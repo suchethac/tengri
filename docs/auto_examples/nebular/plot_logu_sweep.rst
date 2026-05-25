@@ -21,11 +21,6 @@
 Ionization parameter controls optical line strength
 ===================================================
 
-.. image:: images/sphx_glr_plot_logu_sweep_001.png
-   :alt: plot logu sweep
-   :class: sphx-glr-single-img
-
-
 Higher ionisation parameter ``log U`` drives stronger [OIII] and [NII]
 emission, steering the galaxy toward the Seyfert region on the BPT diagram.
 We vary ``log U`` across the typical range for star-forming galaxies.
@@ -88,7 +83,7 @@ We vary ``log U`` across the typical range for star-forming galaxies.
     cbar.set_label(r"$\log U$")
 
     fig.tight_layout()
-    fig.savefig("plot_logu_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_logu_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logu_sweep.py:

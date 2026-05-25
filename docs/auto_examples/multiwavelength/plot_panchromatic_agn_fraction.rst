@@ -21,11 +21,6 @@
 Blending star-forming galaxy and AGN accretion disc continua
 =============================================================
 
-.. image:: images/sphx_glr_plot_panchromatic_agn_fraction_001.png
-   :alt: plot panchromatic agn fraction
-   :class: sphx-glr-single-img
-
-
 Active galactic nuclei dominate UV to infrared SEDs. Sweeps AGN
 luminosity fraction from pure starburst to pure AGN, showing the
 transition in SED morphology as the accretion disc continuum
@@ -116,7 +111,7 @@ increasingly dominates stellar and dust emission.
     cbar.set_label(r"AGN luminosity fraction $f_{\rm AGN}$")
 
     fig.tight_layout()
-    fig.savefig("plot_panchromatic_agn_fraction.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_agn_fraction.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_agn_fraction.py:

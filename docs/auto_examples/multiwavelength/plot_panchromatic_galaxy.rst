@@ -21,11 +21,6 @@
 UV-to-radio SED of a star-forming galaxy
 =========================================
 
-.. image:: images/sphx_glr_plot_panchromatic_galaxy_001.png
-   :alt: plot panchromatic galaxy
-   :class: sphx-glr-single-img
-
-
 Full panchromatic SED combining stellar continuum, dust absorption,
 dust infrared emission, and radio synchrotron. Demonstrates how a
 unified model spans from ultraviolet through centimeter wavelengths
@@ -117,7 +112,7 @@ synchrotron emission.
     ax.legend(frameon=False, fontsize=9)
 
     fig.tight_layout()
-    fig.savefig("plot_panchromatic_galaxy.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_galaxy.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_galaxy.py:

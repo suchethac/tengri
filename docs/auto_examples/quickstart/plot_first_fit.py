@@ -124,4 +124,4 @@ ax_res.set_ylim(-3.5, 3.5)
 ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
 ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
-fig.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")

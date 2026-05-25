@@ -21,11 +21,6 @@
 Parametric SFH form atlas
 ==========================
 
-.. image:: images/sphx_glr_plot_sfh_form_compare_001.png
-   :alt: plot sfh form compare
-   :class: sphx-glr-single-img
-
-
 Each parametric SFH in tengri encodes a different prior on when a galaxy
 forms its stars. We overlay the SFR(t) shape of nine production-status
 forms at their default parameter values, all integrated to the same
@@ -103,7 +98,7 @@ when the data resolve > 5 SFR-bins.
     ax.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 
     fig.tight_layout()
-    fig.savefig("plot_sfh_form_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sfh_form_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_form_compare.py:

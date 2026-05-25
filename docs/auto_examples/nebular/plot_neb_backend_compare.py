@@ -92,4 +92,4 @@ ax.set_xlim(WMIN, WMAX)
 ax.legend(frameon=False, fontsize=10, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_neb_backend_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_neb_backend_compare.png", dpi=150, bbox_inches="tight")

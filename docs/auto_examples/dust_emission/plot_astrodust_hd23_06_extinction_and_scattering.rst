@@ -21,11 +21,6 @@
 Astrodust+PAH extinction, scattering, and albedo
 ================================================
 
-.. image:: images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
-   :alt: plot astrodust hd23 06 extinction and scattering
-   :class: sphx-glr-single-img
-
-
 Extinction opacity, polarized extinction, and single-scattering albedo for
 the Hensley & Draine 2023 fiducial size distribution.
 
@@ -103,7 +98,7 @@ the Hensley & Draine 2023 fiducial size distribution.
     ax3.legend(loc="upper left", frameon=False, fontsize=9)
 
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_06_extinction_and_scattering.py:

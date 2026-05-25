@@ -21,11 +21,6 @@
 SKIRTOR torus: viewing angle tunes IR profile shape
 ====================================================
 
-.. image:: images/sphx_glr_plot_agn_cos_inc_sweep_001.png
-   :alt: plot agn cos inc sweep
-   :class: sphx-glr-single-img
-
-
 The torus inclination angle determines how much cold dust emission we
 observe. Face-on (high ``cos_inc``) views show a smooth thermal bump;
 edge-on (low ``cos_inc``) views expose more reprocessed mid-infrared
@@ -97,7 +92,7 @@ flux and can show silicate absorption features.
     cbar.set_label(r"$\cos \theta_{\rm torus}$")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_cos_inc_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_cos_inc_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_cos_inc_sweep.py:

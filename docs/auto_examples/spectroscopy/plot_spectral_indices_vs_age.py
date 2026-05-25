@@ -126,4 +126,4 @@ ax_h.text(
 ax_h.set_xscale("log")
 ax_h.set_xlabel(r"Stellar burst age  [Gyr]")
 
-fig.savefig("plot_spectral_indices_vs_age.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_spectral_indices_vs_age.png", dpi=150, bbox_inches="tight")

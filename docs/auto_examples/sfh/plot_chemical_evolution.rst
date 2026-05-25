@@ -21,11 +21,6 @@
 Chemical evolution: How SFH and outflows shape metal enrichment history
 =======================================================================
 
-.. image:: images/sphx_glr_plot_chemical_evolution_001.png
-   :alt: plot chemical evolution
-   :class: sphx-glr-single-img
-
-
 Four perspectives on chemical evolution: (1) closed-box model with varying SFR
 timescales; (2) cumulative metallicity from different exponential SFHs; (3)
 leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity
@@ -124,7 +119,7 @@ galactic winds control the Z(t) history.
     ax.set_ylim(-2.5, 0.5)
 
     fig.tight_layout(rect=[0, 0, 1, 0.97])
-    fig.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_chemical_evolution.py:

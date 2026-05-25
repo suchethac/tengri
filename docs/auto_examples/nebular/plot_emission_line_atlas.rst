@@ -21,11 +21,6 @@
 Optical emission-line atlas of a young star-forming galaxy
 ============================================================
 
-.. image:: images/sphx_glr_plot_emission_line_atlas_001.png
-   :alt: plot emission line atlas
-   :class: sphx-glr-single-img
-
-
 Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with
 the strongest optical / near-UV emission lines labelled. Wavelengths
 are vacuum; line positions follow NIST/Atomic Line List.
@@ -38,28 +33,6 @@ be combined with a Photometry/Spectroscopy observation, so this card
 runs in rest-frame-only mode (which is all the atlas needs anyway).
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-98
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
-   :alt: plot emission line atlas
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -144,12 +117,7 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
     ax_opt.set(xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]",
                ylabel=r"$F_\lambda$ [arbitrary]")
 
-    fig.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 11.273 seconds)
+    plt.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_emission_line_atlas.py:

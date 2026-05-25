@@ -98,4 +98,4 @@ ax.text(0.02, 0.97, r"applied $\tau_V = 1$", transform=ax.transAxes,
         va="top")
 
 fig.tight_layout()
-fig.savefig("plot_dust_law_uv_slope_response.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dust_law_uv_slope_response.png", dpi=150, bbox_inches="tight")

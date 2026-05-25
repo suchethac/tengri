@@ -21,11 +21,6 @@
 Dust geometry shapes the extinction: screen vs mixed vs clumpy
 ==============================================================
 
-.. image:: images/sphx_glr_plot_dust_geometry_sweep_001.png
-   :alt: plot dust geometry sweep
-   :class: sphx-glr-single-img
-
-
 Three dust geometries—foreground screen (power-law), mixed slab (Calzetti),
 and clumpy two-phase (SMC)—proxy different physical arrangements via their
 attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape:
@@ -76,7 +71,7 @@ Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
     ax.legend(fontsize=9, frameon=False, loc="lower left")
 
     fig.tight_layout()
-    fig.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_geometry_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_geometry_sweep.py:

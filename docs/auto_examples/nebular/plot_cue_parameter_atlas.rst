@@ -21,11 +21,6 @@
 Comprehensive sweep of the Cue nebular parameters
 ==================================================
 
-.. image:: images/sphx_glr_plot_cue_parameter_atlas_001.png
-   :alt: plot cue parameter atlas
-   :class: sphx-glr-single-img
-
-
 Cue (Li, Leja & Speagle 2023) maps a four-dimensional HII region
 control space — ionization parameter ``log U``, gas-phase metallicity
 ``log Z_gas``, ionizing-spectrum shape, and dust-to-metal ratio —
@@ -143,7 +138,7 @@ References:
         fig.colorbar(mesh, ax=ax, pad=0.01)
 
     fig.tight_layout()
-    fig.savefig("plot_cue_parameter_atlas.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_cue_parameter_atlas.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

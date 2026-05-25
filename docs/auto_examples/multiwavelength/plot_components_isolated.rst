@@ -21,11 +21,6 @@
 Each tengri SED component shown in isolation
 ==============================================
 
-.. image:: images/sphx_glr_plot_components_isolated_001.png
-   :alt: plot components isolated
-   :class: sphx-glr-single-img
-
-
 Six physics blocks added cumulatively to the same star-forming host
 so the contribution of each is visible at every wavelength.
 
@@ -122,7 +117,7 @@ The colour at each wavelength tells you which block matters most.
     ax.legend(frameon=False, fontsize=8, loc="lower center", ncol=2)
 
     fig.tight_layout()
-    fig.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_components_isolated.py:

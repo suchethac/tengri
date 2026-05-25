@@ -21,11 +21,6 @@
 BOSA: log sSFR sweep at fixed log L_TIR
 ========================================
 
-.. image:: images/sphx_glr_plot_bosa_ssfr_sweep_001.png
-   :alt: plot bosa ssfr sweep
-   :class: sphx-glr-single-img
-
-
 Sweep specific star formation rate across the BOSA grid at fixed infrared
 luminosity. Higher sSFR produces harder mid-IR colors and stronger PAH
 features; quiescent galaxies exhibit colder FIR peaks.
@@ -81,7 +76,7 @@ features; quiescent galaxies exhibit colder FIR peaks.
     )
     ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=3)
     fig.tight_layout()
-    fig.savefig("plot_bosa_ssfr_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_bosa_ssfr_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_bosa_ssfr_sweep.py:

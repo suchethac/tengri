@@ -21,11 +21,6 @@
 Non-parametric SFH families compared
 ======================================
 
-.. image:: images/sphx_glr_plot_sfh_nonparametric_compare_001.png
-   :alt: plot sfh nonparametric compare
-   :class: sphx-glr-single-img
-
-
 The parametric SFH atlas (``plot_sfh_form_compare.py``) shows seven
 classical analytic SFH shapes. Beyond those, tengri ships three
 non-parametric families that bin the mass formed in successive lookback
@@ -117,7 +112,7 @@ restrictive.
     axes[0].set_ylabel(r"SFR$(t)$ / $M_\star^{\rm tot}$  [yr$^{-1}$]")
     axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
-    fig.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_nonparametric_compare.py:

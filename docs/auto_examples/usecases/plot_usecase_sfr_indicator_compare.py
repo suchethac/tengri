@@ -90,4 +90,4 @@ ax.set_ylim([0, 15])
 ax.grid(True, alpha=0.3)
 
 fig.tight_layout()
-fig.savefig("plot_usecase_sfr_indicator_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_sfr_indicator_compare.png", dpi=150, bbox_inches="tight")

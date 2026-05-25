@@ -163,4 +163,4 @@ ax.legend(frameon=False, loc="upper right")
 ax.set_ylim(bottom=0)
 
 fig.tight_layout()
-fig.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")

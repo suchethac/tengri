@@ -21,11 +21,6 @@
 QSOgen lines: emission-line contributions vary with luminosity
 ==============================================================
 
-.. image:: images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
-   :alt: plot agn qsogen emline sweep
-   :class: sphx-glr-single-img
-
-
 The QSOgen model includes a UV/optical emission-line forest and broad
 Balmer continuum on top of the underlying disc. The relative strength
 of these line features with respect to the continuum controls the slope
@@ -98,7 +93,7 @@ and colour of the UV–optical SED.
     )
 
     fig.tight_layout()
-    fig.savefig("plot_agn_qsogen_emline_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_qsogen_emline_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_qsogen_emline_sweep.py:

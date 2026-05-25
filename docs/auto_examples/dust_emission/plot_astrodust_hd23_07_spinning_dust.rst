@@ -21,11 +21,6 @@
 Astrodust+PAH spinning-dust microwave emission
 ==============================================
 
-.. image:: images/sphx_glr_plot_astrodust_hd23_07_spinning_dust_001.png
-   :alt: plot astrodust hd23 07 spinning dust
-   :class: sphx-glr-single-img
-
-
 Spinning dust microwave emission across 10–100 GHz, decomposed by grain
 (Astrodust/PAH) and phase (CNM/WNM), for the Hensley & Draine 2023 fiducial.
 
@@ -80,7 +75,7 @@ Spinning dust microwave emission across 10–100 GHz, decomposed by grain
     ax.set_xticklabels(["10", "30", "60", "100"])
     ax.legend(loc="upper right", frameon=False, fontsize=9)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_07_spinning_dust.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_07_spinning_dust.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_07_spinning_dust.py:

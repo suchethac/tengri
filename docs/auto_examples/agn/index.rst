@@ -34,6 +34,40 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The Shakura-Sunyaev thin disc model shows how the big blue bump (BBB) peak shifts to longer wavelengths as black-hole mass increases. At fixed Eddington ratio log(L_bol / L_Edd) = -1.0, the disc temperature scales as T_{\rm in} \propto (\dot{m} / m_\odot)^{1/4}, where the inner temperature determines the location of peak νLν. Higher mass → lower accretion rate → cooler disc → redder peak.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_bbb_mbh_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_bbb_mbh_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Big Blue Bump: multicolor disc temperature evolution with black-hole mass</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The bolometric correction K_X = L_{\rm bol} / L_X relates the total AGN luminosity to the flux in a single observational band. For X-ray selected AGN, this is essential for converting observed X-ray fluxes back to total AGN power.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_bolometric_correction_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_bolometric_correction`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN Bolometric Correction: K_X(L_bol) Across Four Bands</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="A single log L_bol = 12.5 composable AGN built up component by component — disc alone, +torus, +narrow lines, +broad lines — so the reader can see what each block contributes to the total spectrum. The bottom panel shows the same decomposition stacked so the layers add up to the full SED.">
 
 .. only:: html
@@ -97,6 +131,23 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">AGN SEDModel Hierarchy</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A Seyfert galaxy SED is decomposed photometrically by varying the AGN contribution fraction agn_frac from 0 (pure host) to 1.0 (pure AGN) to 0.5 (composite). This demonstrates how to isolate the AGN contribution from the host galaxy using a single model and varying a structural parameter — useful for diagnosing photometric AGN contamination.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_host_decomposition_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_agn_host_decomposition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN host-galaxy decomposition: disentangling Seyfert contributions</div>
     </div>
 
 
@@ -255,6 +306,40 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The ultraviolet-to-X-ray spectral slope α_OX encodes the fundamental physics of accretion discs. At higher bolometric luminosities, discs shift toward cooler effective temperatures and steeper UV slopes, reducing the X-ray-to-UV flux ratio. We compute α_OX for 15 tengri AGN disc models (multicolor, no torus/lines) across log L_bol ∈ [10.5, 14.0], measuring at rest-frame 2500 Å (UV) and 2 keV (X-ray). The Lusso &amp; Risaliti 2016 fit α_OX = −0.166 log L_2500 + 4.74 captures the observational trend that luminous quasars are more UV-bright and X-ray-weak.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_alpha_ox_lusso_risaliti_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_alpha_ox_lusso_risaliti`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lusso & Risaliti 2016: α_OX – L_UV relation for AGN discs</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The dimensionless spin parameter a determines the innermost stable circular orbit (ISCO). Higher spin pushes ISCO inward, raising peak disc temperature and shifting the UV bump bluer. This demonstrates the classic Kerr black hole effect on thin disc accretion: Schwarzschild (a=0) → near-extremal Kerr (a*=0.998).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_bh_spin_disc_continuum_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_bh_spin_disc_continuum`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Black hole spin effect on accretion disc UV peak temperature</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Single recipe (all-GRAHSP), but each pipeline stage rendered independently on top of the disc continuum. Demonstrates how the five blocks (``disc → lines → feii → torus → attenuation``) contribute to the total SED — useful for understanding which knob controls which feature.">
 
 .. only:: html
@@ -301,6 +386,40 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Composable AGN: three evaluation modes side-by-side</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed black hole mass M_BH = 10^8 M_sun, the accretion disc luminosity and spectral shape scale with Eddington ratio λ_Edd = L_bol / L_Edd. Here we sweep λ_Edd from 0.001 to 1.0 at five logarithmic steps and overlay the disc continuum (100–3000 Å) to show how lower accretion rates produce fainter discs with unchanged spectral shape (Shakura &amp; Sunyaev 1973).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_eddington_ratio_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_eddington_ratio_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Eddington ratio sweep: multicolor disc thermal scaling</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The black hole mass (M_BH) and stellar bulge mass (M_) of galaxies follow a tight empirical scaling relation. This example builds 12 mock AGN-hosting galaxies sweeping log M_ from 9 to 12 M_☉, derives M_BH from the published Kormendy &amp; Ho (2013) and Reines &amp; Volonteri (2015) relations, and constrains the AGN bolometric luminosity via a random Eddington ratio (λ_Edd ∈ [0.001, 0.1]).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_mbh_mstar_relation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_mbh_mstar_relation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">M_BH–M_* scaling relation: Kormendy & Ho 2013 and Reines & Volonteri 2015</div>
     </div>
 
 
@@ -357,6 +476,74 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Compute and plot the broad-line region (BLR) size-luminosity relation (R_BLR ∝ L^0.5) using tengri AGN models. This demonstrates how AGN continuum luminosity connects to reverberation mapping measurements of the BLR extent.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_reverberation_size_luminosity_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_reverberation_size_luminosity`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN Reverberation Size-Luminosity Relation (Bentz+2013)</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Three distinct AGN types overlaid to show how AGN morphology and obscuration evolve with luminosity:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_seyfert_quasar_blazar_archetypes_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_seyfert_quasar_blazar_archetypes`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN archetypes: Seyfert, quasar, and LIRG/Sy across bolometric luminosity</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+2016) reprocesses the hot accretion disc as a function of viewing angle.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_inclination_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_inclination_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR AGN torus: inclination-dependent obscuration</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The 9.7 μm and 18 μm silicate bands are strong diagnostics of AGN torus orientation. When viewing the torus face-on (high cos_inc), dust emission dominates and silicates appear in emission. Edge-on views (low cos_inc) show silicates in absorption against the hot dust continuum.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_silicate_features_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_silicate_features`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR Torus: Silicate features from face-on to edge-on</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus model (Stalevski et al. 2016) emits thermal IR radiation that depends strongly on two parameters: viewing angle (inclination θ via cos_inc) and optical depth (``tau_97`` at 9.7 μm). Face-on systems show a smooth thermal continuum; edge-on systems develop deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.">
 
 .. only:: html
@@ -372,6 +559,91 @@ AGN disc and torus SED templates.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The growth of a supermassive black hole (SMBH) traces a path through the (M_BH, L_bol) plane. Starting as a dormant low-mass hole, accretion during mergers builds both mass and luminosity. Peak luminosity occurs as a luminous QSO before accretion slows and the system fades. This example traces four key evolutionary stages and plots both the track on the (M_BH, L_bol) diagram and the corresponding SEDs.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_smbh_growth_track_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_smbh_growth_track`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN SMBH growth track: dormant → merger → QSO → fading</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The torus half-opening angle (OA, polar half-angle in degrees) controls the covering fraction and the relative strength of direct vs. re-processed AGN emission as a function of observer inclination. Smaller OA (narrow torus) covers a smaller solid angle, reducing the fraction of reprocessed emission visible face-on and increasing direct continuum. Larger OA (flared torus) increases covering, suppressing direct light and boosting thermal re-emission in the mid-infrared.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_torus_opening_angle_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_torus_opening_angle`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus opening angle sweep: covering factor and MIR emission</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Unified AGN models explain the Type 1/Type 2 dichotomy as a purely geometric effect — the same accretion disc + dusty torus system appears as:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_type1_type2_unified_model_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_type1_type2_unified_model`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Type 1 vs Type 2 AGN: Unified viewing-angle classification</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Sanders et al. (1988) proposed that Ultra-Luminous Infrared Galaxies (ULIRGs) are the dust-shrouded precursors to optical QSOs. This sequence traces progressive unveiling of a buried AGN through five stages:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_ulirg_to_qso_transition_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_ulirg_to_qso_transition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">ULIRG→QSO evolutionary sequence: dust-obscured starburst to bare quasar</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Accretion disc reverberation mapping reveals how the hot UV-emitting inner disc responds to ionizing source changes. Fausnaugh+2016 observed NGC 5548 using HST multi-band photometry (UV, optical) and found that UV variations lead optical by τ(λ) — the light-crossing time across the effective emission radius at wavelength λ.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_variability_continuum_lag_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_variability_continuum_lag`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">AGN UV→optical continuum reverberation: light-crossing time lags</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -383,10 +655,13 @@ AGN disc and torus SED templates.
    :hidden:
 
    /auto_examples/agn/plot_agn_alpha_ox_lbol_2d
+   /auto_examples/agn/plot_agn_bbb_mbh_sweep
+   /auto_examples/agn/plot_agn_bolometric_correction
    /auto_examples/agn/plot_agn_components_breakdown
    /auto_examples/agn/plot_agn_cos_inc_sweep
    /auto_examples/agn/plot_agn_disc_compare
    /auto_examples/agn/plot_agn_hierarchy
+   /auto_examples/agn/plot_agn_host_decomposition
    /auto_examples/agn/plot_agn_lines_compare
    /auto_examples/agn/plot_agn_log_lbol_sweep
    /auto_examples/agn/plot_agn_oa_sweep
@@ -396,11 +671,24 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_agn_tau_skirtor_sweep
    /auto_examples/agn/plot_agn_torus_compare
    /auto_examples/agn/plot_agn_type12
+   /auto_examples/agn/plot_alpha_ox_lusso_risaliti
+   /auto_examples/agn/plot_bh_spin_disc_continuum
    /auto_examples/agn/plot_composable_block_toggles
    /auto_examples/agn/plot_composable_recipes
    /auto_examples/agn/plot_composable_three_modes
+   /auto_examples/agn/plot_eddington_ratio_sweep
+   /auto_examples/agn/plot_mbh_mstar_relation
    /auto_examples/agn/plot_nlr_blr_lines
    /auto_examples/agn/plot_qsogen_spectrum
    /auto_examples/agn/plot_relagn_spin
+   /auto_examples/agn/plot_reverberation_size_luminosity
+   /auto_examples/agn/plot_seyfert_quasar_blazar_archetypes
+   /auto_examples/agn/plot_skirtor_inclination_sweep
+   /auto_examples/agn/plot_skirtor_silicate_features
    /auto_examples/agn/plot_skirtor_variants
+   /auto_examples/agn/plot_smbh_growth_track
+   /auto_examples/agn/plot_torus_opening_angle
+   /auto_examples/agn/plot_type1_type2_unified_model
+   /auto_examples/agn/plot_ulirg_to_qso_transition
+   /auto_examples/agn/plot_variability_continuum_lag
 

@@ -21,11 +21,6 @@
 BPT diagram ionization sequence from ages
 ==========================================
 
-.. image:: images/sphx_glr_plot_neb_bpt_logu_grid_001.png
-   :alt: plot neb bpt logu grid
-   :class: sphx-glr-single-img
-
-
 The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources.
 We show how stellar population age controls ionization parameter:
 younger (hotter) populations move the locus toward higher [OIII]/Hβ,
@@ -125,7 +120,7 @@ steering from star-forming toward composite/Seyfert regions.
     cbar = fig.colorbar(sm, ax=ax, label="Age [Gyr]")
 
     fig.tight_layout()
-    fig.savefig("plot_neb_bpt_logu_grid.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_neb_bpt_logu_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_neb_bpt_logu_grid.py:

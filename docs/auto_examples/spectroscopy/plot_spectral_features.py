@@ -90,4 +90,4 @@ for ax, ylabel in [
     ax.legend(fontsize=10, frameon=False)
 
 fig.tight_layout()
-fig.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")

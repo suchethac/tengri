@@ -21,11 +21,6 @@
 AGN X-ray hard-tail rollover: exponential cutoff E_cut governs high-energy turnover
 ===================================================================================
 
-.. image:: images/sphx_glr_plot_E_cut_sweep_001.png
-   :alt: plot E cut sweep
-   :class: sphx-glr-single-img
-
-
 The X-ray power-law spectrum steepens above an exponential cutoff E_cut.
 Compact coronae with low optical depth have low E_cut (~100 keV); thick,
 optically-deep coronae extend to higher E_cut (~1 TeV). Variation of E_cut
@@ -73,7 +68,7 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548.
     cbar.set_label(r"Cutoff energy $E_{\rm cut}$ [keV]")
 
     fig.tight_layout()
-    fig.savefig("plot_E_cut_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_E_cut_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_E_cut_sweep.py:

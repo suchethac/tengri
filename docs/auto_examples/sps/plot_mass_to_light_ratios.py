@@ -82,4 +82,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=9, loc="upper left")
 
 fig.tight_layout()
-fig.savefig("plot_mass_to_light_ratios.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_mass_to_light_ratios.png", dpi=150, bbox_inches="tight")

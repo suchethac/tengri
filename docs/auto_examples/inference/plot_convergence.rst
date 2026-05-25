@@ -21,11 +21,6 @@
 MAP fit convergence: loss decay across iterations
 ==================================================
 
-.. image:: images/sphx_glr_plot_convergence_001.png
-   :alt: plot convergence
-   :class: sphx-glr-single-img
-
-
 The convergence diagnostic shows how the negative log posterior (loss) decays
 across optimizer iterations. We fit mock photometry using MAP (maximum a
 posteriori) optimization with Adam and display the loss curve, showing when
@@ -132,7 +127,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     axes[1].grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_convergence.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_convergence.py:

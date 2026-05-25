@@ -21,11 +21,6 @@
 FIR-radio correlation: L_IR × q_IR sets radio loudness scale
 =============================================================
 
-.. image:: images/sphx_glr_plot_radio_lir_relation_001.png
-   :alt: plot radio lir relation
-   :class: sphx-glr-single-img
-
-
 The FIR-radio correlation links far-infrared luminosity (dust-reprocessed
 star-formation energy) to 1.4 GHz synchrotron emission. The dimensionless
 q_IR parameter relates the two via L_IR ∝ L_1.4GHz^(10^q_IR/2.5). Brighter
@@ -79,7 +74,7 @@ Reference: Bell 2003, ApJ 586, 794.
     cbar.set_label(r"log$_{10}$ L$_{\rm IR}$ [L$_\odot$]")
 
     fig.tight_layout()
-    fig.savefig("plot_radio_lir_relation.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_lir_relation.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_lir_relation.py:

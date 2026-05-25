@@ -21,11 +21,6 @@
 Astrodust+PAH polarized emission and polarization fraction
 ==========================================================
 
-.. image:: images/sphx_glr_plot_astrodust_hd23_08_polarized_emission_001.png
-   :alt: plot astrodust hd23 08 polarized emission
-   :class: sphx-glr-single-img
-
-
 Polarized emission and polarization fraction from Astrodust grains at the
 Hensley & Draine 2023 fiducial ionization parameter.
 
@@ -84,7 +79,7 @@ Hensley & Draine 2023 fiducial ionization parameter.
     )
 
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_08_polarized_emission.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_08_polarized_emission.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_08_polarized_emission.py:

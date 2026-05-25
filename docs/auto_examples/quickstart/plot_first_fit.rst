@@ -21,11 +21,6 @@
 Recovering a star-forming galaxy from 5-band SDSS photometry
 ============================================================
 
-.. image:: images/sphx_glr_plot_first_fit_001.png
-   :alt: plot first fit
-   :class: sphx-glr-single-img
-
-
 The simplest end-to-end tengri workflow. We build a model with a
 truncated-skew-normal SFH and a two-component Calzetti dust attenuation,
 mock SDSS *ugriz* photometry at S/N = 20, then run a MAP fit to recover the
@@ -152,7 +147,7 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     ax_res.set_ylabel(r"$(F_{\rm fit} - F_{\rm obs})/\sigma$")
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
-    fig.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

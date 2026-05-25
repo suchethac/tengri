@@ -21,11 +21,6 @@
 BPT diagram separates star formation from shocks and AGN
 =========================================================
 
-.. image:: images/sphx_glr_plot_bpt_diagnostics_001.png
-   :alt: plot bpt diagnostics
-   :class: sphx-glr-single-img
-
-
 The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates ionizing sources. Shocks
 (MAPPINGS V, Allen+2008) trace a sequence from HII regions through composite
 regions into Seyfert regions as velocity increases. We plot shock models
@@ -120,7 +115,7 @@ alongside the standard demarcation lines.
     ax.set_ylim(-1.2, 1.5)
     ax.legend(fontsize=10, frameon=False, loc="lower left")
     fig.tight_layout()
-    fig.savefig("plot_bpt_diagnostics.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_bpt_diagnostics.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagnostics.py:

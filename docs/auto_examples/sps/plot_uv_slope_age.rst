@@ -21,11 +21,6 @@
 Intrinsic UV continuum slope β vs single-burst age
 ====================================================
 
-.. image:: images/sphx_glr_plot_uv_slope_age_001.png
-   :alt: plot uv slope age
-   :class: sphx-glr-single-img
-
-
 Dust-free UV continuum slope of an SSP swept from 10 Myr to 1 Gyr.
 β is fit in the Calzetti+1994 windows (1268–2580 Å) to ``F_λ ∝ λ^β``.
 
@@ -36,17 +31,6 @@ younger one with moderate reddening (the classic IRX–β degeneracy
 that ``plot_usecase_uv_slope_beta`` recovers).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-77
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_uv_slope_age_001.png
-   :alt: plot uv slope age
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_uv_slope_age_001.png
-   :class: sphx-glr-single-img
-
-
-
-
 
 .. code-block:: Python
 
@@ -112,12 +96,7 @@ that ``plot_usecase_uv_slope_beta`` recovers).
            ylabel=r"UV continuum slope  $\beta$  (Calzetti+1994 windows)")
 
     fig.tight_layout()
-    fig.savefig("plot_uv_slope_age.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.241 seconds)
+    plt.savefig("plot_uv_slope_age.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_uv_slope_age.py:

@@ -100,4 +100,4 @@ ax_filt.set(
 ax_filt.legend(frameon=False, fontsize=8, loc="upper right", ncol=2)
 ax_sed.set_xlim(1.0e3, 1.5e6)
 
-fig.savefig("plot_galaxy_with_filters.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_galaxy_with_filters.png", dpi=150, bbox_inches="tight")

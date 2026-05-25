@@ -21,11 +21,6 @@
 Register and use a custom photometric filter
 ==============================================
 
-.. image:: images/sphx_glr_plot_recipe_custom_filter_001.png
-   :alt: plot recipe custom filter
-   :class: sphx-glr-single-img
-
-
 How do I combine a custom photometric filter with standard filters? This
 recipe generates a synthetic Gaussian filter at 2 μm and pairs it with
 SDSS optical bands, then predicts the full SED and photometry.
@@ -123,7 +118,7 @@ SDSS optical bands, then predicts the full SED and photometry.
     ax_filters.legend(frameon=False, ncol=2, fontsize=7)
     ax_filters.set_xlim(2e3, 2.5e4)
 
-    fig.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

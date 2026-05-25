@@ -55,4 +55,4 @@ ax.set(
 )
 ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
 fig.tight_layout()
-fig.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_themis_alpha_sweep.png", dpi=150, bbox_inches="tight")

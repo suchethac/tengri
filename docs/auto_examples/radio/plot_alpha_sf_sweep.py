@@ -53,4 +53,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$\alpha_{\rm sf}$")
 
 fig.tight_layout()
-fig.savefig("plot_alpha_sf_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_alpha_sf_sweep.png", dpi=150, bbox_inches="tight")

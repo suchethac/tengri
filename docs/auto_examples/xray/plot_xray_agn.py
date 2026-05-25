@@ -1,17 +1,27 @@
 """
-AGN X-ray coronae: luminosity sequence and spectral hardness at high energies
-=============================================================================
+AGN X-ray coronae: luminosity sequence
+======================================
 
 AGN coronae are compact hot regions where the hard X-ray power law (photon
-index ~1.7–2.0) is produced via Compton scattering off hot electrons.
-The X-ray spectrum reflects the coronal temperature, optical depth, and
-geometry. This demo varies L_bol across six decades (10⁴²–10⁴⁶·⁵ erg/s) to
-show the gradual brightening of the X-ray continuum and the persistence of
-the power-law form across the luminosity sequence. A separate panel isolates
-key spectral features: soft excess (0.5–2 keV), hard continuum (2–10 keV),
-Compton reflection hump (10–100 keV), and the iron K-α line (6.4 keV).
+index ~1.7–2.0) is produced via Compton up-scattering of seed UV photons by
+hot electrons. ``xray_agn_corona`` models the primary continuum as a cut-off
+power-law normalised through the α_ox–L_2500 relation
+(Lusso & Risaliti 2016), then attenuated by the
+``zphabs(N_H) × cabs(N_H)`` line-of-sight obscurer with a 1 %
+warm-electron scattered fraction added back (Ricci+2017 spectral model
+adopted in Matsumoto+2026 Eq. B6).
 
-Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (AGN X-ray corona models).
+This demo varies ``L_bol`` from 10⁴²–10⁴⁶·⁵ erg/s. The companion example
+``plot_xray_nh_sweep.py`` varies the column density at fixed ``L_bol`` to
+show the Compton-thin → Compton-thick transition. Reflection (pexrav) and
+the 6.4 keV iron Kα line are not modelled here — those are planned in a
+follow-up that ports the Magdziarz & Zdziarski 1995 reflection kernel.
+
+References
+----------
+- Lusso & Risaliti 2016, ApJ 819, 154 (α_ox–L_2500 relation).
+- Ricci et al. 2017, Nature 549, 488 (X-ray spectral model).
+- Matsumoto et al. 2026 (Eq. B6 of the obscured-AGN fit).
 """
 
 import warnings
@@ -61,8 +71,6 @@ ax.loglog(wave_keV, np.array(l_xray), "C0-", lw=2.0)
 
 ax.axvspan(0.5, 2.0, alpha=0.15, color="C1")
 ax.axvspan(2.0, 10.0, alpha=0.15, color="C2")
-ax.axvspan(10.0, 100.0, alpha=0.15, color="C3")
-ax.axvline(6.4, color="red", ls="--", lw=1.0, alpha=0.5)
 
 ax.set_xlim(0.1, 1000)
 ax.set_ylim(1e22, 1e27)
@@ -76,9 +84,8 @@ ax.text(
     verticalalignment="top",
     fontsize=10,
 )
-ax.text(1.2, 0.55e22, "soft excess\n(0.5–2 keV)", fontsize=8, color="C1")
-ax.text(5.0, 0.55e22, "hard PL\n(2–10 keV)", fontsize=8, color="C2")
-ax.text(50.0, 0.55e22, "reflection\n(>10 keV)", fontsize=8, color="C3")
+ax.text(0.8, 0.55e22, "soft band\n(0.5–2 keV)", fontsize=8, color="C1")
+ax.text(4.0, 0.55e22, "hard band\n(2–10 keV)", fontsize=8, color="C2")
 
 # Panel 3: Intermediate luminosity range
 ax = axes[1, 0]
@@ -126,4 +133,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$\log(L_{\rm bol})$ [erg s$^{-1}$]")
 
 fig.tight_layout()
-fig.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")

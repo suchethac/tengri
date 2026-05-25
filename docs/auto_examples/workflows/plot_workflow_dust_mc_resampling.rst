@@ -21,11 +21,6 @@
 Dust attenuation: uncertainty in SED from dust parameter estimation
 ==================================================================
 
-.. image:: images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
-   :alt: plot workflow dust mc resampling
-   :class: sphx-glr-single-img
-
-
 Demonstrates dust attenuation effects and how fitting uncertainty propagates
 to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
 is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
@@ -187,7 +182,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     ax.set_xticklabels(band_labels)
 
     fig.tight_layout()
-    fig.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_dust_mc_resampling.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:

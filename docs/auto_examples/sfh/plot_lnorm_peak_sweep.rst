@@ -21,11 +21,6 @@
 Log-normal peak lookback time shifts stellar age and SED morphology
 ===================================================================
 
-.. image:: images/sphx_glr_plot_lnorm_peak_sweep_001.png
-   :alt: plot lnorm peak sweep
-   :class: sphx-glr-single-img
-
-
 The peak lookback time of a log-normal SFH controls when most stars formed,
 shifting the age structure and dramatically affecting UV slope, 4000 Å break
 strength, and NIR luminosity. We vary the peak time across its prior range with
@@ -87,7 +82,7 @@ every other parameter fixed.
     cbar.set_label(r"Peak lookback time [Gyr]")
 
     fig.tight_layout()
-    fig.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_lnorm_peak_sweep.py:

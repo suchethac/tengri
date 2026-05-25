@@ -21,11 +21,6 @@
 DustEmissionSEDComponent — swap MBB / PAHspec / Astrodust
 =========================================================
 
-.. image:: images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
-   :alt: plot astrodust hd23 04 sedmodel dust emission swap
-   :class: sphx-glr-single-img
-
-
 Compare dust emission templates at fixed infrared luminosity. Shows how
 spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and
 Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
@@ -127,7 +122,7 @@ Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
     )
     ax.legend(loc="lower center", frameon=False, fontsize=10)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py:
