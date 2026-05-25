@@ -177,7 +177,7 @@ print(f"  n_data = {obs_joint.n_data} ({phot_obs.n_filters} phot + {N_PIX_SPEC} 
 # %%
 # Define model and truth parameters
 spec = Parameters(
-    sfh_dpl_log_total_mass=10.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
     sfh_dpl_alpha=Uniform(0.1, 2.5),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),

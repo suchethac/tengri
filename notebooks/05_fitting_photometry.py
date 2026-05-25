@@ -183,7 +183,7 @@ spec = Parameters(
     # so the unconstrained xi-space is roughly Gaussian — flattens the
     # geometry near the lower boundary (tau→0, alpha→1) where Uniform
     # priors create steep gradients and trigger NUTS divergences.
-    sfh_dpl_log_total_mass=10.0, 2.5),  # already in log space
+    sfh_dpl_log_total_mass=Uniform(7.0, 12.5),  # already in log space
     sfh_dpl_tau_gyr=LogUniform(0.5, 12.0),
     sfh_dpl_alpha=LogUniform(1.0, 8.0),
     sfh_dpl_beta=LogUniform(1.0, 8.0),

@@ -221,7 +221,7 @@ print("Noise: cal_floor=1%, Gaussian likelihood")
 # %%
 spec_param = Parameters(
     mean_sfh_type="lnorm",
-    sfh_lnorm_log_total_mass=10.0, 2.0),
+    sfh_lnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_lnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
     sfh_lnorm_width_gyr=Uniform(0.5, 5.0),
     met_logzsol=Uniform(-2.0, 0.2),
