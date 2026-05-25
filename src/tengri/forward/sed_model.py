@@ -911,21 +911,20 @@ class SEDModel:
         return {}
 
     def _init_igm(self, spec):
-        """Configure IGM absorption and DLA."""
+        """Configure IGM absorption and DLA.
+
+        The IGM model name is looked up in
+        :data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` via
+        :func:`~tengri.components.igm.resolve_igm_model`, which also
+        resolves the back-compat alias ``"inoue"`` -> ``"inoue14"``.
+        """
+        from tengri.components.igm import resolve_igm_model
+
         self._uses_igm = spec.apply_igm
         self._uses_dla = getattr(spec, "dla", False)
         self._igm_patchy = getattr(spec, "igm_patchy", False)
-        self._igm_model = getattr(spec, "igm_model", "inoue")
-        _valid = {"inoue", "madau"}
-        if self._igm_model not in _valid:
-            raise ValueError(
-                f"igm_model={self._igm_model!r} not recognised. Choose from: {sorted(_valid)}"
-            )
-        if self._igm_model == "madau":
-            from tengri.components.igm import igm_transmission_madau as _igm_fn
-        else:
-            from tengri.components.igm import igm_transmission as _igm_fn
-        self._igm_fn = _igm_fn
+        self._igm_model = getattr(spec, "igm_model", "inoue14")
+        self._igm_fn = resolve_igm_model(self._igm_model)
 
     def _init_nebular(self, spec, ssp_data):
         """Configure nebular emission backend and return param_map entries.

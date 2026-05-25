@@ -13,10 +13,11 @@ that activate additional free parameters:
   ``dla_log_n_hi``, ``dla_z``, ``dla_b_turb``, ``dla_temp`` params.
 
 Variants are introspected from
-:data:`tengri.parameters.groups._VALID_IGM_TYPES`; the activated
-free-param set comes from a one-shot call to
-:func:`tengri.parameters.registry.recipe_parameters`, so adding a new
-DLA / patchy parameter in the registry surfaces here automatically.
+:data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` (canonical names
+only — aliases like ``"inoue"`` are validator-side back-compat and get
+no separate factory); the activated free-param set comes from a one-shot
+call to :func:`tengri.parameters.registry.recipe_parameters`, so adding
+a new DLA / patchy parameter in the registry surfaces here automatically.
 
 Examples
 --------
@@ -34,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.parameters.groups import _VALID_IGM_TYPES
+from tengri.components.igm import IGM_TRANSMISSION_MODELS
 from tengri.parameters.registry import recipe_parameters
 
 _PREFIXES = ("igm_", "dla_")  # The igm group dict carries both prefixes.
@@ -77,7 +78,11 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
-    for variant in sorted(_VALID_IGM_TYPES):
+    # Canonical IGM models + the structural "none" sentinel. Aliases
+    # (``"inoue"`` -> ``"inoue14"``) are validator-side back-compat only
+    # and do not get their own factory here.
+    canonical = set(IGM_TRANSMISSION_MODELS.keys()) | {"none"}
+    for variant in sorted(canonical):
         short_params, flag_map = _discover_params(variant)
         factories[variant] = make_factory(
             variant=variant,

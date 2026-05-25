@@ -865,3 +865,51 @@ def igm_transmission_madau(
 
     tau_total = (tau_line + tau_cont) * igm_factor
     return jnp.exp(-jnp.clip(tau_total, 0.0, None))
+
+
+# ── Registry ──────────────────────────────────────────────────────────
+#
+# IGM transmission backends. Canonical name keys (publication-correct);
+# legacy aliases are resolved by ``_IGM_ALIASES`` so both the dict-grammar
+# validator path and the SEDModel dispatch can read from one source of
+# truth (per ADR-0005 / ADR-0008). Each value is the pure-JAX transmission
+# function and shares the public signature ``(wave_obs, z, **kwargs)``.
+
+IGM_TRANSMISSION_MODELS: dict[str, object] = {
+    "inoue14": igm_transmission,
+    "madau": igm_transmission_madau,
+}
+
+#: Back-compat aliases that route to canonical registry keys. The bare
+#: ``"inoue"`` was the internal default in tengri pre-2026-05 while the
+#: dict-grammar API consistently used ``"inoue14"``; both now resolve to
+#: the same Inoue+2014 function.
+_IGM_ALIASES: dict[str, str] = {
+    "inoue": "inoue14",
+}
+
+
+def resolve_igm_model(name: str) -> object:
+    """Return the IGM transmission function for ``name``, resolving aliases.
+
+    Parameters
+    ----------
+    name : str
+        Registry key (e.g. ``"inoue14"``, ``"madau"``) or a recognised
+        alias (e.g. ``"inoue"``).
+
+    Returns
+    -------
+    Callable
+        Pure-JAX transmission function ``(wave_obs, z, **kwargs) -> T_igm``.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is neither a registry key nor a known alias.
+    """
+    resolved = _IGM_ALIASES.get(name, name)
+    if resolved not in IGM_TRANSMISSION_MODELS:
+        available = sorted(IGM_TRANSMISSION_MODELS.keys() | _IGM_ALIASES.keys())
+        raise ValueError(f"Unknown IGM model {name!r}. Available: {available}")
+    return IGM_TRANSMISSION_MODELS[resolved]

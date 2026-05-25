@@ -185,12 +185,21 @@ _VALID_NEBULAR_TYPES = {
     "cb19",
 }
 
-#: Valid IGM types.
-_VALID_IGM_TYPES = {
-    "none",
-    "madau",
-    "inoue14",
-}
+
+def _valid_igm_types() -> frozenset[str]:
+    """Return accepted ``igm.type`` values, derived from the registry.
+
+    Union of (i) every key in
+    :data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` (canonical model
+    names like ``"inoue14"``/``"madau"``), (ii) the back-compat aliases
+    in ``_IGM_ALIASES`` (currently ``"inoue"``), and (iii) the structural
+    ``"none"`` sentinel that flips ``apply_igm=False`` rather than picking
+    a transmission function. Per ADR-0005 / ADR-0008.
+    """
+    from tengri.components.igm.igm import _IGM_ALIASES, IGM_TRANSMISSION_MODELS
+
+    return frozenset(IGM_TRANSMISSION_MODELS.keys()) | frozenset(_IGM_ALIASES.keys()) | {"none"}
+
 
 #: Valid radio types.
 _VALID_RADIO_TYPES = {
@@ -694,8 +703,9 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     igm_type = igm_dict.get("type", "madau")
 
     # Validate type
-    if igm_type not in _VALID_IGM_TYPES:
-        suggestions = difflib.get_close_matches(igm_type, _VALID_IGM_TYPES, n=2, cutoff=0.6)
+    valid = _valid_igm_types()
+    if igm_type not in valid:
+        suggestions = difflib.get_close_matches(igm_type, valid, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
