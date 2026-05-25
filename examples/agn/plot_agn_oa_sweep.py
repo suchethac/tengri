@@ -8,6 +8,10 @@ and relies on reprocessed torus emission; a more open torus exposes the
 hot disc continuum and shifts the SED blueward.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

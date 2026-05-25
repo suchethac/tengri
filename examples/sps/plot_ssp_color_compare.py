@@ -15,6 +15,10 @@ This is the systematic an SED fitter inherits from its assumed SSP
 grid even before any prior or noise is involved.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

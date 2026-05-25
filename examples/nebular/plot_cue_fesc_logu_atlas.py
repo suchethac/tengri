@@ -14,6 +14,10 @@ SSP (the wNE grids bake nebular emission in at fixed conditions and
 cannot vary these knobs).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

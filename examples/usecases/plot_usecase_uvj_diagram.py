@@ -11,6 +11,10 @@ Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
 Wuyts et al. 2007, ApJ, 655, 51.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

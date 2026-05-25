@@ -8,6 +8,10 @@ extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from
 unobscured type-1 QSO colours to moderately dust-enshrouded systems.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

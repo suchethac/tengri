@@ -18,6 +18,10 @@ demonstrating the technique's redshift selectivity. References: Steidel+1996,
 Madau+1996 dropout technique.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

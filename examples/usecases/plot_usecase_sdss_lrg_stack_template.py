@@ -22,6 +22,10 @@ References:
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -15,6 +15,10 @@ References:
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

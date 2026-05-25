@@ -18,6 +18,7 @@ infrared re-emission.
 
 **References:**
  - Förster Schreiber et al. (2003) [1]_ for M82 SED observations
+
  - Engelbracht et al. (2008) [2]_ for Spitzer MIR/FIR measurements
  - Dale et al. (2014) [3]_ for dust emission model
 
@@ -35,11 +36,16 @@ infrared re-emission.
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import jax
 import jax.numpy as jnp
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np

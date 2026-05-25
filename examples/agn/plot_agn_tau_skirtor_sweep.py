@@ -8,6 +8,10 @@ weak features and more continuum; thick tori (tau ~11) develop deep
 absorption troughs or bright emission depending on viewing angle.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

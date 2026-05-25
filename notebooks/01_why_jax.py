@@ -31,6 +31,10 @@
 # the posterior gradient, and how that translates into wall-clock time.
 
 # %%
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 from pathlib import Path
 from time import perf_counter
 

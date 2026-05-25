@@ -8,6 +8,10 @@ Posterior objects can be checkpointed for long-running fits or multi-stage
 analysis pipelines.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import tempfile
 import warnings
 from pathlib import Path

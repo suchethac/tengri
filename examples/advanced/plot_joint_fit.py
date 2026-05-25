@@ -11,6 +11,10 @@ Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 from pathlib import Path
 

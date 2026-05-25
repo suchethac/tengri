@@ -18,6 +18,10 @@ TEA), extinction-curve (Cardelli MW, SMC, LMC, Pei 1992),
 grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

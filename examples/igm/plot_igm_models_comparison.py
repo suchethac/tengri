@@ -30,6 +30,10 @@ References:
          absorption at z > 5 (experimental extension to Inoue+2014)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

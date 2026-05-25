@@ -18,6 +18,10 @@ bare-stellar wherever available so the differences trace stellar
 physics, not nebular treatment.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

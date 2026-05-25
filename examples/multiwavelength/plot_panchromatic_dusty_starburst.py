@@ -13,6 +13,10 @@ References: Sanders & Mirabel 1996 (ULIRG definition), Soifer et al. 1987
 (Arp 220 SED properties).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

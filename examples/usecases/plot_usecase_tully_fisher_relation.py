@@ -24,6 +24,10 @@ References:
   - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

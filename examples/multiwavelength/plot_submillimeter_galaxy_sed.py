@@ -18,7 +18,12 @@ References
 ----------
 - Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
 - Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
+
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

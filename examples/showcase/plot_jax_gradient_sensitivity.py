@@ -18,10 +18,15 @@ older = redder continuum through dust absorption).
 
 References:
   - Bradbury et al. 2018 (JAX: composable transformations):
+
     arXiv:1811.02693
   - Hearin et al. 2023 (DSPS — differentiable stellar population synthesis):
     arXiv:2308.16742
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

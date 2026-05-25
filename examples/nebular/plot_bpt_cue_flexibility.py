@@ -9,6 +9,10 @@ panel sweeps one parameter while holding fiducial values fixed. Kewley+2001
 and Kauffmann+2003 demarcations shown for reference.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

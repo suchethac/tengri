@@ -19,6 +19,10 @@ References:
 - King, A. 2003, ApJ, 596, L27 — AGN feedback on galaxy growth
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -8,6 +8,10 @@ strength, and NIR luminosity. We vary the peak time across its prior range with
 every other parameter fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

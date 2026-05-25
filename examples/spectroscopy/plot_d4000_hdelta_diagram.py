@@ -18,6 +18,10 @@ References
        ApJ, 527, 54 (D_n(4000) break strength)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -215,6 +219,7 @@ ax.set_ylim(-2.5, 3.5)
 
 # Legend for shapes (compact)
 from matplotlib.patches import Patch
+
 legend_patches = [Patch(facecolor=colors[i], label=labels_shape[i]) for i in range(len(sfh_shapes))]
 ax.legend(handles=legend_patches, loc="upper left", fontsize=9, title="SFH shape")
 

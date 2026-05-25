@@ -9,6 +9,10 @@ burstiness (σ=1.0, τ=100 Myr). Five realizations appear in each panel,
 with the smooth mean SFH overlaid.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

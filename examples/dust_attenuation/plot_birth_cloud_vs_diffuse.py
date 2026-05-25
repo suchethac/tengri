@@ -14,6 +14,10 @@ Two panels for a young (peak 0.3 Gyr) burst:
 - ``τ_diff`` sweep at fixed ``τ_bc = 0.5``  — full SED suppressed
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

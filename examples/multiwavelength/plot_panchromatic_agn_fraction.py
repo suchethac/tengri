@@ -8,6 +8,10 @@ transition in SED morphology as the accretion disc continuum
 increasingly dominates stellar and dust emission.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -13,6 +13,10 @@ This is the diagnostic family every observer chooses between when
 converting line ratios to a 12 + log(O/H) on a sample.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

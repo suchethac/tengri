@@ -8,6 +8,10 @@ absorbed UV-optical flux. The filled region shows how much light dust
 removes from the intrinsic stellar continuum.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -33,6 +33,10 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     https://doi.org/10.1093/mnras/sty1890
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

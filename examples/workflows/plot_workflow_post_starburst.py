@@ -11,6 +11,10 @@ Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
 classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

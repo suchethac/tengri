@@ -20,6 +20,10 @@ Useful intuition this figure makes obvious:
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

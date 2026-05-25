@@ -16,6 +16,10 @@ Reference: Rubin 1984, J. Educ. Stat., 9, 26; Gelman et al. 1996,
 Bayesian Data Analysis (Chapman & Hall).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

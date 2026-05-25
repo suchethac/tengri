@@ -8,6 +8,10 @@ blue galaxy; sharp quenching creates old red colors; a recent burst injects
 young stars atop an old population. The SED reveals the full assembly history.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

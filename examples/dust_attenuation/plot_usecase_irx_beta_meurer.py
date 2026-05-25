@@ -20,6 +20,10 @@ reddening and star formation rate indicators in galaxies. Here we:
   UV-to-IR conversions in high-z star-forming galaxies.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -341,6 +345,7 @@ ax.text(
 
 fig.tight_layout()
 import pathlib
+
 save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
 plt.savefig(str(save_path), dpi=150, bbox_inches="tight")
 print(f"\nSaved: {save_path}")

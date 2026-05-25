@@ -15,6 +15,10 @@ ratio to metallicity without breaking the R23 degeneracy or adopting a
 secondary diagnostic.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

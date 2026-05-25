@@ -14,6 +14,10 @@ fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

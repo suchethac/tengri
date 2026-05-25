@@ -11,6 +11,10 @@ the ionizing spectrum flexibility and provides smooth gradients through
 metallicity, density, and ionization parameters for joint SED fitting.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

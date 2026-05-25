@@ -13,6 +13,10 @@ emission band by band — the central diagnostic for AGN selection in
 deep X-ray surveys (Lehmer+2010, 2016).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -18,8 +18,13 @@ This example demonstrates:
 
 Reference: Oxygen doublet [O III] λλ4959,5007 and forbidden nitrogen
 [N II] λλ6549,6585 are kinematically degenerate with Balmer lines at
+
 low instrumental resolution.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

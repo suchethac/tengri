@@ -11,6 +11,10 @@ across the prior range with every other parameter fixed.
 Reference: Behroozi et al. 2013, ApJ, 770, 57 (functional form, Eq. 1).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -19,6 +19,10 @@ References:
 - Martin+2007, ApJS, 173, 342 (NUV − r and the green valley)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

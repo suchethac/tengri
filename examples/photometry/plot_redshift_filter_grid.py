@@ -12,6 +12,10 @@ k-correction's sign.
 Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

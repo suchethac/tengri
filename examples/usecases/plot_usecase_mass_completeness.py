@@ -13,6 +13,10 @@ Reference: Blanton et al. 2003, ApJ, 594, 186 (SDSS photometry);
 Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -15,6 +15,10 @@ together explain why the IRX–β diagram is so band-, age-, and
 law-dependent in the literature.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

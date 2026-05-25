@@ -19,6 +19,10 @@ References:
 - Steidel et al. 1996, AJ, 112, 352 — Dropout-selection origins
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

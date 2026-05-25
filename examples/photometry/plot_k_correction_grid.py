@@ -23,6 +23,10 @@ on SDSS template K-corrections.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 # sphinx_gallery_thumbnail_number = 1
 
 from pathlib import Path

@@ -21,6 +21,10 @@ Stalevski et al. 2016, MNRAS 458, 2288 (SKIRTOR);
 Silva, Maiolino & Granato 2004, MNRAS 355, 973.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -9,6 +9,10 @@ Face-on systems show a smooth thermal continuum; edge-on systems develop
 deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

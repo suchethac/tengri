@@ -14,6 +14,10 @@ be combined with a Photometry/Spectroscopy observation, so this card
 runs in rest-frame-only mode (which is all the atlas needs anyway).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

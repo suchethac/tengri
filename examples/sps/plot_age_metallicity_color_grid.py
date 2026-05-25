@@ -14,6 +14,10 @@ centred at the appropriate lookback time, fixed dust extinction,
 and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

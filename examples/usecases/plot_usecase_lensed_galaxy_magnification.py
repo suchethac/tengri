@@ -22,6 +22,10 @@ References:
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

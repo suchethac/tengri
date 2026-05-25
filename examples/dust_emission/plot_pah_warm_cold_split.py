@@ -23,6 +23,10 @@ This script sweeps the two knobs independently to show how the
 dust SED morphology responds.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

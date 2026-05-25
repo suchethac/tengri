@@ -10,6 +10,10 @@ to make slope effects visible (low dust opacities wash out the continuum slope).
 Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

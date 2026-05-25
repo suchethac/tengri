@@ -10,6 +10,10 @@ other parameter fixed on a typical star-forming galaxy.
 Reference: Charlot & Fall 2000, ApJ, 539, 718 (two-component dust model).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
