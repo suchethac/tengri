@@ -22,7 +22,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.xray import xray_agn_corona
+from tengri.xray import alpha_ox_from_l2500, xray_agn_corona
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -30,19 +30,28 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
 energy_keV = 12.398 / np.array(wavelength)
 
+# Hopkins+2007 BC=5.15 at 2500 A
+_BC_NU = 5.15 * 1.199e15
+
 LOG_LBOL_VALUES = (44, 45, 46, 47)
-ALPHA_OX_VALUES = (-1.0, -1.4, -1.8)
-COLORS = plt.cm.viridis(np.linspace(0.0, 0.85, len(ALPHA_OX_VALUES)))
+DELTA_VALUES = (0.4, 0.0, -0.4)  # offsets from the Just+2007 empirical alpha_OX
+COLORS = plt.cm.viridis(np.linspace(0.0, 0.85, len(DELTA_VALUES)))
 
 fig, axes = plt.subplots(2, 2, figsize=(10.5, 7.5), sharex=True, sharey=True)
 for ax, log_lbol in zip(axes.flat, LOG_LBOL_VALUES):
-    L_bol_erg = 10.0**log_lbol
-    for alpha_ox, color in zip(ALPHA_OX_VALUES, COLORS):
+    L_2500 = 10.0**log_lbol / _BC_NU
+    alpha_ox_base = float(alpha_ox_from_l2500(L_2500))
+    for delta, color in zip(DELTA_VALUES, COLORS):
         sed = xray_agn_corona(
-            wavelength, L_agn_bol=L_bol_erg, gamma=1.8, E_cut=300.0, alpha_ox=alpha_ox
+            wavelength,
+            l_2500_30deg_erg_hz=L_2500,
+            gamma=1.8,
+            E_cut=300.0,
+            delta_alpha_ox=float(delta),
         )
         sed_safe = np.where(np.asarray(sed) > 0, np.asarray(sed), np.nan)
-        label = rf"$\alpha_{{ox}} = {alpha_ox}$"
+        alpha_eff = alpha_ox_base + delta
+        label = rf"$\alpha_{{ox}} = {alpha_eff:+.2f}$"
         ax.loglog(energy_keV, sed_safe, lw=1.6, color=color, label=label)
     ax.text(
         0.04,
