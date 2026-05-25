@@ -157,9 +157,9 @@ plt.show()
 print("\n=== Alpha-element enhancement diagnostics ===")
 print(f"Age: {AGE_GYR} Gyr | Metallicity: Z = {MET_LOGZSOL} dex | Redshift: {REDSHIFT}")
 print(
-    f"\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
-    f"Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
-    f"star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
+    "\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
+    "Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
+    "star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
 )
 for alpha_fe in ALPHA_FE_SWEEP:
     print(f"  [α/Fe] = {alpha_fe:.1f} dex (typical for elliptical: 0.0–0.6)")

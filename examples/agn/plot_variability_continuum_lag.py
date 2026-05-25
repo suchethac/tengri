@@ -41,10 +41,8 @@ import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy import optimize
 
 import tengri
 from tengri.analysis.plotting import setup_style
@@ -256,7 +254,7 @@ tau_crossing_seconds = r_eff_cm / C_LIGHT
 tau_crossing_days = tau_crossing_seconds / SECONDS_PER_DAY
 
 print(f"   Gravitational radius: R_g = {r_g_cm:.3e} cm")
-print(f"\n   Computed continuum lags (rest-frame):")
+print("\n   Computed continuum lags (rest-frame):")
 for i, (wave, tau) in enumerate(zip(BAND_WAVELENGTHS, tau_crossing_days)):
     print(f"   λ = {wave:7.0f} Å → τ = {tau:6.2f} days (r_eff = {effective_radii_rg[i]:7.1f} R_g)")
 
@@ -331,7 +329,7 @@ ax.grid(True, alpha=0.3, which="both")
 
 plt.tight_layout()
 plt.savefig("plot_variability_continuum_lag.png", dpi=150, bbox_inches="tight")
-print(f"\n✓ Figure saved: plot_variability_continuum_lag.png")
+print("\n✓ Figure saved: plot_variability_continuum_lag.png")
 
 plt.show()
 
@@ -347,7 +345,7 @@ print("=" * 75)
 residuals_days = tau_crossing_days - FAUSNAUGH_LAGS_DAYS
 residuals_pct = 100.0 * residuals_days / FAUSNAUGH_LAGS_DAYS
 
-print(f"\nComparison: tengri model vs Fausnaugh+2016 observations")
+print("\nComparison: tengri model vs Fausnaugh+2016 observations")
 print(f"{'Wavelength [Å]':>15} {'Model [days]':>15} {'Observed [days]':>15} {'Residual [%]':>15}")
 print("-" * 62)
 for i, wave in enumerate(BAND_WAVELENGTHS):
@@ -356,7 +354,7 @@ for i, wave in enumerate(BAND_WAVELENGTHS):
 rms_pct = np.sqrt(np.mean(residuals_pct**2))
 print(f"\nRMS residual (percent): {rms_pct:.1f}%")
 
-print(f"\nScaling law τ ∝ λ^n:")
+print("\nScaling law τ ∝ λ^n:")
 print(f"  Fitted exponent (tengri):  n = {slope_fitted:.3f}")
 print(f"  Theory prediction (thin disc): n = {4.0/3.0:.3f}")
 print(f"  Fausnaugh+2016 data:       n = {slope_faus:.3f}")
