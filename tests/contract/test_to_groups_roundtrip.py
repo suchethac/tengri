@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for Parameters.to_groups() roundtrip.
 
-Verifies that Parameters.to_groups() correctly inverts Parameters.from_groups(),
+Verifies that Parameters.to_groups() correctly inverts parse_groups(),
 preserving all parameter distributions and structural choices.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 pytestmark = pytest.mark.contract
-from tengri.parameters import FIXED, FREE, Fixed, Uniform
+from tengri.parameters import FIXED, FREE, Fixed, Uniform, parse_groups
 from tengri.parameters.parameters import Parameters
 
 
@@ -21,7 +21,7 @@ def test_roundtrip_with_nebular_off():
     the parser's _VALID_NEBULAR_TYPES uses 'none'. Without translation, the
     round-trip would error: ``Unknown nebular type 'off'``.
     """
-    orig = Parameters.from_groups(
+    orig = parse_groups(
         sfh={"type": "dpl", "*": FIXED},
         redshift=Fixed(0.1),
     )
@@ -31,7 +31,7 @@ def test_roundtrip_with_nebular_off():
     if neb is not None:
         assert neb.get("type") == "none", f"Expected 'none', got {neb.get('type')!r}"
     # Round-trip must not raise
-    rebuilt = Parameters.from_groups(**groups)
+    rebuilt = parse_groups(**groups)
     assert rebuilt.nebular_mode == "off"
 
 
@@ -40,7 +40,7 @@ class TestToGroupsBasic:
 
     def test_to_groups_returns_dict(self):
         """to_groups() returns a dict."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
         )
@@ -49,7 +49,7 @@ class TestToGroupsBasic:
 
     def test_to_groups_contains_sfh_group(self):
         """to_groups() includes 'sfh' key when SFH is configured."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
         )
@@ -59,7 +59,7 @@ class TestToGroupsBasic:
 
     def test_to_groups_contains_redshift_toplevel(self):
         """to_groups() includes 'redshift' at top level."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
         )
@@ -68,7 +68,7 @@ class TestToGroupsBasic:
 
     def test_to_groups_sfh_has_type_key(self):
         """to_groups() includes 'type' key in SFH group."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
         )
@@ -78,7 +78,7 @@ class TestToGroupsBasic:
 
     def test_to_groups_dust_nested_structure(self):
         """to_groups() preserves nested dust.emission subgroup structure."""
-        spec = Parameters.from_groups(
+        spec = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
                 "type": "two_component",
@@ -99,11 +99,11 @@ class TestToGroupsRoundtrip:
 
     def test_round_trip_minimal_dpl(self):
         """Minimal DPL model roundtrips with identical free/fixed sets."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         # Free and fixed sets must be identical
         assert set(original.free_params) == set(roundtripped.free_params)
@@ -122,11 +122,11 @@ class TestToGroupsRoundtrip:
 
     def test_round_trip_with_explicit_override(self):
         """Explicit per-param overrides survive roundtrip."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             redshift=Fixed(0.05),
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
@@ -138,7 +138,7 @@ class TestToGroupsRoundtrip:
 
     def test_round_trip_with_dust_emission(self):
         """Nested dust.emission sub-block roundtrips."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
                 "type": "two_component",
@@ -149,7 +149,7 @@ class TestToGroupsRoundtrip:
             },
             redshift=Fixed(0.1),
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
@@ -163,7 +163,7 @@ class TestToGroupsRoundtrip:
         """AGN composable with sub-blocks roundtrips."""
         pytest.importorskip("grahsp", minversion=None)  # Skip if not available
 
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={"type": "two_component", "*": FIXED},
             agn={
@@ -173,28 +173,28 @@ class TestToGroupsRoundtrip:
             },
             redshift=Fixed(0.1),
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
 
     def test_round_trip_with_sfh_composition(self):
         """SFH composition (list of types) roundtrips."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={
                 "type": ["dpl", "field"],
                 "*": FREE,
             },
             redshift=Fixed(0.1),
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
 
     def test_round_trip_mixed_free_fixed(self):
         """Mixed free and fixed params roundtrip."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
             dust={
                 "type": "two_component",
@@ -204,7 +204,7 @@ class TestToGroupsRoundtrip:
             },
             redshift=FREE,
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
@@ -220,7 +220,7 @@ class TestToGroupsWildcardCollapse:
 
     def test_to_groups_omits_wildcard_expanded_params(self):
         """When '*': FREE was used, those params should NOT appear explicitly."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
         )
@@ -240,7 +240,7 @@ class TestToGroupsWildcardCollapse:
 
     def test_to_groups_preserves_user_overrides(self):
         """Explicit per-param overrides are preserved in the output dict."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             redshift=Fixed(0.1),
         )
@@ -253,7 +253,7 @@ class TestToGroupsWildcardCollapse:
 
     def test_to_groups_no_wildcard_all_explicit(self):
         """When no wildcard was used, all params are explicit."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={
                 "type": "dpl",
                 "alpha": FREE,
@@ -267,9 +267,11 @@ class TestToGroupsWildcardCollapse:
 
         sfh_dict = result["sfh"]
         # DPL params should be explicit
-        # Note: met_logzsol and met_alpha_fe are also in sfh group by partition
+        # met_logzsol and met_alpha_fe stay in the sfh group when
+        # met_mode == "delta" (default) — only specs that opt into a
+        # non-delta chemical-evolution mode (#311) emit a stellar block.
         dpl_keys = {"alpha", "beta", "tau_gyr", "log_peak_sfr"}
-        met_keys = {"logzsol", "alpha_fe"}  # From met_ prefix
+        met_keys = {"logzsol", "alpha_fe"}
         expected_keys = {"type"} | dpl_keys | met_keys
         assert set(sfh_dict.keys()) == expected_keys
 
@@ -316,7 +318,7 @@ class TestToGroupsFlatBuilt:
             dust_tau_bc=Uniform(0, 2),
             redshift=Fixed(0.1),
         )
-        roundtripped = Parameters.from_groups(**original.to_groups())
+        roundtripped = parse_groups(**original.to_groups())
 
         assert original.free_params == roundtripped.free_params
         assert original.fixed_params == roundtripped.fixed_params
@@ -327,7 +329,7 @@ class TestToGroupsStructuralSettings:
 
     def test_to_groups_preserves_dust_law(self):
         """dust_law_bc setting is preserved."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={"type": "two_component", "law_bc": "kriek_conroy", "*": FIXED},
             redshift=Fixed(0.1),
@@ -338,7 +340,7 @@ class TestToGroupsStructuralSettings:
 
     def test_to_groups_preserves_dust_emission_type(self):
         """dust_emission type is preserved."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
                 "type": "two_component",
@@ -353,7 +355,7 @@ class TestToGroupsStructuralSettings:
 
     def test_to_groups_preserves_nebular_type(self):
         """nebular type is preserved."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             neb={"type": "cue", "*": FIXED},
             redshift=Fixed(0.1),
@@ -364,7 +366,7 @@ class TestToGroupsStructuralSettings:
 
     def test_to_groups_preserves_apply_igm(self):
         """apply_igm setting is preserved."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             redshift=Fixed(0.1),
             apply_igm=False,
@@ -375,7 +377,7 @@ class TestToGroupsStructuralSettings:
 
     def test_to_groups_preserves_sfh_composition(self):
         """SFH composition list is preserved."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": ["dpl", "field"], "*": FIXED},
             redshift=Fixed(0.1),
         )
@@ -389,7 +391,7 @@ class TestToGroupsEdgeCases:
 
     def test_to_groups_with_none_nebular(self):
         """to_groups works with nebular disabled (type='none')."""
-        original = Parameters.from_groups(
+        original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             neb={"type": "none"},
             redshift=Fixed(0.1),
@@ -397,6 +399,6 @@ class TestToGroupsEdgeCases:
         result = original.to_groups()
 
         # When nebular is 'none', it's internally 'off'. Roundtrip should work.
-        roundtripped = Parameters.from_groups(**result)
+        roundtripped = parse_groups(**result)
         assert roundtripped.nebular_mode == "off"
         assert original.nebular_mode == roundtripped.nebular_mode

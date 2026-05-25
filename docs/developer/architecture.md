@@ -290,7 +290,7 @@ the average star formation history.
 ## User-facing model builder: nested-dict interface
 
 Users build models via `SEDModel.build()` or
-`Parameters.from_groups()`, which delegate to `parse_groups()` in
+`parse_groups()`, which delegate to `parse_groups()` in
 `parameters/groups.py`. The nested-dict interface translates hierarchical
 parameter groups into the flat `Parameters` object:
 
@@ -313,7 +313,7 @@ groups = {
 #   Pass 2: Parameter resolution (wildcard expansion, defaults)
 #   Returns: flat Parameters object
 
-spec = Parameters.from_groups(**groups)
+spec = parse_groups(**groups)
 ```
 
 The translator is the single source of truth for:

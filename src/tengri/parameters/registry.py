@@ -380,10 +380,10 @@ def recipe_parameters(recipe_dict: dict, free_only: bool = True) -> list[Paramet
     ~tengri.recipes : Curated recipe functions.
     describe_parameter : Look up a single parameter by name.
     """
-    from tengri.parameters.parameters import Parameters
+    from tengri.parameters.groups import parse_groups
 
     # Translate recipe to Parameters (no SSP data needed)
-    params = Parameters.from_groups(**recipe_dict)
+    params = parse_groups(**recipe_dict)
 
     # Get the list of parameter names to introspect
     if free_only:

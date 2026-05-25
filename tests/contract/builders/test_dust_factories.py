@@ -9,9 +9,9 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Parameters, Uniform, builders
+from tengri import FIXED, FREE, Uniform, builders, parse_groups
 from tengri.components.dust.attenuation import DUST_LAWS
-from tengri.parameters.groups import _VALID_DUST_EMISSION_TYPES
+from tengri.parameters.groups import _valid_dust_emission_types
 
 # ── Module surface ────────────────────────────────────────────────
 
@@ -21,7 +21,9 @@ def test_top_level_variants() -> None:
 
 
 def test_emission_variants_match_parser_enum() -> None:
-    assert set(builders.dust.emission.available()) == set(_VALID_DUST_EMISSION_TYPES)
+    # Both sides derive from the registry-backed _valid_dust_emission_types()
+    # helper; this test pins the round-trip.
+    assert set(builders.dust.emission.available()) == set(_valid_dust_emission_types())
 
 
 # ── Signatures ────────────────────────────────────────────────────
@@ -124,7 +126,7 @@ def test_emission_kwarg_must_be_dict() -> None:
 def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
     """``*=FREE`` on dust DOES work — verify the parser's wildcard
     pathway for dust (unlike radio/xray) flips the attenuation knobs."""
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         dust=builders.dust.two_component(_=FREE),
     )
@@ -134,7 +136,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
 
 
 def test_single_component_uses_tau_v_not_tau_bc() -> None:
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         dust=builders.dust.single_component(_=FREE),
     )
@@ -144,7 +146,7 @@ def test_single_component_uses_tau_v_not_tau_bc() -> None:
 
 
 def test_per_param_override_survives_round_trip() -> None:
-    spec = Parameters.from_groups(
+    spec = parse_groups(
         sfh={"type": "dpl"},
         dust=builders.dust.two_component(tau_bc=Uniform(0.5, 3.0)),
     )

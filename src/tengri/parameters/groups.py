@@ -123,42 +123,21 @@ _ensure_registry_loaded()
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
-#: Valid SFH model types (from the registry).
-_VALID_SFH_TYPES = {
-    # Smooth (additive)
-    "tsnorm",
-    "snorm",
-    "snorm_burst",
-    "tsnorm_burst",
-    "norm",
-    "lnorm",
-    "dpl",
-    "const",
-    "exp",
-    "dexp",
-    "tau",
-    "const_exp",
-    "delayed_bq",
-    "periodic",
-    "buat08",
-    "psb",
-    "top_hat",
-    "gaussian_burst",
-    "continuity",
-    "continuity_flex",
-    "dirichlet",
-    "dense_basis",
-    "dense_basis_pure",
-    "table",
-    # Compositors
-    "burst",
-    "field",
-    # Aliases
-    "constant_then_exponential",
-    "psb_wild2020",
-    "db",
-    "dbp",
-}
+
+def _valid_sfh_types() -> frozenset[str]:
+    """Return the set of accepted ``sfh.type`` values, derived from the registry.
+
+    Mirrors ``SFH_REGISTRY.keys()`` so the dict-grammar validator and the
+    auto-generated ``tengri.builders.sfh.*`` factories share one source of
+    truth (per ADR-0005 / ADR-0008). Includes alias keys (``psb_wild2020``,
+    ``db``, ``dbp``) because they live in the registry as duplicate keys
+    pointing at the same spec. Looked up at call time so newly-registered
+    SFHs (e.g. plugins) are picked up without re-importing this module.
+    """
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    return frozenset(SFH_REGISTRY.keys())
+
 
 #: Valid dust model types.
 _VALID_DUST_TYPES = {
@@ -166,19 +145,36 @@ _VALID_DUST_TYPES = {
     "single_component",
 }
 
-#: Valid dust emission types.
-_VALID_DUST_EMISSION_TYPES = {
-    "modified_blackbody",
-    "casey2012",
-    "dale2014",
-    "draine_li2007",
-    "draine_li2014",
-    "dl07_tabulated",
-    "astrodust",
-    "bosa",
-    "themis",
-    "draine2021_pah",
-}
+#: Dust emission types that register lazily via ``register_*_tabulated``
+#: helpers (template data loaded from HDF5 only on first call). These names
+#: are valid even before any tabulated grid has been resolved, so they must
+#: be unioned into the live ``DUST_EMISSION_MODELS`` view when the validator
+#: builds its accepted set. Keeping them as a small, explicit constant
+#: rather than introspecting the loader plumbing keeps the validator path
+#: a pure function of static state.
+_LAZY_DUST_EMISSION_TYPES = frozenset(
+    {
+        "dl07_tabulated",
+        "draine2021_pah",
+    }
+)
+
+
+def _valid_dust_emission_types() -> frozenset[str]:
+    """Return accepted ``dust.emission.type`` values, derived from the registry.
+
+    Union of (i) every name currently in ``DUST_EMISSION_MODELS`` (populated
+    at import time by ``@register_emission_model`` decorators plus the
+    lazy-loader wrappers in ``components/dust/emission.py``) and (ii) the
+    closed set of names that only appear after an explicit
+    ``register_*_tabulated`` call. Together these cover both the
+    eager-registered and lazy-registered branches without the drift footgun
+    a hand-maintained allowlist creates (see ADR-0005 / ADR-0008).
+    """
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+    return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
+
 
 #: Valid nebular types.
 _VALID_NEBULAR_TYPES = {
@@ -208,17 +204,19 @@ _VALID_XRAY_TYPES = {
     "simple",
 }
 
-#: Valid dust attenuation laws.
-_VALID_DUST_LAWS = {
-    "power_law",
-    "calzetti",
-    "kriek_conroy",
-    "smc",
-    "cardelli",
-    "salim",
-    "li08",
-    "noll09",
-}
+
+def _valid_dust_laws() -> frozenset[str]:
+    """Return accepted ``dust.law_bc`` / ``dust.law_diff`` values from the registry.
+
+    Mirrors ``DUST_LAWS.keys()``, which the ``@register_dust_law`` decorator
+    populates eagerly at import time of ``components.dust.attenuation``.
+    No lazy-load wrinkle here (cf. dust emission), so the derivation is a
+    direct view per ADR-0005 / ADR-0008.
+    """
+    from tengri.components.dust.attenuation import DUST_LAWS
+
+    return frozenset(DUST_LAWS.keys())
+
 
 #: Valid AGN disc block types.
 _VALID_AGN_DISC_TYPES = {
@@ -322,7 +320,7 @@ _TOP_LEVEL_SETTINGS = {
 #:
 #: Some recipes (and user-facing nested dicts) carry build-time SEDModel
 #: kwargs like ``approx=WavePrecomp()`` so that the same dict can be splatted
-#: into either ``Parameters.from_groups(**d)`` (parameters only) or
+#: into either ``parse_groups(**d)`` (parameters only) or
 #: ``SEDModel.build(**d)`` (parameters + model construction). These keys
 #: are valid at the SEDModel layer but have no meaning for Parameters; we
 #: drop them here rather than raise ``Unknown group key`` so the splat-both
@@ -382,9 +380,19 @@ def parse_groups(**kwargs) -> Parameters:
     # Build a structural Parameters to get the declared parameter list
     structural_params = Parameters(**structural_kwargs)
 
-    # Partition declared params by owning group
+    # Partition declared params by owning group. ``met_*`` lands in
+    # ``"stellar"`` when the user opted into the new top-level slot
+    # (issue #311); otherwise it stays in ``"sfh"`` so the legacy
+    # ``sfh={'*': FIXED}`` wildcard keeps cascading over met_* params
+    # — preserves pre-#311 behaviour for every fixture/recipe that didn't
+    # pass a ``stellar={}`` block.
     dust_emission_active = structural_params.dust_emission is not None
-    param_partition = _partition_by_group(structural_params.all_params, dust_emission_active)
+    has_stellar_block = isinstance(kwargs.get("stellar"), dict)
+    param_partition = _partition_by_group(
+        structural_params.all_params,
+        dust_emission_active,
+        met_group="stellar" if has_stellar_block else "sfh",
+    )
 
     # Resolve each parameter's final distribution
     resolved_kwargs = dict(structural_kwargs)
@@ -480,7 +488,7 @@ def parse_groups(**kwargs) -> Parameters:
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
     result = {}
 
     for group_name, group_dict in groups.items():
@@ -504,6 +512,8 @@ def _translate_structural(groups: dict) -> dict:
 
         if group_name == "sfh":
             _translate_sfh(group_dict, result)
+        elif group_name == "stellar":
+            _translate_stellar(group_dict, result)
         elif group_name == "dust":
             _translate_dust(group_dict, result)
         elif group_name == "neb":
@@ -536,23 +546,53 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
         result["mean_sfh_type"] = ["dpl", "field"]
         return
 
+    valid = _valid_sfh_types()
     if isinstance(sfh_type, list):
         for type_name in sfh_type:
-            if type_name not in _VALID_SFH_TYPES:
-                suggestions = difflib.get_close_matches(
-                    type_name, _VALID_SFH_TYPES, n=3, cutoff=0.6
-                )
+            if type_name not in valid:
+                suggestions = difflib.get_close_matches(type_name, valid, n=3, cutoff=0.6)
                 suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                 raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
         result["mean_sfh_type"] = sfh_type
         return
 
-    if sfh_type not in _VALID_SFH_TYPES:
-        suggestions = difflib.get_close_matches(sfh_type, _VALID_SFH_TYPES, n=3, cutoff=0.6)
+    if sfh_type not in valid:
+        suggestions = difflib.get_close_matches(sfh_type, valid, n=3, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown SFH type '{sfh_type}'.{suggest_str}")
 
     result["mean_sfh_type"] = sfh_type
+
+
+def _translate_stellar(stellar_dict: dict, result: dict) -> None:
+    """Resolve ``stellar.met_mode`` into the matching Parameters kwarg.
+
+    Wires the chemical-evolution mode (``delta``, ``ramp``, ``two_step``,
+    ``psb_two_step``, ``bins``, ``bins_continuity``, ``chem_evol``, ``table``)
+    through the nested-dict builder. Per-mode parameters (``logzsol_old``,
+    ``logzsol_young``, ``step_age_gyr``, etc.) flow through the standard
+    pass-2 resolver, since :func:`_partition_by_group` routes ``met_*``
+    declarations into this group.
+
+    See :func:`tengri.components.stellar.sfh.met_registry` for the full
+    list of registered modes and their per-mode parameters.
+    """
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+    met_mode = stellar_dict.get("met_mode")
+    if met_mode is None:
+        # No explicit mode; let auto-inference (from per-param keys) decide.
+        return
+
+    valid_modes = sorted(MET_REGISTRY.keys())
+    if met_mode not in MET_REGISTRY:
+        suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(
+            f"Unknown met_mode '{met_mode}'. Valid modes: {', '.join(valid_modes)}.{suggest_str}"
+        )
+
+    result["met_mode"] = met_mode
 
 
 def _translate_dust(dust_dict: dict, result: dict) -> None:
@@ -586,18 +626,17 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     dust_law_bc = dust_dict.get("law_bc", "power_law")
     dust_law_diff = dust_dict.get("law_diff")
 
-    if dust_law_bc not in _VALID_DUST_LAWS:
-        suggestions = difflib.get_close_matches(dust_law_bc, _VALID_DUST_LAWS, n=2, cutoff=0.6)
+    valid_laws = _valid_dust_laws()
+    if dust_law_bc not in valid_laws:
+        suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
 
     result["dust_law_bc"] = dust_law_bc
 
     if dust_law_diff is not None:
-        if dust_law_diff not in _VALID_DUST_LAWS:
-            suggestions = difflib.get_close_matches(
-                dust_law_diff, _VALID_DUST_LAWS, n=2, cutoff=0.6
-            )
+        if dust_law_diff not in valid_laws:
+            suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
         result["dust_law_diff"] = dust_law_diff
@@ -613,9 +652,10 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                     result["dust_emission"] = emission_type
                     return
 
-                if emission_type not in _VALID_DUST_EMISSION_TYPES:
+                valid_emission_types = _valid_dust_emission_types()
+                if emission_type not in valid_emission_types:
                     suggestions = difflib.get_close_matches(
-                        emission_type, _VALID_DUST_EMISSION_TYPES, n=3, cutoff=0.6
+                        emission_type, valid_emission_types, n=3, cutoff=0.6
                     )
                     suggest_str = (
                         f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -709,6 +749,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*"}),
+    "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*"}),
@@ -761,7 +802,7 @@ def _validate_user_keys(
     was added (issue tracked in the forward-model cleanup arc).
     """
     dust_emission_active = structural_params.dust_emission is not None
-    valid_top_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_top_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
     agn_shared_names = _short_names_for_group("agn", param_partition)
@@ -1025,7 +1066,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         result[block_to_kwarg[block_name]] = block_type
 
 
-def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) -> dict[str, str]:
+def _partition_by_group(
+    all_param_names: list[str],
+    dust_emission_active: bool,
+    *,
+    met_group: str = "sfh",
+) -> dict[str, str]:
     """Partition parameter names by their owning group.
 
     Returns a dict: param_name -> group_name. For sub-groups, group_name
@@ -1066,7 +1112,9 @@ def _partition_by_group(all_param_names: list[str], dust_emission_active: bool) 
             partition[name] = "dust.emission"
         elif name.startswith("dust_"):
             partition[name] = "dust"
-        elif name.startswith("sfh_") or name.startswith("met_"):
+        elif name.startswith("met_"):
+            partition[name] = met_group
+        elif name.startswith("sfh_"):
             partition[name] = "sfh"
         else:
             # _structural (settings like mean_sfh_type, dust_model, etc.)
@@ -1259,9 +1307,9 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
 def parameters_to_groups(spec: Parameters) -> dict:
     """Convert a Parameters back to nested-dict form.
 
-    Inverts Parameters.from_groups() by reconstructing the nested-dict
+    Inverts parse_groups() by reconstructing the nested-dict
     structure that would reproduce the same Parameters when passed back to
-    from_groups(). Uses provenance tags (if available) to collapse wildcard-
+    parse_groups(). Uses provenance tags (if available) to collapse wildcard-
     expanded parameters and preserve explicit overrides.
 
     Parameters
@@ -1272,7 +1320,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
     Returns
     -------
     dict
-        Nested-dict suitable for re-passing to Parameters.from_groups(**result).
+        Nested-dict suitable for re-passing to parse_groups(**result).
 
     Notes
     -----
@@ -1285,22 +1333,31 @@ def parameters_to_groups(spec: Parameters) -> dict:
     all parameters are listed explicitly (no wildcard).
 
     **Roundtrip guarantee**: The output dict, when passed to
-    Parameters.from_groups(**output), produces a Parameters with identical
+    parse_groups(**output), produces a Parameters with identical
     free/fixed partitions and distributions.
 
     Examples
     --------
-    >>> spec = Parameters.from_groups(
+    >>> spec = parse_groups(
     ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
     ...     redshift=Fixed(0.05),
     ... )
     >>> groups = spec.to_groups()
-    >>> roundtripped = Parameters.from_groups(**groups)
+    >>> roundtripped = parse_groups(**groups)
     >>> spec.free_params == roundtripped.free_params
     True
     """
     result = {}
-    partition = _partition_by_group(spec.all_params, spec.dust_emission is not None)
+    # Emit a ``stellar`` block on the round-trip only when ``met_mode`` is
+    # non-default OR the user explicitly built the spec with a stellar group
+    # (provenance check). Otherwise keep met_* under ``sfh`` for back-compat
+    # with the legacy fixtures that pre-#311 expected.
+    use_stellar = getattr(spec, "met_mode", "delta") != "delta"
+    partition = _partition_by_group(
+        spec.all_params,
+        spec.dust_emission is not None,
+        met_group="stellar" if use_stellar else "sfh",
+    )
     provenance = getattr(spec, "_group_provenance", {})
 
     # Group parameters by their owning group
@@ -1409,7 +1466,7 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
     elif group_name == "neb":
         # ``Parameters`` stores ``nebular_mode == "off"`` to mean "no nebular
         # contribution"; the dict grammar's canonical name for that state is
-        # ``"none"``. Map at the boundary so to_groups() / from_groups()
+        # ``"none"``. Map at the boundary so to_groups() / parse_groups()
         # round-trip cleanly.
         return "none" if spec.nebular_mode == "off" else spec.nebular_mode
     elif group_name == "igm":
@@ -1443,6 +1500,12 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
             group_output["law_bc"] = spec.dust_law_bc
         if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
             group_output["law_diff"] = spec.dust_law_diff
+    elif group_name == "stellar":
+        # Emit met_mode whenever it's non-default (default = 'delta').
+        # Always-emit would force a stellar={} entry on every round-trip, which
+        # noisily breaks existing diff-against-from_groups call sites.
+        if getattr(spec, "met_mode", "delta") != "delta":
+            group_output["met_mode"] = spec.met_mode
 
 
 def _analyze_wildcard_intent(

@@ -140,7 +140,12 @@ class Silva04Torus(SEDModelComponent):
     log_nh_silva = Uniform(
         22.0, 25.0, description="Hydrogen column density (Silva et al.)", units="dex (cm^-2)"
     )
-    torus_frac = Uniform(0.0, 1.0, description="Torus luminosity fraction of L_bol", units="")
+    torus_frac = Uniform(
+        0.0,
+        1.0,
+        description="Torus luminosity fraction of L_bol",
+        units="dimensionless",
+    )
 
     # Cross-component output
     outputs: ClassVar[dict[str, str]] = {"L_agn_torus": "erg/s"}

@@ -949,91 +949,48 @@ class Parameters:
 
     # ── Public API ────────────────────────────────────────────────────
 
-    @classmethod
-    def from_groups(cls, **groups) -> Parameters:
-        """Build a Parameters from the Bagpipes-style nested-dict form.
-
-        Thin convenience wrapper around :func:`tengri.parameters.parse_groups`.
-        Lets users construct a model via grouped dicts (one per physics block,
-        with a ``'type'`` key and an optional ``'*'`` wildcard) instead of the
-        flat-kwarg form. Anything left unspecified auto-fills from the registry.
-
-        Parameters
-        ----------
-        **groups : dict
-            One keyword per physics group (``sfh``, ``dust``, ``neb``, ``igm``,
-            ``radio``, ``xray``) plus top-level kwargs (``redshift``,
-            ``apply_igm``). Each group is a dict containing a ``'type'`` key,
-            an optional ``'*'`` wildcard set to :data:`~tengri.FREE` or
-            :data:`~tengri.FIXED`, and per-parameter overrides. See
-            :func:`parse_groups` for the full grammar.
-
-        Returns
-        -------
-        Parameters
-            A fully-resolved Parameters identical to what the equivalent
-            flat-kwarg ``Parameters(...)`` call would produce.
-
-        See Also
-        --------
-        tengri.parameters.parse_groups : The underlying parser.
-
-        Examples
-        --------
-        >>> from tengri import Parameters, Fixed, FREE, FIXED, Uniform
-        >>> spec = Parameters.from_groups(
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
-        ...     neb={"type": "cue", "*": FIXED},
-        ...     redshift=Fixed(0.05),
-        ... )
-        >>> "sfh_dpl_beta" in spec.free_params
-        True
-        """
-        from tengri.parameters.groups import parse_groups
-
-        return parse_groups(**groups)
-
     def to_groups(self) -> dict:
         """Convert this Parameters to nested-dict form.
 
-        Inverts :meth:`from_groups` by reconstructing the nested-dict structure
-        that would reproduce this Parameters when passed to from_groups(). Uses
-        provenance metadata to collapse wildcard-expanded parameters and preserve
-        explicit overrides.
+        Inverts :func:`tengri.parse_groups` by reconstructing the nested-dict
+        structure that would reproduce this Parameters when re-parsed. Uses
+        provenance metadata to collapse wildcard-expanded parameters and
+        preserve explicit overrides.
 
         Returns
         -------
         dict
-            Nested-dict suitable for re-passing to Parameters.from_groups(**result).
+            Nested-dict suitable for re-passing to
+            ``tengri.parse_groups(**result)`` or ``SEDModel.build(ssp, **result)``.
 
         See Also
         --------
-        from_groups : The inverse operation.
+        tengri.parse_groups : The inverse operation.
+        tengri.SEDModel.build : End-to-end model construction from nested dicts.
 
         Notes
         -----
         **Provenance-aware collapsing**: If this Parameters was built via
-        from_groups(), provenance tags are used to collapse parameters that
-        shared the same wildcard marker ('*': FREE or '*': FIXED) back into
-        that wildcard, with explicit overrides listed separately.
+        ``parse_groups``, provenance tags are used to collapse parameters that
+        shared the same wildcard marker (``'*': FREE`` or ``'*': FIXED``) back
+        into that wildcard, with explicit overrides listed separately.
 
         **Flat-built fallback**: If this Parameters was built via flat-kwarg
-        Parameters(...), all parameters are listed explicitly (no wildcard).
+        ``Parameters(...)``, all parameters are listed explicitly (no wildcard).
 
         **Roundtrip guarantee**: The output dict, when passed to
-        Parameters.from_groups(**output), produces a Parameters with identical
+        ``parse_groups(**output)``, produces a Parameters with identical
         free/fixed partitions and distributions.
 
         Examples
         --------
-        >>> from tengri import Parameters, FREE, FIXED, Uniform, Fixed
-        >>> spec = Parameters.from_groups(
+        >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
+        >>> spec = parse_groups(
         ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
         ...     redshift=Fixed(0.05),
         ... )
         >>> groups = spec.to_groups()
-        >>> roundtripped = Parameters.from_groups(**groups)
+        >>> roundtripped = parse_groups(**groups)
         >>> spec.free_params == roundtripped.free_params
         True
         """

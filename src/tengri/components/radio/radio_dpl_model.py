@@ -60,19 +60,31 @@ class RadioDPL(SEDModelComponent):
     parameter_prefix = "radio_"
 
     # SF
-    q_ir = Fixed(2.64, description="FIR-radio correlation q_IR (Bell+2003)", units="")
-    alpha_sf = Fixed(0.8, description="SF synchrotron spectral index", units="")
+    q_ir = Fixed(
+        2.64,
+        description="FIR-radio correlation q_IR (Bell+2003)",
+        units="dimensionless",
+    )
+    alpha_sf = Fixed(0.8, description="SF synchrotron spectral index", units="dimensionless")
 
     # AGN power-law trunk
-    alpha_thin = Uniform(-1.5, 0.0, description="thin (high-ν) spectral index", units="")
-    alpha_thick = Uniform(-0.5, 1.0, description="thick (low-ν) spectral index", units="")
+    alpha_thin = Uniform(
+        -1.5, 0.0, description="thin (high-ν) spectral index", units="dimensionless"
+    )
+    alpha_thick = Uniform(
+        -0.5, 1.0, description="thick (low-ν) spectral index", units="dimensionless"
+    )
     log_nu_t = Uniform(8.0, 11.0, description="log break frequency", units="dex (Hz)")
     log_nu_cut = Uniform(11.0, 14.0, description="log aging-cutoff frequency", units="dex (Hz)")
-    loudness = Fixed(0.0, description="AGN radio-loudness log10(L_5GHz/L_B)", units="")
+    loudness = Fixed(
+        0.0,
+        description="AGN radio-loudness log10(L_5GHz/L_B)",
+        units="dimensionless",
+    )
 
     # Thermal free-free
     T_e = Fixed(1e4, description="free-free electron temperature", units="K")
-    alpha_ff = Fixed(-0.1, description="thermal free-free spectral index", units="")
+    alpha_ff = Fixed(-0.1, description="thermal free-free spectral index", units="dimensionless")
 
     inputs: dict[str, str] = {}  # noqa: RUF012
     # Opportunistic cross-component reads — fallback to 0 when not published.

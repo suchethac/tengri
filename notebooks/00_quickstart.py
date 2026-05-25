@@ -285,7 +285,7 @@ spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 spec_truth = obs_fnu(truth_full)
 
-phot_draws = np.asarray(jax.vmap(lambda p: forward.predict(p)["phot_fnu"])(draws))
+phot_draws = np.asarray(jax.vmap(lambda p: forward.predict_observables(p)["phot_fnu"])(draws))
 phot_med = np.median(phot_draws, axis=0)
 
 fig = plt.figure(figsize=(8.6, 5.4))

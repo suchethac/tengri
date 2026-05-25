@@ -28,7 +28,11 @@ class TestXRayAirdPort:
         comp = XRayAirdSEDComponent()
         params = comp.declared_parameters()
         assert isinstance(params, list)
-        assert len(params) >= 5  # gamma_hmxb, gamma_lmxb, gamma_agn, E_cut, alpha_ox
+        # PR #329 demoted alpha_ox from a free parameter (now an empirical prior
+        # via L_2500) and E_cut to a fixed default. The N_H column density is
+        # the new free parameter from PR #325. So the current count is 4:
+        # gamma_hmxb, gamma_lmxb, gamma_agn, log_nh.
+        assert len(params) >= 4
         assert all(isinstance(p, ParamDeclaration) for p in params)
 
     def test_parameter_units(self):

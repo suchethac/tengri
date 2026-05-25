@@ -52,7 +52,7 @@ class TestDL14IRComponent:
         assert names == {"dust_qpah", "dust_umin", "dust_gamma"}
         for d in decls:
             assert isinstance(d, ParamDeclaration)
-            assert d.units in ("%", "dex", "")
+            assert d.units in ("%", "dex", "", "dimensionless")
 
     def test_predict_signature(self):
         """DL14IR.predict has correct signature."""
@@ -116,7 +116,7 @@ class TestDale2014IRComponent:
         assert isinstance(decls, list)
         assert len(decls) == 1
         assert decls[0].name == "dust_alpha_dale"
-        assert decls[0].units == ""
+        assert decls[0].units == "dimensionless"
         assert isinstance(decls[0], ParamDeclaration)
 
     def test_predict_signature(self):
@@ -179,7 +179,7 @@ class TestAstrodustIRComponent:
         assert names == {"dust_qpah", "dust_umin", "dust_gamma"}
         for d in decls:
             assert isinstance(d, ParamDeclaration)
-            assert d.units in ("%", "dex", "")
+            assert d.units in ("%", "dex", "", "dimensionless")
 
     def test_predict_signature(self):
         """AstrodustIR.predict has correct signature."""

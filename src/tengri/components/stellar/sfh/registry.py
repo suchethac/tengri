@@ -64,12 +64,14 @@ from tengri.components.stellar.sfh.mean_sfh import (
 )
 from tengri.components.stellar.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
+    DEFAULT_BIN_EDGES_GYR,
     continuity,
     continuity_flex,
     dirichlet,
+    psb_continuity,
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
-from tengri.parameters.priors import Distribution, Fixed, Uniform
+from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
 
 # ── Data structures ───────────────────────────────────────────────
 
@@ -921,7 +923,7 @@ _register(
                     f"log10 SFR ratio bin {i}/{i + 1}",
                     _always_true,
                     "",
-                    Uniform(-1.0, 1.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
                 )
                 for i in range(6)  # 7 bins -> 6 ratios
             },
@@ -934,7 +936,10 @@ _register(
         composition_type="additive",
     ),
     citation="Leja et al. 2019 (ApJ 876, 39)",
-    short_doc="Non-parametric piecewise continuity SFH (Leja+19)",
+    short_doc=(
+        "Non-parametric piecewise continuity SFH (Leja+19); "
+        "StudentT(0, 0.3, df=2) on log-SFR ratios"
+    ),
 )
 
 # --- continuity_flex (Leja+2019): piecewise-constant with flexible bin edges ---
@@ -956,14 +961,14 @@ _register(
                 "log10(SFR_young / SFR_flex[0])",
                 _always_true,
                 "",
-                Uniform(-1.0, 1.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0),
             ),
             **{
                 f"sfh_cflex_flex_{i}": ParamDef(
                     f"log10 flex bin SFR ratio {i} (controls bin width)",
                     _always_true,
                     "",
-                    Uniform(-1.0, 1.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
                 )
                 for i in range(_N_CFLEX)
             },
@@ -971,7 +976,7 @@ _register(
                 "log10(SFR_old / SFR_flex[N])",
                 _always_true,
                 "",
-                Uniform(-1.0, 1.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0),
             ),
         },
         settings={
@@ -986,7 +991,11 @@ _register(
         },
         composition_type="additive",
     ),
-    short_doc="Non-parametric continuity + flexible bin edges",
+    citation="Leja et al. 2019 (ApJ 876, 39)",
+    short_doc=(
+        "Non-parametric continuity + flexible bin edges (Leja+19); "
+        "StudentT(0, 0.3, df=2) on log-SFR ratios"
+    ),
 )
 
 # --- dirichlet (Leja+2017): piecewise-constant with Dirichlet mass fraction prior ---
@@ -1006,7 +1015,9 @@ _register(
                     f"Dirichlet stick-breaking variable {i}",
                     lambda lo, hi: lo >= 0 and hi <= 1,
                     "must be in [0, 1]",
-                    Uniform(0.01, 0.99),
+                    # Beta(1, 1) is exactly Uniform(0, 1); faithful Leja+2017
+                    # symmetric Dirichlet(1,...,1) marginal on mass fractions.
+                    Uniform(0.0, 1.0),
                 )
                 for i in range(6)  # 7 bins -> 6 auxiliary variables
             },
@@ -1019,7 +1030,177 @@ _register(
         composition_type="additive",
     ),
     citation="Leja et al. 2017 (ApJ 837, 170)",
-    short_doc="Non-parametric Dirichlet SFH (Leja+17)",
+    short_doc=(
+        "Non-parametric Dirichlet SFH (Leja+17); "
+        "Beta(1,1) = Uniform(0,1) stick-breaking aux variables"
+    ),
+)
+
+
+# --- bursty_continuity (Tacchella+2022): bin-edge-dependent Student-t scale ---
+# Same shape function as `continuity`, but per-ratio sigma toggles between
+# scale_young = 1.0 dex (when the younger edge bin_edges_gyr[i+1] < t_split_gyr)
+# and scale_old = 0.3 dex otherwise. For the default 7-bin grid
+# DEFAULT_BIN_EDGES_GYR = [0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7] Gyr and
+# t_split = 1.0 Gyr, this gives sigma = [1.0, 1.0, 1.0, 0.3, 0.3, 0.3] for
+# ratios 0..5. See bursty_continuity_prior_logp in nonparametric.py.
+_BURSTY_T_SPLIT_GYR = 1.0
+_BURSTY_SCALE_YOUNG = 1.0
+_BURSTY_SCALE_OLD = 0.3
+_BURSTY_DEFAULT_SIGMAS = [
+    _BURSTY_SCALE_YOUNG
+    if float(DEFAULT_BIN_EDGES_GYR[i + 1]) < _BURSTY_T_SPLIT_GYR
+    else _BURSTY_SCALE_OLD
+    for i in range(6)
+]
+_register(
+    SFHModelSpec(
+        name="bursty_continuity",
+        fn=continuity,
+        params={
+            "sfh_burstcont_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_burstcont_ratio_{i}": ParamDef(
+                    f"log10 SFR ratio bin {i}/{i + 1} (Tacchella+22 piecewise scale)",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=_BURSTY_DEFAULT_SIGMAS[i], df=2.0),
+                )
+                for i in range(6)
+            },
+        },
+        settings={
+            "sfh_burstcont_t_split_gyr": _BURSTY_T_SPLIT_GYR,
+            "sfh_burstcont_scale_young": _BURSTY_SCALE_YOUNG,
+            "sfh_burstcont_scale_old": _BURSTY_SCALE_OLD,
+        },
+        internal_param_map={
+            "sfh_burstcont_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{f"sfh_burstcont_ratio_{i}": (f"ratio_{i}", 1.0, 0.0) for i in range(6)},
+        },
+        composition_type="additive",
+    ),
+    citation="Tacchella et al. 2022 (ApJ 926, 134); arXiv:2102.11954",
+    short_doc=(
+        "Bursty continuity SFH (Tacchella+22); StudentT df=2 with sigma=1.0 dex on "
+        "ratios whose younger edge < 1 Gyr and sigma=0.3 dex otherwise"
+    ),
+)
+
+
+# --- psb_suess2022 (Suess+2022): post-starburst nonparametric SFH ---
+# Distinct from the existing `psb_wild2020` (Wilkinson+2020 parametric).
+# Free params: log_total_mass, tlast_gyr (quenching epoch), tflex_gyr (upper
+# bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
+# ratio_old_0..N-2 for the fixed old bins. Defaults match Suess+2022: tlast
+# in [0.01, 1.0] Gyr, tflex in [0.5, 5.0] Gyr, StudentT(0, 0.3, 2) on ratios.
+# Default fixed old bins = DEFAULT_BIN_EDGES_GYR[2:] = [0.3, 1.0, 3.0, 6.0, 13.7]
+# -> 4 old bins -> 3 ratio_old_* parameters.
+_N_PSB_OLD_RATIOS = 3
+_register(
+    SFHModelSpec(
+        name="psb_suess2022",
+        fn=psb_continuity,
+        params={
+            "sfh_psb2022_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            "sfh_psb2022_tlast_gyr": ParamDef(
+                "Quenching-onset lookback time (Gyr); width of the youngest bin",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 1.0),
+            ),
+            "sfh_psb2022_tflex_gyr": ParamDef(
+                "Upper boundary of the flexible quenching zone (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 5.0),
+            ),
+            "sfh_psb2022_ratio_young": ParamDef(
+                "log10(SFR_young / SFR_flex); large positive = recent burst",
+                _always_true,
+                "",
+                StudentT(mu=0.0, sigma=0.3, df=2.0),
+            ),
+            **{
+                f"sfh_psb2022_ratio_old_{i}": ParamDef(
+                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                )
+                for i in range(_N_PSB_OLD_RATIOS)
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_psb2022_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_psb2022_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
+            "sfh_psb2022_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb2022_ratio_young": ("ratio_young", 1.0, 0.0),
+            **{
+                f"sfh_psb2022_ratio_old_{i}": (f"ratio_old_{i}", 1.0, 0.0)
+                for i in range(_N_PSB_OLD_RATIOS)
+            },
+        },
+        composition_type="additive",
+    ),
+    citation="Suess et al. 2022 (ApJ 935, 146); arXiv:2207.05895",
+    short_doc=(
+        "Post-starburst non-parametric SFH (Suess+22): youngest bin [0, tlast] + "
+        "flex zone [tlast, tflex] + fixed old bins, with StudentT(0, 0.3, df=2) ratios"
+    ),
+)
+
+
+# --- prospector_beta (Wang+2024): redshift-aware continuity SFH ---
+# Same shape and ratio prior as `continuity`; differs by using
+# redshift-dependent bin edges produced by `make_agebins_from_zred(zred)`.
+# Edges are passed via the composer's `bin_edges_gyr` argument at build
+# time (call `make_agebins_from_zred` in your recipe). The joint mass-z-SFR
+# hierarchical prior from Wang+2023 is out of scope here.
+_register(
+    SFHModelSpec(
+        name="prospector_beta",
+        fn=continuity,
+        params={
+            "sfh_pbeta_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_pbeta_ratio_{i}": ParamDef(
+                    f"log10 SFR ratio bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                )
+                for i in range(6)
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_pbeta_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{f"sfh_pbeta_ratio_{i}": (f"ratio_{i}", 1.0, 0.0) for i in range(6)},
+        },
+        composition_type="additive",
+    ),
+    citation="Wang et al. 2024 (arXiv:2401.12198); SFH shape from Leja+2019",
+    short_doc=(
+        "Prospector-beta: continuity SFH with redshift-aware bin edges from "
+        "make_agebins_from_zred(zred); StudentT(0, 0.3, df=2) on log-SFR ratios"
+    ),
 )
 
 
@@ -1301,7 +1482,14 @@ def resolve_sfh(
         merged_settings.update(s.settings)
 
     # Build lists of (fn, set_of_internal_names) for each additive component
-    _NONPARAM_NAMES = {"continuity", "dirichlet", "continuity_flex"}
+    _NONPARAM_NAMES = {
+        "continuity",
+        "dirichlet",
+        "continuity_flex",
+        "bursty_continuity",
+        "psb_suess2022",
+        "prospector_beta",
+    }
     additive_info = []
     for s in additive:
         internal_names = {v[0] for v in s.internal_param_map.values()}

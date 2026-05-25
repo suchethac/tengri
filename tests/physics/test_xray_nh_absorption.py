@@ -24,7 +24,13 @@ import pytest
 from tengri.components.xray.xray import (
     compton_scattering_transmission,
     tbabs_transmission,
-    xray_agn_corona,
+    # PR #329 changed the public `xray_agn_corona` to take L_2500_30deg
+    # directly. The legacy L_bol-driven path (which this PR's N_H absorption
+    # was originally implemented against) lives behind the
+    # `xray_agn_corona_bolometric` deprecation shim. The N_H math is
+    # identical in both paths; testing it via the shim keeps the focus on
+    # absorption physics rather than re-deriving L_2500 from L_bol.
+    xray_agn_corona_bolometric as xray_agn_corona,
 )
 
 jax.config.update("jax_enable_x64", True)
@@ -79,7 +85,11 @@ def test_unabsorbed_limit_matches_intrinsic_power_law() -> None:
     nu = C_AA / wave
     E_keV = H_PLANCK * nu / 1.6022e-9
     L_2500 = 1e45 / (5.15 * 1.199e15)
-    L_2keV = L_2500 * 10.0 ** (-1.4 / 0.384)
+    # PR #329 tightened the α_OX divisor from 0.384 → 0.3838 (exact
+    # 1/log10(ν_2keV/ν_2500Å)) to match X-CIGALE yang20.py:227. The 0.4 %
+    # difference shows up here because we recompute the expected spectrum
+    # analytically — use the same divisor so the test pins the active code.
+    L_2keV = L_2500 * 10.0 ** (-1.4 / 0.3838)
     spec = (E_keV / 2.0) ** (-1.8 + 1) * jnp.exp(-E_keV / 300.0)
     expected = jnp.where(wave < 124.0, L_2keV * spec, 0.0)
 
@@ -101,9 +111,7 @@ def test_compton_thick_floor_at_scattered_fraction() -> None:
     """
     wave = jnp.array([100.0])  # ≈ 0.124 keV
     l_intr = xray_agn_corona(wave, L_agn_bol=1e45, log_nh=15.0, scattered_frac=0.0)
-    l_thick = xray_agn_corona(
-        wave, L_agn_bol=1e45, log_nh=26.0, scattered_frac=0.01
-    )
+    l_thick = xray_agn_corona(wave, L_agn_bol=1e45, log_nh=26.0, scattered_frac=0.01)
     ratio = float(l_thick[0] / l_intr[0])
     assert 0.005 < ratio < 0.015, f"expected ≈ 0.01, got {ratio}"
 

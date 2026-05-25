@@ -1,28 +1,11 @@
 # Contributing to tengri
 
-Thank you for your interest in contributing to tengri! We welcome contributions of all kinds: bug reports, feature requests, code improvements, documentation, examples, and code review.
+Tengri is differentiable SED fitting in JAX. Bug reports, fixes, new physics
+modules, docs, and review are all welcome. The two things to read before a PR
+are this file and [`docs/dev/NAMING_CONTRACT.md`](docs/dev/NAMING_CONTRACT.md).
 
-## Welcome
-
-Tengri is a scientific software project for differentiable SED fitting. We aim to be inclusive and supportive of contributors at all experience levels. If you're interested in astronomy, Bayesian inference, JAX, or scientific software in general, we'd love your input.
-
-## Ways to contribute
-
-**Non-code contributions:**
-- File bug reports if you find issues
-- Propose new features or improvements via GitHub issues
-- Review pull requests and share feedback
-- Improve documentation and examples
-- Help others in GitHub Discussions
-- Spread the word about tengri in your community
-
-**Code contributions:**
-- Fix bugs
-- Implement planned features (see ROADMAP.md)
-- Add tests
-- Improve documentation
-- Optimize performance
-- Port or integrate new physics models
+Open issues and the roadmap track ongoing work — see
+[`ROADMAP.md`](ROADMAP.md) and the [issue tracker](https://github.com/suchethac/tengri/issues).
 
 ## Quick start for developers
 
@@ -62,31 +45,21 @@ Tengri is a scientific software project for differentiable SED fitting. We aim t
    .venv/bin/ruff format src/ tests/
    ```
 
-## Filing a good bug report
+## Filing a bug report
 
-When opening a bug report, please include:
-- **What happened:** A clear description of the problem
-- **Minimum reproducer:** The smallest code snippet that triggers the bug
-- **Expected behavior:** What you thought should happen
-- **Environment:**
-  - tengri version (`pip show tengri`)
-  - Python version (`python --version`)
-  - Operating system
-  - JAX backend (CPU, GPU) and version
-  - JAX device (`JAX_PLATFORMS` env var)
-- **Log output:** Full traceback or error message
+Include:
+- a minimum reproducer (smallest snippet that triggers the bug),
+- expected vs actual behaviour,
+- `pip show astro-tengri`, `python --version`, OS, JAX backend + version, and the value of `JAX_PLATFORMS`,
+- the full traceback.
 
-See `.github/ISSUE_TEMPLATE/bug_report.md` for a template.
+Template: `.github/ISSUE_TEMPLATE/bug_report.md`.
 
 ## Proposing a feature
 
-To propose a new feature:
-1. Open a GitHub issue and describe what you want and why
-2. Discuss the scope and approach with maintainers
-3. Once consensus is reached, you're welcome to implement it
-4. See "Development workflow" below
-
-See `.github/ISSUE_TEMPLATE/feature_request.md` for a template.
+Open an issue describing what and why before implementing. For larger changes,
+agree on scope first — it's cheaper than rewriting after review.
+Template: `.github/ISSUE_TEMPLATE/feature_request.md`.
 
 ## Adding a new alternative within a component
 
@@ -161,39 +134,35 @@ Implements disk-torus geometry from Stalevski et al. (2016).
 Anisotropy parameter theta_torus controls opening angle.
 ```
 
-**Pre-commit hooks (planned):**
-- Style checking will be automated in CI
-
 ## Coding standards
 
-- **Style guide:** Follow ruff (configured in `pyproject.toml`)
-- **Naming:** See `docs/dev/NAMING_CONTRACT.md` — canonical names are non-negotiable
-- **Docstrings:** See `docs/dev/docstring-standard.md` — numpydoc format with units, shapes, equations, and references
-- **Immutability:** Never mutate arrays in-place; use `.at[].set()`
-- **JAX compatibility:** Ensure all functions are JIT-safe unless explicitly marked otherwise
+- Ruff for lint + format (`pyproject.toml`).
+- Naming: `docs/dev/NAMING_CONTRACT.md` — the canonical names are non-negotiable.
+- Docstrings: numpydoc (`docs/dev/docstring-standard.md`) with units, shapes, equations, references.
+- Immutable arrays: `.at[].set()` rather than in-place writes.
+- Pure JAX in `components/` and `forward/` — `jit`, `vmap`, `grad` must compose.
 
-## Testing standards
+## Tests
 
-Every code change must include tests.
+Every change ships with a test. Layout:
 
-- **Coverage goal:** 80%+ across the codebase
-- **Unit tests** (`tests/unit/`): Fast, no large data files
-- **Integration tests** (`tests/integration/`): Require SSP data from `data/`, skip gracefully if missing
-- **Crossval tests** (`tests/crossval/`): Validation against bagpipes/FSPS; run manually with `-m crossval` flag
+- `tests/unit/` — fast, no SSP data.
+- `tests/integration/` — needs `data/ssp_*.h5`, skips if missing.
+- `tests/crossval/` — against bagpipes / FSPS; opt-in with `-m crossval`.
 
-Run locally before pushing:
+Run before pushing:
+
 ```bash
 .venv/bin/pytest tests/ -q
-.venv/bin/pytest --cov=src tests/  # Check coverage
 ```
 
 ## Scientific standards
 
 Every new physics module must:
 
-1. **Cite a primary source:** Every formula or algorithm must reference a peer-reviewed paper, arXiv preprint, or well-documented code repository
-2. **Pin a known value:** Implement a regression test that validates one key prediction to 1% against the paper or upstream reference (e.g., SED shape, line flux, attenuation curve)
-3. **Register a Citation:** Add an entry to `src/tengri/citations/registry.py` with paper title, authors, year, and arXiv/DOI
+1. Cite a primary source (peer-reviewed paper, arXiv preprint, or well-documented code).
+2. Ship a regression test pinning one prediction to 1% against the paper or upstream reference (SED shape, line flux, attenuation curve, …).
+3. Register the citation in `src/tengri/citations/registry.py` so `tengri.cite_all()` picks it up.
 
 Example registration in `registry.py`:
 ```python
@@ -222,16 +191,14 @@ See [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) for a
 
 ## Docstring expectations
 
-Follow numpydoc format. All parameter descriptions must include units in brackets:
+Numpydoc. Every parameter description carries units in brackets. Compare:
 
-Bad:
 ```python
+# Not enough:
 def sfr_to_mass(sfr, duration):
     """Convert SFR to stellar mass."""
-```
 
-Good:
-```python
+# What we expect:
 def sfr_to_mass(sfr, duration):
     """
     Integrate star formation rate to total stellar mass.
@@ -281,61 +248,49 @@ def planck(nu, T):
     """
 ```
 
-## PR review expectations
+## PR review
 
-When you open a PR, a maintainer will review it within ~2 weeks. Reviews focus on:
-
-- **Correctness:** Does the code do what it claims?
-- **Tests:** Are there adequate tests? Do they pass?
-- **Style:** Does it follow ruff and naming conventions?
-- **Documentation:** Are docstrings complete? Are new functions in docs?
-- **Citations:** For new physics, are primary sources verified and cited?
-- **Performance:** Could this be slow? Any obvious bottlenecks?
-
-We may request changes. This is normal and collaborative — we're trying to improve code quality.
+Reviews land within ~2 weeks. They look at correctness, tests, style, docs,
+primary-source citations for new physics, and any obvious performance traps.
+Expect requested changes; that is the point of review.
 
 ## PR checklist
 
-Before submitting, ensure:
-- [ ] `ruff check src/ tests/` passes with zero violations
+- [ ] `ruff check src/ tests/` clean
 - [ ] `pytest tests/ -q` passes locally
-- [ ] New or modified functions have docstrings (numpydoc format)
-- [ ] New physics modules have VERIFICATION entries
-- [ ] All new exports are added to `__init__.py`
-- [ ] CHANGELOG.md is updated (for features/fixes)
-- [ ] AI-assistance checkbox is filled in (if applicable)
+- [ ] new / modified functions have numpydoc docstrings
+- [ ] new physics modules have a VERIFICATION entry
+- [ ] new exports added to `__init__.py`
+- [ ] `CHANGELOG.md` updated for user-visible changes
+- [ ] AI-assistance checkbox filled in the PR template if applicable
 
-## AI-use disclosure
+## AI-assisted contributions
 
-Tengri was initially drafted with AI assistance. We welcome AI-assisted contributions, but with accountability:
+Tengri was initially drafted with AI assistance and continues to accept
+AI-assisted PRs. The bar is the same as for any other PR:
 
-1. **Review every line personally** — AI can make mistakes; you are responsible for correctness
-2. **Verify every equation and citation against a primary source** — Don't trust AI's citations; check them yourself
-3. **Run tests locally** — Execute `pytest tests/ -q` and `ruff check src/ tests/` before pushing
-4. **Check the AI-assistance box in the PR template** — Transparency helps maintainers understand the review context
-
-AI is a tool, not an author. Maintainers review AI-assisted and human-only PRs to the same standard.
+- read every line you submit and own its correctness,
+- verify every equation and citation against a primary source — never trust an AI-generated reference,
+- run `pytest tests/ -q` and `ruff check src/ tests/` before pushing,
+- tick the AI-assistance box in the PR template so reviewers know the context.
 
 ## Release process
 
-Releases are cut by the maintainer (see GOVERNANCE.md). The process:
-1. Update version in `pyproject.toml` and `CITATION.cff`
-2. Update CHANGELOG.md with release notes
-3. Tag on main: `git tag v0.2.0`
-4. Push tag: `git push origin v0.2.0`
-5. GitHub Actions builds and uploads to PyPI
+Releases are cut by the maintainer (see GOVERNANCE.md):
 
-## Governance and recognition
+1. bump version in `pyproject.toml` and `CITATION.cff`,
+2. update `CHANGELOG.md`,
+3. `git tag v0.2.0 && git push origin v0.2.0`,
+4. GitHub Actions builds and uploads to PyPI.
 
-- **Governance:** See GOVERNANCE.md for decision-making and maintainer responsibilities
-- **Contributors:** Major contributors are listed in CONTRIBUTORS.md
-- **Code of Conduct:** See [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md)
+## Governance
 
-## Questions?
+- [GOVERNANCE.md](GOVERNANCE.md) — decision-making and maintainer responsibilities
+- [CONTRIBUTORS.md](CONTRIBUTORS.md) — contributor list
+- [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md)
 
-- **How-to questions:** Use GitHub Discussions
-- **Bug reports:** Use GitHub Issues
-- **Ideas and feedback:** Open an issue or discussion
-- **Don't email the maintainer directly for support** — use public channels so others can learn too
+## Questions
 
-Thank you for contributing!
+How-to questions go to GitHub Discussions, bug reports to Issues. Please use
+the public channels rather than mailing the maintainer directly — other
+people benefit from the answer too.

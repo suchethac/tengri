@@ -8,7 +8,7 @@ Each function in this module corresponds to one SFH variant registered in
 single source of truth for SFH model variants and their fittable
 parameters). Calling a factory returns a plain :class:`dict` matching the
 nested-dict grammar consumed by :meth:`tengri.SEDModel.build` and
-:meth:`tengri.Parameters.from_groups`, so factories and the dict path are
+:func:`tengri.parse_groups`, so factories and the dict path are
 freely interchangeable.
 
 Why factories rather than dicts

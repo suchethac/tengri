@@ -131,7 +131,7 @@ during compile.
 
 If a single notebook with a single fit and `dust_emission="dale2014"`
 peaks above 8 GB on your machine, that's a regression worth reporting.
-The post-Phase-II-2 baseline is ~5 GB peak compile, ~1 GB steady state.
+Baseline (April 2026): ~5 GB peak compile, ~1 GB steady state.
 
 The contributor-side write-up of these patterns lives at
 [`docs/dev/notebook_orchestration_oom.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/notebook_orchestration_oom.md);

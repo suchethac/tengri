@@ -30,7 +30,7 @@ class SimpleDustComponent(SEDModelComponent):
 
     name = "test_dust"
     parameter_prefix = "dust_"
-    tau_v = Uniform(0.0, 2.0, description="Emission amplitude", units="")
+    tau_v = Uniform(0.0, 2.0, description="Emission amplitude", units="dimensionless")
 
     outputs = {"L_ir": "erg/s"}
 
@@ -54,7 +54,7 @@ class SimpleDustComponentWithTaylor(SEDModelComponent):
 
     name = "test_dust_taylor"
     parameter_prefix = "dust_taylor_"
-    tau_v = Uniform(0.0, 2.0, description="Emission amplitude", units="")
+    tau_v = Uniform(0.0, 2.0, description="Emission amplitude", units="dimensionless")
     taylor_order = 1
 
     outputs = {"L_ir": "erg/s"}
@@ -243,7 +243,7 @@ class TestComponentContract:
 
         assert len(params) == 1
         assert params[0].name == "dust_tau_v"
-        assert params[0].units == ""
+        assert params[0].units == "dimensionless"
 
     def test_inputs_outputs_unchanged(self):
         """inputs() and outputs() should be unaffected."""
