@@ -362,16 +362,23 @@ def xray_xrb(
     )
     L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
 
-    # Lehmer+2016 age quartic for LMXB (yang20.py:216–224)
-    # log(L_LMXB / M_star) = 33.276 - 1.503*log(t) - 0.423*(log t)^2
-    #   + 0.425*(log t)^3 + 0.136*(log t)^4 (in W units)
-    # Leading constant 40.276 = 33.276 + 7.0 for erg/s conversion.
-    # where t is age in Gyr
+    # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216–224).
+    # Yang+22 normalises *per 1e10 M_sun*, not per M_sun:
+    #   log( L_LMXB(2-10) / (M_star/1e10 Msun) ) [W]
+    #       = 33.276 - 1.503·logT - 0.423·logT² + 0.425·logT³ + 0.136·logT⁴
+    # So in erg/s per Msun:
+    #   L_LMXB = (M_star / 1e10) · 10^(quartic + 7)
+    #          = (M_star / 1e10) · 10^40.276 · 10^(quartic_terms)
+    # NOT  10^(40.276 + ...) · M_star, which was off by 10^10 (the original
+    # bug surfaced by the salvaged regression tests, see
+    # tests/physics/test_xray_yang22_scalings.py).
     log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
-    log_l_lmxb_per_mstar = (
+    log_l_lmxb_per_1e10 = (
         40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
     )
-    L_lmxb_ref = 10.0**log_l_lmxb_per_mstar * stellar_mass * 10.0**log_L_lmxb_offset
+    L_lmxb_ref = (
+        10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
+    )
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalise by integrating the spectral shape over the 2-10 keV reference band
@@ -695,15 +702,20 @@ def xray_agn_corona_from_disc(
     -----
     **JIT-compatible**: yes — pure JAX function.
     """
-    # alpha_ox from disc UV luminosity via the selected empirical correlation
-    alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz, relation=alpha_ox_relation) + delta_alpha_ox
+    # alpha_ox from disc UV luminosity via the selected empirical correlation.
+    # NaN guard for the L_2500=0 fallback (no AGN upstream): log10(0)=-inf
+    # would propagate as 0 * inf = NaN through L_2keV below. Compute α_ox
+    # from a tiny positive floor; the spectrum is masked back to 0 at the
+    # end when l_2500_erg_hz ≤ 0.
+    safe_l_2500 = jnp.maximum(l_2500_erg_hz, 1e-300)
+    alpha_ox = alpha_ox_from_l2500(safe_l_2500, relation=alpha_ox_relation) + delta_alpha_ox
 
     # Derive L_2keV from alpha_ox definition (yang20.py:227):
     #   alpha_ox = 0.3838 * log10(L_2keV / L_2500)
     #   => L_2keV = L_2500 * 10^(alpha_ox / 0.3838)
     # The divisor 0.3838 = 1 / log10(nu_2keV / nu_2500A) is the exact
     # frequency ratio between 2 keV (λ ≈ 6.2 Å) and 2500 Å.
-    l_2kev_erg_hz = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.3838)
+    l_2kev_erg_hz = safe_l_2500 * 10.0 ** (alpha_ox / 0.3838)
 
     # Build power-law spectrum with exponential cutoff
     nu = _C_AA / wavelength
@@ -725,8 +737,12 @@ def xray_agn_corona_from_disc(
         + 0.01 * l_intr
     )
 
-    # X-ray mask (E > 0.1 keV => lambda < 124 A)
-    l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
+    # X-ray mask (E > 0.1 keV => lambda < 124 A) AND mask to zero when
+    # there is no AGN upstream (L_2500 ≤ 0). The safe_l_2500 floor above
+    # keeps the math finite; this mask reverts the floor's effect on the
+    # final spectrum so consumers see exactly zero, not 10^-300 noise.
+    has_agn = l_2500_erg_hz > 0.0
+    l_nu = jnp.where((wavelength < 124.0) & has_agn, l_nu, 0.0)
 
     # Optional anisotropy correction
     if apply_anisotropy:

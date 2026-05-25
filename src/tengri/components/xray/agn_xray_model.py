@@ -139,16 +139,23 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
             - sed_out: sed_in + X-ray continuum.
             - published: Dict with "L_xray_agn" (integrated X-ray luminosity).
         """
-        # Read cross-component input with fallback
+        # Prefer L_2500_30deg from SKIRTOR (canonical Yang+22 driver after
+        # PR #329 changed the corona signature). Fall back to L_agn_bol via
+        # Hopkins+2007 BC_2500 for AGN components that don't publish L_2500.
+        L_2500_30deg = jnp.asarray(inputs.get("L_2500_30deg", 0.0))
         L_agn_bol = jnp.asarray(inputs.get("L_agn_bol", 0.0))
+        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)  # erg/s/Hz
+        L_2500 = jnp.where(L_2500_30deg > 0.0, L_2500_30deg, L_2500_fallback)
 
-        # Call xray_agn_corona primitive
+        # alpha_ox is no longer a free parameter; the new corona derives it
+        # from L_2500 via Just+2007. The component's "alpha_ox" knob is
+        # forwarded as the delta-offset around that empirical prior.
         L_xray = xray_agn_corona(
             wave,
-            L_agn_bol=L_agn_bol,
+            l_2500_30deg_erg_hz=L_2500,
             gamma=jnp.asarray(p["gamma"]),
             E_cut=jnp.asarray(p["e_cut"]),
-            alpha_ox=jnp.asarray(p["alpha_ox"]),
+            delta_alpha_ox=jnp.asarray(p["alpha_ox"]),
         )
 
         # Integrate X-ray luminosity over spectrum
