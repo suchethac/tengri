@@ -148,4 +148,4 @@ cax = fig.colorbar(sm, ax=ax, orientation="vertical", pad=0.05, fraction=0.046)
 cax.set_label("Age [Gyr]", fontsize=8)
 
 fig.tight_layout()
-fig.savefig("plot_ssp_grid.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_ssp_grid.png", dpi=150, bbox_inches="tight")

@@ -105,4 +105,4 @@ ax.text(2175, 1.5e40, "2175 Å bump", fontsize=8, color="0.4", rotation=90, va="
 ax.legend(frameon=False, fontsize=7.5, loc="lower right", ncol=2)
 
 fig.tight_layout()
-fig.savefig("plot_dust_law_application.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dust_law_application.png", dpi=150, bbox_inches="tight")

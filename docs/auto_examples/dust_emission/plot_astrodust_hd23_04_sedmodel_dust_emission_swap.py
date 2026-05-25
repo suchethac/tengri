@@ -99,4 +99,4 @@ ax.set(
 )
 ax.legend(loc="lower center", frameon=False, fontsize=10)
 fig.tight_layout()
-fig.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")

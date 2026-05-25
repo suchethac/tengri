@@ -21,11 +21,6 @@
 Quenching morphology sets the age mix and resulting SED colors
 ==============================================================
 
-.. image:: images/sphx_glr_plot_sfh_quenching_compare_001.png
-   :alt: plot sfh quenching compare
-   :class: sphx-glr-single-img
-
-
 Four quenching scenarios—constant SFR, exponential decline, sharp truncation,
 and recent burst—produce distinct SED shapes. Constant SFR yields a young,
 blue galaxy; sharp quenching creates old red colors; a recent burst injects
@@ -143,7 +138,7 @@ young stars atop an old population. The SED reveals the full assembly history.
     ax.grid(True, alpha=0.2, which="both")
 
     fig.tight_layout()
-    fig.savefig("plot_sfh_quenching_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sfh_quenching_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_quenching_compare.py:

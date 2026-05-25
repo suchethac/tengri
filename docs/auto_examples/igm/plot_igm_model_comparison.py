@@ -51,4 +51,4 @@ ax.set_ylabel("IGM transmission")
 ax.legend(frameon=False, loc="upper right")
 
 fig.tight_layout()
-fig.savefig("plot_igm_model_comparison.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_igm_model_comparison.png", dpi=150, bbox_inches="tight")

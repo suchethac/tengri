@@ -21,11 +21,6 @@
 Modified Blackbody Dust Temperature
 ====================================
 
-.. image:: images/sphx_glr_plot_dust_T_sweep_001.png
-   :alt: plot dust T sweep
-   :class: sphx-glr-single-img
-
-
 Dust temperature T sets the far-infrared peak via Wien's displacement law.
 Higher T shifts the peak blueward into the mid-IR; lower T shifts it
 redward toward the submillimeter.
@@ -73,7 +68,7 @@ redward toward the submillimeter.
         ylabel=r"$\lambda F_\lambda$ (not normalized)",
     )
     fig.tight_layout()
-    fig.savefig("plot_dust_T_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_T_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_T_sweep.py:

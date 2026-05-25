@@ -162,4 +162,4 @@ ax_phot.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax_phot.set_xlim(2.5e3, 1.2e4)
 ax_phot.legend(frameon=False, fontsize=8, loc="lower right")
 
-fig.savefig("plot_workflow_photoz_degeneracy.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_photoz_degeneracy.png", dpi=150, bbox_inches="tight")

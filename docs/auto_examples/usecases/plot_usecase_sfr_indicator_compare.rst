@@ -21,11 +21,6 @@
 SFR indicators: comparing UV, Hα, FIR under stochastic star formation
 =====================================================================
 
-.. image:: images/sphx_glr_plot_usecase_sfr_indicator_compare_001.png
-   :alt: plot usecase sfr indicator compare
-   :class: sphx-glr-single-img
-
-
 Compares four classical SFR indicators (UV continuum, Hα emission, FIR,
 bolometric) on a population of mock galaxies spanning burstiness amplitudes.
 Stochastic SFHs introduce variance that differs between indicators. Hα shows
@@ -118,7 +113,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax.grid(True, alpha=0.3)
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_sfr_indicator_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_sfr_indicator_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_indicator_compare.py:

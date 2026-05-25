@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:03.714** total execution time for 9 files **from auto_examples/multiwavelength**:
+**00:24.710** total execution time for 15 files **from auto_examples/multiwavelength**:
 
 .. container::
 
@@ -32,8 +32,23 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py` (``plot_ulirg_arp220_analog.py``)
-     - 00:03.714
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py` (``plot_panchromatic_milky_way_analog.py``)
+     - 00:21.048
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_m82_starburst_panchromatic.py` (``plot_m82_starburst_panchromatic.py``)
+     - 00:01.261
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_metallicity_radial_gradient.py` (``plot_metallicity_radial_gradient.py``)
+     - 00:01.076
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_submillimeter_galaxy_sed.py` (``plot_submillimeter_galaxy_sed.py``)
+     - 00:00.496
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_dusty_starburst.py` (``plot_panchromatic_dusty_starburst.py``)
+     - 00:00.461
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_mid_ir_pah_features.py` (``plot_mid_ir_pah_features.py``)
+     - 00:00.369
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_components_isolated.py` (``plot_components_isolated.py``)
      - 00:00.000
@@ -57,5 +72,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_panchromatic_redshift_sweep.py` (``plot_panchromatic_redshift_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py` (``plot_ulirg_arp220_analog.py``)
      - 00:00.000
      - 0.0

@@ -21,11 +21,6 @@
 AGN composite SED: per-block decomposition
 ============================================
 
-.. image:: images/sphx_glr_plot_agn_components_breakdown_001.png
-   :alt: plot agn components breakdown
-   :class: sphx-glr-single-img
-
-
 A single ``log L_bol = 12.5`` composable AGN built up component by
 component — disc alone, +torus, +narrow lines, +broad lines — so the
 reader can see what each block contributes to the total spectrum.
@@ -154,7 +149,7 @@ disc choice barely matters longward of 1 μm), etc.
     )
     ax_bot.legend(frameon=False, fontsize=8, loc="lower right")
 
-    fig.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

@@ -69,4 +69,4 @@ for ax, wmin, wmax, _title, lam_hbeta, lam_main in regions:
     ax.legend(frameon=False, fontsize=10)
 
 fig.tight_layout()
-fig.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")

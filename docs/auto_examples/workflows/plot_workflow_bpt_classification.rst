@@ -21,11 +21,6 @@
 BPT diagram: emission lines separate star-forming from AGN ionization
 ====================================================================
 
-.. image:: images/sphx_glr_plot_workflow_bpt_classification_001.png
-   :alt: plot workflow bpt classification
-   :class: sphx-glr-single-img
-
-
 Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics
 on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001
 and Kauffmann+2003 demarcation lines to show the clean separation of
@@ -161,7 +156,7 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
     ax.legend(frameon=False, loc="lower left")
 
     fig.tight_layout()
-    fig.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_bpt_classification.py:

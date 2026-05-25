@@ -21,11 +21,6 @@
 The photo-z degeneracy: dusty z≈0.3 vs unobscured z≈3.5
 ========================================================
 
-.. image:: images/sphx_glr_plot_workflow_photoz_degeneracy_001.png
-   :alt: plot workflow photoz degeneracy
-   :class: sphx-glr-single-img
-
-
 Two galaxies with very different physical properties — a dusty
 star-forming galaxy at z=0.3 and an unobscured Lyman-break galaxy
 at z=3.5 — can produce nearly identical *ugrizY* broadband fluxes.
@@ -190,7 +185,7 @@ References:
     ax_phot.set_xlim(2.5e3, 1.2e4)
     ax_phot.legend(frameon=False, fontsize=8, loc="lower right")
 
-    fig.savefig("plot_workflow_photoz_degeneracy.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_photoz_degeneracy.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_photoz_degeneracy.py:

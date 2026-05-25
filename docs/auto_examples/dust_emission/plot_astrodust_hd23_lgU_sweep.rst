@@ -21,11 +21,6 @@
 Hensley & Draine 2023 Astrodust+PAH: log U sweep
 =================================================
 
-.. image:: images/sphx_glr_plot_astrodust_hd23_lgU_sweep_001.png
-   :alt: plot astrodust hd23 lgU sweep
-   :class: sphx-glr-single-img
-
-
 Sweep ionization parameter across the published :math:`[-3, +6]` range of the
 Hensley & Draine 2023 grid. Shows FIR peak shift toward shorter wavelengths
 and rising MIR PAH features as radiation field intensifies.
@@ -79,7 +74,7 @@ and rising MIR PAH features as radiation field intensifies.
     )
     ax.legend(loc="lower right", frameon=False, fontsize=9, ncol=2)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_lgU_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_lgU_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_lgU_sweep.py:

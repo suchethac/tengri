@@ -21,11 +21,6 @@
 The 2175 Å UV bump traces small-grain dust populations
 =======================================================
 
-.. image:: images/sphx_glr_plot_uv_bump_sweep_001.png
-   :alt: plot uv bump sweep
-   :class: sphx-glr-single-img
-
-
 The 2175 Å UV bump from PAHs and small graphite grains sweeps from absent to
 Milky-Way strength via the ``dust_bump_strength`` knob. At zero, the attenuation
 curve is a smooth power law; at MW-like values, the bump dominates the UV. We
@@ -77,7 +72,7 @@ Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
     cbar.set_label(r"UV bump strength")
 
     fig.tight_layout()
-    fig.savefig("plot_uv_bump_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_uv_bump_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_uv_bump_sweep.py:

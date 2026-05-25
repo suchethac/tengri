@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.004** total execution time for 6 files **from auto_examples/xray**:
+**00:00.113** total execution time for 7 files **from auto_examples/xray**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_vs_agn_lbol.py` (``plot_xray_vs_agn_lbol.py``)
-     - 00:04.004
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_nh_sweep.py` (``plot_xray_nh_sweep.py``)
+     - 00:00.113
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_E_cut_sweep.py` (``plot_E_cut_sweep.py``)
      - 00:00.000
@@ -48,5 +48,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_sf.py` (``plot_xray_sf.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_vs_agn_lbol.py` (``plot_xray_vs_agn_lbol.py``)
      - 00:00.000
      - 0.0

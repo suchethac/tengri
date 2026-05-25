@@ -292,6 +292,23 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The Draine &amp; Li (2007) dust model naturally separates three emission regimes via its parameters. Varying q_PAH (PAH mass fraction) and U_min (minimum radiation-field intensity) traces three archetypal SED shapes:">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_pah_warm_cold_split_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_pah_warm_cold_split`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust IR SED: PAH / Warm grain / Cold grain decomposition</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the Draine+2021 PAHspec library at fixed starlight spectrum and size distribution. Low U: FIR-cooling regime; high U: mid-IR peak shift and PAH-feature strengthening.">
 
 .. only:: html
@@ -409,6 +426,23 @@ Astrodust (HD23) template grids.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust re-radiates absorbed starlight across a broad range of temperatures: colder dust (e.g., diffuse cirrus at ~20 K) peaks in the far-infrared (~250 μm), while warmer dust grains (e.g., starburst regions at ~40 K) peak at shorter wavelengths (~50–100 μm).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_warm_cold_dust_decomposition_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_warm_cold_dust_decomposition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust IR SED: Warm and cold dust decomposition</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -435,6 +469,7 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid
    /auto_examples/dust_emission/plot_ir_library_compare
    /auto_examples/dust_emission/plot_mbb_temperature_beta_grid
+   /auto_examples/dust_emission/plot_pah_warm_cold_split
    /auto_examples/dust_emission/plot_pahspec_lgU_sweep
    /auto_examples/dust_emission/plot_pahspec_starlight_sweep
    /auto_examples/dust_emission/plot_qpah_sweep
@@ -442,4 +477,5 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_themis_qhac_sweep
    /auto_examples/dust_emission/plot_themis_umin_sweep
    /auto_examples/dust_emission/plot_umin_sweep
+   /auto_examples/dust_emission/plot_warm_cold_dust_decomposition
 

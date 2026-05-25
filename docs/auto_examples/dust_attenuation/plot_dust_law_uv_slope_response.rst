@@ -21,11 +21,6 @@
 Attenuation law leaves a distinct UV-slope fingerprint
 =========================================================
 
-.. image:: images/sphx_glr_plot_dust_law_uv_slope_response_001.png
-   :alt: plot dust law uv slope response
-   :class: sphx-glr-single-img
-
-
 For a fixed star-forming galaxy with τ_V = 1 (a moderate
 attenuation), six common attenuation laws produce six visibly
 different reddened UV slopes β. The intrinsic SED has β ≈ −2.3;
@@ -39,28 +34,6 @@ together explain why the IRX–β diagram is so band-, age-, and
 law-dependent in the literature.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-102
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_uv_slope_response_001.png
-   :alt: plot dust law uv slope response
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_uv_slope_response_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/.claude-squad/worktrees/cs/examples-sweep_18b2090a1299ea18/examples/dust_attenuation/plot_dust_law_uv_slope_response.py:92: UserWarning: set_ticklabels() should only be used with a fixed number of ticks, i.e. after set_ticks() or using a FixedLocator.
-      ax.set_xticklabels([lbl for _, lbl, _ in LAWS], rotation=20, ha="right",
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -148,7 +121,7 @@ law-dependent in the literature.
             va="top")
 
     fig.tight_layout()
-    fig.savefig("plot_dust_law_uv_slope_response.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_law_uv_slope_response.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py:

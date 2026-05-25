@@ -47,4 +47,4 @@ ax.set_ylabel(r"$\lambda F_\lambda$ / $\lambda F_\lambda^{\rm max}$ (peak-normal
 ax.legend(fontsize=8, frameon=False, loc="lower right")
 
 fig.tight_layout()
-fig.savefig("plot_ssp_age_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_ssp_age_sweep.png", dpi=150, bbox_inches="tight")

@@ -21,11 +21,6 @@
 Astrodust+PAH size distribution
 ================================
 
-.. image:: images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
-   :alt: plot astrodust hd23 01 size distribution
-   :class: sphx-glr-single-img
-
-
 Per-H grain volume distribution versus grain radius for the Hensley & Draine
 2023 fiducial size distribution (MW high-latitude :math:`R_V=3.1` sightline).
 
@@ -74,7 +69,7 @@ Per-H grain volume distribution versus grain radius for the Hensley & Draine
     )
     ax.legend(loc="upper left", frameon=False)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_01_size_distribution.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_01_size_distribution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py:

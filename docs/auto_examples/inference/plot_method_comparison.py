@@ -114,4 +114,4 @@ ax_sed.legend(frameon=False, fontsize=9)
 ax_sed.grid(True, alpha=0.3, which="both")
 
 fig.tight_layout()
-fig.savefig("plot_method_comparison.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_method_comparison.png", dpi=150, bbox_inches="tight")

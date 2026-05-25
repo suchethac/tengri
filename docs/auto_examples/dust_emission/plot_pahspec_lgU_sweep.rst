@@ -21,11 +21,6 @@
 Draine+2021 PAHspec: log U sweep at fixed (starlight, ion, size)
 ================================================================
 
-.. image:: images/sphx_glr_plot_pahspec_lgU_sweep_001.png
-   :alt: plot pahspec lgU sweep
-   :class: sphx-glr-single-img
-
-
 Sweep ionization parameter across the Draine+2021 PAHspec library at fixed
 starlight spectrum and size distribution. Low U: FIR-cooling regime; high U:
 mid-IR peak shift and PAH-feature strengthening.
@@ -86,7 +81,7 @@ mid-IR peak shift and PAH-feature strengthening.
     )
     ax.legend(loc="lower right", frameon=False, fontsize=7, ncol=3)
     fig.tight_layout()
-    fig.savefig("plot_pahspec_lgU_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_pahspec_lgU_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py:

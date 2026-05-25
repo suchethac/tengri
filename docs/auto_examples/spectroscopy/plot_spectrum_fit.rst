@@ -21,11 +21,6 @@
 Rest-frame spectrum with stellar population ages
 ==================================================
 
-.. image:: images/sphx_glr_plot_spectrum_fit_001.png
-   :alt: plot spectrum fit
-   :class: sphx-glr-single-img
-
-
 Compare the rest-frame spectrum of a young and old galaxy at fixed redshift.
 Shows how the optical continuum color, Balmer decrement, and absorption line
 strengths depend on mean stellar age, holding metallicity and dust fixed.
@@ -124,7 +119,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     ax.legend(frameon=False, loc="upper left", fontsize=10)
 
     fig.tight_layout()
-    fig.savefig("plot_spectrum_fit.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_spectrum_fit.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_spectrum_fit.py:

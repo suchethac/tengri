@@ -71,6 +71,57 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="M82 (NGC 3034) is a nearby starburst galaxy with intense nuclear star formation (SFR ~ 10 Msun/yr), stellar mass M* ~ 1×10^10 Msun, and moderate-to-high dust opacity (τ_V ~ 2 in the starburst core). The panchromatic SED spans from UV (young stars) through optical (attenuated by dust) to far-infrared (warm dust re-emission at ~50 μm) and radio (free-free continuum from ionized regions and synchrotron from supernovae).">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_m82_starburst_panchromatic_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_m82_starburst_panchromatic`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Panchromatic SED: M82 Starburst Analog</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Spiral galaxies exhibit radial metallicity gradients: metal-rich centres and metal-poor discs (e.g. NGC 891, Searle 1971). This example illustrates how three common gradient scenarios—steep positive, flat, and inverted depletion—reshape the integrated SED when weighted by disc area.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_metallicity_radial_gradient_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_metallicity_radial_gradient`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radial metallicity gradients and integrated-light SED</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The 5–30 μm rest-frame spectrum showcases distinct infrared tracers: dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6, 11.3, and 12.7 μm in star-forming galaxies, while silicate absorption (9.7 μm Si–O stretch) and AGN heating suppress PAH and introduce continuum growth in AGN-dominated systems. We model three templates: (a) pure starburst (no AGN), (b) pure AGN (no star formation), and (c) composite with AGN fraction = 0.5. This illustrates the diagnostic power of mid-IR spectroscopy: PAH strength probes star formation rate, while continuum slope and silicate depth reveal AGN heating and dust temperature.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_mid_ir_pah_features_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_mid_ir_pah_features`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Mid-IR PAH features in star-forming, AGN, and composite galaxies</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Panchromatic SED spanning hard X-rays through centimeter radio of a luminous quasar with radio-loud jets. Combines AGN disc continuum, X-ray corona, and radio components, showing how AGN dominate across 0.1 keV through centimeter wavelengths.">
 
 .. only:: html
@@ -122,6 +173,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="A heavily obscured starburst archetype (Arp 220-class ULIRG) with high optical depth and extreme far-infrared dominance. The SED shows: stellar intrinsic (suppressed by dust), stellar attenuated, dust re-emission dominating at 60 μm, and radio extension. Demonstrates how dust attenuation redirects all UV/optical photons into the infrared, completely transforming the SED from young, luminous starbursts.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_panchromatic_dusty_starburst_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_panchromatic_dusty_starburst`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">UV-to-radio SED of a dusty starburst ULIRG</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Full panchromatic SED combining stellar continuum, dust absorption, dust infrared emission, and radio synchrotron. Demonstrates how a unified model spans from ultraviolet through centimeter wavelengths with continuous physics from stellar populations through dust and synchrotron emission.">
 
 .. only:: html
@@ -139,6 +207,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_panchromatic_milky_way_analog_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_panchromatic_milky_way_analog`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Panchromatic SED: Milky Way Analog</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Same galaxy rest-frame panchromatic SED (UV through radio) observed at increasing redshifts. Cosmological redshift transforms rest-frame wavelengths and dims luminosity, shifting spectral features to infrared bands at high redshift where ground-based surveys probe star formation epochs.">
 
 .. only:: html
@@ -151,6 +236,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Rest-to-observer-frame transformation of panchromatic SEDs with redshift</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Submillimeter galaxies (SMGs) are the most luminous starbursts in the universe, hidden behind massive dust columns. This example constructs a z=3 SMG SED with M* = 2×10^11 Msun, SFR = 500 Msun/yr, and τ_V ≈ 3.5 — typical of ALMA-detected sources and the SCUBA-2 850 μm parent population.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_submillimeter_galaxy_sed_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_submillimeter_galaxy_sed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Submillimeter galaxy SED: dust-obscured starburst at z=3</div>
     </div>
 
 
@@ -184,10 +286,16 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
    /auto_examples/multiwavelength/plot_components_isolated
    /auto_examples/multiwavelength/plot_fir_radio_correlation
    /auto_examples/multiwavelength/plot_lbg_observed_evolution
+   /auto_examples/multiwavelength/plot_m82_starburst_panchromatic
+   /auto_examples/multiwavelength/plot_metallicity_radial_gradient
+   /auto_examples/multiwavelength/plot_mid_ir_pah_features
    /auto_examples/multiwavelength/plot_panchromatic_agn
    /auto_examples/multiwavelength/plot_panchromatic_agn_fraction
    /auto_examples/multiwavelength/plot_panchromatic_dust_balance
+   /auto_examples/multiwavelength/plot_panchromatic_dusty_starburst
    /auto_examples/multiwavelength/plot_panchromatic_galaxy
+   /auto_examples/multiwavelength/plot_panchromatic_milky_way_analog
    /auto_examples/multiwavelength/plot_panchromatic_redshift_sweep
+   /auto_examples/multiwavelength/plot_submillimeter_galaxy_sed
    /auto_examples/multiwavelength/plot_ulirg_arp220_analog
 

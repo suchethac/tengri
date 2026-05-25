@@ -17,6 +17,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The bursty continuity prior (Tacchella+2022, ApJ 926, 134) shares the piecewise-constant continuity SFH with Leja+2019 but doubles the Student-t scale on log-SFR ratios whose younger bin edge is recent (&lt; 1 Gyr lookback). The result is a prior that lets recent SFR variations swing by ~1 dex while keeping older history smooth (σ = 0.3 dex).">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_bursty_continuity_sigma_schedule_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_bursty_continuity_sigma_schedule`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Bursty continuity prior: bin-edge-dependent σ schedule (Tacchella+2022)</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Four representative (σ, τ) pairs define burstiness regimes: Smooth (σ=0.3, τ=100 Myr), Moderate (σ=1.0, τ=50 Myr), Bursty (σ=2.0, τ=20 Myr), and Extreme (σ=3.0, τ=5 Myr). Each panel shows one forward-model draw with the smooth mean SFH overlaid, illustrating the range of morphologies that each regime produces before inference.">
 
 .. only:: html
@@ -46,6 +63,40 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Chemical evolution: How SFH and outflows shape metal enrichment history</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The chemical composition of stars encodes the assembly history of galaxies. This figure demonstrates three metallicity evolution pathways available in tengri: (1) constant solar Z, (2) linear ramp from Z = 0.1 Zsun to Zsun over 13 Gyr of cosmic time, and (3) two-step enrichment (low-metallicity plateau at early times, then a sharp jump at lookback time 8 Gyr ago).">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_chemical_evolution_ramp_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_chemical_evolution_ramp`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Metallicity evolution: three scenarios for Z(t) and resulting SED</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The continuity prior (Leja+2019) penalises sharp transitions in adjacent-bin log-SFR ratios with a Student-t distribution (mu=0, sigma=0.3, df=2). This visualisation shows 200 independent draws from the registry default prior, displayed as percentile bands (5th, 25th, 50th, 75th, 95th) versus lookback time.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_continuity_prior_visualisation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_continuity_prior_visualisation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Non-Parametric Continuity Prior: 200 Sample Draws</div>
     </div>
 
 
@@ -153,6 +204,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Tengri ships the non-parametric SFH priors that appear most often in Prospector papers, all with the published prior on the SFR ratios:">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_prospector_priors_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_prospector_priors_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Prospector prior families: continuity vs bursty vs Dirichlet vs PSB</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Three PSD models govern the frequency structure of stochastic SFHs: the default damped random walk (DRW), the Matern family (which includes DRW as a special case), and the extended regulator model. Plotted in frequency space at representative parameters. No SSP data required.">
 
 .. only:: html
@@ -187,6 +255,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The field SFH employs a damped random walk (DRW) power spectral density (PSD) to govern stochastic star formation history realizations. Two parameters control the prior distribution of SFR time-variability:">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_burstiness_prior_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_psd_burstiness_prior`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">PSD-Governed Stochastic SFH Prior: Burstiness Corner Cases</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The amplitude σ of the power spectral density sets how dramatically star formation fluctuates around the smooth trend: σ ≈ 0 means nearly constant SFR, large σ produces dramatic bursts that leave imprints in UV slope, optical colors, and stellar masses. We vary σ across its prior range with the timescale τ fixed.">
 
 .. only:: html
@@ -216,6 +301,23 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">PSD timescale τ controls burst duration in stochastic SFHs</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare three star-formation histories representing distinct quenching scenarios: (1) Constantly star-forming (no quenching), (2) Slowly quenched exponential decay (tau=4 Gyr, peak 6 Gyr ago), and (3) Rapidly quenched post-starburst (truncated skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhibit markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting how quenching timescale imprints on observable photometry and spectroscopy.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_quenching_pathway_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_quenching_pathway_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Quenching pathways: fast vs slow termination of star formation</div>
     </div>
 
 
@@ -304,6 +406,23 @@ Parametric and stochastic star formation history models.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr) starburst? This example demonstrates the outshining problem in broadband photometry (Trager+ 2000, Renzini 2006): the young burst&#x27;s UV emission completely dominates over the ancient burst&#x27;s optical/IR, rendering the ancient population invisible to broadband SED fitting.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_two_burst_observability_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_two_burst_observability`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The outshining problem: young bursts eclipse ancient populations</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -314,21 +433,28 @@ Parametric and stochastic star formation history models.
 .. toctree::
    :hidden:
 
+   /auto_examples/sfh/plot_bursty_continuity_sigma_schedule
    /auto_examples/sfh/plot_bursty_recovery
    /auto_examples/sfh/plot_chemical_evolution
+   /auto_examples/sfh/plot_chemical_evolution_ramp
+   /auto_examples/sfh/plot_continuity_prior_visualisation
    /auto_examples/sfh/plot_dexp_tau_sweep
    /auto_examples/sfh/plot_dpl_alpha_beta_grid
    /auto_examples/sfh/plot_dpl_alpha_sweep
    /auto_examples/sfh/plot_dpl_beta_sweep
    /auto_examples/sfh/plot_lnorm_peak_sweep
    /auto_examples/sfh/plot_parametric_sfh
+   /auto_examples/sfh/plot_prospector_priors_compare
    /auto_examples/sfh/plot_psd_alternatives
    /auto_examples/sfh/plot_psd_burstiness
+   /auto_examples/sfh/plot_psd_burstiness_prior
    /auto_examples/sfh/plot_psd_sigma_sweep
    /auto_examples/sfh/plot_psd_tau_sweep
+   /auto_examples/sfh/plot_quenching_pathway_compare
    /auto_examples/sfh/plot_sfh_double_burst
    /auto_examples/sfh/plot_sfh_form_compare
    /auto_examples/sfh/plot_sfh_nonparametric_compare
    /auto_examples/sfh/plot_sfh_quenching_compare
    /auto_examples/sfh/plot_stochastic_sfh
+   /auto_examples/sfh/plot_two_burst_observability
 

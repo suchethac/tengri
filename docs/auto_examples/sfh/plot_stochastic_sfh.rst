@@ -21,11 +21,6 @@
 Stochastic SFH samples from GP-correlated fields with different burstiness
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_stochastic_sfh_001.png
-   :alt: plot stochastic sfh
-   :class: sphx-glr-single-img
-
-
 Generate stochastic star-formation histories using the Fourier-space GP
 correlated field model, governed by a damped-random-walk power spectrum.
 Left panel shows mild burstiness (σ=0.3, τ=300 Myr); right shows strong
@@ -88,7 +83,7 @@ with the smooth mean SFH overlaid.
     axes[0].set_ylabel("SFR [M$_\\odot$/yr]")
     axes[0].legend(fontsize=10, frameon=False)
     fig.tight_layout()
-    fig.savefig("plot_stochastic_sfh.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_stochastic_sfh.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_stochastic_sfh.py:

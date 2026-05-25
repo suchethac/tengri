@@ -21,11 +21,6 @@
 Draine & Li Minimum Radiation Field (U_min)
 ============================================
 
-.. image:: images/sphx_glr_plot_umin_sweep_001.png
-   :alt: plot umin sweep
-   :class: sphx-glr-single-img
-
-
 Minimum radiation field intensity U_min controls diffuse dust heating.
 Higher U_min implies hotter dust and FIR peak shifted blueward toward
 shorter wavelengths.
@@ -74,7 +69,7 @@ shorter wavelengths.
         ylabel=r"$\lambda F_\lambda$ (not normalized)",
     )
     fig.tight_layout()
-    fig.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_umin_sweep.py:

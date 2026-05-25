@@ -103,4 +103,4 @@ ax.set_ylabel(r"$D_n(4000)$  [F$_\nu$, Balogh+1999]")
 ax.legend(frameon=False, fontsize=9, loc="lower right")
 
 fig.tight_layout()
-fig.savefig("plot_usecase_d4000_age.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_d4000_age.png", dpi=150, bbox_inches="tight")

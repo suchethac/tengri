@@ -100,6 +100,23 @@ Star-formation radio emission and the FIR–radio correlation.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Decompose a star-forming galaxy&#x27;s radio SED into its physical components: synchrotron (steep, slope ~ -0.8) from supernova remnants and thermal free-free (flat, slope ~ -0.1) from HII regions. At radio frequencies, synchrotron dominates below ~30 GHz, while free-free becomes progressively important above. This example uses the Condon (1992) framework with Murphy+2011 thermal calibration.">
+
+.. only:: html
+
+  .. image:: /auto_examples/radio/images/thumb/sphx_glr_plot_synchrotron_thermal_decomposition_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/radio/plot_synchrotron_thermal_decomposition`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radio SED decomposition: synchrotron vs thermal free-free</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -115,4 +132,5 @@ Star-formation radio emission and the FIR–radio correlation.
    /auto_examples/radio/plot_radio_lir_relation
    /auto_examples/radio/plot_radio_loudness_sweep
    /auto_examples/radio/plot_radio_vs_agn_lbol
+   /auto_examples/radio/plot_synchrotron_thermal_decomposition
 

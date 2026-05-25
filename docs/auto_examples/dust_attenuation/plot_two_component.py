@@ -56,4 +56,4 @@ ax_spec.set_ylabel("Transmission")
 ax_spec.legend(fontsize=9, frameon=False)
 
 fig.tight_layout()
-fig.savefig("plot_two_component.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_two_component.png", dpi=150, bbox_inches="tight")

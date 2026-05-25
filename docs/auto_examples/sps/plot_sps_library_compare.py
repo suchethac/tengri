@@ -88,4 +88,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=8, loc="lower right")
 
 fig.tight_layout()
-fig.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")

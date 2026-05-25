@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.218** total execution time for 13 files **from auto_examples/dust_attenuation**:
+**00:03.139** total execution time for 18 files **from auto_examples/dust_attenuation**:
 
 .. container::
 
@@ -32,13 +32,28 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_cardelli_rv_sweep.py` (``plot_cardelli_rv_sweep.py``)
-     - 00:01.218
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_usecase_irx_beta_meurer.py` (``plot_usecase_irx_beta_meurer.py``)
+     - 00:01.013
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_family.py` (``plot_attenuation_law_family.py``)
+     - 00:00.952
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_galactic_zoo_dust_laws.py` (``plot_galactic_zoo_dust_laws.py``)
+     - 00:00.614
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``plot_dust_geometry_screen_vs_mixed.py``)
+     - 00:00.560
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_attenuation_law_compare.py` (``plot_attenuation_law_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``plot_birth_cloud_vs_diffuse.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse_age.py` (``plot_birth_cloud_vs_diffuse_age.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_cardelli_rv_sweep.py` (``plot_cardelli_rv_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_curves.py` (``plot_dust_curves.py``)

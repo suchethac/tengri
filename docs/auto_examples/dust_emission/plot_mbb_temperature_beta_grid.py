@@ -91,4 +91,4 @@ cb_b = fig.colorbar(plt.cm.ScalarMappable(norm=norm_b, cmap="viridis"),
                     ax=ax_b, pad=0.01)
 cb_b.set_label(r"emissivity index $\beta$   ($T_{\rm dust}$ = 30 K fixed)")
 
-fig.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")

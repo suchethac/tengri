@@ -21,11 +21,6 @@
 Dust-emission model family at fixed L_abs
 =========================================
 
-.. image:: images/sphx_glr_plot_dust_emission_models_001.png
-   :alt: plot dust emission models
-   :class: sphx-glr-single-img
-
-
 All six dust-emission ingredients shipped with tengri, called with the same
 absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature
 (35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop
@@ -130,7 +125,7 @@ skip if the data files aren't available.
         )
 
     fig.tight_layout()
-    fig.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_emission_models.py:

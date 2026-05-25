@@ -21,11 +21,6 @@
 Dust IR SED: q_PAH × U_min Grid
 ===============================
 
-.. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :alt: plot dust qpah umin grid
-   :class: sphx-glr-single-img
-
-
 2D grid of dust IR emission showing how PAH mass fraction and radiation-field
 hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
 2007 templates across parameter space.
@@ -97,7 +92,7 @@ hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
                     ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.4)
 
     fig.tight_layout()
-    fig.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py:

@@ -80,4 +80,4 @@ fig = corner.corner(
     show_titles=False,
 )
 
-fig.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_corner.png", dpi=150, bbox_inches="tight")

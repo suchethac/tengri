@@ -36,6 +36,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust attenuation laws encode how interstellar dust preferentially absorbs short-wavelength (UV) starlight relative to optical/IR. The wavelength dependence is empirically calibrated to extinction measurements in the Milky Way (Cardelli+1989), Large/Small Magellanic Clouds (Pei 1992), and starburst galaxies (Calzetti+2000, Kriek+Conroy 2013).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_attenuation_law_family_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_attenuation_law_family`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust attenuation laws: family comparison across UV to near-IR</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into a birth-cloud component (``τ_bc``) that only the youngest stellar ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two are degenerate for an old population (every star is &quot;old&quot; by the BC clock, so τ_bc has no effect) but separate cleanly for a young one.">
 
 .. only:: html
@@ -48,6 +65,23 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: which knob does what?</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into: - τ_bc (birth-cloud): attenuates only young stellar ages (&lt; 10 Myr) - τ_diff (diffuse ISM): attenuates all stellar light">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_birth_cloud_vs_diffuse_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Birth-cloud attenuation age dependence: Charlot & Fall 2000</div>
     </div>
 
 
@@ -82,6 +116,23 @@ depths, two-component geometry, and law comparisons.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Dust attenuation laws from UV through near-infrared</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust geometry determines how dust affects starlight. A screen (foreground dust) filters the light as it leaves the galaxy: transmission = exp(-τ_λ). A mixed geometry (dust uniformly distributed with stars) is more gentle: transmission = (1 - exp(-τ_λ)) / τ_λ.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_geometry_screen_vs_mixed_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Screen vs. mixed dust geometry: identical optical depths, different SEDs</div>
     </div>
 
 
@@ -155,6 +206,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Four named attenuation laws applied to the same intrinsic SED at the same V-band optical depth (τ_V = 1.0), illustrating how dust geometry and grain-size composition vary across the local universe.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_galactic_zoo_dust_laws_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_galactic_zoo_dust_laws`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust attenuation laws across the galaxy zoo</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_bc attenuates only the youngest stellar light (age &lt; ~10 Myr), controlling nebular emission from embedded HII regions. τ_bc effects are clearest on young star-forming populations; we use a 500 Myr starburst and vary τ_bc across the prior range.">
 
 .. only:: html
@@ -206,6 +274,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The IRX–β relation connects the UV continuum slope β (1250–2600 Å) with the infrared excess IRX = log₁₀(L_IR / L_UV). This diagram reveals dust reddening and star formation rate indicators in galaxies. Here we:">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_usecase_irx_beta_meurer_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_usecase_irx_beta_meurer`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">IRX–β diagram: infra-red excess vs UV slope (Meurer+1999)</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump from PAHs and small graphite grains sweeps from absent to Milky-Way strength via the dust_bump_strength knob. At zero, the attenuation curve is a smooth power law; at MW-like values, the bump dominates the UV. We show the attenuation law (not a galaxy SED) to isolate the curve shape.">
 
 .. only:: html
@@ -249,16 +334,21 @@ depths, two-component geometry, and law comparisons.
    :hidden:
 
    /auto_examples/dust_attenuation/plot_attenuation_law_compare
+   /auto_examples/dust_attenuation/plot_attenuation_law_family
    /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
+   /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse_age
    /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
    /auto_examples/dust_attenuation/plot_dust_curves
+   /auto_examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed
    /auto_examples/dust_attenuation/plot_dust_geometry_sweep
    /auto_examples/dust_attenuation/plot_dust_law_application
    /auto_examples/dust_attenuation/plot_dust_law_uv_slope_response
    /auto_examples/dust_attenuation/plot_dust_slope_sweep
+   /auto_examples/dust_attenuation/plot_galactic_zoo_dust_laws
    /auto_examples/dust_attenuation/plot_tau_bc_sweep
    /auto_examples/dust_attenuation/plot_tau_diff_sweep
    /auto_examples/dust_attenuation/plot_two_component
+   /auto_examples/dust_attenuation/plot_usecase_irx_beta_meurer
    /auto_examples/dust_attenuation/plot_uv_bump_sweep
    /auto_examples/dust_attenuation/plot_uv_ir_energy_balance
 

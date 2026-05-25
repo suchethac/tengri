@@ -126,4 +126,4 @@ ax_bot.set(
 )
 ax_bot.legend(frameon=False, fontsize=8, loc="lower right")
 
-fig.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")

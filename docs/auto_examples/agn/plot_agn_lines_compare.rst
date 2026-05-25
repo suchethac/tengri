@@ -21,11 +21,6 @@
 AGN emission-line backbones compared
 ======================================
 
-.. image:: images/sphx_glr_plot_agn_lines_compare_001.png
-   :alt: plot agn lines compare
-   :class: sphx-glr-single-img
-
-
 Four production line backbones layered on top of the same disc +
 torus at fixed ``log L_bol = 12.5``. The line backbone controls
 which optical/UV emission features the model produces — narrow-line
@@ -114,7 +109,7 @@ not shipped with the gallery):
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

@@ -73,4 +73,4 @@ for i, beta in enumerate(betas):
         ax.tick_params(labelsize=8)
 
 fig.tight_layout()
-fig.savefig("plot_dpl_alpha_beta_grid.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dpl_alpha_beta_grid.png", dpi=150, bbox_inches="tight")

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.985** total execution time for 23 files **from auto_examples/dust_emission**:
+**00:01.055** total execution time for 25 files **from auto_examples/dust_emission**:
 
 .. container::
 
@@ -32,8 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``plot_mbb_temperature_beta_grid.py``)
-     - 00:00.985
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pah_warm_cold_split.py` (``plot_pah_warm_cold_split.py``)
+     - 00:00.616
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py` (``plot_warm_cold_dust_decomposition.py``)
+     - 00:00.439
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``plot_astrodust_hd23_01_size_distribution.py``)
      - 00:00.000
@@ -78,6 +81,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``plot_ir_library_compare.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``plot_mbb_temperature_beta_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_lgU_sweep.py` (``plot_pahspec_lgU_sweep.py``)

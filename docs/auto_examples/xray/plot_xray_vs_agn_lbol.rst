@@ -21,11 +21,6 @@
 X-ray SED response to AGN bolometric luminosity
 ================================================
 
-.. image:: images/sphx_glr_plot_xray_vs_agn_lbol_001.png
-   :alt: plot xray vs agn lbol
-   :class: sphx-glr-single-img
-
-
 At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution)
 we sweep the composable AGN's bolometric luminosity ``agn_log_lbol``
 from 9 to 13 (in log L_sun). The host XRB component is a flat
@@ -104,7 +99,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
     cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")
 
     fig.tight_layout()
-    fig.savefig("plot_xray_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_xray_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

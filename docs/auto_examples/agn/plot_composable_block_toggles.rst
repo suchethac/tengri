@@ -21,11 +21,6 @@
 Composable AGN: per-block contribution breakdown
 =================================================
 
-.. image:: images/sphx_glr_plot_composable_block_toggles_001.png
-   :alt: plot composable block toggles
-   :class: sphx-glr-single-img
-
-
 Single recipe (all-GRAHSP), but each pipeline stage rendered independently
 on top of the disc continuum. Demonstrates how the five blocks
 (``disc → lines → feii → torus → attenuation``) contribute to the total
