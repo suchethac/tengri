@@ -78,14 +78,22 @@ class XRayAirdSEDComponent(SEDModelComponent):
     and age-dependent XRB scaling), Yang et al. 2020 (hot gas and AGN
     anisotropy), and Just et al. 2007 (α_OX–L_2500 relation).
 
-    Free parameters (3):
+    Free parameters (4):
     - xray_gamma_hmxb: HMXB spectral index
     - xray_gamma_lmxb: LMXB spectral index
     - xray_gamma_agn: AGN X-ray spectral index
+    - xray_log_nh: line-of-sight equivalent hydrogen column density,
+      applied to the AGN corona only as
+      ``T_phabs(E, N_H) × T_cabs(N_H) × intrinsic + 0.01 × intrinsic``
+      (Ricci+2017; Matsumoto+2026 Eq. B6). T_phabs uses
+      Morrison & McCammon (1983) wabs cross-sections; T_cabs is
+      Thomson down-scattering. Galactic absorption is not modelled
+      (assume user provides intrinsic-frame fluxes).
 
-    The α_OX parameter is not a free parameter here; it is a PRIOR that
-    couples AGN UV (L_2500) and X-ray emission self-consistently
-    (Just+2007, Yang+2020).
+    The α_OX parameter is not a free parameter here; it is a PRIOR
+    that couples AGN UV (L_2500) and X-ray emission self-consistently
+    (Just+2007, Yang+2020). Offsets from the empirical relation can be
+    passed at the function level via ``delta_alpha_ox``.
 
     Notes
     -----
@@ -113,6 +121,16 @@ class XRayAirdSEDComponent(SEDModelComponent):
     gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="dimensionless")
     gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="dimensionless")
     gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="dimensionless")
+    log_nh = Uniform(
+        20.0,
+        26.0,
+        description=(
+            "Line-of-sight equivalent hydrogen column density; applied as "
+            "T_phabs × T_cabs to AGN corona (Ricci+2017; Matsumoto+2026 "
+            "Eq. B6). Compton-thick regime starts at log_nh = 24."
+        ),
+        units="log10(cm^-2)",
+    )
     # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
     # an empirical prior derived from L_2500 via alpha_ox_from_l2500()
     # (Just+2007 / Lusso–Risaliti). Offsets from the empirical value are exposed
@@ -182,12 +200,13 @@ class XRayAirdSEDComponent(SEDModelComponent):
             gamma_hmxb=jnp.asarray(p["gamma_hmxb"]),
             gamma_lmxb=jnp.asarray(p["gamma_lmxb"]),
             gamma_agn=jnp.asarray(p["gamma_agn"]),
-            E_cut=300.0,  # fixed cutoff
-            delta_alpha_ox=0.0,  # no offset from Just+2007
+            E_cut=300.0,  # fixed cutoff (E_cut is no longer a free parameter)
+            delta_alpha_ox=0.0,  # no offset from the empirical α_ox prior
             cos_inc=1.0,  # face-on by default
-            apply_anisotropy=False,  # disable by default (XRayAirdSEDComponent is simple)
+            apply_anisotropy=False,  # XRayAirdSEDComponent stays inclination-agnostic
             a1=0.5,
             a2=0.0,
+            log_nh=jnp.asarray(p["log_nh"]),
         )
 
         return sed_in + L_xray, {
