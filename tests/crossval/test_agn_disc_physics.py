@@ -441,7 +441,6 @@ class TestTorusPhysics:
     """Torus emission must peak in mid-IR and obey temperature scaling."""
 
 
-
 # ── 10. UNIFIED AGN — Type 1/Type 2 geometry ──────────────────────
 
 
