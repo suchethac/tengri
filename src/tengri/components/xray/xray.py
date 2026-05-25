@@ -376,9 +376,7 @@ def xray_xrb(
     log_l_lmxb_per_1e10 = (
         40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
     )
-    L_lmxb_ref = (
-        10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
-    )
+    L_lmxb_ref = 10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalise by integrating the spectral shape over the 2-10 keV reference band
