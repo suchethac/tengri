@@ -80,6 +80,70 @@ class TestBug361A_cb19_dispatch:
         assert isinstance(m._nebular_backend, BakedInBackend)
 
 
+class TestBug361C_cb19_per_line_variation:
+    """CB19 line_lums must vary per line.
+
+    Regression for #361 Bug C: when the synthetic conftest fixture
+    shipped all ratios = 1.0, every CB19 line collapsed to the same
+    luminosity. The fixture now uses physically-distinct Case B SF
+    ratios so any code consumer of the synthetic grid sees per-line
+    variation. Real Martinez-Paredes+2023 data is even more diverse.
+    """
+
+    def test_cb19_lines_have_distinct_luminosities(self, ssp):
+        import jax.numpy as jnp
+
+        from tengri.components.nebular import CB19Backend
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            backend = CB19Backend(ssp_data=ssp)
+
+        ssp_log_ages = ssp.ssp_lg_age_gyr + 9.0  # log10(yr)
+        _waves, lums = backend.predict_nebular_line_luminosities(
+            ssp_weights=jnp.ones_like(ssp_log_ages) * 1e7,
+            ssp_log_ages_yr=ssp_log_ages,
+            log_z=-1.7,
+            neb_logU=-3.0,
+            neb_logZ_gas=-1.7,
+            neb_fesc=0.0,
+            neb_fesc_lya=0.0,
+        )
+        # At least half the 10 emission lines should produce a unique
+        # luminosity. ([N II] 6548 ≈ [O I] 6300 in the synthetic by
+        # design, so we don't require all 10 to be unique.)
+        n_unique = int(jnp.unique(lums).shape[0])
+        assert n_unique >= 5, f"#361 Bug C: only {n_unique} unique line luminosities (expected ≥5)"
+
+    def test_balmer_decrement_matches_case_b_synthetic(self, ssp):
+        """Hα/Hβ in the synthetic CB19 fixture is the Case B value 2.87."""
+        import jax.numpy as jnp
+
+        from tengri.components.nebular import CB19Backend
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            backend = CB19Backend(ssp_data=ssp)
+
+        ssp_log_ages = ssp.ssp_lg_age_gyr + 9.0
+        waves, lums = backend.predict_nebular_line_luminosities(
+            ssp_weights=jnp.ones_like(ssp_log_ages) * 1e7,
+            ssp_log_ages_yr=ssp_log_ages,
+            log_z=-1.7,
+            neb_logU=-3.0,
+            neb_logZ_gas=-1.7,
+            neb_fesc=0.0,
+            neb_fesc_lya=0.0,
+        )
+        # Hα = 6564.61, Hβ = 4862.68 (vacuum)
+        i_ha = int(jnp.argmin(jnp.abs(waves - 6564.61)))
+        i_hb = int(jnp.argmin(jnp.abs(waves - 4862.68)))
+        ratio = float(lums[i_ha] / lums[i_hb])
+        assert abs(ratio - 2.87) / 2.87 < 0.01, (
+            f"Hα/Hβ = {ratio:.3f}, expected 2.87 (Case B; from synthetic fixture)"
+        )
+
+
 class TestBug361B_silent_nan_warning:
     """BakedIn line accessors used to return NaN silently. Now they warn."""
 
