@@ -118,7 +118,7 @@ class TestXrayAnisotropy:
         assert jnp.all(mid < face_on)
         # Exact with denominator: 0.75 / 0.933
         denom = 1.0 - 0.13397 * 0.5
-        expected = (0.5*0.5 + 0.5) / denom
+        expected = (0.5 * 0.5 + 0.5) / denom
         assert jnp.allclose(mid, expected, rtol=1e-6)
 
     def test_isotropic_when_a1_zero(self):
