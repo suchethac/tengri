@@ -967,6 +967,14 @@ class SEDModel:
             from tengri.components.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+        elif spec.nebular_mode == "cb19":
+            # Bug A in #361: ``neb={'type': 'cb19'}`` used to fall through
+            # to the BakedIn ``else`` branch, leaving the user with a model
+            # whose ``_nebular_backend`` was the wrong class — every line
+            # accessor then returned NaN with no warning. Dispatch explicitly.
+            from tengri.components.nebular import CB19Backend
+
+            self._nebular_backend = CB19Backend(ssp_data=ssp_data)
         else:
             from tengri.components.nebular import BakedInBackend
 
