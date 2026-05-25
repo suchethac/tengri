@@ -21,11 +21,6 @@
 SKIRTOR torus opening angle sweep: covering factor and MIR emission
 ====================================================================
 
-.. image:: images/sphx_glr_plot_torus_opening_angle_001.png
-   :alt: plot torus opening angle
-   :class: sphx-glr-single-img
-
-
 The torus half-opening angle (OA, polar half-angle in degrees) controls
 the covering fraction and the relative strength of direct vs. re-processed
 AGN emission as a function of observer inclination. Smaller OA (narrow

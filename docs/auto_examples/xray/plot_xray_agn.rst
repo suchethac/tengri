@@ -21,11 +21,6 @@
 AGN X-ray coronae: luminosity sequence
 ======================================
 
-.. image:: images/sphx_glr_plot_xray_agn_001.png
-   :alt: plot xray agn
-   :class: sphx-glr-single-img
-
-
 AGN coronae are compact hot regions where the hard X-ray power law (photon
 index ~1.7–2.0) is produced via Compton up-scattering of seed UV photons by
 hot electrons. ``xray_agn_corona`` models the primary continuum as a cut-off

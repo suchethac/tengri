@@ -21,11 +21,6 @@
 Optical emission-line atlas of a young star-forming galaxy
 ============================================================
 
-.. image:: images/sphx_glr_plot_emission_line_atlas_001.png
-   :alt: plot emission line atlas
-   :class: sphx-glr-single-img
-
-
 Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with
 the strongest optical / near-UV emission lines labelled. Wavelengths
 are vacuum; line positions follow NIST/Atomic Line List.

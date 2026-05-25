@@ -21,11 +21,6 @@
 A morphological atlas: E, Sa, Sb, Sc, Im galaxy SEDs
 =====================================================
 
-.. image:: images/sphx_glr_plot_usecase_hubble_sequence_001.png
-   :alt: plot usecase hubble sequence
-   :class: sphx-glr-single-img
-
-
 The Coleman, Wu & Weedman 1980 spectral templates remain the textbook
 illustration of how the integrated SED morphs along the Hubble sequence
 — from quiescent ellipticals with deep 4000 Å breaks to gas-rich

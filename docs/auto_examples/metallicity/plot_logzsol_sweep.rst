@@ -21,11 +21,6 @@
 Stellar metallicity drives UV-optical SED colour
 =================================================
 
-.. image:: images/sphx_glr_plot_logzsol_sweep_001.png
-   :alt: plot logzsol sweep
-   :class: sphx-glr-single-img
-
-
 Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich
 stars are redder due to increased opacity. We sweep stellar metallicity across
 the prior range with every other parameter fixed on a typical intermediate-age

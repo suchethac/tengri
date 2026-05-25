@@ -21,11 +21,6 @@
 Hα SFR calibration breaks at young ages
 ========================================
 
-.. image:: images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
-   :alt: plot halpha sfr calibration age
-   :class: sphx-glr-single-img
-
-
 Murphy+2011 SFR-Hα relation requires ionizing photons from stars younger
 than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration
 breaks at young (<10 Myr; insufficient ionizing photons) and old (>100 Myr;

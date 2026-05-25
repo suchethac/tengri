@@ -21,11 +21,6 @@
 Dust-emission model family at fixed L_abs
 =========================================
 
-.. image:: images/sphx_glr_plot_dust_emission_models_001.png
-   :alt: plot dust emission models
-   :class: sphx-glr-single-img
-
-
 All six dust-emission ingredients shipped with tengri, called with the same
 absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature
 (35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop

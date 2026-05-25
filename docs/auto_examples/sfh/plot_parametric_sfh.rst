@@ -21,11 +21,6 @@
 Catalog of parametric star-formation-history models
 ====================================================
 
-.. image:: images/sphx_glr_plot_parametric_sfh_001.png
-   :alt: plot parametric sfh
-   :class: sphx-glr-single-img
-
-
 Compare all parametric SFH models available in tengri. Each is evaluated on
 a lookback-time grid with representative parameters, showing the range of
 morphologies from smooth exponentials to sharp truncations. No SSP data required.

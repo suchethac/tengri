@@ -21,11 +21,6 @@
 Composable AGN: three evaluation modes side-by-side
 ====================================================
 
-.. image:: images/sphx_glr_plot_composable_three_modes_001.png
-   :alt: plot composable three modes
-   :class: sphx-glr-single-img
-
-
 The composable AGN runner exposes three evaluation modes (see
 ``docs/dev/three_evaluation_modes.md``):
 

@@ -21,11 +21,6 @@
 JWST NIRCam color-color diagnostics for high-z galaxy classification
 ====================================================================
 
-.. image:: images/sphx_glr_plot_usecase_jwst_color_color_001.png
-   :alt: plot usecase jwst color color
-   :class: sphx-glr-single-img
-
-
 Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3),
 and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs
 F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color

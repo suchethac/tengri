@@ -21,11 +21,6 @@
 Emission-line pseudo-color-color diagram for redshift classification
 =====================================================================
 
-.. image:: images/sphx_glr_plot_usecase_emission_line_pcc_001.png
-   :alt: plot usecase emission line pcc
-   :class: sphx-glr-single-img
-
-
 Demonstrates emission-line diagnostics using [OIII]/Hbeta, [NII]/Halpha
 ratios across a population mock sample. At different redshifts, nebular
 lines shift into different broadband filters creating photometric signatures

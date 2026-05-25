@@ -21,11 +21,6 @@
 D_n(4000) – specific SFR: the Kauffmann+2003 sequence
 =======================================================
 
-.. image:: images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
-   :alt: plot usecase d4000 vs ssfr
-   :class: sphx-glr-single-img
-
-
 The Kauffmann+2003 separation of star-forming and quiescent SDSS
 galaxies plotted as a sample track: stellar-burst age varied from
 30 Myr to 11 Gyr (single-burst SSP), with each model giving a

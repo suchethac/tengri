@@ -21,11 +21,6 @@
 Dust IR-emission library comparison at fixed L_dust
 ====================================================
 
-.. image:: images/sphx_glr_plot_ir_library_compare_001.png
-   :alt: plot ir library compare
-   :class: sphx-glr-single-img
-
-
 All seven shipped dust IR-emission libraries reprocessing the same
 absorbed UV power into the IR, normalised so the integrated
 ``L_IR(8–1000 μm)`` is identical across curves. The differences then

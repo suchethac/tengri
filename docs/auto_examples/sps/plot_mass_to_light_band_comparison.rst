@@ -21,11 +21,6 @@
 Stellar mass-to-light ratios across bands: age sensitivity
 ===========================================================
 
-.. image:: images/sphx_glr_plot_mass_to_light_band_comparison_001.png
-   :alt: plot mass to light band comparison
-   :class: sphx-glr-single-img
-
-
 The ``M_★/L_band`` ratio depends on population age, but the sensitivity
 varies dramatically by band. At short wavelengths (u, V), ``M/L`` is
 very age-sensitive: young starbursts are bright, so M/L is small;

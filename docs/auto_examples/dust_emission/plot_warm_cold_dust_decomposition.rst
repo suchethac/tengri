@@ -21,11 +21,6 @@
 Dust IR SED: Warm and cold dust decomposition
 ==============================================
 
-.. image:: images/sphx_glr_plot_warm_cold_dust_decomposition_001.png
-   :alt: plot warm cold dust decomposition
-   :class: sphx-glr-single-img
-
-
 Dust re-radiates absorbed starlight across a broad range of temperatures:
 colder dust (e.g., diffuse cirrus at ~20 K) peaks in the far-infrared
 (~250 μm), while warmer dust grains (e.g., starburst regions at ~40 K)

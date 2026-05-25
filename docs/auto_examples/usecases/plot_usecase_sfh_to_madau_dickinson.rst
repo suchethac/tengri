@@ -290,7 +290,7 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.030 seconds)
+   **Total running time of the script:** (0 minutes 6.174 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py:

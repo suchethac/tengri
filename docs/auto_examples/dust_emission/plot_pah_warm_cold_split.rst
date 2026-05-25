@@ -21,11 +21,6 @@
 Dust IR SED: PAH / Warm grain / Cold grain decomposition
 =========================================================
 
-.. image:: images/sphx_glr_plot_pah_warm_cold_split_001.png
-   :alt: plot pah warm cold split
-   :class: sphx-glr-single-img
-
-
 The Draine & Li (2007) dust model naturally separates three emission
 regimes via its parameters. Varying ``q_PAH`` (PAH mass fraction) and
 ``U_min`` (minimum radiation-field intensity) traces three archetypal
