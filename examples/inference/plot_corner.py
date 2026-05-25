@@ -68,8 +68,11 @@ posterior = forward.fit(
 )
 
 samples_dict = posterior.samples
-param_names = list(samples_dict.keys())
-samples_array = np.array([samples_dict[p] for p in param_names]).T
+# Keep only parameters with non-zero posterior variance — fixed params
+# end up in the samples dict as constants and corner.corner refuses to
+# plot columns without dynamic range.
+param_names = [p for p in samples_dict.keys() if np.asarray(samples_dict[p]).std() > 0]
+samples_array = np.array([np.asarray(samples_dict[p]) for p in param_names]).T
 truths = [float(truth[p]) for p in param_names]
 
 fig = corner.corner(

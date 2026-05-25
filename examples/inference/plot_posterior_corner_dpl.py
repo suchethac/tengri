@@ -66,7 +66,7 @@ forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
     mock.flux_obs,
     mock.noise,
-    method="nuts",
+    method="mcmc_nuts",
     warmup=500,
     samples=500,
     verbose=False,
