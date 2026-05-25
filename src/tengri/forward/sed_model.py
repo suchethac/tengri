@@ -937,7 +937,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
@@ -967,6 +967,10 @@ class SEDModel:
             from tengri.components.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+        elif spec.nebular_mode == "cb19":
+            from tengri.components.nebular import CB19Backend
+
+            self._nebular_backend = CB19Backend(ssp_data=ssp_data)
         else:
             from tengri.components.nebular import BakedInBackend
 
