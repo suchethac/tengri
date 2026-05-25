@@ -5,9 +5,14 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
-Tengri is a differentiable SED fitting library written in JAX. It models galaxy spectral energy distributions across stars, dust, nebular emission, AGN, and IGM, and runs a common forward model through multiple inference backends (MAP, Laplace, NUTS, ray-tracing MCMC, nested sampling, Pathfinder, and NIFTy geoVI).
+Tengri is a differentiable SED fitting library in JAX. One forward model
+covers stars, dust, nebular emission, AGN, and IGM; the same model feeds
+MAP, Laplace, Pathfinder, NUTS, ray-tracing MCMC, nested sampling, and
+NIFTy geoVI through a single `Fitter` interface.
 
-The project is pre-1.0 research code. The API is moving, some physics modules are still being human-verified, and Paper I (methods + mock recovery) is in preparation.
+The project is pre-1.0 research code: the API is moving, some physics
+modules are still being human-verified, and Paper I (methods + mock
+recovery) is in preparation.
 
 **Documentation:** [suchethacooray.com/tengri](https://suchethacooray.com/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks)
 
@@ -15,7 +20,11 @@ The project is pre-1.0 research code. The API is moving, some physics modules ar
 
 ## Status and provenance
 
-This codebase was initially drafted with AI assistance (Claude Code) and is being human-verified module by module. See [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) for the per-component status. Components marked PENDING there should not be used for publication-grade science without an independent cross-check.
+This codebase was initially drafted with AI assistance (Claude Code) and
+is being human-verified module by module. The per-component status table
+lives at [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md);
+modules marked PENDING there have not been independently cross-checked and
+should not be used for publication-grade science yet.
 
 ## Installation
 
@@ -163,9 +172,19 @@ These read the registries directly, so a model registered via `@register_agn_mod
 
 ## What's modular
 
-Stars come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny). The SFH layer covers parametric families (15+, registry-driven), non-parametric reconstructions (Leja+ continuity, Dirichlet), and stochastic fields (IFT correlated fields with PSD-governed burstiness). Dust is swappable on both attenuation and emission sides. Nebular emission has four shipped backends (`baked_in`, `cue`, `cloudy_grid`, `cb19`). AGN spans disc, torus, BLR/NLR, and IR re-emission, unified across optical, IR, and X-ray. IGM, radio, and X-ray are first-class components.
+Stars come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny). The SFH layer
+covers parametric families (15+, registry-driven), non-parametric
+reconstructions (Leja+ continuity, Dirichlet), and stochastic fields
+(IFT correlated fields with PSD-governed burstiness). Dust is swappable
+on both the attenuation and emission sides. Nebular emission has four
+backends (`baked_in`, `cue`, `cloudy_grid`, `cb19`). AGN spans disc,
+torus, BLR/NLR, and IR re-emission, unified across optical, IR, and
+X-ray. IGM, radio, and X-ray sit alongside as components, not
+afterthoughts.
 
-Every physics component is a pure JAX function, so `jit`, `vmap`, and `grad` compose throughout the forward model. `tengri.cite_all()` returns BibTeX for every SSP, model, and code used in a fit.
+Every physics component is a pure JAX function, so `jit`, `vmap`, and
+`grad` compose through the whole forward model. `tengri.cite_all()`
+returns BibTeX for every SSP, model, and code used in a fit.
 
 ## Community
 

@@ -84,3 +84,5 @@ docs/build.log
 
 # Notebook runtime data caches (SVO filter pulls, etc.)
 notebooks/data/
+examples/*/data/filters/
+examples/*/data/

@@ -388,6 +388,16 @@ class NebularSEDComponent:
         # ``jax.jit`` traces. The backend identity is in
         # ``self.config.backend`` (eager-time inspection only).
 
+        # SEDModel._template_data_for_jit wraps the backend's weights/grid
+        # bundle in a namespaced dict ``{"nebular": <bundle>, ...}`` so the
+        # JIT closure can thread heterogeneous template payloads (nebular +
+        # dust IR + AGN). Backends expect the unwrapped bundle, so peel
+        # the ``"nebular"`` slot off here. ``None`` is preserved (no
+        # threading active → backend falls back to the closure-captured
+        # ``self.weights`` / ``self.grid``).
+        if isinstance(template_data, dict) and "nebular" in template_data:
+            template_data = template_data["nebular"]
+
         # Always publish both ``sed_nebular`` and ``sed_shock`` so
         # downstream consumers (e.g. ``Posterior.sed_components``) can
         # read them uniformly without conditioning on the active backend.
@@ -673,6 +683,25 @@ class NebularSEDComponent:
             )
             derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
 
-        return state.add_intrinsic(nebular_sed).with_(
+        # Issue #301: ``neb_fesc`` is the fraction of LyC photons that
+        # *escape* the HII region (observed unattenuated); the absorbed
+        # fraction (1 - fesc) drives the nebular emission. The current
+        # code already scales the nebular continuum (Cue cue.py:1656) and
+        # lines (cue.py:1214) by (1 - fesc), but the stellar LyC below
+        # 912 Å was passed through untouched — overestimating the
+        # observed ionising continuum at fesc < 1 and breaking energy
+        # balance against the nebular emission. Attenuate stellar LyC by
+        # ``fesc`` here so the SED reflects "stellar LyC × fesc + nebular
+        # ∝ (1 − fesc)" globally.
+        neb_fesc = jnp.asarray(params.get("neb_fesc", 0.0))
+        sed_intrinsic = state.sed_intrinsic
+        if sed_intrinsic is not None:
+            lyc_mask = state.wave < 912.0
+            sed_intrinsic = jnp.where(lyc_mask, sed_intrinsic * neb_fesc, sed_intrinsic)
+
+        return state.with_(
+            sed_intrinsic=(sed_intrinsic + nebular_sed)
+            if sed_intrinsic is not None
+            else nebular_sed,
             derived=state.derived.with_(**derived_overrides),
         )

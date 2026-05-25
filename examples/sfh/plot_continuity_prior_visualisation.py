@@ -2,10 +2,11 @@
 Non-Parametric Continuity Prior: 200 Sample Draws
 ===================================================
 
-The continuity prior (Leja+2019) produces smooth star formation histories
-by penalizing sharp transitions in SFR ratios between adjacent age bins.
-This visualization shows 200 independent samples from the prior, displayed
-as percentile bands (5th, 25th, 50th, 75th, 95th) versus lookback time.
+The continuity prior (Leja+2019) penalises sharp transitions in adjacent-bin
+log-SFR ratios with a Student-t distribution (mu=0, sigma=0.3, df=2). This
+visualisation shows 200 independent draws from the registry default prior,
+displayed as percentile bands (5th, 25th, 50th, 75th, 95th) versus lookback
+time.
 
 .. sphx-glr-precomputed-img:
 
@@ -19,23 +20,19 @@ import jax.random as jr
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
+from tengri import Fixed, Parameters, SEDModel, load_ssp, setup_style
 
 setup_style()
 
 ssp = load_ssp()
 
-# Build a model with continuity SFH (non-parametric, 7 bins)
-# Using the nested-dict grammar with all log-SFR ratios FREE
+# Build a model with continuity SFH (non-parametric, 7 bins). The registry
+# ships the faithful Leja+2019 prior on each log-SFR ratio:
+# StudentT(mu=0, sigma=0.3, df=2). We let the registry defaults flow through
+# so the prior draws below reflect the published prior rather than an
+# arbitrary uniform override.
 spec = Parameters(
     mean_sfh_type="continuity",
-    # 7 bins -> 6 log-SFR ratios
-    sfh_cont_ratio_0=Uniform(-2.0, 2.0),
-    sfh_cont_ratio_1=Uniform(-2.0, 2.0),
-    sfh_cont_ratio_2=Uniform(-2.0, 2.0),
-    sfh_cont_ratio_3=Uniform(-2.0, 2.0),
-    sfh_cont_ratio_4=Uniform(-2.0, 2.0),
-    sfh_cont_ratio_5=Uniform(-2.0, 2.0),
     met_logzsol=Fixed(-0.3),
     dust_tau_bc=Fixed(0.3),
     dust_tau_diff=Fixed(0.2),

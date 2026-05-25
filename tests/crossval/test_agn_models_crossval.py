@@ -375,10 +375,10 @@ class TestFritzVsSKIRTOR:
     def test_torus_emission_in_correct_wavelength_range(self):
         """Torus thermal emission should be between 1-100 um.
 
-        This is true for both Fritz+2006 (from RT) and SKIRTOR (analytic).
+        This is true for both SKIRTOR and Silva+04 (analytic RT models).
         """
+        from tengri.components.agn.silva04 import silva04_analytic
         from tengri.components.agn.skirtor import skirtor_analytic
-        from tengri.components.agn.torus import simple_torus
 
         wave = jnp.linspace(1000, 1000000, 10000)
         wave_np = np.asarray(wave)
@@ -387,12 +387,12 @@ class TestFritzVsSKIRTOR:
         sed_sk = np.asarray(skirtor_analytic(wave, agn_log_lbol=11.0))
         peak_sk = wave_np[np.argmax(sed_sk)] / 1e4
 
-        # Simple torus (proxy for Fritz-like model)
-        sed_ft = np.asarray(simple_torus(wave, agn_log_lbol=11.0, agn_T_torus=800.0))
-        peak_ft = wave_np[np.argmax(sed_ft)] / 1e4
+        # Silva+04 smooth torus (production torus model)
+        sed_silva = np.asarray(silva04_analytic(wave, agn_log_lbol=11.0))
+        peak_silva = wave_np[np.argmax(sed_silva)] / 1e4
 
         assert 1 < peak_sk < 100, f"SKIRTOR peak: {peak_sk:.1f} um"
-        assert 1 < peak_ft < 100, f"Simple torus peak: {peak_ft:.1f} um"
+        assert 1 < peak_silva < 100, f"Silva+04 peak: {peak_silva:.1f} um"
 
 
 # ── 4. QSOGen numerical precision vs original ─────────────────────

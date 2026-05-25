@@ -146,7 +146,7 @@ class SEDModelComponent:
     treated as a free parameter. Examples::
 
         T = Uniform(20.0, 80.0, description="Temperature", units="K")
-        beta = Gaussian(1.5, 0.3, description="Index", units="")
+        beta = Gaussian(1.5, 0.3, description="Index", units="dimensionless")
         tau = Fixed(0.5)
 
     The base class extracts these at class-definition time and stores them

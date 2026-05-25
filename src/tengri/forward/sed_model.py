@@ -70,6 +70,7 @@ from tengri.parameters.translate import (
     _EVOLVING_ALPHA_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
+    check_unknown_params,
     get_internal_params,
 )
 from tengri.utils.grid import (
@@ -3806,14 +3807,107 @@ class SEDModel:
         Returns
         -------
         EmissionLines
-            11 standard survey-diagnostic lines (lya, civ_1549, oii,
-            hbeta, oiii_4959/5007, nii_6548/6584, halpha, sii_6717/6731).
-            Returns all-NaN when the active nebular backend does not
-            publish a discrete line catalogue (BakedIn, shock).
-        """
-        from tengri.forward import state_to_emission_lines
+            11 headline survey-diagnostic lines (``lya``, ``civ_1549``,
+            ``oii``, ``hbeta``, ``oiii_4959/5007``, ``nii_6548/6584``,
+            ``halpha``, ``sii_6717/6731``) plus the full backend catalogue
+            via ``all_waves`` / ``all_lums``. See
+            :meth:`EmissionLines.get` for nearest-wavelength access to
+            species the headline NamedTuple does not name (HeII 1640,
+            [O III] 4363, ...). All luminosities in Lsun.
 
-        return state_to_emission_lines(self.predict_state(params))
+        Raises
+        ------
+        NotImplementedError
+            When the active nebular backend does not publish a discrete
+            line catalogue (BakedIn or shock). Switch to ``neb={'type':
+            'cue', ...}`` or ``neb={'type': 'cloudy_grid', ...}`` for
+            discrete line predictions, or read the continuous nebular
+            SED from ``model.predict_rest_sed(params).sed`` directly.
+
+        Notes
+        -----
+        Dust attenuation is applied to the line luminosities in the
+        attenuation regime selected by ``_neb_dust_mode`` (default
+        ``"bc"`` — birth-cloud + diffuse, Charlot & Fall 2000 [1]_).
+        The line-attenuated values match the continuum treatment in
+        :meth:`predict_rest_sed`, so Balmer decrement, BPT, and other
+        line-ratio diagnostics behave correctly under a dust sweep
+        (regression: issue #313).
+
+        References
+        ----------
+        .. [1] S. Charlot & S. Fall, "A Simple Model for the Absorption of
+           Starlight by Dust in Galaxies," ApJ 539, 718 (2000).
+        """
+        from tengri.components.nebular import BakedInBackend
+
+        if isinstance(self._nebular_backend, BakedInBackend):
+            raise NotImplementedError(
+                "predict_emission_lines is not supported for the BakedIn "
+                "nebular backend: emission is baked into the SSP grid and "
+                "no discrete line catalogue is published. To predict line "
+                "luminosities, build the model with a photoionisation "
+                "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
+                "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
+                "For a quick narrow-band measurement on the BakedIn SED, "
+                "integrate model.predict_rest_sed(params).sed across the "
+                "line wavelength range yourself."
+            )
+        from tengri.forward import state_to_emission_lines
+        from tengri.forward.emission_helpers import attenuate_emission
+
+        state = self.predict_state(params)
+        lines = state_to_emission_lines(state)
+        if lines.all_waves.size == 0:
+            # No discrete catalogue; nothing to attenuate.
+            return lines
+
+        # Apply dust attenuation at line wavelengths in the same regime
+        # the continuum sees. Charlot & Fall 2000: lines from young
+        # populations (HII regions) experience BC + diffuse; single-
+        # component dust applies the BC law twice (degenerate fallback).
+        tau_bc = jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0)))
+        tau_diff = jnp.asarray(params.get("dust_tau_diff", 0.0))
+        dust_kw = dict(
+            dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
+            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+        )
+        _is_single = self._dust_model == "single_component"
+        atten_lums, _ = attenuate_emission(
+            lines.all_lums,
+            lines.all_waves,
+            self._neb_dust_mode,
+            tau_bc,
+            tau_diff,
+            self._dust_law_bc_fn,
+            self._dust_law_diff_fn if not _is_single else self._dust_law_bc_fn,
+            neb_bc_fn=self._neb_dust_law_bc_fn,
+            **dust_kw,
+        )
+
+        # Re-extract the headline scalars from the attenuated catalogue
+        # so EmissionLines.halpha / .hbeta / etc. reflect dust.
+        from tengri.forward.prediction import EmissionLines
+        from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
+
+        def _at(name):
+            return extract_line_luminosity(lines.all_waves, atten_lums, KEY_LINES[name])
+
+        return EmissionLines(
+            lya=_at("lya"),
+            civ_1549=_at("civ_1549"),
+            oii=_at("oii"),
+            hbeta=_at("hbeta"),
+            oiii_4959=_at("oiii_4959"),
+            oiii_5007=_at("oiii_5007"),
+            nii_6548=_at("nii_6548"),
+            halpha=_at("halpha"),
+            nii_6584=_at("nii_6584"),
+            sii_6717=_at("sii_6717"),
+            sii_6731=_at("sii_6731"),
+            all_waves=lines.all_waves,
+            all_lums=atten_lums,
+        )
 
     def declared_parameters(self):
         """Free-parameter declarations for this SED chain.
@@ -4111,6 +4205,9 @@ class SEDModel:
         passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
         instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
+        # Validate param keys before entering JIT — silent drops of unknown
+        # override keys produce plausible-looking but wrong physics (issue #314).
+        check_unknown_params(params, self._param_map)
         return self._get_or_build_predict_observables_jit()(
             params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
         )
@@ -4663,6 +4760,7 @@ class SEDModel:
         ssp_data,
         *,
         sfh=None,
+        stellar=None,
         dust=None,
         neb=None,
         agn=None,
@@ -4679,7 +4777,7 @@ class SEDModel:
 
         Convenience constructor that translates grouped dicts (one per physics
         block) into a ``Parameters`` via
-        :meth:`tengri.Parameters.from_groups`, then constructs the
+        :func:`tengri.parse_groups`, then constructs the
         ``SEDModel``. Anything left unspecified auto-fills from the registry.
 
         The ``from_*`` namespace is reserved for future deserialization
@@ -4709,11 +4807,12 @@ class SEDModel:
         -------
         SEDModel
             Fully initialised model, identical to one built via
-            ``SEDModel(Parameters.from_groups(**groups), ssp_data, ...)``.
+            ``SEDModel(parse_groups(**groups), ssp_data, ...)``.
 
         See Also
         --------
-        tengri.Parameters.from_groups : The underlying Parameters builder.
+        tengri.parse_groups : The underlying nested-dict parser that returns
+            a :class:`Parameters` spec.
         SEDModel.from_config : String-based grouped configuration with
             defaults from ``defaults.toml``.
 
@@ -4733,6 +4832,7 @@ class SEDModel:
             k: v
             for k, v in dict(
                 sfh=sfh,
+                stellar=stellar,
                 dust=dust,
                 neb=neb,
                 agn=agn,
@@ -4744,9 +4844,9 @@ class SEDModel:
             ).items()
             if v is not None
         }
-        from tengri.parameters.parameters import Parameters
+        from tengri.parameters.groups import parse_groups
 
-        spec = Parameters.from_groups(**groups)
+        spec = parse_groups(**groups)
         return cls(
             spec,
             ssp_data,

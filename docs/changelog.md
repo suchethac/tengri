@@ -2,7 +2,7 @@
 
 ## v0.2.0 (in development)
 
-Comprehensive physics model audit, new models, and cross-validation.
+Physics-model audit, new models, and cross-validation.
 
 ### New Physics Models
 - **Dust**: SMC/LMC extinction curves (Pei 1992 Drude profiles), Witt & Gordon (2000) RT-based dust geometries (shell, cloudy, dusty), Casey (2012) MBB + mid-IR power law emission, Narayanan+2018 z-dependent attenuation priors

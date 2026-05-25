@@ -1,10 +1,17 @@
 # Tengri
 
-**A JAX framework for differentiable galaxy SED fitting.** One modular forward model spans stars, dust, nebular emission, AGN, and IGM — from X-ray to radio. Every inference method (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, Bayesian evidence, hierarchical population) runs on the same model, with gradients available everywhere.
+**A JAX framework for differentiable galaxy SED fitting.** One forward
+model covers stars, dust, nebular emission, AGN, and IGM, from X-ray to
+radio. MAP, Laplace, Pathfinder, NUTS, ray tracing, Bayesian evidence,
+and hierarchical population fits all run on that single model with
+gradients available everywhere.
 
 ---
 
-*The name [Tengri](https://en.wikipedia.org/wiki/Tengri) comes from the all-encompassing God of Heaven in traditional Turkic, Mongolic, and other Central Asian nomadic religions. A fitting name for a code that models the light of galaxies across cosmic time. This name is chosen with respect for the cultural and spiritual traditions it originates from; no religious claim or appropriation is intended.*
+*The name [Tengri](https://en.wikipedia.org/wiki/Tengri) comes from the
+sky deity of Turkic, Mongolic, and other Central Asian nomadic
+traditions — a name used with respect for the cultures it originates
+from.*
 
 ---
 
@@ -16,7 +23,11 @@
 
 ## Why tengri
 
-The forward model is pure JAX end-to-end: the same code that produces an SED also gives you its gradient. That makes every inference method — MAP, Laplace, Pathfinder, NUTS, Ray Tracing, geoVI, nested sampling — a thin wrapper over the same model. There are no separate fast/slow paths, no Fortran/C extensions to keep in sync, no manual derivatives to maintain.
+The forward model is pure JAX end-to-end, so the same code that
+produces an SED also gives its gradient. Every inference method — MAP,
+Laplace, Pathfinder, NUTS, Ray Tracing, geoVI, nested sampling — is a
+thin wrapper around that model, with no parallel fast/slow paths or
+hand-maintained derivatives.
 
 The physics is modular: stars (DSPS SSPs — BC03, BPASS, FSPS, ProGeny), SFH (parametric, non-parametric, and IFT correlated-field), dust attenuation and emission, nebular (BakedIn / CloudyGrid / Cue), a unified AGN block (disc + torus + BLR/NLR), IGM absorption, radio, X-ray. Each component is a pure function you can swap, vmap, or differentiate without touching the rest of the pipeline.
 
@@ -77,28 +88,28 @@ The full walkthrough — including how the mock is constructed, what the priors 
 | MAP | `fitter.run("map")` | Point estimates, initialization |
 | Laplace | `fitter.run("laplace")` | Gaussian posterior from Hessian at MAP |
 | Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior; good NUTS warm-start |
-| NUTS | `fitter.run("mcmc_nuts")` | Gold-standard posterior (D ≲ 30) |
-| Ray Tracing | `fitter.run("mcmc_raytrace")` | Exact MCMC, noise-robust, scales past D = 30 |
+| NUTS | `fitter.run("mcmc_nuts")` | Reference posterior for D ≲ 30 |
+| Ray Tracing | `fitter.run("mcmc_raytrace")` | Exact MCMC; tolerates noisy gradients; scales past D = 30 |
 | Evidence (NSS) | `fitter.run("evidence")` | Bayesian evidence for model comparison |
 | Population | `PopulationFitter(...)` | Shared hyperparameters across galaxy samples |
 | geoVI / `vi_native` | `fitter.run("vi")` / `"vi_native"` | **Paper II preview.** High-D stochastic SFHs (D ≈ 137+) |
 
-Method choice is introduced in `notebooks/05_fitting_photometry.py`; a deeper walkthrough will land in a future spine notebook.
+Method choice is introduced in `notebooks/05_fitting_photometry.py`.
 
 ## Tutorial spine
 
 Tutorials live as Jupytext `.py` files in [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks) and are synced to `docs/spine/*.ipynb` via `python scripts/sync_spine_notebooks_for_docs.py`.
 
-The spine is written for astronomers — physics framing, copy-paste-able code cells, progressive teaching across notebooks. Start with `00` and `01`, then branch based on your use case.
+The spine is written for astronomers — physics framing, copy-paste-able
+code cells. Start with `00` and `01`, then branch based on your use case.
 
 ## Examples gallery
 
-Looking for a one-figure recipe? Browse the
-**[examples gallery](auto_examples/index)** — 120+ thumbnailed scripts, each
-self-contained and runnable standalone. Categories: AGN, dust attenuation +
-emission, IGM, inference, metallicity, multiwavelength, nebular, photometry,
-quickstart, radio, recipes, SFH, spectroscopy, SPS, X-ray, plus end-to-end
-use-cases and workflows.
+The **[examples gallery](auto_examples/index)** holds 120+ thumbnailed,
+self-contained scripts grouped by topic: AGN, dust attenuation +
+emission, IGM, inference, metallicity, multiwavelength, nebular,
+photometry, quickstart, radio, recipes, SFH, spectroscopy, SPS, X-ray,
+and end-to-end workflows.
 
 ## Performance (Apple M-series CPU)
 

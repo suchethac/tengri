@@ -327,7 +327,7 @@ def _cgm_damping_wing_tau(
     z_source: float,
     z_mid: float = 7.0,
     dz: float = 0.5,
-    log_nhi: float = 20.0,
+    log_nhi: float = 21.0,
 ) -> jnp.ndarray:
     r"""CGM damping wing optical depth from neutral hydrogen (Asada et al. 2025).
 
@@ -346,7 +346,8 @@ def _cgm_damping_wing_tau(
     dz : float, optional
         Redshift width of the sigmoid. [dimensionless] Default: 0.5.
     log_nhi : float, optional
-        log10(N_HI / cm^-2) at the plateau. [dimensionless] Default: 20.0.
+        log10(N_HI / cm^-2) at the plateau. Canonical Asada+2025 value: 21.0 (τ ≈ 0.15 at z=7).
+        log_nhi ≤ 19 is effectively invisible. [dimensionless] Default: 21.0.
 
     Returns
     -------
@@ -416,7 +417,7 @@ def igm_transmission(
     add_cgm: bool = False,
     cgm_z_mid: float = 7.0,
     cgm_dz: float = 0.5,
-    cgm_log_nhi: float = 20.0,
+    cgm_log_nhi: float = 21.0,
 ) -> jnp.ndarray:
     r"""Compute mean IGM transmission including Lyman-series and continuum absorption.
 
@@ -441,8 +442,9 @@ def igm_transmission(
     cgm_dz : float, optional
         Redshift width of the sigmoid transition. [dimensionless] Default: 0.5.
     cgm_log_nhi : float, optional
-        log10(N_HI / cm^-2) at the plateau of the sigmoid evolution. [dimensionless]
-        Default: 20.0, corresponding to N_HI = 10^20 cm^-2 (typical for the epoch of reionization).
+        log10(N_HI / cm^-2) at the plateau of the sigmoid evolution. Canonical Asada+2025 value (21.0)
+        produces τ ≈ 0.15 (15% absorption) redward of Lyα at z=7; log_nhi ≤ 19 is invisible. [dimensionless]
+        Default: 21.0.
 
     Returns
     -------

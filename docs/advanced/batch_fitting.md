@@ -1,7 +1,7 @@
 # Batch Fitting
 
-Fitting catalogs of galaxies efficiently. This page covers `fit_batch` (independent
-fits) and `fit_population` (hierarchical, shared hyperparameters), mock catalog
+Fitting catalogues of galaxies: `fit_batch` (independent fits) and
+`fit_population` (hierarchical, shared hyperparameters), mock catalogue
 generation, result aggregation, and practical considerations for real survey data.
 
 :::{important}

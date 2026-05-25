@@ -72,11 +72,12 @@ class TestCosmologyCrossval:
         assert all(ages[i] > ages[i + 1] for i in range(len(ages) - 1))
 
     def test_dl_zero_at_z0(self):
-        """Luminosity distance at z=0 should be ~0."""
+        """Luminosity distance at z=0 should be 10 pc (optical absolute mag convention)."""
         from tengri.utils.cosmology import luminosity_distance
+        from tengri.utils.physics_constants import TEN_PC_CM
 
         dl = float(luminosity_distance(0.0))
-        assert dl < 1e20, f"dL(z=0) = {dl:.2e}, expected ~0"
+        assert abs(dl - TEN_PC_CM) < 1e17, f"dL(z=0) = {dl:.2e}, expected ~{float(TEN_PC_CM):.2e}"
 
     def test_dl_increases_with_z(self):
         """dL should increase monotonically with redshift."""

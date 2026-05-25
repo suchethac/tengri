@@ -257,10 +257,17 @@ class SEDQuantities(NamedTuple):
 
 
 class EmissionLines(NamedTuple):
-    """Key emission line luminosities.
+    """Emission line luminosities — headline survey lines plus the full backend catalogue.
 
-    NaN for all fields when no nebular model is active. For doublets
-    ([OII], C IV), the luminosities of both components are summed.
+    NaN for the headline fields and empty arrays for ``all_*`` when no
+    nebular model is active. For doublets ([O II], C IV) the headline
+    fields sum both components.
+
+    The full ~271-line Cue catalogue (and equivalent grids for CloudyGrid)
+    is exposed via :attr:`all_waves` / :attr:`all_lums` so users can read
+    species the headline NamedTuple does not name explicitly (HeII 1640,
+    HeI 10830, NIII] 1750, [O III] 4363, etc.). See :meth:`get` for the
+    nearest-wavelength accessor.
 
     Attributes
     ----------
@@ -286,6 +293,14 @@ class EmissionLines(NamedTuple):
         [SII] at 6717 Å [Lsun].
     sii_6731 : jnp.ndarray
         [SII] at 6731 Å [Lsun].
+    all_waves : jnp.ndarray, shape ``(n_lines,)``
+        Vacuum rest-frame wavelengths of every species published by the
+        active nebular backend [Angstrom]. Empty when the backend does
+        not expose a discrete catalogue (BakedIn, shock).
+    all_lums : jnp.ndarray, shape ``(n_lines,)``
+        Luminosities at ``all_waves``, in the same dust regime as the
+        headline fields (i.e. attenuated by the active dust model when
+        present) [Lsun].
 
     Returns
     -------
@@ -311,6 +326,8 @@ class EmissionLines(NamedTuple):
         # BPT diagram
         bpt_x = float(lines.nii_6584 / lines.halpha)
         bpt_y = float(lines.oiii_5007 / lines.hbeta)
+        # Access lines outside the headline catalogue via nearest-wavelength
+        heii_1640 = lines.get(1640.42)  # closest match in ``all_waves``
     """
 
     lya: jnp.ndarray
@@ -324,6 +341,32 @@ class EmissionLines(NamedTuple):
     nii_6584: jnp.ndarray
     sii_6717: jnp.ndarray
     sii_6731: jnp.ndarray
+    all_waves: jnp.ndarray
+    all_lums: jnp.ndarray
+
+    def get(self, wavelength: float, tol_aa: float = 2.0) -> jnp.ndarray:
+        """Return the luminosity at the species nearest ``wavelength`` Å.
+
+        Parameters
+        ----------
+        wavelength : float
+            Rest-frame vacuum wavelength to look up [Angstrom].
+        tol_aa : float, optional
+            Acceptable distance to the nearest catalogued line [Angstrom].
+            Returns ``nan`` if the nearest line is further than this. Default 2.0.
+
+        Returns
+        -------
+        jnp.ndarray
+            Luminosity at the matched line [Lsun], or ``nan`` if no line
+            is within ``tol_aa``. Returns ``nan`` if the active backend
+            did not publish a discrete catalogue.
+        """
+        if self.all_waves.size == 0:
+            return jnp.asarray(jnp.nan)
+        diff = jnp.abs(self.all_waves - jnp.asarray(wavelength))
+        idx = jnp.argmin(diff)
+        return jnp.where(diff[idx] <= tol_aa, self.all_lums[idx], jnp.asarray(jnp.nan))
 
 
 class DerivedQuantities(NamedTuple):

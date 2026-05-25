@@ -82,10 +82,20 @@ from tengri.components.agn.nlr import (
     compute_nlr_sed,
     compute_nlr_sed_richardson2014,
 )
+from tengri.components.agn.nlr_cloudy import (
+    compute_nlr_sed_feltre,
+    compute_nlr_sed_synthesizer,
+    get_feltre_backend,
+    get_synthesizer_nlr_backend,
+)
 from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen
+from tengri.components.agn.richards2006_disc import (
+    richards2006,
+    richards2006_disc,
+)
 from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic
 from tengri.components.agn.silva04_model import Silva04Torus
 from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
@@ -128,13 +138,17 @@ __all__ = [
     "compute_grahsp_sed",
     "compute_l2500",
     "compute_nlr_sed",
+    "compute_nlr_sed_feltre",
     "compute_nlr_sed_richardson2014",
+    "compute_nlr_sed_synthesizer",
     "compute_qsogen_sed",
     "create_cat3d_wind_from_grid",
     "create_relagn_disc_from_grid",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
     "evaluate_grahsp_agn",
+    "get_feltre_backend",
+    "get_synthesizer_nlr_backend",
     "grahsp",
     "kubota_done_disc",
     "kubota_done_full_agn",
@@ -147,6 +161,8 @@ __all__ = [
     "register_agn_model",
     "resolve_agn_block",
     "resolve_agn_model",
+    "richards2006",
+    "richards2006_disc",
     "silva04_analytic",
     "unified_agn",
     "unified_nlr_blr",

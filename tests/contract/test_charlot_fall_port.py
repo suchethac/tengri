@@ -41,7 +41,7 @@ def test_declared_parameters_units():
     assert isinstance(by_name["dust_tau_bc"].prior, Uniform)
     assert isinstance(by_name["dust_slope"].prior, Fixed)
     for d in decls:
-        assert d.units == ""
+        assert d.units == "dimensionless"
 
 
 def test_inputs_outputs_contract():

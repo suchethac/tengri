@@ -90,12 +90,10 @@ This matches the internal computation in ``components/agn/_phys.py``
   ``agn_log_lbol = log10(L_bol_erg) - log10(L_SUN_erg)``,
   i.e. subtract :math:`\\approx 33.58` from synthesizer's value.
 
-Defaults of ``agn_log_lbol=44.0`` in the function signatures of this module
-are inherited from early test fixtures and correspond to
-:math:`L_{\\rm bol}\\!\\approx\\!4\\times 10^{77}` erg/s — **not a physical AGN
-luminosity**. They are kept for backward-compatibility with the existing test
-suite. Always set this parameter explicitly in production fits; do not rely on
-the default.
+Default ``agn_log_lbol=11.0`` in the function signatures of this module
+corresponds to a bolometric luminosity of ~10^44 erg/s,
+a typical bright Seyfert nucleus. This is a physically reasonable default for AGN
+fitting; always set this parameter explicitly in production to match your target.
 
 Usage::
 
@@ -140,7 +138,6 @@ from tengri.components.agn.disc import (
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
-from tengri.components.agn.torus import simple_torus, two_temperature_torus
 from tengri.components.dust.attenuation import prevot_smc
 from tengri.components.radio.radio import radio_total
 from tengri.components.xray.xray import xray_agn_corona
@@ -381,7 +378,7 @@ def unified_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
     disc_model: str = "powerlaw",
-    torus_model: str = "simple",
+    torus_model: str = "silva04",
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
     **kwargs,
@@ -401,8 +398,8 @@ def unified_agn(
         Disc model name: "powerlaw", "multicolor", "kubota_done_3zone", "adaf".
         Default "powerlaw".
     torus_model : str, optional
-        Torus model name: "simple", "two_temperature", "skirtor".
-        Default "simple".
+        Torus model name: "silva04" (production, default), "skirtor".
+        Default "silva04" (radiative-transfer based Silva+04 smooth torus).
     agn_torus_frac : float, optional
         Torus covering factor [dimensionless], range [0, 1]. Disc gets
         (1 - agn_torus_frac). Default 0.5.
@@ -435,8 +432,7 @@ def unified_agn(
         "adaf": adaf_disc,
     }
     torus_fns = {
-        "simple": simple_torus,
-        "two_temperature": two_temperature_torus,
+        "silva04": silva04_analytic,
         "skirtor": skirtor_analytic,
     }
 
@@ -479,18 +475,16 @@ def multicolor_agn(
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
     agn_cos_inc: float = 0.5,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
-    agn_tau_torus: float = 5.0,
+    agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Multicolor Shakura-Sunyaev disc + two-temperature torus.
+    """Multicolor Shakura-Sunyaev disc + Silva+04 smooth AGN torus.
 
     Standard thin-disc SED with spin-dependent ISCO and Novikov-Thorne
     radiative efficiency. This is the outer standard disc only — no warm
     Comptonization or hot corona (for the full 3-zone model, see kubota_done_full).
+    The torus uses the Silva+04 radiative-transfer solution for smooth dust geometry.
 
     Parameters
     ----------
@@ -508,14 +502,8 @@ def multicolor_agn(
         Black hole spin [dimensionless], range [0, 0.998]. Default 0.0.
     agn_cos_inc : float, optional
         cos(inclination) [dimensionless], range [0, 1]. Default 0.5.
-    agn_T_hot : float, optional
-        Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float, optional
-        Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float, optional
-        Hot dust mass fraction [dimensionless]. Default 0.3.
-    agn_tau_torus : float, optional
-        Torus optical depth at 9.7 um [dimensionless]. Default 5.
+    agn_log_nh_silva : float, optional
+        Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
     agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
 
@@ -526,23 +514,26 @@ def multicolor_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`multicolor_disc` and :func:`two_temperature_torus`.
+    **JIT-compatible**: yes — uses :func:`multicolor_disc` and :func:`silva04_analytic`.
 
     Also registered as "kubota_done" (deprecated alias).
+
+    References
+    ----------
+    .. [1] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
+       arXiv:astro-ph/0403425. AGN torus radiative transfer.
+    .. [2] Kubota, A. & Done, C. (2018). MNRAS, 480, 1247. Disc model.
     """
     l_nu = unified_agn(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         disc_model="multicolor",
-        torus_model="two_temperature",
+        torus_model="silva04",
         agn_log_mbh=agn_log_mbh,
         agn_log_ledd=agn_log_ledd,
         agn_a_spin=agn_a_spin,
         agn_cos_inc=agn_cos_inc,
-        agn_T_hot=agn_T_hot,
-        agn_T_warm=agn_T_warm,
-        agn_frac_hot=agn_frac_hot,
-        agn_tau_torus=agn_tau_torus,
+        agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
     )
     return l_nu * agn_frac
@@ -574,19 +565,17 @@ def kubota_done_full_agn(
     agn_gamma_hard: float = 1.8,
     agn_kt_hot: float = 100.0,
     agn_r_warm_ratio: float = 2.0,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
-    agn_tau_torus: float = 5.0,
+    agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Full Kubota & Done (2018) 3-zone disc + two-temperature torus.
+    """Full Kubota & Done (2018) 3-zone disc + Silva+04 torus.
 
     Extends ``multicolor_agn`` with the full K&D 3-zone disc model:
     outer standard disc, warm Comptonization (soft X-ray excess), and
-    hot corona (hard X-ray power law). Combined with a two-temperature dust torus.
+    hot corona (hard X-ray power law). Combined with a Silva+04 smooth
+    dust torus using radiative-transfer geometry.
 
     Parameters
     ----------
@@ -616,16 +605,12 @@ def kubota_done_full_agn(
         Hot corona temperature [keV]. Default 100.0.
     agn_r_warm_ratio : float, optional
         R_warm / R_hot ratio [dimensionless]. Default 2.0.
-    agn_T_hot : float, optional
-        Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float, optional
-        Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float, optional
-        Hot dust mass fraction [dimensionless]. Default 0.3.
-    agn_tau_torus : float, optional
-        Torus optical depth at 9.7 um [dimensionless]. Default 5.
+    agn_log_nh_silva : float, optional
+        Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
     agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
+    agn_ebv_disc : float, optional
+        SMC-law colour excess on disc [mag]. Default 0.0.
 
     Returns
     -------
@@ -634,7 +619,13 @@ def kubota_done_full_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`kubota_done_disc` and :func:`two_temperature_torus`.
+    **JIT-compatible**: yes — uses :func:`kubota_done_disc` and :func:`silva04_analytic`.
+
+    References
+    ----------
+    .. [1] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
+       arXiv:astro-ph/0403425. AGN torus radiative transfer.
+    .. [2] Kubota, A. & Done, C. (2018). MNRAS, 480, 1247. Disc model.
     """
     # 3-zone disc gets (1 - covering_factor) of L_bol
     l_disc = kubota_done_disc(
@@ -655,14 +646,11 @@ def kubota_done_full_agn(
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # Torus re-emits covering_factor of L_bol
-    l_torus = two_temperature_torus(
+    l_torus = silva04_analytic(
         wavelength,
         agn_log_lbol=agn_log_lbol,
+        agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
-        agn_T_hot=agn_T_hot,
-        agn_T_warm=agn_T_warm,
-        agn_frac_hot=agn_frac_hot,
-        agn_tau_torus=agn_tau_torus,
     )
 
     return (l_disc + l_torus) * agn_frac
@@ -675,7 +663,7 @@ def kubota_done_full_agn(
 )
 def skirtor_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
     agn_tau_skirtor: float = 7.0,
     agn_p_skirtor: float = 1.0,
@@ -752,7 +740,7 @@ def skirtor_agn(
 )
 def silva04_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
@@ -812,7 +800,7 @@ def silva04_agn(
 )
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
     agn_cos_inc: float = 0.5,
     agn_a_cat3d: float = -2.0,
@@ -891,15 +879,15 @@ def adaf_agn(
     agn_adaf_delta: float = 0.01,
     agn_cos_inc: float = 0.5,
     agn_torus_frac: float = 0.3,
-    agn_T_torus: float = 500.0,
+    agn_log_nh_silva: float = 23.0,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """ADAF + truncated disc + simple torus for low-luminosity AGN.
+    """ADAF + truncated disc + Silva+04 torus for low-luminosity AGN.
 
     At low accretion rates (L/L_Edd < 0.01), the inner disc transitions
     to an ADAF. The outer disc remains as a truncated Shakura-Sunyaev disc.
-    A simple torus re-emits a fraction of the bolometric luminosity in the IR.
+    A Silva+04 smooth torus re-emits a fraction of the bolometric luminosity in the IR.
 
     6 free parameters (+ agn_frac scaling):
 
@@ -932,8 +920,10 @@ def adaf_agn(
         cos(inclination) [dimensionless]. Default 0.5.
     agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.3.
-    agn_T_torus : float, optional
-        Torus temperature [K]. Default 500.
+    agn_log_nh_silva : float, optional
+        Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
+    agn_ebv_disc : float, optional
+        SMC-law colour excess on disc [mag]. Default 0.0.
 
     Returns
     -------
@@ -942,7 +932,12 @@ def adaf_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`adaf_disc` and :func:`simple_torus`.
+    **JIT-compatible**: yes — uses :func:`adaf_disc` and :func:`silva04_analytic`.
+
+    References
+    ----------
+    .. [1] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
+       arXiv:astro-ph/0403425. AGN torus radiative transfer.
     """
     # ADAF + truncated disc gets (1 - torus_frac) of L_bol
     l_disc = adaf_disc(
@@ -958,12 +953,12 @@ def adaf_agn(
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
-    # Simple torus re-emits torus_frac of L_bol
-    l_torus = simple_torus(
+    # Silva+04 torus re-emits torus_frac of L_bol
+    l_torus = silva04_analytic(
         wavelength,
         agn_log_lbol=agn_log_lbol,
+        agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
-        agn_T_torus=agn_T_torus,
     )
 
     return (l_disc + l_torus) * agn_frac
@@ -981,17 +976,15 @@ def relagn_agn(
     agn_astar: float = 0.0,
     agn_cos_inc: float = 0.5,
     agn_torus_frac: float = 0.5,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
+    agn_log_nh_silva: float = 23.0,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """RELAGN relativistic outer disc + two-temperature dust torus.
+    """RELAGN relativistic outer disc + Silva+04 dust torus.
 
     Uses the precomputed RELAGN grid (Hagen & Done 2023) with KYCONV
     (Dovciak, Karas & Yaqoob 2004) per-annulus Kerr ray-tracing for the
-    disc, and a two-temperature modified blackbody for the torus.
+    disc, and a Silva+04 smooth dust torus for radiative-transfer reprocessing.
 
     The disc luminosity is self-consistent with BH mass and accretion rate;
     the torus re-emits ``agn_torus_frac`` of the disc bolometric output.
@@ -1011,12 +1004,8 @@ def relagn_agn(
     agn_torus_frac : float, optional
         Torus covering factor; torus re-emits this fraction of disc L_bol.
         Disc is attenuated by ``(1 − agn_torus_frac)``. Default 0.5.
-    agn_T_hot : float, optional
-        Hot dust temperature [K]. Default 1200.
-    agn_T_warm : float, optional
-        Warm dust temperature [K]. Default 300.
-    agn_frac_hot : float, optional
-        Hot dust mass fraction. Default 0.3.
+    agn_log_nh_silva : float, optional
+        Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
     agn_ebv_disc : float, optional
         SMC-law colour excess applied to disc [mag]. Default 0.0.
 
@@ -1044,7 +1033,10 @@ def relagn_agn(
        ApJS, 153, 205. doi:10.1086/421115  [KYCONV]
 
     .. [2] Hagen, S. & Done, C. (2023).
-       MNRAS, 521, 251. doi:10.1093/mnras/stad478  [RELAGN]
+       MNRAS, 521, 251. doi:10.1093/mnras/stad478  [RELAGN disc]
+
+    .. [3] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
+       arXiv:astro-ph/0403425. AGN torus radiative transfer.
     """
     disc_fn = _load_relagn_fn()
 
@@ -1069,13 +1061,11 @@ def relagn_agn(
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol
-    l_torus = two_temperature_torus(
+    l_torus = silva04_analytic(
         wavelength,
         agn_log_lbol=log_lbol_lsun,
+        agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
-        agn_T_hot=agn_T_hot,
-        agn_T_warm=agn_T_warm,
-        agn_frac_hot=agn_frac_hot,
     )
 
     return l_disc + l_torus
@@ -1151,7 +1141,7 @@ def _sigmoid_mask(
 )
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
-    agn_log_lbol: float = 44.0,
+    agn_log_lbol: float = 11.0,
     agn_cos_inc: float = 0.5,
     agn_theta_torus: float = 30.0,
     agn_nlr_cf: float = 0.1,
@@ -1159,10 +1149,7 @@ def unified_nlr_blr(
     agn_log_mbh: float = 7.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_T_hot: float = 1200.0,
-    agn_T_warm: float = 300.0,
-    agn_frac_hot: float = 0.3,
-    agn_tau_torus: float = 5.0,
+    agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     agn_frac: float = 0.1,
     agn_blr_fwhm: float = 5000.0,
@@ -1458,14 +1445,11 @@ def unified_nlr_blr(
     l_disc_masked = mask_disc * l_disc * polar_trans
 
     # --- Torus emission (always visible) ---
-    l_torus = two_temperature_torus(
+    l_torus = silva04_analytic(
         wavelength,
         agn_log_lbol=agn_log_lbol,
+        agn_log_nh_silva=agn_log_nh_silva,
         agn_torus_frac=agn_torus_frac,
-        agn_T_hot=agn_T_hot,
-        agn_T_warm=agn_T_warm,
-        agn_frac_hot=agn_frac_hot,
-        agn_tau_torus=agn_tau_torus,
     )
 
     # --- NLR emission (isotropic, always visible) ---

@@ -245,12 +245,31 @@ def test_emission_lines_published_by_cue(state_with_cue):
 
 
 def test_state_to_emission_lines_all_finite(state_with_cue):
-    """All 11 bridge-extracted lines should be finite for Cue."""
+    """All 11 headline bridge-extracted lines should be finite for Cue.
+
+    ``all_waves``/``all_lums`` are arrays (skipped here — see
+    ``test_state_to_emission_lines_publishes_full_catalogue``).
+    """
     from tengri.forward import state_to_emission_lines
 
     lines = state_to_emission_lines(state_with_cue)
-    nans = [f for f in lines._fields if not bool(jnp.isfinite(getattr(lines, f)))]
+    scalar_fields = [f for f in lines._fields if f not in ("all_waves", "all_lums")]
+    nans = [f for f in scalar_fields if not bool(jnp.isfinite(getattr(lines, f)))]
     assert nans == [], f"Lines with NaN: {nans}"
+
+
+def test_state_to_emission_lines_publishes_full_catalogue(state_with_cue):
+    """Cue exposes the full ~138-line catalogue via all_waves/all_lums (#303)."""
+    from tengri.forward import state_to_emission_lines
+
+    lines = state_to_emission_lines(state_with_cue)
+    assert lines.all_waves.size > 50, (
+        f"Expected >50 species exposed via all_waves, got {lines.all_waves.size}"
+    )
+    assert lines.all_waves.shape == lines.all_lums.shape
+    # HeII 1640 was a canonical example in the issue: must be queryable.
+    heii = float(lines.get(1640.4, tol_aa=5.0))
+    assert jnp.isfinite(heii), "HeII 1640 should be in the catalogue"
 
 
 def test_state_to_emission_lines_balmer_decrement(state_with_cue):
@@ -265,13 +284,16 @@ def test_state_to_emission_lines_balmer_decrement(state_with_cue):
 
 
 def test_state_to_emission_lines_no_catalogue_returns_nan(state):
-    """Chain without nebular catalogue (no Cue/Cloudy) → all NaN."""
+    """Chain without nebular catalogue (no Cue/Cloudy) → NaN headlines + empty all_*."""
     from tengri.forward import state_to_emission_lines
 
     # The ``state`` fixture has no nebular component → no line_waves.
     assert "line_waves" not in state.derived
     lines = state_to_emission_lines(state)
-    for f in lines._fields:
+    scalar_fields = [f for f in lines._fields if f not in ("all_waves", "all_lums")]
+    for f in scalar_fields:
         assert not bool(jnp.isfinite(getattr(lines, f))), (
             f"Lines.{f} should be NaN when no catalogue published"
         )
+    assert lines.all_waves.size == 0
+    assert lines.all_lums.size == 0

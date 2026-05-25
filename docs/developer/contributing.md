@@ -6,7 +6,7 @@ tests, and submitting changes.
 ## Development environment
 
 ```bash
-git clone https://github.com/<org>/tengri.git
+git clone https://github.com/suchethac/tengri.git
 cd tengri
 python -m venv .venv
 source .venv/bin/activate

@@ -26,11 +26,10 @@ class TestUnifiedAgnCombinations:
     @pytest.mark.parametrize(
         "disc_model,torus_model",
         [
-            ("powerlaw", "simple"),
-            ("powerlaw", "two_temperature"),
-            ("multicolor", "simple"),
-            ("multicolor", "two_temperature"),
-            ("adaf", "simple"),
+            ("powerlaw", "silva04"),
+            ("multicolor", "silva04"),
+            ("adaf", "silva04"),
+            ("powerlaw", "skirtor"),
         ],
     )
     def test_all_combinations_produce_finite_output(self, wavelength, disc_model, torus_model):
@@ -85,7 +84,7 @@ class TestUnifiedAgnCombinations:
     def test_torus_frac_one_sets_disc_to_zero(self, wavelength):
         """agn_torus_frac=0.0 yields exactly the disc alone (no torus).
 
-        Torus is called with agn_torus_frac=0, so simple_torus returns 0;
+        Torus is called with agn_torus_frac=0, so silva04_analytic returns 0;
         unified_agn output equals disc-only.
         """
         from tengri.components.agn.disc import powerlaw_disc
@@ -114,13 +113,19 @@ class TestUnifiedAgnCombinations:
     def test_total_is_disc_plus_torus(self, wavelength):
         """unified_agn output equals disc + torus computed separately."""
         from tengri.components.agn.disc import powerlaw_disc
-        from tengri.components.agn.torus import simple_torus
+        from tengri.components.agn.silva04 import silva04_analytic
         from tengri.components.agn.unified import unified_agn
 
         frac = 0.3
-        l_unified = unified_agn(wavelength, agn_log_lbol=44.0, agn_torus_frac=frac)
+        l_unified = unified_agn(
+            wavelength,
+            agn_log_lbol=44.0,
+            disc_model="powerlaw",
+            torus_model="silva04",
+            agn_torus_frac=frac,
+        )
         l_disc = powerlaw_disc(wavelength, agn_log_lbol=44.0, agn_frac=1.0 - frac)
-        l_torus = simple_torus(wavelength, agn_log_lbol=44.0, agn_torus_frac=frac)
+        l_torus = silva04_analytic(wavelength, agn_log_lbol=44.0, agn_torus_frac=frac)
         np.testing.assert_allclose(
             np.array(l_unified),
             np.array(l_disc + l_torus),

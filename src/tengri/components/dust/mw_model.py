@@ -70,8 +70,13 @@ class MilkyWay(SEDModelComponent):
     name = "mw"
     parameter_prefix = "dust_"
 
-    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="")
-    dust_Rv = Uniform(2.5, 5.5, description="Total-to-selective extinction R_V", units="")
+    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="dimensionless")
+    dust_Rv = Uniform(
+        2.5,
+        5.5,
+        description="Total-to-selective extinction R_V",
+        units="dimensionless",
+    )
 
     inputs: dict[str, str] = {}  # noqa: RUF012
     outputs: dict[str, str] = {"L_absorbed": "erg/s"}  # noqa: RUF012

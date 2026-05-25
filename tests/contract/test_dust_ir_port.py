@@ -50,7 +50,7 @@ class TestModifiedBlackbodyComponent:
                 assert decl.units == "K"
                 assert "temperature" in decl.description.lower()
             elif decl.name == "dust_beta_ir":
-                assert decl.units == ""
+                assert decl.units == "dimensionless"
                 assert "emissivity" in decl.description.lower()
 
     def test_inputs_outputs_contract(self):
@@ -140,7 +140,7 @@ class TestDL07Component:
             elif decl.name == "dust_umin":
                 assert decl.units == "dex"
             elif decl.name == "dust_gamma":
-                assert decl.units == ""
+                assert decl.units == "dimensionless"
 
     def test_inputs_outputs_contract(self):
         """Cross-component contract should be declared."""
