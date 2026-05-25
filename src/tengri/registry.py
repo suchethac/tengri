@@ -515,32 +515,21 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-def list_nebular_backends() -> _RegistryTable:
-    """List all available nebular emission backends."""
-    raw = [
-        (
-            "baked_in",
-            "production",
-            "DSPS / FSPS SSP-internal",
-            "Emission baked into SSP grid; zero free params",
-        ),
-        ("cue", "production", "Li+2024 (CUE neural emulator)", "Neural-network Cloudy emulator"),
-        ("cloudy_grid", "production", "Byler+2017 grids", "Trilinear interp on Cloudy grid"),
-        ("cb19", "experimental", "Charlot & Bruzual 2019", "Precomputed CB19 nebular grid"),
-    ]
-    return _RegistryTable(
-        [
-            {
-                "name": n,
-                "kind": "nebular_backend",
-                "status": st,
-                "citation": cit,
-                "short_doc": doc,
-                "use": _usage_hint(n, "nebular_backend"),
-            }
-            for (n, st, cit, doc) in raw
-        ]
-    )
+def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
+    """List all registered nebular emission backends.
+
+    Reads :data:`tengri.components.nebular.NEBULAR_MODELS` so the
+    listing stays in lock-step with what the grammar-layer validator
+    will actually accept (#331). The names match the keys consumed by
+    ``SEDModel.build(..., neb={'type': ...})`` — ``'none'`` /
+    ``'ssp'`` / ``'cue'`` / ``'cloudy'`` / ``'cb19'``.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    out = [_entry_to_dict(n, e, kind="nebular_backend") for n, e in NEBULAR_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
 def list_xray_models(*, status: str | None = None) -> _RegistryTable:

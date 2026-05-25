@@ -176,14 +176,19 @@ def _valid_dust_emission_types() -> frozenset[str]:
     return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
 
 
-#: Valid nebular types.
-_VALID_NEBULAR_TYPES = {
-    "none",
-    "ssp",
-    "cue",
-    "cloudy",
-    "cb19",
-}
+def _valid_nebular_types() -> frozenset[str]:
+    """Derive accepted ``neb.type`` values from :data:`NEBULAR_MODELS`.
+
+    Mirrors the IGM / radio / X-ray derivation (#355): the validator
+    reads the runtime registry rather than maintaining a parallel
+    hand-written set. Adding a new nebular backend = one
+    ``register_nebular_model`` call in
+    ``components/nebular/__init__.py``; this validator picks it up
+    automatically. ADR-0005 / ADR-0008.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    return frozenset(NEBULAR_MODELS.keys())
 
 
 def _valid_igm_types() -> frozenset[str]:
@@ -688,8 +693,9 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     neb_type = neb_dict.get("type", "none")
 
     # Validate type
-    if neb_type not in _VALID_NEBULAR_TYPES:
-        suggestions = difflib.get_close_matches(neb_type, _VALID_NEBULAR_TYPES, n=2, cutoff=0.6)
+    valid_neb = _valid_nebular_types()
+    if neb_type not in valid_neb:
+        suggestions = difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown nebular type '{neb_type}'.{suggest_str}")
 
