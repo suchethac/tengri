@@ -26,7 +26,6 @@ prior framework).
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -109,11 +108,13 @@ for i in range(N_GALAXIES):
 
     # Generate mock photometry (SNR ~20 for SDSS-like):
     mock = model_template.mock(truth, snr=20.0, key=key)
-    galaxies_data.append({
-        "flux_obs": mock.flux_obs,
-        "noise": mock.noise,
-        "true_met": true_met_logzsol[i],
-    })
+    galaxies_data.append(
+        {
+            "flux_obs": mock.flux_obs,
+            "noise": mock.noise,
+            "true_met": true_met_logzsol[i],
+        }
+    )
 
 # ── Fit individual galaxies first (naive baseline) ───────────────────────
 # We'll fit a few galaxies individually to show per-galaxy constraints
@@ -133,20 +134,19 @@ for i in range(SAMPLE_INDIVIDUAL_FITS):
         n_samples=3,
         verbose=False,
     )
-    individual_posteriors.append({
-        "params": post_i.params,
-        "samples": post_i.samples,
-        "true_met": galaxies_data[i]["true_met"],
-    })
+    individual_posteriors.append(
+        {
+            "params": post_i.params,
+            "samples": post_i.samples,
+            "true_met": galaxies_data[i]["true_met"],
+        }
+    )
 
 # ── Hierarchical fit (population-level pooling) ──────────────────────────
 # Build a single shared model template for the population:
 hfitter = tengri.PopulationFitter(
     model_template,
-    data=[
-        {"flux_obs": g["flux_obs"], "noise": g["noise"]}
-        for g in galaxies_data
-    ],
+    data=[{"flux_obs": g["flux_obs"], "noise": g["noise"]} for g in galaxies_data],
 )
 
 # Run hierarchical variational inference:
@@ -241,7 +241,14 @@ if "met_logzsol_mean" in result.shared_samples:
     ax.grid(True, alpha=0.3)
 else:
     # Fallback: show the available shared samples
-    ax.text(0.5, 0.5, "Population-level hyperparameter\ntracking not yet exposed in API;\nsee docs for details.", ha="center", va="center", transform=ax.transAxes)
+    ax.text(
+        0.5,
+        0.5,
+        "Population-level hyperparameter\ntracking not yet exposed in API;\nsee docs for details.",
+        ha="center",
+        va="center",
+        transform=ax.transAxes,
+    )
     ax.set_title("Population posterior")
 
 # Axis [1, 1]: Histogram of individual met_logzsol vs. population distribution
@@ -267,7 +274,8 @@ if len(all_met_samples) > 0:
 # Overlay population truth (expected distribution):
 met_grid = np.linspace(-0.5, 0.5, 100)
 pop_pdf = (
-    1.0 / (np.sqrt(2 * np.pi) * true_pop_scatter)
+    1.0
+    / (np.sqrt(2 * np.pi) * true_pop_scatter)
     * np.exp(-0.5 * ((met_grid - true_pop_mean) / true_pop_scatter) ** 2)
 )
 ax.plot(
@@ -306,12 +314,16 @@ print()
 print("Population posterior statistics:")
 if "met_logzsol_mean" in result.shared_samples:
     pop_mean_samples = result.shared_samples["met_logzsol_mean"]
-    print(f"  Population mean: {np.median(pop_mean_samples):.4f} "
-          f"(16%-84%: {np.percentile(pop_mean_samples, 16):.4f}–{np.percentile(pop_mean_samples, 84):.4f})")
+    print(
+        f"  Population mean: {np.median(pop_mean_samples):.4f} "
+        f"(16%-84%: {np.percentile(pop_mean_samples, 16):.4f}–{np.percentile(pop_mean_samples, 84):.4f})"
+    )
     pop_scatter_samples = result.shared_samples.get("met_logzsol_scatter", [])
     if len(pop_scatter_samples) > 0:
-        print(f"  Population scatter: {np.median(pop_scatter_samples):.4f} "
-              f"(16%-84%: {np.percentile(pop_scatter_samples, 16):.4f}–{np.percentile(pop_scatter_samples, 84):.4f})")
+        print(
+            f"  Population scatter: {np.median(pop_scatter_samples):.4f} "
+            f"(16%-84%: {np.percentile(pop_scatter_samples, 16):.4f}–{np.percentile(pop_scatter_samples, 84):.4f})"
+        )
 print()
 print("Key result: Hierarchical pooling sharpens the population-level")
 print("hyperparameter constraint by ~5-10×, enabling precise demographics.")

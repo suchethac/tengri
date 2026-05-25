@@ -52,6 +52,7 @@ setup_style()
 ssp_path = Path("data/fsps_prsc_miles_chabrier.h5")
 if not ssp_path.exists():
     import tengri
+
     ssp_path = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
 ssp = load_ssp_data(str(ssp_path))
 
@@ -92,8 +93,9 @@ obs = Observation(photometry=Photometry.from_names(filters))
 # 3. Optical depth grid and model construction
 # ============================================================================
 
-tau_v_grid = np.array([0.0, 0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0,
-                        0.15, 0.75, 2.25, 3.75])  # 15 values total
+tau_v_grid = np.array(
+    [0.0, 0.1, 0.3, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 0.15, 0.75, 2.25, 3.75]
+)  # 15 values total
 
 lir_grid = []  # Integrated IR luminosity (8–1000 μm)
 luv_absorbed_grid = []  # Absorbed UV luminosity
@@ -218,8 +220,7 @@ ax.plot(lum_range, lum_range, "r--", lw=1.5, label="Perfect balance (y=x)", alph
 
 # Shaded regions for ±10% tolerance
 ax.fill_between(
-    lum_range, lum_range * 0.9, lum_range * 1.1, alpha=0.15, color="green",
-    label="±10% tolerance"
+    lum_range, lum_range * 0.9, lum_range * 1.1, alpha=0.15, color="green", label="±10% tolerance"
 )
 
 ax.set_xscale("log")

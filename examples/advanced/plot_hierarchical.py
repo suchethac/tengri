@@ -38,9 +38,7 @@ N_GAL = 4
 
 ssp = tengri.load_ssp()
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    )
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 
 
