@@ -389,6 +389,10 @@ class Parameters:
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 64))
         self.apply_igm = kwargs.pop("apply_igm", True)
+        # IGM transmission model: 'inoue' (default) or 'madau'. Stored as a
+        # structural setting so the grammar-layer choice propagates through
+        # to :meth:`SEDModel._init_igm` (#344).
+        self.igm_model = kwargs.pop("igm_model", "inoue")
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
