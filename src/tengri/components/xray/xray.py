@@ -376,9 +376,7 @@ def xray_xrb(
     log_l_lmxb_per_1e10 = (
         40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
     )
-    L_lmxb_ref = (
-        10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
-    )
+    L_lmxb_ref = 10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalise by integrating the spectral shape over the 2-10 keV reference band
@@ -1303,7 +1301,14 @@ def xray_total_lopez24(
     See :func:`xray_agn_corona_lopez24` for the α_IRX model details
     and :func:`xray_xrb` for the XRB component.
     """
-    xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
+    xrb = xray_xrb(
+        wavelength,
+        sfr=sfr,
+        stellar_mass=stellar_mass,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+    )
     agn = xray_agn_corona_lopez24(
         wavelength,
         l_12um_erg_hz,

@@ -204,6 +204,13 @@ def pytest_configure(config):
     scripts/download_cb19_templates.py), this hook is a no-op.
     """
     cb19_path = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
+    _create_cb19_fixture_if_missing(cb19_path)
+    _create_silva04_fixture_if_missing(
+        Path(__file__).parent.parent / "data" / "silva04_torus_grid.h5"
+    )
+
+
+def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
     if cb19_path.exists():
         return
 
@@ -268,35 +275,42 @@ def pytest_configure(config):
         stacklevel=1,
     )
 
-    # ── Silva+04 torus grid (parallel to CB19 pattern) ──
-    # The Silva+04 cold-torus loader raises FileNotFoundError when the
-    # grid is missing, which breaks ~ 20 test modules at import time in
-    # CI. Synthesise a minimal grid here so the code path runs; real
-    # physics tests can guard with `@pytest.mark.skipif(not
-    # _real_silva04_grid_present())`. The grid is keyed on
-    # `silva04/{log_nh_axis, wavelength, template}` per
-    # `_load_silva04_arrays` in `components/agn/silva04.py`.
-    silva04_path = Path(__file__).parent.parent / "data" / "silva04_torus_grid.h5"
-    if not silva04_path.exists():
-        silva04_path.parent.mkdir(parents=True, exist_ok=True)
-        n_nh, n_wave = 8, 64
-        log_nh_axis = np.linspace(22.0, 25.0, n_nh).astype(np.float64)
-        wavelength = np.logspace(np.log10(1.0), np.log10(1e7), n_wave).astype(np.float64)
-        # Template: zero everywhere — gives a defensibly null Silva+04
-        # spectrum so tests exercise the orchestration without
-        # accidentally claiming numerical agreement with Silva+04 physics.
-        template = np.zeros((n_nh, n_wave), dtype=np.float64)
-        with h5py.File(silva04_path, "w") as f:
-            g = f.create_group("silva04")
-            g.create_dataset("log_nh_axis", data=log_nh_axis)
-            g.create_dataset("wavelength", data=wavelength)
-            g.create_dataset("template", data=template)
-        warnings.warn(
-            f"Created synthetic Silva+04 grid at {silva04_path} for tests. "
-            "Run scripts/build_silva04_grid.py to replace with the real grid.",
-            UserWarning,
-            stacklevel=1,
-        )
+
+def _create_silva04_fixture_if_missing(silva04_path: Path) -> None:
+    """Synthesise a minimal Silva+04 cold-torus grid if absent.
+
+    The Silva+04 loader raises FileNotFoundError when its HDF5 grid is
+    missing, breaking ~ 20 test modules at import time in CI. We
+    synthesise a minimal grid with a zero template so the orchestration
+    code path runs; real physics tests can guard themselves with
+    ``@pytest.mark.skipif`` against the actual grid file.
+
+    The grid is keyed on ``silva04/{log_nh_axis, wavelength, template}``
+    per ``_load_silva04_arrays`` in ``components/agn/silva04.py``.
+    """
+    if silva04_path.exists():
+        return
+    import warnings
+
+    silva04_path.parent.mkdir(parents=True, exist_ok=True)
+    n_nh, n_wave = 8, 64
+    log_nh_axis = np.linspace(22.0, 25.0, n_nh).astype(np.float64)
+    wavelength = np.logspace(np.log10(1.0), np.log10(1e7), n_wave).astype(np.float64)
+    # Template: zero everywhere — gives a defensibly null Silva+04
+    # spectrum so tests exercise the orchestration without accidentally
+    # claiming numerical agreement with Silva+04 physics.
+    template = np.zeros((n_nh, n_wave), dtype=np.float64)
+    with h5py.File(silva04_path, "w") as f:
+        g = f.create_group("silva04")
+        g.create_dataset("log_nh_axis", data=log_nh_axis)
+        g.create_dataset("wavelength", data=wavelength)
+        g.create_dataset("template", data=template)
+    warnings.warn(
+        f"Created synthetic Silva+04 grid at {silva04_path} for tests. "
+        "Run scripts/build_silva04_grid.py to replace with the real grid.",
+        UserWarning,
+        stacklevel=1,
+    )
 
 
 @pytest.fixture
