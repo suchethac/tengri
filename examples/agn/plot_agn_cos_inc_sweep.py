@@ -8,6 +8,10 @@ edge-on (low ``cos_inc``) views expose more reprocessed mid-infrared
 flux and can show silicate absorption features.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

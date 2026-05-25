@@ -18,6 +18,10 @@ Reference: Leja et al. 2019, ApJ, 876, 3 (rapid field inference with
 correlated priors).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import time
 import warnings
 

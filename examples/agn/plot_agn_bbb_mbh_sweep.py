@@ -14,6 +14,10 @@ Eddington ratio samples the range from stellar-mass-like accretion physics to
 supermassive black holes.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -8,6 +8,10 @@ shows the optical-to-NIR region in linear scale; right panel shows the full
 panchromatic SED in log-log, revealing the emission from both young and old stars.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

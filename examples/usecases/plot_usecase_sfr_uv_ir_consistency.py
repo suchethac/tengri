@@ -25,6 +25,10 @@ References
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

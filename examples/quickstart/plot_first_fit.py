@@ -12,6 +12,10 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
 et al. 2000, ApJ, 533, 682 (attenuation law).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

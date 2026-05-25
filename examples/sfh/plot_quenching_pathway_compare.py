@@ -10,6 +10,10 @@ markedly different colors, equivalent widths (Hα), and spectral slopes, highlig
 how quenching timescale imprints on observable photometry and spectroscopy.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

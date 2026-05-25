@@ -9,6 +9,10 @@ colors, and stellar masses. We vary σ across its prior range with the timescale
 τ fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

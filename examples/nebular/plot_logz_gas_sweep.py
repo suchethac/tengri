@@ -11,6 +11,10 @@ and [O III]/Hbeta the textbook diagnostics.
 Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

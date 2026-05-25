@@ -17,6 +17,10 @@ for the per-backend status of the discrete-line API.
 Reference: Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

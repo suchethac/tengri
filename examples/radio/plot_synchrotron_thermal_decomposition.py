@@ -19,6 +19,10 @@ Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
   (FIR-radio correlation and physical origins)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

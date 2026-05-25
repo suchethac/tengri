@@ -8,6 +8,10 @@ constant log U (varying metallicity) and constant log Z (varying ionization)
 show the full grid's coverage and demarcation positions.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

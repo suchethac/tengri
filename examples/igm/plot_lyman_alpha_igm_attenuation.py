@@ -18,6 +18,7 @@ are:
   absorbed at higher redshift due to neutral hydrogen absorption
 - The red side (Lyα + a few hundred Ångströms) remains mostly unaffected
   by IGM
+
 - At z ≥ 6, the blue wing is severely damped, which is why Lyα emission
   becomes difficult to detect in high-redshift galaxies
 
@@ -29,6 +30,10 @@ References:
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

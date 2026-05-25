@@ -24,6 +24,10 @@ References:
 - Poggianti & Barbaro 1997, A&A, 325, 1025
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt

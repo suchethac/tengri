@@ -9,6 +9,10 @@ relation across galactic radii. Together they show how star formation and
 galactic winds control the Z(t) history.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

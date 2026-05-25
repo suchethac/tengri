@@ -7,6 +7,10 @@ shifting galaxies toward the LINER region on the BPT diagram. We vary the
 DIG fraction from pure HII (0) to mixed gas (0.8).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

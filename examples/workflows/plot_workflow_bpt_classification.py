@@ -17,6 +17,10 @@ Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
 Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

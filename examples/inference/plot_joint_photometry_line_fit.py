@@ -19,6 +19,10 @@ References:
 - Bouwens et al. (2022), ApJ, 931, 160 — JWST LAE survey at z~5
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import corner

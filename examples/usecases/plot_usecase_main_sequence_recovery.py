@@ -20,6 +20,10 @@ References:
 - Whitaker et al. 2014, ApJ, 795, 104 (sSFR evolution)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

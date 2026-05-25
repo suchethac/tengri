@@ -18,6 +18,10 @@ override is being dropped in the build path.
 Reference: Meurer et al. 1999, ApJ, 521, 64 (β as UV slope diagnostic).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

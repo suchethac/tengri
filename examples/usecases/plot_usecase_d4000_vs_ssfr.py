@@ -14,6 +14,10 @@ The Kauffmann+2003 green-valley cut at ``D_n(4000) ≈ 1.5`` is the
 horizontal divider.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -9,6 +9,10 @@ effect on thin disc accretion: Schwarzschild (a*=0) → near-extremal Kerr
 (a*=0.998).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

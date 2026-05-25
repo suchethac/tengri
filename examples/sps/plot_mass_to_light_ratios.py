@@ -14,6 +14,10 @@ from inverting tengri's photometric prediction back to ``L_ν``
 band's effective frequency.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

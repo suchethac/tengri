@@ -8,6 +8,10 @@ disc, reducing the mid-IR peak temperature and shifting flux toward the far-IR.
 Flatter profiles distribute dust more uniformly and hotter on average.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

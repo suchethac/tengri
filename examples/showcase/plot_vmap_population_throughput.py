@@ -17,6 +17,9 @@ programs (https://arxiv.org/abs/1811.02361); JAX documentation on vmap
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import time
 import warnings
 

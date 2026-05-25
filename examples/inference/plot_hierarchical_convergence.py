@@ -12,6 +12,10 @@ Reference: Behroozi et al. 2013, ApJ, 770, 57 (functional form);
 Asterhan et al. (forthcoming) — stochastic SFH formalism.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

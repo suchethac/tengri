@@ -18,10 +18,15 @@ For real data, this three-trace pattern can be extended to a suite of
 The analytic scaling is ``L_total = (1 - frac) * L_host + frac * L_AGN``.
 
 References
+
 ----------
 .. [1] Ciesla et al. 2015, A&A, 576, A10 — Host-AGN decomposition via SED fitting
 .. [2] Stalevski et al. 2017, MNRAS, 470, 3876 — IR torus models in composite SEDs
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

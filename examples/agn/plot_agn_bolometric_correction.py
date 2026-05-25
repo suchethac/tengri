@@ -18,6 +18,7 @@ monotonically with :math:`L_{\\rm bol}`.
 Bands sampled:
 
 - **Hard X-ray**: 2–10 keV (:math:`\\lambda = 1.24–6.2 \\,\\mathrm{\\AA}`)
+
 - **Soft X-ray**: 0.5–2 keV (:math:`\\lambda = 6.2–24.8 \\,\\mathrm{\\AA}`)
 - **Optical-UV**: 1000–7000 Å
 - **Mid-IR**: 5–30 μm
@@ -31,6 +32,10 @@ References
 .. [2] Duras, F., et al., 2020, A&A, 642, A204.
 
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

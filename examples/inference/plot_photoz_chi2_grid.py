@@ -13,6 +13,10 @@ Reference: Bolzonella et al. 2000, A&A, 363, 476 (HYPERZ photometric
 redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

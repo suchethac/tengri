@@ -23,6 +23,10 @@ References:
 - Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

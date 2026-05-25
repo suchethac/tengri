@@ -7,6 +7,10 @@ affecting emission line strengths. Higher density increases cooling efficiency,
 shifting line ratios through recombination rate changes.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

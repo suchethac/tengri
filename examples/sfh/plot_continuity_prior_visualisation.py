@@ -16,6 +16,12 @@ time.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
+
 import jax.random as jr
 import matplotlib.pyplot as plt
 import numpy as np

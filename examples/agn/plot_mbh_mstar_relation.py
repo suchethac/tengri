@@ -30,6 +30,10 @@ to verify consistency within the observed scatter (~0.3 dex).
        Journal, 813(2), 82. https://doi.org/10.1088/0004-637X/813/2/82
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

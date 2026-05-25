@@ -19,6 +19,10 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (radial gradients in galaxies);
 Henry, R. B. C., & Worthey, G. 1999, PASP, 111, 919 (abundance gradients).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

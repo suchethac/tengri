@@ -8,6 +8,10 @@ Each panel shows one forward-model draw with the smooth mean SFH overlaid,
 illustrating the range of morphologies that each regime produces before inference.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

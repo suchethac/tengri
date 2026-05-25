@@ -9,6 +9,10 @@ diagnostic — line core depth tracks σ_v, asymmetric wings appear with
 rotational broadening (not modelled here, sigma only).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

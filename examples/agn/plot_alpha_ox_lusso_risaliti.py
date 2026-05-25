@@ -16,6 +16,10 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 (α_OX–L_UV relation); Tananbaum 1979, ApJ, 234, L9 (definition of α_OX).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

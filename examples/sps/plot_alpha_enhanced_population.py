@@ -18,7 +18,12 @@ into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
 **References:**
     - Thomas et al. 2005 (MNRAS 357, 1113) — age–metallicity–[α/Fe] diagnostics
     - Conroy & van Dokkum 2012 (ApJ 747, 69) — stellar population models
+
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

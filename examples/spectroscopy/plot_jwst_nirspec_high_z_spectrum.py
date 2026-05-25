@@ -12,6 +12,10 @@ the high-z star-forming regime, useful for planning JWST observations
 at z ≳ 6.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

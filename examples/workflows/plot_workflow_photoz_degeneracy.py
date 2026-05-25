@@ -18,6 +18,10 @@ References:
 - Massarotti, Iovino & Buzzoni 2001, A&A, 368, 74 (photo-z degeneracies)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

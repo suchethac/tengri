@@ -8,6 +8,10 @@ means sustained episodes that leave their imprint on the SED. We vary τ
 across the prior range with the burst amplitude σ fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

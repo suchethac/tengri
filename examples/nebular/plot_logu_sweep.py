@@ -13,6 +13,10 @@ Reference: Kewley & Dolphin 2002, ApJ, 549, 716; Li et al. 2024
 (Cue nebular emulator).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

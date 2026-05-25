@@ -18,6 +18,7 @@ This two-panel comparison shows:
 
 Both indices are computed from high-resolution spectra (R=2000) in the
 5050–5350 Å rest-frame optical window using Trager+1998 and Worthey+1994
+
 line definitions. Reproduces the cluster age-dating diagnostics of
 Trager+2000 [1]_.
 
@@ -31,6 +32,10 @@ References
    and Population Diagnostics," ApJS 94, 687.
    https://doi.org/10.1086/192220
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

@@ -12,6 +12,10 @@ Sweep over the canonical range R_V ∈ [2.0, 5.5] showing the family
 on the same intrinsic SED at τ_V = 1.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
