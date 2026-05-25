@@ -81,19 +81,19 @@ class TestSKIRTORParameterDiscovery:
     """Test auto-discovery of free parameters."""
 
     def test_declared_parameters_count(self):
-        """SKIRTORTorus declares seven free parameters."""
+        """SKIRTORTorus declares ten free parameters (seven core + polar dust trio)."""
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
-        assert len(decls) == 7
+        assert len(decls) == 10
 
     def test_declared_parameter_names(self):
         """Parameter names have agn_ prefix as per naming contract.
 
         Post-#329 ``agn_torus_frac`` was renamed to ``agn_frac_agn`` to align
-        with CIGALE's nomenclature (the parameter is the AGN bolometric
-        fraction of the total reprocessed luminosity, not specifically the
-        torus). The old name is still accepted by the analytic wrapper as a
-        deprecated alias.
+        with CIGALE's nomenclature. The polar-dust trio (``agn_polar_ebv``,
+        ``agn_polar_temperature``, ``agn_polar_beta``) was promoted to free
+        params when the bi-conical re-emission pipeline was wired through
+        (Yang+2020 §2.2.2).
         """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
@@ -106,6 +106,9 @@ class TestSKIRTORParameterDiscovery:
             "agn_oa_skirtor",
             "agn_cos_inc",
             "agn_frac_agn",
+            "agn_polar_ebv",
+            "agn_polar_temperature",
+            "agn_polar_beta",
         }
         assert names == expected
 
