@@ -98,13 +98,14 @@ for log_lbol in log_lbol_values:
     L_sun_erg = 3.828e33  # erg/s
     L_bol_erg = 10.0**log_lbol * L_sun_erg
 
-    # Compute X-ray SED via the public API.
+    # Convert L_bol → L_2500 via Hopkins+2007 BC=5.15 and call the
+    # CIGALE-faithful new corona signature (post-#329).
+    L_2500 = L_bol_erg / (5.15 * 1.199e15)
     sed = xray_agn_corona(
         wavelength,
-        L_agn_bol=L_bol_erg,
+        l_2500_30deg_erg_hz=L_2500,
         gamma=X_RAY_GAMMA,
         E_cut=X_RAY_E_CUT,
-        alpha_ox=X_RAY_ALPHA_OX,
     )
     sed = np.asarray(sed)
 

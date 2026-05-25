@@ -15,7 +15,6 @@ at z ≳ 6.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -35,10 +34,15 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "tau_gyr": 0.05, "log_peak_sfr": 1.8, "alpha": 3.5, "beta": 2.2},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.08, "tau_bc": 0.15},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.05,
+        "log_peak_sfr": 1.8,
+        "alpha": 3.5,
+        "beta": 2.2,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
     neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
     redshift=tengri.Fixed(7.0),
 )
@@ -111,11 +115,21 @@ for lam_rest, line_name in EMISSION_LINES:
         # Label with rest wavelength, staggering height for readability
         y_pos = ymax * (0.82 + 0.08 * (hash(lam_rest) % 3))
         ax.text(
-            lam_obs_um, y_pos,
+            lam_obs_um,
+            y_pos,
             f"{line_name}\n({lam_rest:.1f} Å)",
-            fontsize=7, color="C1", ha="center", va="top",
-            rotation=0, bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                                   edgecolor="C1", alpha=0.8, linewidth=0.5)
+            fontsize=7,
+            color="C1",
+            ha="center",
+            va="top",
+            rotation=0,
+            bbox=dict(
+                boxstyle="round,pad=0.3",
+                facecolor="white",
+                edgecolor="C1",
+                alpha=0.8,
+                linewidth=0.5,
+            ),
         )
 
 ax.set_xlim(2.9, 5.1)

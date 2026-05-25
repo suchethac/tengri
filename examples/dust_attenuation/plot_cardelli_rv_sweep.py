@@ -15,7 +15,6 @@ on the same intrinsic SED at τ_V = 1.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,16 +27,29 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 ssp = tengri.load_ssp()
-SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 0.05,
-       "width_gyr": 0.05, "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+SFH = {
+    "type": "tsnorm",
+    "*": tengri.FIXED,
+    "peak_lbt_gyr": 0.05,
+    "width_gyr": 0.05,
+    "log_peak_sfr": 1.0,
+    "skew": 0.0,
+    "trunc": 13.0,
+}
 
 
 def _model(rv):
     return tengri.SEDModel.build(
-        ssp, sfh=SFH,
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 1.0, "tau_bc": 0.0, "law_diff": "cardelli",
-              "Rv": rv},
+        ssp,
+        sfh=SFH,
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 1.0,
+            "tau_bc": 0.0,
+            "law_diff": "cardelli",
+            "Rv": rv,
+        },
         redshift=tengri.Fixed(0.05),
     )
 
@@ -56,11 +68,13 @@ for rv in rv_grid:
     ax.loglog(wave, nu_l_nu, color=cmap(norm(rv)), lw=1.4)
 
 ax.axvline(2175, color="0.55", lw=0.4, ls=":")
-ax.text(2175, 8e43, "2175 Å bump", fontsize=8, color="0.4",
-        ha="right", rotation=90)
-ax.set(xlim=(900, 1e4), ylim=(1e41, 1e44),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.text(2175, 8e43, "2175 Å bump", fontsize=8, color="0.4", ha="right", rotation=90)
+ax.set(
+    xlim=(900, 1e4),
+    ylim=(1e41, 1e44),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cb.set_label(r"$R_V = A_V / E(B-V)$")
 

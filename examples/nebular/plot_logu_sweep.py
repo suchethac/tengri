@@ -1,10 +1,16 @@
 """
-Ionization parameter controls optical line strength
-===================================================
+Ionisation parameter reshapes the full optical SED, not just line ratios
+==========================================================================
 
-Higher ionisation parameter ``log U`` drives stronger [OIII] and [NII]
-emission, steering the galaxy toward the Seyfert region on the BPT diagram.
-We vary ``log U`` across the typical range for star-forming galaxies.
+Varying log U from -4 to -1.5 on a young star-forming galaxy at fixed
+metallicity changes every strong optical line simultaneously — Hbeta,
+[O III], Halpha, [N II], [S II] all move together. We plot the full
+4000-7500 A SED so the continuum context is visible alongside the line
+forest. Companion to ``plot_cue_logu_line_ratios.py``, which projects
+the same sweep onto two-line diagnostic axes.
+
+Reference: Kewley & Dolphin 2002, ApJ, 549, 716; Li et al. 2024
+(Cue nebular emulator).
 """
 
 import warnings

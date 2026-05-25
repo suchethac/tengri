@@ -16,7 +16,6 @@ References: Sanders & Mirabel 1996 (ULIRG definition), Soifer et al. 1987
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -36,15 +35,15 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 2.0,           # 100 Msun/yr sustained
+        "log_sfr": 2.0,  # 100 Msun/yr sustained
         "start_gyr": 0.1,
-        "end_gyr": 0.0,           # 100 Myr ongoing burst
+        "end_gyr": 0.0,  # 100 Myr ongoing burst
     },
     dust={
         "type": "two_component",
         "*": tengri.FIXED,
-        "tau_diff": 3.0,          # diffuse dust: tau_V = 3 mag
-        "tau_bc": 2.5,            # birth cloud opacity: tau_V = 2.5 mag
+        "tau_diff": 3.0,  # diffuse dust: tau_V = 3 mag
+        "tau_bc": 2.5,  # birth cloud opacity: tau_V = 2.5 mag
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
     radio={"type": "condon92", "*": tengri.FIXED},
@@ -111,7 +110,9 @@ fig, ax = plt.subplots(figsize=(7.6, 4.6))
 
 # Plot the main panchromatic SED (stellar attenuated + dust re-emission + radio)
 mask = np.asarray(out.sed) > 0
-ax.loglog(wave[mask], nu_l_nu[mask], color="0.15", lw=1.4, label="Full SED (attenuated + dust + radio)")
+ax.loglog(
+    wave[mask], nu_l_nu[mask], color="0.15", lw=1.4, label="Full SED (attenuated + dust + radio)"
+)
 
 # Overplot intrinsic stellar for reference (fainter grey)
 mask_int = np.asarray(out_intrinsic.sed) > 0
@@ -156,7 +157,7 @@ l_sun_cgs = 3.839e33
 ax.text(
     0.97,
     0.05,
-    rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir/l_sun_cgs):.1f}}}\,L_\odot$",
+    rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / l_sun_cgs):.1f}}}\,L_\odot$",
     transform=ax.transAxes,
     ha="right",
     fontsize=9,
