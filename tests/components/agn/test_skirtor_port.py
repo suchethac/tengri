@@ -53,12 +53,24 @@ class TestSKIRTORComponentBasics:
         assert comp.parameter_prefix == "agn_"
 
     def test_skirtor_outputs(self):
-        """outputs() method returns expected cross-component keys."""
+        """outputs() returns the six cross-component keys SKIRTOR publishes.
+
+        Updated for #329's three-contribution split: SKIRTOR now exposes
+        the disc / torus / polar-dust luminosity decomposition as well
+        as the canonical L_ν probes (2500 Å at 30° viewing for the X-ray
+        α_ox driver; 6 µm and 12 µm for the AGN MIR–L_X relation).
+        """
         comp = SKIRTORTorus()
         outs = comp.outputs()
-        assert len(outs) == 1
-        assert outs[0].name == "L_agn_torus"
-        assert outs[0].units == "erg/s"
+        names_to_units = {o.name: o.units for o in outs}
+        assert names_to_units == {
+            "L_agn_disc": "erg/s",
+            "L_agn_torus": "erg/s",
+            "L_agn_polar_dust": "erg/s",
+            "L_2500_30deg": "erg/s/Hz",
+            "L_6um": "erg/s/Hz",
+            "L_12um": "erg/s/Hz",
+        }
 
 
 class TestSKIRTORParameterDiscovery:
@@ -71,7 +83,11 @@ class TestSKIRTORParameterDiscovery:
         assert len(decls) == 7
 
     def test_declared_parameter_names(self):
-        """Parameter names have agn_ prefix as per naming contract."""
+        """Parameter names have agn_ prefix as per naming contract.
+
+        ``agn_torus_frac`` was renamed to ``agn_frac_agn`` in #329 to
+        match CIGALE's ``fracAGN`` convention (Yang+2020 yang20.py).
+        """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
         names = {d.name for d in decls}
@@ -82,7 +98,7 @@ class TestSKIRTORParameterDiscovery:
             "agn_q_skirtor",
             "agn_oa_skirtor",
             "agn_cos_inc",
-            "agn_torus_frac",
+            "agn_frac_agn",
         }
         assert names == expected
 
