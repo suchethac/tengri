@@ -124,7 +124,15 @@ def truncated_skewnormal(
     peak_lbt : float
         Peak lookback time [yr].
     width : float
-        Gaussian width parameter [yr].
+        Gaussian width parameter [yr]. **SSP grid aliasing**: the forward
+        model interpolates ``SFR(t)`` at SSP grid points (a point-sample,
+        not a bin-integral), so a ``width`` narrower than the local SSP
+        grid spacing at the burst peak produces a non-physical staircase
+        as the peak crosses adjacent grid boundaries. Rough minimum:
+        ``width ≳ 0.3 Gyr`` at peaks < 2 Gyr, ``≳ 0.6 Gyr`` past 5 Gyr.
+        See issue #299. ``SEDModel.build`` emits a
+        :class:`SFHBurstAliasingWarning` when the chosen ``width`` is
+        too narrow for the SSP grid.
     skew : float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
     trunc : float
