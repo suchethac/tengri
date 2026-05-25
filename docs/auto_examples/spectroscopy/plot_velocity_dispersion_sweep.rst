@@ -134,7 +134,7 @@ of higher-velocity stellar populations.
     ax.set_ylim(0.8, 1.02)
     ax.legend(frameon=False, loc="lower left", fontsize=10)
     fig.tight_layout()
-    fig.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py:

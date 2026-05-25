@@ -59,4 +59,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"Peak lookback time [Gyr]")
 
 fig.tight_layout()
-fig.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")

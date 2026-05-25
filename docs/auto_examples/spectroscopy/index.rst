@@ -17,7 +17,92 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep instrumental resolution R ∈ {500, 2000, 5000, 20000} to demonstrate how spectral resolution affects line profile visibility. The Hα line (~6564.6 Å vacuum) transforms from a single broad bump to a sharply resolved absorption feature as resolution increases. High-res spectroscopy reveals kinematics.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar absorption features, especially the Mg b and Fe5270 line strengths, encode both age and metallicity in a classical anti-correlation pattern: at fixed metallicity, both features strengthen with age (population becomes older, cooler); at fixed age, increasing metallicity also strengthens the features (enhanced α-element abundances + stronger metal absorption).">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_bandheads_age_metallicity_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_bandheads_age_metallicity`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar absorption bandheads: age and metallicity anti-correlation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Population diagnostics: single-burst SSP populations (3 SFH shapes × 5 ages × 3 metallicities = 45 points) colored by SFH shape and marked by metallicity. The Hδ_A vs D_n(4000) diagram discriminates starburst (high Hδ_A, low D_n(4000)) from quiescent (low Hδ_A, high D_n(4000)) populations and is sensitive to recent star formation and metal enrichment.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_d4000_hdelta_diagram_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_d4000_hdelta_diagram`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Kauffmann+2003 D_n(4000) vs Hδ_A Diagram</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="High-redshift star-forming galaxy with strong rest-frame UV and optical emission lines redshifted into the JWST NIRSpec G395M window (2.9–5.1 μm). Lines include Lyα, CIV, HeII, CIII], [OII], Hβ, [OIII], and Hα, each annotated with rest wavelength and vacuum-frame position.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_jwst_nirspec_high_z_spectrum_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_jwst_nirspec_high_z_spectrum`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Mock JWST NIRSpec G395M spectrum of a z=7 star-forming galaxy</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A z=5 JADES-like star-forming galaxy observed with JWST NIRSpec in two modes: PRISM (R~100, low-resolution) and G395M grating (R~1000, medium-resolution). The Hα line at rest 6564.61 Å appears as a single blob in PRISM but resolves into three peaks in the grating: Hα + [NII] λλ6549,6585 Å doublet.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_nirspec_prism_vs_grating_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_nirspec_prism_vs_grating`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">JWST NIRSpec PRISM vs G395M grating: Hα + [NII] resolution comparison</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer absorption lines (high Hδ_A) with no emission, visible only in a narrow window after a recent burst of star formation has been abruptly quenched.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_post_starburst_diagnostic_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_post_starburst_diagnostic`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Post-Starburst K+A Diagnostic: Hδ_A vs Time Since Quench</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how instrumental resolution affects spectral line profile visibility by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500 (DESI), 2000 (KMOS), 5000 (MUSE), and 25000 (HARPS). The Hα + [N II] complex (rest ~6550–6600 Å) transitions from fully blended at low R to completely resolved at high R, revealing the forbidden and Balmer lines separately.">
 
 .. only:: html
 
@@ -28,7 +113,24 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Instrumental Resolution Sweep</div>
+      <div class="sphx-glr-thumbnail-title">Instrumental Resolution Sweep: Hα Line Blending</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Mg b 5170 Å region of an old stellar population observed at spectral resolution R = 3000, convolved with increasing stellar velocity dispersion σ_v from 50 to 400 km/s. The classic kinematic diagnostic — line core depth tracks σ_v, asymmetric wings appear with rotational broadening (not modelled here, sigma only).">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_sigma_v_absorption_broadening_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_sigma_v_absorption_broadening`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Velocity-dispersion broadening of stellar absorption features</div>
     </div>
 
 
@@ -110,7 +212,13 @@ Spectroscopic fitting and spectral features.
 .. toctree::
    :hidden:
 
+   /auto_examples/spectroscopy/plot_bandheads_age_metallicity
+   /auto_examples/spectroscopy/plot_d4000_hdelta_diagram
+   /auto_examples/spectroscopy/plot_jwst_nirspec_high_z_spectrum
+   /auto_examples/spectroscopy/plot_nirspec_prism_vs_grating
+   /auto_examples/spectroscopy/plot_post_starburst_diagnostic
    /auto_examples/spectroscopy/plot_resolution_sweep
+   /auto_examples/spectroscopy/plot_sigma_v_absorption_broadening
    /auto_examples/spectroscopy/plot_spectral_features
    /auto_examples/spectroscopy/plot_spectral_indices_vs_age
    /auto_examples/spectroscopy/plot_spectrum_fit

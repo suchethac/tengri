@@ -115,4 +115,4 @@ ax.legend(fontsize=10, frameon=False, loc="lower left")
 ax.grid(True, alpha=0.2, which="both")
 
 fig.tight_layout()
-fig.savefig("plot_sfh_quenching_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_sfh_quenching_compare.png", dpi=150, bbox_inches="tight")

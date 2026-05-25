@@ -21,11 +21,6 @@
 Composable AGN: three evaluation modes side-by-side
 ====================================================
 
-.. image:: images/sphx_glr_plot_composable_three_modes_001.png
-   :alt: plot composable three modes
-   :class: sphx-glr-single-img
-
-
 The composable AGN runner exposes three evaluation modes (see
 ``docs/dev/three_evaluation_modes.md``):
 
@@ -229,7 +224,7 @@ acceptable.
     # evaluation. This is by design (smoothness for gradients), not a bug.
 
     fig.tight_layout()
-    fig.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_composable_three_modes.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_three_modes.py:

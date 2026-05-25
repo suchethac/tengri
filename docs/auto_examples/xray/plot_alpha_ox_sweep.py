@@ -46,4 +46,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"UV-to-X-ray slope $\alpha_{\rm ox}$")
 
 fig.tight_layout()
-fig.savefig("plot_alpha_ox_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_alpha_ox_sweep.png", dpi=150, bbox_inches="tight")

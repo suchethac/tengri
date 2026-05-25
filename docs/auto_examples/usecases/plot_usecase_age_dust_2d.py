@@ -95,4 +95,4 @@ ax.text(
 )
 
 fig.tight_layout()
-fig.savefig("plot_usecase_age_dust_2d.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_age_dust_2d.png", dpi=150, bbox_inches="tight")

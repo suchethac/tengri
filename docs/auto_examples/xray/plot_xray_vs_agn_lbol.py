@@ -76,4 +76,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")
 
 fig.tight_layout()
-fig.savefig("plot_xray_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_xray_vs_agn_lbol.png", dpi=150, bbox_inches="tight")

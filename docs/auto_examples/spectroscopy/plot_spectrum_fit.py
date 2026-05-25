@@ -96,4 +96,4 @@ ax.set_ylim(0.2, 5.0)
 ax.legend(frameon=False, loc="upper left", fontsize=10)
 
 fig.tight_layout()
-fig.savefig("plot_spectrum_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_spectrum_fit.png", dpi=150, bbox_inches="tight")

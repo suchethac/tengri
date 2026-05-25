@@ -51,4 +51,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"log$_{10}$ L$_{\rm IR}$ [L$_\odot$]")
 
 fig.tight_layout()
-fig.savefig("plot_radio_lir_relation.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_radio_lir_relation.png", dpi=150, bbox_inches="tight")

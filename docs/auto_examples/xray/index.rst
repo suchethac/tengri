@@ -64,7 +64,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="AGN coronae are compact hot regions where the hard X-ray power law (photon index ~1.7–2.0) is produced via Compton scattering off hot electrons. The X-ray spectrum reflects the coronal temperature, optical depth, and geometry. This demo varies L_bol across six decades (10⁴²–10⁴⁶·⁵ erg/s) to show the gradual brightening of the X-ray continuum and the persistence of the power-law form across the luminosity sequence. A separate panel isolates key spectral features: soft excess (0.5–2 keV), hard continuum (2–10 keV), Compton reflection hump (10–100 keV), and the iron K-α line (6.4 keV).">
+    <div class="sphx-glr-thumbcontainer" tooltip="AGN coronae are compact hot regions where the hard X-ray power law (photon index ~1.7–2.0) is produced via Compton up-scattering of seed UV photons by hot electrons. xray_agn_corona models the primary continuum as a cut-off power-law normalised through the α_ox–L_2500 relation (Lusso &amp; Risaliti 2016), then attenuated by the zphabs(N_H) × cabs(N_H) line-of-sight obscurer with a 1 % warm-electron scattered fraction added back (Ricci+2017 spectral model adopted in Matsumoto+2026 Eq. B6).">
 
 .. only:: html
 
@@ -75,7 +75,7 @@ AGN Coronae
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">AGN X-ray coronae: luminosity sequence and spectral hardness at high energies</div>
+      <div class="sphx-glr-thumbnail-title">AGN X-ray coronae: luminosity sequence</div>
     </div>
 
 
@@ -93,6 +93,23 @@ AGN Coronae
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">AGN X-ray spectral hardness: photon index γ controls power-law steepness</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The line-of-sight column density N_H reshapes the AGN X-ray spectrum in two regimes: photoelectric absorption (``zphabs``) suppresses the soft band roughly as \exp(-\sigma(E)\,N_H) with cross-section \sigma \propto E^{-3}, while Compton down-scattering (``cabs``) adds an energy-independent suppression \exp(-\sigma_T\,N_H) that becomes dominant once log N_H ≳ 24 (the Compton-thick boundary). A constant warm-electron scattered fraction (~1 % of the intrinsic continuum) is added back, which is the only flux observable in the soft band for nearly opaque columns and explains why Compton-thick AGN are still marginally detectable in soft-band stacks (Matsumoto et al. 2026 Fig. 11/12).">
+
+.. only:: html
+
+  .. image:: /auto_examples/xray/images/thumb/sphx_glr_plot_xray_nh_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/xray/plot_xray_nh_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">N_H column density sweep: from unobscured to Compton-thick</div>
     </div>
 
 
@@ -144,6 +161,7 @@ AGN Coronae
    /auto_examples/xray/plot_alpha_ox_sweep
    /auto_examples/xray/plot_xray_agn
    /auto_examples/xray/plot_xray_gamma_sweep
+   /auto_examples/xray/plot_xray_nh_sweep
    /auto_examples/xray/plot_xray_sf
    /auto_examples/xray/plot_xray_vs_agn_lbol
 

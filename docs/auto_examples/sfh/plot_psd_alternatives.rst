@@ -21,11 +21,6 @@
 Comparison of power-spectral-density models for stochastic SFHs
 ==============================================================
 
-.. image:: images/sphx_glr_plot_psd_alternatives_001.png
-   :alt: plot psd alternatives
-   :class: sphx-glr-single-img
-
-
 Three PSD models govern the frequency structure of stochastic SFHs: the default
 damped random walk (DRW), the Matern family (which includes DRW as a special
 case), and the extended regulator model. Plotted in frequency space at
@@ -115,7 +110,7 @@ representative parameters. No SSP data required.
     ax.legend(frameon=False, fontsize=10)
     fig.tight_layout()
 
-    fig.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_alternatives.py:

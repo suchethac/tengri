@@ -21,11 +21,6 @@
 QSOgen disc: dust reddening tunes UV to optical colour
 =======================================================
 
-.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
-   :alt: plot agn qsogen ebv sweep
-   :class: sphx-glr-single-img
-
-
 Dust-free quasar spectra are intrinsically blue in the UV and optical.
 Intrinsic dust reddening ``ebv`` (E(B−V)) reddens the continuum via
 extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from
@@ -97,7 +92,7 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
     cbar.set_label(r"$E(B-V)$ [mag]")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:

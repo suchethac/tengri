@@ -21,11 +21,6 @@
 Chemical evolution: closed-box vs leaky-box enrichment histories
 ================================================================
 
-.. image:: images/sphx_glr_plot_zh_evolution_compare_001.png
-   :alt: plot zh evolution compare
-   :class: sphx-glr-single-img
-
-
 Metallicity evolution Z(t) depends on the balance between metal production
 (in supernovae) and metal removal (via outflows). This four-panel figure shows
 how different star formation timescales and outflow efficiencies η alter the
@@ -179,7 +174,7 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
     ax.set_ylim(0, 1.0)
 
     fig.tight_layout()
-    fig.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_zh_evolution_compare.py:

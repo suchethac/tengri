@@ -21,11 +21,6 @@
 AGN X-ray spectral hardness: photon index γ controls power-law steepness
 =========================================================================
 
-.. image:: images/sphx_glr_plot_xray_gamma_sweep_001.png
-   :alt: plot xray gamma sweep
-   :class: sphx-glr-single-img
-
-
 The X-ray photon index γ controls how rapidly the AGN corona's power-law
 spectrum falls off above a few keV. Flat spectra (low γ ~1.4) extend more
 photons to high energies; steep spectra (high γ ~2.4) drop quickly. We vary
@@ -73,7 +68,7 @@ photon index dependence).
     cbar.set_label(r"Photon index $\gamma$")
 
     fig.tight_layout()
-    fig.savefig("plot_xray_gamma_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_xray_gamma_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_gamma_sweep.py:

@@ -19,6 +19,57 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Young, metal-rich and old, metal-poor stellar populations can produce similar colours — a fundamental degeneracy in stellar population inference. This example builds a 2D grid of single-burst SSP-like models varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4), then plots three SDSS broadband colours (u − r, g − r, NUV − r) as pcolormesh grids to visualize the degeneracy.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_age_metallicity_color_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_age_metallicity_color_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Age-metallicity colour degeneracy in SDSS colours</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The stellar populations in massive elliptical galaxies are typically α-enhanced ([α/Fe] &gt; 0) due to rapid star formation timescales that terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005). This example demonstrates how increasing [α/Fe] shifts absorption features — particularly the Mg b and Fe5270 indices — which serve as diagnostics of star-formation history timescale.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_alpha_enhanced_population_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_alpha_enhanced_population`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Alpha-element enhancement in quiescent stellar populations</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The same stellar population SED looks different depending on the units chosen for visualization. This example shows a single galaxy SED in three complementary representations on a 3-panel grid:">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_fnu_vs_flambda_units_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_fnu_vs_flambda_units`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SED Conventions: F_λ vs F_ν vs νF_ν</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The hydrogen-ionising photon production rate Q_H of a simple stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars die. Different SSP libraries predict different Q_H(t) because they differ in upper-IMF treatment, stellar rotation, and (most dramatically) whether massive binaries are included — BPASS extends the Q_H-producing phase to ~30 Myr.">
 
 .. only:: html
@@ -31,6 +82,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Ionising-photon production rate vs SSP age</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The M_★/L_band ratio depends on population age, but the sensitivity varies dramatically by band. At short wavelengths (u, V), M/L is very age-sensitive: young starbursts are bright, so M/L is small; old populations are faint in the UV, so M/L grows rapidly (factor ~100 over 10 Gyr).">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_mass_to_light_band_comparison_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_mass_to_light_band_comparison`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar mass-to-light ratios across bands: age sensitivity</div>
     </div>
 
 
@@ -138,6 +206,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Stellar population synthesis templates differ across stellar evolution codes and isochrone libraries, producing measurable offsets in predicted spectra even at fixed age and metallicity. This gallery script loads four representative SSP libraries shipped with tengri (BC03, FSPS MILES, FSPS C3K, BPASS, ProGeny), constructs minimal SEDModel instances at age = 5 Gyr and Z = 0 (solar), and overlays rest-frame SED predictions (νL_ν) on log-log axes to reveal template-dependent uncertainties and continuum shape differences.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_ssp_library_shootout_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_ssp_library_shootout`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SSP Library Shootout: Comparing Spectral Predictions at 5 Gyr, Z=0</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Metallicity reddens the optical continuum and shifts iron-peak absorption features in the near-IR. We show five metallicity points spanning the SSP grid at fixed age (1 Gyr). Peak-normalized λF_λ makes spectral shape variations visible without large luminosity differences obscuring them.">
 
 .. only:: html
@@ -180,13 +265,18 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 .. toctree::
    :hidden:
 
+   /auto_examples/sps/plot_age_metallicity_color_grid
+   /auto_examples/sps/plot_alpha_enhanced_population
+   /auto_examples/sps/plot_fnu_vs_flambda_units
    /auto_examples/sps/plot_ionising_lum
+   /auto_examples/sps/plot_mass_to_light_band_comparison
    /auto_examples/sps/plot_mass_to_light_ratios
    /auto_examples/sps/plot_sps_library_compare
    /auto_examples/sps/plot_ssp_age_sweep
    /auto_examples/sps/plot_ssp_color_compare
    /auto_examples/sps/plot_ssp_grid
    /auto_examples/sps/plot_ssp_imf_compare
+   /auto_examples/sps/plot_ssp_library_shootout
    /auto_examples/sps/plot_ssp_metallicity_sweep
    /auto_examples/sps/plot_uv_slope_age
 

@@ -21,11 +21,6 @@
 Posterior corner plot from variational inference
 ================================================
 
-.. image:: images/sphx_glr_plot_corner_001.png
-   :alt: plot corner
-   :class: sphx-glr-single-img
-
-
 Demonstrates parameter degeneracies and individual 1-D marginalized
 posteriors after fitting mock 5-band SDSS photometry. The corner plot
 shows the full 2-D covariance structure between parameters; blue lines
@@ -108,7 +103,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
         show_titles=False,
     )
 
-    fig.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_corner.py:

@@ -37,4 +37,4 @@ ax.set_ylabel(r"$k(\lambda)$ (normalized at 5500 $\mathrm{\AA}$)")
 ax.legend(fontsize=8, frameon=False, loc="upper right", ncol=1)
 
 fig.tight_layout()
-fig.savefig("plot_dust_curves.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_dust_curves.png", dpi=150, bbox_inches="tight")

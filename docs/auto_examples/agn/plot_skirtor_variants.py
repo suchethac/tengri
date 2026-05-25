@@ -90,4 +90,4 @@ axes[1, 0].set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 axes[1, 0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
 fig.tight_layout()
-fig.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")

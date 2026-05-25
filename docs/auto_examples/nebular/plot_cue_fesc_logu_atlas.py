@@ -100,4 +100,4 @@ axes[0].set_ylabel(r"ionization parameter $\log\,U$")
 for ax, mesh in zip(axes, [m1, m2, m3]):
     fig.colorbar(mesh, ax=ax, pad=0.02)
 
-fig.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")

@@ -21,11 +21,6 @@
 FIR-radio correlation: q_IR sets radio loudness
 ================================================
 
-.. image:: images/sphx_glr_plot_q_ir_sweep_001.png
-   :alt: plot q ir sweep
-   :class: sphx-glr-single-img
-
-
 The dimensionless parameter q_IR characterizes the FIR-radio correlation,
 linking far-infrared luminosity to 1.4 GHz synchrotron emission. Higher q_IR
 means relatively weaker radio per unit star formation. We vary q_IR across
@@ -76,7 +71,7 @@ Reference: Bell 2003, ApJ 586, 794.
     cbar.set_label(r"q$_{\rm IR}$")
 
     fig.tight_layout()
-    fig.savefig("plot_q_ir_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_q_ir_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_q_ir_sweep.py:

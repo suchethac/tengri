@@ -101,4 +101,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"Redshift $z$")
 
 fig.tight_layout()
-fig.savefig("plot_panchromatic_redshift_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_panchromatic_redshift_sweep.png", dpi=150, bbox_inches="tight")

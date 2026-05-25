@@ -95,4 +95,4 @@ for um, name in [(8, "8 μm"), (24, "MIPS 24"), (70, "FIR 70"), (160, "FIR 160")
 ax.legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_ir_library_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_ir_library_compare.png", dpi=150, bbox_inches="tight")

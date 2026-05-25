@@ -21,11 +21,6 @@
 Photometric colour tracks vs redshift
 ========================================
 
-.. image:: images/sphx_glr_plot_color_tracks_redshift_001.png
-   :alt: plot color tracks redshift
-   :class: sphx-glr-single-img
-
-
 How does a galaxy's location in colour–colour space evolve with
 redshift? We compute SDSS ``g − r`` and ``r − z`` colours for two
 galaxy populations — a young star-forming and an old quiescent —
@@ -129,7 +124,7 @@ Useful intuition this figure makes obvious:
     ax.legend(frameon=False, fontsize=9, loc="upper left")
 
     fig.tight_layout()
-    fig.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_color_tracks_redshift.py:

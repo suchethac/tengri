@@ -113,4 +113,4 @@ ax.text(
 )
 
 fig.tight_layout()
-fig.savefig("plot_ssp_color_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_ssp_color_compare.png", dpi=150, bbox_inches="tight")
