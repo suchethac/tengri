@@ -208,6 +208,28 @@ def pytest_configure(config):
     _create_silva04_fixture_if_missing(
         Path(__file__).parent.parent / "data" / "silva04_torus_grid.h5"
     )
+    # Warm the Silva+04 grid cache outside of any JIT trace. Without this,
+    # the first call inside a `jax.jit` (or `jax.grad`) closure caches
+    # Tracer-wrapped arrays via `@functools.cache`, which then leak as
+    # UnexpectedTracerError on the next out-of-trace call (a real CI
+    # failure on the regression suite). Eager warm-up is the canonical
+    # fix for caches that wrap JAX arrays.
+    _warm_silva04_cache()
+
+
+def _warm_silva04_cache() -> None:
+    """Force ``silva04._load_silva04_default()`` to load outside of JIT.
+
+    If the synthetic fixture didn't get created (e.g. import-only path),
+    the original FileNotFoundError will surface from real call sites
+    rather than here, so we suppress it.
+    """
+    import contextlib
+
+    from tengri.components.agn.silva04 import _load_silva04_default
+
+    with contextlib.suppress(FileNotFoundError):
+        _load_silva04_default()
 
 
 def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
