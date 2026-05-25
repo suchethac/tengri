@@ -126,13 +126,13 @@ class TestSFHCompositionShortNames:
             sfh={
                 "type": ["dpl", "tsnorm"],
                 "*": FREE,
-                "sfh_dpl_log_peak_sfr": Fixed(2.0),  # Use full prefix to disambiguate
+                "sfh_dpl_log_total_mass": Fixed(2.0),  # Use full prefix to disambiguate
             },
             redshift=Fixed(0.1),
         )
         # Verify the override worked
-        assert "sfh_dpl_log_peak_sfr" in params.fixed_params
-        assert params.get_distribution("sfh_dpl_log_peak_sfr").value == 2.0
+        assert "sfh_dpl_log_total_mass" in params.fixed_params
+        assert params.get_distribution("sfh_dpl_log_total_mass").value == 2.0
 
 
 class TestSFHCompositionValidation:

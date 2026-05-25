@@ -284,7 +284,7 @@ sfh_models = {
     "SFH: snorm (skew-normal)": lambda: snorm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.5),
     "SFH: norm (Gaussian)": lambda: norm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9),
     "SFH: lnorm (log-normal)": lambda: lnorm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=0.5),
-    "SFH: const (constant)": lambda: constant_sfh(age_grid, log_sfr=0.7, start=1e9, end=10e9),
+    "SFH: const (constant)": lambda: constant_sfh(age_grid, log_total_mass=0.7, start=1e9, end=10e9),
     "SFH: exp (exponential)": lambda: exponential_sfh(age_grid, log_peak_sfr=1.0, tau=3e9),
     "SFH: dexp (delayed exp.)": lambda: delayed_exponential_sfh(age_grid, log_peak_sfr=1.0, tau=3e9),
 }

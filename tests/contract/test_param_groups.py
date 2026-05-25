@@ -48,7 +48,7 @@ class TestWildcard:
         assert "sfh_dpl_alpha" in params.free_params
         assert "sfh_dpl_beta" in params.free_params
         assert "sfh_dpl_tau_gyr" in params.free_params
-        assert "sfh_dpl_log_peak_sfr" in params.free_params
+        assert "sfh_dpl_log_total_mass" in params.free_params
 
     def test_star_fixed_fixes_all_declared_params(self):
         """With '*': FIXED, all params in the group should be fixed."""
@@ -61,7 +61,7 @@ class TestWildcard:
         assert "sfh_dpl_alpha" in params.fixed_params
         assert "sfh_dpl_beta" in params.fixed_params
         assert "sfh_dpl_tau_gyr" in params.fixed_params
-        assert "sfh_dpl_log_peak_sfr" in params.fixed_params
+        assert "sfh_dpl_log_total_mass" in params.fixed_params
 
     def test_star_omitted_defaults_to_fixed(self):
         """When '*' is not present, default behavior is to fix all params."""
@@ -541,7 +541,12 @@ class TestEdgeCases:
             redshift=Fixed(0.1),
         )
         # All dpl params should be fixed
-        for param in ["sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_peak_sfr"]:
+        for param in [
+            "sfh_dpl_alpha",
+            "sfh_dpl_beta",
+            "sfh_dpl_tau_gyr",
+            "sfh_dpl_log_total_mass",
+        ]:
             assert param in params.fixed_params
 
     def test_no_groups_at_all(self):

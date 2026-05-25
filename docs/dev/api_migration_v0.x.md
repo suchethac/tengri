@@ -757,6 +757,26 @@ References: `docs/dev/sed-model-components.md` (how-to),
 
 ---
 
+## Phase II-4 — Parametric SFH normalization convention (2026-05-25)
+
+**Breaking change (v0.x):** All 11 parametric SFH functions (`truncated_skewnormal`,
+`skewnormal`, `gaussian`, `lognormal`, `dpl`, `exponential`, `delayed_exponential`,
+`declining_exponential`, `snorm_burst`, `snorm_trunc_burst`, `psb_wild2020`) now
+expose `log_total_mass` (log10 of total stellar mass formed in Msun) instead of
+`log_peak_sfr` (log10 of peak SFR in Msun/yr). The SFH shape is rescaled internally
+so that `trapezoid(sfr, t_lookback) = 10**log_total_mass` exactly, matching
+Bagpipes/Prospector convention. This fixes GitHub issue #357 (CIGALE normalization
+discrepancy ~30%, now resolved with `log_total_mass=0.0` → 1 Msun).
+
+| Old registry key | New registry key | Typical value | Notes |
+|---|---|---|---|
+| `sfh_X_log_peak_sfr` (11 SFHs) | `sfh_X_log_total_mass` | ~10.0 | Mass for typical galaxies; CIGALE match uses 0.0 |
+
+Value remapping: `log_peak_sfr` ∈ [-1, 2] (SFR 0.1–100 Msun/yr) → `log_total_mass` ∈ [9.5, 11] (M ∈ [3×10⁹, 10¹¹ Msun).
+When unsure, use `log_total_mass=10.0` as a sensible default for observable galaxies. (See #357 for CIGALE-matching calibration.)
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

@@ -62,8 +62,8 @@ class TestProvenanceAttribution:
 
     def test_wildcard_free_tagged_correctly(self, grouped_spec):
         """Wildcard '*': FREE expansions get 'wildcard_free'."""
-        # sfh has '*': FREE; sfh_dpl_log_peak_sfr/tau_gyr weren't overridden
-        assert grouped_spec._group_provenance["sfh_dpl_log_peak_sfr"] == "wildcard_free"
+        # sfh has '*': FREE; sfh_dpl_log_total_mass/tau_gyr weren't overridden
+        assert grouped_spec._group_provenance["sfh_dpl_log_total_mass"] == "wildcard_free"
         assert grouped_spec._group_provenance["sfh_dpl_tau_gyr"] == "wildcard_free"
 
     def test_wildcard_fixed_tagged_correctly(self, grouped_spec):
@@ -97,7 +97,7 @@ class TestSummaryRendering:
     def test_grouped_summary_includes_wildcard_free_tag(self, grouped_spec):
         """Wildcard-FREE params show [* FREE]."""
         out = grouped_spec.summary_str()
-        lines = [ln for ln in out.splitlines() if "sfh_dpl_log_peak_sfr" in ln]
+        lines = [ln for ln in out.splitlines() if "sfh_dpl_log_total_mass" in ln]
         assert len(lines) == 1
         assert "[* FREE]" in lines[0]
 
@@ -112,7 +112,7 @@ class TestSummaryRendering:
         """Flat-kwarg specs render the existing summary without a Source column."""
         spec = Parameters(
             mean_sfh_type="dpl",
-            sfh_dpl_log_peak_sfr=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(-1, 2),
             sfh_dpl_alpha=Uniform(0.5, 3),
             redshift=Fixed(0.1),
         )

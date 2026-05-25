@@ -61,7 +61,7 @@ def _short_form(full_param_name: str) -> str:
 
     The grammar's parser strips ``sfh_`` then splits on the first
     underscore, so ``sfh_dpl_alpha`` becomes ``alpha`` and
-    ``sfh_cexp_log_sfr`` becomes ``log_sfr``. Factories must mirror this
+    ``sfh_cexp_log_total_mass`` becomes ``log_sfr``. Factories must mirror this
     rule so their kwargs match what the parser will look up.
     """
     if not full_param_name.startswith("sfh_"):

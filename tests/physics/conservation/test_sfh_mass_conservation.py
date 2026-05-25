@@ -7,12 +7,12 @@ numerical trapezoid integral must match the known analytical closed form.
 
 Analytical integrals
 --------------------
-exponential(t, log_peak_sfr, tau):
-    ∫₀^T SFR dt = peak_sfr * tau * (1 - exp(-T/tau))
+exponential(t, log_total_mass, tau):
+    ∫₀^T SFR dt = 10^log_total_mass * tau * (1 - exp(-T/tau))
 
-delayed_exponential(t, log_peak_sfr, tau):
-    SFR(t) = peak_sfr * (t/tau) * exp(-(t/tau) + 1)
-    ∫₀^T SFR dt = peak_sfr * e * tau * [1 - exp(-T/tau) * (1 + T/tau)]
+delayed_exponential(t, log_total_mass, tau):
+    SFR(t) = 10^log_total_mass * (t/tau) * exp(-(t/tau) + 1)
+    ∫₀^T SFR dt = 10^log_total_mass * e * tau * [1 - exp(-T/tau) * (1 + T/tau)]
 
 constant(t, log_sfr, start, end):
     ∫ dt = sfr * (end - start)   [within support]
@@ -60,46 +60,48 @@ class TestExponentialSFHMassConservation:
     """∫₀^T SFR dt = peak_sfr * tau * (1 - exp(-T/tau))"""
 
     @staticmethod
-    def _analytical(log_peak_sfr, tau, T):
-        peak_sfr = 10.0**log_peak_sfr
-        return peak_sfr * tau * (1.0 - np.exp(-T / tau))
+    def _analytical(log_total_mass, tau, T):
+        total_formed_mass = 10.0**log_total_mass
+        return total_formed_mass * tau * (1.0 - np.exp(-T / tau))
 
     def test_short_tau(self):
-        log_peak_sfr, tau = 1.0, 1e9
+        log_total_mass, tau = 1.0, 1e9
         T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        analytical = self._analytical(log_peak_sfr, tau, T)
+        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
+        analytical = self._analytical(log_total_mass, tau, T)
         assert abs(numerical - analytical) / analytical < 0.01
 
     def test_long_tau(self):
-        log_peak_sfr, tau = 0.5, 5e9
+        log_total_mass, tau = 0.5, 5e9
         T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        analytical = self._analytical(log_peak_sfr, tau, T)
+        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
+        analytical = self._analytical(log_total_mass, tau, T)
         assert abs(numerical - analytical) / analytical < 0.01
 
     def test_high_sfr(self):
-        log_peak_sfr, tau = 2.5, 2e9
+        log_total_mass, tau = 2.5, 2e9
         T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        analytical = self._analytical(log_peak_sfr, tau, T)
+        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
+        analytical = self._analytical(log_total_mass, tau, T)
         assert abs(numerical - analytical) / analytical < 0.01
 
     def test_low_sfr(self):
-        log_peak_sfr, tau = -0.5, 3e9
+        log_total_mass, tau = -0.5, 3e9
         T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        analytical = self._analytical(log_peak_sfr, tau, T)
+        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
+        analytical = self._analytical(log_total_mass, tau, T)
         assert abs(numerical - analytical) / analytical < 0.01
 
     def test_start_offset(self):
         """start != 0 shifts the integral by the truncated leading region."""
-        log_peak_sfr, tau, start = 1.0, 2e9, 1e9
+        log_total_mass, tau, start = 1.0, 2e9, 1e9
         t = np.linspace(start, T_MAX, N_GRID)
-        sfr = np.array(exponential(jnp.array(t), log_peak_sfr=log_peak_sfr, tau=tau, start=start))
+        sfr = np.array(
+            exponential(jnp.array(t), log_total_mass=log_total_mass, tau=tau, start=start)
+        )
         numerical = float(trapezoid(sfr, t))
         T_eff = T_MAX - start
-        analytical = 10.0**log_peak_sfr * tau * (1.0 - np.exp(-T_eff / tau))
+        analytical = 10.0**log_total_mass * tau * (1.0 - np.exp(-T_eff / tau))
         assert abs(numerical - analytical) / analytical < 0.01
 
 
@@ -110,37 +112,37 @@ class TestDelayedExponentialSFHMassConservation:
     """∫₀^T SFR dt = peak_sfr * e * tau * [1 - exp(-T/tau) * (1 + T/tau)]"""
 
     @staticmethod
-    def _analytical(log_peak_sfr, tau, T):
-        peak_sfr = 10.0**log_peak_sfr
+    def _analytical(log_total_mass, tau, T):
+        peak_sfr = 10.0**log_total_mass
         return peak_sfr * np.e * tau * (1.0 - np.exp(-T / tau) * (1.0 + T / tau))
 
     def test_short_tau(self):
-        log_peak_sfr, tau = 1.0, 1e9
+        log_total_mass, tau = 1.0, 1e9
         T = T_MAX - T_MIN
-        numerical = _integrate(delayed_exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        analytical = self._analytical(log_peak_sfr, tau, T)
+        numerical = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
+        analytical = self._analytical(log_total_mass, tau, T)
         assert abs(numerical - analytical) / analytical < 0.01
 
     def test_long_tau(self):
-        log_peak_sfr, tau = 0.5, 5e9
+        log_total_mass, tau = 0.5, 5e9
         T = T_MAX - T_MIN
-        numerical = _integrate(delayed_exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        analytical = self._analytical(log_peak_sfr, tau, T)
+        numerical = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
+        analytical = self._analytical(log_total_mass, tau, T)
         assert abs(numerical - analytical) / analytical < 0.01
 
     def test_peak_sfr_at_tau(self):
         """SFR at t=tau should equal peak_sfr (normalization invariant)."""
-        log_peak_sfr, tau = 1.5, 3e9
+        log_total_mass, tau = 1.5, 3e9
         sfr_at_peak = float(
-            delayed_exponential(jnp.array(tau), log_peak_sfr=log_peak_sfr, tau=tau)
+            delayed_exponential(jnp.array(tau), log_total_mass=log_total_mass, tau=tau)
         )
-        assert abs(sfr_at_peak - 10.0**log_peak_sfr) / 10.0**log_peak_sfr < 1e-5
+        assert abs(sfr_at_peak - 10.0**log_total_mass) / 10.0**log_total_mass < 1e-5
 
     def test_mass_larger_than_exponential(self):
         """Delayed exp. rises before declining — more mass than pure exp at same tau."""
-        log_peak_sfr, tau = 1.0, 3e9
-        mass_delayed = _integrate(delayed_exponential, log_peak_sfr=log_peak_sfr, tau=tau)
-        mass_exp = _integrate(exponential, log_peak_sfr=log_peak_sfr, tau=tau)
+        log_total_mass, tau = 1.0, 3e9
+        mass_delayed = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
+        mass_exp = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
         assert mass_delayed > mass_exp
 
 
@@ -205,11 +207,11 @@ class TestDoublePowerlawMassConservation:
         mass2 = _integrate(double_powerlaw, alpha=alpha, beta=beta, tau=tau, norm=10.0)
         assert abs(mass2 / mass1 - 10.0) < 0.01
 
-    def test_dpl_log_peak_sfr_wrapper(self):
-        """dpl() with log_peak_sfr should give same mass as double_powerlaw with linear norm."""
+    def test_dpl_log_total_mass_wrapper(self):
+        """dpl() with log_total_mass should give same mass as double_powerlaw with linear norm."""
         alpha, beta, tau = 1.5, 2.0, 3e9
-        log_peak_sfr = 1.0  # peak_sfr = 10
-        mass_dpl = _integrate(dpl, alpha=alpha, beta=beta, tau=tau, log_peak_sfr=log_peak_sfr)
+        log_total_mass = 1.0  # peak_sfr = 10
+        mass_dpl = _integrate(dpl, alpha=alpha, beta=beta, tau=tau, log_total_mass=log_total_mass)
         # double_powerlaw norm != dpl peak_sfr directly (different normalization)
         # just verify dpl is finite and positive
         assert np.isfinite(mass_dpl)

@@ -1731,3 +1731,105 @@ def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndar
 
     """
     return jnp.sum(weights * mass_remaining_at_met)
+
+
+def predict_surviving_mass(
+    sfr: jnp.ndarray,
+    t_lookback_yr: jnp.ndarray,
+    ssp: "SSPData",
+    log_z_zsun: float = 0.0,
+) -> jnp.ndarray:
+    """Predict surviving stellar mass directly from an SFR(t) array.
+
+    Standalone helper for putting **priors on the surviving stellar mass**
+    without running the full SED forward pass. Computes
+
+    .. math::
+
+        M_{\\star,{\\rm surv}} = \\int \\mathrm{SFR}(t_{\\rm lb}) \\,
+                                  f_{\\rm surv}(t_{\\rm lb}; Z) \\, dt_{\\rm lb}
+
+    where :math:`f_{\\rm surv}(t)` is the surviving mass fraction from the
+    SSP's ``ssp_mass_remaining`` table, evaluated at the user-supplied
+    metallicity via linear interpolation in :math:`\\log_{10}(Z/Z_\\odot)`
+    and resampled onto the SFH lookback grid via linear interp in
+    :math:`\\log_{10}({\\rm age})`.
+
+    This formula follows from the post-2026-05-25 SFH normalization contract
+    (``trapezoid(sfr, t) = 10**log_total_mass`` for every parametric SFH):
+    the survivor fraction at each age becomes a *weight* on the SFR, and the
+    integral collapses to a single trapezoid rule on the SFH grid — no DSPS
+    convolution required.
+
+    Parameters
+    ----------
+    sfr : array_like, shape (n_lb,)
+        SFR on the lookback grid [Msun/yr]. Typically the output of one of
+        the parametric SFH callables (e.g. ``tau(t, log_total_mass=10.0, …)``).
+    t_lookback_yr : array_like, shape (n_lb,)
+        Lookback time grid [yr], ascending.
+    ssp : SSPData
+        SSP container with populated ``ssp_mass_remaining`` (n_met, n_age)
+        and ``ssp_lg_age_gyr``, ``ssp_lgmet`` axes. Raises if
+        ``ssp_mass_remaining`` is ``None``.
+    log_z_zsun : float, optional
+        Metallicity at which to evaluate the surviving-mass fraction,
+        :math:`\\log_{10}(Z/Z_\\odot)`. Default 0.0 (solar). Add
+        :data:`tengri.utils.physics_constants.LOG10_ZSUN` if you have
+        absolute :math:`\\log_{10}(Z)`.
+
+    Returns
+    -------
+    jnp.ndarray (scalar)
+        Surviving stellar mass [Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp``, ``jnp.trapezoid``,
+    and the existing :func:`interpolate_mass_remaining` helper.
+    **Gradient-safe**: yes — differentiable w.r.t. any SFH parameter
+    through ``sfr``.
+
+    The result is also published as ``state.derived["log_mstar"]`` after
+    every full forward pass through ``SEDModel.predict_*``. This helper
+    is the cheap standalone path for the prior layer:
+
+    .. code-block:: python
+
+        # Put a Gaussian prior on log10(M*,surv)
+        sfr = tau(t_lb, log_total_mass=lgM_formed, tau=tau_yr, age=age_yr)
+        log_mstar_surv = jnp.log10(predict_surviving_mass(sfr, t_lb, ssp))
+        log_prior = -0.5 * ((log_mstar_surv - 10.5) / 0.3) ** 2
+
+    Raises
+    ------
+    ValueError
+        If ``ssp.ssp_mass_remaining`` is ``None`` (e.g., legacy SSP file
+        without a stored mass-remaining table).
+
+    See Also
+    --------
+    compute_surviving_mass : low-level helper that takes pre-computed weights.
+    interpolate_mass_remaining : metallicity interpolation used internally.
+
+    """
+    if ssp.ssp_mass_remaining is None:
+        raise ValueError(
+            "SSP has no ssp_mass_remaining table. Surviving mass cannot be "
+            "computed without it. Load an SSP file with stellar-evolution "
+            "mass-loss data (see tengri.load_ssp_data)."
+        )
+    # Mass-remaining fraction on the SSP age grid at the requested metallicity.
+    f_surv_on_ssp = interpolate_mass_remaining(
+        ssp.ssp_mass_remaining, ssp.ssp_lgmet, log_z_zsun
+    )  # (n_age,)
+    # Resample to the SFH lookback grid via linear interp in log10(age).
+    # SSP ages are in log10(Gyr); SFH lookback is in linear yr. Convert both
+    # to log10(yr) for the interp x-axis.
+    ssp_log_age_yr = ssp.ssp_lg_age_gyr + 9.0
+    log_lb_yr = jnp.log10(jnp.maximum(t_lookback_yr, 1.0))
+    f_surv_on_lb = jnp.interp(log_lb_yr, ssp_log_age_yr, f_surv_on_ssp)
+    # Clamp to [0, 1] — extrapolation outside the SSP age range can drift.
+    f_surv_on_lb = jnp.clip(f_surv_on_lb, 0.0, 1.0)
+    # Trapezoid: M_surv = ∫ SFR(t) f_surv(t) dt
+    return jnp.trapezoid(sfr * f_surv_on_lb, t_lookback_yr)

@@ -138,7 +138,7 @@ def _tengri_const(
 
     spec = Parameters(
         mean_sfh_type="const",
-        sfh_const_log_sfr=Fixed(0.0),
+        sfh_const_log_total_mass=Fixed(0.0),
         sfh_const_start_gyr=Fixed(start_gyr),
         sfh_const_end_gyr=Fixed(end_gyr),
         met_logzsol=Fixed(logzsol),

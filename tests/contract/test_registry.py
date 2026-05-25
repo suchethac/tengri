@@ -54,7 +54,7 @@ class TestResolveSingle:
     def test_tsnorm_returns_5_params(self):
         _fn, params, _param_map, _settings = resolve_sfh("tsnorm")
         assert len(params) == 5
-        assert "sfh_tsnorm_log_peak_sfr" in params
+        assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_tsnorm_peak_lbt_gyr" in params
 
     def test_dpl_returns_4_params(self):
@@ -84,7 +84,7 @@ class TestResolveComposed:
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "field"])
         # tsnorm (5) + field (2) = 7
         assert len(params) == 7
-        assert "sfh_tsnorm_log_peak_sfr" in params
+        assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_field_psd_sigma" in params
         assert "sfh_field_psd_tau_myr" in params
 
@@ -105,7 +105,7 @@ class TestResolveComposed:
         t = jnp.logspace(6, 10, 100)
         sfr = fn(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
@@ -151,7 +151,7 @@ class TestComposedFunction:
         """Single tsnorm produces finite positive SFR."""
         fn, _, _, _ = resolve_sfh("tsnorm")
         t = jnp.logspace(6, 10, 200)
-        sfr = fn(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
+        sfr = fn(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
         chex.assert_tree_all_finite(sfr)
         assert jnp.max(sfr) > 0
 
@@ -161,13 +161,13 @@ class TestComposedFunction:
         t = jnp.logspace(6, 10, 256)
 
         # Without GP
-        sfr_no_gp = fn(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
+        sfr_no_gp = fn(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
 
         # With GP (zero gp_x should give same result)
         gp_x = jnp.zeros(256)
         sfr_gp = fn(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
@@ -183,7 +183,7 @@ class TestComposedFunction:
         t = jnp.logspace(6, 10, 200)
 
         kw = dict(
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
@@ -203,7 +203,7 @@ class TestComposedFunction:
         jit_fn = jax.jit(
             lambda t_: fn(
                 t_,
-                log_peak_sfr=1.0,
+                log_total_mass=1.0,
                 peak_lbt=5e9,
                 width=2e9,
                 skew=0.0,

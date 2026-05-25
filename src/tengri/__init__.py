@@ -158,11 +158,14 @@ from tengri.components.stellar.sfh.registry import (
 )
 from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
+    compute_surviving_mass,
     effective_metallicity,
     has_alpha_grid,
+    interpolate_mass_remaining,
     interpolate_met_alpha,
     load_ssp,
     load_ssp_data,
+    predict_surviving_mass,
     salaris_feh_from_mh,
     salaris_mh_from_feh,
 )
