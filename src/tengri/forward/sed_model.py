@@ -829,6 +829,17 @@ class SEDModel:
         self._uses_stochastic_sfh = spec.stochastic
         self._gp_kernel = sfh_settings.get("sfh_field_model", "drw")
 
+        # Warn if any burst-width SFH parameter is narrower than the
+        # local SSP grid spacing at the burst peak — see #299. The
+        # forward model interpolates SFR(t) at SSP grid points (not a
+        # bin-integral), so narrow bursts alias as a staircase in
+        # age-sensitive observables.
+        from tengri.components.stellar.sfh._aliasing_warning import (
+            maybe_warn_burst_aliasing,
+        )
+
+        maybe_warn_burst_aliasing(spec, self.ssp_ages_yr)
+
         # Return the base param_map delta (built param_map + dust-model selection)
         return _build_param_map(
             spec.mean_sfh_type,
