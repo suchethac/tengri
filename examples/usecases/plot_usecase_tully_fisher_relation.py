@@ -7,7 +7,7 @@ baryonic mass of disc galaxies and their observed rotation velocity,
 parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).
 
 This example constructs 30 mock disc-like galaxies spanning stellar masses
-from 1e9 to 1e11 M_sun via a log_peak_sfr sweep, assigns circular velocity
+from 1e9 to 1e11 M_sun via a log_total_mass sweep, assigns circular velocity
 from the McGaugh+2000 baryonic TF scaling law, and then computes rest-frame
 optical (SDSS r-band) absolute magnitude using tengri.predict_photometry.
 
@@ -101,14 +101,14 @@ ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5
 # Use SDSS r-band (available locally) as proxy for K-band magnitudes
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 
-# Model: double-power-law SFH (dpl) with free log_peak_sfr normalization
+# Model: double-power-law SFH (dpl) with free log_total_mass normalization
 # For disc-like galaxies, set dust to near-zero (typical for nearby spirals)
 # Fix redshift to z=0 (local universe TF sample)
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "dpl", "*": tengri.FIXED,
-         "log_peak_sfr": tengri.Uniform(-1.0, 3.0)},
+         "log_total_mass": 10.0, 3.0)},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.05, "tau_bc": 0.05},
     neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5},
@@ -123,18 +123,18 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 # ==============================================================================
 
 n_galaxies = 30
-log_peak_sfr_vals = np.linspace(-0.5, 2.3, n_galaxies)
+log_total_mass_vals = np.linspace(-0.5, 2.3, n_galaxies)
 
 # Pre-allocate storage
 log_m_stars = []
 log_v_circs = []
 m_r_abs = []
 
-# Loop over log_peak_sfr to generate population
-for log_peak_sfr in log_peak_sfr_vals:
+# Loop over log_total_mass to generate population
+for log_total_mass in log_total_mass_vals:
     p = {
         **baseline,
-        "sfh_dpl_log_peak_sfr": jnp.float64(log_peak_sfr),
+        "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
     }
 
     # Predict SFH (rest-frame, independent of redshift)

@@ -34,7 +34,7 @@ HOST = dict(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 1.5,
-        "log_peak_sfr": 1.3,
+        "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 2.0,
     },

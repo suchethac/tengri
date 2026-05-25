@@ -300,7 +300,7 @@ plt.show()
 mean_sfr_th = np.array(
     tsnorm(
         jnp.array(ages_yr_th),
-        log_peak_sfr=0.5,
+        log_total_mass=10.0,
         peak_lbt=6e9,
         width=2e9,
         skew=0.2,
@@ -388,32 +388,32 @@ sfr_dtau = sfr_dtau / np.max(sfr_dtau)
 ax.plot(t_gyr, sfr_dtau, color=pal[0], lw=1.8, label="delayed_tau")
 
 # 2. delayed_exponential (dexp): peaks at start + tau
-sfr_dexp = delayed_exponential_sfh(t_yr, log_peak_sfr=0.0, tau=3e9, start=0.0)
+sfr_dexp = delayed_exponential_sfh(t_yr, log_total_mass=10.0, tau=3e9, start=0.0)
 sfr_dexp = sfr_dexp / np.max(sfr_dexp)
 ax.plot(t_gyr, sfr_dexp, color=pal[1], lw=1.8, label="dexp")
 
 # 3. double_powerlaw (dpl)
-sfr_dpl = dpl(t_yr, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=0.0)
+sfr_dpl = dpl(t_yr, alpha=2.0, beta=1.0, tau=5e9, log_total_mass=10.0)
 sfr_dpl = sfr_dpl / np.max(sfr_dpl)
 ax.plot(t_gyr, sfr_dpl, color=pal[2], lw=1.8, label="dpl")
 
 # 4. tsnorm (Bellstedt+2020)
-sfr_tsn = tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=3.0)
+sfr_tsn = tsnorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=3.0)
 sfr_tsn = sfr_tsn / np.max(sfr_tsn)
 ax.plot(t_gyr, sfr_tsn, color=pal[3], lw=1.8, label="tsnorm")
 
 # 5. snorm (skewed Gaussian)
-sfr_sn = snorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.5)
+sfr_sn = snorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5)
 sfr_sn = sfr_sn / np.max(sfr_sn)
 ax.plot(t_gyr, sfr_sn, color=pal[4], lw=1.8, label="snorm")
 
 # 6. norm (symmetric Gaussian)
-sfr_nm = norm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9)
+sfr_nm = norm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9)
 sfr_nm = sfr_nm / np.max(sfr_nm)
 ax.plot(t_gyr, sfr_nm, color=pal[5], lw=1.8, label="norm")
 
 # 7. lnorm (log-normal)
-sfr_ln = lnorm(t_yr, log_peak_sfr=0.0, peak_lbt=5e9, width=0.4)
+sfr_ln = lnorm(t_yr, log_total_mass=10.0, peak_lbt=5e9, width=0.4)
 sfr_ln = sfr_ln / np.max(sfr_ln)
 ax.plot(t_gyr, sfr_ln, color=pal[6], lw=1.8, label="lnorm")
 
@@ -423,7 +423,7 @@ sfr_cst = sfr_cst / np.max(sfr_cst + 1e-30)
 ax.plot(t_gyr, sfr_cst, color=pal[7], lw=1.8, label="const")
 
 # 9. exponential (declining tau)
-sfr_exp = exponential_sfh(t_yr, log_peak_sfr=0.0, tau=3e9, start=0.0)
+sfr_exp = exponential_sfh(t_yr, log_total_mass=10.0, tau=3e9, start=0.0)
 sfr_exp = sfr_exp / np.max(sfr_exp)
 ax.plot(t_gyr, sfr_exp, color=pal[8], lw=1.8, label="exp")
 
@@ -483,7 +483,7 @@ fig, axes = plt.subplots(1, 2, figsize=(9, 3.2))
 ax = axes[0]
 series_dexp_tau = []
 for tau_gyr in [0.5, 1.5, 3.0, 5.0]:
-    sfr = delayed_exponential_sfh(t_yr, log_peak_sfr=0.0, tau=tau_gyr * 1e9)
+    sfr = delayed_exponential_sfh(t_yr, log_total_mass=10.0, tau=tau_gyr * 1e9)
     sfr = sfr / np.max(sfr)
     series_dexp_tau.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\tau = {tau_gyr}$ Gyr")
@@ -497,7 +497,7 @@ add_multi_sfh_inset(ax, t_gyr, series_dexp_tau, ylabel="SFR")
 ax = axes[1]
 series_dexp_lp = []
 for log_p in [-0.5, 0.0, 0.5, 1.0]:
-    sfr = delayed_exponential_sfh(t_yr, log_peak_sfr=log_p, tau=3e9)
+    sfr = delayed_exponential_sfh(t_yr, log_total_mass=10.0, tau=3e9)
     series_dexp_lp.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\log$ peak = {log_p}")
 ax.set_xlabel(XLAB_LBT_GYR)
@@ -523,7 +523,7 @@ fig, axes = plt.subplots(1, 3, figsize=(12, 3))
 ax = axes[0]
 series_dpl_a = []
 for alpha in [0.5, 1.0, 2.0, 4.0]:
-    sfr = dpl(t_yr, alpha=alpha, beta=1.0, tau=5e9, log_peak_sfr=0.0)
+    sfr = dpl(t_yr, alpha=alpha, beta=1.0, tau=5e9, log_total_mass=10.0)
     sfr = sfr / np.max(sfr)
     series_dpl_a.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\alpha = {alpha}$")
@@ -538,7 +538,7 @@ add_multi_sfh_inset(ax, t_gyr, series_dpl_a, ylabel="SFR")
 ax = axes[1]
 series_dpl_b = []
 for beta in [0.3, 0.7, 1.5, 3.0]:
-    sfr = dpl(t_yr, alpha=2.0, beta=beta, tau=5e9, log_peak_sfr=0.0)
+    sfr = dpl(t_yr, alpha=2.0, beta=beta, tau=5e9, log_total_mass=10.0)
     sfr = sfr / np.max(sfr)
     series_dpl_b.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\beta = {beta}$")
@@ -553,7 +553,7 @@ add_multi_sfh_inset(ax, t_gyr, series_dpl_b, ylabel="SFR")
 ax = axes[2]
 series_dpl_t = []
 for tau_gyr in [1.0, 3.0, 6.0, 10.0]:
-    sfr = dpl(t_yr, alpha=2.0, beta=1.0, tau=tau_gyr * 1e9, log_peak_sfr=0.0)
+    sfr = dpl(t_yr, alpha=2.0, beta=1.0, tau=tau_gyr * 1e9, log_total_mass=10.0)
     sfr = sfr / np.max(sfr)
     series_dpl_t.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\tau = {tau_gyr}$ Gyr")
@@ -578,7 +578,7 @@ fig, axes = plt.subplots(2, 2, figsize=(9, 6))
 ax = axes[0, 0]
 series_tsn_pk = []
 for pk_gyr in [2.0, 4.0, 6.0, 9.0, 12.0]:
-    sfr = tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=pk_gyr * 1e9, width=2e9, skew=0.0, trunc=3.0)
+    sfr = tsnorm(t_yr, log_total_mass=10.0, peak_lbt=pk_gyr * 1e9, width=2e9, skew=0.0, trunc=3.0)
     sfr = sfr / np.max(sfr + 1e-30)
     series_tsn_pk.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"peak = {pk_gyr} Gyr")
@@ -593,7 +593,7 @@ add_multi_sfh_inset(ax, t_gyr, series_tsn_pk, ylabel="SFR")
 ax = axes[0, 1]
 series_tsn_w = []
 for w_gyr in [0.5, 1.0, 2.0, 4.0]:
-    sfr = tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=w_gyr * 1e9, skew=0.0, trunc=3.0)
+    sfr = tsnorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=w_gyr * 1e9, skew=0.0, trunc=3.0)
     sfr = sfr / np.max(sfr + 1e-30)
     series_tsn_w.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"width = {w_gyr} Gyr")
@@ -608,7 +608,7 @@ add_multi_sfh_inset(ax, t_gyr, series_tsn_w, ylabel="SFR")
 ax = axes[1, 0]
 series_tsn_sk = []
 for sk in [-0.8, -0.3, 0.0, 0.3, 0.8]:
-    sfr = tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=sk, trunc=3.0)
+    sfr = tsnorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=sk, trunc=3.0)
     sfr = sfr / np.max(sfr + 1e-30)
     series_tsn_sk.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"skew = {sk}")
@@ -623,7 +623,7 @@ add_multi_sfh_inset(ax, t_gyr, series_tsn_sk, ylabel="SFR")
 ax = axes[1, 1]
 series_tsn_tr = []
 for tr in [1.0, 2.0, 5.0, 10.0]:
-    sfr = tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=tr)
+    sfr = tsnorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=tr)
     sfr = sfr / np.max(sfr + 1e-30)
     series_tsn_tr.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"trunc = {tr}")
@@ -647,9 +647,9 @@ plt.show()
 # %%
 fig, ax = plt.subplots(figsize=(6.5, 3.2))
 
-sfr_norm = norm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9)
-sfr_snorm = snorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.5)
-sfr_lnorm = lnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=0.4)
+sfr_norm = norm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9)
+sfr_snorm = snorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5)
+sfr_lnorm = lnorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=0.4)
 
 series_gauss = []
 for sfr_i, name, ls in [
@@ -694,7 +694,7 @@ add_multi_sfh_inset(ax, t_gyr, [np.array(sfr_c1), np.array(sfr_c2)], ylabel="SFR
 ax = axes[1]
 series_exp = []
 for tau_gyr in [1.0, 3.0, 5.0, 10.0]:
-    sfr = exponential_sfh(t_yr, log_peak_sfr=0.0, tau=tau_gyr * 1e9)
+    sfr = exponential_sfh(t_yr, log_total_mass=10.0, tau=tau_gyr * 1e9)
     sfr = sfr / np.max(sfr)
     series_exp.append(sfr)
     ax.plot(t_gyr, sfr, lw=1.5, label=rf"$\tau = {tau_gyr}$ Gyr")
@@ -726,7 +726,7 @@ ax = axes[0]
 series_dexp2 = []
 for tau_gyr, age_gyr_val in [(1.0, 12.0), (3.0, 12.0), (6.0, 12.0), (1.0, 6.0)]:
     sfr = declining_exponential_sfh(
-        t_yr, log_peak_sfr=0.0, tau=tau_gyr * 1e9, age=age_gyr_val * 1e9
+        t_yr, log_total_mass=10.0, tau=tau_gyr * 1e9, age=age_gyr_val * 1e9
     )
     sfr = np.array(sfr) / np.max(np.array(sfr) + 1e-30)
     series_dexp2.append(sfr)
@@ -798,14 +798,14 @@ fig, axes = plt.subplots(1, 2, figsize=(11, 3.5))
 ax = axes[0]
 series_snb = []
 lss_snb = []
-base_snorm = np.array(snorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.3))
+base_snorm = np.array(snorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.3))
 base_snorm_n = base_snorm / np.max(base_snorm + 1e-30)
 ax.plot(t_gyr, base_snorm_n, "k--", lw=1.3, alpha=0.5, label="snorm (no burst)")
 for burst_sfr, ls in [(0.1, "-"), (0.5, "--"), (1.0, "-.")]:
     sfr = np.array(
         snorm_burst(
             jnp.array(t_yr),
-            log_peak_sfr=0.0,
+            log_total_mass=10.0,
             peak_lbt=6e9,
             width=2e9,
             skew=0.3,
@@ -836,7 +836,7 @@ ax = axes[1]
 series_tnb = []
 lss_tnb = []
 base_tsnorm = np.array(
-    tsnorm(t_yr, log_peak_sfr=0.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=3.0)
+    tsnorm(t_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.3, trunc=3.0)
 )
 base_tsnorm_n = base_tsnorm / np.max(base_tsnorm + 1e-30)
 ax.plot(t_gyr, base_tsnorm_n, "k--", lw=1.3, alpha=0.5, label="tsnorm (no burst)")
@@ -844,7 +844,7 @@ for burst_age_myr, ls in [(100.0, "-"), (300.0, "--"), (600.0, "-.")]:
     sfr = np.array(
         tsnorm_burst(
             jnp.array(t_yr),
-            log_peak_sfr=0.0,
+            log_total_mass=10.0,
             peak_lbt=6e9,
             width=2e9,
             skew=0.3,
@@ -891,7 +891,7 @@ for fburst in [0.1, 0.3, 0.5, 0.8]:
     sfr = np.array(
         psb_wild2020(
             jnp.array(t_yr),
-            log_peak_sfr=0.0,
+            log_total_mass=10.0,
             age=12e9,
             tau=3e9,
             burstage=0.3e9,
@@ -916,7 +916,7 @@ for burstage_gyr in [0.1, 0.3, 0.5, 1.0]:
     sfr = np.array(
         psb_wild2020(
             jnp.array(t_yr),
-            log_peak_sfr=0.0,
+            log_total_mass=10.0,
             age=12e9,
             tau=3e9,
             burstage=burstage_gyr * 1e9,
@@ -1555,7 +1555,7 @@ fig, axes = plt.subplots(1, 3, figsize=(12, 3.3))
 
 # Panel A: Mean SFH (tsnorm)
 ax = axes[0]
-mean_sfr = tsnorm(ages_yr, log_peak_sfr=0.5, peak_lbt=6e9, width=2e9, skew=0.2, trunc=3.0)
+mean_sfr = tsnorm(ages_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.2, trunc=3.0)
 mean_lin = _sfh_on_lin_grid(mean_sfr)
 ax.plot(ages_gyr_lin, mean_lin, color=COLORS["sfh_mean"], lw=2, label="Mean SFH")
 ax.set_xlabel(XLAB_LBT_GYR)

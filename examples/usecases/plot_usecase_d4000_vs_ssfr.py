@@ -45,7 +45,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh={"type": "tsnorm", "*": tengri.FIXED,
          "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
-         "width_gyr": 0.05, "log_peak_sfr": 1.0,
+         "width_gyr": 0.05, "log_total_mass": 10.0,
          "skew": 0.0, "trunc": 13.0},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.0, "tau_bc": 0.0},

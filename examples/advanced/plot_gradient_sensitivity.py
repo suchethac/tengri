@@ -42,7 +42,7 @@ model = tengri.SEDModel.build(
 )
 
 fiducial = {
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
     "sfh_tsnorm_width_gyr": 2.0,
     "sfh_tsnorm_skew": 0.0,

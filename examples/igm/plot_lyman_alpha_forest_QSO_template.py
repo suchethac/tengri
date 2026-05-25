@@ -66,7 +66,7 @@ ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     # Pure stellar synthesis: single-age stellar pop for normalization only
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0, "alpha": 1.5, "beta": 1.0},
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     agn={
         "type": "composable",
@@ -100,7 +100,7 @@ nu_L_nu = nu_obs * sed_rest
 # Create a second model without IGM to show intrinsic continuum
 model_no_igm = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0, "alpha": 1.5, "beta": 1.0},
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     agn={
         "type": "composable",

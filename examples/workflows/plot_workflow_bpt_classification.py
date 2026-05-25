@@ -55,8 +55,32 @@ def boxcar_line_flux(wave, sed, line_centre):
 ssp = tengri.load_ssp()
 logzsol_grid = np.linspace(-1.0, 0.2, 15)
 
+<<<<<<< HEAD
 log_n2_ha = []
 log_o3_hb = []
+=======
+# Build a simple model to generate mock SFH samples
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "tsnorm",
+        "log_total_mass": 10.0, 2.5),
+        "peak_lbt_gyr": tengri.Fixed(2.0),
+        "width_gyr": tengri.Fixed(1.0),
+        "skew": tengri.Fixed(0.2),
+        "trunc": tengri.Fixed(3.0),
+        "logzsol": tengri.Fixed(-0.2),
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.1,
+        "tau_diff": 0.1,
+        "slope": -0.7,
+    },
+    redshift=tengri.Fixed(z),
+)
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 for logz in logzsol_grid:
     model = tengri.SEDModel.build(
@@ -64,7 +88,7 @@ for logz in logzsol_grid:
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 1.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 1.0,
             "skew": 0.2,
@@ -87,8 +111,17 @@ for logz in logzsol_grid:
     log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
     log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
 
+<<<<<<< HEAD
 log_n2_ha = np.array(log_n2_ha)
 log_o3_hb = np.array(log_o3_hb)
+=======
+for agn_frac in agn_fracs:
+    key, subkey = jax.random.split(key)
+    params = model.spec.sample(subkey)
+    params["sfh_tsnorm_log_total_mass"] = 0.5
+    params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+    sfr_peak = float(params["sfh_tsnorm_log_total_mass"])
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 fig, ax = plt.subplots(figsize=(8, 7))
 

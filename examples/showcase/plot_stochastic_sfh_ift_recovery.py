@@ -89,12 +89,21 @@ key = jax.random.PRNGKey(42)
 # Truth: z=2, modest burstiness (psd_sigma ~ 0.15, psd_tau ~ 100 Myr)
 # The DPL component sets the broad envelope; the field adds structure
 truth_params = {
+<<<<<<< HEAD
     "sfh_dpl_alpha": 0.5,  # declining SFR with time
     "sfh_dpl_beta": 1.0,  # smooth exponential cutoff
     "sfh_dpl_tau_gyr": 2.0,  # ~2 Gyr time-scale
-    "sfh_dpl_log_peak_sfr": 0.8,  # 10^0.8 ~ 6.3 Msun/yr
+    "sfh_dpl_log_total_mass": 0.8,  # 10^0.8 ~ 6.3 Msun/yr
     "sfh_field_psd_sigma": 0.15,  # moderate stochasticity amplitude
     "sfh_field_psd_tau_myr": 100.0,  # ~100 Myr burstiness timescale
+=======
+    "sfh_dpl_alpha": 0.5,           # declining SFR with time
+    "sfh_dpl_beta": 1.0,            # smooth exponential cutoff
+    "sfh_dpl_tau_gyr": 2.0,         # ~2 Gyr time-scale
+    "sfh_dpl_log_total_mass": 0.8,    # 10^0.8 ~ 6.3 Msun/yr
+    "sfh_field_psd_sigma": 0.15,    # moderate stochasticity amplitude
+    "sfh_field_psd_tau_myr": 100.0, # ~100 Myr burstiness timescale
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     "dust_tau_bc": 0.3,
     "dust_tau_diff": 0.1,
     "dust_slope": -0.7,

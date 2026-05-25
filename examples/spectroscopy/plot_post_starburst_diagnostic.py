@@ -130,7 +130,7 @@ for i, tsq in enumerate(time_since_quench_gyr):
         "*": tengri.FIXED,
         "peak_lbt_gyr": tsq,
         "width_gyr": 0.2,  # ~200 Myr width: moderate extended burst
-        "log_peak_sfr": 0.8,  # ~6 Msun/yr SFR (brighter, more typical)
+        "log_total_mass": 10.0,  # ~6 Msun/yr SFR (brighter, more typical)
         "skew": 0.0,
         "trunc": 13.5,
     }

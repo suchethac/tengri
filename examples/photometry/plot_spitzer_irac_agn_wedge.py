@@ -68,7 +68,7 @@ def sample_sf_galaxy(ssp, key, redshift):
         observation=tengri.Observation(photometry=obs_irac.photometry),
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 1.5),
+            "log_total_mass": 10.0, 1.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 10.0),
             "width_gyr": tengri.Uniform(0.3, 4.0),
             "skew": tengri.Uniform(-2.0, 2.0),

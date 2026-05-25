@@ -63,7 +63,7 @@ SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.2,  # Young starburst timescale
-    "log_peak_sfr": 1.5,  # Moderately intense star formation
+    "log_total_mass": 10.0,  # Moderately intense star formation
     "alpha": 3.0,  # Rising SFR at early times
     "beta": 2.0,  # Declining SFR at late times
 }

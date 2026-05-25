@@ -64,7 +64,7 @@ Representative declared-parameter sets per `sfh_model`:
 
 | `sfh_model` | Parameters declared |
 |---|---|
-| `tsnorm` (truncated skew-normal) | `sfh_tsnorm_log_peak_sfr`, `sfh_tsnorm_peak_lbt_gyr`, `sfh_tsnorm_width_gyr`, `sfh_tsnorm_skew`, `sfh_tsnorm_trunc` |
+| `tsnorm` (truncated skew-normal) | `sfh_tsnorm_log_total_mass`, `sfh_tsnorm_peak_lbt_gyr`, `sfh_tsnorm_width_gyr`, `sfh_tsnorm_skew`, `sfh_tsnorm_trunc` |
 | `dpl` (double power-law) | `sfh_dpl_alpha`, `sfh_dpl_beta`, `sfh_dpl_tau`, `sfh_dpl_norm` |
 | `field` (PSD-governed GP, used as additive on top of any mean) | `sfh_field_psd_sigma`, `sfh_field_psd_tau_myr`, `sfh_field_xi` (an n_grid-dim vector of unit-variance Gaussian draws) |
 | `continuity` (binned non-parametric) | `sfh_continuity_logsfr_ratios` (vector of length `n_bins-1`) |

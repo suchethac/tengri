@@ -46,7 +46,7 @@ ssp = tengri.load_ssp()
 
 # Shared model components: star-forming host + dust
 COMMON = dict(
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 2.0, "log_peak_sfr": 1.2,
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 2.0, "log_total_mass": 10.0,
          "alpha": 1.5, "beta": 1.8},
     dust={"type": "two_component", "*": tengri.FIXED, "law_bc": "calzetti",
           "tau_diff": 0.2, "tau_bc": 0.5,

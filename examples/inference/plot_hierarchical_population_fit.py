@@ -69,7 +69,7 @@ def make_model_template():
             "alpha": tengri.Uniform(0.5, 3.0),
             "beta": tengri.Uniform(0.3, 2.0),
             "tau_gyr": tengri.Uniform(1.0, 8.0),
-            "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+            "log_total_mass": 10.0, 1.5),
         },
         dust={
             "type": "two_component",

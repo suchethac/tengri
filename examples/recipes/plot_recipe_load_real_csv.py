@@ -38,7 +38,7 @@ for gal_id in range(3):
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 3.0,
             "width_gyr": 2.0,
             "skew": 0.0,

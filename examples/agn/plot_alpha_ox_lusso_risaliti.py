@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5},
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
     agn={
         "type": "composable",

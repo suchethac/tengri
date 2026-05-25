@@ -47,10 +47,17 @@ C_AA_PER_S = 2.998e18
 SFH_CONFIG = {
     "type": "dpl",
     "*": tengri.FIXED,
+<<<<<<< HEAD
     "tau_gyr": 0.01,  # Very short timescale (10 Myr) — young burst
-    "log_peak_sfr": 1.0,  # Moderate star formation rate
+    "log_total_mass": 1.0,  # Moderate star formation rate
     "alpha": 2.0,  # Rising phase exponent
     "beta": 2.5,  # Declining phase exponent
+=======
+    "tau_gyr": 0.01,      # Very short timescale (10 Myr) — young burst
+    "log_total_mass": 10.0,  # Moderate star formation rate
+    "alpha": 2.0,         # Rising phase exponent
+    "beta": 2.5,          # Declining phase exponent
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 }
 
 DUST_CONFIG = {

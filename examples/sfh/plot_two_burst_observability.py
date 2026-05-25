@@ -47,7 +47,7 @@ t_gyr = t_yr / 1e9
 # ────────────────────────────────────────────────────────────────────────────
 sfh_ancient = tengri.tsnorm(
     t_lookback=t_yr,
-    log_peak_sfr=1.0,
+    log_total_mass=10.0,
     peak_lbt=10.0e9,  # 10 Gyr in years
     width=0.5e9,  # 0.5 Gyr in years
     skew=0.3,
@@ -59,7 +59,7 @@ model_ancient = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
         "skew": 0.3,
@@ -75,7 +75,7 @@ model_ancient = tengri.SEDModel.build(
 # ────────────────────────────────────────────────────────────────────────────
 sfh_young = tengri.tsnorm(
     t_lookback=t_yr,
-    log_peak_sfr=1.0,
+    log_total_mass=10.0,
     peak_lbt=0.3e9,  # 0.3 Gyr (300 Myr) in years
     width=0.1e9,  # 0.1 Gyr (100 Myr) in years
     skew=0.3,
@@ -87,7 +87,7 @@ model_young = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.3,
         "width_gyr": 0.1,
         "skew": 0.3,
@@ -104,10 +104,10 @@ model_young = tengri.SEDModel.build(
 # To achieve 1:1 mass ratio, scale the ancient peak to be ~1.0 - log10(timescale_ratio)
 # Rough: ancient width 0.5 Gyr vs young width 0.1 Gyr → 5x longer
 # Adjust ancient peak to lower value to equalize integrated mass
-# log_peak_sfr_ancient ≈ 0.3 achieves approximate 1:1
+# log_total_mass_ancient ≈ 0.3 achieves approximate 1:1
 sfh_ancient_component = tengri.tsnorm(
     t_lookback=t_yr,
-    log_peak_sfr=0.3,
+    log_total_mass=10.0,
     peak_lbt=10.0e9,
     width=0.5e9,
     skew=0.3,
@@ -116,7 +116,7 @@ sfh_ancient_component = tengri.tsnorm(
 
 sfh_young_component = tengri.tsnorm(
     t_lookback=t_yr,
-    log_peak_sfr=1.0,
+    log_total_mass=10.0,
     peak_lbt=0.3e9,
     width=0.1e9,
     skew=0.3,
@@ -133,7 +133,7 @@ model_combined_ancient = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 0.3,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
         "skew": 0.3,
@@ -149,7 +149,7 @@ model_combined_young = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.3,
         "width_gyr": 0.1,
         "skew": 0.3,

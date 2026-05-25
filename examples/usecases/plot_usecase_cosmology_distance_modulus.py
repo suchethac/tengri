@@ -53,7 +53,7 @@ model = tengri.SEDModel.build(
 # Fixed SED parameters from the recipe (all FIXED)
 # This is a simple, non-degerate model: age + dust opacity only
 params_fixed = {
-    "sfh_const_log_sfr": 0.0,
+    "sfh_const_log_total_mass": 0.0,
     "dust_tau": 0.1,  # Small dust opacity
     "redshift": 0.0,  # Will be overridden per-redshift
 }

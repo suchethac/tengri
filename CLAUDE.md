@@ -147,7 +147,7 @@ groups = model.spec.to_groups()    # round-trip for inspection/editing
 from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_peak_sfr
+    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
     dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED},
     neb={'type': 'cue', '*': FIXED},
 )

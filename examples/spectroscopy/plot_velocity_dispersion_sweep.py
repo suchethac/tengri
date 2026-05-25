@@ -44,7 +44,7 @@ obs = Observation(
 )
 
 spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(0.8),
+    sfh_tsnorm_log_total_mass=10.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.5),
     sfh_tsnorm_width_gyr=Fixed(1.8),
     sfh_tsnorm_skew=Fixed(0.1),

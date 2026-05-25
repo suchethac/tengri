@@ -34,7 +34,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 # --- Truth: post-starburst (E+A) --- burst 500 Myr ago, then quench
 key = jax.random.PRNGKey(42)
 truth_params = {
-    "sfh_tsnorm_log_peak_sfr": 1.5,
+    "sfh_tsnorm_log_total_mass": 1.5,
     "sfh_tsnorm_peak_lbt_gyr": 0.5,
     "sfh_tsnorm_width_gyr": 0.2,
     "sfh_tsnorm_skew": 0.8,
@@ -61,7 +61,7 @@ model_correct = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "log_peak_sfr": tengri.Uniform(0.5, 2.5),
+        "log_total_mass": 10.0, 2.5),
         "peak_lbt_gyr": tengri.Uniform(0.2, 2.0),
         "width_gyr": tengri.Uniform(0.1, 1.0),
         "skew": tengri.Uniform(-0.5, 2.0),
@@ -93,7 +93,7 @@ model_wrong = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "dpl",
-        "log_peak_sfr": tengri.Uniform(0.5, 2.5),
+        "log_total_mass": 10.0, 2.5),
         "tau_gyr": tengri.Uniform(0.5, 10.0),
         "alpha": tengri.Fixed(1.0),
         "beta": tengri.Fixed(0.1),

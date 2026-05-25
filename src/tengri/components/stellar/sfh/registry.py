@@ -231,8 +231,8 @@ _tsnorm_spec = SFHModelSpec(
     name="tsnorm",
     fn=tsnorm,
     params={
-        "sfh_tsnorm_log_peak_sfr": ParamDef(
-            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+        "sfh_tsnorm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
         "sfh_tsnorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
@@ -247,7 +247,7 @@ _tsnorm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_tsnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_tsnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_tsnorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_skew": ("skew", 1.0, 0.0),
@@ -266,7 +266,9 @@ _snorm_spec = SFHModelSpec(
     name="snorm",
     fn=snorm,
     params={
-        "sfh_snorm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
+        "sfh_snorm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+        ),
         "sfh_snorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -277,7 +279,7 @@ _snorm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_snorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_snorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_snorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_skew": ("skew", 1.0, 0.0),
@@ -294,8 +296,8 @@ _snorm_burst_spec = SFHModelSpec(
     name="snorm_burst",
     fn=snorm_burst,
     params={
-        "sfh_snorm_burst_log_peak_sfr": ParamDef(
-            "log10 peak SFR of skew-normal component", _always_true, "", Uniform(-1.0, 3.0)
+        "sfh_snorm_burst_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
         "sfh_snorm_burst_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
@@ -313,7 +315,7 @@ _snorm_burst_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_snorm_burst_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_snorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_snorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_burst_skew": ("skew", 1.0, 0.0),
@@ -332,8 +334,8 @@ _tsnorm_burst_spec = SFHModelSpec(
     name="tsnorm_burst",
     fn=snorm_trunc_burst,
     params={
-        "sfh_tsnorm_burst_log_peak_sfr": ParamDef(
-            "log10 peak SFR of tsnorm component", _always_true, "", Uniform(-1.0, 3.0)
+        "sfh_tsnorm_burst_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
         "sfh_tsnorm_burst_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
@@ -354,7 +356,7 @@ _tsnorm_burst_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_tsnorm_burst_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_tsnorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_tsnorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_burst_skew": ("skew", 1.0, 0.0),
@@ -374,7 +376,9 @@ _norm_spec = SFHModelSpec(
     name="norm",
     fn=norm,
     params={
-        "sfh_norm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
+        "sfh_norm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+        ),
         "sfh_norm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -384,7 +388,7 @@ _norm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_norm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_norm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_norm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_norm_width_gyr": ("width", 1e9, 0.0),
     },
@@ -397,7 +401,9 @@ _lnorm_spec = SFHModelSpec(
     name="lnorm",
     fn=lnorm,
     params={
-        "sfh_lnorm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
+        "sfh_lnorm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+        ),
         "sfh_lnorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -407,7 +413,7 @@ _lnorm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_lnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_lnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_lnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
     },
@@ -430,8 +436,8 @@ _register(
             "sfh_dpl_tau_gyr": ParamDef(
                 "DPL turnover time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 12.0)
             ),
-            "sfh_dpl_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_dpl_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
         },
         settings={},
@@ -439,7 +445,7 @@ _register(
             "sfh_dpl_alpha": ("alpha", 1.0, 0.0),
             "sfh_dpl_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_tau_gyr": ("tau", 1e9, 0.0),
-            "sfh_dpl_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_dpl_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -453,7 +459,12 @@ _register(
         name="const",
         fn=constant,
         params={
-            "sfh_const_log_sfr": ParamDef("log10 SFR", _always_true, "", Uniform(-1.0, 3.0)),
+            "sfh_const_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_const_start_gyr": ParamDef(
                 "Lookback to SF onset (Gyr): when did SF start?",
                 _lo_positive,
@@ -469,7 +480,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_const_log_sfr": ("log_sfr", 1.0, 0.0),
+            "sfh_const_log_total_mass": ("log_total_mass", 1.0, 0.0),
             # User's "start" (when SF began) = older lookback = internal "end"
             # User's "end" (when SF stopped) = younger lookback = internal "start"
             "sfh_const_start_gyr": ("end", 1e9, 0.0),
@@ -486,8 +497,8 @@ _register(
         name="exp",
         fn=exponential,
         params={
-            "sfh_exp_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_exp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
             "sfh_exp_tau_gyr": ParamDef(
                 "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
@@ -498,7 +509,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_exp_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_exp_start_gyr": ("start", 1e9, 0.0),
         },
@@ -513,8 +524,8 @@ _register(
         name="dexp",
         fn=delayed_exponential,
         params={
-            "sfh_dexp_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_dexp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
             "sfh_dexp_tau_gyr": ParamDef(
                 "Timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
@@ -525,7 +536,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_dexp_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_dexp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_dexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dexp_start_gyr": ("start", 1e9, 0.0),
         },
@@ -542,8 +553,8 @@ _register(
         name="tau",
         fn=declining_exponential,
         params={
-            "sfh_tau_log_peak_sfr": ParamDef(
-                "log10 peak SFR at formation (Msun/yr)", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_tau_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
             "sfh_tau_tau_gyr": ParamDef(
                 "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
@@ -557,7 +568,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_tau_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_tau_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_tau_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_tau_age_gyr": ("age", 1e9, 0.0),
         },
@@ -572,11 +583,11 @@ _register(
         name="const_exp",
         fn=constant_then_exponential,
         params={
-            "sfh_cexp_log_sfr": ParamDef(
-                "log10 constant SFR before quenching (Msun/yr)",
+            "sfh_cexp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun] (constant + decline phases)",
                 _always_true,
                 "",
-                Uniform(-1.0, 3.0),
+                Uniform(7.0, 12.5),
             ),
             "sfh_cexp_tau_gyr": ParamDef(
                 "Post-quench e-folding timescale (Gyr)",
@@ -599,7 +610,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_cexp_log_sfr": ("log_sfr", 1.0, 0.0),
+            "sfh_cexp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_cexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_cexp_quench_gyr": ("quench_age", 1e9, 0.0),
             "sfh_cexp_age_gyr": ("age", 1e9, 0.0),
@@ -617,6 +628,12 @@ _register(
         name="delayed_bq",
         fn=delayed_bq,
         params={
+            "sfh_delayed_bq_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_delayed_bq_tau_main_gyr": ParamDef(
                 "e-folding timescale of main component (Gyr)",
                 _lo_positive,
@@ -644,6 +661,7 @@ _register(
         },
         settings={},
         internal_param_map={
+            "sfh_delayed_bq_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_delayed_bq_tau_main_gyr": ("tau_main_yr", 1e9, 0.0),
             "sfh_delayed_bq_age_main_gyr": ("age_main_yr", 1e9, 0.0),
             "sfh_delayed_bq_age_bq_gyr": ("age_bq_yr", 1e9, 0.0),
@@ -661,6 +679,12 @@ _register(
         name="periodic",
         fn=periodic,
         params={
+            "sfh_periodic_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_periodic_delta_bursts_gyr": ParamDef(
                 "Spacing between burst onsets (Gyr)",
                 _lo_positive,
@@ -688,6 +712,7 @@ _register(
         },
         settings={},
         internal_param_map={
+            "sfh_periodic_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_periodic_delta_bursts_gyr": ("delta_bursts_yr", 1e9, 0.0),
             "sfh_periodic_tau_bursts_gyr": ("tau_bursts_yr", 1e9, 0.0),
             "sfh_periodic_burst_type": ("burst_type", 1.0, 0.0),
@@ -705,6 +730,12 @@ _register(
         name="buat08",
         fn=buat08,
         params={
+            "sfh_buat08_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_buat08_velocity_km_s": ParamDef(
                 "Rotational velocity (km/s), range [40, 360]",
                 lambda lo, hi: lo >= 40 and hi <= 360,
@@ -714,6 +745,7 @@ _register(
         },
         settings={},
         internal_param_map={
+            "sfh_buat08_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_buat08_velocity_km_s": ("velocity_km_s", 1.0, 0.0),
         },
         composition_type="additive",
@@ -729,11 +761,11 @@ _register(
         name="psb",
         fn=psb_wild2020,
         params={
-            "sfh_psb_log_peak_sfr": ParamDef(
-                "log10 overall SFR normalization (Msun/yr)",
+            "sfh_psb_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(-1.0, 3.0),
+                Uniform(7.0, 12.5),
             ),
             "sfh_psb_age_gyr": ParamDef(
                 "Galaxy age / lookback to formation (Gyr)",
@@ -768,7 +800,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_psb_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_psb_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb_age_gyr": ("age", 1e9, 0.0),
             "sfh_psb_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_psb_burstage_gyr": ("burstage", 1e9, 0.0),
@@ -790,11 +822,11 @@ _register(
         name="top_hat",
         fn=top_hat,
         params={
-            "sfh_top_hat_amplitude": ParamDef(
-                "Constant SFR inside window (Msun/yr)",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.01, 100.0),
+            "sfh_top_hat_log_total_mass": ParamDef(
+                "log10 total stellar mass formed in window [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
             ),
             "sfh_top_hat_t_start_gyr": ParamDef(
                 "Older lookback boundary / SF onset (Gyr)",
@@ -817,7 +849,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_top_hat_amplitude": ("amplitude", 1.0, 0.0),
+            "sfh_top_hat_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_top_hat_t_start_gyr": ("t_start", 1e9, 0.0),
             "sfh_top_hat_t_end_gyr": ("t_end", 1e9, 0.0),
             "sfh_top_hat_smooth_width_gyr": ("smooth_width", 1e9, 0.0),
@@ -833,11 +865,11 @@ _register(
         name="gaussian_burst",
         fn=gaussian_burst,
         params={
-            "sfh_gaussian_burst_amplitude": ParamDef(
-                "Peak burst SFR (Msun/yr)",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.01, 100.0),
+            "sfh_gaussian_burst_log_total_mass": ParamDef(
+                "log10 total stellar mass formed in burst [Msun]",
+                _always_true,
+                "",
+                Uniform(6.0, 11.0),
             ),
             "sfh_gaussian_burst_t_peak_gyr": ParamDef(
                 "Burst peak age / lookback time (Gyr)",
@@ -854,7 +886,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_gaussian_burst_amplitude": ("amplitude", 1.0, 0.0),
+            "sfh_gaussian_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_gaussian_burst_t_peak_gyr": ("t_peak", 1e9, 0.0),
             "sfh_gaussian_burst_sigma_gyr": ("sigma", 1e9, 0.0),
         },
@@ -1481,7 +1513,13 @@ def resolve_sfh(
         merged_param_map.update(s.internal_param_map)
         merged_settings.update(s.settings)
 
-    # Build lists of (fn, set_of_internal_names) for each additive component
+    # Build per-spec dispatch info for each additive component.
+    #
+    # Each entry holds: (callable, public->internal map, set of internal names).
+    # The composer dispatches PER-COMPONENT using the public-name map so that
+    # two additive SFHs sharing the same internal kwarg (e.g. ``log_total_mass``
+    # for any two parametric SFHs after the 2026-05-25 normalization refactor)
+    # do not collide. See #372 for the bug this fixes.
     _NONPARAM_NAMES = {
         "continuity",
         "dirichlet",
@@ -1492,36 +1530,64 @@ def resolve_sfh(
     }
     additive_info = []
     for s in additive:
-        internal_names = {v[0] for v in s.internal_param_map.values()}
+        pub_to_internal = dict(
+            s.internal_param_map
+        )  # public_name -> (internal_name, scale, offset)
+        internal_names = {v[0] for v in pub_to_internal.values()}
         fn_i = s.fn
         if bin_edges_gyr is not None and s.name in _NONPARAM_NAMES:
             fn_i = functools.partial(fn_i, bin_edges_gyr=bin_edges_gyr)
-        additive_info.append((fn_i, internal_names))
+        additive_info.append((fn_i, pub_to_internal, internal_names))
 
     has_burst = len(mixtures) > 0
     burst_info = None
     if has_burst:
         bs = mixtures[0]
-        burst_internal = {v[0] for v in bs.internal_param_map.values()}
-        burst_info = (bs.fn, burst_internal)
+        burst_pub_to_internal = dict(bs.internal_param_map)
+        burst_internal = {v[0] for v in burst_pub_to_internal.values()}
+        burst_info = (bs.fn, burst_pub_to_internal, burst_internal)
 
     has_field = len(modulators) > 0
+
+    def _build_component_kw(kw, pub_to_internal, internal_names, *, skip=()):
+        """Slice ``kw`` to the internal kwargs this component expects.
+
+        Prefers per-spec public-name entries (``sfh_X_log_total_mass``) so two
+        additive components sharing an internal name (``log_total_mass``) each
+        get their own value. Falls back to the internal-name entry for
+        backward compatibility with callers that pre-translated.
+
+        ``kw[public]`` is assumed already scaled/offset by the upstream
+        translator (``parameters/translate.py::get_internal_params``), so the
+        composer copies the value verbatim under its internal kwarg name.
+        """
+        kw_i = {}
+        for pub_name, (intl_name, _scale, _offset) in pub_to_internal.items():
+            if intl_name in skip:
+                continue
+            if pub_name in kw:
+                kw_i[intl_name] = kw[pub_name]
+            elif intl_name in kw:
+                kw_i[intl_name] = kw[intl_name]
+        return kw_i
 
     # Build the composed closure
     def composed_fn(t_lookback, **kw):
         """Evaluate the composed SFH: sum additive components, then apply burst and field."""
-        # 1. Sum additive components
+        # 1. Sum additive components (per-spec public-name dispatch — no collision)
         smooth = jnp.zeros_like(t_lookback)
-        for fn_i, int_names_i in additive_info:
-            kw_i = {k: kw[k] for k in int_names_i if k in kw}
+        for fn_i, pub_to_internal, internal_names in additive_info:
+            kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
             smooth = smooth + fn_i(t_lookback, **kw_i)
 
         # 2. Apply burst mixture
         if has_burst:
-            burst_fn, burst_int = burst_info
+            burst_fn, burst_pub_to_internal, burst_internal = burst_info
             log_fburst = kw["log_fburst"]
             f = 10.0**log_fburst
-            burst_kw = {k: kw[k] for k in burst_int if k != "log_fburst" and k in kw}
+            burst_kw = _build_component_kw(
+                kw, burst_pub_to_internal, burst_internal, skip=("log_fburst",)
+            )
             burst_shape = burst_fn(t_lookback, **burst_kw)
             # Normalize burst shape to match smooth integral scale
             smooth = (1.0 - f) * smooth + f * burst_shape * jnp.max(smooth)

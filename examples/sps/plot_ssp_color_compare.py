@@ -61,7 +61,7 @@ for ssp_name, label in LIBRARIES:
         "*": tengri.FIXED,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.3,
         "trunc": 10.0,
     }

@@ -70,10 +70,10 @@ model = tengri.SEDModel.build(
 key = jax.random.PRNGKey(42)
 baseline_params = dict(model.spec.sample(key))
 
-# Four parameters of interest: log_peak_sfr, metallicity, dust tau, age
+# Four parameters of interest: log_total_mass, metallicity, dust tau, age
 # We'll compute ∂(log F_ν) / ∂(log θ) for each band and parameter
 param_names = [
-    "sfh_dpl_log_peak_sfr",
+    "sfh_dpl_log_total_mass",
     "met_logzsol",
     "dust_tau_diff",
     "sfh_dpl_tau_gyr",

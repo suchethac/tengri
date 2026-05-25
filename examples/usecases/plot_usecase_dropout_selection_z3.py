@@ -51,7 +51,7 @@ def build_model(z: float) -> tengri.SEDModel:
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+            "log_total_mass": 10.0, 1.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 6.0),
             "width_gyr": tengri.Uniform(0.8, 3.0),
             "skew": tengri.Uniform(-0.5, 1.0),

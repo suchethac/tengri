@@ -136,25 +136,25 @@ repo_root = next(
 ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
 
 # Build a star-forming model with a flexible SFH
-# Use dpl (double-power-law) SFH with free log_peak_sfr (normalization)
+# Use dpl (double-power-law) SFH with free log_total_mass (normalization)
 model = tengri.SEDModel.build(
     ssp,
     sfh={"type": "dpl", "*": tengri.FIXED,
-         "log_peak_sfr": tengri.Uniform(-1.0, 3.0)},
+         "log_total_mass": 10.0, 3.0)},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.0, "tau_bc": 0.0},
     neb={"type": "cue", "*": tengri.FIXED},
 )
 
-# Sample baseline parameters (all fixed except log_peak_sfr)
+# Sample baseline parameters (all fixed except log_total_mass)
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Two redshifts, 30 galaxies each with varied log_peak_sfr
+# Two redshifts, 30 galaxies each with varied log_total_mass
 n_galaxies = 30
 redshifts = [0.05, 2.0]
 
-# Generate log_peak_sfr values spanning ~1.5 dex range
-log_peak_sfr_vals = np.linspace(-0.5, 2.0, n_galaxies)
+# Generate log_total_mass values spanning ~1.5 dex range
+log_total_mass_vals = np.linspace(-0.5, 2.0, n_galaxies)
 
 fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.5))
 
@@ -163,10 +163,10 @@ for panel_idx, (ax, z_obs) in enumerate(zip(axes, redshifts)):
     m_stars = []
     sfr_nows = []
 
-    for log_peak_sfr in log_peak_sfr_vals:
+    for log_total_mass in log_total_mass_vals:
         p = {
             **baseline,
-            "sfh_dpl_log_peak_sfr": jnp.float64(log_peak_sfr),
+            "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
         }
 
         # Predict SFH: returns dict with "t_gyr" and "sfr_mean"
