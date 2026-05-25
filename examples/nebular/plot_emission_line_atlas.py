@@ -35,7 +35,7 @@ C_AA_PER_S = 2.998e18
 model = tengri.SEDModel.build(
     tengri.load_ssp("fsps_prsc_miles_chabrier"),
     sfh={"type": "dpl", "*": tengri.FIXED,
-         "tau_gyr": 0.03, "log_peak_sfr": 1.5, "alpha": 4.0, "beta": 2.0},
+         "tau_gyr": 0.03, "log_total_mass": 10.0, "alpha": 4.0, "beta": 2.0},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.05, "tau_bc": 0.1},
     neb={"type": "cue", "*": tengri.FIXED},

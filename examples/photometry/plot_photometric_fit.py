@@ -44,21 +44,57 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(3.0),
 )
 
+<<<<<<< HEAD
 key = jax.random.PRNGKey(7)
 truth = dict(model.spec.sample(key))
 truth.update(
     sfh_tsnorm_peak_lbt_gyr=1.5,
     sfh_tsnorm_width_gyr=0.7,
-    sfh_tsnorm_log_peak_sfr=1.4,
+    sfh_tsnorm_log_total_mass=1.4,
     sfh_tsnorm_skew=0.2,
     sfh_tsnorm_trunc=2.0,
     dust_tau_diff=0.5,
+=======
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
+    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
+    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+    met_logzsol=Uniform(-2.0, 0.2),
+    dust_tau_bc=Fixed(0.3),
+    dust_tau_diff=Fixed(0.2),
+    dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.05),
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 )
 mock = model.mock(truth, snr=15.0, key=key)
 
+<<<<<<< HEAD
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
     mock.flux_obs, mock.noise, method="map", optimizer="adam", n_steps=300, verbose=False
+=======
+# --- Generate mock data (star-forming galaxy) ---
+true_params = spec.sample(jax.random.PRNGKey(42))
+true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+true_params["sfh_tsnorm_width_gyr"] = 2.0
+true_params["sfh_tsnorm_log_total_mass"] = 1.0
+true_params["sfh_tsnorm_skew"] = 0.3  # Positive skew = recent star formation
+mock = model.mock(true_params, snr=20.0, key=jax.random.PRNGKey(0))
+
+# --- Fit with MAP ---
+fitter = Fitter(model, mock.flux_obs, mock.noise)
+posterior = fitter.run("map", optimizer="adam", n_steps=300, verbose=False)
+best_fit = model.predict_photometry(posterior.params)
+
+# --- Plot ---
+wave_eff = np.array([3551, 4686, 6166, 7480, 8932])  # SDSS effective wavelengths
+band_names = ["u", "g", "r", "i", "z"]
+
+fig, (ax, ax_res) = plt.subplots(
+    2, 1, figsize=(7, 5), height_ratios=[3, 1], sharex=True, gridspec_kw={"hspace": 0.05}
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 )
 fit_params = posterior.params
 

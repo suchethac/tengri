@@ -51,7 +51,7 @@ truth = dict(model.spec.sample(key))
 truth.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
-    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_skew=0.3,
     sfh_tsnorm_trunc=10.0,
     met_logzsol=-0.2,

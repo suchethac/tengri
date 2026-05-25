@@ -59,7 +59,7 @@ truth = dict(model.spec.sample(key))
 truth.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
-    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_log_total_mass=10.0,
     dust_tau_diff=0.3,
 )
 mock = model.mock(truth, snr=20.0, key=key)

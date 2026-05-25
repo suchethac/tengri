@@ -174,7 +174,7 @@ def _tengri_dexp(
 
     spec = Parameters(
         mean_sfh_type="dexp",
-        sfh_dexp_log_peak_sfr=Fixed(np.log10(peak_sfr)),
+        sfh_dexp_log_total_mass=Fixed(np.log10(peak_sfr) + 10.0),
         sfh_dexp_tau_gyr=Fixed(tau_gyr),
         sfh_dexp_start_gyr=Fixed(start_gyr),
         met_logzsol=Fixed(logzsol),
@@ -211,7 +211,7 @@ def _tengri_dpl(
 
     spec = Parameters(
         mean_sfh_type="dpl",
-        sfh_dpl_log_peak_sfr=Fixed(np.log10(peak_sfr)),
+        sfh_dpl_log_total_mass=Fixed(np.log10(peak_sfr) + 10.0),
         sfh_dpl_alpha=Fixed(alpha),
         sfh_dpl_beta=Fixed(beta),
         sfh_dpl_tau_gyr=Fixed(tau_gyr),

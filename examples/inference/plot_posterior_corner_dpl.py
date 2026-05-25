@@ -8,7 +8,7 @@ formation history. The corner plot visualizes all 1-D marginalized posteriors
 and 2-D joint distributions, with blue lines marking the injected truth values.
 
 The model has four free parameters in the SFH: alpha (rise), beta (decline),
-tau_gyr (timescale), and log_peak_sfr (normalization). The posterior reveals
+tau_gyr (timescale), and log_total_mass (normalization). The posterior reveals
 parameter degeneracies between SFH shape and dust attenuation.
 
 Reference: Foreman-Mackey 2016, corner.py (https://arxiv.org/abs/1606.02919);
@@ -58,7 +58,7 @@ truth.update(
     sfh_dpl_alpha=2.5,
     sfh_dpl_beta=1.2,
     sfh_dpl_tau_gyr=8.0,
-    sfh_dpl_log_peak_sfr=1.1,
+    sfh_dpl_log_total_mass=10.0,
     dust_tau_diff=0.3,
 )
 mock = model.mock(truth, snr=20.0, key=key)

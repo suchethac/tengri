@@ -77,7 +77,7 @@ COLORS_BAR = ["#4477AA", "#EE6677", "#228833"]
 
 key = jax.random.PRNGKey(42)
 true_params = {
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
     "sfh_tsnorm_width_gyr": 2.0,
     "sfh_tsnorm_skew": 0.0,

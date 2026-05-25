@@ -42,7 +42,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
 
-def _make(z_value: float, tau_diff: float, peak_lbt: float, log_peak_sfr: float):
+def _make(z_value: float, tau_diff: float, peak_lbt: float, log_total_mass: float):
     """Build a model at a chosen redshift and a couple of SFH/dust knobs."""
     model = tengri.SEDModel.build(
         tengri.load_ssp(),
@@ -52,7 +52,7 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_peak_sfr: float)
             "*": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": 1.5,
-            "log_peak_sfr": log_peak_sfr,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 10.0,
         },
@@ -70,8 +70,8 @@ def _make(z_value: float, tau_diff: float, peak_lbt: float, log_peak_sfr: float)
 
 
 # Two galaxies tuned to land at comparable g/r/i/z flux levels.
-m_low, p_low = _make(z_value=0.3, tau_diff=1.4, peak_lbt=3.0, log_peak_sfr=1.4)
-m_hi, p_hi = _make(z_value=3.5, tau_diff=0.05, peak_lbt=0.2, log_peak_sfr=1.0)
+m_low, p_low = _make(z_value=0.3, tau_diff=1.4, peak_lbt=3.0, log_total_mass=10.0)
+m_hi, p_hi = _make(z_value=3.5, tau_diff=0.05, peak_lbt=0.2, log_total_mass=10.0)
 
 flux_low = np.array(m_low.predict_photometry(p_low))
 flux_hi = np.array(m_hi.predict_photometry(p_hi))

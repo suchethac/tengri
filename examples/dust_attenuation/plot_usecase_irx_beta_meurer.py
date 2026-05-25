@@ -163,7 +163,7 @@ SFH_BASE = {
     "*": tengri.FIXED,
     "peak_lbt_gyr": 0.05,  # 50 Myr lookback
     "width_gyr": 0.05,      # 50 Myr width
-    "log_peak_sfr": 1.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
+    "log_total_mass": 10.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
     "skew": 0.0,
     "trunc": 13.0,          # max lookback time
 }

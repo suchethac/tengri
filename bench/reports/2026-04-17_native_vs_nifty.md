@@ -2,7 +2,8 @@
 
 **Date:** 2026-04-17  
 **Verdict:** FAIL  
-**Platform:** `cpu`, x64=True
+**Platform:** `cpu`, x64=True  
+**Note:** Parameter names updated for the 2026-05-25 SFH normalization refactor (log_total_mass → log_total_mass); numerical values are from the pre-refactor run.
 
 ## Question
 
@@ -40,7 +41,7 @@ Is `fitter.run("vi_native")` equivalent to `fitter.run("vi")` — same posterior
 | `dust_tau_bc` | 0.654 | 1.27 | 1.75 | 0.351 | 0.367 | 1.04 | ✗ | ✓ |
 | `dust_tau_diff` | 0.367 | 0.887 | 2.30 | 0.226 | 0.236 | 1.04 | ✗ | ✓ |
 | `met_logzsol` | -0.278 | -0.411 | 0.50 | 0.267 | 0.312 | 1.17 | ✗ | ✓ |
-| `sfh_tsnorm_log_peak_sfr` | 1.09 | 1.2 | 1.57 | 0.0737 | 0.188 | 2.55 | ✗ | ✗ |
+| `sfh_tsnorm_log_total_mass` | 11.09 | 11.2 | 1.57 | 0.0737 | 0.188 | 2.55 | ✗ | ✗ |
 | `sfh_tsnorm_peak_lbt_gyr` | 5.52 | 0.87 | 2.11 | 2.21 | 0.407 | 0.18 | ✗ | ✗ |
 | `sfh_tsnorm_skew` | -0.0117 | -0.105 | 0.22 | 0.416 | 0.741 | 1.78 | ✓ | ✗ |
 | `sfh_tsnorm_trunc` | 5.03 | 7.4 | 1.29 | 1.84 | 1.62 | 0.88 | ✗ | ✓ |
@@ -57,7 +58,7 @@ Is `fitter.run("vi_native")` equivalent to `fitter.run("vi")` — same posterior
 | `met_logzsol` | -1.29 | -1.24 | 0.13 | 0.393 | 0.41 | 1.04 | ✓ | ✓ |
 | `sfh_field_psd_sigma` | 2.49 | 3.77 | 1.82 | 0.709 | 0.217 | 0.31 | ✗ | ✗ |
 | `sfh_field_psd_tau_myr` | 82.4 | 6.35 | 1.48 | 51.2 | 6.46 | 0.13 | ✗ | ✗ |
-| `sfh_tsnorm_log_peak_sfr` | 1.36 | 2.2 | 1.69 | 0.496 | 0.231 | 0.46 | ✗ | ✗ |
+| `sfh_tsnorm_log_total_mass` | 11.36 | 12.2 | 1.69 | 0.496 | 0.231 | 0.46 | ✗ | ✗ |
 | `sfh_tsnorm_peak_lbt_gyr` | 4.1 | 1.18 | 1.50 | 1.96 | 0.649 | 0.33 | ✗ | ✗ |
 | `sfh_tsnorm_skew` | -0.401 | 1.65 | 2.74 | 0.748 | 0.915 | 1.22 | ✗ | ✓ |
 | `sfh_tsnorm_trunc` | 5.06 | 6.12 | 0.57 | 1.85 | 1.84 | 1.00 | ✗ | ✓ |

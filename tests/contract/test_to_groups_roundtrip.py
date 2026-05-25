@@ -226,7 +226,7 @@ class TestToGroupsWildcardCollapse:
         )
         result = original.to_groups()
 
-        # The SFH params (alpha, beta, tau_gyr, log_peak_sfr) should NOT be
+        # The SFH params (alpha, beta, tau_gyr, log_total_mass) should NOT be
         # explicit keys in the sfh dict if they all came from the wildcard
         sfh_dict = result["sfh"]
         # 'type' is always there
@@ -259,7 +259,7 @@ class TestToGroupsWildcardCollapse:
                 "alpha": FREE,
                 "beta": Uniform(1, 3),
                 "tau_gyr": Fixed(2.0),
-                "log_total_mass": Uniform(-1, 2),
+                "log_total_mass": Uniform(8, 12),
             },
             redshift=Fixed(0.1),
         )
@@ -286,7 +286,7 @@ class TestToGroupsFlatBuilt:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(8, 12),
             dust_tau_bc=Uniform(0, 4),
             dust_tau_diff=Uniform(0, 3),
             redshift=Fixed(0.1),
@@ -314,7 +314,7 @@ class TestToGroupsFlatBuilt:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(8, 12),
             dust_tau_bc=Uniform(0, 2),
             redshift=Fixed(0.1),
         )

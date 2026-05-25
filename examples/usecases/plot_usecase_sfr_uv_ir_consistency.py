@@ -106,7 +106,7 @@ for i, tau_v in enumerate(tau_v_values):
             "alpha": Fixed(0.1),              # shallow rising slope
             "beta": Fixed(4.0),               # steep quenching
             "tau_gyr": Fixed(2.0),            # turnover timescale
-            "log_peak_sfr": Fixed(1.0),       # log10(10 Msun/yr) = 1.0
+            "log_total_mass": 10.0,       # log10(10 Msun/yr) = 1.0
         },
         "dust": {
             "type": "two_component",

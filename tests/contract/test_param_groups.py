@@ -44,7 +44,7 @@ class TestWildcard:
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
-        # dpl has: alpha, beta, tau_gyr, log_peak_sfr
+        # dpl has: alpha, beta, tau_gyr, log_total_mass
         assert "sfh_dpl_alpha" in params.free_params
         assert "sfh_dpl_beta" in params.free_params
         assert "sfh_dpl_tau_gyr" in params.free_params
@@ -127,7 +127,7 @@ class TestEquivalence:
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Fixed(1.0),
-            # tau_gyr and log_peak_sfr should be free via registry defaults
+            # tau_gyr and log_total_mass should be free via registry defaults
             dust_model="two_component",
             dust_tau_bc=0.0,  # Registry default
             dust_tau_diff=0.0,  # Registry default

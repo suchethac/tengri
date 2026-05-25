@@ -55,7 +55,7 @@ SFH = {
     "alpha": 1.0,
     "beta": 2.0,
     "tau_gyr": 4.0,
-    "log_peak_sfr": 0.5,
+    "log_total_mass": 10.0,
 }
 
 ssp = tengri.load_ssp()

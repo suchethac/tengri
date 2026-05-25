@@ -124,7 +124,7 @@ kitchen_sink = dict(
     sfh={
         "type": "dpl",
         "*": FIXED,
-        "log_peak_sfr": 1.6,
+        "log_total_mass": 10.0,
         "alpha": 2.2,
         "beta": 1.4,
         "tau_gyr": 4.0,

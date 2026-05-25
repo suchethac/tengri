@@ -33,7 +33,7 @@ SFH = {
     "alpha": 3.0,
     "beta": 2.0,
     "tau_gyr": 0.3,
-    "log_peak_sfr": 1.5,
+    "log_total_mass": 10.0,
 }
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
 

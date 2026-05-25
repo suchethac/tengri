@@ -64,7 +64,7 @@ SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.1,
-    "log_peak_sfr": 1.0,
+    "log_total_mass": 10.0,
     "alpha": 2.5,
     "beta": 1.5,
 }

@@ -124,7 +124,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 1.0,
-        "log_peak_sfr": -2.0,  # Very faint host
+        "log_total_mass": 10.0,  # Very faint host
         "alpha": 1.0,
         "beta": 1.0,
     },

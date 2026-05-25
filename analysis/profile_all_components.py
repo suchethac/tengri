@@ -9,14 +9,12 @@ Usage::
     python analysis/profile_all_components.py
 """
 
-import gc
 import sys
 import time
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 
@@ -85,7 +83,7 @@ print("DIFFSED COMPREHENSIVE COMPONENT PROFILING")
 print("=" * 80)
 print(f"\nPlatform: {sys.platform}, JAX backend: {jax.default_backend()}")
 print(f"JAX version: {jax.__version__}")
-print(f"Float precision: float64 (jax_enable_x64=True)")
+print("Float precision: float64 (jax_enable_x64=True)")
 
 from tengri import (
     Fixed,
@@ -109,11 +107,15 @@ if not Path(ssp_path).exists():
         sys.exit(1)
 
 ssp = load_ssp_data(ssp_path)
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
-print(f"SSP shape: {ssp.ssp_flux.shape} "
-      f"({ssp.ssp_flux.shape[0]} met × {ssp.ssp_flux.shape[1]} age × "
-      f"{ssp.ssp_flux.shape[2]} wave)")
+print(
+    f"SSP shape: {ssp.ssp_flux.shape} "
+    f"({ssp.ssp_flux.shape[0]} met × {ssp.ssp_flux.shape[1]} age × "
+    f"{ssp.ssp_flux.shape[2]} wave)"
+)
 print(f"SSP memory (float64): {array_mb(ssp.ssp_flux):.1f} MB")
 
 # ===================================================================
@@ -134,23 +136,29 @@ f32_mb = f64_mb / 2
 print(f"{'Raw SSP templates':<50s} {shape_str:<25s} {f64_mb:>10.1f} {f32_mb:>10.1f}")
 
 # SSP wavelength grid
-print(f"{'SSP wavelength grid':<50s} {'(' + str(ssp.ssp_wave.shape[0]) + ',)':<25s} "
-      f"{array_mb(ssp.ssp_wave):>10.3f} {array_mb(ssp.ssp_wave)/2:>10.3f}")
+print(
+    f"{'SSP wavelength grid':<50s} {'(' + str(ssp.ssp_wave.shape[0]) + ',)':<25s} "
+    f"{array_mb(ssp.ssp_wave):>10.3f} {array_mb(ssp.ssp_wave) / 2:>10.3f}"
+)
 
 # SSP metallicity grid
-print(f"{'SSP metallicity grid':<50s} {'(' + str(ssp.ssp_lgmet.shape[0]) + ',)':<25s} "
-      f"{array_mb(ssp.ssp_lgmet):>10.3f} {array_mb(ssp.ssp_lgmet)/2:>10.3f}")
+print(
+    f"{'SSP metallicity grid':<50s} {'(' + str(ssp.ssp_lgmet.shape[0]) + ',)':<25s} "
+    f"{array_mb(ssp.ssp_lgmet):>10.3f} {array_mb(ssp.ssp_lgmet) / 2:>10.3f}"
+)
 
 # SSP age grid
-print(f"{'SSP log-age grid':<50s} {'(' + str(ssp.ssp_lg_age_gyr.shape[0]) + ',)':<25s} "
-      f"{array_mb(ssp.ssp_lg_age_gyr):>10.3f} {array_mb(ssp.ssp_lg_age_gyr)/2:>10.3f}")
+print(
+    f"{'SSP log-age grid':<50s} {'(' + str(ssp.ssp_lg_age_gyr.shape[0]) + ',)':<25s} "
+    f"{array_mb(ssp.ssp_lg_age_gyr):>10.3f} {array_mb(ssp.ssp_lg_age_gyr) / 2:>10.3f}"
+)
 
 # Precomputed photometry
 spec_smooth = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -163,23 +171,24 @@ if model_smooth._precomp is not None:
     pc = model_smooth._precomp
     pc_shape = f"{pc.ssp_phot.shape}"
     pc_mb = array_mb(pc.ssp_phot)
-    print(f"{'Precomp phot (fixed z)':<50s} {pc_shape:<25s} "
-          f"{pc_mb:>10.3f} {pc_mb/2:>10.3f}")
+    print(f"{'Precomp phot (fixed z)':<50s} {pc_shape:<25s} {pc_mb:>10.3f} {pc_mb / 2:>10.3f}")
     if hasattr(pc, "eff_waves_rest"):
-        print(f"{'  Effective wavelengths (rest)':<50s} {'(' + str(len(pc.eff_waves_rest)) + ',)':<25s} "
-              f"{array_mb(pc.eff_waves_rest):>10.3f} {'—':>10s}")
+        print(
+            f"{'  Effective wavelengths (rest)':<50s} {'(' + str(len(pc.eff_waves_rest)) + ',)':<25s} "
+            f"{array_mb(pc.eff_waves_rest):>10.3f} {'—':>10s}"
+        )
 
 # Z-table
 try:
     from tengri.sps.precompute import precompute_photometry_ztable
+
     n_z = 200
     fw_list = list(obs.photometry.filter_waves)
     ft_list = list(obs.photometry.filter_trans)
     ztab = precompute_photometry_ztable(ssp, fw_list, ft_list, z_min=0.01, z_max=3.0, n_z=n_z)
     zt_shape = f"{ztab.ssp_phot_table.shape}"
     zt_mb = array_mb(ztab.ssp_phot_table)
-    print(f"{'Z-table (n_z={n_z})':<50s} {zt_shape:<25s} "
-          f"{zt_mb:>10.1f} {zt_mb/2:>10.1f}")
+    print(f"{'Z-table (n_z={n_z})':<50s} {zt_shape:<25s} {zt_mb:>10.1f} {zt_mb / 2:>10.1f}")
 except Exception as e:
     print(f"{'Z-table':<50s} {'(skipped: ' + str(e)[:40] + ')':<25s}")
 
@@ -192,14 +201,17 @@ try:
         sp = model_spec._spec_precomp
         sp_shape = f"{sp.ssp_on_pixels.shape}"
         sp_mb = array_mb(sp.ssp_on_pixels)
-        print(f"{'Precomp spec (200 pix, fixed z)':<50s} {sp_shape:<25s} "
-              f"{sp_mb:>10.3f} {sp_mb/2:>10.3f}")
+        print(
+            f"{'Precomp spec (200 pix, fixed z)':<50s} {sp_shape:<25s} "
+            f"{sp_mb:>10.3f} {sp_mb / 2:>10.3f}"
+        )
 except Exception as e:
     print(f"{'Spec precomp':<50s} {'(skipped: ' + str(e)[:40] + ')':<25s}")
 
 # CUE weights
 try:
     from tengri.nebular.cue import load_cue_weights
+
     cue_path = Path("data/cue_weights.npz")
     if cue_path.exists():
         cue_w = load_cue_weights(str(cue_path))
@@ -213,8 +225,10 @@ try:
                 for item in val:
                     if hasattr(item, "nbytes"):
                         cue_total += item.nbytes / 1e6
-        print(f"{'CUE neural emulator weights':<50s} {'(16 sub-nets + cont.)':<25s} "
-              f"{cue_total:>10.3f} {'—':>10s}")
+        print(
+            f"{'CUE neural emulator weights':<50s} {'(16 sub-nets + cont.)':<25s} "
+            f"{cue_total:>10.3f} {'—':>10s}"
+        )
     else:
         print(f"{'CUE weights':<50s} {'(not found)':>25s}")
 except Exception as e:
@@ -224,27 +238,33 @@ except Exception as e:
 filter_mb = 0.0
 for fw_i, ft_i in zip(obs.photometry.filter_waves, obs.photometry.filter_trans):
     filter_mb += array_mb(fw_i) + array_mb(ft_i)
-print(f"{'Filter curves (5 SDSS bands)':<50s} {'(5 × ~1000 pts)':<25s} "
-      f"{filter_mb:>10.3f} {'—':>10s}")
+print(
+    f"{'Filter curves (5 SDSS bands)':<50s} {'(5 × ~1000 pts)':<25s} {filter_mb:>10.3f} {'—':>10s}"
+)
 
 # Dust age weights
-if hasattr(model_smooth, '_dust_age_weights') and model_smooth._dust_age_weights is not None:
+if hasattr(model_smooth, "_dust_age_weights") and model_smooth._dust_age_weights is not None:
     daw = model_smooth._dust_age_weights
-    print(f"{'Precomp dust age weights':<50s} {'(' + str(daw.shape[0]) + ',)':<25s} "
-          f"{array_mb(daw):>10.3f} {'—':>10s}")
+    print(
+        f"{'Precomp dust age weights':<50s} {'(' + str(daw.shape[0]) + ',)':<25s} "
+        f"{array_mb(daw):>10.3f} {'—':>10s}"
+    )
 
 # DL07 templates
 try:
     dl07_path = Path("data/dl07_templates.h5")
     if dl07_path.exists():
         import h5py
+
         with h5py.File(dl07_path, "r") as f:
             dl07_size = sum(f[k].nbytes for k in f.keys() if hasattr(f[k], "nbytes"))
             # Try to get the grid shape
             for k in f.keys():
-                if hasattr(f[k], 'shape') and len(f[k].shape) >= 3:
-                    print(f"{'DL07 tabulated templates':<50s} {str(f[k].shape):<25s} "
-                          f"{f[k].nbytes/1e6:>10.1f} {'—':>10s}")
+                if hasattr(f[k], "shape") and len(f[k].shape) >= 3:
+                    print(
+                        f"{'DL07 tabulated templates':<50s} {f[k].shape!s:<25s} "
+                        f"{f[k].nbytes / 1e6:>10.1f} {'—':>10s}"
+                    )
                     break
 except Exception:
     pass
@@ -279,14 +299,26 @@ from tengri.sfh.mean_sfh import (
 age_grid = model_smooth.age_yr
 
 sfh_models = {
-    "SFH: dpl (double power law)": lambda: dpl(age_grid, alpha=1.5, beta=1.0, tau=5e9, log_peak_sfr=1.0),
-    "SFH: tsnorm (trunc skew-normal)": lambda: tsnorm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.5, trunc=3.0),
-    "SFH: snorm (skew-normal)": lambda: snorm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.5),
-    "SFH: norm (Gaussian)": lambda: norm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9),
-    "SFH: lnorm (log-normal)": lambda: lnorm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=0.5),
-    "SFH: const (constant)": lambda: constant_sfh(age_grid, log_total_mass=0.7, start=1e9, end=10e9),
-    "SFH: exp (exponential)": lambda: exponential_sfh(age_grid, log_peak_sfr=1.0, tau=3e9),
-    "SFH: dexp (delayed exp.)": lambda: delayed_exponential_sfh(age_grid, log_peak_sfr=1.0, tau=3e9),
+    "SFH: dpl (double power law)": lambda: dpl(
+        age_grid, alpha=1.5, beta=1.0, tau=5e9, log_total_mass=1.0
+    ),
+    "SFH: tsnorm (trunc skew-normal)": lambda: tsnorm(
+        age_grid, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.5, trunc=3.0
+    ),
+    "SFH: snorm (skew-normal)": lambda: snorm(
+        age_grid, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.5
+    ),
+    "SFH: norm (Gaussian)": lambda: norm(age_grid, log_total_mass=1.0, peak_lbt=5e9, width=2e9),
+    "SFH: lnorm (log-normal)": lambda: lnorm(
+        age_grid, log_total_mass=1.0, peak_lbt=5e9, width=0.5
+    ),
+    "SFH: const (constant)": lambda: constant_sfh(
+        age_grid, log_total_mass=0.7, start=1e9, end=10e9
+    ),
+    "SFH: exp (exponential)": lambda: exponential_sfh(age_grid, log_total_mass=1.0, tau=3e9),
+    "SFH: dexp (delayed exp.)": lambda: delayed_exponential_sfh(
+        age_grid, log_total_mass=1.0, tau=3e9
+    ),
 }
 
 for name, fn in sfh_models.items():
@@ -294,11 +326,30 @@ for name, fn in sfh_models.items():
     # Gradient of sum w.r.t. a scalar param
     try:
         if "dpl" in name:
-            grad_fn = jax.jit(jax.grad(lambda a: jnp.sum(dpl(age_grid, alpha=a, beta=1.0, tau=5e9, log_peak_sfr=1.0))))
+            grad_fn = jax.jit(
+                jax.grad(
+                    lambda a: jnp.sum(
+                        dpl(age_grid, alpha=a, beta=1.0, tau=5e9, log_total_mass=1.0)
+                    )
+                )
+            )
             _ = grad_fn(1.5)
             t_grad, _ = bench(lambda: grad_fn(1.5), n=500)
         elif "tsnorm" in name:
-            grad_fn = jax.jit(jax.grad(lambda s: jnp.sum(tsnorm(age_grid, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=s, trunc=3.0))))
+            grad_fn = jax.jit(
+                jax.grad(
+                    lambda s: jnp.sum(
+                        tsnorm(
+                            age_grid,
+                            log_total_mass=1.0,
+                            peak_lbt=5e9,
+                            width=2e9,
+                            skew=s,
+                            trunc=3.0,
+                        )
+                    )
+                )
+            )
             _ = grad_fn(0.5)
             t_grad, _ = bench(lambda: grad_fn(0.5), n=500)
         else:
@@ -329,8 +380,9 @@ from tengri.sps.dsps_wrapper import (
     interpolate_metallicity,
 )
 
-sfr_on_ssp = jnp.interp(model_smooth.ssp_log_ages_yr, model_smooth.log_age_grid,
-                         model_smooth._compute_sfr(p))
+sfr_on_ssp = jnp.interp(
+    model_smooth.ssp_log_ages_yr, model_smooth.log_age_grid, model_smooth._compute_sfr(p)
+)
 t_w, weights = bench(lambda: compute_csp_weights(sfr_on_ssp, model_smooth.ssp_ages_yr), n=500)
 print(format_row("CSP weights (trapezoid)", t_w, None, array_mb(weights)))
 
@@ -341,8 +393,8 @@ t_met, ssp_at_z = bench(
 print(format_row("Metallicity interpolation", t_met, None, array_mb(ssp_at_z)))
 
 from tengri.dust.attenuation import two_component_dust
-dust_atten = two_component_dust(ssp.ssp_wave, model_smooth.ssp_ages_yr,
-                                 p["tau_bc"], p["tau_diff"])
+
+dust_atten = two_component_dust(ssp.ssp_wave, model_smooth.ssp_ages_yr, p["tau_bc"], p["tau_diff"])
 
 t_sed, sed = bench(
     lambda: compute_csp_sed(weights, ssp_at_z, dust_atten),
@@ -358,17 +410,30 @@ for law_name in ["power_law", "calzetti", "kriek_conroy", "smc", "cardelli", "sa
     if law_name not in DUST_LAWS:
         continue
     fn = lambda ln=law_name: two_component_dust(
-        ssp.ssp_wave, model_smooth.ssp_ages_yr,
-        p["tau_bc"], p["tau_diff"],
-        law_bc=ln, law_diff=ln, n_slope=p["dust_slope"],
+        ssp.ssp_wave,
+        model_smooth.ssp_ages_yr,
+        p["tau_bc"],
+        p["tau_diff"],
+        law_bc=ln,
+        law_diff=ln,
+        n_slope=p["dust_slope"],
     )
     t_fwd, r = bench(fn, n=200)
-    grad_fn = jax.jit(jax.grad(
-        lambda tv, ln=law_name: jnp.sum(two_component_dust(
-            ssp.ssp_wave, model_smooth.ssp_ages_yr,
-            tv, p["tau_diff"], law_bc=ln, law_diff=ln, n_slope=p["dust_slope"],
-        ))
-    ))
+    grad_fn = jax.jit(
+        jax.grad(
+            lambda tv, ln=law_name: jnp.sum(
+                two_component_dust(
+                    ssp.ssp_wave,
+                    model_smooth.ssp_ages_yr,
+                    tv,
+                    p["tau_diff"],
+                    law_bc=ln,
+                    law_diff=ln,
+                    n_slope=p["dust_slope"],
+                )
+            )
+        )
+    )
     _ = grad_fn(p["tau_bc"])
     t_grad, _ = bench(lambda: grad_fn(p["tau_bc"]), n=200)
     print(format_row(f"Dust attenuation ({law_name})", t_fwd, t_grad, array_mb(r)))
@@ -384,12 +449,13 @@ for em_name in ["modified_blackbody", "dale2014"]:
     if em_name not in DUST_EMISSION_MODELS:
         continue
     em_fn = DUST_EMISSION_MODELS[em_name]
-    fn = lambda efn=em_fn: efn(wave, L_absorbed, dust_T=35.0, dust_beta_ir=1.6,
-                                dust_alpha_dale=2.0)
+    fn = lambda efn=em_fn: efn(
+        wave, L_absorbed, dust_T=35.0, dust_beta_ir=1.6, dust_alpha_dale=2.0
+    )
     t_fwd, r = bench(fn, n=200)
-    grad_fn = jax.jit(jax.grad(
-        lambda T, efn=em_fn: jnp.sum(efn(wave, L_absorbed, dust_T=T, dust_beta_ir=1.6))
-    ))
+    grad_fn = jax.jit(
+        jax.grad(lambda T, efn=em_fn: jnp.sum(efn(wave, L_absorbed, dust_T=T, dust_beta_ir=1.6)))
+    )
     _ = grad_fn(35.0)
     t_grad, _ = bench(lambda: grad_fn(35.0), n=200)
     print(format_row(f"Dust emission ({em_name})", t_fwd, t_grad, array_mb(r)))
@@ -402,9 +468,13 @@ for em_name in ["draine_li2007", "draine_li2014"]:
     fn = lambda efn=em_fn: efn(wave, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
     t_fwd, r = bench(fn, n=100)
     try:
-        grad_fn = jax.jit(jax.grad(
-            lambda u, efn=em_fn: jnp.sum(efn(wave, L_absorbed, dust_umin=u, dust_gamma_dl=0.01, dust_qpah=2.5))
-        ))
+        grad_fn = jax.jit(
+            jax.grad(
+                lambda u, efn=em_fn: jnp.sum(
+                    efn(wave, L_absorbed, dust_umin=u, dust_gamma_dl=0.01, dust_qpah=2.5)
+                )
+            )
+        )
         _ = grad_fn(1.0)
         t_grad, _ = bench(lambda: grad_fn(1.0), n=100)
     except Exception:
@@ -431,22 +501,31 @@ if cue_path.exists():
     cue_weights = load_cue_weights(str(cue_path))
 
     # CUE: 12 NN params + gas_logq + gas_logqion
-    nn_params = jnp.array([
-        0.5, -0.3, 0.1, -0.2,   # ionspec indices
-        0.5, -0.1, 0.2,          # ionspec log-ratios
-        -3.0,                     # gas_logu
-        2.0,                      # gas_logn
-        -1.0,                     # gas_logz
-        -0.5,                     # gas_logno
-        0.0,                      # gas_logco
-    ])
+    nn_params = jnp.array(
+        [
+            0.5,
+            -0.3,
+            0.1,
+            -0.2,  # ionspec indices
+            0.5,
+            -0.1,
+            0.2,  # ionspec log-ratios
+            -3.0,  # gas_logu
+            2.0,  # gas_logn
+            -1.0,  # gas_logz
+            -0.5,  # gas_logno
+            0.0,  # gas_logco
+        ]
+    )
     gas_logq = jnp.array(45.0)
     gas_logqion = jnp.array(44.0)
 
     # Lines
     fn_lines = jax.jit(lambda: predict_all_lines(nn_params, cue_weights, gas_logq, gas_logqion))
     t_lines, r_lines = bench(fn_lines, n=200)
-    grad_lines = jax.jit(jax.grad(lambda x: jnp.sum(predict_all_lines(x, cue_weights, gas_logq, gas_logqion)[1])))
+    grad_lines = jax.jit(
+        jax.grad(lambda x: jnp.sum(predict_all_lines(x, cue_weights, gas_logq, gas_logqion)[1]))
+    )
     _ = grad_lines(nn_params)
     t_glines, _ = bench(lambda: grad_lines(nn_params), n=200)
     print(format_row("CUE lines (16 batched nets)", t_lines, t_glines))
@@ -454,7 +533,9 @@ if cue_path.exists():
     # Continuum
     fn_cont = jax.jit(lambda: predict_continuum(nn_params, cue_weights, gas_logq, gas_logqion))
     t_cont, r_cont = bench(fn_cont, n=200)
-    grad_cont = jax.jit(jax.grad(lambda x: jnp.sum(predict_continuum(x, cue_weights, gas_logq, gas_logqion)[1])))
+    grad_cont = jax.jit(
+        jax.grad(lambda x: jnp.sum(predict_continuum(x, cue_weights, gas_logq, gas_logqion)[1]))
+    )
     _ = grad_cont(nn_params)
     t_gcont, _ = bench(lambda: grad_cont(nn_params), n=200)
     print(format_row("CUE continuum (1 net)", t_cont, t_gcont))
@@ -557,7 +638,7 @@ spec_min = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -572,7 +653,7 @@ spec_igm = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -587,7 +668,7 @@ spec_mbb = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -605,7 +686,7 @@ spec_cal = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -622,7 +703,7 @@ try:
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -640,7 +721,7 @@ spec_stoch = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     sfh_field_psd_sigma=Uniform(0.01, 1.0),
     sfh_field_psd_tau_myr=Uniform(10, 500),
     met_logzsol=Uniform(-2.0, 0.5),
@@ -658,6 +739,7 @@ print(f"\n{'Configuration':<42s} {'Forward':>10s} {'Gradient':>10s} {'D':>4s} {'
 print("-" * 80)
 
 import warnings
+
 for name, spec, precomp, kwargs in configs:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -675,7 +757,11 @@ for name, spec, precomp, kwargs in configs:
             t_grad, _ = bench(lambda: grad_fn(par), n=200)
 
             n_free = len(spec.free_params)
-            path = "FUSED" if (m._precomp is not None and m._fused_photometry is not None) else "EXACT"
+            path = (
+                "FUSED"
+                if (m._precomp is not None and m._fused_photometry is not None)
+                else "EXACT"
+            )
             row = f"  {name:<42s} {t_fwd:>8.1f} μs {t_grad:>8.1f} μs {n_free:>4d} {path:>8s}"
             print(row)
         except Exception as e:
@@ -720,8 +806,13 @@ t5, ssp_z_ex = bench(
 
 # 6. Dust atten
 t6, dust_ex = bench(
-    lambda: two_component_dust(ssp.ssp_wave, model_exact.ssp_ages_yr,
-                                p_ex["tau_bc"], p_ex["tau_diff"], n_slope=p_ex["dust_slope"]),
+    lambda: two_component_dust(
+        ssp.ssp_wave,
+        model_exact.ssp_ages_yr,
+        p_ex["tau_bc"],
+        p_ex["tau_diff"],
+        n_slope=p_ex["dust_slope"],
+    ),
     n=200,
 )
 
@@ -730,8 +821,12 @@ t7, sed_ex = bench(lambda: compute_csp_sed(w_ex, ssp_z_ex, dust_ex), n=200)
 
 # 8. Photometry
 t8, _ = bench(
-    lambda: jnp.array([compute_flux_density(sed_ex, ssp.ssp_wave, fwi, fti, 0.1, dl_cm)
-                        for fwi, fti in zip(fw, ft)]),
+    lambda: jnp.array(
+        [
+            compute_flux_density(sed_ex, ssp.ssp_wave, fwi, fti, 0.1, dl_cm)
+            for fwi, fti in zip(fw, ft)
+        ]
+    ),
     n=100,
 )
 

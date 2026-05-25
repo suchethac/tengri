@@ -39,7 +39,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+        "log_total_mass": 10.0, 2.5),
         "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
         "width_gyr": tengri.Uniform(0.3, 5.0),
         "skew": tengri.Uniform(-1.0, 1.5),
@@ -58,7 +58,7 @@ model = tengri.SEDModel.build(
 # Generate mock data
 key = jax.random.PRNGKey(42)
 truth_params = {
-    "sfh_tsnorm_log_peak_sfr": 0.8,
+    "sfh_tsnorm_log_total_mass": 0.8,
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
     "sfh_tsnorm_width_gyr": 1.5,
     "sfh_tsnorm_skew": 0.3,

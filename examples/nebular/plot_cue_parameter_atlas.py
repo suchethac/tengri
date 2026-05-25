@@ -51,7 +51,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     },

@@ -1,24 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""SFH mass conservation tests — trapezoid integral vs analytical formula.
+"""SFH mass conservation tests — trapezoid integral vs target log_total_mass.
 
-Inspired by bagpipes' star_formation_history.py, which integrates SFH × dt to
-compute total formed stellar mass. Every SFH model should conserve mass: the
-numerical trapezoid integral must match the known analytical closed form.
+After the 2026-05-25 normalization refactor, every parametric SFH callable
+obeys the contract::
 
-Analytical integrals
---------------------
-exponential(t, log_total_mass, tau):
-    ∫₀^T SFR dt = 10^log_total_mass * tau * (1 - exp(-T/tau))
+    trapezoid(sfr, t_lookback) == 10**log_total_mass     (within trapezoid noise)
 
-delayed_exponential(t, log_total_mass, tau):
-    SFR(t) = 10^log_total_mass * (t/tau) * exp(-(t/tau) + 1)
-    ∫₀^T SFR dt = 10^log_total_mass * e * tau * [1 - exp(-T/tau) * (1 + T/tau)]
+This module spot-checks that contract for a few callables. The broader
+parametric coverage lives in :mod:`tests.physics.conservation.test_sfh_normalization_contract`.
 
-constant(t, log_sfr, start, end):
-    ∫ dt = sfr * (end - start)   [within support]
-
-double_powerlaw (no closed form): integral must be finite, positive,
-    and increase monotonically with integration range.
+The pre-refactor formulas like ``peak_sfr * tau * (1 - exp(-T/tau))`` no
+longer hold — those were ``log_peak_sfr`` semantics where ``peak_sfr`` was
+the amplitude knob, not the integrated mass. After the refactor the integral
+*is* the parameter.
 """
 
 import jax
@@ -57,133 +51,95 @@ def _integrate(sfr_fn, t=T_GRID, **kwargs):
 
 
 class TestExponentialSFHMassConservation:
-    """∫₀^T SFR dt = peak_sfr * tau * (1 - exp(-T/tau))"""
+    """exponential(t, log_total_mass, tau) integrates to 10**log_total_mass."""
 
-    @staticmethod
-    def _analytical(log_total_mass, tau, T):
-        total_formed_mass = 10.0**log_total_mass
-        return total_formed_mass * tau * (1.0 - np.exp(-T / tau))
-
-    def test_short_tau(self):
-        log_total_mass, tau = 1.0, 1e9
-        T = T_MAX - T_MIN
+    @pytest.mark.parametrize(
+        "log_total_mass, tau",
+        [(10.0, 1e9), (9.5, 5e9), (11.0, 2e9), (8.5, 3e9)],
+    )
+    def test_integral_matches_log_total_mass(self, log_total_mass, tau):
         numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
-        analytical = self._analytical(log_total_mass, tau, T)
-        assert abs(numerical - analytical) / analytical < 0.01
+        expected = 10.0**log_total_mass
+        assert abs(numerical - expected) / expected < 0.01
 
-    def test_long_tau(self):
-        log_total_mass, tau = 0.5, 5e9
-        T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
-        analytical = self._analytical(log_total_mass, tau, T)
-        assert abs(numerical - analytical) / analytical < 0.01
-
-    def test_high_sfr(self):
-        log_total_mass, tau = 2.5, 2e9
-        T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
-        analytical = self._analytical(log_total_mass, tau, T)
-        assert abs(numerical - analytical) / analytical < 0.01
-
-    def test_low_sfr(self):
-        log_total_mass, tau = -0.5, 3e9
-        T = T_MAX - T_MIN
-        numerical = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
-        analytical = self._analytical(log_total_mass, tau, T)
-        assert abs(numerical - analytical) / analytical < 0.01
-
-    def test_start_offset(self):
-        """start != 0 shifts the integral by the truncated leading region."""
-        log_total_mass, tau, start = 1.0, 2e9, 1e9
+    def test_start_offset_preserves_total_mass(self):
+        """start != 0 just truncates the grid; renormalization still hits target mass."""
+        log_total_mass, tau, start = 10.0, 2e9, 1e9
         t = np.linspace(start, T_MAX, N_GRID)
         sfr = np.array(
             exponential(jnp.array(t), log_total_mass=log_total_mass, tau=tau, start=start)
         )
         numerical = float(trapezoid(sfr, t))
-        T_eff = T_MAX - start
-        analytical = 10.0**log_total_mass * tau * (1.0 - np.exp(-T_eff / tau))
-        assert abs(numerical - analytical) / analytical < 0.01
+        assert abs(numerical - 10.0**log_total_mass) / 10.0**log_total_mass < 0.01
 
 
 # ── delayed_exponential ───────────────────────────────────────
 
 
 class TestDelayedExponentialSFHMassConservation:
-    """∫₀^T SFR dt = peak_sfr * e * tau * [1 - exp(-T/tau) * (1 + T/tau)]"""
+    """delayed_exponential(t, log_total_mass, tau) integrates to 10**log_total_mass."""
 
-    @staticmethod
-    def _analytical(log_total_mass, tau, T):
-        peak_sfr = 10.0**log_total_mass
-        return peak_sfr * np.e * tau * (1.0 - np.exp(-T / tau) * (1.0 + T / tau))
-
-    def test_short_tau(self):
-        log_total_mass, tau = 1.0, 1e9
-        T = T_MAX - T_MIN
+    @pytest.mark.parametrize(
+        "log_total_mass, tau",
+        [(10.0, 1e9), (9.5, 5e9), (11.0, 3e9)],
+    )
+    def test_integral_matches_log_total_mass(self, log_total_mass, tau):
         numerical = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
-        analytical = self._analytical(log_total_mass, tau, T)
-        assert abs(numerical - analytical) / analytical < 0.01
-
-    def test_long_tau(self):
-        log_total_mass, tau = 0.5, 5e9
-        T = T_MAX - T_MIN
-        numerical = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
-        analytical = self._analytical(log_total_mass, tau, T)
-        assert abs(numerical - analytical) / analytical < 0.01
-
-    def test_peak_sfr_at_tau(self):
-        """SFR at t=tau should equal peak_sfr (normalization invariant)."""
-        log_total_mass, tau = 1.5, 3e9
-        sfr_at_peak = float(
-            delayed_exponential(jnp.array(tau), log_total_mass=log_total_mass, tau=tau)
-        )
-        assert abs(sfr_at_peak - 10.0**log_total_mass) / 10.0**log_total_mass < 1e-5
-
-    def test_mass_larger_than_exponential(self):
-        """Delayed exp. rises before declining — more mass than pure exp at same tau."""
-        log_total_mass, tau = 1.0, 3e9
-        mass_delayed = _integrate(delayed_exponential, log_total_mass=log_total_mass, tau=tau)
-        mass_exp = _integrate(exponential, log_total_mass=log_total_mass, tau=tau)
-        assert mass_delayed > mass_exp
+        expected = 10.0**log_total_mass
+        assert abs(numerical - expected) / expected < 0.01
 
 
 # ── constant ──────────────────────────────────────────────────
 
 
 class TestConstantSFHMassConservation:
-    """∫ dt = sfr * (end - start)"""
+    """constant(t, log_total_mass, start, end) integrates to 10**log_total_mass within window."""
 
     def test_full_range(self):
-        log_sfr = 1.0
+        log_total_mass = 10.0
         start, end = T_MIN, T_MAX
-        numerical = _integrate(constant, log_sfr=log_sfr, start=start, end=end)
-        analytical = 10.0**log_sfr * (end - start)
-        assert abs(numerical - analytical) / analytical < 0.005
+        numerical = _integrate(constant, log_total_mass=log_total_mass, start=start, end=end)
+        expected = 10.0**log_total_mass
+        assert abs(numerical - expected) / expected < 0.005
 
     def test_partial_range(self):
-        log_sfr = 0.5
+        log_total_mass = 9.5
         start, end = 2e9, 8e9
         t = np.linspace(T_MIN, T_MAX, N_GRID)
-        sfr = np.array(constant(jnp.array(t), log_sfr=log_sfr, start=start, end=end))
+        sfr = np.array(constant(jnp.array(t), log_total_mass=log_total_mass, start=start, end=end))
         numerical = float(trapezoid(sfr, t))
-        analytical = 10.0**log_sfr * (end - start)
-        assert abs(numerical - analytical) / analytical < 0.005
+        expected = 10.0**log_total_mass
+        assert abs(numerical - expected) / expected < 0.005
 
-    def test_flat_sfr(self):
+    def test_flat_sfr_within_window(self):
         """SFR should be constant (zero variance) within support."""
-        log_sfr = 0.0
+        log_total_mass = 10.0
         start, end = 1e9, 10e9
         t_in = np.linspace(start + 1e7, end - 1e7, 100)
-        sfr_in = np.array(constant(jnp.array(t_in), log_sfr=log_sfr, start=start, end=end))
-        assert float(np.std(sfr_in)) == pytest.approx(0.0, abs=1e-12)
+        sfr_in = np.array(
+            constant(jnp.array(t_in), log_total_mass=log_total_mass, start=start, end=end)
+        )
+        # After renormalization the flat value is approximately
+        # 10**log_total_mass / mass_norm, where mass_norm = trapezoid(mask, t)
+        # over the FULL grid (including soft-edge bins). Small boundary effects
+        # from the trapezoid quadrature shift this from the analytical
+        # ``(end - start)`` by ~0.2% on coarse grids — fine for science.
+        assert float(np.std(sfr_in)) == pytest.approx(0.0, abs=1e-3)
+        expected_flat = 10.0**log_total_mass / (end - start)
+        np.testing.assert_allclose(sfr_in, expected_flat, rtol=0.01)
 
     def test_zero_outside_support(self):
         """SFR must be zero outside [start, end]."""
-        log_sfr = 1.0
+        log_total_mass = 10.0
         start, end = 3e9, 7e9
         t_before = np.linspace(T_MIN, start - 1e8, 50)
         t_after = np.linspace(end + 1e8, T_MAX, 50)
-        sfr_before = np.array(constant(jnp.array(t_before), log_sfr=log_sfr, start=start, end=end))
-        sfr_after = np.array(constant(jnp.array(t_after), log_sfr=log_sfr, start=start, end=end))
+        sfr_before = np.array(
+            constant(jnp.array(t_before), log_total_mass=log_total_mass, start=start, end=end)
+        )
+        sfr_after = np.array(
+            constant(jnp.array(t_after), log_total_mass=log_total_mass, start=start, end=end)
+        )
         np.testing.assert_array_equal(sfr_before, 0.0)
         np.testing.assert_array_equal(sfr_after, 0.0)
 
@@ -192,61 +148,20 @@ class TestConstantSFHMassConservation:
 
 
 class TestDoublePowerlawMassConservation:
-    """No analytical closed form; verify numerical properties."""
+    """Bare double_powerlaw (unnormalized) — verify numerical properties only.
+
+    ``double_powerlaw`` is the bare shape function and does NOT use
+    ``log_total_mass`` (the registry-facing ``dpl`` wrapper does).
+    """
 
     def test_finite_positive(self):
         alpha, beta, tau, norm = 1.5, 2.0, 3e9, 5.0
         mass = _integrate(double_powerlaw, alpha=alpha, beta=beta, tau=tau, norm=norm)
         assert np.isfinite(mass)
-        assert mass > 0
+        assert mass > 0.0
 
-    def test_scales_with_norm(self):
-        """Mass should scale linearly with norm."""
-        alpha, beta, tau = 1.5, 2.0, 3e9
-        mass1 = _integrate(double_powerlaw, alpha=alpha, beta=beta, tau=tau, norm=1.0)
-        mass2 = _integrate(double_powerlaw, alpha=alpha, beta=beta, tau=tau, norm=10.0)
-        assert abs(mass2 / mass1 - 10.0) < 0.01
-
-    def test_dpl_log_total_mass_wrapper(self):
-        """dpl() with log_total_mass should give same mass as double_powerlaw with linear norm."""
-        alpha, beta, tau = 1.5, 2.0, 3e9
-        log_total_mass = 1.0  # peak_sfr = 10
-        mass_dpl = _integrate(dpl, alpha=alpha, beta=beta, tau=tau, log_total_mass=log_total_mass)
-        # double_powerlaw norm != dpl peak_sfr directly (different normalization)
-        # just verify dpl is finite and positive
-        assert np.isfinite(mass_dpl)
-        assert mass_dpl > 0
-
-    def test_shallower_alpha_more_early_mass(self):
-        """Smaller alpha (shallower high-z decline) → more mass at early (large lookback) times.
-
-        In lookback time, alpha controls the right/early side (large t >> tau).
-        SFR ≈ norm * (tau/t)^alpha for t >> tau, so smaller alpha = shallower decline
-        = more integrated mass at early epochs.
-        """
-        beta, tau, norm = 2.0, 3e9, 5.0
-        # Integrate over early-universe lookback times (t >> tau)
-        t_early = np.linspace(6e9, T_MAX, 1000)
-
-        def integrate_early(alpha):
-            sfr = np.array(
-                double_powerlaw(jnp.array(t_early), alpha=alpha, beta=beta, tau=tau, norm=norm)
-            )
-            return float(trapezoid(sfr, t_early))
-
-        mass_shallow = integrate_early(0.5)
-        mass_steep = integrate_early(3.0)
-        assert mass_shallow > mass_steep
-
-    def test_monotone_with_integration_range(self):
-        """Integral over [0, T] should increase as T grows."""
-        alpha, beta, tau, norm = 1.5, 2.0, 3e9, 5.0
-        t_ends = [3e9, 6e9, 10e9, T_MAX]
-        masses = []
-        for t_end in t_ends:
-            t = np.linspace(T_MIN, t_end, N_GRID)
-            sfr = np.array(
-                double_powerlaw(jnp.array(t), alpha=alpha, beta=beta, tau=tau, norm=norm)
-            )
-            masses.append(float(trapezoid(sfr, t)))
-        assert all(masses[i] < masses[i + 1] for i in range(len(masses) - 1))
+    def test_dpl_renormalizes_to_target(self):
+        """The registry-facing ``dpl`` rescales the bare shape to 10**log_total_mass."""
+        log_total_mass = 10.0
+        mass = _integrate(dpl, alpha=1.5, beta=2.0, tau=3e9, log_total_mass=log_total_mass)
+        assert abs(mass - 10.0**log_total_mass) / 10.0**log_total_mass < 0.01

@@ -48,7 +48,7 @@ for i, age_gyr in enumerate(age_gyr_grid):
                 "alpha": 2.0,
                 "beta": 2.5,
                 "tau_gyr": age_gyr,
-                "log_peak_sfr": 1.0,
+                "log_total_mass": 10.0,
             },
             dust={
                 "type": "two_component",

@@ -18,7 +18,7 @@ like ``{'beta_': Uniform(1, 3)}`` surface only at construction time. The
 factories give per-variant signatures generated from the registry, so:
 
 - Hovering over ``builders.sfh.dpl`` in an IDE shows the real parameter
-  list (``alpha``, ``beta``, ``tau_gyr``, ``log_peak_sfr``).
+  list (``alpha``, ``beta``, ``tau_gyr``, ``log_total_mass``).
 - A typo (``beat=Uniform(1,3)``) is rejected immediately with a
   :class:`TypeError` listing valid parameter names.
 - The registry remains the canonical source — factories regenerate
@@ -32,7 +32,7 @@ Examples
 >>> # All params free unless overridden:
 >>> sfh_config = builders.sfh.dpl(defaults=FREE)
 >>> # Mix wildcard policy with explicit overrides:
->>> sfh_config = builders.sfh.dpl(defaults=FREE, log_peak_sfr=Fixed(1.0))
+>>> sfh_config = builders.sfh.dpl(defaults=FREE, log_total_mass=Fixed(10.0))
 
 The output is interchangeable with the dict form:
 

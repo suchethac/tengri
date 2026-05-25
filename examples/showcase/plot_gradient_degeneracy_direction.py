@@ -44,7 +44,7 @@ FIDUCIAL_PARAMS = {
     "sfh_dpl_alpha": 1.5,
     "sfh_dpl_beta": 2.0,
     "sfh_dpl_tau_gyr": 1.0,
-    "sfh_dpl_log_peak_sfr": 0.5,
+    "sfh_dpl_log_total_mass": 0.5,
     "dust_tau_bc": 0.3,
     "dust_tau_diff": 0.1,
     "redshift": 0.1,
@@ -85,7 +85,7 @@ noise = flux_fiducial / snr
 noise_inv = 1.0 / noise**2
 
 # Extract the two degenerate parameters
-free_names = ["sfh_dpl_log_peak_sfr", "dust_tau_bc"]
+free_names = ["sfh_dpl_log_total_mass", "dust_tau_bc"]
 flat_fiducial = np.array(
     [FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]]
 )

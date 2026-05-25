@@ -120,7 +120,7 @@ class TestSFHCompositionShortNames:
 
     def test_sfh_ambiguous_short_name_in_composition(self):
         """Ambiguous short name (exists in multiple types) uses full prefix name."""
-        # Both dpl and tsnorm have log_peak_sfr; using short name is ambiguous
+        # Both dpl and tsnorm have log_total_mass; using short name is ambiguous
         # Prefer using the full prefixed name instead
         params = parse_groups(
             sfh={

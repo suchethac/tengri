@@ -177,7 +177,7 @@ print(f"  n_data = {obs_joint.n_data} ({phot_obs.n_filters} phot + {N_PIX_SPEC} 
 # %%
 # Define model and truth parameters
 spec = Parameters(
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=10.0, 2.5),
     sfh_dpl_alpha=Uniform(0.1, 2.5),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
@@ -206,7 +206,7 @@ key = jax.random.PRNGKey(42)
 truth = spec.sample(key)
 truth = {
     **truth,
-    "sfh_dpl_log_peak_sfr": jnp.array(1.0),
+    "sfh_dpl_log_total_mass": jnp.array(1.0),
     "sfh_dpl_alpha": jnp.array(1.2),
     "met_logzsol": jnp.array(0.0),
     "dust_tau_bc": jnp.array(0.6),

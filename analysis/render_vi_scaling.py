@@ -47,14 +47,24 @@ TRUTH_TAU = 20.0
 METHODS = ("native_vi_linear", "native_vi_nonlinear")
 LABELS = {"native_vi_linear": "MGVI (linear)", "native_vi_nonlinear": "geoVI (nonlinear)"}
 COLORS = {"native_vi_linear": "#1f77b4", "native_vi_nonlinear": "#d62728"}
-LINESTYLES = {1: "-", 2: "--", 4: "-.", 8: ":", 16: (0, (1, 1)),
-              32: (0, (3, 1, 1, 1)), 64: (0, (5, 1)), 128: (0, (1, 3))}
+LINESTYLES = {
+    1: "-",
+    2: "--",
+    4: "-.",
+    8: ":",
+    16: (0, (1, 1)),
+    32: (0, (3, 1, 1, 1)),
+    64: (0, (5, 1)),
+    128: (0, (1, 3)),
+}
 
 
 def _series(rows, method, k, key):
-    sel = [r for r in rows if r["method"] == method
-           and r["forward_chunk_size"] == k
-           and r.get("wall_s_warm", -1) > 0]
+    sel = [
+        r
+        for r in rows
+        if r["method"] == method and r["forward_chunk_size"] == k and r.get("wall_s_warm", -1) > 0
+    ]
     sel.sort(key=lambda r: r["n_gal"])
     if not sel:
         return np.array([]), np.array([])
@@ -65,9 +75,9 @@ def _series(rows, method, k, key):
 
 
 def _constraint_series(rows, method, key, k=1):
-    sel = [r for r in rows if r["method"] == method
-           and r["forward_chunk_size"] == k
-           and r.get(key)]
+    sel = [
+        r for r in rows if r["method"] == method and r["forward_chunk_size"] == k and r.get(key)
+    ]
     sel.sort(key=lambda r: r["n_gal"])
     if not sel:
         return (np.array([]),) * 4
@@ -94,8 +104,15 @@ def render(rows: list[dict]) -> plt.Figure:
             n, t = _series(rows, method, k, "wall_s_warm")
             if n.size == 0:
                 continue
-            ax_t.plot(n, t, color=COLORS[method], linestyle=LINESTYLES.get(k, "-"),
-                      marker="o", markersize=4, label=f"{LABELS[method]}, K={k}")
+            ax_t.plot(
+                n,
+                t,
+                color=COLORS[method],
+                linestyle=LINESTYLES.get(k, "-"),
+                marker="o",
+                markersize=4,
+                label=f"{LABELS[method]}, K={k}",
+            )
     ax_t.set_xscale("log", base=2)
     ax_t.set_yscale("log")
     ax_t.set_ylim(10, 1000)
@@ -105,13 +122,21 @@ def render(rows: list[dict]) -> plt.Figure:
     ax_t.grid(True, which="both", alpha=0.3)
     # Reference horizontal lines at human time-scales.
     for sec, lbl in (
-        (30, "30 s"), (60, "1 min"), (120, "2 min"),
-        (180, "3 min"), (300, "5 min"),
+        (30, "30 s"),
+        (60, "1 min"),
+        (120, "2 min"),
+        (180, "3 min"),
+        (300, "5 min"),
     ):
         ax_t.axhline(sec, color="gray", linestyle="--", linewidth=0.8, alpha=0.6)
         ax_t.text(
-            0.98, sec, lbl,
-            color="gray", fontsize=7, va="bottom", ha="right",
+            0.98,
+            sec,
+            lbl,
+            color="gray",
+            fontsize=7,
+            va="bottom",
+            ha="right",
             transform=ax_t.get_yaxis_transform(),
         )
 
@@ -138,17 +163,26 @@ def render(rows: list[dict]) -> plt.Figure:
         # Slope fixed at 1 (linear in N) but anchored to the largest-N point;
         # extend the line across the full plotted N range so the eye can
         # see how the small-N points sit above the asymptote.
-        all_n = np.concatenate([
-            _series(rows, m, k, "wall_s_warm")[0]
-            for m in METHODS for k in ks
-            if _series(rows, m, k, "wall_s_warm")[0].size > 0
-        ])
+        all_n = np.concatenate(
+            [
+                _series(rows, m, k, "wall_s_warm")[0]
+                for m in METHODS
+                for k in ks
+                if _series(rows, m, k, "wall_s_warm")[0].size > 0
+            ]
+        )
         if all_n.size > 0:
             n_ref = np.array([all_n.min(), all_n.max()], dtype=float)
             t_ref = t0 * (n_ref / n0)
-            ax_t.plot(n_ref, t_ref, color="black", linestyle="-",
-                      linewidth=1.4, alpha=0.8,
-                      label=r"$\propto N$ (anchored at $N \geq 2048$)")
+            ax_t.plot(
+                n_ref,
+                t_ref,
+                color="black",
+                linestyle="-",
+                linewidth=1.4,
+                alpha=0.8,
+                label=r"$\propto N$ (anchored at $N \geq 2048$)",
+            )
 
     ax_t.legend(fontsize=7, loc="upper left", ncol=2)
 
@@ -158,8 +192,15 @@ def render(rows: list[dict]) -> plt.Figure:
             n, m = _series(rows, method, k, "rss_delta_gb")
             if n.size == 0:
                 continue
-            ax_m.plot(n, m, color=COLORS[method], linestyle=LINESTYLES.get(k, "-"),
-                      marker="s", markersize=4, label=f"{LABELS[method]}, K={k}")
+            ax_m.plot(
+                n,
+                m,
+                color=COLORS[method],
+                linestyle=LINESTYLES.get(k, "-"),
+                marker="s",
+                markersize=4,
+                label=f"{LABELS[method]}, K={k}",
+            )
     ax_m.axhline(30.0, color="k", linestyle=":", alpha=0.5, label="30 GB budget")
     ax_m.set_xscale("log", base=2)
     ax_m.set_xlabel("N (galaxies)")
@@ -174,14 +215,26 @@ def render(rows: list[dict]) -> plt.Figure:
             n, it = _series(rows, method, k, "n_iters_used_warm")
             if n.size == 0:
                 continue
-            ax_i.plot(n, it, color=COLORS[method], linestyle=LINESTYLES.get(k, "-"),
-                      marker="^", markersize=4, label=f"{LABELS[method]}, K={k}")
+            ax_i.plot(
+                n,
+                it,
+                color=COLORS[method],
+                linestyle=LINESTYLES.get(k, "-"),
+                marker="^",
+                markersize=4,
+                label=f"{LABELS[method]}, K={k}",
+            )
     not_conv = [r for r in rows if not r.get("converged", False)]
     if not_conv:
-        ax_i.scatter([r["n_gal"] for r in not_conv],
-                     [r["n_iters_used_warm"] for r in not_conv],
-                     marker="x", color="red", s=80, zorder=5,
-                     label="hit cap (NOT converged)")
+        ax_i.scatter(
+            [r["n_gal"] for r in not_conv],
+            [r["n_iters_used_warm"] for r in not_conv],
+            marker="x",
+            color="red",
+            s=80,
+            zorder=5,
+            label="hit cap (NOT converged)",
+        )
     cap = max((r["n_iters_max"] for r in rows), default=50)
     ax_i.axhline(cap, color="k", linestyle=":", alpha=0.5, label=f"cap = {cap}")
     ax_i.set_xscale("log", base=2)
@@ -201,8 +254,7 @@ def render(rows: list[dict]) -> plt.Figure:
             if n.size == 0:
                 continue
             ax.fill_between(n, p16, p84, color=COLORS[method], alpha=0.2)
-            ax.plot(n, med, color=COLORS[method], marker="o", markersize=4,
-                    label=LABELS[method])
+            ax.plot(n, med, color=COLORS[method], marker="o", markersize=4, label=LABELS[method])
         ax.axhline(truth, color="k", linestyle="--", alpha=0.7, label="truth")
         ax.set_xscale("log", base=2)
         ax.set_xlabel("N (galaxies)")
@@ -217,16 +269,18 @@ def render(rows: list[dict]) -> plt.Figure:
         if n.size == 0:
             continue
         width = (p84 - p16) / 2.0
-        ax_sig_err.plot(n, width, color=COLORS[method], marker="o", markersize=4,
-                        label=LABELS[method])
+        ax_sig_err.plot(
+            n, width, color=COLORS[method], marker="o", markersize=4, label=LABELS[method]
+        )
     # Anchor 1/sqrt(N) to whichever method has data first.
     for method in METHODS:
         ref_n, _, p16r, p84r = _constraint_series(rows, method, "psd_sigma_summary", k=1)
         if ref_n.size >= 2:
             w0 = (p84r[0] - p16r[0]) / 2.0
             ref = w0 * np.sqrt(ref_n[0] / ref_n)
-            ax_sig_err.plot(ref_n, ref, color="gray", linestyle=":",
-                            label=r"$1/\sqrt{N}$ reference")
+            ax_sig_err.plot(
+                ref_n, ref, color="gray", linestyle=":", label=r"$1/\sqrt{N}$ reference"
+            )
             break
     ax_sig_err.set_xscale("log", base=2)
     ax_sig_err.set_yscale("log")
@@ -249,10 +303,14 @@ def _render_placeholder() -> None:
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.axis("off")
     ax.text(
-        0.5, 0.5,
+        0.5,
+        0.5,
         f"Benchmark JSON not yet generated:\n  {RESULTS_PATH.name}\n\n"
         "Run bench/scripts/benchmark_vi_xlarge.py to produce it.",
-        ha="center", va="center", fontsize=11, family="monospace",
+        ha="center",
+        va="center",
+        fontsize=11,
+        family="monospace",
         bbox=dict(boxstyle="round,pad=0.7", fc="#f6f6f6", ec="#999"),
     )
     fig.savefig(FIG_PNG, dpi=120, bbox_inches="tight")
@@ -290,18 +348,26 @@ def watch_loop() -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--watch", action="store_true",
-                    help="Re-render whenever the JSON file changes "
-                         f"(every {WATCH_S}s).")
-    ap.add_argument("--rich-obs", action="store_true",
-                    help="Render the 10-band rich-observation benchmark "
-                         "(vi_scaling_benchmark_rich.json).")
-    ap.add_argument("--spec-obs", action="store_true",
-                    help="Render the spectroscopy benchmark "
-                         "(vi_scaling_benchmark_spec.json).")
-    ap.add_argument("--joint-obs", action="store_true",
-                    help="Render the joint photometry+lines benchmark "
-                         "(vi_scaling_benchmark_joint.json).")
+    ap.add_argument(
+        "--watch",
+        action="store_true",
+        help=f"Re-render whenever the JSON file changes (every {WATCH_S}s).",
+    )
+    ap.add_argument(
+        "--rich-obs",
+        action="store_true",
+        help="Render the 10-band rich-observation benchmark (vi_scaling_benchmark_rich.json).",
+    )
+    ap.add_argument(
+        "--spec-obs",
+        action="store_true",
+        help="Render the spectroscopy benchmark (vi_scaling_benchmark_spec.json).",
+    )
+    ap.add_argument(
+        "--joint-obs",
+        action="store_true",
+        help="Render the joint photometry+lines benchmark (vi_scaling_benchmark_joint.json).",
+    )
     args = ap.parse_args()
 
     global RESULTS_PATH, FIG_PNG, FIG_PDF

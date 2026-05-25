@@ -65,7 +65,7 @@ model_a = SEDModel.build(
         "type": "dexp",
         "*": tengri.FIXED,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,  # Will be tuned for magnitude match
+        "log_total_mass": 10.0,  # Will be tuned for magnitude match
     },
     dust={
         "type": "two_component",
@@ -99,7 +99,7 @@ model_b = SEDModel.build(
         "type": "dexp",
         "*": tengri.FIXED,
         "tau_gyr": 8.0,
-        "log_peak_sfr": 1.5,  # Will be tuned
+        "log_total_mass": 10.0,  # Will be tuned
     },
     dust={
         "type": "two_component",
@@ -134,7 +134,7 @@ model_c = SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 1.0,
         "width_gyr": 0.5,
-        "log_peak_sfr": 1.5,  # Will be tuned
+        "log_total_mass": 10.0,  # Will be tuned
     },
     dust={
         "type": "two_component",
@@ -155,9 +155,9 @@ baseline_c["dust_tau_diff"] = 0.3
 baseline_c["dust_slope"] = -0.7
 
 
-# Bisection helper to find log_peak_sfr that produces target r-band magnitude
-def _bisect_log_peak_sfr(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
-    """Binary search for log_peak_sfr that produces m_r = m_r_target."""
+# Bisection helper to find log_total_mass that produces target r-band magnitude
+def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
+    """Binary search for log_total_mass that produces m_r = m_r_target."""
     for iteration in range(30):
         mid = 0.5 * (lo + hi)
         params = {**baseline, sfh_param_name: mid}
@@ -182,20 +182,20 @@ def _bisect_log_peak_sfr(model, sfh_param_name, baseline, m_r_target, lo=-1.0, h
 
 # Tune each scenario to match target r-band magnitude
 print("\nTuning stellar masses to match r-band magnitude...")
-log_peak_sfr_a = _bisect_log_peak_sfr(model_a, "sfh_dexp_log_peak_sfr", baseline_a, m_r_target)
-baseline_a["sfh_dexp_log_peak_sfr"] = log_peak_sfr_a
+log_total_mass_a = _bisect_log_total_mass(model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target)
+baseline_a["sfh_dexp_log_total_mass"] = log_total_mass_a
 params_a = baseline_a
-print(f"  Scenario A: log_peak_sfr = {log_peak_sfr_a:.3f}")
+print(f"  Scenario A: log_total_mass=10.0)
 
-log_peak_sfr_b = _bisect_log_peak_sfr(model_b, "sfh_dexp_log_peak_sfr", baseline_b, m_r_target)
-baseline_b["sfh_dexp_log_peak_sfr"] = log_peak_sfr_b
+log_total_mass_b = _bisect_log_total_mass(model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target)
+baseline_b["sfh_dexp_log_total_mass"] = log_total_mass_b
 params_b = baseline_b
-print(f"  Scenario B: log_peak_sfr = {log_peak_sfr_b:.3f}")
+print(f"  Scenario B: log_total_mass=10.0)
 
-log_peak_sfr_c = _bisect_log_peak_sfr(model_c, "sfh_lnorm_log_peak_sfr", baseline_c, m_r_target)
-baseline_c["sfh_lnorm_log_peak_sfr"] = log_peak_sfr_c
+log_total_mass_c = _bisect_log_total_mass(model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target)
+baseline_c["sfh_lnorm_log_total_mass"] = log_total_mass_c
 params_c = baseline_c
-print(f"  Scenario C: log_peak_sfr = {log_peak_sfr_c:.3f}")
+print(f"  Scenario C: log_total_mass=10.0)
 
 # Predict photometry for all three scenarios
 print("\nComputing photometry predictions...")

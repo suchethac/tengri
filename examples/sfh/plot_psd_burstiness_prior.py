@@ -57,7 +57,7 @@ age_lookback_gyr = np.array(age_lookback_yr) / 1e9
 # --- Smooth mean SFH (shared across all panels) ---
 # Use a truncated skewed normal SFH peaked at 2 Gyr lookback
 mean_sfr = tengri.tsnorm(
-    age_lookback_yr, log_peak_sfr=0.5, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
+    age_lookback_yr, log_total_mass=10.0, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
 )
 sfr_mean = np.array(mean_sfr)
 

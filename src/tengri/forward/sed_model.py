@@ -18,7 +18,7 @@ Usage::
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -2778,7 +2778,7 @@ class SEDModel:
         ----------
         params : dict
             Parameter values using public parameter names (e.g.,
-            ``sfh_tsnorm_log_peak_sfr``, ``met_logzsol``, ``redshift``).
+            ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
 
         Returns
@@ -4720,7 +4720,7 @@ class SEDModel:
         wave_obs : array, optional
             Observed-frame wavelength array for spectroscopy.
         priors : dict, optional
-            Parameter priors. Keys may be short names (``"log_peak_sfr"``),
+            Parameter priors. Keys may be short names (``"log_total_mass"``),
             universal short names (``"logzsol"``), or full prefixed names.
             Short names are expanded automatically.
         **model_kwargs

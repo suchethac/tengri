@@ -35,7 +35,7 @@ model = tengri.SEDModel.build(
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     neb={"type": "cue", "*": tengri.FIXED, "neb_n_h": tengri.Uniform(1.0, 1e3)},

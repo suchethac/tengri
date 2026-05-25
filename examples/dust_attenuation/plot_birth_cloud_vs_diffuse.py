@@ -34,14 +34,19 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 C_AA_PER_S = 2.998e18
 
 ssp = tengri.load_ssp()
+<<<<<<< HEAD
 SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.3,
-    "log_peak_sfr": 1.5,
+    "log_total_mass": 1.5,
     "alpha": 4.0,
     "beta": 2.0,
 }
+=======
+SFH = {"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.3,
+       "log_total_mass": 10.0, "alpha": 4.0, "beta": 2.0}
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 
 def _model(tau_diff, tau_bc):

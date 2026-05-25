@@ -58,15 +58,22 @@ SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # MW analog: moderate-mass, sustained star formation with a recent uptick
 # Double power law: τ_gyr = 13 Gyr (age of universe proxy), mild cusp
-# log_peak_sfr ≈ 0 → peak SFR ~ 1 Msun/yr, log10 scaling
+# log_total_mass ≈ 0 → peak SFR ~ 1 Msun/yr, log10 scaling
 HOST = dict(
     sfh={
         "type": "dpl",
         "*": tengri.FIXED,
+<<<<<<< HEAD
         "tau_gyr": 9.0,  # Main growth timescale
-        "log_peak_sfr": 0.35,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
+        "log_total_mass": 0.35,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
         "alpha": 0.8,  # Early rise
         "beta": 0.5,  # Late decline
+=======
+        "tau_gyr": 9.0,          # Main growth timescale
+        "log_total_mass": 10.0,    # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
+        "alpha": 0.8,            # Early rise
+        "beta": 0.5,             # Late decline
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     },
     redshift=tengri.Fixed(0.05),  # z=0.05 for cosmic variance context
 )

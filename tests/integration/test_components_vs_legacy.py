@@ -47,7 +47,7 @@ def stellar_only_model(ssp):
     """Stellar-only model — minimal chain (zero dust, no IGM)."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -230,7 +230,7 @@ def stellar_field_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm", "field"],
         n_grid=_FIELD_N_GRID,
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -542,7 +542,7 @@ def stellar_chem_evol_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         met_mode="chem_evol",
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -616,7 +616,7 @@ def stellar_ramp_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         met_mode="ramp",
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -709,7 +709,7 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
         # Some params have physical constraints (must be > 0): widths,
         # truncs, burst_sfr, burst_age, peak_lbt. Use multiplicative
         # bounds for those; additive ±1.5 for unconstrained params
-        # like log_peak_sfr and skew.
+        # like log_total_mass and skew.
         # Most time/scale-like params have ``lo >= 0`` constraints in
         # their priors. Use multiplicative bounds for any param whose
         # name does NOT match an unconstrained suffix.
@@ -910,7 +910,7 @@ def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=2e-2):
 def test_orchestrator_psb_close_to_legacy(ssp):
     """``psb`` (post-starburst, Wild+ 2020) — orchestrator vs legacy."""
     priors = {
-        "sfh_psb_log_total_mass": Uniform(-1.0, 3.0),
+        "sfh_psb_log_total_mass": Uniform(8.0, 12.0),
         "sfh_psb_age_gyr": Uniform(0.5, 13.0),
         "sfh_psb_tau_gyr": Uniform(0.1, 10.0),
         "sfh_psb_burstage_gyr": Uniform(0.01, 5.0),
@@ -996,7 +996,7 @@ def test_orchestrator_exp_close_to_legacy(ssp):
     cutoff edge, which closes only with the SFH-side CSP migration.
     """
     priors = {
-        "sfh_exp_log_total_mass": Uniform(-1.0, 3.0),
+        "sfh_exp_log_total_mass": Uniform(8.0, 12.0),
         "sfh_exp_tau_gyr": Uniform(0.1, 10.0),
     }
     sfh_params = {
@@ -1043,7 +1043,7 @@ def test_orchestrator_buat08_close_to_legacy(ssp):
 def test_orchestrator_dexp_close_to_legacy(ssp):
     """``dexp`` (delayed exponential) — same caveat as ``exp``."""
     priors = {
-        "sfh_dexp_log_total_mass": Uniform(-1.0, 3.0),
+        "sfh_dexp_log_total_mass": Uniform(8.0, 12.0),
         "sfh_dexp_tau_gyr": Uniform(0.1, 10.0),
     }
     sfh_params = {
@@ -1065,7 +1065,7 @@ def test_orchestrator_tau_close_to_legacy(ssp):
     representation and agree to ~1e-11.
     """
     priors = {
-        "sfh_tau_log_total_mass": Uniform(-1.0, 3.0),
+        "sfh_tau_log_total_mass": Uniform(8.0, 12.0),
         "sfh_tau_tau_gyr": Uniform(0.1, 10.0),
         "sfh_tau_age_gyr": Uniform(0.5, 13.0),
     }

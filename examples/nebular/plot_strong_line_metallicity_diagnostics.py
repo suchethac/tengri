@@ -34,7 +34,7 @@ SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 model = tengri.SEDModel.build(
     SSP,
     sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.05,
-         "log_peak_sfr": 1.5, "alpha": 4.0, "beta": 2.0},
+         "log_total_mass": 10.0, "alpha": 4.0, "beta": 2.0},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.0, "tau_bc": 0.0},
     neb={"type": "cue", "*": tengri.FIXED,
