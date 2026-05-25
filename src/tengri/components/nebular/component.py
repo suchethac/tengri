@@ -57,11 +57,22 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         Whether to silence the ``BakedInNebularWarning`` emitted when
         :class:`BakedInBackend` is constructed. Default ``True`` for
         adapter use.
+    cue_full_catalogue : bool
+        For the ``"cue"`` backend only. When ``True``, expose the full
+        Cue-trained line catalogue (~271 species) via ``state.derived
+        ["line_waves"]`` / ``["line_lums"]`` so users can query HeII
+        1640, HeI 10830 and other high-z diagnostics via
+        :meth:`tengri.forward.prediction.EmissionLines.get`. Default
+        ``False`` matches the pre-#303 behaviour (128 CLOUDY/FSPS
+        lines) and avoids surprising users who iterate over
+        ``all_waves`` / ``all_lums``. No effect on the headline
+        Hα/Hβ/etc. named accessors, which always work.
     """
 
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
+    cue_full_catalogue: bool = False
 
 
 @dataclass(frozen=True)
@@ -556,12 +567,23 @@ class NebularSEDComponent:
         if hasattr(self.backend, "predict_nebular_line_luminosities"):
             try:
                 if self.config.backend == "cue":
+                    # #303: opt into the full Cue catalogue (~271 species)
+                    # instead of the default 128 CLOUDY/FSPS subset, so
+                    # users can read HeII 1640, HeI 10830, [OIII] 4363,
+                    # etc. via pred.lines.get(wavelength).
+                    cue_cloudyfsps_only = not self.config.cue_full_catalogue
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
-                        **common_kwargs, **cue_extras, template_data=template_data
+                        **common_kwargs,
+                        **cue_extras,
+                        template_data=template_data,
+                        cloudyfsps_only=cue_cloudyfsps_only,
                     )
                     if _dig_kwargs is not None:
                         _, line_lums_dig = self.backend.predict_nebular_line_luminosities(
-                            **_dig_kwargs, **cue_extras, template_data=template_data
+                            **_dig_kwargs,
+                            **cue_extras,
+                            template_data=template_data,
+                            cloudyfsps_only=cue_cloudyfsps_only,
                         )
                         _f = jnp.asarray(_dig_frac)
                         line_lums = (1.0 - _f) * line_lums + _f * line_lums_dig
