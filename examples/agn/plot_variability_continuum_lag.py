@@ -139,6 +139,7 @@ model = tengri.SEDModel.build(
         "lines": {"type": "none", "*": tengri.FIXED},
         "*": tengri.FIXED,
         "log_lbol": 11.0,  # AGN bolometric luminosity [log10 L_sun]
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
     },
     neb={"type": "none", "*": tengri.FIXED},
     redshift=tengri.Fixed(REDSHIFT),

@@ -56,6 +56,7 @@ model = tengri.SEDModel.build(
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
         "log_lbol": 12.5,  # log10(L_bol / L_sun)
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
     },
     redshift=tengri.Fixed(0.05),
 )

@@ -98,6 +98,8 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Fixed(12.0),  # Fixed bolometric luminosity for quasar regime
     },
     redshift=tengri.Fixed(0.0),  # Rest-frame SED at z=0
 )
