@@ -67,15 +67,23 @@ posterior = forward.fit(
     mock.flux_obs,
     mock.noise,
     method="mcmc_nuts",
-    warmup=500,
-    samples=500,
+    n_warmup=500,
+    n_samples=500,
     verbose=False,
 )
 
-# Extract samples and parameter names for the corner plot
+# Extract samples and parameter names for the corner plot. Filter to
+# columns with non-trivial posterior variance — fixed params and tightly
+# constrained ones end up as effectively zero-range columns and
+# corner.corner refuses to plot them.
 samples_dict = posterior.samples
-param_names = list(samples_dict.keys())
-samples_array = np.array([samples_dict[p] for p in param_names]).T
+EPS = 1e-8
+param_names = [
+    p
+    for p in samples_dict
+    if np.asarray(samples_dict[p]).std() > EPS * abs(np.asarray(samples_dict[p]).mean() + 1.0)
+]
+samples_array = np.array([np.asarray(samples_dict[p]) for p in param_names]).T
 truths = [float(truth[p]) for p in param_names]
 
 # --- Create corner plot ---

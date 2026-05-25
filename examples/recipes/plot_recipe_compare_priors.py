@@ -47,9 +47,13 @@ dust_truth = {k.replace("dust_", ""): v for k, v in truth.items() if k.startswit
 template = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED, **sfh_truth},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "met_logzsol": tengri.Fixed(truth["met_logzsol"]),
+        **sfh_truth,
+    },
     dust={"type": "two_component", "*": tengri.FIXED, **dust_truth},
-    met_logzsol=tengri.Fixed(truth["met_logzsol"]),
     redshift=tengri.Fixed(0.1),
 )
 mock = template.mock(truth, snr=20.0, key=key)
@@ -59,19 +63,23 @@ def fit_with_metallicity_prior(met_prior):
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FREE},
+        sfh={"type": "tsnorm", "*": tengri.FREE, "met_logzsol": met_prior},
         dust={
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
         },
-        met_logzsol=met_prior,
         redshift=tengri.Fixed(0.1),
     )
     forward = tengri.ForwardModel.build(sed=model, observation=obs)
     return forward.fit(
-        mock.flux_obs, mock.noise, method="vi_native", n_iter=8, n_samples=3, verbose=False
+        mock.flux_obs,
+        mock.noise,
+        method="native_vi_nonlinear",
+        n_iterations=8,
+        n_samples=3,
+        verbose=False,
     )
 
 

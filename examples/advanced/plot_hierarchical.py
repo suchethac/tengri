@@ -6,9 +6,13 @@ Four mock galaxies whose star-formation histories share the same
 Fourier-field power-spectrum (sigma, tau) — a hierarchical inference
 problem. We mock the photometry, fit jointly with
 ``tengri.PopulationFitter``, and check that the shared (sigma, tau)
-posteriors bracket the input values. Composed ``[tsnorm, field]`` SFHs
-are now reachable through the nested-dict grammar (``sfh.type`` accepts
-a list), so the model builds via ``SEDModel.build`` like any other.
+posteriors bracket the input values.
+
+The composed ``[tsnorm, field]`` mean SFH still uses the flat
+``Parameters(...)`` escape hatch here because the nested-dict
+``SEDModel.build`` grammar does not yet expose the ``n_grid`` field
+resolution, and the default n_grid is too large for a hierarchical
+fit on a laptop (OOM at ~30 GB without the override).
 
 Reference: Leja et al. 2019, ApJ, 876, 3 (rapid field inference with
 correlated priors).
@@ -22,6 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
+from tengri import Fixed, Parameters, SEDModel, Uniform
 from tengri.analysis.plotting import setup_style
 
 setup_style()
@@ -33,37 +38,31 @@ N_GAL = 4
 
 ssp = tengri.load_ssp()
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    photometry=tengri.Photometry.from_names(
+        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+    )
 )
 
 
-def model_factory(psd_sigma: float = 1.0, psd_tau_myr: float = 50.0) -> tengri.SEDModel:
+def model_factory(psd_sigma: float = 1.0, psd_tau_myr: float = 50.0) -> SEDModel:
     """tsnorm mean SFH modulated by a Fourier field with fixed (sigma, tau)."""
-    return tengri.SEDModel.build(
-        ssp,
-        observation=obs,
-        sfh={
-            "type": ["tsnorm", "field"],
-            "*": tengri.FIXED,
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
-            "peak_lbt_gyr": tengri.Uniform(1.0, 8.0),
-            "width_gyr": tengri.Uniform(0.5, 3.0),
-            "skew": 0.0,
-            "trunc": 3.0,
-            "psd_sigma": psd_sigma,
-            "psd_tau_myr": psd_tau_myr,
-        },
-        dust={
-            "type": "two_component",
-            "*": tengri.FIXED,
-            "tau_bc": 0.3,
-            "tau_diff": 0.2,
-            "slope": -0.7,
-        },
-        met_logzsol=tengri.Fixed(0.0),
-        redshift=tengri.Fixed(0.1),
+    spec = Parameters(
+        mean_sfh_type=["tsnorm", "field"],
+        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(1.0, 8.0),
+        sfh_tsnorm_width_gyr=Uniform(0.5, 3.0),
+        sfh_tsnorm_skew=Fixed(0.0),
+        sfh_tsnorm_trunc=Fixed(3.0),
+        sfh_field_psd_sigma=Fixed(psd_sigma),
+        sfh_field_psd_tau_myr=Fixed(psd_tau_myr),
+        met_logzsol=Fixed(0.0),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        dust_slope=Fixed(-0.7),
+        redshift=Fixed(0.1),
         n_grid=128,
     )
+    return SEDModel(spec, ssp, observation=obs)
 
 
 key = jax.random.PRNGKey(42)
