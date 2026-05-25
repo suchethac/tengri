@@ -99,18 +99,19 @@ class TestResolveComposed:
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "burst", "field"])
         assert len(params) == 10
 
-    def test_additive_sum(self):
-        """Two additive models sum their SFR (each scaled to log_total_mass)."""
+    def test_additive_sum_legacy_internal_names(self):
+        """Backward compat: passing pre-translated internal kwargs still works.
+
+        Two additive components sharing an internal kwarg (``log_total_mass``)
+        both receive the same value — the legacy ``kw_i = {k: kw[k] for k in
+        int_names_i}`` semantics. New code should prefer the per-component
+        public-name dispatch (see ``test_additive_sum_distinct_masses``).
+        """
         fn, _, _, _ = resolve_sfh(["tsnorm", "const"])
-        t = jnp.logspace(6, 10, 100)
-        # Known limitation post-2026-05-25: both additive components share the
-        # internal kwarg ``log_total_mass``, so they receive the same mass
-        # value. The composed SFR sums two unit-mass shapes, each integrating
-        # to 10**log_total_mass. Independent per-component masses require a
-        # composer-layer rework (see follow-up issue).
+        t = jnp.linspace(1e5, 14e9, 5000)
         sfr = fn(
             t,
-            log_total_mass=10.0,
+            log_total_mass=10.0,  # both components see this — legacy collision behavior
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
@@ -119,9 +120,53 @@ class TestResolveComposed:
             end=14e9,
         )
         assert jnp.all(sfr >= 0)
-        # The composed SFR should be strictly larger than either component alone
-        # at the tsnorm peak (~5 Gyr lookback): both contribute positively.
-        assert jnp.max(sfr) > 0.0
+        # Both components integrate to 10**10 Msun each ⇒ composite ≈ 2e10.
+        m_total = float(jnp.trapezoid(sfr, t))
+        assert abs(m_total - 2e10) / 2e10 < 0.01
+
+    def test_additive_sum_distinct_masses(self):
+        """Public-name dispatch (#372 fix): each component gets its own mass."""
+        fn, _, _, _ = resolve_sfh(["tsnorm", "exp"])
+        t = jnp.linspace(1e5, 14e9, 5000)
+        sfr = fn(
+            t,
+            # tsnorm: 10^10 Msun formed over a 5 Gyr peak
+            sfh_tsnorm_log_total_mass=10.0,
+            sfh_tsnorm_peak_lbt_gyr=5e9,
+            sfh_tsnorm_width_gyr=2e9,
+            sfh_tsnorm_skew=0.0,
+            sfh_tsnorm_trunc=3.0,
+            # exp: 10^9 Msun formed (10× less — must not collide with tsnorm's mass)
+            sfh_exp_log_total_mass=9.0,
+            sfh_exp_tau_gyr=2e9,
+            sfh_exp_start_gyr=0.0,
+        )
+        assert jnp.all(sfr >= 0)
+        m_total = float(jnp.trapezoid(sfr, t))
+        expected = 10**10.0 + 10**9.0  # tsnorm + exp, independent masses
+        assert abs(m_total - expected) / expected < 0.01
+
+    def test_additive_sum_three_components(self):
+        """Per-component dispatch scales to 3+ additive SFHs."""
+        fn, _, _, _ = resolve_sfh(["tsnorm", "exp", "lnorm"])
+        t = jnp.linspace(1e5, 14e9, 5000)
+        sfr = fn(
+            t,
+            sfh_tsnorm_log_total_mass=10.0,
+            sfh_tsnorm_peak_lbt_gyr=5e9,
+            sfh_tsnorm_width_gyr=2e9,
+            sfh_tsnorm_skew=0.0,
+            sfh_tsnorm_trunc=3.0,
+            sfh_exp_log_total_mass=9.5,
+            sfh_exp_tau_gyr=2e9,
+            sfh_exp_start_gyr=0.0,
+            sfh_lnorm_log_total_mass=8.5,
+            sfh_lnorm_peak_lbt_gyr=3e9,
+            sfh_lnorm_width_gyr=0.3,
+        )
+        m_total = float(jnp.trapezoid(sfr, t))
+        expected = 10**10.0 + 10**9.5 + 10**8.5
+        assert abs(m_total - expected) / expected < 0.01
 
     def test_no_param_collision(self):
         """All model prefixes are unique so no collisions possible."""

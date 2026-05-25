@@ -1513,7 +1513,13 @@ def resolve_sfh(
         merged_param_map.update(s.internal_param_map)
         merged_settings.update(s.settings)
 
-    # Build lists of (fn, set_of_internal_names) for each additive component
+    # Build per-spec dispatch info for each additive component.
+    #
+    # Each entry holds: (callable, public->internal map, set of internal names).
+    # The composer dispatches PER-COMPONENT using the public-name map so that
+    # two additive SFHs sharing the same internal kwarg (e.g. ``log_total_mass``
+    # for any two parametric SFHs after the 2026-05-25 normalization refactor)
+    # do not collide. See #372 for the bug this fixes.
     _NONPARAM_NAMES = {
         "continuity",
         "dirichlet",
@@ -1524,36 +1530,64 @@ def resolve_sfh(
     }
     additive_info = []
     for s in additive:
-        internal_names = {v[0] for v in s.internal_param_map.values()}
+        pub_to_internal = dict(
+            s.internal_param_map
+        )  # public_name -> (internal_name, scale, offset)
+        internal_names = {v[0] for v in pub_to_internal.values()}
         fn_i = s.fn
         if bin_edges_gyr is not None and s.name in _NONPARAM_NAMES:
             fn_i = functools.partial(fn_i, bin_edges_gyr=bin_edges_gyr)
-        additive_info.append((fn_i, internal_names))
+        additive_info.append((fn_i, pub_to_internal, internal_names))
 
     has_burst = len(mixtures) > 0
     burst_info = None
     if has_burst:
         bs = mixtures[0]
-        burst_internal = {v[0] for v in bs.internal_param_map.values()}
-        burst_info = (bs.fn, burst_internal)
+        burst_pub_to_internal = dict(bs.internal_param_map)
+        burst_internal = {v[0] for v in burst_pub_to_internal.values()}
+        burst_info = (bs.fn, burst_pub_to_internal, burst_internal)
 
     has_field = len(modulators) > 0
+
+    def _build_component_kw(kw, pub_to_internal, internal_names, *, skip=()):
+        """Slice ``kw`` to the internal kwargs this component expects.
+
+        Prefers per-spec public-name entries (``sfh_X_log_total_mass``) so two
+        additive components sharing an internal name (``log_total_mass``) each
+        get their own value. Falls back to the internal-name entry for
+        backward compatibility with callers that pre-translated.
+
+        ``kw[public]`` is assumed already scaled/offset by the upstream
+        translator (``parameters/translate.py::get_internal_params``), so the
+        composer copies the value verbatim under its internal kwarg name.
+        """
+        kw_i = {}
+        for pub_name, (intl_name, _scale, _offset) in pub_to_internal.items():
+            if intl_name in skip:
+                continue
+            if pub_name in kw:
+                kw_i[intl_name] = kw[pub_name]
+            elif intl_name in kw:
+                kw_i[intl_name] = kw[intl_name]
+        return kw_i
 
     # Build the composed closure
     def composed_fn(t_lookback, **kw):
         """Evaluate the composed SFH: sum additive components, then apply burst and field."""
-        # 1. Sum additive components
+        # 1. Sum additive components (per-spec public-name dispatch — no collision)
         smooth = jnp.zeros_like(t_lookback)
-        for fn_i, int_names_i in additive_info:
-            kw_i = {k: kw[k] for k in int_names_i if k in kw}
+        for fn_i, pub_to_internal, internal_names in additive_info:
+            kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
             smooth = smooth + fn_i(t_lookback, **kw_i)
 
         # 2. Apply burst mixture
         if has_burst:
-            burst_fn, burst_int = burst_info
+            burst_fn, burst_pub_to_internal, burst_internal = burst_info
             log_fburst = kw["log_fburst"]
             f = 10.0**log_fburst
-            burst_kw = {k: kw[k] for k in burst_int if k != "log_fburst" and k in kw}
+            burst_kw = _build_component_kw(
+                kw, burst_pub_to_internal, burst_internal, skip=("log_fburst",)
+            )
             burst_shape = burst_fn(t_lookback, **burst_kw)
             # Normalize burst shape to match smooth integral scale
             smooth = (1.0 - f) * smooth + f * burst_shape * jnp.max(smooth)

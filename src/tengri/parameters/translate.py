@@ -353,7 +353,14 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         that isn't active in this spec).
     """
     internal = {}
+    # Per-spec SFH params (sfh_X_*) are *also* preserved under their public name so
+    # the composer in resolve_sfh can dispatch per-component without collisions
+    # when multiple SFHs share the same internal kwarg name (e.g.
+    # ``log_total_mass`` for any two parametric SFHs after the 2026-05-25
+    # normalization refactor). See ``composed_fn`` in
+    # ``components/stellar/sfh/registry.py`` and #372.
     for pub_name, (int_name, scale, offset) in param_map.items():
+        is_sfh = pub_name.startswith("sfh_")
         if pub_name in params:
             value = params[pub_name]
             # String-typed Fixed params (e.g. shock_abundance="solar") are config
@@ -362,16 +369,26 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
             # the standard scale/offset translation.
             if isinstance(value, str):
                 internal[int_name] = value
+                if is_sfh:
+                    internal[pub_name] = value
             else:
-                internal[int_name] = value * scale + offset
+                translated = value * scale + offset
+                internal[int_name] = translated
+                if is_sfh:
+                    internal[pub_name] = translated
         else:
             # Check short-form alias: find short name that maps to pub_name
             alias_val = find_short_param(params, pub_name)
             if alias_val is not None:
                 if isinstance(alias_val, str):
                     internal[int_name] = alias_val
+                    if is_sfh:
+                        internal[pub_name] = alias_val
                 else:
-                    internal[int_name] = alias_val * scale + offset
+                    translated = alias_val * scale + offset
+                    internal[int_name] = translated
+                    if is_sfh:
+                        internal[pub_name] = translated
             else:
                 # Fall back to fixed value from spec, or skip if absent.
                 #
@@ -400,9 +417,15 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
                         # bounds[0] is the literal value, not a numeric range. Pass
                         # through verbatim — downstream code branches on the string.
                         # None handles enum-typed Fixed where bounds isn't populated.
-                        internal[int_name] = fixed_val if fixed_val is not None else dist.value
+                        resolved = fixed_val if fixed_val is not None else dist.value
+                        internal[int_name] = resolved
+                        if is_sfh:
+                            internal[pub_name] = resolved
                     else:
-                        internal[int_name] = fixed_val * scale + offset
+                        translated = fixed_val * scale + offset
+                        internal[int_name] = translated
+                        if is_sfh:
+                            internal[pub_name] = translated
                 else:
                     raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
 
