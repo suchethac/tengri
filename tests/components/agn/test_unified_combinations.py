@@ -69,6 +69,14 @@ class TestUnifiedAgnCombinations:
         giving B_nu ∝ exp(-28.8) ≈ 3e-13 relative to peak.  The disc
         contributes nothing (agn_frac=0).  So IR >> UV by a factor >>1000.
         """
+        # ``unified_agn`` defaults to ``torus_model="silva04"``. Skip when
+        # only the synthetic (all-zero) Silva+04 fixture is on disk —
+        # see ``tests/conftest.py::silva04_grid_is_synthetic``.
+        from tests.conftest import silva04_grid_is_synthetic
+
+        if silva04_grid_is_synthetic():
+            pytest.skip("needs the real Silva+04 torus grid")
+
         from tengri.components.agn.unified import unified_agn
 
         uv_mask = (wavelength > 500.0) & (wavelength < 5000.0)
