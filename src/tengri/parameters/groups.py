@@ -708,6 +708,11 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
+        # #303: opt into the full Cue catalogue (~271 species) instead
+        # of the default 128 CLOUDY/FSPS subset so users can read
+        # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
+        if neb_dict.get("full_catalogue", False):
+            result["cue_full_catalogue"] = True
     elif neb_type == "cloudy":
         result["nebular"] = True
     elif neb_type == "cb19":
@@ -784,7 +789,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
-    "neb": frozenset({"type", "*"}),
+    "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "radio": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),

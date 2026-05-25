@@ -603,6 +603,11 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        # When True, the Cue orchestrator path publishes the full
+        # ~271-species line catalogue instead of the default 128
+        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
+        # read via ``pred.lines.get(wavelength)``. See #303.
+        self.cue_full_catalogue = kwargs.pop("cue_full_catalogue", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         self._nebular_cb19 = False
