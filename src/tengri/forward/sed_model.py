@@ -937,7 +937,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
