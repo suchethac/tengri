@@ -563,8 +563,23 @@ def _translate_structural(groups: dict) -> dict:
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
-    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`."""
+    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
+
+    Also forwards the (non-parametric only) ``bin_edges_gyr`` structural
+    kwarg through to :func:`resolve_sfh` so users can override the
+    bin layout for ``prospector_beta`` / ``continuity`` / etc. from the
+    nested-dict grammar (#337).
+    """
     sfh_type = sfh_dict.get("type")
+
+    # ``bin_edges_gyr`` is a structural setting (array of bin edges in
+    # Gyr) that only applies to non-parametric SFHs. Surface it as a
+    # top-level kwarg so ``Parameters.__init__`` can pop it and forward
+    # to ``resolve_sfh(mean_sfh_type, bin_edges_gyr=...)`` via
+    # ``_build_legacy``. The wildcard ``'*': FREE / FIXED`` does NOT
+    # apply to this — it's a config, not a free parameter.
+    if "bin_edges_gyr" in sfh_dict:
+        result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
 
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
@@ -785,7 +800,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
