@@ -822,7 +822,16 @@ class SEDModel:
             Parameter map entries for this component:
             public_name -> (internal_name, scale, offset).
         """
-        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
+        # Forward the (optional) non-parametric bin edges through to
+        # resolve_sfh so prospector_beta / continuity / ... use the
+        # user-supplied edges in the forward pass (#337).
+        _sfh_kwargs = {}
+        _bin_edges = getattr(spec, "bin_edges_gyr", None)
+        if _bin_edges is not None:
+            _sfh_kwargs["bin_edges_gyr"] = _bin_edges
+        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(
+            spec.mean_sfh_type, **_sfh_kwargs
+        )
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
         # Per-spec public SFH param names (sfh_X_*). The composer
