@@ -39,6 +39,10 @@ References
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -76,7 +80,7 @@ peak_lbt_gyr_samples = np.random.uniform(1.0, 10.0, n_sf)  # Age of peak SFR
 
 # Fixed parameters for all SF galaxies
 z_gal = 0.1
-log_peak_sfr_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
+log_total_mass_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
 
 sf_colors_w1_w2 = []
 sf_colors_w2_w3 = []
@@ -86,7 +90,7 @@ for i in range(n_sf):
     sfh_config = {
         "type": "dpl",
         "*": tengri.FIXED,
-        "log_peak_sfr": log_peak_sfr_sf,
+        "log_total_mass": 10.0,
         "alpha": 1.0,      # Fixed power-law slope (rising)
         "beta": 1.0,       # Fixed power-law slope (declining)
         "tau_gyr": 0.5,    # Fixed quenching timescale
@@ -168,7 +172,7 @@ for i in range(n_agn):
     sfh_config = {
         "type": "dpl",
         "*": tengri.FIXED,
-        "log_peak_sfr": -2.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
+        "log_total_mass": 10.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
         "alpha": 1.0,
         "beta": 1.0,
         "tau_gyr": 0.05,       # Quickly quenched

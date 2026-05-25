@@ -26,6 +26,10 @@ References: Cardelli et al. (1989), Calzetti et al. (2000),
 Gordon et al. (2003), Kriek & Conroy (2013).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -58,7 +62,7 @@ SFH = {
     "*": tengri.FIXED,
     "peak_lbt_gyr": 2.0,
     "width_gyr": 1.0,
-    "log_peak_sfr": 1.0,
+    "log_total_mass": 10.0,
     "skew": 0.0,
     "trunc": 13.0,
 }

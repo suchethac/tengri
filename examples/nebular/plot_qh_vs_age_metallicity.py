@@ -27,9 +27,12 @@ References
   morphology-density relation at z ~ 0.05," MNRAS, 462, 3302 (binaries).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
-import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np

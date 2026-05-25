@@ -36,7 +36,7 @@ def stellar_only_model(ssp):
     """Stellar-only SED model for bounds tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -59,7 +59,7 @@ def stellar_only_free_z_model(ssp):
     """Free-redshift variant for bounds tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -78,7 +78,7 @@ def stellar_only_free_z_model(ssp):
 
 
 _PARAMS = {
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 2.0,
     "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": 0.0,
@@ -172,7 +172,7 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -269,7 +269,7 @@ def test_taylor_moment_published_in_free_z(ssp):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -302,7 +302,7 @@ def test_dust_attenuation_precomp_consistent_with_pipeline(ssp):
     """LUT A matches exp(-tau_v * k(λ_eff)) computed independently to 1e-10."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -344,7 +344,7 @@ def test_predict_via_precomp_with_dust_matches_predict(ssp):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -377,7 +377,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
     """
     spec_no_dust = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -401,7 +401,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
 
     spec_dust = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -440,7 +440,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -478,7 +478,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -521,7 +521,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -563,7 +563,7 @@ def test_predict_via_precomp_handles_bakedin_nebular(ssp):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -604,7 +604,7 @@ def test_predict_via_precomp_matches_default_predict_observables(ssp):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -639,7 +639,7 @@ def test_predict_via_precomp_raises_without_wave_precomp(ssp):
     """predict_via_precomp requires the LUT — raises clearly when missing."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -668,7 +668,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp):
     """Higher metallicity changes the LUT-projected stellar photometry."""
     spec_lo = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -687,7 +687,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp):
 
     spec_hi = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),

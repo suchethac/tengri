@@ -15,6 +15,10 @@ Reference: Maeder 1992, A&A, 264, 105 (chemical evolution); Schmidt 1959 (solar
 neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import matplotlib.pyplot as plt
 import numpy as np
 

@@ -123,7 +123,7 @@ plt.show()
 # %%
 # Create a model and compute SFH
 spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=10.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -142,7 +142,7 @@ model.precompute_spectroscopy(WAVE_OBS)
 params = spec.sample(jax.random.PRNGKey(42))
 # Override tsnorm to a typical star-forming galaxy (still forming stars now)
 params = {**params}
-params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+params["sfh_tsnorm_log_total_mass"] = jnp.array(1.2)
 params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 params["sfh_tsnorm_skew"] = jnp.array(0.3)

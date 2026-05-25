@@ -33,7 +33,7 @@ def t_lookback():
 def default_params():
     """Typical PSB parameters."""
     return dict(
-        log_peak_sfr=1.0,
+        log_total_mass=1.0,
         age=10e9,
         tau=1e9,
         burstage=0.5e9,
@@ -160,12 +160,12 @@ class TestJITAndGradients:
         sfr = jit_fn(t_lookback, **default_params)
         chex.assert_tree_all_finite(sfr)
 
-    def test_grad_wrt_log_peak_sfr(self, t_lookback, default_params):
+    def test_grad_wrt_log_total_mass(self, t_lookback, default_params):
         def loss(lp):
-            kw = {k: v for k, v in default_params.items() if k != "log_peak_sfr"}
+            kw = {k: v for k, v in default_params.items() if k != "log_total_mass"}
             return jnp.mean(psb_wild2020(t_lookback, lp, **kw))
 
-        g = jax.grad(loss)(default_params["log_peak_sfr"])
+        g = jax.grad(loss)(default_params["log_total_mass"])
         assert jnp.isfinite(g)
         assert g > 0
 
@@ -215,7 +215,7 @@ class TestRegistryIntegration:
         """Resolved function should produce valid SFR."""
         fn, _params, _param_map, _settings = resolve_sfh("psb")
         internal_kw = {
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 1.0,
             "age": 10e9,
             "tau": 1e9,
             "burstage": 0.5e9,
@@ -281,7 +281,7 @@ class TestLogGridMassNorm:
         fburst = 0.3
         sfr = psb_wild2020(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             age=10e9,
             tau=2e9,
             burstage=0.5e9,

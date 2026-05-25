@@ -165,7 +165,13 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
         # which equals ``_n_grid`` here, so reuse directly.
         _sfr_orch_grid = sfr
     else:
-        _kw = {k: v for k, v in p.items() if k in model._sfh_internal_names}
+        # Include both internal and public SFH names so the composer
+        # can dispatch per-component without colliding on shared internal
+        # kwargs (e.g. ``log_total_mass``). See #372.
+        _sfh_public_names = getattr(model, "_sfh_public_names", set())
+        _kw = {
+            k: v for k, v in p.items() if k in model._sfh_internal_names or k in _sfh_public_names
+        }
         _sfr_orch_grid = model._sfh_fn(sfh_lbt_grid_orch, **_kw)
 
     _sfr_on_ssp_orch = jnp.interp(model.ssp_ages_yr, sfh_lbt_grid_orch, _sfr_orch_grid)

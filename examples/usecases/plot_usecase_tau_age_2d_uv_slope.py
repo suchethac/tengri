@@ -18,6 +18,10 @@ wrong key in a dict-merge override is silently dropped at predict time
 Reference: Meurer et al. 1999, ApJ, 521, 64 (β as UV slope diagnostic).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -59,7 +63,7 @@ model = tengri.SEDModel.build(
     tengri.load_ssp(),
     sfh={"type": "tsnorm", "*": tengri.FIXED,
          "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
-         "width_gyr": 0.05, "log_peak_sfr": 1.0,
+         "width_gyr": 0.05, "log_total_mass": 10.0,
          "skew": 0.0, "trunc": 1.0},  # Limit burst age range to physics-valid region
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.0, "tau_bc": 0.0},

@@ -33,6 +33,10 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     https://doi.org/10.1093/mnras/sty1890
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -120,7 +124,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 1.0,
-        "log_peak_sfr": -2.0,  # Very faint host
+        "log_total_mass": 10.0,  # Very faint host
         "alpha": 1.0,
         "beta": 1.0,
     },

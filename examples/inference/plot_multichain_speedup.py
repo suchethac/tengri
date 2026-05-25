@@ -18,6 +18,7 @@ Run::
     python examples/inference/plot_multichain_speedup.py
 
 Output: ``plot_multichain_speedup.png`` (per-sample wall time, single
+
 chain vs four chains, across NUTS / HMC / dynamic HMC / GHMC / MCLMC /
 adjusted MCLMC / ray tracing).
 """
@@ -25,6 +26,9 @@ adjusted MCLMC / ray tracing).
 from __future__ import annotations
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import time
 from pathlib import Path
 

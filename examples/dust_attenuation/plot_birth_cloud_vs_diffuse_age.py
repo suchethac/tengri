@@ -14,6 +14,10 @@ are unaffected by birth-cloud dust — only diffuse attenuation remains.
 Reference: Charlot & Fall 2000, ApJ, 539, 718.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -56,7 +60,7 @@ for i, (age_myr, peak_lbt_gyr) in enumerate(zip(ages_myr, peak_lbt_values)):
             "*": tengri.FIXED,
             "peak_lbt_gyr": float(peak_lbt_gyr),
             "width_gyr": 0.1,  # narrow width to approximate single age
-            "log_peak_sfr": 0.0,  # normalized scale
+            "log_total_mass": 10.0,  # normalized scale
         },
         dust={
             "type": "two_component",

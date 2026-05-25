@@ -18,6 +18,7 @@ infrared re-emission.
 
 **References:**
  - Förster Schreiber et al. (2003) [1]_ for M82 SED observations
+
  - Engelbracht et al. (2008) [2]_ for Spitzer MIR/FIR measurements
  - Dale et al. (2014) [3]_ for dust emission model
 
@@ -35,11 +36,16 @@ infrared re-emission.
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import jax
 import jax.numpy as jnp
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -58,7 +64,7 @@ L_SUN_CGS = 3.839e33
 ssp = tengri.load_ssp()
 
 # M82-class starburst model:
-# - SFH: double power-law peaking ~50 Myr ago (log_peak_sfr ~ 0.95 → SFR_peak ~ 9 Msun/yr)
+# - SFH: double power-law peaking ~50 Myr ago (log_total_mass ~ 0.95 → SFR_peak ~ 9 Msun/yr)
 #   with alpha=2.0 (sharp rise, young burst) and beta=1.5 (extended tail into old epoch)
 # - Dust: two-component with high optical depths (tau_diff=1.5, tau_bc=2.0)
 # - Dust re-emission: Dale et al. (2014) templates
@@ -69,7 +75,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.05,          # Burst timescale 50 Myr
-        "log_peak_sfr": 0.95,     # Peak SFR ~ 9 Msun/yr
+        "log_total_mass": 10.0,     # Peak SFR ~ 9 Msun/yr
         "alpha": 2.0,             # Sharp initial rise (young burst)
         "beta": 1.5,              # Extended tail (star formation continues)
     },
@@ -98,7 +104,7 @@ model_intrinsic = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.05,
-        "log_peak_sfr": 0.95,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 1.5,
     },

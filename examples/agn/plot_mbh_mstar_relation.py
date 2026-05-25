@@ -30,6 +30,10 @@ to verify consistency within the observed scatter (~0.3 dex).
        Journal, 813(2), 82. https://doi.org/10.1088/0004-637X/813/2/82
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -109,7 +113,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -165,16 +169,16 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
     log_lbol = log_edd + log_ledd
 
-    # Scale log_peak_sfr to achieve the target stellar mass via binary search
-    # M_* ∝ log_peak_sfr, so we can adjust it linearly in log space
+    # Scale log_total_mass to achieve the target stellar mass via binary search
+    # M_* ∝ log_total_mass, so we can adjust it linearly in log space
     baseline = dict(baseline_sample)
     m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
     log_mstar_baseline = np.log10(m_star_baseline)
     delta_log_mstar = log_mstar_target - log_mstar_baseline
 
-    # Adjust log_peak_sfr proportionally
-    baseline["sfh_dpl_log_peak_sfr"] = (
-        float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
+    # Adjust log_total_mass proportionally
+    baseline["sfh_dpl_log_total_mass"] = (
+        float(baseline["sfh_dpl_log_total_mass"]) + delta_log_mstar
     )
 
     # Construct parameters for this galaxy
@@ -222,15 +226,15 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
     log_lbol = log_edd + log_ledd
 
-    # Scale log_peak_sfr to achieve the target stellar mass
+    # Scale log_total_mass to achieve the target stellar mass
     baseline = dict(baseline_sample)
     m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
     log_mstar_baseline = np.log10(m_star_baseline)
     delta_log_mstar = log_mstar_target - log_mstar_baseline
 
-    # Adjust log_peak_sfr proportionally
-    baseline["sfh_dpl_log_peak_sfr"] = (
-        float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
+    # Adjust log_total_mass proportionally
+    baseline["sfh_dpl_log_total_mass"] = (
+        float(baseline["sfh_dpl_log_total_mass"]) + delta_log_mstar
     )
 
     # Construct parameters

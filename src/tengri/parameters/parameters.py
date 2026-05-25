@@ -30,7 +30,7 @@ Shorthand tsnorm equivalent::
 
     spec = Parameters(
         mean_sfh_type = "tsnorm",
-        sfh_tsnorm_log_peak_sfr = Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass = Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
@@ -45,7 +45,7 @@ Shorthand DPL equivalent::
         sfh_dpl_alpha    = Uniform(0.5, 3.0),
         sfh_dpl_beta     = Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr  = Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr = Uniform(-1, 2),
+        sfh_dpl_log_total_mass = Uniform(8, 12),
         ...
     )
 """
@@ -341,7 +341,7 @@ class Parameters:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.5, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(8.0, 12.5),
             met_logzsol=Uniform(-2.0, 0.5),
             dust_tau_bc=Uniform(0.0, 2.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -389,6 +389,10 @@ class Parameters:
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 64))
         self.apply_igm = kwargs.pop("apply_igm", True)
+        # IGM transmission model: 'inoue' (default) or 'madau'. Stored as a
+        # structural setting so the grammar-layer choice propagates through
+        # to :meth:`SEDModel._init_igm` (#344).
+        self.igm_model = kwargs.pop("igm_model", "inoue")
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
@@ -599,6 +603,11 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        # When True, the Cue orchestrator path publishes the full
+        # ~271-species line catalogue instead of the default 128
+        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
+        # read via ``pred.lines.get(wavelength)``. See #303.
+        self.cue_full_catalogue = kwargs.pop("cue_full_catalogue", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         self._nebular_cb19 = False

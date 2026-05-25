@@ -89,7 +89,16 @@ def pick_ssp_for(recipe_name: str):
     raise FileNotFoundError("No SSP data file found in data/")
 
 
-DEFAULT_BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z", "2mass_j", "2mass_h", "2mass_ks"]
+DEFAULT_BANDS = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
 SDSS5 = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 
 
@@ -110,7 +119,9 @@ def report(label, **kv):
     print(line)
 
 
-def bench_recipe(name: str, with_precomp: bool, ssp_data, mcmc: bool, ssp_kind: str = "bare", bands=None):
+def bench_recipe(
+    name: str, with_precomp: bool, ssp_data, mcmc: bool, ssp_kind: str = "bare", bands=None
+):
     rss0 = rss_mb()
     recipe_dict = getattr(recipes, name)()
     obs = standard_obs(bands=bands)
@@ -121,6 +132,7 @@ def bench_recipe(name: str, with_precomp: bool, ssp_data, mcmc: bool, ssp_kind: 
     swapped = False
     if ssp_kind == "wNE":
         import tengri.builders as builders
+
         neb = kw.get("neb")
         if isinstance(neb, dict) and neb.get("type") == "cue":
             kw["neb"] = builders.neb.none()
@@ -289,9 +301,11 @@ def main():
     print()
 
     print("=" * 140)
-    print(f"  {'Recipe [path]':<48} {'D':>3}  "
-          f"{'build_ms':>10} {'fwd_cc_ms':>11} {'fwd_us':>10} "
-          f"{'grad_cc_ms':>12} {'grad_us':>10} {'rss_MiB':>9} {'d_rss':>7}")
+    print(
+        f"  {'Recipe [path]':<48} {'D':>3}  "
+        f"{'build_ms':>10} {'fwd_cc_ms':>11} {'fwd_us':>10} "
+        f"{'grad_cc_ms':>12} {'grad_us':>10} {'rss_MiB':>9} {'d_rss':>7}"
+    )
     print("=" * 140)
 
     for r in all_recipes:

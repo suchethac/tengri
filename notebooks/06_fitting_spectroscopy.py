@@ -32,6 +32,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 import time
 import warnings
@@ -218,7 +221,7 @@ print("Noise: cal_floor=1%, Gaussian likelihood")
 # %%
 spec_param = Parameters(
     mean_sfh_type="lnorm",
-    sfh_lnorm_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_lnorm_log_total_mass=10.0, 2.0),
     sfh_lnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
     sfh_lnorm_width_gyr=Uniform(0.5, 5.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -238,7 +241,7 @@ print(f"Model built: {spec_param.n_free} free params")
 # Generate mock spectrum: young, solar metallicity, moderate dust
 key = jax.random.PRNGKey(123)
 true_params = {
-    "sfh_lnorm_log_peak_sfr": jnp.array(0.5),
+    "sfh_lnorm_log_total_mass": jnp.array(0.5),
     "sfh_lnorm_peak_lbt_gyr": jnp.array(1.0),
     "sfh_lnorm_width_gyr": jnp.array(1.5),
     "met_logzsol": jnp.array(-0.05),

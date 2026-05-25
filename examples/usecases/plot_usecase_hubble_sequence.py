@@ -18,6 +18,10 @@ References:
 - Kennicutt 1992, ApJS, 79, 255 (modern revision of the atlas)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -48,7 +52,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
         "width_gyr": tengri.Uniform(0.1, 5.0),
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.5,
     },

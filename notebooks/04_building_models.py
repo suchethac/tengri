@@ -37,6 +37,9 @@
 # %%
 import os
 
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 import time
@@ -138,12 +141,12 @@ print()
 #
 # `tengri.builders.sfh.dpl(...)` carries a real signature listing the
 # variant's parameters by short name, so hovering or autocompleting in an
-# IDE surfaces `alpha`, `beta`, `tau_gyr`, `log_peak_sfr` directly. A typo
+# IDE surfaces `alpha`, `beta`, `tau_gyr`, `log_total_mass` directly. A typo
 # (`beat=...`) is rejected immediately with the list of valid names —
 # you don't have to wait until SEDModel.build() runs.
 print("PATH 3: Builder factories")
 factory_groups = {
-    "sfh": builders.sfh.dpl(_=FREE, log_peak_sfr=Uniform(-1.0, 3.0)),
+    "sfh": builders.sfh.dpl(_=FREE, log_total_mass=Uniform(9.0, 11.0)),
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
@@ -351,7 +354,7 @@ sfh_families = [
     (
         "tsnorm",
         {
-            "sfh_tsnorm_log_peak_sfr": np.log10(15.0),
+            "sfh_tsnorm_log_total_mass": np.log10(1e10),
             "sfh_tsnorm_peak_lbt_gyr": 3.0,
             "sfh_tsnorm_width_gyr": 2.5,
             "sfh_tsnorm_skew": 0.2,
@@ -361,7 +364,7 @@ sfh_families = [
     (
         "dpl",
         {
-            "sfh_dpl_log_peak_sfr": np.log10(15.0),
+            "sfh_dpl_log_total_mass": np.log10(1e10),
             "sfh_dpl_alpha": 2.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 2.0,
@@ -370,14 +373,14 @@ sfh_families = [
     (
         "dexp",
         {
-            "sfh_dexp_log_peak_sfr": np.log10(15.0),
+            "sfh_dexp_log_total_mass": np.log10(1e10),
             "sfh_dexp_tau_gyr": 2.5,
         },
     ),
     (
         "lnorm",
         {
-            "sfh_lnorm_log_peak_sfr": np.log10(15.0),
+            "sfh_lnorm_log_total_mass": np.log10(1e10),
             "sfh_lnorm_peak_lbt_gyr": 3.0,
             "sfh_lnorm_width_gyr": 0.6,
         },
@@ -535,7 +538,7 @@ print("─" * 70)
 base_groups_dust = {
     "sfh": {
         "type": "tsnorm",
-        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
         "width_gyr": Fixed(2.5),
         "skew": Fixed(0.2),
@@ -577,7 +580,7 @@ gs = fig.add_gridspec(1, 2, wspace=0.3)
 
 # Fixed SFH for all dust laws
 truth_sfh = {
-    "sfh_tsnorm_log_peak_sfr": np.log10(15.0),
+    "sfh_tsnorm_log_total_mass": np.log10(1e10),
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
     "sfh_tsnorm_width_gyr": 2.5,
     "sfh_tsnorm_skew": 0.2,
@@ -591,7 +594,7 @@ ax_ref = fig.add_subplot(gs[0])
 groups_nodust = {
     "sfh": {
         "type": "tsnorm",
-        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
         "width_gyr": Fixed(2.5),
         "skew": Fixed(0.2),
@@ -651,7 +654,7 @@ for idx, dust_law in enumerate(dust_laws):
     groups_dustlaw_fig = {
         "sfh": {
             "type": "tsnorm",
-            "log_peak_sfr": Fixed(np.log10(15.0)),
+            "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
             "width_gyr": Fixed(2.5),
             "skew": Fixed(0.2),
@@ -728,7 +731,7 @@ print("─" * 70)
 base_groups_emission = {
     "sfh": {
         "type": "tsnorm",
-        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
         "width_gyr": Fixed(2.5),
         "skew": Fixed(0.2),
@@ -772,7 +775,7 @@ gs = fig.add_gridspec(1, 2, wspace=0.3)
 
 # Fixed SFH/metallicity/dust for all emission models
 truth_base = {
-    "sfh_tsnorm_log_peak_sfr": np.log10(15.0),
+    "sfh_tsnorm_log_total_mass": np.log10(1e10),
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
     "sfh_tsnorm_width_gyr": 2.5,
     "sfh_tsnorm_skew": 0.2,
@@ -791,7 +794,7 @@ for idx, emission in enumerate(dust_emissions):
     groups_emission_fig = {
         "sfh": {
             "type": "tsnorm",
-            "log_peak_sfr": Fixed(np.log10(15.0)),
+            "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
             "width_gyr": Fixed(2.5),
             "skew": Fixed(0.2),
@@ -839,7 +842,7 @@ for emission in dust_emissions:
     groups_energy_fig = {
         "sfh": {
             "type": "tsnorm",
-            "log_peak_sfr": Fixed(np.log10(15.0)),
+            "log_total_mass": Fixed(np.log10(1e10)),
             "peak_lbt_gyr": Fixed(3.0),
             "width_gyr": Fixed(2.5),
             "skew": Fixed(0.2),
@@ -971,7 +974,7 @@ print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 groups_perf = {
     "sfh": {
         "type": "tsnorm",
-        "log_peak_sfr": Fixed(np.log10(15.0)),
+        "log_total_mass": Fixed(np.log10(1e10)),
         "peak_lbt_gyr": Fixed(3.0),
         "width_gyr": Fixed(2.5),
         "skew": Fixed(0.2),
@@ -993,7 +996,7 @@ model_perf = SEDModel(spec_perf, ssp, observation=observation)
 
 # Base truth dict
 truth_perf = {
-    "sfh_tsnorm_log_peak_sfr": np.log10(15.0),
+    "sfh_tsnorm_log_total_mass": np.log10(1e10),
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
     "sfh_tsnorm_width_gyr": 2.5,
     "sfh_tsnorm_skew": 0.2,

@@ -176,33 +176,57 @@ def _valid_dust_emission_types() -> frozenset[str]:
     return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
 
 
-#: Valid nebular types.
-_VALID_NEBULAR_TYPES = {
-    "none",
-    "ssp",
-    "cue",
-    "cloudy",
-    "cb19",
+def _valid_nebular_types() -> frozenset[str]:
+    """Derive accepted ``neb.type`` values from :data:`NEBULAR_MODELS`.
+
+    Mirrors the IGM / radio / X-ray derivation (#355): the validator
+    reads the runtime registry rather than maintaining a parallel
+    hand-written set. Adding a new nebular backend = one
+    ``register_nebular_model`` call in
+    ``components/nebular/__init__.py``; this validator picks it up
+    automatically. ADR-0005 / ADR-0008.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    return frozenset(NEBULAR_MODELS.keys())
+
+
+def _valid_igm_types() -> frozenset[str]:
+    """Derive accepted ``igm.type`` values from :data:`IGM_MODELS`.
+
+    Following ADR-0005 / ADR-0008 (single source of truth), the
+    grammar-layer validator views the runtime registry directly rather
+    than maintaining a parallel hand-written set. Adding a new IGM
+    transmission model = one ``register_igm_model`` call in
+    ``components/igm/__init__.py``; this validator picks it up
+    automatically.
+    """
+    from tengri.components.igm import IGM_MODELS
+
+    return frozenset(IGM_MODELS.keys())
+
+
+#: Map grammar-layer IGM names to the canonical form consumed by
+#: :meth:`SEDModel._init_igm` (which only accepts ``'inoue'`` / ``'madau'``).
+_IGM_TYPE_ALIASES = {
+    "inoue14": "inoue",
+    "inoue": "inoue",
+    "madau": "madau",
 }
 
-#: Valid IGM types.
-_VALID_IGM_TYPES = {
-    "none",
-    "madau",
-    "inoue14",
-}
 
-#: Valid radio types.
-_VALID_RADIO_TYPES = {
-    "none",
-    "condon92",
-}
+def _valid_radio_types() -> frozenset[str]:
+    """Derive accepted ``radio.type`` values from :data:`RADIO_MODELS`."""
+    from tengri.components.radio import RADIO_MODELS
 
-#: Valid X-ray types.
-_VALID_XRAY_TYPES = {
-    "none",
-    "simple",
-}
+    return frozenset(RADIO_MODELS.keys())
+
+
+def _valid_xray_types() -> frozenset[str]:
+    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`."""
+    from tengri.components.xray import XRAY_MODELS
+
+    return frozenset(XRAY_MODELS.keys())
 
 
 def _valid_dust_laws() -> frozenset[str]:
@@ -669,8 +693,9 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     neb_type = neb_dict.get("type", "none")
 
     # Validate type
-    if neb_type not in _VALID_NEBULAR_TYPES:
-        suggestions = difflib.get_close_matches(neb_type, _VALID_NEBULAR_TYPES, n=2, cutoff=0.6)
+    valid_neb = _valid_nebular_types()
+    if neb_type not in valid_neb:
+        suggestions = difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown nebular type '{neb_type}'.{suggest_str}")
 
@@ -683,6 +708,11 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
+        # #303: opt into the full Cue catalogue (~271 species) instead
+        # of the default 128 CLOUDY/FSPS subset so users can read
+        # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
+        if neb_dict.get("full_catalogue", False):
+            result["cue_full_catalogue"] = True
     elif neb_type == "cloudy":
         result["nebular"] = True
     elif neb_type == "cb19":
@@ -694,8 +724,9 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     igm_type = igm_dict.get("type", "madau")
 
     # Validate type
-    if igm_type not in _VALID_IGM_TYPES:
-        suggestions = difflib.get_close_matches(igm_type, _VALID_IGM_TYPES, n=2, cutoff=0.6)
+    valid_igm = _valid_igm_types()
+    if igm_type not in valid_igm:
+        suggestions = difflib.get_close_matches(igm_type, valid_igm, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
@@ -705,6 +736,10 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     else:
         # Both madau and inoue14 -> apply_igm=True
         result["apply_igm"] = True
+        # Propagate the model choice. _init_igm speaks 'inoue'/'madau';
+        # 'inoue14' is the grammar-level name — normalise to the canonical
+        # form here so the user's selection isn't silently dropped (#344).
+        result["igm_model"] = _IGM_TYPE_ALIASES[igm_type]
 
     # Handle optional IGM subkeys
     if igm_dict.get("patchy", False):
@@ -719,8 +754,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     radio_type = radio_dict.get("type", "none")
 
     # Validate type
-    if radio_type not in _VALID_RADIO_TYPES:
-        suggestions = difflib.get_close_matches(radio_type, _VALID_RADIO_TYPES, n=2, cutoff=0.6)
+    valid_radio = _valid_radio_types()
+    if radio_type not in valid_radio:
+        suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
 
@@ -732,8 +768,9 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     xray_type = xray_dict.get("type", "none")
 
     # Validate type
-    if xray_type not in _VALID_XRAY_TYPES:
-        suggestions = difflib.get_close_matches(xray_type, _VALID_XRAY_TYPES, n=2, cutoff=0.6)
+    valid_xray = _valid_xray_types()
+    if xray_type not in valid_xray:
+        suggestions = difflib.get_close_matches(xray_type, valid_xray, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
 
@@ -752,7 +789,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
-    "neb": frozenset({"type", "*"}),
+    "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "radio": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),

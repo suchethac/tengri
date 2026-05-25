@@ -18,7 +18,12 @@ This technique is essential for:
 
 Reference: Eisenstein et al. 2003, ApJ 585, 694–717 (SDSS DR1 spectral stacking);
 Bradbury et al. 2018, arXiv:1811.02361 (JAX documentation).
+
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import time
 import warnings

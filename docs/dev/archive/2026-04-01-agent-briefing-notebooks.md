@@ -370,7 +370,7 @@ Use these as the base for most notebooks. Copy exactly.
 **Smooth galaxy (D=7):**
 ```python
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -389,7 +389,7 @@ spec = ParamSpec(
 spec_stochastic = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 5.0),
     sfh_dpl_beta=Uniform(0.5, 5.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
     sfh_field_psd_sigma=Uniform(0.01, 1.5),
     sfh_field_psd_tau_myr=Uniform(10.0, 500.0),
     met_logzsol=Uniform(-2.0, 0.2),

@@ -54,7 +54,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sds
 sed = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": FIXED, "log_peak_sfr": tengri.Uniform(-1.0, 3.0)},
+    sfh={"type": "dpl", "*": FIXED, "log_total_mass": 10.0, 3.0)},
     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
     neb={"type": "none"},
     redshift=tengri.Fixed(0.05),

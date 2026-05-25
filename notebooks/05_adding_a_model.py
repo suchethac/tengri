@@ -43,6 +43,9 @@
 # %%
 import os
 
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 import jax.numpy as jnp

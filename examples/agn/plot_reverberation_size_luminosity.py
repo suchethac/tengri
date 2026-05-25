@@ -30,6 +30,10 @@ Reference
 - Peterson 1993, PASP, 105, 247 — Reverberation mapping review
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 # %%
 import os
 import warnings
@@ -48,24 +52,27 @@ from tengri.agn import resolve_agn_model
 # Setup plotting style
 try:
     from _plot_style import setup_style
+
     setup_style()
 except ImportError:
     # Fallback style if _plot_style not available
-    plt.rcParams.update({
-        "figure.dpi": 150,
-        "font.size": 10,
-        "font.family": "serif",
-        "mathtext.fontset": "dejavuserif",
-        "axes.linewidth": 1.0,
-        "xtick.major.width": 0.8,
-        "ytick.major.width": 0.8,
-        "xtick.direction": "in",
-        "ytick.direction": "in",
-        "xtick.top": True,
-        "ytick.right": True,
-        "legend.frameon": False,
-        "savefig.bbox": "tight",
-    })
+    plt.rcParams.update(
+        {
+            "figure.dpi": 150,
+            "font.size": 10,
+            "font.family": "serif",
+            "mathtext.fontset": "dejavuserif",
+            "axes.linewidth": 1.0,
+            "xtick.major.width": 0.8,
+            "ytick.major.width": 0.8,
+            "xtick.direction": "in",
+            "ytick.direction": "in",
+            "xtick.top": True,
+            "ytick.right": True,
+            "legend.frameon": False,
+            "savefig.bbox": "tight",
+        }
+    )
 
 # Output directory for figures
 FIG_DIR = "figures"
@@ -100,7 +107,7 @@ def bentz2013_r_blr(log_l5100):
     and accretion physics.
     """
     log_r_blr = -21.3 + 0.533 * log_l5100
-    return 10.0 ** log_r_blr
+    return 10.0**log_r_blr
 
 
 # %%
@@ -195,7 +202,7 @@ for idx, color in zip(selected_indices, colors):
         lambda_l_lambda,
         color=color,
         linewidth=2,
-        label=f"$\\log L_{{\\rm bol}} = {log_lbol:.1f}$"
+        label=f"$\\log L_{{\\rm bol}} = {log_lbol:.1f}$",
     )
 
 # Mark 5100 Angstrom on the SED plot
@@ -208,17 +215,10 @@ ax2.set_xlim(0.01, 100)
 ax2.grid(True, alpha=0.3, which="both")
 ax2.legend(fontsize=9, loc="upper left")
 
-fig.suptitle(
-    "AGN Reverberation Size-Luminosity Relation (Bentz et al. 2013)",
-    fontsize=13,
-    y=1.00
-)
+fig.suptitle("AGN Reverberation Size-Luminosity Relation (Bentz et al. 2013)", fontsize=13, y=1.00)
 fig.tight_layout()
 
-# Save figure
-figpath = os.path.join(FIG_DIR, "agn_reverberation_size_luminosity.png")
-fig.savefig(figpath, dpi=150, bbox_inches="tight")
-print(f"Saved {figpath}")
+fig.savefig("plot_reverberation_size_luminosity.png", dpi=150, bbox_inches="tight")
 
 plt.show()
 
@@ -232,25 +232,27 @@ coeffs = np.polyfit(log_l_for_fit, log_r_for_fit, 1)
 fitted_slope = coeffs[0]
 fitted_intercept = coeffs[1]
 
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("Reverberation Size-Luminosity Relation Verification")
-print("="*70)
-print(f"\nBentz et al. (2013) relation:")
-print(f"  log(R_BLR) = -21.3 + 0.533 * log(L_5100)")
-print(f"\nFitted to tengri qsogen AGN model:")
+print("=" * 70)
+print("\nBentz et al. (2013) relation:")
+print("  log(R_BLR) = -21.3 + 0.533 * log(L_5100)")
+print("\nFitted to tengri qsogen AGN model:")
 print(f"  log(R_BLR) = {fitted_intercept:.2f} + {fitted_slope:.3f} * log(L_5100)")
-print(f"\nSlope comparison:")
+print("\nSlope comparison:")
 print(f"  Bentz:   {0.533:.3f}")
 print(f"  Fitted:  {fitted_slope:.3f}")
 print(f"  Deviation: {abs(fitted_slope - 0.533) / 0.533 * 100:.1f}%")
 
-print(f"\nData summary:")
-print(f"  AGN model: qsogen (Temple, Hewett & Banerji 2021)")
-print(f"  Wavelength of interest: 5100 Å (Balmer alpha region)")
+print("\nData summary:")
+print("  AGN model: qsogen (Temple, Hewett & Banerji 2021)")
+print("  Wavelength of interest: 5100 Å (Balmer alpha region)")
 print(f"  Number of luminosity samples: {len(log_lbol_used)}")
-print(f"  L_5100 range: 10^{log_l5100_computed.min():.1f} to 10^{log_l5100_computed.max():.1f} erg/s")
+print(
+    f"  L_5100 range: 10^{log_l5100_computed.min():.1f} to 10^{log_l5100_computed.max():.1f} erg/s"
+)
 print(f"  R_BLR range: {r_blr_computed.min():.2e} to {r_blr_computed.max():.2e} light-days")
 
-print(f"\nCitations:")
-print(f"  Bentz et al. (2013), ApJ 767:149, arXiv:1303.1742")
-print(f"  Peterson (1993), PASP 105:247 — Reverberation mapping review")
+print("\nCitations:")
+print("  Bentz et al. (2013), ApJ 767:149, arXiv:1303.1742")
+print("  Peterson (1993), PASP 105:247 — Reverberation mapping review")

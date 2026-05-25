@@ -23,6 +23,10 @@ on SDSS template K-corrections.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 # sphinx_gallery_thumbnail_number = 1
 
 from pathlib import Path
@@ -86,7 +90,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,  # 10 Msun/yr
+            "log_total_mass": 10.0,  # 10 Msun/yr
             "peak_lbt_gyr": 0.2,  # age ≈ 0.2 Gyr
             "width_gyr": 0.15,
             "skew": 0.0,
@@ -106,7 +110,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 5.0,  # age ≈ 5 Gyr
             "width_gyr": 1.0,
             "skew": 0.0,
@@ -126,7 +130,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 2.0,  # 100 Msun/yr
+            "log_total_mass": 10.0,  # 100 Msun/yr
             "peak_lbt_gyr": 10.0,  # age ≈ 10 Gyr (old starburst)
             "width_gyr": 0.5,
             "skew": 0.0,
@@ -146,7 +150,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 2.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 1.5,  # intermediate age
             "width_gyr": 0.3,
             "skew": 0.0,

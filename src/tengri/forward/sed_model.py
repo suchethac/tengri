@@ -18,7 +18,7 @@ Usage::
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -825,9 +825,25 @@ class SEDModel:
         sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
+        # Per-spec public SFH param names (sfh_X_*). The composer
+        # dispatches per-component on these to avoid collisions when two
+        # additive SFHs share an internal kwarg (e.g. ``log_total_mass``).
+        # See ``composed_fn`` in components/stellar/sfh/registry.py and #372.
+        self._sfh_public_names = set(sfh_param_map.keys())
         self._sfh_settings = sfh_settings
         self._uses_stochastic_sfh = spec.stochastic
         self._gp_kernel = sfh_settings.get("sfh_field_model", "drw")
+
+        # Warn if any burst-width SFH parameter is narrower than the
+        # local SSP grid spacing at the burst peak — see #299. The
+        # forward model interpolates SFR(t) at SSP grid points (not a
+        # bin-integral), so narrow bursts alias as a staircase in
+        # age-sensitive observables.
+        from tengri.components.stellar.sfh._aliasing_warning import (
+            maybe_warn_burst_aliasing,
+        )
+
+        maybe_warn_burst_aliasing(spec, self.ssp_ages_yr)
 
         # Return the base param_map delta (built param_map + dust-model selection)
         return _build_param_map(
@@ -937,7 +953,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
@@ -967,6 +983,14 @@ class SEDModel:
             from tengri.components.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+        elif spec.nebular_mode == "cb19":
+            # Bug A in #361: ``neb={'type': 'cb19'}`` used to fall through
+            # to the BakedIn ``else`` branch, leaving the user with a model
+            # whose ``_nebular_backend`` was the wrong class — every line
+            # accessor then returned NaN with no warning. Dispatch explicitly.
+            from tengri.components.nebular import CB19Backend
+
+            self._nebular_backend = CB19Backend(ssp_data=ssp_data)
         else:
             from tengri.components.nebular import BakedInBackend
 
@@ -2016,7 +2040,11 @@ class SEDModel:
             SFR(t) in Msun/yr on the log-age grid.
         """
         # Build kwargs for the composed SFH function
-        kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
+        kw = {
+            k: v
+            for k, v in p.items()
+            if k in self._sfh_internal_names or k in self._sfh_public_names
+        }
 
         # If field is present, compute GP and pass to composed fn
         if self._uses_stochastic_sfh and "xi" in p:
@@ -2045,7 +2073,11 @@ class SEDModel:
         sfr_full : array
             SFR with GP modulation (same as sfr_mean if no field).
         """
-        kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
+        kw = {
+            k: v
+            for k, v in p.items()
+            if k in self._sfh_internal_names or k in self._sfh_public_names
+        }
         sfr_mean = self._sfh_fn(self.age_yr, **kw)
 
         if self._uses_stochastic_sfh and "xi" in p:
@@ -2759,7 +2791,7 @@ class SEDModel:
         ----------
         params : dict
             Parameter values using public parameter names (e.g.,
-            ``sfh_tsnorm_log_peak_sfr``, ``met_logzsol``, ``redshift``).
+            ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
 
         Returns
@@ -4443,6 +4475,7 @@ class SEDModel:
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
+            cue_full_catalogue=bool(getattr(self.spec, "cue_full_catalogue", False)),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_torus_block=getattr(self, "_agn_torus_block", "none"),
@@ -4700,7 +4733,7 @@ class SEDModel:
         wave_obs : array, optional
             Observed-frame wavelength array for spectroscopy.
         priors : dict, optional
-            Parameter priors. Keys may be short names (``"log_peak_sfr"``),
+            Parameter priors. Keys may be short names (``"log_total_mass"``),
             universal short names (``"logzsol"``), or full prefixed names.
             Short names are expanded automatically.
         **model_kwargs

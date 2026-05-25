@@ -53,12 +53,28 @@ class TestSKIRTORComponentBasics:
         assert comp.parameter_prefix == "agn_"
 
     def test_skirtor_outputs(self):
-        """outputs() method returns expected cross-component keys."""
+        """outputs() method returns the six CIGALE-faithful cross-component keys.
+
+        Post-#329 (CIGALE-faithful BLR/NLR/X-ray/SKIRTOR), SKIRTORTorus publishes
+        a richer set: separate disc/torus/polar-dust bolometric luminosities, the
+        AGN-only 2500 A monochromatic luminosity (used for α_OX), and the mid-IR
+        diagnostics at 6 and 12 micron.
+        """
         comp = SKIRTORTorus()
         outs = comp.outputs()
-        assert len(outs) == 1
-        assert outs[0].name == "L_agn_torus"
-        assert outs[0].units == "erg/s"
+        names = {o.name for o in outs}
+        expected = {
+            "L_agn_disc",
+            "L_agn_torus",
+            "L_agn_polar_dust",
+            "L_2500_30deg",
+            "L_6um",
+            "L_12um",
+        }
+        assert names == expected
+        units = {o.name: o.units for o in outs}
+        assert units["L_agn_torus"] == "erg/s"
+        assert units["L_6um"] == "erg/s/Hz"
 
 
 class TestSKIRTORParameterDiscovery:
@@ -71,7 +87,14 @@ class TestSKIRTORParameterDiscovery:
         assert len(decls) == 7
 
     def test_declared_parameter_names(self):
-        """Parameter names have agn_ prefix as per naming contract."""
+        """Parameter names have agn_ prefix as per naming contract.
+
+        Post-#329 ``agn_torus_frac`` was renamed to ``agn_frac_agn`` to align
+        with CIGALE's nomenclature (the parameter is the AGN bolometric
+        fraction of the total reprocessed luminosity, not specifically the
+        torus). The old name is still accepted by the analytic wrapper as a
+        deprecated alias.
+        """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
         names = {d.name for d in decls}
@@ -82,7 +105,7 @@ class TestSKIRTORParameterDiscovery:
             "agn_q_skirtor",
             "agn_oa_skirtor",
             "agn_cos_inc",
-            "agn_torus_frac",
+            "agn_frac_agn",
         }
         assert names == expected
 

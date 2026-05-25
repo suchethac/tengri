@@ -32,6 +32,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
@@ -96,7 +99,7 @@ ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 # %%
 spec_sf = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+    sfh_tsnorm_log_total_mass=10.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
     sfh_tsnorm_width_gyr=Fixed(1.5),
     sfh_tsnorm_skew=Fixed(0.2),
@@ -196,7 +199,7 @@ for inst_factory in (Instrument.SDSS, Instrument.JWST_NIRCam, Instrument.WISE):
 
 # %%
 spec_grid = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+    sfh_tsnorm_log_total_mass=10.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
     sfh_tsnorm_width_gyr=Fixed(1.5),
     sfh_tsnorm_skew=Fixed(0.2),
@@ -279,7 +282,7 @@ fig, ax = plt.subplots(figsize=(9, 4))
 viridis = plt.get_cmap("viridis")
 for i, (law_name, label) in enumerate(DUST_LAW_LABELS.items()):
     spec_law = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+        sfh_tsnorm_log_total_mass=10.0),
         sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
         sfh_tsnorm_width_gyr=Fixed(1.5),
         sfh_tsnorm_skew=Fixed(0.2),
@@ -327,7 +330,7 @@ plt.show()
 # %%
 inst_jwst = Instrument.JWST_NIRCam()
 spec_z = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+    sfh_tsnorm_log_total_mass=10.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),
     sfh_tsnorm_width_gyr=Fixed(0.2),
     sfh_tsnorm_skew=Fixed(0.0),
@@ -379,7 +382,7 @@ plt.show()
 
 # %%
 spec_agn = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+    sfh_tsnorm_log_total_mass=10.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
     sfh_tsnorm_width_gyr=Fixed(1.5),
     sfh_tsnorm_skew=Fixed(0.2),

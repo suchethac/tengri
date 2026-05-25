@@ -8,6 +8,10 @@ speed; late-time β sets the post-peak decay. The optical SED responds across
 each cell, revealing how parameter space maps to stellar age.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -30,7 +34,7 @@ fig, axes = plt.subplots(3, 3, figsize=(12, 10))
 
 baseline = dict(
     tau_gyr=3.0,
-    log_peak_sfr=1.0,
+    log_total_mass=10.0,
 )
 
 for i, beta in enumerate(betas):
@@ -45,7 +49,7 @@ for i, beta in enumerate(betas):
                 "alpha": alpha,
                 "beta": beta,
                 "tau_gyr": baseline["tau_gyr"],
-                "log_peak_sfr": baseline["log_peak_sfr"],
+                "log_total_mass": 10.0,
             },
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
             redshift=tengri.Fixed(0.1),

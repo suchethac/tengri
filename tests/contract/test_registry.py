@@ -54,7 +54,7 @@ class TestResolveSingle:
     def test_tsnorm_returns_5_params(self):
         _fn, params, _param_map, _settings = resolve_sfh("tsnorm")
         assert len(params) == 5
-        assert "sfh_tsnorm_log_peak_sfr" in params
+        assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_tsnorm_peak_lbt_gyr" in params
 
     def test_dpl_returns_4_params(self):
@@ -84,7 +84,7 @@ class TestResolveComposed:
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "field"])
         # tsnorm (5) + field (2) = 7
         assert len(params) == 7
-        assert "sfh_tsnorm_log_peak_sfr" in params
+        assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_field_psd_sigma" in params
         assert "sfh_field_psd_tau_myr" in params
 
@@ -99,24 +99,74 @@ class TestResolveComposed:
         _fn, params, _param_map, _settings = resolve_sfh(["tsnorm", "burst", "field"])
         assert len(params) == 10
 
-    def test_additive_sum(self):
-        """Two additive models sum their SFR."""
+    def test_additive_sum_legacy_internal_names(self):
+        """Backward compat: passing pre-translated internal kwargs still works.
+
+        Two additive components sharing an internal kwarg (``log_total_mass``)
+        both receive the same value — the legacy ``kw_i = {k: kw[k] for k in
+        int_names_i}`` semantics. New code should prefer the per-component
+        public-name dispatch (see ``test_additive_sum_distinct_masses``).
+        """
         fn, _, _, _ = resolve_sfh(["tsnorm", "const"])
-        t = jnp.logspace(6, 10, 100)
+        t = jnp.linspace(1e5, 14e9, 5000)
         sfr = fn(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=10.0,  # both components see this — legacy collision behavior
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
             trunc=3.0,
-            log_sfr=0.0,
             start=0.0,
             end=14e9,
         )
         assert jnp.all(sfr >= 0)
-        # Should be larger than just constant (1.0)
-        assert jnp.max(sfr) > 1.0
+        # Both components integrate to 10**10 Msun each ⇒ composite ≈ 2e10.
+        m_total = float(jnp.trapezoid(sfr, t))
+        assert abs(m_total - 2e10) / 2e10 < 0.01
+
+    def test_additive_sum_distinct_masses(self):
+        """Public-name dispatch (#372 fix): each component gets its own mass."""
+        fn, _, _, _ = resolve_sfh(["tsnorm", "exp"])
+        t = jnp.linspace(1e5, 14e9, 5000)
+        sfr = fn(
+            t,
+            # tsnorm: 10^10 Msun formed over a 5 Gyr peak
+            sfh_tsnorm_log_total_mass=10.0,
+            sfh_tsnorm_peak_lbt_gyr=5e9,
+            sfh_tsnorm_width_gyr=2e9,
+            sfh_tsnorm_skew=0.0,
+            sfh_tsnorm_trunc=3.0,
+            # exp: 10^9 Msun formed (10× less — must not collide with tsnorm's mass)
+            sfh_exp_log_total_mass=9.0,
+            sfh_exp_tau_gyr=2e9,
+            sfh_exp_start_gyr=0.0,
+        )
+        assert jnp.all(sfr >= 0)
+        m_total = float(jnp.trapezoid(sfr, t))
+        expected = 10**10.0 + 10**9.0  # tsnorm + exp, independent masses
+        assert abs(m_total - expected) / expected < 0.01
+
+    def test_additive_sum_three_components(self):
+        """Per-component dispatch scales to 3+ additive SFHs."""
+        fn, _, _, _ = resolve_sfh(["tsnorm", "exp", "lnorm"])
+        t = jnp.linspace(1e5, 14e9, 5000)
+        sfr = fn(
+            t,
+            sfh_tsnorm_log_total_mass=10.0,
+            sfh_tsnorm_peak_lbt_gyr=5e9,
+            sfh_tsnorm_width_gyr=2e9,
+            sfh_tsnorm_skew=0.0,
+            sfh_tsnorm_trunc=3.0,
+            sfh_exp_log_total_mass=9.5,
+            sfh_exp_tau_gyr=2e9,
+            sfh_exp_start_gyr=0.0,
+            sfh_lnorm_log_total_mass=8.5,
+            sfh_lnorm_peak_lbt_gyr=3e9,
+            sfh_lnorm_width_gyr=0.3,
+        )
+        m_total = float(jnp.trapezoid(sfr, t))
+        expected = 10**10.0 + 10**9.5 + 10**8.5
+        assert abs(m_total - expected) / expected < 0.01
 
     def test_no_param_collision(self):
         """All model prefixes are unique so no collisions possible."""
@@ -151,7 +201,7 @@ class TestComposedFunction:
         """Single tsnorm produces finite positive SFR."""
         fn, _, _, _ = resolve_sfh("tsnorm")
         t = jnp.logspace(6, 10, 200)
-        sfr = fn(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
+        sfr = fn(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
         chex.assert_tree_all_finite(sfr)
         assert jnp.max(sfr) > 0
 
@@ -161,13 +211,13 @@ class TestComposedFunction:
         t = jnp.logspace(6, 10, 256)
 
         # Without GP
-        sfr_no_gp = fn(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
+        sfr_no_gp = fn(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=3.0)
 
         # With GP (zero gp_x should give same result)
         gp_x = jnp.zeros(256)
         sfr_gp = fn(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
@@ -183,7 +233,7 @@ class TestComposedFunction:
         t = jnp.logspace(6, 10, 200)
 
         kw = dict(
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             peak_lbt=5e9,
             width=2e9,
             skew=0.0,
@@ -203,7 +253,7 @@ class TestComposedFunction:
         jit_fn = jax.jit(
             lambda t_: fn(
                 t_,
-                log_peak_sfr=1.0,
+                log_total_mass=1.0,
                 peak_lbt=5e9,
                 width=2e9,
                 skew=0.0,
