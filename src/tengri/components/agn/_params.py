@@ -24,8 +24,14 @@ from tengri.protocols.component import ParamDeclaration
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_frac",
-        Fixed(0.0),
-        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
+        Fixed(1.0),
+        "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
+        "multiplier on the composable runner output and as the AGN-to-stellar "
+        "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
+        "configured AGN at full strength'; a wildcard ``'*': FIXED`` on an "
+        "AGN-configured group therefore yields a working AGN (closes #417). "
+        "Set explicitly to 0.0 to disable the AGN while keeping the rest of "
+        "the agn config in place.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
