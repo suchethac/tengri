@@ -23,9 +23,6 @@ try:
 except ImportError:  # numpy < 1.26
     from numpy import trapz as _np_trapz  # type: ignore[no-redef]
 
-# Physical constants
-from tengri.utils.physics_constants import L_SUN as _LSUN
-
 # Module-level memoization for ``precompute_ionizing_params_table``.
 #
 # Same SSP → identical ionizing-parameter table. The scipy curve-fit loop
@@ -44,10 +41,11 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 # modules → the persistent XLA cache misses on every Cue compile. Loading
 # a bit-identical table from disk on every process keeps the HLO stable
 # and lets the JAX persistent cache actually hit on cold-start runs.
-
 import hashlib as _hashlib
 import os as _os
 from pathlib import Path as _Path
+
+from tengri.utils.physics_constants import L_SUN as _LSUN
 
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
