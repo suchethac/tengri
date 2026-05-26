@@ -45,32 +45,32 @@ Read the file first, then add the following immediately after the `_REVERSE_ALIA
 # Used by Model.from_config() to expand user-supplied short priors.
 _SFH_SHORT_NAMES: dict[str, dict[str, str]] = {
     "tsnorm": {
-        "log_peak_sfr": "sfh_tsnorm_log_peak_sfr",
+        "log_total_mass": "sfh_tsnorm_log_total_mass",
         "peak_lbt_gyr": "sfh_tsnorm_peak_lbt_gyr",
         "width_gyr": "sfh_tsnorm_width_gyr",
         "skew": "sfh_tsnorm_skew",
         "trunc": "sfh_tsnorm_trunc",
     },
     "snorm": {
-        "log_peak_sfr": "sfh_snorm_log_peak_sfr",
+        "log_total_mass": "sfh_snorm_log_total_mass",
         "peak_lbt_gyr": "sfh_snorm_peak_lbt_gyr",
         "width_gyr": "sfh_snorm_width_gyr",
         "skew": "sfh_snorm_skew",
     },
     "lnorm": {
-        "log_peak_sfr": "sfh_lnorm_log_peak_sfr",
+        "log_total_mass": "sfh_lnorm_log_total_mass",
         "peak_lbt_gyr": "sfh_lnorm_peak_lbt_gyr",
         "width_gyr": "sfh_lnorm_width_gyr",
     },
     "dpl": {
         "alpha": "sfh_dpl_alpha",
         "beta": "sfh_dpl_beta",
-        "log_peak_sfr": "sfh_dpl_log_peak_sfr",
+        "log_total_mass": "sfh_dpl_log_total_mass",
         "tau_gyr": "sfh_dpl_tau_gyr",
     },
     "delayed": {
         "tau_gyr": "sfh_delayed_tau_gyr",
-        "log_peak_sfr": "sfh_delayed_log_peak_sfr",
+        "log_total_mass": "sfh_delayed_log_total_mass",
     },
     # "field" additions apply to any sfh that includes "+field"
     "field": {
@@ -100,8 +100,8 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
         SFH type tokens, e.g. ``"tsnorm"`` or ``["dpl", "field"]``.
         Determines which short names are valid.
     priors : dict
-        User-supplied prior dict, may contain short names like ``"log_peak_sfr"``
-        or full names like ``"sfh_tsnorm_log_peak_sfr"``. Full names pass through
+        User-supplied prior dict, may contain short names like ``"log_total_mass"``
+        or full names like ``"sfh_tsnorm_log_total_mass"``. Full names pass through
         unchanged.
 
     Returns
@@ -112,8 +112,8 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
 
     Examples
     --------
-    >>> resolve_short_names("tsnorm", {"log_peak_sfr": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)})
-    {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5), "met_logzsol": Uniform(-2, 0.2)}
+    >>> resolve_short_names("tsnorm", {"log_total_mass": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)})
+    {"sfh_tsnorm_log_total_mass": Uniform(-1, 2.5), "met_logzsol": Uniform(-2, 0.2)}
     """
     if isinstance(sfh_type, str):
         tokens = [t.strip() for t in sfh_type.replace("+", " ").split()]
@@ -751,9 +751,9 @@ Add the following method to the `Model` class immediately before `fit()` (around
             Observed-frame wavelength array for spectroscopy. If provided,
             builds a ``SpectroscopyConfig`` and attaches it.
         priors : dict, optional
-            Parameter priors. Keys may be short names (e.g. ``"log_peak_sfr"``
+            Parameter priors. Keys may be short names (e.g. ``"log_total_mass"``
             when ``sfh="tsnorm"``), universal short names (``"logzsol"``,
-            ``"tau_bc"``), or full prefixed names (``"sfh_tsnorm_log_peak_sfr"``).
+            ``"tau_bc"``), or full prefixed names (``"sfh_tsnorm_log_total_mass"``).
             Short names are expanded automatically based on the ``sfh`` argument.
         **model_kwargs
             Forwarded to ``Model.__init__()`` (e.g. ``forward_dtype="float32"``).
@@ -772,7 +772,7 @@ Add the following method to the `Model` class immediately before `fit()` (around
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ...     redshift=0.1,
         ...     priors=dict(
-        ...         log_peak_sfr=tengri.Uniform(-1, 2.5),
+        ...         log_total_mass=tengri.Uniform(-1, 2.5),
         ...         peak_lbt_gyr=tengri.Uniform(0.5, 12),
         ...         width_gyr=tengri.Uniform(0.3, 5),
         ...         logzsol=tengri.Uniform(-2, 0.2),
@@ -1685,12 +1685,12 @@ class TestResolveShortNames:
         from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
-        prior = {"log_peak_sfr": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)}
+        prior = {"log_total_mass": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)}
         expanded = resolve_short_names("tsnorm", prior)
 
-        assert "sfh_tsnorm_log_peak_sfr" in expanded
+        assert "sfh_tsnorm_log_total_mass" in expanded
         assert "met_logzsol" in expanded
-        assert "log_peak_sfr" not in expanded
+        assert "log_total_mass" not in expanded
         assert "logzsol" not in expanded
 
     def test_dpl_short_names(self):
@@ -1717,17 +1717,17 @@ class TestResolveShortNames:
         from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
-        prior = {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5)}
+        prior = {"sfh_tsnorm_log_total_mass": Uniform(-1, 2.5)}
         expanded = resolve_short_names("tsnorm", prior)
 
         # Full name passes through unchanged
-        assert "sfh_tsnorm_log_peak_sfr" in expanded
+        assert "sfh_tsnorm_log_total_mass" in expanded
 
     def test_list_input_sfh_type(self):
         from tengri.parameters.translate import resolve_short_names
         from tengri.distributions import Uniform
 
-        prior = {"log_peak_sfr": Uniform(-1, 2.5)}
+        prior = {"log_total_mass": Uniform(-1, 2.5)}
         # Both string "tsnorm" and list ["tsnorm"] should work
         r1 = resolve_short_names("tsnorm", prior)
         r2 = resolve_short_names(["tsnorm"], prior)
@@ -1858,7 +1858,7 @@ class TestModelFromConfig:
             filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
             redshift=0.1,
             priors=dict(
-                log_peak_sfr=tengri.Uniform(-1, 2.5),
+                log_total_mass=tengri.Uniform(-1, 2.5),
                 peak_lbt_gyr=tengri.Uniform(0.5, 12),
                 width_gyr=tengri.Uniform(0.3, 5),
                 logzsol=tengri.Uniform(-2, 0.2),
@@ -1874,7 +1874,7 @@ class TestModelFromConfig:
 
     def test_free_params_contain_expanded_names(self, model_tsnorm):
         free = model_tsnorm.spec.free_params
-        assert "sfh_tsnorm_log_peak_sfr" in free
+        assert "sfh_tsnorm_log_total_mass" in free
         assert "met_logzsol" in free
         assert "dust_tau_bc" in free
 
@@ -1895,7 +1895,7 @@ class TestModelFromConfig:
             filters=["sdss_u", "sdss_g", "sdss_r"],
             redshift=0.2,
             priors=dict(
-                log_peak_sfr=tengri.Uniform(-1, 2.5),
+                log_total_mass=tengri.Uniform(-1, 2.5),
                 logzsol=tengri.Uniform(-2, 0.2),
             ),
         )
@@ -1917,7 +1917,7 @@ class TestModelFitConvenience:
                 alpha=tengri.Uniform(0.5, 3.0),
                 beta=tengri.Uniform(0.3, 2.0),
                 tau_gyr=tengri.Uniform(0.5, 10.0),
-                log_peak_sfr=tengri.Uniform(-1, 2.5),
+                log_total_mass=tengri.Uniform(-1, 2.5),
                 logzsol=tengri.Uniform(-1.5, 0.2),
                 tau_bc=tengri.Uniform(0, 3.0),
             ),
@@ -1926,7 +1926,7 @@ class TestModelFitConvenience:
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 4.0,
-            "sfh_dpl_log_peak_sfr": 0.9,
+            "sfh_dpl_log_total_mass": 0.9,
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,
             "dust_tau_diff": 0.3,
@@ -1991,7 +1991,7 @@ class TestPriorPredictive:
                 alpha=tengri.Uniform(0.5, 3.0),
                 beta=tengri.Uniform(0.3, 2.0),
                 tau_gyr=tengri.Uniform(0.5, 10.0),
-                log_peak_sfr=tengri.Uniform(-1, 2.5),
+                log_total_mass=tengri.Uniform(-1, 2.5),
                 logzsol=tengri.Uniform(-1.5, 0.2),
                 tau_bc=tengri.Uniform(0, 3.0),
             ),
@@ -2041,7 +2041,7 @@ class TestFitCatalog:
                 alpha=tengri.Uniform(0.5, 3.0),
                 beta=tengri.Uniform(0.3, 2.0),
                 tau_gyr=tengri.Uniform(0.5, 10.0),
-                log_peak_sfr=tengri.Uniform(-1, 2.5),
+                log_total_mass=tengri.Uniform(-1, 2.5),
                 logzsol=tengri.Uniform(-1.5, 0.2),
                 tau_bc=tengri.Uniform(0, 3.0),
             ),
@@ -2051,7 +2051,7 @@ class TestFitCatalog:
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 4.0,
-            "sfh_dpl_log_peak_sfr": 0.9,
+            "sfh_dpl_log_total_mass": 0.9,
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,
             "dust_tau_diff": 0.3,

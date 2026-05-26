@@ -156,7 +156,7 @@ print(
         key = jax.random.PRNGKey(42)
         truth = dict(model.spec.sample(key))
         truth.update({
-            "sfh_tsnorm_log_peak_sfr": 0.5,
+            "sfh_tsnorm_log_total_mass": 0.5,
             "agn_log_lbol": 45.0,
             "agn_frac": 0.1,
         })

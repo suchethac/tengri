@@ -30,6 +30,10 @@ References:
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 from pathlib import Path
 

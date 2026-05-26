@@ -45,6 +45,10 @@ luminosity inferred from multiwavelength SED fitting.
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import jax
@@ -83,7 +87,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -94,6 +98,8 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Fixed(12.0),  # Fixed bolometric luminosity for quasar regime
     },
     redshift=tengri.Fixed(0.0),  # Rest-frame SED at z=0
 )
@@ -180,12 +186,12 @@ plt.show()
 print("\n" + "=" * 70)
 print("Torus Opening Angle Sweep Summary")
 print("=" * 70)
-print(f"\nConfiguration:")
+print("\nConfiguration:")
 print(f"  Bolometric luminosity: log L_bol = {LOG_LBOL}")
 print(f"  Inclination: cos(i) = {COS_INCLINATION} (θ ≈ 45°)")
 print(f"  AGN fraction: {AGN_FRAC * 100:.0f}%")
 print(f"  Torus luminosity fraction: {TORUS_FRAC * 100:.0f}%")
-print(f"  Redshift: z = 0 (rest-frame)")
+print("  Redshift: z = 0 (rest-frame)")
 
 print(f"\nOpening angle values: {OPENING_ANGLES_DEG}")
 
@@ -194,7 +200,7 @@ mir_wave_min = 8.0 * 1e4  # Angstrom
 mir_wave_max = 100.0 * 1e4  # Angstrom
 mir_mask = (wave_rest >= mir_wave_min) & (wave_rest <= mir_wave_max)
 
-print(f"\nMIR emission (8–100 μm) scaling:")
+print("\nMIR emission (8–100 μm) scaling:")
 mir_lums = []
 for sed, oa_deg in zip(seds, OPENING_ANGLES_DEG):
     mir_sed = sed[mir_mask]
@@ -212,12 +218,12 @@ for sed, oa_deg in zip(seds, OPENING_ANGLES_DEG):
 mir_lums = np.array(mir_lums)
 increase_percent = (mir_lums[-1] - mir_lums[0]) / mir_lums[0] * 100.0
 print(f"\nMIR luminosity increase from 15° to 70°: {increase_percent:.1f}%")
-print(f"  This reflects the monotonic rise in torus covering fraction")
-print(f"  with larger opening angle (Mateos et al. 2017).")
+print("  This reflects the monotonic rise in torus covering fraction")
+print("  with larger opening angle (Mateos et al. 2017).")
 
-print(f"\nPhysics:")
-print(f"  Stalevski et al. (2016) SKIRTOR: 3D clumpy torus radiative transfer")
-print(f"  Opening angle controls viewing-angle-dependent absorption and")
-print(f"  re-emission, modulating the observable torus contribution.")
+print("\nPhysics:")
+print("  Stalevski et al. (2016) SKIRTOR: 3D clumpy torus radiative transfer")
+print("  Opening angle controls viewing-angle-dependent absorption and")
+print("  re-emission, modulating the observable torus contribution.")
 
 print("\n" + "=" * 70)

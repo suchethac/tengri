@@ -101,7 +101,7 @@ def build_model(sfh_type, spec_kwargs, *, approx):
     elif sfh_type == "dpl":
         base_kwargs.update(
             mean_sfh_type="dpl",
-            sfh_dpl_log_peak_sfr=Uniform(-1, 2.5),
+            sfh_dpl_log_total_mass=Uniform(8, 12),
             sfh_dpl_tau_gyr=Uniform(0.1, 10),
             sfh_dpl_alpha=Uniform(1, 10),
             sfh_dpl_beta=Uniform(1, 10),

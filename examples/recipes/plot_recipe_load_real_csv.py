@@ -7,6 +7,10 @@ generates mock photometry for 3 galaxies and fits each one independently
 with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -34,7 +38,7 @@ for gal_id in range(3):
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 3.0,
             "width_gyr": 2.0,
             "skew": 0.0,

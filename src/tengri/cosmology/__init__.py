@@ -12,7 +12,7 @@ Examples
 >>> cosmo.luminosity_distance_mpc(0.5)
 DeviceArray(2867.4..., dtype=float64)
 >>> cosmo.PLANCK18
-CosmoParams(Om0=0.315, w0=-1.0, wa=0.0, h=0.674)
+CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ from tengri.utils.cosmology import (
     comoving_distance,
     comoving_distance_mpc,
     comoving_volume_element,
+    cosmo_from_astropy,
     distance_modulus,
     kpc_per_arcsec,
     lookback_time,
@@ -50,6 +51,7 @@ __all__ = [
     "comoving_distance",
     "comoving_distance_mpc",
     "comoving_volume_element",
+    "cosmo_from_astropy",
     "distance_modulus",
     "kpc_per_arcsec",
     "lookback_time",

@@ -36,6 +36,10 @@ References
    https://doi.org/10.1088/0004-637X/787/1/35
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -89,6 +93,7 @@ def _build_model(u_min: float) -> tuple:
             "type": "draine_li2007",
             "*": tengri.FIXED,
             "qpah": 2.5,  # Fixed PAH mass fraction
+            "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
         },
     }
 

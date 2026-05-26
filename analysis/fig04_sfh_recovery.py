@@ -184,7 +184,9 @@ def main():
         choices=["mcmc_raytrace", "vi", "mcmc_nuts"],
         help="Inference method",
     )
-    parser.add_argument("--n-steps", type=int, default=400, help="MCMC steps for mcmc_raytrace/mcmc_nuts")
+    parser.add_argument(
+        "--n-steps", type=int, default=400, help="MCMC steps for mcmc_raytrace/mcmc_nuts"
+    )
     parser.add_argument("--n-grid", type=int, default=128, help="GP grid points")
     args = parser.parse_args()
 

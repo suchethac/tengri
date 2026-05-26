@@ -20,6 +20,10 @@ References:
 - Kauffmann et al. 2003, MNRAS, 341, 33
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -58,7 +62,7 @@ model = tengri.SEDModel.build(
         "width_gyr": 0.10,
         "skew": 0.0,
         "trunc": 13.5,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.0),

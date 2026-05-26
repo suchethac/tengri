@@ -23,7 +23,9 @@ from tengri.utils.transforms import to_bounded, to_unbounded
 # ---------------------------------------------------------------------------
 
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 
 def bench(fn, n=200, warmup=5):
@@ -52,7 +54,7 @@ spec = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     sfh_field_psd_sigma=Uniform(0.01, 1.0),
     sfh_field_psd_tau_myr=Uniform(10, 500),
     met_logzsol=Uniform(-2.0, 0.5),
@@ -103,8 +105,7 @@ def bench_batch(n_gal, model, spec, key):
     # Python loop (JIT-compiled, but graph unrolled N times)
     def loop_fwd_fn():
         return jnp.stack(
-            [model.predict_photometry({k: v[i] for k, v in bp.items()})
-             for i in range(n_gal)]
+            [model.predict_photometry({k: v[i] for k, v in bp.items()}) for i in range(n_gal)]
         )
 
     loop_fwd_jit = jax.jit(loop_fwd_fn)
@@ -200,10 +201,7 @@ def build_hierarchical_fns(n_gal, model):
         psd_sigma = to_bounded(pr["psd_sigma_u"], sigma_lo, sigma_hi)
         psd_tau = to_bounded(pr["psd_tau_u"], tau_lo, tau_hi)
 
-        gal_ub = {
-            name: jnp.stack([pr[f"g{i}_{name}"] for i in range(_n)])
-            for name in free_names
-        }
+        gal_ub = {name: jnp.stack([pr[f"g{i}_{name}"] for i in range(_n)]) for name in free_names}
         gal_xi = jnp.stack([pr[f"g{i}_psd_xi"] for i in range(_n)])
 
         def forward_one(ub_scalars, xi):
@@ -259,8 +257,13 @@ def bench_hierarchical(n_gal, model):
     t_vmap_grad, _ = bench(lambda _f=grad_vmap, _p=primals: _f(_p), n=200)
 
     return (
-        t_loop_fwd, t_vmap_fwd, t_loop_grad, t_vmap_grad,
-        jit_loop_s, jit_vmap_s, max_err,
+        t_loop_fwd,
+        t_vmap_fwd,
+        t_loop_grad,
+        t_vmap_grad,
+        jit_loop_s,
+        jit_vmap_s,
+        max_err,
     )
 
 
@@ -301,12 +304,9 @@ def build_raytrace_fns(n_gal, model):
         "psd_sigma_u": to_unbounded(jnp.array(2.0), sigma_lo, sigma_hi),
         "psd_tau_u": to_unbounded(jnp.array(100.0), tau_lo, tau_hi),
         "gal": {
-            name: 0.1 * jax.random.normal(jax.random.PRNGKey(0), (n_gal,))
-            for name in free_names
+            name: 0.1 * jax.random.normal(jax.random.PRNGKey(0), (n_gal,)) for name in free_names
         },
-        "gal_xi": 0.1 * jax.random.normal(
-            jax.random.PRNGKey(1), (n_gal, n_grid)
-        ),
+        "gal_xi": 0.1 * jax.random.normal(jax.random.PRNGKey(1), (n_gal, n_grid)),
     }
     init_flat, unravel_fn = ravel_pytree(init)
     n_D = len(init_flat)

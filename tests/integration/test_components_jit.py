@@ -44,7 +44,7 @@ def ssp():
 def base_params():
     return {
         # tsnorm SFH
-        "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
+        "sfh_tsnorm_log_total_mass": jnp.asarray(1.0),
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),
         "sfh_tsnorm_width_gyr": jnp.asarray(1.0),
         "sfh_tsnorm_skew": jnp.asarray(0.0),
@@ -126,7 +126,7 @@ def test_stellar_grad_finite(ssp, base_params):
 
     g = jax.jit(jax.grad(loss))(base_params)
     # The peak-SFR gradient must be positive (more SFR → more L).
-    assert float(g["sfh_tsnorm_log_peak_sfr"]) > 0.0
+    assert float(g["sfh_tsnorm_log_total_mass"]) > 0.0
     # All gradient leaves are finite.
     chex.assert_tree_all_finite(g)
 

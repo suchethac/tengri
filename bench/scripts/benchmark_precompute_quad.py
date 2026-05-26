@@ -32,6 +32,7 @@ Usage
     # N timing repeats:
     python bench/scripts/benchmark_precompute_quad.py --timing --n-repeats 500
 """
+
 from __future__ import annotations
 
 import argparse
@@ -61,12 +62,12 @@ def _gaussian_filters() -> tuple[list[str], list[np.ndarray], list[np.ndarray]]:
     """
     # Centers and FWHM chosen to span 2000–20000 Å with varying resolution
     configs = [
-        ("G2000_R3.4", 2000.0, 590.0),   # R ≈ 3.4
-        ("G3000_R4.3", 3000.0, 700.0),   # R ≈ 4.3
-        ("G4000_R5.7", 4000.0, 700.0),   # R ≈ 5.7
-        ("G5500_R7.9", 5500.0, 700.0),   # R ≈ 7.9
-        ("G7000_R10", 7000.0, 700.0),    # R ≈ 10
-        ("G9000_R13", 9000.0, 700.0),    # R ≈ 12.9
+        ("G2000_R3.4", 2000.0, 590.0),  # R ≈ 3.4
+        ("G3000_R4.3", 3000.0, 700.0),  # R ≈ 4.3
+        ("G4000_R5.7", 4000.0, 700.0),  # R ≈ 5.7
+        ("G5500_R7.9", 5500.0, 700.0),  # R ≈ 7.9
+        ("G7000_R10", 7000.0, 700.0),  # R ≈ 10
+        ("G9000_R13", 9000.0, 700.0),  # R ≈ 12.9
         ("G12000_R17", 12000.0, 700.0),  # R ≈ 17.1
         ("G15000_R21", 15000.0, 700.0),  # R ≈ 21.4
         ("G18000_R26", 18000.0, 700.0),  # R ≈ 25.7
@@ -354,9 +355,7 @@ def main() -> None:
     sdss = _load_real_filters(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     if sdss is not None:
         results_sdss = run_accuracy(*sdss, n_quad_vals)
-        print_accuracy_table(
-            "SDSS ugriz", results_sdss, n_quad_vals, timings=timings
-        )
+        print_accuracy_table("SDSS ugriz", results_sdss, n_quad_vals, timings=timings)
 
     # --- Filter set 3: LSST grizy ---
     lsst = _load_real_filters(["lsst_g", "lsst_r", "lsst_i", "lsst_z", "lsst_y"])

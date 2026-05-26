@@ -52,7 +52,7 @@ class TestResolvesCosmo:
         """h0 and om0 kwargs should create correct CosmoParams (h = H0/100)."""
         # h0=70 km/s/Mpc -> h=0.7
         result = luminosity_distance(0.5, h0=70.0, om0=0.3)
-        # Should differ from default (67.4, 0.315)
+        # Should differ from default (67.66, 0.30966)
         expected = luminosity_distance(0.5, h0=DEFAULT_H0, om0=DEFAULT_OM0)
         assert not jnp.allclose(result, expected)
 
@@ -310,7 +310,7 @@ class TestFlexibleAPI:
     def test_h0_om0_kwargs_match_cosmo(self):
         """luminosity_distance(z, h0=h, om0=o) should match with cosmo object."""
         z = 0.5
-        h0, om0 = 67.4, 0.315
+        h0, om0 = 67.66, 0.30966
         result1 = luminosity_distance(z, h0=h0, om0=om0)
         cosmo = CosmoParams(Om0=om0, w0=-1.0, wa=0.0, h=h0 / 100.0)
         result2 = luminosity_distance(z, cosmo=cosmo)
@@ -319,7 +319,7 @@ class TestFlexibleAPI:
     def test_different_h0_om0_differs(self):
         """Different h0/om0 should produce different results."""
         z = 0.5
-        result1 = luminosity_distance(z, h0=67.4, om0=0.315)
+        result1 = luminosity_distance(z, h0=67.66, om0=0.30966)
         result2 = luminosity_distance(z, h0=70.0, om0=0.3)
         assert not jnp.allclose(result1, result2)
 
@@ -338,14 +338,14 @@ class TestFlexibleAPI:
         ]
         for func in funcs:
             result1 = func(z)
-            result2 = func(z, h0=67.4, om0=0.315)
+            result2 = func(z, h0=67.66, om0=0.30966)
             assert jnp.allclose(result1, result2), f"{func.__name__} failed"
 
     def test_distance_modulus_supports_flexible_api(self):
         """distance_modulus should support flexible API."""
         z = 0.5
         result1 = distance_modulus(z)
-        result2 = distance_modulus(z, h0=67.4, om0=0.315)
+        result2 = distance_modulus(z, h0=67.66, om0=0.30966)
         assert jnp.allclose(result1, result2)
 
 
@@ -354,32 +354,32 @@ class TestBackwardCompat:
 
     def test_luminosity_distance_positional_args(self):
         """luminosity_distance(z, h0, om0) should work (positional args)."""
-        result = luminosity_distance(0.5, 67.4, 0.315)
-        expected = luminosity_distance(0.5, h0=67.4, om0=0.315)
+        result = luminosity_distance(0.5, 67.66, 0.30966)
+        expected = luminosity_distance(0.5, h0=67.66, om0=0.30966)
         assert jnp.allclose(result, expected)
 
     def test_age_at_z_positional_args(self):
         """age_at_z(z, h0, om0) should work (positional args)."""
-        result = age_at_z(0.5, 67.4, 0.315)
-        expected = age_at_z(0.5, h0=67.4, om0=0.315)
+        result = age_at_z(0.5, 67.66, 0.30966)
+        expected = age_at_z(0.5, h0=67.66, om0=0.30966)
         assert jnp.allclose(result, expected)
 
     def test_comoving_distance_positional_args(self):
         """comoving_distance(z, h0, om0) should work (positional args)."""
-        result = comoving_distance(0.5, 67.4, 0.315)
-        expected = comoving_distance(0.5, h0=67.4, om0=0.315)
+        result = comoving_distance(0.5, 67.66, 0.30966)
+        expected = comoving_distance(0.5, h0=67.66, om0=0.30966)
         assert jnp.allclose(result, expected)
 
     def test_distance_modulus_positional_args(self):
         """distance_modulus(z, h0, om0) should work (positional args)."""
-        result = distance_modulus(0.5, 67.4, 0.315)
-        expected = distance_modulus(0.5, h0=67.4, om0=0.315)
+        result = distance_modulus(0.5, 67.66, 0.30966)
+        expected = distance_modulus(0.5, h0=67.66, om0=0.30966)
         assert jnp.allclose(result, expected)
 
     def test_lookback_time_positional_args(self):
         """lookback_time(z, h0, om0) should work (positional args)."""
-        result = lookback_time(0.5, 67.4, 0.315)
-        expected = lookback_time(0.5, h0=67.4, om0=0.315)
+        result = lookback_time(0.5, 67.66, 0.30966)
+        expected = lookback_time(0.5, h0=67.66, om0=0.30966)
         assert jnp.allclose(result, expected)
 
 
@@ -547,7 +547,7 @@ class TestZAtCosmicTime:
 
         z1 = float(z_at_cosmic_time(5.0))
         z2 = float(z_at_cosmic_time(5.0, cosmo=PLANCK18))
-        z3 = float(z_at_cosmic_time(5.0, h0=67.4, om0=0.315))
+        z3 = float(z_at_cosmic_time(5.0, h0=67.66, om0=0.30966))
         assert_allclose(z1, z2, rtol=1e-10)
         assert_allclose(z1, z3, rtol=0.01)
 
