@@ -61,7 +61,7 @@ for logu in logu_array:
                  "tau_gyr": 0.1, "log_peak_sfr": 0.5},
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
             neb={"type": "cue", "*": tengri.FIXED,
-                 "neb_logU": tengri.Fixed(logu), "neb_logZ_gas": tengri.Fixed(logz)},
+                 "logU": tengri.Fixed(logu), "logZ_gas": tengri.Fixed(logz)},
             redshift=tengri.Fixed(0.05),
         )
 
@@ -106,8 +106,8 @@ for config in agn_configs:
              "tau_gyr": 0.15, "log_peak_sfr": 0.3},
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
         neb={"type": "cue", "*": tengri.FIXED,
-             "neb_logU": tengri.Fixed(config["logu"]),
-             "neb_logZ_gas": tengri.Fixed(config["logz"])},
+             "logU": tengri.Fixed(config["logu"]),
+             "logZ_gas": tengri.Fixed(config["logz"])},
         redshift=tengri.Fixed(0.05),
     )
 

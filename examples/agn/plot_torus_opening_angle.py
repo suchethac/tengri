@@ -94,6 +94,7 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "agn_frac": 1.0,
     },
     redshift=tengri.Fixed(0.0),  # Rest-frame SED at z=0
 )

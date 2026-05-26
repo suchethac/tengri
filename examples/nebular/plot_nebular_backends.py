@@ -32,7 +32,7 @@ model_cue = tengri.SEDModel.build(
         "log_peak_sfr": 1.5,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
+    neb={"type": "cue", "*": tengri.FIXED, "logU": tengri.Fixed(-3.0)},
     redshift=tengri.Fixed(0.0),
 )
 

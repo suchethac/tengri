@@ -38,10 +38,12 @@ model = tengri.SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED, "oa": tengri.Uniform(20, 60)},
+        "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
-        "log_lbol": 11.0,
+        "agn_frac": 1.0,
+        "agn_log_lbol": 11.0,
+        "agn_oa_skirtor": tengri.Uniform(20, 60),  # torus params live at the agn top level
     },
     redshift=tengri.Fixed(0.05),
 )

@@ -38,11 +38,13 @@ model = tengri.SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": tengri.Uniform(3, 11)},
+        "torus": {"type": "skirtor", "*": tengri.FIXED,},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "agn_frac": 1.0,
         "log_lbol": 11.0,
-    },
+    "agn_tau_skirtor": tengri.Uniform(3, 11),
+},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

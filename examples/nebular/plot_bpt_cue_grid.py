@@ -59,8 +59,8 @@ for logu in logu_grid:
             neb={
                 "type": "cue",
                 "*": tengri.FIXED,
-                "neb_logU": tengri.Fixed(logu),
-                "neb_logZ_gas": tengri.Fixed(logz),
+                "logU": tengri.Fixed(logu),
+                "logZ_gas": tengri.Fixed(logz),
             },
             redshift=tengri.Fixed(0.05),
         )

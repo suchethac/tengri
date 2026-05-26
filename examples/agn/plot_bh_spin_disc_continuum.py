@@ -38,14 +38,16 @@ model = tengri.SEDModel.build(
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED, "a_spin": tengri.FREE},
-        "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
-        "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
+        "agn_frac": 1.0,
         "agn_log_lbol": 11.5,
         "agn_log_mbh": 8.0,
         "agn_log_ledd": -0.5,
+        "agn_a_spin": tengri.FREE,
+        "agn_tau_skirtor": 7.0,
     },
     redshift=tengri.Fixed(0.05),
 )

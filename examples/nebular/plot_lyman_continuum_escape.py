@@ -50,7 +50,7 @@ model = tengri.SEDModel.build(
         "log_peak_sfr": 1.5,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_fesc": tengri.Uniform(0.0, 1.0), "neb_logU": -2.5, "neb_logZ_gas": -0.5},
+    neb={"type": "cue", "*": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0), "logU": -2.5, "logZ_gas": -0.5},
     redshift=tengri.Fixed(0.05),
 )
 
