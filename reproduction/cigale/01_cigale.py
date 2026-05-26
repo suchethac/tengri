@@ -807,12 +807,16 @@ m_x = SEDModel.build(
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
           "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
           "*": FIXED},
-    agn={"type": "silva04", "agn_log_lbol": Fixed(11.5), "*": FIXED},
+    agn={"type": "composable",
+         "disc": {"type": "multicolor", "*": FIXED},
+         "torus": {"type": "skirtor", "*": FIXED},
+         "agn_log_lbol": Fixed(11.5), "*": FIXED},
     xray={"type": "simple"},
     redshift=Fixed(0.0),
 )
-w_t, sed_t = m_x.predict_rest_sed({})
-w_t = np.asarray(w_t); sed_t = np.asarray(sed_t)
+state_x = m_x.predict_state({})
+w_t = np.asarray(state_x.wave)
+sed_t = np.asarray(state_x.derived.get("sed_xray", state_x.sed_intrinsic))
 e_kev_t = 12.398 / w_t
 m_t = (e_kev_t >= 0.3) & (e_kev_t <= 200) & (sed_t > 0)
 
