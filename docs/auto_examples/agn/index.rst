@@ -8,6 +8,10 @@ AGN Models
 AGN disc and torus SED templates.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

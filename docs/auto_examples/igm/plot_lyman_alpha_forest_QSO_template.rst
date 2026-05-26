@@ -21,6 +21,11 @@
 QSO continuum with Lyman-alpha forest absorption at z=3
 ========================================================
 
+.. image:: images/sphx_glr_plot_lyman_alpha_forest_QSO_template_001.png
+   :alt: plot lyman alpha forest QSO template
+   :class: sphx-glr-single-img
+
+
 A power-law QSO continuum (Vanden Berk et al. 2001 composite slope
 :math:`\alpha_{\nu} = -0.5`) is built with tengri's AGN multicolor disc
 and pure-stellar synthesis. The Inoue et al. 2014 intergalactic-medium

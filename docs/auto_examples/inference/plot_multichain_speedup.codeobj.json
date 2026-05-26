@@ -3,54 +3,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.parameters.sentinels",
-   "module_short": "tengri.parameters.sentinels",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri.parameters",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
    "name": "FIXED"
   }
  ],
  "FREE": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters.sentinels",
-   "module_short": "tengri.parameters.sentinels",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri.parameters",
-   "name": "_Sentinel"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "_Sentinel"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -61,27 +19,6 @@
  ],
  "Fitter": [
   {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.inference.fitter",
-   "module_short": "tengri",
-   "name": "Fitter"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.inference",
-   "module_short": "tengri",
-   "name": "Fitter"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Fitter"
-  },
-  {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.inference.fitter",
@@ -90,48 +27,6 @@
   }
  ],
  "Fixed": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters.priors",
-   "module_short": "tengri",
-   "name": "Fixed"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri",
-   "name": "Fixed"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Fixed"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters.priors",
-   "module_short": "tengri.parameters.priors",
-   "name": "Distribution"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri.parameters",
-   "name": "Distribution"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Distribution"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -142,27 +37,6 @@
  ],
  "Observation": [
   {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.observation.observation",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.observation",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
@@ -171,20 +45,6 @@
   }
  ],
  "Path": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PurePath"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -197,40 +57,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.Photometry",
    "module_short": "tengri.Photometry",
    "name": "from_names"
   }
  ],
  "SEDModel.build": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.forward.sed_model",
-   "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.build"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "SEDModel.build"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel.build"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -241,48 +73,6 @@
  ],
  "Uniform": [
   {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters.priors",
-   "module_short": "tengri",
-   "name": "Uniform"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri",
-   "name": "Uniform"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Uniform"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters.priors",
-   "module_short": "tengri.parameters.priors",
-   "name": "Distribution"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.parameters",
-   "module_short": "tengri.parameters",
-   "name": "Distribution"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Distribution"
-  },
-  {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
@@ -291,27 +81,6 @@
   }
  ],
  "WavePrecomp": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.forward.sed_model",
-   "module_short": "tengri.forward.sed_model",
-   "name": "WavePrecomp"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "WavePrecomp"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "WavePrecomp"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -333,26 +102,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.builders.dust",
    "module_short": "tengri.builders.dust",
    "name": "two_component"
   }
  ],
  "builders.neb.none": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -365,26 +120,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.builders.sfh",
    "module_short": "tengri.builders.sfh",
    "name": "tsnorm"
   }
  ],
  "generate_mock": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -397,26 +138,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "jax.random",
    "module_short": "jax.random",
    "name": "PRNGKey"
   }
  ],
  "load_ssp_data": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -429,26 +156,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "arange"
   }
  ],
  "np.array": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -461,110 +174,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "asarray"
   }
  ],
  "os.environ.setdefault": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "os",
-   "module_short": "os",
-   "name": "_Environ.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections.abc",
-   "module_short": "collections.abc",
-   "name": "MutableMapping.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "MutableMapping.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections.abc",
-   "module_short": "collections.abc",
-   "name": "Mapping.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "Mapping.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections.abc",
-   "module_short": "collections.abc",
-   "name": "Collection.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "Collection.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections.abc",
-   "module_short": "collections.abc",
-   "name": "Sized.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "Sized.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections.abc",
-   "module_short": "collections.abc",
-   "name": "Iterable.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "Iterable.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections.abc",
-   "module_short": "collections.abc",
-   "name": "Container.setdefault"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "collections",
-   "module_short": "collections",
-   "name": "Container.setdefault"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -577,13 +192,6 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.plot",
    "module_short": "tengri",
    "name": "setup_style"
@@ -593,26 +201,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "subplots"
   }
  ],
  "time.perf_counter": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
   {
    "is_class": false,
    "is_explicit": false,

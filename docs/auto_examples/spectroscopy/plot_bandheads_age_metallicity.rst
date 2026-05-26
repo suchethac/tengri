@@ -21,6 +21,11 @@
 Stellar absorption bandheads: age and metallicity anti-correlation
 ===================================================================
 
+.. image:: images/sphx_glr_plot_bandheads_age_metallicity_001.png
+   :alt: plot bandheads age metallicity
+   :class: sphx-glr-single-img
+
+
 Stellar absorption features, especially the Mg b and Fe5270 line strengths,
 encode both age and metallicity in a classical anti-correlation pattern:
 at fixed metallicity, both features strengthen with age (population becomes

@@ -21,6 +21,11 @@
 AGN disc continuum: model comparison at fixed L_bol
 =====================================================
 
+.. image:: images/sphx_glr_plot_agn_disc_compare_001.png
+   :alt: plot agn disc compare
+   :class: sphx-glr-single-img
+
+
 Six accretion-disc backbones at fixed bolometric luminosity
 ``log L_bol = 12.5`` (in log L_sun), evaluated in isolation with the
 host suppressed and no torus/lines/dust. The differences between the

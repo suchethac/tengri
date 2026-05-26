@@ -21,6 +21,11 @@
 Lyman continuum escape fraction effect on ionizing photons
 ==========================================================
 
+.. image:: images/sphx_glr_plot_lyman_continuum_escape_001.png
+   :alt: plot lyman continuum escape
+   :class: sphx-glr-single-img
+
+
 The Lyman continuum (λ < 912 Å rest) is the primary source of ionizing photons
 for nebular emission. Escape fraction ``f_esc`` sets the fraction of ionizing
 photons that escape the ISM without being absorbed. Higher ``f_esc`` increases

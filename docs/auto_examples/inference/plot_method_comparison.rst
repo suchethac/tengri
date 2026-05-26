@@ -21,6 +21,11 @@
 Comparing MAP and pure-JAX variational inference
 ================================================
 
+.. image:: images/sphx_glr_plot_method_comparison_001.png
+   :alt: plot method comparison
+   :class: sphx-glr-single-img
+
+
 Demonstrates convergence behavior of two inference methods: MAP
 (point-estimate via optimization) and pure-JAX geometric variational
 inference (native VI). Both are initialized from the same MAP fit, then

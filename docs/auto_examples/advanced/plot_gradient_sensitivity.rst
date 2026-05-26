@@ -104,7 +104,7 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
     ax.set_ylabel("Band")
     fig.colorbar(im, ax=ax, shrink=0.8, label="Normalized sensitivity")
     fig.tight_layout()
-    fig.savefig("plot_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_gradient_sensitivity.py:

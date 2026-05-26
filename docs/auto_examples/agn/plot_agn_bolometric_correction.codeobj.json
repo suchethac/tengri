@@ -1,118 +1,14 @@
 {
- "L_bol_erg": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "L_sun_erg": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  }
- ],
- "X_RAY_ALPHA_OX": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  }
- ],
- "X_RAY_E_CUT": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  }
- ],
- "X_RAY_GAMMA": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  }
- ],
- "band_colors": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "dict"
-  }
- ],
- "band_edges": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "band_names": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "list"
-  }
- ],
- "bands": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "dict"
-  }
- ],
- "bands.keys": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
  "energy_balance.integrate_lnu_over_band": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.analysis.diagnostics.energy_balance",
-   "module_short": "tengri.analysis.diagnostics",
+   "module_short": "tengri.analysis.diagnostics.energy_balance",
    "name": "integrate_lnu_over_band"
   }
  ],
  "jnp.logspace": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -121,41 +17,7 @@
    "name": "logspace"
   }
  ],
- "k_corr_by_band": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "dict"
-  }
- ],
- "log_lbol": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
- "log_lbol_values": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
  "np.array": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -165,13 +27,6 @@
   }
  ],
  "np.asarray": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -186,13 +41,6 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "linspace"
   }
  ],
@@ -202,24 +50,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "ufunc"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "log10"
   }
  ],
  "np.nan": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -234,24 +68,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "where"
   }
  ],
  "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -264,26 +84,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "subplots"
   }
  ],
  "setup_style": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -305,88 +111,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "warnings",
    "module_short": "warnings",
    "name": "filterwarnings"
   }
  ],
- "wavelength": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl"
-  }
- ],
- "wavelength.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl.max"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl.max"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax",
-   "module_short": "jax",
-   "name": "Array.max"
-  }
- ],
- "wavelength.min": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib._jax",
-   "module_short": "jaxlib._jax",
-   "name": "ArrayImpl.min"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jaxlib",
-   "module_short": "jaxlib",
-   "name": "ArrayImpl.min"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "jax",
-   "module_short": "jax",
-   "name": "Array.min"
-  }
- ],
  "xray_agn_corona": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,

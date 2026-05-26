@@ -21,6 +21,11 @@
 Prospector prior families: continuity vs bursty vs Dirichlet vs PSB
 ====================================================================
 
+.. image:: images/sphx_glr_plot_prospector_priors_compare_001.png
+   :alt: plot prospector priors compare
+   :class: sphx-glr-single-img
+
+
 Tengri ships the non-parametric SFH priors that appear most often in
 Prospector papers, all with the *published* prior on the SFR ratios:
 

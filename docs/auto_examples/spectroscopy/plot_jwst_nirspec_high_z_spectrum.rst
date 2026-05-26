@@ -21,6 +21,11 @@
 Mock JWST NIRSpec G395M spectrum of a z=7 star-forming galaxy
 ==============================================================
 
+.. image:: images/sphx_glr_plot_jwst_nirspec_high_z_spectrum_001.png
+   :alt: plot jwst nirspec high z spectrum
+   :class: sphx-glr-single-img
+
+
 High-redshift star-forming galaxy with strong rest-frame UV and optical
 emission lines redshifted into the JWST NIRSpec G395M window (2.9–5.1 μm).
 Lines include Lyα, CIV, HeII, CIII], [OII], Hβ, [OIII], and Hα, each

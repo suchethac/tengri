@@ -21,6 +21,11 @@
 Strong-lensing magnification: EoR galaxy detection boost
 =========================================================
 
+.. image:: images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
+   :alt: plot usecase lensed galaxy magnification
+   :class: sphx-glr-single-img
+
+
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
 

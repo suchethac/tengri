@@ -21,6 +21,11 @@
 AGN SMBH growth track: dormant → merger → QSO → fading
 =======================================================
 
+.. image:: images/sphx_glr_plot_smbh_growth_track_001.png
+   :alt: plot smbh growth track
+   :class: sphx-glr-single-img
+
+
 The growth of a supermassive black hole (SMBH) traces a path through
 the (M_BH, L_bol) plane. Starting as a dormant low-mass hole, accretion
 during mergers builds both mass and luminosity. Peak luminosity occurs

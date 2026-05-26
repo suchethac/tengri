@@ -9,6 +9,10 @@ Hierarchical inference, gradient sensitivity, batch fitting, panchromatic SED
 with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

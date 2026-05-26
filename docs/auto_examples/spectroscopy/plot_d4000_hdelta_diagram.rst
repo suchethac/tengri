@@ -21,6 +21,11 @@
 Kauffmann+2003 D_n(4000) vs Hδ_A Diagram
 =========================================
 
+.. image:: images/sphx_glr_plot_d4000_hdelta_diagram_001.png
+   :alt: plot d4000 hdelta diagram
+   :class: sphx-glr-single-img
+
+
 Population diagnostics: single-burst SSP populations (3 SFH shapes × 5 ages
 × 3 metallicities = 45 points) colored by SFH shape and marked by
 metallicity. The Hδ_A vs D_n(4000) diagram discriminates starburst

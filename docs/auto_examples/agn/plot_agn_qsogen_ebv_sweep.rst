@@ -21,6 +21,11 @@
 QSOgen disc: dust reddening tunes UV to optical colour
 =======================================================
 
+.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :alt: plot agn qsogen ebv sweep
+   :class: sphx-glr-single-img
+
+
 Dust-free quasar spectra are intrinsically blue in the UV and optical.
 Intrinsic dust reddening ``ebv`` (E(B−V)) reddens the continuum via
 extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from

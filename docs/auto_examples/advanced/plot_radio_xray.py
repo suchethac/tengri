@@ -78,4 +78,4 @@ for x, label in [(1.24e-4, "X-ray"), (3e4, "Radio")]:
     ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
 
 fig.tight_layout()
-fig.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")

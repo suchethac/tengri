@@ -21,6 +21,11 @@
 Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 ===================================================================
 
+.. image:: images/sphx_glr_plot_sed_components_001.png
+   :alt: plot sed components
+   :class: sphx-glr-single-img
+
+
 Build a model with both stellar and dust components. Predict the full SED
 with attenuation, then predict without dust absorption to isolate the
 absorbed UV-optical flux. The filled region shows how much light dust

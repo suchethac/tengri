@@ -21,6 +21,11 @@
 Screen vs. mixed dust geometry: identical optical depths, different SEDs
 =========================================================================
 
+.. image:: images/sphx_glr_plot_dust_geometry_screen_vs_mixed_001.png
+   :alt: plot dust geometry screen vs mixed
+   :class: sphx-glr-single-img
+
+
 Dust geometry determines how dust affects starlight. A **screen**
 (foreground dust) filters the light as it leaves the galaxy:
 ``transmission = exp(-τ_λ)``. A **mixed** geometry (dust uniformly

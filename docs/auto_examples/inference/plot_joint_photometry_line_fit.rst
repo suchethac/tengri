@@ -58,12 +58,6 @@ References:
     warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 38-44
 
 Typical properties:
@@ -89,12 +83,6 @@ Typical properties:
     # Rest-frame H-alpha = 6564.61 A -> observed = 32823 A (beyond JWST NIRCam!)
     # But mock data: we use rest-frame lines as "equivalent widths"
     LINE_NAMES = ["Halpha", "OIII_5007"]
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 59-62
@@ -135,28 +123,6 @@ integrates over line amplitudes (faster, but requires eline_catalog).
     )
 
     print(f"Joint observation: {obs_joint.n_data_phot} phot + {obs_joint.n_data_spec} spec pixels")
-
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_joint_photometry_line_fit.py", line 72, in <module>
-        photometry=tengri.Photometry.from_names(PHOT_BANDS)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/photometry_config.py", line 172, in from_names
-        _waves, _trans, curves = load_filter_set(list(names), cache_dir=cache_dir)
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/filters/__init__.py", line 440, in load_filter_set
-        fc = load_filter(name, cache_dir=cache_dir)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/filters/__init__.py", line 384, in load_filter
-        raise KeyError(
-    KeyError: "Unknown filter 'jwst_nircam_f150w'. Use list_available_filters() to see valid names, or use load_custom_filter() for arbitrary files."
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 93-98

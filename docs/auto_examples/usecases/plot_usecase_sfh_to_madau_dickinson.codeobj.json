@@ -1,49 +1,5 @@
 {
- "SSP": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar.sps.dsps_wrapper",
-   "module_short": "tengri.components.stellar.sps",
-   "name": "SSPData"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar.sps",
-   "module_short": "tengri.components.stellar.sps",
-   "name": "SSPData"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar",
-   "module_short": "tengri.components.stellar",
-   "name": "SSPData"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components",
-   "module_short": "tengri.components",
-   "name": "SSPData"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SSPData"
-  }
- ],
  "jax.random.PRNGKey": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -52,41 +8,7 @@
    "name": "PRNGKey"
   }
  ],
- "log_mstar_grid": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
- "madau_dickinson_2014": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  }
- ],
- "n_gal": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "int"
-  }
- ],
  "np.abs": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ufunc"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -101,24 +23,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "argmax"
   }
  ],
  "np.argmin": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -131,26 +39,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
   }
  ],
  "np.asarray": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -165,24 +59,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "linspace"
   }
  ],
  "np.mean": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -195,13 +75,6 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "nan"
@@ -211,26 +84,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "float"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
    "name": "pi"
   }
  ],
  "np.random.normal": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "module.normal"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -245,24 +104,10 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "_ArrayFunctionDispatcher"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
    "name": "sum"
   }
  ],
  "np.zeros": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -271,37 +116,7 @@
    "name": "zeros"
   }
  ],
- "obs": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.observation.observation",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.observation",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Observation"
-  }
- ],
  "plt.close": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -314,26 +129,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "savefig"
   }
  ],
  "plt.subplots": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -346,40 +147,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
   }
  ],
  "tengri.Observation": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.observation.observation",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.observation",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Observation"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -392,40 +165,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.Photometry",
    "module_short": "tengri.Photometry",
    "name": "from_names"
   }
  ],
  "tengri.SEDModel.build": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.forward.sed_model",
-   "module_short": "tengri.forward.sed_model",
-   "name": "SEDModel.build"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri.forward",
-   "module_short": "tengri.forward",
-   "name": "SEDModel.build"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel.build"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -438,26 +183,12 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.cosmology",
    "module_short": "tengri.cosmology",
    "name": "comoving_volume_element"
   }
  ],
  "tengri.load_ssp": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -470,13 +201,6 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri.recipes",
    "module_short": "tengri.recipes",
    "name": "star_forming_photometry"
@@ -486,25 +210,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "warnings",
    "module_short": "warnings",
    "name": "filterwarnings"
-  }
- ],
- "z_grid": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
   }
  ]
 }

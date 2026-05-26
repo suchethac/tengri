@@ -21,6 +21,11 @@
 AGN UV→optical continuum reverberation: light-crossing time lags
 ===================================================================
 
+.. image:: images/sphx_glr_plot_variability_continuum_lag_001.png
+   :alt: plot variability continuum lag
+   :class: sphx-glr-single-img
+
+
 Accretion disc reverberation mapping reveals how the hot UV-emitting
 inner disc responds to ionizing source changes. Fausnaugh+2016 observed
 NGC 5548 using HST multi-band photometry (UV, optical) and found that

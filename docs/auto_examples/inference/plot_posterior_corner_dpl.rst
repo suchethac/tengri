@@ -35,32 +35,6 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-93
 
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_posterior_corner_dpl.py", line 67, in <module>
-        posterior = forward.fit(
-                    ^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/forward_model.py", line 537, in fit
-        return fitter.run(method, key=key, **kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/inference/fitter.py", line 1794, in run
-        method = resolve_method(method)
-                 ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/inference/fitter.py", line 183, in resolve_method
-        raise ParameterError(
-    tengri.config.exceptions.ParameterError: Unknown method: 'nuts'. Valid names: auto, laplace, map, mcmc, mcmc_adjusted_mclmc, mcmc_dynamic_hmc, mcmc_ess, mcmc_ghmc, mcmc_hmc, mcmc_mclmc, mcmc_nuts, mcmc_raytrace, native_vi_linear, native_vi_nonlinear, nss, pathfinder, vi, vi_linear, vi_linear_fast, vi_nonlinear, vi_nonlinear_fast. See Fitter.run() docstring for details.
-
-
-
-
-
-
-|
-
 .. code-block:: Python
 
 
