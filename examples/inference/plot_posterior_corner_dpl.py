@@ -67,15 +67,18 @@ forward = tengri.ForwardModel.build(sed=model, observation=obs)
 posterior = forward.fit(
     mock.flux_obs,
     mock.noise,
-    method="nuts",
-    warmup=500,
-    samples=500,
+    method="mcmc_nuts",
+    n_warmup=500,
+    n_samples=500,
     verbose=False,
 )
 
-# Extract samples and parameter names for the corner plot
+# Extract samples and parameter names for the corner plot — keep only
+# the free parameters (posterior.samples may include fixed params with
+# zero variance, which breaks corner's range inference).
 samples_dict = posterior.samples
-param_names = list(samples_dict.keys())
+free_params = list(model.spec.free_params)
+param_names = [p for p in free_params if p in samples_dict]
 samples_array = np.array([samples_dict[p] for p in param_names]).T
 truths = [float(truth[p]) for p in param_names]
 

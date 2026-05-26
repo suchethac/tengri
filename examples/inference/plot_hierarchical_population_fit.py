@@ -74,7 +74,8 @@ def make_model_template():
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
         },
-        met={
+        stellar={
+            "*": tengri.FIXED,
             "logzsol": tengri.Uniform(-0.5, 0.5),  # Per-galaxy metallicity
         },
         redshift=tengri.Fixed(0.05),  # Low-z anchor; typical for SDSS LRGs
@@ -84,7 +85,7 @@ def make_model_template():
 # ── Generate mock population ─────────────────────────────────────────────
 N_GALAXIES = 50
 np.random.seed(42)
-jax.random.seed(99)
+# (jax.random.seed is not a thing — seeding is via PRNGKey at call sites)
 
 # Sample the true population hyperparameters:
 true_pop_mean = 0.05  # log(Z/Z☉), anchored to SDSS LRG

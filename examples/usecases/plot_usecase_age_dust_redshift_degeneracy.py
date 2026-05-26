@@ -35,7 +35,7 @@ from tengri import FIXED, Observation, Photometry, SEDModel, Uniform, recipes
 # Setup
 tengri.analysis.plotting.setup_style()
 
-ssp = tengri.load_ssp()
+ssp = tengri.load_ssp('fsps_prsc_miles_chabrier')
 sdss_filters = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 observation = Observation(photometry=sdss_filters)
 
@@ -79,7 +79,6 @@ model_a = SEDModel.build(
 baseline_a = dict(model_a.spec.sample(jax.random.PRNGKey(0)))
 baseline_a["met_logzsol"] = -0.1
 baseline_a["dust_tau_diff"] = 0.8
-baseline_a["dust_slope"] = -0.7
 
 # Scenario B: Old + clean + mid-z
 # Use a very declining SFH with long timescale (old light-weighted age)
@@ -113,7 +112,6 @@ model_b = SEDModel.build(
 baseline_b = dict(model_b.spec.sample(jax.random.PRNGKey(1)))
 baseline_b["met_logzsol"] = -0.1
 baseline_b["dust_tau_diff"] = 0.05
-baseline_b["dust_slope"] = -0.7
 
 # Scenario C: Post-starburst + dust + high-z
 # Use log-normal peak with intermediate age at peak
@@ -148,7 +146,6 @@ model_c = SEDModel.build(
 baseline_c = dict(model_c.spec.sample(jax.random.PRNGKey(2)))
 baseline_c["met_logzsol"] = -0.1
 baseline_c["dust_tau_diff"] = 0.3
-baseline_c["dust_slope"] = -0.7
 
 
 # Bisection helper to find log_peak_sfr that produces target r-band magnitude

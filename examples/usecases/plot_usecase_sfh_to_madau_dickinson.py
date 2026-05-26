@@ -63,7 +63,7 @@ def madau_dickinson_2014(z):
 # Load SSP and prepare observation
 # ============================================================================
 
-SSP = tengri.load_ssp()
+SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
 
 # Simple observation: SDSS u-band (UV rest-frame proxy)
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u"]))
@@ -110,7 +110,7 @@ for z in z_grid:
         log_sfr = 0.7 * log_mstar - 6.0
 
         params = dict(params_template)
-        params["sfh_dpl_log_sfr"] = float(log_sfr)
+        params["sfh_dpl_log_peak_sfr"] = float(log_sfr)
         params["redshift"] = float(z)
 
         # Compute SFH and extract instantaneous SFR
