@@ -8,9 +8,13 @@ from tengri.components.xray._models import (
 )
 from tengri.components.xray.xray import (
     alpha_ox_from_l2500,
+    compton_scattering_transmission,
+    pexrav_reflection,
+    tbabs_transmission,
     xray_agn_corona,
     xray_agn_corona_from_disc,
     xray_anisotropy,
+    xray_hotgas,
     xray_total,
     xray_xrb,
 )
@@ -38,10 +42,14 @@ __all__ = [
     "XRayAirdSEDComponentConfig",
     "XRayRegistryEntry",
     "alpha_ox_from_l2500",
+    "compton_scattering_transmission",
+    "pexrav_reflection",
     "register_xray_model",
+    "tbabs_transmission",
     "xray_agn_corona",
     "xray_agn_corona_from_disc",
     "xray_anisotropy",
+    "xray_hotgas",
     "xray_total",
     "xray_xrb",
 ]

@@ -1,12 +1,19 @@
-# Tengri
+<div class="tg-hero" markdown="0">
+  <img src="_static/tengri-logo.png" alt="" class="tg-hero__logo" />
+  <h1 class="tg-hero__title">tengri</h1>
+  <p class="tg-hero__tagline">
+    A differentiable framework for high-dimensional Bayesian inference
+    from galaxy spectral energy distributions.
+  </p>
+</div>
 
 Tengri is a panchromatic galaxy SED inference library, written in
 JAX. The same forward model covers stellar populations, dust,
 nebular emission, AGN, and the IGM, from X-rays out to the radio.
-Inference is
-modular too: the `Fitter` interface borrows optimisers from `optax`,
-samplers from `BlackJAX`, and variational inference from
-`NIFTy.re`. Gradients are available everywhere, and they are exact.
+Inference is modular too: the `Fitter` interface borrows optimisers
+from `optax`, samplers from `BlackJAX`, and variational inference
+from `NIFTy.re`. Gradients are available everywhere, and they are
+exact.
 
 Tengri is pre-1.0 and developed as a community effort. The public
 API is still moving in places, and the repository will move to the
@@ -173,6 +180,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
 .. toctree::
    :caption: Examples
    :maxdepth: 1
+   :titlesonly:
    :hidden:
 
    auto_examples/index

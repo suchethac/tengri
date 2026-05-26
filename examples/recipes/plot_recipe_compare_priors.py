@@ -35,13 +35,8 @@ ssp = tengri.load_ssp()
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 key = jax.random.PRNGKey(42)
-<<<<<<< HEAD
 truth = {
     "sfh_tsnorm_log_total_mass": 0.8,
-=======
-true_params = {
-    "sfh_tsnorm_log_total_mass": 0.8,
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     "sfh_tsnorm_peak_lbt_gyr": 2.0,
     "sfh_tsnorm_width_gyr": 1.5,
     "sfh_tsnorm_skew": 0.1,
@@ -67,28 +62,6 @@ template = tengri.SEDModel.build(
 )
 mock = template.mock(truth, snr=20.0, key=key)
 
-<<<<<<< HEAD
-=======
-# Fit 2: Gaussian prior on metallicity (informative)
-# NOTE: To use Gaussian priors, build with Parameters API then construct SEDModel
-spec_gaussian = tengri.Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=tengri.Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=tengri.Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=tengri.Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=tengri.Uniform(1.0, 10.0),
-    met_logzsol=tengri.Gaussian(mu=0.0, sigma=0.3),
-    dust_tau_diff=tengri.Uniform(0.0, 1.5),
-    dust_slope=tengri.Fixed(-0.7),
-    redshift=tengri.Fixed(0.1),
-    mean_sfh_type="tsnorm",
-)
-model_gaussian = tengri.SEDModel(spec_gaussian, ssp, observation=obs)
-forward_g = tengri.ForwardModel.build(sed=model_gaussian, observation=obs)
-post_g = forward_g.fit(
-    mock.flux_obs, mock.noise, method="vi_native", n_iter=8, n_samples=3, verbose=False
-)
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 def fit_with_metallicity_prior(met_prior):
     model = tengri.SEDModel.build(

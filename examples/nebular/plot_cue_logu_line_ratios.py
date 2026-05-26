@@ -77,8 +77,24 @@ for logu in logu_values:
 fig, ax = plt.subplots(figsize=(7, 5))
 
 valid_logu = logu_values[: len(o32_ratio)]
-ax.plot(valid_logu, o32_ratio, "o-", lw=2.0, ms=4, label=r"$\log([{\rm OIII}]/[{\rm OII}])$ (O32)", color="C0")
-ax.plot(valid_logu, o3hb_ratio, "s-", lw=2.0, ms=4, label=r"$\log([{\rm OIII}]/{\rm H\beta})$", color="C1")
+ax.plot(
+    valid_logu,
+    o32_ratio,
+    "o-",
+    lw=2.0,
+    ms=4,
+    label=r"$\log([{\rm OIII}]/[{\rm OII}])$ (O32)",
+    color="C0",
+)
+ax.plot(
+    valid_logu,
+    o3hb_ratio,
+    "s-",
+    lw=2.0,
+    ms=4,
+    label=r"$\log([{\rm OIII}]/{\rm H\beta})$",
+    color="C1",
+)
 
 ax.set_xlabel(r"Ionization parameter $\log U$", fontsize=12)
 ax.set_ylabel(r"Log line ratio", fontsize=12)

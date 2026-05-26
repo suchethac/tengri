@@ -87,6 +87,7 @@ baseline_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 # Sample N_MODELS ages uniformly within the red-sequence range
 ages_gyr = np.linspace(AGE_GYR_MIN, AGE_GYR_MAX, N_MODELS)
 
+
 # --- Define vmap-friendly predict function ---
 def predict_single_spectrum(age_gyr):
     """Predict spectrum for a single age (rest-frame)."""
@@ -146,8 +147,7 @@ ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.legend(frameon=False, fontsize=8, loc="upper right")
 ax.set_title(
-    "SDSS LRG Quiescent Template (z=0.3, R=2000)\n"
-    "Red sequence ages 6–11 Gyr per Thomas+2005"
+    "SDSS LRG Quiescent Template (z=0.3, R=2000)\nRed sequence ages 6–11 Gyr per Thomas+2005"
 )
 
 fig.tight_layout()

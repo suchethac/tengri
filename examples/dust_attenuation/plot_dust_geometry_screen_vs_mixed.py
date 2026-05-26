@@ -1,6 +1,5 @@
 """
 Screen vs. mixed dust geometry: identical optical depths, different SEDs
-=========================================================================
 
 Dust geometry determines how dust affects starlight. A **screen**
 (foreground dust) filters the light as it leaves the galaxy:
@@ -8,7 +7,7 @@ Dust geometry determines how dust affects starlight. A **screen**
 distributed with stars) is more gentle:
 ``transmission = (1 - exp(-τ_λ)) / τ_λ``.
 
-This example shows both geometries applied to the *same intrinsic SED*
+both geometries applied to the *same intrinsic SED*
 at the *same V-band optical depth* (τ_V = 0.5, 1.0, 2.0). Despite
 identical τ_V, the resulting SEDs are qualitatively different — mixed
 geometry produces less attenuation in the UV, creating a shallower
@@ -33,11 +32,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib
 
-<<<<<<< HEAD
 matplotlib.use("Agg")
-=======
-matplotlib.use('Agg')
->>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 import matplotlib.pyplot as plt
 import numpy as np
 

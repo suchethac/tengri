@@ -36,8 +36,13 @@ sfr_inferred, ages_valid = [], []
 for age_myr in ages_myr:
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": log_sfr_true,
-             "start_gyr": age_myr / 1e3, "end_gyr": 0.0},
+        sfh={
+            "type": "const",
+            "*": tengri.FIXED,
+            "log_sfr": log_sfr_true,
+            "start_gyr": age_myr / 1e3,
+            "end_gyr": 0.0,
+        },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={"type": "cue", "*": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
@@ -51,8 +56,12 @@ ratio = np.array(sfr_inferred) / sfr_true
 ax.loglog(ages_valid, ratio, "o-", markersize=7, linewidth=1.5, color="C0")
 ax.axhline(1.0, color="0.5", linestyle="--", linewidth=1.0, alpha=0.7, label="Calibration valid")
 ax.fill_between(ages_valid, 0.8, 1.2, color="green", alpha=0.1)
-ax.set(xlabel="Constant SFH age [Myr]", ylabel=r"$\mathrm{SFR}_{\mathrm{inferred}} / \mathrm{SFR}_{\mathrm{true}}$",
-       xlim=(0.5, 500), ylim=(0.1, 10))
+ax.set(
+    xlabel="Constant SFH age [Myr]",
+    ylabel=r"$\mathrm{SFR}_{\mathrm{inferred}} / \mathrm{SFR}_{\mathrm{true}}$",
+    xlim=(0.5, 500),
+    ylim=(0.1, 10),
+)
 ax.legend(loc="upper left", fontsize=9)
 ax.grid(True, which="both", alpha=0.3, linestyle=":", linewidth=0.5)
 plt.savefig("plot_halpha_sfr_calibration_age.png", dpi=150, bbox_inches="tight")

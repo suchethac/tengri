@@ -1,9 +1,8 @@
 """
 AGN Reverberation Size-Luminosity Relation (Bentz+2013)
-========================================================
 
 Compute and plot the broad-line region (BLR) size-luminosity relation
-(R_BLR ∝ L^0.5) using tengri AGN models. This demonstrates how AGN
+(R_BLR ∝ L^0.5) using tengri AGN models. how AGN
 continuum luminosity connects to reverberation mapping measurements of
 the BLR extent.
 
@@ -234,11 +233,7 @@ fitted_intercept = coeffs[1]
 
 print("\n" + "=" * 70)
 print("Reverberation Size-Luminosity Relation Verification")
-<<<<<<< HEAD
 print("=" * 70)
-=======
-print("="*70)
->>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 print("\nBentz et al. (2013) relation:")
 print("  log(R_BLR) = -21.3 + 0.533 * log(L_5100)")
 print("\nFitted to tengri qsogen AGN model:")

@@ -7,7 +7,7 @@ colder dust (e.g., diffuse cirrus at ~20 K) peaks in the far-infrared
 (~250 μm), while warmer dust grains (e.g., starburst regions at ~40 K)
 peak at shorter wavelengths (~50–100 μm).
 
-This script demonstrates how the **U_min** parameter of the Draine & Li
+the **U_min** parameter of the Draine & Li
 (2007) dust emission model controls the balance between warm and cold
 grain populations. By varying ``dust_umin`` while holding ``dust_qpah``
 fixed, we show the dust temperature decomposition:

@@ -63,6 +63,7 @@ c_angstrom_per_s = 2.998e18  # c in Å/s
 nu_uv = c_angstrom_per_s / lambda_uv_rest
 nu_xray = c_angstrom_per_s / lambda_xray_rest
 
+
 # Lusso & Risaliti 2016 fit (Eq. 1)
 def lusso_risaliti_fit(log_l_2500):
     """α_OX = −0.166 log L_2500 + 4.74 (in cgs, L in erg/s)."""

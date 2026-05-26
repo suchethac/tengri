@@ -1,6 +1,5 @@
 """
 Panchromatic SED: Milky Way Analog
-==================================
 
 A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across
 the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).
@@ -63,17 +62,10 @@ HOST = dict(
     sfh={
         "type": "dpl",
         "*": tengri.FIXED,
-<<<<<<< HEAD
         "tau_gyr": 9.0,  # Main growth timescale
-        "log_total_mass": 0.35,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
+        "log_total_mass": 10.0,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
         "alpha": 0.8,  # Early rise
         "beta": 0.5,  # Late decline
-=======
-        "tau_gyr": 9.0,          # Main growth timescale
-        "log_total_mass": 10.0,    # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
-        "alpha": 0.8,            # Early rise
-        "beta": 0.5,             # Late decline
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     },
     redshift=tengri.Fixed(0.05),  # z=0.05 for cosmic variance context
 )

@@ -8,7 +8,7 @@ from z = 2 to z = 7, the IGM becomes progressively opaque at wavelengths
 shortward of Lyα (the "blue wing"), due to cumulative Lyman-series absorption
 from neutral hydrogen in the intergalactic medium.
 
-This figure shows a young star-forming galaxy SED with strong Lyα emission,
+a young star-forming galaxy SED with strong Lyα emission,
 redshifted and IGM-attenuated across five epochs. The characteristic signatures
 are:
 

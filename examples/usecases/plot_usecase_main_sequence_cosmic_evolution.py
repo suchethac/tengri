@@ -1,5 +1,5 @@
 """
-Star-forming main sequence cosmic evolution: z=0 → z=2
+Star-forming main sequence: z = 0 → 2
 ========================================================
 
 The star-forming main sequence (MS) defines a tight relation between stellar
@@ -130,7 +130,8 @@ def whitaker2014_z2(log_m_star: np.ndarray) -> np.ndarray:
 from pathlib import Path
 
 repo_root = next(
-    p for p in [Path.cwd(), *Path.cwd().parents]
+    p
+    for p in [Path.cwd(), *Path.cwd().parents]
     if (p / "data" / "fsps_prsc_miles_chabrier.h5").exists()
 )
 ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
@@ -139,10 +140,8 @@ ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5
 # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "log_total_mass": 10.0, 3.0)},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.0, "tau_bc": 0.0},
+    sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     neb={"type": "cue", "*": tengri.FIXED},
 )
 
@@ -187,8 +186,16 @@ for panel_idx, (ax, z_obs) in enumerate(zip(axes, redshifts)):
     log_sfr_nows = np.log10(np.maximum(sfr_nows, 1e-30))
 
     # Scatter plot: our mock sample
-    ax.scatter(log_m_stars, log_sfr_nows, c="C0", s=48, alpha=0.6,
-               label=f"Mock galaxies (z={z_obs:.2f})", edgecolor="0.3", lw=0.5)
+    ax.scatter(
+        log_m_stars,
+        log_sfr_nows,
+        c="C0",
+        s=48,
+        alpha=0.6,
+        label=f"Mock galaxies (z={z_obs:.2f})",
+        edgecolor="0.3",
+        lw=0.5,
+    )
 
     # Literature relation
     m_lit = np.linspace(8.5, 11.5, 100)
@@ -199,17 +206,26 @@ for panel_idx, (ax, z_obs) in enumerate(zip(axes, redshifts)):
         sfr_lit = whitaker2014_z2(m_lit)
         ax.plot(m_lit, sfr_lit, "k--", lw=1.5, label="Whitaker+2014 (z~2)")
 
-    ax.set(xlabel=r"$\log(M_* / M_\odot)$",
-           ylabel=r"$\log(\mathrm{SFR} / M_\odot\,\mathrm{yr}^{-1})$",
-           xlim=(8.8, 11.3), ylim=(-2.0, 2.5))
+    ax.set(
+        xlabel=r"$\log(M_* / M_\odot)$",
+        ylabel=r"$\log(\mathrm{SFR} / M_\odot\,\mathrm{yr}^{-1})$",
+        xlim=(8.8, 11.3),
+        ylim=(-2.0, 2.5),
+    )
     ax.grid(True, alpha=0.3, linestyle=":")
     ax.legend(loc="upper left", fontsize=9)
     ax.set_title(f"z = {z_obs:.2f}", fontsize=11, fontweight="bold")
 
 # Add annotation pointing out the upward shift
-fig.text(0.5, 0.02, r"Upward shift of main sequence at high-z: $\approx 0.7$ dex (SFR at fixed $M_*$)",
-         ha="center", fontsize=10, style="italic", color="0.4")
+fig.text(
+    0.5,
+    0.02,
+    r"Upward shift of main sequence at high-z: $\approx 0.7$ dex (SFR at fixed $M_*$)",
+    ha="center",
+    fontsize=10,
+    style="italic",
+    color="0.4",
+)
 
 fig.tight_layout(rect=[0, 0.05, 1, 1])
-plt.savefig("plot_usecase_main_sequence_cosmic_evolution.png",
-            dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_main_sequence_cosmic_evolution.png", dpi=150, bbox_inches="tight")

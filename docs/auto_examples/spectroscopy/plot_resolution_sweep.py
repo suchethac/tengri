@@ -1,0 +1,126 @@
+"""
+Instrumental Resolution Sweep: Hα Line Blending
+=================================================
+
+Demonstrate how instrumental resolution affects spectral line profile visibility
+by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500
+(DESI), 2000 (KMOS), 5000 (MUSE), and 25000 (HARPS). The Hα + [N II] complex
+(rest ~6550–6600 Å) transitions from fully blended at low R to completely
+resolved at high R, revealing the forbidden and Balmer lines separately.
+
+This example demonstrates:
+
+- Building an SED model with the public API using ``SEDModel.build()``
+- Observing spectra at different instrumental resolutions via
+  ``Spectroscopy(resolution=R)``
+- Predicting observed spectra with ``model.predict_spectrum()``
+- How forbidden and Balmer lines blend/separate with resolution
+
+Reference: Oxygen doublet [O III] λλ4959,5007 and forbidden nitrogen
+[N II] λλ6549,6585 are kinematically degenerate with Balmer lines at
+low instrumental resolution.
+"""
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+
+ssp = tengri.load_ssp()
+
+# --- Setup: intrinsic SED ---
+# Rest-frame wavelength grid covering the Hα + [N II] complex
+WAVE_REST = jnp.linspace(6400.0, 6700.0, 600)
+REDSHIFT = 0.05
+
+# Build model with fixed, simple SFH and dust properties
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={"type": "tsnorm", "*": tengri.FIXED,
+         "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
+         "skew": -0.2, "trunc": 2.0},
+    dust={"type": "two_component", "*": tengri.FIXED,
+          "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
+    redshift=tengri.Fixed(REDSHIFT),
+)
+
+# Sample parameters (all fixed, so just use defaults)
+params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+
+# --- Resolution sweep: observe at 5 different instrumental resolutions ---
+# R = 100 (SDSS lores), 500 (DESI), 2000 (KMOS), 5000 (MUSE), 25000 (HARPS)
+resolution_vals = [100, 500, 2000, 5000, 25000]
+colors = plt.cm.viridis(np.linspace(0.0, 0.9, len(resolution_vals)))
+
+fig, ax = plt.subplots(figsize=(10, 5.5))
+
+for r, color in zip(resolution_vals, colors):
+    # Observed-frame wavelengths at this resolution
+    wave_obs = WAVE_REST * (1 + REDSHIFT)
+
+    # Create spectroscopy config with this resolution
+    spec = tengri.Spectroscopy(wave_obs=wave_obs, resolution=float(r))
+    obs = tengri.Observation(spectroscopy=spec)
+
+    # Build model with this observation setup
+    model_r = tengri.SEDModel.build(
+        ssp,
+        observation=obs,
+        sfh={"type": "tsnorm", "*": tengri.FIXED,
+             "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
+             "skew": -0.2, "trunc": 2.0},
+        dust={"type": "two_component", "*": tengri.FIXED,
+              "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
+        redshift=tengri.Fixed(REDSHIFT),
+    )
+
+    # Predict spectrum at this resolution
+    flux = model_r.predict_spectrum(params, wave_obs=wave_obs)
+    flux_array = np.asarray(flux)
+
+    # Normalize to continuum level for visual comparison
+    wave_rest_array = np.asarray(WAVE_REST)
+    cont_mask = (wave_rest_array >= 6400) & (wave_rest_array <= 6450)
+    f_cont = np.median(flux_array[cont_mask])
+    flux_norm = flux_array / f_cont
+
+    ax.plot(
+        wave_rest_array,
+        flux_norm,
+        lw=2.0,
+        color=color,
+        label=f"$R$ = {r:,}",
+        alpha=0.85,
+    )
+
+# Annotations: mark key emission and forbidden lines (vacuum wavelengths)
+ax.axvline(6549.85, ls="--", lw=0.7, color="0.5", alpha=0.6)
+ax.axvline(6564.61, ls="--", lw=0.7, color="0.5", alpha=0.6)
+ax.axvline(6585.27, ls="--", lw=0.7, color="0.5", alpha=0.6)
+
+# Text labels
+ax.text(6549.85, 0.88, r"[N II]$\lambda$6549", fontsize=8, ha="right",
+        color="0.5", rotation=90)
+ax.text(6564.61, 0.88, r"H$\alpha$", fontsize=8, ha="center", color="0.5",
+        rotation=90)
+ax.text(6585.27, 0.88, r"[N II]$\lambda$6585", fontsize=8, ha="left",
+        color="0.5", rotation=90)
+
+# Formatting
+ax.set_xlabel(r"Rest-frame wavelength [$\mathrm{\AA}$]", fontsize=11)
+ax.set_ylabel(r"Normalized $F_\lambda$", fontsize=11)
+ax.set_xlim(6450, 6700)
+ax.set_ylim(0.85, 1.15)
+ax.legend(frameon=False, loc="upper right", fontsize=10, ncol=1)
+
+fig.tight_layout()
+plt.savefig("plot_resolution_sweep.png", dpi=150, bbox_inches="tight")

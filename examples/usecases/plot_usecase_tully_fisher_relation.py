@@ -92,7 +92,8 @@ def stellar_mass_from_sfh(t_gyr: np.ndarray, sfr_mean: np.ndarray) -> float:
 from pathlib import Path
 
 repo_root = next(
-    p for p in [Path.cwd(), *Path.cwd().parents]
+    p
+    for p in [Path.cwd(), *Path.cwd().parents]
     if (p / "data" / "fsps_prsc_miles_chabrier.h5").exists()
 )
 ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
@@ -107,10 +108,8 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "log_total_mass": 10.0, 3.0)},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.05, "tau_bc": 0.05},
+    sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
     neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5},
     redshift=tengri.Fixed(0.0),
 )
@@ -178,9 +177,14 @@ fig, ax = plt.subplots(figsize=(8.0, 6.0))
 
 # Scatter plot: mock galaxies
 ax.scatter(
-    log_v_circs, m_r_abs,
-    c="C0", s=60, alpha=0.65, edgecolor="0.3", lw=0.5,
-    label=r"Mock disc galaxies ($n=30$)"
+    log_v_circs,
+    m_r_abs,
+    c="C0",
+    s=60,
+    alpha=0.65,
+    edgecolor="0.3",
+    lw=0.5,
+    label=r"Mock disc galaxies ($n=30$)",
 )
 
 # Published McGaugh+2000 relation (originally in K-band)
@@ -196,21 +200,13 @@ log_m_plot = mcgaugh2000_baryonic_tf(v_plot)
 # Optical TF: m_opt ≈ -21.0 - 1.2 * (log M_baryon - 11)
 m_r_plot = -21.0 - 1.2 * (log_m_plot - 11.0)
 
-ax.plot(
-    log_v_plot, m_r_plot,
-    "k--", lw=2.0, alpha=0.7,
-    label=r"McGaugh+2000 TF (optical)"
-)
+ax.plot(log_v_plot, m_r_plot, "k--", lw=2.0, alpha=0.7, label=r"McGaugh+2000 TF (optical)")
 
 # Fit a line to mock data for slope verification
 z_fit = np.polyfit(log_v_circs, m_r_abs, 1)
 v_fit = np.array([log_v_circs.min(), log_v_circs.max()])
 m_r_fit = np.polyval(z_fit, v_fit)
-ax.plot(
-    v_fit, m_r_fit,
-    "C1--", lw=1.5, alpha=0.6,
-    label=f"Mock fit (slope={z_fit[0]:.2f})"
-)
+ax.plot(v_fit, m_r_fit, "C1--", lw=1.5, alpha=0.6, label=f"Mock fit (slope={z_fit[0]:.2f})")
 
 # Formatting
 ax.set_xlabel(r"$\log V_{\mathrm{circ}}$ [km/s]", fontsize=12)
@@ -222,9 +218,14 @@ ax.legend(loc="lower right", frameon=False, fontsize=10)
 
 # Title and annotation
 ax.text(
-    0.05, 0.95, r"Baryonic Tully-Fisher: $M_{\mathrm{baryon}} \propto V_{\mathrm{circ}}^4$",
-    transform=ax.transAxes, fontsize=11, fontweight="bold",
-    verticalalignment="top", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5)
+    0.05,
+    0.95,
+    r"Baryonic Tully-Fisher: $M_{\mathrm{baryon}} \propto V_{\mathrm{circ}}^4$",
+    transform=ax.transAxes,
+    fontsize=11,
+    fontweight="bold",
+    verticalalignment="top",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
 
 fig.tight_layout()

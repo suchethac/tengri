@@ -1,0 +1,119 @@
+{
+ "AGN_MODELS": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
+   "name": "AGN_MODELS"
+  }
+ ],
+ "jnp.logspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "logspace"
+  }
+ ],
+ "np.all": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "all"
+  }
+ ],
+ "np.any": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "any"
+  }
+ ],
+ "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "array"
+  }
+ ],
+ "np.isnan": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "isnan"
+  }
+ ],
+ "np.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "linspace"
+  }
+ ],
+ "np.log10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "log10"
+  }
+ ],
+ "plt.cm.Set1": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "Set1"
+  }
+ ],
+ "plt.savefig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "savefig"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "resolve_agn_model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
+   "name": "resolve_agn_model"
+  }
+ ],
+ "setup_style": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ]
+}

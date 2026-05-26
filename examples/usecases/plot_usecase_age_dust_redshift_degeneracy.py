@@ -181,20 +181,26 @@ def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0,
 
 # Tune each scenario to match target r-band magnitude
 print("\nTuning stellar masses to match r-band magnitude...")
-log_total_mass_a = _bisect_log_total_mass(model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target)
+log_total_mass_a = _bisect_log_total_mass(
+    model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target
+)
 baseline_a["sfh_dexp_log_total_mass"] = log_total_mass_a
 params_a = baseline_a
-print(f"  Scenario A: log_total_mass=10.0)
+print(f"  Scenario A: log_total_mass={log_total_mass_a:.2f}")
 
-log_total_mass_b = _bisect_log_total_mass(model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target)
+log_total_mass_b = _bisect_log_total_mass(
+    model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target
+)
 baseline_b["sfh_dexp_log_total_mass"] = log_total_mass_b
 params_b = baseline_b
-print(f"  Scenario B: log_total_mass=10.0)
+print(f"  Scenario B: log_total_mass={log_total_mass_b:.2f}")
 
-log_total_mass_c = _bisect_log_total_mass(model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target)
+log_total_mass_c = _bisect_log_total_mass(
+    model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target
+)
 baseline_c["sfh_lnorm_log_total_mass"] = log_total_mass_c
 params_c = baseline_c
-print(f"  Scenario C: log_total_mass=10.0)
+print(f"  Scenario C: log_total_mass={log_total_mass_c:.2f}")
 
 # Predict photometry for all three scenarios
 print("\nComputing photometry predictions...")
@@ -223,9 +229,7 @@ for i, fname in enumerate(filter_names):
 # Flag convergence failure
 convergence_pass = np.all(mag_std < 0.5)
 if not convergence_pass:
-    print(
-        "\n[WARNING] Photometric convergence FAILED! σ > 0.5 mag on some bands."
-    )
+    print("\n[WARNING] Photometric convergence FAILED! σ > 0.5 mag on some bands.")
     print(
         "This indicates the SFR tuning did not fully converge. "
         "The degeneracy may be weaker than expected for this redshift/age/dust combo."

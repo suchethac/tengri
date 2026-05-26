@@ -44,9 +44,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 # Build a baseline model: star-forming galaxy at z=0 with 5 SDSS filters
 ssp = tengri.load_ssp()
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    ),
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
 # Construct a realistic model with free parameters
@@ -86,6 +84,7 @@ param_labels = [
 ]
 
 band_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+
 
 # Function to compute log-log sensitivity: ∂(log F) / ∂(log θ)
 def compute_log_sensitivities(params):

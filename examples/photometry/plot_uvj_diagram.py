@@ -10,7 +10,7 @@ post-starburst galaxy, and (4) a dusty starburst. The grey box
 marks the "quiescent region" from Williams+2009, a visual guide
 for identifying passive galaxies.
 
-This figure demonstrates how dust, age, and star formation
+dust, age, and star formation
 history shape a galaxy's position in the UVJ plane — a
 workhorse diagnostic for photometric surveys.
 """

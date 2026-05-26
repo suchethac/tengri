@@ -10,8 +10,6 @@ emission visible face-on and increasing direct continuum. Larger OA
 (flared torus) increases covering, suppressing direct light and boosting
 thermal re-emission in the mid-infrared.
 
-This example demonstrates:
-
 - Torus geometry control via opening angle (OA = {15°, 30°, 50°, 70°})
 - Covering factor and its MIR emission signature
 - Rest-frame νL_ν SED from 1000 Å to 1 mm at fixed cos(inclination)=0.5

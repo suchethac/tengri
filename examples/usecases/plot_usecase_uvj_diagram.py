@@ -63,7 +63,7 @@ sf_model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_total_mass": 10.0, 1.5),
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
         "width_gyr": tengri.Uniform(1.0, 4.0),
         "skew": tengri.Uniform(-0.5, 1.0),
@@ -87,7 +87,7 @@ passive_model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_total_mass": 10.0, 0.5),
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
         "width_gyr": tengri.Uniform(0.5, 1.5),
         "skew": tengri.Uniform(-1.5, 0.0),

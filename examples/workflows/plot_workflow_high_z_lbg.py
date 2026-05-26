@@ -43,7 +43,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "log_total_mass": 10.0, 2.5),
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": tengri.Uniform(0.1, 2.0),
         "width_gyr": tengri.Uniform(0.05, 1.0),
         "skew": tengri.Fixed(0.5),

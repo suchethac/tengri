@@ -8,7 +8,7 @@ dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6,
 (9.7 μm Si–O stretch) and AGN heating suppress PAH and introduce continuum
 growth in AGN-dominated systems. We model three templates: (a) pure starburst
 (no AGN), (b) pure AGN (no star formation), and (c) composite with
-AGN fraction = 0.5. This illustrates the diagnostic power of mid-IR
+AGN fraction = 0.5. the diagnostic power of mid-IR
 spectroscopy: PAH strength probes star formation rate, while continuum
 slope and silicate depth reveal AGN heating and dust temperature.
 
@@ -53,7 +53,7 @@ model_sf = tengri.SEDModel.build(
         "type": "two_component",
         "*": tengri.FIXED,
         "tau_diff": 0.5,  # diffuse dust: moderate optical depth
-        "tau_bc": 1.2,    # birth cloud opacity: birth clouds
+        "tau_bc": 1.2,  # birth cloud opacity: birth clouds
         "emission": {
             "type": "dale2014",  # Dale et al. 2014 dust SED
             "*": tengri.FIXED,
@@ -88,8 +88,8 @@ model_agn = tengri.SEDModel.build(
     dust={
         "type": "two_component",
         "*": tengri.FIXED,
-        "tau_diff": 1.5,    # warm dust around AGN
-        "tau_bc": 0.0,      # no birth clouds
+        "tau_diff": 1.5,  # warm dust around AGN
+        "tau_bc": 0.0,  # no birth clouds
         "emission": {
             "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
             "*": tengri.FIXED,
@@ -104,8 +104,8 @@ model_agn = tengri.SEDModel.build(
             "type": "skirtor",
             "*": tengri.FIXED,
         },
-        "log_lbol": 12.0,    # AGN bolometric luminosity: ~1e12 Lsun
-        "frac": 1.0,         # 100% AGN (no stellar contribution to near/mid-IR)
+        "log_lbol": 12.0,  # AGN bolometric luminosity: ~1e12 Lsun
+        "frac": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
         "*": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),
@@ -125,7 +125,7 @@ model_composite = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 1.2,     # SFR ~ 16 Msun/yr
+        "log_sfr": 1.2,  # SFR ~ 16 Msun/yr
         "start_gyr": 1.0,
         "end_gyr": 0.0,
     },
@@ -148,8 +148,8 @@ model_composite = tengri.SEDModel.build(
             "type": "skirtor",
             "*": tengri.FIXED,
         },
-        "log_lbol": 11.5,    # AGN bolometric luminosity: ~3e11 Lsun
-        "frac": 0.5,         # 50% AGN, 50% stellar
+        "log_lbol": 11.5,  # AGN bolometric luminosity: ~3e11 Lsun
+        "frac": 0.5,  # 50% AGN, 50% stellar
         "*": tengri.FIXED,
     },
     redshift=tengri.Fixed(0.05),

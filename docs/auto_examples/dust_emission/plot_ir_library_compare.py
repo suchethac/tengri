@@ -1,0 +1,98 @@
+"""
+Dust IR-emission library comparison at fixed L_dust
+====================================================
+
+All seven shipped dust IR-emission libraries reprocessing the same
+absorbed UV power into the IR, normalised so the integrated
+``L_IR(8–1000 μm)`` is identical across curves. The differences then
+sit entirely in the SED *shape* — peak wavelength (T_dust proxy),
+PAH-feature amplitude in the 3–20 μm window, and how steeply the
+sub-mm tail falls.
+
+Libraries compared:
+- ``dale2014``  — Dale+2014 SFR-driven template family
+- ``dl07``      — Draine & Li 2007 grain mixture
+- ``dl14``      — Draine+2014 update (extended PAH/silicate)
+- ``mbb``       — single-T modified blackbody (Casey 2012)
+- ``themis``    — THEMIS amorphous-carbon grains (Jones+2017)
+- ``astrodust`` — Hensley & Draine 2023 unified grain model
+- ``bosa``      — BOSA template set (Boquien et al. CIGALE)
+"""
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*experimental.*")
+
+LIBS = [
+    ("dale2014", "Dale+2014"),
+    ("draine_li2007", "Draine & Li 2007"),
+    ("draine_li2014", "Draine+2014"),
+    ("modified_blackbody", "modified BB (Casey 2012)"),
+    ("themis", "THEMIS (Jones+2017)"),
+    ("astrodust", "Astrodust (HD23)"),
+    ("bosa", "BOSA (CIGALE)"),
+]
+COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
+
+C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 1.0}
+
+ssp = tengri.load_ssp()
+fig, ax = plt.subplots(figsize=(7.2, 4.6))
+
+for (lib, label), color in zip(LIBS, COLORS):
+    try:
+        model = tengri.SEDModel.build(
+            ssp,
+            sfh=SFH,
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": 1.0,
+                "tau_bc": 1.5,
+                "emission": {"type": lib, "*": tengri.FIXED},
+            },
+            redshift=tengri.Fixed(0.05),
+        )
+    except Exception:
+        continue
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    wave = np.asarray(out.wavelength)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    # Normalise on integrated L_IR(8-1000 μm).
+    ir = (wave > 8e4) & (wave < 1e7)
+    if ir.sum() < 5:
+        continue
+    nu_ir = C_AA_PER_S / wave[ir]
+    order = np.argsort(nu_ir)
+    l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+    if l_ir > 0:
+        nu_l_nu = nu_l_nu / l_ir
+    ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+
+ax.set(
+    xlim=(1e4, 1e7),
+    ylim=(2e-3, 3.0),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
+)
+
+for um, name in [(8, "8 μm"), (24, "MIPS 24"), (70, "FIR 70"), (160, "FIR 160")]:
+    lam = um * 1.0e4
+    ax.axvline(lam, color="0.85", lw=0.4, alpha=0.6)
+    ax.text(lam, 2.2, name, fontsize=7, color="0.5", ha="center", va="bottom")
+
+ax.legend(frameon=False, fontsize=8, loc="lower left")
+
+fig.tight_layout()
+plt.savefig("plot_ir_library_compare.png", dpi=150, bbox_inches="tight")

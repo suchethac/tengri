@@ -1,0 +1,74 @@
+{
+ "igm_transmission": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.igm",
+   "module_short": "tengri.igm",
+   "name": "igm_transmission"
+  }
+ ],
+ "igm_transmission_madau": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.igm",
+   "module_short": "tengri.igm",
+   "name": "igm_transmission_madau"
+  }
+ ],
+ "jnp.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "linspace"
+  }
+ ],
+ "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "array"
+  }
+ ],
+ "plt.savefig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "savefig"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "setup_style": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
+  }
+ ]
+}

@@ -1,5 +1,5 @@
 """
-Strong-lensing magnification: EoR galaxy detection boost
+Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
 =========================================================
 
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
@@ -95,9 +95,7 @@ params = model.spec.sample(key)
 flux_intrinsic = np.asarray(model.predict_photometry(params))
 
 # Convert to AB magnitudes
-mag_intrinsic = np.array([
-    float(fnu_to_ab_mag(jnp.array(f))) for f in flux_intrinsic
-])
+mag_intrinsic = np.array([float(fnu_to_ab_mag(jnp.array(f))) for f in flux_intrinsic])
 
 # JWST NIRCam 5σ detection threshold (Rieke+2023)
 # F150W ≈ 27.9 AB, F200W ≈ 28.1 AB, F277W ≈ 28.4 AB, F356W ≈ 28.6 AB, F444W ≈ 28.5 AB
@@ -174,8 +172,9 @@ for i, mu in enumerate(magnifications):
             fontsize=9,
             ha="left",
             bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3),
-            arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.2",
-                          color="black", lw=1.0),
+            arrowprops=dict(
+                arrowstyle="->", connectionstyle="arc3,rad=0.2", color="black", lw=1.0
+            ),
         )
         break
 
@@ -201,11 +200,7 @@ ax.legend(
 )
 
 # Add reference annotations
-textstr = (
-    "z=7, M* ~ 10$^9$ M$_\\odot$\n"
-    "Age ~ 50 Myr (tsnorm burst)\n"
-    "τ_BC = 0.1 (minimal dust)"
-)
+textstr = "z=7, M* ~ 10$^9$ M$_\\odot$\nAge ~ 50 Myr (tsnorm burst)\nτ_BC = 0.1 (minimal dust)"
 ax.text(
     0.98,
     0.97,
@@ -229,10 +224,7 @@ print("=" * 70)
 print("\nIntrinsic (unlensed) magnitudes:")
 print("-" * 70)
 for j, band in enumerate(bands):
-    print(
-        f"  {band.upper():20s}: {mag_intrinsic[j]:6.2f} AB "
-        f"({flux_intrinsic[j]:.3e} erg/s/Hz)"
-    )
+    print(f"  {band.upper():20s}: {mag_intrinsic[j]:6.2f} AB ({flux_intrinsic[j]:.3e} erg/s/Hz)")
 
 print(f"\nJWST NIRCam 5σ detection limit: {mag_5sigma_limit:.1f} AB")
 print("(Rieke+2023, NIRCam module performance)")

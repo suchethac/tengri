@@ -1,0 +1,54 @@
+"""
+AGN radio loudness R: orders of magnitude in jet power
+=======================================================
+
+Radio loudness R = log_10(L_5GHz / L_B) quantifies the ratio of AGN radio
+to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources
+(FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order
+of magnitude increase in jet radio luminosity at fixed bolometric AGN power.
+We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and
+α_agn = 0.7.
+
+Reference: Kellermann et al. 1989, ApJ 345, 171.
+"""
+
+import warnings
+
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+from tengri.radio import radio_agn
+
+wave = jnp.logspace(7, 11, 600)  # 1 mm – 10 m in Angstrom
+L_agn_bol = 1e44  # erg/s — Seyfert-1-like bolometric luminosity
+L_agn_bol_lsun = L_agn_bol / 3.828e33  # convert erg/s → Lsun
+
+R_values = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+norm = mpl.colors.Normalize(vmin=R_values.min(), vmax=R_values.max())
+cmap = plt.get_cmap("viridis")
+
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+
+for R in R_values:
+    L_nu = radio_agn(wave, L_agn_bol=L_agn_bol_lsun, radio_loudness=R, alpha_agn=0.7)
+    nu_ghz = (3e18 / np.array(wave)) / 1e9
+    ax.loglog(nu_ghz, np.array(L_nu), color=cmap(norm(R)), lw=1.4)
+
+ax.set_xlabel(r"Frequency $\nu$ [GHz]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.invert_xaxis()
+ax.set_xlim(200, 0.1)
+ax.set_ylim(1e-8, 1e2)
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"R = log$_{10}$(L$_{5\,\rm GHz}$ / L$_B$)")
+
+fig.tight_layout()
+plt.savefig("plot_radio_loudness_sweep.png", dpi=150, bbox_inches="tight")

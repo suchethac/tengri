@@ -56,32 +56,9 @@ def boxcar_line_flux(wave, sed, line_centre):
 
 ssp = tengri.load_ssp()
 
-<<<<<<< HEAD
 logzsol_grid = np.linspace(-1.0, 0.2, 12)
 log_o3_hb = []
 log_n2_ha = []
-=======
-# Build model for emission-line diagnostics
-model = tengri.SEDModel.build(
-    ssp,
-    sfh={
-        "type": "tsnorm",
-        "log_total_mass": 10.0, 2.0),
-        "peak_lbt_gyr": tengri.Fixed(2.0),
-        "width_gyr": tengri.Fixed(1.0),
-        "skew": tengri.Fixed(0.2),
-        "trunc": tengri.Fixed(3.0),
-        "logzsol": tengri.Fixed(-0.1),
-    },
-    dust={
-        "type": "two_component",
-        "*": tengri.FIXED,
-        "tau_bc": 0.2,
-        "tau_diff": 0.1,
-        "slope": -0.7,
-    },
-)
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 for logz in logzsol_grid:
     model = tengri.SEDModel.build(
@@ -89,7 +66,7 @@ for logz in logzsol_grid:
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_total_mass": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 1.0,
             "skew": 0.2,
@@ -105,7 +82,6 @@ for logz in logzsol_grid:
         },
     )
 
-<<<<<<< HEAD
     pred = model.predict_rest_sed({"redshift": 0.05})
     wave = np.asarray(pred.wavelength)
     sed = np.asarray(pred.sed)
@@ -113,28 +89,6 @@ for logz in logzsol_grid:
     fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
     log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
     log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
-=======
-for z in redshifts:
-    for _i in range(5):
-        key, subkey = jax.random.split(key)
-        params = model.spec.sample(subkey)
-        params["redshift"] = z
-        params["sfh_tsnorm_log_total_mass"] = np.random.uniform(0.5, 1.5)
-
-        sfr = float(params["sfh_tsnorm_log_total_mass"])
-        # Synthetic line ratios
-        ha = 1.0
-        hb = 0.3
-        nii = 0.1 * (1.0 + sfr)
-        oiii = 0.15 * (1.0 + sfr)
-
-        log_nii_ha.append(np.log10(max(nii / ha, 1e-3)))
-        log_oiii_hb.append(np.log10(max(oiii / hb, 1e-3)))
-        z_vals.append(z)
-
-# Plot
-fig, ax = plt.subplots(figsize=(8, 7))
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 fig, ax = plt.subplots(figsize=(7.5, 6.5))
 sc = ax.scatter(
