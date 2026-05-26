@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import types
 import warnings
@@ -926,6 +927,22 @@ class SEDModel:
                 stacklevel=2,
             )
             self._dust_emission_model = "draine_li2007"
+
+        # Template-based dust emission models lazy-load HDF5 grids on first
+        # call. If the first call happens inside a `@jax.jit` scope (the
+        # common Fitter path), `jnp.array(...)` inside the loader creates
+        # `DynamicJaxprTracer` objects that escape the loader's closure,
+        # triggering `UnexpectedTracerError` on subsequent non-JIT calls.
+        # Mirror the `_warm_grid_caches()` pattern used by `_build_precomputed_data`
+        # and force-load at factory time (#390).
+        _TEMPLATE_BASED_EMISSION_MODELS = frozenset(
+            {"draine_li2007", "dl14", "dale2014", "astrodust", "bosa", "themis"}
+        )
+        if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
+            from tengri.components.dust.emission import preload_emission_model
+
+            with contextlib.suppress(Exception):
+                preload_emission_model(self._dust_emission_model)
 
         # Identity entries for dust-emission params now come from the
         # registry-driven auto-derive in ``_build_param_map`` (Step B,
@@ -2967,8 +2984,21 @@ class SEDModel:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif (
+            wave_obs is None
+            and self.observation is not None
+            and getattr(self.observation, "spectroscopy", None) is not None
+            and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
+        ):
+            # Tier-2 fallback documented in the docstring above (#389):
+            # honour observation.spectroscopy.wave_obs so Fitter-driven
+            # spectroscopy fits don't need a manual `model._wave_obs` hack.
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
-            raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
+            raise ValueError(
+                "No wavelength grid. Pass wave_obs, call precompute_spectroscopy(), "
+                "or attach an Observation with spectroscopy.wave_obs set."
+            )
 
         # Use instance default if not overridden
         if wave_chunk_size is None:

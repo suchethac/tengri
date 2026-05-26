@@ -880,6 +880,37 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
     return out
 
 
+def _short_names_for_registered_type(type_name: str | None) -> set[str]:
+    """Short + full param names declared by a user-registered SEDModelComponent
+    subclass selected via ``type=<type_name>``.
+
+    The per-group validator only sees params that already live on the
+    structural ``Parameters`` instance. User-registered subclasses
+    (``class MyDust(SEDModelComponent): T = Uniform(...)``) aren't in
+    that pool yet, so a per-parameter override like ``"T": Fixed(35)``
+    is rejected before the build can wire the subclass in (#391).
+
+    Returns both the short name (``T``) and the prefixed full name
+    (``dust_T``) so either spelling is accepted in the user's group dict.
+    """
+    if not type_name:
+        return set()
+    try:
+        from tengri.components.sed_model_component import _REGISTRY
+    except Exception:
+        return set()
+    cls = _REGISTRY.get(type_name)
+    if cls is None:
+        return set()
+    prefix = getattr(cls, "parameter_prefix", "")
+    priors = getattr(cls, "_priors", {}) or {}
+    out: set[str] = set()
+    for short in priors:
+        out.add(short)
+        out.add(f"{prefix}{short}")
+    return out
+
+
 def _validate_user_keys(
     kwargs: dict,
     structural_params: Parameters,
@@ -942,12 +973,21 @@ def _validate_user_keys(
             # dust.emission group path).
             param_names = param_names | _short_names_for_group("dust.emission", param_partition)
 
+        # User-registered SEDModelComponent subclasses (#391): if the
+        # group dict picks a custom ``type``, add that subclass's
+        # declared short/full param names to the accepted set.
+        if isinstance(top_val.get("type"), str):
+            param_names = param_names | _short_names_for_registered_type(top_val["type"])
+
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 
         # Recurse into sub-block dicts.
         if top_key == "dust" and isinstance(top_val.get("emission"), dict):
             sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
             sub_params = _short_names_for_group("dust.emission", param_partition)
+            sub_params = sub_params | _short_names_for_registered_type(
+                top_val["emission"].get("type") if isinstance(top_val["emission"], dict) else None
+            )
             _check_dict_keys(
                 "dust.emission", top_val["emission"], sub_allowed | sub_params, param_partition
             )
@@ -959,6 +999,7 @@ def _validate_user_keys(
                 sub_group = f"agn.{sub_name}"
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
+                sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
                 # Cross-level: sub-block dict may also legitimately carry
                 # shared AGN param names.
                 _check_dict_keys(
