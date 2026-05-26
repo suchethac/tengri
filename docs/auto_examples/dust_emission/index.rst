@@ -11,6 +11,10 @@ temperature sweeps, and dives into the BOSA, THEMIS, PAHspec, and
 Astrodust (HD23) template grids.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

@@ -8,6 +8,10 @@ Inference Methods
 Comparing inference methods and convergence diagnostics.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

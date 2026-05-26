@@ -8,6 +8,10 @@ Metallicity
 Stellar metallicity Z and α-element enhancement effects on the SED.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

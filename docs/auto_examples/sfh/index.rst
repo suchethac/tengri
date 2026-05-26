@@ -8,6 +8,10 @@ Star Formation Histories
 Parametric and stochastic star formation history models.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
