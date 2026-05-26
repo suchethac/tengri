@@ -4,6 +4,7 @@
 from tengri.components.xray.xray import (
     alpha_ox_from_l2500,
     xray_agn_corona,
+    xray_agn_corona_bolometric,
     xray_agn_corona_from_disc,
     xray_anisotropy,
     xray_total,
@@ -19,6 +20,7 @@ __all__ = [
     "XRayAirdSEDComponentConfig",
     "alpha_ox_from_l2500",
     "xray_agn_corona",
+    "xray_agn_corona_bolometric",
     "xray_agn_corona_from_disc",
     "xray_anisotropy",
     "xray_total",
