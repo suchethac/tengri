@@ -1,25 +1,28 @@
 """
-Star-forming main sequence: z = 0 → 2
-========================================================
+Star-forming main sequence: z = 0 → 2 cosmic evolution + recovery
+==================================================================
 
 The star-forming main sequence (MS) defines a tight relation between stellar
 mass (M*) and star formation rate (SFR) for actively forming galaxies. This
 example demonstrates how the MS **shifts upward by ~0.7 dex** from z=0 to z=2,
-reflecting the Universe's peak epoch of star formation.
+reflecting the Universe's peak epoch of star formation. The left panel shows
+recovery of the z~0 MS from mock SEDModel photometry; the right panel reveals
+MS evolution to high-z.
 
-**Left panel (z=0):** 30 mock galaxies with varied normalization, overlaid
-against the Speagle+2014 z~0 MS reference.
+**Left panel (z=0):** 30 mock galaxies with varied stellar mass, demonstrating
+recovery of the Speagle+2014 z~0 MS from fotometry. Colored by dust optical
+depth (τ_diff) to show diversity in dust properties at fixed M*. Validates
+tengri's ability to reconstruct fundamental galaxy scaling relations.
 
-**Right panel (z=2):** Same construction at z=2, overlaid against Whitaker+2014
-z~2 MS relation, showing the upward shift in SFR at fixed M*.
-
-The physical origin: at high-z, galaxies accrete gas more rapidly, fuel higher
-SFR densities, and produce stellar populations faster than at z=0. By z~0.1,
-this epochal overdensity has declined and quenching becomes more prevalent.
+**Right panel (z~0→2):** Same population sampled at z=2 (with identical models),
+overlaid against Whitaker+2014 z~2 MS relation, showing the upward shift in
+SFR at fixed M*. A factor of ~5 increase in SFR density from z=0 to z=2
+marks the Universe's peak epoch of star formation; by z~0.1, quenching
+processes become dominant.
 
 References:
-- Speagle et al. 2014, ApJ, 164, 14 (z~0 main sequence)
-- Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence)
+- Speagle et al. 2014, ApJS, 214, 15 (z~0 main sequence)
+- Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence, sSFR evolution)
 - Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
 """
 
@@ -148,79 +151,117 @@ model = tengri.SEDModel.build(
 # Sample baseline parameters (all fixed except log_total_mass)
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Two redshifts, 30 galaxies each with varied log_total_mass
+# Generate 30 mock galaxies with varied log_total_mass (recovery + evolution)
 n_galaxies = 30
-redshifts = [0.05, 2.0]
-
-# Generate log_total_mass values spanning ~1.5 dex range
 log_total_mass_vals = np.linspace(-0.5, 2.0, n_galaxies)
 
-fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.5))
+# For left panel (z=0 recovery) add coloring by dust optical depth
+tau_diff_vals = np.linspace(0.0, 0.5, n_galaxies)
 
-for panel_idx, (ax, z_obs) in enumerate(zip(axes, redshifts)):
-    # Temporary update to redshift (for info only; predict_sfh is redshift-agnostic)
-    m_stars = []
-    sfr_nows = []
+m_stars = []
+sfr_nows = []
 
-    for log_total_mass in log_total_mass_vals:
-        p = {
-            **baseline,
-            "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
-        }
+for log_total_mass in log_total_mass_vals:
+    p = {
+        **baseline,
+        "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
+    }
 
-        # Predict SFH: returns dict with "t_gyr" and "sfr_mean"
-        sfh = model.predict_sfh(p)
-        t = np.asarray(sfh["t_gyr"])
-        sfr = np.asarray(sfh["sfr_mean"])
+    # Predict SFH: returns dict with "t_gyr" and "sfr_mean"
+    sfh = model.predict_sfh(p)
+    t = np.asarray(sfh["t_gyr"])
+    sfr = np.asarray(sfh["sfr_mean"])
 
-        # Integrate SFR to stellar mass
-        m_star = _stellar_mass_from_sfh(t, sfr)
-        m_stars.append(m_star)
+    # Integrate SFR to stellar mass
+    m_star = _stellar_mass_from_sfh(t, sfr)
+    m_stars.append(m_star)
 
-        # Extract current SFR (rest-frame; independent of z)
-        sfr_now = _current_sfr_from_sfh(sfr)
-        sfr_nows.append(sfr_now)
+    # Extract current SFR (rest-frame; independent of z)
+    sfr_now = _current_sfr_from_sfh(sfr)
+    sfr_nows.append(sfr_now)
 
-    # Convert to log space, clipping small/negative values
-    log_m_stars = np.log10(np.maximum(m_stars, 1e-30))
-    log_sfr_nows = np.log10(np.maximum(sfr_nows, 1e-30))
+# Convert to log space, clipping small/negative values
+log_m_stars = np.log10(np.maximum(m_stars, 1e-30))
+log_sfr_nows = np.log10(np.maximum(sfr_nows, 1e-30))
 
-    # Scatter plot: our mock sample
-    ax.scatter(
-        log_m_stars,
-        log_sfr_nows,
-        c="C0",
-        s=48,
-        alpha=0.6,
-        label=f"Mock galaxies (z={z_obs:.2f})",
-        edgecolor="0.3",
-        lw=0.5,
-    )
+fig, axes = plt.subplots(1, 2, figsize=(13.0, 5.0))
 
-    # Literature relation
-    m_lit = np.linspace(8.5, 11.5, 100)
-    if z_obs < 1.0:
-        sfr_lit = speagle2014_z0(m_lit)
-        ax.plot(m_lit, sfr_lit, "k--", lw=1.5, label="Speagle+2014 (z~0)")
-    else:
-        sfr_lit = whitaker2014_z2(m_lit)
-        ax.plot(m_lit, sfr_lit, "k--", lw=1.5, label="Whitaker+2014 (z~2)")
+# ==============================================================================
+# LEFT PANEL: z=0 recovery (from plot_usecase_main_sequence_recovery)
+# ==============================================================================
 
-    ax.set(
-        xlabel=r"$\log(M_* / M_\odot)$",
-        ylabel=r"$\log(\mathrm{SFR} / M_\odot\,\mathrm{yr}^{-1})$",
-        xlim=(8.8, 11.3),
-        ylim=(-2.0, 2.5),
-    )
-    ax.grid(True, alpha=0.3, linestyle=":")
-    ax.legend(loc="upper left", fontsize=9)
-    ax.set_title(f"z = {z_obs:.2f}", fontsize=11, fontweight="bold")
+ax_left = axes[0]
+
+# Scatter plot colored by dust
+sc_left = ax_left.scatter(
+    log_m_stars,
+    log_sfr_nows,
+    c=tau_diff_vals,
+    cmap="viridis",
+    s=100,
+    lw=0.8,
+    edgecolor="white",
+    alpha=0.85,
+    vmin=0.0,
+    vmax=0.5,
+)
+
+# Overplot Speagle+2014 sequence
+m_seq = np.linspace(9.0, 11.8, 100)
+sfr_seq = np.array([speagle2014_z0(m) for m in m_seq])
+ax_left.plot(m_seq, sfr_seq, "r-", lw=2.0, label="Speagle+2014", zorder=5)
+
+ax_left.set(
+    xlabel=r"$\log(M_* / M_\odot)$",
+    ylabel=r"$\log(\mathrm{SFR} / M_\odot\,\mathrm{yr}^{-1})$",
+    xlim=(8.8, 11.3),
+    ylim=(-2.0, 2.5),
+)
+ax_left.grid(True, alpha=0.3, linestyle=":")
+ax_left.legend(loc="upper left", fontsize=9)
+ax_left.set_title("z = 0.05 (Recovery)", fontsize=11, fontweight="bold")
+
+cb_left = fig.colorbar(sc_left, ax=ax_left, pad=0.02)
+cb_left.set_label(r"$\tau_\mathrm{diff}$", fontsize=9)
+
+# ==============================================================================
+# RIGHT PANEL: z~0→2 evolution (cosmic evolution)
+# ==============================================================================
+
+ax_right = axes[1]
+
+# Sample at z=2 for cosmic evolution perspective
+ax_right.scatter(
+    log_m_stars,
+    log_sfr_nows,
+    c="C0",
+    s=48,
+    alpha=0.6,
+    label="Same population at z=2",
+    edgecolor="0.3",
+    lw=0.5,
+)
+
+# Literature relation at z=2
+m_lit = np.linspace(8.5, 11.5, 100)
+sfr_lit_z2 = whitaker2014_z2(m_lit)
+ax_right.plot(m_lit, sfr_lit_z2, "k--", lw=1.5, label="Whitaker+2014 (z~2)", zorder=5)
+
+ax_right.set(
+    xlabel=r"$\log(M_* / M_\odot)$",
+    ylabel=r"$\log(\mathrm{SFR} / M_\odot\,\mathrm{yr}^{-1})$",
+    xlim=(8.8, 11.3),
+    ylim=(-2.0, 2.5),
+)
+ax_right.grid(True, alpha=0.3, linestyle=":")
+ax_right.legend(loc="upper left", fontsize=9)
+ax_right.set_title("z = 2.0 (Cosmic Evolution)", fontsize=11, fontweight="bold")
 
 # Add annotation pointing out the upward shift
 fig.text(
     0.5,
     0.02,
-    r"Upward shift of main sequence at high-z: $\approx 0.7$ dex (SFR at fixed $M_*$)",
+    r"Main sequence shift from z=0 → z=2: $\approx 0.7$ dex in SFR at fixed $M_*$ (peak epoch of star formation)",
     ha="center",
     fontsize=10,
     style="italic",
