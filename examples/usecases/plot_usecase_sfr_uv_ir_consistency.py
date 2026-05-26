@@ -214,7 +214,7 @@ ax.axhline(
 
 ax.set_xlabel(r"Dust optical depth $\tau_V$")
 ax.set_ylabel(r"SFR estimator [M$_{\odot}$/yr]")
-ax.set_ylim(bottom=0)
+ax.set_ylim(bottom=0, top=11)
 ax.legend(loc="upper left", frameon=False, fontsize=9)
 ax.grid(True, alpha=0.2)
 

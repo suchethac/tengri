@@ -31,6 +31,28 @@ The colour at each wavelength tells you which block matters most.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-98
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_components_isolated_001.png
+   :alt: plot components isolated
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_components_isolated_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/.claude-squad/worktrees/cs/egenerate-and-swee-expamles_18b313d32c623a20/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
+      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -109,7 +131,7 @@ The colour at each wavelength tells you which block matters most.
         ax.text(x, 4e44, name, fontsize=7, color="0.5", ha="center", alpha=0.7)
 
     ax.set(
-        xlim=(10, 3e9),
+        xlim=(10, 1e10),
         ylim=(1e35, 1e45),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
@@ -118,6 +140,11 @@ The colour at each wavelength tells you which block matters most.
 
     fig.tight_layout()
     plt.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 9.717 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_components_isolated.py:

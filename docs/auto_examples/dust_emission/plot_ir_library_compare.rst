@@ -39,6 +39,17 @@ Libraries compared:
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-99
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_ir_library_compare_001.png
+   :alt: plot ir library compare
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_ir_library_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -105,7 +116,7 @@ Libraries compared:
 
     ax.set(
         xlim=(1e4, 1e7),
-        ylim=(2e-3, 3.0),
+        ylim=(1e-4, 3.0),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
     )

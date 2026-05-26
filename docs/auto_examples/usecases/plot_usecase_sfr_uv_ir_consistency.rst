@@ -57,7 +57,7 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
+    /Users/suchethacooray/.claude-squad/worktrees/cs/egenerate-and-swee-expamles_18b313d32c623a20/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
       np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
     SFR recovery statistics:
       tau_V range: 0.00 – 4.00
@@ -263,7 +263,7 @@ References
 
     ax.set_xlabel(r"Dust optical depth $\tau_V$")
     ax.set_ylabel(r"SFR estimator [M$_{\odot}$/yr]")
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=0, top=11)
     ax.legend(loc="upper left", frameon=False, fontsize=9)
     ax.grid(True, alpha=0.2)
 
@@ -297,7 +297,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 16.912 seconds)
+   **Total running time of the script:** (1 minutes 10.671 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:
