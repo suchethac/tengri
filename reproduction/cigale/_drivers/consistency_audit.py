@@ -36,6 +36,22 @@ SSP_PATH = Path(__file__).parent / "data" / "bc03_from_cigale.h5"
 # integrates the SFH to exactly 1 M☉ formed (Bagpipes/Prospector convention).
 LOG_TOTAL_MASS_FIDUCIAL = 0.0
 
+# Metallicity match — solar-Z reference is library-dependent.
+# CIGALE's bc03 is built on Padova tracks, so its "metallicity=0.02" is
+# Z_abs = 0.02 (slightly super-solar in Padova: Zsun=0.0190, log10Zsun=-1.721).
+# tengri normalises met_logzsol against **Asplund 2009 Zsun = 0.0142**
+# (LOG10_ZSUN = -1.8477; matches MIST). To put tengri's CSP at the same
+# absolute log_z as CIGALE's bc03 call we go through absolute:
+#     met_logzsol = log10(Z_abs_cigale) - tengri_LOG10_ZSUN
+# This keeps the SSP-grid interpolation bit-exact regardless of which Zsun
+# the SSP library was originally calibrated against. Always pin met_logzsol
+# explicitly for CIGALE comparisons; tengri's default (met_logzsol = 0.0,
+# solar in tengri's Asplund convention) does not match CIGALE's BC03 grid.
+# See #412 for the trace.
+_LOG10_ZSUN = -1.8477  # tengri's Asplund-2009 constant (Zsun = 0.0142)
+_Z_ABS_CIGALE = 0.02   # CIGALE bc03(metallicity=0.02) — Padova absolute Z
+MET_LOGZSOL_FIDUCIAL = float(np.log10(_Z_ABS_CIGALE) - _LOG10_ZSUN)  # ≈ +0.149
+
 # CIGALE modified_starburst(E_BV_lines=0.3) ↔ tengri two_component (τ_bc, τ_diff)
 # via Calzetti R_V = 4.05 and the E(B-V)_cont / E(B-V)_lines = 0.44 split.
 _E_BV_LINES, _R_V, _F = 0.3, 4.05, 0.44
@@ -46,6 +62,8 @@ DUST_TAU_FIDUCIAL = {
 
 print(
     f"# fiducial — log_total_mass = {LOG_TOTAL_MASS_FIDUCIAL:.3f}, "
+    f"met_logzsol = {MET_LOGZSOL_FIDUCIAL:.3f} "
+    f"(log10(Z_abs) = {MET_LOGZSOL_FIDUCIAL + _LOG10_ZSUN:.3f}, Z = {_Z_ABS_CIGALE}), "
     f"tau_bc = {DUST_TAU_FIDUCIAL['tau_bc']:.3f}, "
     f"tau_diff = {DUST_TAU_FIDUCIAL['tau_diff']:.3f}"
 )
@@ -96,6 +114,7 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         "ssp_data": ssp,
         "sfh": {"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(LOG_TOTAL_MASS_FIDUCIAL), "*": FIXED},
+        "stellar": {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "*": FIXED},
         "redshift": Fixed(0.0),
     }
     if with_dust or with_ir:
