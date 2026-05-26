@@ -52,7 +52,7 @@ def _build_with_burst(ssp, *, width_gyr: float, peak_lbt_gyr: float):
                 sfh={
                     "type": "tsnorm",
                     "*": tengri.FIXED,
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 8.0,
                     "peak_lbt_gyr": peak_lbt_gyr,
                     "width_gyr": width_gyr,
                     "skew": 0.0,
