@@ -11,6 +11,10 @@ use 10× more VI iterations and samples.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import corner
@@ -52,7 +56,7 @@ truth = dict(model.spec.sample(key))
 truth.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
-    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_log_total_mass=10.0,
     dust_tau_diff=0.3,
 )
 mock = model.mock(truth, snr=25.0, key=key)

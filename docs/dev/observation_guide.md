@@ -90,7 +90,7 @@ obs = Observation(
 )
 
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=10.0, 3),
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -543,7 +543,7 @@ obs = Observation(
 # }
 
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=10.0, 3),
     met_logzsol=Uniform(-2.0, 0.2),
     redshift=Fixed(2.0),
 )
@@ -562,7 +562,7 @@ takes precedence:
 from tengri import Gaussian
 
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=10.0, 3),
     cal_c1=Gaussian(0.0, 0.5),  # user override: wider prior than default 0.1
     redshift=Fixed(2.0),
 )
@@ -719,7 +719,7 @@ obs = Observation(
 )
 
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=10.0, 3),
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -841,7 +841,7 @@ obs = Observation(
 )
 
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=10.0, 3),
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -922,7 +922,7 @@ obs = Observation(
 )
 
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=10.0, 3),
     sfh_tsnorm_tau_rise_gyr=Uniform(0.1, 5.0),
     sfh_tsnorm_tau_fall_gyr=Uniform(0.1, 10.0),
     met_logzsol=Uniform(-2.0, 0.2),

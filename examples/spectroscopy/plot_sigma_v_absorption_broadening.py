@@ -9,6 +9,10 @@ diagnostic — line core depth tracks σ_v, asymmetric wings appear with
 rotational broadening (not modelled here, sigma only).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -36,7 +40,7 @@ model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 7.0,
-         "width_gyr": 1.5, "log_peak_sfr": 1.0,
+         "width_gyr": 1.5, "log_total_mass": 10.0,
          "skew": 0.0, "trunc": 13.5},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.0, "tau_bc": 0.0},

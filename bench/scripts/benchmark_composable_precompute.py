@@ -43,8 +43,9 @@ def _toy_filter():
     return wave, trans
 
 
-def _bandpass_l_nu(l_nu: np.ndarray, wave_aa: np.ndarray,
-                   filter_wave: np.ndarray, filter_trans: np.ndarray) -> float:
+def _bandpass_l_nu(
+    l_nu: np.ndarray, wave_aa: np.ndarray, filter_wave: np.ndarray, filter_trans: np.ndarray
+) -> float:
     """Filter-averaged :math:`L_\\nu` (matches preintegrate_grid convention)."""
     nu = _C_AA_PER_S / wave_aa
     trans_interp = np.interp(wave_aa, filter_wave, filter_trans, left=0.0, right=0.0)
@@ -170,27 +171,22 @@ def main() -> None:
     print("─" * 67)
     print(
         f"{'exact (no JIT)':<25}"
-        f"{t_eager_first*1e3:>12.1f} ms"
-        f"{t_eager_med*1e3:>12.1f} ms"
+        f"{t_eager_first * 1e3:>12.1f} ms"
+        f"{t_eager_med * 1e3:>12.1f} ms"
         f"{1.0:>12.1f}x"
     )
     print(
         f"{'JIT-composable':<25}"
-        f"{t_jit_first*1e3:>12.1f} ms"
-        f"{t_jit_med*1e3:>12.3f} ms"
-        f"{t_eager_med/t_jit_med:>12.1f}x"
+        f"{t_jit_first * 1e3:>12.1f} ms"
+        f"{t_jit_med * 1e3:>12.3f} ms"
+        f"{t_eager_med / t_jit_med:>12.1f}x"
     )
-    print(
-        f"{'precompute (build)':<25}"
-        f"{t_build*1e3:>12.1f} ms"
-        f"{'-':>15}"
-        f"{'-':>12}"
-    )
+    print(f"{'precompute (build)':<25}{t_build * 1e3:>12.1f} ms{'-':>15}{'-':>12}")
     print(
         f"{'precompute (lookup)':<25}"
-        f"{t_pre_first*1e3:>12.1f} ms"
-        f"{t_pre_med*1e3:>12.3f} ms"
-        f"{t_eager_med/t_pre_med:>12.1f}x"
+        f"{t_pre_first * 1e3:>12.1f} ms"
+        f"{t_pre_med * 1e3:>12.3f} ms"
+        f"{t_eager_med / t_pre_med:>12.1f}x"
     )
     print()
 
@@ -225,17 +221,12 @@ def main() -> None:
 
     print("multi-axis (2D: l5100 × plslope, 5×5 grid)")
     print("─" * 67)
-    print(
-        f"{'precompute (build)':<25}"
-        f"{t_build2*1e3:>12.1f} ms"
-        f"{'-':>15}"
-        f"{'-':>12}"
-    )
+    print(f"{'precompute (build)':<25}{t_build2 * 1e3:>12.1f} ms{'-':>15}{'-':>12}")
     print(
         f"{'precompute (lookup)':<25}"
-        f"{t_pre2_first*1e3:>12.1f} ms"
-        f"{t_pre2_med*1e3:>12.3f} ms"
-        f"{t_eager_med/t_pre2_med:>12.1f}x"
+        f"{t_pre2_first * 1e3:>12.1f} ms"
+        f"{t_pre2_med * 1e3:>12.3f} ms"
+        f"{t_eager_med / t_pre2_med:>12.1f}x"
     )
     print()
 

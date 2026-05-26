@@ -255,12 +255,37 @@ def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
         )
         f.create_dataset("line_wavelengths_aa", data=line_waves)
 
-        # All line ratios = 1.0 (linear L_line/L_Hβ), so after log10 conversion = 0.0.
-        # This satisfies test_hb_ratio_is_unity (Hβ log10(ratio)=0.0) and
-        # test_no_all_nan_slices_at_solar (all values finite).
-        ratios = np.ones(
-            (n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines), dtype=np.float32
+        # Per-line ratios (linear L_line / L_Hβ). Plumbing tests need
+        # Hβ = 1.0 (test_hb_ratio_is_unity) and all entries finite
+        # (test_no_all_nan_slices_at_solar). Beyond those constraints,
+        # ship *physically-distinct-per-line* defaults so consumers like
+        # ``CB19Backend.predict_nebular_line_luminosities`` produce
+        # visible per-line variation under the synthetic grid — without
+        # this, every line collapses to the same luminosity and #361
+        # Bug C reproduces. The numbers below are rough SF Case B Hβ
+        # ratios (Osterbrock & Ferland 2006, Tables 4.4/4.10) — not
+        # production-grade, but enough to break the degeneracy in
+        # plumbing tests. Replace with the real Martinez-Paredes+2023
+        # grid via ``scripts/download_cb19_templates.py`` for science.
+        per_line_ratios_to_hbeta = np.array(
+            [
+                10.0,  # 1215.67  Lyα (intrinsic Case B; resonant scatter applied downstream)
+                0.50,  # 1549     C IV
+                2.00,  # 3727     [O II]
+                0.47,  # 4340.47  Hγ (Case B)
+                1.00,  # 4862.68  Hβ (reference; required = 1.0)
+                4.00,  # 5008.24  [O III]
+                0.10,  # 6300.30  [O I]
+                0.10,  # 6548.05  [N II] (one tail of doublet)
+                2.87,  # 6564.61  Hα (Case B)
+                0.30,  # 6583.45  [N II] (other tail)
+            ],
+            dtype=np.float32,
         )
+        ratios = np.broadcast_to(
+            per_line_ratios_to_hbeta,
+            (n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines),
+        ).astype(np.float32)
         grp = f.create_group("grids/SSP/Kroupa01/mu100")
         grp.create_dataset("line_ratios", data=ratios)
 

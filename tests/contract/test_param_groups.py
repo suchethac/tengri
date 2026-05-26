@@ -44,11 +44,11 @@ class TestWildcard:
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
-        # dpl has: alpha, beta, tau_gyr, log_peak_sfr
+        # dpl has: alpha, beta, tau_gyr, log_total_mass
         assert "sfh_dpl_alpha" in params.free_params
         assert "sfh_dpl_beta" in params.free_params
         assert "sfh_dpl_tau_gyr" in params.free_params
-        assert "sfh_dpl_log_peak_sfr" in params.free_params
+        assert "sfh_dpl_log_total_mass" in params.free_params
 
     def test_star_fixed_fixes_all_declared_params(self):
         """With '*': FIXED, all params in the group should be fixed."""
@@ -61,7 +61,7 @@ class TestWildcard:
         assert "sfh_dpl_alpha" in params.fixed_params
         assert "sfh_dpl_beta" in params.fixed_params
         assert "sfh_dpl_tau_gyr" in params.fixed_params
-        assert "sfh_dpl_log_peak_sfr" in params.fixed_params
+        assert "sfh_dpl_log_total_mass" in params.fixed_params
 
     def test_star_omitted_defaults_to_fixed(self):
         """When '*' is not present, default behavior is to fix all params."""
@@ -127,7 +127,7 @@ class TestEquivalence:
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Fixed(1.0),
-            # tau_gyr and log_peak_sfr should be free via registry defaults
+            # tau_gyr and log_total_mass should be free via registry defaults
             dust_model="two_component",
             dust_tau_bc=0.0,  # Registry default
             dust_tau_diff=0.0,  # Registry default
@@ -541,7 +541,12 @@ class TestEdgeCases:
             redshift=Fixed(0.1),
         )
         # All dpl params should be fixed
-        for param in ["sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_peak_sfr"]:
+        for param in [
+            "sfh_dpl_alpha",
+            "sfh_dpl_beta",
+            "sfh_dpl_tau_gyr",
+            "sfh_dpl_log_total_mass",
+        ]:
             assert param in params.fixed_params
 
     def test_no_groups_at_all(self):

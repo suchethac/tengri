@@ -19,6 +19,10 @@ References:
 - Bouwens et al. (2022), ApJ, 931, 160 — JWST LAE survey at z~5
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import corner
@@ -126,7 +130,7 @@ truth = dict(model.spec.sample(key))
 
 # Override to star-forming archetype
 truth.update(
-    sfh_tsnorm_log_peak_sfr=1.5,  # ~30 Msun/yr peak
+    sfh_tsnorm_log_total_mass=10.0,  # ~30 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=1.0,  # Young: 1 Gyr lookback
     sfh_tsnorm_width_gyr=0.5,  # Narrow burst
     sfh_tsnorm_skew=0.3,  # Slight asymmetry
@@ -205,7 +209,7 @@ print(
 # - A_V posterior width (dust constraint)
 
 # Extract posterior statistics
-params_to_plot = ["dust_tau_bc", "sfh_tsnorm_log_peak_sfr", "dust_tau_diff"]
+params_to_plot = ["dust_tau_bc", "sfh_tsnorm_log_total_mass", "dust_tau_diff"]
 
 fig, axes = plt.subplots(
     1,

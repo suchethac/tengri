@@ -12,6 +12,10 @@ bump) fall inside each band.
 Reference: Conroy 2013, ARA&A, 51, 393.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -37,13 +41,14 @@ PANEL_XLIM = {
     "HST ACS": (3000, 11000),
 }
 
+<<<<<<< HEAD
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 1.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
         "skew": 0.3,
@@ -57,6 +62,20 @@ model = tengri.SEDModel.build(
         "slope": -0.7,
     },
     redshift=tengri.Fixed(0.05),
+=======
+# Build common model (fixed parameters)
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0),
+    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
+    sfh_tsnorm_width_gyr=Fixed(1.5),
+    sfh_tsnorm_skew=Fixed(0.3),
+    sfh_tsnorm_trunc=Fixed(3.0),
+    met_logzsol=Fixed(-0.2),
+    dust_tau_bc=Fixed(0.4),
+    dust_tau_diff=Fixed(0.2),
+    dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.05),
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 

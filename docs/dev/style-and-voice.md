@@ -180,7 +180,7 @@ function.
 ## 8. Variable names track the paper
 
 This is already strong across the tree — keep it that way. `tau_bc`, `tau_diff`, `k_lambda`,
-`L_nu`, `M_star`, `sigma_v`, `xi_PAH`, `f_obscuration`, `log_peak_sfr`. Not
+`L_nu`, `M_star`, `sigma_v`, `xi_PAH`, `f_obscuration`, `log_total_mass`. Not
 `stellar_mass_total`, not `dust_optical_depth_v_band`. When the math uses Greek, the code
 uses the Greek-letter transliteration. Reviewers should compare the code against the cited
 paper and find the same symbols.

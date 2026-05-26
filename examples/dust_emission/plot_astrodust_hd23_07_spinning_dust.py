@@ -6,6 +6,10 @@ Spinning dust microwave emission across 10–100 GHz, decomposed by grain
 (Astrodust/PAH) and phase (CNM/WNM), for the Hensley & Draine 2023 fiducial.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

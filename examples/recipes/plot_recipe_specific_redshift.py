@@ -9,6 +9,10 @@ and redshift free (photometric only), showing how redshift degeneracies affect
 parameter recovery.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 # Generate mock data at known redshift
 key = jax.random.PRNGKey(42)
 true_params = {
-    "sfh_tsnorm_log_peak_sfr": 1.2,
+    "sfh_tsnorm_log_total_mass": 1.2,
     "sfh_tsnorm_peak_lbt_gyr": 2.5,
     "sfh_tsnorm_width_gyr": 1.8,
     "sfh_tsnorm_skew": 0.1,

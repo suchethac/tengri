@@ -13,6 +13,10 @@ Reference: Antonucci 1993, ARA&A, 31, 473 (unified model);
 Urry & Padovani 1995, PASP, 107, 803.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

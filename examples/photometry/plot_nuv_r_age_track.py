@@ -22,6 +22,10 @@ This figure illustrates:
 - the physical origin of colour-colour diagnostic diagrams used in photometric surveys
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -67,7 +71,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 0.1,  # Very young burst
         "width_gyr": 0.05,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },

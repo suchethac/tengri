@@ -23,6 +23,10 @@ This example demonstrates:
        Observational appearance. Astronomy and Astrophysics, 24, 337–355.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -50,7 +54,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -61,6 +65,9 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Uniform(11.0, 13.0),  # Bugfix: promote swept param to FREE
+        "log_mbh": tengri.Fixed(8.0),  # Fixed at 10^8 M_sun for Eddington scaling
     },
     redshift=tengri.Fixed(0.05),
 )

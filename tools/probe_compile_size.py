@@ -45,10 +45,18 @@ REPO = Path(__file__).resolve().parent.parent
 SSP_PATH = REPO / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 FILTER_NAMES = [
-    "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w",
-    "vista_ks", "irac_36", "irac_45",
-    "herschel_160", "herschel_250",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "herschel_160",
+    "herschel_250",
 ]
 
 CONST_RE = re.compile(
@@ -96,7 +104,7 @@ def _build_params(dust_emission: str | None) -> Parameters:
         )
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -181,7 +189,7 @@ def main() -> int:
             continue
         print(
             f"| {r['dust_emission']!s:<20} "
-            f"| {r['hlo_bytes']/1e6:6.1f} "
+            f"| {r['hlo_bytes'] / 1e6:6.1f} "
             f"| {r['n_large_consts']:>10} "
             f"| {r['largest_const_mb']:>10.1f} "
             f"| {r['largest_shape']:<16} |"

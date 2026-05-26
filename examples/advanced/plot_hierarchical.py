@@ -18,6 +18,10 @@ Reference: Leja et al. 2019, ApJ, 876, 3 (rapid field inference with
 correlated priors).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import time
 import warnings
 
@@ -46,7 +50,7 @@ def model_factory(psd_sigma: float = 1.0, psd_tau_myr: float = 50.0) -> SEDModel
     """tsnorm mean SFH modulated by a Fourier field with fixed (sigma, tau)."""
     spec = Parameters(
         mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=10.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1.0, 8.0),
         sfh_tsnorm_width_gyr=Uniform(0.5, 3.0),
         sfh_tsnorm_skew=Fixed(0.0),

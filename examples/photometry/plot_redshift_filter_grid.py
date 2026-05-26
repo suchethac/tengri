@@ -12,6 +12,10 @@ k-correction's sign.
 Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -25,8 +29,65 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+<<<<<<< HEAD
 BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 BAND_COLORS = {
+=======
+
+def _find_filters():
+    """Find filter cache directory in standard locations."""
+    for p in [
+        Path("data/filters"),
+        Path("../data/filters"),
+        Path("../../data/filters"),
+        Path("../../../data/filters"),
+    ]:
+        if p.exists():
+            return str(p)
+    return "data/filters"
+
+
+ssp = load_ssp()
+
+filter_dir = _find_filters()
+
+
+# Generate a template star-forming galaxy SED (rest-frame)
+wave_rest = jnp.logspace(jnp.log10(1000.0), jnp.log10(3e5), 500)  # 0.1 µm – 30 µm [Å]
+obs_dummy = Observation(spectroscopy=Spectroscopy(wave_obs=wave_rest))
+
+spec = Parameters(
+    mean_sfh_type="tsnorm",
+    dust_emission="draine_li2007",
+    sfh_tsnorm_log_total_mass=10.0),
+    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
+    sfh_tsnorm_width_gyr=Fixed(1.5),
+    sfh_tsnorm_skew=Fixed(0.0),
+    sfh_tsnorm_trunc=Fixed(2.0),
+    met_logzsol=Fixed(0.0),
+    dust_tau_bc=Fixed(0.3),
+    dust_tau_diff=Fixed(0.2),
+    dust_slope=Fixed(-0.7),
+    dust_umin=Fixed(2.0),
+    dust_qpah=Fixed(3.5),
+    dust_gamma_dl=Fixed(0.02),
+    redshift=Fixed(0.0),  # Rest-frame for now
+)
+
+model = SEDModel(spec, ssp, observation=obs_dummy)
+key = jax.random.PRNGKey(42)
+params = spec.sample(key)
+pred = model.predict_rest_sed(params)
+
+wave_rest_um = np.array(pred.wavelength) / 1e4
+sed_rest = np.array(pred.sed)
+
+# Load SDSS filters
+filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+_, _, filter_curves = load_filter_set(filter_names, cache_dir=filter_dir)
+
+band_colors = {
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     "sdss_u": "#4B0082",
     "sdss_g": "#00AA00",
     "sdss_r": "#CC0000",
@@ -40,7 +101,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 1.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
         "skew": 0.0,

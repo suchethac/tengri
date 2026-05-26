@@ -11,6 +11,10 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox relation and
 photon index dependence).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

@@ -8,6 +8,10 @@ absorbed UV-optical flux. The filled region shows how much light dust
 removes from the intrinsic stellar continuum.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -31,7 +35,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.2,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 5.0,
         "width_gyr": 2.0,
         "skew": 0.5,

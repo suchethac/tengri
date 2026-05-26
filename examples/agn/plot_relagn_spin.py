@@ -16,6 +16,10 @@ relativistic ISCO); Hagen & Done 2023, MNRAS, 525, 3455 (RELAGN
 formulation).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

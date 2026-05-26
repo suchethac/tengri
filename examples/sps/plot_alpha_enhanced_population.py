@@ -18,7 +18,12 @@ into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
 **References:**
     - Thomas et al. 2005 (MNRAS 357, 1113) — age–metallicity–[α/Fe] diagnostics
     - Conroy & van Dokkum 2012 (ApJ 747, 69) — stellar population models
+
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -58,7 +63,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": AGE_GYR,
         "width_gyr": 0.01,  # Narrow burst to isolate age
-        "log_peak_sfr": 11.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.5,
     },
@@ -152,9 +157,9 @@ plt.show()
 print("\n=== Alpha-element enhancement diagnostics ===")
 print(f"Age: {AGE_GYR} Gyr | Metallicity: Z = {MET_LOGZSOL} dex | Redshift: {REDSHIFT}")
 print(
-    f"\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
-    f"Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
-    f"star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
+    "\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
+    "Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
+    "star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
 )
 for alpha_fe in ALPHA_FE_SWEEP:
     print(f"  [α/Fe] = {alpha_fe:.1f} dex (typical for elliptical: 0.0–0.6)")

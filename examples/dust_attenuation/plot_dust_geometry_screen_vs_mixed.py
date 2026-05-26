@@ -23,13 +23,21 @@ References
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
 import jax.numpy as jnp
 import matplotlib
 
+<<<<<<< HEAD
 matplotlib.use("Agg")
+=======
+matplotlib.use('Agg')
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -51,7 +59,7 @@ SFH = {
     "alpha": 1.0,
     "beta": 2.0,
     "tau_gyr": 4.0,
-    "log_peak_sfr": 0.5,
+    "log_total_mass": 10.0,
 }
 
 ssp = tengri.load_ssp()

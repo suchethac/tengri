@@ -23,6 +23,10 @@ Non-conservation flags calibration issues in the dust emission routing.
 Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 from pathlib import Path
 

@@ -72,7 +72,7 @@ from tengri import (
 # Define model
 spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0), sfh_dpl_beta=Uniform(0.3, 2.0),
-    sfh_dpl_tau_gyr=Uniform(0.5, 10.0), sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_dpl_tau_gyr=Uniform(0.5, 10.0), sfh_dpl_log_total_mass=10.0, 2.0),
     sfh_field_psd_sigma=Uniform(0.1, 3.0), sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
     met_logzsol=Gaussian(-0.3, 0.2, lo=-2.0, hi=0.2),
     dust_tau_bc=Uniform(0.0, 3.0), dust_tau_diff=Fixed(0.3), dust_slope=Fixed(-0.7),

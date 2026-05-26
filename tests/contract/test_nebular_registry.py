@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Contract tests for the nebular runtime registry (closes #331 — nebular).
+
+Mirrors :mod:`tests.contract.test_xray_radio_igm_registry`. Locks the
+canonical entries, validator-derived-from-registry property, dict-shape
+parity with the sibling listers, and the round-trip through
+:func:`parse_groups`.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+import tengri
+from tengri.parameters.groups import (
+    Fixed,
+    _valid_nebular_types,
+    parse_groups,
+)
+
+_EXPECTED_KEYS = {"name", "kind", "status", "citation", "short_doc", "use"}
+
+
+class TestNebularRegistry:
+    def test_canonical_entries_present(self):
+        from tengri.components.nebular import NEBULAR_MODELS
+
+        assert {"none", "ssp", "cue", "cloudy", "cb19"} <= set(NEBULAR_MODELS.keys())
+
+    def test_validator_derived_from_registry(self):
+        from tengri.components.nebular import NEBULAR_MODELS
+
+        assert _valid_nebular_types() == frozenset(NEBULAR_MODELS.keys())
+
+    def test_list_nebular_backends_shape(self):
+        rows = tengri.list_nebular_backends()
+        names = {r["name"] for r in rows}
+        assert {"none", "ssp", "cue", "cloudy", "cb19"} <= names
+        for row in rows:
+            missing = _EXPECTED_KEYS - row.keys()
+            assert not missing, f"missing keys: {missing} in {row!r}"
+            assert row["kind"] == "nebular_backend"
+            assert row["status"] in {"production", "experimental", "demo", "deprecated"}
+
+    def test_status_filter(self):
+        # All current entries are production; deprecated returns nothing.
+        production = tengri.list_nebular_backends(status="production")
+        assert {"none", "ssp", "cue", "cloudy", "cb19"} <= {r["name"] for r in production}
+        assert tengri.list_nebular_backends(status="deprecated") == []
+
+    def test_parse_groups_accepts_standalone_variants(self):
+        # ``cloudy`` requires an external grid path (see
+        # ``parameters.Parameters._raise_missing_grid_path``) and so
+        # can't be exercised in a pure validator-round-trip test
+        # without fixturing the grid HDF5. The validator-shape
+        # contract is covered by ``test_validator_derived_from_registry``.
+        for variant in ("none", "ssp", "cue", "cb19"):
+            params = parse_groups(neb={"type": variant}, redshift=Fixed(0.1))
+            assert params is not None, variant
+
+    def test_parse_groups_rejects_unknown(self):
+        with pytest.raises(ValueError, match="Unknown nebular type"):
+            parse_groups(neb={"type": "not-a-real-backend"}, redshift=Fixed(0.1))
+
+    def test_parse_groups_suggests_close_match(self):
+        """Suggestion machinery still works against the derived set."""
+        with pytest.raises(ValueError, match="Did you mean"):
+            parse_groups(neb={"type": "cue1"}, redshift=Fixed(0.1))
+
+
+class TestNebularRegistryParity:
+    """The five list_*_models / list_nebular_backends listers must all
+    share the same row shape so consumers can iterate them uniformly."""
+
+    def test_row_shape_matches_xray_listers(self):
+        # Locked against XRAY_MODELS (added in #355) since that's the
+        # canonical registry-derived lister shape.
+        xray_keys = set(tengri.list_xray_models()[0])
+        neb_keys = set(tengri.list_nebular_backends()[0])
+        assert xray_keys == neb_keys
