@@ -11,6 +11,10 @@ into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The colour at each wavelength tells you which block matters most.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -30,7 +34,7 @@ HOST = dict(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 1.5,
-        "log_peak_sfr": 1.3,
+        "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 2.0,
     },

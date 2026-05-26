@@ -117,7 +117,7 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
 # Test 1: exp (single exponential — fully analytic, no matrix solve)
 # ---------------------------------------------------------------------------
 spec_exp = Parameters(
-    sfh_exp_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=Uniform(-1, 3),
     sfh_exp_tau_gyr=Uniform(0.5, 8.0),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
@@ -127,7 +127,7 @@ spec_exp = Parameters(
     mean_sfh_type="exp",
 )
 true_exp = {
-    "sfh_exp_log_peak_sfr": jnp.array(1.0),
+    "sfh_exp_log_total_mass": jnp.array(1.0),
     "sfh_exp_tau_gyr": jnp.array(3.0),
     "met_logzsol": jnp.array(-0.3),
     "dust_tau_bc": jnp.array(0.5),
@@ -142,7 +142,7 @@ ok_exp = run_sfh_test("exp (single exponential)", spec_exp, true_exp)
 # Test 2: dpl (double power-law — fully analytic, no matrix solve)
 # ---------------------------------------------------------------------------
 spec_dpl = Parameters(
-    sfh_dpl_log_peak_sfr=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=Uniform(-1, 3),
     sfh_dpl_alpha=Uniform(0.5, 5.0),
     sfh_dpl_beta=Uniform(0.5, 5.0),
     sfh_dpl_tau_gyr=Uniform(0.1, 5.0),
@@ -154,7 +154,7 @@ spec_dpl = Parameters(
     mean_sfh_type="dpl",
 )
 true_dpl = {
-    "sfh_dpl_log_peak_sfr": jnp.array(1.0),
+    "sfh_dpl_log_total_mass": jnp.array(1.0),
     "sfh_dpl_alpha": jnp.array(2.0),
     "sfh_dpl_beta": jnp.array(1.5),
     "sfh_dpl_tau_gyr": jnp.array(2.0),

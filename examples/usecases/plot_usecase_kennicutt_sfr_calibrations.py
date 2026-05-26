@@ -16,6 +16,10 @@ indicator measure the bias from violating the constant-SFR
 assumption — see also ``plot_usecase_sfr_indicator_compare.py``.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

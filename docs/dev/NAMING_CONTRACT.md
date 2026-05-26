@@ -71,7 +71,7 @@ These are the **canonical** names. Old names are deprecated aliases that emit `D
 
 | Domain | Prefix | Examples |
 |--------|--------|---------|
-| Star formation | `sfh_{type}_` | `sfh_dpl_alpha`, `sfh_tsnorm_log_peak_sfr` |
+| Star formation | `sfh_{type}_` | `sfh_dpl_alpha`, `sfh_tsnorm_log_total_mass` |
 | GP field | `sfh_field_` | `sfh_field_psd_sigma`, `sfh_field_psd_tau_myr`, `sfh_field_xi` |
 | Metallicity | `met_` | `met_logzsol`, `met_alpha_fe` |
 | Chemistry | `chem_` | *(reserved; populate when chemical evolution module is added)* |
@@ -93,7 +93,7 @@ This regex validates that every user-facing parameter name begins with a recogni
 
 - **Short names in public API** (e.g., bare `psd_sigma` instead of `sfh_field_psd_sigma`). Short names exist ONLY inside `resolve_short_names()` for `from_config()` convenience. One exception: `logzsol` → `met_logzsol`.
 - **`_u` suffix params** (e.g., `psd_sigma_u`) leaking outside optimizer internals in `hierarchical.py`.
-- **Internal names shadowing public names** (e.g., `log_peak_sfr` meaning different things at different layers).
+- **Internal names shadowing public names** (e.g., `log_total_mass` meaning different things at different layers).
 
 ### Unit contract
 

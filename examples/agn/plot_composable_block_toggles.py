@@ -17,6 +17,10 @@ log L_bol = 12.0, all built via the public nested-dict grammar:
 Reference: Buchner et al. 2024 (GRAHSP recipe).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

@@ -17,6 +17,7 @@ from tengri.components.agn.polar_dust import (
     polar_dust_extinction,
     polar_dust_total,
 )
+from tengri.utils.physics_constants import C_AA as _C_AA
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -44,14 +45,17 @@ class TestPolarDustExtinction:
         assert jnp.allclose(l_atten, L_NU_DISC, rtol=1e-10)
         assert jnp.allclose(l_abs, 0.0, atol=1e-10)
 
-    def test_no_extinction_for_type2(self):
-        """Edge-on (cos_inc=0) with opening_angle=40 => Type 2, no extinction."""
+    def test_no_disc_attenuation_for_type2(self):
+        """Edge-on (cos_inc=0) => observer-frame disc is unattenuated, but
+        polar-dust absorption is still bi-conical (Yang+2020 §2.2.2)."""
         l_atten, l_abs = polar_dust_extinction(
             L_NU_DISC, WAVELENGTH, cos_inc=0.0, opening_angle_deg=40.0, ebv=0.3
         )
-        # Type 2: mask ~ 0, so l_atten ~ l_nu
+        # Type 2: mask ~ 0 → observed disc unattenuated.
         assert jnp.allclose(l_atten, L_NU_DISC, rtol=1e-4)
-        assert jnp.all(l_abs < 1e-4 * jnp.max(L_NU_DISC))
+        # But the bi-conical polar dust still absorbs disc photons → nonzero
+        # l_abs drives the isotropic FIR re-emission visible from any angle.
+        assert jnp.sum(l_abs) > 0.0
 
     def test_extinction_for_type1(self):
         """Face-on (cos_inc=1) with opening_angle=40 => Type 1, significant extinction."""
@@ -233,3 +237,174 @@ class TestPolarDustTotal:
         )
         # ebv gradient should be non-zero (more ebv = more extinction)
         assert abs(grad_ebv_jax) > 0.0
+
+
+class TestSKIRTORPolarDustIntegration:
+    """Integration tests for SKIRTOR + polar dust reemission."""
+
+    @pytest.fixture
+    def wave_test(self):
+        """Test wavelength grid from 1000 Å to 1e7 Å (50 points logspaced)."""
+        return jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 50)
+
+    def test_skirtor_polar_dust_type2_reemission(self, wave_test):
+        """SKIRTOR Type 2 polar dust reemission increases with E(B-V).
+
+        Test the SKIRTORTorus SEDModelComponent with polar dust parameters
+        as free variables. Type 2 (edge-on, cos_inc=0.0) sightline should
+        show increased FIR luminosity when polar_ebv=0.3 vs 0.0, due to
+        greybody reemission of absorbed UV/optical photons.
+
+        This validates Yang+2020 §2.2.2: isotropic absorption geometry
+        for polar dust, regardless of viewing angle.
+
+        References
+        ----------
+        .. [1] Yang, A., et al. 2020, MNRAS, 491, 740.
+        """
+        pytest.importorskip("h5py")
+        from pathlib import Path
+
+        # Check for SKIRTOR template file
+        skirtor_template = (
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "data"
+            / "skirtor_templates_v3.h5"
+        )
+        if not skirtor_template.is_file():
+            pytest.skip(f"SKIRTOR template not found: {skirtor_template}")
+
+        try:
+            from tengri.components.agn.skirtor import SKIRTORTorus
+        except Exception as e:
+            pytest.skip(f"Cannot load SKIRTOR: {e}")
+
+        # Create SKIRTOR torus component
+        torus = SKIRTORTorus()
+        torus.load(wave_test)
+
+        # Type 2 parameters: edge-on viewing angle, varying polar dust
+        params_ebv_0 = {
+            "torus_tau": 5.0,
+            "torus_p": 0.5,
+            "torus_q": 10.0,
+            "torus_oa": 30.0,
+            "torus_frac": 0.5,
+            "polar_ebv": 0.0,
+            "polar_temperature": 100.0,
+            "polar_beta": 1.6,
+        }
+        params_ebv_03 = params_ebv_0.copy()
+        params_ebv_03["polar_ebv"] = 0.3
+
+        # Apply at Type 2 (cos_inc=0.0)
+        sed_ebv_0, _ = torus.predict(
+            params_ebv_0, jnp.zeros_like(wave_test), wave_test, agn_cos_inc=0.0
+        )
+        sed_ebv_03, _ = torus.predict(
+            params_ebv_03, jnp.zeros_like(wave_test), wave_test, agn_cos_inc=0.0
+        )
+
+        # Integrate FIR luminosity from 10 um to 1000 um (integrate in frequency)
+        fir_mask = (wave_test >= 1e5) & (wave_test <= 1e8)  # 10 um to 1000 um
+        nu = _C_AA / wave_test
+        delta_nu = jnp.abs(jnp.diff(nu))
+        delta_nu = jnp.concatenate(
+            [delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]]
+        )
+
+        fir_lum_ebv_0 = jnp.sum(sed_ebv_0[fir_mask] * delta_nu[fir_mask])
+        fir_lum_ebv_03 = jnp.sum(sed_ebv_03[fir_mask] * delta_nu[fir_mask])
+
+        # Assert: ebv=0.3 produces more FIR than ebv=0.0 (reemission > 0)
+        ratio = fir_lum_ebv_03 / (fir_lum_ebv_0 + 1e-20)
+        assert float(ratio) > 1.05, (
+            f"FIR luminosity did not increase with polar_ebv: "
+            f"ratio={float(ratio):.3f}, expected > 1.05. "
+            f"FIR(ebv=0.0)={float(fir_lum_ebv_0):.3e}, "
+            f"FIR(ebv=0.3)={float(fir_lum_ebv_03):.3e}"
+        )
+
+    def test_composable_polar_dust_type2_reemission(self, wave_test):
+        """Composable AGN runner with polar_dust block increases FIR with E(B-V).
+
+        Call the composable_agn_l_nu runner with agn_attenuation_block="polar_dust"
+        and agn_torus_block="skirtor", comparing Type 2 sightlines (cos_inc=0.0)
+        with polar_ebv in {0.0, 0.3}.
+
+        FIR luminosity should increase strictly by >5% when polar_ebv=0.3
+        vs polar_ebv=0.0, due to isotropic greybody reemission.
+
+        References
+        ----------
+        .. [1] Yang, A., et al. 2020, MNRAS, 491, 740.
+        """
+        pytest.importorskip("h5py")
+        from pathlib import Path
+
+        # Check for SKIRTOR template
+        skirtor_template = (
+            Path(__file__).resolve().parent.parent.parent.parent
+            / "data"
+            / "skirtor_templates_v3.h5"
+        )
+        if not skirtor_template.is_file():
+            pytest.skip(f"SKIRTOR template not found: {skirtor_template}")
+
+        try:
+            from tengri.components.agn.blocks.runner import composable_agn_l_nu
+        except Exception as e:
+            pytest.skip(f"Cannot load composable runner: {e}")
+
+        # Call composable runner twice with different polar_ebv, both Type 2
+        common_params = {
+            "agn_log_lbol": 12.0,
+            "agn_frac": 1.0,
+            "agn_attenuation_block": "polar_dust",
+            "agn_torus_block": "skirtor",
+            "agn_disc_block": "multicolor",
+            "agn_cos_inc": 0.0,  # Type 2 (edge-on)
+            "agn_polar_temperature": 100.0,
+            "agn_polar_beta": 1.6,
+            "agn_polar_oa": 45.0,
+            "agn_polar_law": "smc",
+            # SKIRTOR torus params (all fixed for simplicity)
+            "agn_torus_tau": 5.0,
+            "agn_torus_p": 0.5,
+            "agn_torus_q": 10.0,
+            "agn_torus_oa": 30.0,
+            "agn_torus_frac": 0.5,
+        }
+
+        params_ebv_0 = common_params.copy()
+        params_ebv_0["agn_polar_ebv"] = 0.0
+
+        params_ebv_03 = common_params.copy()
+        params_ebv_03["agn_polar_ebv"] = 0.3
+
+        sed_ebv_0 = composable_agn_l_nu(wave_test, **params_ebv_0)
+        sed_ebv_03 = composable_agn_l_nu(wave_test, **params_ebv_03)
+
+        chex.assert_equal_shape([sed_ebv_0, wave_test])
+        chex.assert_equal_shape([sed_ebv_03, wave_test])
+        chex.assert_tree_all_finite(sed_ebv_0)
+        chex.assert_tree_all_finite(sed_ebv_03)
+
+        # Integrate FIR from 10 um to 1000 um
+        fir_mask = (wave_test >= 1e5) & (wave_test <= 1e8)
+        nu = _C_AA / wave_test
+        delta_nu = jnp.abs(jnp.diff(nu))
+        delta_nu = jnp.concatenate(
+            [delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]]
+        )
+
+        fir_lum_ebv_0 = jnp.sum(sed_ebv_0[fir_mask] * delta_nu[fir_mask])
+        fir_lum_ebv_03 = jnp.sum(sed_ebv_03[fir_mask] * delta_nu[fir_mask])
+
+        ratio = fir_lum_ebv_03 / (fir_lum_ebv_0 + 1e-20)
+        assert float(ratio) > 1.05, (
+            f"Composable runner: FIR luminosity did not increase with polar_ebv. "
+            f"ratio={float(ratio):.3f}, expected > 1.05. "
+            f"FIR(ebv=0.0)={float(fir_lum_ebv_0):.3e}, "
+            f"FIR(ebv=0.3)={float(fir_lum_ebv_03):.3e}"
+        )

@@ -9,14 +9,18 @@ This script sweeps BOTH dust (τ_diff ∈ [0, 1.5]) and stellar age
 the resulting UV slope β as a 2D heatmap. We expect the age and dust
 axes to BOTH affect β: old stars are redder, dust reddens UV.
 
-If either axis is flat in the output, that axis variable is not actually
-being varied (likely a builder override that silently no-ops; see issue
-#314). As of this writing the dust axis appears flat: β is monotonic in
-age but invariant to τ_diff — evidence the ``dust_two_component_tau_diff``
-override is being dropped in the build path.
+Heads-up: spec keys for the ``two_component`` dust block are flattened to
+``dust_tau_diff`` / ``dust_tau_bc`` (no ``two_component_`` infix), whereas
+the ``tsnorm`` SFH block uses ``sfh_tsnorm_peak_lbt_gyr``. Passing the
+wrong key in a dict-merge override is silently dropped at predict time
+— see issue #314 for the broader fix.
 
 Reference: Meurer et al. 1999, ApJ, 521, 64 (β as UV slope diagnostic).
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -59,7 +63,7 @@ model = tengri.SEDModel.build(
     tengri.load_ssp(),
     sfh={"type": "tsnorm", "*": tengri.FIXED,
          "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
-         "width_gyr": 0.05, "log_peak_sfr": 1.0,
+         "width_gyr": 0.05, "log_total_mass": 10.0,
          "skew": 0.0, "trunc": 1.0},  # Limit burst age range to physics-valid region
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_diff": 0.0, "tau_bc": 0.0},
@@ -79,7 +83,7 @@ print("\nSanity check: β at fixed dust (tau_diff=0.0) across two ages:")
 print("-" * 70)
 
 for age in [0.01, 1.0]:
-    p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age), "dust_two_component_tau_diff": 0.0}
+    p = {**baseline, "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age), "dust_tau_diff": 0.0}
     out = model.predict_rest_sed(p)  # Use full SSP wavelength grid
     beta = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
     print(f"  Age = {age:6.2f} Gyr: β = {beta:7.3f}")
@@ -101,7 +105,7 @@ for age_idx, age in enumerate(age_values):
         p = {
             **baseline,
             "sfh_tsnorm_peak_lbt_gyr": jnp.float64(age),
-            "dust_two_component_tau_diff": jnp.float64(tau),
+            "dust_tau_diff": jnp.float64(tau),
         }
         out = model.predict_rest_sed(p)  # Use full SSP wavelength grid
         beta_2d[age_idx, tau_idx] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))

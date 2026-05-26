@@ -18,8 +18,13 @@ evolve with luminosity:
    narrow-line region visible; bridging the Seyfert–quasar continuum.
 
 This archetype figure is the diagnostic for understanding how AGN
+
 classification depends on viewing angle, accretion rate, and dust geometry.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

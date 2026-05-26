@@ -51,7 +51,7 @@ DEFAULT_SFH = dict(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.3, 2.0),
     sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-    sfh_dpl_log_peak_sfr=Uniform(0.0, 1.5),
+    sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
 )
 
 DEFAULT_SPS = dict(

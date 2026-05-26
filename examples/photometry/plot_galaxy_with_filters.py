@@ -13,6 +13,10 @@ the Balmer break, where MIR PAH features land, which JWST band picks
 up rest-frame ``5500 Å`` at moderate z, etc.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -33,7 +37,7 @@ SFH = {
     "*": tengri.FIXED,
     "peak_lbt_gyr": 2.0,
     "width_gyr": 1.5,
-    "log_peak_sfr": 1.3,
+    "log_total_mass": 10.0,
     "skew": 0.2,
     "trunc": 13.0,
 }

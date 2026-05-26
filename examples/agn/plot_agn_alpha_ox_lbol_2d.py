@@ -15,6 +15,10 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154 (alpha_OX-L_UV
 correlation); Wilkins et al. 2020, MNRAS, 493, 5548.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

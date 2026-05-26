@@ -12,6 +12,10 @@ Sweep over the canonical range R_V ∈ [2.0, 5.5] showing the family
 on the same intrinsic SED at τ_V = 1.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -27,15 +31,20 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 ssp = tengri.load_ssp()
+<<<<<<< HEAD
 SFH = {
     "type": "tsnorm",
     "*": tengri.FIXED,
     "peak_lbt_gyr": 0.05,
     "width_gyr": 0.05,
-    "log_peak_sfr": 1.0,
+    "log_total_mass": 1.0,
     "skew": 0.0,
     "trunc": 13.0,
 }
+=======
+SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 0.05,
+       "width_gyr": 0.05, "log_total_mass": 10.0, "skew": 0.0, "trunc": 13.0}
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
 
 def _model(rv):

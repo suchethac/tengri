@@ -18,8 +18,13 @@ This example demonstrates:
 
 Reference: Oxygen doublet [O III] λλ4959,5007 and forbidden nitrogen
 [N II] λλ6549,6585 are kinematically degenerate with Balmer lines at
+
 low instrumental resolution.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -46,7 +51,7 @@ REDSHIFT = 0.05
 model = tengri.SEDModel.build(
     ssp,
     sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
+         "log_total_mass": 10.0, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
          "skew": -0.2, "trunc": 2.0},
     dust={"type": "two_component", "*": tengri.FIXED,
           "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
@@ -76,7 +81,7 @@ for r, color in zip(resolution_vals, colors):
         ssp,
         observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
+             "log_total_mass": 10.0, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
              "skew": -0.2, "trunc": 2.0},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},

@@ -19,6 +19,10 @@ Torus libraries (the six production selectors under
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

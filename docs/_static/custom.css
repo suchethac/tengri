@@ -1,5 +1,33 @@
 /* tengri docs — custom overrides for Furo theme */
 
+/* ── Sidebar: collapse the Examples gallery to a single entry ──────────
+   Sphinx-gallery registers ~19 section indexes (and ~170 per-script
+   pages) into the global toctree, which Furo dutifully emits into the
+   sidebar regardless of :maxdepth:. The result is 200+ nav entries
+   under "Examples gallery". We want one button. The cards on the
+   gallery page itself are the navigation surface.
+
+   Two parallel selectors so this works in browsers without ``:has()``
+   (sibling-combinator form) and in browsers with ``:has()`` (descendant
+   form, which also clips any deeper nesting). ``!important`` on every
+   rule because Furo's own sidebar CSS uses ``display: flex`` on the
+   relevant ULs. */
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ ul,
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ input,
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ label {
+    display: none !important;
+}
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) ul,
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) input.toctree-checkbox,
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) label {
+    display: none !important;
+}
+/* Also clear the chevron icon since there is nothing to expand. */
+.sidebar-tree li.toctree-l1.has-children:has(> a[href*="auto_examples/index"]) > a::after,
+.sidebar-tree li.toctree-l1.has-children:has(> a[href*="auto_examples/index"]) svg {
+    display: none !important;
+}
+
 /* ── Sidebar logo ─────────────────────────────────────────────────────
    Large logo centred above the "tengri" title. */
 .sidebar-logo-container {

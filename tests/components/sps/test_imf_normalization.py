@@ -43,7 +43,7 @@ class TestEmissionLineAmplitudes:
             pytest.skip("SSP data not available")
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(log_sfr),
+            sfh_const_log_total_mass=Fixed(log_sfr),
             sfh_const_start_gyr=Fixed(1.0),
             sfh_const_end_gyr=Fixed(1e-3),
             met_logzsol=Fixed(0.0),
