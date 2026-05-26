@@ -115,6 +115,49 @@ class TestIonizingParamsTable:
         chex.assert_shape(ionspec, (7,))
         chex.assert_tree_all_finite(ionspec)
 
+    def test_precompute_is_memoized(self, ssp_data_wne):
+        """Repeat calls with the same SSP grid must hit the cache (issue #416).
+
+        ``precompute_ionizing_params_table`` runs scipy curve-fits per (met, age)
+        SSP cell; on a full grid this costs ~6 s and was re-entered on every
+        ``SEDModel.build(neb={'type':'cue', ...})``. Memoization keyed on the
+        SSP wavelength + metallicity grids guarantees the second call returns
+        without re-fitting.
+        """
+        import time
+
+        from tengri.components.nebular.ionizing_spectrum import (
+            _IONSPEC_TABLE_CACHE,
+            precompute_ionizing_params_table,
+        )
+
+        ssp = ssp_data_wne
+        wave = np.array(ssp.ssp_wave)
+        flux = np.array(ssp.ssp_flux[:3, :10, :])
+        lgmet = np.array(ssp.ssp_lgmet[:3])
+
+        # Clear any cached entry from prior tests so the first call is cold.
+        _IONSPEC_TABLE_CACHE.clear()
+
+        t0 = time.time()
+        first = precompute_ionizing_params_table(wave, flux, lgmet)
+        cold = time.time() - t0
+
+        t0 = time.time()
+        second = precompute_ionizing_params_table(wave, flux, lgmet)
+        warm = time.time() - t0
+
+        # Same Python object → memoization hit (not a re-fit returning
+        # an equal-but-distinct dict).
+        assert second is first
+
+        # And the warm call must be at least 100x faster than the cold one;
+        # in practice it's microseconds vs seconds. A generous bound keeps
+        # the test stable on slow CI machines.
+        assert warm < max(cold / 100.0, 0.05), (
+            f"second call should be near-instant (cold={cold:.2f}s warm={warm:.4f}s)"
+        )
+
 
 # ── Cue backend ───────────────────────────────────────────────────
 

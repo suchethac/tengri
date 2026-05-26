@@ -26,6 +26,26 @@ except ImportError:  # numpy < 1.26
 # Physical constants
 from tengri.utils.physics_constants import L_SUN as _LSUN
 
+# Module-level memoization for ``precompute_ionizing_params_table``.
+#
+# Same SSP → identical ionizing-parameter table. The scipy curve-fit loop
+# costs ~6 s on a modern MILES grid (15×93 SSPs), and re-runs on every
+# ``SEDModel.build(neb={'type':'cue', ...})``. Cache keyed on a stable
+# fingerprint of the SSP wavelength + metallicity grids (small, fast to
+# hash); flux identity is established by matching grids since SSP files
+# pair a unique flux cube with a unique (wave, lgmet) pair.
+_IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
+
+
+def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.ndarray) -> tuple:
+    """Cheap, stable fingerprint for an SSP grid."""
+    return (
+        tuple(ssp_flux.shape),
+        str(ssp_flux.dtype),
+        bytes(np.asarray(ssp_wave).tobytes()),
+        bytes(np.asarray(ssp_lgmet).tobytes()),
+    )
+
 
 def _fit_segment(
     seg_wave: np.ndarray,
@@ -367,6 +387,14 @@ def precompute_ionizing_params_table(
     code handles these gracefully via clipping and default fallback values.
 
     """
+    # Memoize: same SSP grid → identical result, but the scipy curve-fit
+    # loop below costs ~6 s and is re-entered on every ``SEDModel.build``
+    # that constructs a fresh ``CueBackend`` (see issue #416).
+    key = _ssp_fingerprint(ssp_wave, ssp_flux, ssp_lgmet)
+    cached = _IONSPEC_TABLE_CACHE.get(key)
+    if cached is not None:
+        return cached
+
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
     logqion_table = np.full((n_met, n_age), -99.0)
@@ -398,12 +426,14 @@ def precompute_ionizing_params_table(
                 # RuntimeError: scipy optimization failed to converge
                 continue
 
-    return {
+    result = {
         "ionspec_table": ionspec_table,
         "logqion_table": logqion_table,
         "n_met": n_met,
         "n_age": n_age,
     }
+    _IONSPEC_TABLE_CACHE[key] = result
+    return result
 
 
 def interpolate_ionizing_params(
