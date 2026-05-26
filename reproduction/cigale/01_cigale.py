@@ -91,7 +91,11 @@ LOG10_ZSUN = -1.848
 MET_LOGZSOL = float(np.log10(0.02) - LOG10_ZSUN)  # ≈ +0.149
 STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
 
-figs_dir = Path(__file__).parent / "_figs"
+# Notebook-vs-script compatible: ``__file__`` is undefined when this
+# is run via nbclient (the kernel's resources path is set to the
+# reproduction/cigale/ directory instead), so fall back to the CWD.
+_HERE = Path(__file__).resolve().parent if "__file__" in dir() else Path.cwd().resolve()
+figs_dir = _HERE / "_figs"
 figs_dir.mkdir(exist_ok=True)
 
 
@@ -117,7 +121,7 @@ def _assert_comparable(arr_c, arr_t, *, name: str) -> None:
 # that tengri reads — same numerical SSPs on both sides.
 
 # %%
-ssp_file = Path(__file__).parent / "_drivers" / "data" / "bc03_from_cigale.h5"
+ssp_file = _HERE / "_drivers" / "data" / "bc03_from_cigale.h5"
 ssp = load_ssp_data(str(ssp_file.resolve()))
 print(
     f"BC03 Chabrier SSP: {ssp.ssp_wave.shape[0]} wavelengths, "
