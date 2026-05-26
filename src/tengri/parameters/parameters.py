@@ -394,6 +394,12 @@ class Parameters:
         # bin_edges_gyr=...)``. Default ``None`` falls back to the
         # registry's own canonical edges. See #337.
         self.bin_edges_gyr = kwargs.pop("bin_edges_gyr", None)
+        # MW foreground extinction screen — applied at the
+        # observed-frame SED boundary, independent of host-galaxy dust
+        # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.
+        self.foreground_ebmv_mw = float(kwargs.pop("foreground_ebmv_mw", 0.0))
+        self.foreground_law = kwargs.pop("foreground_law", "cardelli")
+        self.foreground_rv = float(kwargs.pop("foreground_rv", 3.1))
         self.apply_igm = kwargs.pop("apply_igm", True)
         # IGM transmission model: 'inoue' (default) or 'madau'. Stored as a
         # structural setting so the grammar-layer choice propagates through
