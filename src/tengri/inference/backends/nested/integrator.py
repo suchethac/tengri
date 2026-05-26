@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # Copyright 2020- The Blackjax Authors.
 # Ported to tengri from github.com/handley-lab/blackjax (nested_sampling branch).
 #

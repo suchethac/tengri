@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate dust attenuation and emission against published references.
 
 Part 1 (bagpipes): Charlot & Fall (2000) power-law curve vs bagpipes.

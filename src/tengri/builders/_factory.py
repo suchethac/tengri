@@ -5,8 +5,8 @@
 
 Each ``tengri.builders.<component>`` module uses :func:`make_factory` to
 synthesise one callable per variant. The helpers here keep the per-module
-files focused on *what* varies (variant list, prefix, short-name rule)
-rather than the boilerplate of attaching signatures and docstrings.
+files focused on *what* varies (variant list, prefix, short-name rule);
+signature and docstring attachment lives here.
 
 The SFH module (:mod:`tengri.builders.sfh`) was the first consumer and
 predates this helper; it carries its own equivalent inline. Future
@@ -16,6 +16,7 @@ unification can fold SFH onto these helpers when convenient.
 from __future__ import annotations
 
 import inspect
+import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -66,11 +67,11 @@ def make_factory(
     flag_param_map = flag_param_map or {}
 
     def factory(**kwargs: Any) -> dict:
-        wildcard = kwargs.pop("_", FIXED)
+        wildcard = _pop_wildcard(variant, kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"{variant}(_=...): expected FREE or FIXED, got {wildcard!r}. "
-                f"Use tengri.FREE or tengri.FIXED to set the wildcard policy."
+                f"{variant}(defaults=...): expected FREE or FIXED, got "
+                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         flag_values: dict[str, bool] = {f: bool(kwargs.pop(f, False)) for f in bool_flags}
         unknown = [k for k in kwargs if k not in short_params]
@@ -79,7 +80,7 @@ def make_factory(
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid: {valid_kwargs}. "
-                f"(Pass ``_=FREE`` or ``_=FIXED`` to set the wildcard policy.)"
+                f"(Pass ``defaults=FREE`` or ``defaults=FIXED`` to set the policy.)"
             )
 
         # Auto-enable flag when a flag-conditional param was given.
@@ -98,7 +99,7 @@ def make_factory(
 
     sig_params = [
         inspect.Parameter(
-            "_",
+            "defaults",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
             annotation=Any,
@@ -135,7 +136,7 @@ def make_factory(
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("_ : sentinel, optional")
+    lines.append("defaults : sentinel, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named. ``FREE`` "
         "makes them fit; ``FIXED`` (default) pins them to their registry "
@@ -163,6 +164,34 @@ def make_factory(
     lines.append("    Config dict matching the :meth:`SEDModel.build` grammar.")
     factory.__doc__ = "\n".join(lines)
     return factory
+
+
+def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
+    """Pop the wildcard kwarg, supporting both ``defaults=`` and legacy ``_=``.
+
+    The original builder grammar exposed the wildcard via ``_=FREE``. That
+    name is ungreppable, conflicts with the throwaway-identifier convention,
+    and confuses IDE autocomplete. The new canonical name is ``defaults=``.
+    ``_=`` still works for one minor-version cycle and emits a
+    :class:`DeprecationWarning`.
+
+    Raises ``TypeError`` if both are passed in the same call.
+    """
+    has_new = "defaults" in kwargs
+    has_old = "_" in kwargs
+    if has_new and has_old:
+        raise TypeError(
+            f"{variant}(): pass `defaults=` (preferred) or `_=` (deprecated), not both."
+        )
+    if has_old:
+        warnings.warn(
+            f"{variant}(_=...) is deprecated; use `defaults=` instead. "
+            "The `_=` alias will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return kwargs.pop("_")
+    return kwargs.pop("defaults", FIXED)
 
 
 def short_form(full_name: str, *, prefixes: tuple[str, ...]) -> str:

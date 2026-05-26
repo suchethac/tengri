@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 # ruff: noqa: F821
 """Cross-validation tests for MAGPHYS dust emission against literature values.
 

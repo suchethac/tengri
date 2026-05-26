@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Redshift-dependent dust attenuation priors from Narayanan+2018.
 
 Based on cosmological radiative transfer simulations (SIMBA/Narayanan et al.

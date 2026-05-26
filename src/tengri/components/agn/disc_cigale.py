@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SKIRTOR disc spectrum models ported from CIGALE.
 
 Three piecewise power-law disc spectrum models for AGN torus emission,

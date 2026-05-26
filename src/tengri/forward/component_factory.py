@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Build orchestrator-compatible component chains from a single call.
 
-Phase II-2.6 public-API helper. Lets users assemble the
-``run_components`` chain from a flat set of keyword arguments without
-constructing each :class:`SEDComponent` subclass by hand::
+Public-API helper that lets users assemble the ``run_components`` chain
+from a flat set of keyword arguments without constructing each
+:class:`SEDComponent` subclass by hand::
 
     from tengri.forward.component_factory import build_components
     from tengri.forward.orchestrator import run_components
@@ -148,8 +148,22 @@ def build_components(
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
+    # When ``True`` and ``nebular_backend == "cue"``, the orchestrator
+    # asks the Cue backend for the full ~271-species line catalogue
+    # instead of the default 128 CLOUDY/FSPS subset. See #303.
+    cue_full_catalogue: bool = False,
     # AGN
     agn_model: str | None = None,
+    # Composable-AGN block selectors (only consulted when agn_model="composable").
+    # They are static Python strings, threaded into the AGNSEDComponent's
+    # config so the runner can pick the right per-stage callable at trace-
+    # build time. For other AGN models the registered function absorbs
+    # them via ``**kwargs`` and they have no effect.
+    agn_disc_block: str = "none",
+    agn_torus_block: str = "none",
+    agn_lines_block: str = "none",
+    agn_feii_block: str = "none",
+    agn_attenuation_block: str = "none",
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
@@ -201,11 +215,13 @@ def build_components(
     lgmet_scatter : float
         Gaussian σ in log10(Z) for the DSPS triweight kernel [dex].
     nebular_backend : str | None
-        ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cue"``, or
-        ``None`` to omit nebular entirely.
+        ``"baked_in"`` (default), ``"cloudy_grid"``, ``"cb19"``,
+        ``"mappings"``, ``"cue"``, ``"shock"``, or ``None`` to omit
+        nebular entirely.
     nebular_backend_instance : object | None
-        Pre-constructed backend object for ``cloudy_grid`` / ``cue``
-        (which need HDF5 / weights paths). Required for those backends.
+        Pre-constructed backend object for ``cloudy_grid`` / ``cb19`` /
+        ``mappings`` / ``cue`` / ``shock`` (which need HDF5 / weights
+        paths). Required for those backends.
     agn_model : str | None
         AGN model registry key (``"simple"``, ``"standard"``, …) or
         ``None`` to omit AGN.
@@ -228,11 +244,10 @@ def build_components(
     -----
     **JIT-compatible**: yes — the returned components flow through
     ``jax.jit`` once :class:`tengri.protocols.ForwardState` is registered
-    as a pytree (Phase II-2.2-followup).
+    as a pytree.
 
-    The ``StellarSEDComponent`` carries ``ssp_data`` on its instance
-    (the most natural plumbing per Phase II-2.2). All other adapters
-    are stateless except their config knobs.
+    The ``StellarSEDComponent`` carries ``ssp_data`` on its instance.
+    All other adapters are stateless except their config knobs.
     """
     components: list[SEDComponent] = []
 
@@ -255,14 +270,28 @@ def build_components(
     if nebular_backend is not None:
         components.append(
             NebularSEDComponent(
-                config=NebularSEDComponentConfig(backend=nebular_backend),
+                config=NebularSEDComponentConfig(
+                    backend=nebular_backend,
+                    cue_full_catalogue=cue_full_catalogue,
+                ),
                 backend=nebular_backend_instance,
             )
         )
 
     # 3. AGN (optional)
     if agn_model is not None:
-        components.append(AGNSEDComponent(config=AGNSEDComponentConfig(model=agn_model)))
+        components.append(
+            AGNSEDComponent(
+                config=AGNSEDComponentConfig(
+                    model=agn_model,
+                    agn_disc_block=agn_disc_block,
+                    agn_torus_block=agn_torus_block,
+                    agn_lines_block=agn_lines_block,
+                    agn_feii_block=agn_feii_block,
+                    agn_attenuation_block=agn_attenuation_block,
+                )
+            )
+        )
 
     # 4. Dust (optional). Two-component (Charlot & Fall 2000) is the
     # default; ``dust_model="single_component"`` picks the simpler
@@ -659,34 +688,48 @@ def state_to_emission_lines(state: Any):
 
     Reads the discrete line catalogue
     ``state.derived["line_waves"]`` / ``state.derived["line_lums"]``
-    published by :class:`NebularSEDComponent` (when the active backend
-    is Cue or CloudyGrid) and extracts the 11 standard
-    survey-diagnostic lines via the legacy nearest-wavelength
-    matcher :func:`tengri.utils.sed_quantities.extract_line_luminosity`.
+    published by :class:`NebularSEDComponent` (when the active backend is
+    Cue or CloudyGrid) and extracts the 11 headline survey-diagnostic
+    lines via the legacy nearest-wavelength matcher
+    :func:`tengri.utils.sed_quantities.extract_line_luminosity`. The full
+    backend catalogue (typically ~138–271 species) is also exposed via
+    ``all_waves`` / ``all_lums`` for downstream lookups of species the
+    headline NamedTuple does not name explicitly (HeII 1640, HeI 10830,
+    [O III] 4363, ...).
+
+    Dust attenuation: the published luminosities already include the
+    attenuation regime selected by the SEDModel's ``_neb_dust_mode``
+    when ``predict_emission_lines`` routes through
+    :meth:`SEDModel.predict_emission_lines`. Direct callers of this
+    helper see the *intrinsic* line luminosities — apply
+    :func:`tengri.forward.emission_helpers.attenuate_emission` (or call
+    via ``model.predict_emission_lines``) for the observed values.
 
     Returns
     -------
     EmissionLines
-        ``lya``, ``civ_1549``, ``oii``, ``hbeta``, ``oiii_4959``,
-        ``oiii_5007``, ``nii_6548``, ``halpha``, ``nii_6584``,
-        ``sii_6717``, ``sii_6731`` — all in Lsun.
+        Headline scalars (``halpha``, ``hbeta``, ``oiii_5007``, ...) plus
+        the full ``all_waves`` / ``all_lums`` arrays — all in Lsun.
 
     Notes
     -----
-    Returns all-NaN when the chain's nebular backend did not publish
-    a line catalogue (BakedIn — emission baked into SSP grid; shock —
-    publishes a continuous line SED, not a discrete list). For those
-    cases callers should query ``state.derived["sed_nebular"]`` and
-    perform their own narrow-band integration.
+    Returns all-NaN headlines and empty ``all_*`` arrays when the
+    chain's nebular backend did not publish a line catalogue (BakedIn —
+    emission baked into SSP grid; shock — publishes a continuous line
+    SED, not a discrete list). For those cases callers should query
+    ``state.derived["sed_nebular"]`` and perform their own narrow-band
+    integration.
     """
     from tengri.forward.prediction import EmissionLines
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
+    empty = jnp.asarray([], dtype=jnp.float64)
     if "line_waves" not in derived or "line_lums" not in derived:
-        # No discrete catalogue published. Return all-NaN.
-        return EmissionLines(**{k: nan_scalar for k in EmissionLines._fields})
+        # No discrete catalogue published. Return all-NaN + empty all_*.
+        kw = {k: nan_scalar for k in EmissionLines._fields if k not in ("all_waves", "all_lums")}
+        return EmissionLines(all_waves=empty, all_lums=empty, **kw)
 
     line_waves = jnp.asarray(derived["line_waves"])
     line_lums = jnp.asarray(derived["line_lums"])
@@ -703,4 +746,6 @@ def state_to_emission_lines(state: Any):
         nii_6584=extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6584"]),
         sii_6717=extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6717"]),
         sii_6731=extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6731"]),
+        all_waves=line_waves,
+        all_lums=line_lums,
     )

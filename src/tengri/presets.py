@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Vetted factory functions for common galaxy types.
 
 This module provides preset Parameter + SEDModelConfig tuples for typical galaxy
@@ -106,7 +107,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-0.5, 0.3),
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=Uniform(0.0, 1.5),
@@ -178,7 +179,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     params = Parameters(
         mean_sfh_type="dexp",
-        sfh_dexp_log_peak_sfr=Uniform(-2.0, 0.5),
+        sfh_dexp_log_total_mass=Uniform(8.0, 11.0),
         sfh_dexp_tau_gyr=Uniform(0.1, 1.0),
         met_logzsol=Uniform(0.0, 0.5),
         dust_tau_bc=Uniform(0.0, 0.5),
@@ -251,7 +252,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     params = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(0.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 1.5),
         sfh_tsnorm_width_gyr=Uniform(0.05, 1.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -329,7 +330,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.5),
         met_logzsol=Uniform(-1.0, 0.5),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -407,7 +408,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-0.5, 0.3),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -494,7 +495,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-0.5, 0.3),
         dust_tau_bc=Uniform(0.0, 4.0),
         dust_tau_diff=Uniform(0.0, 2.5),

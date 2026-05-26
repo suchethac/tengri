@@ -1,8 +1,8 @@
 # Convergence Diagnostics
 
-How to know whether your inference results are trustworthy. This page covers
-industry-standard diagnostics (Vehtari et al. 2021; Stan/ArviZ/BlackJAX conventions),
-tengri's built-in diagnostic tools, and practical guidance for when to worry.
+How to know whether your inference results are trustworthy: the standard
+diagnostics (Vehtari et al. 2021; Stan / ArviZ / BlackJAX conventions),
+tengri's built-in tools, and when to worry.
 
 ## Standard thresholds
 

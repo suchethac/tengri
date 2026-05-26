@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pre-computation of SSP observables at fixed or tabulated redshift.
 
 The key insight: at inference time, redshift is either known (fixed) or
@@ -35,7 +36,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.utils.conversions import lnu_to_fnu
 from tengri.utils.grid_interp import preintegrate_grid
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
@@ -301,14 +301,30 @@ def precompute_spectroscopy(
     ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
+    # Inline the (1+z)/(4π d_L²) geometric scale rather than calling the
+    # ``@jit``'d ``lnu_to_fnu`` and ``float()``-casting; the latter raises
+    # ConcretizationTypeError when this precompute runs inside a jit trace
+    # (e.g. when the user calls ``predict_*`` for the first time inside a
+    # ``jax.jit`` wrapper without warming the chain). See companion fix in
+    # ``utils/grid_interp.py``.
+    import math as _math
+
+    flux_scale = (1.0 + redshift) / (4.0 * _math.pi * dl_cm**2)
+    # ``redshift`` may itself be a tracer when this path runs inside jit;
+    # keep the conversion defensive in that case too.
+    try:
+        flux_scale_out = float(flux_scale)
+        redshift_out = float(redshift)
+    except (TypeError, jax.errors.ConcretizationTypeError):
+        flux_scale_out = flux_scale
+        redshift_out = redshift
 
     return SpectroscopicPrecomputation(
         ssp_on_pixels=ssp_on_pixels,
         wave_rest_pixels=wave_rest_pixels,
         wave_obs_pixels=wave_obs_pixels,
-        flux_scale=float(flux_scale),
-        redshift=float(redshift),
+        flux_scale=flux_scale_out,
+        redshift=redshift_out,
     )
 
 
@@ -349,6 +365,12 @@ class PhotometricZTable(NamedTuple):
     z_grid: jnp.ndarray
     n_filters: int
     igm_trans_table: jnp.ndarray
+    # Phase 3c-3c-v: Taylor moment Ψ on the z grid, shape
+    # ``(n_z, n_met, n_age, n_filters)``. ``None`` when
+    # ``taylor_correction=False`` was passed to
+    # :func:`precompute_photometry_ztable`. Used by the free-z dust LUT
+    # path to apply ``A·Φ + A'·Ψ`` at the source's redshift.
+    ssp_phot_moment_table: jnp.ndarray | None = None
 
 
 def precompute_photometry_ztable(
@@ -360,6 +382,7 @@ def precompute_photometry_ztable(
     z_max=3.0,
     n_z=100,
     apply_igm=False,
+    taylor_correction: bool = False,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
@@ -401,7 +424,7 @@ def precompute_photometry_ztable(
     **Gradient-safe**: not applicable (CPU preprocessing).
 
     """
-    from tengri.utils.cosmology import luminosity_distance
+    from tengri.cosmology import luminosity_distance
 
     if z_grid is None:
         z_grid = jnp.linspace(z_min, z_max, n_z)
@@ -419,6 +442,10 @@ def precompute_photometry_ztable(
     eff_waves_rest_all = np.zeros((n_z_pts, n_filters))
     flux_scale_all = np.zeros(n_z_pts)
     igm_trans_all = np.ones((n_z_pts, n_filters))
+    # Phase 3c-3c-v: Taylor moment Ψ on the z grid (only if requested).
+    ssp_phot_moment_all = (
+        np.zeros((n_z_pts, n_met, n_age, n_filters)) if taylor_correction else None
+    )
 
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
@@ -458,6 +485,21 @@ def precompute_photometry_ztable(
             num = _np_trapezoid(integrand, fw_np, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
+            # Phase 3c-3c-v: Taylor moment Ψ at this z and filter.
+            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) λ_obs dλ_obs / ∫ T_b λ_obs dλ_obs
+            # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
+            if taylor_correction:
+                lambda_rest_per_obs = fw_np / (1.0 + z_val)
+                lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
+                moment_integrand = (
+                    ssp_on_filt
+                    * ft_np[None, None, :]
+                    * fw_np[None, None, :]
+                    * lambda_minus_eff[None, None, :]
+                )
+                moment_num = _np_trapezoid(moment_integrand, fw_np, axis=-1)
+                ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
+
         # Geometric flux scale
         dl_cm = float(luminosity_distance(z_val))
         flux_scale_all[zi] = (1.0 + z_val) / (4.0 * np.pi * dl_cm**2)
@@ -469,6 +511,9 @@ def precompute_photometry_ztable(
         z_grid=z_grid,
         n_filters=n_filters,
         igm_trans_table=jnp.array(igm_trans_all),
+        ssp_phot_moment_table=(
+            jnp.array(ssp_phot_moment_all) if ssp_phot_moment_all is not None else None
+        ),
     )
 
 

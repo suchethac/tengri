@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Surviving stellar mass fraction from stellar evolution.
 
 Computes the fraction of formed mass still in living stars + stellar

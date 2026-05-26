@@ -25,7 +25,7 @@ identical set for both backends).
 Examples
 --------
 >>> from tengri import builders, FREE, Uniform
->>> builders.neb.cue(_=FREE, fesc=Uniform(0.0, 0.5))  # doctest: +SKIP
+>>> builders.neb.cue(defaults=FREE, fesc=Uniform(0.0, 0.5))  # doctest: +SKIP
 {'type': 'cue', '*': FREE, 'fesc': Uniform(...)}
 """
 
@@ -34,7 +34,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.parameters.groups import _VALID_NEBULAR_TYPES
+from tengri.parameters.groups import _valid_nebular_types
 from tengri.parameters.registry import recipe_parameters
 from tengri.parameters.sentinels import FREE
 
@@ -66,7 +66,7 @@ def _discover_params(variant: str) -> list[str]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
-    for variant in sorted(_VALID_NEBULAR_TYPES):
+    for variant in sorted(_valid_nebular_types()):
         factories[variant] = make_factory(
             variant=variant,
             short_params=_discover_params(variant),

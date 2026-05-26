@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Generic template preintegration through photometric filters.
 
 Provides a universal function to collapse the wavelength dimension of any
@@ -23,7 +24,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.utils.conversions import lnu_to_fnu
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 __all__ = [
@@ -280,8 +280,15 @@ def preintegrate_grid(
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))
     moment = jnp.array(moment_flat.reshape(*grid_dims, n_filters)) if taylor else None
 
-    # Compute flux scale (geometric factor)
-    flux_scale = float(lnu_to_fnu(1.0, dl_cm, redshift))
+    # Compute flux scale (geometric factor). Avoid calling the ``@jit``'d
+    # ``lnu_to_fnu`` and then ``float()``-casting its result — under a
+    # surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
+    # and ``float(traced)`` raises ``ConcretizationTypeError``. Inline the
+    # math so the expression returns a Python float when inputs are concrete
+    # and a JAX scalar when traced; both are valid downstream multipliers.
+    import math as _math
+
+    flux_scale = (1.0 + redshift) / (4.0 * _math.pi * dl_cm**2)
 
     # Convert axes to JAX arrays and precompute edges
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)

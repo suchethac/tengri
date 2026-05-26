@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end panchromatic integration tests.
 
 Tests that exercise the COMPLETE forward model pipeline including components
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -97,13 +99,13 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
             dust_slope=Fixed(-0.7),
             dust_emission="modified_blackbody",
-            agn_model="simple",
+            agn_model="multicolor_agn",
             agn_log_lbol=Fixed(10.5),
             agn_torus_frac=Fixed(0.5),
             redshift=0.1,
@@ -121,7 +123,7 @@ class TestFullPanchromaticSED:
         """Full panchromatic SED must be finite and mostly positive."""
         result = dusty_sfg_model.predict_rest_sed(dusty_params)
         assert isinstance(result, SEDResult)
-        assert jnp.all(jnp.isfinite(result.sed))
+        chex.assert_tree_all_finite(result.sed)
         # Allow a few zero pixels at extreme wavelengths
         frac_positive = float(jnp.mean(result.sed > 0))
         assert frac_positive > 0.9, f"Only {frac_positive:.1%} positive pixels"
@@ -134,7 +136,7 @@ class TestFullPanchromaticSED:
         """
         phot = dusty_sfg_model.predict_photometry(dusty_params)
         assert phot.shape == (14,)  # 14 bands
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0), "All bands must have positive flux"
 
         # Reasonable flux range for a z=0.1 galaxy
@@ -154,12 +156,12 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
             dust_slope=Fixed(-0.7),
-            agn_model="simple",
+            agn_model="multicolor_agn",
             agn_log_lbol=Fixed(10.5),
             agn_torus_frac=Fixed(0.5),
             redshift=0.1,
@@ -200,7 +202,7 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
@@ -214,12 +216,12 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
             dust_slope=Fixed(-0.7),
-            agn_model="simple",
+            agn_model="multicolor_agn",
             agn_log_lbol=Uniform(8.0, 12.0),
             agn_torus_frac=Fixed(0.5),
             redshift=0.1,
@@ -275,7 +277,7 @@ class TestRadioXrayIntegration:
         """Galaxy with radio + X-ray enabled."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),  # SFR = 10 Msun/yr
+            sfh_const_log_total_mass=Fixed(1.0),  # SFR = 10 Msun/yr
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -366,7 +368,7 @@ class TestRadioXrayIntegration:
         # SEDModel without radio/xray for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),
+            sfh_const_log_total_mass=Fixed(1.0),
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -507,7 +509,7 @@ class TestRadioXrayIntegration:
         # Build stellar-only model for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),
+            sfh_const_log_total_mass=Fixed(1.0),
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -547,7 +549,7 @@ class TestEnergyBalanceEndToEnd:
     def energy_model(self, ssp):
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),  # SFR = 1 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.0),  # SFR = 1 Msun/yr
             sfh_const_start_gyr=Fixed(13.0),
             sfh_const_end_gyr=Fixed(1.0),
             met_logzsol=Fixed(0.0),  # solar
@@ -566,7 +568,7 @@ class TestEnergyBalanceEndToEnd:
         the MBB approximation.
         """
         params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
-        state = energy_model.predict_via_orchestrator(params)
+        state = energy_model.predict_state(params)
         derived = state.derived
 
         wave = np.asarray(state.wave)
@@ -614,7 +616,7 @@ class TestDerivedQuantityRanges:
         """
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.3),  # SFR ~ 2 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.3),  # SFR ~ 2 Msun/yr
             sfh_const_start_gyr=Fixed(13.0),  # SF began 13 Gyr ago
             sfh_const_end_gyr=Fixed(0.0),  # SF ongoing (0 = now)
             met_logzsol=Fixed(0.0),
@@ -665,7 +667,7 @@ class TestDerivedQuantityRanges:
         """Quenched elliptical: red u-g > 1.5, no recent SF."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),  # SFR=10 back then
+            sfh_const_log_total_mass=Fixed(1.0),  # SFR=10 back then
             sfh_const_start_gyr=Fixed(5.0),
             sfh_const_end_gyr=Fixed(0.5),  # quenched 8.7 Gyr ago
             met_logzsol=Fixed(0.1),  # slightly super-solar
@@ -690,7 +692,7 @@ class TestDerivedQuantityRanges:
         """Young starburst: blue u-g < 1.2, high sSFR."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.5),  # SFR=30 Msun/yr
+            sfh_const_log_total_mass=Fixed(1.5),  # SFR=30 Msun/yr
             sfh_const_start_gyr=Fixed(0.7),  # SF began 700 Myr ago
             sfh_const_end_gyr=Fixed(0.0),  # started 700 Myr ago
             met_logzsol=Fixed(-0.5),
@@ -727,12 +729,12 @@ class TestGradientFlowComplete:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
             dust_emission="modified_blackbody",
-            agn_model="simple",
+            agn_model="multicolor_agn",
             agn_log_lbol=Fixed(10.5),
             redshift=0.1,
         )
@@ -785,27 +787,35 @@ class TestExactVsPrecomputed:
     """Precomputed (fused) photometry must agree with exact within tolerance."""
 
     def test_fused_matches_exact(self, ssp, sdss_filters):
-        """Fused kernel photometry within 3% of exact SED integration."""
+        """Wave-precomp (LUT) photometry within 3 % of the exact wave-grid path.
+
+        Build two models with the same physics — one default (exact wave-grid),
+        one with ``approx=WavePrecomp()`` (LUT) — and confirm they agree on
+        broadband flux density.
+        """
+        from tengri import WavePrecomp
+
         spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.5),
             dust_tau_diff=Fixed(0.3),
             redshift=0.1,
         )
-        model = SEDModel(spec, ssp, filters=sdss_filters)
+        model_exact = SEDModel(spec, ssp, filters=sdss_filters)
+        model_fast = SEDModel(spec, ssp, filters=sdss_filters, approx=WavePrecomp())
 
         params = {}
-        phot_exact = model.predict_photometry(params, approx=False)
-        phot_fast = model.predict_photometry(params, approx=True)
+        phot_exact = model_exact.predict_photometry(params)
+        phot_fast = model_fast.predict_photometry(params)
 
         np.testing.assert_allclose(
             np.array(phot_fast),
             np.array(phot_exact),
             rtol=0.03,
-            err_msg="Fused and exact photometry disagree by > 3%",
+            err_msg="Wave-precomp and exact photometry disagree by > 3 %",
         )

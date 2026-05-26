@@ -14,459 +14,412 @@
 # ---
 
 # %% [markdown]
-# # Quickstart
+# # Quickstart: fit a mock galaxy
 #
-# Build a 7-parameter SED model, generate mock photometry from a known
-# galaxy, fit it back with NUTS, and check the recovery. About two minutes
-# end-to-end on a laptop CPU. No prerequisites.
+# A star-forming galaxy with 14 broadband fluxes from GALEX, SDSS, 2MASS,
+# and WISE (UV through mid-IR), fitted with NUTS on a differentiable JAX
+# forward model.
 #
-# The forward model is pure JAX, so the same code that produces the spectrum
-# also gives us its gradient. NUTS uses that gradient to sample the posterior
-# directly — no hand-tuned proposals, no MH ratio. Every other backend
-# (`map`, `laplace`, `pathfinder`, `vi`, `mcmc_raytrace`, `evidence`) runs
-# against the *same* model.
-#
-# Next stop: [`02_sed_anatomy.py`](02_sed_anatomy.py) breaks the SED apart
-# component by component.
+# Truncated-skew-normal SFH, two-component Calzetti dust with modified-
+# blackbody IR re-emission, nebular off, redshift fixed at 0.05. Seven free
+# parameters. See `04_building_models.py` for the recipe grammar and
+# `02_sed_anatomy.py` for a panchromatic model with nebular, AGN, and
+# IGM enabled.
 
 # %%
 import os
-import sys
-import time
-import warnings
 
-# Must be set before JAX initializes its XLA backend (first computation, not import).
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-try:
-    _nb_dir = os.path.dirname(os.path.abspath(__file__))
-    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
-except NameError:
-    _nb_dir = os.getcwd()
-    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
-
-_src = os.path.join(_repo_root, "src")
-if os.path.isdir(os.path.join(_src, "tengri")):
-    sys.path.insert(0, _src)
-sys.path.insert(0, _repo_root)
-sys.path.insert(0, _nb_dir)
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
-import matplotlib
-
-# Use non-interactive backend when run as a plain script (not in Jupyter).
-if "ipykernel" not in sys.modules:
-    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-warnings.filterwarnings("ignore", category=FutureWarning)
-
+import tengri
 from tengri import (
-    Fitter,
+    FIXED,
+    FREE,
     Fixed,
-    SEDModel,
+    ForwardModel,
     Observation,
-    Parameters,
-    Spectroscopy,
+    Photometry,
+    SEDModel,
     Uniform,
+    WavePrecomp,
+    builders,
+    citations,
+    cosmology,
+    generate_mock,
     load_ssp_data,
+    plot,
 )
+from tengri.utils.conversions import lnu_to_fnu
 
-# Locate ``notebooks/_plot_style.py`` and ``data/`` root (nbclient cwd is often wrong).
-import importlib.util
+plot.setup_style()
+FIG_DIR = Path("_figs")
+FIG_DIR.mkdir(exist_ok=True)
 
-_repo_data_root = None
-_spec_tengri = importlib.util.find_spec("tengri")
-if _spec_tengri is not None and _spec_tengri.origin:
-    _walk = os.path.dirname(os.path.abspath(_spec_tengri.origin))
-    for _step in range(12):
-        _candidate = os.path.join(_walk, "notebooks", "_plot_style.py")
-        if os.path.isfile(_candidate):
-            sys.path.insert(0, os.path.dirname(_candidate))
-            _repo_data_root = os.path.dirname(os.path.dirname(os.path.abspath(_candidate)))
-            break
-        _parent_walk = os.path.dirname(_walk)
-        if _parent_walk == _walk:
-            break
-        _walk = _parent_walk
-
-if _repo_data_root is None:
-    _np_here = os.path.abspath(os.getcwd())
-    while True:
-        if os.path.isfile(os.path.join(_np_here, "_plot_style.py")):
-            sys.path.insert(0, _np_here)
-            _repo_data_root = os.path.dirname(_np_here)
-            break
-        _ppt = os.path.join(_np_here, "notebooks", "_plot_style.py")
-        if os.path.isfile(_ppt):
-            _nbsd = os.path.dirname(_ppt)
-            sys.path.insert(0, _nbsd)
-            _repo_data_root = os.path.dirname(_nbsd)
-            break
-        _parent_here = os.path.dirname(_np_here)
-        if _parent_here == _np_here:
-            break
-        _np_here = _parent_here
-
-if _repo_data_root is not None and os.path.isdir(os.path.join(_repo_data_root, "data")):
-    os.chdir(_repo_data_root)
-elif os.path.isdir(os.path.join(_repo_root, "data")):
-    os.chdir(_repo_root)
-elif os.path.isdir("data"):
-    pass
-elif os.path.isdir(os.path.join("..", "data")):
-    os.chdir("..")
-
-FIGDIR = os.path.join("notebooks", "figures", "quickstart")
-os.makedirs(FIGDIR, exist_ok=True)
-
-from _plot_style import (
-    COLORS,
-    SPECTRAL_FEATURES,
-    convergence_table,
-    plot_corner_comparison,
-    plot_sfh,
-    safe_corner,
-    setup_style,
-)
-
-setup_style()
-
-# %%
-# tengri logo banner — prints the hex-spiral mark (default size).
-import tengri as tg
-tg.print_logo()
-print(f"tengri {tg.__version__}")
-
-# %%
-# Load SSP templates and multi-wavelength photometry
-ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-from tengri.observation import Photometry
-
-# Try to load candidate filters (UV to radio); fall back to 2MASS if unavailable
-_candidate_filters = [
-    "galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "twomass_j", "twomass_h", "twomass_ks", "wise_w1", "wise_w2", "herschel_pacs70", "herschel_pacs160",
-]
-phot_bands_list = []
-for band in _candidate_filters:
-    try:
-        Photometry.from_names([band])
-        phot_bands_list.append(band)
-    except Exception:
-        pass
-if not phot_bands_list:
-    phot_bands_list = ["twomass_j", "twomass_h", "twomass_ks"]
-
-phot_obs = Photometry.from_names(phot_bands_list, cache_dir="data/filters")
-obs = Observation(photometry=phot_obs)
-print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
-print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
+C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
 # %% [markdown]
-# ## One SED, X-ray to radio
+# ## Stellar library and observation
 #
-# Before fitting anything, look at the full forward prediction. The shaded
-# strip is the optical window the photometric fit will actually use — every-
-# thing else is along for the ride.
+# A bare-stellar SSP grid (Cue-compatible if you later want to add nebular
+# emission). `download_ssp` fetches on first use.
 
 # %%
-warnings.filterwarnings(
-    "ignore",
-    message=".*BakedInBackend.*",
-    category=UserWarning,
+SSP_NAME = "fsps_prsc_miles_chabrier"
+ssp_path = Path("../data") / f"{SSP_NAME}.h5"
+if not ssp_path.exists():
+    ssp_path = Path(tengri.download_ssp(SSP_NAME))
+ssp = load_ssp_data(str(ssp_path))
+
+FILTERS = [
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+    "wise_w3",
+    "wise_w4",
+]
+obs = Observation(photometry=Photometry.from_names(FILTERS))
+
+# %% [markdown]
+# ## Build the model
+#
+# A truncated skew-normal SFH, two-component Calzetti dust with a
+# modified-blackbody IR re-emission (so the WISE mid-IR bands carry signal),
+# nebular emission off, redshift fixed at z = 0.05. Seven free
+# parameters. `model.summary()` prints the assembled pipeline;
+# `citations.print_citations` pulls the bibliography straight from the
+# registry — enough for a methods section.
+
+# %%
+sed_model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    approx=WavePrecomp(),
+    sfh=builders.sfh.tsnorm(defaults=FREE),
+    dust=builders.dust.two_component(
+        defaults=FIXED,
+        law_bc="calzetti",
+        tau_bc=Uniform(0.0, 1.0),
+        emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
+    ),
+    neb=builders.neb.none(),
+    redshift=Fixed(0.05),
 )
-_z_q = 0.1
-spec_pan = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(1.5),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(5.0),
-    sfh_tsnorm_width_gyr=Fixed(3.0),
-    sfh_tsnorm_skew=Fixed(0.5),
-    sfh_tsnorm_trunc=Fixed(1.0),
-    met_logzsol=Fixed(0.0),
-    dust_tau_bc=Fixed(0.8),
-    dust_tau_diff=Fixed(0.4),
-    dust_slope=Fixed(-0.7),
-    dust_emission="draine_li2007",
-    dust_T=Fixed(35.0),
-    dust_qpah=Fixed(2.5),
-    nebular_ssp=True,
-    radio=True,
-    xray=True,
-    radio_q_ir=Fixed(2.64),
-    redshift=Fixed(_z_q),
+forward = ForwardModel.build(sed=sed_model, observation=obs)
+
+print(sed_model.summary())
+citations.print_citations(sed_model)
+
+# %% [markdown]
+# ## Mock observation
+#
+# One draw from the prior is the truth. `generate_mock` returns the
+# noiseless model fluxes, Gaussian uncertainties at the requested SNR,
+# and a noisy realisation.
+
+# %%
+key = jax.random.PRNGKey(7)
+key_truth, key_mock, key_fit = jax.random.split(key, 3)
+
+truth = sed_model.spec.sample(key_truth)
+mock = generate_mock(sed_model, truth, key=key_mock, snr=30.0)
+flux_obs = np.asarray(mock["flux_obs"])
+noise = np.asarray(mock["noise"])
+
+phot = obs.photometry
+wave_eff_um = (
+    np.array(
+        [
+            np.trapezoid(w * t, w) / np.trapezoid(t, w)
+            for w, t in zip(phot.filter_waves, phot.filter_trans)
+        ]
+    )
+    / 1e4
 )
-model_pan = SEDModel(spec_pan, ssp_data, observation=None)
-params_pan = spec_pan.sample(jax.random.PRNGKey(101))
-wave_pan = jnp.logspace(0.8, 7.15, 900)
-sed_pan = model_pan.predict_spectrum(params_pan, wave_pan)
-wave_pan_np = np.array(wave_pan)
-sed_pan_np = np.array(sed_pan)
-valid = np.isfinite(sed_pan_np) & (sed_pan_np > 0)
 
-fig0, ax0 = plt.subplots(figsize=(12, 4.2))
-ax0.loglog(wave_pan_np[valid], sed_pan_np[valid], color=COLORS.get("model", "C0"), lw=1.2)
-ax0.axvspan(3800.0, 9200.0, alpha=0.25, color="0.5", label="Optical window (obs. Å)")
-ax0.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
-ax0.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax0.set_title("Panchromatic forward model (same SSP family as the fits below)")
-ax0.set_xlim(float(wave_pan_np.min()), float(wave_pan_np.max()))
-y_valid = sed_pan_np[valid]
-ax0.set_ylim(float(y_valid.min()) * 0.5, float(y_valid.max()) * 2.0)
-ax0.grid(True, alpha=0.3)
-ax0.legend(loc="upper right", fontsize=10)
-fig0.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig00_panchromatic.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
-plt.show()
-del (
-    model_pan,
-    sed_pan,
-    sed_pan_np,
-    wave_pan,
-    wave_pan_np,
-)  # free SSP device memory before inference
+# %% [markdown]
+# ## One-time JIT compile
+#
+# First touch of the photometric forward kernel and its gradient triggers
+# XLA compilation against the precomputed SSP × filter LUT (the
+# `WavePrecomp` knob set above). Cold cache is a few seconds; warm cache
+# (`~/.cache/tengri_jax_cache`) is milliseconds. Subsequent calls are
+# pure numeric throughput — no Python in the hot path.
 
 # %%
-# 3 free parameters (metallicity + two dust optical depths). Everything else is
-# fixed at the panchromatic-truth value above so the recovery test is clean.
-spec_param = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(1.5),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(5.0),
-    sfh_tsnorm_width_gyr=Fixed(3.0),
-    sfh_tsnorm_skew=Fixed(0.5),
-    sfh_tsnorm_trunc=Fixed(1.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
+import time
+
+p0 = {**sed_model.spec.get_fixed_values(), **truth}
+predict_phot = jax.jit(sed_model.predict_photometry)
+grad_fn = jax.jit(
+    jax.grad(lambda p: 0.5 * jnp.sum(((sed_model.predict_photometry(p) - flux_obs) / noise) ** 2))
 )
-print(f"Free parameters ({spec_param.n_free}): {', '.join(spec_param.free_params)}")
 
-# Create model with photometric precomputation
-model_param = SEDModel(spec_param, ssp_data, observation=obs)
+t = time.perf_counter()
+_ = predict_phot(p0).block_until_ready()
+print(f"  forward kernel   first call: {time.perf_counter() - t:8.4f} s  (compile + run)")
+t = time.perf_counter()
+_ = predict_phot(p0).block_until_ready()
+print(f"  forward kernel   warm:       {time.perf_counter() - t:8.4f} s")
 
-# Benchmark: forward model is fast
-params_test = spec_param.sample(jax.random.PRNGKey(99))
-t0 = time.perf_counter()
-_ = model_param.predict_photometry(params_test)
-t_raw = (time.perf_counter() - t0) * 1e3
-jit_predict = jax.jit(model_param.predict_photometry)
-_ = jit_predict(params_test)
-t0 = time.perf_counter()
-for _ in range(100):
-    _ = jit_predict(params_test)
-    _.block_until_ready()
-t_jit = (time.perf_counter() - t0) / 100 * 1e6
-print(f"Forward model: {t_raw:.1f} ms (raw) → {t_jit:.0f} µs (JIT)")
+t = time.perf_counter()
+jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
+print(f"  ∇log-likelihood  first call: {time.perf_counter() - t:8.4f} s  (compile + run)")
+t = time.perf_counter()
+jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
+print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
-# %%
-# Generate mock photometry. The truth point sits at solar metallicity and
-# moderate two-component dust — close to a typical low-z star-forming galaxy.
-key = jax.random.PRNGKey(42)
-true_params_param = spec_param.sample(key)
-true_params_param = {**true_params_param}
-true_params_param["met_logzsol"] = jnp.array(-0.1)
-true_params_param["dust_tau_bc"] = jnp.array(0.5)
-true_params_param["dust_tau_diff"] = jnp.array(0.3)
-mock_param = model_param.mock(true_params_param, snr=50.0, key=key)
-
-print("True (free) parameters:")
-for name in spec_param.free_params:
-    print(f"  {name:30s} = {float(true_params_param[name]):.4f}")
+# %% [markdown]
+# ## Pre-warm
+#
+# `Fitter.prewarm` compiles the loss / sampler stack and runs the NUTS
+# window adaptation once. After this call the model carries a cached
+# step size, mass matrix, and MAP point estimate. Subsequent `.run()`
+# calls skip both the XLA compile and the warmup; only the actual
+# sampling work remains.
+#
+# *Note*: routing through `Fitter(sed_model, ...)` instead of
+# `forward.fit(...)` is a temporary workaround for issue #281
+# (`ForwardModel.predict` bypasses the WavePrecomp LUT, ~16× slowdown).
+# Will be removed once #281 closes.
 
 # %%
-# Plot the mock photometry colour-coded by wavelength regime.
-fig, ax = plt.subplots(figsize=(12, 4))
-band_names = list(phot_obs.names)
-band_idx = np.arange(len(band_names))
-flux_true = np.array(mock_param.flux_true)
-flux_obs = np.array(mock_param.flux_obs)
-noise = np.array(mock_param.noise)
+from tengri.inference.fitter import Fitter
 
+fitter = Fitter(sed_model, flux_obs, noise, data_type="photometry")
+t = time.perf_counter()
+fitter.prewarm(method="mcmc_nuts", n_chains=4)
+print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
+
+# Optional: persist the cache to disk. A fresh notebook session can then
+# `fitter.load_cache(...)` and skip warmup + MAP init entirely.
+# fitter.save_cache("00_quickstart_cache.pkl")
+
+# %% [markdown]
+# ## Fit
+#
+# MAP (ADAM) for the point estimate; NUTS with four parallel chains via
+# `jax.vmap` for the full posterior. Both calls reuse the prewarmed
+# adaptation cache.
+
+# %%
+t = time.perf_counter()
+map_result = fitter.run(method="map", key=key_fit, n_steps=200)
+print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
+
+t = time.perf_counter()
+posterior = fitter.run(
+    method="mcmc_nuts",
+    key=key_fit,
+    n_warmup=400,
+    n_samples=400,
+    n_chains=4,
+    n_burnin=0,
+)
+print(f"  NUTS wall (4 chains × 400 = 1600 samples): {time.perf_counter() - t:6.2f} s")
+posterior.summary()
+
+# %% [markdown]
+# Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
+# SFH integral, with the input truth in the first column.
+
+# %%
+N_DRAWS = 200
+draws = posterior.resample(jax.random.PRNGKey(11), n=N_DRAWS)
+fixed = sed_model.spec.get_fixed_values()
+
+
+def draw_dicts(n):
+    for i in range(n):
+        yield {**fixed, **{k: float(v[i]) for k, v in draws.items()}}
+
+
+DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
+samples = {k: [] for k in DERIVED_KEYS}
+for p in draw_dicts(N_DRAWS):
+    d = sed_model.predict_derived(p)
+    for k in DERIVED_KEYS:
+        v = d.get(k)
+        samples[k].append(float("nan") if v is None else float(v))
+
+truth_full = {**fixed, **truth}
+truth_derived = sed_model.predict_derived(truth_full)
+print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
+print("-" * 70)
+for k in DERIVED_KEYS:
+    lo, med, hi = np.percentile(samples[k], [16, 50, 84])
+    t = truth_derived.get(k)
+    tstr = "—" if t is None else f"{float(t):.3e}"
+    print(f"{k:<14}{tstr:>14}{lo:>14.3e}{med:>14.3e}{hi:>14.3e}")
+
+# %% [markdown]
+# ## Posterior SED
+#
+# Full posterior spectrum in the background (median + 68 % band), truth
+# dashed, observed photometry with error bars, residuals against the
+# posterior median below.
+
+# %%
+WAVE_OBS = np.geomspace(1300.0, 3e5, 1200)  # 0.13–30 μm covers GALEX → WISE W4
+z_truth = float(truth_full["redshift"])
+dl_cm = cosmology.luminosity_distance(z_truth)
+
+
+def obs_fnu(params):
+    rest = sed_model.predict_rest_sed(params, wave=WAVE_OBS / (1.0 + z_truth))
+    return np.asarray(lnu_to_fnu(jnp.asarray(rest.sed), dl_cm, z_truth))
+
+
+spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
+spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
+spec_truth = obs_fnu(truth_full)
+
+phot_draws = np.asarray(jax.vmap(lambda p: forward.predict_observables(p)["phot_fnu"])(draws))
+phot_med = np.median(phot_draws, axis=0)
+
+fig = plt.figure(figsize=(8.6, 5.4))
+gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.04)
+ax, ax_res = fig.add_subplot(gs[0]), fig.add_subplot(gs[1])
+
+wave_um = WAVE_OBS / 1e4
+
+# Filter transmission curves shaded behind the spectrum — Bagpipes/Prospector
+# style. Use the matplotlib default qualitative palette across bands.
+band_palette = plt.cm.viridis(np.linspace(0.05, 0.95, len(phot.filter_waves)))
+ymin, ymax = 0.3 * spec_truth.min(), 3 * spec_truth.max()
+for fw, ft, color in zip(phot.filter_waves, phot.filter_trans, band_palette):
+    fw_um = np.asarray(fw) / 1e4
+    ft_norm = np.asarray(ft) / np.max(ft)
+    # Map transmission to the bottom 12 % of the log-y axis.
+    band = ymin * (ymax / ymin) ** (0.12 * ft_norm)
+    ax.fill_between(fw_um, ymin, band, color=color, alpha=0.35, lw=0)
+
+ax.fill_between(wave_um, spec_lo, spec_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
+ax.plot(wave_um, spec_med, color=C_POST, lw=1.4, label="posterior median")
+ax.plot(wave_um, spec_truth, color=C_TRUTH, lw=1.1, ls="--", label="truth")
 ax.errorbar(
-    band_idx,
+    wave_eff_um,
     flux_obs,
     yerr=noise,
     fmt="o",
-    ms=7,
-    color=COLORS["data"],
-    alpha=0.7,
-    label="Observed (SNR = 50)",
-    zorder=2,
+    color=C_DATA,
+    ms=5.5,
+    capsize=2,
+    elinewidth=1.0,
+    mec="white",
+    mew=0.6,
+    label="observed",
+    zorder=5,
 )
-ax.plot(
-    band_idx,
-    flux_true,
-    "s",
-    ms=9,
-    color=COLORS["truth"],
-    alpha=0.8,
-    label="Truth (noiseless)",
-    zorder=3,
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_ylim(ymin, ymax)
+ax.set_xlim(wave_um.min(), wave_um.max())
+ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax.legend(frameon=False, fontsize=9, loc="upper left")
+plt.setp(ax.get_xticklabels(), visible=False)
+
+# Rest-frame wavelength axis on top.
+ax_rest = ax.twiny()
+ax_rest.set_xscale("log")
+ax_rest.set_xlim(wave_um.min() / (1.0 + z_truth), wave_um.max() / (1.0 + z_truth))
+ax_rest.set_xlabel(rf"rest-frame wavelength  [$\mu$m]   (z = {z_truth:.2f})", fontsize=9)
+
+resid = (flux_obs - phot_med) / noise
+ax_res.axhspan(-1, 1, alpha=0.08, color="0.5")
+ax_res.axhline(0, color="0.4", lw=0.8)
+ax_res.bar(
+    wave_eff_um,
+    resid,
+    width=wave_eff_um * 0.12,
+    color=C_DATA,
+    alpha=0.85,
+    edgecolor="white",
+    linewidth=0.5,
 )
-
-# Shade filter families based on wavelength (approximate)
-n_bands = len(band_names)
-if n_bands >= 2:
-    ax.axvspan(-0.5, 1.5, alpha=0.08, color="purple", label="UV")
-if n_bands >= 7:
-    ax.axvspan(2.5, 6.5, alpha=0.08, color="cyan", label="Optical")
-if n_bands >= 9:
-    ax.axvspan(6.5, 9.5, alpha=0.08, color="red", label="NIR")
-if n_bands >= 10:
-    ax.axvspan(9.5, n_bands + 0.5, alpha=0.08, color="orange", label="MIR/FIR")
-
-ax.set_xticks(band_idx)
-ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
-ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]", fontsize=10)
-ax.set_title("Mock photometry (truncated skew-normal SFH, SNR = 50)")
-ax.legend(fontsize=10, loc="upper left", ncol=2)
-ax.grid(True, alpha=0.3, axis="y")
-fig.tight_layout()
-plt.show()
-
-# %%
-# Run NUTS (No-U-Turn Sampler) inference.
-#
-# ``dense_mass_matrix=False`` (diagonal mass matrix) keeps the warmup peak
-# RSS bounded. The 3-D fit here is fine on either setting, but the kwarg
-# stays explicit so users who edit this template to free more SFH
-# parameters don't accidentally hit the dense-mass OOM gotcha — D ≥ 8
-# with ``dense_mass_matrix=True`` peaks ~22 GB during the warmup vmap
-# compile and can jetsam on machines with < 32 GB. Switch to ``True``
-# only if you have free strongly-correlated parameters and the headroom.
-os.environ["TENGRI_NO_BACKGROUND_COMPILE"] = "1"
-fitter_param = Fitter(model_param, mock_param.flux_obs, mock_param.noise)
-t0 = time.perf_counter()
-result_mcmc = fitter_param.run(
-    "mcmc_nuts",
-    n_warmup=500,
-    n_samples=1000,
-    dense_mass_matrix=False,
-    verbose=False,
-)
-t_mcmc = time.perf_counter() - t0
-print(f"NUTS: {t_mcmc:.1f}s")
-
-# %%
-# Posterior predictive check: draw 50 samples and overplot.
-phot_samples = []
-n_draws = 50
-
-# Draw from NUTS posterior
-for i in range(n_draws):
-    idx = i % len(result_mcmc.samples[spec_param.free_params[0]])
-    draw_params = {k: v[idx] for k, v in result_mcmc.samples.items()}
-    phot_draw = model_param.predict_photometry(draw_params)
-    phot_samples.append(np.array(phot_draw))
-
-phot_median = np.median(np.array(phot_samples), axis=0)
-
-fig, ax = plt.subplots(figsize=(12, 5))
-band_idx = np.arange(len(band_names))
-obs_np = np.array(mock_param.flux_obs)
-noise_np = np.array(mock_param.noise)
-true_np = np.array(mock_param.flux_true)
-
-# Data
-ax.errorbar(
-    band_idx,
-    obs_np,
-    yerr=noise_np,
-    fmt="o",
-    ms=8,
-    color=COLORS["data"],
-    alpha=0.7,
-    label="Observed",
-    zorder=3,
-)
-
-# Posterior samples
-for s in phot_samples[:30]:
-    ax.plot(band_idx, s, "-", color=COLORS["mcmc_nuts"], alpha=0.02, lw=0.8, zorder=1)
-
-# Median
-ax.plot(
-    band_idx,
-    phot_median,
-    "D-",
-    color=COLORS["mcmc_nuts"],
-    ms=7,
-    lw=2.5,
-    label=f"NUTS median ({t_mcmc:.1f}s)",
-    zorder=4,
-)
-
-# Truth
-ax.plot(band_idx, true_np, "s", color=COLORS["truth"], ms=9, alpha=0.8, label="Truth", zorder=5)
-
-ax.set_xticks(band_idx)
-ax.set_xticklabels(band_names, rotation=45, ha="right", fontsize=10)
-ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax.set_title("NUTS posterior predictive vs. truth")
-ax.legend(fontsize=10, loc="upper left")
-ax.grid(True, alpha=0.3, axis="y")
-fig.tight_layout()
-plt.show()
-
-# %%
-# SFH recovery: posterior median + band against the (fixed) truth.
-fig, ax = plt.subplots(figsize=(10, 4))
-plot_sfh(
-    model_param,
-    result_mcmc,
-    true_params=true_params_param,
-    ax=ax,
-    color=COLORS["mcmc_nuts"],
-    label="NUTS",
-    method="NUTS",
-    xlim=(0, 6),
-)
-ax.set_title("SFH recovery (NUTS)")
-fig.tight_layout()
-# plt.savefig(os.path.join(FIGDIR, "fig03_sfh_param.png", dpi=300, bbox_inches="tight"), dpi=150, bbox_inches="tight")
-plt.show()
-
-# %%
-# Corner plot: posterior with truth overlaid.
-fig = plot_corner_comparison(
-    [result_mcmc],
-    labels=["NUTS"],
-    colors=[COLORS["mcmc_nuts"]],
-    truths=true_params_param,
-)
-plt.show()
-
-# %%
-# Convergence diagnostics and parameter recovery
-ct = convergence_table({"NUTS": result_mcmc})
-print("\nParameter Recovery:")
-print(f"{'Parameter':<30s} {'True':>8s} {'Median':>8s} {'16–84%':>12s} {'Status':>6s}")
-print("-" * 70)
-for name in spec_param.free_params:
-    truth = float(true_params_param[name])
-    lo, med, hi = np.percentile(result_mcmc.samples[name], [16, 50, 84])
-    covered = "ok" if lo <= truth <= hi else "MISS"
-    print(f"  {name:<28s} {truth:8.3f} {med:8.3f} [{lo:6.3f}, {hi:6.3f}] {covered:>6s}")
-
-n_mcmc = len(next(iter(result_mcmc.samples.values())))
-print(f"\nNUTS: {t_mcmc:.1f}s, {n_mcmc} samples, {n_mcmc/t_mcmc:.0f} ESS/s")
+ax_res.set_xscale("log")
+ax_res.set_xlim(wave_um.min(), wave_um.max())
+ax_res.set_ylim(-3.5, 3.5)
+ax_res.set_xlabel(r"observed wavelength  [$\mu$m]")
+ax_res.set_ylabel(r"$(d-m)/\sigma$")
+fig.savefig(FIG_DIR / "00_posterior_sed.png", dpi=300, bbox_inches="tight")
+fig.savefig(FIG_DIR / "00_posterior_sed.pdf", bbox_inches="tight")
 
 # %% [markdown]
-# ## What just happened
+# ## Star-formation history
+
+
+# %%
+def sfh(p):
+    s = sed_model.predict_state(p)
+    return (
+        np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9,
+        np.asarray(s.derived["sfr_history"]),
+    )
+
+
+sfr_draws, lbt = [], None
+for p in draw_dicts(120):
+    lbt_i, sfr_i = sfh(p)
+    sfr_draws.append(sfr_i)
+    if lbt is None:
+        lbt = lbt_i
+sfr_draws = np.stack(sfr_draws)
+sfr_lo, sfr_med, sfr_hi = np.percentile(sfr_draws, [16, 50, 84], axis=0)
+lbt_t, sfr_t = sfh(truth_full)
+
+# Two-panel SFH: SFR(t) on top, cumulative formed mass on bottom.
+fig_sfh, (ax_sfh, ax_cum) = plt.subplots(
+    2, 1, figsize=(7.2, 5.4), sharex=True, gridspec_kw=dict(height_ratios=[2, 1], hspace=0.05)
+)
+
+ax_sfh.fill_between(lbt, sfr_lo, sfr_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
+ax_sfh.plot(lbt, sfr_med, color=C_POST, lw=1.6, label="posterior median")
+ax_sfh.plot(lbt_t, sfr_t, color=C_TRUTH, ls="--", lw=1.3, label="truth")
+ax_sfh.set_ylabel(r"SFR  [$M_\odot$ yr$^{-1}$]")
+ax_sfh.legend(frameon=False, fontsize=9, loc="upper left")
+plt.setp(ax_sfh.get_xticklabels(), visible=False)
+
+# Cumulative formed stellar mass — integrate SFR(t) backwards from now.
+dt_yr = np.gradient(lbt * 1e9)  # Gyr → yr, signed
+cum_draws = np.flip(np.cumsum(np.flip(sfr_draws * dt_yr[None, :], axis=1), axis=1), axis=1)
+cum_lo, cum_med, cum_hi = np.percentile(cum_draws, [16, 50, 84], axis=0)
+cum_truth = np.flip(np.cumsum(np.flip(sfr_t * dt_yr), axis=0), axis=0)
+ax_cum.fill_between(lbt, cum_lo / 1e10, cum_hi / 1e10, color=C_POST, alpha=0.30, lw=0)
+ax_cum.plot(lbt, cum_med / 1e10, color=C_POST, lw=1.6)
+ax_cum.plot(lbt_t, cum_truth / 1e10, color=C_TRUTH, ls="--", lw=1.3)
+ax_cum.set_ylabel(r"cumulative $M_\star$  [$10^{10}\,M_\odot$]")
+
+for axx in (ax_sfh, ax_cum):
+    axx.invert_xaxis()
+    axx.set_xlim(13.5, 0)
+ax_cum.set_xlabel("lookback time  [Gyr]")
+
+fig_sfh.savefig(FIG_DIR / "00_sfh.png", dpi=300, bbox_inches="tight")
+fig_sfh.savefig(FIG_DIR / "00_sfh.pdf", bbox_inches="tight")
+
+# %% [markdown]
+# ## Corner
 #
-# Mock photometry, NUTS, and posterior diagnostics — all the same JAX
-# forward model under the hood. The 16–84% intervals should bracket the
-# truth in every row of the table; if any row says `MISS`, that's a sign
-# the model is mis-specified or the SNR is too low to constrain that
-# parameter.
-#
-# Next: [`02_sed_anatomy.py`](02_sed_anatomy.py) takes the panchromatic SED
-# from the top of this notebook apart, component by component.
+# Free parameters plus derived quantities (`stellar_mass`, `sfr_100myr`,
+# `sfr_10myr`, in log₁₀), truth dashed.
+
+# %%
+fig_corner = posterior.plot_corner(truths=truth_full, color=C_POST)
+fig_corner.savefig(FIG_DIR / "00_corner.png", dpi=300, bbox_inches="tight")
+fig_corner.savefig(FIG_DIR / "00_corner.pdf", bbox_inches="tight")

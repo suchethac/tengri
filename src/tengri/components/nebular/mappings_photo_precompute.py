@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for MAPPINGS V photoionization grid (Flury et al. 2024).
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics tests for dust emission models: MBB, Casey2012, CMB corrections.
 
 References

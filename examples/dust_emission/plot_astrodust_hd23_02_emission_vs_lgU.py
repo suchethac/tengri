@@ -5,14 +5,13 @@ Astrodust+PAH emission vs log U
 Emission per H per ionization parameter U across the Hensley & Draine 2023
 grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
 (U-independent) but rises steeply with U in MIR.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
-   :alt: plot_astrodust_hd23_02_emission_vs_lgU
-   :class: sphx-glr-single-img
-
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,6 +21,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
 wave_um = np.asarray(tpl.wavelength_um)
@@ -52,9 +53,7 @@ ax.set(
     ylabel=r"$\lambda I_\lambda / (N_{\rm H}\,U)\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
     xlim=(2.0, 1000.0),
     ylim=(1.0e-28, 5.0e-25),
-    title="Astrodust+PAH emission per H per U",
 )
 ax.legend(loc="lower right", frameon=False, fontsize=8)
 fig.tight_layout()
 plt.savefig("plot_astrodust_hd23_02_emission_vs_lgU.png", dpi=150, bbox_inches="tight")
-plt.show()

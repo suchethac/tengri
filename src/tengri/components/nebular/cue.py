@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cue neural network emulator for nebular emission (pure JAX).
 
 A JAX re-implementation of the Cue emulator (Li et al. 2025) that predicts
@@ -102,7 +103,7 @@ All functions are JIT-compatible and differentiable through JAX.
 
 import os
 import warnings
-from typing import ClassVar, NamedTuple
+from typing import Any, ClassVar, NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -995,11 +996,21 @@ class CueBackend:
                     f"Max log10(Q_H) for bins younger than 10 Myr is "
                     f"{max_logqion_young:.1f}, well below the ~47-50 floor "
                     "for bare stellar populations. Cue's ionizing-spectrum "
-                    "fit will under-predict line luminosities by 4-7 dex. "
-                    "Fix: use a bare-stellar SSP (e.g. "
-                    "data/fsps_prsc_miles_chabrier.h5) or pass ssp_data=None "
-                    "and provide Q_H externally. To bypass for testing, set "
-                    "TENGRI_ALLOW_WNE_CUE=1 (downgrades to a warning)."
+                    "fit will under-predict line luminosities by 4-7 dex.\n"
+                    "\n"
+                    "Fix (one of):\n"
+                    "  1. Use a bare-stellar SSP. The four recipes that\n"
+                    "     use Cue (star_forming_photometry, quiescent_z0,\n"
+                    "     stochastic_sfh_jwst, agn_panchromatic) need a\n"
+                    "     file like fsps_prsc_miles_chabrier.h5. Download with:\n"
+                    "         from tengri.data import download_ssp\n"
+                    "         path = download_ssp('fsps_prsc_miles_chabrier.h5')\n"
+                    "     then  load_ssp_data(str(path)). See\n"
+                    "     tengri.data.list_remote_ssps() for the full catalogue.\n"
+                    "  2. Pass ssp_data=None to CueBackend and provide Q_H\n"
+                    "     externally.\n"
+                    "  3. Bypass for testing: set TENGRI_ALLOW_WNE_CUE=1\n"
+                    "     (downgrades to a warning)."
                 )
                 if os.environ.get("TENGRI_ALLOW_WNE_CUE"):
                     warnings.warn(msg, CueWNESSPWarning, stacklevel=3)
@@ -1171,8 +1182,11 @@ class CueBackend:
             ionspec_logLratio3=_pick("ionspec_logLratio3", ionspec_logLratio3, 0.2),
         )
 
-    def _forward_lines(self, p: dict, cloudyfsps_only=True, neb_fesc=0.0, neb_fesc_lya=0.0):
+    def _forward_lines(
+        self, p: dict, cloudyfsps_only=True, neb_fesc=0.0, neb_fesc_lya=0.0, template_data=None
+    ):
         """Low-level line prediction from resolved param dict."""
+        weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
             jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
             jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
@@ -1193,7 +1207,7 @@ class CueBackend:
         )
         wav, lum = predict_all_lines(
             nn_params,
-            self.weights,
+            weights,
             gas_logq,
             jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
         )
@@ -1202,12 +1216,13 @@ class CueBackend:
         lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
         lum = lum.at[lya_idx].multiply(lya_scale)
         if cloudyfsps_only:
-            old_idx = self.weights.line_old_idx
+            old_idx = weights.line_old_idx
             return wav[old_idx], lum[old_idx]
         return wav, lum
 
-    def _forward_continuum(self, p: dict):
+    def _forward_continuum(self, p: dict, template_data=None):
         """Low-level continuum prediction from resolved param dict."""
+        weights = template_data if template_data is not None else self.weights
         nn_params = _prepare_nn_params(
             jnp.asarray(p["ionspec_index1"], dtype=jnp.float32),
             jnp.asarray(p["ionspec_index2"], dtype=jnp.float32),
@@ -1228,7 +1243,7 @@ class CueBackend:
         )
         return predict_continuum(
             nn_params,
-            self.weights,
+            weights,
             gas_logq,
             jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
         )
@@ -1358,6 +1373,7 @@ class CueBackend:
         ionspec_logLratio1: float | None = None,
         ionspec_logLratio2: float | None = None,
         ionspec_logLratio3: float | None = None,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         """Predict emission line luminosities.
@@ -1446,6 +1462,7 @@ class CueBackend:
             cloudyfsps_only=cloudyfsps_only,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            template_data=template_data,
         )
         return wav, lum * _LSUN_ERG
 
@@ -1555,6 +1572,7 @@ class CueBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,
+        template_data: Any | None = None,
         **neb_params,
     ) -> jnp.ndarray:
         """Predict total nebular emission on an arbitrary wavelength grid.
@@ -1581,6 +1599,10 @@ class CueBackend:
             Escape fractions.
         line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function.
+        template_data : Any | None, optional
+            Cue weights object. When provided, overrides ``self.weights``
+            for JIT purposes (threading as a runtime parameter instead of
+            closure-capturing). Default ``None`` uses ``self.weights``.
         **neb_params
             Additional Cue-specific overrides (gas_logn, gas_logno, etc.).
 
@@ -1626,10 +1648,11 @@ class CueBackend:
             cloudyfsps_only=False,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            template_data=template_data,
         )
 
         # Continuum (same resolved params — no double computation)
-        cont_wav, cont_lum = self._forward_continuum(p)
+        cont_wav, cont_lum = self._forward_continuum(p, template_data=template_data)
         cont_lum = cont_lum * (1.0 - neb_fesc)  # escape fraction suppression
 
         # Interpolate continuum onto SSP grid

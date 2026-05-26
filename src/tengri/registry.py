@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Public introspection façade — list and describe everything available in tengri.
 
 This is the first thing a new user should reach for. Open a notebook, run::
@@ -293,6 +294,12 @@ def _usage_hint(name: str, kind: str) -> str:
         return f'Parameters(..., nebular_backend="{name}")'
     if kind == "inference_method":
         return f'fitter.run("{name}")'
+    if kind == "xray_model":
+        return f"SEDModel.build(..., xray={{'type': '{name}'}})"
+    if kind == "radio_model":
+        return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+    if kind == "igm_model":
+        return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
         return f"tengri.{name}  (see list_{name}_models / list_{name}_laws for alternatives)"
     return ""
@@ -508,32 +515,78 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-def list_nebular_backends() -> _RegistryTable:
-    """List all available nebular emission backends."""
-    raw = [
-        (
-            "baked_in",
-            "production",
-            "DSPS / FSPS SSP-internal",
-            "Emission baked into SSP grid; zero free params",
-        ),
-        ("cue", "production", "Li+2024 (CUE neural emulator)", "Neural-network Cloudy emulator"),
-        ("cloudy_grid", "production", "Byler+2017 grids", "Trilinear interp on Cloudy grid"),
-        ("cb19", "experimental", "Charlot & Bruzual 2019", "Precomputed CB19 nebular grid"),
-    ]
-    return _RegistryTable(
-        [
-            {
-                "name": n,
-                "kind": "nebular_backend",
-                "status": st,
-                "citation": cit,
-                "short_doc": doc,
-                "use": _usage_hint(n, "nebular_backend"),
-            }
-            for (n, st, cit, doc) in raw
-        ]
-    )
+def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
+    """List all registered nebular emission backends.
+
+    Reads :data:`tengri.components.nebular.NEBULAR_MODELS` so the
+    listing stays in lock-step with what the grammar-layer validator
+    will actually accept (#331). The names match the keys consumed by
+    ``SEDModel.build(..., neb={'type': ...})`` — ``'none'`` /
+    ``'ssp'`` / ``'cue'`` / ``'cloudy'`` / ``'cb19'``.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    out = [_entry_to_dict(n, e, kind="nebular_backend") for n, e in NEBULAR_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_xray_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered X-ray emission models.
+
+    The X-ray group composes the AGN corona (Yang+2020 ``alpha_ox(L_2500)``
+    relation), the Lehmer+2016 high- and low-mass X-ray binary fits,
+    and optional thermal hot-gas emission. The ``'none'`` entry disables
+    the whole block.
+
+    See also: :func:`list_radio_models`, :func:`list_igm_models`,
+    :mod:`tengri.builders.xray`.
+    """
+    from tengri.components.xray._models import XRAY_MODELS
+
+    out = [_entry_to_dict(n, e, kind="xray_model") for n, e in XRAY_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_radio_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered radio emission models.
+
+    The radio group adds the Condon+1992 FIR-radio correlation for the
+    star-forming-galaxy contribution plus an optional AGN radio
+    power-law via the radio-loudness parameter. ``'none'`` disables
+    the block.
+
+    See also: :func:`list_xray_models`, :func:`list_igm_models`,
+    :mod:`tengri.builders.radio`.
+    """
+    from tengri.components.radio._models import RADIO_MODELS
+
+    out = [_entry_to_dict(n, e, kind="radio_model") for n, e in RADIO_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_igm_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered IGM transmission models.
+
+    Optional sub-flags on the IGM group (``patchy=True``, ``dla=True``)
+    layer extra free parameters on top of the chosen mean transmission
+    curve. Those are not separate models here — they apply to either
+    ``'inoue14'`` or ``'madau'``.
+
+    See also: :func:`list_xray_models`, :func:`list_radio_models`,
+    :mod:`tengri.builders.igm`.
+    """
+    from tengri.components.igm._models import IGM_MODELS
+
+    out = [_entry_to_dict(n, e, kind="igm_model") for n, e in IGM_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
@@ -1067,6 +1120,10 @@ def describe(name: str) -> _DescribeRecord:
     KeyError
         If the name is not registered anywhere.
     """
+    # Core classes — ForwardModel, SEDModel, Parameters, Fitter, Posterior, Observation.
+    if name in _CORE_CLASSES:
+        return _DescribeRecord(_CORE_CLASSES[name])
+
     for fn in (
         list_inference_methods,
         list_agn_models,
@@ -1077,15 +1134,174 @@ def describe(name: str) -> _DescribeRecord:
         list_components,
         list_filters,
         list_plots,
+        list_recipes,
     ):
         for entry in fn():
             if entry["name"] == name:
                 return _DescribeRecord(entry)
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
-        "AGN model, dust law, SFH variant, nebular backend, component, "
-        "filter, or "
-        "inference method that exists."
+        "core class, AGN model, dust law, SFH variant, nebular backend, "
+        "component, filter, or inference method that exists."
+    )
+
+
+# ── Recipe discovery (#310 proposal 2) ─────────────────────────────────────
+
+
+def list_recipes() -> _RegistryTable:
+    """List every callable in :mod:`tengri.recipes`.
+
+    Each entry carries the recipe name, the first sentence of its docstring,
+    and the SSP-requirement tag (parsed from the ``**SSP requirement:**``
+    line in the docstring, when present). Use :func:`describe_recipe` for the
+    full per-recipe block (component selectors, parameter freedoms,
+    suggested redshift, etc.).
+
+    Returns
+    -------
+    _RegistryTable
+        Rows: ``{name, short_doc, ssp_requirement, kind="recipe"}``.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_recipes()
+    >>> tengri.describe_recipe("star_forming_photometry")
+    """
+    import inspect
+
+    from tengri import recipes as _recipes
+
+    out: list[dict] = []
+    for name in sorted(_recipes.__all__):
+        fn = getattr(_recipes, name, None)
+        if fn is None or not callable(fn):
+            continue
+        doc = inspect.getdoc(fn) or ""
+        short_doc = doc.split("\n\n", 1)[0].strip().replace("\n", " ")
+        ssp_req = _parse_ssp_requirement(doc)
+        out.append(
+            {
+                "name": name,
+                "kind": "recipe",
+                "short_doc": short_doc,
+                "ssp_requirement": ssp_req,
+                "use": f"recipes.{name}() → SEDModel.build(ssp_data=ssp, **recipe)",
+            }
+        )
+    return _RegistryTable(out)
+
+
+def _parse_ssp_requirement(doc: str) -> str:
+    """Pull the ``**SSP requirement:**`` value from a recipe docstring."""
+    for line in doc.splitlines():
+        if "SSP requirement" in line:
+            after = line.split(":", 1)[1] if ":" in line else line
+            return after.replace("*", "").strip()
+    return "any"
+
+
+def describe_recipe(name: str) -> _DescribeRecord:
+    """Return the full descriptor block for a single recipe.
+
+    Parameters
+    ----------
+    name : str
+        Recipe name (see :func:`list_recipes`).
+
+    Returns
+    -------
+    _DescribeRecord
+        Dict-like with ``name``, ``docstring``, ``ssp_requirement``,
+        ``returns`` (the actual nested-dict the recipe builds), and a
+        ready-to-paste ``use`` example.
+
+    Raises
+    ------
+    KeyError
+        If ``name`` is not in :mod:`tengri.recipes`.
+    """
+    import inspect
+
+    from tengri import recipes as _recipes
+
+    fn = getattr(_recipes, name, None)
+    if fn is None or not callable(fn):
+        known = sorted(_recipes.__all__)
+        raise KeyError(f"Unknown recipe '{name}'. Known recipes: {known}")
+    doc = inspect.getdoc(fn) or ""
+    # Materialise the recipe dict so users can see the actual selectors.
+    try:
+        recipe_dict = fn()
+        component_keys = sorted(k for k in recipe_dict if not k.startswith("_"))
+    except Exception:
+        recipe_dict = {}
+        component_keys = []
+    return _DescribeRecord(
+        {
+            "name": name,
+            "kind": "recipe",
+            "short_doc": doc.split("\n\n", 1)[0].strip().replace("\n", " "),
+            "docstring": doc,
+            "ssp_requirement": _parse_ssp_requirement(doc),
+            "components": component_keys,
+            "use": f"model = tengri.SEDModel.build(ssp_data=ssp, **tengri.recipes.{name}())",
+        }
+    )
+
+
+# ── Symmetric describe_* per kind (#310 proposal 1) ────────────────────────
+
+
+def _describe_from_list(name: str, list_fn, kind_label: str, fn_label: str) -> _DescribeRecord:
+    """Common path for ``describe_*(name)`` — look up ``name`` in ``list_fn()``."""
+    for entry in list_fn():
+        if entry["name"] == name:
+            return _DescribeRecord(entry)
+    known = sorted(e["name"] for e in list_fn())
+    raise KeyError(
+        f"Unknown {kind_label} '{name}'. Known names: {known}. See {fn_label}() for the full menu."
+    )
+
+
+def describe_agn_model(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one AGN model (citation, status, short doc).
+
+    Symmetric with :func:`list_agn_models`. Use the generic :func:`describe`
+    for a cross-kind lookup.
+    """
+    return _describe_from_list(name, list_agn_models, "AGN model", "list_agn_models")
+
+
+def describe_dust_law(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one dust **attenuation** law."""
+    return _describe_from_list(name, list_dust_laws, "dust law", "list_dust_laws")
+
+
+def describe_dust_emission_model(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one dust **emission** template family."""
+    return _describe_from_list(
+        name, list_dust_emission_models, "dust emission model", "list_dust_emission_models"
+    )
+
+
+def describe_sfh_model(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one star-formation history model."""
+    return _describe_from_list(name, list_sfh_models, "SFH model", "list_sfh_models")
+
+
+def describe_nebular_backend(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one nebular emission backend."""
+    return _describe_from_list(
+        name, list_nebular_backends, "nebular backend", "list_nebular_backends"
+    )
+
+
+def describe_inference_method(name: str) -> _DescribeRecord:
+    """Return the descriptor row for one inference backend (MAP / VI / NUTS / NSS / …)."""
+    return _describe_from_list(
+        name, list_inference_methods, "inference method", "list_inference_methods"
     )
 
 
@@ -1320,6 +1536,61 @@ def list_all() -> dict[str, _RegistryTable]:
 # ──────────────────────────────────────────────────────────────────
 
 
+_CORE_CLASSES: dict[str, dict[str, str]] = {
+    "SEDModel": {
+        "kind": "core_class",
+        "name": "SEDModel",
+        "module": "tengri.forward.sed_model",
+        "purpose": (
+            "Differentiable SED forward chain "
+            "(stellar → dust → nebular → AGN → IGM → radio → X-ray)."
+        ),
+        "see_also": "tengri.SEDModel.build(...)",
+    },
+    "ForwardModel": {
+        "kind": "core_class",
+        "name": "ForwardModel",
+        "module": "tengri.forward.forward_model",
+        "purpose": (
+            "Thin outer shell that inference talks to. Owns an SED chain and "
+            "an observation; exposes .predict / .predict_observables(params) → channel dict."
+        ),
+        "see_also": "tengri.ForwardModel.build(sed=..., observation=...)",
+    },
+    "Parameters": {
+        "kind": "core_class",
+        "name": "Parameters",
+        "module": "tengri.parameters.parameters",
+        "purpose": "Free / fixed parameter spec with priors.",
+        "see_also": "tengri.Parameters(...)",
+    },
+    "Fitter": {
+        "kind": "core_class",
+        "name": "Fitter",
+        "module": "tengri.inference.fitter",
+        "purpose": (
+            "Inference driver. Runs MAP / NUTS / VI / Pathfinder / Ray Tracing "
+            "/ geoVI / evidence against a forward model."
+        ),
+        "see_also": 'fitter.run("map") or "nuts" / "vi" / "pathfinder" / ...',
+    },
+    "Posterior": {
+        "kind": "core_class",
+        "name": "Posterior",
+        "module": "tengri.inference.posterior",
+        "purpose": ("Return value of fitter.run(). Posterior samples / mean / median / 68% CI."),
+        "see_also": "posterior.summary()",
+    },
+    "Observation": {
+        "kind": "core_class",
+        "name": "Observation",
+        "module": "tengri.observation.observation",
+        "purpose": "Frozen configuration container for photometry + spectroscopy.",
+        "see_also": "tengri.Observation(photometry=..., spectroscopy=...)",
+    },
+}
+
+
 def summary() -> None:
     """Print a one-line count of every menu in tengri.
 
@@ -1348,6 +1619,15 @@ def summary() -> None:
         (len(list_inference_methods()), "total inference methods", "list_inference_methods()"),
     ]
     _display("\ntengri — what's available:\n")
+    _display("  Core classes (the four nouns inference talks to):")
+    _display("    tengri.SEDModel         differentiable SED forward chain")
+    _display(
+        "    tengri.ForwardModel     outer shell — owns SED + observation, "
+        "exposes .predict / .predict_observables"
+    )
+    _display("    tengri.Parameters       priors + fixed values")
+    _display("    tengri.Fitter           inference driver")
+    _display("")
     width = max(len(label) for _, label, _ in counts)
     for n, label, call in counts:
         _display(f"  {n:>4}  {label.ljust(width)}    tengri.{call}")
@@ -1451,13 +1731,20 @@ tengri — differentiable galaxy SED fitting in JAX
 ────────────────────────────────────────────────────────────────────
     obs        = tengri.Observation(photometry=tengri.Photometry.from_names([...]))
     parameters = tengri.Parameters(...)        # priors + fixed values
-    model      = tengri.SEDModel(parameters, ssp_data, observation=obs)
-    fitter     = tengri.Fitter(model, data, noise)
+    sed        = tengri.SEDModel.build(ssp_data=..., observation=obs, ...)
+    forward    = tengri.ForwardModel.build(sed=sed, observation=obs)
+    fitter     = tengri.Fitter(forward, data, noise)
     posterior  = fitter.run("map")             # or "nuts", "vi", …
     posterior.summary()                        # median ± 68% CI per param
 
     Pick the right kwargs:
       tengri.suggest_parameters(mean_sfh_type="dpl", agn_model="skirtor")
+
+    The outer shell:
+      tengri.ForwardModel — thin shell inference talks to. Owns the SED
+        chain and the observation; exposes a single .predict(params)
+        method that returns a {{channel: array}} dict (phot_fnu, spec_fnu).
+        Inference doesn't need to know which prediction method to call.
 
 ────────────────────────────────────────────────────────────────────
 4.  Contribute a new physics alternative

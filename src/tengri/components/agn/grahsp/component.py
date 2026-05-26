@@ -158,6 +158,10 @@ class GRAHSPSEDComponent:
     name: str = "agn_grahsp"
     parameter_prefix: str = "agn_grahsp_"
 
+    def citations(self) -> tuple[str, ...]:
+        """GRAHSP/QSOgen big-blue-bump template from Temple+2021."""
+        return ("temple2021_qsogen",)
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
 
@@ -308,8 +312,13 @@ class GRAHSPSEDComponent:
         state: ForwardState,
         params: Mapping[str, Array],
         templates_state: GRAHSPSEDComponentState | None = None,
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Add GRAHSP AGN emission to ``state.sed_intrinsic``.
+
+        ``ssp_data`` is accepted for Protocol uniformity but unused — this
+        component reads only from ``state`` and ``params``.
 
         Parameters
         ----------
@@ -421,11 +430,6 @@ class GRAHSPSEDComponent:
         L_lambda_total = bbb_total + torus_total
         L_nu = L_lambda_total * wave_nm**2 / _C_NM_PER_S
 
-        if state.sed_intrinsic is None:
-            new_sed = L_nu
-        else:
-            new_sed = state.sed_intrinsic + L_nu
-
         # Bolometric quantities (computed from L_lambda on the nm grid).
         L_bol_BBB = bolometric_luminosity_bbb(wave_nm, bbb_intrinsic)
         L_bol_torus = bolometric_luminosity_torus(wave_nm, torus_intrinsic)
@@ -434,8 +438,7 @@ class GRAHSPSEDComponent:
         # GRAHSP's torus already empirically captures dust re-radiation.
         L_agn_absorbed = jnp.trapezoid((bbb_intrinsic + torus_intrinsic) - L_lambda_total, wave_nm)
 
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_nu).with_(
             derived=state.derived.with_(
                 sed_grahsp=L_nu,
                 L_agn_bol=L_bol_BBB,

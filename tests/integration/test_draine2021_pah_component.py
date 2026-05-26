@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SEDComponent tests for Draine+2021 PAHspec emission template.
 
 The PAHspec model is exposed as the ``template="draine2021_pah"``
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -71,9 +73,9 @@ def test_modified_blackbody_default_branch_unchanged():
 
 def test_precompute_returns_state_with_grid(precomputed):
     state, wave_aa = precomputed
-    assert state.pahspec_lgU_grid.shape == (15,)
-    assert state.pahspec_lnu_template.shape == (15, wave_aa.size)
-    assert state.pahspec_norm_per_lgU.shape == (15,)
+    chex.assert_shape(state.pahspec_lgU_grid, (15,))
+    chex.assert_shape(state.pahspec_lnu_template, (15, wave_aa.size))
+    chex.assert_shape(state.pahspec_norm_per_lgU, (15,))
     assert (np.asarray(state.pahspec_norm_per_lgU) > 0).all()
 
 
@@ -91,7 +93,7 @@ def test_apply_adds_pah_emission(component, precomputed):
     state_post = component.apply(pipeline, params, precomputed=state_pre)
 
     sed = np.asarray(state_post.sed_intrinsic)
-    assert sed.shape == (wave_aa.size,)
+    chex.assert_shape(sed, (wave_aa.size,))
     assert np.isfinite(sed).all()
     assert (sed >= 0).all()
     assert sed.sum() > 0
@@ -282,4 +284,4 @@ def test_pahspec_starlight_auto_passthrough_to_precompute():
     if resolved == "mMMP":
         wave_aa = jnp.geomspace(1.0e4, 1.0e7, 100)
         state = comp.precompute(wave_grid=wave_aa)
-        assert state.pahspec_lgU_grid.shape == (15,)
+        chex.assert_shape(state.pahspec_lgU_grid, (15,))

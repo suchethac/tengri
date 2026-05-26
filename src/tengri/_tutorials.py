@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Interactive tutorials — runnable, copy-pasteable code recipes.
 
 Each tutorial is a small self-contained snippet teaching one concrete
@@ -60,7 +61,7 @@ _FIRST_FIT = _Tutorial(
             sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
             sfh_dpl_beta=tengri.Uniform(0.5, 3.0),
             sfh_dpl_tau_gyr=tengri.Uniform(0.5, 8.0),
-            sfh_dpl_log_peak_sfr=tengri.Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=tengri.Uniform(8.0, 12.0),
             dust_tau_diff=tengri.Uniform(0.0, 2.0),
             met_logzsol=tengri.Uniform(-1.5, 0.2),
         )
@@ -206,7 +207,7 @@ _CUSTOM_LIKELIHOOD = _Tutorial(
         fitter = tengri.Fitter(model, data=fluxes, noise=student_t)
 
         # For genuinely non-standard likelihoods, implement the Likelihood
-        # Protocol from tengri.protocols (Phase II-1 scaffold).  Minimum surface:
+        # Protocol from tengri.protocols.  Minimum surface:
         #
         #     class MyLikelihood:
         #         def log_prob(self, params, predicted, data) -> float: ...
@@ -648,7 +649,7 @@ _MOCK_RECOVERY = _Tutorial(
             mean_sfh_type="dpl",
             redshift=tengri.Fixed(0.1),
             sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
-            sfh_dpl_log_peak_sfr=tengri.Uniform(-1, 2.5),
+            sfh_dpl_log_total_mass=tengri.Uniform(8, 12),
             dust_tau_diff=tengri.Uniform(0, 2),
             met_logzsol=tengri.Uniform(-1.5, 0.2),
         )

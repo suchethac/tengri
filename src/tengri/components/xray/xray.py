@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """X-ray SED models: binaries, AGN corona, hot gas.
 
 Predicts X-ray emission (0.1–10 keV, λ < 124 Å) from three physical components:
@@ -24,6 +25,7 @@ full JAX reimplementation for differentiability and gradient-based inference.
 
 import jax.numpy as jnp
 
+from tengri._deprecated import deprecated_alias
 from tengri.utils.physics_constants import (
     C_AA as _C_AA,
     H_PLANCK as _H_PLANCK,
@@ -31,11 +33,211 @@ from tengri.utils.physics_constants import (
     KEV_TO_HZ as _KEV_TO_HZ,
 )
 
+# ── Morrison & McCammon (1983) photoelectric cross-section, Table 2 ──
+# σ(E) · E³ = c0 + c1·E + c2·E² with σ in 10⁻²⁴ cm² and E in keV.
+# Fit valid for 0.030 ≤ E ≤ 10 keV; above 10 keV the cross-section is
+# negligible (drops faster than E⁻³) and we return transmission = 1.
+_MM83_E_EDGES = jnp.array(
+    [
+        0.030,
+        0.100,
+        0.284,
+        0.400,
+        0.532,
+        0.707,
+        0.867,
+        1.303,
+        1.840,
+        2.471,
+        3.210,
+        4.038,
+        7.111,
+        8.331,
+        10.000,
+    ]
+)
+_MM83_C0 = jnp.array(
+    [
+        17.3,
+        34.6,
+        78.1,
+        71.4,
+        95.5,
+        308.9,
+        120.6,
+        141.3,
+        202.7,
+        342.7,
+        352.2,
+        433.9,
+        629.0,
+        701.2,
+    ]
+)
+_MM83_C1 = jnp.array(
+    [
+        608.1,
+        267.9,
+        18.8,
+        66.8,
+        145.8,
+        -380.6,
+        169.3,
+        146.8,
+        104.7,
+        18.7,
+        18.7,
+        -2.4,
+        30.9,
+        25.2,
+    ]
+)
+_MM83_C2 = jnp.array(
+    [
+        -2150.0,
+        -476.1,
+        4.3,
+        -51.4,
+        -61.1,
+        294.0,
+        -47.7,
+        -31.5,
+        -17.0,
+        0.0,
+        0.0,
+        0.75,
+        0.0,
+        0.0,
+    ]
+)
+
+
+def tbabs_transmission(E_keV: jnp.ndarray, log_nh: float) -> jnp.ndarray:
+    r"""Photoelectric absorption transmission ``T(E) = exp(−σ(E)·N_H)``.
+
+    Implements the Morrison & McCammon (1983) ``wabs`` cross-section
+    via the published polynomial fit:
+
+    .. math::
+
+        \sigma(E)\,E^3 = c_0 + c_1\,E + c_2\,E^2
+        \quad
+        (\sigma \,\,\mathrm{in}\,\,10^{-24}\,\mathrm{cm}^2,\;
+         E \,\,\mathrm{in}\,\,\mathrm{keV})
+
+    The fit is valid for 0.030 ≤ E ≤ 10 keV. Outside that range the
+    cross-section is negligible (E ≫ 10 keV) or outside the X-ray band
+    we model (E ≪ 0.1 keV), so transmission is set to 1 there.
+
+    Parameters
+    ----------
+    E_keV : array_like, shape (n,)
+        Photon energy. [keV]
+    log_nh : float
+        Equivalent hydrogen column density. [log10(cm⁻²)]
+        Typical AGN range: 20 (unobscured) → 24 (Compton-thick).
+
+    Returns
+    -------
+    ndarray, shape (n,)
+        Transmission ``T(E) ∈ [0, 1]``. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` primitives.
+
+    **Gradient**: smooth with respect to ``log_nh`` (single ``exp``);
+    bin-edge selection uses ``searchsorted`` which has zero gradient
+    with respect to ``E_keV`` — adequate because ``E_keV`` is the
+    wavelength grid, not a free parameter.
+
+    **Convention**: matches XSPEC ``wabs``. The newer ``tbabs`` model
+    of Wilms et al. (2000) gives 30–50 % higher cross-sections in the
+    0.5–2 keV band due to updated metal abundances; we use ``wabs``
+    here because its closed-form polynomial fit is exactly
+    differentiable and the systematic is well below typical N_H
+    posterior uncertainty.
+
+    References
+    ----------
+    .. [1] R. Morrison and D. McCammon, "Interstellar photoelectric
+       absorption cross-sections, 0.03–10 keV," ApJ, 270, 119 (1983),
+       Table 2. https://doi.org/10.1086/161102
+    .. [2] J. Wilms, A. Allen and R. McCray, "On the absorption of X-rays
+       in the interstellar medium," ApJ, 542, 914 (2000). arXiv:astro-ph/0008425.
+    """
+    E = jnp.asarray(E_keV)
+    # Only the lower bound is enforced strictly; above 10 keV we let the
+    # last bin extrapolate (σ ∝ E⁻³ asymptotically, so τ → 0 quickly and
+    # T → 1 naturally). A hard upper cutoff would create a spurious
+    # discontinuity at exactly E = 10 keV under floating round-trip.
+    in_range = E >= 0.030
+
+    idx = jnp.clip(jnp.searchsorted(_MM83_E_EDGES, E, side="right") - 1, 0, 13)
+    c0 = _MM83_C0[idx]
+    c1 = _MM83_C1[idx]
+    c2 = _MM83_C2[idx]
+    sigma_e3 = c0 + c1 * E + c2 * E**2  # 10⁻²⁴ cm² · keV³
+    sigma = sigma_e3 / jnp.maximum(E, 1e-30) ** 3 * 1e-24  # cm²
+
+    tau = sigma * 10.0**log_nh
+    return jnp.where(in_range, jnp.exp(-jnp.maximum(tau, 0.0)), 1.0)
+
+
+# Thomson scattering cross-section per hydrogen atom (one free electron).
+# σ_T = 6.6524587e-25 cm² (NIST 2018). XSPEC ``cabs`` applies exactly this
+# as exp(−σ_T·N_H), an energy-independent attenuation that captures
+# Compton down-scattering of photons out of the line of sight.
+_SIGMA_THOMSON_CM2 = 6.6524587e-25
+
+
+def compton_scattering_transmission(log_nh: float) -> float:
+    r"""Energy-independent Compton (Thomson) attenuation ``exp(−σ_T·N_H)``.
+
+    Matches XSPEC ``cabs``: photons removed from the line of sight by
+    Thomson scattering off bound electrons in the absorber. Becomes the
+    dominant suppression mechanism above the photoelectric edge once
+    ``log_nh ≳ 24`` (Compton-thick regime).
+
+    Parameters
+    ----------
+    log_nh : float
+        Equivalent hydrogen column density. [log10(cm⁻²)]
+
+    Returns
+    -------
+    float
+        Transmission ``T ∈ [0, 1]``. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — single ``jnp.exp``.
+
+    **Why this matters**: the photoelectric edge alone (Morrison &
+    McCammon ``wabs``) underestimates the suppression of hard-band
+    flux at log_nh ≥ 24. At log_nh = 24, σ_T·N_H ≈ 0.67, giving an
+    extra factor exp(−0.67) ≈ 0.51 of attenuation that the
+    photoelectric model misses entirely above ~10 keV.
+
+    References
+    ----------
+    .. [1] C. Ricci et al., "The Close Environments of Accreting Massive
+       Black Holes are Shaped by Radiative Feedback," Nature, 549, 488
+       (2017). Underlying XSPEC spectral model used in obscured-AGN
+       fits (Eq. B6 of Matsumoto+2026).
+    .. [2] N. Matsumoto et al., "MIR Search for Luminous Heavily
+       Obscured AGN at z > 3," ApJ submitted (2026), Appendix B.
+    """
+    tau_T = _SIGMA_THOMSON_CM2 * 10.0**log_nh
+    return jnp.exp(-jnp.maximum(tau_T, 0.0))
+
 
 def xray_xrb(
     wavelength: jnp.ndarray,
     sfr: float,
     stellar_mass: float,
+    metallicity_z: float = 0.02,
+    stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
     E_cut: float = 100.0,
@@ -45,8 +247,10 @@ def xray_xrb(
     r"""Predict X-ray SED from accretion-powered binaries.
 
     Computes the combined X-ray emission from high-mass (HMXB) and low-mass
-    (LMXB) X-ray binary populations, scaled by SFR and stellar mass respectively.
-    Each population is modelled as a power-law with exponential cutoff.
+    (LMXB) X-ray binary populations. HMXB luminosity scales with SFR and
+    metallicity (Lehmer et al. 2016). LMXB luminosity scales with stellar
+    mass and age (Lehmer et al. 2016). Both are modelled as power-laws
+    with exponential cutoff.
 
     Parameters
     ----------
@@ -56,6 +260,10 @@ def xray_xrb(
         Star formation rate. [Msun/yr]
     stellar_mass : float
         Stellar mass. [Msun]
+    metallicity_z : float, optional
+        Metallicity (mass fraction, not log Z/Z_sun). Default: 0.02 (solar). []
+    stellar_age_gyr : float, optional
+        Stellar age in Gyr. Default: 1.0. [Gyr]
     gamma_hmxb : float, optional
         HMXB photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 2.0.
     gamma_lmxb : float, optional
@@ -78,28 +286,32 @@ def xray_xrb(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    **HMXB luminosity scaling** (Grimm et al. 2003, MNRAS 339, 793, Eq. 1):
+    **HMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         HMXBs are young binary systems (age < 100 Myr) with massive companions,
-        so their population follows the instantaneous SFR:
+        so their population follows the instantaneous SFR. The luminosity
+        depends strongly on metallicity Z (mass fraction):
 
         .. math::
 
-            L_X^{\mathrm{HMXB}}(2\text{–}10\,\mathrm{keV}) =
-                2.6 \times 10^{39} \times \left(\frac{\mathrm{SFR}}{M_\odot/\mathrm{yr}}\right)
-                \quad [\mathrm{erg/s}]
+            \log(L_X^{\mathrm{HMXB}}(2\text{–}10\,\mathrm{keV})/\mathrm{SFR}) =
+                40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
+                \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        A coefficient offset (log_L_hmxb_offset) captures intrinsic scatter
-        or evolutionary effects.
+        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
+        M_sun/yr SFR, consistent with Grimm et al. 2003.
 
-    **LMXB luminosity scaling** (Gilfanov 2004, MNRAS 349, 146, Eq. 1):
+    **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
-        stellar mass:
+        stellar mass. The luminosity depends on stellar age t (Gyr):
 
         .. math::
 
-            L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV}) =
-                8.3 \times 10^{28} \times \left(\frac{M_\star}{M_\odot}\right)
-                \quad [\mathrm{erg/s}]
+            \log(L_X^{\mathrm{LMXB}}(2\text{–}10\,\mathrm{keV})/M_\star) =
+                40.276 - 1.503\log t - 0.423(\log t)^2 + 0.425(\log t)^3 + 0.136(\log t)^4
+                \quad [\mathrm{erg\,s^{-1}\,M_\odot^{-1}}]
+
+        At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
+        Gilfanov 2004.
 
     **Spectral shape**: Both HMXB and LMXB are modelled as power-laws with
     a high-energy exponential cutoff (photoelectric absorption, or intrinsic
@@ -116,27 +328,55 @@ def xray_xrb(
     (λ ≈ 1.2 Å – 124 Å). Outside this range, flux is negligible.
 
     **Offsets**: The log_L_*_offset parameters allow captured intrinsic
-    scatter (e.g., metallicity effects on binary evolution) or
-    redshift-dependent evolution in hierarchical models.
+    scatter (e.g., redshift-dependent evolution) in hierarchical models.
 
     References
     ----------
-    .. [1] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
+    .. [1] B. D. Lehmer et al., "The evolution of the X-ray binary
+       luminosity functions of nearby galaxies with the Chandra COSMOS
+       survey," ApJ, 825, 7 (2016).
+       https://doi.org/10.3847/0004-637X/825/1/7
+    .. [2] H.-J. Grimm et al., "High-mass X-ray binaries as a star formation
        rate indicator in distant galaxies," MNRAS, 339, 793 (2003).
        https://doi.org/10.1046/j.1365-8711.2003.06224.x
-    .. [2] M. Gilfanov, "Low-mass X-ray binaries as a stellar mass indicator
+    .. [3] M. Gilfanov, "Low-mass X-ray binaries as a stellar mass indicator
        for the host galaxy," MNRAS, 349, 146 (2004). arXiv:astro-ph/0309171.
        https://doi.org/10.1111/j.1365-2966.2004.07473.x
-    .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+    .. [4] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
        https://doi.org/10.3847/1538-4357/ac4971
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / _KEV_TO_ERG  # convert to keV
 
-    # Reference luminosities (erg/s in 2-10 keV)
-    L_hmxb_ref = 2.6e39 * sfr * 10.0**log_L_hmxb_offset
-    L_lmxb_ref = 8.3e28 * stellar_mass * 10.0**log_L_lmxb_offset
+    # Lehmer+2016 metallicity quartic for HMXB (yang20.py:207–214)
+    # log(L_HMXB / SFR) = 33.28 - 62.12*Z + 569.44*Z^2 - 1833.80*Z^3 + 1968.33*Z^4
+    # in W units. Convert to erg/s: +7.0 (log10 conversion)
+    # Leading constant 40.28 = 33.28 + 7.0 makes the unit conversion explicit.
+    log_l_hmxb_per_sfr = (
+        40.28
+        - 62.12 * metallicity_z
+        + 569.44 * metallicity_z**2
+        - 1833.80 * metallicity_z**3
+        + 1968.33 * metallicity_z**4
+    )
+    L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
+
+    # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216–224).
+    # Yang+22 normalises *per 1e10 M_sun*, not per M_sun:
+    #   log( L_LMXB(2-10) / (M_star/1e10 Msun) ) [W]
+    #       = 33.276 - 1.503·logT - 0.423·logT² + 0.425·logT³ + 0.136·logT⁴
+    # So in erg/s per Msun:
+    #   L_LMXB = (M_star / 1e10) · 10^(quartic + 7)
+    #          = (M_star / 1e10) · 10^40.276 · 10^(quartic_terms)
+    # NOT  10^(40.276 + ...) · M_star, which was off by 10^10 (the original
+    # bug surfaced by the salvaged regression tests, see
+    # tests/physics/test_xray_yang22_scalings.py).
+    log_t = jnp.log10(jnp.maximum(stellar_age_gyr, 1e-3))  # protect against log(0)
+    log_l_lmxb_per_1e10 = (
+        40.276 - 1.503 * log_t - 0.423 * log_t**2 + 0.425 * log_t**3 + 0.136 * log_t**4
+    )
+    L_lmxb_ref = 10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
     # Normalise by integrating the spectral shape over the 2-10 keV reference band
@@ -163,13 +403,37 @@ def xray_xrb(
     return jnp.where(xray_mask, L_nu_hmxb + L_nu_lmxb, 0.0)
 
 
-def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
-    r"""Compute alpha_ox from monochromatic 2500 A luminosity (Just+2007).
+ALPHA_OX_RELATIONS: tuple[str, ...] = (
+    "just2007",
+    "lusso_risaliti_2016",
+    "lusso_risaliti_2017",
+)
+"""Available empirical α_OX(L_2500) correlations.
+
+* ``"just2007"`` — Just et al. 2007, ApJ 665, 1004 Eq. 3. CIGALE default
+  (yang20.py:227). Derived from optically-bright AGN at low–intermediate
+  luminosity.
+* ``"lusso_risaliti_2016"`` — Lusso & Risaliti 2016, ApJ 819, 154 Eq. 3.
+  Refit on 2685 SDSS+XMM quasars, extends to higher L_2500.
+* ``"lusso_risaliti_2017"`` — Lusso & Risaliti 2017, A&A 602, A79 Eq. 2.
+  High-z quasar sample, used by AGNfitter-rx.
+"""
+
+
+def alpha_ox_from_l2500(
+    l_2500_erg_hz: float,
+    relation: str = "just2007",
+) -> float:
+    r"""Compute alpha_ox from monochromatic 2500 A luminosity.
 
     Parameters
     ----------
     l_2500_erg_hz : float
         Monochromatic luminosity density at rest-frame 2500 A. [erg/s/Hz]
+    relation : {"just2007", "lusso_risaliti_2016", "lusso_risaliti_2017"}
+        Which empirical α_OX(L_2500) correlation to use. Default
+        ``"just2007"`` matches X-CIGALE (yang20.py:227). The Lusso–Risaliti
+        variants are used by AGNfitter-rx.
 
     Returns
     -------
@@ -180,26 +444,145 @@ def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure JAX function.
+    **JIT-compatible**: yes — pure JAX function. The string ``relation``
+    argument is a Python-level dispatch (not traced); pass it statically.
 
-    **Empirical correlation** (Just et al. 2007 [1]_, Eq. 3):
-    derived from optically-bright AGN; valid for
-    :math:`28 \lesssim \log_{10}(L_{2500}/[\mathrm{erg\,s^{-1}\,Hz^{-1}}]) \lesssim 33`.
+    **Just+2007 [1]_ (Eq. 3):** derived from optically-bright AGN; valid for
+    :math:`28 \lesssim \log_{10}(L_{2500}) \lesssim 33`.
 
     .. math::
 
-        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}\!\left(
-            L_{2500}\,[\mathrm{erg\,s^{-1}\,Hz^{-1}}]
-        \right) + 2.638
+        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}(L_{2500}) + 2.638
+
+    **Lusso–Risaliti 2016 [2]_ (Eq. 3):** refit on 2685 SDSS+XMM quasars,
+    extends usefully to high L_2500.
+
+    .. math::
+
+        \alpha_{\mathrm{ox}} = -0.137 \, \log_{10}(L_{2500}) + 2.594
+
+    **Lusso–Risaliti 2017 [3]_ (Eq. 2):** high-z quasar sample, used by
+    AGNfitter-rx.
+
+    .. math::
+
+        \alpha_{\mathrm{ox}} = -0.159 \, \log_{10}(L_{2500}) + 3.32
 
     More luminous AGN are X-ray weaker (steeper, more negative
-    :math:`\alpha_{\mathrm{ox}}`).
+    :math:`\alpha_{\mathrm{ox}}`). All three correlations agree to within
+    ~0.05 at the median quasar L_2500 ≈ 10^30 erg/s/Hz and diverge by up
+    to ~0.15 at the extremes.
 
     References
     ----------
     .. [1] Just, D. W. et al., 2007, ApJ, 665, 1004, Eq. 3.
+    .. [2] Lusso, E. & Risaliti, G., 2016, ApJ, 819, 154, Eq. 3.
+    .. [3] Lusso, E. & Risaliti, G., 2017, A&A, 602, A79, Eq. 2.
     """
-    return -0.137 * jnp.log10(l_2500_erg_hz) + 2.638
+    log_l = jnp.log10(l_2500_erg_hz)
+    if relation == "just2007":
+        return -0.137 * log_l + 2.638
+    if relation == "lusso_risaliti_2016":
+        return -0.137 * log_l + 2.594
+    if relation == "lusso_risaliti_2017":
+        return -0.159 * log_l + 3.32
+    raise ValueError(f"Unknown alpha_ox relation {relation!r}. Choose from {ALPHA_OX_RELATIONS}.")
+
+
+def xray_hotgas(
+    wavelength: jnp.ndarray,
+    sfr: float,
+    gamma: float = 1.0,
+    E_cut: float = 1.0,
+) -> jnp.ndarray:
+    r"""Predict X-ray SED from hot gas (diffuse ISM/CGM).
+
+    Computes thermal X-ray emission from optically-thin hot plasma in the
+    interstellar medium (ISM) and circumgalactic medium (CGM). The emission
+    scales with SFR and is modelled as thermal bremsstrahlung.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Å (rest-frame). [Å]
+    sfr : float
+        Star formation rate. [Msun/yr]
+    gamma : float, optional
+        Photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 1.0 (thermal).
+    E_cut : float, optional
+        Exponential cutoff energy. Default: 1.0 keV (hot gas characteristic). [keV]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Spectral luminosity density of hot gas X-ray emission.
+        [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    **Hot gas luminosity scaling** (Yang et al. 2020, MNRAS 491, 740;
+    Yang et al. 2022, ApJ 927, 192; Mineo et al. 2012, ApJ 745, 181):
+        Hot gas X-ray emission scales with SFR because star-forming regions
+        heat the ISM through supernovae and winds:
+
+        .. math::
+
+            \log(L_X^{\mathrm{hot\,gas}}(0.5\text{–}2\,\mathrm{keV})/\mathrm{SFR}) = 38.9
+                \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
+
+        This gives L_X^{hot gas} ≈ 7.94×10^38 erg/s per M_sun/yr SFR.
+
+    **Spectral shape**: Hot gas is modelled as thermal bremsstrahlung from
+    optically-thin plasma (Γ = 1; free-free and free-bound emission):
+
+        .. math::
+
+            F_\nu \propto \nu^{-\Gamma} \exp(-h\nu / E_{\mathrm{cut}})
+
+        Typical cutoff: E_cut ≈ 1 keV (plasma temperature ~ 10^7 K).
+
+    **Wavelength coverage**: Hot gas emits in soft X-rays (0.5–2 keV,
+        λ ≈ 6–124 Å). Outside this range, flux is negligible.
+
+    References
+    ----------
+    .. [1] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+       https://doi.org/10.1093/mnras/stz3001
+    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," ApJ, 927, 192 (2022).
+       https://doi.org/10.3847/1538-4357/ac4971
+    .. [3] S. Mineo et al., "The hot and energetic universe: The X-ray binary
+       populations in normal galaxies," ApJ, 745, 181 (2012).
+       https://doi.org/10.1088/0004-637X/745/2/181
+    """
+    nu = _C_AA / wavelength
+    E_keV = _H_PLANCK * nu / _KEV_TO_ERG
+
+    # Hot gas luminosity scaling (yang20.py:204)
+    # L_0.5-2keV = 8.3e31 W * SFR. In erg/s: 8.3e38 = 10^38.919.
+    # (yang20.py:204 shows L_hotgas_0p5to2keV = 8.3e31 * sfr)
+    log_l_hotgas_per_sfr = 38.919
+    L_hotgas_ref = 10.0**log_l_hotgas_per_sfr * sfr
+
+    # Thermal bremsstrahlung spectrum with exponential cutoff
+    E_ref = 1.0  # keV (characteristic hot-gas energy)
+    spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
+
+    # Normalise by integrating spectral shape over 0.5-2 keV
+    E_fine = jnp.linspace(0.5, 2.0, 200)  # keV
+    nu_fine = E_fine * _KEV_TO_HZ
+    spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
+    band_int = jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
+
+    L_nu = L_hotgas_ref / band_int * spec
+
+    # Soft X-ray only (0.5-2 keV => 6-124 A)
+    # but allow slightly beyond for smoothness
+    xray_mask = wavelength < 124.0
+    return jnp.where(xray_mask, L_nu, 0.0)
 
 
 def xray_anisotropy(
@@ -225,30 +608,45 @@ def xray_anisotropy(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Anisotropy-corrected L_X. [erg/s/Hz]
+        Anisotropy-corrected L_X. [erm/s/Hz]
 
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
 
     **Empirical correction** (Yang et al. 2022 [1]_): polynomial in
-    :math:`\mu \equiv \cos\theta`, normalised so face-on
-    (:math:`\mu = 1`) returns the input ``l_x`` unchanged.
+    :math:`\mu \equiv \cos\theta`, normalised so the bolometric
+    corona luminosity at θ=0° (face-on, :math:`\mu = 1`) is recovered.
+
+    The anisotropic luminosity is computed as (yang20.py:231–235):
 
     .. math::
 
-        f(\mu) = a_1\,\mu + a_2\,\mu^2 + (1 - a_1 - a_2),
+        f(\mu) = \frac{a_1\,\mu + a_2\,\mu^2 + (1 - a_1 - a_2)}{1 - 0.13397\,a_1 - 0.25\,a_2},
         \qquad
         L_X^{\rm obs} = f(\mu)\, L_X^{\rm iso}
 
-    The default :math:`a_1 = 0.5,\, a_2 = 0` corresponds to the
-    "intermediate" obscuration solution adopted in CIGALE's X-CIGALE.
+    The denominator is crucial: it normalizes the angular distribution so that
+    multiplying by the numerator and dividing by the denominator at θ=0° gives
+    unity, ensuring the face-on luminosity is unmodified. The default
+    :math:`a_1 = 0.5,\, a_2 = 0` corresponds to the "intermediate" obscuration
+    solution adopted in X-CIGALE (Yang et al. 2022).
+
+    At default (a1=0.5, a2=0), the denominator is 0.933, so the correction
+    factor is ~1.072 at face-on (7% enhancement relative to the polynomial alone,
+    to recover the face-on bolometric luminosity).
 
     References
     ----------
-    .. [1] Yang, G. et al., 2022, ApJ, 927, 42.
+    .. [1] Yang, G. et al., 2022, ApJ, 927, 192.
+       Eq. 231–235; CIGALE yang20.py:231–235.
     """
-    factor = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
+    numerator = a1 * cos_inc + a2 * cos_inc**2 + (1.0 - a1 - a2)
+    # Normalization denominator (yang20.py:231–235): ensures face-on
+    # bolometric corona luminosity is recovered. Without this, anisotropy
+    # would suppress the face-on luminosity.
+    denominator = 1.0 - 0.13397 * a1 - 0.25 * a2
+    factor = numerator / denominator
     return l_x * factor
 
 
@@ -262,12 +660,15 @@ def xray_agn_corona_from_disc(
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
+    log_nh: float = 20.0,
+    alpha_ox_relation: str = "just2007",
 ) -> jnp.ndarray:
     """Self-consistent AGN corona emission derived from disc UV luminosity.
 
-    Computes alpha_ox from L_2500 via the Just+2007 relation, derives
-    L_2keV, builds the X-ray power-law spectrum, and optionally applies
-    viewing-angle anisotropy (Yang+2022).
+    Computes alpha_ox from L_2500 via an empirical correlation (Just+2007
+    by default; Lusso–Risaliti 2016/2017 selectable), derives L_2keV, builds
+    the X-ray power-law spectrum, and optionally applies viewing-angle
+    anisotropy (Yang+2022).
 
     Parameters
     ----------
@@ -299,13 +700,20 @@ def xray_agn_corona_from_disc(
     -----
     **JIT-compatible**: yes — pure JAX function.
     """
-    # alpha_ox from disc UV luminosity
-    alpha_ox = alpha_ox_from_l2500(l_2500_erg_hz) + delta_alpha_ox
+    # alpha_ox from disc UV luminosity via the selected empirical correlation.
+    # NaN guard for the L_2500=0 fallback (no AGN upstream): log10(0)=-inf
+    # would propagate as 0 * inf = NaN through L_2keV below. Compute α_ox
+    # from a tiny positive floor; the spectrum is masked back to 0 at the
+    # end when l_2500_erg_hz ≤ 0.
+    safe_l_2500 = jnp.maximum(l_2500_erg_hz, 1e-300)
+    alpha_ox = alpha_ox_from_l2500(safe_l_2500, relation=alpha_ox_relation) + delta_alpha_ox
 
-    # Derive L_2keV from alpha_ox definition:
-    #   alpha_ox = 0.384 * log10(L_2keV / L_2500)
-    #   => L_2keV = L_2500 * 10^(alpha_ox / 0.384)
-    l_2kev_erg_hz = l_2500_erg_hz * 10.0 ** (alpha_ox / 0.384)
+    # Derive L_2keV from alpha_ox definition (yang20.py:227):
+    #   alpha_ox = 0.3838 * log10(L_2keV / L_2500)
+    #   => L_2keV = L_2500 * 10^(alpha_ox / 0.3838)
+    # The divisor 0.3838 = 1 / log10(nu_2keV / nu_2500A) is the exact
+    # frequency ratio between 2 keV (λ ≈ 6.2 Å) and 2500 Å.
+    l_2kev_erg_hz = safe_l_2500 * 10.0 ** (alpha_ox / 0.3838)
 
     # Build power-law spectrum with exponential cutoff
     nu = _C_AA / wavelength
@@ -318,8 +726,21 @@ def xray_agn_corona_from_disc(
     # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
     l_nu = l_2kev_erg_hz * spec
 
-    # X-ray mask (E > 0.1 keV => lambda < 124 A)
-    l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
+    # Ricci+2017 / Matsumoto+2026 Eq. B6: photoelectric + Compton
+    # scattering applied to the primary continuum, plus a small
+    # constant scattered fraction (defaulting to 1 %).
+    l_intr = l_nu
+    l_nu = (
+        tbabs_transmission(E_keV, log_nh) * compton_scattering_transmission(log_nh) * l_intr
+        + 0.01 * l_intr
+    )
+
+    # X-ray mask (E > 0.1 keV => lambda < 124 A) AND mask to zero when
+    # there is no AGN upstream (L_2500 ≤ 0). The safe_l_2500 floor above
+    # keeps the math finite; this mask reverts the floor's effect on the
+    # final spectrum so consumers see exactly zero, not 10^-300 noise.
+    has_agn = l_2500_erg_hz > 0.0
+    l_nu = jnp.where((wavelength < 124.0) & has_agn, l_nu, 0.0)
 
     # Optional anisotropy correction
     if apply_anisotropy:
@@ -330,16 +751,148 @@ def xray_agn_corona_from_disc(
 
 def xray_agn_corona(
     wavelength: jnp.ndarray,
+    l_2500_30deg_erg_hz: float,
+    gamma: float = 1.8,
+    E_cut: float = 300.0,
+    delta_alpha_ox: float = 0.0,
+    cos_inc: float = 1.0,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
+    log_nh: float = 20.0,
+    alpha_ox_relation: str = "just2007",
+) -> jnp.ndarray:
+    r"""X-ray emission from AGN corona (CIGALE / Yang+2020 canonical path).
+
+    Self-consistent AGN corona emission derived from the disc UV luminosity
+    at 30° intrinsic angle. This is the canonical path matching X-CIGALE
+    (Yang+2020) and enforces physical consistency between UV and X-ray SEDs.
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Wavelength grid in Å (rest-frame). [Å]
+    l_2500_30deg_erg_hz : float
+        Monochromatic luminosity density at 2500 Å from the AGN disc
+        at 30° inclination angle (intrinsic). [erg/s/Hz]
+    gamma : float, optional
+        Photon index (Γ, where F_ν ∝ ν^{−Γ}). Default: 1.8. Range: 1.4–2.4.
+    E_cut : float, optional
+        Exponential cutoff energy. Default: 300 keV. [keV]
+    delta_alpha_ox : float, optional
+        Additive offset to the Just+2007 α_ox relation. Default: 0.0. [dex]
+    cos_inc : float, optional
+        Cosine of inclination angle (1 = face-on, 0 = edge-on).
+        Default: 1.0. []
+    apply_anisotropy : bool, optional
+        Whether to apply Yang+2022 viewing-angle correction. Default: True.
+    a1 : float, optional
+        Linear anisotropy coefficient. Default: 0.5. []
+    a2 : float, optional
+        Quadratic anisotropy coefficient. Default: 0.0. []
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
+
+    **Physical basis** (Yang et al. 2020, MNRAS 491, 740, §2.2.1):
+    The α_OX parameter (defined as the SED slope between 2500 Å and 2 keV)
+    is an observationally-calibrated relation from Just et al. (2007):
+
+    .. math::
+
+        \alpha_{\mathrm{OX}} = -0.137 \log_{10}(L_{2500}/[\mathrm{erg\,s^{-1}\,Hz^{-1}}])
+            + 2.638
+
+    The 2–10 keV luminosity then follows from the definition:
+
+    .. math::
+
+        \alpha_{\mathrm{OX}} = 0.3838 \log_{10}(L_{2\,\mathrm{keV}}/L_{2500})
+            \quad \Rightarrow \quad
+        L_{2\,\mathrm{keV}} = L_{2500} \times 10^{\alpha_{\mathrm{OX}}/0.3838}
+
+    This driving from L_2500 (rather than L_bol) ensures consistency with
+    the AGN disc model and avoids the ambiguity of bolometric corrections.
+
+    **Anisotropy** (Yang et al. 2022, ApJ 927, 192):
+    When apply_anisotropy=True, an inclination-dependent factor is applied:
+
+    .. math::
+
+        L_X(\theta) = L_X(0°) \times [a_1\cos\theta + a_2\cos^2\theta
+            + (1 - a_1 - a_2)]
+
+    Default (a1=0.5, a2=0.0) matches X-CIGALE's "intermediate" solution.
+
+    References
+    ----------
+    .. [1] D. W. Just et al., "The X-ray luminosity and morphology
+       dependence of narrow emission-line regions in nearby active galactic
+       nuclei," ApJ, 665, 1004 (2007).
+       https://doi.org/10.1086/519990
+    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+       https://doi.org/10.1093/mnras/stz3001
+    .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
+       CIGALE and improvement of the code," ApJ, 927, 192 (2022).
+       https://doi.org/10.3847/1538-4357/ac4971
+    """
+    return xray_agn_corona_from_disc(
+        wavelength,
+        l_2500_30deg_erg_hz,
+        cos_inc=cos_inc,
+        delta_alpha_ox=delta_alpha_ox,
+        gamma=gamma,
+        E_cut=E_cut,
+        apply_anisotropy=apply_anisotropy,
+        a1=a1,
+        a2=a2,
+        log_nh=log_nh,
+        alpha_ox_relation=alpha_ox_relation,
+    )
+
+
+def _xray_agn_corona_bolometric(
+    wavelength: jnp.ndarray,
     L_agn_bol: float,
     gamma: float = 1.8,
     E_cut: float = 300.0,
     alpha_ox: float = -1.4,
+    log_nh: float = 20.0,
+    scattered_frac: float = 0.01,
 ) -> jnp.ndarray:
-    """X-ray emission from AGN corona.
+    r"""**DEPRECATED**: AGN corona from bolometric luminosity (with N_H absorption).
 
-    Power law with photon index Gamma and exponential cutoff,
-    normalized via the alpha_ox relation:
-      alpha_ox = 0.384 * log(L_2keV / L_2500A)
+    Use :func:`xray_agn_corona_from_disc` (which takes ``L_2500_30deg``
+    directly) instead — that is the X-CIGALE-faithful path (Yang+2020
+    yang20.py:227). This function converts from ``L_bol`` via the
+    Hopkins+2007 bolometric correction (BC_2500 ≈ 5.15), which is
+    ambiguous and inconsistent with the disc UV model.
+
+    The N_H absorption + scattered-flux machinery from PR #325 is
+    preserved here so that legacy callers keep working until the
+    deprecation is removed:
+
+    .. math::
+
+        L_\nu(E) =
+            T_{\rm phabs}(E, N_H)\,
+            T_{\rm cabs}(N_H)\,
+            L_\nu^{\rm intr}(E)
+            + f_{\rm scat}\, L_\nu^{\rm intr}(E)
+
+    where the line-of-sight absorber attenuates the primary continuum
+    through photoelectric absorption (:func:`tbabs_transmission`) and
+    Compton down-scattering (:func:`compton_scattering_transmission`),
+    while a constant fraction ``scattered_frac`` of the intrinsic
+    spectrum reaches the observer via warm-electron scattering on
+    scales beyond the obscurer (Ricci+2017; Matsumoto+2026 Eq. B6).
 
     Parameters
     ----------
@@ -353,15 +906,19 @@ def xray_agn_corona(
         Cutoff energy [keV]. Default 300.
     alpha_ox : float
         UV-to-X-ray slope. Default -1.4. Range: -2.0 to -1.0.
+    log_nh : float
+        Line-of-sight equivalent hydrogen column density. [log10(cm⁻²)]
+        Default 20.0 (unobscured). Range 20.0 – 26.0.
+    scattered_frac : float
+        Fraction of the intrinsic continuum reaching the observer via
+        warm-electron scattering on scales beyond the obscurer. [dimensionless]
+        Default 0.01 (Ricci+2017, typical for type-2 AGN). Range 0.0 – 0.1.
+        Set to 0 to disable.
 
     Returns
     -------
     ndarray, shape (n_wave,)
         Spectral luminosity density [erg/s/Hz].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — pure JAX function.
     """
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / (1.6022e-9)
@@ -373,9 +930,9 @@ def xray_agn_corona(
     _BC_2500 = 5.15  # Hopkins+2007 bolometric correction at 2500 A
     L_2500 = L_agn_bol / (_BC_2500 * _NU_2500)  # erg/s/Hz
 
-    # alpha_ox = 0.384 * log10(L_2keV / L_2500A)
-    # => L_2keV = L_2500 * 10^(alpha_ox / 0.384)
-    L_2keV = L_2500 * 10.0 ** (alpha_ox / 0.384)
+    # alpha_ox = 0.3838 * log10(L_2keV / L_2500A)
+    # => L_2keV = L_2500 * 10^(alpha_ox / 0.3838)
+    L_2keV = L_2500 * 10.0 ** (alpha_ox / 0.3838)
 
     # Power-law spectrum
     E_ref = 2.0  # keV
@@ -384,7 +941,16 @@ def xray_agn_corona(
     # Normalise at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
     # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
-    L_nu = L_2keV * spec
+    L_intr = L_2keV * spec
+
+    # Ricci+2017 / Matsumoto+2026 Eq. B6:
+    #   primary = zphabs(N_H) × cabs(N_H) × intrinsic
+    #   scattered = scattered_frac × intrinsic
+    # Applied to the AGN corona only — XRBs and hot gas are outside the
+    # torus line of sight and are unobscured by host N_H.
+    T_phabs = tbabs_transmission(E_keV, log_nh)
+    T_cabs = compton_scattering_transmission(log_nh)
+    L_nu = T_phabs * T_cabs * L_intr + scattered_frac * L_intr
 
     xray_mask = wavelength < 124.0
     return jnp.where(xray_mask, L_nu, 0.0)
@@ -394,36 +960,62 @@ def xray_total(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
-    L_agn_bol: float = 0.0,
+    metallicity_z: float = 0.02,
+    stellar_age_gyr: float = 1.0,
+    l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
-    alpha_ox: float = -1.4,
+    delta_alpha_ox: float = 0.0,
+    cos_inc: float = 1.0,
+    apply_anisotropy: bool = True,
+    a1: float = 0.5,
+    a2: float = 0.0,
+    log_nh: float = 20.0,
+    alpha_ox_relation: str = "just2007",
     **_kwargs,
 ) -> jnp.ndarray:
-    """Total X-ray emission (XRB + AGN corona).
+    """Total X-ray emission (HMXB + LMXB + hot gas + AGN corona).
+
+    Combines X-ray binaries (HMXB and LMXB), diffuse hot gas, and AGN
+    corona emission into a single SED. Implements Lehmer et al. 2016
+    (metallicity and age-dependent XRB scaling), Yang et al. 2020 (hot gas),
+    and Just et al. 2007 / Yang et al. 2020 (AGN corona).
 
     Parameters
     ----------
     wavelength : array, shape (n_wave,)
         Wavelength [Angstrom].
     sfr : float
-        Star formation rate [Msun/yr].
+        Star formation rate [Msun/yr]. Default: 1.0.
     stellar_mass : float
-        Stellar mass [Msun].
-    L_agn_bol : float
-        AGN bolometric luminosity [erg/s]. 0 = no AGN X-ray.
+        Stellar mass [Msun]. Default: 1e10.
+    metallicity_z : float
+        Metallicity (mass fraction). Default: 0.02 (solar). []
+    stellar_age_gyr : float
+        Stellar age in Gyr. Default: 1.0. [Gyr]
+    l_2500_30deg : float
+        AGN monochromatic luminosity at 2500 Å at 30° inclination [erg/s/Hz].
+        Default: 0.0 (no AGN X-ray).
     gamma_hmxb : float
-        HMXB photon index. Default 2.0.
+        HMXB photon index. Default: 2.0.
     gamma_lmxb : float
-        LMXB photon index. Default 1.6.
+        LMXB photon index. Default: 1.6.
     gamma_agn : float
-        AGN photon index. Default 1.8.
+        AGN X-ray photon index. Default: 1.8.
     E_cut : float
-        Exponential cutoff energy [keV]. Default 300.
-    alpha_ox : float
-        UV-to-X-ray slope. Default -1.4.
+        Exponential cutoff energy [keV]. Default: 300.
+    delta_alpha_ox : float
+        Additive offset to Just+2007 α_ox relation [dex]. Default: 0.0.
+    cos_inc : float
+        Cosine of inclination angle. Default: 1.0 (face-on). []
+    apply_anisotropy : bool
+        Whether to apply Yang+2022 viewing-angle correction. Default: True.
+    a1 : float
+        Linear anisotropy coefficient. Default: 0.5. []
+    a2 : float
+        Quadratic anisotropy coefficient. Default: 0.0. []
 
     Returns
     -------
@@ -433,10 +1025,40 @@ def xray_total(
     Notes
     -----
     **JIT-compatible**: yes — pure JAX function.
+
+    **Components**:
+    - HMXB: Lehmer+2016 metallicity quartic, scaling with SFR
+    - LMXB: Lehmer+2016 age quartic, scaling with M_star
+    - Hot gas: Yang+2020, scaling with SFR
+    - AGN corona: Just+2007 / Yang+2020, scaling with L_2500 and α_OX
     """
-    xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
-    agn = xray_agn_corona(wavelength, L_agn_bol, gamma_agn, E_cut, alpha_ox)
-    return xrb + agn
+    xrb = xray_xrb(
+        wavelength,
+        sfr,
+        stellar_mass,
+        metallicity_z=metallicity_z,
+        stellar_age_gyr=stellar_age_gyr,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+    )
+    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
+    # AGN corona path uses the X-CIGALE driver (L_2500_30deg) with the
+    # PR #325 line-of-sight absorber (log_nh -> tbabs × cabs + scattered floor).
+    agn = xray_agn_corona(
+        wavelength,
+        l_2500_30deg,
+        gamma=gamma_agn,
+        E_cut=E_cut,
+        delta_alpha_ox=delta_alpha_ox,
+        cos_inc=cos_inc,
+        apply_anisotropy=apply_anisotropy,
+        a1=a1,
+        a2=a2,
+        log_nh=log_nh,
+        alpha_ox_relation=alpha_ox_relation,
+    )
+    return xrb + hotgas + agn
 
 
 # ── Lopez+2024 IRX-based X-ray (for low-luminosity AGN) ─────────
@@ -504,6 +1126,7 @@ def xray_agn_corona_lopez24(
     apply_anisotropy: bool = True,
     a1: float = 0.5,
     a2: float = 0.0,
+    log_nh: float = 20.0,
 ) -> jnp.ndarray:
     r"""AGN corona X-ray emission from 12μm luminosity (Lopez et al. 2024).
 
@@ -607,6 +1230,14 @@ def xray_agn_corona_lopez24(
 
     l_nu = l_x_2_10 / band_integral * spec
 
+    # Ricci+2017 / Matsumoto+2026 Eq. B6: photoelectric + Compton
+    # scattering + 1 % scattered.
+    l_intr = l_nu
+    l_nu = (
+        tbabs_transmission(E_keV, log_nh) * compton_scattering_transmission(log_nh) * l_intr
+        + 0.01 * l_intr
+    )
+
     # X-ray mask (E > 0.1 keV => λ < 124 Å)
     l_nu = jnp.where(wavelength < 124.0, l_nu, 0.0)
 
@@ -627,6 +1258,7 @@ def xray_total_lopez24(
     gamma_lmxb: float = 1.6,
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
+    log_nh: float = 20.0,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Total X-ray emission using IRX-based AGN (Lopez+2024) + XRBs.
@@ -669,7 +1301,14 @@ def xray_total_lopez24(
     See :func:`xray_agn_corona_lopez24` for the α_IRX model details
     and :func:`xray_xrb` for the XRB component.
     """
-    xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
+    xrb = xray_xrb(
+        wavelength,
+        sfr=sfr,
+        stellar_mass=stellar_mass,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+    )
     agn = xray_agn_corona_lopez24(
         wavelength,
         l_12um_erg_hz,
@@ -677,5 +1316,19 @@ def xray_total_lopez24(
         gamma_agn,
         E_cut,
         apply_anisotropy=False,
+        log_nh=log_nh,
     )
     return xrb + agn
+
+
+# ── Deprecation shims ──
+
+
+# Deprecated: old bolometric-normalisation path for xray_agn_corona
+# Use xray_agn_corona_from_disc (which takes l_2500_30deg) instead
+xray_agn_corona_bolometric = deprecated_alias(
+    _xray_agn_corona_bolometric,
+    old_name="xray_agn_corona_bolometric",
+    new_name="xray_agn_corona_from_disc",
+    drop_version="1.0",
+)

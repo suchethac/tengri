@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests against EXPLICIT numerical values from published papers.
 
 Every assertion here cites a specific equation, table, or figure from a
@@ -431,8 +432,8 @@ class TestBellstedt2020:
         from tengri.components.stellar.sfh import norm, snorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
-        sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
-        sfr_norm = norm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9)
+        sfr_snorm = snorm(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
+        sfr_norm = norm(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9)
         np.testing.assert_allclose(sfr_snorm, sfr_norm, rtol=1e-10)
 
     def test_tsnorm_trunc_1_minimal_effect(self):
@@ -440,8 +441,8 @@ class TestBellstedt2020:
         from tengri.components.stellar.sfh import snorm, tsnorm
 
         t = jnp.geomspace(1e5, 14e9, 500)
-        sfr_snorm = snorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
-        sfr_tsnorm = tsnorm(t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=1.0)
+        sfr_snorm = snorm(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0)
+        sfr_tsnorm = tsnorm(t, log_total_mass=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=1.0)
         # With trunc=1, the CDF truncation should produce a measurable difference
         # but the shape should be similar
         corr = float(jnp.corrcoef(sfr_snorm, sfr_tsnorm)[0, 1])

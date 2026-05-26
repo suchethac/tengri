@@ -41,7 +41,7 @@ from tengri.parameters.parameters import Parameters
 # ── Naming contract regex ───────────────────────────────────────────────────
 
 ALLOWED_PREFIXES = re.compile(
-    r"^(sfh_|met_|dust_|neb_|agn_|eline_|noise_|radio_|xray_|shock_|chem_|igm_|dla_).*$"
+    r"^(sfh_|met_|dust_|neb_|agn_|eline_|noise_|radio_|xray_|shock_|chem_|igm_|dla_|spatial_).*$"
 )
 EXACT_MATCHES = {"redshift"}
 
@@ -49,24 +49,33 @@ EXACT_MATCHES = {"redshift"}
 def is_valid_param_name(name: str, registered_params: set[str] | None = None) -> bool:
     """Check if a parameter name complies with NAMING_CONTRACT §3.2.
 
+    Multi-population (ADR-0012): names of the form
+    ``"<population_name>.<param_name>"`` are valid iff the part after the
+    first ``.`` satisfies the bare-name rule. This lets every population's
+    namespaced parameters share the same prefix discipline without
+    duplicating the registry per population.
+
     Parameters
     ----------
     name : str
         Parameter name to validate.
     registered_params : set[str] | None, optional
         Set of registered parameter names from the registry. If provided,
-        name must be in this set AND satisfy the prefix rule.
+        the bare name (after namespace strip) must be in this set AND
+        satisfy the prefix rule.
 
     Returns
     -------
     bool
         True if name matches the contract and is registered; False otherwise.
     """
-    # Check registry membership if provided
-    if registered_params is not None and name not in registered_params:
+    # Strip multi-population namespace (ADR-0012) before applying prefix check.
+    bare_name = name.split(".", 1)[1] if "." in name else name
+    # Check registry membership against the bare name
+    if registered_params is not None and bare_name not in registered_params:
         return False
-    # Check prefix rule
-    return name in EXACT_MATCHES or bool(ALLOWED_PREFIXES.match(name))
+    # Check prefix rule against the bare name
+    return bare_name in EXACT_MATCHES or bool(ALLOWED_PREFIXES.match(bare_name))
 
 
 def check_preset(
@@ -138,7 +147,7 @@ def main() -> int:
                     sfh_dpl_alpha=Uniform(0.5, 3.0),
                     sfh_dpl_beta=Uniform(0.3, 2.0),
                     sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-                    sfh_dpl_log_peak_sfr=Uniform(-1, 2),
+                    sfh_dpl_log_total_mass=Uniform(8, 12),
                     sfh_field_psd_sigma=Uniform(0.01, 1.0),
                     sfh_field_psd_tau_myr=Uniform(10, 500),
                     met_logzsol=Gaussian(-0.3, 0.2),
@@ -147,7 +156,7 @@ def main() -> int:
                 ),
                 "tsnorm_field": Parameters(
                     mean_sfh_type=["tsnorm", "field"],
-                    sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+                    sfh_tsnorm_log_total_mass=Uniform(8, 12),
                     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
                     sfh_tsnorm_width_gyr=Uniform(0.5, 5),
                     sfh_tsnorm_skew=Uniform(-1, 1),

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Comprehensive user scenario testing for model combinations × inference engines.
 
 Tests various SFH types, component combinations, and inference methods from an
@@ -382,7 +383,7 @@ class TestStandardGalaxyWorkflows:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -439,7 +440,7 @@ class TestStandardGalaxyWorkflows:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -500,7 +501,7 @@ class TestStandardGalaxyWorkflows:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -688,7 +689,7 @@ class TestKnownBugReproduction:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -766,7 +767,7 @@ class TestMemoryAndCompilation:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -815,7 +816,7 @@ class TestAGNScience:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -866,7 +867,7 @@ class TestAGNScience:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -969,7 +970,7 @@ class TestInferenceStressTests:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1090,7 +1091,7 @@ class TestMemoryProfiling:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1144,7 +1145,7 @@ class TestMemoryProfiling:
         # Base: stellar only
         params_stellar = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1169,7 +1170,7 @@ class TestMemoryProfiling:
         # + nebular
         params_nebular = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1195,7 +1196,7 @@ class TestMemoryProfiling:
         # + DL07 dust emission (Fixed umin)
         params_dl07 = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1226,7 +1227,7 @@ class TestMemoryProfiling:
         # + AGN
         params_agn = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1298,7 +1299,7 @@ class TestMemoryProfiling:
         # Kitchen-sink params
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1358,7 +1359,7 @@ class TestEdgeCases:
         """F1. Very low redshift (z=0.01, IGM transparent)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1405,7 +1406,7 @@ class TestEdgeCases:
         """F2. Very high redshift (z=8, strong Lyman forest)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 1.0),  # Young universe
             sfh_tsnorm_width_gyr=Uniform(0.1, 0.5),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1452,7 +1453,7 @@ class TestEdgeCases:
         """F3. Zero dust (tau_bc=0, tau_diff=0)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -1484,7 +1485,7 @@ class TestEdgeCases:
         """F4. Extreme metallicity (logZ = -2.0 subsolar)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Differentiable N-dimensional triweight histograms in JAX.
 
 Vendored from diffsky (Hearin et al.), commit 2024-xx:

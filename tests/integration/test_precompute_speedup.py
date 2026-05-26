@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Benchmark tests for photometry precomputation speedup and gradient cleanliness.
 
 Validates:
@@ -44,7 +45,7 @@ def smooth_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
         met_logzsol=Gaussian(-1.5, 0.3, lo=-2.0, hi=-1.23),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=0.3,
@@ -104,22 +105,24 @@ class TestPrecomputeSpeedup:
 
     def test_gradient_speedup(self, ssp_data, sdss_filters, smooth_spec):
         """Gradient evaluation is >5x faster with precomputation."""
-        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        from tengri import WavePrecomp
+
+        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, approx=WavePrecomp())
         model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
 
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model_exact.predict_photometry(params)
         noise = data / 20.0
 
-        def make_loss(model, approx=False):
+        def make_loss(model):
             def loss(p):
-                pred = model.predict_photometry(p, approx=approx)
+                pred = model.predict_photometry(p)
                 return jnp.sum(((data - pred) / noise) ** 2)
 
             return jax.jit(jax.value_and_grad(loss))
 
-        grad_fast = make_loss(model_fast, approx=True)
-        grad_exact = make_loss(model_exact, approx=False)
+        grad_fast = make_loss(model_fast)
+        grad_exact = make_loss(model_exact)
 
         # JIT warmup
         _ = grad_fast(params)
@@ -224,7 +227,7 @@ class TestGradientCleanliness:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
             sfh_field_psd_sigma=Uniform(0.1, 3.0),
             sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
             met_logzsol=Gaussian(-1.5, 0.3, lo=-2.0, hi=-1.23),

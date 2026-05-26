@@ -120,7 +120,9 @@ def main():
     print(f"wrote {OUT}")
     print(f"  feii: {feii_wave.size} samples, {feii_wave.min():.1f}-{feii_wave.max():.1f} nm")
     print(f"  lines: {len(lines)} lines, {line_wave_nm.min():.0f}-{line_wave_nm.max():.0f} nm")
-    print(f"  torus grid: {torus_wave_nm.size} points, {torus_wave_nm.min():.1f}-{torus_wave_nm.max():.0f} nm")
+    print(
+        f"  torus grid: {torus_wave_nm.size} points, {torus_wave_nm.min():.1f}-{torus_wave_nm.max():.0f} nm"
+    )
 
 
 if __name__ == "__main__":

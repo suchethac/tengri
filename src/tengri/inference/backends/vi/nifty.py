@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """geoVI-preconditioned NUTS: exact MCMC in geoVI-flattened coordinates.
 
 Uses geoVI's nonlinear coordinate transform g(ξ; m*) to precondition
@@ -632,12 +633,12 @@ def _get_or_build_nifty_likelihood(fitter):
         def _predict(params):
             """Dispatch to the forward model for this data_type given params."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
+                return model.predict_photometry(params)
             elif data_type == "spectroscopy":
-                return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_spectrum(params)
             elif data_type == "joint":
-                p = model.predict_photometry(params, mode="_traceable")
-                s = model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                p = model.predict_photometry(params)
+                s = model.predict_spectrum(params)
                 return jnp.concatenate([p, s])
             raise ValueError(f"Unknown data_type: {data_type}")
 

@@ -1,18 +1,22 @@
 """
-Dust IR SED: q_PAH × U_min Grid
-===============================
+The q_PAH and U_min knobs move PAH amplitude and FIR peak independently
+========================================================================
 
-2D grid of dust IR emission showing how PAH mass fraction and radiation-field
-hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
-2007 templates across parameter space.
+A 2-D grid on the Draine & Li 2007 template library: rows step through
+PAH mass fraction q_PAH (controls mid-IR PAH-feature strength),
+columns through the minimum radiation field U_min (sets the diffuse
+dust temperature, i.e. the FIR peak position). The two axes act
+nearly orthogonally — a surprise for anyone who would lump them
+together as "PAH knobs."
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :alt: plot_dust_qpah_umin_grid
-   :class: sphx-glr-single-img
-
+Reference: Draine & Li 2007, ApJ, 657, 810.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -22,6 +26,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.dust import draine_li2007
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
 wave_um = np.array(wave_aa) * 1e-4
@@ -33,11 +39,6 @@ umin_values = [0.5, 2.0, 10.0]
 colors_grid = plt.cm.viridis(np.linspace(0.0, 0.85, 3))
 
 fig, axes = plt.subplots(3, 3, figsize=(15, 13))
-fig.suptitle(
-    r"Dust Emission: q$_{\rm PAH}$ × U$_{\rm min}$ Grid (Draine & Li 2007)",
-    fontsize=13,
-    y=0.995,
-)
 
 for i, umin in enumerate(umin_values):
     for j, qpah in enumerate(qpah_values):
@@ -72,17 +73,9 @@ for i, umin in enumerate(umin_values):
             ylim=(1e29, 1e32),
         )
         ax.tick_params(labelsize=11)
-
-        ax.set_title(
-            f"q$_{{\\rm PAH}}$ = {qpah:.1f}%, U$_{{\\rm min}}$ = {umin:.1f}",
-            fontsize=13,
-            fontweight="bold",
-        )
-
         if i == 0 and j == 0:
             for wl_um, _wl_label in [(3, "PAH"), (25, "mid-IR"), (100, "far-IR")]:
                 ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.4)
 
 fig.tight_layout()
 plt.savefig("plot_dust_qpah_umin_grid.png", dpi=150, bbox_inches="tight")
-plt.show()

@@ -1,73 +1,31 @@
 """
-UVJ Diagram: Star-Forming vs Passive Galaxy Population
-========================================================
+UVJ diagram: rest-frame colors separate star-forming from quiescent
+==================================================================
 
-Generates a mock galaxy population (star-forming + passive) and plots
-each galaxy on the rest-frame UVJ color-color plane (U-V vs V-J).
-The UVJ diagram (Wuyts+2007, Williams+2009) is the workhorse diagnostic
-for separating quiescent galaxies from dusty star-forming galaxies, which
-are degenerate in single-color cuts.
+Generates a mock star-forming and quiescent galaxy population and plots
+each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
+quiescent wedge (z < 1) marks the boundary between dusty star-forming and
+passive galaxies — a key degeneracy-breaking diagnostic.
 
-The Williams+2009 quiescent wedge (z < 1) is overplotted:
-
-    (U - V) > 1.3
-    (V - J) < 1.6
-    (U - V) > 0.88 * (V - J) + 0.49
-
-Galaxies above the wedge: passive / quiescent.
-Galaxies below the wedge: star-forming, including dusty starbursts that
-extend to red V-J.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_usecase_uvj_diagram_001.png
-   :alt: plot_usecase_uvj_diagram
-   :class: sphx-glr-single-img
-
+Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
+Wuyts et al. 2007, ApJ, 655, 51.
 """
 
-from pathlib import Path
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    Photometry,
-    SEDModel,
-    Uniform,
-    load_ssp_data,
-    setup_style,
-)
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
-
-
-def _find(rel: str) -> Path | None:
-    for d in [Path(rel), Path("..") / rel, Path("../..") / rel, Path("../../..") / rel]:
-        if d.exists():
-            return d
-    return None
-
-
-SSP_PATH = _find("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-FILTER_DIR = _find("data/filters")
-if SSP_PATH is None or FILTER_DIR is None:
-    raise FileNotFoundError("SSP data or filters not found")
-
-ssp = load_ssp_data(str(SSP_PATH))
-
-# Rest-frame UVJ: Johnson U/V + 2MASS J. Using a tiny redshift z=0.01
-# keeps the colors effectively rest-frame (1% wavelength shift) while
-# avoiding the D_L → 0 singularity at z = 0 that makes f_nu blow up.
-obs = Observation(
-    photometry=Photometry.from_names(
-        ["johnson_u", "johnson_v", "2mass_j"], cache_dir=str(FILTER_DIR)
-    ),
-)
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
 def _color(flux: np.ndarray) -> tuple[float, float]:
@@ -80,8 +38,8 @@ def _color(flux: np.ndarray) -> tuple[float, float]:
     return uv, vj
 
 
-def _sample_population(spec: Parameters, n: int, seed: int) -> np.ndarray:
-    model = SEDModel(spec, ssp, observation=obs)
+def _sample_population(model, spec, n: int, seed: int) -> np.ndarray:
+    """Draw n galaxy parameter samples and compute UVJ colors."""
     out = np.full((n, 2), np.nan)
     for i in range(n):
         params = spec.sample(jax.random.fold_in(jax.random.PRNGKey(seed), i))
@@ -90,41 +48,69 @@ def _sample_population(spec: Parameters, n: int, seed: int) -> np.ndarray:
     return out
 
 
-# --- Star-forming population: ongoing SF, modest dust spread, broad SFH ---
-sf_spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(0.0, 1.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 4.0),
-    sfh_tsnorm_width_gyr=Uniform(1.0, 4.0),
-    sfh_tsnorm_skew=Uniform(-0.5, 1.0),
-    sfh_tsnorm_trunc=Uniform(2.0, 6.0),
-    met_logzsol=Uniform(-0.5, 0.2),
-    dust_tau_bc=Uniform(0.1, 1.5),
-    dust_tau_diff=Uniform(0.1, 1.0),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.01),
+ssp = tengri.load_ssp()
+
+# Rest-frame UVJ: Johnson U/V + 2MASS J. z=0.01 keeps colors rest-frame
+# (1% shift) while avoiding D_L → 0 singularity at z=0.
+obs = tengri.Observation(
+    photometry=tengri.Photometry.from_names(["johnson_u", "johnson_v", "2mass_j"]),
 )
 
-# --- Passive population: old peak, narrow burst, very low dust ---
-passive_spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-0.5, 0.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(7.0, 11.0),
-    sfh_tsnorm_width_gyr=Uniform(0.5, 1.5),
-    sfh_tsnorm_skew=Uniform(-1.5, 0.0),
-    sfh_tsnorm_trunc=Uniform(1.5, 3.0),
-    met_logzsol=Uniform(-0.2, 0.3),
-    dust_tau_bc=Uniform(0.0, 0.15),
-    dust_tau_diff=Uniform(0.0, 0.1),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.01),
+# Star-forming population: ongoing SF, modest dust, broad SFH
+sf_model = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "log_total_mass": 10.0, 1.5),
+        "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
+        "width_gyr": tengri.Uniform(1.0, 4.0),
+        "skew": tengri.Uniform(-0.5, 1.0),
+        "trunc": tengri.Uniform(2.0, 6.0),
+        "logzsol": tengri.Uniform(-0.5, 0.2),
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": tengri.Uniform(0.1, 1.5),
+        "tau_diff": tengri.Uniform(0.1, 1.0),
+        "slope": -0.7,
+    },
+    redshift=tengri.Fixed(0.01),
 )
 
-sf_uvj = _sample_population(sf_spec, n=120, seed=0)
-passive_uvj = _sample_population(passive_spec, n=60, seed=1)
+# Passive population: old assembly, narrow burst, minimal dust
+passive_model = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "log_total_mass": 10.0, 0.5),
+        "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
+        "width_gyr": tengri.Uniform(0.5, 1.5),
+        "skew": tengri.Uniform(-1.5, 0.0),
+        "trunc": tengri.Uniform(1.5, 3.0),
+        "logzsol": tengri.Uniform(-0.2, 0.3),
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": tengri.Uniform(0.0, 0.15),
+        "tau_diff": tengri.Uniform(0.0, 0.1),
+        "slope": -0.7,
+    },
+    redshift=tengri.Fixed(0.01),
+)
+
+sf_uvj = _sample_population(sf_model, sf_model.spec, n=120, seed=0)
+passive_uvj = _sample_population(passive_model, passive_model.spec, n=60, seed=1)
 
 # --- Plot ---
 fig, ax = plt.subplots(figsize=(8, 7))
 
-# Williams+2009 quiescent wedge (z<1):  (U-V)>1.3, (V-J)<1.6, (U-V)>0.88*(V-J)+0.49
+# Williams+2009 quiescent wedge (z<1): (U-V)>1.3, (V-J)<1.6, (U-V)>0.88*(V-J)+0.49
 vj_grid = np.linspace(-0.5, 1.6, 100)
 uv_diag = 0.88 * vj_grid + 0.49
 ax.plot(
@@ -162,7 +148,6 @@ ax.set_xlim(-0.5, 2.5)
 ax.set_ylim(-0.2, 3.0)
 ax.set_xlabel(r"$V - J$ [mag, rest-frame]")
 ax.set_ylabel(r"$U - V$ [mag, rest-frame]")
-ax.set_title("UVJ diagram: star-forming vs passive galaxy population")
 ax.legend(frameon=False, loc="upper left")
 
 # Annotate the regions
@@ -172,4 +157,3 @@ ax.text(0.0, 0.4, "Unobscured SF", fontsize=11, color="#1a4f8b", ha="left")
 
 fig.tight_layout()
 plt.savefig("plot_usecase_uvj_diagram.png", dpi=150, bbox_inches="tight")
-plt.show()

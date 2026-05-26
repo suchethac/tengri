@@ -60,12 +60,22 @@ from tengri.utils.cosmology import luminosity_distance
 # Style
 try:
     import scienceplots
+
     plt.style.use(["science", "no-latex"])
 except ImportError:
     pass
-plt.rcParams.update({"font.size": 12, "axes.labelsize": 14, "figure.dpi": 150,
-                      "xtick.direction": "in", "ytick.direction": "in",
-                      "xtick.top": True, "ytick.right": True, "legend.frameon": False})
+plt.rcParams.update(
+    {
+        "font.size": 12,
+        "axes.labelsize": 14,
+        "figure.dpi": 150,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+        "legend.frameon": False,
+    }
+)
 
 C_TRUTH = "#1a1a1a"
 C_BLUE = "#1f77b4"
@@ -97,7 +107,9 @@ sfr_declining = jnp.where(t_table > 1.0, 10.0 * jnp.exp(-(t_table - 1.0) / 3.0),
 
 print(f"SSP grid: {ssp.ssp_flux.shape}")
 print(f"Z grid (solar-relative): {np.array(ssp.ssp_lgmet) - LOG10_ZSUN}")
-print(f"Age range: {10**float(ssp.ssp_lg_age_gyr[0]):.4f} - {10**float(ssp.ssp_lg_age_gyr[-1]):.2f} Gyr")
+print(
+    f"Age range: {10 ** float(ssp.ssp_lg_age_gyr[0]):.4f} - {10 ** float(ssp.ssp_lg_age_gyr[-1]):.2f} Gyr"
+)
 print(f"z_obs = {z_obs}, t_obs = {t_obs_gyr:.2f} Gyr")
 
 # %% [markdown]
@@ -111,19 +123,25 @@ print(f"z_obs = {z_obs}, t_obs = {t_obs_gyr:.2f} Gyr")
 # | **BB**: DSPS-age + smooth | DSPS cumulative | triweight |
 # | **Ref**: full DSPS | DSPS cumulative | triweight + 2D weights |
 
+
 # %%
 def _dsps_age_weights(sfr_table):
     r = calc_age_weights_from_sfh_table(
-        gal_t_table=t_table, gal_sfr_table=sfr_table,
-        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr, t_obs=t_obs_gyr)
+        gal_t_table=t_table,
+        gal_sfr_table=sfr_table,
+        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+        t_obs=t_obs_gyr,
+    )
     return r.age_weights if hasattr(r, "age_weights") else jnp.asarray(r)
 
+
 def _midpoint_weights(sfr_table):
-    ssp_ages_gyr = 10.0 ** ssp.ssp_lg_age_gyr
+    ssp_ages_gyr = 10.0**ssp.ssp_lg_age_gyr
     ssp_ages_yr = ssp_ages_gyr * 1e9
     t_lb = t_obs_gyr - t_table
     sfr_ssp = jnp.interp(ssp_ages_gyr, t_lb[::-1], sfr_table[::-1], left=0.0, right=0.0)
     return compute_csp_weights(sfr_ssp, ssp_ages_yr)
+
 
 def compute_sed(sfr_table, log_z_solar, age_method, z_method):
     """Compute rest-frame SED with specified integration methods."""
@@ -146,14 +164,21 @@ def compute_sed(sfr_table, log_z_solar, age_method, z_method):
     dust = jnp.ones_like(ssp_at_z)
     return np.array(compute_csp_sed(weights, ssp_at_z, dust))
 
+
 def compute_photometry(sed):
     """Compute SDSS photometry from rest-frame SED."""
-    return np.array([float(compute_flux_density(jnp.array(sed), ssp.ssp_wave, fwi, fti, z_obs, dl_cm))
-                     for fwi, fti in zip(fw, ft)])
+    return np.array(
+        [
+            float(compute_flux_density(jnp.array(sed), ssp.ssp_wave, fwi, fti, z_obs, dl_cm))
+            for fwi, fti in zip(fw, ft)
+        ]
+    )
+
 
 def sed_to_mags(sed):
     phot = compute_photometry(sed)
     return -2.5 * np.log10(np.maximum(phot, 1e-40)) - 48.6
+
 
 # %% [markdown]
 # ## 3. Age weight comparison
@@ -162,7 +187,9 @@ def sed_to_mags(sed):
 fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
 ssp_ages_gyr = 10.0 ** np.array(ssp.ssp_lg_age_gyr)
 
-for ax, (sfh_name, sfr) in zip(axes, [("Constant", sfr_constant), (r"Declining $\tau$=3 Gyr", sfr_declining)]):
+for ax, (sfh_name, sfr) in zip(
+    axes, [("Constant", sfr_constant), (r"Declining $\tau$=3 Gyr", sfr_declining)]
+):
     w_dsps = np.array(_dsps_age_weights(sfr))
     w_midpt = np.array(_midpoint_weights(sfr))
 
@@ -170,17 +197,33 @@ for ax, (sfh_name, sfr) in zip(axes, [("Constant", sfr_constant), (r"Declining $
     t_midpt = w_midpt.sum()
     total_true = float(jnp.trapezoid(sfr, t_table * 1e9))
 
-    ax.step(ssp_ages_gyr, w_dsps / t_dsps, where="mid", color=C_TRUTH, lw=2, label="DSPS cumulative")
-    ax.step(ssp_ages_gyr, w_midpt / t_midpt, where="mid", color=C_BLUE, lw=1.5, ls="--", label="Midpoint rule")
+    ax.step(
+        ssp_ages_gyr, w_dsps / t_dsps, where="mid", color=C_TRUTH, lw=2, label="DSPS cumulative"
+    )
+    ax.step(
+        ssp_ages_gyr,
+        w_midpt / t_midpt,
+        where="mid",
+        color=C_BLUE,
+        lw=1.5,
+        ls="--",
+        label="Midpoint rule",
+    )
     ax.set_xscale("log")
     ax.set_xlabel("SSP age (Gyr)")
     ax.set_ylabel("Normalised weight")
     ax.set_title(sfh_name)
     ax.legend(fontsize=9)
-    ax.text(0.95, 0.65, f"$M_{{true}}$ = {total_true:.2e}\n$M_{{midpt}}$ = {t_midpt:.2e}\n"
-            f"Ratio = {t_midpt/total_true:.3f}",
-            transform=ax.transAxes, ha="right", fontsize=9,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5))
+    ax.text(
+        0.95,
+        0.65,
+        f"$M_{{true}}$ = {total_true:.2e}\n$M_{{midpt}}$ = {t_midpt:.2e}\n"
+        f"Ratio = {t_midpt / total_true:.3f}",
+        transform=ax.transAxes,
+        ha="right",
+        fontsize=9,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="wheat", alpha=0.5),
+    )
 
 fig.suptitle("Age weight methods", fontsize=14, y=1.02)
 fig.tight_layout()
@@ -198,21 +241,28 @@ methods = {
     "BB: DSPS-age+smooth": ("dsps", "smooth", "-", C_RED),
 }
 
-fig, axes = plt.subplots(2, 2, figsize=(14, 8),
-                          gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05})
+fig, axes = plt.subplots(
+    2, 2, figsize=(14, 8), gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05}
+)
 
-for col, (sfh_name, sfr) in enumerate([("Constant", sfr_constant),
-                                         (r"Declining $\tau$=3 Gyr", sfr_declining)]):
+for col, (sfh_name, sfr) in enumerate(
+    [("Constant", sfr_constant), (r"Declining $\tau$=3 Gyr", sfr_declining)]
+):
     ax_top = axes[0, col]
     ax_bot = axes[1, col]
 
     log_z_sol = -0.3
     # DSPS reference
     ref = calc_rest_sed_sfh_table_lognormal_mdf(
-        gal_t_table=t_table, gal_sfr_table=sfr,
-        gal_lgmet=log_z_sol + LOG10_ZSUN, gal_lgmet_scatter=0.1,
-        ssp_lgmet=ssp.ssp_lgmet, ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-        ssp_flux=ssp.ssp_flux, t_obs=t_obs_gyr)
+        gal_t_table=t_table,
+        gal_sfr_table=sfr,
+        gal_lgmet=log_z_sol + LOG10_ZSUN,
+        gal_lgmet_scatter=0.1,
+        ssp_lgmet=ssp.ssp_lgmet,
+        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+        ssp_flux=ssp.ssp_flux,
+        t_obs=t_obs_gyr,
+    )
     sed_ref = np.array(ref.rest_sed) * LSUN_ERG_PER_S
     safe = np.where(sed_ref > 0, sed_ref, 1.0)
 
@@ -224,10 +274,11 @@ for col, (sfh_name, sfr) in enumerate([("Constant", sfr_constant),
         ax_top.plot(wave, sed, color=color, ls=ls, lw=1.5, label=label)
         res = (sed - sed_ref) / safe * 100
         ax_bot.plot(wave, res, color=color, ls=ls, lw=1.2)
-        rms = np.sqrt(np.mean(res[mask]**2))
+        rms = np.sqrt(np.mean(res[mask] ** 2))
         print(f"  {sfh_name:20s} | {label} | RMS = {rms:.2f}%")
 
-    ax_top.set_xscale("log"); ax_top.set_yscale("log")
+    ax_top.set_xscale("log")
+    ax_top.set_yscale("log")
     ax_top.set_title(f"{sfh_name}, [Z/H] = {log_z_sol}")
     ax_top.set_xlim(900, 30000)
     if col == 0:
@@ -237,7 +288,8 @@ for col, (sfh_name, sfr) in enumerate([("Constant", sfr_constant),
 
     ax_bot.axhline(0, color="0.5", lw=0.5)
     ax_bot.axhspan(-2, 2, color="0.9", alpha=0.3)
-    ax_bot.set_xscale("log"); ax_bot.set_xlim(900, 30000)
+    ax_bot.set_xscale("log")
+    ax_bot.set_xlim(900, 30000)
     ax_bot.set_ylim(-15, 15)
     ax_bot.set_xlabel(r"$\lambda$ ($\AA$)")
     if col == 0:
@@ -267,10 +319,15 @@ for method_label, (am, zm, ls, color) in methods.items():
         sed_test = compute_sed(sfr_declining, z_sol, am, zm)
         # Reference: DSPS
         ref = calc_rest_sed_sfh_table_lognormal_mdf(
-            gal_t_table=t_table, gal_sfr_table=sfr_declining,
-            gal_lgmet=z_sol + LOG10_ZSUN, gal_lgmet_scatter=0.1,
-            ssp_lgmet=ssp.ssp_lgmet, ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-            ssp_flux=ssp.ssp_flux, t_obs=t_obs_gyr)
+            gal_t_table=t_table,
+            gal_sfr_table=sfr_declining,
+            gal_lgmet=z_sol + LOG10_ZSUN,
+            gal_lgmet_scatter=0.1,
+            ssp_lgmet=ssp.ssp_lgmet,
+            ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+            ssp_flux=ssp.ssp_flux,
+            t_obs=t_obs_gyr,
+        )
         sed_ref = np.array(ref.rest_sed) * LSUN_ERG_PER_S
 
         mag_test = sed_to_mags(sed_test)
@@ -281,8 +338,9 @@ for method_label, (am, zm, ls, color) in methods.items():
 
     for i, cn in enumerate(color_names):
         r, c_idx = divmod(i, 2)
-        axes[r, c_idx].plot(z_solar_scan, delta_colors[cn], ls=ls, color=color,
-                            lw=1.5, label=method_label)
+        axes[r, c_idx].plot(
+            z_solar_scan, delta_colors[cn], ls=ls, color=color, lw=1.5, label=method_label
+        )
 
 for i, cn in enumerate(color_names):
     r, c_idx = divmod(i, 2)
@@ -297,8 +355,9 @@ for i, cn in enumerate(color_names):
         ax.legend(fontsize=7, loc="upper left")
     ax.set_title(cn)
 
-fig.suptitle(r"Color differences vs DSPS reference (declining SFH, $\tau$=3 Gyr)",
-             fontsize=14, y=1.02)
+fig.suptitle(
+    r"Color differences vs DSPS reference (declining SFH, $\tau$=3 Gyr)", fontsize=14, y=1.02
+)
 fig.tight_layout()
 plt.savefig("figures/csp_color_differences.pdf")
 plt.show()
@@ -333,10 +392,15 @@ for ax, (feat_name, (wlo, whi)) in zip(axes.flat, features.items()):
 
     # DSPS reference
     ref = calc_rest_sed_sfh_table_lognormal_mdf(
-        gal_t_table=t_table, gal_sfr_table=sfr_declining,
-        gal_lgmet=log_z_sol + LOG10_ZSUN, gal_lgmet_scatter=0.1,
-        ssp_lgmet=ssp.ssp_lgmet, ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-        ssp_flux=ssp.ssp_flux, t_obs=t_obs_gyr)
+        gal_t_table=t_table,
+        gal_sfr_table=sfr_declining,
+        gal_lgmet=log_z_sol + LOG10_ZSUN,
+        gal_lgmet_scatter=0.1,
+        ssp_lgmet=ssp.ssp_lgmet,
+        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+        ssp_flux=ssp.ssp_flux,
+        t_obs=t_obs_gyr,
+    )
     sed_ref = np.array(ref.rest_sed) * LSUN_ERG_PER_S
     sed_ref_norm = sed_ref[mask] / np.median(sed_ref[mask])
     ax.plot(ww, sed_ref_norm, color=C_TRUTH, lw=2.5, label="DSPS ref", zorder=10)
@@ -365,13 +429,16 @@ total_mass = jnp.trapezoid(sfr_constant, t_table * 1e9)
 weights = age_w * total_mass
 iband = (ssp.ssp_wave > 5000) & (ssp.ssp_wave < 6000)
 
+
 def vband_linear(log_z_abs):
     s = interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, log_z_abs)
     return jnp.sum(compute_csp_sed(weights, s, jnp.ones_like(s)) * iband)
 
+
 def vband_smooth(log_z_abs):
     s = interpolate_metallicity_smooth(ssp.ssp_flux, ssp.ssp_lgmet, log_z_abs, 0.1)
     return jnp.sum(compute_csp_sed(weights, s, jnp.ones_like(s)) * iband)
+
 
 grad_lin = jax.grad(vband_linear)
 grad_smo = jax.grad(vband_smooth)
@@ -386,8 +453,9 @@ lum_s = np.array([float(vband_smooth(z)) for z in z_scan])
 g_l = np.array([float(grad_lin(z)) for z in z_scan])
 g_s = np.array([float(grad_smo(z)) for z in z_scan])
 
-fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True,
-                          gridspec_kw={"height_ratios": [2, 1.5], "hspace": 0.05})
+fig, axes = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [2, 1.5], "hspace": 0.05}
+)
 
 ax = axes[0]
 ax.plot(z_scan_solar, lum_l, color=C_BLUE, lw=2, label="2-point linear")
@@ -400,7 +468,14 @@ ax.set_title("V-band luminosity and gradient vs metallicity")
 
 ax = axes[1]
 ax.plot(z_scan_solar, g_l, color=C_BLUE, lw=2, label=r"$\partial L/\partial \log Z$ (linear)")
-ax.plot(z_scan_solar, g_s, color=C_RED, lw=2, ls="--", label=r"$\partial L/\partial \log Z$ (triweight)")
+ax.plot(
+    z_scan_solar,
+    g_s,
+    color=C_RED,
+    lw=2,
+    ls="--",
+    label=r"$\partial L/\partial \log Z$ (triweight)",
+)
 ax.axhline(0, color="0.5", lw=0.5)
 for zg in np.array(ssp.ssp_lgmet) - LOG10_ZSUN:
     ax.axvline(zg, color="0.88", ls=":", lw=0.5, zorder=0)
@@ -412,9 +487,13 @@ fig.tight_layout()
 plt.savefig("figures/csp_gradient_smoothness.pdf")
 plt.show()
 
-print(f"\nGradient max jump — linear: {np.max(np.abs(np.diff(g_l))):.3e}, "
-      f"smooth: {np.max(np.abs(np.diff(g_s))):.3e}")
-print(f"Smoothness improvement: {np.max(np.abs(np.diff(g_l))) / max(np.max(np.abs(np.diff(g_s))), 1e-30):.1f}x")
+print(
+    f"\nGradient max jump — linear: {np.max(np.abs(np.diff(g_l))):.3e}, "
+    f"smooth: {np.max(np.abs(np.diff(g_s))):.3e}"
+)
+print(
+    f"Smoothness improvement: {np.max(np.abs(np.diff(g_l))) / max(np.max(np.abs(np.diff(g_s))), 1e-30):.1f}x"
+)
 
 # %% [markdown]
 # ## 8. Speed benchmark
@@ -439,8 +518,10 @@ t_smo = (time.perf_counter() - t0) / N * 1e6
 
 print(f"2-point linear:  {t_lin:.0f} us")
 print(f"Triweight smooth: {t_smo:.0f} us")
-print(f"Overhead: {t_smo/t_lin:.1f}x")
-print(f"\nIn context of full forward model (~4500 us), this is {(t_smo-t_lin)/4500*100:.1f}% overhead")
+print(f"Overhead: {t_smo / t_lin:.1f}x")
+print(
+    f"\nIn context of full forward model (~4500 us), this is {(t_smo - t_lin) / 4500 * 100:.1f}% overhead"
+)
 
 # %% [markdown]
 # ## 9. Triweight weight kernel visualisation
@@ -453,10 +534,10 @@ lgmet_solar = np.array(ssp.ssp_lgmet) - LOG10_ZSUN
 
 # Left: different scatter values
 for scatter, ls, alpha, label in [
-    (0.001, ":",  0.5, r"$\sigma\approx 0$"),
-    (0.05,  "--", 0.7, r"$\sigma = 0.05$"),
-    (0.1,   "-",  1.0, r"$\sigma = 0.1$ (default)"),
-    (0.3,   "-.", 0.7, r"$\sigma = 0.3$"),
+    (0.001, ":", 0.5, r"$\sigma\approx 0$"),
+    (0.05, "--", 0.7, r"$\sigma = 0.05$"),
+    (0.1, "-", 1.0, r"$\sigma = 0.1$ (default)"),
+    (0.3, "-.", 0.7, r"$\sigma = 0.3$"),
 ]:
     w = np.array(calc_lgmet_weights_from_lognormal_mdf(-0.3 + LOG10_ZSUN, scatter, ssp.ssp_lgmet))
     axes[0].step(lgmet_solar, w, where="mid", ls=ls, lw=2, alpha=alpha, label=label)

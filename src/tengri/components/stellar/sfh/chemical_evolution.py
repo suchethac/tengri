@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Gas-regulator chemical evolution model: Z(t) from SFH.
 
 Derives a time-dependent metallicity history Z(t) from the star formation

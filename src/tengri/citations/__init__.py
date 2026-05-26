@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Citation records and attribution helpers for tengri components.
 
 Provides a central registry of papers and upstream code that tengri depends on

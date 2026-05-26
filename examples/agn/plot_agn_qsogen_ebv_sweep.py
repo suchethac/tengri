@@ -1,63 +1,78 @@
 """
-QSOgen Dust Reddening: Intrinsic AGN Obscuration
-=================================================
+QSOgen disc: dust reddening tunes UV to optical colour
+=======================================================
 
-Sweep `agn_ebv` from 0.0 to 0.4 on a QSOgen disc at log L_bol = 45.
-The transition from unobscured UV/optical slopes to reddened spectra
-traces the obscured-quasar regime.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
-   :alt: plot_agn_qsogen_ebv_sweep
-   :class: sphx-glr-single-img
-
+Dust-free quasar spectra are intrinsically blue in the UV and optical.
+Intrinsic dust reddening ``ebv`` (E(B−V)) reddens the continuum via
+extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from
+unobscured type-1 QSO colours to moderately dust-enshrouded systems.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import qsogen
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# Wavelength grid: UV to near-IR (rest-frame)
-wavelength = jnp.logspace(np.log10(1000), np.log10(15000), 512)
-wave_um = np.array(wavelength) / 1e4
-
-# Dust reddening E(B-V) values to sweep
-ebv_values = [0.0, 0.05, 0.1, 0.2, 0.4]
-
-# Create figure with single panel
-fig, ax = plt.subplots(figsize=(8, 5))
-
-# Generate colors from colormap
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(ebv_values)))
-
-# Fixed AGN luminosity
-log_lbol = 45.0
-
-# Sweep dust reddening
-for ebv, color in zip(ebv_values, colors):
-    sed = np.array(qsogen(wavelength, agn_log_lbol=log_lbol, agn_ebv=ebv))
-    sed_safe = np.where(sed > 0, sed, np.nan)
-    label = rf"E(B$-$V) = {ebv}"
-    ax.loglog(wave_um, sed_safe, lw=2.0, color=color, label=label)
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(
-    f"QSOgen: Intrinsic AGN dust reddening at log L_bol/L_sun = {log_lbol}",
-    fontsize=12,
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 3.0,
+        "log_total_mass": 10.0,
+        "alpha": 2.0,
+        "beta": 2.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    agn={
+        "type": "composable",
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED},
+        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "*": tengri.FIXED,
+        "log_lbol": 11.0,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "grahsp_ebv": tengri.Uniform(0.0, 0.4),  # Bugfix: promote swept param to FREE
+    },
+    redshift=tengri.Fixed(0.05),
 )
-ax.legend(fontsize=10, frameon=False, loc="lower left")
-# Broader axis limits for UV–near-IR context
-ax.set_xlim(0.1, 2.0)
-ax.set_ylim(1e61, 1e66)
-ax.grid(False)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
+
+ebv_values = np.linspace(0.0, 0.4, 7)
+norm = mpl.colors.Normalize(vmin=ebv_values.min(), vmax=ebv_values.max())
+cmap = plt.get_cmap("viridis")
+
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for ebv in ebv_values:
+    params = {**baseline, "agn_grahsp_ebv": jnp.float64(ebv)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(ebv)), lw=1.4)
+
+ax.set_xlim(100, 1e6)
+ax.set_ylim(1e40, 1e45)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$E(B-V)$ [mag]")
 
 fig.tight_layout()
 plt.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

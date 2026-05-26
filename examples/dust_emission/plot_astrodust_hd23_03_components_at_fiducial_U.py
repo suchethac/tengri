@@ -4,14 +4,13 @@ Astrodust+PAH per-component decomposition
 
 Per-component breakdown (Astrodust continuum, PAHs, spinning dust) at the
 Hensley & Draine 2023 fiducial ionization parameter :math:`\log_{10} U = 0.2`.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_03_components_at_fiducial_U_001.png
-   :alt: plot_astrodust_hd23_03_components_at_fiducial_U
-   :class: sphx-glr-single-img
-
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +20,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
 wave_um = np.asarray(tpl.wavelength_um)
@@ -59,9 +60,7 @@ ax.set(
     ylabel=r"$\lambda I_\lambda / N_{\rm H}\ [\mathrm{erg\,s^{-1}\,sr^{-1}\,H^{-1}}]$",
     xlim=(5.0, 3.0e4),
     ylim=(1.0e-32, 1.0e-24),
-    title=rf"H&D 2023 fiducial: $\log_{{10}} U={lgU[i]:.1f}$",
 )
 ax.legend(loc="lower left", frameon=False, fontsize=10)
 fig.tight_layout()
 plt.savefig("plot_astrodust_hd23_03_components_at_fiducial_U.png", dpi=150, bbox_inches="tight")
-plt.show()

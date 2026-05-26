@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate radio, X-ray, and AGN models against CIGALE formulas.
 
 Radio: tengri and CIGALE both use the FIR-radio correlation
@@ -209,15 +210,15 @@ class TestAGNCrossval:
         assert 0.5 < ratio < 2.0, f"Disc L_bol ratio = {ratio:.2f}"
 
     def test_torus_peaks_in_mir(self):
-        """Torus at T=1000K should peak at ~3 um (Wien's law)."""
-        from tengri.components.agn.torus import simple_torus
+        """Silva+04 torus should peak in the mid-IR (1-100 um)."""
+        from tengri.components.agn.silva04 import silva04_analytic
 
         wave = jnp.linspace(5000, 200000, 5000)
-        l_nu = np.asarray(simple_torus(wave, agn_log_lbol=11.0, agn_T_torus=1000.0))
+        l_nu = np.asarray(silva04_analytic(wave, agn_log_lbol=11.0))
         peak = float(wave[np.argmax(l_nu)]) / 1e4  # um
 
-        # Wien: lambda_peak ~ 2900/T um for B_lambda; for B_nu it's ~5100/T
-        assert 1.0 < peak < 10.0, f"Torus peak at {peak:.1f} um, expected 1-10 um"
+        # Silva+04 smooth torus peaks in the mid-IR for typical column densities
+        assert 1.0 < peak < 100.0, f"Torus peak at {peak:.1f} um, expected 1-100 um"
 
     def test_unified_total_luminosity(self):
         """Unified AGN (disc+torus) should conserve total luminosity."""

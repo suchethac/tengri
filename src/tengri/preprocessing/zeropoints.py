@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Survey-published zero-point corrections for photometric fluxes.
 
 Each entry: (survey, release, filter) -> magnitude offset (mag) and

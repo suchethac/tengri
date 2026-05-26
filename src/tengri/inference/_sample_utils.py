@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared post-processing utilities for all inference backends.
 
 Every sampler needs the same three operations after collecting samples:
@@ -91,16 +92,79 @@ def _maybe_map_init(
 ) -> tuple[dict, Array]:
     """Return (init_params_unbounded, updated_key).
 
-    If init_from is given, converts it to unbounded coordinates.
-    Otherwise runs a short MAP optimisation to find a good starting point.
+    Resolution order:
+
+    1. Explicit ``init_from`` from caller — converted to unbounded.
+    2. Cached MAP point on the model (populated by a previous fit or by
+       :meth:`Fitter.load_cache`) — used directly, no fresh MAP run.
+    3. Run a short MAP optimisation to find a good starting point.
+       Caches the result so subsequent calls / sessions can skip step 3.
     """
     if init_from is not None:
         return fitter._unbounded_from_posterior(init_from), key
+
+    # Cached MAP point (from a prior fit or load_cache)?
+    from tengri.inference._model_cache import get_model_cache
+
+    mc = get_model_cache(fitter.model)
+    cached_map = mc.get("map_params_physical")
+    if cached_map is not None:
+        # Build a minimal posterior-like shim to reuse _unbounded_from_posterior.
+        class _Shim:
+            def __init__(self, params):
+                self.params = params
+
+        if verbose:
+            print("  MAP initialization: reusing cached MAP point")
+        return fitter._unbounded_from_posterior(_Shim(cached_map)), key
+
+    # Pre-warm: one eager forward call resolves a tracing pathology in
+    # ``Uniform.unstandardize`` that crashes the MAP-init JIT trace on
+    # models whose forward pass has never been exercised in Python (e.g.
+    # ``Fitter(model, flux_from_disk, noise).run('mcmc_hmc')`` with no
+    # prior ``model.predict_photometry(...)`` or ``model.mock(...)``).
+    # See issue #262 for the narrow reproducer and traceback.
+    _prewarm_forward(fitter)
     if verbose:
         print(f"  MAP initialization ({n_map_steps} steps)...")
     key, map_key = jax.random.split(key)
     map_result = fitter._run_map(key=map_key, n_steps=n_map_steps, verbose=False)
+    # Cache the physical MAP params so future runs/sessions skip MAP.
+    mc["map_params_physical"] = {k: jnp.asarray(v) for k, v in map_result.params.items()}
     init_params = fitter._unbounded_from_posterior(map_result)
     if verbose:
         print(f"  MAP init done (loss={map_result.diagnostics['final_loss']:.2f})")
     return init_params, key
+
+
+def _prewarm_forward(fitter: Any) -> None:
+    """Run one eager forward pass to materialise lazy unbounded→physical state.
+
+    Hit by issue #262: when ``Fitter`` is constructed against externally
+    sourced data (e.g. ``np.load(npz)``) and the model has never had a
+    Python-side forward pass on it, the first JIT trace through
+    ``Uniform.unstandardize`` keeps a traced array escaping into
+    ``float()``. Calling ``predict_photometry`` once eagerly before
+    JIT tracing materialises the relevant arrays and resolves the
+    leak. Best-effort: if the call fails for any other reason, swallow
+    silently and let the real path raise.
+    """
+    try:
+        sample_params = {}
+        for name in fitter._free_names:
+            dist = fitter.spec.get_distribution(name)
+            if hasattr(dist, "low") or hasattr(dist, "lo"):
+                lo = getattr(dist, "low", getattr(dist, "lo", 0.0))
+                hi = getattr(dist, "high", getattr(dist, "hi", 1.0))
+                sample_params[name] = float(0.5 * (lo + hi))
+            elif hasattr(dist, "mean"):
+                sample_params[name] = float(dist.mean)
+            else:
+                sample_params[name] = 0.0
+        for name, value in fitter._fixed_values.items():
+            sample_params[name] = float(value)
+        fitter.model.predict_photometry(sample_params)
+    except Exception:
+        # Pre-warm is a soft guarantee; the real path will surface
+        # any genuine failure with a richer traceback.
+        pass

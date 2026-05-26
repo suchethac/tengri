@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Protocol definition for nebular emission backends.
 
 All backends must satisfy the NebularBackend Protocol to be usable in

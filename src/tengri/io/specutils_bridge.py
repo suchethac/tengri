@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Bridge from specutils.Spectrum1D to SpectrumTuple."""
 
 from __future__ import annotations

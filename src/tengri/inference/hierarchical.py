@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Hierarchical inference for population-level PSD recovery.
 
 Shares PSD hyperparameters (σ_PSD, τ_PSD) across N galaxies while
@@ -352,7 +353,32 @@ class PopulationFitter:
         psd_sigma_prior=(0.1, 4.0),
         psd_tau_prior=(1.0, 300.0),
         data_type="photometry",
+        *,
+        _via_routing: bool = False,
     ):
+        # ── Soft deprecation: prefer PopulationSEDModel + Fitter routing ──
+        # Direct ``PopulationFitter(model_factory, galaxies, ...)`` keeps
+        # working bit-for-bit; this nudges new callers to the canonical
+        # surface. Routing through ``Fitter(forward, ...)`` (when
+        # ``forward`` holds a :class:`PopulationSEDModel`) sets
+        # ``_via_routing=True`` and silences the warning.
+        if not _via_routing:
+            import warnings
+
+            warnings.warn(
+                "PopulationFitter(model_factory, galaxies, ...) is deprecated "
+                "and will be removed in tengri v1.0. The canonical entry point "
+                "is the ForwardModel + PopulationSEDModel pattern: "
+                "template = SEDModel.build(...); "
+                "pop = PopulationSEDModel(sed=template, galaxies=galaxies, "
+                "shared=('sfh_field_psd_sigma', 'sfh_field_psd_tau_myr')); "
+                "forward = ForwardModel.build(population=pop, observation=obs); "
+                "result = Fitter(forward).run('vi'). "
+                "See issue #211.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         self.model_factory = model_factory
         self.galaxies = galaxies
         self.n_galaxies = len(galaxies)
@@ -588,8 +614,8 @@ class PopulationFitter:
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params)
 
         # --- Hierarchical signal_response (lax.map, O(1) memory in N_gal) ---
         def signal_response(p):
@@ -937,8 +963,8 @@ class PopulationFitter:
         def _predict(params):
             """Predict data from parameters for single or batch mode."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params)
 
         # --- Hierarchical signal_response (lax.map, O(1) memory in N_gal) ---
         def signal_response(p):
@@ -1274,12 +1300,12 @@ class PopulationFitter:
         def _predict_cfm(params):
             """Predict data from parameters (CorrelatedFieldMaker variant)."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params)
 
         if verbose:
             print(f"Hierarchical geoVI (CorrelatedFieldMaker): {n_gal} galaxies, n_grid={n_grid}")
-            if model._precomputed.photometry is not None:
+            if model.precomputed.photometry is not None:
                 print("  Photometry precomputation: ACTIVE")
 
         t0 = time.time()
@@ -1649,7 +1675,7 @@ class PopulationFitter:
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
 
         # Verify precomputation is active
-        if model._precomputed.photometry is not None and verbose:
+        if model.precomputed.photometry is not None and verbose:
             print("  Photometry precomputation: ACTIVE (21.6x speedup)")
         elif verbose:
             print("  WARNING: Photometry precomputation NOT active")
@@ -1657,9 +1683,9 @@ class PopulationFitter:
         def _predict_single(params):
             """Single-galaxy forward model (for vmap)."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
+                return model.predict_photometry(params)
             else:
-                return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_spectrum(params)
 
         def signal_response(primals):
             """Map hierarchical primals to stacked predictions for all galaxies."""
@@ -1937,8 +1963,8 @@ class PopulationFitter:
         def _predict_rt(params):
             """Predict data from parameters (ray-trace variant)."""
             if data_type == "photometry":
-                return model.predict_photometry(params, mode="_traceable")
-            return model.predict_spectrum(params, model._wave_obs, mode="_traceable")
+                return model.predict_photometry(params)
+            return model.predict_spectrum(params)
 
         def log_prob(flat_params):
             """Compute log posterior for hierarchical ray-tracing."""

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """nthcomp warm Comptonization precomputed template support.
 
 Provides JAX-compatible log-space trilinear interpolation over a precomputed

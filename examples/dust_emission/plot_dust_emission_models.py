@@ -1,18 +1,20 @@
 """
-Dust Emission Models: Overview
-==============================
+Dust-emission model family at fixed L_abs
+=========================================
 
-Compares all dust emission models available in tengri at a fixed infrared
-luminosity and fiducial temperature. Template-based models gracefully skip
-if data files are unavailable.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_dust_emission_models_001.png
-   :alt: plot_dust_emission_models
-   :class: sphx-glr-single-img
-
+All six dust-emission ingredients shipped with tengri, called with the same
+absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature
+(35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop
+sharply blue-ward of the warm-dust peak; template-based libraries (DL07, DL14,
+Dale+2014) carry PAH features in the 3-20 μm window. Template models silently
+skip if the data files aren't available.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -29,84 +31,79 @@ from tengri.dust import (
 )
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+C_AA_PER_S = 2.998e18
+L_SUN = 3.828e33
+L_ABS = 1e10 * L_SUN
 
 wave_aa = jnp.logspace(np.log10(1e4), np.log10(1e7), 2000)
-wave_um = np.array(wave_aa) * 1e-4
-L_ABS = 1e10 * 3.828e33
+wave_um = np.asarray(wave_aa) * 1e-4
 
 
-def _mbb():
-    return modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)
-
-
-def _casey():
-    return casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0)
-
-
-def _ebs():
-    return energy_balance_split(wave_aa, L_ABS, dust_T_warm=35.0, dust_T_cold=20.0)
-
-
-def _dl07():
+def _maybe(fn, *args, **kwargs):
     try:
-        return draine_li2007(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-    except FileNotFoundError:
-        return None
-
-
-def _dl14():
-    try:
-        return draine_li2014(wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-    except FileNotFoundError:
-        return None
-
-
-def _dale():
-    try:
-        return dale2014(wave_aa, L_ABS, dust_alpha_dale=2.0)
+        return fn(*args, **kwargs)
     except FileNotFoundError:
         return None
 
 
 MODELS = [
-    ("Modified BB", "C0", _mbb()),
-    ("Casey (2012)", "C1", _casey()),
-    ("Energy balance", "C3", _ebs()),
-    ("DL07", "C4", _dl07()),
-    ("DL14", "C5", _dl14()),
-    ("Dale+2014", "C6", _dale()),
+    ("Modified BB", "C0", modified_blackbody(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8)),
+    (
+        "Casey 2012",
+        "C1",
+        casey2012(wave_aa, L_ABS, dust_T=35.0, dust_beta_ir=1.8, dust_alpha_mir=2.0),
+    ),
+    (
+        "Energy balance",
+        "C3",
+        energy_balance_split(wave_aa, L_ABS, dust_T_warm=35.0, dust_T_cold=20.0),
+    ),
+    (
+        "Draine & Li 2007",
+        "C4",
+        _maybe(draine_li2007, wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5),
+    ),
+    (
+        "Draine+2014",
+        "C5",
+        _maybe(draine_li2014, wave_aa, L_ABS, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5),
+    ),
+    ("Dale+2014", "C6", _maybe(dale2014, wave_aa, L_ABS, dust_alpha_dale=2.0)),
 ]
 
-fig, ax = plt.subplots(figsize=(10, 6))
+fig, ax = plt.subplots(figsize=(7.2, 4.6))
+nu = C_AA_PER_S / np.asarray(wave_aa)
+
 for label, color, lnu in MODELS:
     if lnu is None:
         continue
-    y = np.array(lnu)
-    mask = (wave_um > 1) & (y > 0)
-    ax.loglog(wave_um[mask], y[mask], color=color, lw=2.0, label=label)
+    nu_l_nu = nu * np.asarray(lnu)
+    # Clip the Wien-tail floor so curves stay above the legend.
+    peak = np.nanmax(nu_l_nu)
+    mask = nu_l_nu > 1e-3 * peak
+    ax.loglog(wave_um[mask], nu_l_nu[mask], color=color, lw=1.5, label=label)
 
 ax.set(
     xlim=(1, 1000),
-    ylim=(1e27, 5e31),
-    xlabel=r"Wavelength [$\mu$m]",
-    ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]",
-    title=r"Dust Emission Models ($L_{\rm abs} = 10^{10}\,L_\odot$, $T = 35$ K)",
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
 )
-ax.legend(fontsize=10, frameon=False, ncol=2)
+ax.legend(frameon=False, fontsize=9, ncol=2, loc="lower center")
 
-for wl_um, name in [(8, "PAH"), (25, "mid-IR"), (100, "far-IR peak"), (850, "submm")]:
-    ax.axvline(wl_um, color="grey", ls=":", lw=0.5, alpha=0.5)
+for lam_um, name in [(8, "PAH"), (24, "MIPS 24"), (100, "FIR peak"), (850, "submm")]:
+    ax.axvline(lam_um, color="0.85", lw=0.5, alpha=0.7)
     ax.text(
-        wl_um * 1.05,
-        0.97,
+        lam_um,
+        1.02,
         name,
-        fontsize=10,
-        color="grey",
-        rotation=90,
+        fontsize=8,
+        color="0.4",
+        ha="center",
+        va="bottom",
         transform=ax.get_xaxis_transform(),
-        va="top",
     )
 
 fig.tight_layout()
 plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
-plt.show()

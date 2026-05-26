@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """JAX-aware timing infrastructure for tengri.
 
 Provides tic/toc timing, a ``@profiled`` decorator, and an

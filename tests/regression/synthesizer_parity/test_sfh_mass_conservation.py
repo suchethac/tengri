@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for stellar mass conservation in tabulated SFH forward models.
 
 Pitfall P-16 (from Synthesizer issue #159 + PR #1061): `sample_sfzh()` accepted
@@ -24,6 +25,10 @@ References
 
 from __future__ import annotations
 
+import chex
+import pytest
+
+pytestmark = pytest.mark.regression_paper
 from pathlib import Path
 
 import jax
@@ -198,7 +203,7 @@ def test_sed_zero_sfh(ssp_data_wne):
     sed = result["sed"]
 
     # All wavelengths should be zero (within numerical precision)
-    assert jnp.all(jnp.isfinite(sed)), "SED contains non-finite values for zero SFH"
+    chex.assert_tree_all_finite(sed)
     assert jnp.max(jnp.abs(sed)) < 1e-15, (
         f"Zero SFH should yield zero SED, got max |SED| = {jnp.max(jnp.abs(sed))}"
     )

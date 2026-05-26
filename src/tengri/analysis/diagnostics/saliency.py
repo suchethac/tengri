@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Gradient SEDs / saliency maps: ∂flux(λ)/∂θ across wavelength.
 
 Computes the sensitivity of each wavelength to each physical parameter.

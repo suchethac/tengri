@@ -1,124 +1,80 @@
 """
-Save and Load a Posterior
-==========================
+Save and load a posterior to disk
+==================================
 
-How do I save a posterior to disk and load it later? This recipe demonstrates
-running a NUTS fit, saving the Posterior to an HDF5 file, reloading it,
-and analyzing the saved results.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_recipe_save_load_posterior_001.png
-   :alt: plot_recipe_save_load_posterior
-   :class: sphx-glr-single-img
-
+How do I persist a posterior between sessions? This recipe runs a MAP fit,
+saves the result to HDF5, reloads it, and demonstrates basic analysis.
+Posterior objects can be checkpointed for long-running fits or multi-stage
+analysis pipelines.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import tempfile
+import warnings
 from pathlib import Path
 
 import jax
 import matplotlib.pyplot as plt
 
-from tengri import (
-    Fitter,
-    Fixed,
-    Observation,
-    Parameters,
-    Photometry,
-    SEDModel,
-    Uniform,
-    load_ssp,
-)
+import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.inference.posterior import Posterior
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-ssp = load_ssp()
-
-# --- Setup and fit ---
+ssp = tengri.load_ssp()
 bands = ["sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-obs = Observation(photometry=Photometry.from_names(bands))
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.08),
-    mean_sfh_type="tsnorm",
+# Build model and generate mock data
+model = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={"type": "tsnorm", "*": tengri.FREE},
+    dust={"type": "two_component", "*": tengri.FREE},
+    redshift=tengri.Fixed(0.08),
 )
-model = SEDModel(spec, ssp, observation=obs)
 
-# Generate mock data
 key = jax.random.PRNGKey(42)
-true_params = spec.sample(key)
-true_params["sfh_tsnorm_peak_lbt_gyr"] = 2.5
-true_params["sfh_tsnorm_log_peak_sfr"] = 1.0
+true_params = dict(model.spec.sample(key))
+true_params.update(
+    {
+        "sfh_tsnorm_peak_lbt_gyr": 2.5,
+        "sfh_tsnorm_log_total_mass": 1.0,
+    }
+)
 mock = model.mock(true_params, snr=25.0, key=key)
 
-# Fit with NUTS (small sample for speed)
-fitter = Fitter(model, data=mock.flux_obs, noise=mock.noise)
-fitter.run("map", optimizer="adam", n_steps=150, verbose=False)
-posterior = fitter.run(
-    "mcmc_nuts",
-    n_warmup=50,
-    n_samples=100,
-    verbose=False,
+# Fit with MAP
+forward = tengri.ForwardModel.build(sed=model, observation=obs)
+posterior = forward.fit(
+    mock.flux_obs, mock.noise, method="map", optimizer="adam", n_steps=150, verbose=False
 )
 
-# --- Save to temporary file ---
+# Save to temporary file and reload
 with tempfile.TemporaryDirectory() as tmpdir:
     save_path = str(Path(tmpdir) / "posterior.h5")
-    print(f"Saving posterior to: {save_path}")
+    print(f"Saving posterior to {Path(save_path).name}")
     posterior.save(save_path)
 
-    # --- Load from file ---
-    print(f"Loading posterior from: {save_path}")
+    print(f"Loading posterior from {Path(save_path).name}")
     posterior_loaded = Posterior.load(save_path, model=model)
+    print(f"Method: {posterior_loaded.method}")
+    print(f"Parameters: {len(posterior_loaded.params)}")
 
-    # --- Verify loaded posterior ---
-    print(f"\nLoaded posterior method: {posterior_loaded.method}")
-    print(f"Number of samples: {len(posterior_loaded.samples['met_logzsol'])}")
-    print(f"Diagnostics: {posterior_loaded.diagnostics}")
+    # Plot scatter of parameters from loaded posterior
+    fig, ax = plt.subplots(figsize=(7.0, 4.2))
 
-    # --- Plot both originals and loaded ---
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+    sfr = posterior_loaded.params["sfh_tsnorm_log_total_mass"]
+    met = posterior_loaded.params["met_logzsol"]
 
-    # Original posterior scatter
-    if posterior.samples:
-        axes[0].scatter(
-            posterior.samples["sfh_tsnorm_log_peak_sfr"],
-            posterior.samples["met_logzsol"],
-            alpha=0.5,
-            s=30,
-            color="C0",
-        )
-        axes[0].set_xlabel("log peak SFR [Msun/yr]")
-        axes[0].set_ylabel("log Z/Zsun")
-        axes[0].set_title("Original Posterior (in memory)")
-
-    # Loaded posterior scatter
-    if posterior_loaded.samples:
-        axes[1].scatter(
-            posterior_loaded.samples["sfh_tsnorm_log_peak_sfr"],
-            posterior_loaded.samples["met_logzsol"],
-            alpha=0.5,
-            s=30,
-            color="C3",
-        )
-        axes[1].set_xlabel("log peak SFR [Msun/yr]")
-        axes[1].set_ylabel("log Z/Zsun")
-        axes[1].set_title("Loaded Posterior (from HDF5)")
+    ax.scatter(sfr, met, alpha=0.6, s=50, color="C0", edgecolors="k", linewidth=0.5)
+    ax.set_xlabel(r"$\log_{10}(\mathrm{SFR}_{\rm peak})$ [M$_\odot$/yr]")
+    ax.set_ylabel(r"$\log_{10}(Z/Z_\odot)$")
 
     fig.tight_layout()
     plt.savefig("plot_recipe_save_load_posterior.png", dpi=150, bbox_inches="tight")
-    plt.show()
-
-print("\nSave/load test complete!")

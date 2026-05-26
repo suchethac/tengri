@@ -1,56 +1,75 @@
 """
-Stochastic SFH: Burstiness Timescale τ
-========================================
+PSD timescale τ controls burst duration in stochastic SFHs
+==========================================================
 
-τ (in Myr) controls how long bursts last. Short τ = fast flickering;
-long τ = sustained episodes.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_psd_tau_sweep_001.png
-   :alt: plot_psd_tau_sweep
-   :class: sphx-glr-single-img
-
+The damping timescale τ (in Myr) of the power spectral density governs how
+long star-formation bursts persist. Short τ means rapid flickering; long τ
+means sustained episodes that leave their imprint on the SED. We vary τ
+across the prior range with the burst amplitude σ fixed.
 """
 
-import jax
-import matplotlib.pyplot as plt
+import os
 
-from tengri import Fixed, Parameters, SEDModel, Uniform, load_ssp, setup_style
-from tengri.analysis.plotting import sfh_sed_comparison
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-ssp = load_ssp()
-
-# Build Parameters with tsnorm + GP field for stochastic SFH
-spec = Parameters(
-    mean_sfh_type=["tsnorm", "field"],
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
-    sfh_tsnorm_width_gyr=Fixed(2.0),
-    sfh_tsnorm_skew=Fixed(0.3),
-    sfh_tsnorm_trunc=Fixed(2.0),
-    sfh_field_psd_sigma=Fixed(1.0),
-    sfh_field_psd_tau_myr=Uniform(30, 3000),  # will be overridden
-    met_logzsol=Fixed(-0.3),
-    dust_tau_bc=Fixed(0.3),
-    dust_tau_diff=Fixed(0.2),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "field_psd",
+        "*": tengri.FIXED,
+        "mean": "tsnorm",
+        "tsnorm_log_total_mass": 1.0,
+        "tsnorm_peak_lbt_gyr": 3.0,
+        "tsnorm_width_gyr": 2.0,
+        "tsnorm_skew": 0.3,
+        "tsnorm_trunc": 2.0,
+        "psd_sigma": 1.0,
+        "psd_tau_myr": tengri.Uniform(30, 3000),
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    redshift=tengri.Fixed(0.1),
 )
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-model = SEDModel(spec, ssp)
+tau_values = np.array([30, 100, 300, 1000, 3000])
+norm = mpl.colors.Normalize(vmin=tau_values.min(), vmax=tau_values.max())
+cmap = plt.get_cmap("viridis")
 
-# Sweep parameter with stochastic samples
-key = jax.random.PRNGKey(42)
-values = [30, 100, 300, 1000, 3000]
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+key_base = jax.random.PRNGKey(42)
+for i, tau in enumerate(tau_values):
+    for k in range(3):
+        params = {**baseline, "sfh_field_psd_tau_myr": jnp.float64(tau)}
+        key = jax.random.fold_in(key_base, i * 10 + k)
+        # Sample from the stochastic field
+        out = model.predict_rest_sed(params, key=key)
+        wave = np.asarray(out.wavelength)
+        nu = 2.998e18 / wave  # Å/s -> Hz
+        nu_l_nu = nu * np.asarray(out.sed)
+        ax.loglog(wave, nu_l_nu, color=cmap(norm(tau)), lw=0.8, alpha=0.6)
 
-fig = sfh_sed_comparison(
-    model, "sfh_field_psd_tau_myr", values, cmap="viridis", n_stochastic=5, key=key
-)
-fig.suptitle("Stochastic SFH: Burstiness Timescale τ", fontsize=12, y=1.00)
-plt.tight_layout()
+ax.set_xlim(800, 3e4)
+ax.set_ylim(1e40, 5e43)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"PSD timescale $\tau$ [Myr]")
+
+fig.tight_layout()
 plt.savefig("plot_psd_tau_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

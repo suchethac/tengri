@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Lazy prediction object for derived physical quantities.
 
 The :class:`Prediction` class provides on-demand computation of derived
@@ -256,10 +257,17 @@ class SEDQuantities(NamedTuple):
 
 
 class EmissionLines(NamedTuple):
-    """Key emission line luminosities.
+    """Emission line luminosities — headline survey lines plus the full backend catalogue.
 
-    NaN for all fields when no nebular model is active. For doublets
-    ([OII], C IV), the luminosities of both components are summed.
+    NaN for the headline fields and empty arrays for ``all_*`` when no
+    nebular model is active. For doublets ([O II], C IV) the headline
+    fields sum both components.
+
+    The full ~271-line Cue catalogue (and equivalent grids for CloudyGrid)
+    is exposed via :attr:`all_waves` / :attr:`all_lums` so users can read
+    species the headline NamedTuple does not name explicitly (HeII 1640,
+    HeI 10830, NIII] 1750, [O III] 4363, etc.). See :meth:`get` for the
+    nearest-wavelength accessor.
 
     Attributes
     ----------
@@ -285,6 +293,14 @@ class EmissionLines(NamedTuple):
         [SII] at 6717 Å [Lsun].
     sii_6731 : jnp.ndarray
         [SII] at 6731 Å [Lsun].
+    all_waves : jnp.ndarray, shape ``(n_lines,)``
+        Vacuum rest-frame wavelengths of every species published by the
+        active nebular backend [Angstrom]. Empty when the backend does
+        not expose a discrete catalogue (BakedIn, shock).
+    all_lums : jnp.ndarray, shape ``(n_lines,)``
+        Luminosities at ``all_waves``, in the same dust regime as the
+        headline fields (i.e. attenuated by the active dust model when
+        present) [Lsun].
 
     Returns
     -------
@@ -310,6 +326,8 @@ class EmissionLines(NamedTuple):
         # BPT diagram
         bpt_x = float(lines.nii_6584 / lines.halpha)
         bpt_y = float(lines.oiii_5007 / lines.hbeta)
+        # Access lines outside the headline catalogue via nearest-wavelength
+        heii_1640 = lines.get(1640.42)  # closest match in ``all_waves``
     """
 
     lya: jnp.ndarray
@@ -323,6 +341,32 @@ class EmissionLines(NamedTuple):
     nii_6584: jnp.ndarray
     sii_6717: jnp.ndarray
     sii_6731: jnp.ndarray
+    all_waves: jnp.ndarray
+    all_lums: jnp.ndarray
+
+    def get(self, wavelength: float, tol_aa: float = 2.0) -> jnp.ndarray:
+        """Return the luminosity at the species nearest ``wavelength`` Å.
+
+        Parameters
+        ----------
+        wavelength : float
+            Rest-frame vacuum wavelength to look up [Angstrom].
+        tol_aa : float, optional
+            Acceptable distance to the nearest catalogued line [Angstrom].
+            Returns ``nan`` if the nearest line is further than this. Default 2.0.
+
+        Returns
+        -------
+        jnp.ndarray
+            Luminosity at the matched line [Lsun], or ``nan`` if no line
+            is within ``tol_aa``. Returns ``nan`` if the active backend
+            did not publish a discrete catalogue.
+        """
+        if self.all_waves.size == 0:
+            return jnp.asarray(jnp.nan)
+        diff = jnp.abs(self.all_waves - jnp.asarray(wavelength))
+        idx = jnp.argmin(diff)
+        return jnp.where(diff[idx] <= tol_aa, self.all_lums[idx], jnp.asarray(jnp.nan))
 
 
 class DerivedQuantities(NamedTuple):
@@ -1725,7 +1769,7 @@ class Prediction:
         if "weights" in self._cache:
             return
         p = self._model._get_internal_params(self._params)
-        state = self._model.predict_via_orchestrator(self._params)
+        state = self._model.predict_state(self._params)
         derived = state.derived
         # The stellar block integrates the SFH on
         # ``spec.n_grid`` (default 64) regardless of whether the model
@@ -1792,9 +1836,12 @@ class Prediction:
         :class:`~tengri.components.nebular.component.NebularSEDComponent`
         (``state.derived["line_waves"]`` / ``["line_lums"]``). Matches
         legacy-path luminosities within numerical tolerance for both
-        Cue and CloudyGrid backends after the Phase II-3 PR 5b'
-        orchestrator fixes (``age_weights`` plumbing +
-        ``neb_logZ_gas`` translation; commit b7dff1b).
+        Cue and CloudyGrid backends.
+
+        Issues a one-time :class:`UserWarning` when the active backend
+        doesn't expose a per-line luminosity catalogue (BakedIn / Shock).
+        Without the warning, ``pred.lines.halpha`` etc. silently return
+        NaN — see #361.
         """
         if "line_waves" in self._cache:
             return
@@ -1803,6 +1850,20 @@ class Prediction:
         backend = model._nebular_backend
 
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
+            import warnings
+
+            backend_name = type(backend).__name__ if backend is not None else "None"
+            warnings.warn(
+                f"Nebular backend {backend_name!r} does not publish a "
+                "per-line luminosity catalogue, so pred.lines.halpha, "
+                ".hbeta, .bpt_nii, etc. will return NaN. To get discrete "
+                "line luminosities, rebuild the model with neb={'type': "
+                "'cue'}, 'cloudy', or 'cb19' (each requires a "
+                "compatible SSP and any backing grid; see "
+                "tengri.list_nebular_backends() for details). See #361.",
+                UserWarning,
+                stacklevel=3,
+            )
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])
             self._cache["q_h_total"] = jnp.array(jnp.nan)
@@ -1812,7 +1873,7 @@ class Prediction:
         # publication. BakedIn / Shock backends won't publish it; fall
         # back to all-NaN for those (matches the legacy "no catalogue"
         # behaviour without raising).
-        state = model.predict_via_orchestrator(self._params)
+        state = model.predict_state(self._params)
         derived = state.derived
         if "line_waves" in derived and "line_lums" in derived:
             self._cache["line_waves"] = jnp.asarray(derived["line_waves"])

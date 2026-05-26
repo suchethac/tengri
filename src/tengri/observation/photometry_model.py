@@ -35,13 +35,12 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.cosmology import CosmoParams, luminosity_distance
 from tengri.observation.photometry import (
     FilterCurve,
     compute_flux_density_batch,
-    pad_filters,
 )
 from tengri.protocols.component import ForwardState, ParamDeclaration
-from tengri.utils.cosmology import CosmoParams, luminosity_distance
 
 __all__ = ["PhotometryObservationModel"]
 
@@ -81,20 +80,30 @@ class PhotometryObservationModel:
     parameter_prefix: str = "phot_"
 
     # Padded filter arrays cached at construction so :meth:`predict`
-    # is JIT-friendly (no Python loops).
+    # is JIT-friendly (no Python loops). ``_fw_padded``/``_ft_padded``
+    # have shape ``(n_filters_bucket, max_len)`` where ``n_filters_bucket``
+    # is the next entry of ``FILTER_COUNT_BUCKETS``; the trailing rows are
+    # zero and contribute zero by construction. Slice the output to
+    # ``[:_n_filters_real]`` before exposing to callers.
     _fw_padded: jnp.ndarray = field(init=False, repr=False, compare=False)
     _ft_padded: jnp.ndarray = field(init=False, repr=False, compare=False)
+    _n_filters_real: int = field(init=False, repr=False, compare=False, default=0)
 
     def __post_init__(self) -> None:
         # `frozen=True` blocks normal attribute assignment; route
         # through object.__setattr__ as is idiomatic for frozen
-        # dataclasses with computed fields.
-        fw, ft, _n_valid = pad_filters(
+        # dataclasses with computed fields. Bucket-pad the n_filters
+        # axis to FILTER_COUNT_BUCKETS so distinct Photometry instances
+        # with similar counts share an XLA cache key.
+        from tengri.observation.photometry import pad_filters_to_bucket
+
+        fw, ft, _n_valid, n_real = pad_filters_to_bucket(
             [f.wave for f in self.filters],
             [f.trans for f in self.filters],
         )
         object.__setattr__(self, "_fw_padded", fw)
         object.__setattr__(self, "_ft_padded", ft)
+        object.__setattr__(self, "_n_filters_real", n_real)
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this observation model owns.
@@ -145,5 +154,5 @@ class PhotometryObservationModel:
             self._ft_padded,
             z,
             dl_cm,
-        )
+        )[: self._n_filters_real]
         return {"phot_fnu": flux}

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cosmology utilities backed by DSPS.
 
 Thin wrappers around dsps.cosmology.flat_wcdm (Hearin+ JAX-based flat w0-wa-CDM).
@@ -25,13 +26,17 @@ from dsps.cosmology.flat_wcdm import (
 
 from tengri.utils.physics_constants import MPC_CM
 
-# Planck 2018 cosmology (tengri default)
-PLANCK18 = CosmoParams(Om0=0.315, w0=-1.0, wa=0.0, h=0.674)
+# Planck 2018 cosmology (tengri default).
+# Values from Planck Collaboration 2020, A&A 641, A6 (TT,TE,EE+lowE+lensing):
+#   H0 = 67.66 km/s/Mpc → h = 0.6766
+#   Om0 = 0.30966
+# These also match astropy.cosmology.Planck18 — see #401 for the drift fix.
+PLANCK18 = CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
 DEFAULT_COSMO = PLANCK18
 
-# Backward-compat scalar defaults (for positional arg parsing)
-DEFAULT_H0 = 67.4  # km/s/Mpc
-DEFAULT_OM0 = 0.315
+# Backward-compat scalar defaults (for positional arg parsing).
+DEFAULT_H0 = 67.66  # km/s/Mpc — matches PLANCK18.h × 100
+DEFAULT_OM0 = 0.30966
 
 __all__ = [
     "DEFAULT_COSMO",
@@ -49,6 +54,7 @@ __all__ = [
     "comoving_distance",
     "comoving_distance_mpc",
     "comoving_volume_element",
+    "cosmo_from_astropy",
     "distance_modulus",
     "kpc_per_arcsec",
     "lookback_time",
@@ -59,14 +65,86 @@ __all__ = [
 ]
 
 
+def cosmo_from_astropy(astropy_cosmo) -> CosmoParams:
+    """Convert an :mod:`astropy.cosmology` object to DSPS :class:`CosmoParams`.
+
+    Provides build-time ergonomics for users who think in astropy terms.
+    The returned :class:`CosmoParams` is the JIT-safe form tengri stores
+    internally — astropy objects are heavy and not JIT-compatible, so this
+    helper is the boundary between the two worlds.
+
+    Supports flat cosmologies only: :class:`astropy.cosmology.FlatLambdaCDM`
+    (``w0=-1``, ``wa=0``) and :class:`astropy.cosmology.Flatw0waCDM`.
+    Non-flat cosmologies raise :class:`ValueError` — DSPS's underlying
+    ``flat_wcdm`` engine has no support for them.
+
+    Parameters
+    ----------
+    astropy_cosmo : astropy.cosmology.FLRW
+        Any astropy cosmology object with attributes ``Om0`` (Ω_m at z=0),
+        ``H0`` (Hubble constant with units), and optionally ``w0`` and
+        ``wa`` for the w₀wₐCDM family.
+
+    Returns
+    -------
+    CosmoParams
+        DSPS flat w₀wₐCDM dataclass with ``Om0``, ``h``, ``w0``, ``wa``.
+
+    Raises
+    ------
+    ValueError
+        If the cosmology is non-flat (Ω_de + Ω_m ≠ 1).
+
+    Examples
+    --------
+    >>> from astropy.cosmology import Planck18
+    >>> from tengri.cosmology import cosmo_from_astropy
+    >>> cp = cosmo_from_astropy(Planck18)
+    >>> abs(cp.h - 0.6766) < 1e-4
+    True
+
+    Custom dark-energy equation of state via :class:`Flatw0waCDM`:
+
+    >>> from astropy.cosmology import Flatw0waCDM  # doctest: +SKIP
+    >>> de = Flatw0waCDM(H0=70, Om0=0.3, w0=-0.95, wa=-0.05)  # doctest: +SKIP
+    >>> cp = cosmo_from_astropy(de)  # doctest: +SKIP
+    >>> cp.w0, cp.wa  # doctest: +SKIP
+    (-0.95, -0.05)
+
+    Notes
+    -----
+    Optional import: ``astropy`` is not a hard dependency of tengri.
+    This function only needs astropy installed on the caller's side
+    when it's actually invoked. The forward-model JIT path never
+    imports astropy.
+    """
+    # Flat-only guard — DSPS doesn't support non-flat cosmologies.
+    # Use astropy's curvature density Ok0 (0 for any flat cosmology,
+    # regardless of how Ode0 splits between dark energy / neutrinos /
+    # photons in Planck18, WMAP9, etc.).
+    ok0 = float(getattr(astropy_cosmo, "Ok0", 0.0))
+    if abs(ok0) > 1e-6:
+        raise ValueError(
+            f"DSPS supports flat cosmologies only; got Ok0 = {ok0:.6f}. "
+            f"Use astropy.cosmology.FlatLambdaCDM or FlatwCDM / Flatw0waCDM."
+        )
+    om0 = float(astropy_cosmo.Om0)
+    h = float(astropy_cosmo.H0.value) / 100.0
+    w0 = float(getattr(astropy_cosmo, "w0", -1.0))
+    wa = float(getattr(astropy_cosmo, "wa", 0.0))
+    return CosmoParams(Om0=om0, w0=w0, wa=wa, h=h)
+
+
 def _resolve_cosmo(
     cosmo: CosmoParams | None = None,
     h0: float | None = None,
     om0: float | None = None,
+    w0: float | None = None,
+    wa: float | None = None,
 ) -> CosmoParams:
     """Convert flexible cosmology inputs to CosmoParams.
 
-    Priority: cosmo object > h0/om0 kwargs > PLANCK18 defaults.
+    Priority: cosmo object > scalar kwargs > PLANCK18 defaults.
 
     Parameters
     ----------
@@ -76,6 +154,10 @@ def _resolve_cosmo(
         Hubble constant in km/s/Mpc. Converted to h = H0/100.
     om0 : float, optional
         Matter density parameter Ω_m.
+    w0 : float, optional
+        Dark-energy equation-of-state at z=0. Default -1.0 (ΛCDM).
+    wa : float, optional
+        Dark-energy equation-of-state evolution. Default 0.0 (ΛCDM).
 
     Returns
     -------
@@ -84,17 +166,18 @@ def _resolve_cosmo(
     Raises
     ------
     ValueError
-        If both ``cosmo`` and ``h0``/``om0`` are provided.
+        If both ``cosmo`` and any scalar kwarg are provided.
     """
-    if cosmo is not None and (h0 is not None or om0 is not None):
-        raise ValueError("Pass either cosmo or h0/om0, not both")
+    scalar_kwargs = (h0, om0, w0, wa)
+    if cosmo is not None and any(v is not None for v in scalar_kwargs):
+        raise ValueError("Pass either cosmo or scalar kwargs (h0/om0/w0/wa), not both")
     if cosmo is not None:
         return cosmo
-    if h0 is not None or om0 is not None:
+    if any(v is not None for v in scalar_kwargs):
         return CosmoParams(
             Om0=om0 if om0 is not None else DEFAULT_OM0,
-            w0=-1.0,
-            wa=0.0,
+            w0=w0 if w0 is not None else -1.0,
+            wa=wa if wa is not None else 0.0,
             h=(h0 / 100.0) if h0 is not None else DEFAULT_COSMO.h,
         )
     return DEFAULT_COSMO
@@ -112,6 +195,9 @@ def luminosity_distance(
     Accepts positional h0/om0 or a keyword-only ``cosmo`` object.
     Priority: positional h0/om0 > keyword cosmo > defaults.
 
+    At z=0, returns 10 pc (the standard optical absolute-magnitude distance
+    convention) to enable finite L_ν → F_ν conversion in observation models.
+
     Parameters
     ----------
     z : float
@@ -127,13 +213,15 @@ def luminosity_distance(
     Returns
     -------
     float
-        Luminosity distance in cm.
+        Luminosity distance in cm. At z=0, returns 10 pc (3.086e19 cm).
     """
     # Handle positional args taking priority
     if h0 is not None or om0 is not None:
         cosmo = None  # Ignore cosmo if positional args provided
     c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
     dl_mpc = luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
+    # At z=0, use 10 pc (1e-5 Mpc) for the optical absolute-magnitude convention
+    dl_mpc = jnp.where(z <= 0.0, 1e-5, dl_mpc)
     return dl_mpc * MPC_CM
 
 

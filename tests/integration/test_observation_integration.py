@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for Observation with SEDModel and Fitter.
 
 Requires SSP data — skips gracefully if not found.
@@ -5,6 +6,7 @@ Requires SSP data — skips gracefully if not found.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -44,7 +46,7 @@ def base_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         redshift=Fixed(0.5),
@@ -132,7 +134,7 @@ class TestObservationWithModel:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
             met_logzsol=Uniform(-1.5, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             redshift=Fixed(0.5),
@@ -167,7 +169,7 @@ class TestObservationWithModel:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
             met_logzsol=Uniform(-1.5, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             redshift=Uniform(0.1, 1.0),  # Free redshift
@@ -264,8 +266,7 @@ class TestObservationEndToEnd:
         phot_data = jnp.ones(3) * 1e-29
         spec_data = jnp.ones(50) * 1e-30
         packed = obs.pack_data(phot=phot_data, spec=spec_data)
-        assert packed.shape == (53,)
-
+        chex.assert_shape(packed, (53,))
         unpacked = obs.unpack_prediction(packed)
         assert unpacked["photometry"].shape == (3,)
         assert unpacked["spectroscopy"].shape == (50,)

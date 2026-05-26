@@ -1,15 +1,18 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """AGN emission models for tengri.
 
 Provides modular accretion disc and dust torus components that combine
-into a unified AGN SED. Three complexity levels:
+into a unified AGN SED. Available models:
 
-- **simple**: power-law disc + single-temperature torus (3 params)
-- **standard**: multi-color Shakura-Sunyaev disc + two-temperature torus (6 params)
-- **kubota_done**: Kubota & Done (2018) disc (outer zone only) + clumpy torus (8+ params)
+- **multicolor_agn** (= deprecated alias ``kubota_done``): Kubota & Done (2018)
+  outer-zone disc + 2-T torus (8+ params)
 - **kubota_done_full**: Kubota & Done (2018) full 3-zone disc + torus (13+ params)
-- **adaf**: ADAF + truncated disc for low-luminosity AGN (Lopez+2024, Mahadevan 1997) (6 params)
+- **adaf**: ADAF + truncated disc for low-luminosity AGN (Mahadevan 1997) (6 params)
 - **unified_nlr_blr**: kubota_done + NLR/BLR decomposition with geometric masking (12+ params)
 - **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 2016) (7 params)
+- **silva04**: power-law disc + Silva+04 smooth torus (5 params)
+- **cat3d_wind**: power-law disc + CAT3D-Wind clumpy torus (6 params)
+- **relagn**: RELAGN relativistic outer disc + 2-T torus (8 params)
 - **qsogen**: Temple, Hewett & Banerji (2021) empirical quasar SED (7 params)
 
 Usage::
@@ -21,7 +24,7 @@ Usage::
     # (L_bol ~ 4e44 erg/s); 13 to a bright quasar.
 
     # Named model
-    model_fn = resolve_agn_model("simple")
+    model_fn = resolve_agn_model("multicolor_agn")
     l_nu = model_fn(wavelength, agn_log_lbol=11.0, agn_frac=0.1)
 
     # Generic combiner
@@ -52,6 +55,9 @@ from tengri.components.agn.blocks import (
     validate_block_recipe,
 )
 from tengri.components.agn.blr import compute_blr_sed
+
+# SEDModelComponent adapters (Phase II-4)
+from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 from tengri.components.agn.cat3d_wind import cat3d_wind_analytic, create_cat3d_wind_from_grid
 from tengri.components.agn.disc import (
     adaf_disc,
@@ -71,16 +77,30 @@ from tengri.components.agn.grahsp import (
     evaluate_grahsp_agn,
     grahsp,
 )
+from tengri.components.agn.kd18_disc_model import KD18Disc
 from tengri.components.agn.nlr import (
     compute_nlr_sed,
     compute_nlr_sed_richardson2014,
 )
+from tengri.components.agn.nlr_cloudy import (
+    compute_nlr_sed_feltre,
+    compute_nlr_sed_synthesizer,
+    get_feltre_backend,
+    get_synthesizer_nlr_backend,
+)
+from tengri.components.agn.powerlaw_disc_model import PowerLawDisc
 
 # QSOgen must be imported after unified (needs register_agn_model)
 from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen
+from tengri.components.agn.richards2006_disc import (
+    richards2006,
+    richards2006_disc,
+)
 from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic
+from tengri.components.agn.silva04_model import Silva04Torus
 from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
-from tengri.components.agn.torus import nenkova_torus, simple_torus, two_temperature_torus
+from tengri.components.agn.skirtor_model import SKIRTORTorus
+from tengri.components.agn.torus import nenkova_torus
 from tengri.components.agn.unified import (
     AGN_MODELS,
     adaf_agn,
@@ -99,10 +119,15 @@ __all__ = [
     "BLOCK_CATEGORIES",
     "GRAHSPSED",
     "AGNConfig",
+    "CAT3DTorus",
     "GRAHSPParams",
     "GRAHSPSEDComponent",
     "GRAHSPSEDComponentConfig",
+    "KD18Disc",
+    "PowerLawDisc",
     "RecipeWarning",
+    "SKIRTORTorus",
+    "Silva04Torus",
     "adaf_agn",
     "adaf_disc",
     "beloborodov_gamma_hot",
@@ -113,13 +138,17 @@ __all__ = [
     "compute_grahsp_sed",
     "compute_l2500",
     "compute_nlr_sed",
+    "compute_nlr_sed_feltre",
     "compute_nlr_sed_richardson2014",
+    "compute_nlr_sed_synthesizer",
     "compute_qsogen_sed",
     "create_cat3d_wind_from_grid",
     "create_relagn_disc_from_grid",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
     "evaluate_grahsp_agn",
+    "get_feltre_backend",
+    "get_synthesizer_nlr_backend",
     "grahsp",
     "kubota_done_disc",
     "kubota_done_full_agn",
@@ -132,9 +161,9 @@ __all__ = [
     "register_agn_model",
     "resolve_agn_block",
     "resolve_agn_model",
+    "richards2006",
+    "richards2006_disc",
     "silva04_analytic",
-    "simple_torus",
-    "two_temperature_torus",
     "unified_agn",
     "unified_nlr_blr",
     "validate_block_recipe",

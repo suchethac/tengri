@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: Bagpipes feature parity for gap-analysis items.
 
 Tests physics equivalence between Tengri and Bagpipes for each feature
@@ -13,6 +14,7 @@ References
 - Leja+2019: Continuity SFH
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -239,7 +241,7 @@ class TestPSBSFHPhysics:
         for fburst in [0.1, 0.5, 0.9]:
             sfr = psb_wild2020(
                 t,
-                log_peak_sfr=1.0,
+                log_total_mass=1.0,
                 age=age,
                 tau=tau,
                 burstage=burstage,
@@ -247,7 +249,7 @@ class TestPSBSFHPhysics:
                 beta=beta,
                 fburst=fburst,
             )
-            assert jnp.all(jnp.isfinite(sfr))
+            chex.assert_tree_all_finite(sfr)
             assert float(jnp.max(sfr)) > 0
 
     def test_sfr_nonzero_at_burstage(self):
@@ -258,7 +260,7 @@ class TestPSBSFHPhysics:
         t = jnp.array([burstage])
         sfr = psb_wild2020(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             age=10e9,
             tau=3e9,
             burstage=burstage,
@@ -276,7 +278,7 @@ class TestPSBSFHPhysics:
         t = jnp.array([age + 1e9, age + 5e9])
         sfr = psb_wild2020(
             t,
-            log_peak_sfr=1.0,
+            log_total_mass=1.0,
             age=age,
             tau=2e9,
             burstage=300e6,
@@ -293,10 +295,10 @@ class TestPSBSFHPhysics:
         t = jnp.linspace(0.0, 13e9, 200)
 
         @jax.jit
-        def total_mass(log_peak_sfr):
+        def total_mass(log_total_mass):
             sfr = psb_wild2020(
                 t,
-                log_peak_sfr=log_peak_sfr,
+                log_total_mass=log_total_mass,
                 age=10e9,
                 tau=3e9,
                 burstage=500e6,
@@ -385,18 +387,18 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 3.0),
-            dust_tau_diff="sfh_dpl_log_peak_sfr",
+            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            dust_tau_diff="sfh_dpl_log_total_mass",
         )
 
         assert "dust_tau_diff" in spec.mirrors
-        assert spec.mirrors["dust_tau_diff"] == "sfh_dpl_log_peak_sfr"
+        assert spec.mirrors["dust_tau_diff"] == "sfh_dpl_log_total_mass"
 
         params = {
             "sfh_dpl_alpha": 2.5,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": 1.0,
+            "sfh_dpl_log_total_mass": 1.0,
         }
         resolved = spec.resolve_mirrors(params)
         assert resolved["dust_tau_diff"] == 1.0
@@ -412,7 +414,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
             dust_tau_diff=Uniform(0.0, 3.0),
         )
         spec_mirror = Parameters(
@@ -421,8 +423,8 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 3.0),
-            dust_tau_diff="sfh_dpl_log_peak_sfr",
+            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            dust_tau_diff="sfh_dpl_log_total_mass",
         )
 
         assert spec_mirror.n_free == spec_no_mirror.n_free - 1

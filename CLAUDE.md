@@ -4,7 +4,7 @@
 
 Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
 
-**Code name:** `tengri` (working name, final TBD).
+**Name:** `tengri`.
 **Paper draft:** *(private paper draft)*
 **Paper I:** Methods + mock recovery. **Paper II:** Real data.
 
@@ -49,8 +49,12 @@ After upgrading JAX (`pip install -U jax`), wipe stale entries:
 import tengri; tengri.clear_cache()
 ```
 
-Default `min_compile_time_secs=5.0` keeps small SSP/dust kernels out of
-the cache. See `docs/inference/compilation_cache.md` for full details.
+Default `min_compile_time_secs=0.05` persists per-filter
+`compute_flux_density` kernels and other ~150–250 ms component
+precompute compiles. Threshold history: 5.0 (≤ 2026-05-04, skipped
+the orchestrator chain), 0.5 (≤ 2026-05-22, missed per-filter
+micro-compiles), 0.05 (current). See
+`docs/inference/compilation_cache.md` for full details.
 
 ## Naming contract (MANDATORY)
 
@@ -143,7 +147,7 @@ groups = model.spec.to_groups()    # round-trip for inspection/editing
 from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_peak_sfr
+    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
     dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED},
     neb={'type': 'cue', '*': FIXED},
 )
@@ -171,7 +175,7 @@ variant swapping, and round-trip editing. Design plan:
 ## Key conventions
 
 - **Physical constants**: Import from `utils/physics_constants.py` — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue training convention, not IAU 2015).
-- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`. User-facing `neb_logZ_gas` is Z/Zsun (param_map adds LOG10_ZSUN).
+- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848` (Asplund 2009, **Zsun = 0.0142**, matches MIST). User-facing `met_logzsol` and `neb_logZ_gas` are `log10(Z/Zsun)` (param_map adds LOG10_ZSUN). **Default** `met_logzsol = 0.0` (solar — matches FSPS / Bagpipes). Per-SSP-library Zsun differs: BC03/Padova = 0.0190, PARSEC = 0.0152, BASTI = 0.0200 — see `LOG10_ZSUN_BY_LIBRARY` in `parameters/translate.py`. For bit-exact cross-code comparisons (e.g. CIGALE BC03), reason in **absolute** `log_z_abs = met_logzsol + LOG10_ZSUN` and pin that. See #412 for the audit trace.
 - **ParamSpec free params** use full prefixes: `sfh_dpl_alpha`, `sfh_field_psd_sigma` — NOT shorthand. Check with `spec.free_params`.
 - **PSD timescale**: high-level API is **Myr** (`psd_tau_myr`); internal is **years** (`psd_tau_yr`).
 - **`agn_log_lbol`**: always `log10(L_bol / L_sun)` at API level. AGN functions convert to erg/s internally.
@@ -181,52 +185,56 @@ variant swapping, and round-trip editing. Design plan:
 - **AGN shared physics**: `_planck_lnu` in `components/agn/_phys.py` — do NOT duplicate the Planck function.
 - **Notebooks**: edit `.py` files (jupytext percent format), never `.ipynb`.
 
-## Adding a new physics block (Phase II-2 component shape)
+## Adding a new physics block
 
-The forward model is mid-migration to a `SEDComponent`-based pipeline (`src/tengri/protocols/component.py`; `tengri.core` is a deprecation shim as of 2026-05-18, see `docs/dev/api_migration_v0.x.md` §Phase II-3.1). New physics blocks **must** follow the Protocol shape rather than adding branches to `forward/sed_model.py` or `forward/pipeline.py`.
+**Default path — `SEDModelComponent` (one file):**
 
-**Canonical adapter to copy:** `src/tengri/components/radio/component.py`. Mirror its layout exactly.
-
-**Required structure** (see `core/component.py` for the Protocol):
+For any model that has free parameters, a wavelength-dependent emission or
+transformation function, and (optionally) a pre-computed library or trained
+emulator — closed-form attenuation laws, dust IR libraries, AGN torus
+libraries, nebular emulators — subclass `SEDModelComponent`:
 
 ```python
-@dataclass(frozen=True)
-class MySEDComponentConfig(SEDComponentConfig):
-    name: str = "my"
-    # static knobs only — no parameters that the user fits
+class MyModel(SEDModelComponent):
+    name = "my_model"               # registry key
+    parameter_prefix = "my_"
 
-@dataclass(frozen=True)
-class MySEDComponent:
-    config: MySEDComponentConfig = field(default_factory=MySEDComponentConfig)
-    name: str = "my"
-    parameter_prefix: str = "my_"     # CI-enforced via tools/check_param_prefixes.py
+    T    = Uniform(20.0, 80.0, "temperature",    units="K")
+    beta = Uniform( 1.0,  3.0, "emissivity index", units="")
 
-    def declared_parameters(self) -> list[ParamDeclaration]: ...
-    def publishes(self) -> tuple[DerivedKey, ...]: ...   # cross-component outputs
-    def requires(self) -> tuple[DerivedKey, ...]: ...    # default `()` for opportunistic readers
-    def precompute(self, ssp_data=None, wave_grid=None) -> SEDComponentState: ...
-    def apply(self, state: PipelineState, params) -> PipelineState: ...
+    inputs  = {"L_absorbed": "erg/s"}
+    outputs = {"L_ir": "erg/s"}
+
+    def load(self, wave):           # optional: load atlas/weights → self.data
+        return None
+
+    def predict(self, p, sed_in, wave, *, L_absorbed):
+        sed = my_emission_formula(wave, L_absorbed, p["T"], p["beta"])
+        return sed_in + sed, {"L_ir": trapz_freq(sed, wave)}
 ```
 
-**Cross-component contract (`publishes` / `requires`).** Per
-ADR-0009 (`docs/adr/0009-typed-pipeline-contract.md`, originally
-authored as ADR-0004 in PR #19) every component declares the derived
-keys it writes to / reads from `PipelineState.derived` via
-`DerivedKey(name, units, description)`. `validate_pipeline` in
-`forward/orchestrator.py` runs at `build_components` time and refuses
-renames, unit drift, and out-of-order publishers — with a
-"Did you mean: ..." hint for likely typos. New derived keys add one
-line to `_CANONICAL_UNITS` in the same PR that introduces the
-publisher, plus a matching field on `DerivedBundle`
-(`tengri.protocols.derived_bundle`) per ADR-0007.
+`__init_subclass__` auto-discovers class-level `Distribution` priors,
+registers `(name, cls)` so `SEDModel.build(dust={'type': 'my_model'})`
+finds it, auto-fills `inputs()`/`outputs()` from the dicts, and provides
+sensible `apply()`/`precompute()`. Astronomer writes physics only.
 
-**Parameters.** `declared_parameters()` mirrors the entries already in `parameters/_param_defs.py` — do **not** duplicate priors. The `_param_defs.py` registry stays the single source of truth until the migration completes.
+The contract:
+* `p` — parameter dict, prefix stripped (`p["T"]`, not `p["my_T"]`)
+* `sed_in` — rest-frame L_ν from upstream (erg/s/Hz); zeros if first
+* `wave` — rest-frame grid in Å (or filter effective wavelengths under WavePrecomp)
+* `**inputs` — keyword args auto-supplied from `state.derived`
+* Return `(sed_out, published_dict)` — new SED + dict matching `outputs` keys
 
-**Cross-component coupling.** Read upstream quantities from `state.derived` with a documented fallback (e.g. `state.derived.get("L_ir", 0.0)`); publish your own as `state.derived["L_<name>"]`. Never reach into another component's state directly.
+**Reference:**
+- [`docs/dev/sed-model-components.md`](docs/dev/sed-model-components.md) — full how-to + three worked examples (closed-form, library, NN emulator)
+- [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md) — architectural context
+- [`docs/adr/0011-sed-model-component-base.md`](docs/adr/0011-sed-model-component-base.md) — the design decision
+- [`src/tengri/components/dust/calzetti_model.py`](src/tengri/components/dust/calzetti_model.py) — canonical small port (analytic closed-form)
+- [`src/tengri/components/agn/skirtor_model.py`](src/tengri/components/agn/skirtor_model.py) — canonical library port
 
-**Source of truth:** `docs/dev/20260404-refactor.md`. The active plan, entropy budget, and PR order live there.
+**Advanced fallback — the bare `SEDComponent` Protocol:**
 
-**Do not pre-build** `Parameters.from_components(...)` — it is deferred until ≥5 components have landed.
+Reserve this for models that don't fit the `predict(p, sed_in, wave, **inputs)` shape — typically Stellar (SFH + SSP + age weights + nine derived publishes) and IGM (observer-frame transformation). The bare-Protocol pattern is at `src/tengri/protocols/component.py`; the canonical reference is `src/tengri/components/radio/component.py`. Cross-component contract (`inputs/outputs/optional_inputs`) is documented in ADR-0009.
 
 ## Adding a new inference backend (InferenceContext shape — ADR-0010)
 
@@ -289,17 +297,68 @@ context *before* entering JAX transforms. The context's
 - AGN torus in `torus.py` are **toy models** — use SKIRTOR for science
 - `agn_torus_frac`: do NOT auto-derive from `cos(theta_torus)` in forward pass (gradient discontinuity)
 - Inference internals use `mode="_traceable"` (safe inside JIT). User-facing defaults to `mode="auto"`
+- **Build-time `approx=WavePrecomp(...)` is the speed knob** (Phase 3d, 2026-05-20). Opting in publishes the SSP × filter LUT and routes `predict_photometry` through `observation.predict_via_precomp`. Default `approx=None` uses the exact wave-grid path. The dict / bool / string forms (e.g. `approx={'wave_precomp': True}`, `approx=True`, `approx='wave_precomp'`) were removed — `TypeError` at construction. Override ztable sampling via `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`.
 - **One NUTS fit per notebook process.** Each warmup peaks at 3–6 GB on small models (D ≤ 7 photometry) but can hit 20+ GB on D ≈ 8 with `mean_sfh_type="dense_basis"` — observed 22.78 GB peak on nb00 with default `dense_mass=True`. Multi-fit notebooks (and any single fit on D ≥ 8) need `dense_mass=False` or `mcmc_hmc`. See `docs/dev/notebook_orchestration_oom.md`
 - **Subagent rejection ≠ child kill.** A rejected subagent's `python notebook.py` keeps running. After rejecting, run `ps -axo pid,rss,comm | grep python` and `kill -9` zombies
 
 ## Testing
 
-Every code change MUST include tests. Test organization:
-- `tests/unit/` — fast, no SSP data needed
+**Read `tests/TESTING.md` before writing any test.** It defines the physics-first taxonomy (conservation / bounds / limit / regression_paper / regression_bug / gradient / crossval / contract) and the anti-patterns reviewers reject.
+
+CI guard: `python tools/check_test_markers.py` — every test under `tests/physics/`, `tests/regression/`, `tests/components/`, `tests/contract/` must declare a taxonomy marker.
+
+Test organization:
+- `tests/unit/` — fast, no SSP data needed (legacy tree; rehoming in progress)
 - `tests/integration/` — needs `data/ssp_*.h5`, skips if missing
 - `tests/crossval/` — against bagpipes/FSPS, excluded from default runs
+- `tests/physics/`, `tests/regression/`, `tests/contract/` — new structured trees, marker-enforced
 
 Bug fix rule: every fix MUST cite the original paper equation and include a regression test.
+
+Use `chex` for array shape/finite/tree-allclose assertions in tests — see `docs/dev/testing-with-chex.md` for the conventions and conversion recipes.
+
+## Issue / PR labels (apply when opening any new issue or PR)
+
+Every new issue and PR MUST be labelled. Pick at minimum **one area:** label; add **type:**, **cross-cutting**, and GH-default (`bug`/`enhancement`/`documentation`) labels as they apply. Multi-area issues get multiple `area:*` labels.
+
+**Physics areas** (pick if the issue touches that physics subsystem):
+`area:agn` · `area:sfh` · `area:dust` · `area:nebular` · `area:stellar` · `area:xray` · `area:radio` · `area:igm`
+
+**Code areas** (pick if the issue touches that internal/public seam):
+- `area:api` — `SEDModel.build`, builders, registries, public surface (`__init__.py` re-exports)
+- `area:forward` — forward model pipeline, `PipelineState`, kernels, `ForwardModel`
+- `area:observation` — photometry, spectroscopy, filters, noise, apertures
+- `area:inference` — VI/MCMC/NUTS/MAP backends, `InferenceContext`
+- `area:population` — `PopulationSEDModel`, hierarchical PSD fits
+- `area:spatial` — `SpatialSEDModel`, fiber, aperture, multi-component spatial
+- `area:examples` — sphinx-gallery scripts under `docs/examples/`
+- `area:notebooks` — jupytext fundamentals/quickstart notebooks
+- `area:docs` — user/dev docs (not gallery, not ADR)
+- `area:adr` — architecture decision records under `docs/adr/`
+- `area:ci` — GitHub Actions workflows
+- `area:perf` — compile time, runtime, benchmarks
+- `area:tests` — test infra, taxonomy markers, flakes, rehoming
+
+**Type extensions** (on top of `bug`/`enhancement`):
+- `type:refactor` — internal restructure with no behaviour change
+- `type:audit` — parity audit vs CIGALE/Prospector/AGNfitter/Synthesizer (finding discrepancies)
+- `type:parity` — wire up a specific known upstream model or library variant
+
+**Cross-cutting failure classes** (apply liberally — these are searchable patterns):
+- `silent-failure` — silent NaN/Inf returns, dropped kwargs, ignored config (recurring footgun)
+- `jit-safety` — tracer leaks, `ConcretizationTypeError`, safe-gradient patterns
+- `oom` — memory blowups (warmup, mass matrix, compile)
+- `breaking-change` — public API rename or behavioural break
+
+**Examples** (from existing issues):
+- "Cue neb_fesc has no effect on LyC" → `area:nebular`, `bug`
+- "X-ray missing N_H photoelectric absorption" → `area:xray`, `type:parity`
+- "audit: tengri vs CIGALE — stellar normalization 30% low" → `type:audit`, `area:stellar`, `area:dust`, `bug`
+- "Derive _VALID_SFH_TYPES from SFH_REGISTRY" → `area:sfh`, `area:api`, `type:refactor`
+- "NUTS warmup peaks at 20+ GB on D≈8" → `area:inference`, `oom`, `bug`
+- "Tracer leak in Dale 2014 dust IR under jit" → `area:dust`, `jit-safety`, `bug`
+
+Do **not** add: per-component labels (`area:cue`, `area:skirtor`) — too granular; `priority:*` — decays; `area:registry` — covered by title + `type:refactor`.
 
 ## qmd search (MANDATORY before reading files)
 
@@ -307,8 +366,8 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 
 ## References
 
-- `AGENTS.md` — AI agent documentation
-- `HANDOFF.md` — project status and next steps
+- `docs/dev/agents.md` — AI agent documentation
+- `docs/dev/history/handoff-2026-04.md` — frozen project-status snapshot (pre Phase II-3 closure)
 - `docs/dev/design_philosophy.md` — architecture decisions
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
 - `docs/dev/REFACTOR.md` — refactor plan

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Measure end-to-end inference speed for realistic galaxy fitting scenarios.
 
 Tests actual inference time (not just loss function timing) for:
@@ -112,7 +113,7 @@ def test_a1_quick_optical_map(ssp_data, filters_optical, mock_flux_optical):
     # SEDModel: tsnorm SFH, Calzetti dust, nebular, IGM
     params = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -180,7 +181,7 @@ def test_a1_quick_optical_nuts(ssp_data, filters_optical, mock_flux_optical):
 
     params = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -256,7 +257,7 @@ def test_a2_fir_constrained_nuts(ssp_data):
     # SEDModel: tsnorm + DL07 with Fixed dust_umin
     params = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),

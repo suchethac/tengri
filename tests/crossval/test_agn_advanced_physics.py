@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics tests for unified_nlr_blr, QSOgen, and SKIRTOR AGN models.
 
 References
@@ -8,6 +9,7 @@ References
 - Vanden Berk et al. 2001, AJ, 122, 549 (BLR composite)
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -31,7 +33,7 @@ class TestUnifiedNLRBLRPhysics:
         from tengri.components.agn.unified import unified_nlr_blr
 
         l_nu = unified_nlr_blr(WAVE_OPT, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_type1_sees_blr(self):
@@ -120,7 +122,7 @@ class TestQSOgenPhysics:
         from tengri.components.agn.qsogen import qsogen_sed
 
         l_nu = qsogen_sed(WAVE_OPT)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_power_law_slope_controls_uv(self):
@@ -237,5 +239,5 @@ class TestSKIRTORPhysics:
 
         wave = jnp.geomspace(1000.0, 1e6, 500)
         l_nu = skirtor_analytic(wave, agn_log_lbol=44.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0)

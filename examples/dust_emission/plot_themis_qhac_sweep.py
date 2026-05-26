@@ -5,14 +5,13 @@ THEMIS: q_HAC sweep at fixed U_min
 Sweep hydrocarbon grain content across the THEMIS grid at fixed minimum
 radiation field strength. PAH-like mid-IR features strengthen with q_HAC
 while FIR continuum remains essentially unchanged.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_themis_qhac_sweep_001.png
-   :alt: plot_themis_qhac_sweep
-   :class: sphx-glr-single-img
-
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import h5py
 import matplotlib.pyplot as plt
@@ -22,6 +21,8 @@ from tengri import data_path
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 with h5py.File(data_path("themis_templates.h5"), "r") as f:
     wave_aa = np.asarray(f["wavelength_aa"][:])
@@ -54,9 +55,7 @@ ax.set(
     ylabel=r"$\nu L_\nu\ [\mathrm{arbitrary,\ normalised}]$",
     xlim=(2.0, 1.0e3),
     ylim=(1.0e-26, 1.0e-23),
-    title=rf"THEMIS (Jones+2017) at $U_{{\rm min}}={umin_grid[i_umin]:.2f}$, $\alpha=2$",
 )
 ax.legend(loc="lower center", frameon=False, fontsize=8, ncol=3)
 fig.tight_layout()
 plt.savefig("plot_themis_qhac_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

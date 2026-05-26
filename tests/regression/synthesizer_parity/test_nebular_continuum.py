@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for nebular continuum / emission line decomposition — synthesizer parity.
 
 Mirrors synthesizer's PR #990 validation logic to ensure nebular continuum and lines
@@ -23,6 +24,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import pytest
+
+pytestmark = pytest.mark.regression_paper
 from scipy.integrate import simpson
 
 jax.config.update("jax_enable_x64", True)

@@ -1,289 +1,158 @@
 """
-Emission Line Ratio Correlation Matrix for Nebular Diagnostics
-===============================================================
+Emission-line ratios from a baked-in nebular SSP SED
+=====================================================
 
-Computes a Pearson correlation matrix between five classical emission-line
-ratios ([OIII]/Hβ, Hα/Hβ, [NII]/Hα, [SII]/Hα, [SII]/[OIII]) across a grid
-of 1000 mock galaxies varying ionization parameter (log U ∈ [-4, -1]),
-gas metallicity (log Z/Zsun ∈ [-1, +0.2]), and age (1–5 Gyr). Shows which
-line ratios are independent diagnostics (low correlation) vs degenerate
-(high correlation), directly applicable to BPT-like classification schemes.
+Demonstrates how the SSP-baked nebular emission shapes the
+[OIII] λ5007 / Hβ and [NII] λ6584 / Hα ratios as stellar
+metallicity is varied across the grid. The line fluxes are
+extracted directly from the predicted rest-frame SED via
+continuum-subtracted boxcar integration — no toy formulas.
 
-Synthetic data: Cloudy nebular components, z=0.1 rest-frame.
+Note: with the default ``neb='ssp'`` (baked-in) backend the
+discrete ``Prediction.lines.halpha`` / ``.hbeta`` / ``.bpt_*``
+accessors return NaN — the line content lives only inside the
+SSP grid spectrum, not as a separate catalogue. See issue #361
+for the per-backend status of the discrete-line API.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_usecase_emission_line_pcc_001.png
-   :alt: plot_usecase_emission_line_pcc
-   :class: sphx-glr-single-img
-
+Reference: Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
 """
 
-from pathlib import Path
+import os
 
-import jax
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+import tengri
+from tengri.analysis.plotting import setup_style
 
-try:
-    from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    SEDModel,
-    Uniform,
-    load_ssp,
-    setup_style,
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+LINES = {
+    "halpha": 6564.7,
+    "hbeta": 4862.7,
+    "oiii_5007": 5008.3,
+    "nii_6584": 6585.4,
+}
+# Half-width of the boxcar around each line centre [Angstrom].
+LINE_HALF_WIDTH = 8.0
+# Local continuum is averaged in two side bands offset from the line.
+CONT_OFFSET = 30.0
+CONT_HALF_WIDTH = 8.0
+
+
+def boxcar_line_flux(wave, sed, line_centre):
+    """Continuum-subtracted boxcar flux around a single line."""
+    line_mask = np.abs(wave - line_centre) < LINE_HALF_WIDTH
+    blue_mask = np.abs(wave - (line_centre - CONT_OFFSET)) < CONT_HALF_WIDTH
+    red_mask = np.abs(wave - (line_centre + CONT_OFFSET)) < CONT_HALF_WIDTH
+    cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
+    return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
+
+
+ssp = tengri.load_ssp()
+
+<<<<<<< HEAD
+logzsol_grid = np.linspace(-1.0, 0.2, 12)
+log_o3_hb = []
+log_n2_ha = []
+=======
+# Build model for emission-line diagnostics
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "tsnorm",
+        "log_total_mass": 10.0, 2.0),
+        "peak_lbt_gyr": tengri.Fixed(2.0),
+        "width_gyr": tengri.Fixed(1.0),
+        "skew": tengri.Fixed(0.2),
+        "trunc": tengri.Fixed(3.0),
+        "logzsol": tengri.Fixed(-0.1),
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.2,
+        "tau_diff": 0.1,
+        "slope": -0.7,
+    },
 )
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
-    setup_style()
-
-    ssp = load_ssp()
-
-    # --- Setup: spectroscopy with emission line capability ---
-    try:
-        from tengri.observation.spectroscopy import Spectroscopy
-
-        spec_obs = Spectroscopy(
-            wavelength_range=(3700.0, 7000.0),
-            resolution=100.0,
-        )
-        obs = Observation(
-            spectroscopy=spec_obs,
-        )
-    except Exception:
-        print("Warning: Spectroscopy/emission line module not fully available")
-        obs = None
-
-    key = jax.random.PRNGKey(777)
-
-    # --- Generate grid: log U, log Z/Zsun, age ---
-    log_u_vals = np.linspace(-4.0, -1.0, 10)
-    log_z_vals = np.linspace(-1.0, 0.2, 10)
-    ages_gyr = np.linspace(1.0, 5.0, 10)
-
-    line_ratios = []  # Store 5 ratios per galaxy
-
-    if obs is not None:
-        spec = Parameters(
-            neb_logU=Uniform(-4.0, -1.0),
-            neb_logZ_gas=Uniform(-1.0, 0.2),
-            sfh_tsnorm_peak_lbt_gyr=Uniform(1.0, 5.0),
-            sfh_tsnorm_width_gyr=Uniform(0.3, 2.0),
-            sfh_tsnorm_log_peak_sfr=Uniform(-0.5, 1.5),
-            sfh_tsnorm_skew=Fixed(0.0),
-            sfh_tsnorm_trunc=Fixed(3.0),
-            met_logzsol=Uniform(-1.0, 0.2),
-            dust_tau_bc=Uniform(0.0, 1.0),
-            dust_tau_diff=Uniform(0.0, 0.5),
-            dust_slope=Fixed(-0.7),
-            redshift=Fixed(0.1),
-        )
-        model = SEDModel(spec, ssp, observation=obs)
-
-        for i_u, log_u in enumerate(log_u_vals):
-            for i_z, log_z in enumerate(log_z_vals):
-                for i_a, age in enumerate(ages_gyr):
-                    k = jax.random.fold_in(key, i_u * 100 + i_z * 10 + i_a)
-
-                    params = {
-                        "neb_logU": log_u,
-                        "neb_logZ_gas": log_z,
-                        "sfh_tsnorm_peak_lbt_gyr": age,
-                        "sfh_tsnorm_width_gyr": 0.5,
-                        "sfh_tsnorm_log_peak_sfr": 0.5,
-                        "sfh_tsnorm_skew": 0.0,
-                        "sfh_tsnorm_trunc": 3.0,
-                        "met_logzsol": log_z,
-                        "dust_tau_bc": 0.3,
-                        "dust_tau_diff": 0.1,
-                    }
-
-                    try:
-                        pred = model.predict_photometry(params)
-
-                        # Synthetic emission line ratios (approximate from SED)
-                        # [OIII]/Hβ sensitive to ionization; Hα/Hβ to reddening
-                        # [NII]/Hα to metallicity. Simplified mapping here.
-
-                        # Ionization proxy: log U → [OIII]/Hβ
-                        oiii_hb = 10**log_u * 2.0 + np.random.randn() * 0.1
-
-                        # Reddening proxy: dust → Hα/Hβ (Case B = 2.86, reddening moves it)
-                        ha_hb = 2.86 * (1 + 0.1 * params["dust_tau_bc"])
-
-                        # Metallicity: [NII]/Hα ∝ Z
-                        nii_ha = 10**log_z * 0.5 + np.random.randn() * 0.05
-
-                        # [SII]/Hα ∝ Z (similar to [NII]/Hα)
-                        sii_ha = 10**log_z * 0.3 + np.random.randn() * 0.03
-
-                        # [SII]/[OIII] (anticorrelated: high Z → low ionization)
-                        sii_oiii = 10 ** (-log_u) * 0.2 + np.random.randn() * 0.02
-
-                        line_ratios.append(
-                            [
-                                np.log10(oiii_hb),
-                                np.log10(ha_hb),
-                                np.log10(nii_ha),
-                                np.log10(sii_ha),
-                                np.log10(sii_oiii),
-                            ]
-                        )
-                    except Exception:
-                        pass
-
-    if len(line_ratios) == 0:
-        print("Generating synthetic emission line ratios...")
-        # Fallback: synthetic data from random parameters
-        for _ in range(1000):
-            log_u = np.random.uniform(-4.0, -1.0)
-            log_z = np.random.uniform(-1.0, 0.2)
-            age = np.random.uniform(1.0, 5.0)
-            dust = np.random.uniform(0.0, 1.0)
-
-            oiii_hb = 10**log_u * 2.0 + np.random.randn() * 0.2
-            ha_hb = 2.86 * (1 + 0.1 * dust)
-            nii_ha = 10**log_z * 0.5 + np.random.randn() * 0.1
-            sii_ha = 10**log_z * 0.3 + np.random.randn() * 0.05
-            sii_oiii = 10 ** (-log_u) * 0.2 + np.random.randn() * 0.05
-
-            line_ratios.append(
-                [
-                    np.log10(oiii_hb),
-                    np.log10(ha_hb),
-                    np.log10(nii_ha),
-                    np.log10(sii_ha),
-                    np.log10(sii_oiii),
-                ]
-            )
-
-    line_ratios = np.array(line_ratios)
-
-    # --- Pearson correlation matrix ---
-    corr_matrix = np.corrcoef(line_ratios.T)
-
-    # --- Figure: heatmap ---
-    fig, ax = plt.subplots(figsize=(8, 7))
-
-    labels = [
-        r"$\log([OIII]/H\beta)$",
-        r"$\log(H\alpha/H\beta)$",
-        r"$\log([NII]/H\alpha)$",
-        r"$\log([SII]/H\alpha)$",
-        r"$\log([SII]/[OIII])$",
-    ]
-
-    im = ax.imshow(corr_matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
-
-    # Set ticks
-    ax.set_xticks(np.arange(len(labels)))
-    ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=10)
-    ax.set_yticklabels(labels, fontsize=10)
-
-    # Annotate correlation values
-    for i in range(len(labels)):
-        for j in range(len(labels)):
-            text = ax.text(
-                j,
-                i,
-                f"{corr_matrix[i, j]:.2f}",
-                ha="center",
-                va="center",
-                color="white" if np.abs(corr_matrix[i, j]) > 0.5 else "black",
-                fontsize=9,
-                fontweight="bold",
-            )
-
-    fig.colorbar(im, ax=ax, label="Pearson correlation", shrink=0.8)
-    ax.set_title(
-        "Emission Line Ratio Correlation Matrix\n(1000 mock galaxies across log U, Z, age)",
-        fontsize=12,
-        fontweight="bold",
-        pad=15,
+for logz in logzsol_grid:
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_total_mass": 1.0,
+            "peak_lbt_gyr": 2.0,
+            "width_gyr": 1.0,
+            "skew": 0.2,
+            "trunc": 3.0,
+            "logzsol": float(logz),
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.2,
+            "tau_diff": 0.1,
+            "slope": -0.7,
+        },
     )
 
-    fig.tight_layout()
+<<<<<<< HEAD
+    pred = model.predict_rest_sed({"redshift": 0.05})
+    wave = np.asarray(pred.wavelength)
+    sed = np.asarray(pred.sed)
 
-    outdir = (
-        Path(__file__).resolve().parent.parent.parent / "figures"
-        if "__file__" in dir()
-        else Path(".")
-    )
-    outdir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(str(outdir / "usecase_emission_line_pcc.png"), dpi=150, bbox_inches="tight")
-    plt.show()
+    fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
+    log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
+    log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
+=======
+for z in redshifts:
+    for _i in range(5):
+        key, subkey = jax.random.split(key)
+        params = model.spec.sample(subkey)
+        params["redshift"] = z
+        params["sfh_tsnorm_log_total_mass"] = np.random.uniform(0.5, 1.5)
 
-except Exception as e:
-    print(f"Could not generate emission line example: {e}")
-    print("Falling back to synthetic correlation matrix visualization...")
+        sfr = float(params["sfh_tsnorm_log_total_mass"])
+        # Synthetic line ratios
+        ha = 1.0
+        hb = 0.3
+        nii = 0.1 * (1.0 + sfr)
+        oiii = 0.15 * (1.0 + sfr)
 
-    # Minimal fallback: hardcoded synthetic example
-    corr_matrix = np.array(
-        [
-            [1.00, -0.15, 0.35, 0.32, -0.78],
-            [-0.15, 1.00, -0.08, -0.05, 0.12],
-            [0.35, -0.08, 1.00, 0.92, -0.41],
-            [0.32, -0.05, 0.92, 1.00, -0.39],
-            [-0.78, 0.12, -0.41, -0.39, 1.00],
-        ]
-    )
+        log_nii_ha.append(np.log10(max(nii / ha, 1e-3)))
+        log_oiii_hb.append(np.log10(max(oiii / hb, 1e-3)))
+        z_vals.append(z)
 
-    labels = [
-        r"$\log([OIII]/H\beta)$",
-        r"$\log(H\alpha/H\beta)$",
-        r"$\log([NII]/H\alpha)$",
-        r"$\log([SII]/H\alpha)$",
-        r"$\log([SII]/[OIII])$",
-    ]
+# Plot
+fig, ax = plt.subplots(figsize=(8, 7))
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(corr_matrix, cmap="RdBu_r", vmin=-1, vmax=1, aspect="auto")
+fig, ax = plt.subplots(figsize=(7.5, 6.5))
+sc = ax.scatter(
+    log_n2_ha,
+    log_o3_hb,
+    c=logzsol_grid,
+    cmap="viridis",
+    s=80,
+    edgecolors="k",
+    lw=0.5,
+)
+cbar = fig.colorbar(sc, ax=ax, pad=0.01)
+cbar.set_label(r"log $Z_\star / Z_\odot$")
 
-    ax.set_xticks(np.arange(len(labels)))
-    ax.set_yticks(np.arange(len(labels)))
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=10)
-    ax.set_yticklabels(labels, fontsize=10)
+ax.set_xlabel(r"log [NII]$\lambda$6584 / H$\alpha$")
+ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$")
+ax.set_xlim(-2.0, 0.5)
+ax.set_ylim(-2.0, 1.5)
 
-    for i in range(len(labels)):
-        for j in range(len(labels)):
-            text = ax.text(
-                j,
-                i,
-                f"{corr_matrix[i, j]:.2f}",
-                ha="center",
-                va="center",
-                color="white" if np.abs(corr_matrix[i, j]) > 0.5 else "black",
-                fontsize=9,
-                fontweight="bold",
-            )
-
-    fig.colorbar(im, ax=ax, label="Pearson correlation", shrink=0.8)
-    ax.set_title(
-        "Emission Line Ratio Correlation Matrix\n"
-        "FALLBACK: hardcoded values, not computed — grid generation unavailable",
-        fontsize=11,
-        color="firebrick",
-        fontweight="bold",
-        pad=15,
-    )
-    # Watermark the figure so a reader can't mistake the fallback for real data.
-    fig.text(
-        0.5, 0.5, "SYNTHETIC FALLBACK",
-        ha="center", va="center", rotation=30,
-        fontsize=44, color="firebrick", alpha=0.18, zorder=10,
-    )
-
-    fig.tight_layout()
-
-    outdir = (
-        Path(__file__).resolve().parent.parent.parent / "figures"
-        if "__file__" in dir()
-        else Path(".")
-    )
-    outdir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(str(outdir / "usecase_emission_line_pcc.png"), dpi=150, bbox_inches="tight")
-    plt.show()
+fig.tight_layout()
+plt.savefig("plot_usecase_emission_line_pcc.png", dpi=150, bbox_inches="tight")

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Dense Basis GP-SFH: non-parametric star formation history via mass-time quantiles.
 
 Parameterizes the SFH using a small number of mass-time quantile pairs
@@ -36,6 +37,11 @@ _LENGTH_SCALE_FLOOR = 1e-10
 
 # GP interpolation resolution (matching dense_basis default: 1000 points)
 _DEFAULT_RES = 1000
+
+# Recent-SFR decoupling parameters (matches dense_basis defaults in
+# ``tuple_to_sfh``: ``decouple_sfr_time=10`` Myr, ``sfr_tolerance=0.05`` dex).
+_DECOUPLE_SFR_TIME_GYR = 0.010
+_SFR_TOLERANCE_DEX = 0.05
 
 
 # ── GP Kernel functions ───────────────────────────────────────────
@@ -88,30 +94,32 @@ def linear_kernel(
 
     K(x1, x2) = σ² x1 x2 / ℓ²
 
-    Parameters
-    ----------
-    x1 : array_like, shape (n1,)
-        First kernel argument [dimensionless].
-    x2 : array_like, shape (n2,)
-        Second kernel argument [dimensionless].
-    variance : float
-        Signal variance σ² [dimensionless].
-    length_scale : float
-        Length scale ℓ [dimensionless].
-
-    Returns
-    -------
-    ndarray, shape (n1, n2)
-        Covariance matrix [dimensionless].
-
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives throughout.
-
-    Matches ``george.kernels.LinearKernel(order=2, log_gamma2=ln(ℓ))``.
+    Kept for backward compatibility. **Not used by ``dense_basis()``** — the
+    GP-SFH path now calls :func:`_george_linear_kernel` to exactly mirror
+    ``george.kernels.LinearKernel(log_gamma2, order=2)``.
     """
     ls_sq = jnp.maximum(length_scale, _LENGTH_SCALE_FLOOR) ** 2
     return variance * (x1[:, None] * x2[None, :]) / ls_sq
+
+
+def _george_linear_kernel(
+    x1: jnp.ndarray,
+    x2: jnp.ndarray,
+    log_gamma2: float,
+    order: int = 2,
+) -> jnp.ndarray:
+    """Exact replica of ``george.kernels.LinearKernel(log_gamma2, order)``.
+
+    K(x_i, x_j) = (x_i · x_j)^order / exp(log_gamma2)
+
+    Matches the formula in george (https://github.com/dfm/george, kernels.py).
+    The original dense_basis package uses ``LinearKernel(np.median(y), order=2)``
+    so ``log_gamma2 = median(y)`` and γ² = exp(median(y)).
+    """
+    xx = x1[:, None] * x2[None, :]
+    return xx**order / jnp.exp(log_gamma2)
 
 
 def combined_kernel(
@@ -120,31 +128,48 @@ def combined_kernel(
     variance: float,
     length_scale: float,
 ) -> jnp.ndarray:
-    """Matérn 3/2 + Linear kernel (matches dense_basis george config).
+    """Matérn 3/2 + Linear kernel — generic (non-george) backward-compat form.
 
-    Parameters
-    ----------
-    x1 : array_like, shape (n1,)
-        First kernel argument [dimensionless].
-    x2 : array_like, shape (n2,)
-        Second kernel argument [dimensionless].
-    variance : float
-        Signal variance σ² [dimensionless].
-    length_scale : float
-        Length scale ℓ [dimensionless].
-
-    Returns
-    -------
-    ndarray, shape (n1, n2)
-        Covariance matrix [dimensionless].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — delegates to ``matern32_kernel`` and ``linear_kernel``.
+    Kept for testing; **not used** by :func:`dense_basis`. The SFH path uses
+    :func:`_george_combined_kernel` for exact george parity.
     """
     return matern32_kernel(x1, x2, variance, length_scale) + linear_kernel(
         x1, x2, variance, length_scale
     )
+
+
+def _george_combined_kernel(
+    x1: jnp.ndarray,
+    x2: jnp.ndarray,
+    y_train: jnp.ndarray,
+) -> jnp.ndarray:
+    """George-faithful kernel: ``var(y) * (Matern32(metric=median(y))
+    + LinearKernel(log_gamma2=median(y), order=2))``.
+
+    Reproduces the exact construction in ``dense_basis/gp_sfh.py``::
+
+        kernel = np.var(y) * (
+            kernels.Matern32Kernel(np.median(y)) + kernels.LinearKernel(np.median(y), order=2)
+        )
+
+    george's Matern32 with scalar ``metric=M`` gives an effective length scale
+    of ``sqrt(M)``; george's LinearKernel computes ``(x_i x_j)^order / γ²``
+    with ``γ² = exp(log_gamma2)``.
+
+    Parameters
+    ----------
+    x1, x2 : array_like
+        Kernel inputs.
+    y_train : array_like
+        Training y-values used to compute the kernel hyperparameters
+        ``variance = var(y)`` and the metric/log_gamma2 ``= median(y)``.
+    """
+    variance = jnp.var(y_train)
+    med = jnp.maximum(jnp.median(y_train), _LENGTH_SCALE_FLOOR)
+    length_scale_m32 = jnp.sqrt(med)  # george metric = ℓ², so ℓ = √median(y)
+    k_m = matern32_kernel(x1, x2, variance, length_scale_m32)
+    k_l = variance * _george_linear_kernel(x1, x2, log_gamma2=med, order=2)
+    return k_m + k_l
 
 
 # ── GP interpolation ──────────────────────────────────────────────
@@ -352,32 +377,48 @@ def _build_quantile_points(
     )
 
     # --- Observation-epoch SFR constraints (dense_basis lines 140-152) ---
-    # Three points at 97%, 98%, 99% cumulative mass, timed to be
-    # consistent with the instantaneous SFR at observation.
-    # delta_mstar = M* * (1 - const_val)
-    # delta_t_frac = 1 - delta_mstar / (SFR_inst * age_universe_yr)
-    # These are inserted BEFORE the final (1, 1) endpoint.
+    # Three points at 97%, 98%, 99% cumulative mass, timed to be consistent
+    # with the instantaneous SFR at observation.
+    #
+    # The original ``tuple_to_sfh`` has a two-branch conditional:
+    #   if delta_t > tx_last AND delta_t > 0.9:
+    #       insert (t=delta_t, m=cv)             # time-branch
+    #   else:
+    #       insert (t=cv,      m=delta_m_alt)    # mass-branch
+    # where ``delta_m_alt = 1 - age * (1-cv) * SFR / M``.
+    #
+    # We replicate this with ``jnp.where`` so the branch is JIT-safe. The
+    # mass-branch matters for quenched galaxies: it places (~1, ~1) constraint
+    # points near t=0.97..0.99 instead of unphysically placing high-mass
+    # quantiles back near the Big Bang. Distinct clip bounds in the
+    # time-branch keep the three constraint points distinct so the GP kernel
+    # matrix remains non-singular under JIT.
     total_mass = 10.0**log_total_mass
     sfr_inst = 10.0**log_sfr_inst
     age_yr = age_universe_yr
-    const_vals = jnp.array([0.97, 0.98, 0.99])
+    tx_last = tx_fracs[-1]  # last user quantile
 
-    # Use distinct clip bounds per constraint point so the three times are
-    # always distinct. When SFR is very high all unclipped values approach 1.0;
-    # without distinct upper bounds they all collapse to 0.999, making the GP
-    # kernel matrix singular and causing jnp.linalg.solve to return NaN under
-    # JIT (which is silent, unlike the RuntimeError raised in eager mode).
-    # Lower bounds are also distinct to avoid collision with the BB point at 0.01.
-    lower_bounds = [0.013, 0.014, 0.015]
-    upper_bounds = [0.997, 0.998, 0.999]
+    # Distinct clip bounds so the time-branch produces strictly distinct values.
+    upper_bounds = jnp.array([0.997, 0.998, 0.999])
+
     sfr_time_q = []
     sfr_mass_q = []
-    for cv, lo, hi in zip(const_vals, lower_bounds, upper_bounds):
+    for i, cv in enumerate([0.97, 0.98, 0.99]):
         delta_mstar = total_mass * (1.0 - cv)
         delta_t = 1.0 - delta_mstar / (sfr_inst * age_yr)
-        delta_t = jnp.clip(delta_t, lo, hi)
-        sfr_time_q.append(delta_t)
-        sfr_mass_q.append(cv)
+        delta_m_alt = 1.0 - age_yr * (1.0 - cv) * sfr_inst / total_mass
+        # Original code branches on both: delta_t > tx_last AND > 0.9
+        use_time_branch = (delta_t > tx_last) & (delta_t > 0.9)
+        # Time-branch value (clipped to keep three points distinct)
+        # Lower clip > tx_last to maintain monotone ordering when branch fires.
+        t_time = jnp.clip(delta_t, tx_last + 0.001 * (i + 1), upper_bounds[i])
+        # Mass-branch value (delta_m can be clipped to [0,1])
+        m_mass = jnp.clip(delta_m_alt, 0.0, 1.0)
+        # Select between branches
+        t_sel = jnp.where(use_time_branch, t_time, jnp.array(cv))
+        m_sel = jnp.where(use_time_branch, jnp.array(cv), m_mass)
+        sfr_time_q.append(t_sel)
+        sfr_mass_q.append(m_sel)
 
     # Insert SFR constraints BEFORE the final (1.0, 1.0) endpoint
     # (matching dense_basis point ordering)
@@ -495,7 +536,7 @@ def dense_basis(
     # --- Validate and collect tx fractions ---
     n_param = len(tx_kwargs)
     if n_param == 0:
-        raise ValueError("dense_basis_sfh requires at least one tx_frac_* parameter")
+        raise ValueError("dense_basis requires at least one tx_frac_* parameter")
     for i in range(n_param):
         key = f"tx_frac_{i}"
         if key not in tx_kwargs:
@@ -515,27 +556,62 @@ def dense_basis(
         tx_fracs, n_param, log_total_mass, log_sfr_inst, age_universe_yr
     )
 
-    # --- GP kernel hyperparameters (dense_basis convention) ---
-    # variance = np.var(y), length_scale = np.median(y)
-    # where y = mass_quantiles (the training y-values)
-    variance = jnp.var(mass_q)
-    length_scale = jnp.maximum(jnp.median(mass_q), _LENGTH_SCALE_FLOOR)
-
-    # --- GP interpolation on dense grid ---
-    # x_pred = linspace(0, 1, res) — cosmic time fraction
-    # (dense_basis gp_interpolator line 88)
+    # --- GP kernel: george-faithful ``var(y) * (Matern32(metric=median(y))
+    #     + LinearKernel(log_gamma2=median(y), order=2))`` ---
+    # Replaces an earlier formulation that (a) used ``median(y)`` directly as
+    # the Matern length scale (off by √ vs. george's metric convention) and
+    # (b) used a generic linear kernel instead of george's order=2 form.
     t_eval = jnp.linspace(0.0, 1.0, _DEFAULT_RES)
-    m_cumul = gp_interpolate(time_q, mass_q, yerr, t_eval, variance, length_scale)
+    k_train = _george_combined_kernel(time_q, time_q, mass_q)
+    k_train = k_train + jnp.diag(yerr**2) + _NUGGET * jnp.eye(k_train.shape[0])
+    k_eval = _george_combined_kernel(t_eval, time_q, mass_q)
+    cho = jax.scipy.linalg.cho_factor(k_train)
+    alpha = jax.scipy.linalg.cho_solve(cho, mass_q)
+    m_cumul = k_eval @ alpha
 
     # --- SFR = sfh_scale * diff(cumulative_mass) ---
     # (dense_basis lines 165-168)
     # sfh_scale = 10^logM / (age_gyr * 1e9 / res)
     age_universe_gyr = age_universe_yr / 1e9
-    sfh_scale = 10.0**log_total_mass / (age_universe_gyr * 1e9 / _DEFAULT_RES)
+    dt_yr = age_universe_yr / _DEFAULT_RES
+    sfh_scale = 10.0**log_total_mass / dt_yr
     sfr = jnp.diff(m_cumul) * sfh_scale
     sfr = jnp.maximum(sfr, 0.0)
     # Prepend zero for the Big Bang bin (matching dense_basis line 168)
     sfr = jnp.concatenate([jnp.array([0.0]), sfr])
+
+    # --- Mass renormalisation (dense_basis lines 170-180) ---
+    # The GP+diff path can leave a small residual mismatch with the target
+    # mass 10^logM (GP smoothing pulls the endpoints slightly off 0/1).
+    # The original code splits the SFR into "recent" (last ~10 Myr) and
+    # "initial" bins, then rescales ONLY the initial bins so the total
+    # equals 10^logM. The recent bins are then optionally overridden to
+    # the requested instantaneous SFR.
+    target_mass = 10.0**log_total_mass
+    t_cosmic_gyr = t_eval * age_universe_gyr
+    threshold_gyr = age_universe_gyr - _DECOUPLE_SFR_TIME_GYR
+    recent_mask = t_cosmic_gyr >= threshold_gyr  # boolean, shape (RES,)
+
+    # Integrate using rectangle rule (consistent with sfh_scale = 10^logM / dt_yr,
+    # which assumes uniform dt). This matches the original code closely; trapezoid
+    # vs rectangle differs only at endpoints.
+    mass_recent = jnp.sum(jnp.where(recent_mask, sfr, 0.0)) * dt_yr
+    mass_init = jnp.sum(jnp.where(recent_mask, 0.0, sfr)) * dt_yr
+    mass_remaining = jnp.maximum(target_mass - mass_recent, 0.0)
+    init_scale = mass_remaining / jnp.maximum(mass_init, 1e-30)
+    sfr = jnp.where(recent_mask, sfr, sfr * init_scale)
+
+    # --- Recent-SFR override (dense_basis lines 182-183) ---
+    # The original code triggers the override only when the GP-derived recent
+    # SFR deviates by more than ``sfr_tolerance`` (0.05 dex) from the requested
+    # ``log_sfr_inst``. That conditional creates a non-differentiable step at
+    # the threshold, which breaks gradient-based inference. Since the whole
+    # point of having ``log_sfr_inst`` as an explicit free parameter is to
+    # honour it during fitting, we override unconditionally — equivalent to
+    # ``sfr_tolerance = 0``. This is smooth in both ``log_sfr_inst`` and
+    # ``log_total_mass`` (the override bins are independent of the latter).
+    sfr_override_value = 10.0**log_sfr_inst
+    sfr = jnp.where(recent_mask, sfr_override_value, sfr)
 
     # --- Convert cosmic time fraction → lookback time ---
     # dense_basis: timeax = time_arr_interp * cosmo.age(z).value
@@ -602,7 +678,7 @@ def dense_basis_pure(
 ) -> jnp.ndarray:
     """Pure quantile-based SFH using monotone cubic Hermite interpolation (PCHIP).
 
-    A lightweight variant of :func:`dense_basis_sfh` optimized for use as the
+    A lightweight variant of :func:`dense_basis` optimized for use as the
     mean component in a composed model with a GP field modulator
     (``sfh=["dense_basis", "field"]``). Eliminates the GP kernel overhead
     and observation-epoch SFR constraints, using fast PCHIP monotone interpolation
@@ -636,7 +712,7 @@ def dense_basis_pure(
     algorithm computes slopes such that the interpolant never violates the
     monotonicity of the input points.
 
-    Compared to :func:`dense_basis_sfh`:
+    Compared to :func:`dense_basis`:
 
     - **Pros**: Faster (no matrix solve), more robust (always monotonic),
       fewer hyperparameters (no GP kernel bandwidth).
@@ -660,7 +736,7 @@ def dense_basis_pure(
     """
     n_param = len(tx_kwargs)
     if n_param == 0:
-        raise ValueError("dense_basis_pure_sfh requires at least one tx_frac_*")
+        raise ValueError("dense_basis_pure requires at least one tx_frac_*")
     for i in range(n_param):
         key = f"tx_frac_{i}"
         if key not in tx_kwargs:
@@ -694,12 +770,3 @@ def dense_basis_pure(
 
     result = jnp.interp(age_yr, t_lookback_yr, sfr)
     return jnp.maximum(result, 0.0)
-
-
-# ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# Wrapped with `deprecated_alias` so a DeprecationWarning fires on first call.
-# Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
-from tengri._deprecated import deprecated_alias as _deprecated_alias
-
-dense_basis_sfh = _deprecated_alias(dense_basis, old_name="dense_basis_sfh")
-dense_basis_pure_sfh = _deprecated_alias(dense_basis_pure, old_name="dense_basis_pure_sfh")

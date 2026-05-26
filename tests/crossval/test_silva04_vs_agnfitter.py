@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate Silva+04 torus module against AGNfitter's raw template pickles.
 
 The Silva, Maiolino & Granato (2004) torus templates were ported from AGNfitter
@@ -14,6 +15,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import chex
 import h5py
 import jax
 import jax.numpy as jnp
@@ -178,7 +180,7 @@ class TestSilva04RuntimeConsistency:
             agn_log_nh_silva=23.0,
             agn_torus_frac=0.5,
         )
-        assert np.all(np.isfinite(sed)), "Runtime SED contains NaN/inf"
+        chex.assert_tree_all_finite(sed)
         assert sed.shape == wavelength.shape, f"Shape mismatch: {sed.shape} vs {wavelength.shape}"
 
     def test_runtime_respects_luminosity_scaling(self, silva04_runtime):

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """End-to-end validation of Astrodust, BOSA, and THEMIS dust emission templates.
 
 Tests cover:
@@ -11,6 +12,7 @@ Tests cover:
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -81,8 +83,8 @@ class TestAstrodustLoading:
         assert jnp.all(astrodust_data["powerlaw"] >= 0)
 
     def test_spectra_finite(self, astrodust_data):
-        assert jnp.all(jnp.isfinite(astrodust_data["single_u"]))
-        assert jnp.all(jnp.isfinite(astrodust_data["powerlaw"]))
+        chex.assert_tree_all_finite(astrodust_data["single_u"])
+        chex.assert_tree_all_finite(astrodust_data["powerlaw"])
 
 
 class TestAstrodustEmission:
@@ -92,7 +94,7 @@ class TestAstrodustEmission:
         sed = astrodust_fn(
             WAVE_AA, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qpah=3.0
         )
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_output_non_negative(self, astrodust_fn):
         sed = astrodust_fn(
@@ -188,7 +190,7 @@ class TestBosaLoading:
         assert jnp.all(bosa_data["spectra"] >= 0)
 
     def test_spectra_finite(self, bosa_data):
-        assert jnp.all(jnp.isfinite(bosa_data["spectra"]))
+        chex.assert_tree_all_finite(bosa_data["spectra"])
 
 
 class TestBosaEmission:
@@ -196,7 +198,7 @@ class TestBosaEmission:
 
     def test_output_finite(self, bosa_fn):
         sed = bosa_fn(WAVE_AA, L_absorbed=1e10, dust_log_ssfr=-10.0)
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_output_non_negative(self, bosa_fn):
         sed = bosa_fn(WAVE_AA, L_absorbed=1e10, dust_log_ssfr=-10.0)
@@ -281,8 +283,8 @@ class TestThemisLoading:
         assert jnp.all(themis_data["powerlaw"] >= 0)
 
     def test_spectra_finite(self, themis_data):
-        assert jnp.all(jnp.isfinite(themis_data["single_u"]))
-        assert jnp.all(jnp.isfinite(themis_data["powerlaw"]))
+        chex.assert_tree_all_finite(themis_data["single_u"])
+        chex.assert_tree_all_finite(themis_data["powerlaw"])
 
 
 class TestThemisEmission:
@@ -292,7 +294,7 @@ class TestThemisEmission:
         sed = themis_fn(
             WAVE_AA, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qhac=0.17
         )
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_output_non_negative(self, themis_fn):
         sed = themis_fn(

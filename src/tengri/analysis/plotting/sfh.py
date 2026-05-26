@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Star formation history plotting utilities.
 
 Publication-quality SFH visualization for posterior recovery and model comparison.

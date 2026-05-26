@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """MAP optimization, Laplace approximation, and Pathfinder.
 
 Extracted from fitter.py. Migrated to the :class:`InferenceContext`

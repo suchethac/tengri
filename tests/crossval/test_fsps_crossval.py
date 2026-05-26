@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri physics against python-fsps.
 
 Tests component-level agreement between tengri implementations
@@ -415,15 +416,15 @@ class TestAGNCrossval:
         assert l_uv / l_opt > 0.01, "Disc UV flux too weak relative to optical"
 
     def test_torus_ir_dominated(self):
-        """Torus emission should peak in the IR (1-10 um)."""
-        from tengri.components.agn.torus import simple_torus
+        """Silva+04 torus should peak in the IR (1-100 um)."""
+        from tengri.components.agn.silva04 import silva04_analytic
 
         wave = jnp.linspace(1000, 200000, 5000)
-        l_nu = simple_torus(wave, agn_log_lbol=11.0, agn_T_torus=1000.0)
+        l_nu = silva04_analytic(wave, agn_log_lbol=11.0)
 
         peak = float(wave[jnp.argmax(l_nu)])
         peak_um = peak / 1e4
-        assert 0.5 < peak_um < 20, f"Torus should peak at 1-10 um, got {peak_um:.1f} um"
+        assert 0.5 < peak_um < 100, f"Torus should peak in IR, got {peak_um:.1f} um"
 
     def test_unified_has_both_components(self):
         """Unified AGN should have emission in both UV and IR."""

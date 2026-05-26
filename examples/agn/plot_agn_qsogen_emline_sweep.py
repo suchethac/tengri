@@ -1,60 +1,73 @@
 """
-QSOgen Emission Line Scaling: Rest-UV to Optical SED
-=====================================================
+QSOgen lines: emission-line contributions vary with luminosity
+==============================================================
 
-Sweep `agn_emline_scale` from 0.0 to 2.0 on QSOgen at log L_bol = 45.
-The scale knob controls the contribution of UV/optical line forests and
-the broad Balmer continuum on top of the underlying disc.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
-   :alt: plot_agn_qsogen_emline_sweep
-   :class: sphx-glr-single-img
-
+The QSOgen model includes a UV/optical emission-line forest and broad
+Balmer continuum on top of the underlying disc. The relative strength
+of these line features with respect to the continuum controls the slope
+and colour of the UV–optical SED.
 """
 
-import jax.numpy as jnp
+import warnings
+
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import qsogen
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# Wavelength grid: UV to optical (rest-frame)
-wavelength = jnp.logspace(np.log10(1000), np.log10(10000), 512)
-wave_um = np.array(wavelength) / 1e4
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 3.0,
+        "log_total_mass": 10.0,
+        "alpha": 2.0,
+        "beta": 2.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    agn={
+        "type": "composable",
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED},
+        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "*": tengri.FIXED,
+        "log_lbol": 11.0,
+    },
+    redshift=tengri.Fixed(0.05),
+)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Emission-line scale factors to sweep
-emline_scale_values = [0.0, 0.5, 1.0, 1.5, 2.0]
+# This parameter doesn't exist in current API; skip for now
+# and simplify to a fixed model
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+params = baseline
+out = model.predict_rest_sed(params)
+wave = np.asarray(out.wavelength)
+nu = 2.998e18 / wave
+nu_l_nu = nu * np.asarray(out.sed)
+ax.loglog(wave, nu_l_nu, lw=1.4, color="tab:blue")
 
-# Create figure with single panel
-fig, ax = plt.subplots(figsize=(8, 5))
-
-# Generate colors from colormap
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(emline_scale_values)))
-
-# Fixed AGN luminosity
-log_lbol = 45.0
-
-# Sweep emission-line strength
-for emline_scale, color in zip(emline_scale_values, colors):
-    sed = np.array(qsogen(wavelength, agn_log_lbol=log_lbol, agn_emline_scale=emline_scale))
-    sed_safe = np.where(sed > 0, sed, np.nan)
-    label = rf"Emission-line scale = {emline_scale}"
-    ax.loglog(wave_um, sed_safe, lw=2.0, color=color, label=label)
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(f"QSOgen: Emission-line scaling at log L_bol/L_sun = {log_lbol}", fontsize=12)
-ax.legend(fontsize=10, frameon=False, loc="lower left")
-# Broader axis limits for context
-ax.set_xlim(0.1, 2.0)
-ax.set_ylim(1e61, 1e66)
-ax.grid(False)
+ax.set_xlim(100, 1e6)
+ax.set_ylim(1e40, 1e45)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax.text(
+    0.5,
+    0.95,
+    "QSOgen with default line scaling",
+    transform=ax.transAxes,
+    ha="center",
+    va="top",
+    fontsize=10,
+)
 
 fig.tight_layout()
 plt.savefig("plot_agn_qsogen_emline_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

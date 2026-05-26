@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for physical consistency of tengri forward model.
 
 These tests use full SEDModel predictions with real SSP data to verify that
@@ -53,7 +54,7 @@ def _make_model(ssp_data, filters, **spec_kwargs):
     """Helper to create SEDModel with given Parameters overrides."""
     defaults = dict(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=1.0,
         sfh_tsnorm_peak_lbt_gyr=5.0,
         sfh_tsnorm_width_gyr=2.0,
         sfh_tsnorm_skew=0.0,
@@ -100,8 +101,8 @@ class TestStellarMassConsistency:
 
     def test_doubling_sfr_doubles_mass(self, ssp_data, filters):
         """Doubling peak SFR should approximately double stellar mass."""
-        model1, params1 = _make_model(ssp_data, filters, sfh_tsnorm_log_peak_sfr=1.0)
-        model2, params2 = _make_model(ssp_data, filters, sfh_tsnorm_log_peak_sfr=1.301)
+        model1, params1 = _make_model(ssp_data, filters, sfh_tsnorm_log_total_mass=1.0)
+        model2, params2 = _make_model(ssp_data, filters, sfh_tsnorm_log_total_mass=1.301)
 
         d1 = model1.predict_derived(params1)
         d2 = model2.predict_derived(params2)
@@ -309,7 +310,7 @@ class TestPassiveGalaxyProperties:
             sfh_tsnorm_width_gyr=0.5,
             sfh_tsnorm_skew=0.0,
             sfh_tsnorm_trunc=3.0,
-            sfh_tsnorm_log_peak_sfr=1.0,
+            sfh_tsnorm_log_total_mass=1.0,
         )
 
     def test_low_ssfr(self, passive_galaxy):

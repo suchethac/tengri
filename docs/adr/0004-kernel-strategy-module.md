@@ -1,5 +1,21 @@
 # ADR 0004: Kernel strategy as an explicit module
 
+**Status:** **SUPERSEDED** (2026-05-20) by Phase 6 of
+[`docs/dev/photometry_path_unification.md`](../dev/photometry_path_unification.md).
+
+The kernel adapter family (``tengri.forward._kernels``) and the
+``KernelStrategy`` selector this ADR describes were removed in PR #135
+(Phase 3d → Phase 6). The forward path now runs through a single
+``SEDComponent`` orchestrator chain projected via ``Observation.predict``
+(exact) or ``Observation.predict_via_precomp`` (LUT). The build-time
+opt-in for the LUT path is ``approx=WavePrecomp(...)`` on ``SEDModel``;
+JIT compilation is unified under ``predict_observables_jit``. There is
+no longer a "strategy" to select — the routing is structural.
+
+The historical content below is preserved for context only.
+
+---
+
 **Status:** Accepted
 
 **Date:** 2026-05-17

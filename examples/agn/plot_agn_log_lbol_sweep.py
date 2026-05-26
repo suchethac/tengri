@@ -1,60 +1,78 @@
 """
-QSOgen Disc Continuum: Bolometric Luminosity
-==============================================
+QSOgen disc: bolometric luminosity controls overall flux
+=========================================================
 
-Sweep `log L_bol / L_sun` from 43 to 47 on the QSOgen disc continuum.
-The continuum normalisation tracks luminosity directly; the disc
-temperature shifts more subtly with the implied accretion rate.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_log_lbol_sweep_001.png
-   :alt: plot_agn_log_lbol_sweep
-   :class: sphx-glr-single-img
-
+The disc continuum normalisation tracks bolometric luminosity directly;
+the disc temperature shifts more subtly with the implied accretion rate.
+Varying ``agn_log_lbol`` from 10 to 14 (in log10 L_sun) sweeps four orders of
+magnitude in disc luminosity, comparable to typical Seyfert through bright-QSO
+regimes. The spectral shape (slope, peak position) remains nearly fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import qsogen
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# Wavelength grid: UV to NIR (800 - 100,000 Angstrom)
-wavelength = jnp.logspace(np.log10(800), np.log10(1e5), 512)
-wave_um = np.array(wavelength) / 1e4
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 3.0,
+        "log_total_mass": 10.0,
+        "alpha": 2.0,
+        "beta": 2.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    agn={
+        "type": "composable",
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED},
+        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Uniform(10.0, 14.0),  # Bugfix: promote swept param to FREE
+    },
+    redshift=tengri.Fixed(0.05),
+)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# Bolometric luminosity values to sweep
-log_lbol_values = [43, 44, 45, 46, 47]
+log_lbol_values = np.linspace(10.0, 14.0, 7)  # log10(L_bol / L_sun)
+norm = mpl.colors.Normalize(vmin=log_lbol_values.min(), vmax=log_lbol_values.max())
+cmap = plt.get_cmap("viridis")
 
-# Create figure with single panel
-fig, ax = plt.subplots(figsize=(8, 5))
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for log_lbol in log_lbol_values:
+    params = {**baseline, "agn_log_lbol": jnp.float64(log_lbol)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
-# Generate colors from colormap
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(log_lbol_values)))
+ax.set_xlim(100, 1e6)
+ax.set_ylim(1e41, 1e48)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
-# Sweep — plot absolute L_nu so the four-decade L_bol shift is visible.
-# Each curve at log L_bol = X sits 10x above log L_bol = X-1.
-for log_lbol, color in zip(log_lbol_values, colors):
-    sed = np.array(qsogen(wavelength, agn_log_lbol=log_lbol))
-    sed_safe = np.where(sed > 0, sed, np.nan)
-    label = rf"$\log L_{{\mathrm{{bol}}}}/L_\odot = {log_lbol}$"
-    ax.loglog(wave_um, sed_safe, lw=2.2, color=color, label=label)
-
-ax.set_xlabel(r"Wavelength [$\mu$m]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("QSOgen disc continuum: bolometric luminosity sweep", fontsize=14)
-ax.legend(fontsize=11, frameon=False, loc="lower right")
-# Broad zoomed-out view of the QSOgen rest-frame SED, covering Lyα forest
-# (~0.05 µm) through NIR turnover (~5 µm). 7 decades of L_nu give breathing
-# room for all 5 luminosity curves.
-ax.set_xlim(0.05, 10.0)
-ax.set_ylim(5e59, 5e66)
-ax.grid(False)
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\log L_{\mathrm{bol}}/L_\odot$")
 
 fig.tight_layout()
 plt.savefig("plot_agn_log_lbol_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Display / introspection helpers extracted from core/model.py.
 
 Each function takes an SEDModel instance as its first argument so that model.py
@@ -142,7 +143,7 @@ def tree(model: SEDModel) -> str:
     z_info = f"z={z_fixed:.4f} [fixed]" if z_fixed is not None else "z [free]"
     if filter_waves is not None:
         n_filt = len(filter_waves)
-        precomp = model._precomputed.photometry
+        precomp = model.precomputed.photometry
         precomp_str = "YES (21.6x speedup)" if precomp is not None else "NO"
         lines.append(f"{last} Observation: Photometry [{n_filt} bands] at {z_info}")
         lines.append(f"    Precomputed: {precomp_str}")
@@ -199,27 +200,21 @@ def summary(model: SEDModel) -> str:
         lines.append("  Filters:     none")
 
     # Redshift
-    if model._z_fixed is not None:
-        lines.append(f"  Redshift:    {model._z_fixed:.4f} (fixed)")
+    if model.z_fixed is not None:
+        lines.append(f"  Redshift:    {model.z_fixed:.4f} (fixed)")
     else:
         lines.append("  Redshift:    free")
 
     # Dtype and precomputation
     lines.append(f"  Dtype:       {model._forward_dtype}")
     precomp_parts: list[str] = []
-    if model._precomputed.photometry is not None:
+    if model.precomputed.photometry is not None:
         precomp_parts.append("photometry")
-    if model._precomputed.spectroscopy is not None:
+    if model.precomputed.spectroscopy is not None:
         precomp_parts.append("spectroscopy")
-    if model._precomputed.photometry_ztable is not None:
+    if model.precomputed.photometry_ztable is not None:
         precomp_parts.append("z-table")
     lines.append(f"  Precomputed: {', '.join(precomp_parts) if precomp_parts else 'none'}")
-
-    # Kernel status
-    hybrid = "active" if model._hybrid.photometry is not None else "off"
-    compositional = "active" if model._compositional.photometry is not None else "off"
-    lines.append(f"  Hybrid kernel: {hybrid}")
-    lines.append(f"  Compositional kernel: {compositional}")
 
     # Enabled components
     components: list[str] = []
@@ -240,10 +235,80 @@ def summary(model: SEDModel) -> str:
     if components:
         lines.append(f"  Components:  {', '.join(components)}")
 
+    # Pipeline chain (the SEDComponent contract: order, publishes, requires).
+    # Skipped quietly on any failure so summary() never blocks a debug session.
+    try:
+        chain = model._build_component_chain()
+    except Exception as exc:
+        lines.append(f"  Pipeline:    <unable to build chain: {type(exc).__name__}>")
+        chain = []
+
+    if chain:
+        lines.append("")
+        lines.append(f"  Pipeline ({len(chain)} components):")
+        for i, c in enumerate(chain, 1):
+            cfg = _component_config_summary(c)
+            head = f"    {i}. {getattr(c, 'name', type(c).__name__):14s}"
+            lines.append(f"{head} {cfg}".rstrip())
+            reqs = [k.name for k in _safe_call(c, "requires")]
+            opts = [k.name for k in _safe_call(c, "requires_optional")]
+            pubs = [k.name for k in _safe_call(c, "publishes")]
+            if reqs:
+                lines.append(f"       reads:     {', '.join(reqs)}")
+            if opts:
+                lines.append(f"       reads*:    {', '.join(opts)}  (optional, with fallback)")
+            if pubs:
+                lines.append(f"       publishes: {', '.join(pubs)}")
+
     # Dimensionality
     n_free = model.spec.n_free
-    n_grid = model._n_grid if model._uses_stochastic_sfh else 0
+    n_grid = model.n_grid if model.uses_stochastic_sfh else 0
+    lines.append("")
     lines.append(f"  Parameters:  {n_free} free" + (f" + {n_grid} latent (ξ)" if n_grid else ""))
 
     lines.append(sep)
     return "\n".join(lines)
+
+
+def _safe_call(component, attr: str) -> tuple:
+    """Call ``component.<attr>()`` if it exists; return ``()`` otherwise.
+
+    Used by :func:`summary` to render publishes / requires / requires_optional
+    without crashing on partial components that don't declare all three.
+    """
+    fn = getattr(component, attr, None)
+    if fn is None:
+        return ()
+    try:
+        return tuple(fn())
+    except Exception:
+        return ()
+
+
+def _component_config_summary(c) -> str:
+    """Render a short ``[k=v, k=v]`` config snippet for one chain component.
+
+    Picks a small whitelist of well-known config keys. Returns an empty
+    string if the component has no config or none of the keys are set.
+    """
+    cfg = getattr(c, "config", None)
+    if cfg is None:
+        return ""
+    candidate_keys = (
+        "sfh_model",
+        "metallicity_model",
+        "n_grid",
+        "backend",
+        "model",
+        "law_bc",
+        "law_diff",
+        "emission_model",
+    )
+    parts = []
+    for k in candidate_keys:
+        v = getattr(cfg, k, None)
+        if v is not None:
+            parts.append(f"{k}={v}")
+    if not parts:
+        return ""
+    return f"[{', '.join(parts[:3])}]"

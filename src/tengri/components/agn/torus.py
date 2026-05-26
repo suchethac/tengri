@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Toy torus models for AGN infrared emission.
 
 .. warning::
@@ -100,8 +101,9 @@ def simple_torus(
     if "simple_torus" not in _WARNED:
         warnings.warn(
             "simple_torus is a toy AGN torus model not suitable for science fits; "
-            "use the SKIRTOR-based torus components for production work.",
-            UserWarning,
+            "use silva04_analytic (Silva+04 radiative-transfer torus) for production work. "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
             stacklevel=2,
         )
         _WARNED.add("simple_torus")
@@ -193,8 +195,9 @@ def two_temperature_torus(
     if "two_temperature_torus" not in _WARNED:
         warnings.warn(
             "two_temperature_torus is a toy AGN torus model not suitable for science fits; "
-            "use the SKIRTOR-based torus components for production work.",
-            UserWarning,
+            "use silva04_analytic (Silva+04 radiative-transfer torus) for production work. "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
             stacklevel=2,
         )
         _WARNED.add("two_temperature_torus")

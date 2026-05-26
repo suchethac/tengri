@@ -1,153 +1,173 @@
 """
-Workflow: BPT Emission-Line Classification
-=============================================
+BPT diagram: emission lines from the baked-in nebular SSP
+=========================================================
 
-Demonstrates computing emission-line ratios for a mock galaxy catalog
-with mixed star-forming and AGN fractions. Plots the BPT diagram
-([OIII]/Hβ vs [NII]/Hα) and overlays Kewley+2001 and Kauffmann+2003
-demarcation lines to show how emission-line diagnostics separate
-ionization mechanisms.
+Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
+directly from the model's rest-frame SED via continuum-subtracted
+boxcar integration around each line centre, swept across a stellar
+metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation
+lines are overlaid for context.
 
-.. sphx-glr-precomputed-img:
+The AGN-fraction axis of the previous version requires the discrete
+``Prediction.lines.*`` API on a backend that exposes per-line
+luminosities (cb19 / cloudy / cue); the BakedIn SSP backend used
+here does not. See issue #361 for the per-backend status.
 
-.. image:: images/sphx_glr_plot_workflow_bpt_classification_001.png
-   :alt: plot_workflow_bpt_classification
-   :class: sphx-glr-single-img
-
+Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
+Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 """
 
-import jax
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fixed,
-    Parameters,
-    SEDModel,
-    Uniform,
-    load_ssp,
-)
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+LINES = {
+    "halpha": 6564.7,
+    "hbeta": 4862.7,
+    "oiii_5007": 5008.3,
+    "nii_6584": 6585.4,
+}
+LINE_HALF_WIDTH = 8.0
+CONT_OFFSET = 30.0
+CONT_HALF_WIDTH = 8.0
 
 
-# --- SSP data ---
+def boxcar_line_flux(wave, sed, line_centre):
+    """Continuum-subtracted boxcar flux around a single line."""
+    line_mask = np.abs(wave - line_centre) < LINE_HALF_WIDTH
+    blue_mask = np.abs(wave - (line_centre - CONT_OFFSET)) < CONT_HALF_WIDTH
+    red_mask = np.abs(wave - (line_centre + CONT_OFFSET)) < CONT_HALF_WIDTH
+    cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
+    return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
 
 
-ssp = load_ssp()
+ssp = tengri.load_ssp()
+logzsol_grid = np.linspace(-1.0, 0.2, 15)
 
-# --- Build model ---
-z = 0.1
-
-spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
-    sfh_tsnorm_width_gyr=Fixed(1.0),
-    sfh_tsnorm_skew=Fixed(0.2),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.2),
-    dust_tau_bc=Fixed(0.1),
-    dust_tau_diff=Fixed(0.1),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(z),
-    mean_sfh_type="tsnorm",
+<<<<<<< HEAD
+log_n2_ha = []
+log_o3_hb = []
+=======
+# Build a simple model to generate mock SFH samples
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "tsnorm",
+        "log_total_mass": 10.0, 2.5),
+        "peak_lbt_gyr": tengri.Fixed(2.0),
+        "width_gyr": tengri.Fixed(1.0),
+        "skew": tengri.Fixed(0.2),
+        "trunc": tengri.Fixed(3.0),
+        "logzsol": tengri.Fixed(-0.2),
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.1,
+        "tau_diff": 0.1,
+        "slope": -0.7,
+    },
+    redshift=tengri.Fixed(z),
 )
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
-model = SEDModel(spec, ssp)
+for logz in logzsol_grid:
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_total_mass": 1.0,
+            "peak_lbt_gyr": 2.0,
+            "width_gyr": 1.0,
+            "skew": 0.2,
+            "trunc": 3.0,
+            "logzsol": float(logz),
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.1,
+            "tau_diff": 0.1,
+            "slope": -0.7,
+        },
+    )
 
-# --- Generate mock catalog with AGN fractions ---
-n_gal = 20
-key = jax.random.PRNGKey(123)
-agn_fracs = np.linspace(0.0, 0.8, n_gal)  # AGN contribution to ionization
+    pred = model.predict_rest_sed({"redshift": 0.1})
+    wave = np.asarray(pred.wavelength)
+    sed = np.asarray(pred.sed)
+    fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
+    log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
+    log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
 
-log_nii_ha = []
-log_oiii_hb = []
-
+<<<<<<< HEAD
+log_n2_ha = np.array(log_n2_ha)
+log_o3_hb = np.array(log_o3_hb)
+=======
 for agn_frac in agn_fracs:
-    # Sample a star-forming galaxy, modulate AGN fraction
     key, subkey = jax.random.split(key)
-    true_params = spec.sample(subkey)
-    true_params["sfh_tsnorm_log_peak_sfr"] = 0.5  # Moderate SFR
-    true_params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+    params = model.spec.sample(subkey)
+    params["sfh_tsnorm_log_total_mass"] = 0.5
+    params["sfh_tsnorm_peak_lbt_gyr"] = 3.0
+    sfr_peak = float(params["sfh_tsnorm_log_total_mass"])
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 
-    # Generate synthetic emission line ratios via simple power-law approximation
-    # (emission lines proportional to SFR and metallicity)
-    sfr_peak = float(true_params["sfh_tsnorm_log_peak_sfr"])
-
-    # Synthetic line fluxes (relative to H-alpha)
-    ha = 1.0  # Normalized
-    hb = 0.3  # Typical ratio
-    nii = 0.1 * (1.0 + sfr_peak)  # Metallicity-sensitive
-    oiii = 0.2 * (1.0 + sfr_peak)
-
-    # Add AGN-like boost to ionization: AGN primarily enhances [OIII]
-    if agn_frac > 0:
-        oiii = oiii * (1.0 + 3.0 * agn_frac)  # AGN strengthens [OIII]
-        nii = nii * (1.0 + 1.5 * agn_frac)  # and [NII] slightly
-
-    if ha > 1e-12 and hb > 1e-12:
-        log_nii_ha.append(np.log10(max(nii / ha, 1e-3)))
-        log_oiii_hb.append(np.log10(max(oiii / hb, 1e-3)))
-
-log_nii_ha = np.array(log_nii_ha)
-log_oiii_hb = np.array(log_oiii_hb)
-
-# --- Plot BPT diagram ---
 fig, ax = plt.subplots(figsize=(8, 7))
 
-# Kewley+2001 maximum starburst line
-log_nii_ha_grid = np.linspace(-1.6, 0.5, 300)
-log_oiii_hb_kewley = 0.61 / (log_nii_ha_grid - 0.47) + 1.19
+log_nii_grid = np.linspace(-1.6, 0.5, 300)
+log_oiii_kewley = 0.61 / (log_nii_grid - 0.47) + 1.19
+log_oiii_kauff = 0.61 / (log_nii_grid - 0.05) + 1.3
 
-# Kauffmann+2003 empirical SF line
-log_oiii_hb_kauff = 0.61 / (log_nii_ha_grid - 0.05) + 1.3
-
-mask_k = log_nii_ha_grid < 0.47
+mask_k = log_nii_grid < 0.47
 ax.plot(
-    log_nii_ha_grid[mask_k],
-    log_oiii_hb_kewley[mask_k],
+    log_nii_grid[mask_k],
+    log_oiii_kewley[mask_k],
     "k-",
     lw=2.0,
     label="Kewley+2001 (max starburst)",
 )
-mask_kauff = log_nii_ha_grid < 0.05
+mask_kauff = log_nii_grid < 0.05
 ax.plot(
-    log_nii_ha_grid[mask_kauff],
-    log_oiii_hb_kauff[mask_kauff],
+    log_nii_grid[mask_kauff],
+    log_oiii_kauff[mask_kauff],
     "k--",
     lw=1.8,
     label="Kauffmann+2003 (empirical SF)",
 )
 
-# Region labels
-ax.text(-1.35, -0.6, "Star\nForming", fontsize=11, color="#1f77b4", fontweight="bold", ha="center")
-ax.text(-0.1, 0.7, "Composite", fontsize=11, color="#ff7f0e", fontweight="bold", ha="center")
-ax.text(
-    0.25, 1.15, "Seyfert/\nLINER", fontsize=11, color="#d62728", fontweight="bold", ha="center"
-)
+ax.text(-1.35, -0.6, "Star\nForming", fontsize=11, color="#1f77b4", ha="center")
+ax.text(-0.1, 0.7, "Composite", fontsize=11, color="#ff7f0e", ha="center")
+ax.text(0.25, 1.15, "Seyfert/LINER", fontsize=11, color="#d62728", ha="center")
 
-# Galaxy catalog colored by AGN fraction
 sc = ax.scatter(
-    log_nii_ha,
-    log_oiii_hb,
-    c=agn_fracs[: len(log_nii_ha)],
+    log_n2_ha,
+    log_o3_hb,
+    c=logzsol_grid,
     cmap="viridis",
     s=80,
     zorder=5,
     edgecolors="k",
     lw=0.5,
-    label="Mock galaxies",
 )
-cbar = plt.colorbar(sc, ax=ax, label="AGN fraction")
-cbar.ax.tick_params(labelsize=10)
+cbar = fig.colorbar(sc, ax=ax, pad=0.01)
+cbar.set_label(r"log $Z_\star / Z_\odot$")
 
-ax.set_xlabel(r"log [NII]$\lambda$6583 / H$\alpha$", fontsize=12)
-ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$", fontsize=12)
-ax.set_title("BPT Diagram: Star Formation vs AGN Classification", fontsize=12, fontweight="bold")
+ax.set_xlabel(r"log [NII]$\lambda$6584 / H$\alpha$")
+ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$")
 ax.set_xlim(-1.6, 0.6)
 ax.set_ylim(-1.2, 1.5)
-ax.legend(fontsize=10, frameon=False, loc="lower left")
+ax.legend(frameon=False, loc="lower left")
+
 fig.tight_layout()
 plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
-plt.show()

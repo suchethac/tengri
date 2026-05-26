@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration test for HMC structural sharing across Fitter instances (Phase B).
 
 Tests verify that smart-lean (the default) keeps the L3 entry whose key
@@ -41,7 +42,7 @@ def test_hmc_structural_reuse_same_model():
         sfh_dpl_alpha=tengri.Uniform(0.5, 4.0),
         sfh_dpl_beta=tengri.Uniform(0.5, 4.0),
         sfh_dpl_tau_gyr=tengri.Uniform(0.5, 12.0),
-        sfh_dpl_log_peak_sfr=tengri.Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=tengri.Uniform(-1.0, 2.5),
         met_logzsol=tengri.Uniform(-2.0, 0.2),
         dust_law_bc="calzetti",
         dust_tau_bc=tengri.Uniform(0, 3),
@@ -126,7 +127,7 @@ def test_hmc_structural_reuse_different_data():
         sfh_dpl_alpha=tengri.Uniform(0.5, 4.0),
         sfh_dpl_beta=tengri.Uniform(0.5, 4.0),
         sfh_dpl_tau_gyr=tengri.Uniform(0.5, 12.0),
-        sfh_dpl_log_peak_sfr=tengri.Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=tengri.Uniform(-1.0, 2.5),
         met_logzsol=tengri.Uniform(-2.0, 0.2),
         dust_law_bc="calzetti",
         dust_tau_bc=tengri.Uniform(0, 3),

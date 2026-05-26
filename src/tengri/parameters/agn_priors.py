@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Informative AGN prior penalty terms for the log-prior.
 
 These functions provide opt-in soft (Gaussian) penalty terms that can be added

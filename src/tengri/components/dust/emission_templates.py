@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Template loaders for dust IR emission models.
 
 This module holds template-loading functions and file-discovery helpers for

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Non-parametric star formation history models.
 
 Implements the Continuity (Leja+2019), Dirichlet (Leja+2017), Bursty
@@ -378,8 +379,8 @@ def make_agebins_from_zred(
     This is a **setup-time utility** — call it when building a
     :class:`~tengri.parameters.Parameters` object, not inside the forward
     model. The returned array is plain NumPy so it can be passed as the
-    ``bin_edges_gyr`` argument to :func:`continuity_sfh` or
-    :func:`dirichlet_sfh`.
+    ``bin_edges_gyr`` argument to :func:`continuity` or
+    :func:`dirichlet`.
 
     Parameters
     ----------
@@ -419,7 +420,7 @@ def make_agebins_from_zred(
     >>> bool((edges[:-1] < edges[1:]).all())  # monotone
     True
     """
-    from tengri.utils.cosmology import DEFAULT_COSMO, age_at_z
+    from tengri.cosmology import DEFAULT_COSMO, age_at_z
 
     if cosmo is None:
         cosmo = DEFAULT_COSMO
@@ -513,7 +514,7 @@ def psb_continuity(
     --------
     >>> import jax.numpy as jnp
     >>> t = jnp.logspace(6.0, 10.14, 256)
-    >>> sfr = psb_continuity_sfh(
+    >>> sfr = psb_continuity(
     ...     t,
     ...     log_total_mass=10.5,
     ...     tlast_gyr=0.3,
@@ -658,7 +659,7 @@ def continuity_flex(
     --------
     >>> import jax.numpy as jnp
     >>> t = jnp.logspace(6.0, 10.14, 256)
-    >>> sfr = continuity_flex_sfh(
+    >>> sfr = continuity_flex(
     ...     t,
     ...     log_total_mass=10.5,
     ...     ratio_young=0.5,
@@ -794,14 +795,3 @@ def continuity_flex_prior_logp(
         ]
     )
     return jnp.sum(student_t.logpdf(all_ratios, df, loc=0.0, scale=scale))
-
-
-# ── Deprecated aliases (Phase 3) ──────────────────────────────────
-# Wrapped with `deprecated_alias` so a DeprecationWarning fires on first call.
-# Will be removed in v1.0. See docs/dev/api_migration_v0.x.md.
-from tengri._deprecated import deprecated_alias as _deprecated_alias
-
-continuity_sfh = _deprecated_alias(continuity, old_name="continuity_sfh")
-dirichlet_sfh = _deprecated_alias(dirichlet, old_name="dirichlet_sfh")
-psb_continuity_sfh = _deprecated_alias(psb_continuity, old_name="psb_continuity_sfh")
-continuity_flex_sfh = _deprecated_alias(continuity_flex, old_name="continuity_flex_sfh")

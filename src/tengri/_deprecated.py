@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Deprecation helpers for the tengri public API.
 
 Centralises the shims used to keep old import paths working while the API

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Hensley & Draine 2023 Astrodust+PAH template branch.
 
 Exercises the ``template="astrodust"`` dispatch on
@@ -9,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -58,12 +60,11 @@ def test_loader_axes_match_published_grid(fixture_path):
     )
 
     tpl = load_astrodust_hd23_or_raise(fixture_path)
-    assert tpl.lgU.shape == (91,)
-    assert tpl.wavelength_um.shape == (1000,)
-    assert tpl.L_nu_total.shape == (91, 1000)
-    assert tpl.L_nu_astrodust.shape == (91, 1000)
-    assert tpl.L_nu_pah.shape == (91, 1000)
-
+    chex.assert_shape(tpl.lgU, (91,))
+    chex.assert_shape(tpl.wavelength_um, (1000,))
+    chex.assert_shape(tpl.L_nu_total, (91, 1000))
+    chex.assert_shape(tpl.L_nu_astrodust, (91, 1000))
+    chex.assert_shape(tpl.L_nu_pah, (91, 1000))
     np.testing.assert_allclose(np.asarray(tpl.lgU)[0], -3.0, atol=1e-3)
     np.testing.assert_allclose(np.asarray(tpl.lgU)[-1], 6.0, atol=1e-3)
     assert float(tpl.wavelength_um[0]) < 1.0  # extends to UV (~0.1 μm)
@@ -104,9 +105,9 @@ def test_declared_parameter_is_lgU_only(component):
 
 def test_precompute_state_shape(precomputed):
     state, wave_aa = precomputed
-    assert state.astrodust_lgU_grid.shape == (91,)
-    assert state.astrodust_lnu_template.shape == (91, wave_aa.size)
-    assert state.astrodust_norm_per_lgU.shape == (91,)
+    chex.assert_shape(state.astrodust_lgU_grid, (91,))
+    chex.assert_shape(state.astrodust_lnu_template, (91, wave_aa.size))
+    chex.assert_shape(state.astrodust_norm_per_lgU, (91,))
     # No spinning dust requested -> zeros.
     np.testing.assert_array_equal(
         np.asarray(state.astrodust_lnu_spinning),

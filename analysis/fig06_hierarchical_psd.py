@@ -28,40 +28,53 @@ from common import (
 )
 
 from tengri import (
-    HierarchicalFitter,
+    Fitter,
+    Fixed,
+    ForwardModel,
     Model,
     ParamSpec,
+    PopulationSEDModel,
     Uniform,
 )
 
 
-def make_model_factory(ssp, obs):
-    """Create a model factory that accepts PSD params."""
+def make_sed_template(ssp, obs):
+    """Build the SED template that PopulationSEDModel shares across galaxies.
 
-    def factory(psd_sigma, psd_tau_myr):
-        spec = ParamSpec(
-            sfh_dpl_alpha=Uniform(0.5, 3.0),
-            sfh_dpl_beta=Uniform(0.3, 2.0),
-            sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-            sfh_dpl_log_peak_sfr=Uniform(0.0, 1.5),
+    PSD parameters are declared as free at construction time but get
+    fixed to the per-iteration values by the hierarchical sampler under
+    the hood — PopulationSEDModel publishes them as ``shared``.
+    """
+    spec = ParamSpec(
+        sfh_dpl_alpha=Uniform(0.5, 3.0),
+        sfh_dpl_beta=Uniform(0.3, 2.0),
+        sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
+        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
+        sfh_field_psd_sigma=Uniform(0.1, 4.0),
+        sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
+        met_logzsol=Fixed(-0.3),
+        dust_tau_bc=Fixed(0.3),
+        dust_tau_diff=Fixed(0.2),
+        dust_slope=Fixed(-0.7),
+        redshift=Fixed(0.1),
+        stochastic=True,
+        n_grid=32,  # keep D manageable for hierarchical raytrace
+    )
+    return Model(spec, ssp, observation=obs)
+
+
+def generate_population(sed_template, psd_sigma, psd_tau_myr, n_galaxies, key, snr=20.0):
+    """Generate a mock population with known shared PSD."""
+    # Mock generation still uses the legacy `with_fixed`-style flow on a
+    # per-iteration model — the PSD values are fixed at the chosen
+    # truth so the mocks are self-consistent.
+    if hasattr(sed_template, "with_fixed"):
+        model = sed_template.with_fixed(
             sfh_field_psd_sigma=psd_sigma,
             sfh_field_psd_tau_myr=psd_tau_myr,
-            met_logzsol=-0.3,
-            dust_tau_bc=0.3,
-            dust_tau_diff=0.2,
-            dust_slope=-0.7,
-            redshift=0.1,
-            stochastic=True,
-            n_grid=32,  # keep D manageable for hierarchical raytrace
         )
-        return Model(spec, ssp, observation=obs)
-
-    return factory
-
-
-def generate_population(model_factory, psd_sigma, psd_tau_myr, n_galaxies, key, snr=20.0):
-    """Generate a mock population with known shared PSD."""
-    model = model_factory(psd_sigma, psd_tau_myr)
+    else:
+        model = sed_template
     galaxies = []
     keys = jax.random.split(key, n_galaxies)
     for _i, k in enumerate(keys):
@@ -78,13 +91,19 @@ def generate_population(model_factory, psd_sigma, psd_tau_myr, n_galaxies, key, 
 
 
 def run_convergence_test(
-    model_factory, psd_sigma_true, psd_tau_true, n_values, method, key, **fit_kwargs
+    sed_template, obs, psd_sigma_true, psd_tau_true, n_values, method, key, **fit_kwargs
 ):
-    """Run hierarchical fits at increasing N to test convergence."""
-    # Generate the largest population once
+    """Run hierarchical fits at increasing N to test convergence.
+
+    Each iteration constructs a :class:`PopulationSEDModel` for that
+    slice of galaxies, wraps it in :class:`ForwardModel`, and calls
+    :meth:`Fitter.run` — the inference automatically routes through
+    the hierarchical machinery.
+    """
+    # Generate the largest population once.
     n_max = max(n_values)
     all_galaxies = generate_population(
-        model_factory,
+        sed_template,
         psd_sigma_true,
         psd_tau_true,
         n_max,
@@ -97,15 +116,16 @@ def run_convergence_test(
         galaxies_n = all_galaxies[:n]
         print(f"  N={n}...", end=" ", flush=True)
 
-        hfitter = HierarchicalFitter(
-            model_factory,
-            galaxies_n,
-            psd_sigma_prior=(0.1, 4.0),
-            psd_tau_prior=(1.0, 300.0),
+        pop = PopulationSEDModel(
+            sed=sed_template,
+            galaxies=galaxies_n,
+            # shared= defaults to the PSD pair; priors default to PSD-typical
         )
+        forward = ForwardModel.build(population=pop, observation=obs)
+        fitter = Fitter(forward)  # no data/noise — lives on pop.galaxies
 
         key_fit = jax.random.fold_in(key, n)
-        result = hfitter.run(method, key=key_fit, verbose=False, **fit_kwargs)
+        result = fitter.run(method, key=key_fit, verbose=False, **fit_kwargs)
 
         s = result.summary()
         print(
@@ -121,14 +141,14 @@ def run_convergence_test(
     return results
 
 
-def run_distinction_test(model_factory, regimes, n_galaxies, method, key, **fit_kwargs):
+def run_distinction_test(sed_template, obs, regimes, n_galaxies, method, key, **fit_kwargs):
     """Run hierarchical fits on two different populations."""
     results = {}
     for name, (sigma, tau) in regimes.items():
         print(f"  Population '{name}' (σ={sigma}, τ={tau})...", flush=True)
 
         galaxies = generate_population(
-            model_factory,
+            sed_template,
             sigma,
             tau,
             n_galaxies,
@@ -136,15 +156,12 @@ def run_distinction_test(model_factory, regimes, n_galaxies, method, key, **fit_
             snr=20.0,
         )
 
-        hfitter = HierarchicalFitter(
-            model_factory,
-            galaxies,
-            psd_sigma_prior=(0.1, 4.0),
-            psd_tau_prior=(1.0, 300.0),
-        )
+        pop = PopulationSEDModel(sed=sed_template, galaxies=galaxies)
+        forward = ForwardModel.build(population=pop, observation=obs)
+        fitter = Fitter(forward)
 
         key_fit = jax.random.fold_in(key, abs(hash(name)) % (2**31))
-        result = hfitter.run(method, key=key_fit, verbose=False, **fit_kwargs)
+        result = fitter.run(method, key=key_fit, verbose=False, **fit_kwargs)
 
         s = result.summary()
         print(
@@ -286,12 +303,14 @@ def plot_results(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--n-max", type=int, default=30, help="Maximum N for convergence test")
-    parser.add_argument("--method", type=str, default="mcmc_raytrace", choices=["mcmc_raytrace", "vi"])
+    parser.add_argument(
+        "--method", type=str, default="mcmc_raytrace", choices=["mcmc_raytrace", "vi"]
+    )
     args = parser.parse_args()
 
     ssp = get_ssp()
     obs = get_observation()
-    model_factory = make_model_factory(ssp, obs)
+    sed_template = make_sed_template(ssp, obs)
 
     key = jax.random.PRNGKey(7)
 
@@ -316,7 +335,8 @@ def main():
     print(f"N values: {n_values}, method: {args.method}")
 
     convergence_results = run_convergence_test(
-        model_factory,
+        sed_template,
+        obs,
         sigma_true,
         tau_true,
         n_values,
@@ -336,7 +356,8 @@ def main():
     print(f"Distinction test: N={n_distinction}")
 
     distinction_results = run_distinction_test(
-        model_factory,
+        sed_template,
+        obs,
         distinction_regimes,
         n_distinction,
         args.method,

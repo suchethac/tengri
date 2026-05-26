@@ -145,27 +145,31 @@ internally, so registry-driven fits do **not** emit warnings — only
 direct user calls under the deprecated name do. Pinned by
 `tests/unit/test_sfh_deprecations.py`.
 
-## Phase 4 — AGN / dust sub-namespaces
+## Phase 4 — AGN / dust sub-namespaces (REMOVED)
 
-Additive re-export modules grouping the public surface by physics. The
-parent `__init__.py` files are unchanged so existing imports keep
-working. The new modules are the recommended canonical paths going
-forward.
+These seven additive re-export modules were introduced as
+physics-grouped canonical paths but never adopted by internal callers.
+Grep showed zero production references; only this doc cited them. They
+were removed in the file-structure cleanup pass to reduce the public
+surface area without losing any symbol — every name they re-exported is
+still available from the parent `tengri.components.agn` or
+`tengri.components.dust` namespace.
 
-| New module | Re-exported symbols |
-|---|---|
-| `tengri.components.agn.disc_api` | `powerlaw_disc`, `multicolor_disc`, `kubota_done_disc`, `adaf_disc`, `compute_l2500`, `beloborodov_gamma_hot`, `qsogen`, `compute_qsogen_sed` |
-| `tengri.components.agn.torus_api` | `simple_torus`, `two_temperature_torus`, `nenkova_torus`, `skirtor_analytic`, `create_skirtor_from_grid`, `cat3d_wind_analytic`, `create_cat3d_wind_from_grid`, `silva04_analytic`, `create_silva04_from_grid` |
-| `tengri.components.agn.lines` | `compute_nlr_sed`, `compute_nlr_sed_richardson2014`, `compute_blr_sed` |
-| `tengri.components.agn.compose` | `unified_agn`, `unified_nlr_blr`, `adaf_agn`, `kubota_done_full_agn` |
-| `tengri.components.dust.attenuation_models` | All attenuation laws (`calzetti`, `cardelli`, MW/LMC/SMC variants, `prevot_smc`, `li08`, `vw07_*`, `wg00_*`), composite models (`two_component_dust`, `single_component_dust`, fast variants), `register_dust_law`, `resolve_dust_law` |
-| `tengri.components.dust.emission_models` | `modified_blackbody`, `casey2012`, `dale2014`, `draine_li2007`, `draine_li2014`, `astrodust`, `bosa`, `themis`, all `load_*_templates` / `register_*_tabulated` / `create_*_from_grid` variants, `energy_balance_split`, `compute_absorbed_luminosity`, `compute_absorbed_luminosity_from_tau` |
-| `tengri.components.dust.pah` | `drude_profile`, `decompose_pah`, `compute_pah_template`, `N_PAH_FEATURES`, `SMITH2007_PAH_FEATURES` |
+Removed modules:
+`tengri.components.agn.{disc_api, torus_api, lines, compose}`,
+`tengri.components.dust.{attenuation_models, emission_models, pah}`.
 
-The `_api` suffix on `disc_api`/`torus_api` and the `_models` suffix on
-`attenuation_models`/`emission_models` is because the un-suffixed names
-already exist as private implementation modules. We chose the suffix
-over a directory rearrangement to keep the diff additive.
+Use the parent package instead:
+
+```python
+# old (removed)
+from tengri.components.agn.disc_api import powerlaw_disc
+from tengri.components.dust.pah import drude_profile
+
+# new (canonical)
+from tengri.components.agn import powerlaw_disc
+from tengri.components.dust import drude_profile
+```
 
 ## Phase 5 — Free-parameter prefix guard
 
@@ -309,6 +313,30 @@ remain and resolve to the canonical location without warning.
 | `tengri.components.sps`                           | `tengri.components.stellar.sps`                          |
 | `tengri.components.sps.<submodule>`               | `tengri.components.stellar.sps.<submodule>`              |
 | `tengri.sfh`, `tengri.sps`                        | `tengri.stellar.sfh`, `tengri.stellar.sps` (unchanged, no warn) |
+
+---
+
+## Forward-model outer shell (2026-05-21)
+
+Three new top-level names were added to `tengri.__all__` as part of the
+forward-model architecture tracer-bullet
+(`docs/dev/forward-model-architecture.md`, PR #149). All three are
+purely additive — no existing name was renamed, removed, or shadowed.
+
+| New top-level name | Lives in                              | Purpose                                                                                  |
+| ------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ForwardModel`     | `tengri.forward.forward_model`        | Outer-shell forward-model class. `build(sed=..., observation=...)` + `predict(params)`. |
+| `Population`       | `tengri.forward.population`           | `(name, sed, spatial=None)` pair held by `ForwardModel`. Single-population in v0.       |
+
+A fourth name lives one level deeper, exposed via the protocols subpackage:
+
+| New name                  | Lives in                            | Purpose                                                              |
+| ------------------------- | ----------------------------------- | -------------------------------------------------------------------- |
+| `tengri.protocols.SubModel` | `tengri.protocols.submodel`        | Runtime-checkable Protocol with the 2-method contract that all sub-models satisfy. |
+
+Existing `SEDModel` usage is unchanged. The follow-up plans (multi-population
+ADR-0012, SpatialModel, SEDModel-as-SubModel refactor) build on this surface
+without breaking it.
 
 ---
 
@@ -458,7 +486,7 @@ Five curated recipes ship with tengri:
 - `stochastic_sfh_jwst()` — DPL + stochastic field, JWST high-z
 - `mock_recovery_minimal()` — Minimal model for benchmarks and tests
 
-Each returns a nested dict ready to splice into `from_groups()`:
+Each returns a nested dict ready to splice into `parse_groups()`:
 
 ```python
 from tengri import recipes
@@ -484,7 +512,7 @@ spec = Parameters(
 )
 
 # New (recommended)
-spec = Parameters.from_groups(
+spec = parse_groups(
     sfh={'type': 'dpl', '*': FREE},
     dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FREE},
 )
@@ -637,7 +665,8 @@ a `DeprecationWarning`; they are removed in v1.0.
 
 | Old                                     | New                                              | Status (v0.x)        |
 | --------------------------------------- | ------------------------------------------------ | -------------------- |
-| `SEDModel.from_groups(...)`             | `SEDModel.build(...)`                            | Both work; old warns |
+| `SEDModel.from_groups(...)`             | `SEDModel.build(...)`                            | Removed 2026-05-23   |
+| `Parameters.from_groups(...)`           | `tengri.parse_groups(...)` or `SEDModel.build(...)` | Removed 2026-05-24   |
 | `SEDComponent.publishes()`              | `SEDComponent.outputs()`                         | Both work; old warns |
 | `SEDComponent.requires()`               | `SEDComponent.inputs()`                          | Both work; old warns |
 | `SEDComponent.requires_optional()`      | `SEDComponent.optional_inputs()`                 | Both work; old warns |
@@ -650,7 +679,7 @@ namespace on `SEDModel` is reserved for future deserialization entry
 points (`from_file`, `from_yaml`, `from_dict`) — this is the reason
 for picking the verb `build` rather than another `from_*` variant.
 
-`Parameters.from_groups` is **not** renamed in this phase; only the
+`parse_groups` is **not** renamed in this phase; only the
 `SEDModel`-level entry point. The `_groups` suffix on `Parameters` is
 historically accurate to the grammar it parses.
 
@@ -686,6 +715,65 @@ factories. The SFH registry has the cleanest "variant has named params
 with default priors" shape and was the right place to prove the
 pattern. Other registries need a metadata audit before codegen can
 drive them. Tracked by issue #74.
+
+---
+
+## Phase II-4 — `SEDModelComponent` authoring path (2026-05)
+
+A concrete convenience base class `SEDModelComponent` was added at
+`src/tengri/components/sed_model_component.py` to make adding new
+physics models a single-file change. It coexists with the bare
+`SEDComponent` Protocol (canonical reference: `components/radio/component.py`),
+which stays as the fallback for models with rich state (stellar, IGM).
+
+| Aspect                              | Bare `SEDComponent` Protocol               | New `SEDModelComponent` base                 |
+| ----------------------------------- | ------------------------------------------- | --------------------------------------------- |
+| File layout                         | `component.py` + `_params.py`               | one file: `<name>_model.py`                   |
+| Free-parameter declaration          | `_params.py:PARAMS` tuple                   | class-level `Distribution` attrs with `units` |
+| `declared_parameters()`             | Hand-returned                               | Auto-built by `__init_subclass__`             |
+| `inputs()` / `outputs()`            | Hand-implemented as DerivedKey tuples       | Auto-built from class-level `inputs` / `outputs` dicts |
+| `precompute()`                      | Hand-implemented                            | Calls subclass `load(wave_grid) → self.data` |
+| `apply()`                           | Hand-written full body                      | Auto-dispatches to subclass `predict()`       |
+| Registry for `SEDModel.build(type=...)` | Per-domain hard-coded dispatch          | Module-level `_REGISTRY` via `__init_subclass__` |
+| WavePrecomp participation           | Component publishes own LUT                 | Base class calls `predict()` at filter_eff_waves automatically |
+
+**No deprecations.** Both styles work. Existing bare-Protocol components
+(stellar, radio, dust, nebular, AGN, IGM, X-ray) are unchanged. New
+models default to `SEDModelComponent`.
+
+Ported in 2026-05:
+* `Calzetti`, `SMC`, `MilkyWay`, `Salim18` (dust attenuation)
+* `ModifiedBlackbodySED`, `DL07IRSEDComponent`, `DL14IRSEDComponent`,
+  `Dale2014IRSEDComponent`, `AstrodustIRSEDComponent`, `Draine2021PAHIRSEDComponent`
+  (dust IR emission)
+* `SKIRTORTorus`, `KD18Disc`, `PowerLawDisc`, `Silva04Torus`, `CAT3DTorus` (AGN)
+* `CueNebularSEDComponent`, `CloudyGridSEDComponent`, `CB19SEDComponent`,
+  `MAPPINGSSEDComponent` (nebular)
+* `RadioPowerLawSEDComponent`, `XRayAirdSEDComponent` (multiwavelength)
+
+References: `docs/dev/sed-model-components.md` (how-to),
+`docs/dev/forward-model-architecture.md` (architecture),
+`docs/adr/0011-sed-model-component-base.md` (decision).
+
+---
+
+## Phase II-4 — Parametric SFH normalization convention (2026-05-25)
+
+**Breaking change (v0.x):** All 11 parametric SFH functions (`truncated_skewnormal`,
+`skewnormal`, `gaussian`, `lognormal`, `dpl`, `exponential`, `delayed_exponential`,
+`declining_exponential`, `snorm_burst`, `snorm_trunc_burst`, `psb_wild2020`) now
+expose `log_total_mass` (log10 of total stellar mass formed in Msun) instead of
+`log_total_mass` (log10 of peak SFR in Msun/yr). The SFH shape is rescaled internally
+so that `trapezoid(sfr, t_lookback) = 10**log_total_mass` exactly, matching
+Bagpipes/Prospector convention. This fixes GitHub issue #357 (CIGALE normalization
+discrepancy ~30%, now resolved with `log_total_mass=0.0` → 1 Msun).
+
+| Old registry key | New registry key | Typical value | Notes |
+|---|---|---|---|
+| `sfh_X_log_total_mass` (11 SFHs) | `sfh_X_log_total_mass` | ~10.0 | Mass for typical galaxies; CIGALE match uses 0.0 |
+
+Value remapping: `log_total_mass` ∈ [-1, 2] (SFR 0.1–100 Msun/yr) → `log_total_mass` ∈ [9.5, 11] (M ∈ [3×10⁹, 10¹¹ Msun).
+When unsure, use `log_total_mass=10.0` as a sensible default for observable galaxies. (See #357 for CIGALE-matching calibration.)
 
 ---
 

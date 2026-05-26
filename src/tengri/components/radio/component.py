@@ -138,6 +138,12 @@ class RadioSEDComponent:
     name: str = "radio"
     parameter_prefix: str = "radio_"
 
+    def citations(self) -> tuple[str, ...]:
+        """No structurally-mandatory paper for this wrapper; the FIR-radio
+        correlation citations are config-driven via
+        :mod:`tengri.citations.associations`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
@@ -188,15 +194,19 @@ class RadioSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> RadioSEDComponentState:
         r"""No-op precompute. Radio is a closed-form function of (λ, params)."""
-        del ssp_data, wave_grid
+        del ssp_data, wave_grid, filters
         return RadioSEDComponentState(name=self.name)
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Add radio emission to ``state.sed_intrinsic``.
 
@@ -269,12 +279,6 @@ class RadioSEDComponent:
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             )
 
-        if state.sed_intrinsic is None:
-            new_sed = L_radio
-        else:
-            new_sed = state.sed_intrinsic + L_radio
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_radio).with_(
             derived=state.derived.with_(sed_radio=L_radio),
         )

@@ -55,6 +55,7 @@ from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     resolve_agn_block,
 )
+from tengri.components.agn.blocks.atten_blocks import polar_dust_reemission_lnu
 
 __all__ = [
     "BLOCK_SELECTOR_KEYS",
@@ -388,8 +389,20 @@ agn_attenuation_block : str
 
     L_lambda_total = (L_lambda_disc + L_lambda_lines + L_lambda_feii + L_lambda_torus) * factor
 
-    # L_lambda [erg/s/Å] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c.
-    return L_lambda_total * wave**2 / C_AA_PER_S
+    # Convert to L_nu [erg/s/Hz] using L_nu = L_lambda * lambda^2 / c.
+    L_nu_atten = L_lambda_total * wave**2 / C_AA_PER_S
+
+    # Stage 6 (conditional): polar-dust reemission.
+    # When polar_dust attenuation is selected, the absorbed photons are re-emitted
+    # as a geometry-independent FIR greybody. Compute and add this to the SED.
+    # Static dispatch on agn_attenuation_block (a Python string) is JIT-safe.
+    if agn_attenuation_block == "polar_dust":
+        # Compute reemission in L_nu from the pre-attenuation SED.
+        L_lambda_pre_atten = L_lambda_disc + L_lambda_lines + L_lambda_feii + L_lambda_torus
+        L_nu_reemit = polar_dust_reemission_lnu(wave, L_lambda_pre_atten, **params)
+        return L_nu_atten + L_nu_reemit
+    else:
+        return L_nu_atten
 
 
 def composable_agn_l_nu(

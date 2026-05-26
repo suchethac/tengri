@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SED, spectrum, and parameter sweep plotting utilities.
 
 Publication-quality spectral energy distribution visualization for photometry,
@@ -491,7 +492,7 @@ def sfh_sed_comparison(
                 # Generate unique key for this sample
                 sample_key = jax.random.fold_in(key, i * 1000 + s)
                 # Generate xi vector for stochastic SFH
-                xi = jax.random.normal(sample_key, shape=(model._n_grid,))
+                xi = jax.random.normal(sample_key, shape=(model.n_grid,))
                 override_with_xi = {**override, "sfh_field_xi": xi}
 
                 # SFH panel - stochastic

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate SFH generation, parameter transforms, and grid utilities.
 
 Covers: GP SFH via IFFT, precomputation consistency, parameter transforms
@@ -6,6 +7,7 @@ Covers: GP SFH via IFFT, precomputation consistency, parameter transforms
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -87,7 +89,7 @@ class TestGPSFHCrossval:
             return jnp.sum(gp_from_xi(xi, sqrt_power, len(xi)) ** 2)
 
         grad = jax.grad(loss)(jnp.zeros(n))
-        assert jnp.all(jnp.isfinite(grad))
+        chex.assert_tree_all_finite(grad)
 
 
 # ── 2. Parameter transforms (bounded <-> unbounded) ───────────────

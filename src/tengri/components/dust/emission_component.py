@@ -277,6 +277,12 @@ class DustEmissionSEDComponent:
             log_z_solar=self.config.pahspec_auto_log_z_solar,
         )
 
+    def citations(self) -> tuple[str, ...]:
+        """Dust IR template citations (DL07 / DL14 / Dale2014 / MBB) are
+        config-driven via
+        :data:`tengri.citations.associations.DUST_EMISSION_CITATIONS`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns, by template.
 
@@ -337,6 +343,8 @@ class DustEmissionSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustEmissionSEDComponentState:
         r"""Build cached tensors per template.
 
@@ -369,6 +377,7 @@ class DustEmissionSEDComponent:
         time, then the cached tensors enter the JIT graph as static
         constants.
         """
+        del ssp_data, filters
         if self.config.template == "modified_blackbody":
             return DustEmissionSEDComponentState(name=self.name)
 
@@ -475,6 +484,8 @@ class DustEmissionSEDComponent:
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
         precomputed: DustEmissionSEDComponentState | None = None,
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Add IR re-emission to ``state.sed_intrinsic``.
 
@@ -488,9 +499,20 @@ class DustEmissionSEDComponent:
             Receives ``dust_*`` keys plus ``redshift`` from the bare-
             name allowlist.
         precomputed : DustEmissionSEDComponentState, optional
-            Cached tensors from :meth:`precompute`.  Required for
+            **Deprecated** — use ``template_data`` instead for JIT
+            threading. Kept for backwards compatibility with direct
+            (non-orchestrator) calls. Cached tensors from
+            :meth:`precompute`.  Required for
             ``template="draine2021_pah"``; ignored for analytic
             templates.
+        ssp_data : Any, optional
+            Ignored — present for Protocol uniformity.
+        template_data : dict | None, optional
+            Thread runtime for JIT (Phase 4-D-B). When set, contains a
+            ``"dust_ir"`` sub-dict carrying the precomputed template
+            arrays (``pahspec_*`` or ``astrodust_*`` fields). When
+            ``None``, falls back to re-precomputing (slower, but safe
+            for non-JIT callers).
 
         Returns
         -------
@@ -502,12 +524,16 @@ class DustEmissionSEDComponent:
 
         Notes
         -----
-        **JIT-compatible**: yes for both supported templates.
+        **JIT-compatible**: yes for both supported templates when
+        ``template_data`` is supplied. The template arrays flow
+        through as runtime ``Parameter`` ops instead of baked-in
+        HLO ``Constant`` ops (Phase 4-D-B threading).
 
-        **Energy balance**: for ``draine2021_pah`` the template
-        spectrum is rescaled so that
+        **Energy balance**: for ``draine2021_pah`` and ``astrodust``
+        the template spectrum is rescaled so that
         :math:`\int L_\nu \, d\nu = L_{\rm ir}` exactly.
         """
+        del ssp_data  # unused — present for Protocol uniformity
         L_ir = jnp.asarray(state.derived.get("L_ir", 0.0))
 
         if self.config.template == "modified_blackbody":
@@ -521,20 +547,58 @@ class DustEmissionSEDComponent:
             )
 
         elif self.config.template == "draine2021_pah":
-            if precomputed is None:
-                precomputed = self.precompute(wave_grid=state.wave)
+            # Extract PAHspec templates from template_data if available,
+            # otherwise precompute. When threaded (template_data is a dict
+            # with "dust_ir" key), the arrays appear as JIT Parameter ops.
+            has_dust_ir = (
+                template_data is not None
+                and isinstance(template_data, dict)
+                and "dust_ir" in template_data
+            )
+            if has_dust_ir:
+                dust_ir = template_data["dust_ir"]
+                precomputed_for_apply = DustEmissionSEDComponentState(
+                    name=self.name,
+                    pahspec_lgU_grid=dust_ir["pahspec_lgU_grid"],
+                    pahspec_lnu_template=dust_ir["pahspec_lnu_template"],
+                    pahspec_norm_per_lgU=dust_ir["pahspec_norm_per_lgU"],
+                )
+            elif precomputed is None:
+                precomputed_for_apply = self.precompute(wave_grid=state.wave)
+            else:
+                precomputed_for_apply = precomputed
+
             L_dust_lnu = _apply_pahspec(
-                precomputed=precomputed,
+                precomputed=precomputed_for_apply,
                 wave_aa=state.wave,
                 L_ir=L_ir,
                 dust_lgU=jnp.asarray(params["dust_lgU"]),
             )
 
         elif self.config.template == "astrodust":
-            if precomputed is None:
-                precomputed = self.precompute(wave_grid=state.wave)
+            # Extract Astrodust templates from template_data if available,
+            # otherwise precompute.
+            has_dust_ir = (
+                template_data is not None
+                and isinstance(template_data, dict)
+                and "dust_ir" in template_data
+            )
+            if has_dust_ir:
+                dust_ir = template_data["dust_ir"]
+                precomputed_for_apply = DustEmissionSEDComponentState(
+                    name=self.name,
+                    astrodust_lgU_grid=dust_ir["astrodust_lgU_grid"],
+                    astrodust_lnu_template=dust_ir["astrodust_lnu_template"],
+                    astrodust_norm_per_lgU=dust_ir["astrodust_norm_per_lgU"],
+                    astrodust_lnu_spinning=dust_ir["astrodust_lnu_spinning"],
+                )
+            elif precomputed is None:
+                precomputed_for_apply = self.precompute(wave_grid=state.wave)
+            else:
+                precomputed_for_apply = precomputed
+
             L_dust_lnu = _apply_astrodust(
-                precomputed=precomputed,
+                precomputed=precomputed_for_apply,
                 L_ir=L_ir,
                 dust_lgU=jnp.asarray(params["dust_lgU"]),
             )
@@ -545,13 +609,7 @@ class DustEmissionSEDComponent:
                 f"{self.config.template!r}; valid: {_SUPPORTED_TEMPLATES}"
             )
 
-        if state.sed_intrinsic is None:
-            new_sed = jnp.zeros_like(state.wave) + L_dust_lnu
-        else:
-            new_sed = state.sed_intrinsic + L_dust_lnu
-
-        return state.with_(
-            sed_intrinsic=new_sed,
+        return state.add_intrinsic(L_dust_lnu).with_(
             derived=state.derived.with_(sed_dust_ir=L_dust_lnu),
         )
 

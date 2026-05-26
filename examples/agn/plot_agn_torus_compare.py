@@ -1,0 +1,87 @@
+"""
+AGN dusty torus: library comparison at fixed L_bol
+=====================================================
+
+Six dusty-torus libraries reprocessing the same accretion-disc
+continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
+inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)
+so the differences in the curves are entirely how each torus library
+geometrically distributes hot grains and re-emits the absorbed UV in
+the MIR.
+
+Torus libraries (the six production selectors under
+``agn.torus.type``):
+- ``skirtor``          — Stalevski+2016 clumpy radiative-transfer grid
+- ``cat3d_wind``       — Hönig & Kishimoto 2017 disc + wind grid
+- ``nenkova``          — Nenkova+2008 clumpy CLUMPY grid
+- ``silva04``          — Silva+2004 smooth two-temperature
+- ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
+- ``two_temperature``  — simple two-blackbody phenomenological torus
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+TORI = [
+    ("skirtor", "SKIRTOR (Stalevski+2016)"),
+    ("cat3d_wind", "CAT3D-WIND (Hönig & Kishimoto 2017)"),
+    ("nenkova", "CLUMPY (Nenkova+2008)"),
+    ("silva04", "Silva+2004"),
+    ("qsogen", "QSOGEN MIR"),
+    ("two_temperature", "two-T blackbody"),
+]
+COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(TORI)))
+
+C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+
+ssp = tengri.load_ssp()
+fig, ax = plt.subplots(figsize=(7.2, 4.6))
+
+for (torus, label), color in zip(TORI, COLORS):
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh=SFH,
+        dust=DUST,
+        agn={
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": torus, "*": tengri.FIXED},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
+        },
+        redshift=tengri.Fixed(0.05),
+    )
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    wave = np.asarray(out.wavelength)
+    nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+
+ax.set(
+    xlim=(1e3, 3e6),
+    ylim=(1e42, 5e46),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+)
+for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (70.0, "FIR")]:
+    ax.axvline(um * 1.0e4, color="0.85", lw=0.4, alpha=0.6)
+    ax.text(um * 1.0e4, 5e46 * 0.5, f"{name}", fontsize=7, color="0.5", ha="center", va="top")
+ax.legend(frameon=False, fontsize=8, loc="lower left")
+
+fig.tight_layout()
+plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")

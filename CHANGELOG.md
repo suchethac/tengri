@@ -6,8 +6,132 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+### Removed
+
+- Toy AGN registered models `"simple"` (`simple_agn`) and `"standard"`
+  (`standard_agn`). Both were modified-blackbody-based demo models flagged
+  with once-per-process warnings; the science path remains the
+  Kubota & Done 2018 models (`"multicolor_agn"` = deprecated alias
+  `"kubota_done"`, `"kubota_done_full"`) and the SKIRTOR / Silva+04 /
+  CAT3D-Wind / RELAGN templates.
+- Public re-exports of `simple_torus` and `two_temperature_torus` from
+  `tengri.components.agn`. The functions remain importable from
+  `tengri.components.agn.torus` for the production models that still
+  call them internally (`multicolor_agn`, `kubota_done_full`, `adaf`,
+  `relagn`) — see #233 for the planned IR-torus substitution.
+- Demo examples `examples/agn/plot_agn_polar_dust_temp_sweep.py`,
+  `plot_agn_templates.py`, `plot_polar_dust.py`,
+  `plot_torus_comparison.py` and the corresponding
+  `docs/auto_examples/agn/` artifacts. They used the deleted toy AGN
+  public surface; the SKIRTOR-based examples (`plot_agn_cos_inc_sweep`,
+  `plot_agn_oa_sweep`, `plot_skirtor_variants`, etc.) remain.
+- `tests/contract/test_torus_deprecation.py` (the warn-once contract
+  test for the now-private toy torus functions).
+- `tests/components/agn/test_simple_agn.py` and `test_standard_agn.py`.
+
+### Changed
+
+- Default AGN model for `AGNSEDComponentConfig` changed from `"simple"`
+  to `"multicolor_agn"` (the Kubota & Done 2018 outer-zone disc + 2-T
+  torus). Existing fits that explicitly set `agn_model="simple"` will
+  fail with a clear `ValueError`; update to one of the production
+  models listed in the AGN module docstring.
+- Promoted to the top-level `tengri` public surface (added to
+  `__all__`): `FIXED`, `FREE`, `fit_batch`, `SEDResult`,
+  `PriorPredictive`, `data_path`. No behaviour change — they were
+  importable but not advertised. `load_filter_set` was considered but
+  stays demoted per existing design — import from
+  `tengri.observation.load_filter_set`.
+
+## [0.1.0] - 2026-05-22
+
+First public preview release.
+
+### Added
+
+- **`tengri.PopulationSEDModel` — hierarchical SubModel.**
+  Bundles one `SEDModel` template + a list of per-galaxy data dicts +
+  the names of parameters tied across the population (default: the
+  two PSD hyperparameters `sfh_field_psd_sigma`,
+  `sfh_field_psd_tau_myr`) + their priors. Held by `ForwardModel`
+  via the new `ForwardModel.build(population=pop, observation=obs)`
+  kwarg slot, so the outer-shell construction signature stays uniform
+  across SubModel variants (`SEDModel`, `SpatialModel`,
+  `SpatialSEDModel`, `PopulationSEDModel`,
+  `PopulationSpatialSEDModel` *(far future)*). The hierarchical
+  inference path itself is tracked in
+  [issue #211](https://github.com/suchethac/tengri/issues/211); until
+  it lands, users continue to drive the fit via
+  `tengri.PopulationFitter` directly (legacy entry point preserved
+  for backward compatibility).
+- **Multi-population galaxy decompositions (ADR-0012 accepted).**
+  `ForwardModel.build(populations=[...])` now accepts N > 1
+  populations for AGN + bulge + disc and similar galaxy
+  decompositions. Parameter names use the namespace
+  `"<population_name>.<prefix>_<param>"` (e.g.
+  `"disc.sfh_dpl_alpha"`); bare names like `redshift` flow to every
+  population. Each population's prediction is summed in linear flux
+  at the observation layer via `JointObservation.predict_summed`.
+  Cross-population state reads are supported by namespaced keys in
+  `state.derived` (e.g. `"agn.L_bolometric"`). The prefix CI guard
+  strips the namespace before applying the prefix discipline. See
+  `docs/adr/0012-forward-model-population.md`.
+- **`tengri.ForwardModel`** — the outer-shell forward-model class.
+  Wraps populations + observation and exposes a single
+  `.predict(params)` method. See
+  `docs/dev/forward-model-architecture.md`.
+- **`tengri.Population`** — one (SED, spatial) pair held by
+  `ForwardModel`. Spatial submodel is reserved (`None`) in this
+  slice.
+- **`tengri.protocols.SubModel`** — runtime-checkable Protocol for
+  one mode of `ForwardModel` (SED, spatial, joint). Two-method
+  contract (`run`, `declared_parameters`).
+- **`tengri.protocols.SpatialComponent`** — mirror of `SEDComponent`
+  on the spatial side; runtime-checkable Protocol with the same
+  `declared_parameters`/`precompute`/`apply` shape.
+- **`SpatialModelComponent`** astronomer-facing base class
+  (`tengri.components.spatial_model_component`). Mirror of
+  `SEDModelComponent`. Auto-discovers class-level `Distribution`
+  attrs as free parameters, supports `reads`/`publishes` dicts, and
+  provides a default `apply()` that handles param slicing, grid
+  lookup, and writes the resulting profile to
+  `state.derived["spatial_profile_2d"]`.
+- **`tengri.components.spatial.{Sersic, Exponential, FlatSlab}`** —
+  three concrete spatial-profile blocks. `Sersic` implements the
+  full Ciotti & Bertin (1999) expansion for `b_n`; `Exponential` is
+  the standalone n=1 case; `FlatSlab` is the explicit form of the
+  uniform-aperture model that classical SED codes use implicitly.
+- `DerivedBundle` gained two canonical fields, `spatial_profile_2d`
+  and `spatial_grid_xy_kpc`, with matching entries in the
+  orchestrator's `_CANONICAL_UNITS` table.
+- **`tengri.forward.spatial_model.SpatialModel`** — SubModel composer
+  over a list of `SpatialComponent`s. Mirror of `SEDModel` at the
+  sub-model layer (no physics of its own; aggregates declared
+  parameters; threads `ForwardState` through components).
+- **`tengri.forward.spatial_model.SpatialSEDModel`** — joint
+  composer holding one SED SubModel + one `SpatialModel`. Runs
+  SED → Spatial per architecture spec §4.3 so spatial components can
+  optionally read SED-derived state keys. The scientific main path
+  for combined spatial+SED fits once observation adapters land.
+
 ### Internal
 
+- **`SEDModel` directly satisfies `tengri.protocols.SubModel`.** The
+  `run(state, params)` and `declared_parameters()` methods are now on
+  `SEDModel` itself, alongside a `name = "sed"` class attribute. The
+  transitional `_LegacySEDSubModel` adapter introduced in the
+  forward-model tracer-bullet is deleted; `ForwardModel.build` and
+  `ForwardModel.predict` consume `SEDModel` instances directly. No
+  user-visible change to the public API — additive on `SEDModel`,
+  internal cleanup on `ForwardModel`.
+- **`ForwardModel.predict` now projects through `Observation.predict`.**
+  Previously the outer shell reached into `SEDModel.predict_photometry`
+  for the photometric channel; it now follows the architectural seam —
+  per-population SED `SubModel.run(state, params) → ForwardState`, then
+  `Observation.predict(state, params) → dict`. Fixed parameter values
+  are merged into the params dict before projection so callers can pass
+  only their free-parameter overrides. No user-visible API change; the
+  prediction dict still matches the legacy path numerically.
 - Scaffolded per-component `_params.py` skeletons (PR1/5 of the
   parameter-registry consolidation) and extended
   `tengri.core.component.ParamDeclaration` with optional `bound_check`

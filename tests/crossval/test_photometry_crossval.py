@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate photometry and apparent magnitudes against FSPS.
 
 Tests AB magnitudes through SDSS ugriz and 2MASS JHKs filters at
@@ -13,6 +14,7 @@ data/fsps_spectrum_reference.npz.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -182,7 +184,7 @@ class TestDiffsedPhotometry:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": 0.5,
+            "sfh_dpl_log_total_mass": 0.5,
             "sfh_field_psd_sigma": 0.01,
             "sfh_field_psd_tau_myr": 50.0,
             "sfh_field_xi": jnp.zeros(256),
@@ -193,7 +195,7 @@ class TestDiffsedPhotometry:
 
         try:
             phot = tengri_model.predict_photometry(params)
-            assert jnp.all(jnp.isfinite(phot)), "Photometry has non-finite values"
+            chex.assert_tree_all_finite(phot)
             assert jnp.all(phot > 0), "Photometry should be positive"
         except (ValueError, AttributeError):
             pytest.skip("No filters configured on SEDModel")

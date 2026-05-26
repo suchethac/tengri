@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Performance and memory optimizations for JAX-based SED fitting.
 
 Implements tricks from NIFTy.re (Edenhofer+2024) and Zacharegkas+2025

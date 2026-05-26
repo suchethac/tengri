@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Lightweight Instrument bundles + a registry of common premade instruments.
 
 An :class:`Instrument` packages a filter set (or spectroscopic config) with

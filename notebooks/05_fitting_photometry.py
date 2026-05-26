@@ -35,8 +35,11 @@
 # ## Setup
 
 # %%
-import contextlib
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import contextlib
 import sys
 import time
 import warnings
@@ -180,7 +183,7 @@ spec = Parameters(
     # so the unconstrained xi-space is roughly Gaussian — flattens the
     # geometry near the lower boundary (tau→0, alpha→1) where Uniform
     # priors create steep gradients and trigger NUTS divergences.
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),  # already in log space
+    sfh_dpl_log_total_mass=Uniform(7.0, 12.5),  # already in log space
     sfh_dpl_tau_gyr=LogUniform(0.5, 12.0),
     sfh_dpl_alpha=LogUniform(1.0, 8.0),
     sfh_dpl_beta=LogUniform(1.0, 8.0),
@@ -189,12 +192,10 @@ spec = Parameters(
     dust_tau_diff=LogUniform(0.01, 1.5),
     dust_slope=Fixed(-0.7),
     # No dust_emission: UV-NIR alone is well-constrained without IR.
-    # Free redshift — `SEDModel(approx={"ztable": ...})` auto-precomputes
-    # a redshift table interpolated by the `hybrid_ztable` kernel, so
-    # free z costs no more compile time than fixed z. Defaults: z_min /
-    # z_max pulled from the prior with 1% padding, n_z=100. Override:
-    #   approx={"ztable": {"z_min": 0.01, "z_max": 3.0, "n_z": 200}}
-    # or disable: approx={"ztable": False}.
+    # Free redshift — pass `approx=WavePrecomp()` to SEDModel and the
+    # ztable interpolation is auto-enabled (free z costs no more compile
+    # time than fixed z). Use `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`
+    # to override the default sampling.
     redshift=Uniform(0.01, 0.5),
 )
 print(f"\nModel: {spec.n_free} free parameters")
@@ -225,7 +226,7 @@ truth = spec.sample(key)
 # Override to realistic: z=0.08, Msun=10.5, rising SFH
 truth = {**truth}
 truth["redshift"] = jnp.array(0.08)
-truth["sfh_dpl_log_peak_sfr"] = jnp.array(np.log10(15.0))
+truth["sfh_dpl_log_total_mass"] = jnp.array(np.log10(15.0))
 truth["sfh_dpl_tau_gyr"] = jnp.array(3.0)
 truth["sfh_dpl_alpha"] = jnp.array(3.5)
 truth["sfh_dpl_beta"] = jnp.array(2.0)

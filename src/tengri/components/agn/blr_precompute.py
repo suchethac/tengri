@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for AGN Broad Line Region (BLR) Gaussian composer.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
@@ -42,8 +43,15 @@ import numpy as np
 from tengri.components.agn.blr import (
     _BLR_LINE_STRENGTHS,
     _BLR_LINE_WAVELENGTHS,
-    _FE2_GROUPS,
 )
+
+# The Fe II pseudo-continuum used to be a small set of discrete Gaussian
+# groups (``_FE2_GROUPS``) suitable for delta-function preintegration. It
+# was replaced by the PyQSOFit tabulated template (Tsuzuki+06 / Boroson &
+# Green 92) which is applied at runtime and is not preintegrable as
+# discrete deltas. The precompute path now only handles the discrete BLR
+# emission lines; Fe II flows through the runtime template path.
+_FE2_GROUPS = np.empty((0, 3), dtype=np.float64)
 
 # Axis parameters: BLR Gaussian composer has NO grid axes — all parameters are
 # runtime. This tuple is empty; precompute returns only the filter table.

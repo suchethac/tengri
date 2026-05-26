@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation of tengri's dense_basis GP-SFH against the original package.
 
 Compares the SFH shapes produced by tengri's JAX reimplementation against
@@ -39,7 +40,7 @@ skip_no_db = pytest.mark.skipif(
     reason="dense_basis package not installed (pip install dense_basis)",
 )
 
-from tengri.components.stellar.sfh.dense_basis import dense_basis_sfh
+from tengri.components.stellar.sfh.dense_basis import dense_basis as dense_basis_sfh
 
 # ── Test data: 6 canonical tutorial shapes (Iyer+2019) ────────────
 # Format: [log_M*, log_SFR_inst, Nparam, tx0, tx1, tx2]

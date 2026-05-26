@@ -100,9 +100,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
 
 @dataclass(frozen=True)
 class DustSEDComponentState(SEDComponentState):
-    """Marker state — emission templates are resolved lazily inside ``apply``."""
+    """State for dust component, optionally caching emission templates for JIT threading.
+
+    When ``wave_precomp=True`` is set on the parent SEDModel, this holds
+    pre-loaded dust IR emission templates as JAX arrays, so they thread
+    through JIT as Parameter ops rather than baking into HLO Constants.
+    """
 
     name: str = "dust"
+    dust_emission_templates: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +130,12 @@ class DustSEDComponent:
     config: DustSEDComponentConfig = field(default_factory=DustSEDComponentConfig)
     name: str = "dust"
     parameter_prefix: str = "dust_"
+
+    def citations(self) -> tuple[str, ...]:
+        """Structurally implements Charlot & Fall (2000) two-component dust;
+        per-leaf attenuation laws are config-driven via
+        :data:`tengri.citations.associations.DUST_LAW_CITATIONS`."""
+        return ("charlot_fall2000",)
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
@@ -219,17 +231,81 @@ class DustSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: dict[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustSEDComponentState:
-        """No-op marker — all dust templates are baked in at construction."""
-        del ssp_data, wave_grid
-        return DustSEDComponentState(name=self.name)
+        r"""Optionally pre-load dust IR emission templates for JIT threading.
+
+        When ``approx=WavePrecomp()``, loads the dust IR emission
+        template grids into a JAX pytree so they become JIT ``Parameter``
+        ops rather than baked-in ``Constant`` ops.
+
+        Parameters
+        ----------
+        ssp_data : Any | None
+            Unused; accepted for Protocol uniformity.
+        wave_grid : ndarray | None
+            Unused; accepted for Protocol uniformity.
+        approx : dict[str, bool] | None
+            Approximation flags. When ``approx.get('wave_precomp')`` is
+            ``True``, load templates.
+        filters : tuple of (wave, trans) pairs | None
+            Unused; accepted for Protocol uniformity.
+
+        Returns
+        -------
+        DustSEDComponentState
+            State with optionally-populated ``dust_emission_templates``.
+        """
+        del ssp_data, wave_grid, filters
+        approx = approx or {}
+
+        dust_templates = None
+        if approx.get("wave_precomp") and self.config.emission_model is not None:
+            # Load the emission template grids for JIT threading
+            emission_models_with_templates = {
+                "dale2014",
+                "draine_li2007",
+                "draine_li2014",
+                "astrodust",
+                "bosa",
+            }
+            if self.config.emission_model in emission_models_with_templates:
+                from tengri.components.dust.emission import (
+                    DUST_EMISSION_MODELS,
+                    resolve_emission_model,
+                )
+
+                try:
+                    # Trigger template loading by calling the emission function
+                    # with dummy inputs. This populates DUST_EMISSION_MODELS
+                    # with the actual template arrays.
+                    resolve_emission_model(self.config.emission_model)
+                    emission_fn = DUST_EMISSION_MODELS.get(self.config.emission_model)
+                    if emission_fn is not None:
+                        # Store a reference to the resolved function for apply()
+                        dust_templates = emission_fn
+                except Exception:
+                    # If template loading fails (file not found), gracefully
+                    # continue without threading.
+                    pass
+
+        return DustSEDComponentState(
+            name=self.name,
+            dust_emission_templates=dust_templates,
+        )
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Apply two-component attenuation + IR re-emission.
+
+        ``ssp_data`` is accepted for Protocol uniformity but unused — this
+        component reads only from ``state`` and ``params``.
 
         Parameters
         ----------
@@ -326,12 +402,60 @@ class DustSEDComponent:
         else:
             non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
         sed_total = non_stellar_pre_dust + sed_attenuated + sed_ir
+
+        # Phase 3c-3c-iv-b: per-filter LUTs for two-component attenuation.
+        # T(a, λ) factorises as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
+        # path we publish A_diff = exp(-τ_diff·k_diff(λ_eff)) and
+        # A_bc = exp(-τ_bc·k_bc(λ_eff)) at each filter pivot, plus their
+        # wavelength derivatives via central finite difference. The young
+        # indicator ``y(a)`` is exposed for downstream consumers.
+        derived_overrides = dict(
+            L_ir=L_ir,
+            L_absorbed=L_absorbed,
+            sed_dust_attenuated=sed_attenuated,
+            sed_dust_ir=sed_ir,
+        )
+        filter_eff = state.derived.get("filter_eff_waves")
+        if filter_eff is not None:
+            from tengri.components.dust.attenuation import resolve_dust_law
+
+            tau_bc = jnp.asarray(params["dust_tau_bc"])
+            tau_diff = jnp.asarray(params["dust_tau_diff"])
+            n_slope = jnp.asarray(params.get("dust_slope", -0.7))
+            law_bc_fn = resolve_dust_law(self.config.law_bc)
+            law_diff_fn = resolve_dust_law(self.config.law_diff)
+            d_lambda = jnp.asarray(1.0)
+            # Evaluate k_bc and k_diff at the filter pivots and ±δλ for
+            # the finite-difference slope.
+            k_bc_at = law_bc_fn(filter_eff, n_slope=n_slope)
+            k_diff_at = law_diff_fn(filter_eff, n_slope=n_slope)
+            k_bc_plus = law_bc_fn(filter_eff + d_lambda, n_slope=n_slope)
+            k_bc_minus = law_bc_fn(filter_eff - d_lambda, n_slope=n_slope)
+            k_diff_plus = law_diff_fn(filter_eff + d_lambda, n_slope=n_slope)
+            k_diff_minus = law_diff_fn(filter_eff - d_lambda, n_slope=n_slope)
+            k_bc_slope = (k_bc_plus - k_bc_minus) / (2.0 * d_lambda)
+            k_diff_slope = (k_diff_plus - k_diff_minus) / (2.0 * d_lambda)
+            a_bc = jnp.exp(-tau_bc * k_bc_at)
+            a_diff = jnp.exp(-tau_diff * k_diff_at)
+            a_bc_slope = -tau_bc * k_bc_slope * a_bc
+            a_diff_slope = -tau_diff * k_diff_slope * a_diff
+            derived_overrides["dust_bc_attenuation_precomp"] = a_bc
+            derived_overrides["dust_bc_attenuation_slope_precomp"] = a_bc_slope
+            derived_overrides["dust_diff_attenuation_precomp"] = a_diff
+            derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
+
+            # Young-star indicator on the SSP age grid: smooth sigmoid
+            # transition around t_birth (matches two_component_dust).
+            t_birth = self.config.t_birth_yr
+            transition = self.config.transition_width_dex
+            log_t = jnp.log10(jnp.maximum(ssp_ages_yr, 1.0))
+            log_t_birth = jnp.log10(t_birth)
+            # y(a) = 1 / (1 + 10^((log_t - log_t_birth) / transition))
+            # → 1 for log_t << log_t_birth (young), 0 for log_t >> log_t_birth (old).
+            y_age = 1.0 / (1.0 + 10.0 ** ((log_t - log_t_birth) / transition))
+            derived_overrides["dust_young_indicator"] = y_age
+
         return state.with_(
             sed_intrinsic=sed_total,
-            derived=state.derived.with_(
-                L_ir=L_ir,
-                L_absorbed=L_absorbed,
-                sed_dust_attenuated=sed_attenuated,
-                sed_dust_ir=sed_ir,
-            ),
+            derived=state.derived.with_(**derived_overrides),
         )

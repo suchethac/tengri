@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """VI smoke-fit tests exercising dust emission precompute paths with 50-step gradient inference.
 
 These tests validate the end-to-end inference stack against dust emission models
@@ -51,7 +52,7 @@ _VI_SMOKE_CASES = [
             "sfh_dpl_alpha": Uniform(0.5, 3.0),
             "sfh_dpl_beta": Uniform(0.3, 2.0),
             "sfh_dpl_tau_gyr": Uniform(0.5, 10.0),
-            "sfh_dpl_log_peak_sfr": Uniform(-1.0, 2.5),
+            "sfh_dpl_log_total_mass": Uniform(-1.0, 2.5),
             "met_logzsol": Uniform(-1.5, 0.2),
             "dust_tau_bc": Uniform(0.0, 3.0),
             "dust_tau_diff": Uniform(0.0, 2.0),
@@ -65,7 +66,7 @@ _VI_SMOKE_CASES = [
             "sfh_dpl_alpha": 1.5,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": 0.5,
+            "sfh_dpl_log_total_mass": 0.5,
             "met_logzsol": -0.5,
             "dust_tau_bc": 0.5,
             "dust_tau_diff": 0.3,
@@ -85,7 +86,7 @@ _VI_SMOKE_CASES = [
             "sfh_dpl_alpha": Uniform(0.5, 3.0),
             "sfh_dpl_beta": Uniform(0.3, 2.0),
             "sfh_dpl_tau_gyr": Uniform(0.5, 10.0),
-            "sfh_dpl_log_peak_sfr": Uniform(-1.0, 2.5),
+            "sfh_dpl_log_total_mass": Uniform(-1.0, 2.5),
             "met_logzsol": Uniform(-1.5, 0.2),
             "dust_tau_bc": Uniform(0.0, 3.0),
             "dust_tau_diff": Uniform(0.0, 2.0),
@@ -99,7 +100,7 @@ _VI_SMOKE_CASES = [
             "sfh_dpl_alpha": 1.5,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": 0.5,
+            "sfh_dpl_log_total_mass": 0.5,
             "met_logzsol": -0.5,
             "dust_tau_bc": 0.5,
             "dust_tau_diff": 0.3,

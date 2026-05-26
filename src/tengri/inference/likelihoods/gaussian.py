@@ -5,7 +5,7 @@ These tiny pure-JAX helpers are the single source of truth for the
 diagonal-Gaussian χ² that appears throughout
 :mod:`tengri.inference.loss_functions` (16 call-sites as of 2026-05)
 and the new :class:`tengri.pipeline.PhotometryLikelihood` Protocol
-adapter. Both the legacy fitter and the Phase II-1 component pipeline
+adapter. Both the legacy fitter and the component pipeline
 delegate here so any change (e.g. adding a systematic floor) lands in
 one place.
 

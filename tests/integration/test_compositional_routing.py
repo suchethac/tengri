@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests verifying compositional kernel routing for special SFH/metallicity modes.
 
 Tests cover:
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -61,7 +63,7 @@ class TestEvolvingZRouting:
     def evolvingz_spec(self):
         return Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -99,7 +101,7 @@ class TestEvolvingZRouting:
 
     def test_photometry_shape(self, evolvingz_model, evolvingz_params):
         phot = evolvingz_model.predict_photometry(evolvingz_params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))
 
 
 # ── TestChemEvolRouting ───────────────────────────────────────────
@@ -113,7 +115,7 @@ class TestChemEvolRouting:
         # chem_evol params all have Fixed defaults — no Uniform needed
         return Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -148,7 +150,7 @@ class TestChemEvolRouting:
 
     def test_photometry_shape(self, chemevol_model, chemevol_params):
         phot = chemevol_model.predict_photometry(chemevol_params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))
 
 
 # ── TestTabularSFHRouting ─────────────────────────────────────────
@@ -210,4 +212,4 @@ class TestTabularSFHRouting:
     def test_photometry_shape(self, tabular_model, base_params):
         params = self._add_sfh(base_params, jax.random.PRNGKey(7))
         phot = tabular_model.predict_photometry(params)
-        assert phot.shape == (_N_FILTERS,)
+        chex.assert_shape(phot, (_N_FILTERS,))

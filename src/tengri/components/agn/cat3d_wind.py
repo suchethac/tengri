@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """CAT3D-Wind clumpy-disc-plus-polar-wind AGN torus (Hönig & Kishimoto 2017).
 
 Three-parameter torus library interpolated differentiably in

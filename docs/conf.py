@@ -79,7 +79,10 @@ sphinx_gallery_conf = {
     "ignore_pattern": (
         # Heavy NUTS/SVI scripts whose runtime + memory footprint OOMs the
         # build (each NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha).
-        r"plot_(population_scaling|hierarchical_convergence|prior_posterior_compare)\.py$"
+        # plot_hierarchical also hits an upstream stochastic-SFH JAX-tracing
+        # issue in model.mock() / predict_observables under field SFH — needs
+        # a library fix before re-enabling.
+        r"plot_(population_scaling|hierarchical|hierarchical_convergence|prior_posterior_compare|wrong_model_trap)\.py$"
     ),
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
@@ -120,22 +123,34 @@ sphinx_gallery_conf = {
 # pedagogically (onboarding → physics building blocks → observation
 # layer → inference → applications) rather than alphabetical.
 _GALLERY_SECTION_ORDER = (
+    # Onboarding: where every astronomer should start.
     "quickstart",
-    "workflows",
     "recipes",
+    "workflows",
+    # The stellar engine: what produces the continuum.
     "sps",
     "sfh",
     "metallicity",
+    # ISM processing: what happens between the stars and us.
+    # Order mirrors the radiative-transfer pipeline:
+    #   stellar continuum --> nebular reprocessing at the source
+    #   --> dust attenuation along the line of sight
+    #   --> dust thermal re-emission set by energy balance.
+    "nebular",
     "dust_attenuation",
     "dust_emission",
-    "nebular",
-    "igm",
+    # AGN: the alternative engine.
     "agn",
+    # Wavelength extensions: long- and short-λ companions of the optical
+    # SED, plus the cosmological line-of-sight absorption.
     "radio",
     "xray",
+    "igm",
+    # Observation layer: how the SED couples to instruments.
     "photometry",
     "spectroscopy",
     "multiwavelength",
+    # Inference and science applications.
     "inference",
     "usecases",
     "advanced",
@@ -229,12 +244,16 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
         entries.keys(),
         key=lambda s: (order.get(s, len(order)), s),
     )
-    # ``:hidden:`` (no ``:includehidden:``) so the section list shows up
-    # on the gallery page body but does NOT propagate into the parent
-    # sidebar — the gallery is one dropdown, not 19 nested ones.
+    # ``:hidden:`` + ``:titlesonly:`` + ``:maxdepth: 1`` so the gallery is
+    # ONE sidebar entry, not 19 nested ones. ``:hidden:`` keeps the toctree
+    # out of the page body; ``:titlesonly:`` stops Furo from descending past
+    # the gallery title into per-section indexes; ``:maxdepth: 1`` caps the
+    # walk so per-script pages can't bubble up either.
     toctree = [
         ".. toctree::",
         "   :hidden:",
+        "   :titlesonly:",
+        "   :maxdepth: 1",
         "",
     ] + [f"   /auto_examples/{s}/index.rst" for s in ordered_sections]
 
@@ -263,9 +282,66 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
     path.write_text("\n".join(new_lines) + "\n")
 
 
+def _inject_missing_image_directives(app, *_args, **_kwargs):
+    """Inject ``.. image::`` blocks into RSTs that lack one.
+
+    Sphinx-gallery only writes the image directive into a script's RST
+    when it *executes* the script. ``filename_pattern`` here skips any
+    script whose ``images/sphx_glr_<stem>_001.png`` is already on disk
+    (the speed-up that keeps docs build under 5 min). So skipped
+    scripts produce RSTs without the directive, and the deployed HTML
+    for those pages silently loses its figure.
+
+    For every ``plot_*.rst`` that lacks ``.. image::`` but DOES have a
+    matching image on disk, inject a standard sphinx-gallery image
+    block right after the section title underline.
+    """
+    from pathlib import Path
+
+    auto = Path(app.srcdir) / "auto_examples"
+    if not auto.exists():
+        return
+    fixed = 0
+    for rst in auto.glob("*/plot_*.rst"):
+        text = rst.read_text()
+        if ".. image::" in text:
+            continue
+        stem = rst.stem
+        img = f"images/sphx_glr_{stem}_001.png"
+        if not (rst.parent / img).exists():
+            continue
+        lines = text.splitlines()
+        out = []
+        inserted = False
+        for i, line in enumerate(lines):
+            out.append(line)
+            if (not inserted and i + 1 < len(lines)
+                    and lines[i + 1].strip()
+                    and set(lines[i + 1].strip()) <= {"="}):
+                out.append(lines[i + 1])
+                out += ["",
+                        f".. image:: {img}",
+                        f"   :alt: {stem.replace('_', ' ')}",
+                        "   :class: sphx-glr-single-img",
+                        ""]
+                for j in range(i + 2, len(lines)):
+                    out.append(lines[j])
+                inserted = True
+                break
+        if inserted:
+            rst.write_text("\n".join(out) + "\n")
+            fixed += 1
+    if fixed:
+        print(f"[conf.py] injected .. image:: directives into {fixed} skipped RSTs")
+
+
 def setup(app):
     # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
     app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)
+    # env-before-read-docs fires AFTER sphinx-gallery has generated the
+    # per-script RSTs but BEFORE sphinx parses any source, which is exactly
+    # the window we need to mutate the RSTs on disk.
+    app.connect("env-before-read-docs", _inject_missing_image_directives)
 
 # -- MyST configuration ------------------------------------------------------
 
@@ -361,4 +437,9 @@ exclude_patterns = [
     # Not part of the published sidebar (content folded into index.md or omitted)
     "changelog.md",
     "documentation.md",
+    # Spine notebooks not currently in the published sidebar (08 emission
+    # lines + 09 parameter sweeps were the "physics deep dives" section,
+    # dropped from the index in the 2026-05 polish pass).
+    "spine/08_emission_lines.ipynb",
+    "spine/09_parameter_sweeps.ipynb",
 ]

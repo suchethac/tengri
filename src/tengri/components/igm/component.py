@@ -85,6 +85,11 @@ class IGMSEDComponent:
     name: str = "igm"
     parameter_prefix: str = "igm_"
 
+    def citations(self) -> tuple[str, ...]:
+        """IGM transmission backend (Inoue+2014 / Madau+1995) is config-driven;
+        see :data:`tengri.citations.associations.IGM_CITATIONS`."""
+        return ()
+
     def declared_parameters(self) -> list[ParamDeclaration]:
         r"""Free parameters this component owns.
 
@@ -113,15 +118,19 @@ class IGMSEDComponent:
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> IGMSEDComponentState:
         r"""No-op precompute. IGM transmission is evaluated at apply time."""
-        del ssp_data, wave_grid
+        del ssp_data, wave_grid, filters
         return IGMSEDComponentState(name=self.name)
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         r"""Multiply ``state.sed_observed`` by the Inoue+2014 transmission.
 

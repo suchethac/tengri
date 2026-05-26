@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter translation between public and internal names.
 
 Naming Conventions
@@ -5,7 +6,30 @@ Naming Conventions
 Metallicity:
     Public:   met_logzsol     = log10(Z/Zsun) (relative to solar)
     Internal: log_z_abs       = log10(Z) (absolute)
-    Offset:   LOG10_ZSUN = -1.8477 (Asplund 2009)
+    Offset:   LOG10_ZSUN = -1.8477 (Asplund 2009, Zsun = 0.0142)
+
+    Tengri uses **Asplund 2009 Zsun = 0.0142** as the single normalising
+    constant for the public ``met_logzsol`` axis. This matches the MIST
+    isochrone family. Other SSP libraries adopt different "solar"
+    references:
+
+    =========  =======  =======================================
+    Library    Zsun     LOG10_ZSUN  (= log10(Zsun))
+    =========  =======  =======================================
+    MIST       0.0142   -1.8477   ← matches tengri's constant
+    PARSEC     0.0152   -1.8181
+    Padova     0.0190   -1.7212   ← BC03, default in CIGALE
+    BASTI      0.0200   -1.6990
+    =========  =======  =======================================
+
+    Practical note: when working entirely in solar-normalised
+    ``met_logzsol`` units **and** the SSP file's tabulated Z grid was
+    generated against the *same* Zsun, the round-trip is self-consistent.
+    When comparing against a code that uses a different Zsun (e.g. CIGALE
+    BC03 on Padova), reason in **absolute** ``log_z_abs = met_logzsol +
+    LOG10_ZSUN`` and pin that — see ``reproduction/cigale/_drivers/
+    consistency_audit.py`` for the canonical CIGALE-comparison pattern.
+    See also #412.
 
 Dust:
     Public:   dust_tau_bc, dust_tau_diff, dust_slope
@@ -41,8 +65,23 @@ from tengri.parameters._builders import _resolve_lazy_bucket
 
 # ── Constants ─────────────────────────────────────────────────────
 
-# Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
+# Solar metallicity convention: tengri uses **Asplund 2009 Zsun = 0.0142**,
+# i.e. LOG10_ZSUN = log10(0.0142) = -1.8477. This matches the MIST isochrone
+# family. SSP libraries built on Padova (BC03, default CIGALE), PARSEC, or
+# BASTI use different Zsun — see module docstring for the table. Reason in
+# absolute ``log_z_abs`` (not solar-normalised) for cross-code comparisons.
 LOG10_ZSUN = -1.8477116556169435
+
+# Per-SSP-library solar Z values (kept as a reference dict so downstream
+# code or audits can look up the right Zsun if they need to translate
+# between conventions). Not consumed by the forward model directly — the
+# public surface uses LOG10_ZSUN above.
+LOG10_ZSUN_BY_LIBRARY: dict[str, float] = {
+    "mist": -1.8477,  # Asplund 2009, Zsun = 0.0142
+    "parsec": -1.8181,  # Bressan+ 2012, Zsun = 0.0152
+    "padova": -1.7212,  # BC03 / CIGALE default, Zsun = 0.0190
+    "basti": -1.6990,  # Pietrinferni+ 2004, Zsun = 0.0200
+}
 
 # ── Parameter maps: public → (internal, unit_scale, offset) ───────
 
@@ -108,32 +147,32 @@ _NON_SFH_PARAM_MAP = {
 # Used by Model.from_config() to expand user-supplied short priors.
 _SFH_SHORT_NAMES: dict[str, dict[str, str]] = {
     "tsnorm": {
-        "log_peak_sfr": "sfh_tsnorm_log_peak_sfr",
+        "log_total_mass": "sfh_tsnorm_log_total_mass",
         "peak_lbt_gyr": "sfh_tsnorm_peak_lbt_gyr",
         "width_gyr": "sfh_tsnorm_width_gyr",
         "skew": "sfh_tsnorm_skew",
         "trunc": "sfh_tsnorm_trunc",
     },
     "snorm": {
-        "log_peak_sfr": "sfh_snorm_log_peak_sfr",
+        "log_total_mass": "sfh_snorm_log_total_mass",
         "peak_lbt_gyr": "sfh_snorm_peak_lbt_gyr",
         "width_gyr": "sfh_snorm_width_gyr",
         "skew": "sfh_snorm_skew",
     },
     "lnorm": {
-        "log_peak_sfr": "sfh_lnorm_log_peak_sfr",
+        "log_total_mass": "sfh_lnorm_log_total_mass",
         "peak_lbt_gyr": "sfh_lnorm_peak_lbt_gyr",
         "width_gyr": "sfh_lnorm_width_gyr",
     },
     "dpl": {
         "alpha": "sfh_dpl_alpha",
         "beta": "sfh_dpl_beta",
-        "log_peak_sfr": "sfh_dpl_log_peak_sfr",
+        "log_total_mass": "sfh_dpl_log_total_mass",
         "tau_gyr": "sfh_dpl_tau_gyr",
     },
     "delayed": {
         "tau_gyr": "sfh_delayed_tau_gyr",
-        "log_peak_sfr": "sfh_delayed_log_peak_sfr",
+        "log_total_mass": "sfh_delayed_log_total_mass",
     },
     # "field" additions apply to any sfh that includes "+field"
     "field": {
@@ -173,8 +212,8 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
         SFH type tokens, e.g. ``"tsnorm"`` or ``["dpl", "field"]``.
         Determines which short names are valid.
     priors : dict
-        User-supplied prior dict, may contain short names like ``"log_peak_sfr"``
-        or full names like ``"sfh_tsnorm_log_peak_sfr"``. Full names pass through
+        User-supplied prior dict, may contain short names like ``"log_total_mass"``
+        or full names like ``"sfh_tsnorm_log_total_mass"``. Full names pass through
         unchanged.
 
     Returns
@@ -185,8 +224,8 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
 
     Examples
     --------
-    >>> resolve_short_names("tsnorm", {"log_peak_sfr": Uniform(-1, 2.5)})
-    {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5)}
+    >>> resolve_short_names("tsnorm", {"log_total_mass": Uniform(8, 12)})
+    {"sfh_tsnorm_log_total_mass": Uniform(8, 12)}
     """
     if isinstance(sfh_type, str):
         tokens = [t.strip() for t in sfh_type.replace("+", " ").split()]
@@ -212,11 +251,12 @@ def resolve_short_names(sfh_type: str | list[str], priors: dict) -> dict:
 
 
 # Module-level PARAM_MAP exported for tests and external tooling
+# NOTE: This legacy map has been superseded by the registry-driven _build_param_map()
+# function. Retained here for backwards compatibility with tests that may reference it.
 PARAM_MAP = {
     "sfh_alpha": ("alpha", 1.0, 0.0),
     "sfh_beta": ("beta", 1.0, 0.0),
     "sfh_tau_peak_gyr": ("tau_sfh", 1e9, 0.0),
-    "sfh_peak_sfr": ("sfr_norm", 1.0, 0.0),
     "psd_sigma": ("psd_sigma", 1.0, 0.0),
     "psd_tau_myr": ("psd_tau_yr", 1e6, 0.0),
     "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
@@ -251,7 +291,7 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 
     Notes
     -----
-    As of Phase II-2, registered SEDComponent instances auto-declare parameters
+    Registered SEDComponent instances auto-declare parameters
     via :meth:`declared_parameters`. This function auto-derives identity mappings
     from those declarations (if not already in the map) to keep the param_map
     synchronized without manual editing.
@@ -351,7 +391,14 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         that isn't active in this spec).
     """
     internal = {}
+    # Per-spec SFH params (sfh_X_*) are *also* preserved under their public name so
+    # the composer in resolve_sfh can dispatch per-component without collisions
+    # when multiple SFHs share the same internal kwarg name (e.g.
+    # ``log_total_mass`` for any two parametric SFHs after the 2026-05-25
+    # normalization refactor). See ``composed_fn`` in
+    # ``components/stellar/sfh/registry.py`` and #372.
     for pub_name, (int_name, scale, offset) in param_map.items():
+        is_sfh = pub_name.startswith("sfh_")
         if pub_name in params:
             value = params[pub_name]
             # String-typed Fixed params (e.g. shock_abundance="solar") are config
@@ -360,22 +407,32 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
             # the standard scale/offset translation.
             if isinstance(value, str):
                 internal[int_name] = value
+                if is_sfh:
+                    internal[pub_name] = value
             else:
-                internal[int_name] = value * scale + offset
+                translated = value * scale + offset
+                internal[int_name] = translated
+                if is_sfh:
+                    internal[pub_name] = translated
         else:
             # Check short-form alias: find short name that maps to pub_name
             alias_val = find_short_param(params, pub_name)
             if alias_val is not None:
                 if isinstance(alias_val, str):
                     internal[int_name] = alias_val
+                    if is_sfh:
+                        internal[pub_name] = alias_val
                 else:
-                    internal[int_name] = alias_val * scale + offset
+                    translated = alias_val * scale + offset
+                    internal[int_name] = translated
+                    if is_sfh:
+                        internal[pub_name] = translated
             else:
                 # Fall back to fixed value from spec, or skip if absent.
                 #
                 # ``param_map`` is built from a registry that may include
-                # auto-derived entries from Phase II SEDComponents (AGN,
-                # Radio, IGM, X-ray) regardless of whether the active
+                # auto-derived entries from SEDComponents (AGN, Radio,
+                # IGM, X-ray) regardless of whether the active
                 # spec actually uses them. When a spec doesn't use a
                 # given component, its parameters are absent from both
                 # ``params`` and ``spec`` — silently skipping the entry
@@ -398,9 +455,15 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
                         # bounds[0] is the literal value, not a numeric range. Pass
                         # through verbatim — downstream code branches on the string.
                         # None handles enum-typed Fixed where bounds isn't populated.
-                        internal[int_name] = fixed_val if fixed_val is not None else dist.value
+                        resolved = fixed_val if fixed_val is not None else dist.value
+                        internal[int_name] = resolved
+                        if is_sfh:
+                            internal[pub_name] = resolved
                     else:
-                        internal[int_name] = fixed_val * scale + offset
+                        translated = fixed_val * scale + offset
+                        internal[int_name] = translated
+                        if is_sfh:
+                            internal[pub_name] = translated
                 else:
                     raise KeyError(f"Free parameter '{pub_name}' not found in params dict")
 
@@ -411,25 +474,94 @@ def get_internal_params(params, param_map, spec, has_field, *, strict_unknown_pa
         elif "psd_xi" in params:
             internal["xi"] = params["psd_xi"]
 
-    # Warn about unrecognized keys (silent bugs when wrong names used)
-    recognized = set(param_map.keys())
-    recognized.update(_REVERSE_ALIASES.keys())
-    recognized.update({"sfh_field_xi", "psd_xi"})
-    # Array-data inputs consumed by ``forward/pipeline.py`` directly (not via
-    # the scalar param-map): tabulated SFH (``sfh_t_gyr`` + ``sfh_sfr``) and
-    # tabulated metallicity history (``met_history``) for chem-evolution runs.
-    recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
-    # Also recognize internal names (for backwards compat)
-    recognized.update(int_name for _, (int_name, _, _) in param_map.items())
-    unrecognized = set(params.keys()) - recognized
+    # Raise/warn about unrecognized keys (silent bugs when wrong names used)
+    unrecognized = _unknown_param_keys(params, param_map)
     if unrecognized:
-        msg = (
-            f"Unrecognized parameter names passed to Model: {sorted(unrecognized)}. "
-            f"Did you mean one of: {sorted(param_map.keys())}? "
-            f"(Pass strict_unknown_params=False to downgrade to a warning.)"
-        )
+        msg = _unknown_param_msg(unrecognized, param_map)
         if strict_unknown_params:
-            raise ValueError(msg)
+            from tengri.config.exceptions import UnknownParameterError
+
+            raise UnknownParameterError(msg)
         warnings.warn(msg, UserWarning, stacklevel=3)
 
     return internal
+
+
+def _recognized_param_keys(param_map):
+    """Set of keys ``params`` may legally contain for a given param_map.
+
+    Combines public names, short-form aliases, latent-vector slots, array-data
+    inputs (tabulated SFH, metallicity history), and internal names (for
+    backwards compat). Pure-Python; cheap enough to call per predict.
+    """
+    recognized = set(param_map.keys())
+    recognized.update(_REVERSE_ALIASES.keys())
+    recognized.update({"sfh_field_xi", "psd_xi"})
+    recognized.update({"sfh_t_gyr", "sfh_sfr", "met_history"})
+    recognized.update(int_name for _, (int_name, _, _) in param_map.items())
+    return recognized
+
+
+#: Public-key prefixes that belong to sibling sub-models composed alongside
+#: ``SEDModel`` in higher-level wrappers (``ForwardModel`` + ``SpatialModel``,
+#: etc.) and pass through the params dict on their way to a different
+#: handler. We recognize them so the SED-side validator doesn't false-flag
+#: legitimate sub-model kwargs as typos (#314).
+_PASSTHROUGH_PARAM_PREFIXES: tuple[str, ...] = ("spatial_",)
+
+
+def _unknown_param_keys(params, param_map):
+    """Return sorted list of param keys not recognized for ``param_map``."""
+    recognized = _recognized_param_keys(param_map)
+    return sorted(
+        k for k in params if k not in recognized and not k.startswith(_PASSTHROUGH_PARAM_PREFIXES)
+    )
+
+
+def _unknown_param_msg(unrecognized, param_map):
+    """Build the ``UnknownParameterError`` message with did-you-mean hints."""
+    import difflib
+
+    public = sorted(param_map.keys())
+    hints = []
+    for bad in unrecognized:
+        close = difflib.get_close_matches(bad, public, n=3, cutoff=0.6)
+        if close:
+            hints.append(f"  {bad!r} → did you mean {close}?")
+        else:
+            hints.append(f"  {bad!r} → no close match (this param is not in the live model)")
+    return (
+        "Unrecognized parameter names passed to Model: "
+        f"{list(unrecognized)}.\n"
+        + "\n".join(hints)
+        + "\n\nValid free + fixed parameter names: see ``model.spec.summary()`` "
+        "or ``list(model.spec.param_map_public_keys())``."
+    )
+
+
+def check_unknown_params(params, param_map):
+    """Validate ``params`` keys against the live param_map; raise on unknowns.
+
+    Lightweight set-difference validator suitable for use at JIT entry points
+    (no value translation, no tracing concerns). Used by
+    :meth:`SEDModel.predict_observables_jit` and friends to surface typo /
+    stale-override bugs that the JIT path would otherwise silently drop.
+
+    Parameters
+    ----------
+    params : Mapping
+        User-supplied parameter dict.
+    param_map : Mapping
+        ``public_name -> (internal_name, scale, offset)`` from the SEDModel.
+
+    Raises
+    ------
+    UnknownParameterError
+        If any key in ``params`` is not a recognized public, alias, latent,
+        array-data, or internal name.
+    """
+    unrecognized = _unknown_param_keys(params, param_map)
+    if unrecognized:
+        from tengri.config.exceptions import UnknownParameterError
+
+        raise UnknownParameterError(_unknown_param_msg(unrecognized, param_map))

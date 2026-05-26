@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation tests for patchy reionization IGM model.
 
 Verifies physical consistency of the damping wing implementation:

@@ -1,60 +1,73 @@
 """
-Ionization Parameter (logU)
-============================
+Ionisation parameter reshapes the full optical SED, not just line ratios
+==========================================================================
 
-Higher ionisation parameter `log U` drives stronger [OIII] emission
-and pulls the galaxy toward the Seyfert region on the BPT diagram.
+Varying log U from -4 to -1.5 on a young star-forming galaxy at fixed
+metallicity changes every strong optical line simultaneously — Hbeta,
+[O III], Halpha, [N II], [S II] all move together. We plot the full
+4000-7500 A SED so the continuum context is visible alongside the line
+forest. Companion to ``plot_cue_logu_line_ratios.py``, which projects
+the same sweep onto two-line diagnostic axes.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_logu_sweep_001.png
-   :alt: plot_logu_sweep
-   :class: sphx-glr-single-img
-
+Reference: Kewley & Dolphin 2002, ApJ, 549, 716; Li et al. 2024
+(Cue nebular emulator).
 """
 
-import matplotlib.pyplot as plt
+import os
 
-from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-ssp = load_ssp()
-
-# --- Build model: young star-forming galaxy ---
-spec = Parameters(
-    nebular_cue=True,
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
-    sfh_tsnorm_width_gyr=Fixed(0.3),
-    sfh_tsnorm_skew=Fixed(0.2),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.3),  # Solar-ish
-    dust_tau_bc=Fixed(0.0),  # No dust
-    dust_tau_diff=Fixed(0.0),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
-    neb_logU=Fixed(-3.0),  # Will sweep this
-    neb_logZ_gas=Fixed(-0.3),  # Match stellar metallicity
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 1.0,
+        "beta": 2.5,
+        "tau_gyr": 0.3,
+        "log_total_mass": 10.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Uniform(-4.0, -1.5)},
+    redshift=tengri.Fixed(0.05),
 )
-model = SEDModel(spec, ssp)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# --- Sweep ionization parameter (logU) ---
-values = [-4.0, -3.5, -3.0, -2.5, -2.0, -1.5]
+logu_values = np.linspace(-4.0, -1.5, 7)
+norm = mpl.colors.Normalize(vmin=logu_values.min(), vmax=logu_values.max())
+cmap = plt.get_cmap("viridis")
 
-fig, ax = sweep_parameter(
-    model,
-    "neb_logU",
-    values,
-    cmap=SWEEP_CMAPS["nebular"],
-    label_fmt=r"$\log U$ = {:.1f}",
-    wave_range=(4000, 8000),
-)
-ax.set_title("Ionization Parameter: Impact on Optical Emission Lines", fontsize=12)
-ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-ax.set_ylim(0, 50_000)
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for logu in logu_values:
+    params = {**baseline, "neb_logU": jnp.float64(logu)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.semilogy(wave, nu_l_nu, color=cmap(norm(logu)), lw=1.4)
+
+ax.set_xlim(4000, 7500)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\log U$")
+
+fig.tight_layout()
 plt.savefig("plot_logu_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

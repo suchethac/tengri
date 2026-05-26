@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for analytic radio components.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for the
@@ -16,15 +17,14 @@ axis.  Auto-collapses Fixed axes via ``slice_fixed_axes``.
 
 .. note::
 
-   For the present pure power-law radio models, the runtime path
-   (``radio_sfr_bell2003``, ``radio_freefree``, ``radio_agn``) is already
-   cheap because the spectrum is closed-form; the precompute layer here is
-   *forward-looking scaffolding* meant to absorb future radio models that
-   are tabulated grids (e.g. self-absorbed synchrotron + free-free + jet
-   geometry from radiative transfer).  Treat the current adapters as
-   placeholders that establish the ``(scale, *axes) -> photometry`` contract;
-   benchmark before assuming a speedup over the analytic runtime path.
-   See ``scripts/benchmark_precompute_analytic.py``.
+   For the present pure power-law radio models the spectrum is closed-form,
+   so the runtime path (``radio_sfr_bell2003``, ``radio_freefree``,
+   ``radio_agn``) is already cheap. These precompute adapters exist to
+   establish the ``(scale, *axes) -> photometry`` contract that tabulated
+   future models (e.g. self-absorbed synchrotron + free-free + jet geometry
+   from radiative transfer) will need; benchmark before assuming a speedup
+   over the analytic runtime path.  See
+   ``scripts/benchmark_precompute_analytic.py``.
 
 References
 ----------

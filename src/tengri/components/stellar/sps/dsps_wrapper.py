@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """DSPS integration: differentiable CSP synthesis and SSP template management.
 
 This module wraps the Differentiable Stellar Population Synthesis (DSPS) library
@@ -84,6 +85,34 @@ class SSPData(NamedTuple):
     # interpolation adds a third dimension. The current met_alpha_fe parameter
     # uses effective_metallicity() as an approximation for 2D grids.
     ssp_alpha_fe: jnp.ndarray | None = None
+    # Initial mass function the SSP was computed under, e.g. ``"chabrier"``,
+    # ``"kroupa"``, ``"salpeter"``. Surfaced by :func:`load_ssp_data` from
+    # the file's HDF5 metadata if present, else parsed from the filename
+    # tail (last underscore-delimited token before ``.h5``). ``"unknown"``
+    # when neither path yields a match. See issue #307 for the discovery
+    # gap this closes; the IMF is invisible in the model spec otherwise.
+    imf: str = "unknown"
+
+
+def _sspdata_flatten(s):
+    # ``imf`` is metadata, not a JIT leaf — keep strings out of the trace.
+    children = (
+        s.ssp_wave,
+        s.ssp_flux,
+        s.ssp_lg_age_gyr,
+        s.ssp_lgmet,
+        s.ssp_mass_remaining,
+        s.ssp_alpha_fe,
+    )
+    aux = (s.imf,)
+    return children, aux
+
+
+def _sspdata_unflatten(aux, children):
+    return SSPData(*children, imf=aux[0])
+
+
+jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
 
 
 _LOAD_SSP_PRESETS: dict[str, str] = {
@@ -217,9 +246,22 @@ def load_ssp_data(filepath: str) -> SSPData:
             download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     with h5py.File(filepath, "r") as f:
-        mass_remaining = None
+        ssp_lg_age_gyr = jnp.array(f["ssp_lg_age_gyr"][:])
+        ssp_lgmet = jnp.array(f["ssp_lgmet"][:])
+
+        # IMF discovery (#307): HDF5 attribute wins, else parse filename
+        # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
+        # plots can introspect the assumed IMF without grepping the
+        # filename. Resolved before ``ssp_mass_remaining`` so the
+        # surviving-mass synthesiser can pick the right DSPS calibration.
+        imf = _detect_imf(f, fp.name)
+
         if "ssp_mass_remaining" in f:
             mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
+        else:
+            mass_remaining = _synthesize_mass_remaining(
+                filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
+            )
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
@@ -228,11 +270,115 @@ def load_ssp_data(filepath: str) -> SSPData:
         return SSPData(
             ssp_wave=jnp.array(f["ssp_wave"][:]),
             ssp_flux=jnp.array(f["ssp_flux"][:]),
-            ssp_lg_age_gyr=jnp.array(f["ssp_lg_age_gyr"][:]),
-            ssp_lgmet=jnp.array(f["ssp_lgmet"][:]),
+            ssp_lg_age_gyr=ssp_lg_age_gyr,
+            ssp_lgmet=ssp_lgmet,
             ssp_mass_remaining=mass_remaining,
             ssp_alpha_fe=alpha_fe,
+            imf=imf,
         )
+
+
+#: IMFs that ship in the public SSP catalogue. Parsed out of HDF5 metadata
+#: or filename tails. Extend when a new IMF lands in ``_data_setup._KNOWN_SSPS``.
+_KNOWN_IMFS: tuple[str, ...] = ("chabrier", "kroupa", "salpeter")
+
+
+def _detect_imf(h5_file, filename: str) -> str:
+    """Detect the IMF an SSP grid was computed under (#307).
+
+    Resolution order:
+
+    1. ``h5_file.attrs["imf"]`` (when SSP files start shipping the metadata).
+    2. Filename tail matched against :data:`_KNOWN_IMFS`
+       — e.g. ``"fsps_prsc_miles_chabrier.h5"`` → ``"chabrier"``.
+    3. Fallback: ``"unknown"``.
+
+    Falsely returning a wrong IMF is worse than returning ``"unknown"``,
+    so the filename match requires an exact ``_<imf>`` token, not a
+    substring (avoids ``"_kroupa_burst"`` → ``"kroupa"`` if someone
+    appends qualifiers).
+    """
+    attr_imf = h5_file.attrs.get("imf") if hasattr(h5_file, "attrs") else None
+    if attr_imf:
+        # h5py returns ``bytes`` on Python 3 for string attrs from older files.
+        if isinstance(attr_imf, bytes):
+            attr_imf = attr_imf.decode("utf-8", errors="replace")
+        return str(attr_imf).strip().lower()
+
+    stem = filename.rsplit(".h5", 1)[0]
+    tokens = stem.split("_")
+    for tok in reversed(tokens):
+        low = tok.lower()
+        if low in _KNOWN_IMFS:
+            return low
+    return "unknown"
+
+
+def _synthesize_mass_remaining(
+    filepath, ssp_lg_age_gyr: jnp.ndarray, ssp_lgmet: jnp.ndarray, imf_tag=None
+) -> jnp.ndarray:
+    """Fill missing ssp_mass_remaining when the SSP HDF5 lacks the table.
+
+    Uses :func:`dsps.imf.surviving_mstar.surviving_mstar`, a 9-parameter
+    sigmoid fit to FSPS with shipped per-IMF calibrations (Chabrier,
+    Salpeter, Kroupa, van Dokkum). This is the same fallback diffsky and
+    other DSPS-stack codes use, so tengri's reported surviving masses stay
+    bit-aligned with that ecosystem.
+
+    Resolves the IMF via :func:`_detect_imf` (HDF5 attribute → filename
+    tail → ``"unknown"``). When the IMF is ``"unknown"`` or absent, falls
+    back to Chabrier with a one-shot ``UserWarning`` naming the file and
+    convention. The DSPS sigmoid agrees with FSPS to 1–2 % including at
+    young ages, where the IMF-turnoff integrator in
+    :mod:`tengri.components.stellar.sps.mass_remaining` undercounts mass
+    return by missing MS/post-MS stellar-wind losses (e.g. 0% vs 2-3% at
+    1 Myr).
+
+    Returns
+    -------
+    array, shape (n_met, n_age)
+        Surviving mass fraction broadcast over the metallicity axis (Z
+        dependence is dropped here by design; the table-supplied version,
+        when present, is what carries it).
+    """
+    import warnings
+
+    from dsps.imf.surviving_mstar import (
+        CHABRIER_PARAMS,
+        KROUPA_PARAMS,
+        SALPETER_PARAMS,
+        VAN_DOKKUM_PARAMS,
+        surviving_mstar,
+    )
+
+    _IMF_PARAMS = {
+        "chabrier": CHABRIER_PARAMS,
+        "salpeter": SALPETER_PARAMS,
+        "kroupa": KROUPA_PARAMS,
+        "van_dokkum": VAN_DOKKUM_PARAMS,
+    }
+
+    if isinstance(imf_tag, bytes):
+        imf_tag = imf_tag.decode("utf-8", errors="replace")
+    imf = (imf_tag or "unknown").strip().lower()
+    params = _IMF_PARAMS.get(imf, CHABRIER_PARAMS)
+    if imf not in _IMF_PARAMS:
+        warnings.warn(
+            f"SSP file {filepath!s} has no 'ssp_mass_remaining' table and "
+            f"IMF could not be resolved (got {imf!r}); synthesising "
+            "surviving-mass fractions from dsps.imf.surviving_mstar with "
+            "the Chabrier-fit-to-FSPS parameters. Set the 'imf' HDF5 "
+            "attribute or use a filename suffix matching _detect_imf's "
+            "_KNOWN_IMFS to silence, or port the upstream table for a "
+            "bit-exact match.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    # surviving_mstar takes log10(age/yr): ssp_lg_age_gyr is log10(age/Gyr).
+    lg_age_yr = ssp_lg_age_gyr + 9.0
+    f_surv_age = surviving_mstar(lg_age_yr, **params)
+    return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
 
 def load_ssp_data_dsps(filepath: str) -> SSPData:
@@ -1033,6 +1179,50 @@ def has_alpha_grid(ssp_data: SSPData) -> bool:
 
 
 @jax.jit
+def interpolate_alpha_only(
+    ssp_flux: jnp.ndarray,
+    ssp_alpha_fe: jnp.ndarray,
+    alpha_fe: float,
+) -> jnp.ndarray:
+    """Linear interpolation along the [α/Fe] axis only — 4D → 3D.
+
+    Collapses the [α/Fe] dimension of a 4D SSP grid at a single target
+    value, leaving the metallicity axis intact. The result feeds the
+    standard 3D DSPS lognormal-MDF kernel, so the Z marginalisation
+    behaves identically to a no-α-grid run with the same met scatter.
+
+    Parameters
+    ----------
+    ssp_flux : array, shape (n_met, n_alpha, n_age, n_wave)
+        SSP flux on the full 4D (Z, [α/Fe]) grid. [Lsun/Hz/Msun]
+    ssp_alpha_fe : array, shape (n_alpha,)
+        [α/Fe] grid values, relative to solar.
+    alpha_fe : float
+        Target [α/Fe] (dimensionless, relative to solar). Clipped to
+        the grid bounds before interpolation.
+
+    Returns
+    -------
+    array, shape (n_met, n_age, n_wave)
+        α-collapsed SSP flux, ready for the 3D MDF kernel.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+    **Gradient-safe**: yes — linear interpolation is differentiable.
+
+    Complements :func:`interpolate_met_alpha`, which collapses both
+    axes to a single (Z, [α/Fe]) point. Samplers that want lognormal
+    MDF marginalisation over metallicity should use this α-only path
+    so the 4D and 3D code paths share the same Z kernel.
+    """
+    afe = jnp.clip(alpha_fe, ssp_alpha_fe[0], ssp_alpha_fe[-1])
+    ia = jnp.clip(jnp.searchsorted(ssp_alpha_fe, afe) - 1, 0, ssp_alpha_fe.shape[0] - 2)
+    fa = (afe - ssp_alpha_fe[ia]) / (ssp_alpha_fe[ia + 1] - ssp_alpha_fe[ia])
+    return (1.0 - fa) * ssp_flux[:, ia] + fa * ssp_flux[:, ia + 1]
+
+
+@jax.jit
 def interpolate_met_alpha(
     ssp_flux: jnp.ndarray,
     ssp_lgmet: jnp.ndarray,
@@ -1686,3 +1876,105 @@ def compute_surviving_mass(weights: jnp.ndarray, mass_remaining_at_met: jnp.ndar
 
     """
     return jnp.sum(weights * mass_remaining_at_met)
+
+
+def predict_surviving_mass(
+    sfr: jnp.ndarray,
+    t_lookback_yr: jnp.ndarray,
+    ssp: "SSPData",
+    log_z_zsun: float = 0.0,
+) -> jnp.ndarray:
+    """Predict surviving stellar mass directly from an SFR(t) array.
+
+    Standalone helper for putting **priors on the surviving stellar mass**
+    without running the full SED forward pass. Computes
+
+    .. math::
+
+        M_{\\star,{\\rm surv}} = \\int \\mathrm{SFR}(t_{\\rm lb}) \\,
+                                  f_{\\rm surv}(t_{\\rm lb}; Z) \\, dt_{\\rm lb}
+
+    where :math:`f_{\\rm surv}(t)` is the surviving mass fraction from the
+    SSP's ``ssp_mass_remaining`` table, evaluated at the user-supplied
+    metallicity via linear interpolation in :math:`\\log_{10}(Z/Z_\\odot)`
+    and resampled onto the SFH lookback grid via linear interp in
+    :math:`\\log_{10}({\\rm age})`.
+
+    This formula follows from the post-2026-05-25 SFH normalization contract
+    (``trapezoid(sfr, t) = 10**log_total_mass`` for every parametric SFH):
+    the survivor fraction at each age becomes a *weight* on the SFR, and the
+    integral collapses to a single trapezoid rule on the SFH grid — no DSPS
+    convolution required.
+
+    Parameters
+    ----------
+    sfr : array_like, shape (n_lb,)
+        SFR on the lookback grid [Msun/yr]. Typically the output of one of
+        the parametric SFH callables (e.g. ``tau(t, log_total_mass=10.0, …)``).
+    t_lookback_yr : array_like, shape (n_lb,)
+        Lookback time grid [yr], ascending.
+    ssp : SSPData
+        SSP container with populated ``ssp_mass_remaining`` (n_met, n_age)
+        and ``ssp_lg_age_gyr``, ``ssp_lgmet`` axes. Raises if
+        ``ssp_mass_remaining`` is ``None``.
+    log_z_zsun : float, optional
+        Metallicity at which to evaluate the surviving-mass fraction,
+        :math:`\\log_{10}(Z/Z_\\odot)`. Default 0.0 (solar). Add
+        :data:`tengri.utils.physics_constants.LOG10_ZSUN` if you have
+        absolute :math:`\\log_{10}(Z)`.
+
+    Returns
+    -------
+    jnp.ndarray (scalar)
+        Surviving stellar mass [Msun].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.interp``, ``jnp.trapezoid``,
+    and the existing :func:`interpolate_mass_remaining` helper.
+    **Gradient-safe**: yes — differentiable w.r.t. any SFH parameter
+    through ``sfr``.
+
+    The result is also published as ``state.derived["log_mstar"]`` after
+    every full forward pass through ``SEDModel.predict_*``. This helper
+    is the cheap standalone path for the prior layer:
+
+    .. code-block:: python
+
+        # Put a Gaussian prior on log10(M*,surv)
+        sfr = tau(t_lb, log_total_mass=lgM_formed, tau=tau_yr, age=age_yr)
+        log_mstar_surv = jnp.log10(predict_surviving_mass(sfr, t_lb, ssp))
+        log_prior = -0.5 * ((log_mstar_surv - 10.5) / 0.3) ** 2
+
+    Raises
+    ------
+    ValueError
+        If ``ssp.ssp_mass_remaining`` is ``None`` (e.g., legacy SSP file
+        without a stored mass-remaining table).
+
+    See Also
+    --------
+    compute_surviving_mass : low-level helper that takes pre-computed weights.
+    interpolate_mass_remaining : metallicity interpolation used internally.
+
+    """
+    if ssp.ssp_mass_remaining is None:
+        raise ValueError(
+            "SSP has no ssp_mass_remaining table. Surviving mass cannot be "
+            "computed without it. Load an SSP file with stellar-evolution "
+            "mass-loss data (see tengri.load_ssp_data)."
+        )
+    # Mass-remaining fraction on the SSP age grid at the requested metallicity.
+    f_surv_on_ssp = interpolate_mass_remaining(
+        ssp.ssp_mass_remaining, ssp.ssp_lgmet, log_z_zsun
+    )  # (n_age,)
+    # Resample to the SFH lookback grid via linear interp in log10(age).
+    # SSP ages are in log10(Gyr); SFH lookback is in linear yr. Convert both
+    # to log10(yr) for the interp x-axis.
+    ssp_log_age_yr = ssp.ssp_lg_age_gyr + 9.0
+    log_lb_yr = jnp.log10(jnp.maximum(t_lookback_yr, 1.0))
+    f_surv_on_lb = jnp.interp(log_lb_yr, ssp_log_age_yr, f_surv_on_ssp)
+    # Clamp to [0, 1] — extrapolation outside the SSP age range can drift.
+    f_surv_on_lb = jnp.clip(f_surv_on_lb, 0.0, 1.0)
+    # Trapezoid: M_surv = ∫ SFR(t) f_surv(t) dt
+    return jnp.trapezoid(sfr * f_surv_on_lb, t_lookback_yr)

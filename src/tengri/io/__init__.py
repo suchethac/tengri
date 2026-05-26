@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """I/O primitives for loading spectra and photometry from common formats.
 
 All readers return ``(wave_angstrom, flux, flux_err, meta)`` tuples with

@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Parameters, SEDModel, Uniform
+from tengri import FIXED, FREE, Fixed, Parameters, SEDModel, Uniform, parse_groups
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 # ── SSP fixture ───────────────────────────────────────────────────
@@ -47,14 +47,14 @@ class TestFromGroupsConstruction:
         assert isinstance(model.spec, Parameters)
 
     def test_spec_matches_parse_groups(self, ssp):
-        """The internal spec is exactly what Parameters.from_groups would produce."""
+        """The internal spec is exactly what parse_groups would produce."""
         groups = dict(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
             redshift=Fixed(0.05),
         )
         model = SEDModel.build(ssp_data=ssp, **groups)
-        spec_via_from_groups = Parameters.from_groups(**groups)
+        spec_via_from_groups = parse_groups(**groups)
 
         assert model.spec.free_params == spec_via_from_groups.free_params
         assert model.spec.fixed_params == spec_via_from_groups.fixed_params
@@ -84,7 +84,7 @@ class TestFlatEquivalence:
             ssp_data=ssp,
             sfh={
                 "type": "dpl",
-                "log_peak_sfr": Uniform(-1.0, 2.0),
+                "log_total_mass": Uniform(-1.0, 2.0),
                 "alpha": Uniform(0.5, 3.0),
                 "beta": Uniform(0.3, 2.0),
                 "tau_gyr": Uniform(0.5, 10.0),
@@ -101,7 +101,7 @@ class TestFlatEquivalence:
         )
         flat_spec = Parameters(
             mean_sfh_type="dpl",
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+            sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
@@ -127,7 +127,7 @@ class TestFlatEquivalence:
         grouped, flat = equivalent_models
 
         truth = {
-            "sfh_dpl_log_peak_sfr": float(np.log10(15.0)),
+            "sfh_dpl_log_total_mass": float(np.log10(15.0)),
             "sfh_dpl_alpha": 2.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 2.0,
@@ -149,7 +149,7 @@ class TestFlatEquivalence:
         grouped, flat = equivalent_models
 
         truth = {
-            "sfh_dpl_log_peak_sfr": 1.0,
+            "sfh_dpl_log_total_mass": 1.0,
             "sfh_dpl_alpha": 1.8,
             "sfh_dpl_beta": 1.2,
             "sfh_dpl_tau_gyr": 3.0,

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """ObservationModel protocol: how a forward-model SED meets data.
 
 An :class:`ObservationModel` takes a :class:`ForwardState` (rest-frame
@@ -6,10 +7,9 @@ SED + observer-frame F_nu produced by the chain of
 data's native format — broadband photometric points, spectroscopic flux
 samples, emission-line equivalent widths, etc.
 
-This module is part of the Part II-1 scaffold. Nothing in `tengri`
-consumes this protocol yet; the existing
+Nothing in `tengri` consumes this protocol yet; the existing
 :mod:`tengri.observation.observation` and friends remain the active
-implementations until Phase II-3.
+implementations until the orchestrator path is the primary surface.
 """
 
 from __future__ import annotations

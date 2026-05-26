@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for Eddington luminosity unit consistency — synthesizer parity.
 
 Mirrors synthesizer's Eddington-ratio validation logic to ensure L_Edd computation
@@ -24,6 +25,9 @@ Reference papers:
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.regression_paper
 import jax
 import jax.numpy as jnp
 

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Metallicity mode registry (mirrors SFH registry pattern).
 
 Provides a registry of metallicity evolution modes, each with its own
@@ -123,9 +124,22 @@ _register(
         fn=None,
         params={
             "met_logzsol": MetParamDef(
-                "log10(Z/Zsun)",
+                "log10(Z/Zsun) — Zsun = 0.0142 (Asplund 2009, MIST)",
                 _always_true,
                 "",
+                # Flat-in-log prior across the SSP template range. The
+                # wildcard-FIXED resolver special-cases ``met_logzsol`` to
+                # pin the default at **solar** (0.0) rather than the prior
+                # midpoint — matching FSPS (``logzsol=0.0``) and Bagpipes
+                # (``metallicity=1.0 Z⊙``). The previous default (midpoint
+                # -0.9) silently introduced a ~0.85 dex offset in CIGALE
+                # comparisons — see #412 for the trace.
+                #
+                # "Solar" is Asplund 2009 Zsun = 0.0142 (= MIST). For SSP
+                # libraries built against a different Zsun reference (BC03 /
+                # Padova: 0.0190; PARSEC: 0.0152; BASTI: 0.0200) reason in
+                # absolute ``log_z_abs`` for bit-exact cross-code matches —
+                # see tengri.parameters.translate.LOG10_ZSUN_BY_LIBRARY.
                 Uniform(-2.0, 0.2),
             ),
         },

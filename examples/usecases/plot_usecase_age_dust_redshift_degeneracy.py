@@ -1,0 +1,381 @@
+"""
+The age-dust-redshift degeneracy in photometry
+==============================================
+
+Optical photometry alone cannot uniquely break the degeneracy between stellar
+age, dust attenuation, and redshift — a fundamental limitation in photo-z and
+SED fitting. Three physically distinct galaxy populations can produce nearly
+identical SDSS ugriz photometry:
+
+A. Young + dusty + low-z:      200 Myr, τ_V ≈ 2.0, z = 0.5
+B. Old + clean + mid-z:        5 Gyr,  τ_V ≈ 0.1, z = 1.0
+C. Post-starburst + dust + hi-z: 1 Gyr, τ_V ≈ 0.7, z = 1.5
+
+We build three `tengri.SEDModel` instances via `SEDModel.build()` and tune the
+total stellar mass of each to match a reference r-band magnitude. This demonstrates
+why multiwavelength observations (spectroscopy, X-ray, FIR) are critical for
+constraining both age and dust.
+
+See Papovich et al. 2001 (AJ, 122, 1) for the seminal discussion of this
+degeneracy in the context of Hubble Deep Field galaxies.
+
+References:
+- Papovich et al. 2001, AJ, 122, 1
+- Poggianti & Barbaro 1997, A&A, 325, 1025
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri import Observation, Photometry, SEDModel
+
+# Setup
+tengri.analysis.plotting.setup_style()
+
+ssp = tengri.load_ssp()
+sdss_filters = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+observation = Observation(photometry=sdss_filters)
+
+# Reference magnitude (r-band) to which all three models will be tuned
+m_r_target = 20.0
+
+print("=" * 70)
+print("AGE-DUST-REDSHIFT DEGENERACY: Photo-z pitfall")
+print("=" * 70)
+print()
+
+# Scenario A: Young + dusty + low-z
+# Use a declining exponential SFH peaking early (young light-weighted age)
+print("Building Scenario A: young + dusty + low-z...")
+print("  SFH: exponential decline (τ = 0.3 Gyr)")
+print("  Dust: τ_V = 2.0 (heavily obscured)")
+print("  Redshift: z = 0.5")
+
+model_a = SEDModel.build(
+    ssp,
+    observation=observation,
+    sfh={
+        "type": "dexp",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.3,
+        "log_total_mass": 10.0,  # Will be tuned for magnitude match
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": tengri.FIXED,
+        "tau_bc": 2.0,
+        "tau_diff": 0.8,
+        "slope": -0.7,
+    },
+    neb={"type": "cue", "*": tengri.FIXED},
+    redshift=tengri.Fixed(0.5),
+    apply_igm=True,
+)
+
+baseline_a = dict(model_a.spec.sample(jax.random.PRNGKey(0)))
+baseline_a["met_logzsol"] = -0.1
+baseline_a["dust_tau_diff"] = 0.8
+baseline_a["dust_slope"] = -0.7
+
+# Scenario B: Old + clean + mid-z
+# Use a very declining SFH with long timescale (old light-weighted age)
+print("\nBuilding Scenario B: old + clean + mid-z...")
+print("  SFH: exponential decline (τ = 8.0 Gyr)")
+print("  Dust: τ_V = 0.1 (mostly dust-free)")
+print("  Redshift: z = 1.0")
+
+model_b = SEDModel.build(
+    ssp,
+    observation=observation,
+    sfh={
+        "type": "dexp",
+        "*": tengri.FIXED,
+        "tau_gyr": 8.0,
+        "log_total_mass": 10.0,  # Will be tuned
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": tengri.FIXED,
+        "tau_bc": 0.1,
+        "tau_diff": 0.05,
+        "slope": -0.7,
+    },
+    neb={"type": "cue", "*": tengri.FIXED},
+    redshift=tengri.Fixed(1.0),
+    apply_igm=True,
+)
+
+baseline_b = dict(model_b.spec.sample(jax.random.PRNGKey(1)))
+baseline_b["met_logzsol"] = -0.1
+baseline_b["dust_tau_diff"] = 0.05
+baseline_b["dust_slope"] = -0.7
+
+# Scenario C: Post-starburst + dust + high-z
+# Use log-normal peak with intermediate age at peak
+print("\nBuilding Scenario C: post-starburst + dust + high-z...")
+print("  SFH: log-normal (peak at 1 Gyr lookback, width 0.5 Gyr)")
+print("  Dust: τ_V = 0.7 (moderate obscuration)")
+print("  Redshift: z = 1.5")
+
+model_c = SEDModel.build(
+    ssp,
+    observation=observation,
+    sfh={
+        "type": "lnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 1.0,
+        "width_gyr": 0.5,
+        "log_total_mass": 10.0,  # Will be tuned
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": tengri.FIXED,
+        "tau_bc": 0.7,
+        "tau_diff": 0.3,
+        "slope": -0.7,
+    },
+    neb={"type": "cue", "*": tengri.FIXED},
+    redshift=tengri.Fixed(1.5),
+    apply_igm=True,
+)
+
+baseline_c = dict(model_c.spec.sample(jax.random.PRNGKey(2)))
+baseline_c["met_logzsol"] = -0.1
+baseline_c["dust_tau_diff"] = 0.3
+baseline_c["dust_slope"] = -0.7
+
+
+# Bisection helper to find log_total_mass that produces target r-band magnitude
+def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
+    """Binary search for log_total_mass that produces m_r = m_r_target."""
+    for iteration in range(30):
+        mid = 0.5 * (lo + hi)
+        params = {**baseline, sfh_param_name: mid}
+        try:
+            photo = model.predict_photometry(params)
+            flux_array = np.asarray(photo)
+            if np.any(flux_array <= 0) or np.any(np.isnan(flux_array)):
+                hi = mid  # Too high
+                continue
+            m_r = -2.5 * np.log10(flux_array[2]) - 48.6
+            if abs(m_r - m_r_target) < 0.01:
+                return mid
+            if m_r > m_r_target:
+                lo = mid  # Flux too low, need higher SFR
+            else:
+                hi = mid  # Flux too high, need lower SFR
+        except Exception:
+            hi = mid
+            continue
+    return 0.5 * (lo + hi)
+
+
+# Tune each scenario to match target r-band magnitude
+print("\nTuning stellar masses to match r-band magnitude...")
+log_total_mass_a = _bisect_log_total_mass(model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target)
+baseline_a["sfh_dexp_log_total_mass"] = log_total_mass_a
+params_a = baseline_a
+print(f"  Scenario A: log_total_mass=10.0)
+
+log_total_mass_b = _bisect_log_total_mass(model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target)
+baseline_b["sfh_dexp_log_total_mass"] = log_total_mass_b
+params_b = baseline_b
+print(f"  Scenario B: log_total_mass=10.0)
+
+log_total_mass_c = _bisect_log_total_mass(model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target)
+baseline_c["sfh_lnorm_log_total_mass"] = log_total_mass_c
+params_c = baseline_c
+print(f"  Scenario C: log_total_mass=10.0)
+
+# Predict photometry for all three scenarios
+print("\nComputing photometry predictions...")
+photo_a = model_a.predict_photometry(params_a)
+photo_b = model_b.predict_photometry(params_b)
+photo_c = model_c.predict_photometry(params_c)
+
+flux_a = np.asarray(photo_a)
+flux_b = np.asarray(photo_b)
+flux_c = np.asarray(photo_c)
+
+mag_a = -2.5 * np.log10(flux_a) - 48.6
+mag_b = -2.5 * np.log10(flux_b) - 48.6
+mag_c = -2.5 * np.log10(flux_c) - 48.6
+
+# Verify convergence: photometric points should cluster
+mag_std = np.std([mag_a, mag_b, mag_c], axis=0)
+print("\nPhotometric convergence check (σ in magnitudes across 3 scenarios):")
+filter_names = ["u", "g", "r", "i", "z"]
+for i, fname in enumerate(filter_names):
+    print(
+        f"  SDSS {fname:1s}: σ = {mag_std[i]:.3f} mag  "
+        f"(A={mag_a[i]:.2f}, B={mag_b[i]:.2f}, C={mag_c[i]:.2f})"
+    )
+
+# Flag convergence failure
+convergence_pass = np.all(mag_std < 0.5)
+if not convergence_pass:
+    print(
+        "\n[WARNING] Photometric convergence FAILED! σ > 0.5 mag on some bands."
+    )
+    print(
+        "This indicates the SFR tuning did not fully converge. "
+        "The degeneracy may be weaker than expected for this redshift/age/dust combo."
+    )
+else:
+    print("\n[PASS] Photometric convergence: σ < 0.5 mag on all SDSS bands.")
+
+# Predict rest-frame SEDs for display
+print("Computing rest-frame SEDs...")
+sed_a = model_a.predict_rest_sed(params_a)
+sed_b = model_b.predict_rest_sed(params_b)
+sed_c = model_c.predict_rest_sed(params_c)
+
+wave_a = np.asarray(sed_a.wavelength)
+wave_b = np.asarray(sed_b.wavelength)
+wave_c = np.asarray(sed_c.wavelength)
+
+sed_a_lnu = np.asarray(sed_a.sed)
+sed_b_lnu = np.asarray(sed_b.sed)
+sed_c_lnu = np.asarray(sed_c.sed)
+
+# Create figure
+fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+
+# TOP PANEL: Observed photometry (should cluster within degeneracy)
+ax_phot = axes[0]
+band_positions = np.arange(len(filter_names))
+ax_phot.scatter(
+    band_positions - 0.12,
+    mag_a,
+    s=100,
+    marker="o",
+    label="A: 200 Myr + tau=2.0 + z=0.5",
+    color="tab:blue",
+    alpha=0.8,
+    edgecolors="black",
+    linewidth=1.2,
+)
+ax_phot.scatter(
+    band_positions,
+    mag_b,
+    s=100,
+    marker="s",
+    label="B: 5 Gyr + tau=0.1 + z=1.0",
+    color="tab:orange",
+    alpha=0.8,
+    edgecolors="black",
+    linewidth=1.2,
+)
+ax_phot.scatter(
+    band_positions + 0.12,
+    mag_c,
+    s=100,
+    marker="^",
+    label="C: 1 Gyr + tau=0.7 + z=1.5",
+    color="tab:green",
+    alpha=0.8,
+    edgecolors="black",
+    linewidth=1.2,
+)
+
+ax_phot.set_xticks(band_positions)
+ax_phot.set_xticklabels([f"SDSS {name}" for name in filter_names])
+ax_phot.set_ylabel("Magnitude (AB)", fontsize=11)
+ax_phot.invert_yaxis()
+ax_phot.legend(loc="upper left", frameon=False, fontsize=10)
+ax_phot.grid(True, alpha=0.3, linestyle=":")
+y_spread = np.max(mag_a) - np.min(mag_c)
+ax_phot.set_ylim(np.max(mag_a) + 0.5, np.min(mag_c) - 0.5)
+ax_phot.set_title(
+    "Observed-frame SDSS photometry: three scenarios overlap within degeneracy",
+    fontsize=12,
+    weight="bold",
+)
+
+# BOTTOM PANEL: Rest-frame SEDs (should look different)
+ax_sed = axes[1]
+
+# Wave range for visualization
+wave_rest_min = 2000.0
+wave_rest_max = 8000.0
+
+mask_a = (wave_a >= wave_rest_min) & (wave_a <= wave_rest_max)
+mask_b = (wave_b >= wave_rest_min) & (wave_b <= wave_rest_max)
+mask_c = (wave_c >= wave_rest_min) & (wave_c <= wave_rest_max)
+
+ax_sed.loglog(
+    wave_a[mask_a],
+    sed_a_lnu[mask_a],
+    lw=2.5,
+    label="A: young + dusty + low-z",
+    color="tab:blue",
+    alpha=0.85,
+)
+ax_sed.loglog(
+    wave_b[mask_b],
+    sed_b_lnu[mask_b],
+    lw=2.5,
+    label="B: old + clean + mid-z",
+    color="tab:orange",
+    alpha=0.85,
+)
+ax_sed.loglog(
+    wave_c[mask_c],
+    sed_c_lnu[mask_c],
+    lw=2.5,
+    label="C: post-starburst + dust + high-z",
+    color="tab:green",
+    alpha=0.85,
+)
+
+ax_sed.set_xlabel(r"Rest-frame wavelength [Angstrom]", fontsize=11)
+ax_sed.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=11)
+ax_sed.legend(loc="upper right", frameon=False, fontsize=10)
+ax_sed.grid(True, alpha=0.3, linestyle=":", which="both")
+ax_sed.set_xlim(wave_rest_min, wave_rest_max)
+ax_sed.set_title(
+    "Rest-frame SED: clear physical differences despite photometric overlap",
+    fontsize=12,
+    weight="bold",
+)
+
+plt.tight_layout()
+plt.savefig("plot_usecase_age_dust_redshift_degeneracy.png", dpi=150, bbox_inches="tight")
+print("\nFigure saved: plot_usecase_age_dust_redshift_degeneracy.png")
+
+# Verify by reading the PNG
+try:
+    from PIL import Image
+
+    img = Image.open("plot_usecase_age_dust_redshift_degeneracy.png")
+    print(f"PNG verified: {img.size} pixels, {img.mode}")
+except Exception as e:
+    print(f"Could not verify PNG: {e}")
+
+plt.show()
+
+print("\n" + "=" * 70)
+print("[SUMMARY]")
+print("=" * 70)
+print("The age-dust-redshift degeneracy is fundamental in optical photometry.")
+print("Three vastly different physical scenarios produce similar SDSS ugriz colors.")
+print()
+print("Breaking the degeneracy requires:")
+print("  * Spectroscopy (age-sensitive indices: Balmer lines, 4000 A break)")
+print("  * FIR / submm (dust temperature + IR luminosity)")
+print("  * X-ray / UV (AGN, nebular emission, ionization parameter)")
+print("  * Radio (recent star formation, AGN core)")
+print()
+print("Key references:")
+print("  * Papovich et al. 2001 (AJ 122, 1) — seminal HST/HDF discussion")
+print("  * Poggianti & Barbaro 1997 (A&A 325, 1025) — spectral synthesis context")
+print("=" * 70)

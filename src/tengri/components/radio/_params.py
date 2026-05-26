@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the radio component.
 
 Single source of truth for radio priors. ``tengri.parameters._param_defs``

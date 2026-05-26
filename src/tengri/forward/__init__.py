@@ -1,8 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Forward-model orchestration: SEDModel, pipeline, kernels, precompute.
 
 Key class: ``SEDModel`` — the main forward model class.
 
-Phase II-2.6 also exposes the **component-orchestrator** path:
+An alternative **component-orchestrator** path is also exposed:
 
 - :func:`build_components` — assemble an ordered list of
   :class:`SEDComponent` adapters from a flat keyword-argument call.

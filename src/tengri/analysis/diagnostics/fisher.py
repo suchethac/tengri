@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Fisher Information Matrix (FIM) computation.
 
 The FIM quantifies how much information the data carries about each
@@ -105,7 +106,7 @@ def compute_fisher_matrix(forward_model, params, noise, data_type="photometry", 
         if data_type == "photometry":
             return forward_model.predict_photometry(p)
         elif data_type == "spectroscopy":
-            return forward_model.predict_spectrum(p, forward_model._wave_obs)
+            return forward_model.predict_spectrum(p)
         else:
             raise ValueError(f"Unknown data_type: {data_type}")
 

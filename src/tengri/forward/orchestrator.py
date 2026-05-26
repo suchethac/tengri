@@ -1,28 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Minimal pipeline runner over a list of :class:`SEDComponent` adapters.
+"""Run a list of :class:`SEDComponent` physics blocks in order.
 
-This is the smallest possible consumer of the Phase II-1 ``core/``
-Protocol scaffold. It exists to drive the contract tests for the first
-two adapters (RadioSEDComponent, IGMSEDComponent) — **not** to replace
-:class:`tengri.SEDModel`'s tier-dispatch path.
+Internal driver behind :class:`tengri.SEDModel`. Given an ordered list
+of components (stellar, dust, nebular, AGN, IGM, radio, X-ray, …), it:
 
-The two-adapter rule
---------------------
-Per ``~/.claude/skills/improve-codebase-architecture/LANGUAGE.md``:
+1. checks every component's declared inputs are produced upstream
+   (:func:`validate_pipeline`),
+2. threads a :class:`ForwardState` through each component's
+   :meth:`SEDComponent.apply` in order, and
+3. returns the resulting :class:`ForwardState` whose
+   :attr:`~ForwardState.derived` carries the cross-component
+   physics quantities (``L_ir``, ``lnu_age``, ``sed_nebular``, …).
 
-    *One adapter = hypothetical seam. Two adapters = real seam.*
-
-Until two real components run through this orchestrator, the
-:class:`tengri.protocols.SEDComponent` Protocol is hypothetical. This file
-makes the seam real.
-
-What this is **not**
---------------------
-- Not the migration of :class:`tengri.SEDModel`. The legacy code path
-  is untouched.
-- Not a public API. Lives in ``forward/`` as an internal Phase II-1
-  artefact; will be promoted (or replaced) when Phase II-2 starts.
-- Not a registry. Components are passed in as a plain ordered list.
+Not a public API — astronomers use :class:`tengri.SEDModel` and never
+touch this module directly.
 """
 
 from __future__ import annotations
@@ -34,10 +25,10 @@ import jax.numpy as jnp
 
 from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
+    ComponentIOError,
     DerivedKey,
     ForwardState,
     ParamDeclaration,
-    PipelineContractError,
     SEDComponent,
 )
 
@@ -60,10 +51,10 @@ __all__ = [
 # default. These three helpers live at module scope so both
 # validate_pipeline and topological_sort can reuse them.
 #
-# Renamed from ``outputs`` / ``inputs`` / ``optional_inputs`` in
-# Phase II-3.2 (2026-05-18). For one minor version the accessors fall
-# back to the old names with a ``DeprecationWarning``, so components
-# can be migrated incrementally. Old names are removed in v1.0.
+# Renamed from ``outputs`` / ``inputs`` / ``optional_inputs``. For one
+# minor version the accessors fall back to the old names with a
+# ``DeprecationWarning`` so components can be migrated incrementally;
+# the old names are removed in v1.0.
 
 
 def _contract_method(c: SEDComponent, new: str, old: str) -> tuple[DerivedKey, ...]:
@@ -119,6 +110,28 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sfh_grid_lbt_yr": "yr",
     "sfr_history": "Msun/yr",
     "log_metallicity_history": "dex",
+    # Stellar — photometry LUT (Phase 3b; only published when
+    # ``approx=WavePrecomp()`` is set on SEDModel).
+    "stellar_phot_lnu_precomp": "erg/s/Hz",
+    # Stellar — Taylor moment (Phase 3c-3c). Same conditions as
+    # stellar_phot_lnu_precomp. Used by Phase 3c-3c-ii dust integration.
+    "stellar_phot_moment_precomp": "erg*Angstrom/s/Hz",
+    # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a; shape
+    # (n_age, n_filter)). Sum over age axis equals stellar_phot_lnu_precomp.
+    "stellar_phot_lnu_per_age_precomp": "erg/s/Hz",
+    "stellar_phot_moment_per_age_precomp": "erg*Angstrom/s/Hz",
+    # Filter pivot wavelengths (published by stellar when wave_precomp
+    # is on; used by dust LUT, AGN LUT, IGM LUT downstream).
+    "filter_eff_waves": "Angstrom",
+    # Dust attenuation per filter (Phase 3c-3c-ii). A(λ_eff) and A'(λ_eff).
+    "dust_attenuation_precomp": "",
+    "dust_attenuation_slope_precomp": "1/Angstrom",
+    # Two-component dust (Phase 3c-3c-iv-b). BC + diffuse layer precompute.
+    "dust_bc_attenuation_precomp": "",
+    "dust_bc_attenuation_slope_precomp": "1/Angstrom",
+    "dust_diff_attenuation_precomp": "",
+    "dust_diff_attenuation_slope_precomp": "1/Angstrom",
+    "dust_young_indicator": "",
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
@@ -131,6 +144,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_absorbed": "erg/s",
     "sed_agn": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
+    # AGN — filter LUT (Phase 3c-3d-agn).
+    "agn_phot_lnu_precomp": "erg/s/Hz",
     # Nebular outputs (continuous SED in erg/s/Hz per 2026-04-08 standard;
     # discrete line/continuum primitives are Lsun per the 2026-05-17
     # convention — see project_nebular_unit_conventions memory entry).
@@ -138,12 +153,28 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sed_shock": "erg/s/Hz",
     "line_waves": "Angstrom",
     "line_lums": "erg/s",
+    # Nebular — photometry LUT (Phase 3c-3b; only non-BakedIn backends
+    # publish, when ``approx=WavePrecomp()`` is set).
+    "nebular_phot_lnu_precomp": "erg/s/Hz",
+    # Spectrum LUT (Phase 5; published when approx=SpectrumPrecomp() is set).
+    # Per-pixel rest-frame Lν at spectrum pixel centres.
+    "spec_eff_waves": "Angstrom",
+    "stellar_spec_lnu_precomp": "erg/s/Hz",
+    "nebular_spec_lnu_precomp": "erg/s/Hz",
+    "dust_spec_lnu_precomp": "erg/s/Hz",
+    "agn_spec_lnu_precomp": "erg/s/Hz",
+    "igm_spec_transmission_precomp": "",
     # Radio / X-ray / IGM
     "sed_radio": "erg/s/Hz",
     "sed_xray": "erg/s/Hz",
     "igm_transmission": "",
     # Shock (MAPPINGS path)
     "shock_log_lhalpha": "dex",
+    # Spatial — 2D surface-brightness profile + the (x, y) kpc grid
+    # underlying it. Published by spatial components (Sersic, Exponential,
+    # FlatSlab, …). See architecture spec §3.3.
+    "spatial_profile_2d": "",
+    "spatial_grid_xy_kpc": "",
 }
 
 
@@ -169,7 +200,7 @@ def _did_you_mean(missing: str, known: Iterable[str]) -> str:
 
 
 def validate_pipeline(components: Iterable[SEDComponent]) -> None:
-    r"""Check the output / input contract over an ordered component list.
+    r"""Check that every component's inputs are produced by upstream components.
 
     Runs at :class:`tengri.SEDModel` construction time, once per model.
     Zero hot-path / JIT cost — all checks are pure-Python over the
@@ -207,7 +238,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
 
     Raises
     ------
-    PipelineContractError
+    ComponentIOError
         On any of the five failure modes. The message names the offending
         component class, the offending key, the offending units strings,
         and (where applicable) a ``Did you mean: ...`` suggestion.
@@ -220,13 +251,13 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     for idx, component in enumerate(component_list):
         for key in _outputs(component):
             if not isinstance(key, DerivedKey):
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} outputs() returned "
                     f"a non-DerivedKey entry of type {type(key).__name__}"
                 )
             canonical = _CANONICAL_UNITS.get(key.name)
             if canonical is not None and key.units != canonical:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} outputs "
                     f"{key.name!r} in {key.units!r} but the canonical-units "
                     f"table pins it to {canonical!r}. Either fix the units "
@@ -237,7 +268,7 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                 prior_idx, prior_comp, _ = publishers[key.name]
                 pair = frozenset({type(prior_comp).__name__, type(component).__name__})
                 if pair not in _ALTERNATE_PUBLISHERS:
-                    raise PipelineContractError(
+                    raise ComponentIOError(
                         f"Derived key {key.name!r} is published by both "
                         f"{type(prior_comp).__name__!r} (at position {prior_idx}) "
                         f"and {type(component).__name__!r} (at position {idx}). "
@@ -252,34 +283,34 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     for idx, component in enumerate(component_list):
         for needed in _inputs(component):
             if not isinstance(needed, DerivedKey):
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} inputs() returned "
                     f"a non-DerivedKey entry of type {type(needed).__name__}"
                 )
             canonical = _CANONICAL_UNITS.get(needed.name)
             if canonical is not None and needed.units != canonical:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} needs "
                     f"{needed.name!r} in {needed.units!r} but the "
                     f"canonical-units table pins it to {canonical!r}."
                 )
             if needed.name not in publishers:
                 hint = _did_you_mean(needed.name, publishers.keys())
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} needs derived "
                     f"key {needed.name!r} (in {needed.units!r}) but no "
                     f"upstream component outputs it.{hint}"
                 )
             pub_idx, pub_comp, pub_key = publishers[needed.name]
             if pub_idx >= idx:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} (position {idx}) "
                     f"needs {needed.name!r} but it is published by "
                     f"{type(pub_comp).__name__!r} at position {pub_idx} — "
                     f"the producer must come strictly before the consumer."
                 )
             if pub_key.units != needed.units:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} needs "
                     f"{needed.name!r} in {needed.units!r} but "
                     f"{type(pub_comp).__name__!r} outputs it in "
@@ -296,13 +327,13 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
     for idx, component in enumerate(component_list):
         for needed in _optional_inputs(component):
             if not isinstance(needed, DerivedKey):
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} optional_inputs() "
                     f"returned a non-DerivedKey entry of type {type(needed).__name__}"
                 )
             canonical = _CANONICAL_UNITS.get(needed.name)
             if canonical is not None and needed.units != canonical:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} optionally needs "
                     f"{needed.name!r} in {needed.units!r} but the "
                     f"canonical-units table pins it to {canonical!r}."
@@ -311,14 +342,14 @@ def validate_pipeline(components: Iterable[SEDComponent]) -> None:
                 continue  # no upstream publisher → fallback applies; not an error
             pub_idx, pub_comp, pub_key = publishers[needed.name]
             if pub_idx >= idx:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} (position {idx}) "
                     f"optionally needs {needed.name!r} but it is published by "
                     f"{type(pub_comp).__name__!r} at position {pub_idx} — "
                     f"the producer must come strictly before the consumer."
                 )
             if pub_key.units != needed.units:
-                raise PipelineContractError(
+                raise ComponentIOError(
                     f"Component {type(component).__name__!r} optionally needs "
                     f"{needed.name!r} in {needed.units!r} but "
                     f"{type(pub_comp).__name__!r} outputs it in "
@@ -361,7 +392,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
 
     Raises
     ------
-    PipelineContractError
+    ComponentIOError
         If the dependency graph contains a cycle. The error message
         names every component still pending when the algorithm stalls
         — typically the cycle's participants.
@@ -422,7 +453,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
                 break
         if picked is None:
             pending_names = [type(component_list[i]).__name__ for i in sorted(remaining)]
-            raise PipelineContractError(
+            raise ComponentIOError(
                 f"Topological sort failed: cycle in output/input graph "
                 f"involving {pending_names!r}. Every inputs() / "
                 f"optional_inputs() declaration must be satisfiable in some "
@@ -454,9 +485,9 @@ def slice_params_for_component(
     rely on the allowlist for shared scalars.
     """
     prefix = component.parameter_prefix
-    # Phase II-2: prefix may be a single str OR a tuple of strings (e.g.
+    # ``parameter_prefix`` may be a single str or a tuple of strings (e.g.
     # StellarSEDComponent owns ("sfh_", "met_", "chem_")). Normalise to
-    # tuple here so downstream logic handles one shape only.
+    # tuple so downstream logic handles one shape only.
     prefixes = (prefix,) if isinstance(prefix, str) else tuple(prefix)
     if "" in prefixes or len(prefixes) == 0:
         raise ValueError(
@@ -487,9 +518,8 @@ def merge_declared_parameters(
        would make the orchestrator's prefix-slicing ambiguous).
 
     The output maps each parameter name to its prior — suitable for
-    spreading into :class:`tengri.Parameters` once the migration of
-    :mod:`tengri.parameters.parameters` to a component-driven builder
-    lands (Phase II-6 of the plan).
+    spreading into :class:`tengri.Parameters` once the component-driven
+    builder in :mod:`tengri.parameters.parameters` lands.
 
     Parameters
     ----------
@@ -602,6 +632,8 @@ def run_components(
     components: Iterable[SEDComponent],
     state: ForwardState,
     params: Mapping[str, jnp.ndarray],
+    ssp_data: Any | None = None,
+    template_data: Any | None = None,
 ) -> ForwardState:
     r"""Thread ``state`` through ``components`` in order.
 
@@ -616,6 +648,18 @@ def run_components(
     params : mapping
         Full parameter dict. Each component sees only its
         prefix-matched slice plus the bare-name allowlist.
+    ssp_data : Any | None, optional
+        SSP stellar population synthesis grid. When provided, is passed
+        to each component's ``apply()`` method as a JIT runtime
+        parameter. Components that do not need it should ignore the
+        argument. Default ``None`` means components rely on their
+        internal ``self.ssp_data``.
+    template_data : Any | None, optional
+        Nebular backend grids and weights. When provided, is passed
+        to each component's ``apply()`` method as a JIT runtime
+        parameter. Components that do not need it should ignore the
+        argument. Default ``None`` means components rely on their
+        internal template data.
 
     Returns
     -------
@@ -624,10 +668,10 @@ def run_components(
 
     Raises
     ------
-    PipelineContractError
+    ComponentIOError
         If, after every component has applied, the final
         ``state.derived._extras`` is non-empty — i.e. some component's
-        ``apply()`` slipped data through the ``DerivedBundle``'s opt-in
+        ``apply()`` slipped data through the ``DerivedState``'s opt-in
         spillover instead of using ``state.derived.with_(X=value)``
         (ADR-0007 Phase 3). The snapshot test
         (:mod:`tests.integration.test_derived_contract_snapshots`)
@@ -637,14 +681,14 @@ def run_components(
         Bypass with the env var ``TENGRI_ALLOW_DERIVED_EXTRAS=1`` —
         useful during in-flight migrations or when external user code
         explicitly attaches non-canonical keys via
-        ``DerivedBundle.from_dict(..., allow_extras=True)``. Not for
+        ``DerivedState.from_dict(..., allow_extras=True)``. Not for
         production code.
     """
     import os as _os
 
     for component in components:
         sliced = slice_params_for_component(component, params)
-        state = component.apply(state, sliced)
+        state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
     # ADR-0007 Phase 4 invariant — strict typed-only writes (#64
     # added the same check at the snapshot-test boundary; this one
@@ -653,13 +697,13 @@ def run_components(
     if _os.environ.get("TENGRI_ALLOW_DERIVED_EXTRAS") != "1":
         extras = getattr(state.derived, "_extras", None)
         if extras:
-            raise PipelineContractError(
+            raise ComponentIOError(
                 f"run_components: state.derived._extras is non-empty after the "
                 f"forward pass: {list(extras.keys())!r}. Some component's "
-                f"apply() is writing through DerivedBundle's opt-in spillover "
+                f"apply() is writing through DerivedState's opt-in spillover "
                 f"instead of the typed ``state.derived.with_(X=value)`` API "
                 f"(ADR-0007 Phase 3). Migrate the offending write site to use "
-                f"``with_(...)``, add a matching field to DerivedBundle, or "
+                f"``with_(...)``, add a matching field to DerivedState, or "
                 f"set TENGRI_ALLOW_DERIVED_EXTRAS=1 for debugging only."
             )
 

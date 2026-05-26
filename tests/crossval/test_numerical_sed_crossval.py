@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Numerical SED cross-validation against published values and other codes.
 
 Tests verify that tengri produces absolute luminosities, colors, and physical
@@ -78,7 +79,7 @@ class TestSSPAbsoluteNormalisation:
 
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),  # 1 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.0),  # 1 Msun/yr
             sfh_const_start_gyr=Fixed(1.0),  # recent (lookback=0)
             sfh_const_end_gyr=Fixed(0.0),  # started 1 Gyr ago
             met_logzsol=Fixed(0.0),
@@ -116,7 +117,7 @@ class TestSSPAbsoluteNormalisation:
         # Ongoing: SF from 3 Gyr ago to now
         spec_sf = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),
+            sfh_const_log_total_mass=Fixed(0.0),
             sfh_const_start_gyr=Fixed(3.0),
             sfh_const_end_gyr=Fixed(0.0),
             met_logzsol=Fixed(0.0),
@@ -127,7 +128,7 @@ class TestSSPAbsoluteNormalisation:
         # Quenched: SF from 8 Gyr ago to 5 Gyr ago (same 3 Gyr duration)
         spec_q = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),
+            sfh_const_log_total_mass=Fixed(0.0),
             sfh_const_start_gyr=Fixed(8.0),
             sfh_const_end_gyr=Fixed(5.0),
             met_logzsol=Fixed(0.0),
@@ -162,7 +163,7 @@ class TestSSPAbsoluteNormalisation:
         def _make(logzsol):
             spec = Parameters(
                 mean_sfh_type="const",
-                sfh_const_log_sfr=Fixed(0.0),
+                sfh_const_log_total_mass=Fixed(0.0),
                 sfh_const_start_gyr=Fixed(13.7),
                 sfh_const_end_gyr=Fixed(10.7),
                 met_logzsol=Fixed(logzsol),
@@ -205,7 +206,7 @@ class TestDustAttenuationAbsolute:
 
         spec_clean = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),
+            sfh_const_log_total_mass=Fixed(0.0),
             sfh_const_start_gyr=Fixed(10.0),
             sfh_const_end_gyr=Fixed(0.0),  # 10 Gyr of SF
             met_logzsol=Fixed(0.0),
@@ -215,7 +216,7 @@ class TestDustAttenuationAbsolute:
         )
         spec_dusty = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),
+            sfh_const_log_total_mass=Fixed(0.0),
             sfh_const_start_gyr=Fixed(10.0),
             sfh_const_end_gyr=Fixed(0.0),  # 10 Gyr of SF
             met_logzsol=Fixed(0.0),
@@ -247,7 +248,7 @@ class TestDustAttenuationAbsolute:
 
         spec_clean = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),
+            sfh_const_log_total_mass=Fixed(0.0),
             sfh_const_start_gyr=Fixed(10.0),
             sfh_const_end_gyr=Fixed(0.0),  # 10 Gyr of SF
             met_logzsol=Fixed(0.0),
@@ -257,7 +258,7 @@ class TestDustAttenuationAbsolute:
         )
         spec_dusty = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),
+            sfh_const_log_total_mass=Fixed(0.0),
             sfh_const_start_gyr=Fixed(10.0),
             sfh_const_end_gyr=Fixed(0.0),  # 10 Gyr of SF
             met_logzsol=Fixed(0.0),
@@ -308,7 +309,7 @@ class TestSFRLuminosityCalibrations:
 
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),  # SFR = 1 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.0),  # SFR = 1 Msun/yr
             sfh_const_start_gyr=Fixed(3.0),
             sfh_const_end_gyr=Fixed(0.0),  # 3 Gyr of SF
             met_logzsol=Fixed(-0.3),
@@ -355,7 +356,7 @@ class TestAbsoluteMagnitudes:
         filters = load_filter_set(["sdss_r"])
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.3),  # SFR ~ 2 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.3),  # SFR ~ 2 Msun/yr
             sfh_const_start_gyr=Fixed(13.0),
             sfh_const_end_gyr=Fixed(0.0),  # 13 Gyr of continuous SF
             met_logzsol=Fixed(0.0),
@@ -389,7 +390,7 @@ class TestAbsoluteMagnitudes:
         def _make(log_sfr):
             spec = Parameters(
                 mean_sfh_type="const",
-                sfh_const_log_sfr=Fixed(log_sfr),
+                sfh_const_log_total_mass=Fixed(log_sfr),
                 sfh_const_start_gyr=Fixed(13.7),
                 sfh_const_end_gyr=Fixed(10.7),
                 met_logzsol=Fixed(0.0),
@@ -426,7 +427,7 @@ class TestDustLawComparison:
         def _make(law):
             spec = Parameters(
                 mean_sfh_type="const",
-                sfh_const_log_sfr=Fixed(0.0),
+                sfh_const_log_total_mass=Fixed(0.0),
                 sfh_const_start_gyr=Fixed(13.7),
                 sfh_const_end_gyr=Fixed(10.7),
                 met_logzsol=Fixed(0.0),
@@ -466,7 +467,7 @@ class TestRedshiftEffects:
         def _flux(z):
             spec = Parameters(
                 mean_sfh_type="const",
-                sfh_const_log_sfr=Fixed(0.0),
+                sfh_const_log_total_mass=Fixed(0.0),
                 sfh_const_start_gyr=Fixed(13.7),
                 sfh_const_end_gyr=Fixed(10.7),
                 met_logzsol=Fixed(0.0),
@@ -501,7 +502,7 @@ class TestRedshiftEffects:
 
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),  # bright enough to measure
+            sfh_const_log_total_mass=Fixed(1.0),  # bright enough to measure
             sfh_const_start_gyr=Fixed(2.0),
             sfh_const_end_gyr=Fixed(0.0),  # 2 Gyr of SF
             met_logzsol=Fixed(-0.5),

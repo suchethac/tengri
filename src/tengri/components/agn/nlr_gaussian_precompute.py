@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Precompute adapter for the AGN NLR Gaussian-line composer.
 
 Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
@@ -34,7 +35,7 @@ import numpy as np
 
 from tengri.components.agn.nlr import (
     _NLR_FWHM_KMS,
-    _NLR_LINE_EFFICIENCY,
+    _NLR_LINE_EFFICIENCY_DEFAULT as _NLR_LINE_EFFICIENCY,
     _RICHARDSON_FLUXES,
     _RICHARDSON_WAVES,
 )

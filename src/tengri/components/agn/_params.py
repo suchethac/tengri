@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the AGN component.
 
 Single source of truth for the ``agn_*`` priors.
@@ -23,8 +24,14 @@ from tengri.protocols.component import ParamDeclaration
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_frac",
-        Fixed(0.0),
-        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
+        Fixed(1.0),
+        "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
+        "multiplier on the composable runner output and as the AGN-to-stellar "
+        "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
+        "configured AGN at full strength'; a wildcard ``'*': FIXED`` on an "
+        "AGN-configured group therefore yields a working AGN (closes #417). "
+        "Set explicitly to 0.0 to disable the AGN while keeping the rest of "
+        "the agn config in place.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
@@ -55,10 +62,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_torus_frac",
         Fixed(0.5),
-        "AGN torus covering factor (fraction of L_bol re-emitted by torus)",
+        "AGN torus covering factor — DEPRECATED; use agn_frac_agn",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    ParamDeclaration(
+        "agn_frac_agn",
+        Fixed(0.5),
+        "AGN fraction (L_AGN / L_total in a configurable band, CIGALE convention)",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+    ),
+    # (5-line gap reserved for PR 2 xray parameter block)
     ParamDeclaration(
         "agn_log_mbh",
         Fixed(7.0),
@@ -206,6 +221,24 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(0.1),
         "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "agn_nlr_line_efficiency",
+        Fixed(0.10),
+        "NLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "re-emitted as emission-line luminosity. Physical bound [0, 1]; "
+        "typical values 0.01-0.30.",
+        lambda lo, hi: lo >= 0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "agn_blr_line_efficiency",
+        Fixed(0.08),
+        "BLR line radiative efficiency — fraction of intercepted disc luminosity "
+        "re-emitted as broad-line luminosity. Physical bound [0, 1]; "
+        "typical values 0.05-0.15.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
         "must be in [0, 1]",
     ),

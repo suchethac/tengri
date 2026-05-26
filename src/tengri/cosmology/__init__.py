@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cosmology helpers (Planck18 default; differentiable in JAX).
 
 This namespace re-exports the cosmology utilities that were previously
@@ -11,7 +12,7 @@ Examples
 >>> cosmo.luminosity_distance_mpc(0.5)
 DeviceArray(2867.4..., dtype=float64)
 >>> cosmo.PLANCK18
-CosmoParams(Om0=0.315, w0=-1.0, wa=0.0, h=0.674)
+CosmoParams(Om0=0.30966, w0=-1.0, wa=0.0, h=0.6766)
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from __future__ import annotations
 from tengri.utils.cosmology import (
     DEFAULT_COSMO,
     PLANCK18,
+    CosmoParams,
     age_at_z,
     age_at_z0,
     angular_diameter_distance,
@@ -27,6 +29,7 @@ from tengri.utils.cosmology import (
     comoving_distance,
     comoving_distance_mpc,
     comoving_volume_element,
+    cosmo_from_astropy,
     distance_modulus,
     kpc_per_arcsec,
     lookback_time,
@@ -39,6 +42,7 @@ from tengri.utils.cosmology import (
 __all__ = [
     "DEFAULT_COSMO",
     "PLANCK18",
+    "CosmoParams",
     "age_at_z",
     "age_at_z0",
     "angular_diameter_distance",
@@ -47,6 +51,7 @@ __all__ = [
     "comoving_distance",
     "comoving_distance_mpc",
     "comoving_volume_element",
+    "cosmo_from_astropy",
     "distance_modulus",
     "kpc_per_arcsec",
     "lookback_time",

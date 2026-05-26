@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Exception hierarchy for Tengri (Naming Contract §8).
 
 All Tengri exceptions inherit from ``TengriError``.  Domain-specific
@@ -38,6 +39,28 @@ class ParameterMapError(ParameterError):
     ----------
     message : str
         Human-readable error description.
+    """
+
+
+class UnknownParameterError(ParameterError):
+    """Unknown parameter name passed to a ``predict_*`` method.
+
+    Raised by :meth:`SEDModel.predict_photometry`, ``predict_spectrum``,
+    ``predict_rest_sed``, ``predict_emission_lines``, etc., when the user
+    passes an override key that doesn't match any free or fixed parameter
+    of the assembled model (typo, deleted param, or param from a component
+    the spec doesn't use).
+
+    Silent no-ops on overrides are the worst class of bug — they make
+    plausibly-correct downstream plots/fits encode stale defaults. We raise
+    instead, and include a "did you mean…" suggestion built from the live
+    param-map.
+
+    Parameters
+    ----------
+    message : str
+        Human-readable error description, listing unknown keys and
+        suggested matches.
     """
 
 

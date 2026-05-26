@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Protocol interfaces for dust models in tengri.
 
 This module defines the structural types (Protocols) that dust attenuation

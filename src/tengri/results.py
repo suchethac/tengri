@@ -1,4 +1,5 @@
-"""FitResult — a thin provenance-and-citations wrapper around Posterior / SEDResult.
+# SPDX-License-Identifier: BSD-3-Clause
+"""FitResult — a thin record-and-citations wrapper around Posterior / SEDResult.
 
 Does not replace existing result types; wraps them so downstream code can access
 ``.samples`` or ``.params`` exactly as before via ``result.inner``.
@@ -10,6 +11,7 @@ import contextlib
 import datetime as _dt
 import platform as _platform
 import sys as _sys
+import warnings as _warnings
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -21,11 +23,11 @@ from tengri.inference.posterior import Posterior
 
 __all__ = [
     "CatalogPosterior",
+    "FitRecord",
     "FitResult",
     "MockData",
     "PopulationPosterior",
     "Posterior",
-    "Provenance",
     "generate_mock",
     "posteriors_to_dataframe",
 ]
@@ -34,7 +36,7 @@ __version_fallback__ = "0.0.0"
 
 
 @dataclass(frozen=True)
-class Provenance:
+class FitRecord:
     """Environment and execution metadata captured at fit time.
 
     Stores version numbers, platform info, timestamps, and optional execution
@@ -62,13 +64,13 @@ class Provenance:
     random_seed : int | None
         Pseudo-random seed used (reproducibility), None if not applicable.
     input_data_hash : str | None
-        SHA256 hash of input data array (optional provenance audit).
+        SHA256 hash of input data array (optional audit field).
     extras : dict[str, Any]
         Additional metadata keyed by string.
 
     Returns
     -------
-    Provenance
+    FitRecord
         Immutable record of environment and execution context.
 
     Attributes
@@ -86,15 +88,15 @@ class Provenance:
 
     Notes
     -----
-    Provenance is frozen (immutable) to prevent accidental modification
+    FitRecord is frozen (immutable) to prevent accidental modification
     after capture. All fields are read-only.
 
     Examples
     --------
-    >>> prov = Provenance.capture(wall_time_seconds=42.5, random_seed=12345)
-    >>> print(prov.timestamp_utc)
+    >>> rec = FitRecord.capture(wall_time_seconds=42.5, random_seed=12345)
+    >>> print(rec.timestamp_utc)
     2026-04-23T15:30:45Z
-    >>> print(prov.jax_backend)
+    >>> print(rec.jax_backend)
     cpu
     """
 
@@ -117,8 +119,8 @@ class Provenance:
         random_seed: int | None = None,
         input_data_hash: str | None = None,
         extras: dict[str, Any] | None = None,
-    ) -> Provenance:
-        """Snapshot current environment into a Provenance record.
+    ) -> FitRecord:
+        """Snapshot current environment into a FitRecord.
 
         Captures version numbers, platform, JAX backend, and timestamp.
         Optionally includes wall time, random seed, and input data hash.
@@ -136,7 +138,7 @@ class Provenance:
 
         Returns
         -------
-        Provenance
+        FitRecord
             Immutable snapshot of current environment.
 
         Notes
@@ -147,8 +149,8 @@ class Provenance:
 
         Examples
         --------
-        >>> prov = Provenance.capture(wall_time_seconds=123.4)
-        >>> prov.tengri_version
+        >>> rec = FitRecord.capture(wall_time_seconds=123.4)
+        >>> rec.tengri_version
         '0.1.0'
         """
         import tengri
@@ -168,7 +170,7 @@ class Provenance:
             platform=f"{_platform.system()} {_platform.machine()}",
             jax_version=jax_v,
             jax_backend=jax_b,
-            timestamp_utc=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            timestamp_utc=_dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             wall_time_seconds=wall_time_seconds,
             random_seed=random_seed,
             input_data_hash=input_data_hash,
@@ -178,20 +180,20 @@ class Provenance:
 
 @dataclass
 class FitResult:
-    """Wraps a Posterior or SEDResult with provenance + citations.
+    """Wraps a Posterior or SEDResult with a fit record + citations.
 
     A thin, non-invasive wrapper that bundles any result object (Posterior,
-    SEDResult, or list of Posteriors) with execution provenance and citation
-    metadata. Downstream code can access the result's attributes (e.g., ``.samples``,
-    ``.params``) directly on the FitResult object via attribute forwarding.
-    For direct access to the result object, use ``.inner``.
+    SEDResult, or list of Posteriors) with execution metadata and citation
+    information. Downstream code can access the result's attributes (e.g.,
+    ``.samples``, ``.params``) directly on the FitResult object via attribute
+    forwarding. For direct access to the result object, use ``.inner``.
 
     Parameters
     ----------
     inner : Any
         The underlying result object (Posterior, SEDResult, or list[Posterior]).
         Attributes are forwarded via __getattr__ for transparent access.
-    provenance : Provenance
+    record : FitRecord
         Execution environment and timing metadata.
     citation_keys : list[str], optional
         Registry keys for citations that apply to this fit
@@ -206,13 +208,13 @@ class FitResult:
     Returns
     -------
     FitResult
-        Wrapper with provenance and citation tracking.
+        Wrapper with fit-record and citation tracking.
 
     Attributes
     ----------
     inner : Any
         The result object (Posterior, SEDResult, etc.).
-    provenance : Provenance
+    record : FitRecord
         Execution environment snapshot.
     citation_keys : list[str]
         Registry keys for citations.
@@ -229,14 +231,13 @@ class FitResult:
     incrementally during inference. The wrapper itself is transparent:
     accessing ``result.samples`` or ``result.params`` automatically forwards
     to ``result.inner.samples`` or ``result.inner.params`` via ``__getattr__``.
-    For backward compatibility, ``result.inner`` is always available.
 
     Examples
     --------
     >>> result = fitter.fit(data, noise, method="vi")  # returns Posterior
     >>> fit_result = FitResult(
     ...     inner=result,
-    ...     provenance=Provenance.capture(wall_time_seconds=42.5),
+    ...     record=FitRecord.capture(wall_time_seconds=42.5),
     ...     citation_keys=["dsps", "tengri", "calzetti2000"],
     ...     backend="vi",
     ...     preset="starforming",
@@ -249,10 +250,20 @@ class FitResult:
     """
 
     inner: Any
-    provenance: Provenance
+    record: FitRecord
     citation_keys: list[str] = field(default_factory=list)
     backend: str | None = None
     preset: str | None = None
+
+    @property
+    def provenance(self) -> FitRecord:
+        """Deprecated alias for :attr:`record`. Will be removed in tengri v1.0."""
+        _warnings.warn(
+            "FitResult.provenance is deprecated; use FitResult.record instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.record
 
     def __getattr__(self, name: str) -> Any:
         """Forward attribute access to inner result object.
@@ -278,11 +289,11 @@ class FitResult:
         Notes
         -----
         This is called only for attributes not found on FitResult itself.
-        Attributes like ``inner``, ``provenance``, ``citations``, etc.
+        Attributes like ``inner``, ``record``, ``citations``, etc.
         are resolved normally without calling this method.
         """
         # Avoid infinite recursion on dataclass initialization
-        if name in ("inner", "provenance", "citation_keys", "backend", "preset"):
+        if name in ("inner", "record", "citation_keys", "backend", "preset"):
             raise AttributeError(f"FitResult has no attribute {name!r}")
         try:
             inner = object.__getattribute__(self, "inner")
@@ -350,9 +361,9 @@ class FitResult:
         lines.append(f"Backend: {backend_str}, Preset: {preset_str}")
 
         # Timestamp and wall time
-        ts = self.provenance.timestamp_utc
-        if self.provenance.wall_time_seconds is not None:
-            lines.append(f"Timestamp: {ts} ({self.provenance.wall_time_seconds:.1f} s)")
+        ts = self.record.timestamp_utc
+        if self.record.wall_time_seconds is not None:
+            lines.append(f"Timestamp: {ts} ({self.record.wall_time_seconds:.1f} s)")
         else:
             lines.append(f"Timestamp: {ts}")
 
@@ -412,24 +423,24 @@ class FitResult:
             grp.attrs["schema_version"] = "v1"
 
             # Provenance as attributes
-            grp.attrs["tengri_version"] = self.provenance.tengri_version
-            grp.attrs["python_version"] = self.provenance.python_version
-            grp.attrs["platform"] = self.provenance.platform
-            grp.attrs["timestamp_utc"] = self.provenance.timestamp_utc
-            if self.provenance.jax_version is not None:
-                grp.attrs["jax_version"] = self.provenance.jax_version
-            if self.provenance.jax_backend is not None:
-                grp.attrs["jax_backend"] = self.provenance.jax_backend
-            if self.provenance.wall_time_seconds is not None:
-                grp.attrs["wall_time_seconds"] = self.provenance.wall_time_seconds
-            if self.provenance.random_seed is not None:
-                grp.attrs["random_seed"] = self.provenance.random_seed
-            if self.provenance.input_data_hash is not None:
-                grp.attrs["input_data_hash"] = self.provenance.input_data_hash
+            grp.attrs["tengri_version"] = self.record.tengri_version
+            grp.attrs["python_version"] = self.record.python_version
+            grp.attrs["platform"] = self.record.platform
+            grp.attrs["timestamp_utc"] = self.record.timestamp_utc
+            if self.record.jax_version is not None:
+                grp.attrs["jax_version"] = self.record.jax_version
+            if self.record.jax_backend is not None:
+                grp.attrs["jax_backend"] = self.record.jax_backend
+            if self.record.wall_time_seconds is not None:
+                grp.attrs["wall_time_seconds"] = self.record.wall_time_seconds
+            if self.record.random_seed is not None:
+                grp.attrs["random_seed"] = self.record.random_seed
+            if self.record.input_data_hash is not None:
+                grp.attrs["input_data_hash"] = self.record.input_data_hash
 
             # Extras as JSON attribute
-            if self.provenance.extras:
-                grp.attrs["extras_json"] = json.dumps(self.provenance.extras)
+            if self.record.extras:
+                grp.attrs["extras_json"] = json.dumps(self.record.extras)
 
             # Backend and preset
             if self.backend is not None:
@@ -513,7 +524,7 @@ class FitResult:
             if "extras_json" in grp.attrs:
                 extras = json.loads(grp.attrs["extras_json"])
 
-            provenance = Provenance(
+            record = FitRecord(
                 tengri_version=grp.attrs["tengri_version"],
                 python_version=grp.attrs["python_version"],
                 platform=grp.attrs["platform"],
@@ -544,7 +555,7 @@ class FitResult:
 
             return cls(
                 inner=inner,
-                provenance=provenance,
+                record=record,
                 citation_keys=citation_keys,
                 backend=backend,
                 preset=preset,

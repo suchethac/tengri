@@ -1,9 +1,10 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Loss and log-likelihood builders consumed by the Fitter inference engines.
 
 Three public builders — :func:`build_loss_fn`, :func:`build_loglikelihood_fn`,
 and :func:`build_loglikelihood_unbounded_fn` — are thin wrappers over a
 single private core, :func:`_build_data_neg_log_likelihood_fn`. The core
-routes through ``fitter._user_likelihood`` (the Phase II-1 adapter cohort
+routes through ``fitter._user_likelihood`` (the likelihood-adapter cohort
 auto-built by :meth:`Fitter._maybe_build_default_likelihood`) and falls
 through to one tiny legacy χ² branch only for the case the cohort cannot
 yet express (``data_mask + non-photometry``).
@@ -49,13 +50,12 @@ def _build_prediction(
     model,
     params,
     data_type,
-    mode,
     *,
     has_line_fluxes,
     has_indices,
     index_defs,
     data_args,
-    use_orchestrator=False,
+    use_components=False,
 ):
     """Forward-model prediction in one place.
 
@@ -67,24 +67,24 @@ def _build_prediction(
     - ``pred_phot`` / ``pred_spec``: split components or ``None``.
     """
     if data_type == "photometry":
-        if use_orchestrator:
-            predicted = model.predict_photometry_via_orchestrator(params)
+        if use_components:
+            predicted = model.predict_photometry_components(params)
         else:
-            predicted = model.predict_photometry(params, mode=mode)
+            predicted = model.predict_photometry(params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
-        if use_orchestrator:
-            predicted = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+        if use_components:
+            predicted = model.predict_spectrum_components(params)
         else:
-            predicted = model.predict_spectrum(params, model._wave_obs, mode=mode)
+            predicted = model.predict_spectrum(params)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
-        if use_orchestrator:
-            pred_phot = model.predict_photometry_via_orchestrator(params)
-            pred_spec = model.predict_spectrum_via_orchestrator(params, model._wave_obs)
+        if use_components:
+            pred_phot = model.predict_photometry_components(params)
+            pred_spec = model.predict_spectrum_components(params)
         else:
-            pred_phot = model.predict_photometry(params, mode=mode)
-            pred_spec = model.predict_spectrum(params, model._wave_obs, mode=mode)
+            pred_phot = model.predict_photometry(params)
+            pred_spec = model.predict_spectrum(params)
         predicted = jnp.concatenate([pred_phot, pred_spec])
     else:
         raise ValueError(f"Unknown data_type: {data_type}")
@@ -99,7 +99,7 @@ def _build_prediction(
             params, target_wavelengths=data_args["line_flux_waves"]
         )
     if has_indices:
-        prediction["indices"] = model.predict_spectral_indices(params, index_defs, mode=mode)
+        prediction["indices"] = model.predict_spectral_indices(params, index_defs)
 
     return prediction, predicted, pred_phot, pred_spec
 
@@ -107,7 +107,7 @@ def _build_prediction(
 # ── Builders ─────────────────────────────────────────────────────────────
 
 
-def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
+def _build_data_neg_log_likelihood_fn(fitter):
     """Build the data-term function ``neg_log_lik(params, data_args) -> -log p(d|params)``.
 
     Single source of truth for the data term. All three public builders
@@ -146,32 +146,61 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
     user_likelihood = getattr(fitter, "_user_likelihood", None)
-    use_orchestrator = bool(getattr(fitter, "use_orchestrator", False))
+    use_components = bool(getattr(fitter, "use_components", False))
+
+    # Phase 4-D (#250 follow-up): photometry-only fits use the
+    # threaded ``_impl`` directly so the outer JIT trace (HMC/NUTS
+    # loss_fn) sees ssp_data + template_data + fixed_values as
+    # outer-level Parameters. Without this, the outer JIT inlines
+    # ``model.predict_photometry`` → ``predict_observables_jit`` and
+    # bakes the SSP grid (15×93×5994 floats) into the HLO as a
+    # constant — ballooning HMC cold compile to 40 s. Threaded path:
+    # HMC cold ≈ 3-5 s.
+    _photometry_only_threaded = (
+        data_type == "photometry"
+        and not use_components
+        and not has_line_fluxes
+        and not has_indices
+        and hasattr(model, "_get_or_build_predict_observables_jit")
+    )
+    _threaded_impl = (
+        model._get_or_build_predict_observables_jit() if _photometry_only_threaded else None
+    )
 
     def neg_log_lik(params, data_args):
         """-log p(d | params). Caller supplies physical params + data_args."""
         data = data_args["data"]
         noise = data_args["noise"]
 
-        prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
-            model,
-            params,
-            data_type,
-            mode,
-            has_line_fluxes=has_line_fluxes,
-            has_indices=has_indices,
-            index_defs=index_defs,
-            data_args=data_args,
-            use_orchestrator=use_orchestrator,
-        )
+        if _threaded_impl is not None and "_jit_inputs" in data_args:
+            jit_in = data_args["_jit_inputs"]
+            predicted = _threaded_impl(
+                params,
+                jit_in["fixed_values"],
+                jit_in["ssp_data"],
+                jit_in["template_data"],
+            ).phot_fnu
+            prediction = {"phot_fnu": predicted}
+            _pred_phot, _pred_spec = predicted, None
+        else:
+            prediction, predicted, _pred_phot, _pred_spec = _build_prediction(
+                model,
+                params,
+                data_type,
+                has_line_fluxes=has_line_fluxes,
+                has_indices=has_indices,
+                index_defs=index_defs,
+                data_args=data_args,
+                use_components=use_components,
+            )
 
         # Auto-built / user-supplied Likelihood adapter handles the data
         # term (and any extras composed via CompositeLikelihood).
         if user_likelihood is not None:
             return -user_likelihood.log_prob(prediction, params)
 
-        # Legacy χ² fall-through. Exactly one case reaches this code path
-        # post Phase II-2.3: data_mask + spec/joint (censoring across the
+        # Legacy χ² fall-through. Exactly one case reaches this code path:
+        # data_mask + spec/joint (censoring across the
         # concatenated data array, not addressable via a single-channel
         # adapter). All other configurations are covered by auto-build
         # in Fitter._maybe_build_default_likelihood. If you find yourself
@@ -205,7 +234,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
             )
             e_lh = e_lh + 0.5 * chi2_lines
         if has_indices:
-            model_idx = model.predict_spectral_indices(params, index_defs, mode=mode)
+            model_idx = model.predict_spectral_indices(params, index_defs)
             chi2_idx = jnp.sum(
                 ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
             )
@@ -216,7 +245,7 @@ def _build_data_neg_log_likelihood_fn(fitter, mode="_traceable"):
     return neg_log_lik
 
 
-def build_loss_fn(fitter, mode="_traceable"):
+def build_loss_fn(fitter):
     """Build the information Hamiltonian (loss function) from Fitter state.
 
     Constructs a JAX-differentiable loss function encapsulating the likelihood
@@ -242,13 +271,6 @@ def build_loss_fn(fitter, mode="_traceable"):
     ----------
     fitter : Fitter
         Fitter instance with model, data, parameters, and configuration.
-
-    mode : str, optional
-        Forward model prediction mode. Default ``"_traceable"`` is safe
-        inside JIT scopes (used by NIFTy geoVI). Use ``"auto"`` (~1.5×
-        speedup) for non-JIT methods (MAP, Laplace, Pathfinder, NUTS,
-        Ray Tracing, NSS). See
-        :doc:`docs/dev/jit-optimization-report-2026-04-18.md`.
 
     Returns
     -------
@@ -299,7 +321,7 @@ def build_loss_fn(fitter, mode="_traceable"):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
-    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loss_fn(params_unbounded, data_args):
         """Compute loss: -log_lik + ½ξᵀξ prior on standardized params."""
@@ -318,9 +340,15 @@ def build_loss_fn(fitter, mode="_traceable"):
         # cancels the prior density and leaves the isotropic quadratic
         # term. Exact for Uniform, Gaussian, LogUniform, LogNormal,
         # StudentT priors.  Reference: tengri paper §2.2 + Appendix A.
+        # Sum across batched per-galaxy axes too: hierarchical fits
+        # (PopulationSEDModel) have per-galaxy xi with shape (N,) or
+        # higher rank. The prior penalty must reduce to a scalar so
+        # the loss is a single number. ``jnp.sum`` is a no-op for
+        # rank-0 xi (single-galaxy fits) and reduces (N,) → scalar
+        # for hierarchical.
         prior_penalty = 0.0
         for name in free_names:
-            prior_penalty = prior_penalty + params_unbounded[name] ** 2
+            prior_penalty = prior_penalty + jnp.sum(params_unbounded[name] ** 2)
         if stochastic and "psd_xi" in params_unbounded:
             prior_penalty = prior_penalty + jnp.sum(params_unbounded["psd_xi"] ** 2)
         return e_lh + 0.5 * prior_penalty
@@ -402,7 +430,7 @@ def build_logprior_fn(fitter):
     return logprior_fn
 
 
-def build_loglikelihood_fn(fitter, mode="_traceable"):
+def build_loglikelihood_fn(fitter):
     """Build log-likelihood function in physical parameter space.
 
     Constructs a JAX-differentiable function that computes the log-likelihood
@@ -414,11 +442,6 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
     ----------
     fitter : Fitter
         Fitter instance with model, data, parameters, and likelihood config.
-
-    mode : str, optional
-        Forward model prediction mode. Default ``"_traceable"`` is safe
-        inside JIT (used by NIFTy geoVI). Use ``"auto"`` (~1.5× speedup)
-        for non-JIT methods (MAP, Laplace, Pathfinder, NUTS, Ray Tracing, NSS).
 
     Returns
     -------
@@ -454,7 +477,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
     """
     fixed_values = fitter._fixed_values
     spec = fitter.spec
-    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loglikelihood_fn(free_params, data_args):
         """Compute log p(d | params) — physical params, no prior."""
@@ -467,7 +490,7 @@ def build_loglikelihood_fn(fitter, mode="_traceable"):
     return loglikelihood_fn
 
 
-def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
+def build_loglikelihood_unbounded_fn(fitter):
     """Build a log-likelihood function in unbounded parameter space.
 
     For Elliptical Slice Sampling, which handles the N(0,I) prior
@@ -476,10 +499,6 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     Parameters
     ----------
     fitter : Fitter
-    mode : str, optional
-        Forward model prediction mode. Default "_traceable" is safe inside
-        JIT scopes (used by NIFTy VI/geoVI). Use "auto" for better performance
-        with MAP, Laplace, Pathfinder, NUTS, Raytrace, NSS (~1.5x speedup).
 
     Returns
     -------
@@ -498,7 +517,7 @@ def build_loglikelihood_unbounded_fn(fitter, mode="_traceable"):
     fixed_values = fitter._fixed_values
     spec = fitter.spec
     stochastic = spec.stochastic
-    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter, mode=mode)
+    neg_log_lik = _build_data_neg_log_likelihood_fn(fitter)
 
     def loglik_unbounded(params_unbounded, data_args):
         """Compute log-likelihood after unstandardizing unbounded parameters to physical space."""

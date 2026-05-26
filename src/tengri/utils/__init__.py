@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Shared utilities: grid construction, cosmology, conversions, magnitudes."""
 
 from tengri.utils.conversions import (

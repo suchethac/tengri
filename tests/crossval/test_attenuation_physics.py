@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for ALL attenuation curve models.
 
 Tests physical correctness of dust attenuation curves against known
@@ -18,6 +19,7 @@ References
 - Witt & Gordon 2000, ApJ, 528, 799
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -298,7 +300,7 @@ class TestLeitherer02Physics:
 
         wave_fuv = jnp.array([970.0, 1000.0, 1100.0, 1200.0])
         k = leitherer02(wave_fuv)
-        assert jnp.all(jnp.isfinite(k))
+        chex.assert_tree_all_finite(k)
         assert jnp.all(k > 0), "L02 should give positive k below 1200A"
 
 
@@ -459,7 +461,7 @@ class TestNarayananPhysics:
         wave_test = jnp.geomspace(1500.0, 20000.0, 100)
         k_nz = narayanan_z(wave_test, redshift=0.0)
         # Should be finite and positive
-        assert jnp.all(jnp.isfinite(k_nz))
+        chex.assert_tree_all_finite(k_nz)
         assert jnp.all(k_nz >= 0)
         # k(5500) should be ~1
         v_idx = int(jnp.argmin(jnp.abs(wave_test - 5500.0)))
@@ -489,7 +491,7 @@ class TestConroy2010Physics:
         from tengri.components.dust.attenuation import conroy2010
 
         k = conroy2010(WAVE)
-        assert jnp.all(jnp.isfinite(k))
+        chex.assert_tree_all_finite(k)
         assert jnp.all(k >= 0)
 
     def test_uv_bump_present(self):

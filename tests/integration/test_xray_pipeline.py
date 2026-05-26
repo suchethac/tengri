@@ -13,6 +13,7 @@ files are easy to diff side-by-side.
 
 from __future__ import annotations
 
+import chex
 import jax.numpy as jnp
 import pytest
 
@@ -188,7 +189,7 @@ def test_three_adapter_chain_runs_end_to_end():
     )
 
     assert final.sed_intrinsic is not None
-    assert jnp.all(jnp.isfinite(final.sed_intrinsic))
+    chex.assert_tree_all_finite(final.sed_intrinsic)
     assert "sed_radio" in final.derived
     assert "sed_xray" in final.derived
     # IGM transmission at z=8 (above the z_mid=7 reionization midpoint)

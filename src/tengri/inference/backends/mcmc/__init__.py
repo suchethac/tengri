@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """MCMC backends: NUTS, Ray Tracing, HMC variants, elliptical slice."""
 
 from tengri.inference.backends.mcmc.dynamic_hmc import run_dynamic_hmc

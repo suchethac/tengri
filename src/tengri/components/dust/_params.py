@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the dust component.
 
 Three tuples, each the canonical source for one legacy bucket in

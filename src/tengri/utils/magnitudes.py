@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pure JAX magnitude system utilities (AB, Vega, absolute, apparent, surface brightness).
 
 Provides JIT-compatible functions for common magnitude conversions in observational

@@ -14,6 +14,10 @@ registry.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -57,11 +61,9 @@ for fc, name in zip(curves, filter_names):
 
 ax.set_xlabel(r"Wavelength [$\AA$]")
 ax.set_ylabel("Transmission")
-ax.set_title("SDSS ugriz Filter Curves")
 ax.set_xlim(2800, 11500)
 ax.set_ylim(0, None)
 ax.legend(frameon=False, ncol=5, loc="upper right")
 fig.tight_layout()
 
 plt.savefig("plot_filter_curves.png", dpi=150, bbox_inches="tight")
-plt.show()

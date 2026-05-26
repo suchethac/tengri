@@ -1,63 +1,68 @@
 """
-Emission Line Width (σ in km/s)
-===============================
+Emission line broadening traces gas kinematics
+================================================
 
 Emission line velocity dispersion broadens lines from a few km/s (narrow,
-kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic
-resolution). Line broadening is crucial for fitting restframe UV emission lines
-and measuring dynamics in high-redshift galaxies.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_line_sigma_sweep_001.png
-   :alt: plot_line_sigma_sweep
-   :class: sphx-glr-single-img
-
+kinematically resolved) to hundreds of km/s (unresolved at typical
+spectroscopic resolution). We show the [OIII] region broadened across
+the dynamical range.
 """
 
-import matplotlib.pyplot as plt
+import os
 
-from tengri import Fixed, Parameters, SEDModel, load_ssp
-from tengri.analysis.plotting import setup_style, sweep_parameter
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-
-ssp = load_ssp()
-
-# --- Build model: young star-forming galaxy ---
-spec = Parameters(
-    nebular_cue=True,
-    eline_mode="fitted",  # Enable emission line velocity dispersion fitting
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),  # Peak ~500 Myr ago (young)
-    sfh_tsnorm_width_gyr=Fixed(0.3),
-    sfh_tsnorm_skew=Fixed(0.2),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.3),  # Solar-ish
-    dust_tau_bc=Fixed(0.0),  # No dust
-    dust_tau_diff=Fixed(0.0),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
-    neb_logU=Fixed(-3.0),  # Fixed ionization
-    neb_logZ_gas=Fixed(-0.3),
-    eline_sigma_kms=Fixed(0.0),  # Will sweep this
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 1.0,
+        "beta": 2.5,
+        "tau_gyr": 0.3,
+        "log_total_mass": 10.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    neb={"type": "cue", "*": tengri.FIXED, "neb_eline_sigma": tengri.Uniform(50, 800)},
+    redshift=tengri.Fixed(0.05),
 )
-model = SEDModel(spec, ssp)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-# --- Sweep line width ---
-values = [50, 100, 200, 400, 800]
+sigma_values = np.array([50, 100, 200, 400, 800])
+norm = mpl.colors.LogNorm(vmin=sigma_values.min(), vmax=sigma_values.max())
+cmap = plt.get_cmap("Blues")
 
-fig, ax = sweep_parameter(
-    model,
-    "eline_sigma_kms",
-    values,
-    cmap="Blues",
-    label_fmt=r"$\sigma$ = {:.0f} km/s",
-    wave_range=(4700, 5200),
-)
-ax.set_title("Emission Line Broadening: [OIII] Region", fontsize=12)
-ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
-plt.tight_layout()
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for sigma in sigma_values:
+    params = {**baseline, "neb_eline_sigma": jnp.float64(sigma)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.semilogy(wave, nu_l_nu, color=cmap(norm(sigma)), lw=1.4)
+
+ax.set_xlim(4700, 5200)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\sigma$ [km/s]")
+
+fig.tight_layout()
 plt.savefig("plot_line_sigma_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

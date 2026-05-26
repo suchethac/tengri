@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """ASCII-art logo for tengri — the hex+spiral mark in several renderings.
 
 Size/style variants (pass via ``print_logo(size=...)`` / ``logo_str(size=...)``):

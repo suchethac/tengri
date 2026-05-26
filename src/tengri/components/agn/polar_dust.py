@@ -1,14 +1,17 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Polar dust extinction and greybody reemission for AGN.
 
 Implements the X-CIGALE polar dust model (Yang et al. 2020, Section 2.2.2):
-SMC extinction applied to Type 1 AGN sightlines, with energy-conserving
-greybody FIR reemission.
+bi-conical polar dust with viewing-angle-independent absorption and
+energy-conserving greybody FIR reemission. SMC extinction curve applied
+to observer-frame disc attenuation (Type 1 sightlines only); absorption
+is geometry-independent (Yang+2020 §2.2.2).
 
 The Type 1/2 boundary uses a smooth sigmoid transition for differentiability.
 
 References
 ----------
-- Yang et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust)
+- Yang et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust § 2.2.2)
 - Gordon et al. 2003, ApJ, 594, 279 (SMC extinction)
 - Pei 1992, ApJ, 395, 130 (SMC parameterization used here)
 """
@@ -18,15 +21,11 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.components.agn._phys import planck_lnu, wavelength_to_nu
 from tengri.components.dust.attenuation import smc as smc_extinction_curve
 
 # Physical constants (CGS / Angstrom-compatible)
-from tengri.utils.physics_constants import (
-    C_AA as _C_AA,
-    C_CGS as _C_CGS,
-    H_PLANCK as _H_PLANCK,
-    K_BOLTZ as _K_BOLTZ,
-)
+from tengri.utils.physics_constants import C_AA as _C_AA
 
 # SMC R_V from Pei (1992)
 _RV_SMC = 2.93
@@ -246,13 +245,24 @@ def polar_dust_extinction(
     Returns
     -------
     l_nu_attenuated : array, shape (n_wave,)
-        Attenuated luminosity density. Same units as input l_nu.
+        Observer-frame disc luminosity after Type-1-masked attenuation.
+        Same units as input l_nu. Type-2 sightlines are unchanged (mask ≈ 0).
     l_absorbed : array, shape (n_wave,)
-        Absorbed luminosity density (per wavelength bin). Always >= 0.
-        Same units as input l_nu.
+        Absorbed luminosity density (per wavelength bin): bi-conical dust
+        absorbs a fraction (1 - exp(-tau_lambda)) regardless of viewing angle.
+        Always >= 0. Same units as input l_nu.
 
     Notes
     -----
+    **Absorption vs. Attenuation:**
+    - ``l_absorbed`` (geometry-independent) is the disc photon fraction intercepted
+      by the bi-conical polar dust (Yang+2020 §2.2.2). This drives the
+      greybody FIR reemission and is viewed isotropically.
+    - ``l_nu_attenuated`` (Type-1-masked) is the observer-frame disc after
+      passing through the near-cone geometry. Only face-on sightlines see
+      attenuation; edge-on sightlines (Type 2) have the disc already screened
+      by the equatorial torus (handled upstream), so ``l_nu_attenuated = l_nu``.
+
     **JIT-compatible**: yes — uses ``jnp`` primitives and smooth sigmoid.
     """
     # Select extinction law
@@ -275,42 +285,23 @@ def polar_dust_extinction(
     tau_lambda = 0.921 * ebv * r_v * k_lambda
     extinction_factor = jnp.exp(-tau_lambda)  # fraction transmitted
 
+    # Polar-dust absorption is geometry-independent: the bi-conical dust always
+    # intercepts the same disc-photon fraction (set by E(B-V)) regardless of
+    # observer viewing angle. Re-emission is isotropic, so observers at any
+    # inclination see the FIR bump.
+    l_absorbed = jnp.maximum(l_nu * (1.0 - extinction_factor), 0.0)
+
     # Type 1 mask: 1 for face-on (extinct), 0 for edge-on (no effect)
     mask = _type1_mask(cos_inc, opening_angle_deg, sharpness)
 
-    # Effective transmission: mix between full extinction (Type 1) and
-    # no extinction (Type 2)
+    # Observed disc attenuation is gated by Type-1 mask: only face-on sight-lines
+    # look through the near polar cone. Type-2 sightlines have the disc already
+    # screened by the equatorial torus (handled upstream), so we leave l_nu
+    # unchanged here.
     effective_transmission = 1.0 - mask * (1.0 - extinction_factor)
-
     l_nu_attenuated = l_nu * effective_transmission
-    l_absorbed = l_nu - l_nu_attenuated
-
-    # Ensure non-negative (numerical safety)
-    l_absorbed = jnp.maximum(l_absorbed, 0.0)
 
     return l_nu_attenuated, l_absorbed
-
-
-def _planck_nu(wavelength: jnp.ndarray, temperature: float) -> jnp.ndarray:
-    """Planck function B_nu(T) in CGS units [erg/s/cm^2/Hz/sr].
-
-    Parameters
-    ----------
-    wavelength : array
-        Wavelength in Angstrom.
-    temperature : float
-        Temperature in Kelvin.
-
-    Returns
-    -------
-    b_nu : array
-        Planck function values. Same shape as wavelength.
-    """
-    nu = _C_AA / wavelength  # Hz
-    x = _H_PLANCK * nu / (_K_BOLTZ * temperature)
-    # Clip to avoid overflow in exp
-    x_safe = jnp.clip(x, 0.0, 500.0)
-    return 2.0 * _H_PLANCK * nu**3 / _C_CGS**2 / (jnp.exp(x_safe) - 1.0)
 
 
 def polar_dust_emission(
@@ -353,7 +344,7 @@ def polar_dust_emission(
     """
     # Greybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
     opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))
-    b_nu = _planck_nu(wavelength, temperature)
+    b_nu = planck_lnu(wavelength_to_nu(wavelength), temperature)
     unnormalized = opacity_factor * b_nu
 
     # Normalize so that integral(L_reemit * dnu) = l_absorbed_total

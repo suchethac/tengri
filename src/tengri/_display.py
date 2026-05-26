@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Single sink for user-asked-for stdout output (citations, help, doctor reports).
 
 Library consumers can silence all of this output by setting the

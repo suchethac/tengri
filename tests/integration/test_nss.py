@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for NSS with real forward model.
 
 Requires SSP data files. Skipped gracefully if not found.
@@ -26,7 +27,7 @@ def smooth_fitter():
     spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         redshift=0.1,

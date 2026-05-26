@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Free-parameter declarations owned by the IGM component.
 
 Three tuples, each the canonical source for the corresponding IGM

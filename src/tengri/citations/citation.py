@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Citation record for papers and upstream code sources."""
 
 from __future__ import annotations

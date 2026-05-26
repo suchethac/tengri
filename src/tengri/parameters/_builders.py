@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter registry builder and lazy bucket resolution.
 
 This module contains the aggregator logic that converts component-owned
@@ -130,10 +131,19 @@ def _resolve_lazy_bucket(name: str) -> dict:
 
 
 # ── Non-SFH parameter bucket (derived from canonical _shared.PARAMS) ────────
+#
+# Includes observation-layer noise params (``noise_frac_cal``, ``noise_dof``)
+# declared in ``observation/_params.py`` under the ADR-0005 component-owned
+# pattern. They are merged here so the legacy ``_NON_SFH_PARAMS`` bucket
+# remains the single registry entry consumed by ``_build_param_registry``.
 
+from tengri.observation import _params as _obs_params_module
 from tengri.parameters import _shared as _shared_module
 
-_NON_SFH_PARAMS = _bucket_from_declarations(_shared_module.PARAMS)
+_NON_SFH_PARAMS = {
+    **_bucket_from_declarations(_shared_module.PARAMS),
+    **_bucket_from_declarations(_obs_params_module.PARAMS),
+}
 
 
 # ── Two-component dust parameters ───────────────────────────────────────────

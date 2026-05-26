@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """NUTS (No-U-Turn Sampler) via BlackJAX.
 
 Extracted from mcmc/common.py. Import via ``tengri.inference.backends.mcmc``.
@@ -19,10 +20,80 @@ from tengri.inference.backends.mcmc._shared import (
     _nuts_chain_scan,
     _nuts_full_scan,
     _set_cached_adaptation,
+    _vmap_chains,
 )
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bool:
+    """Resolve the ``dense_mass_matrix=None`` auto-policy (#319).
+
+    The auto-policy switches to diagonal at D >= 8 to dodge the
+    documented 20+ GB warmup spike on photometry fits with
+    ``mean_sfh_type="dense_basis"``. Below D = 8 the dense matrix
+    converges faster on tengri's typical age-dust-metallicity
+    posteriors and peaks at ~3-6 GB.
+
+    Pulled out of :func:`run_nuts` so the heuristic is unit-testable
+    without spinning up a full NUTS warmup.
+
+    Parameters
+    ----------
+    dense_mass_matrix : bool or None
+        ``None`` (auto), ``True`` (force dense), or ``False`` (force diagonal).
+    n_dim : int
+        Number of free parameters in the model.
+
+    Returns
+    -------
+    bool
+        Effective ``dense_mass_matrix`` value to pass to the warmup
+        kernel. Explicit ``True`` / ``False`` round-trip unchanged.
+    """
+    if dense_mass_matrix is None:
+        return n_dim < 8
+    return dense_mass_matrix
+
+
+def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> None:
+    """Warn before NUTS warmup OOMs at D >= 8 with dense mass matrix (#319).
+
+    The trace graph for full mass-matrix adaptation grows quadratically
+    in D and is amplified by SFH variants that publish many per-sample
+    derived quantities (``mean_sfh_type="dense_basis"`` is the
+    documented worst case — peak 22.78 GB on a D=8 photometry fit).
+    Small D <= 7 fits peak at 3-6 GB and are fine.
+
+    Pulled out of :func:`run_nuts` so the heuristic is unit-testable
+    without spinning up a full NUTS warmup.
+    """
+    if not (dense_mass_matrix and n_dim >= 8):
+        return
+    if getattr(spec, "stochastic", False):
+        # Stochastic-SFH fits get a separate, more aggressive warning
+        # higher up in run_nuts already.
+        return
+    heavy_sfh_hint = ""
+    mean_sfh_type = getattr(spec, "mean_sfh_type", None)
+    if mean_sfh_type is not None:
+        types_iter = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+        if any("dense_basis" in str(t) for t in types_iter):
+            heavy_sfh_hint = (
+                " (your mean_sfh_type includes 'dense_basis', which "
+                "amplifies this — peak was 22.78 GB on a D=8 fit in "
+                "the original report)"
+            )
+    warnings.warn(
+        f"NUTS warmup with dense_mass_matrix=True at D={n_dim} can "
+        f"peak at 20+ GB of RAM{heavy_sfh_hint}. If you're on a "
+        "32 GB machine and the fit is OOM-ing, pass "
+        "`dense_mass_matrix=False` (diagonal mass matrix; small "
+        "convergence cost) or switch to `method='mcmc_hmc'` "
+        "(less memory-intensive at warmup). See issue #319.",
+        stacklevel=3,
+    )
 
 
 def run_nuts(
@@ -33,9 +104,10 @@ def run_nuts(
     n_warmup=300,
     n_burnin=100,
     n_samples=1000,
+    n_chains=1,
     target_accept_rate=0.85,
     max_num_doublings=10,
-    dense_mass_matrix=True,
+    dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
     verbose=True,
 ):
@@ -78,9 +150,19 @@ def run_nuts(
         the MAP initialization and reach the typical set. Set to 0
         if init_from is already a Posterior from a converged chain.
     n_samples : int
-        Posterior samples to collect. 1000 gives convergence for
-        most SED fitting scenarios at D≤10. Increase if
+        Posterior samples per chain to collect. 1000 gives convergence
+        for most SED fitting scenarios at D≤10. Increase if
         ``check_convergence()`` reports unconverged parameters.
+    n_chains : int, default 1
+        Number of independent NUTS chains to run in parallel via
+        ``jax.vmap`` over chain seeds. Each chain shares the cached
+        warmup adaptation (so this is only honoured on the second
+        ``run_nuts(...)`` call against the same model — the first call
+        populates the cache). Final posterior has ``n_chains * n_samples``
+        total samples. Wall ≈ one chain's worth up to the arithmetic
+        ceiling (CPU SIMD; GPU/TPU scales further). Initial chain
+        positions are MAP + small Gaussian jitter so the chains
+        explore independent neighborhoods.
     target_accept_rate : float
         Target acceptance rate for step size adaptation. 0.85 is
         slightly more conservative than the Stan default (0.8),
@@ -100,11 +182,19 @@ def run_nuts(
         when NUTS is hitting deep trees, which is workload-specific.
         Compile cost scales with this knob but is typically <3s at
         warm cache (see docs/inference/compilation_diagnostics.md).
-    dense_mass_matrix : bool
+    dense_mass_matrix : bool or None, optional
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and
-        dramatically reduces divergences. Default True. Set False
-        for D>20 where the dense matrix becomes expensive.
+        dramatically reduces divergences.
+
+        Default ``None`` auto-picks based on dimensionality:
+
+        - **D < 8**: dense (warmup peak ~3-6 GB; correlations matter).
+        - **D >= 8**: diagonal (avoids the 20+ GB warmup spike at D=8
+          with `dense_basis` SFH reported in issue #319).
+
+        Pass ``True`` or ``False`` explicitly to override. Explicit
+        ``True`` at D >= 8 emits a memory warning but is honoured.
     pathfinder_warmstart : bool, default False
         Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
         Hessian-derived inverse mass matrix + short step-size refinement)
@@ -132,10 +222,13 @@ def run_nuts(
     except ImportError:
         raise ImportError("blackjax required for NUTS: pip install blackjax") from None
 
+    from tengri.inference.context import InferenceContext
     from tengri.inference.posterior import Posterior
 
     # ``_shared.py`` helpers still take a Fitter; reach through the
-    # context until they migrate.
+    # context until they migrate. Normalize first so callers can pass
+    # either a Fitter or an InferenceContext (matches HMC/raytrace).
+    context = InferenceContext.from_target(context)
     fitter = context.fitter
 
     # Warn about high dimensionality
@@ -156,8 +249,18 @@ def run_nuts(
         init_params,
     )
 
+    n_dim = len(init_flat)
+
+    # Resolve auto-policy (default since #319). Explicit True/False
+    # from the caller is honoured as-is.
+    user_passed_explicit = dense_mass_matrix is not None
+    dense_mass_matrix = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim)
+    if verbose and not user_passed_explicit:
+        policy = "dense (D<8)" if dense_mass_matrix else "diagonal (D>=8, #319)"
+        logger.info("NUTS auto-mass-matrix: %s", policy)
+
     if verbose:
-        n_dim = len(init_flat)
+        _maybe_warn_high_memory_nuts(n_dim, dense_mass_matrix, context.spec)
         # Auto-adjust warnings based on dimensionality
         if n_dim > 20 and not context.spec.stochastic:
             warnings.warn(
@@ -181,7 +284,7 @@ def run_nuts(
     # Dense: O(D²) per step, captures correlations. Good for D≤30.
     # Diagonal: O(D) per step, sufficient when init_from=Posterior
     #   (VI already decorrelated) or D>30.
-    n_dim = len(init_flat)
+    # (``n_dim`` already computed above for the #319 auto-policy.)
     use_dense = dense_mass_matrix
     if dense_mass_matrix and n_dim > 30:
         use_dense = False
@@ -202,7 +305,6 @@ def run_nuts(
         def ld_1arg(pos):
             return log_posterior_flat_2arg(pos, data_args)
 
-        state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
@@ -210,19 +312,53 @@ def run_nuts(
                 float(parameters["step_size"]),
             )
         key, chain_key = jax.random.split(key)
-        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent = _nuts_chain_scan(
-                state,
-                chain_keys,
-                log_posterior_flat_2arg,
-                data_args,
-                parameters["step_size"],
-                parameters["inverse_mass_matrix"],
-                max_num_doublings,
-            )
-            jax.block_until_ready(positions)
+        if n_chains > 1:
+
+            def _init(p):
+                return blackjax.mcmc.nuts.init(p, ld_1arg)
+
+            def _scan(s, ks):
+                return _nuts_chain_scan(
+                    s,
+                    ks,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    max_num_doublings,
+                )
+
+            with compile_timer(
+                "nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"
+            ):
+                positions, divergent = _vmap_chains(
+                    _init,
+                    _scan,
+                    init_flat=init_flat,
+                    chain_key=chain_key,
+                    n_chains=n_chains,
+                    n_iter=n_burnin + n_samples,
+                    n_burnin=n_burnin,
+                )
+                jax.block_until_ready(positions)
+            _multichain_burnin_done = True
+        else:
+            state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
+            chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+            with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
+                positions, divergent = _nuts_chain_scan(
+                    state,
+                    chain_keys,
+                    log_posterior_flat_2arg,
+                    data_args,
+                    parameters["step_size"],
+                    parameters["inverse_mass_matrix"],
+                    max_num_doublings,
+                )
+                jax.block_until_ready(positions)
+            _multichain_burnin_done = False
     else:
+        _multichain_burnin_done = False
         key, warmup_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
@@ -251,8 +387,9 @@ def run_nuts(
 
     # Burnin discard happens Python-side (not inside JIT) so changing
     # n_burnin doesn't trigger a recompile when n_burnin + n_samples is
-    # held constant.
-    if n_burnin > 0:
+    # held constant. The multichain branch already discarded per-chain
+    # before flattening; skip the global slice there.
+    if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
@@ -276,6 +413,7 @@ def run_nuts(
             "n_warmup": n_warmup,
             "n_burnin": n_burnin,
             "n_samples": n_samples,
+            "n_chains": n_chains,
             "n_divergent": n_divergent,
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Edge case physics tests for extreme parameter values.
 
 These tests verify that the forward model remains physically sensible
@@ -7,6 +8,7 @@ redshift, high burstiness, and metallicity extremes.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -43,7 +45,7 @@ def filters():
 def _make_model(ssp_data, filters, **spec_kwargs):
     defaults = dict(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=1.0,
         sfh_tsnorm_peak_lbt_gyr=5.0,
         sfh_tsnorm_width_gyr=2.0,
         sfh_tsnorm_skew=0.0,
@@ -91,7 +93,7 @@ class TestExtremeDust:
             dust_tau_bc=3.0,
         )
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed)), "SED has NaN/Inf at extreme dust"
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0), "SED has negative values at extreme dust"
 
     def test_extreme_dust_photometry_physical(self, ssp_data, filters):
@@ -103,7 +105,7 @@ class TestExtremeDust:
             dust_tau_bc=3.0,
         )
         phot = model.predict_photometry(params)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
 
@@ -143,18 +145,18 @@ class TestExtremeRedshift:
         """z = 0.001: SED finite, positive, physical photometry."""
         model, params = _make_model(ssp_data, filters, redshift=0.001)
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0)
 
         phot = model.predict_photometry(params)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
     def test_high_redshift(self, ssp_data, filters):
         """z = 3.0: SED finite, positive."""
         model, params = _make_model(ssp_data, filters, redshift=3.0)
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0)
 
     def test_higher_z_fainter(self, ssp_data, filters):
@@ -181,7 +183,7 @@ class TestHighBurstiness:
         """psd_sigma=5.0 (very bursty): SED should be finite and positive."""
         spec = Parameters(
             mean_sfh_type=["tsnorm", "field"],
-            sfh_tsnorm_log_peak_sfr=1.0,
+            sfh_tsnorm_log_total_mass=1.0,
             sfh_tsnorm_peak_lbt_gyr=5.0,
             sfh_tsnorm_width_gyr=2.0,
             sfh_tsnorm_skew=0.0,
@@ -199,14 +201,14 @@ class TestHighBurstiness:
         params = spec.sample(jax.random.PRNGKey(42))
 
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed)), "NaN/Inf in SED at psd_sigma=5"
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0), "Negative SED values at psd_sigma=5"
 
     def test_moderate_burstiness_physical(self, ssp_data, filters):
         """psd_sigma=2.0 (moderately bursty): derived quantities physical."""
         spec = Parameters(
             mean_sfh_type=["tsnorm", "field"],
-            sfh_tsnorm_log_peak_sfr=1.0,
+            sfh_tsnorm_log_total_mass=1.0,
             sfh_tsnorm_peak_lbt_gyr=5.0,
             sfh_tsnorm_width_gyr=2.0,
             sfh_tsnorm_skew=0.0,
@@ -260,12 +262,12 @@ class TestMetallicityExtremes:
         """Lowest metallicity: SED finite and positive."""
         model, params = _make_model(ssp_data, filters, met_logzsol=-1.5)
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0)
 
     def test_extreme_high_z_finite(self, ssp_data, filters):
         """Highest metallicity: SED finite and positive."""
         model, params = _make_model(ssp_data, filters, met_logzsol=0.2)
         sed = model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
         assert jnp.all(sed >= 0)

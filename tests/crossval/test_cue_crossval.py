@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate Cue JAX implementation against TensorFlow reference outputs.
 
 The Cue emulator (Li et al. 2024) was originally implemented in TensorFlow.
@@ -11,6 +12,7 @@ separate TF-only venv, saved to data/cue_reference_outputs.npz.
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -174,13 +176,13 @@ class TestCueInternalConsistency:
         """All line luminosities should be finite."""
         for params in _TEST_PARAMS:
             _, lum = cue_backend.predict_nebular_line_luminosities(cloudyfsps_only=False, **params)
-            assert jnp.all(jnp.isfinite(lum)), "Line luminosities contain NaN/inf"
+            chex.assert_tree_all_finite(lum)
 
     def test_continuum_finite(self, cue_backend):
         """Continuum should be finite."""
         for params in _TEST_PARAMS:
             _, lum = cue_backend.predict_nebular_continuum(**params)
-            assert jnp.all(jnp.isfinite(lum)), "Continuum contains NaN/inf"
+            chex.assert_tree_all_finite(lum)
 
     def test_different_inputs_different_outputs(self, cue_backend):
         """Different parameters should produce different predictions."""

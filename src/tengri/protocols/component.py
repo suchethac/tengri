@@ -1,14 +1,13 @@
-"""SEDComponent protocol: the contract each physics module satisfies.
+# SPDX-License-Identifier: BSD-3-Clause
+"""SEDComponent protocol: the shape each physics block satisfies.
 
 A component owns one block of the forward model — stellar emission,
 dust attenuation+emission, nebular lines, AGN, IGM, radio, X-ray —
 plus the parameters and precomputed tensors that go with it. The
 :class:`tengri.SEDModel` orchestrator runs components in order, threading
-a :class:`ForwardState` through them.
-
-This module is part of the Part II-1 scaffold. Nothing in `tengri`
-consumes these classes yet; they exist so future phases (II-2 onwards)
-can migrate one component at a time onto a stable interface.
+a :class:`ForwardState` through them. Each component declares the
+derived keys it reads (`inputs()`) and the ones it writes (`outputs()`),
+so the orchestrator can check the chain of physics before any JIT compile.
 
 Notes
 -----
@@ -31,34 +30,47 @@ from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 
-from tengri.protocols.derived_bundle import DerivedBundle
+from tengri.protocols.derived_state import DerivedState
+
+# Deprecated alias kept on tengri.protocols.component for one release —
+# imports of ``DerivedBundle`` from this module continue to work via the
+# renamed canonical type ``DerivedState``. The walker in
+# ``tengri.citations.collect`` and a few port-era test fixtures still
+# read this attribute; remove in v1.0.
+DerivedBundle = DerivedState
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
+    "ComponentIOError",
+    "DerivedBundle",
     "DerivedKey",
+    "DerivedState",
     "ForwardState",
     "ParamDeclaration",
-    "PipelineContractError",
     "SEDComponent",
     "SEDComponentConfig",
     "SEDComponentState",
 ]
 
 
-class PipelineContractError(ValueError):
-    """Raised by :func:`tengri.forward.orchestrator.validate_pipeline` when
-    the output/input contract is violated at component-list construction time.
+class ComponentIOError(ValueError):
+    """Raised when one component's declared inputs/outputs disagree with the chain.
 
-    The contract is checked once at :class:`tengri.SEDModel` construction,
-    before any JIT compile. A raised ``PipelineContractError`` always names
-    the offending component class and the offending derived key, plus a
-    "Did you mean: ..." suggestion when a missing-producer likely indicates
-    a typo. See :func:`validate_pipeline` for the full list of checks.
+    Checked once at :class:`tengri.SEDModel` construction by
+    :func:`tengri.forward.orchestrator.validate_pipeline`, before any
+    JIT compile. The error message always names the offending component
+    class and the offending derived key, with a "Did you mean: ..." hint
+    when a missing producer looks like a typo. See
+    :func:`validate_pipeline` for the full list of checks.
     """
 
 
+# Deprecated alias — old name kept for one release.
+PipelineContractError = ComponentIOError
+
+
 # ─────────────────────────────────────────────────────────────────────
-# Contract decisions resolved by the Phase II-1 first-adapter pass
+# Contract decisions resolved by the first-adapter pass
 # (RadioSEDComponent + IGMSEDComponent, 2026-05).
 # ─────────────────────────────────────────────────────────────────────
 
@@ -212,9 +224,9 @@ class ForwardState:
 
     The carrier object for the forward model: holds the SED-in-progress
     plus a typed bag of derived quantities that downstream components
-    read from upstream components. Renamed from ``ForwardState`` in
-    Phase II-3.2 (2026-05-18) for astronomer-friendly user-facing names;
-    ``ForwardState`` remains as a soft alias for one minor version.
+    read from upstream components. Renamed from ``PipelineState``
+    (2026-05-18) for astronomer-friendly user-facing names;
+    ``PipelineState`` remains as a soft alias for one minor version.
 
     Each component reads what it needs and returns a new ``ForwardState``
     (immutable). Field semantics match :mod:`tengri.forward.prediction`:
@@ -248,16 +260,16 @@ class ForwardState:
     sed_attenuated: jnp.ndarray | None = None
     sed_observed: jnp.ndarray | None = None
     lines: Mapping[str, jnp.ndarray] | None = None
-    # ``derived`` is a typed :class:`DerivedBundle`. Dict-shaped writes
+    # ``derived`` is a typed :class:`DerivedState`. Dict-shaped writes
     # at construction or via ``with_(derived={...})`` are auto-coerced
     # for backward compatibility (see ``__post_init__`` and ``with_``).
-    derived: DerivedBundle = field(default_factory=lambda: DerivedBundle())
+    derived: DerivedState = field(default_factory=lambda: DerivedState())
 
     def __post_init__(self) -> None:
-        """Coerce dict-shaped ``derived`` input to a :class:`DerivedBundle`."""
-        if not isinstance(self.derived, DerivedBundle):
+        """Coerce dict-shaped ``derived`` input to a :class:`DerivedState`."""
+        if not isinstance(self.derived, DerivedState):
             # Frozen dataclass — bypass the guard with object.__setattr__.
-            object.__setattr__(self, "derived", DerivedBundle.from_dict(dict(self.derived)))
+            object.__setattr__(self, "derived", DerivedState.from_dict(dict(self.derived)))
 
     def with_(self, **overrides: Any) -> ForwardState:
         """Return a copy of this state with selected fields replaced.
@@ -268,14 +280,52 @@ class ForwardState:
 
         Equivalent to ``dataclasses.replace`` but reads better at call
         sites. A dict-shaped ``derived=`` is auto-coerced to
-        :class:`DerivedBundle` so existing dict-style write patterns
+        :class:`DerivedState` so existing dict-style write patterns
         keep working unchanged.
         """
         from dataclasses import replace
 
-        if "derived" in overrides and not isinstance(overrides["derived"], DerivedBundle):
-            overrides["derived"] = DerivedBundle.from_dict(dict(overrides["derived"]))
+        if "derived" in overrides and not isinstance(overrides["derived"], DerivedState):
+            overrides["derived"] = DerivedState.from_dict(dict(overrides["derived"]))
         return replace(self, **overrides)
+
+    def add_intrinsic(self, L_component: jnp.ndarray) -> ForwardState:
+        """Accumulate a component's contribution to the intrinsic SED.
+
+        Factorizes the common pattern::
+
+            if state.sed_intrinsic is None:
+                new_sed = L_component
+            else:
+                new_sed = state.sed_intrinsic + L_component
+            state = state.with_(sed_intrinsic=new_sed)
+
+        into a single call, improving readability and reducing
+        copy-paste across components.
+
+        Parameters
+        ----------
+        L_component : ndarray
+            Component's contribution to the intrinsic SED in erg/s/Hz.
+            Broadcasts against ``self.wave`` via JAX's standard rules.
+
+        Returns
+        -------
+        ForwardState
+            New state with ``sed_intrinsic`` = ``L_component`` (if
+            ``self.sed_intrinsic is None``) or
+            ``self.sed_intrinsic + L_component``.
+
+        Notes
+        -----
+        JIT/grad/vmap-compatible: the branching on ``self.sed_intrinsic is None``
+        is resolved at compile time (frozen field).
+        """
+        if self.sed_intrinsic is None:
+            new_sed = L_component
+        else:
+            new_sed = self.sed_intrinsic + L_component
+        return self.with_(sed_intrinsic=new_sed)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -314,7 +364,7 @@ del _tree_util
 
 
 # Soft alias for backwards compatibility. ``ForwardState`` is the canonical
-# name as of Phase II-3.2 (2026-05-18); ``PipelineState`` will be removed in
+# name as of 2026-05-18; ``PipelineState`` will be removed in
 # tengri v1.0. Aliasing the class object (rather than wrapping it) preserves
 # isinstance checks and type-annotation equivalence in downstream code.
 PipelineState = ForwardState
@@ -433,8 +483,8 @@ class SEDComponent(Protocol):
     # the canonical optional-read pattern, and ADR-0009 for the full
     # rationale.
     #
-    # Renamed from ``publishes`` / ``requires`` / ``requires_optional`` in
-    # Phase II-3.2 (2026-05-18). The old method names are still accepted by
+    # Renamed from ``publishes`` / ``requires`` / ``requires_optional``
+    # (2026-05-18). The old method names are still accepted by
     # the orchestrator as a backwards-compatible fallback for one minor
     # version; they emit a ``DeprecationWarning`` at validate_pipeline time.
 
@@ -442,6 +492,8 @@ class SEDComponent(Protocol):
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> SEDComponentState:
         """Cache static tensors. Run once before any JIT compile.
 
@@ -450,6 +502,17 @@ class SEDComponent(Protocol):
         builds its transmission curve on the observed-frame grid at
         :meth:`apply` time). Components that *do* need them will fail
         their own validation if either is ``None``.
+
+        ``approx`` is the build-time approximation dict (the resolved
+        ``SEDModel._approx``). Each component reads the flags it owns
+        (e.g. :class:`StellarSEDComponent` reads
+        ``approx.get("wave_precomp")``) and ignores the rest. ``None``
+        is equivalent to no approximations — all exact paths.
+
+        ``filters`` is a tuple of (filter_wave_obs, filter_trans) pairs,
+        where each pair contains 1-D arrays. Used only by components that
+        build photometric lookup tables. ``None`` means no photometric
+        precomputation is available.
         """
         ...
 
@@ -457,6 +520,8 @@ class SEDComponent(Protocol):
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Pure JAX step.
 
@@ -475,10 +540,60 @@ class SEDComponent(Protocol):
             Free parameters whose name starts with
             :attr:`parameter_prefix`. The orchestrator does the
             slicing.
+        ssp_data : Any | None, optional
+            SSP stellar population synthesis grid. Passed by the
+            orchestrator for components that need it (typically stellar).
+            Components that do not use it should ignore this argument.
+            When provided, should override any SSP data held in ``self``
+            for JIT purposes (threading as a runtime parameter instead of
+            closure-capturing).
+        template_data : Any | None, optional
+            Nebular backend grids and weights (Cue, CloudyGrid, etc.).
+            Passed by the orchestrator for components that need it
+            (typically nebular). Components that do not use it should
+            ignore this argument. When provided, should override any
+            template data held in ``self`` for JIT purposes.
 
         Returns
         -------
         ForwardState
             New state. MUST NOT mutate the input.
+        """
+        ...
+
+    def citations(self) -> tuple[str, ...]:
+        """Bib keys for papers this component implements, solves for, or ports.
+
+        Returns
+        -------
+        tuple of str
+            Zero or more keys into
+            :data:`tengri.citations.registry.REGISTRY`. Components with
+            no associated papers return ``()``; components that ship
+            real physics return the keys for every paper whose
+            equation, atlas, NN weights, or algorithm they use. The
+            walker in :mod:`tengri.citations.collect` unions these with
+            the static association tables in
+            :mod:`tengri.citations.associations` to assemble the full
+            bibliography for a :class:`SEDModel`.
+
+        Notes
+        -----
+        **JIT-compatible:** no. Called once, eagerly, when the walker
+        assembles a model's bibliography. Never inside a JAX trace.
+
+        **Required, not optional.** Concrete components MUST implement
+        this — empty tuple is a valid return for boilerplate components
+        with no physics paper, but the method itself is part of the
+        contract. The earlier optional form (commit 8c06e142) silently
+        dropped provenance from any component that forgot to annotate.
+
+        Examples
+        --------
+        A dust component implementing Calzetti (2000) attenuation and
+        Draine & Li (2007) thermal emission:
+
+        >>> def citations(self) -> tuple[str, ...]:
+        ...     return ("calzetti2000", "draine_li2007")
         """
         ...

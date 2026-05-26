@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """SFH model registry and composition engine.
 
 Provides a registry of parametric SFH models that can be composed
@@ -54,6 +55,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     norm,
     periodic,
     psb_wild2020,
+    sfhdelayed,
     snorm,
     snorm_burst,
     snorm_trunc_burst,
@@ -63,12 +65,14 @@ from tengri.components.stellar.sfh.mean_sfh import (
 )
 from tengri.components.stellar.sfh.nonparametric import (
     CFLEX_DEFAULT_ANCHOR_GYR,
+    DEFAULT_BIN_EDGES_GYR,
     continuity,
     continuity_flex,
     dirichlet,
+    psb_continuity,
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
-from tengri.parameters.priors import Distribution, Fixed, Uniform
+from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
 
 # ── Data structures ───────────────────────────────────────────────
 
@@ -228,8 +232,8 @@ _tsnorm_spec = SFHModelSpec(
     name="tsnorm",
     fn=tsnorm,
     params={
-        "sfh_tsnorm_log_peak_sfr": ParamDef(
-            "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+        "sfh_tsnorm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
         "sfh_tsnorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
@@ -244,7 +248,7 @@ _tsnorm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_tsnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_tsnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_tsnorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_skew": ("skew", 1.0, 0.0),
@@ -257,15 +261,15 @@ _register(
     citation="Bellstedt et al. 2020 (arXiv:2005.11917)",
     short_doc="Truncated skew-normal SFH (Bellstedt+2020)",
 )
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["truncated_skewnormal_sfh"] = SFH_REGISTRY["tsnorm"]
 
 # --- snorm (skew-normal) — canonical: skewnormal_sfh ---
 _snorm_spec = SFHModelSpec(
     name="snorm",
     fn=snorm,
     params={
-        "sfh_snorm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
+        "sfh_snorm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+        ),
         "sfh_snorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -276,7 +280,7 @@ _snorm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_snorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_snorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_snorm_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_skew": ("skew", 1.0, 0.0),
@@ -288,16 +292,13 @@ _register(
     citation="Bellstedt et al. 2020 (arXiv:2005.11917)",
     short_doc="Skew-normal SFH (Bellstedt+2020)",
 )
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["skewnormal_sfh"] = SFH_REGISTRY["snorm"]
-
-# --- snorm_burst (skew-normal + flat burst) — canonical: snorm_burst_sfh ---
+# --- snorm_burst (skew-normal + flat burst) ---
 _snorm_burst_spec = SFHModelSpec(
     name="snorm_burst",
     fn=snorm_burst,
     params={
-        "sfh_snorm_burst_log_peak_sfr": ParamDef(
-            "log10 peak SFR of skew-normal component", _always_true, "", Uniform(-1.0, 3.0)
+        "sfh_snorm_burst_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
         "sfh_snorm_burst_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
@@ -315,7 +316,7 @@ _snorm_burst_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_snorm_burst_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_snorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_snorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_snorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_snorm_burst_skew": ("skew", 1.0, 0.0),
@@ -329,15 +330,13 @@ _register(
     citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
     short_doc="Skew-normal + flat recent burst (ProSpect)",
 )
-SFH_REGISTRY["snorm_burst_sfh"] = SFH_REGISTRY["snorm_burst"]
-
-# --- tsnorm_burst (truncated skew-normal + flat burst) — canonical: snorm_trunc_burst_sfh ---
+# --- tsnorm_burst (truncated skew-normal + flat burst) ---
 _tsnorm_burst_spec = SFHModelSpec(
     name="tsnorm_burst",
     fn=snorm_trunc_burst,
     params={
-        "sfh_tsnorm_burst_log_peak_sfr": ParamDef(
-            "log10 peak SFR of tsnorm component", _always_true, "", Uniform(-1.0, 3.0)
+        "sfh_tsnorm_burst_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
         "sfh_tsnorm_burst_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
@@ -358,7 +357,7 @@ _tsnorm_burst_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_tsnorm_burst_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_tsnorm_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_tsnorm_burst_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_tsnorm_burst_width_gyr": ("width", 1e9, 0.0),
         "sfh_tsnorm_burst_skew": ("skew", 1.0, 0.0),
@@ -373,14 +372,14 @@ _register(
     citation="Robotham et al. 2020 (arXiv:2002.06980) ProSpect",
     short_doc="Truncated skew-normal + flat burst (ProSpect)",
 )
-SFH_REGISTRY["snorm_trunc_burst_sfh"] = SFH_REGISTRY["tsnorm_burst"]
-
-# --- norm (Gaussian) — canonical: gaussian_sfh ---
+# --- norm (Gaussian) ---
 _norm_spec = SFHModelSpec(
     name="norm",
     fn=norm,
     params={
-        "sfh_norm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
+        "sfh_norm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+        ),
         "sfh_norm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -390,22 +389,22 @@ _norm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_norm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_norm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_norm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_norm_width_gyr": ("width", 1e9, 0.0),
     },
     composition_type="additive",
 )
 _register(_norm_spec, short_doc="Gaussian SFH")
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["gaussian_sfh"] = SFH_REGISTRY["norm"]
 
-# --- lnorm (log-normal) — canonical: lognormal_sfh ---
+# --- lnorm (log-normal) ---
 _lnorm_spec = SFHModelSpec(
     name="lnorm",
     fn=lnorm,
     params={
-        "sfh_lnorm_log_peak_sfr": ParamDef("log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)),
+        "sfh_lnorm_log_total_mass": ParamDef(
+            "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+        ),
         "sfh_lnorm_peak_lbt_gyr": ParamDef(
             "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
         ),
@@ -415,15 +414,13 @@ _lnorm_spec = SFHModelSpec(
     },
     settings={},
     internal_param_map={
-        "sfh_lnorm_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+        "sfh_lnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
         "sfh_lnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
         "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
     },
     composition_type="additive",
 )
 _register(_lnorm_spec, short_doc="Log-normal SFH")
-# Register canonical name (same spec object, just different key)
-SFH_REGISTRY["lognormal_sfh"] = SFH_REGISTRY["lnorm"]
 
 # --- dpl (double power law) ---
 _register(
@@ -440,8 +437,8 @@ _register(
             "sfh_dpl_tau_gyr": ParamDef(
                 "DPL turnover time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 12.0)
             ),
-            "sfh_dpl_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_dpl_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
         },
         settings={},
@@ -449,7 +446,7 @@ _register(
             "sfh_dpl_alpha": ("alpha", 1.0, 0.0),
             "sfh_dpl_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_tau_gyr": ("tau", 1e9, 0.0),
-            "sfh_dpl_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_dpl_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
         composition_type="additive",
     ),
@@ -463,7 +460,12 @@ _register(
         name="const",
         fn=constant,
         params={
-            "sfh_const_log_sfr": ParamDef("log10 SFR", _always_true, "", Uniform(-1.0, 3.0)),
+            "sfh_const_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_const_start_gyr": ParamDef(
                 "Lookback to SF onset (Gyr): when did SF start?",
                 _lo_positive,
@@ -479,7 +481,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_const_log_sfr": ("log_sfr", 1.0, 0.0),
+            "sfh_const_log_total_mass": ("log_total_mass", 1.0, 0.0),
             # User's "start" (when SF began) = older lookback = internal "end"
             # User's "end" (when SF stopped) = younger lookback = internal "start"
             "sfh_const_start_gyr": ("end", 1e9, 0.0),
@@ -496,8 +498,8 @@ _register(
         name="exp",
         fn=exponential,
         params={
-            "sfh_exp_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_exp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
             "sfh_exp_tau_gyr": ParamDef(
                 "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
@@ -508,7 +510,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_exp_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_exp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_exp_start_gyr": ("start", 1e9, 0.0),
         },
@@ -523,8 +525,8 @@ _register(
         name="dexp",
         fn=delayed_exponential,
         params={
-            "sfh_dexp_log_peak_sfr": ParamDef(
-                "log10 peak SFR", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_dexp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
             "sfh_dexp_tau_gyr": ParamDef(
                 "Timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
@@ -535,7 +537,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_dexp_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_dexp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_dexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_dexp_start_gyr": ("start", 1e9, 0.0),
         },
@@ -547,13 +549,15 @@ _register(
 # --- tau (declining exponential, matches FSPS sfh=1 / bagpipes 'exponential') ---
 # SFR(t_lb) = peak * exp(-(age - t_lb)/tau): highest at galaxy formation (t_lb=age),
 # declining to present (t_lb=0).  See declining_exponential for full derivation.
+# Note: this is NOT CIGALE's sfhdelayed (which is tau-delayed and rises from 0
+# at formation). Use ``name="delayed"`` for CIGALE-equivalent SFH.
 _register(
     SFHModelSpec(
         name="tau",
         fn=declining_exponential,
         params={
-            "sfh_tau_log_peak_sfr": ParamDef(
-                "log10 peak SFR at formation (Msun/yr)", _always_true, "", Uniform(-1.0, 3.0)
+            "sfh_tau_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
             ),
             "sfh_tau_tau_gyr": ParamDef(
                 "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
@@ -567,7 +571,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_tau_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_tau_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_tau_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_tau_age_gyr": ("age", 1e9, 0.0),
         },
@@ -576,17 +580,55 @@ _register(
     short_doc="Declining exponential SFH (FSPS/bagpipes)",
 )
 
+# --- delayed (τ-delayed, matches CIGALE sfh_delayed / Bagpipes 'delayed') ---
+# SFR(T) ∝ T · exp(-T/τ) with T = age - t_lb. Rises from 0 at formation,
+# peaks at cosmic-time τ-after-formation (lookback age − τ), declines to
+# present. Distinct from ``tau`` above — see #406 for the audit that
+# surfaced the convention mismatch.
+_register(
+    SFHModelSpec(
+        name="delayed",
+        fn=sfhdelayed,
+        params={
+            "sfh_delayed_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            ),
+            "sfh_delayed_tau_gyr": ParamDef(
+                "Timescale (Gyr) — cosmic-time location of SFR peak",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_delayed_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr); must be > τ",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_delayed_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_delayed_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_delayed_age_gyr": ("age", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="τ-delayed SFH (CIGALE sfh_delayed / Bagpipes 'delayed')",
+    citation="Boquien et al. 2019 (CIGALE); Carnall et al. 2018 (Bagpipes)",
+)
+
 # --- const_exp (constant + exponential decline — "quenching at time T") ---
 _register(
     SFHModelSpec(
         name="const_exp",
         fn=constant_then_exponential,
         params={
-            "sfh_cexp_log_sfr": ParamDef(
-                "log10 constant SFR before quenching (Msun/yr)",
+            "sfh_cexp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun] (constant + decline phases)",
                 _always_true,
                 "",
-                Uniform(-1.0, 3.0),
+                Uniform(7.0, 12.5),
             ),
             "sfh_cexp_tau_gyr": ParamDef(
                 "Post-quench e-folding timescale (Gyr)",
@@ -609,7 +651,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_cexp_log_sfr": ("log_sfr", 1.0, 0.0),
+            "sfh_cexp_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_cexp_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_cexp_quench_gyr": ("quench_age", 1e9, 0.0),
             "sfh_cexp_age_gyr": ("age", 1e9, 0.0),
@@ -627,6 +669,12 @@ _register(
         name="delayed_bq",
         fn=delayed_bq,
         params={
+            "sfh_delayed_bq_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_delayed_bq_tau_main_gyr": ParamDef(
                 "e-folding timescale of main component (Gyr)",
                 _lo_positive,
@@ -654,6 +702,7 @@ _register(
         },
         settings={},
         internal_param_map={
+            "sfh_delayed_bq_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_delayed_bq_tau_main_gyr": ("tau_main_yr", 1e9, 0.0),
             "sfh_delayed_bq_age_main_gyr": ("age_main_yr", 1e9, 0.0),
             "sfh_delayed_bq_age_bq_gyr": ("age_bq_yr", 1e9, 0.0),
@@ -671,6 +720,12 @@ _register(
         name="periodic",
         fn=periodic,
         params={
+            "sfh_periodic_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_periodic_delta_bursts_gyr": ParamDef(
                 "Spacing between burst onsets (Gyr)",
                 _lo_positive,
@@ -698,6 +753,7 @@ _register(
         },
         settings={},
         internal_param_map={
+            "sfh_periodic_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_periodic_delta_bursts_gyr": ("delta_bursts_yr", 1e9, 0.0),
             "sfh_periodic_tau_bursts_gyr": ("tau_bursts_yr", 1e9, 0.0),
             "sfh_periodic_burst_type": ("burst_type", 1.0, 0.0),
@@ -715,6 +771,12 @@ _register(
         name="buat08",
         fn=buat08,
         params={
+            "sfh_buat08_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
             "sfh_buat08_velocity_km_s": ParamDef(
                 "Rotational velocity (km/s), range [40, 360]",
                 lambda lo, hi: lo >= 40 and hi <= 360,
@@ -724,6 +786,7 @@ _register(
         },
         settings={},
         internal_param_map={
+            "sfh_buat08_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_buat08_velocity_km_s": ("velocity_km_s", 1.0, 0.0),
         },
         composition_type="additive",
@@ -739,11 +802,11 @@ _register(
         name="psb",
         fn=psb_wild2020,
         params={
-            "sfh_psb_log_peak_sfr": ParamDef(
-                "log10 overall SFR normalization (Msun/yr)",
+            "sfh_psb_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
                 _always_true,
                 "",
-                Uniform(-1.0, 3.0),
+                Uniform(7.0, 12.5),
             ),
             "sfh_psb_age_gyr": ParamDef(
                 "Galaxy age / lookback to formation (Gyr)",
@@ -778,7 +841,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_psb_log_peak_sfr": ("log_peak_sfr", 1.0, 0.0),
+            "sfh_psb_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_psb_age_gyr": ("age", 1e9, 0.0),
             "sfh_psb_tau_gyr": ("tau", 1e9, 0.0),
             "sfh_psb_burstage_gyr": ("burstage", 1e9, 0.0),
@@ -800,11 +863,11 @@ _register(
         name="top_hat",
         fn=top_hat,
         params={
-            "sfh_top_hat_amplitude": ParamDef(
-                "Constant SFR inside window (Msun/yr)",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.01, 100.0),
+            "sfh_top_hat_log_total_mass": ParamDef(
+                "log10 total stellar mass formed in window [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
             ),
             "sfh_top_hat_t_start_gyr": ParamDef(
                 "Older lookback boundary / SF onset (Gyr)",
@@ -827,7 +890,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_top_hat_amplitude": ("amplitude", 1.0, 0.0),
+            "sfh_top_hat_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_top_hat_t_start_gyr": ("t_start", 1e9, 0.0),
             "sfh_top_hat_t_end_gyr": ("t_end", 1e9, 0.0),
             "sfh_top_hat_smooth_width_gyr": ("smooth_width", 1e9, 0.0),
@@ -843,11 +906,11 @@ _register(
         name="gaussian_burst",
         fn=gaussian_burst,
         params={
-            "sfh_gaussian_burst_amplitude": ParamDef(
-                "Peak burst SFR (Msun/yr)",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.01, 100.0),
+            "sfh_gaussian_burst_log_total_mass": ParamDef(
+                "log10 total stellar mass formed in burst [Msun]",
+                _always_true,
+                "",
+                Uniform(6.0, 11.0),
             ),
             "sfh_gaussian_burst_t_peak_gyr": ParamDef(
                 "Burst peak age / lookback time (Gyr)",
@@ -864,7 +927,7 @@ _register(
         },
         settings={},
         internal_param_map={
-            "sfh_gaussian_burst_amplitude": ("amplitude", 1.0, 0.0),
+            "sfh_gaussian_burst_log_total_mass": ("log_total_mass", 1.0, 0.0),
             "sfh_gaussian_burst_t_peak_gyr": ("t_peak", 1e9, 0.0),
             "sfh_gaussian_burst_sigma_gyr": ("sigma", 1e9, 0.0),
         },
@@ -933,7 +996,7 @@ _register(
                     f"log10 SFR ratio bin {i}/{i + 1}",
                     _always_true,
                     "",
-                    Uniform(-1.0, 1.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
                 )
                 for i in range(6)  # 7 bins -> 6 ratios
             },
@@ -946,7 +1009,10 @@ _register(
         composition_type="additive",
     ),
     citation="Leja et al. 2019 (ApJ 876, 39)",
-    short_doc="Non-parametric piecewise continuity SFH (Leja+19)",
+    short_doc=(
+        "Non-parametric piecewise continuity SFH (Leja+19); "
+        "StudentT(0, 0.3, df=2) on log-SFR ratios"
+    ),
 )
 
 # --- continuity_flex (Leja+2019): piecewise-constant with flexible bin edges ---
@@ -968,14 +1034,14 @@ _register(
                 "log10(SFR_young / SFR_flex[0])",
                 _always_true,
                 "",
-                Uniform(-1.0, 1.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0),
             ),
             **{
                 f"sfh_cflex_flex_{i}": ParamDef(
                     f"log10 flex bin SFR ratio {i} (controls bin width)",
                     _always_true,
                     "",
-                    Uniform(-1.0, 1.0),
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
                 )
                 for i in range(_N_CFLEX)
             },
@@ -983,7 +1049,7 @@ _register(
                 "log10(SFR_old / SFR_flex[N])",
                 _always_true,
                 "",
-                Uniform(-1.0, 1.0),
+                StudentT(mu=0.0, sigma=0.3, df=2.0),
             ),
         },
         settings={
@@ -998,7 +1064,11 @@ _register(
         },
         composition_type="additive",
     ),
-    short_doc="Non-parametric continuity + flexible bin edges",
+    citation="Leja et al. 2019 (ApJ 876, 39)",
+    short_doc=(
+        "Non-parametric continuity + flexible bin edges (Leja+19); "
+        "StudentT(0, 0.3, df=2) on log-SFR ratios"
+    ),
 )
 
 # --- dirichlet (Leja+2017): piecewise-constant with Dirichlet mass fraction prior ---
@@ -1018,7 +1088,9 @@ _register(
                     f"Dirichlet stick-breaking variable {i}",
                     lambda lo, hi: lo >= 0 and hi <= 1,
                     "must be in [0, 1]",
-                    Uniform(0.01, 0.99),
+                    # Beta(1, 1) is exactly Uniform(0, 1); faithful Leja+2017
+                    # symmetric Dirichlet(1,...,1) marginal on mass fractions.
+                    Uniform(0.0, 1.0),
                 )
                 for i in range(6)  # 7 bins -> 6 auxiliary variables
             },
@@ -1031,7 +1103,177 @@ _register(
         composition_type="additive",
     ),
     citation="Leja et al. 2017 (ApJ 837, 170)",
-    short_doc="Non-parametric Dirichlet SFH (Leja+17)",
+    short_doc=(
+        "Non-parametric Dirichlet SFH (Leja+17); "
+        "Beta(1,1) = Uniform(0,1) stick-breaking aux variables"
+    ),
+)
+
+
+# --- bursty_continuity (Tacchella+2022): bin-edge-dependent Student-t scale ---
+# Same shape function as `continuity`, but per-ratio sigma toggles between
+# scale_young = 1.0 dex (when the younger edge bin_edges_gyr[i+1] < t_split_gyr)
+# and scale_old = 0.3 dex otherwise. For the default 7-bin grid
+# DEFAULT_BIN_EDGES_GYR = [0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7] Gyr and
+# t_split = 1.0 Gyr, this gives sigma = [1.0, 1.0, 1.0, 0.3, 0.3, 0.3] for
+# ratios 0..5. See bursty_continuity_prior_logp in nonparametric.py.
+_BURSTY_T_SPLIT_GYR = 1.0
+_BURSTY_SCALE_YOUNG = 1.0
+_BURSTY_SCALE_OLD = 0.3
+_BURSTY_DEFAULT_SIGMAS = [
+    _BURSTY_SCALE_YOUNG
+    if float(DEFAULT_BIN_EDGES_GYR[i + 1]) < _BURSTY_T_SPLIT_GYR
+    else _BURSTY_SCALE_OLD
+    for i in range(6)
+]
+_register(
+    SFHModelSpec(
+        name="bursty_continuity",
+        fn=continuity,
+        params={
+            "sfh_burstcont_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_burstcont_ratio_{i}": ParamDef(
+                    f"log10 SFR ratio bin {i}/{i + 1} (Tacchella+22 piecewise scale)",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=_BURSTY_DEFAULT_SIGMAS[i], df=2.0),
+                )
+                for i in range(6)
+            },
+        },
+        settings={
+            "sfh_burstcont_t_split_gyr": _BURSTY_T_SPLIT_GYR,
+            "sfh_burstcont_scale_young": _BURSTY_SCALE_YOUNG,
+            "sfh_burstcont_scale_old": _BURSTY_SCALE_OLD,
+        },
+        internal_param_map={
+            "sfh_burstcont_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{f"sfh_burstcont_ratio_{i}": (f"ratio_{i}", 1.0, 0.0) for i in range(6)},
+        },
+        composition_type="additive",
+    ),
+    citation="Tacchella et al. 2022 (ApJ 926, 134); arXiv:2102.11954",
+    short_doc=(
+        "Bursty continuity SFH (Tacchella+22); StudentT df=2 with sigma=1.0 dex on "
+        "ratios whose younger edge < 1 Gyr and sigma=0.3 dex otherwise"
+    ),
+)
+
+
+# --- psb_suess2022 (Suess+2022): post-starburst nonparametric SFH ---
+# Distinct from the existing `psb_wild2020` (Wilkinson+2020 parametric).
+# Free params: log_total_mass, tlast_gyr (quenching epoch), tflex_gyr (upper
+# bound of the flex zone), ratio_young (youngest-vs-flex SFR ratio), and
+# ratio_old_0..N-2 for the fixed old bins. Defaults match Suess+2022: tlast
+# in [0.01, 1.0] Gyr, tflex in [0.5, 5.0] Gyr, StudentT(0, 0.3, 2) on ratios.
+# Default fixed old bins = DEFAULT_BIN_EDGES_GYR[2:] = [0.3, 1.0, 3.0, 6.0, 13.7]
+# -> 4 old bins -> 3 ratio_old_* parameters.
+_N_PSB_OLD_RATIOS = 3
+_register(
+    SFHModelSpec(
+        name="psb_suess2022",
+        fn=psb_continuity,
+        params={
+            "sfh_psb2022_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            "sfh_psb2022_tlast_gyr": ParamDef(
+                "Quenching-onset lookback time (Gyr); width of the youngest bin",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 1.0),
+            ),
+            "sfh_psb2022_tflex_gyr": ParamDef(
+                "Upper boundary of the flexible quenching zone (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 5.0),
+            ),
+            "sfh_psb2022_ratio_young": ParamDef(
+                "log10(SFR_young / SFR_flex); large positive = recent burst",
+                _always_true,
+                "",
+                StudentT(mu=0.0, sigma=0.3, df=2.0),
+            ),
+            **{
+                f"sfh_psb2022_ratio_old_{i}": ParamDef(
+                    f"log10 SFR ratio old bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                )
+                for i in range(_N_PSB_OLD_RATIOS)
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_psb2022_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_psb2022_tlast_gyr": ("tlast_gyr", 1.0, 0.0),
+            "sfh_psb2022_tflex_gyr": ("tflex_gyr", 1.0, 0.0),
+            "sfh_psb2022_ratio_young": ("ratio_young", 1.0, 0.0),
+            **{
+                f"sfh_psb2022_ratio_old_{i}": (f"ratio_old_{i}", 1.0, 0.0)
+                for i in range(_N_PSB_OLD_RATIOS)
+            },
+        },
+        composition_type="additive",
+    ),
+    citation="Suess et al. 2022 (ApJ 935, 146); arXiv:2207.05895",
+    short_doc=(
+        "Post-starburst non-parametric SFH (Suess+22): youngest bin [0, tlast] + "
+        "flex zone [tlast, tflex] + fixed old bins, with StudentT(0, 0.3, df=2) ratios"
+    ),
+)
+
+
+# --- prospector_beta (Wang+2024): redshift-aware continuity SFH ---
+# Same shape and ratio prior as `continuity`; differs by using
+# redshift-dependent bin edges produced by `make_agebins_from_zred(zred)`.
+# Edges are passed via the composer's `bin_edges_gyr` argument at build
+# time (call `make_agebins_from_zred` in your recipe). The joint mass-z-SFR
+# hierarchical prior from Wang+2023 is out of scope here.
+_register(
+    SFHModelSpec(
+        name="prospector_beta",
+        fn=continuity,
+        params={
+            "sfh_pbeta_log_total_mass": ParamDef(
+                "log10 total stellar mass formed (Msun)",
+                _always_true,
+                "",
+                Uniform(8.0, 12.0),
+            ),
+            **{
+                f"sfh_pbeta_ratio_{i}": ParamDef(
+                    f"log10 SFR ratio bin {i}/{i + 1}",
+                    _always_true,
+                    "",
+                    StudentT(mu=0.0, sigma=0.3, df=2.0),
+                )
+                for i in range(6)
+            },
+        },
+        settings={},
+        internal_param_map={
+            "sfh_pbeta_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            **{f"sfh_pbeta_ratio_{i}": (f"ratio_{i}", 1.0, 0.0) for i in range(6)},
+        },
+        composition_type="additive",
+    ),
+    citation="Wang et al. 2024 (arXiv:2401.12198); SFH shape from Leja+2019",
+    short_doc=(
+        "Prospector-beta: continuity SFH with redshift-aware bin edges from "
+        "make_agebins_from_zred(zred); StudentT(0, 0.3, df=2) on log-SFR ratios"
+    ),
 )
 
 
@@ -1312,40 +1554,81 @@ def resolve_sfh(
         merged_param_map.update(s.internal_param_map)
         merged_settings.update(s.settings)
 
-    # Build lists of (fn, set_of_internal_names) for each additive component
-    _NONPARAM_NAMES = {"continuity", "dirichlet", "continuity_flex"}
+    # Build per-spec dispatch info for each additive component.
+    #
+    # Each entry holds: (callable, public->internal map, set of internal names).
+    # The composer dispatches PER-COMPONENT using the public-name map so that
+    # two additive SFHs sharing the same internal kwarg (e.g. ``log_total_mass``
+    # for any two parametric SFHs after the 2026-05-25 normalization refactor)
+    # do not collide. See #372 for the bug this fixes.
+    _NONPARAM_NAMES = {
+        "continuity",
+        "dirichlet",
+        "continuity_flex",
+        "bursty_continuity",
+        "psb_suess2022",
+        "prospector_beta",
+    }
     additive_info = []
     for s in additive:
-        internal_names = {v[0] for v in s.internal_param_map.values()}
+        pub_to_internal = dict(
+            s.internal_param_map
+        )  # public_name -> (internal_name, scale, offset)
+        internal_names = {v[0] for v in pub_to_internal.values()}
         fn_i = s.fn
         if bin_edges_gyr is not None and s.name in _NONPARAM_NAMES:
             fn_i = functools.partial(fn_i, bin_edges_gyr=bin_edges_gyr)
-        additive_info.append((fn_i, internal_names))
+        additive_info.append((fn_i, pub_to_internal, internal_names))
 
     has_burst = len(mixtures) > 0
     burst_info = None
     if has_burst:
         bs = mixtures[0]
-        burst_internal = {v[0] for v in bs.internal_param_map.values()}
-        burst_info = (bs.fn, burst_internal)
+        burst_pub_to_internal = dict(bs.internal_param_map)
+        burst_internal = {v[0] for v in burst_pub_to_internal.values()}
+        burst_info = (bs.fn, burst_pub_to_internal, burst_internal)
 
     has_field = len(modulators) > 0
+
+    def _build_component_kw(kw, pub_to_internal, internal_names, *, skip=()):
+        """Slice ``kw`` to the internal kwargs this component expects.
+
+        Prefers per-spec public-name entries (``sfh_X_log_total_mass``) so two
+        additive components sharing an internal name (``log_total_mass``) each
+        get their own value. Falls back to the internal-name entry for
+        backward compatibility with callers that pre-translated.
+
+        ``kw[public]`` is assumed already scaled/offset by the upstream
+        translator (``parameters/translate.py::get_internal_params``), so the
+        composer copies the value verbatim under its internal kwarg name.
+        """
+        kw_i = {}
+        for pub_name, (intl_name, _scale, _offset) in pub_to_internal.items():
+            if intl_name in skip:
+                continue
+            if pub_name in kw:
+                kw_i[intl_name] = kw[pub_name]
+            elif intl_name in kw:
+                kw_i[intl_name] = kw[intl_name]
+        return kw_i
 
     # Build the composed closure
     def composed_fn(t_lookback, **kw):
         """Evaluate the composed SFH: sum additive components, then apply burst and field."""
-        # 1. Sum additive components
+        # 1. Sum additive components (per-spec public-name dispatch — no collision)
         smooth = jnp.zeros_like(t_lookback)
-        for fn_i, int_names_i in additive_info:
-            kw_i = {k: kw[k] for k in int_names_i if k in kw}
+        for fn_i, pub_to_internal, internal_names in additive_info:
+            kw_i = _build_component_kw(kw, pub_to_internal, internal_names)
             smooth = smooth + fn_i(t_lookback, **kw_i)
 
         # 2. Apply burst mixture
         if has_burst:
-            burst_fn, burst_int = burst_info
+            burst_fn, burst_pub_to_internal, burst_internal = burst_info
             log_fburst = kw["log_fburst"]
             f = 10.0**log_fburst
-            burst_kw = {k: kw[k] for k in burst_int if k != "log_fburst" and k in kw}
+            burst_kw = _build_component_kw(
+                kw, burst_pub_to_internal, burst_internal, skip=("log_fburst",)
+            )
             burst_shape = burst_fn(t_lookback, **burst_kw)
             # Normalize burst shape to match smooth integral scale
             smooth = (1.0 - f) * smooth + f * burst_shape * jnp.max(smooth)

@@ -1,118 +1,99 @@
 """
-Nebular Backends: BakedIn vs CloudyGrid vs Cue
+Nebular backends side-by-side: BakedIn vs Cue
 ==============================================
 
-Compare three nebular emission models: BakedIn (embedded in SSP),
-CloudyGrid (photoionization tables), and Cue (neural emulator).
-Shows how backend choice affects emission line strengths.
+Two nebular backends, same SFH, same dust, same metallicity. BakedIn pulls
+line ratios from the SSP grid (Conroy + Byler wNE templates); Cue (Li, Leja
+& Speagle 2023) is a neural emulator over the CLOUDY parameter space, run
+here at log U = -3.0.
 
-.. sphx-glr-precomputed-img:
+Because BakedIn requires a wNE SSP and Cue requires a bare-stellar SSP, the
+two SEDs sit at different absolute normalisations. We plot each one as
+λF_λ peak-normalised so the line *shape* is what your eye reads.
 
-.. image:: images/sphx_glr_plot_neb_backend_compare_001.png
-   :alt: plot_neb_backend_compare
-   :class: sphx-glr-single-img
-
+Reference:
+- Byler et al. 2017 ApJ 840 44 (BakedIn line treatment in FSPS/DSPS)
+- Li, Leja & Speagle 2023 ApJ 956 23 (Cue emulator)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import Fixed, Parameters, SEDModel, load_ssp
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-
-ssp = load_ssp()
-
-# Shared baseline: young, star-forming
-shared_params = dict(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),
-    sfh_tsnorm_width_gyr=Fixed(0.3),
-    sfh_tsnorm_skew=Fixed(0.2),
-    sfh_tsnorm_trunc=Fixed(3.0),
-    met_logzsol=Fixed(-0.3),
-    dust_tau_bc=Fixed(0.0),
-    dust_tau_diff=Fixed(0.0),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
+# Active star formation so both backends emit nebular lines.
+common = dict(
+    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0},
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    redshift=tengri.Fixed(0.0),
 )
 
-# Galaxy A: Young, low dust
-spec_young = Parameters(**shared_params)
-model_young = SEDModel(spec_young, ssp)
-params_young = {k: float(v.value) for k, v in shared_params.items()}
-sed_young = model_young.predict_rest_sed(params_young).sed
-wave = ssp.ssp_wave
+ssp_wne = tengri.load_ssp()  # wNE: nebular baked in
+ssp_bare = tengri.load_ssp("fsps_prsc_miles_chabrier")  # Cue needs bare stellar
 
-# Galaxy B: Older, more dust
-spec_old = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(0.8),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(5.0),
-    sfh_tsnorm_width_gyr=Fixed(2.0),
-    sfh_tsnorm_skew=Fixed(0.1),
-    sfh_tsnorm_trunc=Fixed(2.0),
-    met_logzsol=Fixed(-0.1),
-    dust_tau_bc=Fixed(0.6),
-    dust_tau_diff=Fixed(0.4),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.1),
+model_baked = tengri.SEDModel.build(ssp_wne, neb={"type": "ssp", "*": tengri.FIXED}, **common)
+model_cue = tengri.SEDModel.build(
+    ssp_bare,
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "logU": tengri.Fixed(-2.5),
+        "logZ_gas": tengri.Fixed(0.0),
+    },
+    **common,
 )
-model_old = SEDModel(spec_old, ssp)
-params_old = {
-    "sfh_tsnorm_log_peak_sfr": 0.8,
-    "sfh_tsnorm_peak_lbt_gyr": 5.0,
-    "sfh_tsnorm_width_gyr": 2.0,
-    "sfh_tsnorm_skew": 0.1,
-    "sfh_tsnorm_trunc": 2.0,
-    "met_logzsol": -0.1,
-    "dust_tau_bc": 0.6,
-    "dust_tau_diff": 0.4,
-    "dust_slope": -0.7,
-    "redshift": 0.1,
-}
-sed_old = model_old.predict_rest_sed(params_old).sed
 
-# Plot: optical and full SED
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+key = jax.random.PRNGKey(0)
+out_baked = model_baked.predict_rest_sed(dict(model_baked.spec.sample(key)))
+out_cue = model_cue.predict_rest_sed(dict(model_cue.spec.sample(key)))
 
-# Left: Optical region
-ax = axes[0]
-wmin, wmax = 4700, 5100
-mask = (wave > wmin) & (wave < wmax)
-ax.plot(
-    np.array(wave[mask]),
-    np.array(sed_young[mask]),
-    "k-",
-    lw=2.0,
-    label="Young starburst (z~0.5 Gyr)",
-)
-ax.plot(
-    np.array(wave[mask]),
-    np.array(sed_old[mask]),
-    "C1--",
-    lw=2.0,
-    label="Old galaxy (z~5 Gyr)",
-)
-ax.set_xlabel(r"Rest Wavelength [$\AA$]", fontsize=11)
-ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-ax.set_title(r"H$\beta$ + [OIII] Region", fontsize=11)
-ax.legend(frameon=False, fontsize=10, loc="upper right")
-ax.grid(True, alpha=0.2)
+# Zoom on the Hβ / [O III] region.
+WMIN, WMAX = 4700.0, 5100.0
 
-# Right: Full SED
-ax = axes[1]
-ax.loglog(wave, np.array(sed_young), "k-", lw=2.0, label="Young starburst")
-ax.loglog(wave, np.array(sed_old), "C1--", lw=2.0, label="Old galaxy")
-ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
-ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-ax.set_title("Full SED Comparison", fontsize=11)
-ax.set_xlim(1000, 1e6)
+
+def _norm_window(out):
+    wave = np.asarray(out.wavelength)
+    sed = np.asarray(out.sed)
+    lfl = wave * sed
+    mask = (wave > WMIN) & (wave < WMAX)
+    peak = np.nanmax(lfl[mask])
+    return wave[mask], lfl[mask] / peak
+
+
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+wave_b, lfl_b = _norm_window(out_baked)
+wave_c, lfl_c = _norm_window(out_cue)
+ax.plot(wave_b, lfl_b, color="C0", lw=1.5, label="BakedIn (wNE)")
+ax.plot(wave_c, lfl_c, color="C2", lw=1.5, label="Cue (logU = -2.5)")
+
+for lam, name in [(4861.33, r"H$\beta$"), (4958.91, "[O III] 4959"), (5006.84, "[O III] 5007")]:
+    ax.axvline(lam, ls=":", color="0.6", lw=0.7)
+    ax.text(
+        lam,
+        1.02,
+        name,
+        fontsize=8,
+        color="0.4",
+        ha="center",
+        va="bottom",
+        transform=ax.get_xaxis_transform(),
+    )
+
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\lambda F_\lambda$ (peak-normalised in window)")
+ax.set_xlim(WMIN, WMAX)
 ax.legend(frameon=False, fontsize=10, loc="lower left")
-ax.grid(True, alpha=0.2, which="both")
 
-fig.suptitle("Nebular Emission: Age and Metallicity Effects", fontsize=12, y=1.00)
 fig.tight_layout()
 plt.savefig("plot_neb_backend_compare.png", dpi=150, bbox_inches="tight")
-plt.show()

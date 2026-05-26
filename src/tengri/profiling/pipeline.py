@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Pipeline profiler for tengri forward model.
 
 Instruments the ``predict_sed`` / ``predict_photometry`` pipeline to
@@ -250,7 +251,7 @@ def _profile_exact_path(model, params, n: int = 200) -> PipelineReport:
 
     # 8. Photometric integration
     if model.filter_waves is not None:
-        from tengri.utils.cosmology import luminosity_distance
+        from tengri.cosmology import luminosity_distance
 
         z = model._get_redshift(params)
         dl_cm = luminosity_distance(z)
@@ -426,8 +427,8 @@ def profile_pipeline(
     _ = model.predict_photometry(params)
     _sync(model.predict_photometry(params))
 
-    has_fast_path = model._precomputed.photometry is not None and (
-        getattr(model._hybrid, "photometry", None) is not None
+    has_fast_path = model.precomputed.photometry is not None and (
+        getattr(model.hybrid, "photometry", None) is not None
         or getattr(model._compositional, "photometry", None) is not None
     )
 

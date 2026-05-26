@@ -1,20 +1,38 @@
 """
-AGN X-ray Emission and Corona
-==============================
+AGN corona: bolometric luminosity sets normalisation, not shape
+================================================================
 
-Plot the X-ray spectrum from AGN coronae showing power-law continuum,
-reflection hump, and iron K-alpha line. Demonstrates how the X-ray
-spectrum depends on AGN bolometric luminosity and accretion efficiency.
+The AGN X-ray corona produces a cut-off power-law (photon index Gamma
+roughly 1.8, E_cut around 300 keV) normalised through the
+alpha_OX-L_2500 relation (Lusso & Risaliti 2016). At fixed Gamma and
+alpha_OX, increasing bolometric luminosity shifts the whole spectrum
+upward but leaves the spectral *shape* nearly intact — the
+sub-linear alpha_OX relation only steepens the shape at the top of
+the quasar regime.
 
-.. sphx-glr-precomputed-img:
+We sweep ``log L_bol`` from 42 to 46.5 erg/s on a single panel and
+overlay the 2-10 keV band luminosity against L_bol on the right —
+the canonical low-redshift correlation that lets X-ray surveys
+estimate bolometric power from a single broadband flux.
 
-.. image:: images/sphx_glr_plot_xray_agn_001.png
-   :alt: plot_xray_agn
-   :class: sphx-glr-single-img
+Companion: ``plot_xray_nh_sweep.py`` (varies obscuration at fixed
+L_bol); ``plot_alpha_ox_sweep.py`` (varies the UV-X-ray slope).
 
+References
+
+----------
+- Lusso & Risaliti 2016, ApJ 819, 154 (alpha_OX-L_2500 relation).
+- Just et al. 2007, ApJ 665, 1004 (X-ray bolometric corrections).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -22,101 +40,70 @@ from tengri.analysis.plotting import setup_style
 from tengri.xray import xray_agn_corona
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Wavelength grid spans 0.1 keV (124 A, the function's soft cutoff) up to 1000 keV
-# (0.0124 A). The xray_agn_corona function zeros output for lambda > 124 A.
-# Conversion: E[keV] = 12398 / lambda[A].
-wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)  # Angstrom
-# E[keV] = hc/lambda with hc = 12.398 keV*A, so E[keV] = 12.398 / lambda[A].
+wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
 wave_keV = 12.398 / np.array(wavelength)
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+log_lbol_values = np.linspace(42.0, 46.5, 10)
+# Hopkins+2007 BC=5.15 at 2500 A
+_BC_NU = 5.15 * 1.199e15
+cmap = plt.get_cmap("viridis")
+norm = mpl.colors.Normalize(vmin=log_lbol_values.min(), vmax=log_lbol_values.max())
 
-# --- Panel 1: Luminosity dependence ---
-ax = axes[0, 0]
+fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.4))
 
-for log_lbol in [43.0, 44.0, 45.0, 46.0]:
-    L_bol = 10.0**log_lbol  # erg/s
-    l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
-    ax.loglog(wave_keV, np.array(l_xray), lw=1.5, label=f"log(L_bol)={log_lbol:.0f}")
-
-ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("AGN X-ray Corona: Luminosity Sequence")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e22, 1e27)
-
-# --- Panel 2: Show X-ray continuum shape (Compton reflection) ---
-ax = axes[0, 1]
-
-log_lbol = 44.0
-L_bol = 10.0**log_lbol
-
-l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
-
-# Highlight key X-ray features
-ax.loglog(wave_keV, np.array(l_xray), "C0-", lw=2.0, label="Total X-ray SED")
-
-# Annotate key features
-# Soft X-ray bump (0.5-2 keV)
-ax.axvspan(0.5, 2.0, alpha=0.2, color="C1", label="Soft excess (0.5-2 keV)")
-# Hard X-ray power-law (2-10 keV)
-ax.axvspan(2.0, 10.0, alpha=0.2, color="C2", label="Hard power-law (2-10 keV)")
-# Reflection hump (10-100 keV)
-ax.axvspan(10.0, 100.0, alpha=0.2, color="C3", label="Reflection (>10 keV)")
-# Iron K-alpha line
-ax.axvline(6.4, color="red", ls="--", lw=1.0, alpha=0.7, label="Fe K-α (6.4 keV)")
-
-ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("AGN X-ray Spectral Features")
-ax.legend(fontsize=10, frameon=False, ncol=2)
-ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e22, 1e27)
-
-# --- Panel 3: High-luminosity AGN ---
-ax = axes[1, 0]
-
-for log_lbol in [45.0, 45.5, 46.0, 46.5]:
-    L_bol = 10.0**log_lbol
-    l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
-    ax.loglog(wave_keV, np.array(l_xray), lw=1.5, label=f"log(L_bol)={log_lbol:.1f}")
-
-ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("AGN X-ray: Ultra-Luminous Range")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e22, 1e27)
-
-# --- Panel 4: Spectral index vs luminosity (implicit) ---
-ax = axes[1, 1]
-
-log_lbol_range = np.linspace(42.0, 46.5, 12)
-colors = plt.cm.plasma(np.linspace(0, 1, len(log_lbol_range)))
-
-for log_lbol, color in zip(log_lbol_range, colors):
-    L_bol = 10.0**log_lbol
-    l_xray = xray_agn_corona(wavelength, L_agn_bol=L_bol)
-    mask = np.array(l_xray) > 0
-    ax.loglog(wave_keV[mask], np.array(l_xray)[mask], lw=1.0, color=color, alpha=0.7)
-
-ax.set_xlabel("Energy [keV]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("AGN X-ray SED Family")
-ax.set_xlim(0.1, 1000)
-ax.set_ylim(1e22, 1e27)
-
-# Colorbar-like legend
-sm = plt.cm.ScalarMappable(
-    cmap=plt.cm.plasma, norm=plt.Normalize(vmin=log_lbol_range.min(), vmax=log_lbol_range.max())
+# Left panel: L_bol family of cut-off power-laws
+ax = axes[0]
+for log_lbol in log_lbol_values:
+    L_2500 = 10.0**log_lbol / _BC_NU
+    l_xray = np.asarray(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500))
+    ax.loglog(wave_keV, l_xray, color=cmap(norm(log_lbol)), lw=1.3)
+ax.axvspan(0.5, 2.0, alpha=0.10, color="C0")
+ax.axvspan(2.0, 10.0, alpha=0.10, color="C2")
+ax.text(0.7, 1.5e21, "soft\n(0.5–2 keV)", fontsize=7, color="C0", ha="center")
+ax.text(4.0, 1.5e21, "hard\n(2–10 keV)", fontsize=7, color="C2", ha="center")
+ax.set(
+    xlim=(0.1, 1000.0),
+    ylim=(1.0e21, 5.0e27),
+    xlabel="Energy [keV]",
+    ylabel=r"$L_\nu$  [erg s$^{-1}$ Hz$^{-1}$]",
 )
-sm.set_array([])
-cbar = fig.colorbar(sm, ax=ax, orientation="horizontal", pad=0.12, aspect=25)
-cbar.set_label(r"$\log(L_{\mathrm{bol}} / L_\odot)$")
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\log_{10}(L_{\rm bol})$  [erg s$^{-1}$]")
 
-fig.suptitle("AGN X-ray Corona: Power-Law and Reflection", fontsize=12)
-fig.tight_layout(rect=[0, 0.04, 1, 0.97])
+# Right panel: integrated hard-band luminosity vs L_bol — the standard
+# X-ray bolometric correction track.
+ax = axes[1]
+hard_mask = (wave_keV >= 2.0) & (wave_keV <= 10.0)
+log_lbol_dense = np.linspace(42.0, 46.5, 60)
+l_hard = []
+for log_lbol in log_lbol_dense:
+    L_2500 = 10.0**log_lbol / _BC_NU
+    l_xray = np.asarray(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500))
+    # nu L_nu integrated in nu = -L_nu d(c/lam); use trapezoid on |dE|
+    keV_to_erg = 1.602e-9
+    nu = wave_keV[hard_mask] * keV_to_erg / 6.626e-27
+    order = np.argsort(nu)
+    l_hard.append(float(np.trapezoid(l_xray[hard_mask][order], nu[order])))
+l_hard = np.asarray(l_hard)
+
+ax.loglog(10.0**log_lbol_dense, l_hard, color="C2", lw=1.6)
+ax.set(
+    xlabel=r"$L_{\rm bol}$  [erg s$^{-1}$]",
+    ylabel=r"$L_{\rm 2-10\,keV}$  [erg s$^{-1}$]",
+    xlim=(1.0e42, 5.0e46),
+)
+ax.text(
+    0.04,
+    0.95,
+    r"X-ray bolometric correction implied by"
+    "\n"
+    r"the $\alpha_{\rm OX}-L_{2500}$ relation",
+    transform=ax.transAxes,
+    va="top",
+    fontsize=9,
+)
+
+fig.tight_layout()
 plt.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")
-plt.show()

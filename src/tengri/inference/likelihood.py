@@ -28,7 +28,7 @@ __all__ = ["build_base_likelihood", "build_likelihood_extras"]
 def build_base_likelihood(context: InferenceContext):
     """Choose the BASE adapter for the main data channel(s).
 
-    Routes through the Phase II-1 likelihood protocol cohort:
+    Routes through the likelihood protocol cohort:
 
     - simple diagonal Gaussian → ``PhotometryLikelihood`` /
       ``SpectroscopyLikelihood``
@@ -171,9 +171,12 @@ def build_base_likelihood(context: InferenceContext):
             "calibration_marginalize."
         )
     if context.calibration_marginalize and context.eline_marginalize:
-        wavelength = getattr(context.model, "_wave_obs", None)
+        wavelength = getattr(context.model, "wave_obs", None)
         if wavelength is None:
-            raise ValueError("Calibration marginalisation requires model._wave_obs.")
+            raise ValueError(
+                "Calibration marginalisation requires a configured spectroscopy "
+                "wavelength grid (model.wave_obs)."
+            )
         builder = _make_eline_design_builder(context)
         if builder is None:
             raise ValueError(
@@ -208,9 +211,12 @@ def build_base_likelihood(context: InferenceContext):
 
     # ── Calibration polynomial only (no elines) ─────────────────
     if context.calibration_marginalize and context.has_spectroscopy:
-        wavelength = getattr(context.model, "_wave_obs", None)
+        wavelength = getattr(context.model, "wave_obs", None)
         if wavelength is None:
-            raise ValueError("Calibration marginalisation requires model._wave_obs.")
+            raise ValueError(
+                "Calibration marginalisation requires a configured spectroscopy "
+                "wavelength grid (model.wave_obs)."
+            )
         cal_lk = CalibrationMarginalisedLikelihood(
             fnu_obs=context.data
             if context.data_type == "spectroscopy"
@@ -377,7 +383,7 @@ def _build_eline_G_eff(params, fixed_values, model, eline_wavelengths, constrain
     delta_v = params.get("eline_delta_v_kms", 0.0)
     resolution = getattr(model, "_spectral_resolution", None) or 2000.0
     G = build_eline_design_matrix(
-        model._wave_obs,
+        model.wave_obs,
         eline_wavelengths,
         resolution,
         z,

@@ -1,48 +1,24 @@
 """
 Population VI scaling: time, memory, and convergence
-=====================================================
+====================================================
 
 Renders the wall-time / peak-memory / iteration scaling of tengri's two
 pure-JAX population variational engines on a 5-band SDSS photometry
-catalog with a stochastic-SFH forward model:
+catalog with a stochastic-SFH forward model. Data source: cached benchmark
+from ``bench/scripts/benchmark_vi_xlarge.py``.
 
-* ``native_vi_linear`` — linearised geometric VI (MGVI).
-* ``native_vi_nonlinear`` — full geometric VI (geoVI).
+This script is **render-only**: it loads results from a precomputed JSON
+and does not run the benchmark. Instructions for (re)generating the benchmark
+are printed on first missing-data run.
 
-The grid scans N ∈ {4, …, 8192} galaxies × K ∈ {1, 2, 4, 8} forward
-chunks. Each cell is run in a fresh Python subprocess so the peak-RSS
-reading is clean.
-
-This script is **render-only**: it loads results from
-``bench/results/vi_scaling_benchmark.json`` produced by
-
-.. code-block:: bash
-
-    JAX_PLATFORMS=cpu python bench/scripts/benchmark_vi_xlarge.py
-
-If the JSON is absent, the script prints instructions and exits.
-
-Convergence policy
-------------------
-Both engines stop early via ``kl_rtol=1e-2``. The benchmark uses an
-iteration cap of 50 (retry 100); a row is *converged* iff
-``iters_used < cap``. Non-converged rows are flagged on the iteration
-panel.
-
-Memory policy
--------------
-Each run is bounded to ≤ 30 GB peak per worker. Columns abort once a
-row exceeds the budget — those (N, K) cells are absent from the plot.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_population_scaling_001.png
-   :alt: plot_population_scaling
-   :class: sphx-glr-single-img
-
+Reference: Asterhan et al. (forthcoming, stochastic SFH + hierarchical inference).
 """
 
 from __future__ import annotations
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import json
 from pathlib import Path
@@ -50,7 +26,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import setup_style
+from tengri.analysis.plotting import setup_style
 
 setup_style()
 
@@ -90,7 +66,6 @@ if RESULTS is None:
         family="monospace",
         bbox=dict(boxstyle="round,pad=0.7", fc="#f6f6f6", ec="#999"),
     )
-    plt.show()
     raise SystemExit(0)
 
 with RESULTS.open() as f:
@@ -275,10 +250,4 @@ ax_sig_err.set_title("Constraint scaling")
 ax_sig_err.grid(True, which="both", alpha=0.3)
 ax_sig_err.legend(fontsize=8, loc="best")
 
-fig.suptitle(
-    "PopulationFitter scaling: timing, memory, convergence, and PSD recovery",
-    fontsize=13,
-)
-
 plt.savefig("plot_population_scaling.png", dpi=150, bbox_inches="tight")
-plt.show()

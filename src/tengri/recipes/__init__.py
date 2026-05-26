@@ -5,7 +5,7 @@
 
 Provides ready-to-use model configurations for typical galaxy fitting workflows.
 Each recipe returns a nested-dict suitable for splat ting into
-:func:`~tengri.parameters.Parameters.from_groups()` or
+:func:`~tengri.parameters.parse_groups()` or
 :func:`~tengri.forward.SEDModel.build()`.
 
 Examples
@@ -26,6 +26,8 @@ Fit a quiescent galaxy at z~0.05::
 
 from __future__ import annotations
 
+import tengri.builders as builders
+from tengri.forward.sed_model import WavePrecomp
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.sentinels import FIXED, FREE
 
@@ -62,7 +64,7 @@ def star_forming_photometry() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -78,25 +80,16 @@ def star_forming_photometry() -> dict:
     >>> assert "redshift" in model.spec.free_params
     """
     return dict(
-        sfh={
-            "type": "dpl",
-            "*": FREE,
-        },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "*": FREE,
-            "emission": {
-                "type": "dale2014",
-                "*": FIXED,
-            },
-        },
-        neb={
-            "type": "cue",
-            "*": FIXED,
-        },
+        sfh=builders.sfh.dpl(defaults=FREE),
+        dust=builders.dust.two_component(
+            defaults=FREE,
+            law_bc="calzetti",
+            emission=builders.dust.emission.dale2014(defaults=FIXED),
+        ),
+        neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.01, 6.0),
         apply_igm=True,
+        approx=WavePrecomp(),
     )
 
 
@@ -120,7 +113,7 @@ def quiescent_z0() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -136,22 +129,16 @@ def quiescent_z0() -> dict:
     >>> assert params["redshift"] == Fixed(0.05)
     """
     return dict(
-        sfh={
-            "type": "dexp",
-            "*": FREE,
-        },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "*": FREE,
-            "tau_bc": Uniform(0, 0.5),
-            "tau_diff": Uniform(0, 0.3),
-        },
-        neb={
-            "type": "cue",
-            "*": FIXED,
-        },
+        sfh=builders.sfh.dexp(defaults=FREE),
+        dust=builders.dust.two_component(
+            defaults=FREE,
+            law_bc="calzetti",
+            tau_bc=Uniform(0, 0.5),
+            tau_diff=Uniform(0, 0.3),
+        ),
+        neb=builders.neb.cue(defaults=FIXED),
         redshift=Fixed(0.05),
+        approx=WavePrecomp(),
     )
 
 
@@ -180,7 +167,7 @@ def agn_panchromatic() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -196,39 +183,22 @@ def agn_panchromatic() -> dict:
     >>> assert "disc" in params["agn"]
     """
     return dict(
-        sfh={
-            "type": "dpl",
-            "*": FREE,
-        },
-        dust={
-            "type": "two_component",
-            "*": FREE,
-            "emission": {
-                "type": "dale2014",
-                "*": FREE,
-            },
-        },
-        neb={
-            "type": "cue",
-            "*": FIXED,
-        },
-        agn={
-            "disc": {
-                "type": "multicolor",
-                "*": FREE,
-            },
-            "torus": {
-                "type": "skirtor",
-                "*": FREE,
-            },
-            "lines": {
-                "type": "nlr",
-                "*": FREE,
-            },
-        },
+        sfh=builders.sfh.dpl(defaults=FREE),
+        dust=builders.dust.two_component(
+            defaults=FREE,
+            emission=builders.dust.emission.dale2014(defaults=FREE),
+        ),
+        neb=builders.neb.cue(defaults=FIXED),
+        agn=builders.agn.composable(
+            defaults=FREE,
+            disc=builders.agn.disc.multicolor(defaults=FREE),
+            torus=builders.agn.torus.skirtor(defaults=FREE),
+            lines=builders.agn.lines.nlr(defaults=FREE),
+        ),
         radio=True,
         xray=True,
         redshift=Uniform(0.01, 6.0),
+        approx=WavePrecomp(),
     )
 
 
@@ -253,7 +223,7 @@ def stochastic_sfh_jwst() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -268,25 +238,19 @@ def stochastic_sfh_jwst() -> dict:
     >>> assert params["sfh"]["type"] == ["dpl", "field"]
     >>> assert params["apply_igm"] is True
     """
+    # Composed SFH ("dpl" + "field" stochastic component) is expressed as a
+    # type-list dict. The builder factories cover individual variants; the
+    # composed form remains the canonical grammar for now.
     return dict(
-        sfh={
-            "type": ["dpl", "field"],
-            "*": FREE,
-        },
-        dust={
-            "type": "two_component",
-            "*": FREE,
-            "emission": {
-                "type": "dale2014",
-                "*": FIXED,
-            },
-        },
-        neb={
-            "type": "cue",
-            "*": FIXED,
-        },
+        sfh={"type": ["dpl", "field"], "*": FREE},
+        dust=builders.dust.two_component(
+            defaults=FREE,
+            emission=builders.dust.emission.dale2014(defaults=FIXED),
+        ),
+        neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.5, 12.0),
         apply_igm=True,
+        approx=WavePrecomp(),
     )
 
 
@@ -310,7 +274,7 @@ def mock_recovery_minimal() -> dict:
     Returns
     -------
     dict
-        Nested-dict ready for Parameters.from_groups() or SEDModel.build().
+        Nested-dict ready for parse_groups() or SEDModel.build().
 
     Notes
     -----
@@ -322,25 +286,20 @@ def mock_recovery_minimal() -> dict:
     --------
     >>> from tengri import recipes, Parameters
     >>> params_dict = recipes.mock_recovery_minimal()
-    >>> spec = Parameters.from_groups(**params_dict)
+    >>> spec = parse_groups(**params_dict)
     >>> assert 4 <= spec.n_free <= 8  # ~5 SFH + dust + met
     >>> assert "redshift" in spec.fixed_params
     """
     return dict(
-        sfh={
-            "type": "tsnorm",
-            "*": FREE,
-        },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "*": FIXED,
-            "tau_bc": Uniform(0, 1),
-        },
-        neb={
-            "type": "none",
-        },
+        sfh=builders.sfh.tsnorm(defaults=FREE),
+        dust=builders.dust.two_component(
+            defaults=FIXED,
+            law_bc="calzetti",
+            tau_bc=Uniform(0, 1),
+        ),
+        neb=builders.neb.none(),
         redshift=Fixed(0.05),
+        approx=WavePrecomp(),
     )
 
 
@@ -384,26 +343,24 @@ def dust_demo() -> dict:
             wave_range=(1000, 10000),
         )
     """
-    # Metallicity is not a from_groups key; its default Gaussian(-0.3, 0.2)
+    # Metallicity is not a parse_groups key; its default Gaussian(-0.3, 0.2)
     # prior centres at the value we want, so we leave it FREE — sweep_parameter
     # uses the prior median (= -0.3) for every iteration anyway.
     return dict(
-        sfh={
-            "type": "tsnorm",
-            "*": FIXED,
-            "log_peak_sfr": 1.0,
-            "peak_lbt_gyr": 2.0,
-            "width_gyr": 1.5,
-            "skew": 0.2,
-            "trunc": 3.0,
-        },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "*": FIXED,
-            "tau_bc": 0.5,
-            "tau_diff": 0.3,
-            "slope": -0.7,
-        },
+        sfh=builders.sfh.tsnorm(
+            defaults=FIXED,
+            log_total_mass=10.0,
+            peak_lbt_gyr=2.0,
+            width_gyr=1.5,
+            skew=0.2,
+            trunc=3.0,
+        ),
+        dust=builders.dust.two_component(
+            defaults=FIXED,
+            law_bc="calzetti",
+            tau_bc=0.5,
+            tau_diff=0.3,
+            slope=-0.7,
+        ),
         redshift=Fixed(0.1),
     )

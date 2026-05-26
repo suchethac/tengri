@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Nested Sampling algorithms for tengri.
 
 Faithful port of the handley-lab/blackjax nested_sampling branch.

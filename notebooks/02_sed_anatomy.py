@@ -14,557 +14,407 @@
 # ---
 
 # %% [markdown]
-# # SED anatomy
+# # SED anatomy — a kitchen-sink galaxy from X-rays to radio
 #
-# Pull the panchromatic galaxy SED apart, channel by channel: stars,
-# nebular, dust attenuation, dust IR re-emission, AGN disc + torus, X-ray,
-# radio. Each one is a flag in `Parameters(...)` — the same grammar used to
-# build a model for fitting — and isolating a component just means zeroing
-# the rest.
+# Galaxies emit across nine decades of frequency. A faithful SED is a
+# *composition*: stellar photospheres set the optical–NIR continuum;
+# nebular gas turns Lyman photons into lines and a Balmer continuum;
+# birth clouds and the diffuse ISM attenuate the UV and re-radiate in
+# the infrared; AGN add a disc + torus + narrow-line region; thermal
+# free-free and synchrotron close out the radio; corona Comptonisation
+# produces the X-ray power-law; and the IGM eats the FUV at high z.
 #
-# Components live on the orchestrator's running wavelength grid:
-# `state.sed_intrinsic` is the cumulative total at the end of the chain,
-# `state.derived["sed_<name>"]` is the per-component contribution.
+# Tengri composes all of this from one nested-dict specification. The
+# figure below is a **kitchen-sink** model at z = 2 — every component
+# turned on — followed by four mini-sweeps that isolate a single knob
+# at a time.
 #
-# Runs in under a minute on CPU. Builds on
-# [`00_quickstart`](00_quickstart.py) and [`01_why_jax`](01_why_jax.py).
-# Next: [`03_discovering_the_menu`](03_discovering_the_menu.py).
+# Two things to watch for as the model is built:
+#
+# - `model.summary()` makes the assembly explicit.
+# - `citations.print_citations(model)` produces a working bibliography
+#   for the methods section.
 
 # %%
 import os
-import sys
-import warnings
 
-os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
-try:
-    _nb_dir = os.path.dirname(os.path.abspath(__file__))
-    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
-except NameError:
-    _nb_dir = os.getcwd()
-    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
-
-_src = os.path.join(_repo_root, "src")
-if os.path.isdir(os.path.join(_src, "tengri")):
-    sys.path.insert(0, _src)
-sys.path.insert(0, _repo_root)
-sys.path.insert(0, _nb_dir)
-
-# nbconvert kernel cwd is notebooks/, switch to repo root so data/ resolves.
-if os.path.isdir(os.path.join(_repo_root, "data")):
-    os.chdir(_repo_root)
+from copy import deepcopy
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
-import matplotlib
-
-if "ipykernel" not in sys.modules:
-    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=UserWarning, module="tengri")
-
-from _plot_style import COLORS, setup_style
-
-setup_style()
-
-import tengri as tg
-from tengri import Fixed, Parameters, SEDModel, load_ssp_data
-
-print(f"tengri {tg.__version__}")
-
-FIGDIR = os.path.join("notebooks", "figures")
-os.makedirs(FIGDIR, exist_ok=True)
-
-# %% [markdown]
-# ## Build the kitchen-sink model
-#
-# Every component flag ``Parameters`` accepts is set here. With
-# ``predict_via_orchestrator``, each component's contribution is published
-# as a key in ``state.derived``, so we can isolate them at plot time
-# without re-running the model.
-#
-# We need a **bare-stellar SSP** because Cue's nebular emulator infers
-# the ionizing field from the SSP spectrum directly — wNE SSPs (with
-# baked-in nebular) leave that field at log10(Q_H) ≈ 0 and Cue would
-# refuse to construct (see ``CueWNESSPError`` and notebook 08).
-
-# %%
-ssp_data = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
-print(
-    f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × "
-    f"{ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ"
+import tengri
+from tengri import (
+    FIXED,
+    FREE,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    Uniform,
+    builders,
+    citations,
+    load_ssp_data,
+    plot,
+    recipes,
 )
 
-# Star-forming, moderately dusty, modest AGN, z = 0.5
-spec_full = Parameters(
-    # Stellar population — truncated normal SFH peaking 0.3 Gyr ago,
-    # 1 Gyr wide. Choosing a star-forming SFH here so Cue's nebular
-    # continuum + line predictions are non-trivially populated; a
-    # passive SFH (e.g. ``dexp`` with peak in the distant past)
-    # produces ~zero recent Q_H and Cue floors at 1e-100 internally.
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(0.7),  # 5 Msun/yr peak
-    sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),  # peaked 300 Myr ago
-    sfh_tsnorm_width_gyr=Fixed(1.0),
-    sfh_tsnorm_skew=Fixed(0.1),
-    sfh_tsnorm_trunc=Fixed(13.8),
-    met_logzsol=Fixed(-0.3),
-    # Two-component dust attenuation (birth-cloud + diffuse)
-    dust_tau_bc=Fixed(0.8),
-    dust_tau_diff=Fixed(0.4),
-    dust_slope=Fixed(-0.7),
-    # Dust IR re-emission via energy balance (Dale et al. 2014)
-    dust_emission="dale2014",
-    dust_T=Fixed(35.0),
-    dust_qpah=Fixed(2.5),
-    # Nebular continuum + lines via Cue (neural CLOUDY emulator)
-    nebular_cue=True,
-    neb_logU=Fixed(-2.5),
-    neb_logZ_gas=Fixed(-0.3),
-    # AGN — qsogen disc + torus.  ``agn_log_lbol`` is log10(L_bol/L_sun)
-    # at the API surface (CLAUDE.md), not log10(erg/s).  10^11 L_sun ≈
-    # 4×10^44 erg/s — a moderate Seyfert-class AGN.
-    agn_model="qsogen",
-    agn_log_lbol=Fixed(11.0),
-    # ``agn_frac`` defaults to 0 in the registry (a multiplicative on/off
-    # switch on top of ``agn_log_lbol``). Set to 1 so the AGN we just
-    # configured actually contributes.
-    agn_frac=Fixed(1.0),
-    agn_torus_frac=Fixed(0.4),
-    agn_cos_inc=Fixed(0.7),
-    # X-ray (host XRBs + AGN power-law)
-    xray=True,
-    # Radio (FIR-radio correlation + AGN)
+plot.setup_style()
+FIG_DIR = Path("_figs")
+FIG_DIR.mkdir(exist_ok=True)
+
+# %% [markdown]
+# ## Setup — bare-stellar SSP and panchromatic filters
+#
+# Cue needs a bare-stellar SSP. The filter set spans GALEX through ALMA
+# so every component has somewhere to be visible.
+
+# %%
+SSP = Path("../data/fsps_prsc_miles_chabrier.h5")
+if not SSP.exists():
+    SSP = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
+ssp = load_ssp_data(str(SSP))
+
+filters = [
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "ukidss_y",
+    "ukidss_j",
+    "ukidss_h",
+    "ukidss_k",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80",
+    "wise_w3",
+    "wise_w4",
+    "mips_24",
+    "mips_70",
+    "mips_160",
+    "herschel_100",
+    "herschel_160",
+    "herschel_250",
+    "herschel_350",
+    "herschel_500",
+]
+obs = Observation(photometry=Photometry.from_names(filters))
+
+# %% [markdown]
+# ## The kitchen-sink model
+#
+# DPL star-formation history; two-component Calzetti attenuation; Dale
+# 2014 dust IR emission; Cue nebular continuum + lines; multicolour disc
+# + SKIRTOR torus + narrow-line region AGN; radio (free-free +
+# synchrotron, with the SFR–L_1.4GHz scaling); X-ray (Lusso & Risaliti
+# 2017 from L_2500); Inoue 2014 IGM at z = 2. Every parameter pinned at
+# a physically reasonable value so the figure is reproducible.
+
+# %%
+kitchen_sink = dict(
+    sfh={
+        "type": "dpl",
+        "*": FIXED,
+        "log_total_mass": 10.0,
+        "alpha": 2.2,
+        "beta": 1.4,
+        "tau_gyr": 4.0,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+        "tau_bc": 0.8,
+        "tau_diff": 0.3,
+        "slope": -0.4,
+        "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
+    },
+    neb={"type": "cue", "*": FIXED},
+    agn={
+        "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 45.0},
+        "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "cos_inc": 0.5},
+        "lines": {"type": "nlr", "*": FIXED},
+    },
     radio=True,
-    radio_q_ir=Fixed(2.64),
-    # IGM attenuation (Madau 1995)
+    xray=True,
+    redshift=Fixed(2.0),
     apply_igm=True,
-    redshift=Fixed(0.5),
 )
 
-t0 = __import__("time").perf_counter()
-model_full = SEDModel(spec_full, ssp_data, observation=None)
-t_build = __import__("time").perf_counter() - t0
-print(f"  ⏱  SEDModel construction          {t_build:.2f} s")
-
-# Single forward pass — everything below reads from this state.
-params = spec_full.sample(jax.random.PRNGKey(0))
-t0 = __import__("time").perf_counter()
-state = model_full.predict_via_orchestrator(params)
-t_pred = __import__("time").perf_counter() - t0
-print(f"  ⏱  predict_via_orchestrator cold  {t_pred:.2f} s")
-
-# Second pass with τ → 0 to recover the un-attenuated stellar+nebular
-# reference. Same model, different params — no special-casing needed.
-params_no_dust = {**params, "dust_tau_bc": jnp.array(0.0), "dust_tau_diff": jnp.array(0.0)}
-state_no_dust = model_full.predict_via_orchestrator(params_no_dust)
+model = SEDModel.build(ssp_data=ssp, observation=obs, **kitchen_sink)
+print(model.summary())
 
 # %% [markdown]
-# ## Inspect what's in the state
-#
-# Each component's published quantities live in ``state.derived``. The
-# top-level ``state.sed_intrinsic`` is the running sum threaded through
-# the chain — by the end of the orchestrator it equals the panchromatic
-# total.
+# ## Citations from the assembled model
 
 # %%
-print(f"\nstate.wave shape: {state.wave.shape}")
-print(f"state.wave range: {float(state.wave.min()):.2g} to {float(state.wave.max()):.2g} Å")
-print("\nPer-component peaks [erg/s/Hz]:")
-for k in (
-    "sed_dust_attenuated",  # stellar + nebular, after dust attenuation
-    "sed_nebular",  # nebular continuum + lines
-    "sed_dust_ir",  # thermal IR re-emission
-    "sed_agn",  # AGN disc + torus
-    "sed_xray",  # X-ray (XRBs + AGN)
-    "sed_radio",  # radio synchrotron + AGN
-):
-    v = state.derived.get(k)
-    if v is not None and hasattr(v, "max"):
-        peak = float(np.asarray(v).max())
-        print(f"  {k:<30s} {peak:>12.3e}")
+citations.print_citations(model)
 
 # %% [markdown]
-# ## The kitchen-sink figure
+# ## Hero figure — the panchromatic anatomy
 #
-# Plot every component on a single panchromatic ν L_ν panel. Wavelength
-# bands are shaded so the reader can see at a glance which channel
-# dominates each regime. The y-axis is ν L_ν in solar luminosities, the
-# physically natural unit for "how much energy is leaving the galaxy at
-# this wavelength."
+# One sweep through the orchestrator at the truth point. The rest-frame
+# SED carries every contribution as a `state.derived` entry; the total
+# is `state.sed_intrinsic` after attenuation, with dust IR emission
+# added on top by the dust component.
 
 # %%
-_C_AA_S = 2.99792458e18  # speed of light [Å/s]
-_LSUN_ERG = 3.828e33  # IAU 2015 solar luminosity [erg/s]
+params = model.spec.sample(jax.random.PRNGKey(0))
+state = model.predict_state(params)
 
-wave_aa = np.asarray(state.wave)
-wave_um = wave_aa * 1e-4
-nu_hz = _C_AA_S / wave_aa
-
-
-def to_nulnu_lsun(lnu_erg):
-    """L_nu [erg/s/Hz] → ν L_ν [L_sun]."""
-    arr = np.asarray(lnu_erg)
-    return arr * nu_hz / _LSUN_ERG
+wave_rest = np.asarray(state.wave)  # Å
+nu = 2.998e18 / wave_rest  # Hz
+total = np.asarray(state.sed_intrinsic)  # erg/s/Hz, post-dust-attenuation + emission
 
 
-# Components: (key, label, color, linestyle, linewidth, z-order)
-_d = state.derived
-_d_nodust = state_no_dust.derived
-components = [
-    (
-        # Pre-attenuation stellar+nebular reference (dashed)
-        to_nulnu_lsun(_d_nodust["sed_dust_attenuated"]),
-        "Stars + nebular (no dust)",
-        "#999999", "--", 1.4, 2,
-    ),
-    (
-        to_nulnu_lsun(_d["sed_dust_attenuated"]),
-        "Stars + nebular (attenuated)",
-        "#3a86ff", "-", 2.0, 4,
-    ),
-    (
-        to_nulnu_lsun(_d.get("sed_nebular", np.zeros_like(wave_aa))),
-        "Nebular only",
-        "#06d6a0", "-", 1.6, 3,
-    ),
-    (
-        to_nulnu_lsun(_d.get("sed_dust_ir", np.zeros_like(wave_aa))),
-        "Dust IR re-emission",
-        "#f77f00", "-", 2.0, 4,
-    ),
-    (
-        to_nulnu_lsun(_d.get("sed_agn", np.zeros_like(wave_aa))),
-        "AGN (disc + torus)",
-        "#9d4edd", "-", 2.0, 4,
-    ),
-    (
-        to_nulnu_lsun(_d.get("sed_xray", np.zeros_like(wave_aa))),
-        "X-ray (XRBs + AGN)",
-        "#e63946", "-", 1.8, 4,
-    ),
-    (
-        to_nulnu_lsun(_d.get("sed_radio", np.zeros_like(wave_aa))),
-        "Radio (synchrotron)",
-        "#588157", "-", 1.8, 4,
-    ),
-    (
-        to_nulnu_lsun(state.sed_intrinsic),
-        "Total",
-        "#1a1a1a", "-", 2.5, 5,
-    ),
-]
+# Per-component contributions from the orchestrator's derived bundle.
+def _get(key, default=None):
+    arr = state.derived.get(key, default)
+    return None if arr is None else np.asarray(arr)
 
-# Y-range: pick from total, three decades down from peak.
-total = to_nulnu_lsun(state.sed_intrinsic)
-y_peak = float(np.nanmax(total[total > 0]))
-y_top = y_peak * 5
-y_bot = y_peak * 1e-5
 
-fig, ax = plt.subplots(1, 1, figsize=(13, 7))
+lnu_age = _get("lnu_age")  # (n_age, n_wave) intrinsic
+sed_stellar_intrinsic = lnu_age.sum(axis=0) if lnu_age is not None else None
+sed_stellar_attenuated = _get("sed_dust_attenuated")
+sed_nebular = _get("sed_nebular")
+sed_dust_emission = _get("sed_dust_ir")
+sed_agn = _get("sed_agn", _get("sed_grahsp"))  # AGN may be off in some builds
 
-# Wavelength bands (rest-frame interpretation; with z=0.5 these are blueshifted).
-bands = [
-    (1e-5, 1e-3, "X-ray", "#e8d0f5"),
-    (1e-3, 0.0091, "EUV", "#f5e6d3"),
-    (0.0091, 0.4, "UV", "#fff0a0"),
-    (0.4, 0.7, "Optical", "#e0f5e0"),
-    (0.7, 30.0, "NIR / MIR", "#fde8d0"),
-    (30.0, 1e3, "FIR / sub-mm", "#fcc890"),
-    (1e3, 1e7, "Radio", "#dce8f5"),
-]
-for lo, hi, lbl, col in bands:
-    ax.axvspan(lo, hi, color=col, alpha=0.35, zorder=0)
-    ax.text(
-        np.sqrt(lo * hi),
-        y_top * 0.7,
-        lbl,
-        ha="center", va="top", fontsize=10,
-        color="#444444", style="italic", zorder=1,
-    )
+C = {
+    "stellar": "#d97a3a",  # warm
+    "nebular": "#c8377d",  # magenta
+    "dust_att": "#3a76d9",  # blue
+    "dust_em": "#c3372a",  # red
+    "agn": "#7c3fbf",  # violet
+    "total": "0.05",  # near-black
+}
 
-# Plot each component, masking values that fall below the panel floor
-# (otherwise log autoscale would squash everything — see notebook rules §2).
-floor = y_bot * 0.5
-for y, lbl, col, ls, lw, z in components:
-    mask = y > floor
-    if mask.any():
-        ax.plot(wave_um[mask], y[mask], ls=ls, lw=lw, color=col, label=lbl, zorder=z)
-
+fig, ax = plt.subplots(figsize=(9.5, 5.4))
 ax.set_xscale("log")
 ax.set_yscale("log")
-ax.set_xlim(1e-5, 1e7)
-ax.set_ylim(y_bot, y_top)
-ax.set_xlabel(r"Rest wavelength [$\mu$m]", fontsize=12)
-ax.set_ylabel(r"$\nu L_{\nu}$ [$L_\odot$]", fontsize=12)
-ax.set_title(
-    f"Panchromatic SED at z={float(params['redshift']):.2f}: every component on one panel",
-    fontsize=12,
-)
-ax.legend(loc="lower center", frameon=False, fontsize=9, ncol=4)
-ax.grid(True, alpha=0.25, which="both")
+ax.set_xlabel(r"rest-frame wavelength $\lambda$  [$\mu$m]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+wave_um = wave_rest / 1e4
 
-plt.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_sed_anatomy_hero.png"), dpi=200, bbox_inches="tight")
-plt.show()
 
-# %% [markdown]
-# ## Component isolation — same panel, one component at a time
-#
-# Useful for explaining what each component contributes in isolation.
-# Same wavelength grid as above, identical normalization. The bottom
-# row shows the IGM transmission separately because it multiplies
-# (rather than adds to) the SED.
+def nuLnu(y):
+    return nu * y if y is not None else None
 
-# %%
-fig, axes = plt.subplots(2, 3, figsize=(15, 8), sharex=True)
-panels = [
-    ("Stars + nebular", to_nulnu_lsun(_d["sed_dust_attenuated"]), "#3a86ff"),
-    ("Nebular continuum + lines", to_nulnu_lsun(_d.get("sed_nebular", np.zeros_like(wave_aa))), "#06d6a0"),
-    ("Dust IR re-emission", to_nulnu_lsun(_d.get("sed_dust_ir", np.zeros_like(wave_aa))), "#f77f00"),
-    ("AGN (disc + torus)", to_nulnu_lsun(_d.get("sed_agn", np.zeros_like(wave_aa))), "#9d4edd"),
-    ("X-ray (XRBs + AGN)", to_nulnu_lsun(_d.get("sed_xray", np.zeros_like(wave_aa))), "#e63946"),
-    ("Radio (synchrotron)", to_nulnu_lsun(_d.get("sed_radio", np.zeros_like(wave_aa))), "#588157"),
-]
-for ax_p, (label, y, col) in zip(axes.flat, panels):
-    mask = y > floor
-    if mask.any():
-        ax_p.plot(wave_um[mask], y[mask], color=col, lw=2.0)
-        # Faint reference: total
-        ax_p.plot(wave_um, total, color="#cccccc", lw=0.8, ls="-", zorder=0)
-    ax_p.set_xscale("log")
-    ax_p.set_yscale("log")
-    ax_p.set_xlim(1e-5, 1e7)
-    ax_p.set_ylim(y_bot, y_top)
-    ax_p.set_title(label, fontsize=11)
-    ax_p.grid(True, alpha=0.25, which="both")
-for ax_p in axes[-1, :]:
-    ax_p.set_xlabel(r"Rest $\lambda$ [$\mu$m]")
-for ax_p in axes[:, 0]:
-    ax_p.set_ylabel(r"$\nu L_{\nu}$ [$L_\odot$]")
 
-fig.suptitle("Each component on its own (faint grey = full panchromatic total)", fontsize=12)
-plt.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_component_isolation.png"), dpi=200, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ## IGM transmission and dust attenuation as multiplicative factors
-#
-# IGM (Lyman-alpha forest) at z=0.5 is mild — most of the action lives at
-# z ≳ 2. Re-running with z=3 makes it dramatic. Dust attenuation
-# transmission is recovered by ``sed_dust_attenuated /
-# sed_dust_attenuated_no_dust``.
-
-# %%
-# IGM at multiple redshifts
-fig, (ax_igm, ax_dust) = plt.subplots(1, 2, figsize=(14, 5))
-
-for z, color in [(0.5, "#3a86ff"), (1.0, "#06d6a0"), (2.0, "#f77f00"), (3.0, "#e63946")]:
-    p = {**params, "redshift": jnp.array(z)}
-    s = model_full.predict_via_orchestrator(p)
-    igm_t = np.asarray(s.derived["igm_transmission"])
-    # Plot in observed-frame wavelength so the Lyman alpha forest is visible
-    wave_obs = np.asarray(s.wave) * (1.0 + z) * 1e-4  # μm
-    ax_igm.plot(wave_obs, igm_t, color=color, lw=1.8, label=f"z = {z:.1f}")
-
-ax_igm.set_xscale("log")
-ax_igm.set_xlim(0.05, 0.4)
-ax_igm.set_ylim(-0.05, 1.15)
-ax_igm.axhline(1.0, color="k", ls=":", lw=0.8, alpha=0.5)
-ax_igm.set_xlabel(r"Observed $\lambda$ [$\mu$m]")
-ax_igm.set_ylabel("IGM transmission")
-ax_igm.set_title("IGM (Madau 1995) — Lyman-α forest", fontsize=11)
-ax_igm.legend(loc="lower right", frameon=False)
-ax_igm.grid(True, alpha=0.25)
-
-# Dust attenuation curve (transmission vs wavelength)
-intrinsic = np.asarray(_d_nodust["sed_dust_attenuated"])
-attenuated = np.asarray(_d["sed_dust_attenuated"])
-mask_optical = (wave_um >= 0.1) & (wave_um <= 5.0) & (intrinsic > 0)
-trans = attenuated[mask_optical] / intrinsic[mask_optical]
-ax_dust.plot(wave_um[mask_optical], trans, color="#9d4edd", lw=2.0)
-ax_dust.set_xscale("log")
-ax_dust.set_xlim(0.1, 5.0)
-ax_dust.set_ylim(-0.05, 1.05)
-ax_dust.axhline(1.0, color="k", ls=":", lw=0.8, alpha=0.5)
-ax_dust.set_xlabel(r"Rest $\lambda$ [$\mu$m]")
-ax_dust.set_ylabel(r"$L_\nu^{\rm attenuated} / L_\nu^{\rm intrinsic}$")
-ax_dust.set_title(r"Dust attenuation transmission ($\tau_{\rm bc}=0.8,\ \tau_{\rm diff}=0.4$)", fontsize=11)
-ax_dust.grid(True, alpha=0.25)
-
-plt.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_redshift_igm.png"), dpi=200, bbox_inches="tight")
-plt.show()
-
-# %% [markdown]
-# ## Layer-by-layer build
-#
-# Same model, parameters peeled back one at a time. Lets the reader see
-# what each component *adds* (or removes) from the cumulative SED.
-
-# %%
-fig, ax = plt.subplots(1, 1, figsize=(13, 6))
-
-stages = [
-    # Strip dust IR + AGN + radio + xray to leave just the stars
-    (
-        {"dust_tau_bc": 0.0, "dust_tau_diff": 0.0,
-         "agn_log_lbol": -10.0, "dust_emission": None},
-        "(1) Stars + nebular only",
-        "#3a86ff",
-    ),
-    # Add dust attenuation
-    (
-        {"agn_log_lbol": -10.0, "dust_emission": None},
-        "(2) + Dust attenuation",
-        "#06d6a0",
-    ),
-    # Add dust IR re-emission
-    (
-        {"agn_log_lbol": -10.0},
-        "(3) + Dust IR re-emission",
-        "#f77f00",
-    ),
-    # Full kitchen sink
-    (
-        {},
-        "(4) + AGN + X-ray + radio (full)",
-        "#1a1a1a",
-    ),
-]
-
-# Stage 1 needs a model rebuild because dust_emission=None changes structure.
-# For simplicity, run the parameter-only stages from the existing model.
-# (Stages 2-4 only flip parameters; stage 1 is computed separately.)
-spec_no_emit = Parameters(
-    mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(0.7),
-    sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),
-    sfh_tsnorm_width_gyr=Fixed(1.0),
-    sfh_tsnorm_skew=Fixed(0.1),
-    sfh_tsnorm_trunc=Fixed(13.8),
-    met_logzsol=Fixed(-0.3),
-    dust_tau_bc=Fixed(0.0), dust_tau_diff=Fixed(0.0), dust_slope=Fixed(-0.7),
-    nebular_cue=True,
-    neb_logU=Fixed(-2.5), neb_logZ_gas=Fixed(-0.3),
-    redshift=Fixed(0.5),
-)
-model_stars = SEDModel(spec_no_emit, ssp_data, observation=None)
-state_stars = model_stars.predict_via_orchestrator(spec_no_emit.sample(jax.random.PRNGKey(0)))
-
-# Stars-only chain uses a different (shorter) wave grid; convert here
-# rather than via the kitchen-sink-grid helper.
-_wave_stars = np.asarray(state_stars.wave)
-_nu_stars = _C_AA_S / _wave_stars
-_nulnu_stars = np.asarray(state_stars.sed_intrinsic) * _nu_stars / _LSUN_ERG
-ax.plot(
-    _wave_stars * 1e-4,
-    _nulnu_stars,
-    color="#3a86ff", lw=2.0, label="(1) Stars + nebular only", zorder=4,
-)
-
-# Stages 2-4: parameter overrides on the kitchen-sink model.
-for params_override, label, color in [
-    ({"dust_tau_bc": 0.8, "dust_tau_diff": 0.4,
-      "agn_frac": 0.0}, "(2) + Dust attenuation only", "#06d6a0"),
-    ({"agn_frac": 0.0}, "(3) + Dust IR re-emission", "#f77f00"),
-    ({}, "(4) + AGN + X-ray + radio", "#1a1a1a"),
-]:
-    p = {**params, **{k: jnp.array(v) for k, v in params_override.items()}}
-    s = model_full.predict_via_orchestrator(p)
+ax.plot(wave_um, nuLnu(total), color=C["total"], lw=2.2, label="total")
+if sed_stellar_intrinsic is not None:
     ax.plot(
         wave_um,
-        to_nulnu_lsun(s.sed_intrinsic),
-        color=color, lw=2.0, label=label, zorder=5,
+        nuLnu(sed_stellar_intrinsic),
+        color=C["stellar"],
+        lw=1.0,
+        ls="--",
+        alpha=0.7,
+        label="stellar (intrinsic)",
+    )
+if sed_stellar_attenuated is not None:
+    ax.plot(
+        wave_um,
+        nuLnu(sed_stellar_attenuated),
+        color=C["dust_att"],
+        lw=1.4,
+        label="stellar (attenuated)",
+    )
+if sed_nebular is not None:
+    ax.plot(wave_um, nuLnu(sed_nebular), color=C["nebular"], lw=1.0, label="nebular")
+if sed_dust_emission is not None:
+    ax.plot(wave_um, nuLnu(sed_dust_emission), color=C["dust_em"], lw=1.4, label="dust emission")
+if sed_agn is not None:
+    ax.plot(wave_um, nuLnu(sed_agn), color=C["agn"], lw=1.4, label="AGN (disc + torus + NLR)")
+
+# Annotate physical features.
+for lam_um, label in [
+    (0.0912, "Lyman\nbreak"),
+    (0.122, r"Ly$\alpha$"),
+    (0.36, "Balmer\nbreak"),
+    (0.6564, r"H$\alpha$"),
+    (7.7, "PAH"),
+    (100, r"100$\,\mu$m peak"),
+]:
+    if lam_um < wave_um.min() or lam_um > wave_um.max():
+        continue
+    y = np.interp(lam_um, wave_um, nuLnu(total))
+    ax.annotate(
+        label,
+        xy=(lam_um, y),
+        xytext=(0, 18),
+        textcoords="offset points",
+        fontsize=8,
+        ha="center",
+        color="0.25",
+        arrowprops=dict(arrowstyle="-", color="0.5", lw=0.5),
     )
 
+ax.set_xlim(1e-2, 1e4)
+ax.set_ylim(nuLnu(total).max() * 1e-7, nuLnu(total).max() * 3)
+ax.legend(loc="lower center", ncol=3, frameon=False, fontsize=9)
+ax.set_title(f"Kitchen-sink SED at z = {float(params['redshift']):.1f}")
+fig.tight_layout()
+fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight")
+
+# %% [markdown]
+# ## Four sweeps, one knob at a time
+#
+# All on a leaner star-forming recipe so the figures stay readable;
+# everything is held fixed except the swept parameter.
+
+# %%
+base = recipes.star_forming_photometry()
+# Pin the model down to defaults, then sweep one parameter at a time.
+base["sfh"]["*"] = FIXED
+base["dust"]["*"] = FIXED
+base["dust"]["emission"]["*"] = FIXED
+base["redshift"] = Fixed(0.5)
+
+base_model = SEDModel.build(ssp_data=ssp, observation=obs, **base)
+
+
+def predict_rest(m, p):
+    s = m.predict_state(p)
+    return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
+
+
+fig, axes = plt.subplots(2, 2, figsize=(11, 7.4), constrained_layout=True)
+
+
+# (a) SFH shape — three canonical SFHs, mass-normalised
+ax = axes[0, 0]
+for label, sfh_dict, color in [
+    ("exponential", builders.sfh.exp(defaults=FIXED), "#d97a3a"),
+    ("delayed-exp", builders.sfh.dexp(defaults=FIXED), "#c8377d"),
+    ("DPL", builders.sfh.dpl(defaults=FIXED), "#3a76d9"),
+]:
+    cfg = deepcopy(base)
+    cfg["sfh"] = sfh_dict
+    m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
+    p = m.spec.sample(jax.random.PRNGKey(0))
+    w, sed = predict_rest(m, p)
+    ax.plot(w / 1e4, w * sed * 0 + 2.998e18 / w * sed, label=label, color=color, lw=1.3)
 ax.set_xscale("log")
 ax.set_yscale("log")
-ax.set_xlim(1e-5, 1e7)
-ax.set_ylim(y_bot, y_top)
-ax.set_xlabel(r"Rest $\lambda$ [$\mu$m]")
-ax.set_ylabel(r"$\nu L_{\nu}$ [$L_\odot$]")
-ax.set_title("Building up the SED layer by layer", fontsize=12)
-ax.legend(loc="lower center", frameon=False, fontsize=10, ncol=2)
-ax.grid(True, alpha=0.25, which="both")
-plt.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_layer_anatomy.png"), dpi=200, bbox_inches="tight")
-plt.show()
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda$ [$\mu$m]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title("SFH shape")
+ax.legend(frameon=False, fontsize=9)
 
-# %% [markdown]
-# ## Units convention reference
-#
-# tengri carries SED quantities as **L_ν in erg/s/Hz** through the chain.
-# The same number gets reinterpreted as **f_ν in erg/s/cm²/Hz** when
-# divided by ``4π d_L²``, or as an **AB magnitude** via standard
-# zero-point. Here's all three sides at once for the kitchen-sink galaxy.
-
-# %%
-# At z=0.5, dL ≈ 2895 Mpc = 8.94e27 cm. ``state`` for z=0.5 is already in
-# rest-frame L_nu; project to observed-frame f_nu using the helper.
-fig, axes = plt.subplots(1, 3, figsize=(16, 4.5))
-
-lnu = np.asarray(state.sed_intrinsic)
-ax = axes[0]
-mask_pos = lnu > 0
-ax.plot(wave_um[mask_pos], lnu[mask_pos], color="#3a86ff", lw=1.8)
-ax.set_xscale("log"); ax.set_yscale("log")
-ax.set_xlim(0.05, 1000.0)
-ax.set_xlabel(r"Rest $\lambda$ [$\mu$m]"); ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("(a) Rest-frame luminosity density")
-ax.grid(True, alpha=0.25, which="both")
-
-ax = axes[1]
-fnu_ujy = np.asarray(tg.units.fnu_to_ujy(np.asarray(state.sed_intrinsic) / (4.0 * np.pi * (8.94e27) ** 2)))
-m = fnu_ujy > 1e-4
-ax.plot(wave_um[m] * 1.5, fnu_ujy[m], color="#06d6a0", lw=1.8)  # observed wave = rest * (1+z)
-ax.set_xscale("log"); ax.set_yscale("log")
-ax.set_xlim(0.05, 1000.0)
-ax.set_xlabel(r"Observed $\lambda$ [$\mu$m]"); ax.set_ylabel(r"$f_\nu$ [$\mu$Jy]")
-ax.set_title("(b) Observed flux density")
-ax.grid(True, alpha=0.25, which="both")
-
-ax = axes[2]
-m_ab = -2.5 * np.log10(np.maximum(fnu_ujy * 1e-6, 1e-30) / 3631.0)
-m = (fnu_ujy > 1e-4) & (m_ab < 35)
-ax.plot(wave_um[m] * 1.5, m_ab[m], color="#f77f00", lw=1.8)
-ax.invert_yaxis()
+# (b) Birth-cloud τ_V sweep — same SFH, varying attenuation
+ax = axes[0, 1]
+cmap = plt.colormaps["viridis"]
+tau_grid = [0.0, 0.5, 1.0, 2.0, 3.0]
+for tau, col in zip(tau_grid, cmap(np.linspace(0.15, 0.85, len(tau_grid)))):
+    cfg = deepcopy(base)
+    cfg["dust"]["tau_bc"] = tau
+    m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
+    p = m.spec.sample(jax.random.PRNGKey(0))
+    w, sed = predict_rest(m, p)
+    ax.plot(w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\tau_{{\rm BC}}={tau:g}$")
 ax.set_xscale("log")
-ax.set_xlim(0.05, 1000.0)
-ax.set_xlabel(r"Observed $\lambda$ [$\mu$m]"); ax.set_ylabel(r"$m_{\rm AB}$ [mag]")
-ax.set_title("(c) AB magnitude")
-ax.grid(True, alpha=0.25, which="both")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda$ [$\mu$m]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title("Birth-cloud optical depth")
+ax.legend(frameon=False, fontsize=9, ncol=2)
 
-plt.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "02_units_convention.png"), dpi=200, bbox_inches="tight")
-plt.show()
+# (c) AGN bolometric luminosity sweep
+# Lightweight AGN (multicolour disc + Nenkova torus): five rebuilds of
+# the kitchen-sink model with SKIRTOR is far too heavy. The Nenkova
+# torus is a cheap analytic stand-in for the visual story.
+ax = axes[1, 0]
+log_lbol_grid = [44.0, 44.5, 45.0, 45.5, 46.0]
+cmap = plt.colormaps["plasma"]
+for log_lbol, col in zip(log_lbol_grid, cmap(np.linspace(0.15, 0.85, len(log_lbol_grid)))):
+    cfg = deepcopy(base)
+    cfg["agn"] = {
+        "disc": {"type": "multicolor", "*": FIXED, "log_lbol": log_lbol},
+        "torus": {"type": "nenkova", "*": FIXED},
+    }
+    m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
+    p = m.spec.sample(jax.random.PRNGKey(0))
+    w, sed = predict_rest(m, p)
+    ax.plot(
+        w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\log L_{{\rm AGN}}={log_lbol:g}$"
+    )
+    del m
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda$ [$\mu$m]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title("AGN luminosity")
+ax.legend(frameon=False, fontsize=8, ncol=1)
+
+# (d) Redshift sweep — same intrinsic, different IGM + observed-frame
+ax = axes[1, 1]
+z_grid = [0.0, 1.0, 3.0, 6.0]
+cmap = plt.colormaps["cividis"]
+for z, col in zip(z_grid, cmap(np.linspace(0.15, 0.85, len(z_grid)))):
+    cfg = deepcopy(base)
+    cfg["redshift"] = Fixed(z)
+    cfg["apply_igm"] = z > 0
+    m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
+    p = m.spec.sample(jax.random.PRNGKey(0))
+    w, sed = predict_rest(m, p)
+    ax.plot(w * (1 + z) / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$z={z:g}$")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(0.05, 30)
+ax.set_xlabel(r"$\lambda_{\rm obs}$ [$\mu$m]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+ax.set_title("Redshift + IGM")
+ax.legend(frameon=False, fontsize=9)
+
+fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
-# ## Recap
+# ## Round-trip — `spec.to_groups()`
 #
-# | Component | ``state.derived`` key | Wavelength regime |
-# |---|---|---|
-# | Stellar continuum | (in ``sed_dust_attenuated`` after dust) | UV → NIR |
-# | Nebular continuum + lines | ``sed_nebular`` | UV → optical |
-# | Dust attenuation | (multiplicative on ``sed_dust_attenuated``) | UV → near-IR |
-# | Dust IR re-emission | ``sed_dust_ir`` | mid-IR → FIR |
-# | AGN (disc + torus) | ``sed_agn`` | UV → MIR |
-# | X-ray (XRBs + AGN) | ``sed_xray`` | hard X-ray |
-# | Radio (synchrotron) | ``sed_radio`` | cm → m |
-# | IGM transmission | ``igm_transmission`` | < Lyα (high z) |
-#
-# One ``predict_via_orchestrator`` call gives you all of them. To toggle
-# any component off, drop its ``Parameters`` flag (e.g. ``radio=False``)
-# or zero its parameter (``agn_log_lbol=Fixed(-10.0)`` makes AGN
-# negligible). The chain remains JIT-compatible; this is the substrate
-# that the inference notebooks (05–08) use to compute likelihoods.
+# Every model carries its build-time grammar. Pull it back, edit one
+# leaf, rebuild — useful when a recipe is almost what you want and one
+# parameter needs adjusting.
 
 # %%
-tg.cite(model_full)
-print("Notebook 02 (SED anatomy) complete. Next: 03_discovering_the_menu.py")
+groups = model.spec.to_groups()
+groups["dust"]["tau_bc"] = Fixed(1.5)  # double the birth-cloud opacity
+model_edited = SEDModel.build(ssp_data=ssp, observation=obs, **groups)
+print(model_edited.summary())
+
+# %% [markdown]
+# ## What each layer does, in one sentence
+#
+# - **Stellar continuum.** DSPS-driven SSP integration: an SFH +
+#   metallicity history projects onto an age × wavelength grid and sums
+#   to the intrinsic L_ν.
+# - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse-ISM optical
+#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`.
+# - **Dust emission.** Dale 2014 / Draine–Li / THEMIS templates
+#   re-radiate `L_ir` from 8 to 1000 µm.
+# - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionised
+#   continuum + 128 emission lines from `nion` and ionisation conditions.
+# - **AGN.** Disc (multicolour / Kubota–Done / ADAF / power-law) +
+#   torus (SKIRTOR / Nenkova / CAT3D / Silva04 / toy) + NLR (Cue) +
+#   BLR (qsogen).
+# - **Radio.** Free-free + synchrotron from the IR–radio correlation
+#   plus an AGN power-law if a disc is present.
+# - **X-ray.** Lusso & Risaliti 2017 L_2500 → L_2keV with optional
+#   ADAF / Comptonisation refinements.
+# - **IGM.** Inoue 2014 Lyman-alpha forest opacity at z > 0.
+
+# %% [markdown]
+# Next: [`03_discovering_the_menu.py`](03_discovering_the_menu.py) shows
+# how to find every available variant from inside Python.

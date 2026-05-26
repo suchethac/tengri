@@ -33,10 +33,10 @@ Thumbs.db
 # Jupyter
 .ipynb_checkpoints/
 
-# Jupytext: .py files are source of truth, .ipynb are generated
+# Jupytext: .py files are source of truth.
+# Spine notebooks (numeric-prefixed) are kept executed for GitHub rendering.
 notebooks/*.ipynb
-# Keep executed notebooks with pre-computed outputs
-!notebooks/*_executed.ipynb
+!notebooks/[0-9][0-9]_*.ipynb
 
 # Testing
 .pytest_cache/
@@ -73,6 +73,7 @@ notebook_metrics.json
 # Sphinx docs build artifacts
 docs/_build/
 docs/_notebooks/
+docs/build.log
 # docs/auto_examples/ is committed (pre-rendered locally) so the docs build
 # in CI doesn't need SSP grids or RELAGN — see docs/conf.py plot_gallery.
 # Re-run `make html` locally and commit changes when galleries need refresh.
@@ -83,3 +84,5 @@ docs/_notebooks/
 
 # Notebook runtime data caches (SVO filter pulls, etc.)
 notebooks/data/
+examples/*/data/filters/
+examples/*/data/

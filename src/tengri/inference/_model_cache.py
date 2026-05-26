@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Per-model runtime cache using a WeakKeyDictionary.
 
 Replaces the pattern of monkey-patching private dicts onto SEDModel at runtime
@@ -161,7 +162,11 @@ def clear_model_cache(model: Any) -> None:
         DeprecationWarning,
         stacklevel=2,
     )
-    _caches.pop(model, None)
+    # Pop from the live cache (managed by the singleton ``ModelCacheOwner``).
+    # The module-level ``_caches`` global is a stale legacy alias left from
+    # the pre-refactor implementation; popping from it would no-op.
+    with _default_owner._lock:
+        _default_owner._model_caches.pop(model, None)
 
 
 def get_structural_kernel_cache(signature: tuple) -> dict:

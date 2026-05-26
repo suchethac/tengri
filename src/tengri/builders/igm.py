@@ -25,7 +25,7 @@ Examples
 >>> builders.igm.inoue14()
 {'type': 'inoue14', '*': FIXED}
 >>> # Toggle patchy reionisation, override the bubble size prior
->>> builders.igm.inoue14(_=FREE, patchy=True, bubble_mpc=Uniform(5, 50))  # doctest: +SKIP
+>>> builders.igm.inoue14(defaults=FREE, patchy=True, bubble_mpc=Uniform(5, 50))  # doctest: +SKIP
 {'type': 'inoue14', '*': FREE, 'patchy': True, 'bubble_mpc': Uniform(...)}
 """
 
@@ -34,7 +34,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.parameters.groups import _VALID_IGM_TYPES
+from tengri.parameters.groups import _valid_igm_types
 from tengri.parameters.registry import recipe_parameters
 
 _PREFIXES = ("igm_", "dla_")  # The igm group dict carries both prefixes.
@@ -77,7 +77,7 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
-    for variant in sorted(_VALID_IGM_TYPES):
+    for variant in sorted(_valid_igm_types()):
         short_params, flag_map = _discover_params(variant)
         factories[variant] = make_factory(
             variant=variant,

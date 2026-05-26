@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Snapshot regression: predict_photometry/spectrum output across modes.
 
 Pins the numerical output of every prediction mode under a fixed param
@@ -68,7 +69,7 @@ def model(ssp_data, filters):
     """Star-forming photometry model at fixed z=0.05."""
     spec = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -86,7 +87,7 @@ def model(ssp_data, filters):
 def fixed_params():
     """Stable param dict — same numbers every time."""
     return {
-        "sfh_tsnorm_log_peak_sfr": 0.7,
+        "sfh_tsnorm_log_total_mass": 0.7,
         "sfh_tsnorm_peak_lbt_gyr": 3.0,
         "sfh_tsnorm_width_gyr": 1.5,
         "sfh_tsnorm_skew": 0.2,

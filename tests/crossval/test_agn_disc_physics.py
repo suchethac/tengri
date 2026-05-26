@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Physics cross-validation for AGN disc, torus, BLR, and NLR models.
 
 Tests physical correctness against known astrophysical relationships:
@@ -20,6 +21,7 @@ References
 - Mahadevan 1997, ApJ, 477, 585
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -207,8 +209,8 @@ class TestMulticolorDiscPhysics:
         # Both finite and positive
         assert float(jnp.sum(l_no_spin)) > 0
         assert float(jnp.sum(l_high_spin)) > 0
-        assert jnp.all(jnp.isfinite(l_no_spin))
-        assert jnp.all(jnp.isfinite(l_high_spin))
+        chex.assert_tree_all_finite(l_no_spin)
+        chex.assert_tree_all_finite(l_high_spin)
 
     def test_face_on_brighter_than_edge_on(self):
         """cos(i) projection: face-on (cos_i=1) > edge-on (cos_i=0.1)."""
@@ -219,8 +221,8 @@ class TestMulticolorDiscPhysics:
 
         # Renormalization brings both to same L_bol, but the disc shape
         # should differ due to limb effects. Both should be valid.
-        assert jnp.all(jnp.isfinite(l_face))
-        assert jnp.all(jnp.isfinite(l_edge))
+        chex.assert_tree_all_finite(l_face)
+        chex.assert_tree_all_finite(l_edge)
 
 
 # ── 5. KUBOTA & DONE 3-ZONE DISC — multi-zone structure ───────────
@@ -234,7 +236,7 @@ class TestKubotaDonePhysics:
         from tengri.components.agn.disc import kubota_done_disc
 
         l_nu = kubota_done_disc(WAVE, agn_log_lbol=11.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_warm_comp_creates_soft_excess(self):
@@ -250,7 +252,7 @@ class TestKubotaDonePhysics:
         # Soft X-ray region: 50-200 A (0.06-0.25 keV)
         sx_mask = (WAVE > 50) & (WAVE < 200)
         # K&D might have different normalization, but soft X-ray shape differs
-        assert jnp.all(jnp.isfinite(l_kd[sx_mask]))
+        chex.assert_tree_all_finite(l_kd[sx_mask])
 
     def test_corona_fraction_controls_hard_xray(self):
         """Higher f_hard → more hard X-ray emission from corona."""
@@ -297,8 +299,8 @@ class TestADAFPhysics:
         l_large_rtr = adaf_disc(WAVE, agn_log_lbol=10.0, agn_r_tr=500.0)
 
         # Both finite
-        assert jnp.all(jnp.isfinite(l_small_rtr))
-        assert jnp.all(jnp.isfinite(l_large_rtr))
+        chex.assert_tree_all_finite(l_small_rtr)
+        chex.assert_tree_all_finite(l_large_rtr)
 
     def test_adaf_beta_controls_synchrotron(self):
         """Higher beta (magnetic pressure) → stronger synchrotron emission."""
@@ -438,44 +440,6 @@ class TestNLRPhysics:
 class TestTorusPhysics:
     """Torus emission must peak in mid-IR and obey temperature scaling."""
 
-    def test_simple_torus_peaks_in_mir(self):
-        """Single-temperature torus at T~1000K peaks near 3 μm = 30000A."""
-        from tengri.components.agn.torus import simple_torus
-
-        l_nu = simple_torus(WAVE, agn_log_lbol=11.0, agn_T_torus=1000.0)
-        peak_wave = float(WAVE[jnp.argmax(l_nu)])
-        # Wien's law: λ_peak ≈ 2898 μm·K / T = 2.9 μm for T=1000K
-        assert 10000.0 < peak_wave < 100000.0, (
-            f"T=1000K torus peak should be ~30000A (3μm), got {peak_wave:.0f} A"
-        )
-
-    def test_hotter_torus_bluer_peak(self):
-        """Higher T → shorter peak wavelength (Wien's law)."""
-        from tengri.components.agn.torus import simple_torus
-
-        # Use a fine wavelength grid in the IR to resolve peaks properly
-        wave_ir = jnp.geomspace(5000.0, 500000.0, 5000)
-        l_hot = simple_torus(wave_ir, agn_log_lbol=11.0, agn_T_torus=1500.0)
-        l_cool = simple_torus(wave_ir, agn_log_lbol=11.0, agn_T_torus=500.0)
-
-        peak_hot = float(wave_ir[jnp.argmax(l_hot)])
-        peak_cool = float(wave_ir[jnp.argmax(l_cool)])
-        assert peak_hot < peak_cool, "Hotter torus should peak at shorter wavelength"
-
-    def test_two_temp_torus_broader_than_single(self):
-        """Two-temperature torus should have broader SED than single-T."""
-        from tengri.components.agn.torus import simple_torus, two_temperature_torus
-
-        l_single = simple_torus(WAVE, agn_log_lbol=11.0, agn_T_torus=800.0)
-        l_double = two_temperature_torus(
-            WAVE, agn_log_lbol=11.0, agn_T_hot=1200.0, agn_T_warm=300.0
-        )
-
-        # Both should be positive and peak in IR
-        ir_mask = (WAVE > 10000) & (WAVE < 1e6)
-        assert float(jnp.sum(l_single[ir_mask])) > 0
-        assert float(jnp.sum(l_double[ir_mask])) > 0
-
 
 # ── 10. UNIFIED AGN — Type 1/Type 2 geometry ──────────────────────
 
@@ -487,9 +451,9 @@ class TestUnifiedAGNPhysics:
         """Simple AGN model produces finite positive SED."""
         from tengri.components.agn import resolve_agn_model
 
-        model_fn = resolve_agn_model("simple")
+        model_fn = resolve_agn_model("multicolor_agn")
         l_nu = model_fn(WAVE, agn_log_lbol=11.0)
-        assert jnp.all(jnp.isfinite(l_nu))
+        chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
     def test_higher_torus_frac_more_ir(self):

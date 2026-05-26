@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Photometric filter convolution.
 
 Computes observed flux densities by convolving the rest-frame SED
@@ -11,8 +12,7 @@ import dataclasses
 import jax
 import jax.numpy as jnp
 
-from tengri.utils.conversions import lnu_to_fnu
-from tengri.utils.magnitudes import fnu_to_ab_mag
+from tengri.units import fnu_to_ab_mag, lnu_to_fnu
 
 
 @dataclasses.dataclass(frozen=True)
@@ -59,6 +59,66 @@ class FilterCurve:
     wave: jnp.ndarray = dataclasses.field(hash=False)
     trans: jnp.ndarray = dataclasses.field(hash=False)
     name: str = ""
+
+
+@jax.jit
+def lnu_filter_integral(
+    L_nu_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    filter_wave: jnp.ndarray,
+    filter_trans: jnp.ndarray,
+    redshift: float,
+) -> jnp.ndarray:
+    r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
+
+    Returns the filter-weighted rest-frame specific luminosity — no
+    cosmological dimming. The flux conversion is a separate step
+    (compose with :func:`lnu_to_fnu` or :func:`compute_flux_density`).
+
+    .. math::
+
+        L_\nu^{\rm filter}
+        = \frac{\int L_\nu(\lambda_{\rm rest}=\lambda_{\rm obs}/(1+z))
+                T(\lambda_{\rm obs}) \, \lambda_{\rm obs} \, d\lambda_{\rm obs}}
+               {\int T(\lambda_{\rm obs}) \, \lambda_{\rm obs} \, d\lambda_{\rm obs}}
+
+    Parameters
+    ----------
+    L_nu_rest : array, shape (n_wave,)
+        Rest-frame specific luminosity [erg/s/Hz].
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid [Ångstrom].
+    filter_wave : array, shape (n_filt,)
+        Filter wavelength grid [Ångstrom], in observed frame.
+    filter_trans : array, shape (n_filt,)
+        Filter transmission (dimensionless, 0–1).
+    redshift : float
+        Source redshift z.
+
+    Returns
+    -------
+    L_nu_filter : float
+        Filter-weighted rest-frame L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad-safe.** Pure ``jnp`` primitives.
+
+    Introduced in #398.e (per ADR-0016) to give components publishing
+    ``_phot_lnu_precomp`` tensors a named function for "the L_ν step",
+    without forcing them to call :func:`compute_flux_density` with
+    ``dl_cm=1.0`` and then undo the cosmology factor.
+
+    See Also
+    --------
+    compute_flux_density : The full L→F conversion (composes this with
+        :func:`lnu_to_fnu`).
+    """
+    wave_obs = wave_rest * (1.0 + redshift)
+    L_on_filter = jnp.interp(filter_wave, wave_obs, L_nu_rest, left=0.0, right=0.0)
+    num = jnp.trapezoid(L_on_filter * filter_trans * filter_wave, filter_wave)
+    den = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
+    return num / jnp.maximum(den, 1e-30)
 
 
 @jax.jit
@@ -138,20 +198,11 @@ def compute_flux_density(
     pad_filters : Stack variable-length filter arrays.
 
     """
-    # Redshift the SED: observed wavelength = rest * (1+z)
-    wave_obs = wave_rest * (1.0 + redshift)
-
-    # Interpolate SED onto filter wavelength grid
-    sed_on_filter = jnp.interp(filter_wave, wave_obs, sed_rest, left=0.0, right=0.0)
-
-    # Filter-weighted integral: int(SED * T * lam dlam) / int(T * lam dlam)
-    numerator = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
-    denominator = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
-
-    # Scale: (1+z) / (4 pi dL^2) for flux density using lnu_to_fnu conversion
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-
-    return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
+    # Composition of the two canonical operations (ADR-0016, 2026-05):
+    #   1. ``lnu_filter_integral`` — filter-weighted rest-frame L_ν
+    #   2. ``lnu_to_fnu`` — apply (1+z) / (4π d_L²) cosmological dimming
+    L_nu_filter = lnu_filter_integral(sed_rest, wave_rest, filter_wave, filter_trans, redshift)
+    return lnu_to_fnu(L_nu_filter, dl_cm, redshift)
 
 
 def pad_filters(filter_waves: list, filter_trans: list):
@@ -188,6 +239,58 @@ def pad_filters(filter_waves: list, filter_trans: list):
         fw_padded = fw_padded.at[i, :n].set(fw)
         ft_padded = ft_padded.at[i, :n].set(ft)
     return fw_padded, ft_padded, n_valid
+
+
+FILTER_COUNT_BUCKETS: tuple[int, ...] = (4, 6, 8, 10, 12, 16, 20)
+
+
+def _next_filter_bucket(n: int, buckets: tuple[int, ...] = FILTER_COUNT_BUCKETS) -> int:
+    """Smallest bucket ≥ n, or ``n`` itself if larger than all buckets."""
+    for b in buckets:
+        if b >= n:
+            return b
+    return n  # force-compile fallback
+
+
+def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
+    """Pad both filter-length AND filter-count axes for compile reuse.
+
+    Like :func:`pad_filters` but additionally pads the leading axis (number
+    of filters) up to the next entry of :data:`FILTER_COUNT_BUCKETS`. The
+    extra rows are all-zero, which contribute zero to ``compute_flux_density``
+    (the integrand is ``trans × wave × SED`` and the denominator divides
+    out — :func:`_compute_flux_density_padded` already maxes the denominator
+    against ``1e-30``).
+
+    This collapses what would otherwise be N separate XLA compiles (one per
+    distinct (n_filters, max_len) shape encountered across a project) down
+    to one compile per bucket. Two observations with 5 and 6 filters at the
+    same max wavelength length share a compile by padding both to 6.
+
+    For ``n_filters > max(FILTER_COUNT_BUCKETS)``, no padding is applied —
+    each unique large count gets its own compile (the "force compilation"
+    escape hatch).
+
+    Returns
+    -------
+    fw_padded : ndarray, shape (n_padded, max_len)
+    ft_padded : ndarray, shape (n_padded, max_len)
+    n_valid : ndarray, shape (n_padded,), dtype int
+        Number of valid samples per filter; 0 for padded-out filters.
+    n_filters_real : int
+        Original number of filters (use to slice the projected result).
+    """
+    fw_padded, ft_padded, n_valid = pad_filters(filter_waves, filter_trans)
+    n_real = fw_padded.shape[0]
+    n_padded = _next_filter_bucket(n_real)
+    if n_padded == n_real:
+        return fw_padded, ft_padded, n_valid, n_real
+    pad_rows = n_padded - n_real
+    max_len = fw_padded.shape[1]
+    fw_padded = jnp.concatenate([fw_padded, jnp.zeros((pad_rows, max_len))], axis=0)
+    ft_padded = jnp.concatenate([ft_padded, jnp.zeros((pad_rows, max_len))], axis=0)
+    n_valid = jnp.concatenate([n_valid, jnp.zeros((pad_rows,), dtype=n_valid.dtype)], axis=0)
+    return fw_padded, ft_padded, n_valid, n_real
 
 
 def _compute_flux_density_padded(

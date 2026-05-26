@@ -1,7 +1,7 @@
 Examples gallery
 ================
 
-120+ standalone scripts demonstrating tengri's physics components, fitting
+170+ standalone scripts demonstrating tengri's physics components, fitting
 workflows, and end-to-end use cases. Each card below links to a per-script
 page with the rendered figure, the full source, and a downloadable Jupyter
 notebook.

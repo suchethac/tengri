@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Synthesizer-parity model preset.
 
 Reproduces synthesizer-project/synthesizer's default UnifiedAGN +

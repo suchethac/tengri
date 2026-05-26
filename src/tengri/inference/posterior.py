@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Posterior inference results with sampling and diagnostics.
 
 The Posterior object stores parameter samples (or point estimates for MAP),
@@ -581,7 +582,7 @@ class Posterior:
 
         def _one(p: dict) -> dict:
             full_p = {**self._model.spec.get_fixed_values(), **p}
-            state = self._model.predict_via_orchestrator(full_p)
+            state = self._model.predict_state(full_p)
             derived = state.derived
             wave = jnp.asarray(state.wave)
             n_wave = wave.shape[0]
@@ -1816,7 +1817,6 @@ class Posterior:
             "sfh_alpha": r"$\alpha$",
             "sfh_beta": r"$\beta$",
             "sfh_tau_peak_gyr": r"$\tau_{\rm peak}$ (Gyr)",
-            "sfh_peak_sfr": r"SFR$_{\rm peak}$",
             "psd_sigma": r"$\sigma_{\rm burst}$",
             "psd_tau_myr": r"$\tau_{\rm burst}$ (Myr)",
             "met_logzsol": r"log Z",

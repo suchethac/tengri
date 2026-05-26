@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Supporting types for SEDModel: MockData, PriorPredictive, and internal kernel containers."""
 
 from __future__ import annotations

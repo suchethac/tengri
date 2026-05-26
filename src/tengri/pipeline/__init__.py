@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Phase II-1 component pipeline — public entry point.
+"""Component pipeline — public entry point.
 
 This namespace gathers the :class:`SEDComponent` Protocol, the
 :class:`ForwardState` it threads through, the orchestrator helpers
-(:func:`run_components`, :func:`merge_declared_parameters`), and every
-adapter that ships in Phase II-1.
+(:func:`run_components`, :func:`merge_declared_parameters`), and the
+shipped adapters.
 
 The legacy :class:`tengri.SEDModel` tier-dispatch path is unchanged —
 this is an *additive* surface for users who want to compose SED
@@ -38,9 +38,9 @@ Example
 
 Stable surface
 --------------
-Names exported from this namespace are the **canonical** Phase II-1
-import paths. Their location may move once Phase II-2 lands but old
-imports keep working with a :class:`DeprecationWarning`.
+Names exported from this namespace are the **canonical** import paths
+for the component pipeline. Their location may move as the surface
+evolves; old imports keep working with a :class:`DeprecationWarning`.
 
 See :doc:`docs/dev/api_migration_v0.x.md` for the migration table.
 """

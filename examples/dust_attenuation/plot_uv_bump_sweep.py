@@ -1,21 +1,23 @@
 """
-UV Bump Strength
-================
+The 2175 Å UV bump traces small-grain dust populations
+=======================================================
 
-The 2175 Å UV bump (PAHs / small graphite grains) sweeps from zero
-to MW-like via the Kriek & Conroy 2013 ``dust_bump_strength`` knob.
-At zero the curve is a smooth power law; at MW-like values the
-bump dominates the UV.
+The 2175 Å UV bump from PAHs and small graphite grains sweeps from absent to
+Milky-Way strength via the ``dust_bump_strength`` knob. At zero, the attenuation
+curve is a smooth power law; at MW-like values, the bump dominates the UV. We
+show the attenuation law (not a galaxy SED) to isolate the curve shape.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_uv_bump_sweep_001.png
-   :alt: plot_uv_bump_sweep
-   :class: sphx-glr-single-img
-
+Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -23,42 +25,32 @@ from tengri.analysis.plotting import setup_style
 from tengri.dust import resolve_dust_law
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 wave = jnp.linspace(1000.0, 10000.0, 2000)
 dust_fn = resolve_dust_law("kriek_conroy")
-values = [0.0, 1.0, 2.0, 3.0, 4.0]
-# Clamp viridis to 0.0–0.85 — the bright-yellow tail washes out on print.
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(values)))
+bump_values = np.linspace(0.0, 4.0, 7)
+norm = mpl.colors.Normalize(vmin=bump_values.min(), vmax=bump_values.max())
+cmap = plt.get_cmap("viridis")
 
-fig, ax = plt.subplots(figsize=(9, 5))
-for v, c in zip(values, colors):
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for bump in bump_values:
+    k_lambda = dust_fn(wave, dust_bump_strength=bump, dust_delta=0.0)
     ax.plot(
         wave / 1e4,
-        dust_fn(wave, dust_bump_strength=v, dust_delta=0.0),
-        lw=2.0,
-        color=c,
-        label=f"Bump = {v:.1f}",
+        k_lambda,
+        lw=1.4,
+        color=cmap(norm(bump)),
     )
 
-ax.axvline(0.2175, ls=":", color="red", lw=1.5, alpha=0.7)
-ax.annotate(
-    "2175 Å bump",
-    xy=(0.2175, 0.9),
-    xycoords=("data", "axes fraction"),
-    fontsize=10,
-    color="red",
-    rotation=90,
-    ha="right",
-)
+ax.axvline(0.2175, ls=":", color="red", lw=1.0, alpha=0.6)
+ax.set_xlim(0.08, 1.0)
+ax.set_ylim(0, 3.5)
+ax.set_xlabel(r"Wavelength [$\mu$m]")
+ax.set_ylabel(r"$k(\lambda)$ (normalized at 5500 $\mathrm{\AA}$)")
 
-ax.set(
-    xlabel=r"Wavelength [$\mu$m]",
-    ylabel=r"$k(\lambda)$ (normalized at 5500 $\AA$)",
-    title="UV Bump Strength (Kriek & Conroy 2013)",
-    xlim=(0.1, 1.0),
-    ylim=(0, 3.5),
-)
-ax.legend(fontsize=10, frameon=False, loc="upper left")
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"UV bump strength")
+
 fig.tight_layout()
 plt.savefig("plot_uv_bump_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

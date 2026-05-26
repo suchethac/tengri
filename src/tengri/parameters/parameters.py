@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Parameter specification for tengri models.
 
 Parameters defines all model parameters: their names, distributions (or fixed
@@ -29,7 +30,7 @@ Shorthand tsnorm equivalent::
 
     spec = Parameters(
         mean_sfh_type = "tsnorm",
-        sfh_tsnorm_log_peak_sfr = Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass = Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
@@ -44,7 +45,7 @@ Shorthand DPL equivalent::
         sfh_dpl_alpha    = Uniform(0.5, 3.0),
         sfh_dpl_beta     = Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr  = Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr = Uniform(-1, 2),
+        sfh_dpl_log_total_mass = Uniform(8, 12),
         ...
     )
 """
@@ -293,7 +294,7 @@ class Parameters:
     **AGN** (``agn_model != None``):
 
     ========================== ================= =======================================
-    agn_frac                   Fixed(0.0)        AGN fraction of stellar L_bol
+    agn_frac                   Fixed(1.0)        AGN fraction of stellar L_bol (1.0 = full AGN)
     agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
     agn_alpha                  Fixed(-1.0)       Disc power-law slope
     agn_T_torus                Fixed(1000)       Torus temperature (K)
@@ -340,7 +341,7 @@ class Parameters:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.5, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(8.0, 12.5),
             met_logzsol=Uniform(-2.0, 0.5),
             dust_tau_bc=Uniform(0.0, 2.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -387,7 +388,23 @@ class Parameters:
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 64))
+        # Non-parametric SFH bin edges (``prospector_beta`` and other
+        # ``_NONPARAM_NAMES`` entries). Stored as a structural setting
+        # so ``_build_legacy`` can forward to ``resolve_sfh(...,
+        # bin_edges_gyr=...)``. Default ``None`` falls back to the
+        # registry's own canonical edges. See #337.
+        self.bin_edges_gyr = kwargs.pop("bin_edges_gyr", None)
+        # MW foreground extinction screen — applied at the
+        # observed-frame SED boundary, independent of host-galaxy dust
+        # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.
+        self.foreground_ebmv_mw = float(kwargs.pop("foreground_ebmv_mw", 0.0))
+        self.foreground_law = kwargs.pop("foreground_law", "cardelli")
+        self.foreground_rv = float(kwargs.pop("foreground_rv", 3.1))
         self.apply_igm = kwargs.pop("apply_igm", True)
+        # IGM transmission model: 'inoue' (default) or 'madau'. Stored as a
+        # structural setting so the grammar-layer choice propagates through
+        # to :meth:`SEDModel._init_igm` (#344).
+        self.igm_model = kwargs.pop("igm_model", "inoue")
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
@@ -598,6 +615,11 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        # When True, the Cue orchestrator path publishes the full
+        # ~271-species line catalogue instead of the default 128
+        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
+        # read via ``pred.lines.get(wavelength)``. See #303.
+        self.cue_full_catalogue = kwargs.pop("cue_full_catalogue", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         self._nebular_cb19 = False
@@ -948,91 +970,48 @@ class Parameters:
 
     # ── Public API ────────────────────────────────────────────────────
 
-    @classmethod
-    def from_groups(cls, **groups) -> Parameters:
-        """Build a Parameters from the Bagpipes-style nested-dict form.
-
-        Thin convenience wrapper around :func:`tengri.parameters.parse_groups`.
-        Lets users construct a model via grouped dicts (one per physics block,
-        with a ``'type'`` key and an optional ``'*'`` wildcard) instead of the
-        flat-kwarg form. Anything left unspecified auto-fills from the registry.
-
-        Parameters
-        ----------
-        **groups : dict
-            One keyword per physics group (``sfh``, ``dust``, ``neb``, ``igm``,
-            ``radio``, ``xray``) plus top-level kwargs (``redshift``,
-            ``apply_igm``). Each group is a dict containing a ``'type'`` key,
-            an optional ``'*'`` wildcard set to :data:`~tengri.FREE` or
-            :data:`~tengri.FIXED`, and per-parameter overrides. See
-            :func:`parse_groups` for the full grammar.
-
-        Returns
-        -------
-        Parameters
-            A fully-resolved Parameters identical to what the equivalent
-            flat-kwarg ``Parameters(...)`` call would produce.
-
-        See Also
-        --------
-        tengri.parameters.parse_groups : The underlying parser.
-
-        Examples
-        --------
-        >>> from tengri import Parameters, Fixed, FREE, FIXED, Uniform
-        >>> spec = Parameters.from_groups(
-        ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-        ...     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
-        ...     neb={"type": "cue", "*": FIXED},
-        ...     redshift=Fixed(0.05),
-        ... )
-        >>> "sfh_dpl_beta" in spec.free_params
-        True
-        """
-        from tengri.parameters.groups import parse_groups
-
-        return parse_groups(**groups)
-
     def to_groups(self) -> dict:
         """Convert this Parameters to nested-dict form.
 
-        Inverts :meth:`from_groups` by reconstructing the nested-dict structure
-        that would reproduce this Parameters when passed to from_groups(). Uses
-        provenance metadata to collapse wildcard-expanded parameters and preserve
-        explicit overrides.
+        Inverts :func:`tengri.parse_groups` by reconstructing the nested-dict
+        structure that would reproduce this Parameters when re-parsed. Uses
+        provenance metadata to collapse wildcard-expanded parameters and
+        preserve explicit overrides.
 
         Returns
         -------
         dict
-            Nested-dict suitable for re-passing to Parameters.from_groups(**result).
+            Nested-dict suitable for re-passing to
+            ``tengri.parse_groups(**result)`` or ``SEDModel.build(ssp, **result)``.
 
         See Also
         --------
-        from_groups : The inverse operation.
+        tengri.parse_groups : The inverse operation.
+        tengri.SEDModel.build : End-to-end model construction from nested dicts.
 
         Notes
         -----
         **Provenance-aware collapsing**: If this Parameters was built via
-        from_groups(), provenance tags are used to collapse parameters that
-        shared the same wildcard marker ('*': FREE or '*': FIXED) back into
-        that wildcard, with explicit overrides listed separately.
+        ``parse_groups``, provenance tags are used to collapse parameters that
+        shared the same wildcard marker (``'*': FREE`` or ``'*': FIXED``) back
+        into that wildcard, with explicit overrides listed separately.
 
         **Flat-built fallback**: If this Parameters was built via flat-kwarg
-        Parameters(...), all parameters are listed explicitly (no wildcard).
+        ``Parameters(...)``, all parameters are listed explicitly (no wildcard).
 
         **Roundtrip guarantee**: The output dict, when passed to
-        Parameters.from_groups(**output), produces a Parameters with identical
+        ``parse_groups(**output)``, produces a Parameters with identical
         free/fixed partitions and distributions.
 
         Examples
         --------
-        >>> from tengri import Parameters, FREE, FIXED, Uniform, Fixed
-        >>> spec = Parameters.from_groups(
+        >>> from tengri import parse_groups, FREE, FIXED, Uniform, Fixed
+        >>> spec = parse_groups(
         ...     sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
         ...     redshift=Fixed(0.05),
         ... )
         >>> groups = spec.to_groups()
-        >>> roundtripped = Parameters.from_groups(**groups)
+        >>> roundtripped = parse_groups(**groups)
         >>> spec.free_params == roundtripped.free_params
         True
         """

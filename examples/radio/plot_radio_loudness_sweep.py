@@ -1,57 +1,58 @@
 """
-AGN Radio Loudness (R)
-=======================
+AGN radio loudness R: orders of magnitude in jet power
+=======================================================
 
-Radio loudness :math:`R = \\log_{10}(L_{5\\,\\rm GHz} / L_B)` quantifies
-the ratio of radio to optical AGN luminosity. Radio-quiet AGN have
-:math:`R \\lesssim 1`; radio-loud AGN (blazars, FR I/II) can reach
-:math:`R \\sim 3`–:math:`5`. Each decade in :math:`R` adds an order of
-magnitude to the jet radio luminosity at fixed bolometric AGN power.
+Radio loudness R = log_10(L_5GHz / L_B) quantifies the ratio of AGN radio
+to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources
+(FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order
+of magnitude increase in jet radio luminosity at fixed bolometric AGN power.
+We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and
+α_agn = 0.7.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_radio_loudness_sweep_001.png
-   :alt: plot_radio_loudness_sweep
-   :class: sphx-glr-single-img
-
+Reference: Kellermann et al. 1989, ApJ 345, 171.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
 import jax.numpy as jnp
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.radio import radio_agn
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+from tengri.radio import radio_agn
 
 wave = jnp.logspace(7, 11, 600)  # 1 mm – 10 m in Angstrom
-L_agn_bol = 1e44  # erg/s — Seyfert-1-like bolometric luminosity (in Lsun equivalents)
-# Note: radio_agn expects L_agn_bol in the same units as L_nu output (Lsun)
+L_agn_bol = 1e44  # erg/s — Seyfert-1-like bolometric luminosity
 L_agn_bol_lsun = L_agn_bol / 3.828e33  # convert erg/s → Lsun
 
-radio_loudness_values = [0.0, 1.0, 2.0, 3.0, 4.0]
-cmap = plt.get_cmap("Reds")
-colors = [
-    cmap(0.3 + 0.7 * i / max(len(radio_loudness_values) - 1, 1))
-    for i in range(len(radio_loudness_values))
-]
+R_values = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+norm = mpl.colors.Normalize(vmin=R_values.min(), vmax=R_values.max())
+cmap = plt.get_cmap("viridis")
 
-fig, ax = plt.subplots(figsize=(7, 4))
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
 
-for R, color in zip(radio_loudness_values, colors):
+for R in R_values:
     L_nu = radio_agn(wave, L_agn_bol=L_agn_bol_lsun, radio_loudness=R, alpha_agn=0.7)
     nu_ghz = (3e18 / np.array(wave)) / 1e9
-    label = "radio-quiet" if R == 0 else rf"$R={R}$"
-    ax.loglog(nu_ghz, np.array(L_nu), color=color, lw=2.0, label=label)
+    ax.loglog(nu_ghz, np.array(L_nu), color=cmap(norm(R)), lw=1.4)
 
-ax.set_xlabel("Frequency [GHz]", fontsize=12)
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=12)
+ax.set_xlabel(r"Frequency $\nu$ [GHz]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.invert_xaxis()
 ax.set_xlim(200, 0.1)
 ax.set_ylim(1e-8, 1e2)
-ax.legend(fontsize=10, frameon=False)
-ax.set_title(r"AGN Radio Loudness: $R = \log_{10}(L_{5\,\mathrm{GHz}} / L_B)$", fontsize=12)
-plt.tight_layout()
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"R = log$_{10}$(L$_{5\,\rm GHz}$ / L$_B$)")
+
+fig.tight_layout()
 plt.savefig("plot_radio_loudness_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

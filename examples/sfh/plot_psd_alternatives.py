@@ -1,18 +1,18 @@
 """
-Alternative PSD Models
-======================
+Comparison of power-spectral-density models for stochastic SFHs
+==============================================================
 
-Compare the three PSD models available for stochastic SFHs: the default
-Damped Random Walk (DRW/Lorentzian), the Matern covariance family, and the
-extended regulator model. No SSP data required.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_psd_alternatives_001.png
-   :alt: plot_psd_alternatives
-   :class: sphx-glr-single-img
-
+Three PSD models govern the frequency structure of stochastic SFHs: the default
+damped random walk (DRW), the Matern family (which includes DRW as a special
+case), and the extended regulator model. Plotted in frequency space at
+representative parameters. No SSP data required.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -22,8 +22,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.sfh import psd_drw
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# %%
 # Frequency grid (angular frequency in rad/yr)
 omega = jnp.logspace(-4, -1, 500)
 
@@ -31,7 +31,6 @@ omega = jnp.logspace(-4, -1, 500)
 sigma = 0.3
 tau_yr = 200e6  # 200 Myr
 
-# %%
 # DRW (Lorentzian) — the default model
 drw = psd_drw(omega, psd_sigma=sigma, psd_tau_yr=tau_yr)
 
@@ -88,10 +87,8 @@ except ImportError:
 # Annotate and finalize
 ax.set_xlabel(r"Angular frequency $\omega$ [rad yr$^{-1}$]")
 ax.set_ylabel(r"PSD $P(\omega)$")
-ax.set_title(r"PSD Models ($\sigma=0.3$, $\tau=200$ Myr)")
 ax.set_ylim(1e-10, 1e0)
 ax.legend(frameon=False, fontsize=10)
 fig.tight_layout()
 
 plt.savefig("plot_psd_alternatives.png", dpi=150, bbox_inches="tight")
-plt.show()

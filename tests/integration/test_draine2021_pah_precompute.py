@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for the Draine+2021 PAHspec precompute adapter.
 
 Exercises the photometry-grid pre-integration path used by SEDModel
@@ -9,6 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import chex
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -70,7 +72,7 @@ def test_lookup_jit_and_value(precomp):
     lgU = jnp.asarray(1.0)
 
     out = lookup(L_abs, lgU)
-    assert out.shape == (3,)
+    chex.assert_shape(out, (3,))
     arr = np.asarray(out)
     assert np.isfinite(arr).all()
     assert (arr > 0).all()
@@ -117,7 +119,7 @@ def test_build_lookup_dispatch(precomp):
 
     fn = build_lookup(precomp, model_name="draine2021_pah")
     out = fn(jnp.asarray(1.0e44), jnp.asarray(0.5))
-    assert out.shape == (3,)
+    chex.assert_shape(out, (3,))
 
 
 def test_precompute_for_model_returns_none_when_missing(monkeypatch, filter_curves):

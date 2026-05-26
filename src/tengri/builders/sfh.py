@@ -8,7 +8,7 @@ Each function in this module corresponds to one SFH variant registered in
 single source of truth for SFH model variants and their fittable
 parameters). Calling a factory returns a plain :class:`dict` matching the
 nested-dict grammar consumed by :meth:`tengri.SEDModel.build` and
-:meth:`tengri.Parameters.from_groups`, so factories and the dict path are
+:func:`tengri.parse_groups`, so factories and the dict path are
 freely interchangeable.
 
 Why factories rather than dicts
@@ -18,7 +18,7 @@ like ``{'beta_': Uniform(1, 3)}`` surface only at construction time. The
 factories give per-variant signatures generated from the registry, so:
 
 - Hovering over ``builders.sfh.dpl`` in an IDE shows the real parameter
-  list (``alpha``, ``beta``, ``tau_gyr``, ``log_peak_sfr``).
+  list (``alpha``, ``beta``, ``tau_gyr``, ``log_total_mass``).
 - A typo (``beat=Uniform(1,3)``) is rejected immediately with a
   :class:`TypeError` listing valid parameter names.
 - The registry remains the canonical source — factories regenerate
@@ -30,13 +30,13 @@ Examples
 >>> # Equivalent to {'type': 'dpl', '*': FIXED, 'beta': Uniform(1, 3)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
->>> sfh_config = builders.sfh.dpl(_=FREE)
+>>> sfh_config = builders.sfh.dpl(defaults=FREE)
 >>> # Mix wildcard policy with explicit overrides:
->>> sfh_config = builders.sfh.dpl(_=FREE, log_peak_sfr=Fixed(1.0))
+>>> sfh_config = builders.sfh.dpl(defaults=FREE, log_total_mass=Fixed(10.0))
 
 The output is interchangeable with the dict form:
 
->>> model = SEDModel.build(ssp_data=ssp, sfh=builders.sfh.dpl(_=FREE))
+>>> model = SEDModel.build(ssp_data=ssp, sfh=builders.sfh.dpl(defaults=FREE))
 """
 
 from __future__ import annotations
@@ -45,6 +45,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+from tengri.builders._factory import _pop_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.sentinels import FIXED, FREE
 
@@ -60,7 +61,7 @@ def _short_form(full_param_name: str) -> str:
 
     The grammar's parser strips ``sfh_`` then splits on the first
     underscore, so ``sfh_dpl_alpha`` becomes ``alpha`` and
-    ``sfh_cexp_log_sfr`` becomes ``log_sfr``. Factories must mirror this
+    ``sfh_cexp_log_total_mass`` becomes ``log_sfr``. Factories must mirror this
     rule so their kwargs match what the parser will look up.
     """
     if not full_param_name.startswith("sfh_"):
@@ -85,7 +86,7 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("_ : sentinel, optional")
+    lines.append("defaults : sentinel, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
         "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
@@ -129,11 +130,11 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
     short_names = [s for s, _ in param_records]
 
     def factory(**kwargs: Any) -> dict:
-        wildcard = kwargs.pop("_", FIXED)
+        wildcard = _pop_wildcard(variant, kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"{variant}(_=...): expected FREE or FIXED, got {wildcard!r}. "
-                f"Use tengri.FREE or tengri.FIXED to set the wildcard policy."
+                f"{variant}(defaults=...): expected FREE or FIXED, got "
+                f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         out: dict[str, Any] = {"type": variant, "*": wildcard}
         unknown = [k for k in kwargs if k not in short_names]
@@ -141,7 +142,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid parameter names for {variant!r}: {short_names}. "
-                f"(Pass ``_=FREE`` or ``_=FIXED`` to set the wildcard policy.)"
+                f"(Pass ``defaults=FREE`` or ``defaults=FIXED`` to set the policy.)"
             )
         for short in short_names:
             if short in kwargs and kwargs[short] is not _UNSET:
@@ -151,7 +152,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
     # Real signature so IDEs see per-parameter kwargs.
     sig_params = [
         inspect.Parameter(
-            "_",
+            "defaults",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
             annotation=Any,
@@ -177,8 +178,8 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     """Walk SFH_REGISTRY and emit one factory per canonical variant name.
 
-    Aliases (e.g. ``truncated_skewnormal_sfh`` → ``tsnorm``) are skipped:
-    we emit one factory per spec, keyed by the spec's canonical ``name``.
+    Short-name aliases (e.g. ``tsnorm`` for ``truncated_skewnormal``) are
+    skipped: we emit one factory per spec, keyed by the spec's canonical name.
     Same convention as the dict grammar's primary keys.
     """
     factories: dict[str, Callable[..., dict]] = {}

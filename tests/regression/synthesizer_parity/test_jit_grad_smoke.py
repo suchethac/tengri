@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for JIT/grad finiteness at high redshift.
 
 Synthesizer parity.
@@ -27,6 +28,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import pytest
+
+pytestmark = pytest.mark.regression_paper
 
 jax.config.update("jax_enable_x64", True)
 

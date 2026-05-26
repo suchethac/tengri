@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Forward model components: stellar, dust, nebular, AGN, IGM, radio, X-ray.
 
 Physics blocks for the SEDModel pipeline. Each block owns its parameter
@@ -9,8 +10,10 @@ computes rest-frame specific luminosity L_nu over its spectral domain.
 # Import canonical submodules eagerly so users can write
 # ``tengri.components.dust`` etc. without an explicit submodule import.
 from tengri.components import agn, dust, igm, nebular, radio, stellar, xray
+from tengri.components.sed_model_component import SEDModelComponent
 
 __all__ = [
+    "SEDModelComponent",
     "agn",
     "dust",
     "igm",

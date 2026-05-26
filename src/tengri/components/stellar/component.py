@@ -29,7 +29,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.components.stellar.sfh.gp_sfh import make_log_age_grid
+from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
     metallicity_bins_continuity_on_ssp_grid,
     metallicity_bins_on_ssp_grid,
@@ -44,6 +44,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     compute_surviving_mass,
     effective_metallicity,
     has_alpha_grid,
+    interpolate_alpha_only,
     interpolate_mass_remaining,
 )
 
@@ -137,12 +138,14 @@ class StellarSEDComponentConfig(SEDComponentConfig):
 class StellarSEDComponentState(SEDComponentState):
     """Marker state. SSP tensors are held on the component instance.
 
-    The ``precompute`` method returns an empty marker. This is consistent
-    with other fixed-input components (radio, X-ray, IGM) that do not
-    require a separate precomputation step.
+    The ``precompute`` method returns an empty marker or (when wave_precomp
+    is enabled) a state carrying the pre-computed SSP×filter LUT (fixed-z)
+    or ztable (free-z).
     """
 
     name: str = "stellar"
+    ssp_phot_lut: Any | None = None
+    ssp_phot_ztable: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -194,12 +197,22 @@ class StellarSEDComponent:
       the SFH grid.
     - ``log_metallicity_history`` (ndarray, shape ``(n_grid,)``, dex) —
       per-time-bin metallicity (constant for ``metallicity_model="delta"``).
+    - ``stellar_phot_lnu_precomp`` (ndarray, shape ``(n_filter,)``, erg/s/Hz) —
+      stellar contribution to photometry from the LUT. Published only when
+      ``approx=WavePrecomp()`` is set at model construction.
     """
 
     config: StellarSEDComponentConfig = field(default_factory=StellarSEDComponentConfig)
     ssp_data: SSPData | None = None
     name: str = "stellar"
     parameter_prefix: tuple[str, ...] = ("sfh_", "met_", "chem_")
+    _state: StellarSEDComponentState | None = None
+
+    def citations(self) -> tuple[str, ...]:
+        """The stellar component is structurally built on DSPS; SFH-family
+        and SSP-grid citations are config-driven via
+        :mod:`tengri.citations.associations`."""
+        return ("dsps",)
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
@@ -261,28 +274,103 @@ class StellarSEDComponent:
             DerivedKey("sfh_grid_lbt_yr", "yr", "SFH lookback-time grid"),
             DerivedKey("sfr_history", "Msun/yr", "SFR on SFH grid"),
             DerivedKey("log_metallicity_history", "dex", "log10(Z) per SFH time bin"),
+            DerivedKey(
+                "stellar_phot_lnu_precomp",
+                "erg/s/Hz",
+                "stellar contribution to photometry from LUT (approx.wave_precomp only)",
+            ),
         )
 
     def precompute(
         self,
         ssp_data: Any | None = None,
         wave_grid: jnp.ndarray | None = None,
+        approx: Mapping[str, bool] | None = None,
+        filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
+        redshift_spec: dict[str, Any] | None = None,
     ) -> StellarSEDComponentState:
-        """No-op marker. SSP grid is held on the component instance.
+        """Build SSP×filter LUT when approx=WavePrecomp() is set.
 
-        Consistent with :class:`RadioSEDComponent`,
-        :class:`IGMSEDComponent`, :class:`XRaySEDComponent`, which all
-        return empty markers. The legacy ``forward/precompute/`` Protocol
-        (filter-preintegrated photometry tables) is unrelated to this
-        method and runs separately at ``SEDModel.__init__``.
+        Reads the wave_precomp flag from approx. When True AND filters are
+        provided AND the component has an SSP grid, calls either
+        precompute_photometry() for fixed-z (Phase 3b) or
+        precompute_photometry_ztable() for free-z (Phase 3c-1), storing
+        the result on the returned state. Otherwise returns an empty state
+        marker (Phase 3a behaviour).
+
+        Parameters
+        ----------
+        approx : Mapping[str, bool] | None
+            Approximation flags. Reads "wave_precomp".
+        filters : tuple of (filter_wave_obs, filter_trans) pairs, optional
+            Required when wave_precomp=True. Tuple shape:
+            ((fw_0, ft_0), (fw_1, ft_1), ...) where each pair is a pair of
+            1-D arrays. The filter_wave is observed-frame.
+        redshift_spec : dict[str, Any] | None
+            Redshift specification for precomputation. If None or
+            mode="fixed", builds a fixed-z LUT (Phase 3b).
+            - mode="fixed", value=float: builds LUT at that fixed z.
+            - mode="free", z_min=float, z_max=float, n_z=int: builds
+              ztable via precompute_photometry_ztable with the given grid.
         """
-        del ssp_data, wave_grid
-        return StellarSEDComponentState(name=self.name)
+        del wave_grid
+        approx = approx or {}
+        if not approx.get("wave_precomp"):
+            return StellarSEDComponentState(name=self.name)
+
+        # Phase 3b/3c: requires filters at construction.
+        if filters is None or self.ssp_data is None:
+            # Can't build LUT without filters or SSP grid. Fall back to no-op.
+            return StellarSEDComponentState(name=self.name)
+
+        filter_waves, filter_trans = zip(*filters, strict=False)
+        filter_list = [jnp.asarray(fw) for fw in filter_waves]
+        filter_trans_list = [jnp.asarray(ft) for ft in filter_trans]
+
+        # Dispatch: fixed-z (Phase 3b) or free-z (Phase 3c-1)
+        if redshift_spec is None or redshift_spec.get("mode") == "fixed":
+            # Phase 3c-3a: build the fixed-z LUT at the source's z so the
+            # filter passband is correctly redshifted into the rest frame.
+            # This aligns fixed-mode with free-mode semantics — both LUTs
+            # carry the filter integral at the source's z. Cosmology
+            # ``(1+z)/(4π·dl²)`` is applied in :meth:`Observation.predict_via_precomp`.
+            from tengri.components.stellar.sps.precompute import precompute_photometry
+
+            z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
+            lut = precompute_photometry(
+                ssp_data=self.ssp_data,
+                filter_waves=filter_list,
+                filter_trans=filter_trans_list,
+                redshift=z_source,
+                dl_cm=1.0,  # placeholder; cosmology applied at projection time
+                taylor_correction=True,  # Phase 3c-3c: enables Ψ moment for dust LUT
+            )
+            return StellarSEDComponentState(name=self.name, ssp_phot_lut=lut)
+
+        else:  # mode == "free"
+            # Phase 3c-1 path: build ztable for free-z interpolation.
+            from tengri.components.stellar.sps.precompute import (
+                precompute_photometry_ztable,
+            )
+
+            ztable = precompute_photometry_ztable(
+                ssp_data=self.ssp_data,
+                filter_waves=filter_list,
+                filter_trans=filter_trans_list,
+                z_min=redshift_spec.get("z_min", 0.001),
+                z_max=redshift_spec.get("z_max", 3.0),
+                n_z=redshift_spec.get("n_z", 100),
+                apply_igm=False,
+                taylor_correction=True,  # Phase 3c-3c-v: Ψ moment for dust LUT
+            )
+            return StellarSEDComponentState(name=self.name, ssp_phot_ztable=ztable)
 
     def apply(
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Any | None = None,
     ) -> ForwardState:
         """Compute stellar SED and publish derived quantities.
 
@@ -299,6 +387,11 @@ class StellarSEDComponent:
         params : mapping
             Receives ``sfh_*``, ``met_*``, ``chem_*`` keys plus the bare
             ``redshift`` from :data:`BARE_NAME_ALLOWLIST`.
+        ssp_data : Any | None, optional
+            SSP data passed as a JIT runtime input (Phase 4-B threading).
+            When provided, uses this instead of ``self.ssp_data``. Enables
+            SSP arrays to be ``Parameter`` ops in compiled code rather than
+            ``Constant`` ops, reducing HLO size and compile time.
 
         Returns
         -------
@@ -306,7 +399,10 @@ class StellarSEDComponent:
             New state with ``sed_intrinsic`` set and 13 derived keys
             published.
         """
-        if self.ssp_data is None:
+        # Phase 4-B: use ssp_data if threaded as JIT input, otherwise fall
+        # back to the closure (for non-JIT paths).
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        if ssp is None:
             raise ValueError(
                 "StellarSEDComponent.apply requires ssp_data set on the component. "
                 "Pass it at construction: StellarSEDComponent(ssp_data=ssp)."
@@ -334,6 +430,7 @@ class StellarSEDComponent:
             "exp",
             "dexp",
             "tau",
+            "delayed",
             "periodic",
             "buat08",
         )
@@ -358,8 +455,6 @@ class StellarSEDComponent:
                 f"{_SUPPORTED_MET}. Add a branch in StellarSEDComponent.apply() "
                 f"per docs/dev/20260506-met-mode-wiring-blueprint.md."
             )
-
-        ssp = self.ssp_data
         ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
         n_grid = self.config.n_grid
 
@@ -411,19 +506,37 @@ class StellarSEDComponent:
             psd_tau_myr = jnp.asarray(params["sfh_field_psd_tau_myr"])
             xi = jnp.asarray(params.get("sfh_field_xi", jnp.zeros(n_grid)))
             psd_tau_yr = psd_tau_myr * 1e6
-            d_log_age = float(log_age_grid[1] - log_age_grid[0])
+            # JIT-safe: ``log_age_grid`` is traced under jit so indexing +
+            # float() would raise ConcretizationTypeError. ``log_age_grid_step``
+            # recomputes the step from static ``n_grid`` and module constants.
+            d_log_age = log_age_grid_step(n_grid)
             gp_x, k0_half = compute_field_gp(
                 xi, psd_sigma, psd_tau_yr, n_grid, d_log_age, field_model="drw"
             )
             sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
-        sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
+        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
+        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
+        # cutoffs at ``t_lookback = age`` land on grid points instead of
+        # being smeared across the coarser ~3 % log-spaced bins of
+        # ``sfh_lbt_grid``. The closed form also self-normalises through
+        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
+        # exactly. See suchethac/tengri#385.
+        #
+        # The GP-field path still goes through the log grid: ``compute_field_gp``
+        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
+        # GP draw lives on the lookback grid by construction.
+        if self.config.field:
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        else:
+            sfr_on_ssp = sfh_spec.fn(ssp_ages_yr, **sfh_kwargs)
 
         # ── 5. Cosmology: t_obs from redshift ───────────────────────────
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
         # everything as JAX arrays so the whole apply() stays traceable.
-        from tengri.utils.cosmology import age_at_z as _age_at_z
+        from tengri.cosmology import age_at_z as _age_at_z
 
         z = jnp.asarray(params.get("redshift", 0.0))
         t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
@@ -433,27 +546,36 @@ class StellarSEDComponent:
         # ramp: linear interpolation between two endpoints.
         # chem_evol: closed-box gas regulator — Z(t) derived from SFH self-
         # consistently. Mirrors legacy sed_model.py:3578-3592.
+        # 4D α-enhanced SSPs: collapse the [α/Fe] axis to a single
+        # plane once, here, then pass the resulting 3D ssp_flux to the
+        # downstream DSPS kernel (closes #226). The Z marginalisation
+        # remains the standard lognormal MDF for every met_mode, so the
+        # 4D and 3D paths share the same Z bookkeeping — only the
+        # ``ssp_flux`` that DSPS sees differs.
+        _alpha_collapse_active = has_alpha_grid(ssp)
+        if _alpha_collapse_active:
+            _alpha_fe_value = jnp.asarray(params.get("met_alpha_fe", 0.0))
+            ssp_flux_for_csp = interpolate_alpha_only(
+                ssp.ssp_flux, ssp.ssp_alpha_fe, _alpha_fe_value
+            )
+        else:
+            ssp_flux_for_csp = ssp.ssp_flux
+
         if self.config.metallicity_model == "delta":
-            # Apply alpha-Fe enhancement via effective_metallicity for 3D
-            # SSP grids (no native α axis). Mirrors the legacy
+            # Apply alpha-Fe enhancement via effective_metallicity for
+            # 3D SSP grids (no native α axis). Mirrors the legacy
             # ``interp_met_alpha_dispatch`` fallback in
             # ``forward/pipeline.py:239``: when no α grid is available,
             # the α-shift is folded into log_z via Salaris+05 / DSPS
-            # canonical relation. 4D α-grid SSPs require true bilinear
-            # collapse before the lognormal-MDF kernel — not yet wired
-            # here.
-            if has_alpha_grid(ssp):
-                raise NotImplementedError(
-                    "StellarSEDComponent: 4D SSP grids with native [α/Fe] axis "
-                    "are not yet supported. The legacy monolith uses "
-                    "interpolate_met_alpha to collapse the α axis before the "
-                    "lognormal-MDF kernel — add this path when needed. For now, "
-                    "use a 3D SSP grid (effective_metallicity fallback covers "
-                    "met_alpha_fe scientifically)."
-                )
+            # canonical relation. For 4D α-grid SSPs the α axis has
+            # already been collapsed above, so we use ``met_logzsol``
+            # directly without the effective-Z approximation.
             alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
-            log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
-            log_z_abs_scalar = log_z_eff + LOG10_ZSUN
+            if _alpha_collapse_active:
+                log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN
+            else:
+                log_z_eff = effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe)
+                log_z_abs_scalar = log_z_eff + LOG10_ZSUN
             log_metallicity_history = jnp.full(n_grid, log_z_abs_scalar)
             lgmet_on_ssp_ages = jnp.full_like(ssp_ages_yr, log_z_abs_scalar)
             log_z_for_mr = log_z_abs_scalar
@@ -653,7 +775,7 @@ class StellarSEDComponent:
                 gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                ssp_flux=ssp.ssp_flux,
+                ssp_flux=ssp_flux_for_csp,
                 t_obs=t_obs_gyr,
             )
         else:  # ramp / chem_evol — per-age metallicity table
@@ -666,7 +788,7 @@ class StellarSEDComponent:
                 gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                ssp_flux=ssp.ssp_flux,
+                ssp_flux=ssp_flux_for_csp,
                 t_obs=t_obs_gyr,
             )
 
@@ -678,17 +800,28 @@ class StellarSEDComponent:
         # SSP grid.
         joint_weights = dsps_result.weights  # (n_met, n_age)
         # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
-        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp.ssp_flux)
+        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
         # Per-age "mass" for downstream per-age operations (dust BC mask).
         # This is the marginalised age distribution × total_mass.
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        # ``rest_sed`` from DSPS is in Lsun/Hz (mass scaling included).
-        # Sum the per-age cube — XLA folds the sum into the same kernel
-        # as the einsum and avoids materialising ``rest_sed`` separately.
+        # Use DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs`` in
+        # Lsun/Hz) rather than reconstructing it as
+        # ``total_mass × Σ(weights × ssp_flux)``. The two paths are
+        # mathematically identical when ``total_mass == mstar_obs`` (both
+        # integrate the same SFH), but DSPS computes ``mstar_obs`` via a
+        # cumulative-SFH interpolation while tengri's ``total_mass`` is a
+        # trapezoid integral over the ramp-zeroed ``sfr_asc`` grid. Using
+        # DSPS's value keeps the SED self-consistent with the kernel's
+        # own normalisation (closes #394). The per-age cube ``lnu_age``
+        # below is retained for downstream per-age operations (dust BC
+        # mask, bolometric L_age) and continues to use ``total_mass`` —
+        # the per-age sum is consumed before any wavelength-resolved
+        # quantity reads it, so any residual ``total_mass / mstar_obs``
+        # discrepancy does not propagate into observables.
+        sed_intrinsic = dsps_result.rest_sed * LSUN_ERG_PER_S
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
-        sed_intrinsic = jnp.sum(lnu_age, axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
@@ -751,32 +884,135 @@ class StellarSEDComponent:
             sed_intrinsic = sed_intrinsic_proj
             lnu_age = lnu_age_proj
 
+        # ── 12b. Stellar photometry LUT (Phase 3b) ─────────────────────
+        # When eager precomputation is enabled and the LUT is available,
+        # compute stellar_phot_lnu_precomp and publish it to derived.
+        derived_overrides = dict(
+            log_mstar=log_mstar,
+            log_mstar_formed=log_mstar_formed,
+            sfr=sfr_now,
+            sfr_10myr=sfr_10myr,
+            sfr_100myr=sfr_100myr,
+            L_age=L_age,
+            lnu_age=lnu_age,
+            # CSP mass weights (Msun per SSP age bin), summed
+            # over the metallicity axis. Published so downstream
+            # nebular backends (Cue, CloudyGrid) can call their
+            # high-level ``predict_nebular_*(ssp_weights=...)``
+            # entry points and derive Q_H + ionising spectrum
+            # from the SSP, matching legacy parity.
+            age_weights=age_weights,
+            nion=nion,
+            sfh_grid_lbt_yr=sfh_lbt_grid,
+            sfr_history=sfr_history,
+            log_metallicity_history=log_metallicity_history,
+            # Published for downstream (dust two-component attenuation
+            # needs the SSP age axis to apply the BC/diffuse split).
+            ssp_ages_yr=ssp_ages_yr,
+        )
+
+        if self._state is not None and self._state.ssp_phot_lut is not None:
+            # Fixed-z path (Phase 3b) — LUT built at source's z in precompute()
+            ssp_phot = self._state.ssp_phot_lut.ssp_phot
+            # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
+            # age axes weighted by joint distribution × total mass.
+            # Convert to erg/s/Hz to match sed_intrinsic units.
+            stellar_phot_lnu_precomp_rest = (
+                total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            # Phase 3c-3c-iv-a: age-resolved per-filter LUT for two-component
+            # dust attenuation. Marginalise over metallicity only; preserve
+            # the age axis. Shape (n_age, n_filter). Sum over age == the
+            # marginalised stellar_phot_lnu_precomp above.
+            stellar_phot_lnu_per_age = (
+                total_mass * jnp.einsum("ma,maf->af", joint_weights, ssp_phot) * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Phase 3c-3c: Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
+            ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
+            if ssp_phot_moment is not None:
+                stellar_phot_moment_precomp = (
+                    total_mass
+                    * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment)
+                    * LSUN_ERG_PER_S
+                )
+                derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
+                stellar_phot_moment_per_age = (
+                    total_mass
+                    * jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment)
+                    * LSUN_ERG_PER_S
+                )
+                derived_overrides["stellar_phot_moment_per_age_precomp"] = (
+                    stellar_phot_moment_per_age
+                )
+            # Phase 3c-3c-ii: publish filter pivot wavelengths so the dust LUT
+            # (and future per-filter consumers like AGN and IGM) can use them.
+            derived_overrides["filter_eff_waves"] = jnp.asarray(
+                self._state.ssp_phot_lut.effective_wavelengths_rest
+            )
+
+        elif self._state is not None and self._state.ssp_phot_ztable is not None:
+            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — linear interp of the
+            # ztable at runtime z. Publishes the same derived keys as the
+            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
+            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
+            # filter_eff_waves.
+            ztable = self._state.ssp_phot_ztable
+            z = jnp.asarray(params.get("redshift", 0.0))
+            z_grid = ztable.z_grid
+            n_z = z_grid.shape[0]
+            i_hi = jnp.clip(jnp.searchsorted(z_grid, z), 1, n_z - 1)
+            i_lo = i_hi - 1
+            z_lo = z_grid[i_lo]
+            z_hi = z_grid[i_hi]
+            frac = (z - z_lo) / jnp.maximum(z_hi - z_lo, 1e-12)
+            # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
+            ssp_phot_at_z = (1.0 - frac) * ztable.ssp_phot_table[
+                i_lo
+            ] + frac * ztable.ssp_phot_table[i_hi]
+            # Marginalised + age-resolved LUTs (Phase 3c-3c-iv-a parity).
+            stellar_phot_lnu_precomp_rest = (
+                total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
+            )
+            stellar_phot_lnu_per_age = (
+                total_mass
+                * jnp.einsum("ma,maf->af", joint_weights, ssp_phot_at_z)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
+            derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
+            # Phase 3c-3c-v: Taylor moment Ψ at runtime z. Interpolate the
+            # moment table the same way and publish marginalised + per-age.
+            if ztable.ssp_phot_moment_table is not None:
+                ssp_moment_at_z = (1.0 - frac) * ztable.ssp_phot_moment_table[
+                    i_lo
+                ] + frac * ztable.ssp_phot_moment_table[i_hi]
+                stellar_phot_moment_precomp = (
+                    total_mass
+                    * jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z)
+                    * LSUN_ERG_PER_S
+                )
+                stellar_phot_moment_per_age = (
+                    total_mass
+                    * jnp.einsum("ma,maf->af", joint_weights, ssp_moment_at_z)
+                    * LSUN_ERG_PER_S
+                )
+                derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
+                derived_overrides["stellar_phot_moment_per_age_precomp"] = (
+                    stellar_phot_moment_per_age
+                )
+            # Interpolate effective rest-frame wavelengths and publish for
+            # downstream consumers (dust LUT, AGN, IGM).
+            eff_waves_at_z = (1.0 - frac) * ztable.eff_waves_rest_table[
+                i_lo
+            ] + frac * ztable.eff_waves_rest_table[i_hi]
+            derived_overrides["filter_eff_waves"] = eff_waves_at_z
+
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(
             sed_intrinsic=sed_intrinsic,
-            derived=state.derived.with_(
-                log_mstar=log_mstar,
-                log_mstar_formed=log_mstar_formed,
-                sfr=sfr_now,
-                sfr_10myr=sfr_10myr,
-                sfr_100myr=sfr_100myr,
-                L_age=L_age,
-                lnu_age=lnu_age,
-                # CSP mass weights (Msun per SSP age bin), summed
-                # over the metallicity axis. Published so downstream
-                # nebular backends (Cue, CloudyGrid) can call their
-                # high-level ``predict_nebular_*(ssp_weights=...)``
-                # entry points and derive Q_H + ionising spectrum
-                # from the SSP, matching legacy parity.
-                age_weights=age_weights,
-                nion=nion,
-                sfh_grid_lbt_yr=sfh_lbt_grid,
-                sfr_history=sfr_history,
-                log_metallicity_history=log_metallicity_history,
-                # Published for downstream (dust two-component attenuation
-                # needs the SSP age axis to apply the BC/diffuse split).
-                ssp_ages_yr=ssp_ages_yr,
-            ),
+            derived=state.derived.with_(**derived_overrides),
         )
 
 
@@ -818,7 +1054,7 @@ from jax import tree_util as _tree_util
 _tree_util.register_dataclass(
     StellarSEDComponent,
     data_fields=("ssp_data",),
-    meta_fields=("config", "name", "parameter_prefix"),
+    meta_fields=("config", "name", "parameter_prefix", "_state"),
 )
 
 del _tree_util

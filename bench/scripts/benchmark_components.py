@@ -133,16 +133,16 @@ def main():
 
     # --- AGN ---
     print("\nAGN Models:")
-    from tengri.agn.unified import simple_agn, standard_agn
+    from tengri.agn.unified import kubota_done_full_agn, multicolor_agn
 
     wave_agn = jnp.linspace(500, 200000, 5000)
     bench(
-        lambda: simple_agn(wave_agn, agn_log_lbol=11.0, agn_frac=1.0),
-        "Simple AGN (powerlaw + torus, 5000 pts)",
+        lambda: multicolor_agn(wave_agn, agn_log_lbol=11.0, agn_frac=1.0),
+        "multicolor_agn (K&D disc + 2T torus, 5000 pts)",
     )
     bench(
-        lambda: standard_agn(wave_agn, agn_log_lbol=11.0, agn_frac=1.0),
-        "Standard AGN (multicolor + 2T torus, 5000 pts)",
+        lambda: kubota_done_full_agn(wave_agn, agn_log_lbol=11.0, agn_frac=1.0),
+        "kubota_done_full (3-zone K&D disc + 2T torus, 5000 pts)",
     )
 
     # --- Radio ---

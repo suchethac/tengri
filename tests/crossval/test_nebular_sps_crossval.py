@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: nebular, SPS, and observation models against published values.
 
 Validates tengri's implementations against analytically known results and

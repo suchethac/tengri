@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Inference engine: fit observed data using MAP, NUTS, Ray Tracing, or geoVI.
 
 The Fitter separates inference strategy from the forward model. It builds
@@ -19,7 +20,6 @@ import contextlib
 import logging
 import threading
 import time
-import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -45,44 +45,7 @@ from tengri.inference.loss_functions import (
 )
 from tengri.parameters.priors import Gaussian, Uniform
 
-# ── Method name unification ────────────────────────────────────────────
-
-# Maps deprecated/old method strings → new canonical names.
-_DEPRECATED_METHOD_ALIASES: dict[str, str] = {
-    # Old nifty-qualified names → clean canonical
-    "vi_nifty": "vi_nonlinear",
-    "vi_nifty_linear": "vi_linear",
-    # Old fast nifty names → canonical fast names
-    "vi_nifty_fast": "vi_nonlinear_fast",
-    "vi_nifty_fast_linear": "vi_linear_fast",
-    # Old geoVI names → vi_nonlinear
-    "geovi": "vi_nonlinear",
-    "fast_geovi": "vi_nonlinear_fast",
-    "nifty_geovi": "vi_nonlinear",
-    "geovi_nuts": "vi_nonlinear",
-    # Old MGVI / linear names → vi_linear
-    "mgvi": "vi_linear",
-    "fast_mgvi": "vi_linear_fast",
-    "nifty_mgvi": "vi_linear",
-    "evi": "vi_linear",
-    # Old native names → canonical native variants
-    "native_geovi": "native_vi_nonlinear",
-    "vi_native": "native_vi_nonlinear",
-    "vi_native_linear": "native_vi_linear",
-    "native_mgvi": "native_vi_linear",
-    "native_evi": "native_vi_linear",
-    # MCMC
-    "raytrace": "mcmc_raytrace",
-    "nuts": "mcmc_nuts",
-    "hmc": "mcmc_hmc",
-    "dynamic_hmc": "mcmc_dynamic_hmc",
-    "ghmc": "mcmc_ghmc",
-    "mclmc": "mcmc_mclmc",
-    "adjusted_mclmc": "mcmc_adjusted_mclmc",
-    "elliptical_slice": "mcmc_ess",
-    # Evidence
-    "evidence": "nss",
-}
+# ── Method name validation ────────────────────────────────────────────
 
 # D threshold for "auto": D <= this → mcmc_nuts, D > this → vi
 _AUTO_D_THRESHOLD = 20
@@ -118,97 +81,107 @@ _CANONICAL_METHODS = {
 }
 
 
-def resolve_method(method: str, emit_warning: bool = True) -> str:
-    """Resolve method string to canonical name with deprecation warning.
+def _maybe_warn_legacy_sedmodel(model) -> None:
+    """Nudge users from ``Fitter(sed_model, ...)`` to ``Fitter(forward, ...)``.
 
-    Maps deprecated method aliases to their canonical equivalents, emitting
-    a DeprecationWarning for deprecated usage. Validates that the final
-    method name is either canonical (in _CANONICAL_METHODS) or ``"auto"``.
+    Inference is canonically through :class:`ForwardModel` (issue #211).
+    Passing a bare :class:`SEDModel` keeps working — it's the legacy
+    pattern most existing notebooks use — but emits a one-shot
+    :class:`DeprecationWarning` pointing at the canonical surface.
+
+    :class:`ForwardModel` instances pass through silently (they ARE
+    the canonical surface). Anything else (a likelihood Protocol, a
+    test stub, …) also passes through silently — we don't want to
+    warn on legitimate non-SEDModel uses.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.sed_model import SEDModel
+    except ImportError:
+        return
+    if isinstance(model, ForwardModel):
+        return
+    if isinstance(model, SEDModel):
+        import warnings
+
+        warnings.warn(
+            "Fitter(sed_model, ...) is deprecated and will be removed in "
+            "tengri v1.0. Inference is canonically through ForwardModel "
+            "(issue #211). Replace with: forward = ForwardModel.build("
+            "sed=sed_model, observation=obs); Fitter(forward, data, noise)."
+            "run(method) -- or use the shortcut forward.fit(data, noise, "
+            "method=...).",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+
+
+def _maybe_extract_batched_data(model):
+    """Auto-extract ``(data, noise)`` from a ForwardModel's population.
+
+    Returns ``(None, None)`` if ``model`` is not a ForwardModel-with-
+    PopulationSEDModel, otherwise the stacked ``(N, n_filters)`` arrays
+    from ``pop.batched_data()``. Lets users write
+    ``Fitter(forward).run('vi')`` without manually stacking.
+
+    Explicit ``data=`` and ``noise=`` always override this default —
+    auto-extraction only fires when both are ``None``.
+    """
+    try:
+        from tengri.forward.forward_model import ForwardModel
+        from tengri.forward.population_sed_model import PopulationSEDModel
+    except ImportError:
+        return None, None
+
+    if not isinstance(model, ForwardModel):
+        return None, None
+    populations = getattr(model, "populations", ())
+    if len(populations) != 1:
+        return None, None
+    pop_sed = getattr(populations[0], "sed", None)
+    if not isinstance(pop_sed, PopulationSEDModel):
+        return None, None
+
+    return pop_sed.batched_data()
+
+
+def resolve_method(method: str, emit_warning: bool = True) -> str:
+    """Validate that ``method`` is a canonical inference method name.
 
     Parameters
     ----------
     method : str
-        Method name: canonical (e.g., ``"vi"``, ``"mcmc_nuts"``),
-        deprecated alias (e.g., ``"geovi"``, ``"nifty_geovi"``),
-        ``"auto"``, or invalid.
-
+        Method name: canonical (e.g. ``"vi"``, ``"mcmc_nuts"``), ``"auto"``,
+        or invalid.
     emit_warning : bool, optional
-        If ``True`` (default), emit DeprecationWarning when an alias is used.
-        Set to ``False`` to silence warnings (useful in test harnesses).
+        Unused; retained for signature compatibility.
 
     Returns
     -------
     str
-        Canonical method name. May be ``"auto"`` if that was the input.
+        The method name unchanged (canonical or ``"auto"``).
 
     Raises
     ------
     ParameterError
-        If method is not canonical, not a recognized deprecated alias,
-        and not ``"auto"``. Exception message lists all valid canonical
-        names and known aliases.
-
-    Notes
-    -----
-    Deprecated aliases are managed by ``_DEPRECATED_METHOD_ALIASES`` dict at
-    module level. This function is called automatically by ``Fitter.run()``
-    and does not need to be invoked directly by users.
-
-    See Also
-    --------
-    Fitter.run : User-facing method that calls this internally.
-
-    Examples
-    --------
-    Canonical name (no warning):
-
-    >>> resolve_method("vi")
-    'vi'
-
-    Deprecated alias (emits DeprecationWarning):
-
-    >>> resolve_method("geovi")  # doctest: +SKIP
-    'vi'  # Emits: DeprecationWarning: Method 'geovi' is deprecated...
-
-    Suppress warnings for tests:
-
-    >>> resolve_method("nifty_mgvi", emit_warning=False)
-    'vi_linear'
-
-    Invalid method:
-
-    >>> resolve_method("invalid_method")  # doctest: +SKIP
-    ParameterError: Unknown method: 'invalid_method'. Valid canonical names: ...
+        If the method is not in :data:`_CANONICAL_METHODS` and not
+        ``"auto"``. The error message lists every valid canonical name
+        so the user can pick the intended one.
     """
+    del emit_warning  # signature kept for backward source compatibility
     if method is None:
         raise ParameterError(
             "method=None is not allowed. Pass an explicit method string "
-            "(e.g. 'vi_nifty', 'mcmc_nuts', 'auto') or omit the argument to use "
+            "(e.g. 'vi', 'mcmc_nuts', 'auto') or omit the argument to use "
             "the default from defaults.toml."
         )
 
-    # If already canonical or "auto", return as-is
     if method in _CANONICAL_METHODS:
         return method
 
-    # Check if deprecated alias
-    if method in _DEPRECATED_METHOD_ALIASES:
-        canonical = _DEPRECATED_METHOD_ALIASES[method]
-        if emit_warning:
-            warnings.warn(
-                f"Method '{method}' is deprecated. Use '{canonical}' instead. "
-                f"Old names will be removed in tengri v1.0.",
-                DeprecationWarning,
-                stacklevel=3,  # Caller's caller (skip resolve_method frame)
-            )
-        return canonical
-
-    # Invalid method
     canonical_list = ", ".join(sorted(_CANONICAL_METHODS))
     raise ParameterError(
-        f"Unknown method: '{method}'. "
-        f"Valid canonical names: {canonical_list}. "
-        f"Deprecated aliases: {', '.join(sorted(_DEPRECATED_METHOD_ALIASES.keys()))}. "
+        f"Unknown method: '{method}'. Valid names: {canonical_list}. "
         f"See Fitter.run() docstring for details."
     )
 
@@ -349,8 +322,8 @@ class Fitter:
     def __init__(
         self,
         model,
-        data,
-        noise,
+        data=None,
+        noise=None,
         data_type=None,
         data_mask=None,
         calibration_marginalize=False,
@@ -360,11 +333,35 @@ class Fitter:
         eline_prior_type=None,
         likelihood=None,
         auto_protocol_likelihood=True,
-        use_orchestrator=False,
+        use_components=False,
         compile_modes=None,
         cache=None,
     ):
-        # ── User-supplied Likelihood (Phase II-1 Protocol path) ─────
+        # ── Auto-extract batched data for hierarchical ForwardModels ─
+        # When ``model`` is a ForwardModel whose SubModel publishes
+        # batched_axes (e.g. PopulationSEDModel publishes {'galaxy': 0}),
+        # the per-galaxy data already lives on the population. Auto-
+        # extract (N, n_filters) arrays so users can write
+        # ``Fitter(forward).run('vi')`` without manually stacking.
+        if data is None and noise is None:
+            data, noise = _maybe_extract_batched_data(model)
+
+        # ── Soft deprecation: prefer ForwardModel as the model arg ──
+        # Inference is canonically through ForwardModel (issue #211).
+        # Direct SEDModel as the model arg keeps working but nudges
+        # callers to the new pattern.
+        _maybe_warn_legacy_sedmodel(model)
+
+        # ── Validate data/noise for the standard (non-hierarchical) path ──
+        if data is None or noise is None:
+            raise ValueError(
+                "Fitter(model, data, noise) requires data and noise for "
+                "non-hierarchical fits. For hierarchical fits, pass a "
+                "ForwardModel built with population=PopulationSEDModel(...) "
+                "and the per-galaxy data lives on the population."
+            )
+
+        # ── User-supplied Likelihood (Protocol path) ────────────────
         # When non-None, replaces the built-in χ² dispatch. The user
         # owns the entire data-term math and is responsible for
         # tracking their own observed arrays. Calibration / e-line
@@ -373,15 +370,15 @@ class Fitter:
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
 
-        # ── Orchestrator opt-in (Phase II step-1, 2026-05) ──────────
+        # ── Orchestrator opt-in (2026-05) ───────────────────────────
         # When True, route forward predictions through
-        # :meth:`SEDModel.predict_via_orchestrator` (the SEDComponent
+        # :meth:`SEDModel.predict_state` (the SEDComponent
         # chain) instead of the legacy fused ``predict_photometry`` /
         # ``predict_spectrum`` kernels. Default ``False`` preserves
         # existing inference behaviour bit-for-bit. Spectroscopy has no
-        # orchestrator bridge yet, so combining ``use_orchestrator=True``
+        # orchestrator bridge yet, so combining ``use_components=True``
         # with non-photometric data_type is rejected at construction.
-        self.use_orchestrator = bool(use_orchestrator)
+        self.use_components = bool(use_components)
 
         # ── Compile cache (ADR-deepen Step C, 2026-05) ──────────────
         # Optional per-Fitter CompileCache instance. When None, fall back
@@ -403,9 +400,9 @@ class Fitter:
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
-        if self.use_orchestrator and self.data_type not in ("photometry", "spectroscopy", "joint"):
+        if self.use_components and self.data_type not in ("photometry", "spectroscopy", "joint"):
             raise NotImplementedError(
-                "Fitter(use_orchestrator=True) currently supports "
+                "Fitter(use_components=True) currently supports "
                 f"data_type in (photometry, spectroscopy, joint); got {self.data_type!r}."
             )
 
@@ -481,7 +478,7 @@ class Fitter:
     def _maybe_build_default_likelihood(self):
         """Build the default Protocol likelihood for this Fitter's data.
 
-        Now handles every case in the Phase II-1 cohort:
+        Now handles every case in the likelihood-Protocol cohort:
 
         - simple diagonal Gaussian → ``PhotometryLikelihood`` /
           ``SpectroscopyLikelihood``
@@ -529,31 +526,24 @@ class Fitter:
     def _auto_precompute_photometry(self, model: Any) -> None:
         """Auto-trigger photometry precomputation if conditions are met.
 
-        Fires when: fixed redshift + filters present + not yet precomputed.
-        Lets users create a Model without ``precompute=True`` and still get
-        the fast fused path when they construct a Fitter.
+        Fires when: photometry / joint data_type + the model declares an
+        :meth:`ensure_photometry_precomputed` method. Lets users build a
+        Model without ``precompute=True`` and still get the fast fused
+        path when they construct a Fitter.
+
+        The actual gate (fixed redshift + filters + not-yet-precomputed)
+        lives inside :meth:`SEDModel.ensure_photometry_precomputed` so
+        Fitter doesn't reach into model internals. Migration 2 step 3:
+        prior open-coded version touched ``model._precomputed``,
+        ``model._z_fixed``, ``model._dl_cm_fixed`` and a no-op
+        ``model._build_hybrid_kernels()`` call (the method has been
+        absent for a long time and the result was silently dropped).
         """
-        if (
-            self.data_type not in ("photometry", "joint")
-            or model._precomputed.photometry is not None
-            or getattr(model, "_z_fixed", None) is None
-            or getattr(model, "filter_waves", None) is None
-        ):
+        if self.data_type not in ("photometry", "joint"):
             return
-
-        import contextlib
-
-        from tengri.components.stellar.sps.precompute import precompute_photometry
-
-        model._precomputed.photometry = precompute_photometry(
-            model.ssp_data,
-            model.filter_waves,
-            model.filter_trans,
-            model._z_fixed,
-            model._dl_cm_fixed,
-        )
-        with contextlib.suppress(Exception):
-            model._hybrid = model._build_hybrid_kernels()
+        ensure = getattr(model, "ensure_photometry_precomputed", None)
+        if ensure is not None:
+            ensure()
 
     def _init_emission_lines(self, model, eline_marginalize, eline_prior_type):
         """Configure emission line marginalization and fitted-amplitude modes."""
@@ -662,6 +652,15 @@ class Fitter:
         These are passed as explicit arguments (not closed over) so that
         engines compiled for one galaxy can be reused for another with
         the same model + parameter structure.
+
+        Phase 4-D (2026-05-23, issue #250 follow-up): also threads the
+        big template arrays (SSP grid, nebular templates, dust IR / AGN
+        template data, fixed-value dict) so the **outer** JIT used by
+        loss-fn-based samplers (HMC, NUTS, raytrace) sees them as
+        Parameters, not Constants. Without this, the outer JIT inlines
+        ``model.predict_observables_jit(params)`` and bakes the SSP
+        flux grid (15×93×5994 floats) into the HLO as a constant —
+        ballooning compile time from <5 s to 40 s on photometry.
         """
         noise_inv = 1.0 / self.noise**2
         args = {
@@ -690,6 +689,21 @@ class Fitter:
             if index_cfg is not None:
                 args["index_obs"] = index_cfg.values
                 args["index_err"] = index_cfg.errors
+
+        # Outer-JIT threading: big arrays go in here so loss-fn callers
+        # (HMC/NUTS) see them as outer Parameters, not Constants. Stored
+        # under a private "_jit_inputs" sub-dict so existing data_args
+        # consumers don't have to skip new keys.
+        # Some test/dummy models don't implement the threading API —
+        # the `with` suppresses cleanly without falling through.
+        import contextlib
+
+        with contextlib.suppress(AttributeError, TypeError):
+            args["_jit_inputs"] = {
+                "fixed_values": model.spec.get_fixed_values(),
+                "ssp_data": model.ssp_data,
+                "template_data": model._template_data_for_jit(),
+            }
 
         return args
 
@@ -1188,41 +1202,28 @@ class Fitter:
 
     # ── Loss and likelihood builders ──────────────────────────────────
 
-    def _build_loss_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loss_fn(self) -> Callable:
         """Build a differentiable loss function.
 
         See ``tengri.inference.loss_functions.build_loss_fn`` for full docs.
         Returns ``loss_fn(params_unbounded, data_args) -> scalar``.
-
-        Parameters
-        ----------
-        mode : str, optional
-            Forward model prediction mode. Default "_traceable" is for
-            internal tracing mode (NIFTy VI path). Use "auto" for ~1.5x speedup with
-            non-NIFTy methods.
         """
-        return build_loss_fn(self, mode=mode)
+        return build_loss_fn(self)
 
-    def _get_or_build_loss_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loss_fn(self) -> Callable:
         """Return the cached loss function, building it if needed.
 
-        The loss function is cached on the Model object keyed by
-        ``_engine_cache_key()`` + mode so that multiple Fitters with the same
-        model structure share the same compiled XLA program.
-
-        Parameters
-        ----------
-        mode : str, optional
-            Forward model prediction mode. Default "_traceable" for backward
-            compatibility. Pass "auto" for ~1.5x speedup with non-NIFTy methods.
+        Cached on the Model object keyed by ``_engine_cache_key()`` so
+        multiple Fitters with the same model structure share one
+        compiled XLA program.
         """
         from tengri.inference.jit_engine import get_or_build_cached
 
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("loss_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loss_fn = get_or_build_cached(self, mode, "loss", lambda: self._build_loss_fn(mode=mode))
+        loss_fn = get_or_build_cached(self, "loss", self._build_loss_fn)
         per_model[cache_key] = loss_fn
         return loss_fn
 
@@ -1230,32 +1231,46 @@ class Fitter:
         """Build a log-prior function. See ``loss_functions.build_logprior_fn``."""
         return build_logprior_fn(self)
 
-    def _build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loglikelihood_fn(self) -> Callable:
         """Build log-likelihood function. See ``loss_functions.build_loglikelihood_fn``."""
-        return build_loglikelihood_fn(self, mode=mode)
+        return build_loglikelihood_fn(self)
 
-    def _get_or_build_loglikelihood_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loglikelihood_fn(self) -> Callable:
         """Return the cached log-likelihood function, building if needed."""
         from tengri.inference.jit_engine import get_or_build_cached
 
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("loglik_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loglik_fn = get_or_build_cached(
-            self, mode, "loglik", lambda: self._build_loglikelihood_fn(mode=mode)
-        )
+        loglik_fn = get_or_build_cached(self, "loglik", self._build_loglikelihood_fn)
         per_model[cache_key] = loglik_fn
         return loglik_fn
 
-    def _build_loglikelihood_unbounded_fn(self, mode: str = "_traceable") -> Callable:
+    def _build_loglikelihood_unbounded_fn(self) -> Callable:
         """Build unbounded-space log-likelihood.
 
         See ``loss_functions.build_loglikelihood_unbounded_fn``.
         """
-        return build_loglikelihood_unbounded_fn(self, mode=mode)
+        return build_loglikelihood_unbounded_fn(self)
 
-    def _get_or_build_grad_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_loglikelihood_unbounded_fn(self) -> Callable:
+        """Return the cached unbounded-space log-likelihood, building if needed.
+
+        Caches per-model (no shared cross-fitter cache, unlike ``loss_fn``);
+        unbounded-space log-likelihood is a thin wrapper over the data term
+        plus :func:`_unstandardize_parameters`, so the compile cost is
+        marginal and the cache key would mirror the loss cache anyway.
+        """
+        cache_key = self._engine_cache_key()
+        per_model = get_model_cache(self.model).setdefault("loglik_unbounded_fn", {})
+        if cache_key in per_model:
+            return per_model[cache_key]
+        fn = self._build_loglikelihood_unbounded_fn()
+        per_model[cache_key] = fn
+        return fn
+
+    def _get_or_build_grad_fn(self) -> Callable:
         """Return cached JIT-compiled value_and_grad of the loss function.
 
         The gradient function takes ``(params_unbounded, data_args)`` as
@@ -1264,12 +1279,12 @@ class Fitter:
         """
         from tengri.inference.jit_engine import get_or_build_cached
 
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         per_model = get_model_cache(self.model).setdefault("grad_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
 
-        loss_fn = self._get_or_build_loss_fn(mode=mode)
+        loss_fn = self._get_or_build_loss_fn()
 
         def _build():
             @jax.jit
@@ -1279,24 +1294,24 @@ class Fitter:
 
             return val_and_grad
 
-        val_and_grad = get_or_build_cached(self, mode, "grad", _build)
+        val_and_grad = get_or_build_cached(self, "grad", _build)
         per_model[cache_key] = val_and_grad
         return val_and_grad
 
-    def _get_or_build_logdensity_fn(self, mode: str = "_traceable") -> Callable:
+    def _get_or_build_logdensity_fn(self) -> Callable:
         """Return cached JIT-compiled log-density for MCMC/Pathfinder.
 
         Returns ``logdensity(params_u, data_args) -> scalar``.  Callers
         should partial-apply ``data_args`` for blackjax compatibility.
         """
-        cache_key = (self._engine_cache_key(), mode)
+        cache_key = self._engine_cache_key()
         from tengri.inference.jit_engine import get_or_build_cached
 
         per_model = get_model_cache(self.model).setdefault("logdensity_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
 
-        loss_fn = self._get_or_build_loss_fn(mode=mode)
+        loss_fn = self._get_or_build_loss_fn()
 
         def _build():
             @jax.jit
@@ -1306,27 +1321,47 @@ class Fitter:
 
             return logdensity
 
-        logdensity = get_or_build_cached(self, mode, "logdensity", _build)
+        logdensity = get_or_build_cached(self, "logdensity", _build)
         per_model[cache_key] = logdensity
         return logdensity
 
     # ── Parameter transforms ──────────────────────────────────────────
 
     def _initialize_unbounded(self, key: Any) -> dict:
-        """Create initial unbounded parameter dict."""
+        """Create initial unbounded parameter dict.
+
+        Per-param shape comes from ``self.spec.param_init_shape(name)``
+        when available (the PopulationSpecView publishes this — see
+        PR #239 plan Task 5). Scalar specs (the standard
+        :class:`Parameters`) fall back to shape ``()``.
+
+        For hierarchical fits, per-galaxy free params get a leading
+        ``(N,)`` axis; shared parameters stay scalar. This is what
+        the standardized hierarchical Hamiltonian (paper §4) expects.
+        """
         params = {}
         keys = jax.random.split(key, len(self._free_names) + 1)
+        # Shape provider — defaults to scalar for non-Population specs
+        get_shape = getattr(self.spec, "param_init_shape", lambda _n: ())
 
         for i, name in enumerate(self._free_names):
             dist = self.spec.get_distribution(name)
+            shape = get_shape(name)
             if isinstance(dist, Gaussian):
-                params[name] = dist.standardize(jnp.array(dist.mu))
+                base = dist.standardize(jnp.array(dist.mu))
+                params[name] = jnp.broadcast_to(base, shape) if shape else base
             else:
                 # Initialize near midpoint (u=0) with small perturbation
-                params[name] = 0.1 * jax.random.normal(keys[i])
+                params[name] = 0.1 * jax.random.normal(keys[i], shape=shape)
 
         if self.spec.stochastic:
-            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=(self.spec.n_grid,))
+            # psd_xi shape: scalar fits use (n_grid,); hierarchical
+            # populations use (N, n_grid) — published via the spec.
+            psd_shape = getattr(self.spec, "psd_xi_init_shape", None) or (self.spec.n_grid,)
+            # Property vs callable — both supported
+            if callable(psd_shape):
+                psd_shape = psd_shape()
+            params["psd_xi"] = 0.1 * jax.random.normal(keys[-1], shape=psd_shape)
 
         return params
 
@@ -1359,6 +1394,180 @@ class Fitter:
             params["psd_xi"] = params_unbounded["psd_xi"]
         return params
 
+    # ── AOT pre-warm and adaptation persistence ──────────────────────
+
+    def prewarm(self, method: str = "mcmc_nuts", *, n_chains: int | None = None, key=None):
+        """Pre-compile JIT kernels and populate the adaptation cache for ``method``.
+
+        After this returns, a subsequent :meth:`run` call with the same
+        ``method`` skips XLA compilation **and** sampler warmup window
+        adaptation — only the actual sampling work remains.
+
+        Concretely: runs the smallest meaningful inference (a few
+        warmup steps + a handful of samples) to (1) compile every
+        JIT'd kernel in the loss / sampler stack against the current
+        data shape, and (2) write step size + mass matrix (or
+        equivalent) into the per-model adaptation cache. The
+        persistent XLA cache (``~/.cache/tengri_jax_cache``) also
+        captures the compile, so a fresh Python process sees a warm
+        XLA cache too.
+
+        Parameters
+        ----------
+        method : str, default ``"mcmc_nuts"``
+            Inference method to pre-warm. Any name accepted by
+            :meth:`run`.
+        n_chains : int or None
+            If set and greater than 1, also pre-compile the multichain
+            ``jax.vmap`` path for ``n_chains`` so the second multichain
+            call has zero compile latency. Only meaningful for backends
+            that support ``n_chains`` (NUTS / HMC / dHMC / GHMC / MCLMC /
+            adjusted MCLMC / raytrace).
+        key : jax.random.PRNGKey or None
+            Optional seed. Default uses a fixed key — the pre-warm run
+            is throwaway and its randomness does not affect the
+            subsequent real fit.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        >>> from tengri.inference.fitter import Fitter
+        >>> fitter = Fitter(sed_model, flux, noise, data_type="photometry")
+        >>> fitter.prewarm(method="mcmc_nuts", n_chains=4)
+        >>> posterior = fitter.run(method="mcmc_nuts", n_chains=4, n_samples=1000)
+
+        Notes
+        -----
+        Pre-warming is **soft**: any exception raised during the throwaway
+        call is swallowed so the real ``run()`` surfaces the genuine error
+        with a richer traceback. Calling ``prewarm`` redundantly is cheap
+        — both caches are short-circuited.
+        """
+        import jax as _jax
+
+        if key is None:
+            key = _jax.random.PRNGKey(0)
+        sample_kwarg = "n_steps" if method in ("mcmc_raytrace", "raytrace") else "n_samples"
+        warmup_kw = {sample_kwarg: 10}
+        try:
+            self.run(method=method, key=key, verbose=False, **warmup_kw)
+        except Exception:
+            return
+        if n_chains is not None and n_chains > 1:
+            warmup_kw["n_chains"] = n_chains
+            import contextlib
+
+            with contextlib.suppress(Exception):
+                self.run(method=method, key=key, verbose=False, **warmup_kw)
+
+    def save_cache(self, path) -> None:
+        """Persist this model's adaptation cache (step size + mass matrix) to disk.
+
+        Reload in a fresh Python process with :meth:`load_cache` to skip
+        sampler warmup on the next :meth:`run` call. Useful when the same
+        model+data is fit repeatedly across notebook restarts or batch
+        jobs — warmup window adaptation typically dominates first-call
+        wall time on a warm XLA cache.
+
+        Stored payload:
+
+        - ``adaptation`` : dict keyed by ``(engine_key, method_key)`` — the
+          contents of ``get_model_cache(model)["adaptation"]``.
+        - ``spec_fingerprint`` : a content hash of the free-parameter names
+          and prior shape, used by :meth:`load_cache` to refuse to load a
+          cache that was written for a different model.
+
+        Parameters
+        ----------
+        path : str or Path
+            Destination file (``.pkl`` recommended). Parent directory is
+            created if missing.
+
+        Returns
+        -------
+        None
+        """
+        import pickle
+        from pathlib import Path as _Path
+
+        from tengri.inference._model_cache import get_model_cache
+
+        mc = get_model_cache(self.model)
+        adaptation = mc.get("adaptation", {})
+        # Cached MAP point estimate (if a previous .run() or .prewarm()
+        # populated it). Saving it skips MAP init on the next load_cache
+        # session — same speedup the adaptation cache gives for warmup.
+        map_params = mc.get("map_params_physical")
+        payload = {
+            "adaptation": adaptation,
+            "map_params_physical": map_params,
+            "spec_fingerprint": self._spec_fingerprint(),
+        }
+        p = _Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("wb") as f:
+            pickle.dump(payload, f)
+
+    def load_cache(self, path) -> None:
+        """Load an adaptation cache previously written by :meth:`save_cache`.
+
+        Refuses to load if the spec fingerprint disagrees (different
+        free-parameter set), to prevent silently using a stale cache.
+
+        Parameters
+        ----------
+        path : str or Path
+            File written by :meth:`save_cache`.
+
+        Returns
+        -------
+        None
+
+        Raises
+        ------
+        ValueError
+            If the cache's ``spec_fingerprint`` does not match this
+            Fitter's model.
+        """
+        import pickle
+        from pathlib import Path as _Path
+
+        from tengri.inference._model_cache import get_model_cache
+
+        with _Path(path).open("rb") as f:
+            payload = pickle.load(f)
+        if payload.get("spec_fingerprint") != self._spec_fingerprint():
+            raise ValueError(
+                f"Adaptation cache at {path} was written for a different model "
+                "(spec fingerprint mismatch). Re-run prewarm + save_cache."
+            )
+        mc = get_model_cache(self.model)
+        mc.setdefault("adaptation", {}).update(payload["adaptation"])
+        if payload.get("map_params_physical") is not None:
+            mc["map_params_physical"] = payload["map_params_physical"]
+
+    def _spec_fingerprint(self) -> str:
+        """Content hash of free parameter names + ordered fixed values.
+
+        Stable across processes; changes if the user reorders / renames
+        parameters or changes which are fixed vs free. Does NOT depend on
+        data tensors — the adaptation cache itself is data-conditional
+        and the user takes responsibility for fitting the same model+data
+        combination after :meth:`load_cache`.
+        """
+        import hashlib
+
+        h = hashlib.sha1()
+        for name in self._free_names:
+            h.update(name.encode())
+        for name, val in sorted(self._fixed_values.items()):
+            h.update(name.encode())
+            h.update(f"{float(val):.10g}".encode())
+        return h.hexdigest()
+
     # ── Inference dispatch ────────────────────────────────────────────
 
     def run(self, method: str = "vi_nonlinear_fast", *, init_from=None, key=None, **kwargs):
@@ -1368,6 +1577,11 @@ class Fitter:
         point estimation, or nested sampling) and returns a ``Posterior``
         object with samples, diagnostics, and derived quantities.
 
+        Hierarchical fits (``model`` is a ForwardModel built with
+        ``population=PopulationSEDModel(...)``) route through
+        :class:`tengri.PopulationFitter` automatically. No change in
+        the user-facing call site.
+
         Parameters
         ----------
         method : str, optional
@@ -1376,11 +1590,12 @@ class Fitter:
             **Variational Inference (VI)**
 
             - ``"vi"`` — geoVI via NIFTy (nonlinear, default for D>20)
+            - ``"vi_nonlinear"`` — geoVI via NIFTy (alias of ``vi``)
             - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
-            - ``"vi_nifty_fast"`` — geoVI fast path (~35% faster, no logging)
-            - ``"vi_nifty_fast_linear"`` — MGVI fast path (~35% faster, no logging)
-            - ``"vi_native"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
-            - ``"vi_native_linear"`` — Native JAX MGVI (experimental)
+            - ``"vi_nonlinear_fast"`` — geoVI fast path (~35% faster, no logging)
+            - ``"vi_linear_fast"`` — MGVI fast path (~35% faster, no logging)
+            - ``"native_vi_nonlinear"`` — Native JAX geoVI (experimental; ~19× faster than NIFTy)
+            - ``"native_vi_linear"`` — Native JAX MGVI (experimental)
 
             **MCMC Sampling**
 
@@ -1407,17 +1622,6 @@ class Fitter:
             **Automatic Selection**
 
             - ``"auto"`` — NUTS (D≤20) or geoVI (D>20) based on dimensionality
-
-            **Deprecated Aliases** (still work, emit DeprecationWarning):
-
-            - ``"vi_nifty"``, ``"geovi"``, ``"fast_geovi"``, ``"nifty_geovi"``
-              → ``"vi"``
-            - ``"vi_nifty_linear"``, ``"mgvi"``, ``"fast_mgvi"``, ``"nifty_mgvi"``
-              → ``"vi_linear"``
-            - ``"native_geovi"`` → ``"vi_native"``
-            - ``"native_mgvi"``, ``"native_evi"`` → ``"vi_native_linear"``
-            - ``"raytrace"``, ``"nuts"``, ``"hmc"``, etc. (all MCMC methods)
-            - ``"evidence"`` → ``"nss"``
 
         init_from : Posterior, optional
             Previous inference result to use as warm-start initialization.
@@ -1767,7 +1971,7 @@ class Fitter:
 
         # Dimensionality
         n_free = len(self._free_names)
-        n_grid = self.model._n_grid if self.model._uses_stochastic_sfh else 0
+        n_grid = self.model.n_grid if self.model.uses_stochastic_sfh else 0
         dim_str = f"{n_free} free"
         if n_grid:
             dim_str += f" + {n_grid} latent (ξ)"
@@ -1786,7 +1990,7 @@ class Fitter:
         # Available methods
         lines.append("")
         lines.append(
-            "  Methods:     vi, vi_linear, vi_nifty_fast, vi_nifty_fast_linear, "
+            "  Methods:     vi, vi_linear, vi_nonlinear_fast, vi_linear_fast, "
             "vi_native, vi_native_linear, mcmc, mcmc_raytrace, mcmc_nuts, "
             "mcmc_hmc, mcmc_dynamic_hmc, mcmc_ghmc, mcmc_mclmc, "
             "mcmc_adjusted_mclmc, mcmc_ess, map, laplace, pathfinder, nss, auto"
@@ -1794,33 +1998,6 @@ class Fitter:
 
         lines.append(sep)
         return "\n".join(lines)
-
-    def _get_mode_for_method(self, method: str) -> str:
-        """Determine forward model prediction mode based on inference method.
-
-        PERFORMANCE NOTE (2026-04-18): Profiling shows mode="_traceable" is
-        12.64x FASTER than mode="auto" (5.9ms vs 74.4ms) with stable timing.
-        mode="auto" has pathological variance (std=504ms, 6.8x the mean) causing
-        occasional 500ms+ outliers. Always use mode="_traceable" for inference.
-
-        Parameters
-        ----------
-        method : str
-            Inference method name (e.g., "vi", "mcmc_nuts", "map")
-
-        Returns
-        -------
-        str
-            Always returns "_traceable" for optimal performance across all
-            inference methods. Previous "auto" mode had severe variance issues.
-
-        See Also
-        --------
-        docs/dev/jit-optimization-report-2026-04-18.md : Full profiling analysis
-        """
-        # ALL methods now use _traceable for 12.64x speedup + stable timing
-        # (mode="auto" variance pathology fixed 2026-04-18)
-        return "_traceable"
 
     # ── Private method runners ────────────────────────────────────────
 
@@ -2353,7 +2530,7 @@ class Fitter:
             for g in batch
         )
         _use_vmap_map = (
-            method == "map" and self.model._precomputed.photometry is not None and _same_shape
+            method == "map" and self.model.precomputed.photometry is not None and _same_shape
         )
 
         if _use_vmap_map:
@@ -2368,7 +2545,7 @@ class Fitter:
         }
         _use_vmap_mcmc = (
             method in _mcmc_methods
-            and self.model._precomputed.photometry is not None
+            and self.model.precomputed.photometry is not None
             and _same_shape
             and not self.spec.stochastic
         )

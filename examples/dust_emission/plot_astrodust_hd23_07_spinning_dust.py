@@ -4,14 +4,13 @@ Astrodust+PAH spinning-dust microwave emission
 
 Spinning dust microwave emission across 10–100 GHz, decomposed by grain
 (Astrodust/PAH) and phase (CNM/WNM), for the Hensley & Draine 2023 fiducial.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_astrodust_hd23_07_spinning_dust_001.png
-   :alt: plot_astrodust_hd23_07_spinning_dust
-   :class: sphx-glr-single-img
-
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,6 +20,8 @@ from tengri.analysis.plotting import setup_style
 from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
 wave_um = np.asarray(tpl.wavelength_um)
@@ -48,7 +49,6 @@ ax.set(
     ylabel=r"$I_\nu/N_{\rm H}\ [\mathrm{Jy\,cm^2\,sr^{-1}\,H^{-1}}]$",
     xlim=(10.0, 100.0),
     ylim=(1.0e-19, 2.0e-18),
-    title="Spinning dust emission (HDU 9)",
 )
 ax.xaxis.set_minor_formatter(plt.matplotlib.ticker.NullFormatter())
 ax.xaxis.set_major_formatter(plt.matplotlib.ticker.NullFormatter())
@@ -57,4 +57,3 @@ ax.set_xticklabels(["10", "30", "60", "100"])
 ax.legend(loc="upper right", frameon=False, fontsize=9)
 fig.tight_layout()
 plt.savefig("plot_astrodust_hd23_07_spinning_dust.png", dpi=150, bbox_inches="tight")
-plt.show()

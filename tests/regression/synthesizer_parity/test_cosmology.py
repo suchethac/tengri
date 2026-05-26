@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for cosmology utilities — synthesizer parity.
 
 Mirrors synthesizer's ``tests/test_cosmology.py`` shape. The relations
@@ -10,6 +11,9 @@ Pitfalls guarded:
 
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.regression_paper
 import jax
 import jax.numpy as jnp
 

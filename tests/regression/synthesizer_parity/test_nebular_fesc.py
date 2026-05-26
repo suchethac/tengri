@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for ionizing photon escape fraction (neb_fesc) — synthesizer parity.
 
 Mirrors synthesizer issue #126 — fesc (ionizing photon escape fraction) was
@@ -19,6 +20,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import pytest
+
+pytestmark = pytest.mark.regression_paper
 from scipy.integrate import simpson
 
 jax.config.update("jax_enable_x64", True)

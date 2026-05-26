@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Anti-laziness tests: catch fake, stubbed, or incomplete implementations.
 
 These tests are specifically designed to detect common lazy implementation
@@ -18,6 +19,7 @@ These tests should be run after ANY model implementation change to ensure
 no lazy shortcuts were taken.
 """
 
+import chex
 import jax
 import jax.numpy as jnp
 import pytest
@@ -245,14 +247,15 @@ class TestSFHParameterSensitivity:
     _T = jnp.geomspace(1e5, 14e9, 500)
 
     def test_dpl_all_params_matter(self):
-        """DPL: alpha, beta, tau, log_peak_sfr all must matter."""
+        """DPL: alpha, beta, tau, log_total_mass all must matter."""
         from tengri.components.stellar.sfh import dpl
 
-        sfr_default = dpl(self._T, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0)
+        sfr_default = dpl(self._T, alpha=2.0, beta=1.0, tau=5e9, log_total_mass=1.0)
 
-        for param, val in [("alpha", 4.0), ("beta", 3.0), ("tau", 2e9), ("log_peak_sfr", 2.0)]:
+        for param, val in [("alpha", 4.0), ("beta", 3.0), ("tau", 2e9), ("log_total_mass", 2.0)]:
             sfr_mod = dpl(
-                self._T, **{"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_peak_sfr": 1.0, param: val}
+                self._T,
+                **{"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_total_mass": 1.0, param: val},
             )
             assert not jnp.allclose(sfr_default, sfr_mod, rtol=0.01), (
                 f"DPL parameter {param} is IGNORED"
@@ -262,11 +265,17 @@ class TestSFHParameterSensitivity:
         """tsnorm: all 5 params must affect the SFH."""
         from tengri.components.stellar.sfh import tsnorm
 
-        defaults = {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5, "trunc": 2.0}
+        defaults = {
+            "log_total_mass": 1.0,
+            "peak_lbt": 5e9,
+            "width": 2e9,
+            "skew": 0.5,
+            "trunc": 2.0,
+        }
         sfr_default = tsnorm(self._T, **defaults)
 
         mods = {
-            "log_peak_sfr": 2.0,
+            "log_total_mass": 2.0,
             "peak_lbt": 2e9,
             "width": 0.5e9,
             "skew": -0.5,
@@ -475,7 +484,7 @@ class TestWavelengthGridIndependence:
                 wave = jnp.geomspace(100.0, 1e6, n)
                 l_nu = fn(wave, agn_log_lbol=11.0)
                 assert l_nu.shape == (n,), f"Wrong shape: expected ({n},), got {l_nu.shape}"
-                assert jnp.all(jnp.isfinite(l_nu))
+                chex.assert_tree_all_finite(l_nu)
 
 
 # ── 7. NOT RETURNING ZEROS OR ONES ────────────────────────────────
@@ -520,17 +529,17 @@ class TestNotReturningDummies:
                 "tsnorm",
                 tsnorm,
                 {
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 1.0,
                     "peak_lbt": 5e9,
                     "width": 2e9,
                     "skew": 0.5,
                     "trunc": 2.0,
                 },
             ),
-            ("snorm", snorm, {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5}),
-            ("norm", norm, {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9}),
-            ("lnorm", lnorm, {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 0.5}),
-            ("dpl", dpl, {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_peak_sfr": 1.0}),
+            ("snorm", snorm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5}),
+            ("norm", norm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9}),
+            ("lnorm", lnorm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 0.5}),
+            ("dpl", dpl, {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_total_mass": 1.0}),
         ]:
             sfr = fn(t, **kwargs)
             total = float(jnp.sum(sfr))

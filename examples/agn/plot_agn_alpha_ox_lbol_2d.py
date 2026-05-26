@@ -1,83 +1,78 @@
 """
-X-ray Corona: Spectral Index vs Bolometric Luminosity 2D Sweep
-==============================================================
+X-ray corona shape across the alpha_OX vs log L_bol plane
+==========================================================
 
-A 4-panel grid (one panel per ``log L_bol`` value) showing how the X-ray corona
-spectrum depends jointly on bolometric luminosity and the UV-to-X-ray slope
-``alpha_ox``. Both parameters affect the X-ray *normalisation*; only ``alpha_ox``
-shifts the relative balance between UV and X-ray emission. Sweeps cover the
-canonical X-ray band 0.1–1000 keV.
+The X-ray corona response of an AGN depends jointly on bolometric
+luminosity (which sets the X-ray normalisation through the
+Lusso & Risaliti L_X-L_UV correlation) and on the UV-to-X-ray slope
+alpha_OX (which sets the relative balance of UV and X-ray emission).
+Four panels at log L_bol = 44, 45, 46, 47 erg/s overlay three
+alpha_OX values each, showing that the absolute X-ray luminosity
+scales with L_bol while the X-ray-to-UV ratio is set independently
+by alpha_OX.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
-   :alt: plot_agn_alpha_ox_lbol_2d
-   :class: sphx-glr-single-img
-
+Reference: Lusso & Risaliti 2016, ApJ, 819, 154 (alpha_OX-L_UV
+correlation); Wilkins et al. 2020, MNRAS, 493, 5548.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.xray import xray_agn_corona
+from tengri.xray import alpha_ox_from_l2500, xray_agn_corona
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Wavelength grid covers the function's valid X-ray band (lambda < 124 A,
-# i.e. E > 0.1 keV). Conversion: E[keV] = 12.398 / lambda[A].
 wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
 energy_keV = 12.398 / np.array(wavelength)
 
-# log L_bol expressed in erg/s (the unit xray_agn_corona expects). Typical
-# Seyferts ~ 10^44 erg/s, bright quasars ~ 10^46 erg/s.
-log_lbol_values = [44, 45, 46, 47]
-alpha_ox_values = [-1.0, -1.4, -1.8]
+# Hopkins+2007 BC=5.15 at 2500 A
+_BC_NU = 5.15 * 1.199e15
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 9), sharex=True, sharey=True)
-axes_flat = axes.flatten()
+LOG_LBOL_VALUES = (44, 45, 46, 47)
+DELTA_VALUES = (0.4, 0.0, -0.4)  # offsets from the Just+2007 empirical alpha_OX
+COLORS = plt.cm.viridis(np.linspace(0.0, 0.85, len(DELTA_VALUES)))
 
-# Viridis clamped — bright yellow tail (>0.85) is suppressed.
-colors = plt.cm.viridis(np.linspace(0.0, 0.85, len(alpha_ox_values)))
-
-for panel_idx, log_lbol in enumerate(log_lbol_values):
-    ax = axes_flat[panel_idx]
-    L_bol_erg = 10.0**log_lbol  # already in erg/s
-
-    for alpha_ox, color in zip(alpha_ox_values, colors):
+fig, axes = plt.subplots(2, 2, figsize=(10.5, 7.5), sharex=True, sharey=True)
+for ax, log_lbol in zip(axes.flat, LOG_LBOL_VALUES):
+    L_2500 = 10.0**log_lbol / _BC_NU
+    alpha_ox_base = float(alpha_ox_from_l2500(L_2500))
+    for delta, color in zip(DELTA_VALUES, COLORS):
         sed = xray_agn_corona(
             wavelength,
-            L_agn_bol=L_bol_erg,
+            l_2500_30deg_erg_hz=L_2500,
             gamma=1.8,
             E_cut=300.0,
-            alpha_ox=alpha_ox,
+            delta_alpha_ox=float(delta),
         )
-        sed_safe = np.where(np.array(sed) > 0, np.array(sed), np.nan)
-        ax.loglog(
-            energy_keV, sed_safe, lw=2.2, color=color, label=rf"$\alpha_{{ox}} = {alpha_ox}$"
-        )
-
-    ax.set_title(rf"$\log L_{{\mathrm{{bol}}}} [{{\rm erg/s}}] = {log_lbol}$", fontsize=13)
-    # Broad axes with breathing room above and below the data — show
-    # 6 decades of L_nu range so all alpha_ox curves are visible at every L_bol.
-    ax.set_xlim(0.1, 1000)
-    ax.set_ylim(1e21, 1e30)
-    # Place legend in lower-left where the cutoff drops the curves out of frame.
-    ax.legend(fontsize=10, frameon=False, loc="lower left")
+        sed_safe = np.where(np.asarray(sed) > 0, np.asarray(sed), np.nan)
+        alpha_eff = alpha_ox_base + delta
+        label = rf"$\alpha_{{ox}} = {alpha_eff:+.2f}$"
+        ax.loglog(energy_keV, sed_safe, lw=1.6, color=color, label=label)
+    ax.text(
+        0.04,
+        0.95,
+        rf"$\log L_{{\rm bol}} [\mathrm{{erg/s}}] = {log_lbol}$",
+        transform=ax.transAxes,
+        va="top",
+    )
+    ax.set_xlim(0.1, 1000.0)
+    ax.set_ylim(1.0e21, 1.0e30)
+    ax.legend(frameon=False, fontsize=8, loc="lower left")
     ax.label_outer()
 
-# Add x/y labels only on outer panels (sharex/sharey).
 for ax in axes[-1, :]:
     ax.set_xlabel("Energy [keV]")
 for ax in axes[:, 0]:
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+    ax.set_ylabel(r"$L_\nu$  [erg s$^{-1}$ Hz$^{-1}$]")
 
-fig.suptitle(
-    r"AGN X-ray Corona: $\alpha_{\rm ox}$ × $\log L_{\rm bol}$ 2D Sweep",
-    fontsize=15,
-    y=0.995,
-)
-fig.tight_layout(rect=[0, 0, 1, 0.97])
+fig.tight_layout()
 plt.savefig("plot_agn_alpha_ox_lbol_2d.png", dpi=150, bbox_inches="tight")
-plt.show()

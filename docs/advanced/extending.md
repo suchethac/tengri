@@ -1,12 +1,10 @@
 # Extending tengri
 
-How to add custom physics modules to tengri. The modular architecture makes it
-straightforward to plug in new SFH parametrizations, dust laws, nebular models,
-and AGN templates.
+How to plug in custom SFH parametrisations, dust laws, nebular models, and AGN
+templates.
 
 :::{note}
-This page gives a concise overview of the extension points. For full worked
-examples with code, see [`12_extending_tengri.py`](https://github.com/suchethac/tengri/blob/main/notebooks/12_extending_tengri.py) on the reader spine.
+Worked examples with runnable code are in [`12_extending_tengri.py`](https://github.com/suchethac/tengri/blob/main/notebooks/12_extending_tengri.py).
 :::
 
 ## Architecture overview

@@ -1,7 +1,9 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Integration tests for the new SEDModel class with real SSP data."""
 
 from pathlib import Path
 
+import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -41,7 +43,7 @@ def parametric_spec():
     """Parametric tsnorm spec (no GP field)."""
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -59,7 +61,7 @@ def stochastic_spec():
     """Stochastic tsnorm + field spec."""
     return Parameters(
         mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -83,7 +85,7 @@ def dpl_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -119,11 +121,11 @@ def typical_params(parametric_spec):
 class TestPredictSed:
     def test_shape(self, parametric_model, typical_params):
         sed = parametric_model.predict_rest_sed(typical_params).sed
-        assert sed.shape == parametric_model.ssp_data.ssp_wave.shape
+        chex.assert_equal_shape([sed, parametric_model.ssp_data.ssp_wave])
 
     def test_finite(self, parametric_model, typical_params):
         sed = parametric_model.predict_rest_sed(typical_params).sed
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_positive(self, parametric_model, typical_params):
         sed = parametric_model.predict_rest_sed(typical_params).sed
@@ -137,7 +139,7 @@ class TestPredictPhotometry:
 
     def test_finite_positive(self, parametric_model, typical_params):
         phot = parametric_model.predict_photometry(typical_params)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
     def test_physical_range(self, parametric_model, typical_params):
@@ -190,7 +192,7 @@ class TestStochastic:
     def test_predict_sed_works(self, stochastic_model, stochastic_spec):
         params = stochastic_spec.sample(jax.random.PRNGKey(42))
         sed = stochastic_model.predict_rest_sed(params).sed
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_tree_all_finite(sed)
 
     def test_sfh_full_differs_from_mean(self, stochastic_model, stochastic_spec):
         params = stochastic_spec.sample(jax.random.PRNGKey(42))
@@ -208,8 +210,8 @@ class TestDPL:
     def test_predict_photometry(self, dpl_model, dpl_spec):
         params = dpl_spec.sample(jax.random.PRNGKey(42))
         phot = dpl_model.predict_photometry(params)
-        assert phot.shape == (5,)
-        assert jnp.all(jnp.isfinite(phot))
+        chex.assert_shape(phot, (5,))
+        chex.assert_tree_all_finite(phot)
         assert jnp.all(phot > 0)
 
     def test_predict_derived(self, dpl_model, dpl_spec):
@@ -225,9 +227,9 @@ class TestMock:
     def test_mock_structure(self, parametric_model, typical_params):
         mock = parametric_model.mock(typical_params, snr=20.0, key=jax.random.PRNGKey(0))
         assert isinstance(mock, MockData)
-        assert mock.flux_true.shape == (5,)
-        assert mock.flux_obs.shape == (5,)
-        assert mock.noise.shape == (5,)
+        chex.assert_shape(mock.flux_true, (5,))
+        chex.assert_shape(mock.flux_obs, (5,))
+        chex.assert_shape(mock.noise, (5,))
 
     def test_mock_noise_scaling(self, parametric_model, typical_params):
         mock = parametric_model.mock(typical_params, snr=20.0, key=jax.random.PRNGKey(0))
@@ -238,7 +240,7 @@ class TestMock:
         batch = parametric_spec.sample_batch(jax.random.PRNGKey(0), 5)
         mock_batch = parametric_model.mock_batch(batch, snr=20.0, key=jax.random.PRNGKey(1))
         assert mock_batch.flux_true.shape == (5, 5)  # 5 galaxies, 5 bands
-        assert mock_batch.flux_obs.shape == (5, 5)
+        chex.assert_shape(mock_batch.flux_obs, (5, 5))
 
 
 # ── Gradient Flow ─────────────────────────────────────────────────
@@ -254,14 +256,14 @@ class TestGradients:
         def loss(p):
             return jnp.sum(parametric_model.predict_photometry(p))
 
-        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_peak_sfr"])
+        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_total_mass"])
 
         def loss_scalar(x):
             p = dict(typical_params)
-            p["sfh_tsnorm_log_peak_sfr"] = x
+            p["sfh_tsnorm_log_total_mass"] = x
             return float(jnp.sum(parametric_model.predict_photometry(p)))
 
-        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_peak_sfr"]))
+        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_total_mass"]))
         np.testing.assert_allclose(
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
@@ -270,14 +272,14 @@ class TestGradients:
         def loss(p):
             return parametric_model.predict_derived(p)["stellar_mass"]
 
-        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_peak_sfr"])
+        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_total_mass"])
 
         def loss_scalar(x):
             p = dict(typical_params)
-            p["sfh_tsnorm_log_peak_sfr"] = x
+            p["sfh_tsnorm_log_total_mass"] = x
             return float(parametric_model.predict_derived(p)["stellar_mass"])
 
-        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_peak_sfr"]))
+        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_total_mass"]))
         np.testing.assert_allclose(
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
@@ -461,8 +463,8 @@ class TestPrediction:
     def test_sed_array(self, parametric_model, typical_params):
         pred = parametric_model.predict(typical_params)
         sed = pred.sed_array
-        assert sed.shape == parametric_model.ssp_data.ssp_wave.shape
-        assert jnp.all(jnp.isfinite(sed))
+        chex.assert_equal_shape([sed, parametric_model.ssp_data.ssp_wave])
+        chex.assert_tree_all_finite(sed)
 
     def test_sed_array_matches_predict_sed(self, parametric_model, typical_params):
         pred = parametric_model.predict(typical_params)
@@ -511,7 +513,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -527,7 +529,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -549,7 +551,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),

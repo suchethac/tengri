@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """High-level Galaxy facade for one-liner SED fitting.
 
 The Galaxy class bundles SSP data, observation, parameters, and model
@@ -277,10 +278,10 @@ class Galaxy:
         return self.model
 
     def predict_via_components(self, params):
-        """Forward pass via the Phase II SEDComponent orchestrator.
+        """Forward pass via the SEDComponent orchestrator.
 
         Convenience wrapper around
-        :meth:`tengri.SEDModel.predict_via_orchestrator` that lazy-builds
+        :meth:`tengri.SEDModel.predict_state` that lazy-builds
         the underlying ``SEDModel`` and threads the params dict through
         the component chain. Returns a :class:`tengri.protocols.ForwardState`.
 
@@ -297,7 +298,7 @@ class Galaxy:
         Returns
         -------
         ForwardState
-            See :meth:`SEDModel.predict_via_orchestrator`.
+            See :meth:`SEDModel.predict_state`.
 
         See Also
         --------
@@ -311,12 +312,12 @@ class Galaxy:
         >>> state = g.predict_via_components(params)  # doctest: +SKIP
         >>> state.derived["log_mstar"]  # doctest: +SKIP
         """
-        return self.build_model().predict_via_orchestrator(params)
+        return self.build_model().predict_state(params)
 
     def predict(self, params, backend: str = "legacy"):
         """Compute a forward-model prediction for ``params``.
 
-        Phase II-2.6 unified entry point. The ``backend`` argument selects
+        Unified entry point. The ``backend`` argument selects
         between the legacy tier-dispatch path (returns a
         :class:`Prediction` lazy view) and the orchestrator path (returns
         a :class:`ForwardState`).
@@ -330,15 +331,15 @@ class Galaxy:
             wrapper from :meth:`SEDModel.predict`, exposing the
             ``.sfh`` / ``.sed`` / ``.lines`` / ``.radio`` / ``.xray`` /
             ``.ionizing`` property groups. ``"component"`` returns a
-            :class:`tengri.protocols.ForwardState` from the Phase II
+            :class:`tengri.protocols.ForwardState` from the
             SEDComponent orchestrator with all cross-component
             quantities published in ``state.derived``.
 
             The default remains ``"legacy"`` until the v1.0 cutover.
             The two backends agree on the rest-frame SED at
-            ``rtol ≤ 5e-2`` for the configurations covered by the
-            Phase II-2 stellar migration (stellar + dust + IGM +
-            radio + X-ray); see ``docs/dev/phase_ii_2_stellar_migration.md``.
+            ``rtol ≤ 5e-2`` for the configurations the stellar migration
+            covers (stellar + dust + IGM + radio + X-ray); see
+            ``docs/dev/phase_ii_2_stellar_migration.md``.
 
         Returns
         -------
@@ -370,7 +371,7 @@ class Galaxy:
             return self.predict_via_components(params)
         raise ValueError(
             f"backend must be 'legacy' or 'component', got {backend!r}. "
-            f"Default is 'legacy' until the Phase II cutover."
+            f"Default is 'legacy' until the orchestrator cutover."
         )
 
     def fit(
@@ -644,14 +645,14 @@ class Galaxy:
         if self.result is None:
             raise RuntimeError("Galaxy has not been fitted. Call .fit(...) first.")
 
-        from tengri.results import FitResult, Provenance
+        from tengri.results import FitRecord, FitResult
 
         # Citation keys for this run — mirror the logic in self._infer_citation_keys()
         citation_keys = self._infer_citation_keys()
 
         fr = FitResult(
             inner=self.result,
-            provenance=Provenance.capture(),
+            record=FitRecord.capture(),
             citation_keys=citation_keys,
             backend=getattr(self, "_last_backend", None),
             preset=getattr(self, "preset_name", None),
