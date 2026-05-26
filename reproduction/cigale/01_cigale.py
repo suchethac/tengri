@@ -307,42 +307,54 @@ save_fig("02_sfh_tau.png")
 # %% [markdown]
 # ### Declining exponential
 #
-# CIGALE `sfh2exp` (main + burst) vs tengri `sfh.dexp`. Shape only:
-# both codes integrate analytically, the prefactor convention differs.
+# CIGALE `sfh2exp` is a main-exponential plus optional burst; setting
+# ``f_burst = 0`` reduces it to a single declining exponential starting
+# at galaxy formation. tengri's `sfh.tau` is the same shape (FSPS sfh=1
+# / Bagpipes "exponential"). Plotted with linear cosmic-age axis so the
+# decay from formation is readable on both sides.
+#
+# tengri's `sfh.dexp` is a *delayed* exponential (∝ t exp(-t/τ)) — a
+# different shape that peaks at τ rather than at formation; it's the
+# right counterpart for CIGALE's `sfhdelayed`, already shown above.
 
 # %%
-try:
-    t_c2, sfr_c2 = C.sfh_curve(
-        "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
-        f_burst=0.2, sfr_0=1.0, normalise=True,
-    )
-    m_dexp = SEDModel.build(
-        ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
-        sfh={"type": "dexp", "tau_gyr": Fixed(0.5), "start_gyr": Fixed(0.0),
-             "log_total_mass": Fixed(0.0), "*": FIXED},
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-        redshift=Fixed(0.0),
-    )
-    s_dexp = m_dexp.predict_state({})
-    t_d = np.max(s_dexp.derived["sfh_grid_lbt_yr"]) - s_dexp.derived["sfh_grid_lbt_yr"]
-    sfr_d = s_dexp.derived["sfr_history"]
+t_c2, sfr_c2 = C.sfh_curve(
+    "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
+    f_burst=0.0, sfr_0=1.0, normalise=True,
+)
+m_tau = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "tau", "tau_gyr": Fixed(0.5), "age_gyr": Fixed(5.0),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+s_tau = m_tau.predict_state({})
+# tengri reports SFR on a lookback grid; t = age - lbt puts formation
+# at t = 0 like CIGALE.
+t_lbt_tau = np.asarray(s_tau.derived["sfh_grid_lbt_yr"])
+sfr_tau = np.asarray(s_tau.derived["sfr_history"])
+order_tau = np.argsort(5.0e9 - t_lbt_tau)
+t_t_tau = (5.0e9 - t_lbt_tau)[order_tau]
+sfr_t_tau = sfr_tau[order_tau]
+if sfr_t_tau.max() > 0 and sfr_c2.max() > 0:
+    sfr_t_tau = sfr_t_tau / sfr_t_tau.max() * sfr_c2.max()
 
-    fig, ax_l, ax_r = U.two_panel_fig()
-    for ax, title in (
-        (ax_l, "pcigale.sed_modules.sfh2exp"),
-        (ax_r, "tengri sfh.dexp"),
-    ):
-        ax.set_xscale("log"); ax.set_yscale("log")
-        ax.set_xlabel("Cosmic age [yr]"); ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-        ax.grid(True, alpha=0.3)
-        ax.set_title(title)
-    ax_l.plot(t_c2, sfr_c2, "C0-", linewidth=2.0)
-    ax_r.plot(t_d, sfr_d, "C1-", linewidth=2.0)
-    fig.tight_layout()
-    save_fig("02b_sfh_dexp.png")
-except Exception as exc:  # pragma: no cover
-    print(f"  sfh.dexp panel skipped: {exc}")
+fig, ax_l, ax_r = U.two_panel_fig()
+for ax, title in (
+    (ax_l, "pcigale.sed_modules.sfh2exp  (f_burst = 0, τ_main = 500 Myr)"),
+    (ax_r, "tengri sfh.tau  (τ = 0.5 Gyr, age = 5 Gyr)"),
+):
+    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
+    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+    ax.set_xlim(0, 5)
+    ax.grid(True, alpha=0.3)
+    ax.set_title(title)
+ax_l.plot(t_c2 / 1e9, sfr_c2, "C0-", linewidth=2.0)
+ax_r.plot(t_t_tau / 1e9, sfr_t_tau, "C1-", linewidth=2.0)
+fig.tight_layout()
+save_fig("02b_sfh_dexp.png")
 
 
 # %% [markdown]
