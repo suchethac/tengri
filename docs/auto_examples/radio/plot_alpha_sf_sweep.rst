@@ -29,10 +29,14 @@ fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).
 
 Reference: Condon 1992, ApJ 388, 113.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-57
+.. GENERATED FROM PYTHON SOURCE LINES 13-61
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

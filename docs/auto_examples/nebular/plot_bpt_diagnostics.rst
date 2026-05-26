@@ -26,10 +26,14 @@ The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates ionizing sources. Shocks
 regions into Seyfert regions as velocity increases. We plot shock models
 alongside the standard demarcation lines.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-96
+.. GENERATED FROM PYTHON SOURCE LINES 10-100
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

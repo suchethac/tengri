@@ -25,10 +25,14 @@ Sweep radiation-field distribution slope across the THEMIS grid at fixed
 grain content and minimum intensity. Lower alpha shifts weight toward high U,
 warming dust and shifting FIR peak blueward; higher alpha approaches single-U.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-59
+.. GENERATED FROM PYTHON SOURCE LINES 9-63
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

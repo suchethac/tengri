@@ -46,7 +46,7 @@ def spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
         sfh_field_psd_sigma=Uniform(0.01, 3.0),
         sfh_field_psd_tau_myr=Uniform(10.0, 500.0),
         met_logzsol=Uniform(-2.0, 0.2),
@@ -71,7 +71,7 @@ def fiducial_params(spec):
         "sfh_dpl_alpha": 1.0,
         "sfh_dpl_beta": 1.5,
         "sfh_dpl_tau_gyr": 3.0,
-        "sfh_dpl_log_peak_sfr": np.log10(5.0),
+        "sfh_dpl_log_total_mass": np.log10(5.0),
         "sfh_field_psd_sigma": 1.0,
         "sfh_field_psd_tau_myr": 50.0,
         "met_logzsol": -0.2,
@@ -91,7 +91,7 @@ def smooth_params(spec):
         "sfh_dpl_alpha": 1.0,
         "sfh_dpl_beta": 1.5,
         "sfh_dpl_tau_gyr": 3.0,
-        "sfh_dpl_log_peak_sfr": np.log10(5.0),
+        "sfh_dpl_log_total_mass": np.log10(5.0),
         "sfh_field_psd_sigma": 0.01,
         "sfh_field_psd_tau_myr": 50.0,
         "met_logzsol": -0.2,
@@ -130,7 +130,7 @@ class TestStellarMass:
 
         params_2x = {
             **fiducial_params,
-            "sfh_dpl_log_peak_sfr": (fiducial_params["sfh_dpl_log_peak_sfr"] + np.log10(2.0)),
+            "sfh_dpl_log_total_mass": (fiducial_params["sfh_dpl_log_total_mass"] + np.log10(2.0)),
         }
         sfh_2x = model.predict_sfh_quantities(params_2x)
 
@@ -204,7 +204,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0),
             "sfh_field_psd_sigma": 1.0,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -245,7 +245,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0),
             "sfh_field_psd_sigma": 2.0,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -274,7 +274,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0),
             "sfh_field_psd_sigma": 0.3,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -301,7 +301,7 @@ class TestDerivedQuantities:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": np.log10(5.0),
+            "sfh_dpl_log_total_mass": np.log10(5.0),
             "sfh_field_psd_sigma": 1.5,
             "sfh_field_psd_tau_myr": 50.0,
             "met_logzsol": -0.2,
@@ -337,53 +337,53 @@ class TestDerivedQuantities:
 class TestDerivedGradients:
     """Verify gradients flow through derived quantities."""
 
-    def test_mstar_gradient_wrt_peak_sfr(self, model, fiducial_params):
+    def test_mstar_gradient_wrt_log_total_mass(self, model, fiducial_params):
         def loss(p):
             return model.predict_sfh_quantities(p).stellar_mass
 
         grad = jax.grad(loss)(fiducial_params)
-        g = grad["sfh_dpl_log_peak_sfr"]
+        g = grad["sfh_dpl_log_total_mass"]
 
-        # Test with finite difference for peak_sfr
-        def loss_scalar(log_peak_sfr):
+        # Test with finite difference for log_total_mass
+        def loss_scalar(log_total_mass):
             params = dict(fiducial_params)
-            params["sfh_dpl_log_peak_sfr"] = log_peak_sfr
+            params["sfh_dpl_log_total_mass"] = log_total_mass
             return float(model.predict_sfh_quantities(params).stellar_mass)
 
         grad_jax = float(g)
-        x0 = float(fiducial_params["sfh_dpl_log_peak_sfr"])
+        x0 = float(fiducial_params["sfh_dpl_log_total_mass"])
         grad_fd = (loss_scalar(x0 + 1e-4) - loss_scalar(x0 - 1e-4)) / (2.0 * 1e-4)
         np.testing.assert_allclose(
             grad_jax,
             grad_fd,
             rtol=1e-3,
             atol=1e-10,
-            err_msg=f"log_peak_sfr: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+            err_msg=f"log_total_mass: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
         )
-        assert grad_jax > 0.0, "Increasing log_peak_sfr should increase M*"
+        assert grad_jax > 0.0, "Increasing log_total_mass should increase M*"
 
-    def test_sfr_gradient_wrt_peak_sfr(self, model, fiducial_params):
+    def test_sfr_gradient_wrt_log_total_mass(self, model, fiducial_params):
         def loss(p):
             sfh = model.predict_sfh_quantities(p)
             return sfh.stellar_mass + sfh.sfr_100myr
 
         grad = jax.grad(loss)(fiducial_params)
-        g = grad["sfh_dpl_log_peak_sfr"]
+        g = grad["sfh_dpl_log_total_mass"]
 
-        # Test with finite difference for peak_sfr
-        def loss_scalar(log_peak_sfr):
+        # Test with finite difference for log_total_mass
+        def loss_scalar(log_total_mass):
             params = dict(fiducial_params)
-            params["sfh_dpl_log_peak_sfr"] = log_peak_sfr
+            params["sfh_dpl_log_total_mass"] = log_total_mass
             sfh = model.predict_sfh_quantities(params)
             return float(sfh.stellar_mass + sfh.sfr_100myr)
 
         grad_jax = float(g)
-        x0 = float(fiducial_params["sfh_dpl_log_peak_sfr"])
+        x0 = float(fiducial_params["sfh_dpl_log_total_mass"])
         grad_fd = (loss_scalar(x0 + 1e-4) - loss_scalar(x0 - 1e-4)) / (2.0 * 1e-4)
         np.testing.assert_allclose(
             grad_jax,
             grad_fd,
             rtol=1e-3,
             atol=1e-10,
-            err_msg=f"log_peak_sfr: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
+            err_msg=f"log_total_mass: autodiff={grad_jax:.4e}, FD={grad_fd:.4e}",
         )

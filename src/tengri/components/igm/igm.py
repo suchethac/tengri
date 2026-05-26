@@ -604,8 +604,8 @@ def _damping_wing_tau(
     # offset v_bubble = R_bubble * H(z), hence a wavelength offset
     # x_bubble = v_bubble / c.
     # H(z) = H_0 * sqrt(Omega_m * (1+z)^3) for matter-dominated era
-    # Use canonical PLANCK18 cosmology: h = 0.674, Om0 = 0.315
-    # (replaces hardcoded h = 0.7, Om0 = 0.3 which caused ~1-2% drift)
+    # Use canonical PLANCK18 cosmology — sourced from tengri.cosmology
+    # (Planck 2020, A&A 641, A6: h = 0.6766, Om0 = 0.30966).
     h_z_kms_per_mpc = 100.0 * PLANCK18.h * jnp.sqrt(PLANCK18.Om0 * (1.0 + z) ** 3)
     v_bubble = R_bubble * h_z_kms_per_mpc  # km/s
     x_bubble = v_bubble / 2.998e5  # dimensionless

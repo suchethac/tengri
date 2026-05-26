@@ -37,10 +37,14 @@ Models compared (the six production disc selectors under
 - ``powerlaw``     — generic power-law disc
 - ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-84
+.. GENERATED FROM PYTHON SOURCE LINES 21-88
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -26,10 +26,14 @@ Show how the Cue neural emulator (Li+2025) maps the 2D parameter space
 constant log U (varying metallicity) and constant log Z (varying ionization)
 show the full grid's coverage and demarcation positions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-101
+.. GENERATED FROM PYTHON SOURCE LINES 10-105
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -76,7 +80,7 @@ show the full grid's coverage and demarcation positions.
                     "alpha": 1.0,
                     "beta": 2.5,
                     "tau_gyr": 0.05,
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 10.0,
                 },
                 dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
                 neb={

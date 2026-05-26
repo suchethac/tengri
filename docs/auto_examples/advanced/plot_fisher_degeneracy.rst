@@ -34,10 +34,14 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-130
+.. GENERATED FROM PYTHON SOURCE LINES 13-134
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
     from pathlib import Path
@@ -101,7 +105,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
     key = jax.random.PRNGKey(42)
     true_params = {
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
         "sfh_tsnorm_peak_lbt_gyr": 4.0,
         "sfh_tsnorm_width_gyr": 2.0,
         "sfh_tsnorm_skew": 0.0,
@@ -154,7 +158,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     ax.set_ylabel(r"Cramér-Rao $1\sigma$ bound (log scale)")
     ax.legend(fontsize=10, frameon=False)
     fig.tight_layout()
-    fig.savefig("plot_fisher_degeneracy.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_fisher_degeneracy.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

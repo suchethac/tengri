@@ -28,10 +28,14 @@ sharply blue-ward of the warm-dust peak; template-based libraries (DL07, DL14,
 Dale+2014) carry PAH features in the 3-20 μm window. Template models silently
 skip if the data files aren't available.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-106
+.. GENERATED FROM PYTHON SOURCE LINES 12-110
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

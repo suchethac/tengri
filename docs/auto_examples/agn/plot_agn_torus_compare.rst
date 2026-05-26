@@ -37,10 +37,14 @@ Torus libraries (the six production selectors under
 - ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-84
+.. GENERATED FROM PYTHON SOURCE LINES 21-88
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

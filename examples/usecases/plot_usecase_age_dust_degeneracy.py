@@ -12,6 +12,10 @@ Reference: Conroy et al. 2009, ApJ, 699, 486 (age-dust-metallicity
 degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -36,7 +40,7 @@ model_sdss = tengri.SEDModel.build(
     observation=obs_sdss,
     sfh={
         "type": "tsnorm",
-        "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+        "log_total_mass": 10.0, 2.5),
         "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
         "width_gyr": tengri.Uniform(0.3, 5.0),
         "skew": tengri.Uniform(-3.0, 3.0),
@@ -64,7 +68,7 @@ model_sdss_uv = tengri.SEDModel.build(
     observation=obs_sdss_uv,
     sfh={
         "type": "tsnorm",
-        "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+        "log_total_mass": 10.0, 2.5),
         "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
         "width_gyr": tengri.Uniform(0.3, 5.0),
         "skew": tengri.Uniform(-3.0, 3.0),
@@ -85,7 +89,7 @@ key = jax.random.PRNGKey(42)
 
 # Old, dust-poor
 params_old = {
-    "sfh_tsnorm_log_peak_sfr": 0.5,
+    "sfh_tsnorm_log_total_mass": 0.5,
     "sfh_tsnorm_peak_lbt_gyr": 8.0,
     "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": -0.5,
@@ -99,7 +103,7 @@ params_old = {
 
 # Young, dusty
 params_young = {
-    "sfh_tsnorm_log_peak_sfr": 1.5,
+    "sfh_tsnorm_log_total_mass": 1.5,
     "sfh_tsnorm_peak_lbt_gyr": 1.0,
     "sfh_tsnorm_width_gyr": 0.5,
     "sfh_tsnorm_skew": 0.8,

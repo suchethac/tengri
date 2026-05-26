@@ -28,10 +28,14 @@ to IR-red as they cool.
 
 Reference: DSPS SSP grid (Conroy et al. 2009).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-152
+.. GENERATED FROM PYTHON SOURCE LINES 12-156
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

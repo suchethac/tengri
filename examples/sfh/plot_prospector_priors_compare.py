@@ -28,6 +28,10 @@ edges via :func:`~tengri.make_agebins_from_zred` requires passing
 follow-up.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

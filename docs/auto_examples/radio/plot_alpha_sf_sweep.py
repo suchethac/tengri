@@ -11,6 +11,10 @@ fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).
 Reference: Condon 1992, ApJ 388, 113.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

@@ -58,7 +58,7 @@ def _base_spec(**kwargs):
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(5.0),
-        sfh_dpl_log_peak_sfr=Fixed(1.0),
+        sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Fixed(-0.5),
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),

@@ -34,10 +34,14 @@ parameter; dark blue/red indicates strong dependence.
 Reference: Automatic differentiation via JAX enables exact gradients
 for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-80
+.. GENERATED FROM PYTHON SOURCE LINES 13-84
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -66,7 +70,7 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
     )
 
     fiducial = {
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
         "sfh_tsnorm_peak_lbt_gyr": 4.0,
         "sfh_tsnorm_width_gyr": 2.0,
         "sfh_tsnorm_skew": 0.0,
@@ -104,7 +108,7 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
     ax.set_ylabel("Band")
     fig.colorbar(im, ax=ax, shrink=0.8, label="Normalized sensitivity")
     fig.tight_layout()
-    fig.savefig("plot_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_gradient_sensitivity.py:

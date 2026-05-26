@@ -11,6 +11,10 @@ Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
 (X-ray binaries in galaxies, ARA&A, 44, 323).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp
@@ -78,4 +82,4 @@ for x, label in [(1.24e-4, "X-ray"), (3e4, "Radio")]:
     ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
 
 fig.tight_layout()
-fig.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")

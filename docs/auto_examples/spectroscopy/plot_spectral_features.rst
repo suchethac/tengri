@@ -32,10 +32,14 @@ Mg b traces metallicity on the RGB/AGB branch.
    :alt: plot_spectral_features
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-94
+.. GENERATED FROM PYTHON SOURCE LINES 17-98
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

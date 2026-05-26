@@ -11,6 +11,10 @@ observed wavelengths at higher z, suppressing flux blueward of the break.
 Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

@@ -25,6 +25,10 @@ References
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -102,7 +106,7 @@ for i, tau_v in enumerate(tau_v_values):
             "alpha": Fixed(0.1),              # shallow rising slope
             "beta": Fixed(4.0),               # steep quenching
             "tau_gyr": Fixed(2.0),            # turnover timescale
-            "log_peak_sfr": Fixed(1.0),       # log10(10 Msun/yr) = 1.0
+            "log_total_mass": 10.0,       # log10(10 Msun/yr) = 1.0
         },
         "dust": {
             "type": "two_component",

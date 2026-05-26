@@ -27,10 +27,14 @@ strengths depend on mean stellar age, holding metallicity and dust fixed.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-100
+.. GENERATED FROM PYTHON SOURCE LINES 11-104
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -49,6 +49,10 @@
 # %%
 from __future__ import annotations
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import jax.numpy as jnp
 
 from tengri.components.spatial.flat_slab import FlatSlab

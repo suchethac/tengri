@@ -771,7 +771,7 @@ cause — here you'll see each one labelled."
 # Fiducial galaxy: log M* ~ 10.5, moderate star formation, modest dust, no AGN
 # Parameters chosen to show ALL features: UV, optical, NIR, MIR, FIR, radio
 spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.2),       # SFR ~ 15 Msun/yr
+    sfh_tsnorm_log_total_mass=Fixed(1.2),       # SFR ~ 15 Msun/yr
     sfh_tsnorm_peak_lbt_gyr=Fixed(4.0),        # peak 4 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(2.5),
     sfh_tsnorm_skew=Fixed(0.2),
@@ -2906,7 +2906,7 @@ print(
 # %%
 # 1. Define the parameters using the strict prefix namespace
 spec_param = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -2938,7 +2938,7 @@ true_params = spec_param.sample(key)
 # Override to a typical star-forming galaxy
 true_params.update(
     {
-        "sfh_tsnorm_log_peak_sfr": jnp.array(1.2),
+        "sfh_tsnorm_log_total_mass": jnp.array(1.2),
         "sfh_tsnorm_peak_lbt_gyr": jnp.array(3.0),
         "sfh_tsnorm_width_gyr": jnp.array(3.0),
         "sfh_tsnorm_skew": jnp.array(0.3),
@@ -2998,7 +2998,7 @@ plt.show()
 
 # %%
 spec_stoch = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),

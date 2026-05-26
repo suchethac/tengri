@@ -34,10 +34,14 @@ for radio and X-ray—no SSP data required for these components.
 Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
 (X-ray binaries in galaxies, ARA&A, 44, 323).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-82
+.. GENERATED FROM PYTHON SOURCE LINES 13-86
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -106,7 +110,7 @@ Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
         ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
 
     fig.tight_layout()
-    fig.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_radio_xray.py:

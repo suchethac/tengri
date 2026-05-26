@@ -120,19 +120,19 @@ class TestSFHCompositionShortNames:
 
     def test_sfh_ambiguous_short_name_in_composition(self):
         """Ambiguous short name (exists in multiple types) uses full prefix name."""
-        # Both dpl and tsnorm have log_peak_sfr; using short name is ambiguous
+        # Both dpl and tsnorm have log_total_mass; using short name is ambiguous
         # Prefer using the full prefixed name instead
         params = parse_groups(
             sfh={
                 "type": ["dpl", "tsnorm"],
                 "*": FREE,
-                "sfh_dpl_log_peak_sfr": Fixed(2.0),  # Use full prefix to disambiguate
+                "sfh_dpl_log_total_mass": Fixed(2.0),  # Use full prefix to disambiguate
             },
             redshift=Fixed(0.1),
         )
         # Verify the override worked
-        assert "sfh_dpl_log_peak_sfr" in params.fixed_params
-        assert params.get_distribution("sfh_dpl_log_peak_sfr").value == 2.0
+        assert "sfh_dpl_log_total_mass" in params.fixed_params
+        assert params.get_distribution("sfh_dpl_log_total_mass").value == 2.0
 
 
 class TestSFHCompositionValidation:

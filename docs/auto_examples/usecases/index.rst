@@ -10,6 +10,10 @@ SFR-indicator comparison, mass completeness, age–dust degeneracy, and
 emission-line Pearson coefficients.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
@@ -36,7 +40,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Two synthetic galaxies with identical SDSS ugriz photometry — one old and dust-poor, one young and dust-rich — produce wildly different SED fits. Adding GALEX FUV/NUV observation breaks the degeneracy by constraining the UV slope. Demonstrates the critical importance of short-wavelength coverage for stellar age and dust determination.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -47,7 +51,58 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Age-dust-metallicity degeneracy: why UV photometry is critical</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_age_dust_redshift_degeneracy_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_age_dust_redshift_degeneracy`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Balmer decrement measures dust attenuation via hydrogen recombination line ratios: H-alpha / H-beta is sensitive to extinction (Calzetti et al. 2000). Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the Calzetti+2000 expectation.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_balmer_decrement_av_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_balmer_decrement_av`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Balmer Decrement Tests Dust Attenuation on Emission Lines</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Observed-frame flux of a rest-frame SED depends on cosmological distances, which vary with H0 and Ω_M. This example quantifies the Hubble tension (H0 tension between local measurements ~73 km/s/Mpc and CMB measurements ~67.4 km/s/Mpc) by showing how apparent magnitude shifts by ~0.15 mag across cosmic time.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_cosmology_distance_modulus_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_cosmology_distance_modulus`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Hubble Tension: Cosmology-dependent distance modulus</div>
     </div>
 
 
@@ -70,7 +125,41 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates emission-line diagnostics using [OIII]/Hbeta, [NII]/Halpha ratios across a population mock sample. At different redshifts, nebular lines shift into different broadband filters creating photometric signatures useful for photo-z and ionization state estimation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Kauffmann+2003 separation of star-forming and quiescent SDSS galaxies plotted as a sample track: stellar-burst age varied from 30 Myr to 11 Gyr (single-burst SSP), with each model giving a (``D_n(4000)``, sSFR) pair.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_d4000_vs_ssfr_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_d4000_vs_ssfr`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">D_n(4000) – specific SFR: the Kauffmann+2003 sequence</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_dropout_selection_z3_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_dropout_selection_z3`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -81,7 +170,24 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Emission-line pseudo-color-color diagram for redshift classification</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Mannucci+2010 fundamental metallicity relation (FMR) describes how a galaxy&#x27;s gas-phase metallicity (Z) depends not only on its stellar mass (M) but also on its star formation rate (SFR). This three-parameter relation is a schematic* demonstration of the physical interplay between assembly, star formation, and chemical enrichment.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_fundamental_metallicity_relation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_fundamental_metallicity_relation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The Fundamental Metallicity Relation: M*-Z-SFR three-body interaction</div>
     </div>
 
 
@@ -104,7 +210,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3), and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color diagnostics separate spectral types and enable redshift estimation in the rest-frame UV-to-IR with minimal prior knowledge.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -115,7 +221,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">JWST NIRCam color-color diagnostics for high-z galaxy classification</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
@@ -138,7 +244,58 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Measures the 95% stellar mass completeness threshold for SDSS-like photometry. Mocks a population of 150 star-forming and passive galaxies spanning log M* [7-12] at z=0.1, injects realistic photometric noise, and measures below which stellar mass more than 5% of sources drop below detection limit. Critical for constructing mass-limited galaxy samples and understanding survey selection effects.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how strong gravitational lensing elevates intrinsically-faint high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_lensed_galaxy_magnification_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_lensed_galaxy_magnification`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Strong-lensing magnification: EoR galaxy detection boost</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_main_sequence_cosmic_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Speagle et al. 2014 star-forming main sequence defines the locus of star-forming galaxies in the log SFR vs. log M plane. This example generates 30 mock star-forming galaxies by sampling M uniformly and computing SFR from the Speagle+2014 relation. We then build minimal-configuration tengri SEDModels for each galaxy and verify the population using the public API.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_main_sequence_recovery_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_main_sequence_recovery`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The Star-Forming Main Sequence: M*-SFR Galaxy Population</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -149,13 +306,47 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Mass completeness limit in SDSS-like photometric surveys</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compares four classical SFR indicators (UV continuum, Hα emission, FIR, bolometric) on a population of mock galaxies spanning burstiness amplitudes. Stochastic SFHs introduce variance that differs between indicators. Hα shows highest scatter while bolometric is most stable — a key consideration for survey design.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Build a population of N=200 quiescent galaxies replicating the SDSS Luminous Red Galaxy (LRG) sample selection (Eisenstein et al. 2001, SDSS-I): old, massive systems at z~0.3 with log M* ≈ 11 and ages sampling the red-sequence range Uniform(6, 11) Gyr (Thomas et al. 2005).">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_sdss_lrg_stack_template_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_sdss_lrg_stack_template`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SDSS Luminous Red Galaxy Stacked Template Spectrum</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The cosmic star formation rate density (SFRD) — the total stellar mass created per unit time per unit comoving volume — rises from z~0 to peak at z~2, then declines toward higher redshift. Madau &amp; Dickinson 2014 assembled multi-wavelength observational data and fit a smooth analytic form:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_sfh_to_madau_dickinson_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Madau-Dickinson 2014 cosmic SFRD(z) from a population of mock galaxies</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -166,7 +357,75 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">SFR indicators: comparing UV, Hα, FIR under stochastic star formation</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Star formation rate calibrations depend on which wavelengths we observe. At high dust optical depth, UV-only SFR estimators severely underestimate the true SFR because dusty starbursts radiate most energy in the infrared. The hybrid SFR(UV+IR) recipe recovers the true SFR by combining both tracers.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_sfr_uv_ir_consistency_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_sfr_uv_ir_consistency`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SFR calibrations: UV only vs UV+IR hybrid estimators vs dust optical depth</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The stellar mass function (SMF) describes the number density of galaxies as a function of stellar mass, a fundamental probe of galaxy assembly. The Schechter function provides an excellent fit to observed SMF across cosmic time:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_stellar_mass_luminosity_function_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_stellar_mass_luminosity_function`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar Mass and Luminosity Functions from Mock Survey</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="UV slope (β) is degenerate between dust optical depth and stellar age: young dusty and old dust-free populations both show red UV continua. This script sweeps BOTH dust (τ_diff ∈ [0, 1.5]) and stellar age (t_burst ∈ [0.01, 10] Gyr) on a single-burst SFH (tsnorm) and plots the resulting UV slope β as a 2D heatmap. We expect the age and dust axes to BOTH affect β: old stars are redder, dust reddens UV.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_tau_age_2d_uv_slope_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_tau_age_2d_uv_slope`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">2D Degeneracy: Dust Optical Depth vs Stellar Age via UV Slope</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_tully_fisher_relation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_tully_fisher_relation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
@@ -189,7 +448,24 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generates a mock star-forming and quiescent galaxy population and plots each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009 quiescent wedge (z &lt; 1) marks the boundary between dusty star-forming and passive galaxies — a key degeneracy-breaking diagnostic.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A cornerstone of dust modeling is energy conservation: the UV light absorbed by dust must be re-radiated in the infrared. This example constructs 15 tengri SEDModels with optical depth τ_V ∈ {0, 0.1, ..., 4} and validates that integrated infrared luminosity (8–1000 μm) matches the absorbed UV (912–3000 Å rest-frame).">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_uv_to_ir_bolometric_balance_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_uv_to_ir_bolometric_balance`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust energy balance: L_IR = L_UV_absorbed across opacity variations</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -200,7 +476,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">UVJ diagram: rest-frame colors separate star-forming from quiescent</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
@@ -216,13 +492,29 @@ emission-line Pearson coefficients.
 
    /auto_examples/usecases/plot_usecase_age_dust_2d
    /auto_examples/usecases/plot_usecase_age_dust_degeneracy
+   /auto_examples/usecases/plot_usecase_age_dust_redshift_degeneracy
+   /auto_examples/usecases/plot_usecase_balmer_decrement_av
+   /auto_examples/usecases/plot_usecase_cosmology_distance_modulus
    /auto_examples/usecases/plot_usecase_d4000_age
+   /auto_examples/usecases/plot_usecase_d4000_vs_ssfr
+   /auto_examples/usecases/plot_usecase_dropout_selection_z3
    /auto_examples/usecases/plot_usecase_emission_line_pcc
+   /auto_examples/usecases/plot_usecase_fundamental_metallicity_relation
    /auto_examples/usecases/plot_usecase_hubble_sequence
    /auto_examples/usecases/plot_usecase_jwst_color_color
    /auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations
+   /auto_examples/usecases/plot_usecase_lensed_galaxy_magnification
+   /auto_examples/usecases/plot_usecase_main_sequence_cosmic_evolution
+   /auto_examples/usecases/plot_usecase_main_sequence_recovery
    /auto_examples/usecases/plot_usecase_mass_completeness
+   /auto_examples/usecases/plot_usecase_sdss_lrg_stack_template
+   /auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson
    /auto_examples/usecases/plot_usecase_sfr_indicator_compare
+   /auto_examples/usecases/plot_usecase_sfr_uv_ir_consistency
+   /auto_examples/usecases/plot_usecase_stellar_mass_luminosity_function
+   /auto_examples/usecases/plot_usecase_tau_age_2d_uv_slope
+   /auto_examples/usecases/plot_usecase_tully_fisher_relation
    /auto_examples/usecases/plot_usecase_uv_slope_beta
+   /auto_examples/usecases/plot_usecase_uv_to_ir_bolometric_balance
    /auto_examples/usecases/plot_usecase_uvj_diagram
 

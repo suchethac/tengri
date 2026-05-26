@@ -27,10 +27,14 @@ produces more dramatic bursts; longer τ sustains those bursts. Each panel shows
 the mean smooth SFH (dashed) and colored realizations, revealing how the two
 PSD parameters together map to observable burstiness regimes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-85
+.. GENERATED FROM PYTHON SOURCE LINES 11-89
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +57,7 @@ PSD parameters together map to observable burstiness regimes.
     t_gyr = np.array(t_lookback) / 1e9
 
     mean_sfr = tengri.tsnorm(
-        t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+        t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
     )
 
     # --- Parameter grid ---

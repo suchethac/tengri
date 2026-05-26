@@ -25,10 +25,14 @@ Compare dust emission templates at fixed infrared luminosity. Shows how
 spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and
 Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-103
+.. GENERATED FROM PYTHON SOURCE LINES 9-107
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

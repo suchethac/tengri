@@ -1,20 +1,29 @@
 {
- "jnp.logspace": [
+ "jax.random.PRNGKey": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.random",
+   "module_short": "jax.random",
+   "name": "PRNGKey"
+  }
+ ],
+ "jnp.float64": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "jax.numpy",
    "module_short": "jax.numpy",
-   "name": "logspace"
+   "name": "float64"
   }
  ],
- "np.array": [
+ "np.asarray": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "array"
+   "name": "asarray"
   }
  ],
  "np.linspace": [
@@ -53,6 +62,15 @@
    "name": "polyfit"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.cm.plasma": [
   {
    "is_class": false,
@@ -80,15 +98,6 @@
    "name": "subplots"
   }
  ],
- "resolve_agn_model": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.agn",
-   "module_short": "tengri.agn",
-   "name": "resolve_agn_model"
-  }
- ],
  "setup_style": [
   {
    "is_class": false,
@@ -96,6 +105,60 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "FIXED"
+  }
+ ],
+ "tengri.Fixed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
+ "tengri.SEDModel.build": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.SEDModel",
+   "module_short": "tengri.SEDModel",
+   "name": "build"
+  }
+ ],
+ "tengri.Uniform": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Uniform"
+  }
+ ],
+ "tengri.load_ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_ssp"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
   }
  ]
 }

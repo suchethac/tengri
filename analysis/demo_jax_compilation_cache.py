@@ -45,7 +45,7 @@ import pandas as pd
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import Fitter, Gaussian, SEDModel, Uniform, load_filter_set, load_ssp_data
+from tengri import Fitter, SEDModel, Uniform, load_filter_set, load_ssp_data
 
 # %%
 # Load SSP and filters (shared across all tests)
@@ -72,7 +72,7 @@ params = Parameters(
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
     sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
     sfh_tsnorm_trunc=Uniform(0.01, 1.0),
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-1.5, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=0.3,
@@ -93,7 +93,7 @@ true_params_gal1 = {
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
     "sfh_tsnorm_width_gyr": 1.2,
     "sfh_tsnorm_trunc": 0.3,
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 1.0 + 10.0,
     "met_logzsol": -0.3,
     "dust_tau_bc": 0.5,
     "dust_tau_diff": 0.3,
@@ -104,9 +104,10 @@ true_params_gal1 = {
 obs1 = model.mock(true_params_gal1, snr=20.0, key=jr.PRNGKey(42))
 fitter1 = Fitter(model, obs1.flux_obs, obs1.noise)
 
-print(f"\nGalaxy #1 mock data:")
+print("\nGalaxy #1 mock data:")
 print(f"  Flux: {obs1.flux_obs}")
 print(f"  Noise: {obs1.noise}")
+
 
 # %%
 # Utility: Time a function call with warmup
@@ -142,12 +143,16 @@ print("=" * 80)
 
 # Cold run (JIT compilation happens)
 print("\n[1/2] Cold run (first call, JIT compiles)...")
-_, t_cold = time_call(fitter1.run, method="map", key=jr.PRNGKey(1), n_steps=200, verbose=False, warmup=False)
+_, t_cold = time_call(
+    fitter1.run, method="map", key=jr.PRNGKey(1), n_steps=200, verbose=False, warmup=False
+)
 print(f"  Time: {t_cold[0]:.3f}s")
 
 # Warm run (JIT cache hit)
 print("\n[2/2] Warm run (second call, cached)...")
-_, t_warm = time_call(fitter1.run, method="map", key=jr.PRNGKey(2), n_steps=200, verbose=False, warmup=False)
+_, t_warm = time_call(
+    fitter1.run, method="map", key=jr.PRNGKey(2), n_steps=200, verbose=False, warmup=False
+)
 print(f"  Time: {t_warm[0]:.3f}s")
 
 speedup_warm = t_cold[0] / t_warm[0]
@@ -178,7 +183,7 @@ galaxy_params = [
         "sfh_tsnorm_peak_lbt_gyr": 7.0,
         "sfh_tsnorm_width_gyr": 0.5,
         "sfh_tsnorm_trunc": 0.8,
-        "sfh_tsnorm_log_peak_sfr": 0.2,
+        "sfh_tsnorm_log_total_mass": 0.2 + 10.0,
         "met_logzsol": -1.0,
         "dust_tau_bc": 1.5,
         "dust_tau_diff": 0.3,
@@ -191,7 +196,7 @@ galaxy_params = [
         "sfh_tsnorm_peak_lbt_gyr": 5.0,
         "sfh_tsnorm_width_gyr": 2.0,
         "sfh_tsnorm_trunc": 0.5,
-        "sfh_tsnorm_log_peak_sfr": 1.5,
+        "sfh_tsnorm_log_total_mass": 1.5 + 10.0,
         "met_logzsol": -0.5,
         "dust_tau_bc": 0.8,
         "dust_tau_diff": 0.3,
@@ -204,7 +209,7 @@ galaxy_params = [
         "sfh_tsnorm_peak_lbt_gyr": 2.0,
         "sfh_tsnorm_width_gyr": 0.8,
         "sfh_tsnorm_trunc": 0.2,
-        "sfh_tsnorm_log_peak_sfr": 0.5,
+        "sfh_tsnorm_log_total_mass": 0.5 + 10.0,
         "met_logzsol": -0.8,
         "dust_tau_bc": 1.2,
         "dust_tau_diff": 0.3,
@@ -217,7 +222,7 @@ galaxy_params = [
         "sfh_tsnorm_peak_lbt_gyr": 8.0,
         "sfh_tsnorm_width_gyr": 1.5,
         "sfh_tsnorm_trunc": 0.6,
-        "sfh_tsnorm_log_peak_sfr": 2.0,
+        "sfh_tsnorm_log_total_mass": 2.0 + 10.0,
         "met_logzsol": -0.1,
         "dust_tau_bc": 0.3,
         "dust_tau_diff": 0.3,
@@ -236,14 +241,18 @@ print(f"\nGenerated {len(fitters)} galaxies, all using the SAME Model instance")
 
 # Warm up cache with galaxy 1
 print("\n[Warmup] Galaxy #1 (already cached from Test 1)...")
-_, t_warmup = time_call(fitters[0].run, method="map", key=jr.PRNGKey(100), n_steps=200, verbose=False, warmup=False)
+_, t_warmup = time_call(
+    fitters[0].run, method="map", key=jr.PRNGKey(100), n_steps=200, verbose=False, warmup=False
+)
 print(f"  Time: {t_warmup[0]:.3f}s")
 
 # Run MAP on all 4 galaxies and collect timings
 gal_times = []
 for i, fitter in enumerate(fitters, start=1):
     print(f"\nGalaxy #{i}...", end=" ", flush=True)
-    _, t_gal = time_call(fitter.run, method="map", key=jr.PRNGKey(200 + i), n_steps=200, verbose=False, warmup=False)
+    _, t_gal = time_call(
+        fitter.run, method="map", key=jr.PRNGKey(200 + i), n_steps=200, verbose=False, warmup=False
+    )
     gal_times.append(t_gal[0])
     print(f"{t_gal[0]:.3f}s")
 
@@ -251,7 +260,7 @@ mean_time = jnp.mean(jnp.array(gal_times))
 std_time = jnp.std(jnp.array(gal_times))
 
 print(f"\n✓ {len(fitters)}-galaxy average: {mean_time:.3f}s ± {std_time:.3f}s")
-print(f"  (Proves cache is data-agnostic — no recompilation across galaxies!)")
+print("  (Proves cache is data-agnostic — no recompilation across galaxies!)")
 
 # %%
 gc.collect()
@@ -281,20 +290,26 @@ for method, kwargs in mcmc_methods:
     print(f"\n--- {method.upper()} ---")
 
     # Cold run
-    print(f"  [1/3] Cold (JIT compiles)...", end=" ", flush=True)
-    _, t_cold = time_call(fitters[0].run, method=method, key=jr.PRNGKey(10), warmup=False, **kwargs)
+    print("  [1/3] Cold (JIT compiles)...", end=" ", flush=True)
+    _, t_cold = time_call(
+        fitters[0].run, method=method, key=jr.PRNGKey(10), warmup=False, **kwargs
+    )
     print(f"{t_cold[0]:.2f}s")
 
     # Cached run (same Fitter)
-    print(f"  [2/3] Cached (same Fitter)...", end=" ", flush=True)
-    _, t_cached = time_call(fitters[0].run, method=method, key=jr.PRNGKey(11), warmup=False, **kwargs)
+    print("  [2/3] Cached (same Fitter)...", end=" ", flush=True)
+    _, t_cached = time_call(
+        fitters[0].run, method=method, key=jr.PRNGKey(11), warmup=False, **kwargs
+    )
     print(f"{t_cached[0]:.2f}s")
 
     # Run on all 5 galaxies and average
     print(f"  [3/3] Running on all {len(fitters)} galaxies...", end=" ", flush=True)
     multi_gal_times = []
     for i, fitter in enumerate(fitters):
-        _, t_gal = time_call(fitter.run, method=method, key=jr.PRNGKey(20 + i), warmup=False, **kwargs)
+        _, t_gal = time_call(
+            fitter.run, method=method, key=jr.PRNGKey(20 + i), warmup=False, **kwargs
+        )
         multi_gal_times.append(t_gal[0])
 
     mean_multi_gal = jnp.mean(jnp.array(multi_gal_times))
@@ -304,14 +319,16 @@ for method, kwargs in mcmc_methods:
     speedup_cached = t_cold[0] / t_cached[0]
     speedup_multi_gal = t_cold[0] / mean_multi_gal
 
-    results.append({
-        "Method": method,
-        "Cold (s)": t_cold[0],
-        "Cached (s)": t_cached[0],
-        "5-Galaxy Avg (s)": f"{mean_multi_gal:.2f} ± {std_multi_gal:.2f}",
-        "Cold→Cached": f"{speedup_cached:.1f}×",
-        "Cold→5Gal": f"{speedup_multi_gal:.1f}×",
-    })
+    results.append(
+        {
+            "Method": method,
+            "Cold (s)": t_cold[0],
+            "Cached (s)": t_cached[0],
+            "5-Galaxy Avg (s)": f"{mean_multi_gal:.2f} ± {std_multi_gal:.2f}",
+            "Cold→Cached": f"{speedup_cached:.1f}×",
+            "Cold→5Gal": f"{speedup_multi_gal:.1f}×",
+        }
+    )
 
     print(f"  Speedup: Cold→Cached {speedup_cached:.1f}×, Cold→5GalAvg {speedup_multi_gal:.1f}×")
 
@@ -348,7 +365,7 @@ params_fresh = Parameters(
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
     sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
     sfh_tsnorm_trunc=Uniform(0.01, 1.0),
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-1.5, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=0.3,
@@ -359,7 +376,9 @@ model_fresh = SEDModel(params_fresh, ssp, filters=filters)
 fitter_fresh = Fitter(model_fresh, obs1.flux_obs, obs1.noise)
 
 print("\n[1/3] First run (populates disk cache)...")
-_, t_first = time_call(fitter_fresh.run, method="map", key=jr.PRNGKey(20), n_steps=200, verbose=False, warmup=False)
+_, t_first = time_call(
+    fitter_fresh.run, method="map", key=jr.PRNGKey(20), n_steps=200, verbose=False, warmup=False
+)
 print(f"  Time: {t_first[0]:.3f}s")
 
 # Clear in-memory JAX cache (simulates fresh process)
@@ -375,7 +394,7 @@ params_fresh2 = Parameters(
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
     sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
     sfh_tsnorm_trunc=Uniform(0.01, 1.0),
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-1.5, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=0.3,
@@ -386,7 +405,9 @@ model_fresh2 = SEDModel(params_fresh2, ssp, filters=filters)
 fitter_fresh2 = Fitter(model_fresh2, obs1.flux_obs, obs1.noise)
 
 print("\n[3/3] Second run (loads from disk cache)...")
-_, t_second = time_call(fitter_fresh2.run, method="map", key=jr.PRNGKey(21), n_steps=200, verbose=False, warmup=False)
+_, t_second = time_call(
+    fitter_fresh2.run, method="map", key=jr.PRNGKey(21), n_steps=200, verbose=False, warmup=False
+)
 print(f"  Time: {t_second[0]:.3f}s")
 
 speedup_disk = t_first[0] / t_second[0]
@@ -412,10 +433,20 @@ multi_gal_stds = multi_gal_data[1].astype(float)
 # Bar chart: Absolute times (LOG SCALE)
 x = range(len(methods))
 width = 0.25
-ax1.bar([i - width for i in x], cold_times, width, label="Cold (first run)", color="red", alpha=0.7)
+ax1.bar(
+    [i - width for i in x], cold_times, width, label="Cold (first run)", color="red", alpha=0.7
+)
 ax1.bar(x, cached_times, width, label="Cached (same galaxy)", color="green", alpha=0.7)
-ax1.bar([i + width for i in x], multi_gal_means, width, yerr=multi_gal_stds,
-        label="5-galaxy avg", color="blue", alpha=0.7, capsize=5)
+ax1.bar(
+    [i + width for i in x],
+    multi_gal_means,
+    width,
+    yerr=multi_gal_stds,
+    label="5-galaxy avg",
+    color="blue",
+    alpha=0.7,
+    capsize=5,
+)
 ax1.set_xticks(x)
 ax1.set_xticklabels(methods)
 ax1.set_ylabel("Time (s)")
@@ -427,8 +458,22 @@ ax1.grid(axis="y", alpha=0.3)
 speedups_cached = cold_times / cached_times
 speedups_multi_gal = cold_times / multi_gal_means
 
-ax2.bar([i - width/2 for i in x], speedups_cached, width*1.5, label="Cold → Cached", color="green", alpha=0.7)
-ax2.bar([i + width/2 for i in x], speedups_multi_gal, width*1.5, label="Cold → 5-Gal Avg", color="blue", alpha=0.7)
+ax2.bar(
+    [i - width / 2 for i in x],
+    speedups_cached,
+    width * 1.5,
+    label="Cold → Cached",
+    color="green",
+    alpha=0.7,
+)
+ax2.bar(
+    [i + width / 2 for i in x],
+    speedups_multi_gal,
+    width * 1.5,
+    label="Cold → 5-Gal Avg",
+    color="blue",
+    alpha=0.7,
+)
 ax2.set_xticks(x)
 ax2.set_xticklabels(methods)
 ax2.set_ylabel("Speedup Factor")
@@ -471,10 +516,11 @@ print("\n✓ Figure saved: jax_cache_speedup.png")
 # Check disk cache size
 import subprocess
 
-result = subprocess.run(["du", "-sh", str(Path.home() / ".cache" / "tengri_jax_cache")],
-                       capture_output=True, text=True)
+result = subprocess.run(
+    ["du", "-sh", str(Path.home() / ".cache" / "tengri_jax_cache")], capture_output=True, text=True
+)
 cache_size = result.stdout.split()[0]
 print(f"Persistent disk cache size: {cache_size}")
-print(f"Location: ~/.cache/tengri_jax_cache/")
+print("Location: ~/.cache/tengri_jax_cache/")
 
 # %%

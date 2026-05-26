@@ -115,7 +115,7 @@ class TestAlphaFeParamSpec:
             sfh_dpl_alpha=1.0,
             sfh_dpl_beta=1.0,
             sfh_dpl_tau_gyr=5.0,
-            sfh_dpl_log_peak_sfr=1.0,
+            sfh_dpl_log_total_mass=1.0,
             mean_sfh_type="dpl",
         )
         dist = spec.get_distribution("met_alpha_fe")
@@ -179,7 +179,7 @@ class TestAlphaFeForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
@@ -209,7 +209,7 @@ class TestAlphaFeForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),

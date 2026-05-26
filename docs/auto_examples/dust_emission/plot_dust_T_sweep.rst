@@ -25,10 +25,14 @@ Dust temperature T sets the far-infrared peak via Wien's displacement law.
 Higher T shifts the peak blueward into the mid-IR; lower T shifts it
 redward toward the submillimeter.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-49
+.. GENERATED FROM PYTHON SOURCE LINES 9-53
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

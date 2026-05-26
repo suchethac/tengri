@@ -11,6 +11,10 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox relation and
 photon index dependence).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp
@@ -27,13 +31,18 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
 wave_keV = 12.398 / np.array(wavelength)
 
+# L_bol = 1e45 erg/s → L_2500 via Hopkins+2007 BC=5.15
+L_2500 = 1.0e45 / (5.15 * 1.199e15)
+
 gamma_values = np.array([1.4, 1.6, 1.8, 2.0, 2.2, 2.4])
 norm = mpl.colors.Normalize(vmin=gamma_values.min(), vmax=gamma_values.max())
 cmap = plt.get_cmap("viridis")
 
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for gamma in gamma_values:
-    l_xray = xray_agn_corona(wavelength, L_agn_bol=1e45, gamma=gamma, E_cut=300.0, alpha_ox=-1.4)
+    l_xray = xray_agn_corona(
+        wavelength, l_2500_30deg_erg_hz=L_2500, gamma=float(gamma), E_cut=300.0
+    )
     ax.loglog(wave_keV, np.array(l_xray), lw=1.4, color=cmap(norm(gamma)))
 
 ax.set_xlim(0.1, 1000)

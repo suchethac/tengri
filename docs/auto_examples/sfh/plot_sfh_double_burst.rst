@@ -26,10 +26,14 @@ produces a SED that blends young hot and old cool stellar populations. Left pane
 shows the optical-to-NIR region in linear scale; right panel shows the full
 panchromatic SED in log-log, revealing the emission from both young and old stars.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-132
+.. GENERATED FROM PYTHON SOURCE LINES 10-134
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -51,7 +55,7 @@ panchromatic SED in log-log, revealing the emission from both young and old star
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 10.0,
             "width_gyr": 0.5,
             "skew": 0.1,
@@ -67,7 +71,7 @@ panchromatic SED in log-log, revealing the emission from both young and old star
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.3,
             "width_gyr": 0.5,
             "skew": 0.3,
@@ -83,7 +87,7 @@ panchromatic SED in log-log, revealing the emission from both young and old star
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 1.5,
             "skew": 0.2,
@@ -134,7 +138,6 @@ panchromatic SED in log-log, revealing the emission from both young and old star
     )
     ax1.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
     ax1.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-    ax1.set_title("Linear Scale (Optical to NIR)", fontsize=11)
     ax1.legend(fontsize=10, frameon=False)
     ax1.grid(True, alpha=0.2)
 
@@ -144,7 +147,6 @@ panchromatic SED in log-log, revealing the emission from both young and old star
     ax2.loglog(wave, sed_double, "k--", lw=2.0, label="Double burst")
     ax2.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
     ax2.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-    ax2.set_title("Log Scale (Full SED)", fontsize=11)
     ax2.set_xlim(1000, 1e6)
     ax2.set_ylim(1e0, 1e7)
     ax2.legend(fontsize=10, frameon=False, loc="lower left")

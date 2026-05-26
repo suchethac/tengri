@@ -38,10 +38,14 @@ References:
 - Meurer, Heckman & Calzetti 1999, ApJ, 521, 64
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-141
+.. GENERATED FROM PYTHON SOURCE LINES 17-145
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -112,7 +116,7 @@ References:
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 0.5,  # young starburst -> strong UV
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",
@@ -165,7 +169,7 @@ References:
     cbar.set_label(r"$\tau_{\rm diff}$  [mag]")
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

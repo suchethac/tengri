@@ -26,10 +26,14 @@ together control the full SFH morphology. Early-time α determines assembly
 speed; late-time β sets the post-peak decay. The optical SED responds across
 each cell, revealing how parameter space maps to stellar age.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-77
+.. GENERATED FROM PYTHON SOURCE LINES 10-81
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +57,7 @@ each cell, revealing how parameter space maps to stellar age.
 
     baseline = dict(
         tau_gyr=3.0,
-        log_peak_sfr=1.0,
+        log_total_mass=10.0,
     )
 
     for i, beta in enumerate(betas):
@@ -68,7 +72,7 @@ each cell, revealing how parameter space maps to stellar age.
                     "alpha": alpha,
                     "beta": beta,
                     "tau_gyr": baseline["tau_gyr"],
-                    "log_peak_sfr": baseline["log_peak_sfr"],
+                    "log_total_mass": 10.0,
                 },
                 dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
                 redshift=tengri.Fixed(0.1),

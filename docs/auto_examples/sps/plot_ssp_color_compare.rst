@@ -33,10 +33,14 @@ TP-AGB treatment, where BC03 and FSPS-MIST differ most).
 This is the systematic an SED fitter inherits from its assumed SSP
 grid even before any prior or noise is involved.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-117
+.. GENERATED FROM PYTHON SOURCE LINES 17-121
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -80,7 +84,7 @@ grid even before any prior or noise is involved.
             "*": tengri.FIXED,
             "peak_lbt_gyr": 3.0,
             "width_gyr": 2.0,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.3,
             "trunc": 10.0,
         }

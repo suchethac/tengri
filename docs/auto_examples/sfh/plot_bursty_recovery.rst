@@ -26,10 +26,14 @@ Moderate (σ=1.0, τ=50 Myr), Bursty (σ=2.0, τ=20 Myr), and Extreme (σ=3.0, �
 Each panel shows one forward-model draw with the smooth mean SFH overlaid,
 illustrating the range of morphologies that each regime produces before inference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-77
+.. GENERATED FROM PYTHON SOURCE LINES 10-81
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +57,7 @@ illustrating the range of morphologies that each regime produces before inferenc
             "type": "field_psd",
             "*": tengri.FIXED,
             "mean": "tsnorm",
-            "tsnorm_log_peak_sfr": 1.2,
+            "tsnorm_log_total_mass": 1.2,
             "tsnorm_peak_lbt_gyr": 3.0,
             "tsnorm_width_gyr": 3.0,
             "tsnorm_skew": 0.3,

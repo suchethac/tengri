@@ -328,7 +328,7 @@ params_c = Parameters(
     apply_igm=True,
     redshift=Fixed(GAL_Z),
     met_logzsol=Uniform(-2.0, 0.3),
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
     sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -347,7 +347,7 @@ params_d = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 5.0),
     sfh_dpl_beta=Uniform(0.3, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     **DUST_PRIORS,
 )
 

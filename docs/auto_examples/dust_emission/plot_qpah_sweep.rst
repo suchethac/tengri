@@ -25,10 +25,14 @@ PAH mass fraction controls strength of polycyclic aromatic hydrocarbon
 mid-infrared emission features. Higher q_PAH produces stronger features at
 3.3, 6.2, 7.7, 8.6, 11.3 μm. Range varies by dust model.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-50
+.. GENERATED FROM PYTHON SOURCE LINES 9-54
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

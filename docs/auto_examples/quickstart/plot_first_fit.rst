@@ -30,10 +30,14 @@ observed bands and the residuals of the MAP fit relative to the noise level.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
 et al. 2000, ApJ, 533, 682 (attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-128
+.. GENERATED FROM PYTHON SOURCE LINES 14-132
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -69,7 +73,7 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     truth.update(
         sfh_tsnorm_peak_lbt_gyr=3.0,
         sfh_tsnorm_width_gyr=2.0,
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=10.0,
         sfh_tsnorm_skew=0.3,
         sfh_tsnorm_trunc=10.0,
         dust_tau_diff=0.3,

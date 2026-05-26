@@ -25,10 +25,14 @@ Compare all parametric SFH models available in tengri. Each is evaluated on
 a lookback-time grid with representative parameters, showing the range of
 morphologies from smooth exponentials to sharp truncations. No SSP data required.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-59
+.. GENERATED FROM PYTHON SOURCE LINES 9-63
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -48,19 +52,19 @@ morphologies from smooth exponentials to sharp truncations. No SSP data required
     # --- Evaluate each SFH model with representative parameters ---
     models = {
         "tsnorm (truncated skew-normal)": tengri.tsnorm(
-            t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.0, trunc=3.0
+            t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=1.0, trunc=3.0
         ),
         "snorm (skew-normal)": tengri.snorm(
-            t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=1.5
+            t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=1.5
         ),
-        "norm (Gaussian)": tengri.norm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9),
-        "lnorm (log-normal)": tengri.lnorm(t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=0.3),
+        "norm (Gaussian)": tengri.norm(t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9),
+        "lnorm (log-normal)": tengri.lnorm(t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=0.3),
         "dpl (double power law)": tengri.dpl(
-            t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_peak_sfr=1.0
+            t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_total_mass=10.0
         ),
-        "exponential": tengri.exponential(t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9),
+        "exponential": tengri.exponential(t_lookback, log_total_mass=10.0, tau=3e9, start=1e9),
         "delayed exponential": tengri.delayed_exponential(
-            t_lookback, log_peak_sfr=1.0, tau=3e9, start=1e9
+            t_lookback, log_total_mass=10.0, tau=3e9, start=1e9
         ),
         "constant": tengri.constant(t_lookback, log_sfr=0.5, start=2e9, end=10e9),
     }

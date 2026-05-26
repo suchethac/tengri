@@ -37,10 +37,14 @@ Libraries compared:
 - ``astrodust`` — Hensley & Draine 2023 unified grain model
 - ``bosa``      — BOSA template set (Boquien et al. CIGALE)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-99
+.. GENERATED FROM PYTHON SOURCE LINES 21-103
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

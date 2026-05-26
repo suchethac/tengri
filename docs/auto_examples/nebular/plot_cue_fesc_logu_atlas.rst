@@ -32,10 +32,14 @@ Cue (Li, Leja & Speagle 2023) on a young SF galaxy with a bare-stellar
 SSP (the wNE grids bake nebular emission in at fixed conditions and
 cannot vary these knobs).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-104
+.. GENERATED FROM PYTHON SOURCE LINES 16-108
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +62,7 @@ cannot vary these knobs).
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     }

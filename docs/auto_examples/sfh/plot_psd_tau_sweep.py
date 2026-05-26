@@ -8,6 +8,10 @@ means sustained episodes that leave their imprint on the SED. We vary τ
 across the prior range with the burst amplitude σ fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ model = tengri.SEDModel.build(
         "type": "field_psd",
         "*": tengri.FIXED,
         "mean": "tsnorm",
-        "tsnorm_log_peak_sfr": 1.0,
+        "tsnorm_log_total_mass": 1.0,
         "tsnorm_peak_lbt_gyr": 3.0,
         "tsnorm_width_gyr": 2.0,
         "tsnorm_skew": 0.3,
