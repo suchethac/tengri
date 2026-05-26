@@ -21,6 +21,11 @@
 UV-to-radio SED of a dusty starburst ULIRG
 ===========================================
 
+.. image:: images/sphx_glr_plot_panchromatic_dusty_starburst_001.png
+   :alt: plot panchromatic dusty starburst
+   :class: sphx-glr-single-img
+
+
 A heavily obscured starburst archetype (Arp 220-class ULIRG) with
 high optical depth and extreme far-infrared dominance. The SED shows:
 stellar intrinsic (suppressed by dust), stellar attenuated, dust

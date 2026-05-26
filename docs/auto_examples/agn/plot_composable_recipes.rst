@@ -21,6 +21,11 @@
 Composable AGN: mix-and-match recipes
 ======================================
 
+.. image:: images/sphx_glr_plot_composable_recipes_001.png
+   :alt: plot composable recipes
+   :class: sphx-glr-single-img
+
+
 The composable AGN block subsystem (``agn_model="composable"``) lets users
 pick one block per pipeline stage and combine across models. This example
 compares four recipes built from the registered block set:

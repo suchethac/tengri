@@ -21,6 +21,11 @@
 The outshining problem: young bursts eclipse ancient populations
 ================================================================
 
+.. image:: images/sphx_glr_plot_two_burst_observability_001.png
+   :alt: plot two burst observability
+   :class: sphx-glr-single-img
+
+
 How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr)
 starburst? This example demonstrates the *outshining* problem in broadband photometry
 (Trager+ 2000, Renzini 2006): the young burst's UV emission completely dominates over

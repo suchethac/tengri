@@ -21,6 +21,11 @@
 Alpha-element enhancement in quiescent stellar populations
 ===========================================================
 
+.. image:: images/sphx_glr_plot_alpha_enhanced_population_001.png
+   :alt: plot alpha enhanced population
+   :class: sphx-glr-single-img
+
+
 The stellar populations in massive elliptical galaxies are typically
 α-enhanced ([α/Fe] > 0) due to rapid star formation timescales that
 terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005).

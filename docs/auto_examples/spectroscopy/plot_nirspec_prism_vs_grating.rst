@@ -21,6 +21,11 @@
 JWST NIRSpec PRISM vs G395M grating: Hα + [NII] resolution comparison
 ======================================================================
 
+.. image:: images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
+   :alt: plot nirspec prism vs grating
+   :class: sphx-glr-single-img
+
+
 A z=5 JADES-like star-forming galaxy observed with JWST NIRSpec in two modes:
 PRISM (R~100, low-resolution) and G395M grating (R~1000, medium-resolution).
 The Hα line at rest 6564.61 Å appears as a single blob in PRISM but resolves

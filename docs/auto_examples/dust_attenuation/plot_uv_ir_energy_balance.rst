@@ -21,6 +21,11 @@
 UV-IR energy balance: absorbed = re-emitted
 =============================================
 
+.. image:: images/sphx_glr_plot_uv_ir_energy_balance_001.png
+   :alt: plot uv ir energy balance
+   :class: sphx-glr-single-img
+
+
 The Charlot & Fall 2000 two-component dust model conserves energy:
 every UV photon attenuated by the dust must come back out as IR
 re-emission. We sweep ``τ_diff`` from 0 to 2 mag and on each step

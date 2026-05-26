@@ -21,6 +21,11 @@
 Birth-cloud vs diffuse-ISM dust: which knob does what?
 ========================================================
 
+.. image:: images/sphx_glr_plot_birth_cloud_vs_diffuse_001.png
+   :alt: plot birth cloud vs diffuse
+   :class: sphx-glr-single-img
+
+
 The Charlot & Fall 2000 two-component dust model splits attenuation
 into a birth-cloud component (``τ_bc``) that only the youngest stellar
 ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all

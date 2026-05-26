@@ -21,6 +21,11 @@
 SKIRTOR AGN torus: inclination-dependent obscuration
 ======================================================
 
+.. image:: images/sphx_glr_plot_skirtor_inclination_sweep_001.png
+   :alt: plot skirtor inclination sweep
+   :class: sphx-glr-single-img
+
+
 Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+2016)
 reprocesses the hot accretion disc as a function of viewing angle.
 

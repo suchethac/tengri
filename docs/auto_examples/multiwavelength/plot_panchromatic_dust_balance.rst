@@ -21,6 +21,11 @@
 UV attenuation and infrared re-emission balance dust energy
 ===========================================================
 
+.. image:: images/sphx_glr_plot_panchromatic_dust_balance_001.png
+   :alt: plot panchromatic dust balance
+   :class: sphx-glr-single-img
+
+
 Dust absorbs UV and optical photons and re-emits at infrared wavelengths.
 Sweeping diffuse ISM optical depth τ_diff shows how UV absorption
 transfers energy into the infrared, demonstrating energy conservation

@@ -21,6 +21,11 @@
 Emission line broadening traces gas kinematics
 ================================================
 
+.. image:: images/sphx_glr_plot_line_sigma_sweep_001.png
+   :alt: plot line sigma sweep
+   :class: sphx-glr-single-img
+
+
 Emission line velocity dispersion broadens lines from a few km/s (narrow,
 kinematically resolved) to hundreds of km/s (unresolved at typical
 spectroscopic resolution). We show the [OIII] region broadened across

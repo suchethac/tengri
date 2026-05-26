@@ -21,6 +21,11 @@
 Lyman Dropout Redshift Sweep: IGM Absorption Evolution
 ======================================================
 
+.. image:: images/sphx_glr_plot_lyman_dropout_redshift_sweep_001.png
+   :alt: plot lyman dropout redshift sweep
+   :class: sphx-glr-single-img
+
+
 As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer
 observed wavelengths. This example shows how the Lyman dropout sweeps across
 the optical and near-infrared bands at :math:`z = 3, 4, 5, 6, 7`, progressively

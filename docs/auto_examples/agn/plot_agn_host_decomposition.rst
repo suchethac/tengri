@@ -21,6 +21,11 @@
 AGN host-galaxy decomposition: disentangling Seyfert contributions
 ===================================================================
 
+.. image:: images/sphx_glr_plot_agn_host_decomposition_001.png
+   :alt: plot agn host decomposition
+   :class: sphx-glr-single-img
+
+
 A Seyfert galaxy SED is decomposed photometrically by varying the AGN
 contribution fraction ``agn_frac`` from 0 (pure host) to 1.0 (pure AGN)
 to 0.5 (composite). This demonstrates how to isolate the AGN contribution

@@ -21,6 +21,11 @@
 M_BH–M_* scaling relation: Kormendy & Ho 2013 and Reines & Volonteri 2015
 =========================================================================
 
+.. image:: images/sphx_glr_plot_mbh_mstar_relation_001.png
+   :alt: plot mbh mstar relation
+   :class: sphx-glr-single-img
+
+
 The black hole mass (M_BH) and stellar bulge mass (M_*) of galaxies follow a
 tight empirical scaling relation. This example builds 12 mock AGN-hosting
 galaxies sweeping log M_* from 9 to 12 M_☉, derives M_BH from the published

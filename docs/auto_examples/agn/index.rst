@@ -51,23 +51,6 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The bolometric correction K_X = L_{\rm bol} / L_X relates the total AGN luminosity to the flux in a single observational band. For X-ray selected AGN, this is essential for converting observed X-ray fluxes back to total AGN power.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_agn_bolometric_correction_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_agn_bolometric_correction`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">AGN Bolometric Correction: K_X(L_bol) Across Four Bands</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="A single log L_bol = 12.5 composable AGN built up component by component — disc alone, +torus, +narrow lines, +broad lines — so the reader can see what each block contributes to the total spectrum. The bottom panel shows the same decomposition stacked so the layers add up to the full SED.">
 
 .. only:: html
@@ -301,23 +284,6 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Type 1 vs Type 2 AGN: Geometric Unification</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The ultraviolet-to-X-ray spectral slope α_OX encodes the fundamental physics of accretion discs. At higher bolometric luminosities, discs shift toward cooler effective temperatures and steeper UV slopes, reducing the X-ray-to-UV flux ratio. We compute α_OX for 15 tengri AGN disc models (multicolor, no torus/lines) across log L_bol ∈ [10.5, 14.0], measuring at rest-frame 2500 Å (UV) and 2 keV (X-ray). The Lusso &amp; Risaliti 2016 fit α_OX = −0.166 log L_2500 + 4.74 captures the observational trend that luminous quasars are more UV-bright and X-ray-weak.">
-
-.. only:: html
-
-  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_alpha_ox_lusso_risaliti_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/agn/plot_alpha_ox_lusso_risaliti`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Lusso & Risaliti 2016: α_OX – L_UV relation for AGN discs</div>
     </div>
 
 
@@ -656,7 +622,6 @@ AGN disc and torus SED templates.
 
    /auto_examples/agn/plot_agn_alpha_ox_lbol_2d
    /auto_examples/agn/plot_agn_bbb_mbh_sweep
-   /auto_examples/agn/plot_agn_bolometric_correction
    /auto_examples/agn/plot_agn_components_breakdown
    /auto_examples/agn/plot_agn_cos_inc_sweep
    /auto_examples/agn/plot_agn_disc_compare
@@ -671,7 +636,6 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_agn_tau_skirtor_sweep
    /auto_examples/agn/plot_agn_torus_compare
    /auto_examples/agn/plot_agn_type12
-   /auto_examples/agn/plot_alpha_ox_lusso_risaliti
    /auto_examples/agn/plot_bh_spin_disc_continuum
    /auto_examples/agn/plot_composable_block_toggles
    /auto_examples/agn/plot_composable_recipes

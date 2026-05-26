@@ -21,6 +21,11 @@
 Dust attenuation laws: family comparison across UV to near-IR
 ==============================================================
 
+.. image:: images/sphx_glr_plot_attenuation_law_family_001.png
+   :alt: plot attenuation law family
+   :class: sphx-glr-single-img
+
+
 Dust attenuation laws encode how interstellar dust preferentially absorbs
 short-wavelength (UV) starlight relative to optical/IR. The wavelength
 dependence is empirically calibrated to extinction measurements in the Milky Way

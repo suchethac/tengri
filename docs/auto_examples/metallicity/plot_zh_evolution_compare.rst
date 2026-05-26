@@ -21,6 +21,11 @@
 Chemical evolution: closed-box vs leaky-box enrichment histories
 ================================================================
 
+.. image:: images/sphx_glr_plot_zh_evolution_compare_001.png
+   :alt: plot zh evolution compare
+   :class: sphx-glr-single-img
+
+
 Metallicity evolution Z(t) depends on the balance between metal production
 (in supernovae) and metal removal (via outflows). This four-panel figure shows
 how different star formation timescales and outflow efficiencies η alter the

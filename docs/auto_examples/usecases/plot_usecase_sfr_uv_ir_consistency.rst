@@ -21,6 +21,11 @@
 SFR calibrations: UV only vs UV+IR hybrid estimators vs dust optical depth
 ===========================================================================
 
+.. image:: images/sphx_glr_plot_usecase_sfr_uv_ir_consistency_001.png
+   :alt: plot usecase sfr uv ir consistency
+   :class: sphx-glr-single-img
+
+
 Star formation rate calibrations depend on which wavelengths we observe.
 At high dust optical depth, UV-only SFR estimators severely underestimate
 the true SFR because dusty starbursts radiate most energy in the infrared.

@@ -70,23 +70,6 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into: - τ_bc (birth-cloud): attenuates only young stellar ages (&lt; 10 Myr) - τ_diff (diffuse ISM): attenuates all stellar light">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_birth_cloud_vs_diffuse_age_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse_age`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Birth-cloud attenuation age dependence: Charlot & Fall 2000</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Cardelli+1989 Milky Way attenuation curve is a family parameterised by R_V = A_V / E(B-V). Smaller R_V (≲ 3) gives a steeper UV rise and stronger 2175 Å bump (denser lines of sight, small grains dominate); larger R_V (≳ 4.5) flattens the UV slope (processed grains, larger sizes).">
 
 .. only:: html
@@ -336,7 +319,6 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_attenuation_law_compare
    /auto_examples/dust_attenuation/plot_attenuation_law_family
    /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
-   /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse_age
    /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
    /auto_examples/dust_attenuation/plot_dust_curves
    /auto_examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed

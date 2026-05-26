@@ -21,6 +21,11 @@
 Prior sensitivity: uniform vs Gaussian on metallicity
 ======================================================
 
+.. image:: images/sphx_glr_plot_recipe_compare_priors_001.png
+   :alt: plot recipe compare priors
+   :class: sphx-glr-single-img
+
+
 Metallicity is often poorly constrained by optical photometry. This recipe
 compares two fits: one with a Uniform prior on met_logzsol (weak constraint)
 and one with a Gaussian prior (informative from external data). We show how

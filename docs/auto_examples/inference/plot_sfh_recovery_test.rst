@@ -21,6 +21,11 @@
 SFH recovery with MAP: double power-law against mock photometry
 ===============================================================
 
+.. image:: images/sphx_glr_plot_sfh_recovery_test_001.png
+   :alt: plot sfh recovery test
+   :class: sphx-glr-single-img
+
+
 Simulate a galaxy with a double-power-law (dpl) star formation history, mock
 SDSS photometry at S/N=20, and recover the SFH using MAP optimization. The
 figure compares the true and recovered SFH as a function of time, with the

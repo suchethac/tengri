@@ -21,6 +21,11 @@
 Attenuation law leaves a distinct UV-slope fingerprint
 =========================================================
 
+.. image:: images/sphx_glr_plot_dust_law_uv_slope_response_001.png
+   :alt: plot dust law uv slope response
+   :class: sphx-glr-single-img
+
+
 For a fixed star-forming galaxy with τ_V = 1 (a moderate
 attenuation), six common attenuation laws produce six visibly
 different reddened UV slopes β. The intrinsic SED has β ≈ −2.3;

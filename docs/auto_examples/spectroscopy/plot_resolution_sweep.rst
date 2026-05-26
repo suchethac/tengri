@@ -21,6 +21,11 @@
 Instrumental Resolution Sweep: Hα Line Blending
 =================================================
 
+.. image:: images/sphx_glr_plot_resolution_sweep_001.png
+   :alt: plot resolution sweep
+   :class: sphx-glr-single-img
+
+
 Demonstrate how instrumental resolution affects spectral line profile visibility
 by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500
 (DESI), 2000 (KMOS), 5000 (MUSE), and 25000 (HARPS). The Hα + [N II] complex

@@ -21,6 +21,11 @@
 N_H column density sweep: from unobscured to Compton-thick
 ==========================================================
 
+.. image:: images/sphx_glr_plot_xray_nh_sweep_001.png
+   :alt: plot xray nh sweep
+   :class: sphx-glr-single-img
+
+
 The line-of-sight column density ``N_H`` reshapes the AGN X-ray spectrum
 in two regimes: photoelectric absorption (``zphabs``) suppresses the soft
 band roughly as :math:`\exp(-\sigma(E)\,N_H)` with cross-section
@@ -45,23 +50,6 @@ References
 - Morrison & McCammon 1983, ApJ 270, 119 (photoelectric cross-sections).
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-114
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/xray/plot_xray_nh_sweep.py", line 57, in <module>
-        xray_agn_corona(wavelength, L_agn_bol=L_BOL, log_nh=15.0, scattered_frac=0.0)
-    TypeError: xray_agn_corona() got an unexpected keyword argument 'L_agn_bol'
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 

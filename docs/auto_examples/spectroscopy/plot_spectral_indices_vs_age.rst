@@ -21,6 +21,11 @@
 Classic spectral indices vs single-burst age
 ==============================================
 
+.. image:: images/sphx_glr_plot_spectral_indices_vs_age_001.png
+   :alt: plot spectral indices vs age
+   :class: sphx-glr-single-img
+
+
 Three of the most-used optical absorption / emission diagnostics
 evaluated on a single-burst stellar population from 30 Myr to 13 Gyr,
 at solar metallicity, no dust. The figure makes obvious which
