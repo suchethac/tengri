@@ -13,6 +13,10 @@ Reference: Blanton et al. 2003, ApJ, 594, 186 (SDSS photometry);
 Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -35,7 +39,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+        "log_total_mass": 10.0, 2.5),
         "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
         "width_gyr": tengri.Uniform(0.3, 5.0),
         "skew": tengri.Uniform(-3.0, 3.0),
@@ -65,7 +69,7 @@ for _i in range(n_gal):
     # Assign log-mass uniformly
     log_mass = np.random.uniform(7, 12)
     # Heuristic: older/more massive galaxies have higher SFR peak
-    params["sfh_tsnorm_log_peak_sfr"] = 0.5 + (log_mass - 9.0) * 0.2
+    params["sfh_tsnorm_log_total_mass"] = 0.5 + (log_mass - 9.0) * 0.2
     params["sfh_tsnorm_peak_lbt_gyr"] = 3.0 + (log_mass - 9.0) * 1.0
 
     # Predict photometry and inject noise

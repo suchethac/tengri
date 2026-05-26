@@ -63,7 +63,7 @@ obs = Observation(photometry=Photometry.from_names(
 ))
 
 spec = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+    sfh_tsnorm_log_total_mass=Uniform(-1, 2),
     sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
     sfh_tsnorm_width_gyr=Uniform(0.5, 5),
     sfh_field_psd_sigma=Uniform(0.01, 1.0),

@@ -13,6 +13,10 @@ mag in the *u* band.
 Reference: Conroy 2013, ARA&A, 51, 393.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -43,15 +47,29 @@ model = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.05),
 )
 
+<<<<<<< HEAD
 key = jax.random.PRNGKey(42)
 truth = dict(model.spec.sample(key))
 truth.update(
-    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_log_total_mass=1.0,
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
     sfh_tsnorm_skew=0.3,
     sfh_tsnorm_trunc=3.0,
     dust_tau_diff=0.4,
+=======
+spec = Parameters(
+    sfh_tsnorm_log_total_mass=10.0),
+    sfh_tsnorm_peak_lbt_gyr=Fixed(3.0),
+    sfh_tsnorm_width_gyr=Fixed(2.0),
+    sfh_tsnorm_skew=Fixed(0.3),
+    sfh_tsnorm_trunc=Fixed(3.0),
+    met_logzsol=Fixed(-0.1),
+    dust_tau_bc=Fixed(0.5),
+    dust_tau_diff=Fixed(0.3),
+    dust_slope=Fixed(-0.7),
+    redshift=Fixed(0.05),
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 )
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 flux_truth = np.asarray(model.predict_photometry(truth))

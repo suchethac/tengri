@@ -6,6 +6,10 @@ Per-H grain volume distribution versus grain radius for the Hensley & Draine
 2023 fiducial size distribution (MW high-latitude :math:`R_V=3.1` sightline).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import h5py

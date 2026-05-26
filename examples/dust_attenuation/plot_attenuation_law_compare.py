@@ -11,6 +11,10 @@ Calzetti is redder), and parametric extensions (Kriek & Conroy).
 Reference: Cardelli et al. 1989, ApJ, 345, 245 (MW); Pei 1992, ApJ, 395, 130 (SMC).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

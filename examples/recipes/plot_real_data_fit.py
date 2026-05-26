@@ -14,6 +14,10 @@ galaxies); this script focuses on the *parsing* and *single-row*
 workflow that catalogue work begins with.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

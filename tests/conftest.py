@@ -204,6 +204,13 @@ def pytest_configure(config):
     scripts/download_cb19_templates.py), this hook is a no-op.
     """
     cb19_path = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
+    _create_cb19_fixture_if_missing(cb19_path)
+    _create_silva04_fixture_if_missing(
+        Path(__file__).parent.parent / "data" / "silva04_torus_grid.h5"
+    )
+
+
+def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
     if cb19_path.exists():
         return
 
@@ -248,12 +255,37 @@ def pytest_configure(config):
         )
         f.create_dataset("line_wavelengths_aa", data=line_waves)
 
-        # All line ratios = 1.0 (linear L_line/L_Hβ), so after log10 conversion = 0.0.
-        # This satisfies test_hb_ratio_is_unity (Hβ log10(ratio)=0.0) and
-        # test_no_all_nan_slices_at_solar (all values finite).
-        ratios = np.ones(
-            (n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines), dtype=np.float32
+        # Per-line ratios (linear L_line / L_Hβ). Plumbing tests need
+        # Hβ = 1.0 (test_hb_ratio_is_unity) and all entries finite
+        # (test_no_all_nan_slices_at_solar). Beyond those constraints,
+        # ship *physically-distinct-per-line* defaults so consumers like
+        # ``CB19Backend.predict_nebular_line_luminosities`` produce
+        # visible per-line variation under the synthetic grid — without
+        # this, every line collapses to the same luminosity and #361
+        # Bug C reproduces. The numbers below are rough SF Case B Hβ
+        # ratios (Osterbrock & Ferland 2006, Tables 4.4/4.10) — not
+        # production-grade, but enough to break the degeneracy in
+        # plumbing tests. Replace with the real Martinez-Paredes+2023
+        # grid via ``scripts/download_cb19_templates.py`` for science.
+        per_line_ratios_to_hbeta = np.array(
+            [
+                10.0,  # 1215.67  Lyα (intrinsic Case B; resonant scatter applied downstream)
+                0.50,  # 1549     C IV
+                2.00,  # 3727     [O II]
+                0.47,  # 4340.47  Hγ (Case B)
+                1.00,  # 4862.68  Hβ (reference; required = 1.0)
+                4.00,  # 5008.24  [O III]
+                0.10,  # 6300.30  [O I]
+                0.10,  # 6548.05  [N II] (one tail of doublet)
+                2.87,  # 6564.61  Hα (Case B)
+                0.30,  # 6583.45  [N II] (other tail)
+            ],
+            dtype=np.float32,
         )
+        ratios = np.broadcast_to(
+            per_line_ratios_to_hbeta,
+            (n_oh, n_age, n_u, n_nh, n_co, n_dno, n_hbfrac, n_lines),
+        ).astype(np.float32)
         grp = f.create_group("grids/SSP/Kroupa01/mu100")
         grp.create_dataset("line_ratios", data=ratios)
 
@@ -264,6 +296,43 @@ def pytest_configure(config):
     warnings.warn(
         f"Created synthetic CB19 fixture at {cb19_path} for tests. "
         "Run scripts/download_cb19_templates.py to replace with the real grid.",
+        UserWarning,
+        stacklevel=1,
+    )
+
+
+def _create_silva04_fixture_if_missing(silva04_path: Path) -> None:
+    """Synthesise a minimal Silva+04 cold-torus grid if absent.
+
+    The Silva+04 loader raises FileNotFoundError when its HDF5 grid is
+    missing, breaking ~ 20 test modules at import time in CI. We
+    synthesise a minimal grid with a zero template so the orchestration
+    code path runs; real physics tests can guard themselves with
+    ``@pytest.mark.skipif`` against the actual grid file.
+
+    The grid is keyed on ``silva04/{log_nh_axis, wavelength, template}``
+    per ``_load_silva04_arrays`` in ``components/agn/silva04.py``.
+    """
+    if silva04_path.exists():
+        return
+    import warnings
+
+    silva04_path.parent.mkdir(parents=True, exist_ok=True)
+    n_nh, n_wave = 8, 64
+    log_nh_axis = np.linspace(22.0, 25.0, n_nh).astype(np.float64)
+    wavelength = np.logspace(np.log10(1.0), np.log10(1e7), n_wave).astype(np.float64)
+    # Template: zero everywhere — gives a defensibly null Silva+04
+    # spectrum so tests exercise the orchestration without accidentally
+    # claiming numerical agreement with Silva+04 physics.
+    template = np.zeros((n_nh, n_wave), dtype=np.float64)
+    with h5py.File(silva04_path, "w") as f:
+        g = f.create_group("silva04")
+        g.create_dataset("log_nh_axis", data=log_nh_axis)
+        g.create_dataset("wavelength", data=wavelength)
+        g.create_dataset("template", data=template)
+    warnings.warn(
+        f"Created synthetic Silva+04 grid at {silva04_path} for tests. "
+        "Run scripts/build_silva04_grid.py to replace with the real grid.",
         UserWarning,
         stacklevel=1,
     )

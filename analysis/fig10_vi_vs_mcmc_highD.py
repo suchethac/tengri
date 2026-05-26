@@ -44,7 +44,7 @@ def make_stochastic_model(n_grid=128):
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(1.0, 8.0),
-        sfh_dpl_log_peak_sfr=Uniform(0.0, 1.5),
+        sfh_dpl_log_total_mass=Uniform(10.0, 11.5),
         met_logzsol=Gaussian(-0.5, 0.3, lo=-2.0, hi=0.0),
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=Uniform(0.0, 1.0),

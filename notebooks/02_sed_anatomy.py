@@ -36,6 +36,10 @@
 #   for the methods section.
 
 # %%
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 from copy import deepcopy
 from pathlib import Path
 
@@ -120,11 +124,10 @@ kitchen_sink = dict(
     sfh={
         "type": "dpl",
         "*": FIXED,
-        "log_peak_sfr": 1.6,
+        "log_total_mass": 10.0,
         "alpha": 2.2,
         "beta": 1.4,
         "tau_gyr": 4.0,
-        "log_mstar": 10.6,
     },
     dust={
         "type": "two_component",
@@ -133,12 +136,12 @@ kitchen_sink = dict(
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
-        "emission": {"type": "dale2014", "*": FIXED, "alpha": 2.2},
+        "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
     },
     neb={"type": "cue", "*": FIXED},
     agn={
         "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 45.0},
-        "torus": {"type": "skirtor", "*": FIXED, "tau_9p7": 5.0, "cos_theta_torus": 0.5},
+        "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "cos_inc": 0.5},
         "lines": {"type": "nlr", "*": FIXED},
     },
     radio=True,

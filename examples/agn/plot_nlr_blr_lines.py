@@ -17,6 +17,10 @@ Reference: Osterbrock & Ferland 2006, *Astrophysics of Gaseous Nebulae
 and Active Galactic Nuclei* (line classification by FWHM).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

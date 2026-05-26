@@ -244,12 +244,16 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
         entries.keys(),
         key=lambda s: (order.get(s, len(order)), s),
     )
-    # ``:hidden:`` (no ``:includehidden:``) so the section list shows up
-    # on the gallery page body but does NOT propagate into the parent
-    # sidebar — the gallery is one dropdown, not 19 nested ones.
+    # ``:hidden:`` + ``:titlesonly:`` + ``:maxdepth: 1`` so the gallery is
+    # ONE sidebar entry, not 19 nested ones. ``:hidden:`` keeps the toctree
+    # out of the page body; ``:titlesonly:`` stops Furo from descending past
+    # the gallery title into per-section indexes; ``:maxdepth: 1`` caps the
+    # walk so per-script pages can't bubble up either.
     toctree = [
         ".. toctree::",
         "   :hidden:",
+        "   :titlesonly:",
+        "   :maxdepth: 1",
         "",
     ] + [f"   /auto_examples/{s}/index.rst" for s in ordered_sections]
 
@@ -433,4 +437,9 @@ exclude_patterns = [
     # Not part of the published sidebar (content folded into index.md or omitted)
     "changelog.md",
     "documentation.md",
+    # Spine notebooks not currently in the published sidebar (08 emission
+    # lines + 09 parameter sweeps were the "physics deep dives" section,
+    # dropped from the index in the 2026-05 polish pass).
+    "spine/08_emission_lines.ipynb",
+    "spine/09_parameter_sweeps.ipynb",
 ]

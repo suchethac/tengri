@@ -35,7 +35,7 @@ import numpy as np
 
 from tengri.components.agn.nlr import (
     _NLR_FWHM_KMS,
-    _NLR_LINE_EFFICIENCY,
+    _NLR_LINE_EFFICIENCY_DEFAULT as _NLR_LINE_EFFICIENCY,
     _RICHARDSON_FLUXES,
     _RICHARDSON_WAVES,
 )

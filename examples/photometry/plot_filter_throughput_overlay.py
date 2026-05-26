@@ -19,6 +19,10 @@ sfr-scaled nebular emission, rendered in the observer frame at z=1 with complete
 IGM attenuation.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -43,7 +47,7 @@ sfh_config = {
     "*": tengri.FIXED,
     "peak_lbt_gyr": 0.1,  # Peak 100 Myr ago (recent burst)
     "width_gyr": 0.1,  # Duration 100 Myr
-    "log_peak_sfr": 1.5,  # SFR ≈ 30 M_sun/yr
+    "log_total_mass": 10.0,  # SFR ≈ 30 M_sun/yr
     "skew": 0.0,  # Symmetric
     "trunc": 13.0,  # Truncate at z_form ~ z+1
 }

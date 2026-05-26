@@ -2,9 +2,14 @@
 """Tests for X-ray emission module (models/xray.py).
 
 Physics references:
-- Grimm+2003, MNRAS 339, 793 (HMXB-SFR relation)
-- Gilfanov 2004, MNRAS 349, 146 (LMXB-mass relation)
-- Ranalli+2003, A&A 399, 39 (combined XRB calibration)
+- Lehmer+2016, ApJ 825, 7 (HMXB quartic in Z, LMXB quartic in log τ).
+- Yang+2020, MNRAS 491, 740 / X-CIGALE (canonical alpha_ox(L_2500) path).
+- Just+2007, ApJ 665, 1004 (alpha_ox-L_2500 calibration).
+
+Notes
+-----
+Post-#329 ``xray_agn_corona`` and ``xray_total`` take ``l_2500_30deg_erg_hz``
+(not ``L_agn_bol``); we convert via Hopkins+2007 BC_2500 ≈ 5.15.
 """
 
 import chex
@@ -29,6 +34,16 @@ jax.config.update("jax_enable_x64", True)
 _E_GRID = jnp.linspace(2.0, 10.0, 500)  # keV
 _NU_GRID = _E_GRID * _KEV_TO_HZ  # Hz
 _WAVE_GRID = _C_AA / _NU_GRID  # Angstrom (x-ray)
+
+# Hopkins+2007 BC_2500 ≈ 5.15 lets us back out L_2500 from L_agn_bol for the
+# new xray_agn_corona signature.
+_NU_2500 = 1.199e15  # Hz
+_BC_2500 = 5.15
+
+# Gilfanov 2004 / Yang+22-Lehmer+14 assume an old (10 Gyr) stellar population
+# for LMXB normalisation. Set explicitly so tests don't drift if the default
+# ever changes.
+_LMXB_AGE_GYR = 10.0
 
 
 class TestXRBNormalization:
@@ -55,31 +70,58 @@ class TestXRBNormalization:
         )
 
     def test_hmxb_band_luminosity(self):
-        """HMXB 2-10 keV luminosity at SFR=1 Msun/yr. Grimm+2003 Eq. 3: L=2.6e39 erg/s."""
+        """HMXB 2-10 keV luminosity at SFR=1 Msun/yr, Z=Z_sun matches Lehmer+19.
+
+        Yang+22 / Lehmer+19 quartic in Z:
+            log L_HMXB(2-10 keV) [W] = 33.28 - 62.12 Z + 569.44 Z² - 1833.8 Z³
+                                      + 1968.33 Z⁴
+        At Z = 0.02: log L = 32.25 W → 1.78e39 erg/s. Compatible with Grimm+2003
+        within the ~30% scatter between linear and polynomial calibrations.
+        """
         L_band = float(jnp.trapezoid(xray_xrb(_WAVE_GRID, sfr=1.0, stellar_mass=0.0), _NU_GRID))
         np.testing.assert_allclose(
             L_band,
-            2.6e39,
+            10**32.25 * 1e7,  # W -> erg/s, ~ 1.78e39
             rtol=0.05,
-            err_msg="Grimm+2003: HMXB L_2-10keV = 2.6e39 erg/s at SFR=1 Msun/yr",
+            err_msg="Lehmer+19 (yang20.py:207-214): HMXB L_2-10keV ≈ 1.78e39 erg/s at Z_sun",
         )
 
     def test_lmxb_band_luminosity(self):
-        """LMXB 2-10 keV luminosity at M*=1e10 Msun. Gilfanov 2004: L=8.3e38 erg/s."""
-        L_band = float(jnp.trapezoid(xray_xrb(_WAVE_GRID, sfr=0.0, stellar_mass=1e10), _NU_GRID))
+        """LMXB 2-10 keV luminosity at M*=1e10 Msun, age=10 Gyr matches Lehmer+14.
+
+        Yang+22 / Lehmer+14 quartic in log τ:
+            log L_LMXB(2-10) [W / (M*/1e10 Msun)] = 33.276 - 1.503 logT - 0.423 logT²
+                                                   + 0.425 logT³ + 0.136 logT⁴
+        At logT = 1 (10 Gyr): log L = 31.911 W / 1e10 Msun → ~ 8.15e38 erg/s.
+        Compatible with the Gilfanov+04 calibration (8.3e28 erg/s/Msun for old
+        stellar populations).
+        """
+        L_band = float(
+            jnp.trapezoid(
+                xray_xrb(_WAVE_GRID, sfr=0.0, stellar_mass=1e10, stellar_age_gyr=_LMXB_AGE_GYR),
+                _NU_GRID,
+            )
+        )
         np.testing.assert_allclose(
             L_band,
-            8.3e38,
+            10**31.911 * 1e7,  # W -> erg/s, ~ 8.15e38
             rtol=0.05,
-            err_msg="Gilfanov 2004: LMXB L_2-10keV = 8.3e28 erg/s/Msun × 1e10 Msun = 8.3e38 erg/s",
+            err_msg="Lehmer+14: LMXB L_2-10keV ≈ 8.15e38 erg/s at M*=1e10, age=10 Gyr",
         )
 
     def test_combined_ranalli2003(self):
-        """Combined XRB at SFR=1, M*=1e10 within 30% of Ranalli+2003 A&A 399 Eq. 3."""
-        L_band = float(jnp.trapezoid(xray_xrb(_WAVE_GRID, sfr=1.0, stellar_mass=1e10), _NU_GRID))
-        # Ranalli+2003 combined calibration: L_2-10keV ≈ 3.7e39 erg/s at SFR=1, M*=1e10
-        # tengri uses Grimm+2003 (HMXB: 2.6e39) + Gilfanov 2004 (LMXB: 8.3e38 at 1e10)
-        # combined ≈ 3.43e39, within 30% of Ranalli
+        """Combined XRB at SFR=1, M*=1e10, age=10 Gyr within 30% of Ranalli+2003.
+
+        HMXB (Lehmer+19, Z=0.02) ≈ 1.78e39 + LMXB (Lehmer+14, 10 Gyr) ≈ 8.15e38
+        sums to ≈ 2.6e39 erg/s — well inside Ranalli+2003's 30% scatter band
+        around 3.7e39 erg/s.
+        """
+        L_band = float(
+            jnp.trapezoid(
+                xray_xrb(_WAVE_GRID, sfr=1.0, stellar_mass=1e10, stellar_age_gyr=_LMXB_AGE_GYR),
+                _NU_GRID,
+            )
+        )
         np.testing.assert_allclose(
             L_band,
             3.7e39,
@@ -138,18 +180,31 @@ class TestXRBNormalization:
 
 class TestXRayAGN:
     def test_agn_corona_finite(self):
-        """xray_agn_corona returns finite values for typical AGN luminosity."""
-        L_nu = xray_agn_corona(_WAVE_GRID, L_agn_bol=1e44)
+        """xray_agn_corona returns finite values for typical AGN luminosity.
+
+        Post-#329 the canonical CIGALE-faithful path takes L_2500 (intrinsic,
+        at 30 deg inclination), not L_bol. Convert via Hopkins+2007 BC_2500.
+        """
+        L_agn_bol = 1e44
+        l_2500 = L_agn_bol / (_BC_2500 * _NU_2500)  # erg/s/Hz
+        L_nu = xray_agn_corona(_WAVE_GRID, l_2500_30deg_erg_hz=l_2500)
         chex.assert_tree_all_finite(L_nu)
 
     def test_total_additive(self):
-        """xray_total = xray_xrb + xray_agn_corona (additive)."""
+        """xray_total = xray_xrb + xray_agn_corona (additive) under the new L_2500 API."""
         sfr = 1.0
         m = 1e10
-        L_agn = 1e44
-        L_xrb = xray_xrb(_WAVE_GRID, sfr=sfr, stellar_mass=m)
-        L_agn_x = xray_agn_corona(_WAVE_GRID, L_agn_bol=L_agn)
-        L_tot = xray_total(_WAVE_GRID, sfr=sfr, stellar_mass=m, L_agn_bol=L_agn)
+        L_agn_bol = 1e44
+        l_2500 = L_agn_bol / (_BC_2500 * _NU_2500)
+        L_xrb = xray_xrb(_WAVE_GRID, sfr=sfr, stellar_mass=m, stellar_age_gyr=_LMXB_AGE_GYR)
+        L_agn_x = xray_agn_corona(_WAVE_GRID, l_2500_30deg_erg_hz=l_2500)
+        L_tot = xray_total(
+            _WAVE_GRID,
+            sfr=sfr,
+            stellar_mass=m,
+            stellar_age_gyr=_LMXB_AGE_GYR,
+            l_2500_30deg=l_2500,
+        )
         np.testing.assert_allclose(
             float(jnp.sum(L_tot)),
             float(jnp.sum(L_xrb + L_agn_x)),

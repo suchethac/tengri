@@ -198,7 +198,7 @@ gp = gp_from_xi(xi, sqrt_power, N_GRID)
 
 # Mean SFH (tsnorm)
 mean_sfr = tsnorm(
-    ages_yr, log_peak_sfr=1.5, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+    ages_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
 )
 
 # Full SFH
@@ -317,7 +317,7 @@ fig, (ax_lbt, ax_w, ax_s) = plt.subplots(1, 3, figsize=(15, 4))
 # Vary peak lookback
 for lbt, c in [(2, COLORS["seq"][0]), (6, COLORS["seq"][2]),
                (10, COLORS["seq"][3]), (12, COLORS["seq"][4])]:
-    sfr = tsnorm(ages_yr, log_peak_sfr=1.5, peak_lbt=lbt * 1e9, width=2e9, skew=0.0, trunc=3.0)
+    sfr = tsnorm(ages_yr, log_total_mass=10.0, peak_lbt=lbt * 1e9, width=2e9, skew=0.0, trunc=3.0)
     ax_lbt.plot(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"peak = {lbt} Gyr")
 ax_lbt.set_xlim(0, 13.5)
 ax_lbt.legend(fontsize=7)
@@ -326,7 +326,7 @@ ax_lbt.set_title("Vary peak lookback")
 # Vary width
 for w, c in [(0.5, COLORS["seq"][0]), (1, COLORS["seq"][2]),
              (3, COLORS["seq"][3]), (5, COLORS["seq"][4])]:
-    sfr = tsnorm(ages_yr, log_peak_sfr=1.5, peak_lbt=6e9, width=w * 1e9, skew=0.0, trunc=3.0)
+    sfr = tsnorm(ages_yr, log_total_mass=10.0, peak_lbt=6e9, width=w * 1e9, skew=0.0, trunc=3.0)
     ax_w.plot(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"width = {w} Gyr")
 ax_w.set_xlim(0, 13.5)
 ax_w.legend(fontsize=7)
@@ -335,7 +335,7 @@ ax_w.set_title("Vary width")
 # Vary skew
 for s, c in [(-2, COLORS["seq"][0]), (0, COLORS["seq"][2]),
              (1, COLORS["seq"][3]), (3, COLORS["seq"][4])]:
-    sfr = tsnorm(ages_yr, log_peak_sfr=1.5, peak_lbt=6e9, width=2e9, skew=float(s), trunc=3.0)
+    sfr = tsnorm(ages_yr, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=float(s), trunc=3.0)
     ax_s.plot(ages_gyr, np.array(sfr), color=c, lw=1.2, label=f"skew = {s}")
 ax_s.set_xlim(0, 13.5)
 ax_s.legend(fontsize=7)

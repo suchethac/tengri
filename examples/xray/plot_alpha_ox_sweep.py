@@ -17,6 +17,10 @@ Reference: Just et al. 2007, ApJ 665, 1004 (alpha_OX-L_2500);
 Wilkins et al. 2020, MNRAS 493, 5548 (alpha_OX scatter study).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

@@ -119,7 +119,7 @@ def _observation():
 
 def build_parametric_setup(ssp_data, obs):
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -135,7 +135,7 @@ def build_parametric_setup(ssp_data, obs):
 
     key = jax.random.PRNGKey(42)
     true_params = {**spec.sample(key)}
-    true_params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+    true_params["sfh_tsnorm_log_total_mass"] = jnp.array(11.2)
     true_params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
     true_params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
     true_params["sfh_tsnorm_skew"] = jnp.array(0.3)
@@ -147,7 +147,7 @@ def build_parametric_setup(ssp_data, obs):
 
 def build_stochastic_setup(ssp_data, obs):
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -166,7 +166,7 @@ def build_stochastic_setup(ssp_data, obs):
 
     key = jax.random.PRNGKey(123)
     true_params = {**spec.sample(key)}
-    true_params["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+    true_params["sfh_tsnorm_log_total_mass"] = jnp.array(11.2)
     true_params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
     true_params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
     true_params["sfh_tsnorm_skew"] = jnp.array(0.3)
