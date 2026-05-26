@@ -235,14 +235,6 @@ print(f"Free parameters ({spec_param.n_free}): {', '.join(spec_param.free_params
 
 # Create model
 model_spec = SEDModel(spec_param, ssp_data, observation=obs)
-
-# Workaround for tengri issue: Fitter calls model.predict_spectrum(params)
-# with no wave_obs, and the model doesn't currently auto-derive wave_obs from
-# observation.spectroscopy.wave_obs. Setting _wave_obs explicitly makes the
-# elif-branch at SEDModel.predict_spectrum work. Remove once auto-derivation
-# (or a SEDModel.precompute_spectroscopy() entry point) lands upstream.
-model_spec._wave_obs = wave_obs
-
 print(f"Model built: {spec_param.n_free} free params")
 
 # %%
