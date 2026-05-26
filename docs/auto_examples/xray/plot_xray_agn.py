@@ -32,7 +32,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.xray import xray_agn_corona
+from tengri.xray import xray_agn_corona_bolometric as xray_agn_corona
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

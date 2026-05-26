@@ -32,6 +32,17 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-50
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_alpha_ox_sweep_001.png
+   :alt: plot alpha ox sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_alpha_ox_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -43,7 +54,7 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.xray import xray_agn_corona
+    from tengri.xray import xray_agn_corona_bolometric as xray_agn_corona
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

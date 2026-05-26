@@ -31,6 +31,17 @@ photon index dependence).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-49
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_gamma_sweep_001.png
+   :alt: plot xray gamma sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_gamma_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -42,7 +53,7 @@ photon index dependence).
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.xray import xray_agn_corona
+    from tengri.xray import xray_agn_corona_bolometric as xray_agn_corona
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

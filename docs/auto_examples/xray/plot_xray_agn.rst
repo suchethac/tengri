@@ -44,6 +44,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-137
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_agn_001.png
+   :alt: plot xray agn
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_agn_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -55,7 +66,7 @@ References
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.xray import xray_agn_corona
+    from tengri.xray import xray_agn_corona_bolometric as xray_agn_corona
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

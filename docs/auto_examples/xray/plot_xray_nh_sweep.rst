@@ -47,21 +47,15 @@ References
 .. GENERATED FROM PYTHON SOURCE LINES 28-114
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/xray/plot_xray_nh_sweep.py", line 57, in <module>
-        xray_agn_corona(wavelength, L_agn_bol=L_BOL, log_nh=15.0, scattered_frac=0.0)
-    TypeError: xray_agn_corona() got an unexpected keyword argument 'L_agn_bol'
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_nh_sweep_001.png
+   :alt: plot xray nh sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_nh_sweep_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-
-
-|
 
 .. code-block:: Python
 
@@ -74,7 +68,7 @@ References
     import numpy as np
 
     from tengri.analysis.plotting import setup_style
-    from tengri.xray import xray_agn_corona
+    from tengri.xray import xray_agn_corona_bolometric as xray_agn_corona
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
