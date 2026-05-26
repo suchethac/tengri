@@ -53,8 +53,10 @@ model = tengri.SEDModel.build(
         "type": "composable",
         "disc": {"type": "multicolor", "*": tengri.FIXED},
         "*": tengri.FIXED,
-        "frac": 0.95,  # AGN dominates the SED
-        "log_ledd": -1.0,
+        "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
+        "agn_log_ledd": -1.0,
+        "agn_log_mbh": tengri.Uniform(5.0, 10.0),
+        "agn_log_lbol": tengri.Uniform(8.0, 14.0),
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -62,10 +64,10 @@ model = tengri.SEDModel.build(
 # Define four evolutionary stages:
 # (label, log_mbh, log_lbol, color, marker, markersize)
 STAGES = [
-    ("Dormant", 6.0, 9.0, "#2166ac", "o", 120),  # Low mass, low Edd
-    ("Merger accreting", 7.0, 11.0, "#f4a582", "s", 100),  # Intermediate
-    ("QSO peak", 9.0, 13.0, "#d6604d", "*", 250),  # High mass, high Edd
-    ("Fading", 9.0, 11.0, "#92c5de", "D", 90),  # Same mass, lower lbol
+    ("Dormant", 6.0, 9.0, "#2166ac", "o", 25),  # Low mass, low Edd
+    ("Merger accreting", 7.0, 11.0, "#f4a582", "s", 20),  # Intermediate
+    ("QSO peak", 9.0, 13.0, "#d6604d", "*", 50),  # High mass, high Edd
+    ("Fading", 9.0, 11.0, "#92c5de", "D", 18),  # Same mass, lower lbol
 ]
 
 # Eddington luminosity: L_Edd = 3.2e4 * (M / M_sun) * L_sun
@@ -143,17 +145,18 @@ for i in range(len(STAGES) - 1):
 
 # Annotations for physics context
 ax_track.text(
-    1e8,
-    5e12,
+    3e6,
+    3e11,
     "Sub-Eddington",
     fontsize=10,
     color="0.5",
-    rotation=20,
-    alpha=0.6,
+    rotation=0,
+    bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2),
+    zorder=10,
 )
 
-ax_track.set_xlim(3e5, 2e9)
-ax_track.set_ylim(1e8, 5e13)
+ax_track.set_xlim(1e5, 1e10)
+ax_track.set_ylim(5e7, 1e14)
 ax_track.set_xlabel(r"Black hole mass $M_{\mathrm{BH}}$ [$M_\odot$]")
 ax_track.set_ylabel(r"Bolometric luminosity $L_{\mathrm{bol}}$ [$L_\odot$]")
 ax_track.legend(

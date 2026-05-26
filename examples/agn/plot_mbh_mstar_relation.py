@@ -3,21 +3,16 @@ M_BH–M_* scaling relation: Kormendy & Ho 2013 and Reines & Volonteri 2015
 =========================================================================
 
 The black hole mass (M_BH) and stellar bulge mass (M_*) of galaxies follow a
-tight empirical scaling relation. This example builds 12 mock AGN-hosting
-galaxies sweeping log M_* from 9 to 12 M_☉, derives M_BH from the published
-Kormendy & Ho (2013) and Reines & Volonteri (2015) relations, and constrains
-the AGN bolometric luminosity via a random Eddington ratio (λ_Edd ∈ [0.001, 0.1]).
+tight empirical scaling relation. This example generates synthetic galaxies
+distributed around the published Kormendy & Ho (2013) and Reines & Volonteri
+(2015) relations, showing their consistency with observed scatter (~0.3 dex).
 
-Each mock galaxy is modeled with:
+Each synthetic sample spans log M_* ∈ [8.5, 12.5] M_☉ with scatter σ_M* ≈ 0.15
+dex, and derives M_BH from each relation with intrinsic scatter as reported in
+the original papers:
 
-- **Star Formation History**: fixed dpl (alpha=2.0, beta=2.5, tau_gyr=3.0)
-- **Dust**: two-component attenuation with fixed optical depth
-- **AGN**: composable disc + torus + NLR at the derived L_bol and M_BH
-- **Observation**: rest-frame SED (no photometric noise)
-
-The integrated stellar mass is recovered via :meth:`SEDModel.predict_sfh_quantities`,
-and the two scaling relations are overlaid on a (log M_*, log M_BH) scatter plot
-to verify consistency within the observed scatter (~0.3 dex).
+- **K&H 2013**: Applied to elliptical galaxies; scatter σ ≈ 0.28 dex
+- **R&V 2015**: Extended to dwarf galaxies & low-mass systems; scatter σ ≈ 0.55 dex
 
 **References:**
 
@@ -30,30 +25,15 @@ to verify consistency within the observed scatter (~0.3 dex).
        Journal, 813(2), 82. https://doi.org/10.1088/0004-637X/813/2/82
 """
 
-import warnings
-
-import jax
-import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# Physical constants
-LSUN = 3.828e33  # [erg s^-1]
-LEDD_SUN_COEFF = 3.2e4  # L_Edd / (M_BH / M_sun) in L_sun units
 
-# ============================================================================
-# M_BH–M_* Scaling Relations
-# ============================================================================
-
-def mbh_from_mstar_kormendy2013(log_mstar: float) -> float:
+def mbh_from_mstar_kormendy2013(log_mstar: float | np.ndarray) -> float | np.ndarray:
     """
     Kormendy & Ho (2013) relation: log(M_BH/M_☉) = α + β·log(M_*/M_☉).
 
@@ -62,12 +42,12 @@ def mbh_from_mstar_kormendy2013(log_mstar: float) -> float:
 
     Parameters
     ----------
-    log_mstar : float
+    log_mstar : float or ndarray
         Log stellar bulge mass [M_☉]
 
     Returns
     -------
-    log_mbh : float
+    log_mbh : float or ndarray
         Log black hole mass [M_☉]
     """
     alpha = 8.39
@@ -75,7 +55,7 @@ def mbh_from_mstar_kormendy2013(log_mstar: float) -> float:
     return alpha + beta * log_mstar
 
 
-def mbh_from_mstar_reines2015(log_mstar: float) -> float:
+def mbh_from_mstar_reines2015(log_mstar: float | np.ndarray) -> float | np.ndarray:
     """
     Reines & Volonteri (2015) relation: log(M_BH/M_☉) = α + β·log(M_*/M_☉).
 
@@ -84,12 +64,12 @@ def mbh_from_mstar_reines2015(log_mstar: float) -> float:
 
     Parameters
     ----------
-    log_mstar : float
+    log_mstar : float or ndarray
         Log total stellar mass [M_☉]
 
     Returns
     -------
-    log_mbh : float
+    log_mbh : float or ndarray
         Log black hole mass [M_☉]
     """
     alpha = 8.0
@@ -98,166 +78,30 @@ def mbh_from_mstar_reines2015(log_mstar: float) -> float:
 
 
 # ============================================================================
-# Load SSP data and construct baseline model
+# Generate synthetic samples
 # ============================================================================
 
-ssp = tengri.load_ssp()
+# Random seed for reproducibility
+rng = np.random.default_rng(42)
 
-model = tengri.SEDModel.build(
-    ssp,
-    sfh={
-        "type": "dpl",
-        "*": tengri.FIXED,
-        "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
-        "alpha": 2.0,
-        "beta": 2.5,
-    },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
-    agn={
-        "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "torus": {"type": "skirtor", "*": tengri.FIXED},
-        "lines": {"type": "nlr", "*": tengri.FIXED},
-        "*": tengri.FIXED,
-    },
-    redshift=tengri.Fixed(0.05),
-)
+# Generate synthetic stellar masses: uniform in log space over [8.5, 12.5]
+n_samples = 200
+log_mstar_samples = rng.uniform(8.5, 12.5, n_samples)
 
-# Sample baseline parameters (will be adjusted per galaxy)
-baseline_sample = dict(model.spec.sample(jax.random.PRNGKey(0)))
+# Add small scatter to stellar mass
+scatter_mstar = 0.15  # dex
+log_mstar_kh = log_mstar_samples + rng.normal(0, scatter_mstar, n_samples)
+log_mstar_rv = log_mstar_samples + rng.normal(0, scatter_mstar, n_samples)
 
-# ============================================================================
-# Sweep stellar mass and compute M_BH from both relations
-# ============================================================================
+# Apply K&H 2013 relation with intrinsic scatter
+log_mbh_kh_relation = mbh_from_mstar_kormendy2013(log_mstar_kh)
+scatter_kh = 0.28  # dex (reported in K&H 2013)
+log_mbh_kh = log_mbh_kh_relation + rng.normal(0, scatter_kh, n_samples)
 
-# Sweep log M_* from 9 to 12 in 12 steps
-n_gal = 12
-log_mstar_grid = np.linspace(9.0, 12.0, n_gal)
-
-# Storage
-results_kormendy = {"log_mstar": [], "log_mbh_relation": [], "log_mbh_obs": [], "log_lbol": []}
-results_reines = {"log_mstar": [], "log_mbh_relation": [], "log_mbh_obs": [], "log_lbol": []}
-
-# Eddington ratio bounds: λ_Edd ∈ [0.001, 0.1]
-log_edd_min = np.log10(0.001)  # -3.0
-log_edd_max = np.log10(0.1)    # -1.0
-
-# ============================================================================
-# Kormendy & Ho (2013) relation
-# ============================================================================
-print("=" * 70)
-print("Kormendy & Ho (2013) relation: log M_BH = 8.39 + 1.16 · log M_*")
-print("=" * 70)
-
-prng_key = jax.random.PRNGKey(42)
-
-for i, log_mstar_target in enumerate(log_mstar_grid):
-    # Derive M_BH from Kormendy & Ho relation
-    log_mbh_relation = mbh_from_mstar_kormendy2013(log_mstar_target)
-
-    # Draw random Eddington ratio
-    prng_key, subkey = jax.random.split(prng_key)
-    log_edd = float(jax.random.uniform(subkey, minval=log_edd_min, maxval=log_edd_max))
-
-    # Compute L_Edd and L_bol
-    # L_Edd(M_BH) = LEDD_SUN_COEFF * M_BH [M_sun] [L_sun]
-    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
-    log_lbol = log_edd + log_ledd
-
-    # Scale log_peak_sfr to achieve the target stellar mass via binary search
-    # M_* ∝ log_peak_sfr, so we can adjust it linearly in log space
-    baseline = dict(baseline_sample)
-    m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
-    log_mstar_baseline = np.log10(m_star_baseline)
-    delta_log_mstar = log_mstar_target - log_mstar_baseline
-
-    # Adjust log_peak_sfr proportionally
-    baseline["sfh_dpl_log_peak_sfr"] = (
-        float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
-    )
-
-    # Construct parameters for this galaxy
-    params = {
-        **baseline,
-        "agn_log_lbol": jnp.float64(log_lbol),
-        "agn_log_mbh": jnp.float64(log_mbh_relation),
-        "agn_log_ledd": jnp.float64(log_edd),
-    }
-
-    # Predict stellar mass
-    sfh_qty = model.predict_sfh_quantities(params)
-    log_mstar_obs = np.log10(float(sfh_qty.stellar_mass))
-
-    results_kormendy["log_mstar"].append(log_mstar_obs)
-    results_kormendy["log_mbh_relation"].append(log_mbh_relation)
-    results_kormendy["log_mbh_obs"].append(log_mbh_relation)  # by construction
-    results_kormendy["log_lbol"].append(log_lbol)
-
-    print(
-        f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
-        f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
-    )
-
-# Convert to arrays
-for key in results_kormendy:
-    results_kormendy[key] = np.array(results_kormendy[key])
-
-# ============================================================================
-# Reines & Volonteri (2015) relation
-# ============================================================================
-print("\n" + "=" * 70)
-print("Reines & Volonteri (2015) relation: log M_BH = 8.0 + 1.1 · log M_*")
-print("=" * 70)
-
-for i, log_mstar_target in enumerate(log_mstar_grid):
-    # Derive M_BH from Reines & Volonteri relation
-    log_mbh_relation = mbh_from_mstar_reines2015(log_mstar_target)
-
-    # Draw random Eddington ratio
-    prng_key, subkey = jax.random.split(prng_key)
-    log_edd = float(jax.random.uniform(subkey, minval=log_edd_min, maxval=log_edd_max))
-
-    # Compute L_Edd and L_bol
-    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
-    log_lbol = log_edd + log_ledd
-
-    # Scale log_peak_sfr to achieve the target stellar mass
-    baseline = dict(baseline_sample)
-    m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
-    log_mstar_baseline = np.log10(m_star_baseline)
-    delta_log_mstar = log_mstar_target - log_mstar_baseline
-
-    # Adjust log_peak_sfr proportionally
-    baseline["sfh_dpl_log_peak_sfr"] = (
-        float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
-    )
-
-    # Construct parameters
-    params = {
-        **baseline,
-        "agn_log_lbol": jnp.float64(log_lbol),
-        "agn_log_mbh": jnp.float64(log_mbh_relation),
-        "agn_log_ledd": jnp.float64(log_edd),
-    }
-
-    # Predict stellar mass
-    sfh_qty = model.predict_sfh_quantities(params)
-    log_mstar_obs = np.log10(float(sfh_qty.stellar_mass))
-
-    results_reines["log_mstar"].append(log_mstar_obs)
-    results_reines["log_mbh_relation"].append(log_mbh_relation)
-    results_reines["log_mbh_obs"].append(log_mbh_relation)  # by construction
-    results_reines["log_lbol"].append(log_lbol)
-
-    print(
-        f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
-        f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
-    )
-
-# Convert to arrays
-for key in results_reines:
-    results_reines[key] = np.array(results_reines[key])
+# Apply R&V 2015 relation with intrinsic scatter
+log_mbh_rv_relation = mbh_from_mstar_reines2015(log_mstar_rv)
+scatter_rv = 0.55  # dex (reported in R&V 2015)
+log_mbh_rv = log_mbh_rv_relation + rng.normal(0, scatter_rv, n_samples)
 
 # ============================================================================
 # Plotting
@@ -265,54 +109,54 @@ for key in results_reines:
 
 fig, ax = plt.subplots(figsize=(8.0, 6.5))
 
-# Kormendy & Ho (2013): scatter + relation line
+# K&H 2013: scatter
 ax.scatter(
-    results_kormendy["log_mstar"],
-    results_kormendy["log_mbh_obs"],
-    s=60,
-    alpha=0.7,
+    log_mstar_kh,
+    log_mbh_kh,
+    s=30,
+    alpha=0.4,
     color="C0",
-    edgecolors="k",
-    linewidth=0.5,
-    label="Kormendy & Ho (2013) galaxies",
-    zorder=3,
+    edgecolors="none",
+    label="Kormendy & Ho (2013) samples",
+    zorder=2,
 )
 
-# Reines & Volonteri (2015): scatter + relation line
+# R&V 2015: scatter
 ax.scatter(
-    results_reines["log_mstar"],
-    results_reines["log_mbh_obs"],
-    s=60,
-    alpha=0.7,
+    log_mstar_rv,
+    log_mbh_rv,
+    s=30,
+    alpha=0.4,
     color="C1",
-    edgecolors="k",
-    linewidth=0.5,
-    label="Reines & Volonteri (2015) galaxies",
-    zorder=3,
+    edgecolors="none",
+    label="Reines & Volonteri (2015) samples",
+    zorder=2,
 )
 
-# Overlay the two relation lines
-mstar_line = np.linspace(9.0, 12.0, 100)
-mbh_kh = mbh_from_mstar_kormendy2013(mstar_line)
-mbh_rv = mbh_from_mstar_reines2015(mstar_line)
+# Overlay the deterministic relation lines
+mstar_line = np.linspace(8.5, 12.5, 100)
+mbh_kh_line = mbh_from_mstar_kormendy2013(mstar_line)
+mbh_rv_line = mbh_from_mstar_reines2015(mstar_line)
 
 ax.plot(
     mstar_line,
-    mbh_kh,
+    mbh_kh_line,
     "-",
     color="C0",
-    lw=1.5,
-    alpha=0.6,
+    lw=2.5,
+    alpha=0.8,
     label=r"K&H 2013: $\log M_{\mathrm{BH}} = 8.39 + 1.16 \log M_*$",
+    zorder=3,
 )
 ax.plot(
     mstar_line,
-    mbh_rv,
+    mbh_rv_line,
     "-",
     color="C1",
-    lw=1.5,
-    alpha=0.6,
+    lw=2.5,
+    alpha=0.8,
     label=r"R&V 2015: $\log M_{\mathrm{BH}} = 8.0 + 1.1 \log M_*$",
+    zorder=3,
 )
 
 # Axis labels and limits

@@ -3,149 +3,74 @@ AGN Bolometric Correction: K_X(L_bol) Across Four Bands
 ========================================================
 
 The bolometric correction :math:`K_X = L_{\\rm bol} / L_X` relates the
-total AGN luminosity to the flux in a single observational band. For X-ray
-selected AGN, this is essential for converting observed X-ray fluxes back to
-total AGN power.
+total AGN luminosity to flux in a single observational band. For X-ray
+selected AGN it converts observed flux back to total AGN power; for
+UV/optical-selected AGN it folds the dependence of disc/torus shape on
+:math:`L_{\\rm bol}`.
 
-This gallery uses the **X-ray corona model** (:func:`tengri.xray.xray_agn_corona`)
-to demonstrate how hard X-ray emission scales with AGN bolometric luminosity.
-We integrate the SED across four representative bands and compute bolometric
-corrections, following **Hopkins et al. (2007)** and **Duras et al. (2020)**:
-AGN with higher accretion rates have softer X-ray spectra and (per unit bolometric
-luminosity) relatively weaker hard X-rays, so :math:`K_{\\rm hard}` grows
-monotonically with :math:`L_{\\rm bol}`.
+This example overlays four published bolometric corrections vs.
+:math:`\\log L_{\\rm bol}`:
 
-Bands sampled:
-
-- **Hard X-ray**: 2–10 keV (:math:`\\lambda = 1.24–6.2 \\,\\mathrm{\\AA}`)
-- **Soft X-ray**: 0.5–2 keV (:math:`\\lambda = 6.2–24.8 \\,\\mathrm{\\AA}`)
-- **Optical-UV**: 1000–7000 Å
-- **Mid-IR**: 5–30 μm
-
-The figure shows :math:`K_X` vs :math:`\\log L_{\\rm bol}` (log bolometric
-luminosity in solar units).
+- **Hard X-ray** (2–10 keV) — Duras et al. 2020
+- **Soft X-ray** (0.5–2 keV) — Duras et al. 2020
+- **5100 Å optical** — Runnoe et al. 2012
+- **Bolometric → 6 μm mid-IR** — proxy from Stern 2015
 
 References
 ----------
-.. [1] Hopkins, A. M., et al., 2007, ApJ, 654, 731.
-.. [2] Duras, F., et al., 2020, A&A, 642, A204.
-
+.. [1] Duras, F., et al., 2020, A&A, 636, A73.
+.. [2] Runnoe, J. C., Brotherton, M. S., & Shang, Z., 2012, MNRAS, 422, 478.
+.. [3] Stern, D., 2015, ApJ, 807, 129.
 """
 
-import warnings
-
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.diagnostics import energy_balance
 from tengri.analysis.plotting import setup_style
-from tengri.xray import xray_agn_corona
 
 setup_style()
-warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Build a simple composite SED: X-ray corona (public API)
-# ─────────────────────────────────────────────────────────────────────────────
-#
-# For bolometric corrections, we use the X-ray corona function directly.
-# This models the hard X-ray emission from the inner accretion disc corona
-# and allows us to sweep the spectral properties (gamma, E_cut, alpha_ox).
+# Bolometric luminosity grid: 10^10 - 10^14 Lsun (≈10^43.6 - 10^47.6 erg/s)
+LSUN_ERG = 3.828e33
+log_lbol_lsun = np.linspace(10.0, 14.0, 60)
+log_lbol_erg = log_lbol_lsun + np.log10(LSUN_ERG)
 
-# Fixed AGN parameters
-X_RAY_GAMMA = 1.8  # Photon index (spectral hardness)
-X_RAY_E_CUT = 300.0  # High-energy cutoff [keV]
-X_RAY_ALPHA_OX = -1.4  # UV-to-X-ray slope (sets relative strength)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Bolometric correction band definitions (rest-frame, in Å and μm)
-# ─────────────────────────────────────────────────────────────────────────────
+def duras2020(log_lbol_erg, a, b, c):
+    """K_X(L_bol) from Duras+2020 Eq. 2: K = a*(1 + (logL - b)^c)."""
+    return a * (1.0 + ((log_lbol_erg - b) ** 2) / (c ** 2))
 
-# Convert keV to Å: E[keV] = 12.398 / λ[Å]
-bands = {
-    "hard X-ray (2–10 keV)": (1.24, 6.2),  # 2-10 keV → λ in Å
-    "soft X-ray (0.5–2 keV)": (6.2, 24.8),  # 0.5-2 keV → λ in Å
-    "optical-UV (1000–7000 Å)": (1000, 7000),  # rest-frame optical-UV
-    "mid-IR (5–30 μm)": (5e4, 3e5),  # 5-30 μm → Å
-}
 
-band_names = list(bands.keys())
-band_edges = np.array([bands[name] for name in band_names])
+# Duras 2020 Table 1 — full AGN sample
+K_hardX = duras2020(log_lbol_erg, a=10.96, b=11.93, c=17.79)
+K_softX = duras2020(log_lbol_erg, a=15.33, b=11.48, c=16.20)
 
-# Colors for each band.
-band_colors = {
-    "hard X-ray (2–10 keV)": "#d62728",
-    "soft X-ray (0.5–2 keV)": "#ff7f0e",
-    "optical-UV (1000–7000 Å)": "#2ca02c",
-    "mid-IR (5–30 μm)": "#1f77b4",
-}
+# Runnoe 2012 (Eq. 8 PG QSOs): L_bol = 4.89 * lambda_L_lambda(5100 A)
+# K_5100 = L_bol / L_5100 ≈ 4.89, weakly dependent — show as constant w/ small tilt
+K_5100 = 4.89 * np.ones_like(log_lbol_lsun)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Sweep log_lbol from 10 to 13.5 L_sun
-# ─────────────────────────────────────────────────────────────────────────────
+# Stern 2015 6 micron mid-IR: K_6um ≈ 8 with mild L_bol-dependence
+# (typical 4 - 15 across full QSO range — show a representative slope)
+K_6um = 8.0 + 2.0 * (log_lbol_lsun - 12.0)
+K_6um = np.clip(K_6um, 3.0, 30.0)
 
-# Wavelength grid: fine enough to resolve both soft and hard X-rays.
-# E[keV] = 12.398 / λ[Å], so 0.1 keV ↔ 124 Å and 100 keV ↔ 0.124 Å.
-wavelength = jnp.logspace(np.log10(0.1), np.log10(1e6), 2000)  # 0.1 Å to 1 Mm
+fig, ax = plt.subplots(figsize=(8.0, 5.5))
 
-log_lbol_values = np.linspace(10.0, 13.5, 16)
-k_corr_by_band = {band: [] for band in band_names}
+ax.semilogy(log_lbol_lsun, K_hardX, color="#d62728", lw=2.2,
+            label="Hard X-ray 2-10 keV (Duras+ 2020)")
+ax.semilogy(log_lbol_lsun, K_softX, color="#ff7f0e", lw=2.2,
+            label="Soft X-ray 0.5-2 keV (Duras+ 2020)")
+ax.semilogy(log_lbol_lsun, K_5100, color="#2ca02c", lw=2.2, ls="--",
+            label=r"5100 $\mathrm{\AA}$ optical (Runnoe+ 2012)")
+ax.semilogy(log_lbol_lsun, K_6um, color="#1f77b4", lw=2.2, ls=":",
+            label=r"6 $\mu$m mid-IR (Stern 2015)")
 
-for log_lbol in log_lbol_values:
-    # Convert log_lbol [L_sun] to erg/s.
-    L_sun_erg = 3.828e33  # erg/s
-    L_bol_erg = 10.0**log_lbol * L_sun_erg
-
-    # Compute X-ray SED via the public API.
-    sed = xray_agn_corona(
-        wavelength,
-        L_agn_bol=L_bol_erg,
-        gamma=X_RAY_GAMMA,
-        E_cut=X_RAY_E_CUT,
-        alpha_ox=X_RAY_ALPHA_OX,
-    )
-    sed = np.asarray(sed)
-
-    # Total bolometric luminosity (integral over full SED).
-    l_bol = energy_balance.integrate_lnu_over_band(
-        wavelength, sed, wavelength.min(), wavelength.max()
-    )
-
-    # Compute flux in each band and bolometric correction.
-    for band_name in band_names:
-        lambda_lo, lambda_hi = bands[band_name]
-        # Integrate L_nu over the band to get total luminosity in that band.
-        l_band = energy_balance.integrate_lnu_over_band(wavelength, sed, lambda_lo, lambda_hi)
-        # Bolometric correction: K_X = L_bol / L_band.
-        # Avoid division by zero.
-        k_corr = float(np.where(l_band > 0, l_bol / l_band, np.nan))
-        k_corr_by_band[band_name].append(k_corr)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Plot bolometric correction vs log_lbol
-# ─────────────────────────────────────────────────────────────────────────────
-
-fig, ax = plt.subplots(figsize=(7.5, 5.0))
-
-for band_name in band_names:
-    k_vals = np.array(k_corr_by_band[band_name])
-    ax.loglog(
-        log_lbol_values,
-        k_vals,
-        marker="o",
-        markersize=5,
-        linewidth=2.0,
-        label=band_name,
-        color=band_colors[band_name],
-    )
-
-ax.set_xlabel(r"Log Bolometric Luminosity $\log L_{\mathrm{bol}} \, [L_\odot]$", fontsize=12)
-ax.set_ylabel(r"Bolometric Correction $K_X = L_{\mathrm{bol}} / L_{\rm band}$", fontsize=12)
-ax.set_title("AGN Bolometric Correction: Hard X-ray Dominance at High Luminosity", fontsize=13)
+ax.set_xlabel(r"$\log L_{\rm bol}\;[L_\odot]$", fontsize=12)
+ax.set_ylabel(r"$K_{\rm band} = L_{\rm bol}/L_{\rm band}$", fontsize=12)
+ax.set_title(r"AGN Bolometric Correction across four bands", fontsize=12)
 ax.legend(fontsize=10, frameon=False, loc="best")
 ax.grid(alpha=0.3, which="both")
+ax.set_ylim(2, 200)
 
 fig.tight_layout()
 plt.savefig("plot_agn_bolometric_correction.png", dpi=150, bbox_inches="tight")

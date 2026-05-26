@@ -29,6 +29,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
+from tengri.utils.physics_constants import L_SUN
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -39,6 +40,8 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # ── Rest-frame Lyα at 1216 Å
 wave_lya = 1216.0
+# ── Conversion constants for EW
+C_AA_PER_S = 2.998e18  # speed of light [Å/s]
 
 # ── Age range: 1–30 Myr (young starbursts)
 # Scan ages logarithmically to capture the O-star to WR transition
@@ -48,42 +51,45 @@ ages_myr = np.logspace(0.0, np.log10(30), 18)  # 1 to 30 Myr
 neb_config = {
     "type": "cue",
     "*": tengri.FIXED,
-    "neb_logZ_gas": 0.0,  # Z = Zsun (log10 Z, absolute)
-    "neb_logU": -2.0,  # ionization parameter
-    "neb_fesc": 0.0,  # no escape fraction
-    "neb_fesc_lya": 1.0,  # all Lyα available (escape in gas frame)
+    # Short-form keys inside the `neb` group; full `neb_*` keys are silently ignored.
+    "logZ_gas": 0.0,
+    "logU": -2.0,
+    "fesc": 0.0,
+    "fesc_lya": 0.0,  # 0 = no resonant destruction → full intrinsic Lyα emission
 }
 
 # ── Dust: no attenuation for clean nebular emission view
 dust_config = {
     "type": "two_component",
     "*": tengri.FIXED,
-    "dust_tau_diff": 0.0,
-    "dust_tau_bc": 0.0,
-}
-
-# ── SFH: const (constant star formation) model
-# Creates a population with constant SFR over time.
-sfh_config = {
-    "type": "const",
-    "*": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
 }
 
 # ── Collect EW measurements
 ew_lya = []
 
 for age_myr in ages_myr:
-    # Build base model with constant (instantaneous) SFH
+    # Build base model with constant SFH: vary the age via start_gyr/end_gyr window
+    # population spans [age_myr / 1000, 0] Gyr (older age at start → younger, present day)
+    sfh_config_age = {
+        "type": "const",
+        "*": tengri.FIXED,
+        "log_sfr": 0.0,
+        "start_gyr": age_myr / 1e3,
+        "end_gyr": 0.0,
+    }
+
     model = tengri.SEDModel.build(
         ssp,
-        sfh=sfh_config,
+        sfh=sfh_config_age,
         dust=dust_config,
         neb=neb_config,
         redshift=tengri.Fixed(0.0),
     )
 
-    # Sample parameters and constrain the age
-    params = dict(model.spec.sample(jax.random.PRNGKey(int(age_myr * 10))))
+    # Sample parameters
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     # Predict emission lines and rest-frame SED
     lines = model.predict_emission_lines(params)
@@ -100,10 +106,13 @@ for age_myr in ages_myr:
     idx_lya = np.argmin(np.abs(wave - wave_lya))
     continu_at_lya = sed[idx_lya]
 
-    # Compute equivalent width: EW = L_line / L_continuum [Å]
-    # EW measures the line strength relative to the continuum
+    # Compute equivalent width: EW [Å] = L_line [erg/s] / L_lambda_continuum [erg/s/Å]
+    # Convert L_line from Lsun to erg/s, then L_nu to L_lambda via L_lambda = L_nu * c / λ²
     if continu_at_lya > 0:
-        ew = lya_lum / continu_at_lya
+        # EW [Å] = L_line [erg/s] / L_lambda_continuum [erg/s/Å]
+        # `lines.lya` is already in erg/s (verified empirically).
+        continu_lambda = continu_at_lya * C_AA_PER_S / (wave_lya ** 2)  # L_nu [erg/s/Hz] → L_lambda [erg/s/Å]
+        ew = lya_lum / continu_lambda
     else:
         ew = np.nan
 

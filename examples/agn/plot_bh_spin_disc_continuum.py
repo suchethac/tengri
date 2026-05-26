@@ -38,13 +38,14 @@ model = tengri.SEDModel.build(
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "disc": {"type": "multicolor", "*": tengri.FIXED, "a_spin": tengri.FREE},
         "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": 7.0},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
-        "log_lbol": 11.5,
-        "log_mbh": 8.0,
-        "log_ledd": -0.5,
+        "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
+        "agn_log_lbol": 11.5,
+        "agn_log_mbh": 8.0,
+        "agn_log_ledd": -0.5,
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -64,8 +65,8 @@ for a_spin in a_spin_values:
     nu_l_nu = nu * np.asarray(out.sed)
     ax.loglog(wave, nu_l_nu, color=cmap(norm(a_spin)), lw=1.5, label=f"a* = {a_spin:.3f}")
 
-ax.set_xlim(100, 3000)
-ax.set_ylim(1e40, 1e45)
+ax.set_xlim(100, 5000)
+ax.set_ylim(1e43, 1e47)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax.legend(loc="upper right", framealpha=0.95)
