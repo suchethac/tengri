@@ -99,6 +99,13 @@ class SKIRTORTorus(SEDModelComponent):
     frac_agn : Uniform
         AGN fraction in a configurable band (CIGALE convention).
         [dimensionless, 0–1]
+    polar_ebv : Uniform
+        Polar dust E(B-V) (Type-1 sightline only). [mag, 0–0.5]
+    polar_temperature : Uniform
+        Polar dust greybody temperature. [K, 50–200]
+    polar_beta : Uniform
+        Polar dust emissivity index (Casey 2012 modified blackbody).
+        [dimensionless, 1–2.5]
 
     Cross-component outputs
     -----------------------
@@ -177,6 +184,13 @@ class SKIRTORTorus(SEDModelComponent):
         description="AGN fraction (L_AGN / L_total, CIGALE convention)",
         units="dimensionless",
     )
+    polar_ebv = Uniform(0.0, 0.5, description="Polar dust E(B-V) (Type-1 sightline)", units="mag")
+    polar_temperature = Uniform(
+        50.0, 200.0, description="Polar dust greybody temperature", units="K"
+    )
+    polar_beta = Uniform(
+        1.0, 2.5, description="Polar dust emissivity index", units="dimensionless"
+    )
 
     # Cross-component outputs
     outputs: ClassVar[dict[str, str]] = {
@@ -236,8 +250,11 @@ class SKIRTORTorus(SEDModelComponent):
             - p_skirtor: radial density gradient
             - q_skirtor: polar density gradient
             - oa_skirtor: opening angle (degrees)
-            cos_inc: cosine of inclination
+            - cos_inc: cosine of inclination
             - frac_agn: AGN luminosity fraction
+            - polar_ebv: polar dust E(B-V)
+            - polar_temperature: polar dust greybody temperature (K)
+            - polar_beta: polar dust emissivity index
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
         wave : ndarray, shape (n_wave,)
@@ -249,9 +266,17 @@ class SKIRTORTorus(SEDModelComponent):
         -------
         tuple[ndarray, dict]
             (sed_out, published) where:
-            - sed_out: Updated SED (sed_in + disc + torus + polar dust).
+            - sed_out: Updated SED (sed_in + attenuated disc + torus + polar dust reemission).
             - published: dict with keys L_agn_disc, L_agn_torus, L_agn_polar_dust,
               L_2500_30deg, L_6um, L_12um [erg/s] or [erg/s/Hz].
+
+        Notes
+        -----
+        **Polar dust model**: The X-CIGALE polar dust model (Yang et al. 2020,
+        §2.2.2) applies a Type-1/Type-2 mask to the observer-frame disc attenuation.
+        However, the absorbed luminosity driving the greybody FIR reemission is
+        viewing-angle-independent (bi-conical geometry). This means both Type 1
+        (face-on) and Type 2 (edge-on) sightlines see the FIR bump in the combined SED.
         """
         from tengri.components.agn._phys import wavelength_to_nu
         from tengri.components.agn.polar_dust import (
@@ -307,28 +332,25 @@ class SKIRTORTorus(SEDModelComponent):
         L_agn_torus = jnp.trapezoid(sed_torus_dust[idx_sort], nu[idx_sort])
 
         # Apply polar dust (Type 1 only): extinction of disc, reemission
-        # Default: no polar dust (EBV=0), but wire in for future flexibility
-        polar_ebv = 0.0  # Future: make this a parameter
-        _, l_abs = polar_dust_extinction(
+        sed_disc_polar, l_abs = polar_dust_extinction(
             sed_disc,
             wave,
             p["cos_inc"],
             p["oa_skirtor"],
-            polar_ebv,
+            p["polar_ebv"],
             law="smc",
         )
         sed_polar_reemit = polar_dust_emission(
             jnp.trapezoid(l_abs[idx_sort], nu[idx_sort]),
             wave,
-            temperature=100.0,
-            beta=1.6,
+            temperature=p["polar_temperature"],
+            beta=p["polar_beta"],
             lambda_0=2e6,
         )
         L_agn_polar_dust = jnp.trapezoid(sed_polar_reemit[idx_sort], nu[idx_sort])
 
-        # Total SED: disc + torus + polar reemission
-        # (Disc extinction is minimal when EBV=0, so use original disc here)
-        sed_out = sed_in + sed_disc + sed_torus_dust + sed_polar_reemit
+        # Total SED: attenuated disc + torus + polar reemission
+        sed_out = sed_in + sed_disc_polar + sed_torus_dust + sed_polar_reemit
 
         published = {
             "L_agn_disc": L_agn_disc,

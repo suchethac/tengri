@@ -234,7 +234,11 @@ fitted_intercept = coeffs[1]
 
 print("\n" + "=" * 70)
 print("Reverberation Size-Luminosity Relation Verification")
+<<<<<<< HEAD
 print("=" * 70)
+=======
+print("="*70)
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 print("\nBentz et al. (2013) relation:")
 print("  log(R_BLR) = -21.3 + 0.533 * log(L_5100)")
 print("\nFitted to tengri qsogen AGN model:")

@@ -512,7 +512,17 @@ def parse_groups(**kwargs) -> Parameters:
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_groups = {
+        "sfh",
+        "stellar",
+        "dust",
+        "neb",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+        "foreground",
+    }
     result = {}
 
     for group_name, group_dict in groups.items():
@@ -548,6 +558,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_radio(group_dict, result)
         elif group_name == "xray":
             _translate_xray(group_dict, result)
+        elif group_name == "foreground":
+            _translate_foreground(group_dict, result)
         elif group_name == "agn":
             _translate_agn(group_dict, result)
 
@@ -563,8 +575,23 @@ def _translate_structural(groups: dict) -> dict:
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
-    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`."""
+    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
+
+    Also forwards the (non-parametric only) ``bin_edges_gyr`` structural
+    kwarg through to :func:`resolve_sfh` so users can override the
+    bin layout for ``prospector_beta`` / ``continuity`` / etc. from the
+    nested-dict grammar (#337).
+    """
     sfh_type = sfh_dict.get("type")
+
+    # ``bin_edges_gyr`` is a structural setting (array of bin edges in
+    # Gyr) that only applies to non-parametric SFHs. Surface it as a
+    # top-level kwarg so ``Parameters.__init__`` can pop it and forward
+    # to ``resolve_sfh(mean_sfh_type, bin_edges_gyr=...)`` via
+    # ``_build_legacy``. The wildcard ``'*': FREE / FIXED`` does NOT
+    # apply to this — it's a config, not a free parameter.
+    if "bin_edges_gyr" in sfh_dict:
+        result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
 
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
@@ -763,6 +790,40 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     result["radio"] = radio_type != "none"
 
 
+#: Valid laws for the MW foreground screen (#297). Only the closed-form
+#: laws that take a single ``R_V`` parameter are usable as a foreground
+#: screen — host-dust laws with two free knobs (slope, bump, ...) would
+#: collide with the host ``dust`` block's parameter prefix.
+_VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
+
+
+def _translate_foreground(fg_dict: dict, result: dict) -> None:
+    """Translate the ``foreground`` group (MW screen) — see #297.
+
+    Flat layout: ``foreground={'ebmv_mw': 0.05, 'law': 'cardelli', 'rv': 3.1}``.
+    Surfaces three top-level kwargs on ``Parameters`` so the SEDModel can
+    apply the screen in the observed-frame SED path, after IGM and
+    redshifting, independently from the host-galaxy ``dust`` block.
+    """
+    ebmv = fg_dict.get("ebmv_mw", 0.0)
+    law = fg_dict.get("law", "cardelli")
+    rv = fg_dict.get("rv", 3.1)
+    if law not in _VALID_FOREGROUND_LAWS:
+        suggestions = difflib.get_close_matches(law, _VALID_FOREGROUND_LAWS, n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(
+            f"Unknown foreground law {law!r}. Valid: "
+            f"{sorted(_VALID_FOREGROUND_LAWS)}.{suggest_str}"
+        )
+    if float(ebmv) < 0:
+        raise ValueError(f"foreground.ebmv_mw must be >= 0, got {ebmv}")
+    if float(rv) <= 0:
+        raise ValueError(f"foreground.rv must be > 0, got {rv}")
+    result["foreground_ebmv_mw"] = float(ebmv)
+    result["foreground_law"] = law
+    result["foreground_rv"] = float(rv)
+
+
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
     xray_type = xray_dict.get("type", "none")
@@ -785,7 +846,7 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
@@ -799,6 +860,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn.lines": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
     "agn.atten": frozenset({"type", "*"}),
+    "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
 
 
@@ -815,6 +877,37 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
             continue
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
+    return out
+
+
+def _short_names_for_registered_type(type_name: str | None) -> set[str]:
+    """Short + full param names declared by a user-registered SEDModelComponent
+    subclass selected via ``type=<type_name>``.
+
+    The per-group validator only sees params that already live on the
+    structural ``Parameters`` instance. User-registered subclasses
+    (``class MyDust(SEDModelComponent): T = Uniform(...)``) aren't in
+    that pool yet, so a per-parameter override like ``"T": Fixed(35)``
+    is rejected before the build can wire the subclass in (#391).
+
+    Returns both the short name (``T``) and the prefixed full name
+    (``dust_T``) so either spelling is accepted in the user's group dict.
+    """
+    if not type_name:
+        return set()
+    try:
+        from tengri.components.sed_model_component import _REGISTRY
+    except Exception:
+        return set()
+    cls = _REGISTRY.get(type_name)
+    if cls is None:
+        return set()
+    prefix = getattr(cls, "parameter_prefix", "")
+    priors = getattr(cls, "_priors", {}) or {}
+    out: set[str] = set()
+    for short in priors:
+        out.add(short)
+        out.add(f"{prefix}{short}")
     return out
 
 
@@ -880,12 +973,21 @@ def _validate_user_keys(
             # dust.emission group path).
             param_names = param_names | _short_names_for_group("dust.emission", param_partition)
 
+        # User-registered SEDModelComponent subclasses (#391): if the
+        # group dict picks a custom ``type``, add that subclass's
+        # declared short/full param names to the accepted set.
+        if isinstance(top_val.get("type"), str):
+            param_names = param_names | _short_names_for_registered_type(top_val["type"])
+
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 
         # Recurse into sub-block dicts.
         if top_key == "dust" and isinstance(top_val.get("emission"), dict):
             sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
             sub_params = _short_names_for_group("dust.emission", param_partition)
+            sub_params = sub_params | _short_names_for_registered_type(
+                top_val["emission"].get("type") if isinstance(top_val["emission"], dict) else None
+            )
             _check_dict_keys(
                 "dust.emission", top_val["emission"], sub_allowed | sub_params, param_partition
             )
@@ -897,6 +999,7 @@ def _validate_user_keys(
                 sub_group = f"agn.{sub_name}"
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
+                sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
                 # Cross-level: sub-block dict may also legitimately carry
                 # shared AGN param names.
                 _check_dict_keys(

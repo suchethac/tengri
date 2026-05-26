@@ -10,6 +10,10 @@ power-law slopes, the 2175 Å UV bump, birth-cloud and diffuse-ISM optical
 depths, two-component geometry, and law comparisons.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

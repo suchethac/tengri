@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import types
 import warnings
@@ -822,7 +823,16 @@ class SEDModel:
             Parameter map entries for this component:
             public_name -> (internal_name, scale, offset).
         """
-        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
+        # Forward the (optional) non-parametric bin edges through to
+        # resolve_sfh so prospector_beta / continuity / ... use the
+        # user-supplied edges in the forward pass (#337).
+        _sfh_kwargs = {}
+        _bin_edges = getattr(spec, "bin_edges_gyr", None)
+        if _bin_edges is not None:
+            _sfh_kwargs["bin_edges_gyr"] = _bin_edges
+        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(
+            spec.mean_sfh_type, **_sfh_kwargs
+        )
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
         # Per-spec public SFH param names (sfh_X_*). The composer
@@ -917,6 +927,22 @@ class SEDModel:
                 stacklevel=2,
             )
             self._dust_emission_model = "draine_li2007"
+
+        # Template-based dust emission models lazy-load HDF5 grids on first
+        # call. If the first call happens inside a `@jax.jit` scope (the
+        # common Fitter path), `jnp.array(...)` inside the loader creates
+        # `DynamicJaxprTracer` objects that escape the loader's closure,
+        # triggering `UnexpectedTracerError` on subsequent non-JIT calls.
+        # Mirror the `_warm_grid_caches()` pattern used by `_build_precomputed_data`
+        # and force-load at factory time (#390).
+        _TEMPLATE_BASED_EMISSION_MODELS = frozenset(
+            {"draine_li2007", "dl14", "dale2014", "astrodust", "bosa", "themis"}
+        )
+        if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
+            from tengri.components.dust.emission import preload_emission_model
+
+            with contextlib.suppress(Exception):
+                preload_emission_model(self._dust_emission_model)
 
         # Identity entries for dust-emission params now come from the
         # registry-driven auto-derive in ``_build_param_map`` (Step B,
@@ -2443,6 +2469,20 @@ class SEDModel:
                 temp=params.get("dla_temp", 1e4),
                 b_turb_kms=params.get("dla_b_turb", 0.0),
             )
+        # MW foreground screen (#297) — final transformation on the
+        # observed-frame SED, independent of host-galaxy dust. Applied
+        # at observed-frame wavelengths so it works for any source
+        # redshift. Skipped when ebmv_mw=0 (the default).
+        if getattr(self.spec, "foreground_ebmv_mw", 0.0) > 0.0:
+            from tengri.components.dust.attenuation import cardelli
+
+            ebmv = jnp.asarray(self.spec.foreground_ebmv_mw)
+            rv = jnp.asarray(self.spec.foreground_rv)
+            # Cardelli returns A(λ)/A(V); A_V = R_V * E(B-V).
+            # T(λ) = 10^(-0.4 * A_V * k(λ))
+            k_lambda = cardelli(wave_obs, dust_Rv=rv)
+            a_v = rv * ebmv
+            sed_obs = sed_obs * jnp.power(10.0, -0.4 * a_v * k_lambda)
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict(self, params):
@@ -2944,8 +2984,21 @@ class SEDModel:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif (
+            wave_obs is None
+            and self.observation is not None
+            and getattr(self.observation, "spectroscopy", None) is not None
+            and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
+        ):
+            # Tier-2 fallback documented in the docstring above (#389):
+            # honour observation.spectroscopy.wave_obs so Fitter-driven
+            # spectroscopy fits don't need a manual `model._wave_obs` hack.
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
-            raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
+            raise ValueError(
+                "No wavelength grid. Pass wave_obs, call precompute_spectroscopy(), "
+                "or attach an Observation with spectroscopy.wave_obs set."
+            )
 
         # Use instance default if not overridden
         if wave_chunk_size is None:
@@ -4063,6 +4116,15 @@ class SEDModel:
         # chain via ``run_components``. The chain depends only on structural
         # config (spec, ssp_data, filters, approx), all of which are immutable
         # after ``__init__``.
+        # Validate param keys at the orchestrator entry — silent drops
+        # of typo'd or stale override keys produce plausible-looking but
+        # wrong physics. Covers the dict-merge code path that
+        # ``predict_observables_jit`` already guards at line ~4242
+        # (#314). Skip in JIT-runtime threading mode where the JIT
+        # entry point has already validated the caller's dict.
+        if fixed_values is None:
+            check_unknown_params(params, self._param_map)
+
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             cached = self._build_component_chain()
@@ -4800,6 +4862,7 @@ class SEDModel:
         igm=None,
         radio=None,
         xray=None,
+        foreground=None,
         redshift=None,
         apply_igm=None,
         filters=None,
@@ -4872,6 +4935,7 @@ class SEDModel:
                 igm=igm,
                 radio=radio,
                 xray=xray,
+                foreground=foreground,
                 redshift=redshift,
                 apply_igm=apply_igm,
             ).items()

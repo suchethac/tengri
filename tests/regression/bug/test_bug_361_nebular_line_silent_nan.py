@@ -155,7 +155,7 @@ class TestBug361B_silent_nan_warning:
                 sfh={
                     "type": "tsnorm",
                     "*": tengri.FIXED,
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 8.0,
                     "peak_lbt_gyr": 2.0,
                     "width_gyr": 1.0,
                     "skew": 0.2,

@@ -54,7 +54,7 @@ FIDUCIAL_PARAMS = {
 # Single observation config to demonstrate the concept
 FILTERS = ["sdss_u", "sdss_r", "2mass_j"]
 
-print(f"Building model...")
+print("Building model...")
 
 # Build observation
 observation = tengri.Observation(
@@ -91,7 +91,7 @@ flat_fiducial = np.array(
 )
 
 # Compute Fisher matrix via finite differences
-print(f"Computing Fisher matrix via finite differences...")
+print("Computing Fisher matrix via finite differences...")
 delta = 1e-5
 fisher = np.zeros((2, 2))
 

@@ -95,6 +95,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_hierarchy.py` (``plot_agn_hierarchy.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_host_decomposition.py` (``plot_agn_host_decomposition.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_lines_compare.py` (``plot_agn_lines_compare.py``)
      - 00:00.000
      - 0.0
@@ -122,6 +125,12 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_type12.py` (``plot_agn_type12.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_bh_spin_disc_continuum.py` (``plot_bh_spin_disc_continuum.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_composable_block_toggles.py` (``plot_composable_block_toggles.py``)
      - 00:00.000
      - 0.0
@@ -129,6 +138,12 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_composable_three_modes.py` (``plot_composable_three_modes.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_eddington_ratio_sweep.py` (``plot_eddington_ratio_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_mbh_mstar_relation.py` (``plot_mbh_mstar_relation.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_nlr_blr_lines.py` (``plot_nlr_blr_lines.py``)
@@ -140,6 +155,33 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_relagn_spin.py` (``plot_relagn_spin.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_reverberation_size_luminosity.py` (``plot_reverberation_size_luminosity.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py` (``plot_seyfert_quasar_blazar_archetypes.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_inclination_sweep.py` (``plot_skirtor_inclination_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_silicate_features.py` (``plot_skirtor_silicate_features.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_variants.py` (``plot_skirtor_variants.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_smbh_growth_track.py` (``plot_smbh_growth_track.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_torus_opening_angle.py` (``plot_torus_opening_angle.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_type1_type2_unified_model.py` (``plot_type1_type2_unified_model.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_ulirg_to_qso_transition.py` (``plot_ulirg_to_qso_transition.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_variability_continuum_lag.py` (``plot_variability_continuum_lag.py``)
      - 00:00.000
      - 0.0

@@ -21,6 +21,10 @@ AGN Coronae
 - ``plot_alpha_ox_sweep.py`` — UV-to-X-ray slope α_ox controls normalisation
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

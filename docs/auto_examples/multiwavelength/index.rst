@@ -11,6 +11,10 @@ These short scripts complement the main tutorial notebooks — each produces a
 single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

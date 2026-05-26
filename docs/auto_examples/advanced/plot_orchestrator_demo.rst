@@ -149,7 +149,7 @@ through the SEDModel.build() nested-dict grammar and recipes.
         ax.legend()
         ax.set_ylim(1e30, 1e45)
         fig.tight_layout()
-        fig.savefig("plot_orchestrator_demo.png", dpi=150, bbox_inches="tight")
+        plt.savefig("plot_orchestrator_demo.png", dpi=150, bbox_inches="tight")
 
     except ImportError as e:
         print(f"Orchestrator API not available: {e}")

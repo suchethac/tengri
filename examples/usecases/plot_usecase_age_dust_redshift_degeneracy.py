@@ -29,12 +29,11 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import FIXED, Observation, Photometry, SEDModel, Uniform, recipes
+from tengri import Observation, Photometry, SEDModel
 
 # Setup
 tengri.analysis.plotting.setup_style()
