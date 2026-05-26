@@ -94,6 +94,27 @@ class SSPData(NamedTuple):
     imf: str = "unknown"
 
 
+def _sspdata_flatten(s):
+    # ``imf`` is metadata, not a JIT leaf — keep strings out of the trace.
+    children = (
+        s.ssp_wave,
+        s.ssp_flux,
+        s.ssp_lg_age_gyr,
+        s.ssp_lgmet,
+        s.ssp_mass_remaining,
+        s.ssp_alpha_fe,
+    )
+    aux = (s.imf,)
+    return children, aux
+
+
+def _sspdata_unflatten(aux, children):
+    return SSPData(*children, imf=aux[0])
+
+
+jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
+
+
 _LOAD_SSP_PRESETS: dict[str, str] = {
     # Short alias → full filename. Bare-stellar entries come from
     # ``_KNOWN_SSPS`` (the auto-fetch catalogue); wNE entries are produced
