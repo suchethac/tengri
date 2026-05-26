@@ -70,7 +70,7 @@ plot.setup_style()
 # used in the canonical recipes; wNE files cannot be paired with Cue).
 _ssp_name = "fsps_prsc_miles_chabrier.h5"
 _repo_root = next(
-    p for p in [Path.cwd(), *Path.cwd().parents] if (p / "data" / _ssp_name).exists()
+    p for p in [Path.cwd(), *Path.cwd().parents] if (p / "pyproject.toml").exists()
 )
 ssp = load_ssp_data(str(_repo_root / "data" / _ssp_name))
 
@@ -119,14 +119,14 @@ print()
 # Path 2: Nested-dict direct (hand-built nested dict)
 print("PATH 2: Nested-dict direct")
 groups_dict = {
-    "sfh": {"type": "dpl", "*": FREE, "logzsol": Fixed(-0.1)},
+    "sfh": {"type": "dpl", "*": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FREE,
-        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "emission": {"type": "dale2014", "*": FIXED},
     },
-    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "neb": {"type": "cue", "*": FIXED},
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
 }
@@ -151,9 +151,9 @@ factory_groups = {
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FREE,
-        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "emission": {"type": "dale2014", "*": FIXED},
     },
-    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "neb": {"type": "cue", "*": FIXED},
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
 }
@@ -167,8 +167,8 @@ print()
 # Path 4: Round-trip (extract → edit → rebuild)
 print("PATH 4: Round-trip")
 groups_from_model = model1.spec.to_groups()
-# Tweak: change metallicity to free (lives inside the sfh group as 'logzsol')
-groups_from_model.setdefault("sfh", {})["logzsol"] = FREE
+# Tweak: change metallicity to free (lives inside the sfh group as 'met_logzsol')
+groups_from_model.setdefault("sfh", {})["met_logzsol"] = FREE
 model3 = SEDModel.build(ssp_data=ssp, observation=observation, **groups_from_model)
 print(f"  Model: {model3.spec.n_free} free params from round-trip + edit")
 print(f"  Added metallicity freedom: {'met_logzsol' in model3.spec.free_params}")
@@ -412,7 +412,7 @@ base_groups_sfh = {
         "slope": Fixed(-0.7),
         "emission": {"type": "dale2014"},
     },
-    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
@@ -420,7 +420,7 @@ base_groups_sfh = {
 for sfh_name, _ in sfh_families:
     # Swap SFH family: one-line edit
     groups_variant = base_groups_sfh.copy()
-    groups_variant["sfh"] = {"type": sfh_name, "*": FIXED, "logzsol": Fixed(-0.1)}
+    groups_variant["sfh"] = {"type": sfh_name, "*": FIXED, "met_logzsol": Fixed(-0.1)}
 
     spec_sfh = parse_groups(**groups_variant)
     sfh_params = [p for p in spec_sfh.free_params if p.startswith("sfh_")]
@@ -448,7 +448,7 @@ dl_cm = float(cosmology.luminosity_distance(z))
 for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
     # Build model for this SFH family
     groups_sfh_fig = {
-        "sfh": {"type": sfh_name, "*": FIXED, "logzsol": Fixed(-0.1)},
+        "sfh": {"type": sfh_name, "*": FIXED, "met_logzsol": Fixed(-0.1)},
         "dust": {
             "type": "two_component",
             "law_bc": "calzetti",
@@ -457,7 +457,7 @@ for row, (sfh_name, truth_sfh) in enumerate(sfh_families):
             "slope": Fixed(-0.7),
             "emission": {"type": "dale2014"},
         },
-        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "neb": {"type": "cue", "*": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -551,7 +551,7 @@ base_groups_dust = {
         "slope": Fixed(-0.7),
         "emission": {"type": "dale2014"},
     },
-    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
@@ -608,7 +608,7 @@ groups_nodust = {
         "slope": Fixed(-0.7),
         "emission": {"type": "dale2014"},
     },
-    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(z),
     "apply_igm": False,
 }
@@ -668,7 +668,7 @@ for idx, dust_law in enumerate(dust_laws):
             "slope": Fixed(-0.7),
             "emission": {"type": "dale2014"},
         },
-        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "neb": {"type": "cue", "*": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -744,7 +744,7 @@ base_groups_emission = {
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+    "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }
@@ -808,7 +808,7 @@ for idx, emission in enumerate(dust_emissions):
             "slope": Fixed(-0.7),
             "emission": {"type": emission},
         },
-        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "neb": {"type": "cue", "*": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -856,7 +856,7 @@ for emission in dust_emissions:
             "slope": Fixed(-0.7),
             "emission": {"type": emission},
         },
-        "neb": {"type": "cue", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "neb": {"type": "cue", "*": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
     }
@@ -907,13 +907,13 @@ print("─" * 70)
 
 # Build a reference model to show summary()
 groups_ref = {
-    "sfh": {"type": "tsnorm", "*": FREE, "logzsol": Fixed(-0.1)},
+    "sfh": {"type": "tsnorm", "*": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "emission": {"type": "dale2014", "*": FIXED},
     },
     "redshift": Uniform(0.01, 0.1),
     "apply_igm": False,
@@ -924,13 +924,13 @@ print(spec_ref.summary_str())
 
 # Model 1: free redshift
 groups_free_z = {
-    "sfh": {"type": "tsnorm", "*": FREE, "logzsol": Fixed(-0.1)},
+    "sfh": {"type": "tsnorm", "*": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "emission": {"type": "dale2014", "*": FIXED},
     },
     "redshift": Uniform(0.01, 0.1),  # FREE
     "apply_igm": False,
@@ -939,13 +939,13 @@ spec_free_z = parse_groups(**groups_free_z)
 
 # Model 2: fixed redshift
 groups_fixed_z = {
-    "sfh": {"type": "tsnorm", "*": FREE, "logzsol": Fixed(-0.1)},
+    "sfh": {"type": "tsnorm", "*": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "*": FIXED, "logzsol": Fixed(-0.1)},
+        "emission": {"type": "dale2014", "*": FIXED},
     },
     "redshift": Fixed(0.05),  # FIXED
     "apply_igm": False,
