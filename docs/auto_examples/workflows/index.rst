@@ -9,6 +9,10 @@ End-to-end fitting workflows — BPT classification, dust Monte-Carlo
 resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 

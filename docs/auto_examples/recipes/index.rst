@@ -10,6 +10,10 @@ loading photometry from CSV, fixing redshift, swapping filter sets, and
 saving/loading a posterior to disk.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
