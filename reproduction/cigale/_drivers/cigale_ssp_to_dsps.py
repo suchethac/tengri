@@ -7,11 +7,11 @@ an HDF5 file matching the layout of tengri.load_ssp().
 
 Unit conversion:
   CIGALE spec: [W/nm/Msun]
-  1. Convert W/nm → erg/s/nm: multiply by 1e7
+  1. Convert W/nm → erg/s/Å: multiply by 1e6 (1e7 erg/s/W × 0.1 nm/Å)
   2. Convert erg/s/nm → erg/s/Hz via λ²/c: multiply by λ² [Å²] / c [Å/s]
   3. Normalize to Lsun = 3.828e33 erg/s: divide by Lsun
 
-  Formula: L_nu [Lsun/Hz/Msun] = L_lambda [W/nm/Msun] * 1e7 * lambda²_Angstrom / c_Angstrom_per_s / L_sun_erg_per_s
+  Formula: L_nu [Lsun/Hz/Msun] = L_lambda [W/nm/Msun] * 1e6 * lambda²_Angstrom / c_Angstrom_per_s / L_sun_erg_per_s
   where c = 2.998e18 Angstrom/s and L_sun = 3.828e33 erg/s.
 """
 
@@ -92,9 +92,12 @@ def convert_flux_cigale_to_dsps(spec_cigale_w_nm: np.ndarray, wl_angstrom: np.nd
     shape_match[0] = len(wl_angstrom)
     wl_broadcasted = np.broadcast_to(wl_angstrom[:, np.newaxis], shape_match)
 
-    # Unit conversion: W/nm/Msun → Lsun/Hz/Msun
-    # spec [W/nm/Msun] * 1e7 [erg/s per W] * wl²[Å²] / c[Å/s] / L_sun[erg/s]
-    spec_dsps = spec_cigale_w_nm * 1e7 * (wl_broadcasted ** 2) / C_ANGSTROM_PER_S / L_SUN_ERG_PER_S
+    # Unit conversion: W/nm/Msun → Lsun/Hz/Msun.
+    #   spec [W/nm]          × 1e7 erg/s per W      → erg/s/nm
+    #                        × 0.1 nm/Å             → erg/s/Å
+    #   L_λ [erg/s/Å] × λ²[Å²] / c[Å/s]            → erg/s/Hz
+    #                        / L_sun[erg/s]         → Lsun/Hz
+    spec_dsps = spec_cigale_w_nm * 1e6 * (wl_broadcasted ** 2) / C_ANGSTROM_PER_S / L_SUN_ERG_PER_S
 
     return spec_dsps
 

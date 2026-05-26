@@ -27,11 +27,28 @@ import numpy as np
 import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-
 from reproduction.cigale._drivers import cigale_driver as C
 from reproduction.cigale._drivers import units as U
 
 SSP_PATH = Path(__file__).parent / "data" / "bc03_from_cigale.h5"
+
+# CIGALE `sfhdelayed(normalise=True)` ↔ tengri `log_total_mass = 0.0`
+# integrates the SFH to exactly 1 M☉ formed (Bagpipes/Prospector convention).
+LOG_TOTAL_MASS_FIDUCIAL = 0.0
+
+# CIGALE modified_starburst(E_BV_lines=0.3) ↔ tengri two_component (τ_bc, τ_diff)
+# via Calzetti R_V = 4.05 and the E(B-V)_cont / E(B-V)_lines = 0.44 split.
+_E_BV_LINES, _R_V, _F = 0.3, 4.05, 0.44
+DUST_TAU_FIDUCIAL = {
+    "tau_diff": _R_V * _F * _E_BV_LINES / 1.086,
+    "tau_bc": _R_V * (1.0 - _F) * _E_BV_LINES / 1.086,
+}
+
+print(
+    f"# fiducial — log_total_mass = {LOG_TOTAL_MASS_FIDUCIAL:.3f}, "
+    f"tau_bc = {DUST_TAU_FIDUCIAL['tau_bc']:.3f}, "
+    f"tau_diff = {DUST_TAU_FIDUCIAL['tau_diff']:.3f}"
+)
 
 
 def stats(name: str, ratio: np.ndarray) -> None:
@@ -78,14 +95,14 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
     kw = {
         "ssp_data": ssp,
         "sfh": {"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-                "log_peak_sfr": Fixed(-10.0), "*": FIXED},
+                "log_total_mass": Fixed(LOG_TOTAL_MASS_FIDUCIAL), "*": FIXED},
         "redshift": Fixed(0.0),
     }
     if with_dust or with_ir:
         kw["dust"] = {
             "type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
-            "tau_bc": Fixed(0.3 if with_dust else 0.0),
-            "tau_diff": Fixed(0.2 if with_dust else 0.0),
+            "tau_bc": Fixed(DUST_TAU_FIDUCIAL["tau_bc"] if with_dust else 0.0),
+            "tau_diff": Fixed(DUST_TAU_FIDUCIAL["tau_diff"] if with_dust else 0.0),
             "*": FIXED,
             "emission": {"type": "dale2014", "*": FIXED} if with_ir else None,
         }

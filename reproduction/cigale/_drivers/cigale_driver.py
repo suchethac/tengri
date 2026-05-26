@@ -29,7 +29,7 @@ NAME_MAP = {
     "dustatt_modified_CF00": "ModCF00Att",
     "dustatt_modified_starburst": "ModStarburstAtt",
     "dustatt_powerlaw": "PowerLawAtt",
-    "dustatt_2powerlaws": "TwoPowerlawsAtt",
+    "dustatt_2powerlaws": "TwoPowerLawAtt",
     "dl2007": "DL2007",
     "dl2014": "DL2014",
     "casey2012": "Casey2012",
@@ -39,7 +39,7 @@ NAME_MAP = {
     "skirtor2016": "SKIRTOR2016",
     "radio": "Radio",
     "redshifting": "Redshifting",
-    "xray": "Xray",
+    "yang20": "Yang20",
     "sfh2exp": "Sfh2Exp",
     "sfh_buat08": "SfhBuat08",
     "sfhdelayedbq": "SFHDelayedBQ",
@@ -99,7 +99,9 @@ def run_chain(modules):
     sed = SED()
     for module_name, params in modules:
         cls = _get_module_class(module_name)
-        module = cls(params)
+        # `name=module_name` bypasses pcigale's inspect.getfile() lookup,
+        # which fails on dynamically-imported SedModule subclasses.
+        module = cls(name=module_name, **params)
         module.process(sed)
     return sed
 
@@ -142,15 +144,18 @@ def attenuation_curve(law_name, **params):
     A_lambda_mag : ndarray, shape (n_wave,)
         Attenuation in magnitudes.
     """
-    # Build a flat stellar SED to apply attenuation to
+    # Build a flat stellar SED to apply attenuation to. Times are in Myr
+    # for sfhdelayed; age_burst=20 / tau_burst=50 are safe defaults that
+    # avoid the empty-burst-array crash in pcigale.
     sed_intrinsic = SED()
     sfh_cls = _get_module_class("sfhdelayed")
-    sfh = sfh_cls({"tau_main": 1e6, "age_main": 1e10, "tau_burst": 0, "age_burst": 0,
-                   "f_burst": 0, "sfr_A": 1.0, "normalise": True})
+    sfh = sfh_cls(name="sfhdelayed", tau_main=1000, age_main=5000,
+                  tau_burst=50, age_burst=20, f_burst=0.0,
+                  sfr_A=1.0, normalise=True)
     sfh.process(sed_intrinsic)
 
     ssp_cls = _get_module_class("bc03")
-    ssp = ssp_cls({"imf": 1, "metallicity": 0.02, "separation_age": 10})
+    ssp = ssp_cls(name="bc03", imf=1, metallicity=0.02, separation_age=10)
     ssp.process(sed_intrinsic)
 
     # Get the intrinsic spectrum
@@ -162,7 +167,7 @@ def attenuation_curve(law_name, **params):
     ssp.process(sed_attenuated)
 
     dust_cls = _get_module_class(law_name)
-    dust = dust_cls(params)
+    dust = dust_cls(name=law_name, **params)
     dust.process(sed_attenuated)
 
     L_attenuated = sed_attenuated.luminosity
@@ -195,7 +200,7 @@ def sfh_curve(sfh_module_name, **params):
     """
     sed = SED()
     sfh_cls = _get_module_class(sfh_module_name)
-    sfh = sfh_cls(params)
+    sfh = sfh_cls(name=sfh_module_name, **params)
     sfh.process(sed)
 
     # sed.sfh is an SFR array; time grid is implicit [0, 1, 2, ..., n_age-1] Myr
