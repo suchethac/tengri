@@ -49,6 +49,10 @@ model = tengri.SEDModel.build(
         "log_lbol": 11.5,
         "log_mbh": 8.0,
         "log_ledd": -0.5,
+        "frac": 1.0,  # without this the composable AGN is multiplied by zero
+        # Promote a_spin to FREE so the sweep at predict time actually flows;
+        # a bare tengri.FREE at per-param level is swallowed by '*: FIXED'.
+        "a_spin": tengri.Uniform(0.0, 0.998),
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -69,7 +73,7 @@ for a_spin in a_spin_values:
     ax.loglog(wave, nu_l_nu, color=cmap(norm(a_spin)), lw=1.5, label=f"a* = {a_spin:.3f}")
 
 ax.set_xlim(100, 3000)
-ax.set_ylim(1e40, 1e45)
+ax.set_ylim(5e43, 2e45)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax.legend(loc="upper right", framealpha=0.95)

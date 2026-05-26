@@ -93,6 +93,7 @@ def _build_model(u_min: float) -> tuple:
             "type": "draine_li2007",
             "*": tengri.FIXED,
             "qpah": 2.5,  # Fixed PAH mass fraction
+            "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
         },
     }
 

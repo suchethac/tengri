@@ -123,7 +123,11 @@ key, subkey = jax.random.split(key)
 mock_flux = truth_phot + jax.random.normal(subkey, shape=truth_phot.shape) * noise_level
 
 print("Generated synthetic photometry:")
+<<<<<<< HEAD
 print(f"  n bands: {len(obs.photometry.filter_waves)}")
+=======
+print(f"  Bands: {obs.photometry.filter_names}")
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 print("  SNR: ~20 per band")
 print(f"  Truth SFR (100 Myr): {truth_sfr_100myr:.2f} Msun/yr")
 
@@ -152,6 +156,7 @@ recovered_pred = model.predict(best_params)
 recovered_sfr_100myr = float(recovered_pred.sfh.sfr_100myr)
 
 print("Recovered PSD parameters:")
+<<<<<<< HEAD
 print(
     f"  psd_sigma: {best_params['sfh_field_psd_sigma']:.3f} "
     f"(true: {truth_params['sfh_field_psd_sigma']:.3f})"
@@ -160,6 +165,12 @@ print(
     f"  psd_tau_myr: {best_params['sfh_field_psd_tau_myr']:.1f} "
     f"(true: {truth_params['sfh_field_psd_tau_myr']:.1f})"
 )
+=======
+print(f"  psd_sigma: {best_params['sfh_field_psd_sigma']:.3f} "
+      f"(true: {truth_params['sfh_field_psd_sigma']:.3f})")
+print(f"  psd_tau_myr: {best_params['sfh_field_psd_tau_myr']:.1f} "
+      f"(true: {truth_params['sfh_field_psd_tau_myr']:.1f})")
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 print(f"  SFR (100 Myr): {recovered_sfr_100myr:.2f} Msun/yr")
 
 # ============================================================================
