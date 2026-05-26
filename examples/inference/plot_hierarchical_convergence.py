@@ -4,7 +4,7 @@ Population-level PSD recovery from galaxy samples
 
 Hierarchical inference jointly fits a population of galaxies to constrain
 shared stochastic parameters (σ, τ) that cannot be measured from individual
-fits. This demonstrates why population-level inference is essential for
+fits. why population-level inference is essential for
 constraining burstiness. We fit N=3 galaxies with synthetic stochastic SFH
 data using MAP on a reduced search grid to show the principle.
 

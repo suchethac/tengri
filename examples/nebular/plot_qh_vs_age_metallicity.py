@@ -13,7 +13,6 @@ The calculation integrates the ionizing flux (λ < 912 Å) weighted by photon en
 across the hydrogen-ionizing frequency domain. The result is normalized by the
 stellar mass of a single-age population to give photons per second per solar mass.
 
-This example demonstrates:
 - Loading bare-stellar SSP data via ``tengri.load_ssp()``
 - Extracting age and metallicity arrays from the SSP grid
 - Computing Q_H via ``compute_qh(ssp_wave, ssp_flux)`` from the ionizing part

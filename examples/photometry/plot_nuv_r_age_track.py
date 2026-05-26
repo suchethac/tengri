@@ -15,8 +15,6 @@ quiescent populations (NUV−r > 5). At intermediate ages (1–2 Gyr), the NUV�
 color jumps ~2 magnitudes, reflecting the rapid evolution of the UV-to-optical
 SED as young, hot stars fade and the older stellar population emerges.
 
-This figure illustrates:
-
 - the NUV−r color jump across the green valley (age ~ 1–2 Gyr)
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of colour-colour diagnostic diagrams used in photometric surveys

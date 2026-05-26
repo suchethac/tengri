@@ -1,5 +1,5 @@
 """
-Curated recipes for common science cases
+recipes for common science cases
 =========================================
 
 Each recipe is a nested-dict configuration — drop-in templates for common galaxy

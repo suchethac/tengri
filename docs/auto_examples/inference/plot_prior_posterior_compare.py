@@ -3,7 +3,7 @@ Prior vs Posterior: Parameter Constraints from Inference
 =========================================================
 
 A Bayesian fit uses prior distributions over parameters and refines them
-using observed data to obtain posteriors. This script shows how priors
+using observed data to obtain posteriors. priors
 (dashed lines) and posteriors (histograms) differ for key physical
 parameters (stellar mass age, metallicity, dust optical depth) after
 fitting mock photometry.

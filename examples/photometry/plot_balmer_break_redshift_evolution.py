@@ -10,7 +10,7 @@ to longer wavelengths with increasing redshift: z × 4000 Å. This is why
 different photometric bands probe the break at different redshifts — the
 fundamental principle behind photo-z estimation and dust/age degeneracies.
 
-This example shows how a single 2-Gyr-old stellar population appears across
+a single 2-Gyr-old stellar population appears across
 redshift z = 0.5, 1.0, 2.0, 3.0, 4.0 in the observed frame. The top panel
 displays the full nu*F_nu spectrum with HST and JWST filter responses
 overlaid. The bottom panel zooms to the 4000 Å break region, showing exactly

@@ -10,7 +10,7 @@ but small dynamic range of [N II]/H-alpha (Marino et al. 2013), and the
 famous double-valued R23 ratio which peaks near 12 + log(O/H) ≈ 8.3
 (Pagel et al. 1979).
 
-This demonstrates why observers cannot uniquely invert a single line
+why observers cannot uniquely invert a single line
 ratio to metallicity without breaking the R23 degeneracy or adopting a
 secondary diagnostic.
 """

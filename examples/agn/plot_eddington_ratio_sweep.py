@@ -8,8 +8,6 @@ Here we sweep λ_Edd from 0.001 to 1.0 at five logarithmic steps and overlay
 the disc continuum (100–3000 Å) to show how lower accretion rates produce
 fainter discs with unchanged spectral shape (Shakura & Sunyaev 1973).
 
-This example demonstrates:
-
 - Bolometric luminosity constraint: L_bol = λ_Edd × L_Edd(M_BH)
 - Black hole physics encoding in disc models via M_BH and λ_Edd
 - Fixed spectral shape under Eddington scaling (thin-disc invariance)
