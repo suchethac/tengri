@@ -54,11 +54,11 @@ class TestResolveShortNames:
         from tengri.parameters.translate import resolve_short_names
 
         expanded = resolve_short_names(
-            "tsnorm", {"log_peak_sfr": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)}
+            "tsnorm", {"log_total_mass": Uniform(-1, 2.5), "logzsol": Uniform(-2, 0.2)}
         )
-        assert "sfh_tsnorm_log_peak_sfr" in expanded
+        assert "sfh_tsnorm_log_total_mass" in expanded
         assert "met_logzsol" in expanded
-        assert "log_peak_sfr" not in expanded
+        assert "log_total_mass" not in expanded
 
     def test_dpl_plus_field_compound(self):
         from tengri.parameters.priors import Uniform
@@ -66,24 +66,24 @@ class TestResolveShortNames:
 
         expanded = resolve_short_names(
             "dpl+field",
-            {"log_peak_sfr": Uniform(-1, 2.5), "psd_sigma": Uniform(0.1, 2.0)},
+            {"log_total_mass": Uniform(-1, 2.5), "psd_sigma": Uniform(0.1, 2.0)},
         )
-        assert "sfh_dpl_log_peak_sfr" in expanded
+        assert "sfh_dpl_log_total_mass" in expanded
         assert "sfh_field_psd_sigma" in expanded
 
     def test_full_names_pass_through(self):
         from tengri.parameters.priors import Uniform
         from tengri.parameters.translate import resolve_short_names
 
-        expanded = resolve_short_names("tsnorm", {"sfh_tsnorm_log_peak_sfr": Uniform(-1, 2.5)})
-        assert "sfh_tsnorm_log_peak_sfr" in expanded
+        expanded = resolve_short_names("tsnorm", {"sfh_tsnorm_log_total_mass": Uniform(-1, 2.5)})
+        assert "sfh_tsnorm_log_total_mass" in expanded
 
     def test_list_input(self):
         from tengri.parameters.priors import Uniform
         from tengri.parameters.translate import resolve_short_names
 
-        r1 = resolve_short_names("tsnorm", {"log_peak_sfr": Uniform(-1, 2.5)})
-        r2 = resolve_short_names(["tsnorm"], {"log_peak_sfr": Uniform(-1, 2.5)})
+        r1 = resolve_short_names("tsnorm", {"log_total_mass": Uniform(-1, 2.5)})
+        r2 = resolve_short_names(["tsnorm"], {"log_total_mass": Uniform(-1, 2.5)})
         assert set(r1.keys()) == set(r2.keys())
 
 
@@ -318,7 +318,7 @@ class TestModelFitIntegration:
                 alpha=tengri.Uniform(0.5, 3.0),
                 beta=tengri.Uniform(0.3, 2.0),
                 tau_gyr=tengri.Uniform(0.5, 10.0),
-                log_peak_sfr=tengri.Uniform(-1, 2.5),
+                log_total_mass=tengri.Uniform(-1, 2.5),
                 logzsol=tengri.Uniform(-1.5, 0.2),
                 tau_bc=tengri.Uniform(0, 3.0),
             ),
@@ -327,7 +327,7 @@ class TestModelFitIntegration:
             "sfh_dpl_alpha": 1.2,
             "sfh_dpl_beta": 1.0,
             "sfh_dpl_tau_gyr": 4.0,
-            "sfh_dpl_log_peak_sfr": 0.9,
+            "sfh_dpl_log_total_mass": 0.9,
             "met_logzsol": -0.3,
             "dust_tau_bc": 1.0,
             "dust_tau_diff": 0.3,

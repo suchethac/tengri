@@ -17,6 +17,10 @@ References:
     Kauffmann+2003, MNRAS, 346, 1055 (SF/composite line)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -58,7 +62,7 @@ for logu in logu_array:
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.5,
-                 "tau_gyr": 0.1, "log_peak_sfr": 0.5},
+                 "tau_gyr": 0.1, "log_total_mass": 10.0},
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
             neb={"type": "cue", "*": tengri.FIXED,
                  "neb_logU": tengri.Fixed(logu), "neb_logZ_gas": tengri.Fixed(logz)},
@@ -103,7 +107,7 @@ for config in agn_configs:
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.0,
-             "tau_gyr": 0.15, "log_peak_sfr": 0.3},
+             "tau_gyr": 0.15, "log_total_mass": 10.0},
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
         neb={"type": "cue", "*": tengri.FIXED,
              "neb_logU": tengri.Fixed(config["logu"]),

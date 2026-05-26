@@ -14,6 +14,10 @@ fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -66,6 +70,15 @@ configs = [
         ),
         "#4477aa",
     ),
+    (
+        "+ FeII",
+        (
+            ("torus", {"type": "skirtor", "*": tengri.FIXED}),
+            ("lines", {"type": "blr", "*": tengri.FIXED}),
+            ("feii", {"type": "grahsp", "*": tengri.FIXED}),
+        ),
+        "#dd6699",
+    ),
 ]
 
 waves, seds = {}, {}
@@ -94,6 +107,7 @@ disc_only = seds["disc only"]
 torus_contrib = seds["+ torus (SKIRTOR)"] - disc_only
 nlr_contrib = seds["+ NLR"] - seds["+ torus (SKIRTOR)"]
 blr_contrib = seds["+ BLR"] - seds["+ torus (SKIRTOR)"]
+feii_contrib = seds["+ FeII"] - seds["+ BLR"]
 
 ax_bot.loglog(wave, nu * disc_only, color="#8b4513", lw=1.2, label="disc")
 ax_bot.loglog(
@@ -117,6 +131,13 @@ ax_bot.loglog(
     lw=1.2,
     ls=":",
     label="BLR lines",
+)
+ax_bot.loglog(
+    wave,
+    nu * np.where(feii_contrib > 0, feii_contrib, np.nan),
+    color="#dd6699",
+    lw=1.2,
+    label="FeII",
 )
 ax_bot.set(
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",

@@ -25,14 +25,16 @@ pytestmark = pytest.mark.contract
 def mock_spec():
     """Create a minimal Parameters-like object for testing."""
     spec = MagicMock()
-    spec.free_params = ["dust_tau_bc", "met_logzsol", "sfh_tsnorm_log_peak_sfr"]
+    spec.free_params = ["dust_tau_bc", "met_logzsol", "sfh_tsnorm_log_total_mass"]
 
     def _sample_batch(key, n):
         keys = jax.random.split(key, 3)
         return {
             "dust_tau_bc": jax.random.uniform(keys[0], (n,), minval=0.0, maxval=4.0),
             "met_logzsol": jax.random.uniform(keys[1], (n,), minval=-2.0, maxval=0.2),
-            "sfh_tsnorm_log_peak_sfr": jax.random.uniform(keys[2], (n,), minval=-1.0, maxval=2.0),
+            "sfh_tsnorm_log_total_mass": jax.random.uniform(
+                keys[2], (n,), minval=-1.0, maxval=2.0
+            ),
         }
 
     spec.sample_batch = _sample_batch
@@ -50,7 +52,7 @@ def mock_model(mock_spec):
         # Simple deterministic function of params for testing
         tau = params["dust_tau_bc"]
         met = params["met_logzsol"]
-        sfr = params["sfh_tsnorm_log_peak_sfr"]
+        sfr = params["sfh_tsnorm_log_total_mass"]
         return jnp.array(
             [
                 10.0**sfr * jnp.exp(-tau),
@@ -167,7 +169,7 @@ class TestGenerateTrainingData:
         bounds = {
             "dust_tau_bc": (0.0, 4.0),
             "met_logzsol": (-2.0, 0.2),
-            "sfh_tsnorm_log_peak_sfr": (-1.0, 2.0),
+            "sfh_tsnorm_log_total_mass": (-1.0, 2.0),
         }
         for i, name in enumerate(names):
             lo, hi = bounds[name]

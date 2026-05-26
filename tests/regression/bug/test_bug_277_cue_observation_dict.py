@@ -39,7 +39,7 @@ def test_cue_predict_paths_with_observation_attached():
                 "type": "dpl",
                 "*": tengri.FIXED,
                 "tau_gyr": 0.1,
-                "log_peak_sfr": 1.5,
+                "log_total_mass": 1.5,
                 "alpha": 4,
                 "beta": 2,
             },

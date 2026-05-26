@@ -12,6 +12,10 @@ passively evolving galaxy where iron features dominate the continuum absorption.
 Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -35,7 +39,7 @@ model = tengri.SEDModel.build(
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 8.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
     },
     dust={
         "type": "two_component",

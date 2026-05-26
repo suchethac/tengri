@@ -18,10 +18,13 @@ References
        ApJ, 527, 54 (D_n(4000) break strength)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -110,11 +113,11 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")  # Cue needs bare-stellar SSP
 # Three SFH widths under tsnorm, scanned over age and Z. tsnorm accepts
 # peak_lbt_gyr so the inner loop can vary the burst lookback time.
 sfh_shapes = [
-    ("instantaneous", {"type": "tsnorm", "width_gyr": 0.05, "log_peak_sfr": 1.0,
+    ("instantaneous", {"type": "tsnorm", "width_gyr": 0.05, "log_total_mass": 10.0,
                         "skew": 0.0, "trunc": 13.5}),
-    ("extended",      {"type": "tsnorm", "width_gyr": 0.50, "log_peak_sfr": 0.5,
+    ("extended",      {"type": "tsnorm", "width_gyr": 0.50, "log_total_mass": 10.0,
                         "skew": 0.0, "trunc": 13.5}),
-    ("rising",        {"type": "tsnorm", "width_gyr": 0.30, "log_peak_sfr": 0.0,
+    ("rising",        {"type": "tsnorm", "width_gyr": 0.30, "log_total_mass": 10.0,
                         "skew": 1.5, "trunc": 13.5}),
 ]
 ages_gyr = np.array([0.5, 1.0, 2.0, 4.0, 5.5])  # avoid SSP step at 6 Gyr (#299)
@@ -215,6 +218,7 @@ ax.set_ylim(-2.5, 3.5)
 
 # Legend for shapes (compact)
 from matplotlib.patches import Patch
+
 legend_patches = [Patch(facecolor=colors[i], label=labels_shape[i]) for i in range(len(sfh_shapes))]
 ax.legend(handles=legend_patches, loc="upper left", fontsize=9, title="SFH shape")
 

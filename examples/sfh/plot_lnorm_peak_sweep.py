@@ -8,6 +8,10 @@ strength, and NIR luminosity. We vary the peak time across its prior range with
 every other parameter fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ model = tengri.SEDModel.build(
         "type": "lnorm",
         "*": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(1.0, 11.0),
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "width_gyr": 0.3,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},

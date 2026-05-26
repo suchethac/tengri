@@ -49,7 +49,7 @@ def base_model():
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 1.5,
             "alpha": 1.0,
             "beta": 2.5,
         },

@@ -1,11 +1,20 @@
 """
-Dust IR SED: q_PAH × U_min Grid
-===============================
+The q_PAH and U_min knobs move PAH amplitude and FIR peak independently
+========================================================================
 
-2D grid of dust IR emission showing how PAH mass fraction and radiation-field
-hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
-2007 templates across parameter space.
+A 2-D grid on the Draine & Li 2007 template library: rows step through
+PAH mass fraction q_PAH (controls mid-IR PAH-feature strength),
+columns through the minimum radiation field U_min (sets the diffuse
+dust temperature, i.e. the FIR peak position). The two axes act
+nearly orthogonally — a surprise for anyone who would lump them
+together as "PAH knobs."
+
+Reference: Draine & Li 2007, ApJ, 657, 810.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

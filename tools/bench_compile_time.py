@@ -27,24 +27,32 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 os.environ.setdefault("TENGRI_DISABLE_JAX_CACHE", "1")
 
-import jax  # noqa: E402
+import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp  # noqa: E402
+import jax.numpy as jnp
 
-from tengri import Fitter, Observation, Parameters, Photometry, SEDModel  # noqa: E402
-from tengri.components.sps.dsps_wrapper import load_ssp_data  # noqa: E402
-from tengri.observation.filters import load_filter_set  # noqa: E402
-from tengri.parameters.priors import Fixed, Uniform  # noqa: E402
+from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
+from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.filters import load_filter_set
+from tengri.parameters.priors import Fixed, Uniform
 
 REPO = Path(__file__).resolve().parent.parent
 SSP_PATH = REPO / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 FILTER_NAMES = [
-    "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w",
-    "vista_ks", "irac_36", "irac_45",
-    "herschel_160", "herschel_250",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "herschel_160",
+    "herschel_250",
 ]
 
 
@@ -61,7 +69,7 @@ def _build_params(dust_emission: str | None) -> Parameters:
         extra.update(dust_alpha_dale=Uniform(0.0625, 4.0))
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -136,11 +144,11 @@ def _bench_cold_warm(dust_emission: str | None, ssp_data):
     loss2(p2, data2).block_until_ready()
     warm_first = time.perf_counter() - t0
 
-    print(f"  Fitter()      cold:    {build1*1000:8.1f} ms")
-    print(f"  loss_fn()     cold:    {cold_first*1000:8.1f} ms (includes JIT)")
-    print(f"  loss_fn() warm-call:   {cold_second*1000:8.3f} ms")
-    print(f"  Fitter()      reuse:   {build2*1000:8.1f} ms")
-    print(f"  loss_fn() reuse-1st:   {warm_first*1000:8.1f} ms (engine cache hit)")
+    print(f"  Fitter()      cold:    {build1 * 1000:8.1f} ms")
+    print(f"  loss_fn()     cold:    {cold_first * 1000:8.1f} ms (includes JIT)")
+    print(f"  loss_fn() warm-call:   {cold_second * 1000:8.3f} ms")
+    print(f"  Fitter()      reuse:   {build2 * 1000:8.1f} ms")
+    print(f"  loss_fn() reuse-1st:   {warm_first * 1000:8.1f} ms (engine cache hit)")
 
     speedup = cold_first / warm_first if warm_first > 0 else float("inf")
     print(f"  ---> cross-fitter compile speedup: {speedup:.1f}x")
@@ -180,9 +188,11 @@ def _verify_data_traced(dust_emission: str | None, ssp_data) -> bool:
     second_s = time.perf_counter() - t0
 
     same_binary = second_s < first_s * 0.1 or second_s < 0.01
-    print(f"  loss(data_a) :  {first_s*1000:8.1f} ms (compile + run)")
-    print(f"  loss(data_b) :  {second_s*1000:8.3f} ms (run only — should be tiny)")
-    print(f"  ---> data is {'PROPERLY TRACED' if same_binary else 'NOT TRACED (recompile detected!)'}")
+    print(f"  loss(data_a) :  {first_s * 1000:8.1f} ms (compile + run)")
+    print(f"  loss(data_b) :  {second_s * 1000:8.3f} ms (run only — should be tiny)")
+    print(
+        f"  ---> data is {'PROPERLY TRACED' if same_binary else 'NOT TRACED (recompile detected!)'}"
+    )
     return same_binary
 
 

@@ -11,6 +11,10 @@ Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
 Wuyts et al. 2007, ApJ, 655, 51.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -59,7 +63,7 @@ sf_model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": tengri.Uniform(0.0, 1.5),
+        "log_total_mass": 10.0, 1.5),
         "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
         "width_gyr": tengri.Uniform(1.0, 4.0),
         "skew": tengri.Uniform(-0.5, 1.0),
@@ -83,7 +87,7 @@ passive_model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": tengri.Uniform(-0.5, 0.5),
+        "log_total_mass": 10.0, 0.5),
         "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
         "width_gyr": tengri.Uniform(0.5, 1.5),
         "skew": tengri.Uniform(-1.5, 0.0),

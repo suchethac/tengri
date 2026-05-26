@@ -1301,7 +1301,14 @@ def xray_total_lopez24(
     See :func:`xray_agn_corona_lopez24` for the α_IRX model details
     and :func:`xray_xrb` for the XRB component.
     """
-    xrb = xray_xrb(wavelength, sfr, stellar_mass, gamma_hmxb, gamma_lmxb, E_cut)
+    xrb = xray_xrb(
+        wavelength,
+        sfr=sfr,
+        stellar_mass=stellar_mass,
+        gamma_hmxb=gamma_hmxb,
+        gamma_lmxb=gamma_lmxb,
+        E_cut=E_cut,
+    )
     agn = xray_agn_corona_lopez24(
         wavelength,
         l_12um_erg_hz,

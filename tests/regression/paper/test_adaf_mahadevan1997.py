@@ -82,6 +82,6 @@ class TestAdafRegistry:
             optical_wavelength,
             agn_log_lbol=42.0,
             disc_model="adaf",
-            torus_model="simple",
+            torus_model="silva04",
         )
         chex.assert_tree_all_finite(l_nu)

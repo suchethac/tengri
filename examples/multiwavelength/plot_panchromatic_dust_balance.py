@@ -8,6 +8,10 @@ transfers energy into the infrared, demonstrating energy conservation
 between the attenuation and emission components.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -30,7 +34,7 @@ model = tengri.SEDModel.build(
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 1.0,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
     },
     dust={
         "type": "two_component",

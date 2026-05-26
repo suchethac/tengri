@@ -22,6 +22,10 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import jax
@@ -52,7 +56,7 @@ ssp = tengri.load_ssp()
 spec_delta = tengri.Parameters(
     mean_sfh_type="dpl",
     sfh_dpl_tau_gyr=1.0,
-    sfh_dpl_log_peak_sfr=1.0,
+    sfh_dpl_log_total_mass=10.0,
     dust_tau_diff=0.1,
     met_mode="delta",
     redshift=0.0,
@@ -63,7 +67,7 @@ model_delta = tengri.SEDModel(spec_delta, ssp)
 spec_ramp = tengri.Parameters(
     mean_sfh_type="dpl",
     sfh_dpl_tau_gyr=1.0,
-    sfh_dpl_log_peak_sfr=1.0,
+    sfh_dpl_log_total_mass=10.0,
     dust_tau_diff=0.1,
     met_mode="ramp",
     redshift=0.0,
@@ -74,7 +78,7 @@ model_ramp = tengri.SEDModel(spec_ramp, ssp)
 spec_twostep = tengri.Parameters(
     mean_sfh_type="dpl",
     sfh_dpl_tau_gyr=1.0,
-    sfh_dpl_log_peak_sfr=1.0,
+    sfh_dpl_log_total_mass=10.0,
     dust_tau_diff=0.1,
     met_mode="two_step",
     redshift=0.0,

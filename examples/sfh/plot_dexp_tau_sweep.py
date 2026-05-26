@@ -8,6 +8,10 @@ a sustained tail and younger mean age. We vary τ across the prior range with
 every other parameter fixed.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ model = tengri.SEDModel.build(
         "type": "dexp",
         "*": tengri.FIXED,
         "tau_gyr": tengri.Uniform(0.1, 10.0),
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "start_gyr": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},

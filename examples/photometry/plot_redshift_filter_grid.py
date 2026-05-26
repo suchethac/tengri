@@ -1,47 +1,38 @@
 """
-Filter Sampling Across Redshift
-=================================
+SDSS *ugriz* sweep through a galaxy SED as z grows from 0.1 to 2
+==================================================================
 
-Rest-frame stellar continuum overlaid with redshifted SDSS ugriz
-transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. The plot shows which
-features each band actually samples as a galaxy moves out — the
-textbook source of k-correction sign.
+Same rest-frame star-forming SED at four observed redshifts, with the
+SDSS *ugriz* throughputs plotted in their *observed* position so the
+reader sees which rest-frame features each band samples. The Balmer
+break enters the *u* band by z=1; by z=2 the bands fall longward of
+the 4000-A break entirely. This is the geometric source of the
+k-correction's sign.
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_redshift_filter_grid_001.png
-   :alt: plot_redshift_filter_grid
-   :class: sphx-glr-single-img
-
+Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
 """
 
-# sphinx_gallery_thumbnail_number = 1
+import os
 
-from pathlib import Path
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
-from tengri import (
-    Fixed,
-    Observation,
-    Parameters,
-    SEDModel,
-    Spectroscopy,
-    load_filter_set,
-    load_ssp,
-    setup_style,
-)
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+<<<<<<< HEAD
+BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+BAND_COLORS = {
+=======
 
 def _find_filters():
     """Find filter cache directory in standard locations."""
@@ -68,7 +59,7 @@ obs_dummy = Observation(spectroscopy=Spectroscopy(wave_obs=wave_rest))
 spec = Parameters(
     mean_sfh_type="tsnorm",
     dust_emission="draine_li2007",
-    sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+    sfh_tsnorm_log_total_mass=10.0),
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
     sfh_tsnorm_width_gyr=Fixed(1.5),
     sfh_tsnorm_skew=Fixed(0.0),
@@ -96,57 +87,66 @@ filter_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 _, _, filter_curves = load_filter_set(filter_names, cache_dir=filter_dir)
 
 band_colors = {
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     "sdss_u": "#4B0082",
     "sdss_g": "#00AA00",
     "sdss_r": "#CC0000",
     "sdss_i": "#DD6600",
     "sdss_z": "#880000",
 }
+REDSHIFTS = (0.1, 0.5, 1.0, 2.0)
 
-# Redshifts to visualize
-redshifts = [0.1, 0.5, 1.0, 2.0]
+model = tengri.SEDModel.build(
+    tengri.load_ssp(),
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "log_total_mass": 1.0,
+        "peak_lbt_gyr": 2.0,
+        "width_gyr": 1.5,
+        "skew": 0.0,
+        "trunc": 2.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.3,
+        "tau_diff": 0.2,
+        "slope": -0.7,
+    },
+    redshift=tengri.Fixed(0.0),
+)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
+wave_grid = jnp.logspace(jnp.log10(1000.0), jnp.log10(3.0e5), 500)
+pred = model.predict_rest_sed(baseline, wave=wave_grid)
+wave_rest_um = np.asarray(pred.wavelength) / 1.0e4
+sed_rest = np.asarray(pred.sed)
 
-fig, axes = plt.subplots(2, 2, figsize=(13, 9))
+_, _, filter_curves = tengri.load_filter_set(BANDS)
+
+fig, axes = plt.subplots(2, 2, figsize=(11.0, 7.5), sharex=True, sharey=True)
 axes = axes.flatten()
 
-for i, z in enumerate(redshifts):
-    ax = axes[i]
+for ax, z in zip(axes, REDSHIFTS):
+    wave_obs_um = wave_rest_um * (1.0 + z)
+    ax.loglog(wave_obs_um, sed_rest, color="C0", lw=2.0, alpha=0.75, label="rest-frame SED")
+    for fc, name in zip(filter_curves, BANDS):
+        wave_f_um = np.asarray(fc.wave) / 1.0e4
+        trans = np.asarray(fc.trans)
+        scaled = trans * np.max(sed_rest) / np.max(trans)
+        color = BAND_COLORS[name]
+        ax.fill_between(wave_f_um, 1.0e20, scaled, alpha=0.15, color=color)
+        legend_label = name.replace("sdss_", "") if z == REDSHIFTS[0] else None
+        ax.plot(wave_f_um, scaled, color=color, lw=1.3, label=legend_label)
+    ax.set_xlim(0.3, 5.0e2)
+    ax.set_ylim(1.0e22, 1.0e33)
+    ax.text(0.04, 0.95, f"z = {z}", transform=ax.transAxes, va="top")
 
-    # Plot rest-frame SED (shifted to observed frame)
-    wave_obs_um = wave_rest_um * (1 + z)
-    ax.loglog(
-        wave_obs_um,
-        sed_rest,
-        color="C0",
-        lw=2.0,
-        label="Rest-frame SED",
-        alpha=0.7,
-    )
+axes[0].legend(frameon=False, fontsize=8, loc="upper right")
+for ax in axes[2:]:
+    ax.set_xlabel(r"Observed wavelength [$\mu$m]")
+for ax in (axes[0], axes[2]):
+    ax.set_ylabel(r"$L_\nu$  [erg s$^{-1}$ Hz$^{-1}$]")
 
-    # Overlay redshifted filters
-    for fc, fname in zip(filter_curves, filter_names):
-        wave_filter = np.array(fc.wave) / 1e4  # Å → µm
-        trans = np.array(fc.trans)
-
-        # Normalize transmission to fit on log plot
-        trans_scaled = trans * np.max(sed_rest) / np.max(trans)
-
-        color = band_colors[fname]
-        band_short = fname.replace("sdss_", "")
-        ax.fill_between(wave_filter, 1e20, trans_scaled, alpha=0.15, color=color)
-        ax.plot(wave_filter, trans_scaled, color=color, lw=1.5, label=f"{band_short} filter")
-
-    ax.set_xlim(0.3, 5e2)
-    ax.set_ylim(1e22, 1e33)
-    ax.set_xlabel(r"Observed wavelength [$\mu$m]", fontsize=11)
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]", fontsize=11)
-    ax.set_title(f"z = {z}", fontsize=12)
-    if i == 0:
-        ax.legend(fontsize=9, frameon=False, loc="upper right")
-    ax.grid(True, alpha=0.3, which="both")
-
-fig.tight_layout(rect=[0, 0.01, 1, 0.97])
-# Save to script directory
-script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(str(script_dir / "plot_redshift_filter_grid.png"), dpi=150, bbox_inches="tight")
-plt.close()
+fig.tight_layout()
+plt.savefig("plot_redshift_filter_grid.png", dpi=150, bbox_inches="tight")

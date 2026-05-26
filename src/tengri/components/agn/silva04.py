@@ -42,7 +42,6 @@ import numpy as np
 
 from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
 from tengri.utils.grid_interp import interp_nd_triweight
-from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -110,11 +109,27 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     **Gradient-safe**: yes — triweight kernel is C²-continuous in
     ``agn_log_nh_silva``.
     """
+    # Keep the captured grid arrays as ``np.ndarray`` rather than
+    # ``jnp.ndarray``. If this loader is first invoked inside a JIT trace
+    # (e.g. via ``@functools.cache`` on ``_load_silva04_default``) and we
+    # convert to JAX here, any ``jnp`` ops on those arrays — including
+    # ``edges_for_grid`` — produce Tracers that the returned closure
+    # captures. The cache then immortalises a poisoned closure, leaking
+    # tracers as ``UnexpectedTracerError`` on subsequent out-of-trace
+    # calls. ``jnp.asarray`` of a numpy array inside the closure body is
+    # safe in either context: a DeviceArray when called eagerly, a JIT
+    # constant when called under trace.
     raw = _load_silva04_arrays(grid_path)
-    grid_jax = jnp.asarray(raw["template"])
-    wave_grid = jnp.asarray(raw["wavelength"])
-    log_nh_axis = jnp.asarray(raw["log_nh_axis"])
-    edges = (edges_for_grid(log_nh_axis),)
+    grid_np = np.asarray(raw["template"], dtype=np.float64)
+    wave_np = np.asarray(raw["wavelength"], dtype=np.float64)
+    log_nh_np = np.asarray(raw["log_nh_axis"], dtype=np.float64)
+    # ``edges_for_grid`` uses ``jnp.concatenate``; running it on a numpy
+    # array still yields a JAX array, so compute the equivalent in pure
+    # numpy to keep the precompute fully concrete.
+    half_lo = (log_nh_np[1] - log_nh_np[0]) / 2.0
+    half_hi = (log_nh_np[-1] - log_nh_np[-2]) / 2.0
+    mid = 0.5 * (log_nh_np[1:] + log_nh_np[:-1])
+    edges_np = np.concatenate([[log_nh_np[0] - half_lo], mid, [log_nh_np[-1] + half_hi]])
 
     def silva04_grid(
         wavelength: jnp.ndarray,
@@ -161,6 +176,10 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
         full 3D radiative-transfer solution.  For silicate-feature–level
         accuracy, use SKIRTOR ([2]_) instead.
         """
+        grid_jax = jnp.asarray(grid_np)
+        log_nh_axis = jnp.asarray(log_nh_np)
+        wave_grid = jnp.asarray(wave_np)
+        edges = (jnp.asarray(edges_np),)
         template = interp_nd_triweight(grid_jax, (log_nh_axis,), edges, (agn_log_nh_silva,))
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
