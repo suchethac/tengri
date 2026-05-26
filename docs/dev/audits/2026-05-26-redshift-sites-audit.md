@@ -82,16 +82,49 @@ These two sites are doing an apply-then-undo dance with `compute_flux_density`. 
 4. **DLA direction inverted vs main IGM.** Worth a closer look — may be a latent bug.
 5. **No effective-wavelength contract.** `grid_interp.py:248–252` recomputes `eff_waves_rest = eff_waves_obs / (1+z)` per call.
 
-## Plan for sub-PRs (order)
+## Post-merge reassessment (2026-05-26, after #402 + #403 landed)
 
-| PR | Scope | Risk |
+After landing the unified kernel (#402) and the one real bug it surfaced (#403), several of the audit's original recommendations turned out **not to apply as written**:
+
+| Original recommendation | Reality | Status |
 |---|---|---|
-| (this one) | Audit doc + introduce `observation/redshift_kernel.py::shift_to_obs_frame(wave_rest, L_nu_rest, z, cosmo)` as the single canonical kernel. Add parity tests vs DSPS's `precompute_ssp_obsmag_table` on the stellar slice they share. **No call-site migrations yet.** | Low — purely additive. |
-| #398.b | Migrate stellar SPS precompute flux-scale duplicates to `lnu_to_fnu`. | Low — formula-equivalent. |
-| #398.c | Route `predict_obs_sed` / `predict_obs_spectrum` through the unified kernel. Delete in-house duplicates in `observation/photometry.py`, `observation/spectrum.py`, `utils/grid_interp.py`, `analysis/simulate.py`. | Medium — touches the forward path. Parity tests guard. |
-| #398.d | Route `WavePrecomp` build through the kernel. Verify bit-exact agreement vs the exact path. | Medium. |
-| #398.e | Address inverse-cosmology pattern in AGN + nebular. Redesign precompute → predict_state interface to pass rest-frame L_ν directly. | High — architectural. May spawn its own ADR. |
-| #398.f | Investigate DLA obs→rest direction. | Low — single file. |
+| Migrate `stellar/sps/precompute.py:312, 505` to `lnu_to_fnu` | Doesn't fit. Both sites need the **scalar** `(1+z)/(4π d_L²)` factor stored on a precompute dataclass, not the multiplied `L × factor` result. The inline comment at lines 304–310 documents why inlining was chosen. | **Skip** |
+| Route `predict_obs_sed` through the kernel | Doesn't apply. `predict_obs_sed` returns L_ν on observed-frame wavelengths — relabels the wavelength axis but does **not** perform the L→F conversion. The unified kernel produces F_ν, a different output. | **Skip — already correctly factored** |
+| Migrate `compute_flux_density` in `observation/photometry.py` | Already uses canonical `lnu_to_fnu` at line 152. Not a duplicate. | **Skip** |
+| DLA obs→rest direction is a possible bug | Not a bug. The Voigt cross-section is naturally in the absorber rest frame; `dla_transmission_obs` correctly de-redshifts. IGM (Inoue+2014) is tabulated in observed-frame coordinates — different physics, different conventions, both correct. Docstring already documents this. | **Skip — close as "expected divergence"** |
+| `analysis/simulate.py:282, 359` — fix `dl_cm=1.0` fallback | **Real bug.** The Python-side `if redshift > 0 else 1.0` guard was a ~10^19× flux error at z=0; `luminosity_distance(0)` already returns 10 pc via the absolute-magnitude convention. | **Fixed in #403** |
+| AGN + nebular inverse-cosmology pattern | Real architectural issue (apply-then-undo dance with `compute_flux_density`). Needs an ADR before code. | **Open — separate PR** |
+
+### What the unified kernel actually buys us
+
+`shift_to_obs_frame` from #402 is the **reference implementation**, not a wholesale replacement of existing code. Most existing call sites are already canonical or do trivial `wave * (1+z)` relabeling. Its real value:
+
+1. **One citable convention.** Future code that needs a rest→obs SED transform has one canonical entry point.
+2. **DSPS parity lock.** The contract tests at `tests/contract/test_redshift_kernel_dsps_parity.py` catch any future drift from DSPS's convention.
+3. **Foundation for the AGN + nebular architectural fix.** When the inverse-cosmology pattern is cleaned up, the new code routes through this kernel rather than re-implementing it.
+
+### Honest accounting of the "23 sites"
+
+The original audit's "23 call sites" overstated the available migration scope. The true breakdown:
+
+- **~3 sites** genuinely benefit from the kernel — the AGN + nebular components, once the inverse-cosmology pattern is addressed (sub-PR #398.e, blocked on ADR).
+- **~5 sites** are already canonical (use `lnu_to_fnu`, `luminosity_distance`). No migration needed.
+- **~10 sites** are inline `wave * (1+z)` wavelength relabeling. Too small to merit a function call.
+- **~5 sites** have valid reasons to inline (scalar storage with documented constraints, numpy build-time loops outside JIT).
+- **1 site** had a real bug — fixed in #403.
+
+Of the original 6 sub-PRs proposed below, only **#398.e** (AGN + nebular architectural cleanup) is worth pursuing as scoped. The rest were resolved either by being already-correct, by the single bug fix in #403, or by being closed as expected divergences.
+
+## Plan for sub-PRs (original, before reassessment — kept for posterity)
+
+| PR | Scope | Risk | Outcome |
+|---|---|---|---|
+| #402 | Audit doc + introduce `observation/redshift_kernel.py::shift_to_obs_frame(wave_rest, L_nu_rest, z, cosmo)` as the single canonical kernel. Add parity tests vs DSPS. | Low — purely additive. | ✅ Merged |
+| #398.b | Migrate stellar SPS precompute flux-scale duplicates to `lnu_to_fnu`. | Low — formula-equivalent. | ❌ Skipped (sites need scalar storage; see reassessment) |
+| #398.c | Route `predict_obs_sed` / `predict_obs_spectrum` through the unified kernel. Delete in-house duplicates in `observation/photometry.py`, `observation/spectrum.py`, `utils/grid_interp.py`, `analysis/simulate.py`. | Medium. | ❌ Mostly skipped (`predict_obs_sed` returns L_ν not F_ν; `compute_flux_density` already canonical; `simulate.py` z=0 bug fixed in #403) |
+| #398.d | Route `WavePrecomp` build through the kernel. | Medium. | ⏸ Deferred (kernel is the citable convention; precompute path already correct) |
+| #398.e | Address inverse-cosmology pattern in AGN + nebular. | High — architectural. ADR. | 🔜 **Open** — the one remaining real win |
+| #398.f | Investigate DLA obs→rest direction. | Low — single file. | ❌ Skipped (not a bug — physics-driven convention) |
 
 ## Count
 
