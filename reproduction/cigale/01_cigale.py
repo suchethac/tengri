@@ -648,9 +648,20 @@ plt.show()
 # parameters. Cue requires the bare-stellar SSP that this notebook
 # already loaded.
 #
-# Both panels show the stellar baseline (dashed) and the same SFH with
-# nebular added (solid). At matched logU = -2.0, Z_gas = Z_⊙, the two
-# emission paths agree to ~1 % across UV–NIR (consistency_audit.py §8).
+# Each panel shows the stellar baseline (dashed), stellar + nebular
+# (solid), and the nebular component alone (dotted). At matched
+# logU = -2.0, Z_gas = Z_⊙, CIGALE's CLOUDY emits a clean line forest
+# plus continuum (the dotted blue curve on the left).
+#
+# ```{warning}
+# Cue currently absorbs LyC photons at λ < 912 Å but does **not** emit
+# the recycled photons back into ``sed_intrinsic`` — the dotted green
+# curve on the right is essentially zero. Tracked in
+# [tengri #458](https://github.com/suchethac/tengri/issues/458). Once
+# the accumulator fix lands, Cue should overlay CIGALE's CLOUDY emission
+# in the same way the composable AGN now overlays SKIRTOR in §9
+# (post-#420).
+# ```
 
 # %%
 _sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -693,19 +704,27 @@ fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r,
         label_l="pcigale  CLOUDY nebular",
         label_r="tengri  Cue nebular (Li+2024)")
-# Full SED on both sides — dashed = stellar baseline, solid = stellar +
-# nebular. CIGALE's CLOUDY publishes the nebular as a discrete line list
-# (the forest of spikes); Cue blends a smooth continuum + lines into the
-# stellar SED. Cue's published ``derived['sed_nebular']`` is near-zero
-# because the nebular component is mixed into ``sed_intrinsic`` directly,
-# so subtraction (rather than the derived key) is the right comparison.
+# CIGALE side — dashed stellar + solid (stellar+nebular) + dotted
+# nebular-only (the line forest + smooth continuum that CLOUDY adds).
+L_c_neb_only = np.maximum(L_c_neb - U.regrid(w_c_st, L_c_st, w_c_neb), 1e-30)
 ax_l.plot(w_c_st, L_c_st, "k--", linewidth=1.0, alpha=0.5, label="stellar only")
-ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, label="+ CLOUDY nebular")
-ax_l.legend(fontsize=9)
+ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
+          label="stellar + CLOUDY nebular")
+ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
+ax_l.legend(fontsize=8)
+# tengri side — Cue currently absorbs LyC at <912 Å but does not emit
+# the recycled photons back into ``sed_intrinsic`` (tracked in #458).
+# Plot the (essentially zero) Cue-only contribution so the gap is
+# visible against the CIGALE CLOUDY emission on the left panel.
+L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
+                          - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
           linewidth=1.0, alpha=0.5, label="stellar only")
-ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, label="+ Cue")
-ax_r.legend(fontsize=9)
+ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7,
+          label="stellar + Cue")
+ax_r.plot(s_neb.wave, L_t_neb_only, "C1:", linewidth=1.4,
+          label="Cue nebular only (≈ 0 — #458)")
+ax_r.legend(fontsize=8)
 _xmin_n = float(min(w_c_neb.min(), float(np.asarray(s_neb.wave).min())))
 _xmax_n = float(max(w_c_neb.max(), float(np.asarray(s_neb.wave).max())))
 _ymax_n = max(float(L_c_neb.max()), float(np.asarray(s_neb.sed_intrinsic).max()))
@@ -787,13 +806,23 @@ fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r,
         label_l="pcigale  + SKIRTOR2016 (i = 30°, τ_9.7 = 7)",
         label_r="tengri  agn[disc+torus skirtor]")
+# CIGALE side — full chain (stellar+dust dashed, full +SKIRTOR solid,
+# AGN-only differential to show what SKIRTOR adds).
+L_skirt_only = np.maximum(L_skirt - U.regrid(w_base, L_base, w_skirt), 1e-50)
 ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.5, label="stellar + dust")
-ax_l.plot(w_skirt, L_skirt, "C0-", linewidth=1.5, label="+ SKIRTOR")
+ax_l.plot(w_skirt, L_skirt, "C0-", linewidth=1.5, alpha=0.7, label="stellar + dust + SKIRTOR")
+ax_l.plot(w_skirt, L_skirt_only, "C0:", linewidth=1.5, label="SKIRTOR component only")
 ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
+# tengri side — same three-line layout. ``derived['sed_agn']`` carries
+# the disc + torus contribution; ``sed_intrinsic`` is the full SED with
+# everything; dashed baseline is the no-AGN build.
+L_t_agn_only = np.maximum(np.asarray(s_agn.derived["sed_agn"]), 1e-50)
 ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--",
           linewidth=1.0, alpha=0.5, label="stellar + dust")
-ax_r.plot(s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5,
-          label="+ composable disc + SKIRTOR torus")
+ax_r.plot(s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
+          label="stellar + dust + AGN")
+ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
+          label="composable disc + SKIRTOR torus only")
 ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
 
 # Bound the y-axis to a reasonable 6 decades so log-zero autoscale
