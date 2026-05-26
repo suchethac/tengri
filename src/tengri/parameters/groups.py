@@ -512,7 +512,17 @@ def parse_groups(**kwargs) -> Parameters:
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_groups = {
+        "sfh",
+        "stellar",
+        "dust",
+        "neb",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+        "foreground",
+    }
     result = {}
 
     for group_name, group_dict in groups.items():
@@ -548,6 +558,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_radio(group_dict, result)
         elif group_name == "xray":
             _translate_xray(group_dict, result)
+        elif group_name == "foreground":
+            _translate_foreground(group_dict, result)
         elif group_name == "agn":
             _translate_agn(group_dict, result)
 
@@ -778,6 +790,40 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     result["radio"] = radio_type != "none"
 
 
+#: Valid laws for the MW foreground screen (#297). Only the closed-form
+#: laws that take a single ``R_V`` parameter are usable as a foreground
+#: screen — host-dust laws with two free knobs (slope, bump, ...) would
+#: collide with the host ``dust`` block's parameter prefix.
+_VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
+
+
+def _translate_foreground(fg_dict: dict, result: dict) -> None:
+    """Translate the ``foreground`` group (MW screen) — see #297.
+
+    Flat layout: ``foreground={'ebmv_mw': 0.05, 'law': 'cardelli', 'rv': 3.1}``.
+    Surfaces three top-level kwargs on ``Parameters`` so the SEDModel can
+    apply the screen in the observed-frame SED path, after IGM and
+    redshifting, independently from the host-galaxy ``dust`` block.
+    """
+    ebmv = fg_dict.get("ebmv_mw", 0.0)
+    law = fg_dict.get("law", "cardelli")
+    rv = fg_dict.get("rv", 3.1)
+    if law not in _VALID_FOREGROUND_LAWS:
+        suggestions = difflib.get_close_matches(law, _VALID_FOREGROUND_LAWS, n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(
+            f"Unknown foreground law {law!r}. Valid: "
+            f"{sorted(_VALID_FOREGROUND_LAWS)}.{suggest_str}"
+        )
+    if float(ebmv) < 0:
+        raise ValueError(f"foreground.ebmv_mw must be >= 0, got {ebmv}")
+    if float(rv) <= 0:
+        raise ValueError(f"foreground.rv must be > 0, got {rv}")
+    result["foreground_ebmv_mw"] = float(ebmv)
+    result["foreground_law"] = law
+    result["foreground_rv"] = float(rv)
+
+
 def _translate_xray(xray_dict: dict, result: dict) -> None:
     """Translate xray group to xray=True/False."""
     xray_type = xray_dict.get("type", "none")
@@ -814,6 +860,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn.lines": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
     "agn.atten": frozenset({"type", "*"}),
+    "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
 
 

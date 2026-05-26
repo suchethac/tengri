@@ -2452,6 +2452,20 @@ class SEDModel:
                 temp=params.get("dla_temp", 1e4),
                 b_turb_kms=params.get("dla_b_turb", 0.0),
             )
+        # MW foreground screen (#297) — final transformation on the
+        # observed-frame SED, independent of host-galaxy dust. Applied
+        # at observed-frame wavelengths so it works for any source
+        # redshift. Skipped when ebmv_mw=0 (the default).
+        if getattr(self.spec, "foreground_ebmv_mw", 0.0) > 0.0:
+            from tengri.components.dust.attenuation import cardelli
+
+            ebmv = jnp.asarray(self.spec.foreground_ebmv_mw)
+            rv = jnp.asarray(self.spec.foreground_rv)
+            # Cardelli returns A(λ)/A(V); A_V = R_V * E(B-V).
+            # T(λ) = 10^(-0.4 * A_V * k(λ))
+            k_lambda = cardelli(wave_obs, dust_Rv=rv)
+            a_v = rv * ebmv
+            sed_obs = sed_obs * jnp.power(10.0, -0.4 * a_v * k_lambda)
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict(self, params):
@@ -4818,6 +4832,7 @@ class SEDModel:
         igm=None,
         radio=None,
         xray=None,
+        foreground=None,
         redshift=None,
         apply_igm=None,
         filters=None,
@@ -4890,6 +4905,7 @@ class SEDModel:
                 igm=igm,
                 radio=radio,
                 xray=xray,
+                foreground=foreground,
                 redshift=redshift,
                 apply_igm=apply_igm,
             ).items()
