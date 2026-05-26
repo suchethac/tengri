@@ -21,11 +21,6 @@
 QSOgen disc: bolometric luminosity controls overall flux
 =========================================================
 
-.. image:: images/sphx_glr_plot_agn_log_lbol_sweep_001.png
-   :alt: plot agn log lbol sweep
-   :class: sphx-glr-single-img
-
-
 The disc continuum normalisation tracks bolometric luminosity directly;
 the disc temperature shifts more subtly with the implied accretion rate.
 Varying ``agn_log_lbol`` from 10 to 14 (in log10 L_sun) sweeps four orders of

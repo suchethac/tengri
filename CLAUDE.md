@@ -175,7 +175,7 @@ variant swapping, and round-trip editing. Design plan:
 ## Key conventions
 
 - **Physical constants**: Import from `utils/physics_constants.py` — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue training convention, not IAU 2015).
-- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`. User-facing `neb_logZ_gas` is Z/Zsun (param_map adds LOG10_ZSUN).
+- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848` (Asplund 2009, **Zsun = 0.0142**, matches MIST). User-facing `met_logzsol` and `neb_logZ_gas` are `log10(Z/Zsun)` (param_map adds LOG10_ZSUN). **Default** `met_logzsol = 0.0` (solar — matches FSPS / Bagpipes). Per-SSP-library Zsun differs: BC03/Padova = 0.0190, PARSEC = 0.0152, BASTI = 0.0200 — see `LOG10_ZSUN_BY_LIBRARY` in `parameters/translate.py`. For bit-exact cross-code comparisons (e.g. CIGALE BC03), reason in **absolute** `log_z_abs = met_logzsol + LOG10_ZSUN` and pin that. See #412 for the audit trace.
 - **ParamSpec free params** use full prefixes: `sfh_dpl_alpha`, `sfh_field_psd_sigma` — NOT shorthand. Check with `spec.free_params`.
 - **PSD timescale**: high-level API is **Myr** (`psd_tau_myr`); internal is **years** (`psd_tau_yr`).
 - **`agn_log_lbol`**: always `log10(L_bol / L_sun)` at API level. AGN functions convert to erg/s internally.

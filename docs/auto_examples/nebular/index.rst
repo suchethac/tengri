@@ -276,6 +276,57 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Nebular free-free, free-bound, and two-photon emission respond to gas-phase metallicity (``logZ_gas``) through changes in metal cooling efficiency and ionization balance. This example demonstrates the metallicity sensitivity of the nebular continuum at fixed ionization parameter.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_gas_z_continuum_effect_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_gas_z_continuum_effect`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Gas-phase metallicity effect on nebular continuum</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Murphy+2011 SFR-Hα relation requires ionizing photons from stars younger than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration breaks at young (&lt;10 Myr; insufficient ionizing photons) and old (&gt;100 Myr; all stars too old to ionize) populations.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_halpha_sfr_calibration_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_halpha_sfr_calibration_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Hα SFR calibration breaks at young ages</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Three classical strong-line metallicity diagnostics computed as a function of gas-phase metallicity (``logZ_gas``). The plot spans 12 + log(O/H) from ~7 to ~9 and illustrates key observational features: the saturation of [O III]/H-beta at high metallicity (Kewley &amp; Dopita 2002), the monotonic but small dynamic range of [N II]/H-alpha (Marino et al. 2013), and the famous double-valued R23 ratio which peaks near 12 + log(O/H) ≈ 8.3 (Pagel et al. 1979).">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_line_ratios_metallicity_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_line_ratios_metallicity_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Optical line-ratio diagnostics along the metallicity gradient</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Emission line velocity dispersion broadens lines from a few km/s (narrow, kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic resolution). We show the [OIII] region broadened across the dynamical range.">
 
 .. only:: html
@@ -356,6 +407,40 @@ Nebular emission backends comparison.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Lyman-continuum escape fraction reshapes the SED around the 912 A edge</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age through the presence and strength of massive O stars. We construct a sequence of constant star-formation-rate (CSF) models with ages ranging from 1 Myr to 30 Myr at fixed metallicity (Z = Zsun; logZ = 0), compute the rest-frame Lyα emission line luminosity and the underlying continuum at 1216 Å, then derive EW(Lyα) = L(Lyα) / L_continuum.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_lyalpha_ew_vs_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_lyalpha_ew_vs_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lyman-alpha equivalent width peaks during O-star dominance</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Lyman continuum (λ &lt; 912 Å rest) is the primary source of ionizing photons for nebular emission. Escape fraction f_esc sets the fraction of ionizing photons that escape the ISM without being absorbed. Higher f_esc increases ionizing photon loss and suppresses nebular line emission.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_lyman_continuum_escape_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_lyman_continuum_escape`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lyman continuum escape fraction effect on ionizing photons</div>
     </div>
 
 

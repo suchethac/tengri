@@ -21,11 +21,6 @@
 SKIRTOR torus: radial density profile tunes IR emission peak
 =============================================================
 
-.. image:: images/sphx_glr_plot_agn_skirtor_p_sweep_001.png
-   :alt: plot agn skirtor p sweep
-   :class: sphx-glr-single-img
-
-
 The SKIRTOR clumpy torus has a radial dust-density profile with power-law
 index ``p``. Steeper profiles (higher p) concentrate more dust closer to the
 disc, reducing the mid-IR peak temperature and shifting flux toward the far-IR.

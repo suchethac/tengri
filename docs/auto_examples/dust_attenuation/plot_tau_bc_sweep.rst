@@ -21,11 +21,6 @@
 Birth cloud dust suppresses young-stellar UV and nebular emission
 ==================================================================
 
-.. image:: images/sphx_glr_plot_tau_bc_sweep_001.png
-   :alt: plot tau bc sweep
-   :class: sphx-glr-single-img
-
-
 Birth-cloud dust optical depth ``τ_bc`` attenuates only the youngest stellar
 light (age < ~10 Myr), controlling nebular emission from embedded HII regions.
 τ_bc effects are clearest on young star-forming populations; we use a 500 Myr

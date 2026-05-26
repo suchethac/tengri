@@ -6,7 +6,30 @@ Naming Conventions
 Metallicity:
     Public:   met_logzsol     = log10(Z/Zsun) (relative to solar)
     Internal: log_z_abs       = log10(Z) (absolute)
-    Offset:   LOG10_ZSUN = -1.8477 (Asplund 2009)
+    Offset:   LOG10_ZSUN = -1.8477 (Asplund 2009, Zsun = 0.0142)
+
+    Tengri uses **Asplund 2009 Zsun = 0.0142** as the single normalising
+    constant for the public ``met_logzsol`` axis. This matches the MIST
+    isochrone family. Other SSP libraries adopt different "solar"
+    references:
+
+    =========  =======  =======================================
+    Library    Zsun     LOG10_ZSUN  (= log10(Zsun))
+    =========  =======  =======================================
+    MIST       0.0142   -1.8477   ← matches tengri's constant
+    PARSEC     0.0152   -1.8181
+    Padova     0.0190   -1.7212   ← BC03, default in CIGALE
+    BASTI      0.0200   -1.6990
+    =========  =======  =======================================
+
+    Practical note: when working entirely in solar-normalised
+    ``met_logzsol`` units **and** the SSP file's tabulated Z grid was
+    generated against the *same* Zsun, the round-trip is self-consistent.
+    When comparing against a code that uses a different Zsun (e.g. CIGALE
+    BC03 on Padova), reason in **absolute** ``log_z_abs = met_logzsol +
+    LOG10_ZSUN`` and pin that — see ``reproduction/cigale/_drivers/
+    consistency_audit.py`` for the canonical CIGALE-comparison pattern.
+    See also #412.
 
 Dust:
     Public:   dust_tau_bc, dust_tau_diff, dust_slope
@@ -42,8 +65,23 @@ from tengri.parameters._builders import _resolve_lazy_bucket
 
 # ── Constants ─────────────────────────────────────────────────────
 
-# Solar metallicity: log10(Zsun) = log10(0.0142) ≈ -1.848 (Asplund 2009)
+# Solar metallicity convention: tengri uses **Asplund 2009 Zsun = 0.0142**,
+# i.e. LOG10_ZSUN = log10(0.0142) = -1.8477. This matches the MIST isochrone
+# family. SSP libraries built on Padova (BC03, default CIGALE), PARSEC, or
+# BASTI use different Zsun — see module docstring for the table. Reason in
+# absolute ``log_z_abs`` (not solar-normalised) for cross-code comparisons.
 LOG10_ZSUN = -1.8477116556169435
+
+# Per-SSP-library solar Z values (kept as a reference dict so downstream
+# code or audits can look up the right Zsun if they need to translate
+# between conventions). Not consumed by the forward model directly — the
+# public surface uses LOG10_ZSUN above.
+LOG10_ZSUN_BY_LIBRARY: dict[str, float] = {
+    "mist": -1.8477,  # Asplund 2009, Zsun = 0.0142
+    "parsec": -1.8181,  # Bressan+ 2012, Zsun = 0.0152
+    "padova": -1.7212,  # BC03 / CIGALE default, Zsun = 0.0190
+    "basti": -1.6990,  # Pietrinferni+ 2004, Zsun = 0.0200
+}
 
 # ── Parameter maps: public → (internal, unit_scale, offset) ───────
 
