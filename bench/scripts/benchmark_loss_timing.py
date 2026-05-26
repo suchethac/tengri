@@ -6,25 +6,24 @@ Measures:
 3. Multi-galaxy: does changing true params trigger recompilation?
 """
 
-import jax
-import jax.numpy as jnp
-import jax.random as jr
 import time
+
+import jax
+import jax.random as jr
 
 jax.config.update("jax_enable_x64", True)
 
 from pathlib import Path
+
 from tengri import (
-    SEDModel,
-    Parameters,
-    Uniform,
+    Fitter,
     Gaussian,
     LogUniform,
-    LogNormal,
-    StudentT,
-    Fitter,
-    load_ssp_data,
+    Parameters,
+    SEDModel,
+    Uniform,
     load_filter_set,
+    load_ssp_data,
 )
 
 
@@ -58,7 +57,7 @@ def time_workflow(prior_name, spec_kwargs, n_galaxies=3):
             "sfh_tsnorm_peak_lbt_gyr": float(jr.uniform(subkey, minval=1.0, maxval=8.0)),
             "sfh_tsnorm_width_gyr": float(jr.uniform(subkey, minval=0.5, maxval=2.0)),
             "sfh_tsnorm_trunc": float(jr.uniform(subkey, minval=0.1, maxval=0.8)),
-            "sfh_tsnorm_log_peak_sfr": float(jr.uniform(subkey, minval=0.0, maxval=2.0)),
+            "sfh_tsnorm_log_total_mass": float(jr.uniform(subkey, minval=8.0, maxval=12.0)),
             "met_logzsol": float(jr.uniform(subkey, minval=-1.0, maxval=0.0)),
             "dust_tau_bc": float(jr.uniform(subkey, minval=0.1, maxval=1.5)),
             "dust_tau_diff": 0.3,
@@ -118,18 +117,20 @@ def time_workflow(prior_name, spec_kwargs, n_galaxies=3):
             _ = loss_fn(params_unbounded, data_args)
         t_10_warm = time.perf_counter() - t0
 
-        times["galaxy_times"].append({
-            "galaxy_idx": i,
-            "mock_sec": t_mock,
-            "fitter_create_sec": t_fitter_create,
-            "init_sec": t_init,
-            "first_loss_sec": t_first_loss,
-            "second_loss_sec": t_second_loss,
-            "first_grad_sec": t_first_grad,
-            "second_grad_sec": t_second_grad,
-            "mean_warm_loss_sec": t_10_warm / 10,
-            "loss_value": float(loss),
-        })
+        times["galaxy_times"].append(
+            {
+                "galaxy_idx": i,
+                "mock_sec": t_mock,
+                "fitter_create_sec": t_fitter_create,
+                "init_sec": t_init,
+                "first_loss_sec": t_first_loss,
+                "second_loss_sec": t_second_loss,
+                "first_grad_sec": t_first_grad,
+                "second_grad_sec": t_second_grad,
+                "mean_warm_loss_sec": t_10_warm / 10,
+                "loss_value": float(loss),
+            }
+        )
 
     return times
 
@@ -149,7 +150,7 @@ def main():
             "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
             "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
             "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
-            "sfh_tsnorm_log_peak_sfr": Uniform(-1.0, 2.5),
+            "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),
             "met_logzsol": Uniform(-1.5, 0.2),
             "dust_tau_bc": Uniform(0.0, 2.0),
             "dust_tau_diff": 0.3,
@@ -162,7 +163,7 @@ def main():
             "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
             "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
             "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
-            "sfh_tsnorm_log_peak_sfr": Uniform(-1.0, 2.5),
+            "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),
             "met_logzsol": Uniform(-1.5, 0.2),
             "dust_tau_bc": Uniform(0.0, 2.0),
             "dust_tau_diff": 0.3,
@@ -175,7 +176,7 @@ def main():
             "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 10.0),
             "sfh_tsnorm_width_gyr": Uniform(0.1, 3.0),
             "sfh_tsnorm_trunc": Uniform(0.01, 1.0),
-            "sfh_tsnorm_log_peak_sfr": Uniform(-1.0, 2.5),
+            "sfh_tsnorm_log_total_mass": Uniform(8.0, 12.0),
             "met_logzsol": Uniform(-1.5, 0.2),
             "dust_tau_bc": Uniform(0.0, 2.0),
             "dust_tau_diff": LogUniform(0.01, 2.0),
@@ -189,7 +190,7 @@ def main():
     for name, spec_kwargs in configs.items():
         print(f"\n{'─' * 80}")
         print(f"  {name} Prior")
-        print('─' * 80)
+        print("─" * 80)
 
         results = time_workflow(name, spec_kwargs, n_galaxies=3)
         if results is None:
@@ -229,7 +230,7 @@ def main():
             i = gal["galaxy_idx"]
             speedup = gal["first_loss_sec"] / gal["second_loss_sec"]
             print(
-                f"{name:<12} {i+1:<8} "
+                f"{name:<12} {i + 1:<8} "
                 f"{gal['first_loss_sec']:>8.4f}s  "
                 f"{gal['second_loss_sec']:>10.6f}s  "
                 f"{speedup:>8.1f}x"

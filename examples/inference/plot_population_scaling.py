@@ -16,6 +16,10 @@ Reference: Asterhan et al. (forthcoming, stochastic SFH + hierarchical inference
 
 from __future__ import annotations
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import json
 from pathlib import Path
 

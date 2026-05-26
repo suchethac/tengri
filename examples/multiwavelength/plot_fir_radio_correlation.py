@@ -8,6 +8,10 @@ and radio spectral index to show the tight linear correlation and
 how the empirical parameter q_IR varies with model calibration.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp
@@ -18,6 +22,8 @@ import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+
+
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # 1.4 GHz reference wavelength

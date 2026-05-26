@@ -69,7 +69,7 @@ params = {
     "sfh_dpl_alpha": float,                # falling slope (0.1-5.0)
     "sfh_dpl_beta": float,                 # rising slope (0.1-3.0)
     "sfh_dpl_tau_gyr": float,              # turnover time in Gyr (0.1-12)
-    "sfh_dpl_log_peak_sfr": float,         # log10 peak SFR (Msun/yr)
+    "sfh_dpl_log_total_mass": float,         # log10 peak SFR (Msun/yr)
 
     # Metallicity
     "met_logzsol": float,                  # log10(Z/Zsun) (-2.0 to 0.2)
@@ -100,7 +100,7 @@ spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.3, 2.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1, 2),
+    sfh_dpl_log_total_mass=10.0, 2),
     sfh_field_psd_sigma=Uniform(0.01, 1.0),
     sfh_field_psd_tau_myr=Uniform(10, 500),
     redshift=0.1,

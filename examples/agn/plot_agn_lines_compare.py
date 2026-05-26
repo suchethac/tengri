@@ -16,6 +16,10 @@ not shipped with the gallery):
 - ``qsogen``  — Temple+2021 empirical type-1 lines
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

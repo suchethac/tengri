@@ -30,6 +30,10 @@ References:
          absorption at z > 5 (experimental extension to Inoue+2014)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -60,7 +64,7 @@ SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.1,
-    "log_peak_sfr": 1.0,
+    "log_total_mass": 10.0,
     "alpha": 2.5,
     "beta": 1.5,
 }

@@ -11,6 +11,10 @@ demonstrating how radio loudness evolves (Bell 2003).
 Reference: Bell 2003, ApJ 586, 794.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

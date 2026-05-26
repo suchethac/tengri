@@ -184,7 +184,7 @@ class TestDiffsedPhotometry:
             "sfh_dpl_alpha": 1.0,
             "sfh_dpl_beta": 1.5,
             "sfh_dpl_tau_gyr": 3.0,
-            "sfh_dpl_log_peak_sfr": 0.5,
+            "sfh_dpl_log_total_mass": 0.5,
             "sfh_field_psd_sigma": 0.01,
             "sfh_field_psd_tau_myr": 50.0,
             "sfh_field_xi": jnp.zeros(256),

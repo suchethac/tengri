@@ -696,3 +696,44 @@ class TestCB19WithRealH5:
         hb_idx = np.argmin(np.abs(waves - 4862.68))
         hb_log_ratio = float(grid.log_line_ratios[3, 10, 2, 1, 1, 1, hb_idx])
         assert abs(hb_log_ratio - 0.0) < 0.05, f"Hβ log10(ratio) = {hb_log_ratio:.3f} ≠ 0.0"
+
+
+# ── _init_nebular dispatch regression (issue #361) ────────────────
+@_SKIP_NO_H5
+class TestSEDModelInitNebularDispatch:
+    """``neb={'type': 'cb19'}`` must instantiate ``CB19Backend``.
+
+    Before the fix, ``_init_nebular`` had no ``elif "cb19":`` branch, so the
+    requested mode silently fell through to ``BakedInBackend()`` and every
+    ``Prediction.lines.*`` accessor returned NaN.  See issue #361.
+    """
+
+    def test_cb19_mode_uses_cb19_backend(self, ssp_data_wne):
+        """Building a model with neb='cb19' should wire CB19Backend, not BakedInBackend."""
+        import tengri
+        from tengri.components.nebular import BakedInBackend, CB19Backend
+
+        model = tengri.SEDModel.build(
+            ssp_data_wne,
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "log_peak_sfr": 1.0,
+                "peak_lbt_gyr": 2.0,
+                "width_gyr": 1.0,
+                "skew": 0.2,
+                "trunc": 3.0,
+                "logzsol": -0.1,
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_bc": 0.2,
+                "tau_diff": 0.1,
+                "slope": -0.7,
+            },
+            neb={"type": "cb19", "*": tengri.FIXED},
+        )
+        assert model.spec.nebular_mode == "cb19"
+        assert isinstance(model._nebular_backend, CB19Backend)
+        assert not isinstance(model._nebular_backend, BakedInBackend)

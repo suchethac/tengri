@@ -9,6 +9,10 @@ burstiness (σ=1.0, τ=100 Myr). Five realizations appear in each panel,
 with the smooth mean SFH overlaid.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -31,7 +35,7 @@ t_gyr = np.array(t_lookback) / 1e9
 
 # --- Smooth mean SFH ---
 mean_sfr = tengri.tsnorm(
-    t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+    t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
 )
 
 # --- Generate GP realizations at two different PSD settings ---

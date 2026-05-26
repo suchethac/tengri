@@ -47,8 +47,14 @@ def rss_gb():
 
 
 def run_worker(
-    n_gal: int, method: str, n_iterations: int, n_samples: int, forward_chunk_size: int,
-    rich_obs: bool = False, noise_frac: float = 0.10, spec_obs: bool = False,
+    n_gal: int,
+    method: str,
+    n_iterations: int,
+    n_samples: int,
+    forward_chunk_size: int,
+    rich_obs: bool = False,
+    noise_frac: float = 0.10,
+    spec_obs: bool = False,
     joint_obs: bool = False,
 ) -> None:
     """Run one (N, method, K) combination and print a JSON result line.
@@ -100,6 +106,7 @@ def run_worker(
         # Rest 3000–7500 Å covers Hβ, [OIII], Hα and the 4000Å break.
         # At z=0.1 → observed 3300–8250 Å. R≈500 → log-spaced n_pix ≈ 460.
         from tengri import Observation as _Obs, Spectroscopy as _Spec
+
         z_fix = 0.1
         wave_rest = jnp.exp(jnp.linspace(jnp.log(3000.0), jnp.log(7500.0), 460))
         wave_obs_grid = wave_rest * (1.0 + z_fix)
@@ -109,9 +116,16 @@ def run_worker(
     else:
         if rich_obs:
             band_names = [
-                "galex_fuv", "galex_nuv",
-                "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-                "2mass_j", "2mass_h", "2mass_ks",
+                "galex_fuv",
+                "galex_nuv",
+                "sdss_u",
+                "sdss_g",
+                "sdss_r",
+                "sdss_i",
+                "sdss_z",
+                "2mass_j",
+                "2mass_h",
+                "2mass_ks",
             ]
         else:
             band_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
@@ -127,7 +141,7 @@ def run_worker(
 
     def make_spec(psd_sigma, psd_tau_myr):
         kw = dict(
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
             sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -157,8 +171,7 @@ def run_worker(
     z_fix_joint = 0.1
     line_window_aa = 30.0
     line_npix = 41
-    line_centers_obs = (line_wavelengths_arr * (1.0 + z_fix_joint)
-                        if joint_obs else None)
+    line_centers_obs = line_wavelengths_arr * (1.0 + z_fix_joint) if joint_obs else None
 
     # Pre-build one concatenated wave grid covering all line windows.
     if joint_obs:
@@ -177,9 +190,7 @@ def run_worker(
         # Continuum estimate: mean of two outermost pixels per line window.
         cont = 0.5 * (spec_per[:, 0] + spec_per[:, -1])
         wave_per = _line_waves_concat.reshape((line_centers_obs.shape[0], line_npix))
-        return jax.vmap(lambda f, w, c: jnp.trapezoid(f - c, w))(
-            spec_per, wave_per, cont
-        )
+        return jax.vmap(lambda f, w, c: jnp.trapezoid(f - c, w))(spec_per, wave_per, cont)
 
     def _patch_joint_predict(m: SEDModel) -> SEDModel:
         """Wrap predict_photometry to append integrated line fluxes."""
@@ -202,9 +213,7 @@ def run_worker(
         # Joint mode's per-galaxy line-window grid is 164 points; chunking
         # there triggers a ConcretizationTypeError in the MAP jit path.
         wcs = 64 if spec_obs else None
-        return _patch_joint_predict(
-            SEDModel(spec, ssp_data, observation=obs, wave_chunk_size=wcs)
-        )
+        return _patch_joint_predict(SEDModel(spec, ssp_data, observation=obs, wave_chunk_size=wcs))
 
     # Build mock galaxies
     key = jax.random.PRNGKey(42)
@@ -228,7 +237,8 @@ def run_worker(
     rss1 = rss_gb()
 
     pop = PopulationFitter(
-        model_factory, galaxies,
+        model_factory,
+        galaxies,
         data_type="spectroscopy" if spec_obs else "photometry",
     )
 
@@ -266,6 +276,7 @@ def run_worker(
     # Hyperparameter constraint summary (warm run).
     # Truth injected per galaxy in the mock loop above: σ=2.0, τ=20 Myr.
     import numpy as _np
+
     shared = getattr(post2, "shared_samples", {}) or {}
 
     def _summary(key: str) -> dict:
@@ -369,7 +380,11 @@ def spawn(
     import threading
 
     proc = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
         start_new_session=True,
     )
 
@@ -383,11 +398,14 @@ def spawn(
 
     def _watchdog():
         import resource as _resource  # noqa: F401  (parity with worker units)
+
         while not stop_watchdog.is_set():
             try:
                 ps = subprocess.run(
                     ["ps", "-o", "rss=", "-p", str(proc.pid)],
-                    capture_output=True, text=True, timeout=5,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 rss_kb = int(ps.stdout.strip() or "0")
             except (subprocess.TimeoutExpired, ValueError, ProcessLookupError):
@@ -445,6 +463,7 @@ def spawn(
 
     class _ProcShim:
         pass
+
     proc_shim = _ProcShim()
     proc_shim.stdout = stdout_s
     proc_shim.stderr = stderr_s
@@ -520,10 +539,7 @@ def _run_large() -> None:
     print(f"\n4. Large-N scaling: native_vi_linear K=1 at N={large_ns}")
     print(f"   Convergence budget: n_iterations={n_iter}, n_samples={n_samp}")
     print(f"   compile timeout: {timeout}s per worker\n")
-    hdr = (
-        f"  {'N':>5}  {'cold (s)':>9}  {'warm (s)':>9}"
-        f"  {'compile~(s)':>12}  {'ΔRSS (GB)':>10}"
-    )
+    hdr = f"  {'N':>5}  {'cold (s)':>9}  {'warm (s)':>9}  {'compile~(s)':>12}  {'ΔRSS (GB)':>10}"
     print(hdr)
     print("  " + "-" * 52)
 
@@ -531,7 +547,9 @@ def _run_large() -> None:
 
     for n in large_ns:
         print(f"  Running N={n}...", flush=True)
-        row = spawn(n, "native_vi_linear", n_iter, n_samp, forward_chunk_size=1, compile_timeout=timeout)
+        row = spawn(
+            n, "native_vi_linear", n_iter, n_samp, forward_chunk_size=1, compile_timeout=timeout
+        )
         err = row.get("error", "")
         if err:
             print(f"  {n:>5}  ERROR: {err[:70]}")
@@ -542,10 +560,7 @@ def _run_large() -> None:
         delta = row.get("rss_delta_gb", -1)
         if n1_warm is None:
             n1_warm = warm
-        print(
-            f"  {n:>5}  {wall:>9.1f}  {warm:>9.1f}"
-            f"  {comp:>12.1f}  {delta:>10.2f}"
-        )
+        print(f"  {n:>5}  {wall:>9.1f}  {warm:>9.1f}  {comp:>12.1f}  {delta:>10.2f}")
 
 
 def main(smoke: bool = False) -> None:
@@ -617,8 +632,12 @@ def main(smoke: bool = False) -> None:
         ("native_vi_linear", "native_vi_linear"),
         ("native_vi_nonlinear", "native_vi_nonlinear"),
     ):
-        print(f"\n2{'a' if method == 'native_vi_linear' else 'b'}. Memory flatness: {label} at N={memory_ns}\n")
-        print(f"  {'N':>4}  {'cold (s)':>9}  {'warm (s)':>9}  {'compile~(s)':>12}  {'ΔRSS (GB)':>12}  {'flat?':>6}")
+        print(
+            f"\n2{'a' if method == 'native_vi_linear' else 'b'}. Memory flatness: {label} at N={memory_ns}\n"
+        )
+        print(
+            f"  {'N':>4}  {'cold (s)':>9}  {'warm (s)':>9}  {'compile~(s)':>12}  {'ΔRSS (GB)':>12}  {'flat?':>6}"
+        )
         print("  " + "-" * 60)
 
         mem_rows: list[dict] = []
@@ -635,7 +654,9 @@ def main(smoke: bool = False) -> None:
                 comp = row.get("compile_s_approx", -1)
                 delta = row.get("rss_delta_gb", -1)
                 flat = "YES" if delta < 12.0 else "NO"
-                print(f"  {n:>4}  {wall:>9.1f}  {warm:>9.1f}  {comp:>12.1f}  {delta:>12.2f}  {flat:>6}")
+                print(
+                    f"  {n:>4}  {wall:>9.1f}  {warm:>9.1f}  {comp:>12.1f}  {delta:>12.2f}  {flat:>6}"
+                )
 
         valid_mem = [r for r in mem_rows if r.get("rss_delta_gb", -1) > 0]
         if len(valid_mem) >= 2:
@@ -659,7 +680,9 @@ def main(smoke: bool = False) -> None:
         ("MGVI", "native_vi_linear", "vi_linear"),
         ("geoVI", "native_vi_nonlinear", "vi_nonlinear"),
     ):
-        print(f"\nSpeedup {family}: {native_m} vs {nifty_m} (same flat-param model, JAX vs NIFTy):")
+        print(
+            f"\nSpeedup {family}: {native_m} vs {nifty_m} (same flat-param model, JAX vs NIFTy):"
+        )
         for n in speed_ns:
             native_row = next(
                 (r for r in all_rows if r["n_gal"] == n and r["method"] == native_m), None
@@ -667,10 +690,7 @@ def main(smoke: bool = False) -> None:
             nifty_row = next(
                 (r for r in all_rows if r["n_gal"] == n and r["method"] == nifty_m), None
             )
-            if (
-                native_row and nifty_row
-                and native_row["wall_s"] > 0 and nifty_row["wall_s"] > 0
-            ):
+            if native_row and nifty_row and native_row["wall_s"] > 0 and nifty_row["wall_s"] > 0:
                 ratio = nifty_row["wall_s"] / native_row["wall_s"]
                 print(
                     f"  N={n:>3}: {ratio:.1f}x  "
@@ -689,9 +709,17 @@ if __name__ == "__main__":
         nf = float(sys.argv[8]) if len(sys.argv) > 8 else 0.10
         spec = bool(int(sys.argv[9])) if len(sys.argv) > 9 else False
         joint = bool(int(sys.argv[10])) if len(sys.argv) > 10 else False
-        run_worker(n_gal, method, n_iter, n_samp, fcs,
-                   rich_obs=rich, noise_frac=nf, spec_obs=spec,
-                   joint_obs=joint)
+        run_worker(
+            n_gal,
+            method,
+            n_iter,
+            n_samp,
+            fcs,
+            rich_obs=rich,
+            noise_frac=nf,
+            spec_obs=spec,
+            joint_obs=joint,
+        )
     elif "--chunk-only" in sys.argv:
         smoke = "--smoke" in sys.argv
         skip_k1 = "--skip-k1" in sys.argv

@@ -18,6 +18,7 @@ using integration of the recovered SFH and photometric predictions,
 reproducing Fig. 4 of Conroy 2013's review.
 
 References
+
 ----------
 .. [1] Bell, A. R., & de Jong, R. S. 2001, ApJ, 550, 212
    "An Estimate of the Reddening Map from Galaxies in the 2MASS All-Sky
@@ -25,6 +26,10 @@ References
 .. [2] Conroy, C. 2013, ARA&A, 51, 393
    "Modeling the Panchromatic Spectral Energy Distributions of Galaxies"
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -66,7 +71,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.05, 13.0),
         "width_gyr": 0.05,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
