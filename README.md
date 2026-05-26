@@ -5,18 +5,49 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
-Tengri is a differentiable SED fitting library in JAX. One forward model
-covers stars, dust, nebular emission, AGN, and IGM; the same model feeds
-MAP, Laplace, Pathfinder, NUTS, ray-tracing MCMC, nested sampling, and
-NIFTy geoVI through a single `Fitter` interface.
+Tengri is a panchromatic galaxy SED inference library, written in
+JAX. The same forward model covers stars, dust, nebular gas, AGN, IGM,
+radio, and X-ray, and every inference backend we ship (MAP, Laplace,
+Pathfinder, NUTS, ray-tracing MCMC, nested sampling, NIFTy geoVI,
+hierarchical population fits) talks to it through one `Fitter`
+interface. Gradients are available everywhere, and they are exact.
 
-The project is pre-1.0 research code: the API is moving, some physics
-modules are still being human-verified, and Paper I (methods + mock
-recovery) is in preparation.
+This is pre-1.0 research code, developed as a community effort. The
+API is still moving in places, several physics modules are being
+independently human-verified, and the Paper I draft is in
+preparation. The repository will move to the `tengri-project` GitHub
+organisation shortly; collaborative development and issue tracking
+will live there going forward.
 
 **Documentation:** [suchethacooray.com/tengri](https://suchethacooray.com/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks)
 
-> *The name comes from [Tengri](https://en.wikipedia.org/wiki/Tengri), the sky deity in Turkic, Mongolic, and Central Asian traditions. Used with respect for the cultures it originates from.*
+> *The name [Tengri](https://en.wikipedia.org/wiki/Tengri) comes from
+> the all-encompassing God of Heaven in traditional Turkic, Mongolic,
+> and other Central Asian nomadic religions. A fitting name for a code
+> that models the light of galaxies across cosmic time. This name is
+> chosen with respect for the cultural and spiritual traditions it
+> originates from; no religious claim or appropriation is intended.*
+
+## Why tengri
+
+Modern galaxy SED inference needs some combination of speed,
+differentiability, and modularity at once, and most existing codes
+give you one or two of those at a time. Tengri is an attempt at all
+three.
+
+JIT compilation gets the full physical model down to tens of
+microseconds per call on a single CPU core, which is enough for
+catalogue-scale inference without putting a neural emulator in the
+loop. Exact gradients make HMC, variational inference, and Laplace
+approximation work in the $D \gtrsim 100$ parameter spaces where
+bursty correlated-field SFHs and hierarchical population fits live.
+And the codebase is organised so that physics lives in components and
+instruments live in observation, which means a new SFH family, dust
+law, or AGN template lands as one file without any edits to the
+sampling engine.
+
+The full philosophy and an architecture flow chart are on the
+[Overview](https://suchethacooray.com/tengri/overview.html) page.
 
 ## Status and provenance
 
@@ -118,7 +149,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | #  | Notebook                       | Topic                                                       |
 |----|--------------------------------|-------------------------------------------------------------|
 | 00 | `00_quickstart.py`             | mock galaxy → posterior in ~30 s                            |
-| 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` in the context of SED fitting           |
+| 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` in the context of galaxy SED inference  |
 | 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
 | 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
 | 04 | `04_building_models.py`        | the nested-dict / recipe builder                            |
@@ -196,9 +227,32 @@ returns BibTeX for every SSP, model, and code used in a fit.
 - [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) — component verification status
 - [CHANGELOG.md](CHANGELOG.md) · [ROADMAP.md](ROADMAP.md)
 
+## Reproduction
+
+Cross-validation against the established panchromatic SED codes is
+catalogued in
+[docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
+The first comparison is against [CIGALE](https://cigale.lam.fr/) —
+component-for-component agreement on the AGN, dust, nebular, and
+X-ray paths — with a side-by-side notebook in the works. Prospector,
+BAGPIPES, MAGPHYS, x-cigale, GRAHSP, and Synthesizer follow.
+
 ## Citation
 
-If you use tengri, see [CITATION.cff](CITATION.cff) and call `tengri.cite_all()` to recover BibTeX for the upstream grids, papers, and codes contributing to your fit.
+While Paper I is in preparation, the shortest correct in-text citation is:
+
+> Cooray et al., *tengri: A Differentiable Framework for
+> High-Dimensional Bayesian Inference from Galaxy Spectral Energy
+> Distributions*, in prep. (2026).
+
+See [CITATION.cff](CITATION.cff) for the machine-readable form and the
+[Citing tengri](https://suchethacooray.com/tengri/citation.html) page
+for the BibTeX + acknowledgement block. For automatic, fit-specific
+BibTeX (every SSP grid, model, and sampler that actually ran):
+
+```python
+print(tengri.cite_all(result))
+```
 
 ## License
 
