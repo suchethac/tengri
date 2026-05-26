@@ -49,6 +49,14 @@ body {
     --color-sidebar-caption-text: var(--tg-muted);
     --color-highlighted-background: #FFF2A8;
     --color-inline-code-background: #F1F3F5;
+    --color-code-background: #F6F8FA;
+    --color-code-foreground: var(--tg-text);
+    --color-card-background: var(--tg-surface);
+    --color-card-marginals-background: var(--tg-bg);
+    --color-admonition-background: var(--tg-surface);
+    --color-table-background: var(--tg-surface);
+    --color-toc-background: var(--tg-surface);
+    --color-toc-item-text--active: var(--tg-accent);
 
     /* Typography */
     --font-stack: "IBM Plex Sans", -apple-system, BlinkMacSystemFont,
@@ -91,6 +99,14 @@ body {
         --color-sidebar-caption-text: var(--tg-muted);
         --color-highlighted-background: #3D3A1A;
         --color-inline-code-background: #1E2530;
+        --color-code-background: #161D27;
+        --color-code-foreground: var(--tg-text);
+        --color-card-background: var(--tg-surface);
+        --color-card-marginals-background: var(--tg-bg);
+        --color-admonition-background: var(--tg-surface);
+        --color-table-background: var(--tg-surface);
+        --color-toc-background: var(--tg-surface);
+        --color-toc-item-text--active: var(--tg-accent);
     }
 }
 
@@ -125,6 +141,14 @@ body[data-theme="dark"] {
     --color-sidebar-caption-text: var(--tg-muted);
     --color-highlighted-background: #3D3A1A;
     --color-inline-code-background: #1E2530;
+    --color-code-background: #161D27;
+    --color-code-foreground: var(--tg-text);
+    --color-card-background: var(--tg-surface);
+    --color-card-marginals-background: var(--tg-bg);
+    --color-admonition-background: var(--tg-surface);
+    --color-table-background: var(--tg-surface);
+    --color-toc-background: var(--tg-surface);
+    --color-toc-item-text--active: var(--tg-accent);
 }
 
 /* ── Body & headings ─────────────────────────────────────────────────── */
@@ -170,19 +194,30 @@ code, pre, kbd, samp {
 }
 
 /* ── Sidebar logo ─────────────────────────────────────────────────────
-   Large logo centred above the "tengri" wordmark. */
-.sidebar-logo-container {
+   Furo's ``.sidebar-brand`` is the <a> wrapping both the logo
+   container and the brand text. Make IT the flex column so logo and
+   wordmark share the same centre axis. */
+.sidebar-brand {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 0.6rem;
-    padding: 1.25rem 0 0.5rem;
+    padding: 1.25rem 1rem 0.75rem;
+    text-decoration: none;
+}
+.sidebar-logo-container {
+    display: flex;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
 }
 .sidebar-logo {
     max-width: 120px;
     height: auto;
     object-fit: contain;
     background: transparent;
+    display: block;
+    margin: 0;
 }
 .sidebar-logo.only-dark { display: none !important; }
 .sidebar-brand-text {
@@ -190,6 +225,8 @@ code, pre, kbd, samp {
     font-weight: 600;
     letter-spacing: 0.02em;
     color: var(--tg-text);
+    text-align: center;
+    margin: 0;
 }
 
 /* ── Hero block on landing page ──────────────────────────────────────── */

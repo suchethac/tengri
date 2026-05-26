@@ -335,6 +335,7 @@ html_baseurl = "https://suchethac.github.io/tengri/"
 html_title = "tengri"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_js_files = ["two-mode-theme.js"]
 
 html_logo = "_static/tengri-logo.png"
 html_favicon = "_static/tengri-logo.png"
