@@ -21,6 +21,11 @@
 SKIRTOR torus opening angle sweep: covering factor and MIR emission
 ====================================================================
 
+.. image:: images/sphx_glr_plot_torus_opening_angle_001.png
+   :alt: plot torus opening angle
+   :class: sphx-glr-single-img
+
+
 The torus half-opening angle (OA, polar half-angle in degrees) controls
 the covering fraction and the relative strength of direct vs. re-processed
 AGN emission as a function of observer inclination. Smaller OA (narrow
@@ -62,10 +67,14 @@ luminosity inferred from multiwavelength SED fitting.
        The hot dust around the active nucleus in the Mrk 509. MNRAS,
        471, 615. arXiv:1706.07390.
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-65
+.. GENERATED FROM PYTHON SOURCE LINES 46-69
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import os
     import warnings
@@ -86,17 +95,11 @@ luminosity inferred from multiwavelength SED fitting.
     setup_style()
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 66-67
+.. GENERATED FROM PYTHON SOURCE LINES 70-71
 
 Configuration: opening angle sweep
 
-.. GENERATED FROM PYTHON SOURCE LINES 67-77
+.. GENERATED FROM PYTHON SOURCE LINES 71-81
 
 .. code-block:: Python
 
@@ -111,17 +114,11 @@ Configuration: opening angle sweep
     os.makedirs(FIG_DIR, exist_ok=True)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 78-79
+.. GENERATED FROM PYTHON SOURCE LINES 82-83
 
 Load SSP data and construct model
 
-.. GENERATED FROM PYTHON SOURCE LINES 79-104
+.. GENERATED FROM PYTHON SOURCE LINES 83-110
 
 .. code-block:: Python
 
@@ -132,7 +129,7 @@ Load SSP data and construct model
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -143,6 +140,8 @@ Load SSP data and construct model
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+            "log_lbol": tengri.Fixed(12.0),  # Fixed bolometric luminosity for quasar regime
         },
         redshift=tengri.Fixed(0.0),  # Rest-frame SED at z=0
     )
@@ -151,17 +150,11 @@ Load SSP data and construct model
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 105-106
+.. GENERATED FROM PYTHON SOURCE LINES 111-112
 
 Compute SED for each opening angle
 
-.. GENERATED FROM PYTHON SOURCE LINES 106-137
+.. GENERATED FROM PYTHON SOURCE LINES 112-143
 
 .. code-block:: Python
 
@@ -197,17 +190,11 @@ Compute SED for each opening angle
     seds = np.array(seds)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 138-139
+.. GENERATED FROM PYTHON SOURCE LINES 144-145
 
 Plot: νL_ν vs wavelength (rest-frame)
 
-.. GENERATED FROM PYTHON SOURCE LINES 139-178
+.. GENERATED FROM PYTHON SOURCE LINES 145-184
 
 .. code-block:: Python
 
@@ -251,34 +238,23 @@ Plot: νL_ν vs wavelength (rest-frame)
     plt.show()
 
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_torus_opening_angle_001.png
-   :alt: SKIRTOR Torus Opening Angle Sweep ($\log_{10}(L_{\rm bol}) = 12.0$, $\cos(i) = 0.5$, z=0, AGN-dominated)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_torus_opening_angle_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 179-180
+.. GENERATED FROM PYTHON SOURCE LINES 185-186
 
 Extract and verify MIR emission scaling with opening angle
 
-.. GENERATED FROM PYTHON SOURCE LINES 180-224
+.. GENERATED FROM PYTHON SOURCE LINES 186-230
 
 .. code-block:: Python
 
     print("\n" + "=" * 70)
     print("Torus Opening Angle Sweep Summary")
     print("=" * 70)
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Bolometric luminosity: log L_bol = {LOG_LBOL}")
     print(f"  Inclination: cos(i) = {COS_INCLINATION} (θ ≈ 45°)")
     print(f"  AGN fraction: {AGN_FRAC * 100:.0f}%")
     print(f"  Torus luminosity fraction: {TORUS_FRAC * 100:.0f}%")
-    print(f"  Redshift: z = 0 (rest-frame)")
+    print("  Redshift: z = 0 (rest-frame)")
 
     print(f"\nOpening angle values: {OPENING_ANGLES_DEG}")
 
@@ -287,7 +263,7 @@ Extract and verify MIR emission scaling with opening angle
     mir_wave_max = 100.0 * 1e4  # Angstrom
     mir_mask = (wave_rest >= mir_wave_min) & (wave_rest <= mir_wave_max)
 
-    print(f"\nMIR emission (8–100 μm) scaling:")
+    print("\nMIR emission (8–100 μm) scaling:")
     mir_lums = []
     for sed, oa_deg in zip(seds, OPENING_ANGLES_DEG):
         mir_sed = sed[mir_mask]
@@ -305,56 +281,15 @@ Extract and verify MIR emission scaling with opening angle
     mir_lums = np.array(mir_lums)
     increase_percent = (mir_lums[-1] - mir_lums[0]) / mir_lums[0] * 100.0
     print(f"\nMIR luminosity increase from 15° to 70°: {increase_percent:.1f}%")
-    print(f"  This reflects the monotonic rise in torus covering fraction")
-    print(f"  with larger opening angle (Mateos et al. 2017).")
+    print("  This reflects the monotonic rise in torus covering fraction")
+    print("  with larger opening angle (Mateos et al. 2017).")
 
-    print(f"\nPhysics:")
-    print(f"  Stalevski et al. (2016) SKIRTOR: 3D clumpy torus radiative transfer")
-    print(f"  Opening angle controls viewing-angle-dependent absorption and")
-    print(f"  re-emission, modulating the observable torus contribution.")
+    print("\nPhysics:")
+    print("  Stalevski et al. (2016) SKIRTOR: 3D clumpy torus radiative transfer")
+    print("  Opening angle controls viewing-angle-dependent absorption and")
+    print("  re-emission, modulating the observable torus contribution.")
 
     print("\n" + "=" * 70)
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    ======================================================================
-    Torus Opening Angle Sweep Summary
-    ======================================================================
-
-    Configuration:
-      Bolometric luminosity: log L_bol = 12.0
-      Inclination: cos(i) = 0.5 (θ ≈ 45°)
-      AGN fraction: 100%
-      Torus luminosity fraction: 100%
-      Redshift: z = 0 (rest-frame)
-
-    Opening angle values: [15.0, 30.0, 50.0, 70.0]
-
-    MIR emission (8–100 μm) scaling:
-      OA =  15.0°: L_MIR = 1.240e+41 erg/s
-      OA =  30.0°: L_MIR = 1.295e+41 erg/s
-      OA =  50.0°: L_MIR = 1.189e+43 erg/s
-      OA =  70.0°: L_MIR = 3.559e+43 erg/s
-
-    MIR luminosity increase from 15° to 70°: 28606.9%
-      This reflects the monotonic rise in torus covering fraction
-      with larger opening angle (Mateos et al. 2017).
-
-    Physics:
-      Stalevski et al. (2016) SKIRTOR: 3D clumpy torus radiative transfer
-      Opening angle controls viewing-angle-dependent absorption and
-      re-emission, modulating the observable torus contribution.
-
-    ======================================================================
-
-
-
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_torus_opening_angle.py:

@@ -21,6 +21,11 @@
 Alpha-element enhancement suppresses iron absorption features
 =============================================================
 
+.. image:: images/sphx_glr_plot_alpha_fe_sweep_001.png
+   :alt: plot alpha fe sweep
+   :class: sphx-glr-single-img
+
+
 The [α/Fe] abundance ratio encodes the chemical enrichment history: rapid
 enrichment by core-collapse supernovae before Type Ia SNe begin leads to high
 [α/Fe]. In the SED, enhanced alpha-elements suppress iron absorption lines in
@@ -30,10 +35,14 @@ passively evolving galaxy where iron features dominate the continuum absorption.
 
 Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-77
+.. GENERATED FROM PYTHON SOURCE LINES 14-81
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +67,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 8.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",

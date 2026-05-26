@@ -21,6 +21,11 @@
 SDSS Luminous Red Galaxy Stacked Template Spectrum
 ==================================================
 
+.. image:: images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
+   :alt: plot usecase sdss lrg stack template
+   :class: sphx-glr-single-img
+
+
 Build a population of N=200 quiescent galaxies replicating the SDSS
 Luminous Red Galaxy (LRG) sample selection (Eisenstein et al. 2001, SDSS-I):
 old, massive systems at z~0.3 with log M* ≈ 11 and ages sampling the
@@ -40,32 +45,14 @@ References:
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-151
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
-   :alt: SDSS LRG Quiescent Template (z=0.3, R=2000) Red sequence ages 6–11 Gyr per Thomas+2005
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
-      Batch shape: (200, 2400)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 24-155
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -115,7 +102,7 @@ References:
             "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
             "skew": 0.0,
             "trunc": 13.5,
-            "log_peak_sfr": 0.5,  # ~ log M* = 11 when integrated
+            "log_total_mass": 10.0,  # ~ log M* = 11 when integrated
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(REDSHIFT),

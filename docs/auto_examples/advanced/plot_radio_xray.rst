@@ -34,10 +34,14 @@ for radio and X-ray—no SSP data required for these components.
 Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
 (X-ray binaries in galaxies, ARA&A, 44, 323).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-82
+.. GENERATED FROM PYTHON SOURCE LINES 13-86
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

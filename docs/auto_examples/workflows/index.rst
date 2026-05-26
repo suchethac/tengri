@@ -22,7 +22,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show the clean separation of ionization mechanisms across the diagnostic plane.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -33,13 +33,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT diagram: emission lines separate star-forming from AGN ionization</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates dust attenuation effects and how fitting uncertainty propagates to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff) is fit with MAP, showing the best-fit SED plus mock perturbation envelopes to illustrate the uncertainty range from photometric noise.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -50,13 +50,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust attenuation: uncertainty in SED from dust parameter estimation</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W) and HST (F814W) broadband photometry. The characteristic Lyman-break signature (sharp UV dropout at observed ~4 micron) constrains age and metallicity even with just 4 bands. Demonstrates recovery of the young starburst component from the dropout depth.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -67,13 +67,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates running MAP inference on SDSS photometry and comparing the MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior without sampling overhead; for uncertainty quantification, posterior sampling methods (NUTS, VI) would be needed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -84,7 +84,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Inference method comparison: MAP as reference for SFH recovery</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
@@ -107,7 +107,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A post-starburst galaxy shows a recent burst followed by quenching. When fit with smooth tau-model (incorrect), the fit biases the recovered SFH. This workflow compares two models on the same mock data to show how model flexibility directly impacts star formation history inference.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -118,7 +118,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Model misspecification: post-starburst galaxies reveal wrong SFH</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 

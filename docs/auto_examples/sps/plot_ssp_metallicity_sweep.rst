@@ -21,6 +21,11 @@
 Stellar Metallicity Effects on SED
 ==================================
 
+.. image:: images/sphx_glr_plot_ssp_metallicity_sweep_001.png
+   :alt: plot ssp metallicity sweep
+   :class: sphx-glr-single-img
+
+
 Metallicity reddens the optical continuum and shifts iron-peak absorption
 features in the near-IR. We show five metallicity points spanning the SSP
 grid at fixed age (1 Gyr). Peak-normalized λF_λ makes spectral shape
@@ -28,10 +33,14 @@ variations visible without large luminosity differences obscuring them.
 
 Reference: DSPS SSP grid (Conroy et al. 2009).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-53
+.. GENERATED FROM PYTHON SOURCE LINES 12-57
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

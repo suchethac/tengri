@@ -18,21 +18,36 @@
 .. _sphx_glr_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:
 
 
-Dust attenuation: uncertainty in SED from dust parameter estimation
-==================================================================
+SyntaxError
+===========
 
-Demonstrates dust attenuation effects and how fitting uncertainty propagates
-to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
-is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
-to illustrate the uncertainty range from photometric noise.
+.. image:: images/sphx_glr_plot_workflow_dust_mc_resampling_001.png
+   :alt: plot workflow dust mc resampling
+   :class: sphx-glr-single-img
 
-Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
-Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-163
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-167
 
 .. code-block:: Python
 
+    """
+    Dust attenuation: uncertainty in SED from dust parameter estimation
+    ==================================================================
+
+    Demonstrates dust attenuation effects and how fitting uncertainty propagates
+    to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
+    is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
+    to illustrate the uncertainty range from photometric noise.
+
+    Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
+    Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +73,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-1.0, 1.5),
@@ -77,7 +92,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
     # Generate mock data
     key = jax.random.PRNGKey(42)
     truth_params = {
-        "sfh_tsnorm_log_peak_sfr": 0.8,
+        "sfh_tsnorm_log_total_mass": 0.8,
         "sfh_tsnorm_peak_lbt_gyr": 3.0,
         "sfh_tsnorm_width_gyr": 1.5,
         "sfh_tsnorm_skew": 0.3,

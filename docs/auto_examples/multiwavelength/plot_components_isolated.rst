@@ -21,6 +21,11 @@
 Each tengri SED component shown in isolation
 ==============================================
 
+.. image:: images/sphx_glr_plot_components_isolated_001.png
+   :alt: plot components isolated
+   :class: sphx-glr-single-img
+
+
 Six physics blocks added cumulatively to the same star-forming host
 so the contribution of each is visible at every wavelength.
 
@@ -29,10 +34,14 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The colour at each wavelength tells you which block matters most.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-98
+.. GENERATED FROM PYTHON SOURCE LINES 13-102
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +62,7 @@ The colour at each wavelength tells you which block matters most.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.3,
+            "log_total_mass": 10.0,
             "alpha": 2.5,
             "beta": 2.0,
         },

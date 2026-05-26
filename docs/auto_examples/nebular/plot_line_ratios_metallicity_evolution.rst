@@ -21,6 +21,11 @@
 Optical line-ratio diagnostics along the metallicity gradient
 =============================================================
 
+.. image:: images/sphx_glr_plot_line_ratios_metallicity_evolution_001.png
+   :alt: plot line ratios metallicity evolution
+   :class: sphx-glr-single-img
+
+
 Three classical strong-line metallicity diagnostics computed as a function
 of gas-phase metallicity (``logZ_gas``). The plot spans 12 + log(O/H) from
 ~7 to ~9 and illustrates key observational features: the saturation of
@@ -33,32 +38,14 @@ This demonstrates why observers cannot uniquely invert a single line
 ratio to metallicity without breaking the R23 degeneracy or adopting a
 secondary diagnostic.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-83
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_line_ratios_metallicity_evolution_001.png
-   :alt: plot line ratios metallicity evolution
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_line_ratios_metallicity_evolution_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 17-87
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -80,7 +67,7 @@ secondary diagnostic.
     model = tengri.SEDModel.build(
         SSP,
         sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.05,
-             "log_peak_sfr": 1.5, "alpha": 4.0, "beta": 2.0},
+             "log_total_mass": 10.0, "alpha": 4.0, "beta": 2.0},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.0, "tau_bc": 0.0},
         neb={"type": "cue", "*": tengri.FIXED,
@@ -125,11 +112,6 @@ secondary diagnostic.
 
     plt.savefig("plot_line_ratios_metallicity_evolution.png", dpi=150,
                 bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.229 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_line_ratios_metallicity_evolution.py:

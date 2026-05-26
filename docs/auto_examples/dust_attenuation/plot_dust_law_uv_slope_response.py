@@ -15,6 +15,10 @@ together explain why the IRX–β diagram is so band-, age-, and
 law-dependent in the literature.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -53,7 +57,7 @@ LAWS = [
     ("noll09",       "Noll+2009",         "C5"),
 ]
 SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 0.05,
-       "width_gyr": 0.05, "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+       "width_gyr": 0.05, "log_total_mass": 10.0, "skew": 0.0, "trunc": 13.0}
 ssp = tengri.load_ssp()
 
 

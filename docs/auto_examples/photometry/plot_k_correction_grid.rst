@@ -40,22 +40,19 @@ on SDSS template K-corrections.
    :alt: plot_k_correction_grid
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-214
-
-
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 25-217
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 
     from pathlib import Path
 
     import jax
-    import jax.numpy as jnp
     import matplotlib
     import matplotlib.pyplot as plt
     import numpy as np
@@ -113,7 +110,7 @@ on SDSS template K-corrections.
             {
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 1.0,  # 10 Msun/yr
+                "log_total_mass": 10.0,  # 10 Msun/yr
                 "peak_lbt_gyr": 0.2,  # age ≈ 0.2 Gyr
                 "width_gyr": 0.15,
                 "skew": 0.0,
@@ -133,7 +130,7 @@ on SDSS template K-corrections.
             {
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 1.0,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 5.0,  # age ≈ 5 Gyr
                 "width_gyr": 1.0,
                 "skew": 0.0,
@@ -153,7 +150,7 @@ on SDSS template K-corrections.
             {
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 2.0,  # 100 Msun/yr
+                "log_total_mass": 10.0,  # 100 Msun/yr
                 "peak_lbt_gyr": 10.0,  # age ≈ 10 Gyr (old starburst)
                 "width_gyr": 0.5,
                 "skew": 0.0,
@@ -173,7 +170,7 @@ on SDSS template K-corrections.
             {
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 2.0,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 1.5,  # intermediate age
                 "width_gyr": 0.3,
                 "skew": 0.0,
@@ -239,11 +236,6 @@ on SDSS template K-corrections.
         str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight"
     )
     plt.close()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 20.692 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_k_correction_grid.py:

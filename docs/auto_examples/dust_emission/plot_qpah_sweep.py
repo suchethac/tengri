@@ -7,6 +7,10 @@ mid-infrared emission features. Higher q_PAH produces stronger features at
 3.3, 6.2, 7.7, 8.6, 11.3 μm. Range varies by dust model.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

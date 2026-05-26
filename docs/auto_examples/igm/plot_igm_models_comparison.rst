@@ -21,6 +21,11 @@
 Comparison of IGM absorption models at high redshift
 ======================================================
 
+.. image:: images/sphx_glr_plot_igm_models_comparison_001.png
+   :alt: plot igm models comparison
+   :class: sphx-glr-single-img
+
+
 Four IGM transmission variants available in tengri are compared at z=7,
 applied to a young star-forming SED. This diagnostic isolates the differences
 between models around the Lyman-alpha forest:
@@ -48,38 +53,14 @@ References:
   .. [3] Asada, R., Ouchi, M., & collaborators 2025 — CGM damping wing
          absorption at z > 5 (experimental extension to Inoue+2014)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-215
-
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_igm_models_comparison_001.png
-   :alt: plot igm models comparison
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_igm_models_comparison_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved: plot_igm_models_comparison.png
-
-    Model comparison at z=7.0:
-      Intrinsic SED: peak at 1284.7 Å
-      Madau (1995) at 1200 Å:  0.01
-      Inoue+2014 at 1200 Å:  0.00
-      Asada (CGM) at 1200 Å:  0.00
-      Asada (CGM) at 1250 Å:  1.00
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 32-219
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -111,7 +92,7 @@ References:
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.1,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 1.5,
     }

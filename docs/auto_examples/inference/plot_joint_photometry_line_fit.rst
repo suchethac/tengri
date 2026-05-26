@@ -37,10 +37,14 @@ References:
 - Schaerer (2003), A&A, 397, 527 — Star-forming galaxy H-alpha equivalent widths
 - Bouwens et al. (2022), ApJ, 931, 160 — JWST LAE survey at z~5
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-37
+.. GENERATED FROM PYTHON SOURCE LINES 21-41
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,13 +62,7 @@ References:
     warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 38-44
+.. GENERATED FROM PYTHON SOURCE LINES 42-48
 
 Typical properties:
 - stellar mass log M* ~ 9 Msun (Lyman-alpha emitter)
@@ -73,7 +71,7 @@ Typical properties:
 - Halpha EW ~ 250 A (nebular model + young age)
 - [OIII] EW ~ 300 A (high excitation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 45-58
+.. GENERATED FROM PYTHON SOURCE LINES 49-62
 
 .. code-block:: Python
 
@@ -83,7 +81,7 @@ Typical properties:
 
     # Mock photometry: JWST/NIRCam F150W, F277W, F356W (rest-frame UV-optical)
     # These filters straddle the Lyman break at z~5, making photo-z degenerate.
-    PHOT_BANDS = ["jwst_nircam_f150w", "jwst_nircam_f277w", "jwst_nircam_f356w"]
+    PHOT_BANDS = ["jwst_f150w", "jwst_f277w", "jwst_f356w"]
 
     # Emission lines: H-alpha + [OIII]5007 (strongest lines accessible at z~5)
     # Rest-frame H-alpha = 6564.61 A -> observed = 32823 A (beyond JWST NIRCam!)
@@ -91,19 +89,13 @@ Typical properties:
     LINE_NAMES = ["Halpha", "OIII_5007"]
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 59-62
+.. GENERATED FROM PYTHON SOURCE LINES 63-66
 
 The Spectroscopy object accepts eline_mode="fitted" to include line amplitudes
 as free parameters in the fit. Alternatively, eline_mode="marginalized" analytically
 integrates over line amplitudes (faster, but requires eline_catalog).
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-92
+.. GENERATED FROM PYTHON SOURCE LINES 67-94
 
 .. code-block:: Python
 
@@ -115,9 +107,7 @@ integrates over line amplitudes (faster, but requires eline_catalog).
     # Strategy: fit photometry + line EWs simultaneously. The SEDModel forward pass
     # includes nebular continuum + lines from the CUE model, so we capture physical
     # line-to-continuum coupling.
-    obs_phot = tengri.Observation(
-        photometry=tengri.Photometry.from_names(PHOT_BANDS)
-    )
+    obs_phot = tengri.Observation(photometry=tengri.Photometry.from_names(PHOT_BANDS))
 
     # For this example, we fit photometry only and post-fit measure line EWs
     # (full joint phot+line likelihood is in development).
@@ -137,29 +127,7 @@ integrates over line amplitudes (faster, but requires eline_catalog).
     print(f"Joint observation: {obs_joint.n_data_phot} phot + {obs_joint.n_data_spec} spec pixels")
 
 
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_joint_photometry_line_fit.py", line 72, in <module>
-        photometry=tengri.Photometry.from_names(PHOT_BANDS)
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/photometry_config.py", line 172, in from_names
-        _waves, _trans, curves = load_filter_set(list(names), cache_dir=cache_dir)
-                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/filters/__init__.py", line 440, in load_filter_set
-        fc = load_filter(name, cache_dir=cache_dir)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/filters/__init__.py", line 384, in load_filter
-        raise KeyError(
-    KeyError: "Unknown filter 'jwst_nircam_f150w'. Use list_available_filters() to see valid names, or use load_custom_filter() for arbitrary files."
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 93-98
+.. GENERATED FROM PYTHON SOURCE LINES 95-100
 
 Parameters:
 - SFH: truncated-skew-normal (burstiness)
@@ -167,7 +135,7 @@ Parameters:
 - Nebular: CUE (standard star-forming choice)
 - Redshift + mass: fixed to truth for photo-z degeneracy illustration
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-120
+.. GENERATED FROM PYTHON SOURCE LINES 101-122
 
 .. code-block:: Python
 
@@ -193,13 +161,13 @@ Parameters:
     print(f"Total free params: {len(model.spec.free_params)}")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 121-124
+.. GENERATED FROM PYTHON SOURCE LINES 123-126
 
 Truth: young, moderately dusty star-former
 H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
 [OIII] EW ~ 300 A (high excitation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 125-165
+.. GENERATED FROM PYTHON SOURCE LINES 127-167
 
 .. code-block:: Python
 
@@ -209,7 +177,7 @@ H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
 
     # Override to star-forming archetype
     truth.update(
-        sfh_tsnorm_log_peak_sfr=1.5,  # ~30 Msun/yr peak
+        sfh_tsnorm_log_total_mass=10.0,  # ~30 Msun/yr peak
         sfh_tsnorm_peak_lbt_gyr=1.0,  # Young: 1 Gyr lookback
         sfh_tsnorm_width_gyr=0.5,  # Narrow burst
         sfh_tsnorm_skew=0.3,  # Slight asymmetry
@@ -244,12 +212,12 @@ H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
     noise_spec_obs = np.asarray(mock_spec.noise)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 166-168
+.. GENERATED FROM PYTHON SOURCE LINES 168-170
 
 Compare posterior widths for photo-z and dust parameters.
 Strategy: fit photometry alone (degenerate), then photometry+spectrum (tight).
 
-.. GENERATED FROM PYTHON SOURCE LINES 169-199
+.. GENERATED FROM PYTHON SOURCE LINES 171-205
 
 .. code-block:: Python
 
@@ -265,7 +233,9 @@ Strategy: fit photometry alone (degenerate), then photometry+spectrum (tight).
         n_samples=6,
         verbose=False,
     )
-    print(f"Photometry-only fit complete: {len(result_phot.samples[list(result_phot.samples.keys())[0]])} posterior samples")
+    print(
+        f"Photometry-only fit complete: {len(result_phot.samples[list(result_phot.samples.keys())[0]])} posterior samples"
+    )
 
     # Fit 2: Joint photometry + spectrum (breaks degeneracies)
     print("\n=== FIT 2: Joint photometry + spectrum (degeneracy broken) ===")
@@ -281,25 +251,28 @@ Strategy: fit photometry alone (degenerate), then photometry+spectrum (tight).
         n_samples=6,
         verbose=False,
     )
-    print(f"Joint fit complete: {len(result_joint.samples[list(result_joint.samples.keys())[0]])} posterior samples")
+    print(
+        f"Joint fit complete: {len(result_joint.samples[list(result_joint.samples.keys())[0]])} posterior samples"
+    )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 200-203
+.. GENERATED FROM PYTHON SOURCE LINES 206-209
 
 Key quantities for degeneracy assessment:
 - Redshift posterior width (even though z is fixed, model photo-z sensitivity shows)
 - A_V posterior width (dust constraint)
 
-.. GENERATED FROM PYTHON SOURCE LINES 204-245
+.. GENERATED FROM PYTHON SOURCE LINES 210-252
 
 .. code-block:: Python
 
 
     # Extract posterior statistics
-    params_to_plot = ["dust_tau_bc", "sfh_tsnorm_log_peak_sfr", "dust_tau_diff"]
+    params_to_plot = ["dust_tau_bc", "sfh_tsnorm_log_total_mass", "dust_tau_diff"]
 
     fig, axes = plt.subplots(
-        1, len(params_to_plot),
+        1,
+        len(params_to_plot),
         figsize=(12, 3.5),
     )
 
@@ -336,11 +309,11 @@ Key quantities for degeneracy assessment:
     plt.savefig("plot_joint_photometry_line_fit_posteriors.png", dpi=150, bbox_inches="tight")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 246-247
+.. GENERATED FROM PYTHON SOURCE LINES 253-254
 
 Show 2-D degeneracies in the joint fit.
 
-.. GENERATED FROM PYTHON SOURCE LINES 248-266
+.. GENERATED FROM PYTHON SOURCE LINES 255-273
 
 .. code-block:: Python
 
@@ -363,11 +336,11 @@ Show 2-D degeneracies in the joint fit.
     plt.savefig("plot_joint_photometry_line_fit_corner.png", dpi=150, bbox_inches="tight")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 267-268
+.. GENERATED FROM PYTHON SOURCE LINES 274-275
 
 Photometry residuals
 
-.. GENERATED FROM PYTHON SOURCE LINES 269-323
+.. GENERATED FROM PYTHON SOURCE LINES 276-332
 
 .. code-block:: Python
 
@@ -420,7 +393,9 @@ Photometry residuals
     print("\nKey findings:")
     print(f"  - Photo-z degeneracy width (phot-only):  {np.std(samples_phot):.4f}")
     print(f"  - Constraint tightening (joint):         {np.std(samples_joint):.4f}×")
-    print(f"  - Constraint improvement:                {np.std(samples_phot) / np.std(samples_joint):.2f}×")
+    print(
+        f"  - Constraint improvement:                {np.std(samples_phot) / np.std(samples_joint):.2f}×"
+    )
     print("\nFigures saved:")
     print("  - plot_joint_photometry_line_fit_posteriors.png")
     print("  - plot_joint_photometry_line_fit_corner.png")

@@ -18,23 +18,38 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_mass_completeness.py:
 
 
-Mass completeness limit in SDSS-like photometric surveys
-=========================================================
+SyntaxError
+===========
 
-Measures the 95% stellar mass completeness threshold for SDSS-like photometry.
-Mocks a population of 150 star-forming and passive galaxies spanning
-log M* [7-12] at z=0.1, injects realistic photometric noise, and measures
-below which stellar mass more than 5% of sources drop below detection limit.
-Critical for constructing mass-limited galaxy samples and understanding
-survey selection effects.
+.. image:: images/sphx_glr_plot_usecase_mass_completeness_001.png
+   :alt: plot usecase mass completeness
+   :class: sphx-glr-single-img
 
-Reference: Blanton et al. 2003, ApJ, 594, 186 (SDSS photometry);
-Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-117
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-121
 
 .. code-block:: Python
 
+    """
+    Mass completeness limit in SDSS-like photometric surveys
+    =========================================================
+
+    Measures the 95% stellar mass completeness threshold for SDSS-like photometry.
+    Mocks a population of 150 star-forming and passive galaxies spanning
+    log M* [7-12] at z=0.1, injects realistic photometric noise, and measures
+    below which stellar mass more than 5% of sources drop below detection limit.
+    Critical for constructing mass-limited galaxy samples and understanding
+    survey selection effects.
+
+    Reference: Blanton et al. 2003, ApJ, 594, 186 (SDSS photometry);
+    Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +73,7 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-3.0, 3.0),
@@ -88,7 +103,7 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
         # Assign log-mass uniformly
         log_mass = np.random.uniform(7, 12)
         # Heuristic: older/more massive galaxies have higher SFR peak
-        params["sfh_tsnorm_log_peak_sfr"] = 0.5 + (log_mass - 9.0) * 0.2
+        params["sfh_tsnorm_log_total_mass"] = 0.5 + (log_mass - 9.0) * 0.2
         params["sfh_tsnorm_peak_lbt_gyr"] = 3.0 + (log_mass - 9.0) * 1.0
 
         # Predict photometry and inject noise

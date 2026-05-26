@@ -21,6 +21,11 @@
 Posterior corner plot from variational inference
 ================================================
 
+.. image:: images/sphx_glr_plot_corner_001.png
+   :alt: plot corner
+   :class: sphx-glr-single-img
+
+
 Demonstrates parameter degeneracies and individual 1-D marginalized
 posteriors after fitting mock 5-band SDSS photometry. The corner plot
 shows the full 2-D covariance structure between parameters; blue lines
@@ -29,15 +34,20 @@ use 10× more VI iterations and samples.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-84
+.. GENERATED FROM PYTHON SOURCE LINES 13-97
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import corner
     import jax
+    import matplotlib.pyplot as plt
     import numpy as np
 
     import tengri
@@ -74,7 +84,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     truth.update(
         sfh_tsnorm_peak_lbt_gyr=3.0,
         sfh_tsnorm_width_gyr=2.0,
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=10.0,
         dust_tau_diff=0.3,
     )
     mock = model.mock(truth, snr=25.0, key=key)
@@ -90,8 +100,16 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     )
 
     samples_dict = posterior.samples
-    param_names = list(samples_dict.keys())
-    samples_array = np.array([samples_dict[p] for p in param_names]).T
+    # Keep only parameters with non-trivial posterior variance — fixed params
+    # and tightly-constrained ones end up as effectively zero-range columns
+    # and corner.corner refuses to plot them.
+    EPS = 1e-8
+    param_names = [
+        p
+        for p in samples_dict
+        if np.asarray(samples_dict[p]).std() > EPS * abs(np.asarray(samples_dict[p]).mean() + 1.0)
+    ]
+    samples_array = np.array([np.asarray(samples_dict[p]) for p in param_names]).T
     truths = [float(truth[p]) for p in param_names]
 
     fig = corner.corner(

@@ -21,6 +21,11 @@
 Galaxy SED with photometric filter coverage
 ==============================================
 
+.. image:: images/sphx_glr_plot_galaxy_with_filters_001.png
+   :alt: plot galaxy with filters
+   :class: sphx-glr-single-img
+
+
 What each photometric system measures depends on where its filters
 sit relative to the rest-frame spectral features. We overlay six
 common filter sets (GALEX *NUV*, SDSS *ugriz*, 2MASS *JHK*, WISE
@@ -31,10 +36,14 @@ The figure is meant as a quick reference for: which filter samples
 the Balmer break, where MIR PAH features land, which JWST band picks
 up rest-frame ``5500 Å`` at moderate z, etc.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-104
+.. GENERATED FROM PYTHON SOURCE LINES 15-108
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,7 +65,7 @@ up rest-frame ``5500 Å`` at moderate z, etc.
         "*": tengri.FIXED,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
-        "log_peak_sfr": 1.3,
+        "log_total_mass": 10.0,
         "skew": 0.2,
         "trunc": 13.0,
     }

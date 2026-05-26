@@ -21,6 +21,11 @@
 Early-time SFH slope α shapes the UV continuum
 ==============================================
 
+.. image:: images/sphx_glr_plot_dpl_alpha_sweep_001.png
+   :alt: plot dpl alpha sweep
+   :class: sphx-glr-single-img
+
+
 The rising slope ``α`` of a double-power-law star formation history controls
 how rapidly the galaxy assembled its mass before the peak. Larger α means a
 more abrupt onset of star formation, leaving a younger O/B-star population
@@ -29,10 +34,14 @@ across the prior range with every other parameter fixed.
 
 Reference: Behroozi et al. 2013, ApJ, 770, 57 (functional form, Eq. 1).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-67
+.. GENERATED FROM PYTHON SOURCE LINES 13-71
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +66,7 @@ Reference: Behroozi et al. 2013, ApJ, 770, 57 (functional form, Eq. 1).
             "alpha": tengri.Uniform(0.3, 6.0),
             "beta": 2.5,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),

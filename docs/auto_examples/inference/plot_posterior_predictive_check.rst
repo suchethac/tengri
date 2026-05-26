@@ -21,6 +21,11 @@
 Posterior predictive check: Bayesian goodness-of-fit diagnostic
 ================================================================
 
+.. image:: images/sphx_glr_plot_posterior_predictive_check_001.png
+   :alt: plot posterior predictive check
+   :class: sphx-glr-single-img
+
+
 The posterior predictive check (PPC) is the gold-standard Bayesian
 goodness-of-fit diagnostic (Rubin 1984; Gelman et al. 1996). We fit mock
 SDSS photometry, draw 100 samples from the posterior, regenerate mock
@@ -34,40 +39,14 @@ posterior re-predictions negligible in cost.
 Reference: Rubin 1984, J. Educ. Stat., 9, 26; Gelman et al. 1996,
 Bayesian Data Analysis (Chapman & Hall).
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-177
-
-
-
-.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_posterior_predictive_check_001.png
-   :alt: Posterior Predictive Check: Mock Photometry
-   :srcset: /auto_examples/inference/images/sphx_glr_plot_posterior_predictive_check_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_run_vi_nonlinear': JaxRuntimeError: INTERNAL: PjRtCpuClient::SerializeExecutable proto serialization failed
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/src/tengri/inference/_registration.py:154: UserWarning: Seeds disagree: H = 3.1 ± 1.0 (CV=32%). This may indicate multimodality or poor convergence. Consider increasing n_iterations or inspecting the posterior.
-      lambda context, *, key, init_from=None, **kw: _ctx_run_native_vi(
-    /Users/suchethacooray/Projects/tengri/examples/inference/plot_posterior_predictive_check.py:167: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
-    Posterior predictive check diagnostics:
-      Max |residual| (σ units): 1.53
-      Fraction within ±2σ: 100.0%
-      → Well-fit model: True
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 18-181
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -108,7 +87,7 @@ Bayesian Data Analysis (Chapman & Hall).
     truth.update(
         sfh_tsnorm_peak_lbt_gyr=3.0,
         sfh_tsnorm_width_gyr=2.0,
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=10.0,
         sfh_tsnorm_skew=0.3,
         sfh_tsnorm_trunc=10.0,
         met_logzsol=-0.2,
@@ -227,11 +206,6 @@ Bayesian Data Analysis (Chapman & Hall).
     print(f"  Max |residual| (σ units): {max_residual:.2f}")
     print(f"  Fraction within ±2σ: {within_2sigma:.1%}")
     print(f"  → Well-fit model: {within_2sigma > 0.95}")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (13 minutes 34.453 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_posterior_predictive_check.py:

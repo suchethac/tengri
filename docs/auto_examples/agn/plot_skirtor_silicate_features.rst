@@ -21,6 +21,11 @@
 SKIRTOR Torus: Silicate features from face-on to edge-on
 =========================================================
 
+.. image:: images/sphx_glr_plot_skirtor_silicate_features_001.png
+   :alt: plot skirtor silicate features
+   :class: sphx-glr-single-img
+
+
 The 9.7 μm and 18 μm silicate bands are strong diagnostics of AGN torus
 orientation. When viewing the torus face-on (high cos_inc), dust emission
 dominates and silicates appear in emission. Edge-on views (low cos_inc)
@@ -31,27 +36,19 @@ plots the 3–30 μm rest-frame SED, annotating silicate band centers.
 
 Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-120
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_silicate_features_001.png
-   :alt: SKIRTOR torus: silicate features across inclinations
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_silicate_features_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 15-124
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -75,7 +72,7 @@ Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -87,6 +84,7 @@ Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 12.5,  # log10(L_bol / L_sun)
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )

@@ -21,6 +21,11 @@
 QSO continuum with Lyman-alpha forest absorption at z=3
 ========================================================
 
+.. image:: images/sphx_glr_plot_lyman_alpha_forest_QSO_template_001.png
+   :alt: plot lyman alpha forest QSO template
+   :class: sphx-glr-single-img
+
+
 A power-law QSO continuum (Vanden Berk et al. 2001 composite slope
 :math:`\alpha_{\nu} = -0.5`) is built with tengri's AGN multicolor disc
 and pure-stellar synthesis. The Inoue et al. 2014 intergalactic-medium
@@ -44,26 +49,18 @@ References
 .. [2] Inoue et al. 2014, MNRAS, 442, 1805
        *Observational Constraints on Cosmic Reionization*
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-192
-
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_lyman_alpha_forest_QSO_template_001.png
-   :alt: QSO at $z = 3.0$ with Lyman-$\alpha$ Forest Absorption
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_lyman_alpha_forest_QSO_template_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 28-195
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -96,7 +93,7 @@ References
     model = tengri.SEDModel.build(
         ssp,
         # Pure stellar synthesis: single-age stellar pop for normalization only
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0, "alpha": 1.5, "beta": 1.0},
+        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
             "type": "composable",
@@ -130,7 +127,7 @@ References
     # Create a second model without IGM to show intrinsic continuum
     model_no_igm = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_peak_sfr": 1.0, "alpha": 1.5, "beta": 1.0},
+        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
             "type": "composable",

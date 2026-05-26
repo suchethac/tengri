@@ -21,15 +21,24 @@
 Rest-to-observer-frame transformation of panchromatic SEDs with redshift
 =========================================================================
 
+.. image:: images/sphx_glr_plot_panchromatic_redshift_sweep_001.png
+   :alt: plot panchromatic redshift sweep
+   :class: sphx-glr-single-img
+
+
 Same galaxy rest-frame panchromatic SED (UV through radio) observed at
 increasing redshifts. Cosmological redshift transforms rest-frame wavelengths
 and dims luminosity, shifting spectral features to infrared bands at high
 redshift where ground-based surveys probe star formation epochs.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-105
+.. GENERATED FROM PYTHON SOURCE LINES 10-109
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -64,7 +73,7 @@ redshift where ground-based surveys probe star formation epochs.
                 "alpha": 2.0,
                 "beta": 2.5,
                 "tau_gyr": 1.5,
-                "log_peak_sfr": 1.2,
+                "log_total_mass": 10.0,
             },
             dust={
                 "type": "two_component",

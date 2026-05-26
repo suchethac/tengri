@@ -34,10 +34,14 @@ breaks photometric degeneracies.
 Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-121
+.. GENERATED FROM PYTHON SOURCE LINES 13-125
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
     from pathlib import Path
@@ -89,7 +93,7 @@ constraints for star formation histories.
     )
 
     true_params = {
-        "sfh_tsnorm_log_peak_sfr": 1.2,
+        "sfh_tsnorm_log_total_mass": 1.2,
         "sfh_tsnorm_peak_lbt_gyr": 1.5,
         "sfh_tsnorm_width_gyr": 2.0,
         "sfh_tsnorm_skew": 0.3,

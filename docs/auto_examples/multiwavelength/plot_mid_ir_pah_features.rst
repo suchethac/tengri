@@ -21,6 +21,11 @@
 Mid-IR PAH features in star-forming, AGN, and composite galaxies
 =================================================================
 
+.. image:: images/sphx_glr_plot_mid_ir_pah_features_001.png
+   :alt: plot mid ir pah features
+   :class: sphx-glr-single-img
+
+
 The 5–30 μm rest-frame spectrum showcases distinct infrared tracers:
 dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6,
 11.3, and 12.7 μm in star-forming galaxies, while silicate absorption
@@ -35,39 +40,18 @@ References:
   Smith et al. 2007, ApJ, 656, 770 (PAH feature identification).
   Hao et al. 2007, ApJL, 655, L77 (silicate absorption in AGN).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-269
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_mid_ir_pah_features_001.png
-   :alt: plot mid ir pah features
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_mid_ir_pah_features_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/parameters/parameters.py:419: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
-      validate_block_recipe(
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/agn/blocks/runner.py:440: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
-      validate_block_recipe(
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 19-272
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 

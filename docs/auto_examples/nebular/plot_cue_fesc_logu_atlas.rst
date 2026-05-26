@@ -21,6 +21,11 @@
 Cue 2-D atlas: ionizing escape fraction × ionization parameter
 ================================================================
 
+.. image:: images/sphx_glr_plot_cue_fesc_logu_atlas_001.png
+   :alt: plot cue fesc logu atlas
+   :class: sphx-glr-single-img
+
+
 The Cue knobs ``fesc`` (ionizing-photon escape fraction) and ``logU``
 (HII region ionization parameter) jointly govern the line spectrum
 of a star-forming galaxy: escape fraction sets how many ionizing
@@ -32,10 +37,14 @@ Cue (Li, Leja & Speagle 2023) on a young SF galaxy with a bare-stellar
 SSP (the wNE grids bake nebular emission in at fixed conditions and
 cannot vary these knobs).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-104
+.. GENERATED FROM PYTHON SOURCE LINES 16-108
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +67,7 @@ cannot vary these knobs).
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     }

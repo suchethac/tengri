@@ -21,6 +21,11 @@
 THEMIS: U_min sweep at fixed q_HAC
 ===================================
 
+.. image:: images/sphx_glr_plot_themis_umin_sweep_001.png
+   :alt: plot themis umin sweep
+   :class: sphx-glr-single-img
+
+
 Sweep minimum radiation field strength across the THEMIS grid at fixed
 hydrocarbon grain content. Higher U warms dust, shifting FIR peak
 blueward and strengthening mid-IR grain emission relative to far-IR.

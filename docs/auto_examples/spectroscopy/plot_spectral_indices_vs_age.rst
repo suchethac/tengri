@@ -21,6 +21,11 @@
 Classic spectral indices vs single-burst age
 ==============================================
 
+.. image:: images/sphx_glr_plot_spectral_indices_vs_age_001.png
+   :alt: plot spectral indices vs age
+   :class: sphx-glr-single-img
+
+
 Three of the most-used optical absorption / emission diagnostics
 evaluated on a single-burst stellar population from 30 Myr to 13 Gyr,
 at solar metallicity, no dust. The figure makes obvious which
@@ -35,10 +40,14 @@ diagnostic responds on which timescale:
 
 The age axis is shared so the responses can be compared.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-130
+.. GENERATED FROM PYTHON SOURCE LINES 19-134
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -93,7 +102,7 @@ The age axis is shared so the responses can be compared.
         "*": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
         "width_gyr": 0.05,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     }

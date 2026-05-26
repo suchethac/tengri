@@ -21,6 +21,11 @@
 Arp 220 analog: panchromatic SED of a heavily obscured ULIRG
 ==============================================================
 
+.. image:: images/sphx_glr_plot_ulirg_arp220_analog_001.png
+   :alt: plot ulirg arp220 analog
+   :class: sphx-glr-single-img
+
+
 An archetype obscured starburst built up from the tengri component
 toolkit: a 100 Myr ongoing burst with ``τ_diff = 2 mag`` of diffuse
 dust and a 1 mag birth-cloud opacity. The Dale+2014 IR template
@@ -32,10 +37,14 @@ all the UV/optical has been reprocessed.
 Anchor parameters chosen to land at ``L_IR ≈ 10^{12.3} L_sun``,
 similar to Arp 220's bolometric output.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-76
+.. GENERATED FROM PYTHON SOURCE LINES 16-80
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

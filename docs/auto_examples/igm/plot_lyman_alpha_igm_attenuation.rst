@@ -21,6 +21,11 @@
 Lyman-alpha profile and IGM blue-wing absorption across redshift
 ==================================================================
 
+.. image:: images/sphx_glr_plot_lyman_alpha_igm_attenuation_001.png
+   :alt: plot lyman alpha igm attenuation
+   :class: sphx-glr-single-img
+
+
 The Lyman-alpha (Lyα) emission line at rest-frame 1216 Å is one of the strongest
 hydrogen recombination features in star-forming galaxies. As the redshift increases
 from z = 2 to z = 7, the IGM becomes progressively opaque at wavelengths
@@ -37,6 +42,7 @@ are:
   absorbed at higher redshift due to neutral hydrogen absorption
 - The red side (Lyα + a few hundred Ångströms) remains mostly unaffected
   by IGM
+
 - At z ≥ 6, the blue wing is severely damped, which is why Lyα emission
   becomes difficult to detect in high-redshift galaxies
 
@@ -48,31 +54,14 @@ References:
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-166
-
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_lyman_alpha_igm_attenuation_001.png
-   :alt: plot lyman alpha igm attenuation
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_lyman_alpha_igm_attenuation_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved: plot_lyman_alpha_igm_attenuation.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 33-171
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -102,7 +91,7 @@ References:
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.2,  # Young starburst timescale
-        "log_peak_sfr": 1.5,  # Moderately intense star formation
+        "log_total_mass": 10.0,  # Moderately intense star formation
         "alpha": 3.0,  # Rising SFR at early times
         "beta": 2.0,  # Declining SFR at late times
     }

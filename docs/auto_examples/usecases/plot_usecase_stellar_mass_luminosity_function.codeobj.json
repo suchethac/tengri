@@ -134,6 +134,15 @@
    "name": "sort"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.close": [
   {
    "is_class": false,

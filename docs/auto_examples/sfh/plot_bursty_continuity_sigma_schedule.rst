@@ -21,6 +21,11 @@
 Bursty continuity prior: bin-edge-dependent σ schedule (Tacchella+2022)
 ========================================================================
 
+.. image:: images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
+   :alt: plot bursty continuity sigma schedule
+   :class: sphx-glr-single-img
+
+
 The bursty continuity prior (Tacchella+2022, ApJ 926, 134) shares the
 piecewise-constant continuity SFH with Leja+2019 but doubles the
 Student-t scale on log-SFR ratios whose younger bin edge is *recent*
@@ -36,21 +41,14 @@ This example does two things:
    ``continuity`` and ``bursty_continuity`` so the visual width of the
    recent-time bands directly shows the σ-doubling effect.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-107
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
-   :alt: Bursty σ schedule on the default 7-bin grid
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-111
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

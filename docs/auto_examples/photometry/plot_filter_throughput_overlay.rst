@@ -21,6 +21,11 @@
 HST+JWST+LSST+Spitzer Filter Overlay on Star-Forming SED at z=1
 ================================================================
 
+.. image:: images/sphx_glr_plot_filter_throughput_overlay_001.png
+   :alt: plot filter throughput overlay
+   :class: sphx-glr-single-img
+
+
 Show a typical star-forming galaxy SED at z=1 with observed-frame filter
 throughputs overlaid as semi-transparent fills from 0.3 to 25 μm. This helps
 visualize which rest-frame stellar and dust features each photometric system
@@ -37,34 +42,14 @@ The SED uses a starburst history (τ = 100 Myr) with two-component dust and
 sfr-scaled nebular emission, rendered in the observer frame at z=1 with complete
 IGM attenuation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-141
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_filter_throughput_overlay_001.png
-   :alt: plot filter throughput overlay
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_filter_throughput_overlay_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    /Users/suchethacooray/Projects/tengri/examples/photometry/plot_filter_throughput_overlay.py:139: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 21-145
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -90,7 +75,7 @@ IGM attenuation.
         "*": tengri.FIXED,
         "peak_lbt_gyr": 0.1,  # Peak 100 Myr ago (recent burst)
         "width_gyr": 0.1,  # Duration 100 Myr
-        "log_peak_sfr": 1.5,  # SFR ≈ 30 M_sun/yr
+        "log_total_mass": 10.0,  # SFR ≈ 30 M_sun/yr
         "skew": 0.0,  # Symmetric
         "trunc": 13.0,  # Truncate at z_form ~ z+1
     }
@@ -185,11 +170,6 @@ IGM attenuation.
 
     fig.tight_layout()
     plt.savefig("plot_filter_throughput_overlay.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.941 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

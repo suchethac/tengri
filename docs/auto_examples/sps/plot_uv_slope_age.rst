@@ -21,6 +21,11 @@
 Intrinsic UV continuum slope β vs single-burst age
 ====================================================
 
+.. image:: images/sphx_glr_plot_uv_slope_age_001.png
+   :alt: plot uv slope age
+   :class: sphx-glr-single-img
+
+
 Dust-free UV continuum slope of an SSP swept from 10 Myr to 1 Gyr.
 β is fit in the Calzetti+1994 windows (1268–2580 Å) to ``F_λ ∝ λ^β``.
 
@@ -30,10 +35,14 @@ intrinsic clock used to interpret observed UV slopes: a galaxy with
 younger one with moderate reddening (the classic IRX–β degeneracy
 that ``plot_usecase_uv_slope_beta`` recovers).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-77
+.. GENERATED FROM PYTHON SOURCE LINES 14-81
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -71,7 +80,7 @@ that ``plot_usecase_uv_slope_beta`` recovers).
         tengri.load_ssp(),
         sfh={"type": "tsnorm", "*": tengri.FIXED,
              "peak_lbt_gyr": tengri.Uniform(0.01, 13.0),
-             "width_gyr": 0.05, "log_peak_sfr": 1.0,
+             "width_gyr": 0.05, "log_total_mass": 10.0,
              "skew": 0.0, "trunc": 13.0},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.0, "tau_bc": 0.0},

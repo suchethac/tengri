@@ -21,6 +21,11 @@
 Age-metallicity degeneracy in the stellar continuum
 ===================================================
 
+.. image:: images/sphx_glr_plot_metallicity_age_grid_001.png
+   :alt: plot metallicity age grid
+   :class: sphx-glr-single-img
+
+
 Metal-rich young populations and metal-poor old populations can produce similar
 optical colours — a fundamental degeneracy in galaxy fitting. This 3×4 grid
 shows normalised rest-frame continua at nine points in the age–metallicity plane,
@@ -31,10 +36,14 @@ Physics: older stars redden due to turnoff mass loss; higher metallicity
 increases line blanketing, also reddening. At UV wavelengths the degeneracy
 breaks (young stars are bluer).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-107
+.. GENERATED FROM PYTHON SOURCE LINES 15-111
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -67,7 +76,7 @@ breaks (young stars are bluer).
                     "alpha": 2.0,
                     "beta": 2.5,
                     "tau_gyr": age_gyr,
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 10.0,
                 },
                 dust={
                     "type": "two_component",

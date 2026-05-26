@@ -21,6 +21,11 @@
 X-ray SED response to AGN bolometric luminosity
 ================================================
 
+.. image:: images/sphx_glr_plot_xray_vs_agn_lbol_001.png
+   :alt: plot xray vs agn lbol
+   :class: sphx-glr-single-img
+
+
 At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution)
 we sweep the composable AGN's bolometric luminosity ``agn_log_lbol``
 from 9 to 13 (in log L_sun). The host XRB component is a flat
@@ -31,10 +36,14 @@ The colour gradient shows where the AGN corona overtakes the XRB
 emission band by band — the central diagnostic for AGN selection in
 deep X-ray surveys (Lehmer+2010, 2016).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-80
+.. GENERATED FROM PYTHON SOURCE LINES 15-94
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -84,7 +93,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
         ax.loglog(wave, nu_l_nu, color=cmap(norm(log_lbol)), lw=1.4)
 
     ax.set(
-        xlim=(0.5, 1e3),
+        xlim=(0.5, 150.0),
         ylim=(1e38, 5e46),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
@@ -93,7 +102,17 @@ deep X-ray surveys (Lehmer+2010, 2016).
     for kev, name in [(0.5, "0.5 keV"), (2.0, "2 keV"), (10.0, "10 keV"), (50.0, "50 keV")]:
         lam = 12398.4 / (kev * 1000.0)
         ax.axvline(lam, color="0.65", lw=0.4, ls=":")
-        ax.text(lam, 1e38 * 3.0, name, fontsize=7, color="0.4", ha="center", rotation=90, va="bottom")
+        ax.text(
+            lam,
+            0.97,
+            name,
+            transform=ax.get_xaxis_transform(),
+            fontsize=7,
+            color="0.4",
+            ha="center",
+            rotation=90,
+            va="top",
+        )
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")

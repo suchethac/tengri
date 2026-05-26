@@ -23,6 +23,10 @@ References:
 - Lara-López et al. 2010, A&A, 521, L53 (confirmation with SDSS)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

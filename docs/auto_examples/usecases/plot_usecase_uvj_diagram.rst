@@ -18,26 +18,36 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_uvj_diagram.py:
 
 
-UVJ diagram: rest-frame colors separate star-forming from quiescent
-==================================================================
+SyntaxError
+===========
 
 .. image:: images/sphx_glr_plot_usecase_uvj_diagram_001.png
    :alt: plot usecase uvj diagram
    :class: sphx-glr-single-img
 
 
-Generates a mock star-forming and quiescent galaxy population and plots
-each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
-quiescent wedge (z < 1) marks the boundary between dusty star-forming and
-passive galaxies — a key degeneracy-breaking diagnostic.
+Example script with invalid Python syntax
 
-Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
-Wuyts et al. 2007, ApJ, 655, 51.
-
-.. GENERATED FROM PYTHON SOURCE LINES 13-156
+.. GENERATED FROM PYTHON SOURCE LINES 1-160
 
 .. code-block:: Python
 
+    """
+    UVJ diagram: rest-frame colors separate star-forming from quiescent
+    ==================================================================
+
+    Generates a mock star-forming and quiescent galaxy population and plots
+    each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
+    quiescent wedge (z < 1) marks the boundary between dusty star-forming and
+    passive galaxies — a key degeneracy-breaking diagnostic.
+
+    Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
+    Wuyts et al. 2007, ApJ, 655, 51.
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -87,7 +97,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": tengri.Uniform(0.0, 1.5),
+            "log_total_mass": 10.0, 1.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 4.0),
             "width_gyr": tengri.Uniform(1.0, 4.0),
             "skew": tengri.Uniform(-0.5, 1.0),
@@ -111,7 +121,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": tengri.Uniform(-0.5, 0.5),
+            "log_total_mass": 10.0, 0.5),
             "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
             "width_gyr": tengri.Uniform(0.5, 1.5),
             "skew": tengri.Uniform(-1.5, 0.0),

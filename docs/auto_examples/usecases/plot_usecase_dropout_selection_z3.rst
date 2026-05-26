@@ -18,39 +18,43 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:
 
 
-z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis
-===================================================================
+SyntaxError
+===========
 
-Demonstrates the U-dropout (Lyman-break) selection technique for identifying
-galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection.
-Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and
-quiescent star formation histories, each with light dust. Computes observed-frame
-U, G, R photometry and overlays the Steidel+1996 U-dropout selection box.
-
-The U-dropout box is defined by:
-  (U - G) > 1.0
-  (G - R) < 1.5
-  (U - G) > 1.5 * (G - R) + 0.3
-
-True z~3 galaxies cluster inside the box; lower-redshift galaxies fall outside,
-demonstrating the technique's redshift selectivity. References: Steidel+1996,
-Madau+1996 dropout technique.
-
-.. GENERATED FROM PYTHON SOURCE LINES 20-187
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
-   :alt: Lyman-break galaxy z~3 U-dropout selection
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
+.. image:: images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
+   :alt: plot usecase dropout selection z3
    :class: sphx-glr-single-img
 
 
+Example script with invalid Python syntax
 
-
+.. GENERATED FROM PYTHON SOURCE LINES 1-191
 
 .. code-block:: Python
 
+    """
+    z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis
+    ===================================================================
+
+    Demonstrates the U-dropout (Lyman-break) selection technique for identifying
+    galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection.
+    Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and
+    quiescent star formation histories, each with light dust. Computes observed-frame
+    U, G, R photometry and overlays the Steidel+1996 U-dropout selection box.
+
+    The U-dropout box is defined by:
+      (U - G) > 1.0
+      (G - R) < 1.5
+      (U - G) > 1.5 * (G - R) + 0.3
+
+    True z~3 galaxies cluster inside the box; lower-redshift galaxies fall outside,
+    demonstrating the technique's redshift selectivity. References: Steidel+1996,
+    Madau+1996 dropout technique.
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -81,7 +85,7 @@ Madau+1996 dropout technique.
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+                "log_total_mass": 10.0, 1.5),
                 "peak_lbt_gyr": tengri.Uniform(0.5, 6.0),
                 "width_gyr": tengri.Uniform(0.8, 3.0),
                 "skew": tengri.Uniform(-0.5, 1.0),
@@ -218,11 +222,6 @@ Madau+1996 dropout technique.
     fig.tight_layout()
     plt.savefig("plot_usecase_dropout_selection_z3.png", dpi=150, bbox_inches="tight")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.109 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

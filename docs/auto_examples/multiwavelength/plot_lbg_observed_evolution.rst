@@ -21,6 +21,11 @@
 Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8
 ========================================================
 
+.. image:: images/sphx_glr_plot_lbg_observed_evolution_001.png
+   :alt: plot lbg observed evolution
+   :class: sphx-glr-single-img
+
+
 A single intrinsic LBG (young dust-poor star-forming galaxy) shown in
 the observer frame at four redshifts. The Lyman break sweeps redward
 into the *u-* and then *g-* and *r-*band dropout regimes, the
@@ -32,10 +37,14 @@ This is the figure that motivates how each dropout band is chosen for
 each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
 *r* at ``z ~ 6``, *i / z* at ``z ~ 7-8``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-88
+.. GENERATED FROM PYTHON SOURCE LINES 16-92
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +66,7 @@ each redshift bracket — *u* dropout at ``z ~ 3``, *g* at ``z ~ 4-5``,
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.2,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     }

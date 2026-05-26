@@ -21,6 +21,11 @@
 IMF Comparison: Mass-to-Light Ratio
 ====================================
 
+.. image:: images/sphx_glr_plot_ssp_imf_compare_001.png
+   :alt: plot ssp imf compare
+   :class: sphx-glr-single-img
+
+
 Different Initial Mass Functions produce different M/L ratios at fixed age
 and metallicity. We rescale a Chabrier SSP by literature M/L values for
 Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR
@@ -28,10 +33,14 @@ Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR
 
 Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-56
+.. GENERATED FROM PYTHON SOURCE LINES 12-60
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -46,10 +46,14 @@ References:
 - Iyer & Gawiser (2017), ApJ 838, 127 — Dense basis SFH reconstruction
 - NIFTy correlated field formalism (Selig et al. 2013)
 
-.. GENERATED FROM PYTHON SOURCE LINES 31-187
+.. GENERATED FROM PYTHON SOURCE LINES 31-191
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import os
     import warnings
@@ -75,7 +79,7 @@ References:
     # --- Smooth mean SFH (shared across all panels) ---
     # Use a truncated skewed normal SFH peaked at 2 Gyr lookback
     mean_sfr = tengri.tsnorm(
-        age_lookback_yr, log_peak_sfr=0.5, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
+        age_lookback_yr, log_total_mass=10.0, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
     )
     sfr_mean = np.array(mean_sfr)
 
