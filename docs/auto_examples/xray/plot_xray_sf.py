@@ -1,0 +1,125 @@
+"""
+X-ray binary scaling: HMXB traces current SFR, LMXB traces stellar mass
+======================================================================
+
+X-ray binaries (XRBs) are among the brightest X-ray sources in galaxies.
+High-mass XRBs (HMXBs) form copiously during starbursts and scale ~SFR,
+while low-mass XRBs (LMXBs) are long-lived remnants scaling with integrated
+stellar mass. This demo isolates the SFR and M_* dependencies separately on
+a starburst galaxy template to show how the XRB spectral luminosity responds
+to both the recent star formation rate and the accumulated stellar mass.
+
+Reference: Lehmer et al. 2019, ApJ, 878, 122 (L_X−SFR−M_* scaling relations).
+"""
+
+import warnings
+
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+from tengri.analysis.plotting import setup_style
+from tengri.xray import xray_xrb
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+wavelength = jnp.logspace(np.log10(0.1), np.log10(100.0), 512)
+wave_keV = 12.398 / np.array(wavelength)
+
+fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+
+# Panel 1: SFR sweep at fixed M_*
+ax = axes[0, 0]
+sfr_values = np.array([0.1, 1.0, 10.0, 100.0])
+norm_sfr = mpl.colors.Normalize(vmin=sfr_values.min(), vmax=sfr_values.max())
+cmap = plt.get_cmap("viridis")
+
+for sfr in sfr_values:
+    l_xrb = xray_xrb(wavelength, sfr=sfr, stellar_mass=1e11)
+    ax.loglog(wave_keV, np.array(l_xrb), lw=1.4, color=cmap(norm_sfr(sfr)))
+
+ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
+ax.set_xlabel(r"Energy [keV]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+ax.text(
+    0.05, 0.95, "a) SFR variation", transform=ax.transAxes, verticalalignment="top", fontsize=10
+)
+
+cbar1 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_sfr, cmap=cmap), ax=ax, pad=0.01)
+cbar1.set_label(r"SFR [M$_\odot$/yr]")
+
+# Panel 2: M_* sweep at fixed SFR
+ax = axes[0, 1]
+mstar_values = np.array([1e9, 1e10, 1e11, 1e12])
+norm_mstar = mpl.colors.Normalize(vmin=mstar_values.min(), vmax=mstar_values.max())
+
+for m_star in mstar_values:
+    l_xrb = xray_xrb(wavelength, sfr=10.0, stellar_mass=m_star)
+    ax.loglog(wave_keV, np.array(l_xrb), lw=1.4, color=cmap(norm_mstar(m_star)))
+
+ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
+ax.set_xlabel(r"Energy [keV]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+ax.text(
+    0.05,
+    0.95,
+    "b) Stellar mass variation",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
+)
+
+cbar2 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mstar, cmap=cmap), ax=ax, pad=0.01)
+cbar2.set_label(r"$M_*$ [M$_\odot$]")
+
+# Panel 3: Fine SFR grid
+ax = axes[1, 0]
+sfr_fine = np.logspace(-1.0, 2.0, 20)
+norm_fine = mpl.colors.Normalize(vmin=sfr_fine.min(), vmax=sfr_fine.max())
+
+for sfr in sfr_fine:
+    l_xrb = xray_xrb(wavelength, sfr=sfr, stellar_mass=1e11)
+    ax.loglog(wave_keV, np.array(l_xrb), lw=1.0, color=cmap(norm_fine(sfr)), alpha=0.7)
+
+ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
+ax.set_xlabel(r"Energy [keV]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+ax.text(
+    0.05, 0.95, "c) Fine SFR sweep", transform=ax.transAxes, verticalalignment="top", fontsize=10
+)
+
+cbar3 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_fine, cmap=cmap), ax=ax, pad=0.01)
+cbar3.set_label(r"SFR [M$_\odot$/yr]")
+
+# Panel 4: Fine M_* grid
+ax = axes[1, 1]
+mstar_fine = np.logspace(8.0, 12.5, 20)
+norm_mfine = mpl.colors.Normalize(vmin=mstar_fine.min(), vmax=mstar_fine.max())
+
+for m_star in mstar_fine:
+    l_xrb = xray_xrb(wavelength, sfr=10.0, stellar_mass=m_star)
+    ax.loglog(wave_keV, np.array(l_xrb), lw=1.0, color=cmap(norm_mfine(m_star)), alpha=0.7)
+
+ax.set_xlim(0.1, 100)
+ax.set_ylim(1e20, 1e32)
+ax.set_xlabel(r"Energy [keV]")
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
+ax.text(
+    0.05,
+    0.95,
+    "d) Fine stellar mass sweep",
+    transform=ax.transAxes,
+    verticalalignment="top",
+    fontsize=10,
+)
+
+cbar4 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mfine, cmap=cmap), ax=ax, pad=0.01)
+cbar4.set_label(r"$M_*$ [M$_\odot$]")
+
+fig.tight_layout()
+plt.savefig("plot_xray_sf.png", dpi=150, bbox_inches="tight")

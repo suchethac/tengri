@@ -1,0 +1,101 @@
+{
+ "jnp.logspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "logspace"
+  }
+ ],
+ "np.any": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "any"
+  }
+ ],
+ "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "array"
+  }
+ ],
+ "plt.savefig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "savefig"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "setup_style": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ],
+ "tengri.radio.radio_agn": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.radio",
+   "module_short": "tengri.radio",
+   "name": "radio_agn"
+  }
+ ],
+ "tengri.radio.radio_star_forming": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.radio",
+   "module_short": "tengri.radio",
+   "name": "radio_star_forming"
+  }
+ ],
+ "tengri.xray.xray_agn_corona": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.xray",
+   "module_short": "tengri.xray",
+   "name": "xray_agn_corona"
+  }
+ ],
+ "tengri.xray.xray_xrb": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.xray",
+   "module_short": "tengri.xray",
+   "name": "xray_xrb"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
+  }
+ ]
+}

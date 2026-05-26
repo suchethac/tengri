@@ -1,0 +1,72 @@
+"""
+SKIRTOR torus: optical depth governs silicate feature strength
+==============================================================
+
+The 9.7 μm optical depth ``tau_97`` controls the strength of silicate
+dust absorption/emission in the mid-infrared. Thin tori (tau ~3) show
+weak features and more continuum; thick tori (tau ~11) develop deep
+absorption troughs or bright emission depending on viewing angle.
+"""
+
+import warnings
+
+import jax
+import jax.numpy as jnp
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*deprecated.*")
+
+ssp = tengri.load_ssp()
+model = tengri.SEDModel.build(
+    ssp,
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 3.0,
+        "log_peak_sfr": 0.5,
+        "alpha": 2.0,
+        "beta": 2.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
+    agn={
+        "type": "composable",
+        "disc": {"type": "multicolor", "*": tengri.FIXED},
+        "torus": {"type": "skirtor", "*": tengri.FIXED, "tau_skirtor": tengri.Uniform(3, 11)},
+        "lines": {"type": "nlr", "*": tengri.FIXED},
+        "*": tengri.FIXED,
+        "log_lbol": 11.0,
+    },
+    redshift=tengri.Fixed(0.05),
+)
+baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
+
+tau_values = np.array([3.0, 5.0, 7.0, 9.0, 11.0])
+norm = mpl.colors.Normalize(vmin=tau_values.min(), vmax=tau_values.max())
+cmap = plt.get_cmap("viridis")
+
+fig, ax = plt.subplots(figsize=(6.5, 4.2))
+for tau_97 in tau_values:
+    params = {**baseline, "agn_tau_skirtor": jnp.float64(tau_97)}
+    out = model.predict_rest_sed(params)
+    wave = np.asarray(out.wavelength)
+    nu = 2.998e18 / wave
+    nu_l_nu = nu * np.asarray(out.sed)
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(tau_97)), lw=1.4)
+
+ax.set_xlim(100, 1e6)
+ax.set_ylim(1e40, 1e45)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
+cbar.set_label(r"$\tau_{9.7}$")
+
+fig.tight_layout()
+plt.savefig("plot_agn_tau_skirtor_sweep.png", dpi=150, bbox_inches="tight")
