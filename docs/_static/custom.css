@@ -9,7 +9,13 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* ── Palette tokens ──────────────────────────────────────────────────── */
-:root {
+/* Furo binds all its --color-* tokens on ``body`` (not ``:root``), so the
+   light-mode override must also live on ``body`` to win the cascade.
+   Defining the brand tokens on both ``:root`` (so the hero and sidebar
+   rules can read them above body) and on ``body`` (so they override
+   Furo's Furo-default values) is the cleanest fix. */
+:root,
+body {
     /* Light mode (Furo default) */
     --tg-bg: #FAFBFC;
     --tg-surface: #FFFFFF;
