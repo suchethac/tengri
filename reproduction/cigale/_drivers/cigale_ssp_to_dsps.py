@@ -52,11 +52,16 @@ def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
     with open(filename, "rb") as f:
         ssp = pickle.load(f)
 
+    # ssp.info rows: [m_star surviving, m_gas returned, n_ly ionising photons s^-1]
+    # m_star + m_gas = 1 exactly at every age (mass conservation).
     return {
-        'wl': ssp.wl,        # nm
-        'spec': ssp.spec,    # W/nm/Msun, shape (n_wave, n_age)
-        't': ssp.t,          # Myr
+        'wl': ssp.wl,                 # nm
+        'spec': ssp.spec,             # W/nm/Msun, shape (n_wave, n_age)
+        't': ssp.t,                   # Myr
         'Z': ssp.Z,
+        'm_star': ssp.info[0, :],     # surviving stellar mass fraction (n_age,)
+        'm_gas':  ssp.info[1, :],     # mass returned to ISM (n_age,)
+        'n_ly':   ssp.info[2, :],     # ionising photon rate [s^-1 per Msun formed]
         'imf': ssp.imf,
     }
 
@@ -145,6 +150,11 @@ def port_bc03_chabrier(out_path: str | Path) -> None:
 
     # Stack spectra: (n_met, n_age, n_wave)
     flux_dsps = np.zeros((n_met, n_age, n_wave), dtype=np.float32)
+    # And the surviving-mass fraction per (met, age) — needed for
+    # tengri's mass-loss / surviving-mass bookkeeping. CIGALE stores
+    # this per-metallicity in ssp.info[0]; ssp.info[0] + ssp.info[1] = 1
+    # at every age.
+    mass_remaining = np.zeros((n_met, n_age), dtype=np.float32)
 
     print("Converting units...")
     for i_z, z in enumerate(metallicities):
@@ -156,6 +166,7 @@ def port_bc03_chabrier(out_path: str | Path) -> None:
 
         # Transpose to (n_age, n_wave) and store
         flux_dsps[i_z, :, :] = spec_converted.T.astype(np.float32)
+        mass_remaining[i_z, :] = data_by_z[z]['m_star'].astype(np.float32)
 
     # Compute log10(Z) absolute (not log10(Z/Zsun))
     lgmet = np.log10(np.array(metallicities, dtype=np.float32))
@@ -167,6 +178,9 @@ def port_bc03_chabrier(out_path: str | Path) -> None:
         f.create_dataset('ssp_lg_age_gyr', data=lg_age_gyr.astype(np.float32), dtype=np.float32)
         f.create_dataset('ssp_lgmet', data=lgmet, dtype=np.float32)
         f.create_dataset('ssp_wave', data=wl_angstrom.astype(np.float32), dtype=np.float32)
+        # Surviving stellar mass fraction. tengri's SSPData loader looks
+        # for this under ssp_mass_remaining (n_met, n_age).
+        f.create_dataset('ssp_mass_remaining', data=mass_remaining, dtype=np.float32)
 
         # Attributes matching tengri convention
         f.attrs['flux_units'] = 'Lsun/Hz/Msun'
