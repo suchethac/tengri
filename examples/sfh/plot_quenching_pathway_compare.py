@@ -34,7 +34,13 @@ ssp = tengri.load_ssp()
 scenarios = [
     {
         "name": "Star-forming (no quench)",
-        "sfh": {"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 0.1, "end_gyr": 13.8},
+        "sfh": {
+            "type": "const",
+            "*": tengri.FIXED,
+            "log_sfr": 0.5,
+            "start_gyr": 0.1,
+            "end_gyr": 13.8,
+        },
         "color": "#1f77b4",
     },
     {

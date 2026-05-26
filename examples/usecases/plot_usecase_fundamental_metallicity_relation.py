@@ -41,6 +41,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 # Schematic FMR metallicity function: Z as function of M* and sSFR
 # ==============================================================================
 
+
 def schematic_metallicity(log_m_star, log_ssfr):
     r"""
     Schematic metallicity following Mannucci+2010 FMR ansatz.
@@ -75,8 +76,8 @@ def schematic_metallicity(log_m_star, log_ssfr):
 # Generate grid: (M*, sSFR) → (M*, Z)
 # ==============================================================================
 
-log_m_star_vals = np.linspace(9.0, 11.0, 6)      # 9, 9.4, 9.8, 10.2, 10.6, 11.0
-log_ssfr_vals = np.linspace(-11.0, -9.0, 5)     # -11, -10.5, -10, -9.5, -9
+log_m_star_vals = np.linspace(9.0, 11.0, 6)  # 9, 9.4, 9.8, 10.2, 10.6, 11.0
+log_ssfr_vals = np.linspace(-11.0, -9.0, 5)  # -11, -10.5, -10, -9.5, -9
 
 # Create 2D mesh
 log_m_grid, log_ssfr_grid = np.meshgrid(log_m_star_vals, log_ssfr_vals)
@@ -87,7 +88,7 @@ log_ssfr_flat = log_ssfr_grid.ravel()
 log_z_flat = schematic_metallicity(log_m_flat, log_ssfr_flat)
 
 # Extract SFR for coloring (log sSFR → linear sSFR for visual scaling)
-ssfr_linear = 10.0 ** log_ssfr_flat
+ssfr_linear = 10.0**log_ssfr_flat
 
 # ==============================================================================
 # Left panel: M* vs Z colored by SFR
@@ -97,7 +98,8 @@ fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(12.0, 5.0))
 
 # Scatter with SFR as color dimension
 sc_left = ax_left.scatter(
-    log_m_flat, log_z_flat,
+    log_m_flat,
+    log_z_flat,
     c=log_ssfr_flat,
     cmap="plasma",
     s=80,
@@ -125,7 +127,8 @@ cb_left.set_label(r"$\log\,(\mathrm{sSFR}\,/\,\mathrm{yr}^{-1})$", fontsize=10)
 mu = log_m_flat - 0.32 * log_ssfr_flat
 
 sc_right = ax_right.scatter(
-    mu, log_z_flat,
+    mu,
+    log_z_flat,
     c=log_ssfr_flat,
     cmap="plasma",
     s=80,
@@ -151,7 +154,8 @@ p_fit = np.polyfit(mu_sorted, z_sorted, 1)
 mu_line = np.linspace(mu.min() - 0.2, mu.max() + 0.2, 50)
 z_line = np.polyval(p_fit, mu_line)
 ax_right.plot(
-    mu_line, z_line,
+    mu_line,
+    z_line,
     color="gray",
     lw=1.2,
     ls="--",

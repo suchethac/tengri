@@ -66,9 +66,7 @@ ssp = tengri.load_ssp()
 filter_dir = _find_filters()
 
 # Observation: SDSS r-band only
-obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["sdss_r"], cache_dir=filter_dir)
-)
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"], cache_dir=filter_dir))
 
 
 def _build_galaxy(sfh_config, dust_config, label):
@@ -211,7 +209,5 @@ fig.tight_layout()
 
 # Save to script directory
 script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(
-    str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight"
-)
+plt.savefig(str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight")
 plt.close()

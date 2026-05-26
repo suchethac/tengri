@@ -106,10 +106,22 @@ silicate_18 = 18.0  # μm (L_w feature)
 y_min, y_max = ax.get_ylim()
 ax.axvline(silicate_9p7, color="gray", linestyle="--", alpha=0.5, linewidth=1.2)
 ax.axvline(silicate_18, color="gray", linestyle="--", alpha=0.5, linewidth=1.2)
-ax.text(silicate_9p7, y_max * 0.95, "9.7 μm", fontsize=9, ha="center",
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
-ax.text(silicate_18, y_max * 0.90, "18 μm", fontsize=9, ha="center",
-        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+ax.text(
+    silicate_9p7,
+    y_max * 0.95,
+    "9.7 μm",
+    fontsize=9,
+    ha="center",
+    bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
+)
+ax.text(
+    silicate_18,
+    y_max * 0.90,
+    "18 μm",
+    fontsize=9,
+    ha="center",
+    bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
+)
 
 ax.set_xlim(3, 30)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]", fontsize=11)

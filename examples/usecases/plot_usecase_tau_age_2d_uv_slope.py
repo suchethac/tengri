@@ -39,11 +39,20 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 C_AA_PER_S = 2.998e18
 
 # Calzetti+1994 windows for the UV slope fit.
-WINDOWS = np.array([
-    [1268, 1284], [1309, 1316], [1342, 1371], [1407, 1515],
-    [1562, 1583], [1677, 1740], [1760, 1833], [1866, 1890],
-    [1930, 1950], [2400, 2580],
-])
+WINDOWS = np.array(
+    [
+        [1268, 1284],
+        [1309, 1316],
+        [1342, 1371],
+        [1407, 1515],
+        [1562, 1583],
+        [1677, 1740],
+        [1760, 1833],
+        [1866, 1890],
+        [1930, 1950],
+        [2400, 2580],
+    ]
+)
 
 
 def _beta_uv(wave, l_nu):
@@ -61,12 +70,16 @@ def _beta_uv(wave, l_nu):
 # Build model with FIXED peak_lbt_gyr and dust parameters, then override them during sampling.
 model = tengri.SEDModel.build(
     tengri.load_ssp(),
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
-         "width_gyr": 0.05, "log_total_mass": 10.0,
-         "skew": 0.0, "trunc": 1.0},  # Limit burst age range to physics-valid region
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.0, "tau_bc": 0.0},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 0.5,  # Fixed default; we'll override later
+        "width_gyr": 0.05,
+        "log_total_mass": 10.0,
+        "skew": 0.0,
+        "trunc": 1.0,
+    },  # Limit burst age range to physics-valid region
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.01),
 )
 
@@ -137,7 +150,9 @@ cbar = plt.colorbar(im, ax=ax, label=r"UV Slope $\beta$ (1300–2600 Å)")
 
 # Add contours for key β values.
 levels = [-2.0, -1.0, 0.0]
-contours = ax.contour(tau_values, age_values, beta_2d, levels=levels, colors="black", linewidths=0.8, alpha=0.5)
+contours = ax.contour(
+    tau_values, age_values, beta_2d, levels=levels, colors="black", linewidths=0.8, alpha=0.5
+)
 ax.clabel(contours, inline=True, fontsize=8, fmt="β=%.1f")
 
 fig.tight_layout()

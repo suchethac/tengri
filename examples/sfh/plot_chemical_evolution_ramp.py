@@ -127,7 +127,7 @@ sed_twostep = np.asarray(pred_twostep.sed)
 # ─────────────────────────────────────────────────────────────────────────
 # SSP data stores ages in log10(Gyr); convert to linear Gyr for interpolation
 ssp_lg_ages_gyr = np.asarray(ssp.ssp_lg_age_gyr)
-ssp_ages_gyr = 10.0 ** ssp_lg_ages_gyr
+ssp_ages_gyr = 10.0**ssp_lg_ages_gyr
 ssp_ages_yr = ssp_ages_gyr * 1e9
 lookback_time_gyr = AGE_UNIVERSE_GYR - ssp_ages_gyr
 

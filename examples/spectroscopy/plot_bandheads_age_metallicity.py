@@ -216,9 +216,7 @@ for j, age in enumerate(ages_multimet):
 # Plot
 # ============================================================================
 
-fig, (ax_age, ax_met) = plt.subplots(
-    1, 2, figsize=(13.5, 5.2), gridspec_kw={"wspace": 0.30}
-)
+fig, (ax_age, ax_met) = plt.subplots(1, 2, figsize=(13.5, 5.2), gridspec_kw={"wspace": 0.30})
 
 # Left: age at fixed metallicity
 ax_age.plot(ages_gyr, mgb_at_age, "o-", color="C2", lw=1.8, markersize=5, label=r"Mg $b$")

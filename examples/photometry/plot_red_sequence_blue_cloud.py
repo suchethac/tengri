@@ -45,9 +45,7 @@ def _flux(model, params):
 z_fixed = 0.05
 
 # Load u, r filters for colour-magnitude diagram
-obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_r"])
-)
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sdss_r"]))
 
 # Baseline SSP
 ssp = tengri.load_ssp()
@@ -81,7 +79,7 @@ def build_model(peak_lbt, width, tau_diff, tau_bc):
             "*": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
-            "log_total_mass": 10.0, 2.0),  # stellar mass knob
+            "log_total_mass": 10.0,  # stellar mass knob
             "skew": 0.0,
             "trunc": 13.0,
         },

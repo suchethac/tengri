@@ -50,7 +50,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "alpha": 1.5,  # Shallow decay → high SFR at young ages
-        "beta": 2.0,   # Steep early-time turnover
+        "beta": 2.0,  # Steep early-time turnover
         "tau_gyr": 0.8,  # Recent starburst epoch
         "log_total_mass": 10.0,  # Peak SFR = 10^2.7 ≈ 500 Msun/yr
     },

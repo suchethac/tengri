@@ -45,9 +45,7 @@ except Exception:
 
 # Build observation: 5 SDSS filters
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    ),
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
 # Baseline model spec: star-forming galaxy with free parameters
@@ -91,6 +89,7 @@ model_precomp = tengri.SEDModel.build(
     },
     redshift=tengri.Fixed(0.1),
 )
+
 
 # Benchmark function: measure wall-clock time for N forward passes
 def benchmark(model, spec, n_runs=1000, n_warmup=5):

@@ -39,11 +39,16 @@ obs = tengri.Observation(spectroscopy=spec)
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 7.0,
-         "width_gyr": 1.5, "log_total_mass": 10.0,
-         "skew": 0.0, "trunc": 13.5},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.0, "tau_bc": 0.0},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 7.0,
+        "width_gyr": 1.5,
+        "log_total_mass": 10.0,
+        "skew": 0.0,
+        "trunc": 13.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -65,12 +70,14 @@ ax.axvline(5173, color="0.55", lw=0.4, ls=":")
 ax.axvline(5184, color="0.55", lw=0.4, ls=":")
 ax.text(5175, 1.06, "Mg b triplet", fontsize=8, color="0.4", ha="center")
 
-ax.set(xlim=(5050, 5300), ylim=(0.78, 1.10),
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$F_\lambda\,/\,F_{\rm cont}$  (normalised at 5200-5230 Å)")
+ax.set(
+    xlim=(5050, 5300),
+    ylim=(0.78, 1.10),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$  (normalised at 5200-5230 Å)",
+)
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")
 
 fig.tight_layout()
-plt.savefig("plot_sigma_v_absorption_broadening.png", dpi=150,
-            bbox_inches="tight")
+plt.savefig("plot_sigma_v_absorption_broadening.png", dpi=150, bbox_inches="tight")

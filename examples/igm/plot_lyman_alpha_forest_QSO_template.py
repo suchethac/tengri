@@ -65,11 +65,21 @@ ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     # Pure stellar synthesis: single-age stellar pop for normalization only
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 1.0,
+        "log_total_mass": 10.0,
+        "alpha": 1.5,
+        "beta": 1.0,
+    },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     agn={
         "type": "composable",
-        "disc": {"type": "multicolor", "*": tengri.FIXED},  # Vanden Berk slope α_ν = -0.5 (Kubota & Done 2018)
+        "disc": {
+            "type": "multicolor",
+            "*": tengri.FIXED,
+        },  # Vanden Berk slope α_ν = -0.5 (Kubota & Done 2018)
         "*": tengri.FIXED,
         "log_lbol": 12.5,  # L_bol ~ 3e12 L_sun (typical luminous QSO)
         "frac": 1.0,  # 100% AGN dominance
@@ -85,7 +95,7 @@ params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 # Predict rest-frame SED
 out = model.predict_rest_sed(params)
 wave_rest = np.asarray(out.wavelength)  # Rest-frame Angstrom
-sed_rest = np.asarray(out.sed)          # Rest-frame erg/s/Hz
+sed_rest = np.asarray(out.sed)  # Rest-frame erg/s/Hz
 
 # Transform to observer frame
 wave_obs = wave_rest * (1.0 + Z_QSO)
@@ -99,7 +109,14 @@ nu_L_nu = nu_obs * sed_rest
 # Create a second model without IGM to show intrinsic continuum
 model_no_igm = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 1.0,
+        "log_total_mass": 10.0,
+        "alpha": 1.5,
+        "beta": 1.0,
+    },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     agn={
         "type": "composable",
@@ -151,26 +168,56 @@ colors_lyman = {"alpha": "#d62728", "beta": "#ff7f0e", "limit": "#2ca02c"}
 # Lyman-alpha limit in observed frame
 ly_alpha_obs = LY_ALPHA_REST * (1.0 + Z_QSO)
 ax.axvline(ly_alpha_obs, color=colors_lyman["alpha"], lw=1.0, ls="--", alpha=0.6)
-ax.text(ly_alpha_obs * 0.95, ax.get_ylim()[1] * 0.3, r"$\lambda_{\rm Ly\alpha}^{\rm obs}$",
-        fontsize=9, color=colors_lyman["alpha"], ha="right", rotation=90, va="bottom")
+ax.text(
+    ly_alpha_obs * 0.95,
+    ax.get_ylim()[1] * 0.3,
+    r"$\lambda_{\rm Ly\alpha}^{\rm obs}$",
+    fontsize=9,
+    color=colors_lyman["alpha"],
+    ha="right",
+    rotation=90,
+    va="bottom",
+)
 
 # Lyman-beta limit in observed frame
 ly_beta_obs = LY_BETA_REST * (1.0 + Z_QSO)
 ax.axvline(ly_beta_obs, color=colors_lyman["beta"], lw=1.0, ls="--", alpha=0.6)
-ax.text(ly_beta_obs * 0.95, ax.get_ylim()[1] * 0.15, r"$\lambda_{\rm Ly\beta}^{\rm obs}$",
-        fontsize=9, color=colors_lyman["beta"], ha="right", rotation=90, va="bottom")
+ax.text(
+    ly_beta_obs * 0.95,
+    ax.get_ylim()[1] * 0.15,
+    r"$\lambda_{\rm Ly\beta}^{\rm obs}$",
+    fontsize=9,
+    color=colors_lyman["beta"],
+    ha="right",
+    rotation=90,
+    va="bottom",
+)
 
 # Lyman limit (912 Å) in observed frame
 ly_limit_obs = LY_LIMIT_REST * (1.0 + Z_QSO)
 ax.axvline(ly_limit_obs, color=colors_lyman["limit"], lw=1.2, ls=":", alpha=0.7)
-ax.text(ly_limit_obs * 0.95, ax.get_ylim()[1] * 0.05, r"Lyman limit",
-        fontsize=8, color=colors_lyman["limit"], ha="right", rotation=90, va="bottom")
+ax.text(
+    ly_limit_obs * 0.95,
+    ax.get_ylim()[1] * 0.05,
+    r"Lyman limit",
+    fontsize=8,
+    color=colors_lyman["limit"],
+    ha="right",
+    rotation=90,
+    va="bottom",
+)
 
 # Shade the Lyman valley (absorption bottleneck between Lyβ and Lyα)
 ax.axvspan(ly_beta_obs, ly_alpha_obs, color="gray", alpha=0.08, zorder=0)
-ax.text((ly_beta_obs + ly_alpha_obs) / 2, ax.get_ylim()[1] * 0.7,
-        "Lyman valley\n(dark forest)",
-        fontsize=9, color="0.5", ha="center", va="center")
+ax.text(
+    (ly_beta_obs + ly_alpha_obs) / 2,
+    ax.get_ylim()[1] * 0.7,
+    "Lyman valley\n(dark forest)",
+    fontsize=9,
+    color="0.5",
+    ha="center",
+    va="center",
+)
 
 # ============================================================================
 # Labels and limits

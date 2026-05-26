@@ -89,9 +89,7 @@ sed_ref = np.asarray(ref_model.predict_rest_sed(p_ref).sed)
 wave = np.asarray(ref_model.predict_rest_sed(p_ref).wavelength)
 C_AA_PER_S = 2.998e18
 nu = C_AA_PER_S / wave
-ax.loglog(
-    wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--"
-)
+ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
 
 # Plot reddened SED for each law at fixed tau_V = 1.0
 for (law, label), color in zip(LAWS, COLORS):

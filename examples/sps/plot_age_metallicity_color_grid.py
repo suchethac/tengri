@@ -33,7 +33,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # Age and metallicity grids
 LOG10_AGES_GYR = np.linspace(-2.0, 1.1, 13)  # log10(t/Gyr)
-AGES_GYR = 10.0 ** LOG10_AGES_GYR
+AGES_GYR = 10.0**LOG10_AGES_GYR
 MET_LOGZSOL = np.linspace(-2.0, 0.4, 10)
 
 # Filter setup: NUV, u, g, r
