@@ -261,7 +261,10 @@ ax_right.set_title("z = 2.0 (Cosmic Evolution)", fontsize=11, fontweight="bold")
 fig.text(
     0.5,
     0.02,
-    r"Main sequence shift from z=0 → z=2: $\approx 0.7$ dex in SFR at fixed $M_*$ (peak epoch of star formation)",
+    (
+        r"Main sequence shift from z=0 → z=2: $\approx 0.7$ dex in SFR at fixed $M_*$"
+        r" (peak epoch of star formation)"
+    ),
     ha="center",
     fontsize=10,
     style="italic",

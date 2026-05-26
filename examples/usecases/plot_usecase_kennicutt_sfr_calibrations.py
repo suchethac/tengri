@@ -180,7 +180,11 @@ ax_top.set(
     ylabel=r"SFR from K98 indicator  [$M_\odot\,$yr$^{-1}$]",
 )
 ax_top.legend(frameon=False, fontsize=9, loc="upper left")
-ax_top.set_title("Baseline: Kennicutt+1998 (constant SFR assumption)", fontweight="bold", fontsize=11)
+ax_top.set_title(
+    "Baseline: Kennicutt+1998 (constant SFR assumption)",
+    fontweight="bold",
+    fontsize=11,
+)
 
 # BOTTOM: SFR scatter under stochasticity
 for burst in burst_levels:
@@ -199,7 +203,11 @@ ax_bottom.set_xlabel("Burstiness amplitude (σ)", fontsize=10)
 ax_bottom.set_ylabel(r"Indicator scatter [M$_\odot$ yr$^{-1}$]", fontsize=10)
 ax_bottom.set_ylim([0, 15])
 ax_bottom.grid(True, alpha=0.3)
-ax_bottom.set_title("Stochastic SFH: SFR indicator variance across burstiness levels", fontweight="bold", fontsize=11)
+ax_bottom.set_title(
+    "Stochastic SFH: SFR indicator variance across burstiness levels",
+    fontweight="bold",
+    fontsize=11,
+)
 
 fig.tight_layout()
 plt.savefig("plot_usecase_kennicutt_sfr_calibrations.png", dpi=150, bbox_inches="tight")

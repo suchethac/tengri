@@ -217,7 +217,9 @@ ax_left.set_title("(Left) Optical g−r Degeneracy", fontweight="bold", fontsize
 wave_sdss = np.array([3551, 4686, 6166, 7480, 8932])
 wave_uv = np.array([1516, 2267])
 
-ax_right.errorbar(wave_sdss, phot_sdss_use, fmt="o", color="k", ms=7, capsize=3, label="Observed SDSS")
+ax_right.errorbar(
+    wave_sdss, phot_sdss_use, fmt="o", color="k", ms=7, capsize=3, label="Observed SDSS"
+)
 ax_right.plot(
     wave_uv,
     phot_uv_old[:2],

@@ -121,7 +121,9 @@ beta_arr = np.empty_like(tau_grid)
 irx_arr = np.empty_like(tau_grid)
 
 for i, tau in enumerate(tau_grid):
-    out = model_dust_sweep.predict_rest_sed({**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)})
+    out = model_dust_sweep.predict_rest_sed(
+        {**baseline_dust_sweep, "dust_tau_diff": jnp.float64(tau)}
+    )
     wave = np.asarray(out.wavelength)
     l_nu = np.asarray(out.sed)
     beta_arr[i] = _measure_beta(wave, l_nu)
