@@ -85,6 +85,34 @@ class SSPData(NamedTuple):
     # interpolation adds a third dimension. The current met_alpha_fe parameter
     # uses effective_metallicity() as an approximation for 2D grids.
     ssp_alpha_fe: jnp.ndarray | None = None
+    # Initial mass function the SSP was computed under, e.g. ``"chabrier"``,
+    # ``"kroupa"``, ``"salpeter"``. Surfaced by :func:`load_ssp_data` from
+    # the file's HDF5 metadata if present, else parsed from the filename
+    # tail (last underscore-delimited token before ``.h5``). ``"unknown"``
+    # when neither path yields a match. See issue #307 for the discovery
+    # gap this closes; the IMF is invisible in the model spec otherwise.
+    imf: str = "unknown"
+
+
+def _sspdata_flatten(s):
+    # ``imf`` is metadata, not a JIT leaf — keep strings out of the trace.
+    children = (
+        s.ssp_wave,
+        s.ssp_flux,
+        s.ssp_lg_age_gyr,
+        s.ssp_lgmet,
+        s.ssp_mass_remaining,
+        s.ssp_alpha_fe,
+    )
+    aux = (s.imf,)
+    return children, aux
+
+
+def _sspdata_unflatten(aux, children):
+    return SSPData(*children, imf=aux[0])
+
+
+jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
 
 
 _LOAD_SSP_PRESETS: dict[str, str] = {
@@ -226,6 +254,12 @@ def load_ssp_data(filepath: str) -> SSPData:
         if "ssp_alpha_fe" in f:
             alpha_fe = jnp.array(f["ssp_alpha_fe"][:])
 
+        # IMF discovery (#307): HDF5 attribute wins, else parse filename
+        # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
+        # plots can introspect the assumed IMF without grepping the
+        # filename.
+        imf = _detect_imf(f, fp.name)
+
         return SSPData(
             ssp_wave=jnp.array(f["ssp_wave"][:]),
             ssp_flux=jnp.array(f["ssp_flux"][:]),
@@ -233,7 +267,44 @@ def load_ssp_data(filepath: str) -> SSPData:
             ssp_lgmet=jnp.array(f["ssp_lgmet"][:]),
             ssp_mass_remaining=mass_remaining,
             ssp_alpha_fe=alpha_fe,
+            imf=imf,
         )
+
+
+#: IMFs that ship in the public SSP catalogue. Parsed out of HDF5 metadata
+#: or filename tails. Extend when a new IMF lands in ``_data_setup._KNOWN_SSPS``.
+_KNOWN_IMFS: tuple[str, ...] = ("chabrier", "kroupa", "salpeter")
+
+
+def _detect_imf(h5_file, filename: str) -> str:
+    """Detect the IMF an SSP grid was computed under (#307).
+
+    Resolution order:
+
+    1. ``h5_file.attrs["imf"]`` (when SSP files start shipping the metadata).
+    2. Filename tail matched against :data:`_KNOWN_IMFS`
+       — e.g. ``"fsps_prsc_miles_chabrier.h5"`` → ``"chabrier"``.
+    3. Fallback: ``"unknown"``.
+
+    Falsely returning a wrong IMF is worse than returning ``"unknown"``,
+    so the filename match requires an exact ``_<imf>`` token, not a
+    substring (avoids ``"_kroupa_burst"`` → ``"kroupa"`` if someone
+    appends qualifiers).
+    """
+    attr_imf = h5_file.attrs.get("imf") if hasattr(h5_file, "attrs") else None
+    if attr_imf:
+        # h5py returns ``bytes`` on Python 3 for string attrs from older files.
+        if isinstance(attr_imf, bytes):
+            attr_imf = attr_imf.decode("utf-8", errors="replace")
+        return str(attr_imf).strip().lower()
+
+    stem = filename.rsplit(".h5", 1)[0]
+    tokens = stem.split("_")
+    for tok in reversed(tokens):
+        low = tok.lower()
+        if low in _KNOWN_IMFS:
+            return low
+    return "unknown"
 
 
 def load_ssp_data_dsps(filepath: str) -> SSPData:

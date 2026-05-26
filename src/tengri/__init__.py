@@ -100,7 +100,7 @@ __version__ = "0.1.0"
 import sys
 
 from tengri import builders, components as _components, preprocessing, presets, recipes
-from tengri._data_setup import data_path, download_ssp, list_known_ssps
+from tengri._data_setup import data_path, download_ssp, list_available_ssps, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
     Bibliography,
@@ -426,6 +426,7 @@ __all__ = [
     "io",
     "list_agn_models",
     "list_all",
+    "list_available_ssps",
     "list_components",
     "list_dust_emission_models",
     "list_dust_laws",
