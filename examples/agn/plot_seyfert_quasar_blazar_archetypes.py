@@ -47,6 +47,7 @@ COMMON = dict(
     redshift=tengri.Fixed(0.0),  # Rest-frame only (predict_rest_sed)
 )
 
+
 def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
     """Build an AGN archetype model.
 
@@ -107,8 +108,8 @@ wave_sy2, sed_sy2 = build_agn_archetype(
     sfr_log=-10.0,  # Pure AGN, negligible starburst
     dust_config={
         "type": "two_component",
-        "tau_diff": 0.1,       # Minimal diffuse dust
-        "tau_bc": 3.0,         # Heavy birth-cloud attenuation in front of AGN
+        "tau_diff": 0.1,  # Minimal diffuse dust
+        "tau_bc": 3.0,  # Heavy birth-cloud attenuation in front of AGN
         "*": tengri.FIXED,
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
@@ -132,8 +133,8 @@ wave_q, sed_q = build_agn_archetype(
     sfr_log=-10.0,  # Pure AGN
     dust_config={
         "type": "two_component",
-        "tau_diff": 0.0,       # No diffuse dust
-        "tau_bc": 0.0,         # No birth-cloud attenuation
+        "tau_diff": 0.0,  # No diffuse dust
+        "tau_bc": 0.0,  # No birth-cloud attenuation
         "*": tengri.FIXED,
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
@@ -157,8 +158,8 @@ wave_lirg, sed_lirg = build_agn_archetype(
     sfr_log=2.0,  # ~100 M_sun / yr ongoing starburst
     dust_config={
         "type": "two_component",
-        "tau_diff": 1.5,       # Moderate diffuse dust from starburst
-        "tau_bc": 1.0,         # Moderate birth-cloud attenuation
+        "tau_diff": 1.5,  # Moderate diffuse dust from starburst
+        "tau_bc": 1.0,  # Moderate birth-cloud attenuation
         "*": tengri.FIXED,
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },

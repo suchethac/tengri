@@ -1,6 +1,5 @@
 """
 Mock JWST NIRSpec G395M spectrum of a z=7 star-forming galaxy
-==============================================================
 
 High-redshift star-forming galaxy with strong rest-frame UV and optical
 emission lines redshifted into the JWST NIRSpec G395M window (2.9–5.1 μm).
@@ -38,22 +37,15 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 model = tengri.SEDModel.build(
     ssp,
-<<<<<<< HEAD
     sfh={
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.05,
-        "log_total_mass": 1.8,
+        "log_total_mass": 10.0,
         "alpha": 3.5,
         "beta": 2.2,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
-=======
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "tau_gyr": 0.05, "log_total_mass": 10.0, "alpha": 3.5, "beta": 2.2},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.08, "tau_bc": 0.15},
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
     redshift=tengri.Fixed(7.0),
 )

@@ -213,10 +213,14 @@ print("-" * 70)
 # Peak location
 idx_peak_pop = np.argmax(sfrd_pop)
 idx_peak_md = np.argmax(psi_md14)
-print(f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
-      f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³")
-print(f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
-      f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³")
+print(
+    f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
+    f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³"
+)
+print(
+    f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
+    f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³"
+)
 print("\nInterpretation:")
 print("  - SFRD rises from z~0 to peak at z~2")
 print("  - Declines toward z~3+ as the universe ages")

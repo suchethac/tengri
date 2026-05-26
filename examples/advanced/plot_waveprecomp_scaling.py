@@ -44,15 +44,31 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 # Filter ladder, monotonically extending UV→FIR. The slice [:n] gives a
 # realistic survey set at each filter count.
 FILTER_LADDER = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
-    "wise_w1", "wise_w2",
-    "irac_36", "irac_45", "irac_58", "irac_80",
-    "wise_w3", "wise_w4",
-    "herschel_100", "herschel_160",
-    "herschel_250", "herschel_350", "herschel_500",
-    "hst_f435w", "hst_f606w",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+    "irac_36",
+    "irac_45",
+    "irac_58",
+    "irac_80",
+    "wise_w3",
+    "wise_w4",
+    "herschel_100",
+    "herschel_160",
+    "herschel_250",
+    "herschel_350",
+    "herschel_500",
+    "hst_f435w",
+    "hst_f606w",
 ]
 N_FILTERS = [3, 5, 8, 12, 18, 25]
 N_WARMUP = 3
@@ -62,11 +78,10 @@ ssp = tengri.load_ssp()
 
 
 def build(n_filt, approx):
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(FILTER_LADDER[:n_filt])
-    )
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(FILTER_LADDER[:n_filt]))
     return tengri.SEDModel.build(
-        ssp, observation=obs,
+        ssp,
+        observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.05),
@@ -117,14 +132,30 @@ speedup = warm_exact / warm_wp
 
 # ─── Figure: per-call cost vs filter count ─────────────────────────────────
 fig, (ax, ax_amort) = plt.subplots(
-    2, 1, figsize=(6.8, 5.6),
+    2,
+    1,
+    figsize=(6.8, 5.6),
     gridspec_kw={"height_ratios": [2.2, 1], "hspace": 0.32},
 )
 
-ax.plot(N_FILTERS, warm_exact, "o-", color="C3", lw=1.4, ms=6,
-        label=f"Exact wave grid  (build+compile {build_exact.mean():.1f} s)")
-ax.plot(N_FILTERS, warm_wp, "s-", color="C0", lw=1.4, ms=6,
-        label=f"WavePrecomp(n_z=50)  (build+compile {build_wp.mean():.1f} s)")
+ax.plot(
+    N_FILTERS,
+    warm_exact,
+    "o-",
+    color="C3",
+    lw=1.4,
+    ms=6,
+    label=f"Exact wave grid  (build+compile {build_exact.mean():.1f} s)",
+)
+ax.plot(
+    N_FILTERS,
+    warm_wp,
+    "s-",
+    color="C0",
+    lw=1.4,
+    ms=6,
+    label=f"WavePrecomp(n_z=50)  (build+compile {build_wp.mean():.1f} s)",
+)
 ax.set_yscale("log")
 ax.set_ylabel(r"Per-call wall time  [$\mu$s]")
 ax.set_xlabel("Number of filters")
@@ -132,9 +163,15 @@ ax.legend(frameon=False, fontsize=8.5, loc="upper left")
 
 # Annotate the speedup factor at each measured point.
 for n, e, w, s in zip(N_FILTERS, warm_exact, warm_wp, speedup):
-    ax.annotate(f"{s:.1f}×", xy=(n, w), xytext=(0, -12),
-                textcoords="offset points", ha="center",
-                fontsize=8, color="C0")
+    ax.annotate(
+        f"{s:.1f}×",
+        xy=(n, w),
+        xytext=(0, -12),
+        textcoords="offset points",
+        ha="center",
+        fontsize=8,
+        color="C0",
+    )
 
 # Amortization panel: total wall time (compile + N evals) vs N for the
 # middle filter-count, showing the call count above which WavePrecomp pays
@@ -159,8 +196,9 @@ else:
     crossover = n_evals[np.argmin(np.abs(total_exact - total_wp))]
     ax_amort.axvline(crossover, color="0.4", lw=0.6, ls="--")
     headline = f"crossover at {crossover:.0f} calls"
-ax_amort.text(0.02, 0.95, headline, transform=ax_amort.transAxes,
-              color="0.3", fontsize=8.5, va="top")
+ax_amort.text(
+    0.02, 0.95, headline, transform=ax_amort.transAxes, color="0.3", fontsize=8.5, va="top"
+)
 ax_amort.legend(frameon=False, fontsize=8.5, loc="lower right")
 
 fig.savefig("plot_waveprecomp_scaling.png", dpi=150, bbox_inches="tight")

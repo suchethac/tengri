@@ -1,6 +1,5 @@
 """
 Screen vs. mixed dust geometry: identical optical depths, different SEDs
-=========================================================================
 
 Dust geometry determines how dust affects starlight. A **screen**
 (foreground dust) filters the light as it leaves the galaxy:
@@ -33,11 +32,7 @@ import jax
 import jax.numpy as jnp
 import matplotlib
 
-<<<<<<< HEAD
 matplotlib.use("Agg")
-=======
-matplotlib.use('Agg')
->>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 import matplotlib.pyplot as plt
 import numpy as np
 

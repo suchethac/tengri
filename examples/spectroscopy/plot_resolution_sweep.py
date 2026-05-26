@@ -50,11 +50,22 @@ REDSHIFT = 0.05
 # Build model with fixed, simple SFH and dust properties
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "log_total_mass": 10.0, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
-         "skew": -0.2, "trunc": 2.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "log_total_mass": 10.0,
+        "peak_lbt_gyr": 1.5,
+        "width_gyr": 1.2,
+        "skew": -0.2,
+        "trunc": 2.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_bc": 0.2,
+        "tau_diff": 0.1,
+        "slope": -0.7,
+    },
     redshift=tengri.Fixed(REDSHIFT),
 )
 
@@ -80,11 +91,22 @@ for r, color in zip(resolution_vals, colors):
     model_r = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "log_total_mass": 10.0, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
-             "skew": -0.2, "trunc": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_total_mass": 10.0,
+            "peak_lbt_gyr": 1.5,
+            "width_gyr": 1.2,
+            "skew": -0.2,
+            "trunc": 2.0,
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.2,
+            "tau_diff": 0.1,
+            "slope": -0.7,
+        },
         redshift=tengri.Fixed(REDSHIFT),
     )
 
@@ -113,12 +135,9 @@ ax.axvline(6564.61, ls="--", lw=0.7, color="0.5", alpha=0.6)
 ax.axvline(6585.27, ls="--", lw=0.7, color="0.5", alpha=0.6)
 
 # Text labels
-ax.text(6549.85, 0.88, r"[N II]$\lambda$6549", fontsize=8, ha="right",
-        color="0.5", rotation=90)
-ax.text(6564.61, 0.88, r"H$\alpha$", fontsize=8, ha="center", color="0.5",
-        rotation=90)
-ax.text(6585.27, 0.88, r"[N II]$\lambda$6585", fontsize=8, ha="left",
-        color="0.5", rotation=90)
+ax.text(6549.85, 0.88, r"[N II]$\lambda$6549", fontsize=8, ha="right", color="0.5", rotation=90)
+ax.text(6564.61, 0.88, r"H$\alpha$", fontsize=8, ha="center", color="0.5", rotation=90)
+ax.text(6585.27, 0.88, r"[N II]$\lambda$6585", fontsize=8, ha="left", color="0.5", rotation=90)
 
 # Formatting
 ax.set_xlabel(r"Rest-frame wavelength [$\mathrm{\AA}$]", fontsize=11)

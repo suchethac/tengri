@@ -99,11 +99,9 @@ fig, axes = plt.subplots(
 # Panel 1: Full rest-frame SED
 ax1 = axes[0]
 colors = plt.cm.viridis(np.linspace(0, 1, len(ALPHA_FE_SWEEP)))
-for (alpha_fe, color) in zip(ALPHA_FE_SWEEP, colors):
+for alpha_fe, color in zip(ALPHA_FE_SWEEP, colors):
     wave_rest, sed_nulnu = seds[alpha_fe]
-    ax1.loglog(
-        wave_rest, sed_nulnu, label=f"[α/Fe] = {alpha_fe:.1f}", color=color, linewidth=2
-    )
+    ax1.loglog(wave_rest, sed_nulnu, label=f"[α/Fe] = {alpha_fe:.1f}", color=color, linewidth=2)
 
 ax1.set_ylabel(r"$\nu L_\nu$ (erg s$^{-1}$ Hz$^{-1}$)", fontsize=11)
 ax1.set_xlabel(r"Rest wavelength ($\AA$)", fontsize=11)
@@ -117,7 +115,7 @@ ax1.set_title(
 # Panel 2: Zoom into Mg b / Fe5270 region (5050–5350 Å)
 ax2 = axes[1]
 zoom_min, zoom_max = 5050, 5350
-for (alpha_fe, color) in zip(ALPHA_FE_SWEEP, colors):
+for alpha_fe, color in zip(ALPHA_FE_SWEEP, colors):
     wave_rest, sed_nulnu = seds[alpha_fe]
     # Filter to zoom region
     mask = (wave_rest >= zoom_min) & (wave_rest <= zoom_max)

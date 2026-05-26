@@ -76,7 +76,7 @@ for i, (age_myr, peak_lbt_gyr) in enumerate(zip(ages_myr, peak_lbt_values)):
     wave = np.asarray(out.wavelength)
     nu_lnu = C_AA_PER_S / wave * np.asarray(out.sed)
 
-    label = f"{age_myr:.0f} Myr" if age_myr < 100 else f"{age_myr/1e3:.1f} Gyr"
+    label = f"{age_myr:.0f} Myr" if age_myr < 100 else f"{age_myr / 1e3:.1f} Gyr"
     ax.loglog(wave, nu_lnu, color=colors[i], lw=2.0, label=label)
 
 ax.set_xlim(1000, 30000)

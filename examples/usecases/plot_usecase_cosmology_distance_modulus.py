@@ -72,9 +72,7 @@ cosmology_riess = tengri.cosmology.CosmoParams(Om0=0.30, w0=-1.0, wa=0.0, h=0.73
 mu_planck = np.array(
     [tengri.cosmology.distance_modulus(z, cosmo=cosmology_planck) for z in z_grid]
 )
-mu_riess = np.array(
-    [tengri.cosmology.distance_modulus(z, cosmo=cosmology_riess) for z in z_grid]
-)
+mu_riess = np.array([tengri.cosmology.distance_modulus(z, cosmo=cosmology_riess) for z in z_grid])
 
 # Magnitude difference: Δm = m_Riess - m_Planck
 # (negative = Riess H0 places galaxy CLOSER, so brighter; positive means dimmer)

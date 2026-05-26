@@ -71,8 +71,7 @@ nu_l_nu_thermal = C_AA_PER_S / wavelength * sed_thermal
 
 # Thermal fraction at selected frequencies (diagnostic)
 thermal_frac_at_1p4ghz = (
-    np.interp(1.4, nu_ghz, np.asarray(sed_thermal) / (np.asarray(sed_total) + 1e-40))
-    * 100.0
+    np.interp(1.4, nu_ghz, np.asarray(sed_thermal) / (np.asarray(sed_total) + 1e-40)) * 100.0
 )
 
 # Plot
@@ -120,7 +119,7 @@ ax.legend(loc="upper left", fontsize=10, framealpha=0.95)
 # Inset text: diagnostic summary
 textstr = (
     f"SFR = {sfr_msun_yr:.1f} M$_\\odot$ yr$^{{-1}}$\n"
-    f"L$_{{IR}}$ = {L_IR/1e43:.2e} erg s$^{{-1}}$\n"
+    f"L$_{{IR}}$ = {L_IR / 1e43:.2e} erg s$^{{-1}}$\n"
     f"f$_{{ff}}$ @ 1.4 GHz = {thermal_frac_at_1p4ghz:.1f}%"
 )
 ax.text(

@@ -56,6 +56,7 @@ LEDD_SUN_COEFF = 3.2e4  # L_Edd / (M_BH / M_sun) in L_sun units
 # M_BH–M_* Scaling Relations
 # ============================================================================
 
+
 def mbh_from_mstar_kormendy2013(log_mstar: float) -> float:
     """
     Kormendy & Ho (2013) relation: log(M_BH/M_☉) = α + β·log(M_*/M_☉).
@@ -147,7 +148,7 @@ results_reines = {"log_mstar": [], "log_mbh_relation": [], "log_mbh_obs": [], "l
 
 # Eddington ratio bounds: λ_Edd ∈ [0.001, 0.1]
 log_edd_min = np.log10(0.001)  # -3.0
-log_edd_max = np.log10(0.1)    # -1.0
+log_edd_max = np.log10(0.1)  # -1.0
 
 # ============================================================================
 # Kormendy & Ho (2013) relation
@@ -168,7 +169,7 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
 
     # Compute L_Edd and L_bol
     # L_Edd(M_BH) = LEDD_SUN_COEFF * M_BH [M_sun] [L_sun]
-    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
+    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0**log_mbh_relation))
     log_lbol = log_edd + log_ledd
 
     # Scale log_total_mass to achieve the target stellar mass via binary search
@@ -201,7 +202,7 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     results_kormendy["log_lbol"].append(log_lbol)
 
     print(
-        f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
+        f"Gal {i + 1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
         f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
     )
 
@@ -225,7 +226,7 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     log_edd = float(jax.random.uniform(subkey, minval=log_edd_min, maxval=log_edd_max))
 
     # Compute L_Edd and L_bol
-    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
+    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0**log_mbh_relation))
     log_lbol = log_edd + log_ledd
 
     # Scale log_total_mass to achieve the target stellar mass
@@ -257,7 +258,7 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     results_reines["log_lbol"].append(log_lbol)
 
     print(
-        f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
+        f"Gal {i + 1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
         f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
     )
 

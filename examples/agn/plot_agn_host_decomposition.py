@@ -46,11 +46,22 @@ ssp = tengri.load_ssp()
 
 # Shared model components: star-forming host + dust
 COMMON = dict(
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 2.0, "log_total_mass": 10.0,
-         "alpha": 1.5, "beta": 1.8},
-    dust={"type": "two_component", "*": tengri.FIXED, "law_bc": "calzetti",
-          "tau_diff": 0.2, "tau_bc": 0.5,
-          "emission": {"type": "dale2014", "*": tengri.FIXED}},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 2.0,
+        "log_total_mass": 10.0,
+        "alpha": 1.5,
+        "beta": 1.8,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "law_bc": "calzetti",
+        "tau_diff": 0.2,
+        "tau_bc": 0.5,
+        "emission": {"type": "dale2014", "*": tengri.FIXED},
+    },
     redshift=tengri.Fixed(0.05),
 )
 
@@ -61,6 +72,7 @@ BASE_AGN = dict(
     log_lbol=11.5,
 )
 
+
 def _build_model(agn_frac):
     """Build a model with specified AGN fraction."""
     agn_config = {**BASE_AGN, "*": tengri.FIXED, "frac": agn_frac}
@@ -68,6 +80,7 @@ def _build_model(agn_frac):
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict_rest_sed(p)
     return np.asarray(out.wavelength), np.asarray(out.sed)
+
 
 # Compute three traces: host-only, AGN-only, composite
 traces = {}

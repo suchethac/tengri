@@ -57,9 +57,7 @@ FILTERS = ["sdss_u", "sdss_r", "2mass_j"]
 print("Building model...")
 
 # Build observation
-observation = tengri.Observation(
-    photometry=tengri.Photometry.from_names(FILTERS)
-)
+observation = tengri.Observation(photometry=tengri.Photometry.from_names(FILTERS))
 
 # Create a minimal model: DPL SFH + Calzetti dust + Cue nebular (fixed)
 model = tengri.SEDModel.build(
@@ -86,9 +84,7 @@ noise_inv = 1.0 / noise**2
 
 # Extract the two degenerate parameters
 free_names = ["sfh_dpl_log_total_mass", "dust_tau_bc"]
-flat_fiducial = np.array(
-    [FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]]
-)
+flat_fiducial = np.array([FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]])
 
 # Compute Fisher matrix via finite differences
 print("Computing Fisher matrix via finite differences...")
@@ -207,9 +203,7 @@ ax.text(
 )
 
 fig.tight_layout()
-output_path = os.path.join(
-    os.path.dirname(__file__), "plot_gradient_degeneracy_direction.png"
-)
+output_path = os.path.join(os.path.dirname(__file__), "plot_gradient_degeneracy_direction.png")
 print(f"\nSaving figure to {output_path}...")
 plt.savefig(output_path, dpi=150, bbox_inches="tight")
 print("Done.")

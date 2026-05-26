@@ -136,9 +136,7 @@ for item in sequence:
     wave = np.asarray(out.wavelength)
     sed = np.asarray(out.sed)
     nu_l_nu = (C_AA_PER_S / wave) * sed
-    seds.append(
-        {"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu}
-    )
+    seds.append({"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu})
 
 # ============================================================================
 # Plot: ULIRG→QSO sequence on a single νLν panel

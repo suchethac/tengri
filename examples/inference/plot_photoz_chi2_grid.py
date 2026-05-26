@@ -53,13 +53,12 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 model_template = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-<<<<<<< HEAD
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
-        "log_total_mass": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.3,
         "trunc": 10.0,
     },
@@ -70,13 +69,6 @@ model_template = tengri.SEDModel.build(
         "tau_bc": 0.1,
         "slope": -0.7,
     },
-=======
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-         "log_total_mass": 10.0, "skew": 0.3, "trunc": 10.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.3, "tau_bc": 0.1, "slope": -0.7},
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     neb={"type": "cue", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.0),  # will vary on grid
 )
@@ -107,13 +99,12 @@ truth_params.update(
 model_truth = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-<<<<<<< HEAD
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
         "peak_lbt_gyr": 3.0,
         "width_gyr": 2.0,
-        "log_total_mass": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.3,
         "trunc": 10.0,
     },
@@ -124,13 +115,6 @@ model_truth = tengri.SEDModel.build(
         "tau_bc": 0.1,
         "slope": -0.7,
     },
-=======
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-         "log_total_mass": 10.0, "skew": 0.3, "trunc": 10.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.3, "tau_bc": 0.1, "slope": -0.7},
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     neb={"type": "cue", "*": tengri.FIXED},
     redshift=tengri.Fixed(z_true),
 )
@@ -158,13 +142,12 @@ for i, z in enumerate(z_grid):
         model_z = tengri.SEDModel.build(
             tengri.load_ssp(),
             observation=obs,
-<<<<<<< HEAD
             sfh={
                 "type": "tsnorm",
                 "*": tengri.FIXED,
                 "peak_lbt_gyr": 3.0,
                 "width_gyr": 2.0,
-                "log_total_mass": 1.0,
+                "log_total_mass": 10.0,
                 "skew": 0.3,
                 "trunc": 10.0,
             },
@@ -175,13 +158,6 @@ for i, z in enumerate(z_grid):
                 "tau_bc": 0.1,
                 "slope": -0.7,
             },
-=======
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-                 "log_total_mass": 10.0, "skew": 0.3, "trunc": 10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.3, "tau_bc": 0.1, "slope": -0.7},
->>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
             neb={"type": "cue", "*": tengri.FIXED},
             redshift=tengri.Fixed(z),
         )

@@ -103,10 +103,10 @@ for i, tau_v in enumerate(tau_v_values):
     model_dict = {
         "sfh": {
             "type": "dpl",
-            "alpha": Fixed(0.1),              # shallow rising slope
-            "beta": Fixed(4.0),               # steep quenching
-            "tau_gyr": Fixed(2.0),            # turnover timescale
-            "log_total_mass": 10.0,       # log10(10 Msun/yr) = 1.0
+            "alpha": Fixed(0.1),  # shallow rising slope
+            "beta": Fixed(4.0),  # steep quenching
+            "tau_gyr": Fixed(2.0),  # turnover timescale
+            "log_total_mass": 10.0,  # log10(10 Msun/yr) = 1.0
         },
         "dust": {
             "type": "two_component",
@@ -128,7 +128,7 @@ for i, tau_v in enumerate(tau_v_values):
     pred = model.predict_rest_sed({})
 
     # Extract actual SFH-derived SFR (if available)
-    if hasattr(pred, 'sfr_100myr'):
+    if hasattr(pred, "sfr_100myr"):
         actual_sfr = pred.sfr_100myr
     else:
         actual_sfr = None
