@@ -165,7 +165,7 @@ if os.path.exists(SSP_PATH):
             "type": "single_component",
             "law_bc": "calzetti",
             "tau_v": Fixed(0.4),
-            "emission": {"type": "my_modified_blackbody", "*": FIXED},
+            "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta": Fixed(1.8)},
         },
         redshift=Fixed(0.05),
     )

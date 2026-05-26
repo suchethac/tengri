@@ -194,23 +194,10 @@ print(f"Free parameters ({spec.n_free}): {', '.join(spec.free_params)}\n")
 
 # %%
 # Build separate models for each modality
-# Force lazy dale2014 template load outside any JIT scope to avoid
-# DynamicJaxprTracer leaks on first call (see preload_emission_model
-# docstring and emission_templates.py:624 comment).
-from tengri.components.dust.emission import preload_emission_model
-
-preload_emission_model("dale2014")
-
 obs_phot = Observation(photometry=phot_obs)
 model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
-
 model_spec = SEDModel(spec, ssp_data, observation=Observation(spectroscopy=spec_obs))
-# Same wave_obs workaround as 06 — Fitter calls predict_spectrum(params) without
-# wave_obs, and SEDModel does not yet auto-derive it from observation.spectroscopy.
-model_spec._wave_obs = WAVE_OBS
-
 model_joint = SEDModel(spec, ssp_data, observation=obs_joint)
-model_joint._wave_obs = WAVE_OBS
 
 # Define truth: moderately star-forming, modest dust, solar-ish metallicity
 key = jax.random.PRNGKey(42)
