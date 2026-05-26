@@ -193,7 +193,15 @@ code, pre, kbd, samp {
 }
 
 /* ── Hero block on landing page ──────────────────────────────────────── */
+/* Flex column instead of just ``text-align: center`` so block-level
+   children (the logo <img>, the <h1>) are centred relative to the same
+   flex axis rather than each fending for itself. Furo's h1 rule carries
+   a heading-anchor offset that ``text-align`` alone doesn't fully
+   neutralise. */
 .tg-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     text-align: center;
     padding: 2.5rem 1rem 1.5rem;
     margin: 0 0 2.5rem;
@@ -201,7 +209,7 @@ code, pre, kbd, samp {
 }
 .tg-hero__logo {
     display: block;
-    margin: 0 auto 1.25rem;
+    margin: 0 0 1.25rem;
     width: 140px;
     height: auto;
     filter: drop-shadow(0 0 24px rgba(122, 184, 232, 0.18));
@@ -218,8 +226,17 @@ body[data-theme="light"] .tg-hero__logo {
     font-size: 2.8rem;
     font-weight: 700;
     margin: 0 0 0.5rem;
+    padding: 0;             /* override Furo's heading padding */
     letter-spacing: -0.03em;
     color: var(--tg-text);
+    line-height: 1.1;
+    border: none;
+}
+/* Furo injects a heading-anchor link (¶) into every <h1> that nudges
+   the visible glyphs off-centre by a pixel or two even when invisible.
+   Hide it inside the hero. */
+.tg-hero__title .headerlink {
+    display: none;
 }
 .tg-hero__tagline {
     font-size: 1.2rem;
