@@ -21,6 +21,11 @@
 Submillimeter galaxy SED: dust-obscured starburst at z=3
 =========================================================
 
+.. image:: images/sphx_glr_plot_submillimeter_galaxy_sed_001.png
+   :alt: plot submillimeter galaxy sed
+   :class: sphx-glr-single-img
+
+
 Submillimeter galaxies (SMGs) are the most luminous starbursts in the universe,
 hidden behind massive dust columns. This example constructs a z=3 SMG SED with
 M* = 2×10^11 Msun, SFR = 500 Msun/yr, and τ_V ≈ 3.5 — typical of ALMA-detected

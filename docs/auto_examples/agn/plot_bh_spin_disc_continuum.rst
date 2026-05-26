@@ -21,6 +21,11 @@
 Black hole spin effect on accretion disc UV peak temperature
 =============================================================
 
+.. image:: images/sphx_glr_plot_bh_spin_disc_continuum_001.png
+   :alt: plot bh spin disc continuum
+   :class: sphx-glr-single-img
+
+
 The dimensionless spin parameter a* determines the innermost stable circular
 orbit (ISCO). Higher spin pushes ISCO inward, raising peak disc temperature
 and shifting the UV bump bluer. This demonstrates the classic Kerr black hole

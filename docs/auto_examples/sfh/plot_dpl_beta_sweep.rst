@@ -21,6 +21,11 @@
 Post-peak quenching slope β shapes stellar age distribution
 ===========================================================
 
+.. image:: images/sphx_glr_plot_dpl_beta_sweep_001.png
+   :alt: plot dpl beta sweep
+   :class: sphx-glr-single-img
+
+
 The falling slope β of a double-power-law SFH controls quenching after the peak.
 Large β means rapid quenching and an old stellar population; small β means
 a gentle tail and more mixed ages. We vary β across its prior range with every

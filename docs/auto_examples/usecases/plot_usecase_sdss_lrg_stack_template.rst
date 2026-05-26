@@ -21,6 +21,11 @@
 SDSS Luminous Red Galaxy Stacked Template Spectrum
 ==================================================
 
+.. image:: images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
+   :alt: plot usecase sdss lrg stack template
+   :class: sphx-glr-single-img
+
+
 Build a population of N=200 quiescent galaxies replicating the SDSS
 Luminous Red Galaxy (LRG) sample selection (Eisenstein et al. 2001, SDSS-I):
 old, massive systems at z~0.3 with log M* ≈ 11 and ages sampling the

@@ -21,6 +21,11 @@
 Quenching pathways: fast vs slow termination of star formation
 ==============================================================
 
+.. image:: images/sphx_glr_plot_quenching_pathway_compare_001.png
+   :alt: plot quenching pathway compare
+   :class: sphx-glr-single-img
+
+
 Compare three star-formation histories representing distinct quenching scenarios:
 (1) Constantly star-forming (no quenching), (2) Slowly quenched exponential decay
 (tau=4 Gyr, peak 6 Gyr ago), and (3) Rapidly quenched post-starburst (truncated

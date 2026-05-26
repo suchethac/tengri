@@ -21,6 +21,11 @@
 Comparison of IGM absorption models at high redshift
 ======================================================
 
+.. image:: images/sphx_glr_plot_igm_models_comparison_001.png
+   :alt: plot igm models comparison
+   :class: sphx-glr-single-img
+
+
 Four IGM transmission variants available in tengri are compared at z=7,
 applied to a young star-forming SED. This diagnostic isolates the differences
 between models around the Lyman-alpha forest:

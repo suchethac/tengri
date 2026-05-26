@@ -35,24 +35,6 @@ time.
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-131
 
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/sfh/plot_continuity_prior_visualisation.py", line 127, in <module>
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-                                                     ^^^^^^^^
-    NameError: name '__file__' is not defined
-
-
-
-
-
-
-|
-
 .. code-block:: Python
 
 

@@ -21,6 +21,11 @@
 z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis
 ===================================================================
 
+.. image:: images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
+   :alt: plot usecase dropout selection z3
+   :class: sphx-glr-single-img
+
+
 Demonstrates the U-dropout (Lyman-break) selection technique for identifying
 galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection.
 Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and

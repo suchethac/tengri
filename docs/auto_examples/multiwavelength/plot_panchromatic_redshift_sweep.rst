@@ -21,6 +21,11 @@
 Rest-to-observer-frame transformation of panchromatic SEDs with redshift
 =========================================================================
 
+.. image:: images/sphx_glr_plot_panchromatic_redshift_sweep_001.png
+   :alt: plot panchromatic redshift sweep
+   :class: sphx-glr-single-img
+
+
 Same galaxy rest-frame panchromatic SED (UV through radio) observed at
 increasing redshifts. Cosmological redshift transforms rest-frame wavelengths
 and dims luminosity, shifting spectral features to infrared bands at high

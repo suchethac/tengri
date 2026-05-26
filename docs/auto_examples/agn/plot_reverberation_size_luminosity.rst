@@ -21,6 +21,11 @@
 AGN Reverberation Size-Luminosity Relation (Bentz+2013)
 ========================================================
 
+.. image:: images/sphx_glr_plot_reverberation_size_luminosity_001.png
+   :alt: plot reverberation size luminosity
+   :class: sphx-glr-single-img
+
+
 Compute and plot the broad-line region (BLR) size-luminosity relation
 (R_BLR ∝ L^0.5) using tengri AGN models. This demonstrates how AGN
 continuum luminosity connects to reverberation mapping measurements of

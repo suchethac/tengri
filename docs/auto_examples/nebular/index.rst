@@ -68,23 +68,6 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Baldwin-Phillips-Terlevich (BPT) diagram ([OIII]/Hβ vs [NII]/Hα) separates ionization mechanisms: star formation, AGN, and composites.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_diagram_population_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_bpt_diagram_population`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">BPT diagram population with star-forming galaxies and AGN-like models</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Cue knobs fesc (ionizing-photon escape fraction) and logU (HII region ionization parameter) jointly govern the line spectrum of a star-forming galaxy: escape fraction sets how many ionizing photons reach the gas, logU shifts the resulting ionization balance of the gas they ionize. We map the response of three diagnostic lines/ratios on a 2-D grid.">
 
 .. only:: html
@@ -114,23 +97,6 @@ Nebular emission backends comparison.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Cue knob flexibility: six dimensions of HII region control</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The ionization parameter logU controls the hardness of the ionizing radiation field and drives rapid changes in optical line ratios. We show how [OIII]/[OII] (O32) and [OIII]/Hβ respond to logU from -4 to -1 at fixed metallicity (Z/Zsun = -0.5), demonstrating the use of O32 as a logU diagnostic (Kewley &amp; Dolphin 2002). Cue (Li et al. 2024, 2025) samples the ionizing spectrum flexibility and provides smooth gradients through metallicity, density, and ionization parameters for joint SED fitting.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_logu_line_ratios_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_cue_logu_line_ratios`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Ionization parameter (logU) controls emission-line diagnostics</div>
     </div>
 
 
@@ -442,23 +408,6 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Hydrogen-ionizing photon production (Q_H, photons/s per solar mass) depends critically on stellar population age. Young starbursts (age ≈ 3–5 Myr) produce ionizing photons at peak rates; by 100 Myr, Q_H drops by ~3 orders of magnitude. We show how this evolution varies across metallicity Z = [-1.0, -0.5, 0.0, +0.3] using FSPS bare-stellar (non-nebular) SSP templates, as ionizing photons are consumed by CLOUDY during wNE SSP generation and would appear suppressed.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_qh_vs_age_metallicity_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_qh_vs_age_metallicity`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Ionizing photon production rate Q_H peaks sharply with stellar age</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Shock emission (MAPPINGS V models) can mimic AGN on the BPT diagram. We show how shock velocity, gas density, and magnetic field strength affect line ratios and diagnostic positions. Four-panel layout shows velocity and density sequences on BPT, line ratios vs velocity, and magnetic field strength.">
 
 .. only:: html
@@ -504,10 +453,8 @@ Nebular emission backends comparison.
    /auto_examples/nebular/plot_bpt_cue_flexibility
    /auto_examples/nebular/plot_bpt_cue_grid
    /auto_examples/nebular/plot_bpt_diagnostics
-   /auto_examples/nebular/plot_bpt_diagram_population
    /auto_examples/nebular/plot_cue_fesc_logu_atlas
    /auto_examples/nebular/plot_cue_flex_tour
-   /auto_examples/nebular/plot_cue_logu_line_ratios
    /auto_examples/nebular/plot_cue_parameter_atlas
    /auto_examples/nebular/plot_dig_frac_sweep
    /auto_examples/nebular/plot_emission_line_atlas
@@ -526,7 +473,6 @@ Nebular emission backends comparison.
    /auto_examples/nebular/plot_neb_bpt_logu_grid
    /auto_examples/nebular/plot_neb_density_sweep
    /auto_examples/nebular/plot_nebular_backends
-   /auto_examples/nebular/plot_qh_vs_age_metallicity
    /auto_examples/nebular/plot_shock_emission
    /auto_examples/nebular/plot_strong_line_metallicity_diagnostics
 

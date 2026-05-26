@@ -21,6 +21,11 @@
 Balmer Decrement Tests Dust Attenuation on Emission Lines
 ==========================================================
 
+.. image:: images/sphx_glr_plot_usecase_balmer_decrement_av_001.png
+   :alt: plot usecase balmer decrement av
+   :class: sphx-glr-single-img
+
+
 The Balmer decrement measures dust attenuation via hydrogen recombination line
 ratios: H-alpha / H-beta is sensitive to extinction (Calzetti et al. 2000).
 Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep
@@ -28,37 +33,16 @@ dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha
 and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the
 Calzetti+2000 expectation.
 
-**IMPORTANT:** This script tests whether tengri folds dust attenuation into
-emission line predictions. If the tengri trace is flat with A_V (expected
-ratio stays at intrinsic value regardless of dust), this confirms
-`predict_emission_lines` bypasses diffuse-dust attenuation — filing as bug.
+Status: as of issue #313 fix, ``predict_emission_lines`` now folds in the
+diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
+to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
+the birth-cloud component or the dust normalisation differs slightly from
+the pure Calzetti law applied here as the reference.
 
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust
 attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-153
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_balmer_decrement_av_001.png
-   :alt: plot usecase balmer decrement av
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_balmer_decrement_av_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 21-154
 
 .. code-block:: Python
 
@@ -184,22 +168,17 @@ attenuation law).
     ax.text(
         0.98,
         0.05,
-        "If tengri trace is flat: emission_lines bypass dust attenuation (bug)",
+        "After issue #313 fix: tengri now folds diffuse dust into line predictions",
         transform=ax.transAxes,
         fontsize=9,
         va="bottom",
         ha="right",
         style="italic",
-        color="red",
+        color="0.4",
     )
 
     fig.tight_layout()
     plt.savefig("plot_usecase_balmer_decrement_av.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 10.441 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

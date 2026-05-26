@@ -21,6 +21,11 @@
 IRX–β diagram: infra-red excess vs UV slope (Meurer+1999)
 ===========================================================
 
+.. image:: images/sphx_glr_plot_usecase_irx_beta_meurer_001.png
+   :alt: plot usecase irx beta meurer
+   :class: sphx-glr-single-img
+
+
 The **IRX–β relation** connects the UV continuum slope β (1250–2600 Å) with
 the infrared excess IRX = log₁₀(L_IR / L_UV). This diagram reveals dust
 reddening and star formation rate indicators in galaxies. Here we:
@@ -39,24 +44,6 @@ reddening and star formation rate indicators in galaxies. Here we:
   UV-to-IR conversions in high-z star-forming galaxies.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-371
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/dust_attenuation/plot_usecase_irx_beta_meurer.py", line 344, in <module>
-        save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
-                                 ^^^^^^^^
-    NameError: name '__file__' is not defined
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 

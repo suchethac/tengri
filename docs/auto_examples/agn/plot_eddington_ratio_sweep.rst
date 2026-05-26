@@ -21,6 +21,11 @@
 Eddington ratio sweep: multicolor disc thermal scaling
 =======================================================
 
+.. image:: images/sphx_glr_plot_eddington_ratio_sweep_001.png
+   :alt: plot eddington ratio sweep
+   :class: sphx-glr-single-img
+
+
 At fixed black hole mass M_BH = 10^8 M_sun, the accretion disc luminosity
 and spectral shape scale with Eddington ratio λ_Edd = L_bol / L_Edd.
 Here we sweep λ_Edd from 0.001 to 1.0 at five logarithmic steps and overlay

@@ -21,6 +21,11 @@
 What each shipped tengri recipe produces
 ==========================================
 
+.. image:: images/sphx_glr_plot_recipe_compare_001.png
+   :alt: plot recipe compare
+   :class: sphx-glr-single-img
+
+
 ``tengri.recipes`` ships several curated starting-point model configs
 that map common astronomer use-cases onto the nested-dict ``SEDModel.build``
 grammar. This card overlays the rest-frame SED of every shipped recipe

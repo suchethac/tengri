@@ -21,6 +21,11 @@
 Mass completeness limit in SDSS-like photometric surveys
 =========================================================
 
+.. image:: images/sphx_glr_plot_usecase_mass_completeness_001.png
+   :alt: plot usecase mass completeness
+   :class: sphx-glr-single-img
+
+
 Measures the 95% stellar mass completeness threshold for SDSS-like photometry.
 Mocks a population of 150 star-forming and passive galaxies spanning
 log M* [7-12] at z=0.1, injects realistic photometric noise, and measures

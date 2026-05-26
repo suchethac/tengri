@@ -21,6 +21,11 @@
 Model misspecification: post-starburst galaxies reveal wrong SFH
 ==============================================================
 
+.. image:: images/sphx_glr_plot_workflow_post_starburst_001.png
+   :alt: plot workflow post starburst
+   :class: sphx-glr-single-img
+
+
 A post-starburst galaxy shows a recent burst followed by quenching.
 When fit with smooth tau-model (incorrect), the fit biases the recovered
 SFH. This workflow compares two models on the same mock data to show how

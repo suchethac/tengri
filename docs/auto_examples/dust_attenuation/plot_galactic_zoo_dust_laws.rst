@@ -21,6 +21,11 @@
 Dust attenuation laws across the galaxy zoo
 =============================================
 
+.. image:: images/sphx_glr_plot_galactic_zoo_dust_laws_001.png
+   :alt: plot galactic zoo dust laws
+   :class: sphx-glr-single-img
+
+
 Four named attenuation laws applied to the *same* intrinsic SED at the
 *same* V-band optical depth (τ_V = 1.0), illustrating how dust geometry
 and grain-size composition vary across the local universe.

@@ -21,6 +21,11 @@
 Velocity-dispersion broadening of stellar absorption features
 ================================================================
 
+.. image:: images/sphx_glr_plot_sigma_v_absorption_broadening_001.png
+   :alt: plot sigma v absorption broadening
+   :class: sphx-glr-single-img
+
+
 The Mg b 5170 Å region of an old stellar population observed at
 spectral resolution R = 3000, convolved with increasing stellar
 velocity dispersion ``σ_v`` from 50 to 400 km/s. The classic kinematic

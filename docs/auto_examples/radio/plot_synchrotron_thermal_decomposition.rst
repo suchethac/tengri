@@ -21,6 +21,11 @@
 Radio SED decomposition: synchrotron vs thermal free-free
 =========================================================
 
+.. image:: images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
+   :alt: plot synchrotron thermal decomposition
+   :class: sphx-glr-single-img
+
+
 Decompose a star-forming galaxy's radio SED into its physical components:
 synchrotron (steep, slope ~ -0.8) from supernova remnants and thermal
 free-free (flat, slope ~ -0.1) from HII regions. At radio frequencies,
