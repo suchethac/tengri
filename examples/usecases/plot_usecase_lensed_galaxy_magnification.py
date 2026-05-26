@@ -1,5 +1,5 @@
 """
-Strong-lensing magnification: EoR galaxy detection boost
+Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
 =========================================================
 
 Demonstrates how strong gravitational lensing elevates intrinsically-faint

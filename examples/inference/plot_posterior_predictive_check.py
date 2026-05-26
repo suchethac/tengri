@@ -9,7 +9,7 @@ photometry for each sample, and overlay the band-by-band model envelope
 (16th, 50th, 84th percentiles) against observed data with residuals
 normalized by noise. For well-fit models, residuals cluster within ±2σ.
 
-This demonstrates tengri's differentiable + JIT path that makes 100
+tengri's differentiable + JIT path that makes 100
 posterior re-predictions negligible in cost.
 
 Reference: Rubin 1984, J. Educ. Stat., 9, 26; Gelman et al. 1996,

@@ -3,7 +3,7 @@ Metallicity evolution: three scenarios for Z(t) and resulting SED
 ===================================================================
 
 The chemical composition of stars encodes the assembly history of galaxies.
-This figure demonstrates three metallicity evolution pathways available in
+three metallicity evolution pathways available in
 tengri: (1) constant solar Z, (2) linear ramp from Z = 0.1 Zsun to Zsun
 over 13 Gyr of cosmic time, and (3) two-step enrichment (low-metallicity
 plateau at early times, then a sharp jump at lookback time 8 Gyr ago).

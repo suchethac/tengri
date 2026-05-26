@@ -1,5 +1,5 @@
 """
-JAX vmap turns one SED into a population fit — 10,000 galaxies in seconds
+Population fits via jax.vmap: throughput at 10,000 galaxies
 =========================================================================
 
 JAX's `vmap` (vectorized map) transforms a single-sample function into a

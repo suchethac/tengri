@@ -2,7 +2,7 @@
 WISE W1–W2 vs W2–W3 Color-Color Diagram with Stern+2012 AGN Wedge
 ==================================================================
 
-The **WISE color-color diagram** (Stern et al. 2012) is a powerful tool for
+The **WISE color-color diagram** (Stern et al. 2012) is a tool for
 separating AGN from star-forming galaxies using mid-infrared colors. The
 diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while
 star-forming galaxies have cooler dust emission (Rayleigh-Jeans slope at

@@ -19,7 +19,7 @@ main sequence, compute their instantaneous SFR from tengri models, bin in
 redshift, compute SFRD per comoving volume element, and show the population
 average matches the Madau & Dickinson 2014 fit.
 
-This demonstrates that from a proper sample spanning M* space and correcting
+that from a proper sample spanning M* space and correcting
 for cosmic volume, galaxy-level SFR integrates to the observed SFRD history.
 
 Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486

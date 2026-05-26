@@ -9,7 +9,7 @@ panchromatic SED spans from UV (young stars) through optical (attenuated
 by dust) to far-infrared (warm dust re-emission at ~50 μm) and radio
 (free-free continuum from ionized regions and synchrotron from supernovae).
 
-This example demonstrates how starburst physics creates a distinctive
+starburst physics creates a distinctive
 SED shape: suppressed UV/optical, strong warm dust peak, and extended
 radio emission. The model uses a double power-law star formation history
 peaking ~50 Myr ago to capture the intense recent burst, with a

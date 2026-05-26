@@ -1,3 +1,5 @@
+:orphan:
+
 
 
 .. _sphx_glr_auto_examples_sfh:
@@ -72,7 +74,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The chemical composition of stars encodes the assembly history of galaxies. This figure demonstrates three metallicity evolution pathways available in tengri: (1) constant solar Z, (2) linear ramp from Z = 0.1 Zsun to Zsun over 13 Gyr of cosmic time, and (3) two-step enrichment (low-metallicity plateau at early times, then a sharp jump at lookback time 8 Gyr ago).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The chemical composition of stars encodes the assembly history of galaxies. three metallicity evolution pathways available in tengri: (1) constant solar Z, (2) linear ramp from Z = 0.1 Zsun to Zsun over 13 Gyr of cosmic time, and (3) two-step enrichment (low-metallicity plateau at early times, then a sharp jump at lookback time 8 Gyr ago).">
 
 .. only:: html
 
@@ -412,7 +414,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr) starburst? This example demonstrates the outshining problem in broadband photometry (Trager+ 2000, Renzini 2006): the young burst&#x27;s UV emission completely dominates over the ancient burst&#x27;s optical/IR, rendering the ancient population invisible to broadband SED fitting.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr) starburst? outshining problem in broadband photometry (Trager+ 2000, Renzini 2006): the young burst&#x27;s UV emission completely dominates over the ancient burst&#x27;s optical/IR, rendering the ancient population invisible to broadband SED fitting.">
 
 .. only:: html
 

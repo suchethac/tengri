@@ -8,8 +8,6 @@ by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500
 (rest ~6550–6600 Å) transitions from fully blended at low R to completely
 resolved at high R, revealing the forbidden and Balmer lines separately.
 
-This example demonstrates:
-
 - Building an SED model with the public API using ``SEDModel.build()``
 - Observing spectra at different instrumental resolutions via
   ``Spectroscopy(resolution=R)``

@@ -6,8 +6,8 @@ The Charlot & Fall 2000 two-component dust model splits attenuation into:
 - ``τ_bc`` (birth-cloud): attenuates only young stellar ages (< 10 Myr)
 - ``τ_diff`` (diffuse ISM): attenuates all stellar light
 
-This example demonstrates the age dependence by building four single-age
-populations and comparing their SEDs. Young populations (1, 10 Myr) show
+The age dependence shows up clearly when we build four single-age
+populations and compare their SEDs. Young populations (1, 10 Myr) show
 strong UV suppression from ``τ_bc``, while older populations (100, 1000 Myr)
 are unaffected by birth-cloud dust — only diffuse attenuation remains.
 

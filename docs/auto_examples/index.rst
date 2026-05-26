@@ -1,32 +1,6 @@
 Examples gallery
 ================
 
-.. toctree::
-   :hidden:
-   :titlesonly:
-   :maxdepth: 1
-
-   /auto_examples/quickstart/index.rst
-   /auto_examples/recipes/index.rst
-   /auto_examples/workflows/index.rst
-   /auto_examples/sps/index.rst
-   /auto_examples/sfh/index.rst
-   /auto_examples/metallicity/index.rst
-   /auto_examples/nebular/index.rst
-   /auto_examples/dust_attenuation/index.rst
-   /auto_examples/dust_emission/index.rst
-   /auto_examples/agn/index.rst
-   /auto_examples/radio/index.rst
-   /auto_examples/xray/index.rst
-   /auto_examples/igm/index.rst
-   /auto_examples/photometry/index.rst
-   /auto_examples/spectroscopy/index.rst
-   /auto_examples/multiwavelength/index.rst
-   /auto_examples/inference/index.rst
-   /auto_examples/usecases/index.rst
-   /auto_examples/advanced/index.rst
-
-
 170+ standalone scripts demonstrating tengri's physics components, fitting
 workflows, and end-to-end use cases. Each card below links to a per-script
 page with the rendered figure, the full source, and a downloadable Jupyter

@@ -4,7 +4,7 @@ Black hole spin effect on accretion disc UV peak temperature
 
 The dimensionless spin parameter a* determines the innermost stable circular
 orbit (ISCO). Higher spin pushes ISCO inward, raising peak disc temperature
-and shifting the UV bump bluer. This demonstrates the classic Kerr black hole
+and shifting the UV bump bluer. the classic Kerr black hole
 effect on thin disc accretion: Schwarzschild (a*=0) → near-extremal Kerr
 (a*=0.998).
 """
