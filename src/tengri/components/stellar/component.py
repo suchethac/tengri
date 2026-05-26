@@ -430,6 +430,7 @@ class StellarSEDComponent:
             "exp",
             "dexp",
             "tau",
+            "delayed",
             "periodic",
             "buat08",
         )
