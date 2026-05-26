@@ -1175,6 +1175,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     (agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
     agn_attenuation_block). Omitted blocks default to 'none'.
 
+    A top-level ``'type'`` key picks a non-composable monolithic AGN model
+    registered in :data:`tengri.components.agn.AGN_MODELS` (e.g.
+    ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``). When
+    ``type='composable'`` (or absent), the sub-block selectors are honoured.
+    Mixing a non-composable ``type`` with sub-blocks is an error.
+
     Parameters
     ----------
     agn_dict : dict
@@ -1185,8 +1191,32 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     Raises
     ------
     ValueError
-        If unknown block type or invalid block specification.
+        If unknown block type, unknown model type, or invalid block
+        specification.
     """
+    # Top-level 'type' selects a monolithic AGN model when not 'composable'.
+    # Previously this key was silently dropped and the model collapsed to
+    # composable-with-all-none-blocks, which emits identically zero — a
+    # silent-failure footgun (closes #417 second case).
+    top_type = agn_dict.get("type")
+    if top_type is not None and top_type != "composable":
+        # Reject mixing a monolithic ``type`` with sub-block selectors —
+        # the two surfaces are mutually exclusive.
+        used_blocks = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
+        if used_blocks:
+            raise ValueError(
+                f"agn['type']={top_type!r} selects a monolithic AGN model, "
+                f"but sub-block keys {used_blocks} are also present. Drop "
+                f"the sub-blocks, or remove 'type' and let the composable "
+                f"runner use the per-block selectors."
+            )
+        # Forward ``type`` to ``agn_model`` and skip the block-selector
+        # plumbing. Unknown model names are validated lazily by
+        # ``resolve_agn_model`` at predict time, where the available list
+        # is fully populated (some models register late through plugins).
+        result["agn_model"] = top_type
+        return
+
     # Activate composable model
     result["agn_model"] = "composable"
 
