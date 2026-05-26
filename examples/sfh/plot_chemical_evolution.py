@@ -2,11 +2,14 @@
 Chemical evolution: How SFH and outflows shape metal enrichment history
 =======================================================================
 
-Four perspectives on chemical evolution: (1) closed-box model with varying SFR
+Six perspectives on chemical evolution: (1) closed-box model with varying SFR
 timescales; (2) cumulative metallicity from different exponential SFHs; (3)
-leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity
-relation across galactic radii. Together they show how star formation and
-galactic winds control the Z(t) history.
+leaky-box model showing how outflow rates suppress Z; (4) age-metallicity
+relation across galactic radii; (5) three metallicity evolution scenarios
+(constant solar, linear ramp, two-step); (6) resulting integrated SEDs showing
+how Z(t) pathways alter optical/UV colors and absorption features. Together
+they show how star formation, galactic winds, and chemical enrichment control
+the Z(t) history and observable photometry.
 """
 
 import os
@@ -15,9 +18,11 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 
 import warnings
 
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
 from tengri.components.stellar.sfh.chemical_evolution import closed_box_metallicity
 from tengri.cosmology import age_at_z0
@@ -100,4 +105,129 @@ ax.set_xlim(-0.5, 14)
 ax.set_ylim(-2.5, 0.5)
 
 fig.tight_layout(rect=[0, 0, 1, 0.97])
+
+# --- Add panels: Z(t) scenarios and resulting SEDs ---
+# (from plot_chemical_evolution_ramp.py)
+AGE_UNIVERSE_GYR = 13.8
+C_AA_PER_S = 2.998e18
+
+ssp = tengri.load_ssp()
+
+# Scenario 1: Constant solar metallicity
+spec_delta = tengri.Parameters(
+    mean_sfh_type="dpl",
+    sfh_dpl_tau_gyr=1.0,
+    sfh_dpl_log_total_mass=10.0,
+    dust_tau_diff=0.1,
+    met_mode="delta",
+    redshift=0.0,
+)
+model_delta = tengri.SEDModel(spec_delta, ssp)
+
+# Scenario 2: Linear ramp from low to solar metallicity
+spec_ramp = tengri.Parameters(
+    mean_sfh_type="dpl",
+    sfh_dpl_tau_gyr=1.0,
+    sfh_dpl_log_total_mass=10.0,
+    dust_tau_diff=0.1,
+    met_mode="ramp",
+    redshift=0.0,
+)
+model_ramp = tengri.SEDModel(spec_ramp, ssp)
+
+# Scenario 3: Two-step metallicity
+spec_twostep = tengri.Parameters(
+    mean_sfh_type="dpl",
+    sfh_dpl_tau_gyr=1.0,
+    sfh_dpl_log_total_mass=10.0,
+    dust_tau_diff=0.1,
+    met_mode="two_step",
+    redshift=0.0,
+)
+model_twostep = tengri.SEDModel(spec_twostep, ssp)
+
+# Sample parameters
+p_delta = dict(model_delta.spec.sample(jax.random.PRNGKey(42)))
+p_delta["met_logzsol"] = 0.0
+
+p_ramp = dict(model_ramp.spec.sample(jax.random.PRNGKey(43)))
+p_ramp["met_logzsol_0"] = -1.0
+p_ramp["met_logzsol_final"] = 0.0
+
+p_twostep = dict(model_twostep.spec.sample(jax.random.PRNGKey(44)))
+p_twostep["met_logzsol_old"] = -0.5
+p_twostep["met_logzsol_young"] = 0.0
+p_twostep["met_step_age_gyr"] = 8.0
+
+pred_delta = model_delta.predict_rest_sed(p_delta)
+pred_ramp = model_ramp.predict_rest_sed(p_ramp)
+pred_twostep = model_twostep.predict_rest_sed(p_twostep)
+
+wave_delta = np.asarray(pred_delta.wavelength)
+sed_delta = np.asarray(pred_delta.sed)
+wave_ramp = np.asarray(pred_ramp.wavelength)
+sed_ramp = np.asarray(pred_ramp.sed)
+wave_twostep = np.asarray(pred_twostep.wavelength)
+sed_twostep = np.asarray(pred_twostep.sed)
+
+# Z(t) extraction
+ssp_lg_ages_gyr = np.asarray(ssp.ssp_lg_age_gyr)
+ssp_ages_gyr = 10.0**ssp_lg_ages_gyr
+ssp_ages_yr = ssp_ages_gyr * 1e9
+lookback_time_gyr = AGE_UNIVERSE_GYR - ssp_ages_gyr
+
+z_delta = np.full_like(lookback_time_gyr, 10.0 ** p_delta["met_logzsol"])
+
+z_0 = 10.0 ** p_ramp["met_logzsol_0"]
+z_final = 10.0 ** p_ramp["met_logzsol_final"]
+age_max = ssp_ages_yr.max()
+z_ramp = z_0 + (z_final - z_0) * (ssp_ages_yr / age_max)
+
+step_age_gyr = p_twostep["met_step_age_gyr"]
+step_age_yr = step_age_gyr * 1e9
+z_old = 10.0 ** p_twostep["met_logzsol_old"]
+z_young = 10.0 ** p_twostep["met_logzsol_young"]
+z_twostep = np.where(ssp_ages_yr >= step_age_yr, z_old, z_young)
+
+# Create new figure with Z(t) and SED panels
+fig_met = plt.figure(figsize=(13, 6))
+ax_zt = fig_met.add_subplot(121)
+ax_sed = fig_met.add_subplot(122)
+
+colors = {
+    "delta": "#1f77b4",
+    "ramp": "#ff7f0e",
+    "twostep": "#2ca02c",
+}
+
+ax_zt.plot(lookback_time_gyr, z_delta, color=colors["delta"], lw=2.0, label="Constant Z (0.0 dex)")
+ax_zt.plot(lookback_time_gyr, z_ramp, color=colors["ramp"], lw=2.0, label="Ramp: -1.0 → 0.0 dex")
+ax_zt.plot(
+    lookback_time_gyr, z_twostep, color=colors["twostep"], lw=2.0, label="Two-step (step at 8 Gyr)"
+)
+ax_zt.axhline(1.0, color="0.5", lw=0.8, ls="--", alpha=0.5)
+ax_zt.text(13, 1.02, r"Solar $Z_\odot$", fontsize=9, alpha=0.6)
+ax_zt.set(
+    xlabel=r"Lookback time [Gyr]",
+    ylabel=r"Metallicity $Z$ [$Z_\odot$]",
+    xlim=(0, AGE_UNIVERSE_GYR),
+    ylim=(0.05, 1.5),
+)
+ax_zt.legend(frameon=False, fontsize=9, loc="upper left")
+ax_zt.grid(True, alpha=0.25, which="major")
+
+ax_sed.loglog(wave_delta, sed_delta, color=colors["delta"], lw=2.0, label="Constant Z")
+ax_sed.loglog(wave_ramp, sed_ramp, color=colors["ramp"], lw=2.0, label="Ramp")
+ax_sed.loglog(wave_twostep, sed_twostep, color=colors["twostep"], lw=2.0, label="Two-step")
+ax_sed.set(
+    xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$ [erg/s]",
+    xlim=(500, 1e5),
+)
+ax_sed.legend(frameon=False, fontsize=9, loc="upper right")
+ax_sed.grid(True, alpha=0.25, which="both", axis="both")
+
+fig_met.tight_layout()
+fig_met.savefig("plot_chemical_evolution_scenarios.png", dpi=150, bbox_inches="tight")
+
 plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
