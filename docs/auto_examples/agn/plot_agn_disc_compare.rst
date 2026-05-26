@@ -21,6 +21,11 @@
 AGN disc continuum: model comparison at fixed L_bol
 =====================================================
 
+.. image:: images/sphx_glr_plot_agn_disc_compare_001.png
+   :alt: plot agn disc compare
+   :class: sphx-glr-single-img
+
+
 Six accretion-disc backbones at fixed bolometric luminosity
 ``log L_bol = 12.5`` (in log L_sun), evaluated in isolation with the
 host suppressed and no torus/lines/dust. The differences between the
@@ -37,10 +42,14 @@ Models compared (the six production disc selectors under
 - ``powerlaw``     — generic power-law disc
 - ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-84
+.. GENERATED FROM PYTHON SOURCE LINES 21-88
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

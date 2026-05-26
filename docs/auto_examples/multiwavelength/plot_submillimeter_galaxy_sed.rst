@@ -21,6 +21,11 @@
 Submillimeter galaxy SED: dust-obscured starburst at z=3
 =========================================================
 
+.. image:: images/sphx_glr_plot_submillimeter_galaxy_sed_001.png
+   :alt: plot submillimeter galaxy sed
+   :class: sphx-glr-single-img
+
+
 Submillimeter galaxies (SMGs) are the most luminous starbursts in the universe,
 hidden behind massive dust columns. This example constructs a z=3 SMG SED with
 M* = 2×10^11 Msun, SFR = 500 Msun/yr, and τ_V ≈ 3.5 — typical of ALMA-detected
@@ -38,21 +43,14 @@ References
 - Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
 - Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-196
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_submillimeter_galaxy_sed_001.png
-   :alt: Rest-frame (z=3.0, dust-dominated), Observed frame (z=3.0, K-correction visible)
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_submillimeter_galaxy_sed_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 23-201
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -71,7 +69,7 @@ References
     TAU_V = 3.5  # Broad visual absorption → powerful dust-to-star conversion
 
     # Physical parameters: M* = 2e11 Msun, SFR = 500 Msun/yr from SFH
-    # Implied log_peak_sfr ≈ 2.7 (peak ~500 Msun/yr)
+    # Implied log_total_mass ≈ 2.7 (peak ~500 Msun/yr)
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
@@ -81,7 +79,7 @@ References
             "alpha": 1.5,  # Shallow decay → high SFR at young ages
             "beta": 2.0,   # Steep early-time turnover
             "tau_gyr": 0.8,  # Recent starburst epoch
-            "log_peak_sfr": 2.7,  # Peak SFR = 10^2.7 ≈ 500 Msun/yr
+            "log_total_mass": 10.0,  # Peak SFR = 10^2.7 ≈ 500 Msun/yr
         },
         dust={
             "type": "two_component",

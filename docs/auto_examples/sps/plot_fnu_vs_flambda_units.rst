@@ -21,6 +21,11 @@
 SED Conventions: F_λ vs F_ν vs νF_ν
 ===================================
 
+.. image:: images/sphx_glr_plot_fnu_vs_flambda_units_001.png
+   :alt: plot fnu vs flambda units
+   :class: sphx-glr-single-img
+
+
 The same stellar population SED looks different depending on the units
 chosen for visualization. This example shows a single galaxy SED in three
 complementary representations on a 3-panel grid:
@@ -49,21 +54,14 @@ References:
 - Hogg, D. W., Blanton, M. R., et al. 2002, AJ, 123, 1147 (K-corrections
   and SED unit conventions)
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-183
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_fnu_vs_flambda_units_001.png
-   :alt: Same SED, Three Conventions: Peak Position Depends on Unit Choice, $F_\lambda$ vs $\lambda$, $F_\nu$ vs $\nu$, $\nu F_\nu$ vs $\lambda$ (luminosity-weighted)
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_fnu_vs_flambda_units_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 33-187
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

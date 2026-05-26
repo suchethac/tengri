@@ -21,6 +21,11 @@
 Diffuse ISM dust attenuates all stellar populations
 ====================================================
 
+.. image:: images/sphx_glr_plot_tau_diff_sweep_001.png
+   :alt: plot tau diff sweep
+   :class: sphx-glr-single-img
+
+
 Diffuse ISM dust optical depth ``τ_diff`` attenuates all stellar light (young + old).
 Higher τ_diff reddens the optical continuum and weakens the 4000 Å break,
 signaling aging stellar populations. We vary τ_diff across a range with every
@@ -28,10 +33,14 @@ other parameter fixed on a typical star-forming galaxy.
 
 Reference: Charlot & Fall 2000, ApJ, 539, 718 (two-component dust model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-71
+.. GENERATED FROM PYTHON SOURCE LINES 12-75
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,7 +65,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718 (two-component dust model).
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",

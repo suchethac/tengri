@@ -21,6 +21,11 @@
 WISE W1–W2 vs W2–W3 Color-Color Diagram with Stern+2012 AGN Wedge
 ==================================================================
 
+.. image:: images/sphx_glr_plot_wise_agn_color_color_001.png
+   :alt: plot wise agn color color
+   :class: sphx-glr-single-img
+
+
 The **WISE color-color diagram** (Stern et al. 2012) is a powerful tool for
 separating AGN from star-forming galaxies using mid-infrared colors. The
 diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while
@@ -56,26 +61,18 @@ References
 .. [2] Wright, E. L., Eisenhardt, P. R. M., Mainzer, A. K., et al., 2010,
        AJ, 140, 1868. "The Wide-field Infrared Survey Explorer (WISE)"
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-270
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_wise_agn_color_color_001.png
-   :alt: plot wise agn color color
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_wise_agn_color_color_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 41-273
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -109,7 +106,7 @@ References
 
     # Fixed parameters for all SF galaxies
     z_gal = 0.1
-    log_peak_sfr_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
+    log_total_mass_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
 
     sf_colors_w1_w2 = []
     sf_colors_w2_w3 = []
@@ -119,7 +116,7 @@ References
         sfh_config = {
             "type": "dpl",
             "*": tengri.FIXED,
-            "log_peak_sfr": log_peak_sfr_sf,
+            "log_total_mass": 10.0,
             "alpha": 1.0,      # Fixed power-law slope (rising)
             "beta": 1.0,       # Fixed power-law slope (declining)
             "tau_gyr": 0.5,    # Fixed quenching timescale
@@ -201,7 +198,7 @@ References
         sfh_config = {
             "type": "dpl",
             "*": tengri.FIXED,
-            "log_peak_sfr": -2.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
+            "log_total_mass": 10.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
             "alpha": 1.0,
             "beta": 1.0,
             "tau_gyr": 0.05,       # Quickly quenched
@@ -300,11 +297,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.506 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_wise_agn_color_color.py:

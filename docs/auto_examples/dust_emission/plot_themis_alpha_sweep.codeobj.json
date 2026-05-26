@@ -53,6 +53,15 @@
    "name": "asarray"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.get_cmap": [
   {
    "is_class": false,

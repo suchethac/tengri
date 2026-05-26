@@ -15,6 +15,10 @@ References:
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -84,7 +88,7 @@ model = tengri.SEDModel.build(
         "alpha": 2.0,
         "beta": 2.5,
         "tau_gyr": 0.5,  # young starburst -> strong UV
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     },
     dust={
         "type": "two_component",
@@ -137,4 +141,4 @@ cbar = fig.colorbar(sc, ax=ax, pad=0.01)
 cbar.set_label(r"$\tau_{\rm diff}$  [mag]")
 
 fig.tight_layout()
-fig.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")

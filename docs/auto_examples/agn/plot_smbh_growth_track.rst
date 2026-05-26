@@ -21,6 +21,11 @@
 AGN SMBH growth track: dormant → merger → QSO → fading
 =======================================================
 
+.. image:: images/sphx_glr_plot_smbh_growth_track_001.png
+   :alt: plot smbh growth track
+   :class: sphx-glr-single-img
+
+
 The growth of a supermassive black hole (SMBH) traces a path through
 the (M_BH, L_bol) plane. Starting as a dormant low-mass hole, accretion
 during mergers builds both mass and luminosity. Peak luminosity occurs
@@ -37,21 +42,14 @@ References:
 - Soltan, A. 1982, MNRAS, 200, 115 — AGN mass density evolution
 - King, A. 2003, ApJ, 596, L27 — AGN feedback on galaxy growth
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-198
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_smbh_growth_track_001.png
-   :alt: plot smbh growth track
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_smbh_growth_track_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-202
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -78,7 +76,7 @@ References:
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 2.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },

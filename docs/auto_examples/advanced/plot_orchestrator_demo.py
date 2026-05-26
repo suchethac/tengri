@@ -50,7 +50,7 @@ try:
         sed_observed=jnp.ones(len(ssp.ssp_wave)),
     )
     params = {
-        "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
+        "sfh_tsnorm_log_total_mass": jnp.asarray(1.0),
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),
         "sfh_tsnorm_width_gyr": jnp.asarray(1.0),
         "sfh_tsnorm_skew": jnp.asarray(0.0),
@@ -121,7 +121,7 @@ try:
     ax.legend()
     ax.set_ylim(1e30, 1e45)
     fig.tight_layout()
-    fig.savefig("plot_orchestrator_demo.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_orchestrator_demo.png", dpi=150, bbox_inches="tight")
 
 except ImportError as e:
     print(f"Orchestrator API not available: {e}")

@@ -21,6 +21,11 @@
 Eddington ratio sweep: multicolor disc thermal scaling
 =======================================================
 
+.. image:: images/sphx_glr_plot_eddington_ratio_sweep_001.png
+   :alt: plot eddington ratio sweep
+   :class: sphx-glr-single-img
+
+
 At fixed black hole mass M_BH = 10^8 M_sun, the accretion disc luminosity
 and spectral shape scale with Eddington ratio λ_Edd = L_bol / L_Edd.
 Here we sweep λ_Edd from 0.001 to 1.0 at five logarithmic steps and overlay
@@ -41,21 +46,14 @@ This example demonstrates:
 .. [2] Shakura, N. I., & Sunyaev, R. A. (1973). Black holes in binary systems.
        Observational appearance. Astronomy and Astrophysics, 24, 337–355.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-150
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_eddington_ratio_sweep_001.png
-   :alt: Multicolor Disc: Eddington Ratio Sweep ($M_{\mathrm{BH}}=10^8 M_\odot$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_eddington_ratio_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 25-157
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -84,7 +82,7 @@ This example demonstrates:
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -95,6 +93,9 @@ This example demonstrates:
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+            "log_lbol": tengri.Uniform(11.0, 13.0),  # Bugfix: promote swept param to FREE
+            "log_mbh": tengri.Fixed(8.0),  # Fixed at 10^8 M_sun for Eddington scaling
         },
         redshift=tengri.Fixed(0.05),
     )

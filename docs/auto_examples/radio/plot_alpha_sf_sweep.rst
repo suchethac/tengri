@@ -21,6 +21,11 @@
 Synchrotron spectral index: steeper α_sf dims the high-frequency tail
 =====================================================================
 
+.. image:: images/sphx_glr_plot_alpha_sf_sweep_001.png
+   :alt: plot alpha sf sweep
+   :class: sphx-glr-single-img
+
+
 The synchrotron spectral index α_sf controls how steeply the radio spectrum
 falls with frequency. Star-forming galaxies typically have α_sf ≈ 0.7–0.8.
 Flat spectra (α ≈ 0) signal strong free-free contribution; steep spectra
@@ -29,10 +34,14 @@ fixed L_IR = 10^11 L_sun and show normalized spectra (reference 1.4 GHz).
 
 Reference: Condon 1992, ApJ 388, 113.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-57
+.. GENERATED FROM PYTHON SOURCE LINES 13-61
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

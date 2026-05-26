@@ -21,6 +21,11 @@
 Stellar metallicity drives UV-optical SED colour
 =================================================
 
+.. image:: images/sphx_glr_plot_logzsol_sweep_001.png
+   :alt: plot logzsol sweep
+   :class: sphx-glr-single-img
+
+
 Metal-poor stars are hotter and bluer (less line blanketing), while metal-rich
 stars are redder due to increased opacity. We sweep stellar metallicity across
 the prior range with every other parameter fixed on a typical intermediate-age
@@ -28,10 +33,14 @@ galaxy with modest dust attenuation.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SSP synthesis and metallicity effects).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-71
+.. GENERATED FROM PYTHON SOURCE LINES 12-75
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,7 +65,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SSP synthesis and metallicity effects).
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",

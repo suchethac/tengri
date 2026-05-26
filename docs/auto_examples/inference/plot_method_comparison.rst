@@ -21,6 +21,11 @@
 Comparing MAP and pure-JAX variational inference
 ================================================
 
+.. image:: images/sphx_glr_plot_method_comparison_001.png
+   :alt: plot method comparison
+   :class: sphx-glr-single-img
+
+
 Demonstrates convergence behavior of two inference methods: MAP
 (point-estimate via optimization) and pure-JAX geometric variational
 inference (native VI). Both are initialized from the same MAP fit, then
@@ -33,10 +38,14 @@ Note: VI uses demonstration scale (500 iterations); production requires
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-118
+.. GENERATED FROM PYTHON SOURCE LINES 17-122
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -78,7 +87,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting).
     truth.update(
         sfh_tsnorm_peak_lbt_gyr=3.0,
         sfh_tsnorm_width_gyr=2.0,
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=10.0,
         dust_tau_diff=0.3,
     )
     mock = model.mock(truth, snr=20.0, key=key)

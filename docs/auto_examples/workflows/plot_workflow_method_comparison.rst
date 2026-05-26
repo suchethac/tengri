@@ -18,21 +18,36 @@
 .. _sphx_glr_auto_examples_workflows_plot_workflow_method_comparison.py:
 
 
-Inference method comparison: MAP as reference for SFH recovery
-==============================================================
+SyntaxError
+===========
 
-Demonstrates running MAP inference on SDSS photometry and comparing the
-MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior
-without sampling overhead; for uncertainty quantification, posterior sampling
-methods (NUTS, VI) would be needed.
+.. image:: images/sphx_glr_plot_workflow_method_comparison_001.png
+   :alt: plot workflow method comparison
+   :class: sphx-glr-single-img
 
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview);
-Nocedal & Wright 1999 (optimization methods).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-113
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-117
 
 .. code-block:: Python
 
+    """
+    Inference method comparison: MAP as reference for SFH recovery
+    ==============================================================
+
+    Demonstrates running MAP inference on SDSS photometry and comparing the
+    MAP fit to the ground truth SFH. MAP provides a point estimate of the posterior
+    without sampling overhead; for uncertainty quantification, posterior sampling
+    methods (NUTS, VI) would be needed.
+
+    Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview);
+    Nocedal & Wright 1999 (optimization methods).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +73,7 @@ Nocedal & Wright 1999 (optimization methods).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-1.0, 1.5),
@@ -79,7 +94,7 @@ Nocedal & Wright 1999 (optimization methods).
     truth_params = {
         "sfh_tsnorm_peak_lbt_gyr": 2.5,
         "sfh_tsnorm_width_gyr": 1.5,
-        "sfh_tsnorm_log_peak_sfr": 0.9,
+        "sfh_tsnorm_log_total_mass": 0.9,
         "sfh_tsnorm_skew": 0.2,
         "sfh_tsnorm_trunc": 5.0,
         "met_logzsol": -0.1,

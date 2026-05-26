@@ -8,6 +8,10 @@ Nebular Emission
 Nebular emission backends comparison.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
@@ -204,7 +208,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Escape fraction f_esc sets what fraction of ionizing photons reach the ISM. Higher f_esc suppresses all nebular emission lines since fewer photons remain to ionize gas.">
+    <div class="sphx-glr-thumbcontainer" tooltip="We sweep the ionising-photon escape fraction f_esc from 0 to 0.9 at fixed log U and metallicity, and read out the response in diagnostic-ratio space ([O III]/Hbeta etc.). Companion to plot_lyman_continuum_escape.py, which shows the same physics in SED space focused on the Lyman edge.">
 
 .. only:: html
 
@@ -215,7 +219,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Ionizing photon escape suppresses nebular emission</div>
+      <div class="sphx-glr-thumbnail-title">Escape fraction suppresses the optical line ratios, not just amplitudes</div>
     </div>
 
 
@@ -289,7 +293,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] and [NII] emission, steering the galaxy toward the Seyfert region on the BPT diagram. We vary log U across the typical range for star-forming galaxies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Varying log U from -4 to -1.5 on a young star-forming galaxy at fixed metallicity changes every strong optical line simultaneously — Hbeta, [O III], Halpha, [N II], [S II] all move together. We plot the full 4000-7500 A SED so the continuum context is visible alongside the line forest. Companion to plot_cue_logu_line_ratios.py, which projects the same sweep onto two-line diagnostic axes.">
 
 .. only:: html
 
@@ -300,13 +304,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Ionization parameter controls optical line strength</div>
+      <div class="sphx-glr-thumbnail-title">Ionisation parameter reshapes the full optical SED, not just line ratios</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary optical metallicity diagnostics. We vary nebular metallicity across the abundance range.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in plot_cue_parameter_atlas.py and the line-ratio projection in plot_strong_line_metallicity_diagnostics.py. Reader sees how every strong optical line moves together as Z_gas climbs, with [N II]/Halpha and [O III]/Hbeta the textbook diagnostics.">
 
 .. only:: html
 
@@ -317,7 +321,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Gas metallicity shifts optical emission line ratios</div>
+      <div class="sphx-glr-thumbnail-title">Gas metallicity reshapes the optical nebular continuum and line forest</div>
     </div>
 
 
@@ -340,7 +344,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Lyman continuum (λ &lt; 912 Å rest) is the primary source of ionizing photons for nebular emission. Escape fraction f_esc sets the fraction of ionizing photons that escape the ISM without being absorbed. Higher f_esc increases ionizing photon loss and suppresses nebular line emission.">
+    <div class="sphx-glr-thumbcontainer" tooltip="We zoom on the Lyman-continuum region (rest 800-1300 A) and sweep the escape fraction f_esc to show how the 912 A discontinuity deepens as more ionising photons leave the ISM unabsorbed. Companion to plot_fesc_sweep.py, which projects the same physics into optical line-ratio diagnostics.">
 
 .. only:: html
 
@@ -351,7 +355,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Lyman continuum escape fraction effect on ionizing photons</div>
+      <div class="sphx-glr-thumbnail-title">Lyman-continuum escape fraction reshapes the SED around the 912 A edge</div>
     </div>
 
 
@@ -391,7 +395,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources. We show how stellar population age controls ionization parameter: younger (hotter) populations move the locus toward higher [OIII]/Hβ, steering from star-forming toward composite/Seyfert regions.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Young massive stars produce harder ionising continua and drive the nebular emission toward higher [O III]/Hbeta. We sweep the SFH timescale tau_gyr from 0.1 to 2 Gyr on a single dual power-law model and plot the resulting line ratios against the Kewley+2001 / Kauffmann+2003 demarcation curves. The locus migrates from the star-forming wing into the composite region as the population ages — SFH timescale is the upstream knob behind the BPT ionisation sequence.">
 
 .. only:: html
 
@@ -402,7 +406,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT diagram ionization sequence from ages</div>
+      <div class="sphx-glr-thumbnail-title">Stellar-population age moves a galaxy on the BPT diagram</div>
     </div>
 
 

@@ -37,28 +37,11 @@ Run::
     python examples/inference/plot_multichain_speedup.py
 
 Output: ``plot_multichain_speedup.png`` (per-sample wall time, single
+
 chain vs four chains, across NUTS / HMC / dynamic HMC / GHMC / MCLMC /
 adjusted MCLMC / ray tracing).
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-187
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_multichain_speedup.py", line 54, in <module>
-        HERE = Path(__file__).parent
-                    ^^^^^^^^
-    NameError: name '__file__' is not defined
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 25-191
 
 .. code-block:: Python
 
@@ -66,6 +49,9 @@ adjusted MCLMC / ray tracing).
     from __future__ import annotations
 
     import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import time
     from pathlib import Path
 

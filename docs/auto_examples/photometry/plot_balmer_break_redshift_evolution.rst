@@ -49,26 +49,14 @@ Reference: For dust absorption modeling and SED fundamentals, see Calzetti
 et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 1000) SSP synthesis code.
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-193
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved: plot_balmer_break_redshift_evolution.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 33-197
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -114,7 +102,7 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
             "*": tengri.FIXED,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 0.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },

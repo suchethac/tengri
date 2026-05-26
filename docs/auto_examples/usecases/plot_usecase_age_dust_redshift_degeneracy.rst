@@ -18,87 +18,51 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:
 
 
-The age-dust-redshift degeneracy in photometry
-==============================================
+SyntaxError
+===========
 
-Optical photometry alone cannot uniquely break the degeneracy between stellar
-age, dust attenuation, and redshift — a fundamental limitation in photo-z and
-SED fitting. Three physically distinct galaxy populations can produce nearly
-identical SDSS ugriz photometry:
+Example script with invalid Python syntax
 
-A. Young + dusty + low-z:      200 Myr, τ_V ≈ 2.0, z = 0.5
-B. Old + clean + mid-z:        5 Gyr,  τ_V ≈ 0.1, z = 1.0
-C. Post-starburst + dust + hi-z: 1 Gyr, τ_V ≈ 0.7, z = 1.5
-
-We build three `tengri.SEDModel` instances via `SEDModel.build()` and tune the
-total stellar mass of each to match a reference r-band magnitude. This demonstrates
-why multiwavelength observations (spectroscopy, X-ray, FIR) are critical for
-constraining both age and dust.
-
-See Papovich et al. 2001 (AJ, 122, 1) for the seminal discussion of this
-degeneracy in the context of Hubble Deep Field galaxies.
-
-References:
-- Papovich et al. 2001, AJ, 122, 1
-- Poggianti & Barbaro 1997, A&A, 325, 1025
-
-.. GENERATED FROM PYTHON SOURCE LINES 26-379
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/usecases/plot_usecase_age_dust_redshift_degeneracy.py", line 57, in <module>
-        model_a = SEDModel.build(
-                  ^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 4850, in build
-        return cls(
-               ^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 498, in __init__
-        param_map_deltas.append(self._init_nebular(spec, ssp_data))
-                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 965, in _init_nebular
-        self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
-                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/cue.py", line 966, in __init__
-        self._precompute_ionizing_params(ssp_data)
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/cue.py", line 1018, in _precompute_ionizing_params
-        raise CueWNESSPError(msg)
-    tengri.components.nebular.cue.CueWNESSPError: CueBackend received a wNE (with-Nebular-Emission) SSP. Max log10(Q_H) for bins younger than 10 Myr is 42.8, well below the ~47-50 floor for bare stellar populations. Cue's ionizing-spectrum fit will under-predict line luminosities by 4-7 dex.
-
-    Fix (one of):
-      1. Use a bare-stellar SSP. The four recipes that
-         use Cue (star_forming_photometry, quiescent_z0,
-         stochastic_sfh_jwst, agn_panchromatic) need a
-         file like fsps_prsc_miles_chabrier.h5. Download with:
-             from tengri.data import download_ssp
-             path = download_ssp('fsps_prsc_miles_chabrier.h5')
-         then  load_ssp_data(str(path)). See
-         tengri.data.list_remote_ssps() for the full catalogue.
-      2. Pass ssp_data=None to CueBackend and provide Q_H
-         externally.
-      3. Bypass for testing: set TENGRI_ALLOW_WNE_CUE=1
-         (downgrades to a warning).
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 1-382
 
 .. code-block:: Python
 
+    """
+    The age-dust-redshift degeneracy in photometry
+    ==============================================
+
+    Optical photometry alone cannot uniquely break the degeneracy between stellar
+    age, dust attenuation, and redshift — a fundamental limitation in photo-z and
+    SED fitting. Three physically distinct galaxy populations can produce nearly
+    identical SDSS ugriz photometry:
+
+    A. Young + dusty + low-z:      200 Myr, τ_V ≈ 2.0, z = 0.5
+    B. Old + clean + mid-z:        5 Gyr,  τ_V ≈ 0.1, z = 1.0
+    C. Post-starburst + dust + hi-z: 1 Gyr, τ_V ≈ 0.7, z = 1.5
+
+    We build three `tengri.SEDModel` instances via `SEDModel.build()` and tune the
+    total stellar mass of each to match a reference r-band magnitude. This demonstrates
+    why multiwavelength observations (spectroscopy, X-ray, FIR) are critical for
+    constraining both age and dust.
+
+    See Papovich et al. 2001 (AJ, 122, 1) for the seminal discussion of this
+    degeneracy in the context of Hubble Deep Field galaxies.
+
+    References:
+    - Papovich et al. 2001, AJ, 122, 1
+    - Poggianti & Barbaro 1997, A&A, 325, 1025
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
     import tengri
-    from tengri import FIXED, Observation, Photometry, SEDModel, Uniform, recipes
+    from tengri import Observation, Photometry, SEDModel
 
     # Setup
     tengri.analysis.plotting.setup_style()
@@ -129,7 +93,7 @@ References:
             "type": "dexp",
             "*": tengri.FIXED,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,  # Will be tuned for magnitude match
+            "log_total_mass": 10.0,  # Will be tuned for magnitude match
         },
         dust={
             "type": "two_component",
@@ -163,7 +127,7 @@ References:
             "type": "dexp",
             "*": tengri.FIXED,
             "tau_gyr": 8.0,
-            "log_peak_sfr": 1.5,  # Will be tuned
+            "log_total_mass": 10.0,  # Will be tuned
         },
         dust={
             "type": "two_component",
@@ -198,7 +162,7 @@ References:
             "*": tengri.FIXED,
             "peak_lbt_gyr": 1.0,
             "width_gyr": 0.5,
-            "log_peak_sfr": 1.5,  # Will be tuned
+            "log_total_mass": 10.0,  # Will be tuned
         },
         dust={
             "type": "two_component",
@@ -219,9 +183,9 @@ References:
     baseline_c["dust_slope"] = -0.7
 
 
-    # Bisection helper to find log_peak_sfr that produces target r-band magnitude
-    def _bisect_log_peak_sfr(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
-        """Binary search for log_peak_sfr that produces m_r = m_r_target."""
+    # Bisection helper to find log_total_mass that produces target r-band magnitude
+    def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
+        """Binary search for log_total_mass that produces m_r = m_r_target."""
         for iteration in range(30):
             mid = 0.5 * (lo + hi)
             params = {**baseline, sfh_param_name: mid}
@@ -246,20 +210,20 @@ References:
 
     # Tune each scenario to match target r-band magnitude
     print("\nTuning stellar masses to match r-band magnitude...")
-    log_peak_sfr_a = _bisect_log_peak_sfr(model_a, "sfh_dexp_log_peak_sfr", baseline_a, m_r_target)
-    baseline_a["sfh_dexp_log_peak_sfr"] = log_peak_sfr_a
+    log_total_mass_a = _bisect_log_total_mass(model_a, "sfh_dexp_log_total_mass", baseline_a, m_r_target)
+    baseline_a["sfh_dexp_log_total_mass"] = log_total_mass_a
     params_a = baseline_a
-    print(f"  Scenario A: log_peak_sfr = {log_peak_sfr_a:.3f}")
+    print(f"  Scenario A: log_total_mass=10.0)
 
-    log_peak_sfr_b = _bisect_log_peak_sfr(model_b, "sfh_dexp_log_peak_sfr", baseline_b, m_r_target)
-    baseline_b["sfh_dexp_log_peak_sfr"] = log_peak_sfr_b
+    log_total_mass_b = _bisect_log_total_mass(model_b, "sfh_dexp_log_total_mass", baseline_b, m_r_target)
+    baseline_b["sfh_dexp_log_total_mass"] = log_total_mass_b
     params_b = baseline_b
-    print(f"  Scenario B: log_peak_sfr = {log_peak_sfr_b:.3f}")
+    print(f"  Scenario B: log_total_mass=10.0)
 
-    log_peak_sfr_c = _bisect_log_peak_sfr(model_c, "sfh_lnorm_log_peak_sfr", baseline_c, m_r_target)
-    baseline_c["sfh_lnorm_log_peak_sfr"] = log_peak_sfr_c
+    log_total_mass_c = _bisect_log_total_mass(model_c, "sfh_lnorm_log_total_mass", baseline_c, m_r_target)
+    baseline_c["sfh_lnorm_log_total_mass"] = log_total_mass_c
     params_c = baseline_c
-    print(f"  Scenario C: log_peak_sfr = {log_peak_sfr_c:.3f}")
+    print(f"  Scenario C: log_total_mass=10.0)
 
     # Predict photometry for all three scenarios
     print("\nComputing photometry predictions...")
@@ -444,11 +408,6 @@ References:
     print("  * Papovich et al. 2001 (AJ 122, 1) — seminal HST/HDF discussion")
     print("  * Poggianti & Barbaro 1997 (A&A 325, 1025) — spectral synthesis context")
     print("=" * 70)
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.163 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:

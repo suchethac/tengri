@@ -21,6 +21,11 @@
 AGN host-galaxy decomposition: disentangling Seyfert contributions
 ===================================================================
 
+.. image:: images/sphx_glr_plot_agn_host_decomposition_001.png
+   :alt: plot agn host decomposition
+   :class: sphx-glr-single-img
+
+
 A Seyfert galaxy SED is decomposed photometrically by varying the AGN
 contribution fraction ``agn_frac`` from 0 (pure host) to 1.0 (pure AGN)
 to 0.5 (composite). This demonstrates how to isolate the AGN contribution
@@ -37,25 +42,19 @@ For real data, this three-trace pattern can be extended to a suite of
 The analytic scaling is ``L_total = (1 - frac) * L_host + frac * L_AGN``.
 
 References
+
 ----------
 .. [1] Ciesla et al. 2015, A&A, 576, A10 — Host-AGN decomposition via SED fitting
 .. [2] Stalevski et al. 2017, MNRAS, 470, 3876 — IR torus models in composite SEDs
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-96
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_host_decomposition_001.png
-   :alt: plot agn host decomposition
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_host_decomposition_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 26-101
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -75,7 +74,7 @@ References
 
     # Shared model components: star-forming host + dust
     COMMON = dict(
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 2.0, "log_peak_sfr": 1.2,
+        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 2.0, "log_total_mass": 10.0,
              "alpha": 1.5, "beta": 1.8},
         dust={"type": "two_component", "*": tengri.FIXED, "law_bc": "calzetti",
               "tau_diff": 0.2, "tau_bc": 0.5,

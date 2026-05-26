@@ -21,6 +21,11 @@
 Dust attenuation laws: family comparison across UV to near-IR
 ==============================================================
 
+.. image:: images/sphx_glr_plot_attenuation_law_family_001.png
+   :alt: plot attenuation law family
+   :class: sphx-glr-single-img
+
+
 Dust attenuation laws encode how interstellar dust preferentially absorbs
 short-wavelength (UV) starlight relative to optical/IR. The wavelength
 dependence is empirically calibrated to extinction measurements in the Milky Way
@@ -42,31 +47,14 @@ References:
 - Kriek & Conroy 2013, ApJL, 775, L16 (flexible Calzetti+bump+slope)
 - Pei 1992, ApJ, 395, 130 (SMC, LMC extinction)
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-89
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_attenuation_law_family_001.png
-   :alt: plot attenuation law family
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_attenuation_law_family_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved: plot_attenuation_law_family.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 26-93
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

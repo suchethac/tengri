@@ -18,45 +18,48 @@
 .. _sphx_glr_auto_examples_igm_plot_lyman_dropout_redshift_sweep.py:
 
 
-Lyman Dropout Redshift Sweep: IGM Absorption Evolution
-======================================================
+SyntaxError
+===========
 
-As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer
-observed wavelengths. This example shows how the Lyman dropout sweeps across
-the optical and near-infrared bands at :math:`z = 3, 4, 5, 6, 7`, progressively
-absorbing shorter-wavelength photometry and dropping it out of optical surveys.
-
-A young star-forming galaxy (age 10 Myr, modest dust :math:`\tau_V = 0.1`) is
-modeled once in the rest frame with a brief starburst, then IGM transmission
-(Inoue et al. 2014) is applied to the observed-frame SED. The sharp absorption
-feature — the Lyman discontinuity at observed 912(1+z) Å — marches redward and
-deepens with z, enabling photometric dropout selection at high redshift.
-
-References:
-- Inoue et al. 2014, MNRAS, 442, 1805 — IGM model
-- Madau 1995, ApJ, 441, 18 — Lyman-edge physics
-- Steidel et al. 1996, AJ, 112, 352 — Dropout-selection origins
-
-.. GENERATED FROM PYTHON SOURCE LINES 21-109
-
-
-
-.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_lyman_dropout_redshift_sweep_001.png
+.. image:: images/sphx_glr_plot_lyman_dropout_redshift_sweep_001.png
    :alt: plot lyman dropout redshift sweep
-   :srcset: /auto_examples/igm/images/sphx_glr_plot_lyman_dropout_redshift_sweep_001.png
    :class: sphx-glr-single-img
 
 
+Example script with invalid Python syntax
 
-
+.. GENERATED FROM PYTHON SOURCE LINES 1-118
 
 .. code-block:: Python
 
+    """
+    Lyman Dropout Redshift Sweep: IGM Absorption Evolution
+    ======================================================
+
+    As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer
+    observed wavelengths. This example shows how the Lyman dropout sweeps across
+    the optical and near-infrared bands at :math:`z = 3, 4, 5, 6, 7`, progressively
+    absorbing shorter-wavelength photometry and dropping it out of optical surveys.
+
+    A young star-forming galaxy (age 10 Myr, modest dust :math:`\\tau_V = 0.1`) is
+    modeled once in the rest frame with a brief starburst, then IGM transmission
+    (Inoue et al. 2014) is applied to the observed-frame SED. The sharp absorption
+    feature — the Lyman discontinuity at observed 912(1+z) Å — marches redward and
+    deepens with z, enabling photometric dropout selection at high redshift.
+
+    References:
+    - Inoue et al. 2014, MNRAS, 442, 1805 — IGM model
+    - Madau 1995, ApJ, 441, 18 — Lyman-edge physics
+    - Steidel et al. 1996, AJ, 112, 352 — Dropout-selection origins
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -78,17 +81,24 @@ References:
     SFH_CONFIG = {
         "type": "dpl",
         "*": tengri.FIXED,
+    <<<<<<< HEAD
+        "tau_gyr": 0.01,  # Very short timescale (10 Myr) — young burst
+        "log_total_mass": 1.0,  # Moderate star formation rate
+        "alpha": 2.0,  # Rising phase exponent
+        "beta": 2.5,  # Declining phase exponent
+    =======
         "tau_gyr": 0.01,      # Very short timescale (10 Myr) — young burst
-        "log_peak_sfr": 1.0,  # Moderate star formation rate
+        "log_total_mass": 10.0,  # Moderate star formation rate
         "alpha": 2.0,         # Rising phase exponent
         "beta": 2.5,          # Declining phase exponent
+    >>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     }
 
     DUST_CONFIG = {
         "type": "two_component",
         "*": tengri.FIXED,
         "tau_diff": 0.1,  # Diffuse dust
-        "tau_bc": 0.0,    # Minimal birth cloud dust
+        "tau_bc": 0.0,  # Minimal birth cloud dust
     }
 
     # Build and plot
@@ -139,7 +149,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_lyman_dropout_redshift_sweep.png", dpi=150, bbox_inches="tight")
-    plt.show()
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_lyman_dropout_redshift_sweep.py:

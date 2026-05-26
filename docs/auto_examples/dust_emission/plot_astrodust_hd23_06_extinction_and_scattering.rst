@@ -21,13 +21,22 @@
 Astrodust+PAH extinction, scattering, and albedo
 ================================================
 
+.. image:: images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
+   :alt: plot astrodust hd23 06 extinction and scattering
+   :class: sphx-glr-single-img
+
+
 Extinction opacity, polarized extinction, and single-scattering albedo for
 the Hensley & Draine 2023 fiducial size distribution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-79
+.. GENERATED FROM PYTHON SOURCE LINES 8-83
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

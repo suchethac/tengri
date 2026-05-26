@@ -675,6 +675,84 @@ def delayed_exponential(
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
+def sfhdelayed(
+    t_lookback: jnp.ndarray,
+    log_total_mass: float,
+    tau: float,
+    age: float,
+) -> jnp.ndarray:
+    """τ-delayed SFH — matches CIGALE ``sfh_delayed`` / Bagpipes ``delayed`` (#406).
+
+    .. math::
+
+       \\mathrm{SFR}(T) \\propto T \\, \\exp(-T / \\tau),
+       \\quad T = \\mathrm{age} - t_{\\mathrm{lb}} \\geq 0
+
+    SFR rises from 0 at galaxy formation (``T = 0``), peaks at cosmic-time
+    ``T = τ`` (lookback ``age − τ``), and declines toward the present
+    (``T = age``). Zero before formation (``t_lb > age``).
+
+    Distinct from :func:`declining_exponential` (registered as ``"tau"``),
+    which peaks at galaxy formation (FSPS ``sfh=1`` / Bagpipes
+    ``exponential``). The two functions have the same parameter set but
+    physically different shapes — see "Notes" below for the comparison.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+    tau : float
+        Timescale [yr]. Cosmic-time location of the SFR peak relative
+        to galaxy formation.
+    age : float
+        Galaxy age [yr] = lookback time of formation. Required ``> τ``
+        for the peak to lie inside the observable window.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr]. Mass-conserving:
+        ``trapezoid(out, t_lookback) == 10**log_total_mass`` to
+        floating-point precision.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` primitives.
+
+    **Comparison with the ``"tau"`` shape** (``declining_exponential``):
+
+    +-----------------------+------------------------+--------------------------+
+    | Registry name         | Peak in cosmic time T  | Upstream equivalents     |
+    +=======================+========================+==========================+
+    | ``tengri.tau``        | T = 0 (formation)      | FSPS ``sfh=1``,          |
+    |                       |                        | Bagpipes ``exponential`` |
+    +-----------------------+------------------------+--------------------------+
+    | ``tengri.delayed``    | T = τ                  | CIGALE ``sfh_delayed``,  |
+    | (this function)       |                        | Bagpipes ``delayed``     |
+    +-----------------------+------------------------+--------------------------+
+
+    Reproduction-notebook audit (#385) traced a wavelength-dependent
+    CIGALE-vs-tengri drift to comparing ``tengri.tau`` against
+    ``CIGALE.sfhdelayed`` — physically different SFHs with the same
+    name. This function closes that gap.
+
+    References
+    ----------
+    .. [1] M. Boquien et al., "CIGALE: a Python Code Investigating
+       Galaxy Emission," A&A 622, A103 (2019).
+       https://doi.org/10.1051/0004-6361/201834156
+    .. [2] A. C. Carnall et al., "Inferring the star formation histories
+       of massive quiescent galaxies with Bagpipes," MNRAS 480, 4379
+       (2018). https://doi.org/10.1093/mnras/sty2169
+    """
+    dt = age - t_lookback  # cosmic time elapsed since galaxy formation
+    raw = dt * jnp.exp(-dt / tau)
+    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), raw, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
+
+
 def declining_exponential(
     t_lookback: jnp.ndarray,
     log_total_mass: float,
@@ -687,6 +765,12 @@ def declining_exponential(
     ``0 <= T <= age``. Converting T = age - t_lb gives a shape that *increases*
     going back in lookback time (galaxy formed with highest SFR, declining to
     the present). This is opposite to ``exponential``.
+
+    **NOT the same as CIGALE ``sfh_delayed`` / Bagpipes ``delayed``** — those
+    peak at cosmic time T = τ, not T = 0. For that shape use
+    :func:`sfhdelayed` (registered as ``"delayed"``). Confusing the two
+    silently produced a wavelength-dependent residual in the CIGALE
+    reproduction audit (#385, #406).
 
     Rescaled so the integrated mass equals ``10**log_total_mass``.
 
@@ -862,6 +946,68 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
     (64,)
     """
     return norm * t_lookback * jnp.exp(-t_lookback / tau)
+
+
+def sfhdelayed(
+    t_lookback: jnp.ndarray,
+    log_total_mass: float,
+    tau: float,
+    age: float,
+) -> jnp.ndarray:
+    """Tau-delayed SFH in cosmic time (CIGALE ``sfhdelayed`` / Bagpipes ``delayed``).
+
+    The canonical "delayed tau" model from the SED-fitting literature:
+    SFR rises from 0 at galaxy formation, peaks at cosmic time
+    ``t_cosmic = tau`` after formation, and declines to today.
+
+    .. math::
+
+        \\mathrm{SFR}(t_\\mathrm{cosmic}) \\propto
+            \\frac{t_\\mathrm{cosmic}}{\\tau^{2}}\\,
+            \\exp\\!\\left(-\\frac{t_\\mathrm{cosmic}}{\\tau}\\right),
+        \\qquad t_\\mathrm{cosmic} = \\mathrm{age} - t_\\mathrm{lookback}
+
+    where ``t_cosmic`` is time since galaxy formation. The shape is zero
+    outside :math:`[0,\\,\\mathrm{age}]` and is rescaled by
+    :func:`_renormalize_to_mass` so that the integrated SFR equals
+    ``10**log_total_mass``.
+
+    This is the physically-motivated rise-then-fall shape used by CIGALE's
+    ``sfh_delayed`` module and Bagpipes' ``delayed`` component, distinct
+    from :func:`declining_exponential` (FSPS sfh=1 / Bagpipes
+    ``exponential``) which peaks at formation and monotonically declines.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr]. ``t_lookback = 0`` is today;
+        ``t_lookback = age`` is galaxy formation.
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+    tau : float
+        e-folding timescale [yr]. Peak SFR occurs at cosmic time
+        ``t_cosmic = tau`` after formation (i.e. lookback ``age - tau``).
+    age : float
+        Galaxy age [yr] = lookback time of galaxy formation.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    References
+    ----------
+    .. [1] Boquien et al. 2019, A&A 622, A103 — CIGALE ``sfh_delayed`` module.
+    .. [2] Carnall et al. 2018, MNRAS 480, 4379 — Bagpipes ``delayed`` SFH.
+    """
+    t_cosmic = age - t_lookback
+    raw = t_cosmic * jnp.exp(-t_cosmic / tau) / tau**2
+    shape = jnp.where((t_cosmic >= 0.0) & (t_cosmic <= age), raw, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 def psb_wild2020(

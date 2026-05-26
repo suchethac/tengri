@@ -21,11 +21,17 @@
 BOSA: log L_TIR sweep at fixed log sSFR
 ========================================
 
+.. image:: images/sphx_glr_plot_bosa_ltir_sweep_001.png
+   :alt: plot bosa ltir sweep
+   :class: sphx-glr-single-img
+
+
 Sweep infrared luminosity across the BOSA grid at fixed specific star
 formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward
-and enhancing PAH relative to continuum.
+and enhancing PAH relative to continuum. Library is normalised by
+∫Lν dν=1; shape variation with L_TIR is intentionally small.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-57
+.. GENERATED FROM PYTHON SOURCE LINES 10-58
 
 .. code-block:: Python
 
@@ -56,7 +62,7 @@ and enhancing PAH relative to continuum.
 
     fig, ax = plt.subplots(figsize=(8.0, 5.5))
     cmap = plt.get_cmap("plasma")
-    idx_show = np.linspace(0, len(log_ltir) - 1, 12).astype(int)
+    idx_show = np.linspace(0, len(log_ltir) - 1, 6).astype(int)
     for k, il in enumerate(idx_show):
         L_nu = spectra[il, i_ssfr]
         ax.plot(
@@ -71,10 +77,10 @@ and enhancing PAH relative to continuum.
         yscale="log",
         xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
         ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
-        xlim=(3.0, 1.0e3),
+        xlim=(50.0, 200.0),
         ylim=(1.0e-3, 2.0e0),
     )
-    ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=2)
+    ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=1)
     fig.tight_layout()
     plt.savefig("plot_bosa_ltir_sweep.png", dpi=150, bbox_inches="tight")
 

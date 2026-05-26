@@ -8,6 +8,10 @@ Inference Methods
 Comparing inference methods and convergence diagnostics.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
@@ -51,7 +55,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Fit a population of 50 mock galaxies under a hierarchical prior on a shared population-level metallicity parameter. The hierarchical model pools information across galaxies to tighten constraints on the population-level mean — a key differentiator of tengri&#x27;s inference stack.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -62,7 +66,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Hierarchical population fit with shared metallicity hyperprior</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
@@ -119,7 +123,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy photometry is degenerate in redshift and stellar mass — the same galaxy can look identical at different redshifts if the mass is adjusted. We mock a star-forming galaxy at z=2.5 with known stellar mass, observe it in ugrizYJHK bands at S/N=10, then compute χ² on a 2D grid of (z, M*) to show the classic photo-z degeneracy valley. The figure maps χ² as a heatmap with 1σ/2σ/3σ contours and overlays the true redshift.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -130,7 +134,7 @@ Comparing inference methods and convergence diagnostics.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Photo-z degeneracy: chi² landscape over redshift and stellar mass</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 

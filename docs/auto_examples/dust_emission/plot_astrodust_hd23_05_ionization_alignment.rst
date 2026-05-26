@@ -21,13 +21,22 @@
 Astrodust+PAH ionization fraction and alignment
 ===============================================
 
+.. image:: images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
+   :alt: plot astrodust hd23 05 ionization alignment
+   :class: sphx-glr-single-img
+
+
 Ionization fraction and alignment efficiency versus grain size for the
 Hensley & Draine 2023 fiducial size distribution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-46
+.. GENERATED FROM PYTHON SOURCE LINES 8-50
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -18,56 +18,119 @@
 .. _sphx_glr_auto_examples_dust_emission_plot_umin_sweep.py:
 
 
-Draine & Li Minimum Radiation Field (U_min)
-============================================
+U_min sweep: DL07 vs THEMIS FIR peak migration
+==============================================
 
-Minimum radiation field intensity U_min controls diffuse dust heating.
-Higher U_min implies hotter dust and FIR peak shifted blueward toward
-shorter wavelengths.
+.. image:: images/sphx_glr_plot_umin_sweep_001.png
+   :alt: plot umin sweep
+   :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-50
+
+Minimum radiation field intensity :math:`U_{\min}` controls diffuse dust
+heating — higher :math:`U_{\min}` → hotter dust → FIR peak shifted blueward.
+DL07 (Draine & Li 2007) and THEMIS (Jones et al. 2017) are overlaid so that
+their *response* to :math:`U_{\min}` can be compared on the same axes.
+
+Both libraries show the expected peak migration. They do **not** agree on
+absolute peak position: at matched :math:`U_{\min}`, THEMIS peaks roughly
+2× redder than DL07 because THEMIS adopts an amorphous-carbon/silicate mix
+with a systematically lower equilibrium temperature. THEMIS also produces
+~1 dex less mid-IR (30–70 μm) at low :math:`U_{\min}` because its grain
+population emits dominantly in the cold FIR.
+
+Curves are normalised by :math:`L_{\rm IR}` (8–1000 μm) so the peak
+amplitudes line up around :math:`\nu L_\nu / L_{\rm IR} \approx 0.7`.
+
+References
+----------
+- Draine & Li 2007, ApJ 657, 810
+- Jones et al. 2017, A&A 602, A46 (THEMIS)
+
+.. GENERATED FROM PYTHON SOURCE LINES 25-108
 
 .. code-block:: Python
 
 
     import warnings
 
+    import jax
     import matplotlib.pyplot as plt
+    import numpy as np
 
-    from tengri import FIXED, SEDModel, load_ssp, recipes
-    from tengri.analysis.plotting import SWEEP_CMAPS, setup_style, sweep_parameter
+    import tengri
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-    recipe = recipes.dust_demo()
-    recipe["dust"]["emission"] = {
-        "type": "draine_li2007",
-        "*": FIXED,
-        "umin": 1.0,
-        "gamma_dl": 0.01,
-        "qpah": 2.5,
+    C_AA_PER_S = 2.998e18
+    UMIN_VALUES = [0.1, 1.0, 5.0, 25.0]
+    LIB_TYPES = ["draine_li2007", "themis"]
+    LINESTYLES = {
+        "draine_li2007": "-",
+        "themis": "--",
     }
-    model = SEDModel.build(ssp_data=load_ssp(), **recipe)
+    COLORS = plt.cm.viridis(np.linspace(0.1, 0.9, len(UMIN_VALUES)))
+
+    recipe = {"sfh": {"type": "const", "*": tengri.FIXED, "log_sfr": 1.0}}
+    ssp = tengri.load_ssp()
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    sweep_parameter(
-        model,
-        "dust_umin",
-        [0.1, 1.0, 5.0, 25.0],
-        ax=ax,
-        cmap=SWEEP_CMAPS["dust"],
-        label_fmt=r"$U_{{min}}$ = {:.1f}",
-        wave_range=(1e5, 1e7),
-        normalize_at=None,
-    )
+
+    for lib_type in LIB_TYPES:
+        for i, umin in enumerate(UMIN_VALUES):
+            model = tengri.SEDModel.build(
+                ssp,
+                **recipe,
+                dust={
+                    "type": "two_component",
+                    "*": tengri.FIXED,
+                    "tau_diff": 1.0,
+                    "tau_bc": 1.5,
+                    "emission": {
+                        "type": lib_type,
+                        "*": tengri.FIXED,
+                        "umin": umin,
+                        "gamma_dl": 0.01,
+                        "qpah": 2.5,
+                    },
+                },
+                redshift=tengri.Fixed(0.05),
+            )
+            p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+            out = model.predict_rest_sed(p)
+            wave = np.asarray(out.wavelength)
+            nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+            # Normalise on integrated L_IR(8-1000 μm).
+            ir = (wave > 8e4) & (wave < 1e7)
+            if ir.sum() < 5:
+                continue
+            nu_ir = C_AA_PER_S / wave[ir]
+            order = np.argsort(nu_ir)
+            l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+            if l_ir > 0:
+                nu_l_nu = nu_l_nu / l_ir
+            label = rf"$U_{{\min}}$ = {umin:.1f} ({lib_type.replace('_', ' ')})"
+            ax.loglog(
+                wave,
+                nu_l_nu,
+                color=COLORS[i],
+                ls=LINESTYLES[lib_type],
+                lw=1.4,
+                label=label,
+            )
+
     ax.set(
         xscale="log",
         yscale="log",
-        ylim=(1e32, 1e40),
-        ylabel=r"$\lambda F_\lambda$ (not normalized)",
+        xlim=(3e4, 5e6),
+        ylim=(1e-3, 2.0),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
     )
+    ax.set_title("FIR peak migration with $U_{\\min}$ — DL07 (solid) vs THEMIS (dashed)")
+    ax.legend(frameon=False, fontsize=7, loc="lower left", ncol=2)
     fig.tight_layout()
     plt.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
 

@@ -39,10 +39,14 @@ stronger UV absorption and altered optical/near-IR colors.
 
 Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundations).
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-253
+.. GENERATED FROM PYTHON SOURCE LINES 23-257
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import os
     import warnings
@@ -75,7 +79,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     spec_delta = tengri.Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_tau_gyr=1.0,
-        sfh_dpl_log_peak_sfr=1.0,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.1,
         met_mode="delta",
         redshift=0.0,
@@ -86,7 +90,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     spec_ramp = tengri.Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_tau_gyr=1.0,
-        sfh_dpl_log_peak_sfr=1.0,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.1,
         met_mode="ramp",
         redshift=0.0,
@@ -97,7 +101,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     spec_twostep = tengri.Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_tau_gyr=1.0,
-        sfh_dpl_log_peak_sfr=1.0,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.1,
         met_mode="two_step",
         redshift=0.0,

@@ -21,6 +21,11 @@
 JWST NIRSpec PRISM vs G395M grating: Hα + [NII] resolution comparison
 ======================================================================
 
+.. image:: images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
+   :alt: plot nirspec prism vs grating
+   :class: sphx-glr-single-img
+
+
 A z=5 JADES-like star-forming galaxy observed with JWST NIRSpec in two modes:
 PRISM (R~100, low-resolution) and G395M grating (R~1000, medium-resolution).
 The Hα line at rest 6564.61 Å appears as a single blob in PRISM but resolves
@@ -38,33 +43,14 @@ References
 .. [3] Cameron et al. (2023). The assembly of metals in galaxies at z~3-5.
        MNRAS (submitted).
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-208
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
-   :alt: PRISM (blended): $R \approx 100$ — H$\alpha$ + [N\,II] appear as single feature, G395M (resolved): $R \approx 1000$ — Three distinct peaks clearly separated
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Saved: plot_nirspec_prism_vs_grating.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 23-212
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -93,7 +79,7 @@ References
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": tengri.FIXED,
-             "tau_gyr": 0.3, "log_peak_sfr": 0.8, "alpha": 2.5, "beta": 1.8},
+             "tau_gyr": 0.3, "log_total_mass": 10.0, "alpha": 2.5, "beta": 1.8},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.06, "tau_bc": 0.10},
         neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5, "logU": -1.5},
@@ -250,11 +236,6 @@ References
     plt.savefig("plot_nirspec_prism_vs_grating.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_nirspec_prism_vs_grating.png")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.801 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_nirspec_prism_vs_grating.py:

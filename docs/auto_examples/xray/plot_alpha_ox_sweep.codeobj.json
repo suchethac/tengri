@@ -1,4 +1,13 @@
 {
+ "alpha_ox_from_l2500": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.xray",
+   "module_short": "tengri.xray",
+   "name": "alpha_ox_from_l2500"
+  }
+ ],
  "jnp.logspace": [
   {
    "is_class": false,
@@ -26,6 +35,24 @@
    "name": "array"
   }
  ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
+  }
+ ],
+ "np.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "linspace"
+  }
+ ],
  "np.log10": [
   {
    "is_class": false,
@@ -33,6 +60,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "log10"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.cm.ScalarMappable": [

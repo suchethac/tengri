@@ -21,6 +21,11 @@
 SSP Library Shootout: Comparing Spectral Predictions at 5 Gyr, Z=0
 ==================================================================
 
+.. image:: images/sphx_glr_plot_ssp_library_shootout_001.png
+   :alt: plot ssp library shootout
+   :class: sphx-glr-single-img
+
+
 Stellar population synthesis templates differ across stellar evolution codes and
 isochrone libraries, producing measurable offsets in predicted spectra even at
 fixed age and metallicity. This gallery script loads four representative SSP
@@ -34,37 +39,14 @@ References:
   - Conroy et al. 2009 (FSPS): ApJ 699, 486
   - Vazdekis et al. 2010 (MILES): MNRAS 404, 1639
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-101
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_library_shootout_001.png
-   :alt: SSP Library Comparison: Age = 5.0 Gyr, Z = 0 (solar)
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_library_shootout_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    ✓ bc03_pdva_stelib_chabrier: age index 160 (5.00 Gyr), Z index 5 (-1.30 log10 Z)
-    ✓ fsps_prsc_miles_chabrier: age index 84 (5.01 Gyr), Z index 14 (-1.22 log10 Z)
-    ✓ fsps_mist_c3k_a_chabrier: age index 94 (5.01 Gyr), Z index 11 (-1.35 log10 Z)
-    ✓ bpss_stars_c3k_a_chabrier: age index 37 (5.01 Gyr), Z index 12 (-1.40 log10 Z)
-    ✓ pgny_mist_c3k_chabrier: age index 94 (5.01 Gyr), Z index 14 (-1.20 log10 Z)
-
-    ✓ Saved plot_ssp_library_shootout.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 18-105
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -21,15 +21,24 @@
 Four regimes of stochastic-SFH burstiness from smooth to extreme
 ================================================================
 
+.. image:: images/sphx_glr_plot_bursty_recovery_001.png
+   :alt: plot bursty recovery
+   :class: sphx-glr-single-img
+
+
 Four representative (σ, τ) pairs define burstiness regimes: Smooth (σ=0.3, τ=100 Myr),
 Moderate (σ=1.0, τ=50 Myr), Bursty (σ=2.0, τ=20 Myr), and Extreme (σ=3.0, τ=5 Myr).
 Each panel shows one forward-model draw with the smooth mean SFH overlaid,
 illustrating the range of morphologies that each regime produces before inference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-77
+.. GENERATED FROM PYTHON SOURCE LINES 10-81
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +62,7 @@ illustrating the range of morphologies that each regime produces before inferenc
             "type": "field_psd",
             "*": tengri.FIXED,
             "mean": "tsnorm",
-            "tsnorm_log_peak_sfr": 1.2,
+            "tsnorm_log_total_mass": 1.2,
             "tsnorm_peak_lbt_gyr": 3.0,
             "tsnorm_width_gyr": 3.0,
             "tsnorm_skew": 0.3,

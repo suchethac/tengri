@@ -83,6 +83,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "search",
         # ── SSP data setup ──────────────────────────────────────────
         "download_ssp",
+        "list_available_ssps",
         "list_known_ssps",
         # ── Registry introspection ──────────────────────────────────
         "describe",

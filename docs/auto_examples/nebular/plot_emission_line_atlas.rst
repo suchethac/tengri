@@ -21,6 +21,11 @@
 Optical emission-line atlas of a young star-forming galaxy
 ============================================================
 
+.. image:: images/sphx_glr_plot_emission_line_atlas_001.png
+   :alt: plot emission line atlas
+   :class: sphx-glr-single-img
+
+
 Zoomed rest-frame spectrum of an ionised-gas-dominated SF galaxy with
 the strongest optical / near-UV emission lines labelled. Wavelengths
 are vacuum; line positions follow NIST/Atomic Line List.
@@ -32,10 +37,14 @@ the strongest visible emission features. Issue #277 means Cue cannot
 be combined with a Photometry/Spectroscopy observation, so this card
 runs in rest-frame-only mode (which is all the atlas needs anyway).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-98
+.. GENERATED FROM PYTHON SOURCE LINES 16-102
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -54,7 +63,7 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
     model = tengri.SEDModel.build(
         tengri.load_ssp("fsps_prsc_miles_chabrier"),
         sfh={"type": "dpl", "*": tengri.FIXED,
-             "tau_gyr": 0.03, "log_peak_sfr": 1.5, "alpha": 4.0, "beta": 2.0},
+             "tau_gyr": 0.03, "log_total_mass": 10.0, "alpha": 4.0, "beta": 2.0},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.05, "tau_bc": 0.1},
         neb={"type": "cue", "*": tengri.FIXED},

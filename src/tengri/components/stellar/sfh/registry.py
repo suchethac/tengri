@@ -52,9 +52,11 @@ from tengri.components.stellar.sfh.mean_sfh import (
     exponential,
     gaussian_burst,
     lnorm,
+    sfhdelayed,
     norm,
     periodic,
     psb_wild2020,
+    sfhdelayed,
     snorm,
     snorm_burst,
     snorm_trunc_burst,
@@ -545,9 +547,45 @@ _register(
     short_doc="Delayed exponential SFH",
 )
 
+# --- delayed (tau-delayed, matches CIGALE sfhdelayed / bagpipes 'delayed') ---
+# SFR(t_cosmic) ∝ t_cosmic × exp(-t_cosmic/tau)² where t_cosmic = age − t_lookback.
+# Rises from 0 at galaxy formation (t_lb=age), peaks at lookback (age − tau),
+# declines to today (t_lb=0). The physically-standard rise-then-fall shape
+# distinct from ``tau`` / FSPS sfh=1 (peak at formation, monotonic decline).
+_register(
+    SFHModelSpec(
+        name="delayed",
+        fn=sfhdelayed,
+        params={
+            "sfh_delayed_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true, "", Uniform(7.0, 12.5),
+            ),
+            "sfh_delayed_tau_gyr": ParamDef(
+                "e-folding timescale (Gyr); peak SFR is tau-after-formation",
+                _lo_positive, "must have lo > 0", Uniform(0.1, 10.0),
+            ),
+            "sfh_delayed_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr)",
+                _lo_positive, "must have lo > 0", Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_delayed_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_delayed_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_delayed_age_gyr": ("age", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="Tau-delayed SFH (CIGALE sfhdelayed / Bagpipes 'delayed')",
+)
+
 # --- tau (declining exponential, matches FSPS sfh=1 / bagpipes 'exponential') ---
 # SFR(t_lb) = peak * exp(-(age - t_lb)/tau): highest at galaxy formation (t_lb=age),
 # declining to present (t_lb=0).  See declining_exponential for full derivation.
+# Note: this is NOT CIGALE's sfhdelayed (which is tau-delayed and rises from 0
+# at formation). Use ``name="delayed"`` for CIGALE-equivalent SFH.
 _register(
     SFHModelSpec(
         name="tau",
@@ -575,6 +613,44 @@ _register(
         composition_type="additive",
     ),
     short_doc="Declining exponential SFH (FSPS/bagpipes)",
+)
+
+# --- delayed (τ-delayed, matches CIGALE sfh_delayed / Bagpipes 'delayed') ---
+# SFR(T) ∝ T · exp(-T/τ) with T = age - t_lb. Rises from 0 at formation,
+# peaks at cosmic-time τ-after-formation (lookback age − τ), declines to
+# present. Distinct from ``tau`` above — see #406 for the audit that
+# surfaced the convention mismatch.
+_register(
+    SFHModelSpec(
+        name="delayed",
+        fn=sfhdelayed,
+        params={
+            "sfh_delayed_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            ),
+            "sfh_delayed_tau_gyr": ParamDef(
+                "Timescale (Gyr) — cosmic-time location of SFR peak",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_delayed_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr); must be > τ",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_delayed_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_delayed_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_delayed_age_gyr": ("age", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="τ-delayed SFH (CIGALE sfh_delayed / Bagpipes 'delayed')",
+    citation="Boquien et al. 2019 (CIGALE); Carnall et al. 2018 (Bagpipes)",
 )
 
 # --- const_exp (constant + exponential decline — "quenching at time T") ---

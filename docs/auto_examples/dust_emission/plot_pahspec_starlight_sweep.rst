@@ -21,14 +21,23 @@
 Draine+2021 PAHspec: starlight-spectrum sweep at fixed log U
 =============================================================
 
+.. image:: images/sphx_glr_plot_pahspec_starlight_sweep_001.png
+   :alt: plot pahspec starlight sweep
+   :class: sphx-glr-single-img
+
+
 Sweep across the 13 published PAHspec starlight spectra (mMMP, m31bulge,
 BC03/BPASS SSPs) at fixed ionization parameter. Demonstrates strong
 dependence of PAH features on starlight hardness.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-66
+.. GENERATED FROM PYTHON SOURCE LINES 9-70
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

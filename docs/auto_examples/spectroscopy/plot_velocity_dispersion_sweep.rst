@@ -18,24 +18,35 @@
 .. _sphx_glr_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py:
 
 
-Stellar Velocity Dispersion Sweep
-===================================
+SyntaxError
+===========
 
-Sweep stellar velocity dispersion σ_v ∈ {50, 100, 150, 250, 400} km/s to show
-how line broadening increases with dynamical heating. The Mg b absorption
-feature (~5170 Å) widens progressively, demonstrating the kinematic signature
-of higher-velocity stellar populations.
+Example script with invalid Python syntax
 
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_velocity_dispersion_sweep_001.png
-   :alt: plot_velocity_dispersion_sweep
-   :class: sphx-glr-single-img
-
-.. GENERATED FROM PYTHON SOURCE LINES 17-116
+.. GENERATED FROM PYTHON SOURCE LINES 1-120
 
 .. code-block:: Python
 
+    """
+    Stellar Velocity Dispersion Sweep
+    ===================================
+
+    Sweep stellar velocity dispersion σ_v ∈ {50, 100, 150, 250, 400} km/s to show
+    how line broadening increases with dynamical heating. The Mg b absorption
+    feature (~5170 Å) widens progressively, demonstrating the kinematic signature
+    of higher-velocity stellar populations.
+
+    .. sphx-glr-precomputed-img:
+
+    .. image:: images/sphx_glr_plot_velocity_dispersion_sweep_001.png
+       :alt: plot_velocity_dispersion_sweep
+       :class: sphx-glr-single-img
+
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -62,7 +73,7 @@ of higher-velocity stellar populations.
     )
 
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(0.8),
+        sfh_tsnorm_log_total_mass=10.0),
         sfh_tsnorm_peak_lbt_gyr=Fixed(2.5),
         sfh_tsnorm_width_gyr=Fixed(1.8),
         sfh_tsnorm_skew=Fixed(0.1),

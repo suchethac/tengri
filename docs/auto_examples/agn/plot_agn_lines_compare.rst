@@ -21,6 +21,11 @@
 AGN emission-line backbones compared
 ======================================
 
+.. image:: images/sphx_glr_plot_agn_lines_compare_001.png
+   :alt: plot agn lines compare
+   :class: sphx-glr-single-img
+
+
 Four production line backbones layered on top of the same disc +
 torus at fixed ``log L_bol = 12.5``. The line backbone controls
 which optical/UV emission features the model produces — narrow-line
@@ -34,10 +39,14 @@ not shipped with the gallery):
 - ``blr``     — Broad-line region (Cracco+2016 photoionization grid)
 - ``qsogen``  — Temple+2021 empirical type-1 lines
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-90
+.. GENERATED FROM PYTHON SOURCE LINES 18-94
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

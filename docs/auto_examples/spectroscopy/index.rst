@@ -8,6 +8,10 @@ Spectroscopy
 Spectroscopic fitting and spectral features.
 
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
+
 
 .. raw:: html
 
@@ -51,7 +55,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="High-redshift star-forming galaxy with strong rest-frame UV and optical emission lines redshifted into the JWST NIRSpec G395M window (2.9–5.1 μm). Lines include Lyα, CIV, HeII, CIII], [OII], Hβ, [OIII], and Hα, each annotated with rest wavelength and vacuum-frame position.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -62,7 +66,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Mock JWST NIRSpec G395M spectrum of a z=7 star-forming galaxy</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 
@@ -187,7 +191,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep stellar velocity dispersion σ_v ∈ {50, 100, 150, 250, 400} km/s to show how line broadening increases with dynamical heating. The Mg b absorption feature (~5170 Å) widens progressively, demonstrating the kinematic signature of higher-velocity stellar populations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Example script with invalid Python syntax ">
 
 .. only:: html
 
@@ -198,7 +202,7 @@ Spectroscopic fitting and spectral features.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Velocity Dispersion Sweep</div>
+      <div class="sphx-glr-thumbnail-title">SyntaxError</div>
     </div>
 
 

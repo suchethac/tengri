@@ -21,6 +21,11 @@
 The Fundamental Metallicity Relation: M*-Z-SFR three-body interaction
 =====================================================================
 
+.. image:: images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
+   :alt: plot usecase fundamental metallicity relation
+   :class: sphx-glr-single-img
+
+
 The Mannucci+2010 fundamental metallicity relation (FMR) describes how
 a galaxy's gas-phase metallicity (Z) depends not only on its stellar mass
 (M*) but also on its star formation rate (SFR). This three-parameter
@@ -41,21 +46,14 @@ References:
 - Mannucci et al. 2010, MNRAS, 408, 2115 (the FMR definition)
 - Lara-López et al. 2010, A&A, 521, L53 (confirmation with SDSS)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-163
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
-   :alt: plot usecase fundamental metallicity relation
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 25-167
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

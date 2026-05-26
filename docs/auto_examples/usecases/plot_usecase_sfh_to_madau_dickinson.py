@@ -26,6 +26,10 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 (arXiv:1403.0007; "Cosmic Star Formation History")
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
