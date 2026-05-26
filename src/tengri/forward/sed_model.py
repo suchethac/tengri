@@ -488,6 +488,7 @@ class SEDModel:
 
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
+        self._validate_metallicity_bounds(spec, ssp_data)
 
         # ── Dust (attenuation + emission) ─────────────────────────
         param_map_deltas.append(self._init_dust(spec))
@@ -888,6 +889,94 @@ class SEDModel:
             delta.update(_EVOLVING_ALPHA_PARAM_MAP)
 
         return delta
+
+    # Names of every public-API metallicity parameter that resolves to a
+    # log10(Z/Zsun) lookup on the SSP grid. Each lives on the same grid
+    # axis (``ssp_data.ssp_lgmet``) so the bounds check is identical.
+    _MET_LOGZSOL_PARAM_NAMES = (
+        "met_logzsol",
+        "met_logzsol_0",
+        "met_logzsol_final",
+        "met_logzsol_old",
+        "met_logzsol_young",
+        "met_logzsol_burst",
+        "met_logzsol_base",
+    )
+
+    def _validate_metallicity_bounds(self, spec, ssp_data):
+        """Warn / raise if any ``met_logzsol*`` value escapes the SSP grid.
+
+        The forward model interpolates log10(Z/Zsun) onto ``ssp_data.ssp_lgmet``
+        with ``jnp.clip`` at the grid edges and ``jnp.searchsorted`` for the
+        bracket — so an out-of-range value silently clamps to the edge and
+        produces a smooth-but-wrong SED. A MAP/MCMC chain wandering to a
+        prior edge would interpret that plateau as a likelihood maximum
+        (issue #442).
+
+        Catch this at construction time rather than at forward-pass time:
+        the JIT'd predict path can't raise Python exceptions, but build()
+        can.
+
+        Both ``Fixed`` out-of-grid values and ``Uniform`` priors with
+        out-of-grid bounds emit a :class:`UserWarning`. The forward pass
+        still produces a numerical SED (via ``jnp.clip``), but the
+        warning makes the silent-clip path visible. A strict raise was
+        considered but rejected: synthetic / non-Zsun-offset SSPs (e.g.
+        fixture grids in unit tests) sometimes ship lgmet values that
+        live in log10(Z/Zsun) directly rather than absolute log10(Z),
+        and we don't want to lock them out.
+        """
+        if ssp_data is None:
+            return  # synthetic / placeholder construction path
+
+        lgmet = np.asarray(ssp_data.ssp_lgmet)
+        if lgmet.size == 0:
+            return
+
+        # SSP grid stores absolute log10(Z); user-facing params are
+        # log10(Z/Zsun), which differs by LOG10_ZSUN.
+        grid_lo_zsol = float(lgmet.min()) - LOG10_ZSUN
+        grid_hi_zsol = float(lgmet.max()) - LOG10_ZSUN
+
+        distributions = getattr(spec, "_distributions", {})
+        for name in self._MET_LOGZSOL_PARAM_NAMES:
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+            if dist.is_fixed:
+                val = float(dist.value)
+                if not (grid_lo_zsol <= val <= grid_hi_zsol):
+                    import warnings
+
+                    warnings.warn(
+                        f"{name}={val:.3f} is outside the SSP grid metallicity "
+                        f"range [{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
+                        f"log10(Z/Zsun) (absolute grid log10(Z) ∈ "
+                        f"[{lgmet.min():.3f}, {lgmet.max():.3f}]). The forward "
+                        f"model silently clips out-of-range values, producing "
+                        f"a misleadingly smooth SED (issue #442). Either set "
+                        f"{name} inside the grid, or load an SSP whose grid "
+                        f"covers your target metallicity.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
+            else:
+                lo, hi = float(dist.lo), float(dist.hi)
+                if lo < grid_lo_zsol or hi > grid_hi_zsol:
+                    import warnings
+
+                    warnings.warn(
+                        f"{name} prior bounds [{lo:.3f}, {hi:.3f}] extend "
+                        f"beyond the SSP grid metallicity range "
+                        f"[{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
+                        f"log10(Z/Zsun). Samples outside the grid will "
+                        f"silently clip to the edge — a MAP/MCMC chain "
+                        f"wandering there registers a fake likelihood "
+                        f"maximum (issue #442). Tighten the prior to within "
+                        f"the grid range or load an SSP with broader coverage.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.
@@ -3027,42 +3116,23 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes (via ``predict_photometry`` or ``predict_luminosity``).
+        **JIT-compatible**: yes (via ``predict_photometry``).
 
-        Uses :func:`dsps.calc_obs_mag` when available (cosmology-aware),
-        falls back to conversion from photometric flux otherwise.
+        Thin wrapper over :meth:`predict_photometry` — converts the same
+        photon-rate-weighted flux density that enters the photometric
+        likelihood (Bessell & Murphy 2012 eq. A24) into AB magnitudes.
+        This guarantees ``predict_magnitudes(p)`` and
+        ``ab_mag_from_flux(predict_photometry(p))`` agree by construction;
+        previously the magnitudes path used ``dsps.calc_obs_mag``'s
+        per-log-bin convention, which differs from the photometric
+        likelihood convention by 5–40 mmag in broad blue filters where
+        the SED curvature inside the passband is non-trivial (issue #436).
         """
         if self.filter_waves is None:
             raise ValueError("No filters set.")
 
-        try:
-            from dsps import calc_obs_mag
-
-            from tengri.cosmology import DEFAULT_COSMO
-
-            sed_lsun = self.predict_luminosity(params)
-            z = self._get_redshift(params)
-            cosmo = DEFAULT_COSMO
-
-            mags = []
-            for fw, ft in zip(self.filter_waves, self.filter_trans):
-                m = calc_obs_mag(
-                    self.ssp_data.ssp_wave,
-                    sed_lsun,
-                    fw,
-                    ft,
-                    z,
-                    cosmo.Om0,
-                    cosmo.w0,
-                    cosmo.wa,
-                    cosmo.h,
-                )
-                mags.append(m)
-            return jnp.array(mags)
-
-        except ImportError:
-            flux = self.predict_photometry(params)
-            return ab_mag_from_flux(flux)
+        flux = self.predict_photometry(params)
+        return ab_mag_from_flux(flux)
 
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.
