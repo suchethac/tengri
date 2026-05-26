@@ -187,9 +187,7 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
     # kernel's correlation structure can't be transferred to the SSP grid
     # without rebuilding it.
     if model.uses_stochastic_sfh:
-        _sfr_on_ssp_orch = jnp.interp(
-            model.ssp_ages_yr, sfh_lbt_grid_orch, _sfr_orch_grid
-        )
+        _sfr_on_ssp_orch = jnp.interp(model.ssp_ages_yr, sfh_lbt_grid_orch, _sfr_orch_grid)
     else:
         _sfh_public_names = getattr(model, "_sfh_public_names", set())
         _kw = {
