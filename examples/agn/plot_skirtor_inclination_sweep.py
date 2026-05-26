@@ -143,7 +143,7 @@ legend = ax1.legend(
     ncol=1,
 )
 
-for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS"), (100.0, "FIR")]:
+for um, _name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS"), (100.0, "FIR")]:
     ax1.axvline(um * 1.0e4, color="0.85", lw=0.5, alpha=0.5)
 
 # Panel (b): Silicate feature zoom (3–30 μm, 4 angles)

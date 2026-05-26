@@ -122,7 +122,7 @@ ax1.legend(fontsize=9, frameon=False, loc="lower left")
 ax1.grid(True, alpha=0.2, which="both")
 
 # Mark prominent Type-1 features
-for wl, lbl in [(1216, r"Ly$\alpha$"), (4861, r"H$\beta$"), (6563, r"H$\alpha$")]:
+for wl, _lbl in [(1216, r"Ly$\alpha$"), (4861, r"H$\beta$"), (6563, r"H$\alpha$")]:
     ax1.axvline(wl, color="navy", ls=":", lw=0.8, alpha=0.4)
 
 # Type 2 (edge-on): attenuated continuum, narrow lines only
@@ -137,7 +137,7 @@ ax2.legend(fontsize=9, frameon=False, loc="lower left")
 ax2.grid(True, alpha=0.2, which="both")
 
 # Mark prominent Type-2 features
-for wl, lbl in [(6563, r"[N II]"), (6583, r"H$\alpha$"), (5007, r"[O III]")]:
+for wl, _lbl in [(6563, r"[N II]"), (6583, r"H$\alpha$"), (5007, r"[O III]")]:
     ax2.axvline(wl, color="darkred", ls=":", lw=0.8, alpha=0.4)
 
 # ============================================================================
@@ -180,9 +180,7 @@ for label, cos_inc, color in INCLINATIONS:
 
 for wl_um, name in [(0.1216, r"Ly$\alpha$"), (0.6563, r"H$\alpha$"), (9.7, "silicate")]:
     ax_trans.axvline(wl_um, color="0.6", ls=":", lw=0.7)
-    ax_trans.text(
-        wl_um * 1.05, 1.5e41, name, fontsize=8, color="0.45", va="bottom", rotation=90
-    )
+    ax_trans.text(wl_um * 1.05, 1.5e41, name, fontsize=8, color="0.45", va="bottom", rotation=90)
 
 ax_trans.set(
     xlim=(1.0e-3, 100.0),
