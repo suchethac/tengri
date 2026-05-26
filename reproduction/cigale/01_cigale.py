@@ -233,10 +233,12 @@ save_fig("01_ssp_bc03.png")
 # %% [markdown]
 # ## §2 Star formation histories
 #
-# tengri's `sfh.tau` is the same closed-form τ-delayed shape CIGALE
-# uses in `sfhdelayed`: SFR(t) ∝ t · exp(−t/τ), peak at t = τ. Both
-# integrate to 1 M☉ formed by `age` — CIGALE via the `normalise=True`
-# flag, tengri via `log_total_mass = 0.0`.
+# tengri's `sfh.delayed` is the same closed-form τ-delayed shape CIGALE
+# uses in `sfhdelayed`: SFR(t) ∝ t · exp(−t/τ), peak at cosmic-time
+# t = τ (lookback `age − τ`). Both integrate to 1 M☉ formed by `age` —
+# CIGALE via the `normalise=True` flag, tengri via `log_total_mass = 0.0`.
+# (`sfh.tau` is a separate model — FSPS sfh=1 / Bagpipes "exponential":
+# monotonic decline from formation. Different physics.)
 
 # %% [markdown]
 # ### τ-delayed
@@ -249,7 +251,7 @@ t_c, sfr_c = C.sfh_curve(
 
 m_sfh = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -270,7 +272,7 @@ if sfr_t.max() > 0:
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, "pcigale.sed_modules.sfhdelayed (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri sfh.tau (τ_gyr=1, age_gyr=5)"),
+    (ax_r, "tengri sfh.delayed (τ_gyr=1, age_gyr=5)"),
 ):
     ax.set_xlabel("Cosmic age since SF onset [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
@@ -346,7 +348,7 @@ w_c, L_c = C.to_lnu(sed_c)
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -357,7 +359,7 @@ _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r,
         label_l="pcigale  sfhdelayed + bc03",
-        label_r="tengri  sfh.tau + bc03")
+        label_r="tengri  sfh.delayed + bc03")
 ax_l.plot(w_c, L_c, "C0-", linewidth=1.5)
 ax_l.text(0.05, 0.95, r"$M_\star = 1\,M_\odot$ (norm)",
           transform=ax_l.transAxes, fontsize=10, va="top",
@@ -430,7 +432,7 @@ ax_t.set_ylabel(r"$A_\lambda / A_V$")
 ax_t.set_title(r"tengri attenuation laws  ($\tau_V = 0.3$)")
 m_int = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -442,7 +444,7 @@ for law, label in tengri_laws:
     try:
         m_att = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+            sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
                  "log_total_mass": Fixed(0.0), "*": FIXED},
             dust={"type": "two_component", "law_bc": law, "law_diff": law,
                   "tau_bc": Fixed(0.15), "tau_diff": Fixed(0.15), "*": FIXED},
@@ -490,7 +492,7 @@ w_c_d, L_c_d = C.to_lnu(sed_c_dust)
 
 m_nd = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -499,7 +501,7 @@ s_nd = m_nd.predict_state({})
 
 m_d = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
@@ -546,7 +548,7 @@ w_c_ir, L_c_ir = C.to_lnu(sed_c_ir)
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED,
@@ -586,7 +588,7 @@ plt.close()
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
 U.panel(ax_l, ax_r,
         label_l="pcigale  fiducial chain",
-        label_r="tengri  sfh.tau + dust.dale2014")
+        label_r="tengri  sfh.delayed + dust.dale2014")
 ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
 ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
 for ax in (ax_l, ax_r):
@@ -620,7 +622,7 @@ w_c_st, L_c_st = C.to_lnu(sed_c_st)
 
 m_no_neb = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -629,7 +631,7 @@ s_no_neb = m_no_neb.predict_state({})
 
 m_neb = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     neb={"type": "cue", "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -674,7 +676,7 @@ w_base, L_base = C.to_lnu(sed_c_base)
 
 m_agn_base = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
@@ -706,7 +708,7 @@ ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
 try:
     m_silva = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
               "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
@@ -756,7 +758,7 @@ m_c = (e_kev_c >= 0.3) & (e_kev_c <= 200) & (L_x > 0)
 
 m_x = SEDModel.build(
     ssp_data=ssp,
-    sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
@@ -824,7 +826,7 @@ except Exception:
 try:
     m_r = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component",
               "tau_bc": Fixed(TAU_BC_FIDUCIAL),
@@ -893,7 +895,7 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     # against an igm='none' baseline at the same redshift.
     m_igm = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0),
               "tau_diff": Fixed(0.0), "*": FIXED},
@@ -902,7 +904,7 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     )
     m_no = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0),
               "tau_diff": Fixed(0.0), "*": FIXED},

@@ -94,7 +94,7 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
                     with_ir: bool = False, with_agn: bool = False) -> dict:
     kw = {
         "ssp_data": ssp,
-        "sfh": {"type": "tau", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+        "sfh": {"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(LOG_TOTAL_MASS_FIDUCIAL), "*": FIXED},
         "redshift": Fixed(0.0),
     }
