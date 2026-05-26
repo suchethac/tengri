@@ -21,11 +21,6 @@
 Bursty continuity prior: bin-edge-dependent σ schedule (Tacchella+2022)
 ========================================================================
 
-.. image:: images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
-   :alt: plot bursty continuity sigma schedule
-   :class: sphx-glr-single-img
-
-
 The bursty continuity prior (Tacchella+2022, ApJ 926, 134) shares the
 piecewise-constant continuity SFH with Leja+2019 but doubles the
 Student-t scale on log-SFR ratios whose younger bin edge is *recent*

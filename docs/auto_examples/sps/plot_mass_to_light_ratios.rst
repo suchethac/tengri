@@ -21,11 +21,6 @@
 Stellar mass-to-light ratios vs SSP age, per band
 ====================================================
 
-.. image:: images/sphx_glr_plot_mass_to_light_ratios_001.png
-   :alt: plot mass to light ratios
-   :class: sphx-glr-single-img
-
-
 ``M_★/L_band`` rises with stellar age in every band; the rise is
 steepest in g, where massive young stars dominate, and shallowest in
 ``K_s``, where red giants contribute at every age past the first

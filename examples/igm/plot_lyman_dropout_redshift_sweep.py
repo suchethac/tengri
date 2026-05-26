@@ -19,10 +19,13 @@ References:
 - Steidel et al. 1996, AJ, 112, 352 — Dropout-selection origins
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -44,17 +47,24 @@ C_AA_PER_S = 2.998e18
 SFH_CONFIG = {
     "type": "dpl",
     "*": tengri.FIXED,
+<<<<<<< HEAD
+    "tau_gyr": 0.01,  # Very short timescale (10 Myr) — young burst
+    "log_total_mass": 1.0,  # Moderate star formation rate
+    "alpha": 2.0,  # Rising phase exponent
+    "beta": 2.5,  # Declining phase exponent
+=======
     "tau_gyr": 0.01,      # Very short timescale (10 Myr) — young burst
-    "log_peak_sfr": 1.0,  # Moderate star formation rate
+    "log_total_mass": 10.0,  # Moderate star formation rate
     "alpha": 2.0,         # Rising phase exponent
     "beta": 2.5,          # Declining phase exponent
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
 }
 
 DUST_CONFIG = {
     "type": "two_component",
     "*": tengri.FIXED,
     "tau_diff": 0.1,  # Diffuse dust
-    "tau_bc": 0.0,    # Minimal birth cloud dust
+    "tau_bc": 0.0,  # Minimal birth cloud dust
 }
 
 # Build and plot
@@ -105,4 +115,3 @@ ax.text(
 
 fig.tight_layout()
 plt.savefig("plot_lyman_dropout_redshift_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

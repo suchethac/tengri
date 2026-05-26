@@ -10,6 +10,10 @@ show the attenuation law (not a galaxy SED) to isolate the curve shape.
 Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

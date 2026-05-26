@@ -5,7 +5,7 @@ Red Sequence vs Blue Cloud Bimodality
 Galaxy colour–magnitude diagram showing the distinct red and blue populations.
 We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25
 star-forming galaxies (continuous SFR) — varying stellar mass via
-``log_peak_sfr``. Each sample is placed at ``z = 0.05``, computing
+``log_total_mass``. Each sample is placed at ``z = 0.05``, computing
 ``u − r`` colour and rest-frame ``M_r`` magnitude. The colour bimodality and
 green valley are key signatures of galaxy assembly across cosmic time (Strateva
 et al. 2001 SDSS, Baldry et al. 2004).
@@ -19,6 +19,10 @@ Physical insight made obvious:
 - **Green valley** (intermediate): transitional populations; sparse in modern
   surveys due to fast quenching timescales
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -67,7 +71,7 @@ def build_model(peak_lbt, width, tau_diff, tau_bc):
     Returns
     -------
     model : SEDModel
-        Galaxy SED model with log_peak_sfr as free parameter (stellar mass knob).
+        Galaxy SED model with log_total_mass as free parameter (stellar mass knob).
     """
     return tengri.SEDModel.build(
         ssp,
@@ -77,7 +81,7 @@ def build_model(peak_lbt, width, tau_diff, tau_bc):
             "*": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
-            "log_peak_sfr": tengri.Uniform(-0.5, 2.0),  # stellar mass knob
+            "log_total_mass": 10.0, 2.0),  # stellar mass knob
             "skew": 0.0,
             "trunc": 13.0,
         },
@@ -114,7 +118,7 @@ for pop_label, peak, width, tau_diff, tau_bc, color, n_samples in POPULATIONS:
     m_r_mags = np.empty(n_samples)
 
     for i, log_sfr in enumerate(log_sfr_grid):
-        params = {**baseline, "log_peak_sfr": float(log_sfr)}
+        params = {**baseline, "log_total_mass": 10.0}
 
         # Compute photometry: [u, r]
         flux = _flux(model, params)
@@ -128,7 +132,7 @@ for pop_label, peak, width, tau_diff, tau_bc, color, n_samples in POPULATIONS:
 
         # Absolute magnitude (rest-frame, no K-correction applied)
         # For simplicity, assume all galaxies have similar distance modulus;
-        # rank by luminosity via log_peak_sfr
+        # rank by luminosity via log_total_mass
         m_r_abs = m_r - 2.5 * log_sfr
 
         u_r_colors[i] = u_r

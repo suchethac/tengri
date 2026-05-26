@@ -21,11 +21,6 @@
 Save and load a posterior to disk
 ==================================
 
-.. image:: images/sphx_glr_plot_recipe_save_load_posterior_001.png
-   :alt: plot recipe save load posterior
-   :class: sphx-glr-single-img
-
-
 How do I persist a posterior between sessions? This recipe runs a MAP fit,
 saves the result to HDF5, reloads it, and demonstrates basic analysis.
 Posterior objects can be checkpointed for long-running fits or multi-stage

@@ -21,11 +21,6 @@
 SKIRTOR Torus: Silicate features from face-on to edge-on
 =========================================================
 
-.. image:: images/sphx_glr_plot_skirtor_silicate_features_001.png
-   :alt: plot skirtor silicate features
-   :class: sphx-glr-single-img
-
-
 The 9.7 μm and 18 μm silicate bands are strong diagnostics of AGN torus
 orientation. When viewing the torus face-on (high cos_inc), dust emission
 dominates and silicates appear in emission. Edge-on views (low cos_inc)

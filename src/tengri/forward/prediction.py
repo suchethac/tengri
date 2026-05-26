@@ -1837,6 +1837,11 @@ class Prediction:
         (``state.derived["line_waves"]`` / ``["line_lums"]``). Matches
         legacy-path luminosities within numerical tolerance for both
         Cue and CloudyGrid backends.
+
+        Issues a one-time :class:`UserWarning` when the active backend
+        doesn't expose a per-line luminosity catalogue (BakedIn / Shock).
+        Without the warning, ``pred.lines.halpha`` etc. silently return
+        NaN — see #361.
         """
         if "line_waves" in self._cache:
             return
@@ -1845,6 +1850,20 @@ class Prediction:
         backend = model._nebular_backend
 
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
+            import warnings
+
+            backend_name = type(backend).__name__ if backend is not None else "None"
+            warnings.warn(
+                f"Nebular backend {backend_name!r} does not publish a "
+                "per-line luminosity catalogue, so pred.lines.halpha, "
+                ".hbeta, .bpt_nii, etc. will return NaN. To get discrete "
+                "line luminosities, rebuild the model with neb={'type': "
+                "'cue'}, 'cloudy', or 'cb19' (each requires a "
+                "compatible SSP and any backing grid; see "
+                "tengri.list_nebular_backends() for details). See #361.",
+                UserWarning,
+                stacklevel=3,
+            )
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])
             self._cache["q_h_total"] = jnp.array(jnp.nan)

@@ -43,6 +43,9 @@
 # %%
 import os
 
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
 import jax.numpy as jnp
@@ -50,6 +53,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tengri import (
+    FIXED,
     Fixed,
     Observation,
     Photometry,
@@ -156,11 +160,12 @@ if os.path.exists(SSP_PATH):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": Fixed},
+        sfh={"type": "dpl", "*": FIXED},
         dust={
-            "type": "calzetti",
+            "type": "single_component",
+            "law_bc": "calzetti",
             "tau_v": Fixed(0.4),
-            "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta": Fixed(1.8)},
+            "emission": {"type": "my_modified_blackbody", "*": FIXED},
         },
         redshift=Fixed(0.05),
     )

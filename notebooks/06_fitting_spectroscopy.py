@@ -32,6 +32,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 import time
 import warnings
@@ -218,7 +221,7 @@ print("Noise: cal_floor=1%, Gaussian likelihood")
 # %%
 spec_param = Parameters(
     mean_sfh_type="lnorm",
-    sfh_lnorm_log_peak_sfr=Uniform(-1.0, 2.0),
+    sfh_lnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_lnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
     sfh_lnorm_width_gyr=Uniform(0.5, 5.0),
     met_logzsol=Uniform(-2.0, 0.2),
@@ -232,13 +235,21 @@ print(f"Free parameters ({spec_param.n_free}): {', '.join(spec_param.free_params
 
 # Create model
 model_spec = SEDModel(spec_param, ssp_data, observation=obs)
+
+# Workaround for tengri issue: Fitter calls model.predict_spectrum(params)
+# with no wave_obs, and the model doesn't currently auto-derive wave_obs from
+# observation.spectroscopy.wave_obs. Setting _wave_obs explicitly makes the
+# elif-branch at SEDModel.predict_spectrum work. Remove once auto-derivation
+# (or a SEDModel.precompute_spectroscopy() entry point) lands upstream.
+model_spec._wave_obs = wave_obs
+
 print(f"Model built: {spec_param.n_free} free params")
 
 # %%
 # Generate mock spectrum: young, solar metallicity, moderate dust
 key = jax.random.PRNGKey(123)
 true_params = {
-    "sfh_lnorm_log_peak_sfr": jnp.array(0.5),
+    "sfh_lnorm_log_total_mass": jnp.array(0.5),
     "sfh_lnorm_peak_lbt_gyr": jnp.array(1.0),
     "sfh_lnorm_width_gyr": jnp.array(1.5),
     "met_logzsol": jnp.array(-0.05),

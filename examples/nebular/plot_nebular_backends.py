@@ -7,6 +7,10 @@ traditional photoionization grids (CloudyGrid) and SSP-embedded nebular.
 Shows [OIII] and H-alpha regions on a young starburst.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ model_cue = tengri.SEDModel.build(
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.5,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},

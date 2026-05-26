@@ -51,6 +51,24 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 34-152
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/Projects/tengri/examples/agn/plot_agn_bolometric_correction.py", line 102, in <module>
+        sed = xray_agn_corona(
+              ^^^^^^^^^^^^^^^^
+    TypeError: xray_agn_corona() got an unexpected keyword argument 'L_agn_bol'
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

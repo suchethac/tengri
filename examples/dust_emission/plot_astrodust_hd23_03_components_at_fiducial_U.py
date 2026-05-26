@@ -6,6 +6,10 @@ Per-component breakdown (Astrodust continuum, PAHs, spinning dust) at the
 Hensley & Draine 2023 fiducial ionization parameter :math:`\log_{10} U = 0.2`.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

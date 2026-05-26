@@ -26,15 +26,17 @@ References:
   - Selig et al. 2013, A&A, 554, A26 (NIFTy Information Field Theory framework)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import recipes
 from tengri.analysis.plotting import setup_style
 
 setup_style()
@@ -50,12 +52,14 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # Filters for photometry: JWST + HST near-/mid-IR suitable for high-z
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names([
-        "hst_f160w",      # NIR
-        "jwst_f200w",     # JWST NIR
-        "jwst_f277w",     # JWST MIR
-        "jwst_f356w",     # JWST MIR
-    ])
+    photometry=tengri.Photometry.from_names(
+        [
+            "hst_f160w",  # NIR
+            "jwst_f200w",  # JWST NIR
+            "jwst_f277w",  # JWST MIR
+            "jwst_f356w",  # JWST MIR
+        ]
+    )
 )
 
 # Build model with stochastic field component
@@ -85,12 +89,21 @@ key = jax.random.PRNGKey(42)
 # Truth: z=2, modest burstiness (psd_sigma ~ 0.15, psd_tau ~ 100 Myr)
 # The DPL component sets the broad envelope; the field adds structure
 truth_params = {
+<<<<<<< HEAD
+    "sfh_dpl_alpha": 0.5,  # declining SFR with time
+    "sfh_dpl_beta": 1.0,  # smooth exponential cutoff
+    "sfh_dpl_tau_gyr": 2.0,  # ~2 Gyr time-scale
+    "sfh_dpl_log_total_mass": 0.8,  # 10^0.8 ~ 6.3 Msun/yr
+    "sfh_field_psd_sigma": 0.15,  # moderate stochasticity amplitude
+    "sfh_field_psd_tau_myr": 100.0,  # ~100 Myr burstiness timescale
+=======
     "sfh_dpl_alpha": 0.5,           # declining SFR with time
     "sfh_dpl_beta": 1.0,            # smooth exponential cutoff
     "sfh_dpl_tau_gyr": 2.0,         # ~2 Gyr time-scale
-    "sfh_dpl_log_peak_sfr": 0.8,    # 10^0.8 ~ 6.3 Msun/yr
+    "sfh_dpl_log_total_mass": 0.8,    # 10^0.8 ~ 6.3 Msun/yr
     "sfh_field_psd_sigma": 0.15,    # moderate stochasticity amplitude
     "sfh_field_psd_tau_myr": 100.0, # ~100 Myr burstiness timescale
+>>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
     "dust_tau_bc": 0.3,
     "dust_tau_diff": 0.1,
     "dust_slope": -0.7,
@@ -109,9 +122,13 @@ noise_level = truth_phot / 20.0  # S/N = 20 per band
 key, subkey = jax.random.split(key)
 mock_flux = truth_phot + jax.random.normal(subkey, shape=truth_phot.shape) * noise_level
 
-print(f"Generated synthetic photometry:")
+print("Generated synthetic photometry:")
+<<<<<<< HEAD
+print(f"  n bands: {len(obs.photometry.filter_waves)}")
+=======
 print(f"  Bands: {obs.photometry.filter_names}")
-print(f"  SNR: ~20 per band")
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
+print("  SNR: ~20 per band")
 print(f"  Truth SFR (100 Myr): {truth_sfr_100myr:.2f} Msun/yr")
 
 # ============================================================================
@@ -120,7 +137,7 @@ print(f"  Truth SFR (100 Myr): {truth_sfr_100myr:.2f} Msun/yr")
 
 forward = tengri.ForwardModel.build(sed=model, observation=obs)
 
-print(f"Fitting with MAP + Adam optimizer (500 steps)...")
+print("Fitting with MAP + Adam optimizer (500 steps)...")
 posterior = forward.fit(
     mock_flux,
     noise_level,
@@ -138,11 +155,22 @@ print(f"Fit converged. Best-fit log-posterior: {posterior.log_posterior_best:.2f
 recovered_pred = model.predict(best_params)
 recovered_sfr_100myr = float(recovered_pred.sfh.sfr_100myr)
 
-print(f"Recovered PSD parameters:")
+print("Recovered PSD parameters:")
+<<<<<<< HEAD
+print(
+    f"  psd_sigma: {best_params['sfh_field_psd_sigma']:.3f} "
+    f"(true: {truth_params['sfh_field_psd_sigma']:.3f})"
+)
+print(
+    f"  psd_tau_myr: {best_params['sfh_field_psd_tau_myr']:.1f} "
+    f"(true: {truth_params['sfh_field_psd_tau_myr']:.1f})"
+)
+=======
 print(f"  psd_sigma: {best_params['sfh_field_psd_sigma']:.3f} "
       f"(true: {truth_params['sfh_field_psd_sigma']:.3f})")
 print(f"  psd_tau_myr: {best_params['sfh_field_psd_tau_myr']:.1f} "
       f"(true: {truth_params['sfh_field_psd_tau_myr']:.1f})")
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 print(f"  SFR (100 Myr): {recovered_sfr_100myr:.2f} Msun/yr")
 
 # ============================================================================
@@ -177,8 +205,7 @@ print(f"Posterior samples: {len(posterior_psd_sigma)}")
 # ============================================================================
 
 fig = plt.figure(figsize=(9, 6.5))
-gs = fig.add_gridspec(2, 2, height_ratios=[1.5, 1.3], width_ratios=[1, 1],
-                       hspace=0.35, wspace=0.3)
+gs = fig.add_gridspec(2, 2, height_ratios=[1.5, 1.3], width_ratios=[1, 1], hspace=0.35, wspace=0.3)
 
 ax_sfr = fig.add_subplot(gs[0, :])
 ax_psd_sigma = fig.add_subplot(gs[1, 0])
@@ -192,30 +219,59 @@ if len(posterior_sfr) > 5:
 else:
     sfr_16 = sfr_50 = sfr_84 = recovered_sfr_100myr
 
-ax_sfr.axhline(truth_sfr_100myr, color="red", lw=2.5, ls="--",
-               label=f"True SFR (100 Myr): {truth_sfr_100myr:.2f} M$_\\odot$ yr$^{-1}$")
-ax_sfr.fill_between([0, 1], sfr_16, sfr_84, alpha=0.3, color="#2ca02c",
-                     label=f"68% posterior: [{sfr_16:.2f}, {sfr_84:.2f}]")
-ax_sfr.plot([0.5], [sfr_50], marker="o", markersize=11, color="#2ca02c", zorder=5,
-            label=f"Posterior median: {sfr_50:.2f} M$_\\odot$ yr$^{-1}$")
+ax_sfr.axhline(
+    truth_sfr_100myr,
+    color="red",
+    lw=2.5,
+    ls="--",
+    label=f"True SFR (100 Myr): {truth_sfr_100myr:.2f} M$_\\odot$ yr$^{-1}$",
+)
+ax_sfr.fill_between(
+    [0, 1],
+    sfr_16,
+    sfr_84,
+    alpha=0.3,
+    color="#2ca02c",
+    label=f"68% posterior: [{sfr_16:.2f}, {sfr_84:.2f}]",
+)
+ax_sfr.plot(
+    [0.5],
+    [sfr_50],
+    marker="o",
+    markersize=11,
+    color="#2ca02c",
+    zorder=5,
+    label=f"Posterior median: {sfr_50:.2f} M$_\\odot$ yr$^{-1}$",
+)
 
 ax_sfr.set_xlim(-0.1, 1.1)
 ax_sfr.set_xticks([])
 ax_sfr.set_ylabel(r"SFR (100 Myr) [M$_\odot$ yr$^{-1}$]", fontsize=10)
-ax_sfr.set_title("Stochastic SFH recovery via IFT correlated field "
-                 "(burstiness is a free parameter)", fontsize=11, pad=12)
+ax_sfr.set_title(
+    "Stochastic SFH recovery via IFT correlated field (burstiness is a free parameter)",
+    fontsize=11,
+    pad=12,
+)
 ax_sfr.legend(frameon=False, fontsize=9, loc="upper right")
 ax_sfr.grid(True, alpha=0.2, axis="y")
-ax_sfr.set_ylim(min(sfr_16, truth_sfr_100myr) * 0.75,
-                max(sfr_84, truth_sfr_100myr) * 1.25)
+ax_sfr.set_ylim(min(sfr_16, truth_sfr_100myr) * 0.75, max(sfr_84, truth_sfr_100myr) * 1.25)
 
 # Bottom-left: PSD sigma posterior
 if len(posterior_psd_sigma) > 5:
     ax_psd_sigma.hist(posterior_psd_sigma, bins=12, color="#2ca02c", alpha=0.5, density=True)
-    ax_psd_sigma.axvline(truth_params["sfh_field_psd_sigma"], color="red", ls="--",
-                          lw=2.2, label=f"Truth: {truth_params['sfh_field_psd_sigma']:.3f}")
-    ax_psd_sigma.axvline(np.median(posterior_psd_sigma), color="#2ca02c", lw=2.2,
-                          label=f"Median: {np.median(posterior_psd_sigma):.3f}")
+    ax_psd_sigma.axvline(
+        truth_params["sfh_field_psd_sigma"],
+        color="red",
+        ls="--",
+        lw=2.2,
+        label=f"Truth: {truth_params['sfh_field_psd_sigma']:.3f}",
+    )
+    ax_psd_sigma.axvline(
+        np.median(posterior_psd_sigma),
+        color="#2ca02c",
+        lw=2.2,
+        label=f"Median: {np.median(posterior_psd_sigma):.3f}",
+    )
 else:
     ax_psd_sigma.axvline(best_params["sfh_field_psd_sigma"], color="#2ca02c", lw=2.2)
     ax_psd_sigma.axvline(truth_params["sfh_field_psd_sigma"], color="red", ls="--", lw=2.2)
@@ -228,10 +284,19 @@ ax_psd_sigma.grid(True, alpha=0.2, axis="y")
 # Bottom-right: PSD tau posterior
 if len(posterior_psd_tau) > 5:
     ax_psd_tau.hist(posterior_psd_tau, bins=12, color="#2ca02c", alpha=0.5, density=True)
-    ax_psd_tau.axvline(truth_params["sfh_field_psd_tau_myr"], color="red", ls="--",
-                       lw=2.2, label=f"Truth: {truth_params['sfh_field_psd_tau_myr']:.0f} Myr")
-    ax_psd_tau.axvline(np.median(posterior_psd_tau), color="#2ca02c", lw=2.2,
-                       label=f"Median: {np.median(posterior_psd_tau):.0f} Myr")
+    ax_psd_tau.axvline(
+        truth_params["sfh_field_psd_tau_myr"],
+        color="red",
+        ls="--",
+        lw=2.2,
+        label=f"Truth: {truth_params['sfh_field_psd_tau_myr']:.0f} Myr",
+    )
+    ax_psd_tau.axvline(
+        np.median(posterior_psd_tau),
+        color="#2ca02c",
+        lw=2.2,
+        label=f"Median: {np.median(posterior_psd_tau):.0f} Myr",
+    )
 else:
     ax_psd_tau.axvline(best_params["sfh_field_psd_tau_myr"], color="#2ca02c", lw=2.2)
     ax_psd_tau.axvline(truth_params["sfh_field_psd_tau_myr"], color="red", ls="--", lw=2.2)
@@ -242,4 +307,4 @@ ax_psd_tau.legend(frameon=False, fontsize=8)
 ax_psd_tau.grid(True, alpha=0.2, axis="y")
 
 plt.savefig("plot_stochastic_sfh_ift_recovery.png", dpi=150, bbox_inches="tight")
-print(f"Saved: plot_stochastic_sfh_ift_recovery.png")
+print("Saved: plot_stochastic_sfh_ift_recovery.png")

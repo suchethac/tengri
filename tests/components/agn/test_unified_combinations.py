@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import chex
 import jax
 import jax.numpy as jnp
@@ -12,6 +14,27 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.bounds
+
+
+def _real_silva04_grid_present() -> bool:
+    """Distinguish the real Silva+04 grid from the synthetic zero-template
+    fixture that ``tests/conftest.py`` creates for CI.
+
+    The synthetic grid lets the orchestration code path execute, but its
+    template is uniformly zero — so physics-level assertions (e.g. "torus
+    dominates IR") can only be exercised with the real grid.
+    """
+    import h5py
+
+    grid = Path(__file__).resolve().parents[2] / "data" / "silva04_torus_grid.h5"
+    if not grid.is_file():
+        return False
+    try:
+        with h5py.File(grid, "r") as f:
+            template = f["silva04/template"][...]
+    except (KeyError, OSError):
+        return False
+    return bool(np.any(template != 0.0))
 
 
 @pytest.fixture()
@@ -62,6 +85,10 @@ class TestUnifiedAgnCombinations:
         with pytest.raises(KeyError):
             unified_agn(wavelength, agn_log_lbol=44.0, torus_model="nonexistent")
 
+    @pytest.mark.skipif(
+        not _real_silva04_grid_present(),
+        reason="needs real Silva+04 torus grid (synthetic fixture is zero-template)",
+    )
     def test_torus_dominated_sed_uv_suppressed(self, wavelength):
         """With torus_frac=1.0, IR dominates over UV by Wien suppression.
 

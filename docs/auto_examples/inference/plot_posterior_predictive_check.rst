@@ -21,11 +21,6 @@
 Posterior predictive check: Bayesian goodness-of-fit diagnostic
 ================================================================
 
-.. image:: images/sphx_glr_plot_posterior_predictive_check_001.png
-   :alt: plot posterior predictive check
-   :class: sphx-glr-single-img
-
-
 The posterior predictive check (PPC) is the gold-standard Bayesian
 goodness-of-fit diagnostic (Rubin 1984; Gelman et al. 1996). We fit mock
 SDSS photometry, draw 100 samples from the posterior, regenerate mock

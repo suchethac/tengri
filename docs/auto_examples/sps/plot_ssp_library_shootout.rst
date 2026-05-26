@@ -21,11 +21,6 @@
 SSP Library Shootout: Comparing Spectral Predictions at 5 Gyr, Z=0
 ==================================================================
 
-.. image:: images/sphx_glr_plot_ssp_library_shootout_001.png
-   :alt: plot ssp library shootout
-   :class: sphx-glr-single-img
-
-
 Stellar population synthesis templates differ across stellar evolution codes and
 isochrone libraries, producing measurable offsets in predicted spectra even at
 fixed age and metallicity. This gallery script loads four representative SSP

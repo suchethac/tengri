@@ -21,11 +21,6 @@
 Early-time SFH slope α shapes the UV continuum
 ==============================================
 
-.. image:: images/sphx_glr_plot_dpl_alpha_sweep_001.png
-   :alt: plot dpl alpha sweep
-   :class: sphx-glr-single-img
-
-
 The rising slope ``α`` of a double-power-law star formation history controls
 how rapidly the galaxy assembled its mass before the peak. Larger α means a
 more abrupt onset of star formation, leaving a younger O/B-star population

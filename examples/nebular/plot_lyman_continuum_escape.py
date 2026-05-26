@@ -1,15 +1,12 @@
 """
-Lyman continuum escape fraction effect on ionizing photons
-==========================================================
+Lyman-continuum escape fraction reshapes the SED around the 912 A edge
+=======================================================================
 
-The Lyman continuum (λ < 912 Å rest) is the primary source of ionizing photons
-for nebular emission. Escape fraction ``f_esc`` sets the fraction of ionizing
-photons that escape the ISM without being absorbed. Higher ``f_esc`` increases
-ionizing photon loss and suppresses nebular line emission.
-
-This example focuses on the LyC region (rest 800–1300 Å) to clearly show
-how ionizing photon escape changes the SED around the Lyman edge for a
-star-forming galaxy at z = 0.05.
+We zoom on the Lyman-continuum region (rest 800-1300 A) and sweep
+the escape fraction f_esc to show how the 912 A discontinuity
+deepens as more ionising photons leave the ISM unabsorbed. Companion
+to ``plot_fesc_sweep.py``, which projects the same physics into
+optical line-ratio diagnostics.
 
 References
 ----------
@@ -18,6 +15,10 @@ References
 .. [2] Steidel et al. 2018, "The Low-z Lyman Continuum Survey",
     ApJ, 869, 123
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -47,10 +48,16 @@ model = tengri.SEDModel.build(
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_fesc": tengri.Uniform(0.0, 1.0), "neb_logU": -2.5, "neb_logZ_gas": -0.5},
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "neb_fesc": tengri.Uniform(0.0, 1.0),
+        "neb_logU": -2.5,
+        "neb_logZ_gas": -0.5,
+    },
     redshift=tengri.Fixed(0.05),
 )
 
@@ -78,7 +85,13 @@ for fesc in fesc_values:
     nu = 2.998e18 / wave_obs  # frequency in Hz
     nu_l_nu = nu * sed
 
-    ax.loglog(wave_obs, nu_l_nu, color=cmap(norm(fesc)), lw=1.4, label=f"$f_{{\\mathrm{{esc}}}} = {fesc:.1f}$")
+    ax.loglog(
+        wave_obs,
+        nu_l_nu,
+        color=cmap(norm(fesc)),
+        lw=1.4,
+        label=f"$f_{{\\mathrm{{esc}}}} = {fesc:.1f}$",
+    )
 
 # Set limits to focus on Lyman continuum and edge region (obs 840–1350 Å, rest-frame equivalent at z=0.05)
 ax.set_xlim(840, 1350)
@@ -108,4 +121,6 @@ for fesc in fesc_values:
     if len(above_edge) > 0 and len(below_edge) > 0:
         ratio = np.mean(below_edge) / np.mean(above_edge)
         print(f"f_esc={fesc:.1f}: LyC/non-LyC flux ratio = {ratio:.2f}")
-        print(f"  Mean LyC sed: {np.mean(below_edge):.3e}, Mean non-LyC sed: {np.mean(above_edge):.3e}")
+        print(
+            f"  Mean LyC sed: {np.mean(below_edge):.3e}, Mean non-LyC sed: {np.mean(above_edge):.3e}"
+        )

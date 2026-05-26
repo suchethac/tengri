@@ -21,11 +21,6 @@
 Panchromatic SED: Milky Way Analog
 ==================================
 
-.. image:: images/sphx_glr_plot_panchromatic_milky_way_analog_001.png
-   :alt: plot panchromatic milky way analog
-   :class: sphx-glr-single-img
-
-
 A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across
 the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).
 
@@ -56,6 +51,24 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
    https://doi.org/10.1088/0004-637X/784/1/83
 
 .. GENERATED FROM PYTHON SOURCE LINES 34-150
+
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/Projects/tengri/examples/multiwavelength/plot_panchromatic_milky_way_analog.py", line 147, in <module>
+        _script_dir = os.path.dirname(os.path.abspath(__file__))
+                                                      ^^^^^^^^
+    NameError: name '__file__' is not defined
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -175,6 +188,11 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
     _script_dir = os.path.dirname(os.path.abspath(__file__))
     _outfile = os.path.join(_script_dir, "plot_panchromatic_milky_way_analog.png")
     plt.savefig(_outfile, dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 21.048 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py:

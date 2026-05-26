@@ -21,11 +21,6 @@
 BOSA: log L_TIR sweep at fixed log sSFR
 ========================================
 
-.. image:: images/sphx_glr_plot_bosa_ltir_sweep_001.png
-   :alt: plot bosa ltir sweep
-   :class: sphx-glr-single-img
-
-
 Sweep infrared luminosity across the BOSA grid at fixed specific star
 formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward
 and enhancing PAH relative to continuum.

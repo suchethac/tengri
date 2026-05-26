@@ -27,6 +27,45 @@ from tengri.utils.compile_log import compile_timer
 logger = logging.getLogger(__name__)
 
 
+def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> None:
+    """Warn before NUTS warmup OOMs at D >= 8 with dense mass matrix (#319).
+
+    The trace graph for full mass-matrix adaptation grows quadratically
+    in D and is amplified by SFH variants that publish many per-sample
+    derived quantities (``mean_sfh_type="dense_basis"`` is the
+    documented worst case — peak 22.78 GB on a D=8 photometry fit).
+    Small D <= 7 fits peak at 3-6 GB and are fine.
+
+    Pulled out of :func:`run_nuts` so the heuristic is unit-testable
+    without spinning up a full NUTS warmup.
+    """
+    if not (dense_mass_matrix and n_dim >= 8):
+        return
+    if getattr(spec, "stochastic", False):
+        # Stochastic-SFH fits get a separate, more aggressive warning
+        # higher up in run_nuts already.
+        return
+    heavy_sfh_hint = ""
+    mean_sfh_type = getattr(spec, "mean_sfh_type", None)
+    if mean_sfh_type is not None:
+        types_iter = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+        if any("dense_basis" in str(t) for t in types_iter):
+            heavy_sfh_hint = (
+                " (your mean_sfh_type includes 'dense_basis', which "
+                "amplifies this — peak was 22.78 GB on a D=8 fit in "
+                "the original report)"
+            )
+    warnings.warn(
+        f"NUTS warmup with dense_mass_matrix=True at D={n_dim} can "
+        f"peak at 20+ GB of RAM{heavy_sfh_hint}. If you're on a "
+        "32 GB machine and the fit is OOM-ing, pass "
+        "`dense_mass_matrix=False` (diagonal mass matrix; small "
+        "convergence cost) or switch to `method='mcmc_hmc'` "
+        "(less memory-intensive at warmup). See issue #319.",
+        stacklevel=3,
+    )
+
+
 def run_nuts(
     context,
     *,
@@ -174,6 +213,7 @@ def run_nuts(
 
     if verbose:
         n_dim = len(init_flat)
+        _maybe_warn_high_memory_nuts(n_dim, dense_mass_matrix, context.spec)
         # Auto-adjust warnings based on dimensionality
         if n_dim > 20 and not context.spec.stochastic:
             warnings.warn(

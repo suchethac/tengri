@@ -11,6 +11,10 @@ how each law transforms a stellar continuum.
 Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

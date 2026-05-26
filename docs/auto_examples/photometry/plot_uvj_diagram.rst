@@ -35,6 +35,37 @@ workhorse diagnostic for photometric surveys.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-187
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/Projects/tengri/examples/photometry/plot_uvj_diagram.py", line 72, in <module>
+        flux = _flux(sf_model, params)
+               ^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/examples/photometry/plot_uvj_diagram.py", line 33, in _flux
+        return np.asarray(model.predict_photometry(params))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 2812, in predict_photometry
+        return self.predict_observables_jit(params).phot_fnu
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 4210, in predict_observables_jit
+        check_unknown_params(params, self._param_map)
+      File "/Users/suchethacooray/Projects/tengri/src/tengri/parameters/translate.py", line 494, in check_unknown_params
+        raise UnknownParameterError(_unknown_param_msg(unrecognized, param_map))
+    tengri.config.exceptions.UnknownParameterError: Unrecognized parameter names passed to Model: ['dust_two_component_tau_bc'].
+      'dust_two_component_tau_bc' → did you mean ['dust_tau_bc', 'shock_component']?
+
+    Valid free + fixed parameter names: see ``model.spec.summary()`` or ``list(model.spec.param_map_public_keys())``.
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

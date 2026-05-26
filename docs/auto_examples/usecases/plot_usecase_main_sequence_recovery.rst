@@ -21,11 +21,6 @@
 The Star-Forming Main Sequence: M*-SFR Galaxy Population
 =========================================================================
 
-.. image:: images/sphx_glr_plot_usecase_main_sequence_recovery_001.png
-   :alt: plot usecase main sequence recovery
-   :class: sphx-glr-single-img
-
-
 The Speagle et al. 2014 star-forming main sequence defines the locus of
 star-forming galaxies in the log SFR vs. log M* plane. This example generates
 30 mock star-forming galaxies by sampling M* uniformly and computing SFR

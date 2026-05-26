@@ -148,6 +148,10 @@ def build_components(
     # Nebular
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
+    # When ``True`` and ``nebular_backend == "cue"``, the orchestrator
+    # asks the Cue backend for the full ~271-species line catalogue
+    # instead of the default 128 CLOUDY/FSPS subset. See #303.
+    cue_full_catalogue: bool = False,
     # AGN
     agn_model: str | None = None,
     # Composable-AGN block selectors (only consulted when agn_model="composable").
@@ -266,7 +270,10 @@ def build_components(
     if nebular_backend is not None:
         components.append(
             NebularSEDComponent(
-                config=NebularSEDComponentConfig(backend=nebular_backend),
+                config=NebularSEDComponentConfig(
+                    backend=nebular_backend,
+                    cue_full_catalogue=cue_full_catalogue,
+                ),
                 backend=nebular_backend_instance,
             )
         )

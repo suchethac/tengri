@@ -129,15 +129,24 @@ def _build_grid_corona(
 ) -> PreintegratedGrid:
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_ox_grid = np.asarray(alpha_ox_grid, dtype=np.float64)
+    # Convert reference L_bol → L_2500_30deg via Hopkins+2007 BC_2500.
+    # The post-#329 xray_agn_corona drives off L_2500; alpha_ox is no
+    # longer a direct knob — it's a delta offset to the Just+2007
+    # empirical prior at this L_2500. We compute that prior here so the
+    # precomputed grid lookup still keys on α_ox semantically.
+    _NU_2500 = 1.199e15  # Hz
+    _BC_2500 = 5.15
+    L_2500_REF = _LBOL_REF / (_BC_2500 * _NU_2500)  # erg/s/Hz
+    alpha_ox_prior = -0.137 * np.log10(L_2500_REF) + 2.638  # Just+2007 at L_2500_REF
     templates = np.empty((gamma_grid.size, alpha_ox_grid.size, _WAVE_REST.size), dtype=np.float64)
     for i, g in enumerate(gamma_grid):
         for j, aox in enumerate(alpha_ox_grid):
             templates[i, j] = np.asarray(
                 _xray_corona(
                     jnp.asarray(_WAVE_REST),
-                    L_agn_bol=_LBOL_REF,
+                    l_2500_30deg_erg_hz=L_2500_REF,
                     gamma=float(g),
-                    alpha_ox=float(aox),
+                    delta_alpha_ox=float(aox) - float(alpha_ox_prior),
                 )
             )
     return precompute_template_photometry(

@@ -42,6 +42,24 @@ adjusted MCLMC / ray tracing).
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-187
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_multichain_speedup.py", line 54, in <module>
+        HERE = Path(__file__).parent
+                    ^^^^^^^^
+    NameError: name '__file__' is not defined
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

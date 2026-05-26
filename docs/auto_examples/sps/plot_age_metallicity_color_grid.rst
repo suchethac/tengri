@@ -21,11 +21,6 @@
 Age-metallicity colour degeneracy in SDSS colours
 ==================================================
 
-.. image:: images/sphx_glr_plot_age_metallicity_color_grid_001.png
-   :alt: plot age metallicity color grid
-   :class: sphx-glr-single-img
-
-
 Young, metal-rich and old, metal-poor stellar populations can produce
 similar colours — a fundamental degeneracy in stellar population
 inference. This example builds a 2D grid of single-burst SSP-like models

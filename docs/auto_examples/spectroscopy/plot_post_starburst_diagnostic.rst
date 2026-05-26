@@ -21,11 +21,6 @@
 Post-Starburst K+A Diagnostic: Hδ_A vs Time Since Quench
 =========================================================
 
-.. image:: images/sphx_glr_plot_post_starburst_diagnostic_001.png
-   :alt: plot post starburst diagnostic
-   :class: sphx-glr-single-img
-
-
 A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer
 absorption lines (high Hδ_A) with no emission, visible only in a narrow
 window after a recent burst of star formation has been abruptly quenched.

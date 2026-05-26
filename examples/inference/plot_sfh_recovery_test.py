@@ -12,6 +12,10 @@ degeneracies with dust and metallicity.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -50,7 +54,7 @@ truth.update(
     sfh_dpl_alpha=2.5,
     sfh_dpl_beta=1.2,
     sfh_dpl_tau_gyr=8.0,
-    sfh_dpl_log_peak_sfr=1.1,
+    sfh_dpl_log_total_mass=10.0,
     dust_tau_diff=0.3,
 )
 

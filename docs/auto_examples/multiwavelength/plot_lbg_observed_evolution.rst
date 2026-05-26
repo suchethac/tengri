@@ -21,11 +21,6 @@
 Observed SED of a Lyman-break galaxy at z = 2, 4, 6, 8
 ========================================================
 
-.. image:: images/sphx_glr_plot_lbg_observed_evolution_001.png
-   :alt: plot lbg observed evolution
-   :class: sphx-glr-single-img
-
-
 A single intrinsic LBG (young dust-poor star-forming galaxy) shown in
 the observer frame at four redshifts. The Lyman break sweeps redward
 into the *u-* and then *g-* and *r-*band dropout regimes, the

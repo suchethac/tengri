@@ -52,6 +52,12 @@ redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
     warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 32-34
 
 We use a basic star-forming template: truncated-skew-normal SFH + Calzetti
@@ -79,6 +85,28 @@ dust attenuation. Redshift and stellar mass are the free parameters on the grid.
         neb={"type": "cue", "*": tengri.FIXED},
         redshift=tengri.Fixed(0.0),  # will vary on grid
     )
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_photoz_chi2_grid.py", line 39, in <module>
+        obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
+                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/photometry_config.py", line 172, in from_names
+        _waves, _trans, curves = load_filter_set(list(names), cache_dir=cache_dir)
+                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/filters/__init__.py", line 440, in load_filter_set
+        fc = load_filter(name, cache_dir=cache_dir)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/src/tengri/observation/filters/__init__.py", line 384, in load_filter
+        raise KeyError(
+    KeyError: "Unknown filter 'vista_k'. Use list_available_filters() to see valid names, or use load_custom_filter() for arbitrary files."
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 55-93

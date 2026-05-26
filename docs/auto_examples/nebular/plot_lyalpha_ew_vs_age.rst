@@ -21,11 +21,6 @@
 Lyman-alpha equivalent width peaks during O-star dominance
 ===========================================================
 
-.. image:: images/sphx_glr_plot_lyalpha_ew_vs_age_001.png
-   :alt: plot lyalpha ew vs age
-   :class: sphx-glr-single-img
-
-
 Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age
 through the presence and strength of massive O stars. We construct a
 sequence of constant star-formation-rate (CSF) models with ages ranging

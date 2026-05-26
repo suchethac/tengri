@@ -13,11 +13,14 @@ plots the 3–30 μm rest-frame SED, annotating silicate band centers.
 Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -41,7 +44,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -53,6 +56,7 @@ model = tengri.SEDModel.build(
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
         "log_lbol": 12.5,  # log10(L_bol / L_sun)
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
     },
     redshift=tengri.Fixed(0.05),
 )

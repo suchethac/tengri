@@ -21,11 +21,6 @@
 Radial metallicity gradients and integrated-light SED
 ======================================================
 
-.. image:: images/sphx_glr_plot_metallicity_radial_gradient_001.png
-   :alt: plot metallicity radial gradient
-   :class: sphx-glr-single-img
-
-
 Spiral galaxies exhibit radial metallicity gradients: metal-rich centres
 and metal-poor discs (e.g. NGC 891, Searle 1971). This example illustrates
 how three common gradient scenarios—steep positive, flat, and inverted

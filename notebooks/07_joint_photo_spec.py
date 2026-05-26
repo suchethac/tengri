@@ -28,6 +28,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 import time
 import warnings
@@ -174,7 +177,7 @@ print(f"  n_data = {obs_joint.n_data} ({phot_obs.n_filters} phot + {N_PIX_SPEC} 
 # %%
 # Define model and truth parameters
 spec = Parameters(
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
     sfh_dpl_alpha=Uniform(0.1, 2.5),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
@@ -191,19 +194,30 @@ print(f"Free parameters ({spec.n_free}): {', '.join(spec.free_params)}\n")
 
 # %%
 # Build separate models for each modality
+# Force lazy dale2014 template load outside any JIT scope to avoid
+# DynamicJaxprTracer leaks on first call (see preload_emission_model
+# docstring and emission_templates.py:624 comment).
+from tengri.components.dust.emission import preload_emission_model
+
+preload_emission_model("dale2014")
+
 obs_phot = Observation(photometry=phot_obs)
 model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
 
 model_spec = SEDModel(spec, ssp_data, observation=Observation(spectroscopy=spec_obs))
+# Same wave_obs workaround as 06 — Fitter calls predict_spectrum(params) without
+# wave_obs, and SEDModel does not yet auto-derive it from observation.spectroscopy.
+model_spec._wave_obs = WAVE_OBS
 
 model_joint = SEDModel(spec, ssp_data, observation=obs_joint)
+model_joint._wave_obs = WAVE_OBS
 
 # Define truth: moderately star-forming, modest dust, solar-ish metallicity
 key = jax.random.PRNGKey(42)
 truth = spec.sample(key)
 truth = {
     **truth,
-    "sfh_dpl_log_peak_sfr": jnp.array(1.0),
+    "sfh_dpl_log_total_mass": jnp.array(1.0),
     "sfh_dpl_alpha": jnp.array(1.2),
     "met_logzsol": jnp.array(0.0),
     "dust_tau_bc": jnp.array(0.6),

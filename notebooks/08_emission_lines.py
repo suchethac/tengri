@@ -30,6 +30,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 import warnings
 
@@ -173,7 +176,7 @@ z_ref = 0.1
 # Star-forming: tsnorm peaking recently, low dust (ionizing photons escape)
 spec_sf = Parameters(
     mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(0.5),  # 3.16 Msun/yr peak
+    sfh_tsnorm_log_total_mass=Fixed(10.0),  # 3.16 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),  # 300 Myr ago
     sfh_tsnorm_width_gyr=Fixed(1.0),
     sfh_tsnorm_skew=Fixed(0.1),
@@ -197,7 +200,7 @@ print(f"  Dust (birth cloud): τ={float(params_sf['dust_tau_bc']):.2f}")
 # Composite/older: slower SFH, some dust (moderates ionizing photons)
 spec_comp = Parameters(
     mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(0.2),  # 1.58 Msun/yr peak
+    sfh_tsnorm_log_total_mass=Fixed(10.0),  # 1.58 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),  # 2 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(3.0),
     sfh_tsnorm_skew=Fixed(0.2),
@@ -221,7 +224,7 @@ print(f"  Dust (birth cloud): τ={float(params_comp['dust_tau_bc']):.2f}")
 # Older/passive-like: very old SFH, high metallicity, high dust
 spec_old = Parameters(
     mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(-0.5),  # 0.32 Msun/yr peak
+    sfh_tsnorm_log_total_mass=Fixed(10.0),  # 0.32 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=Fixed(10.0),  # 10 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(4.0),
     sfh_tsnorm_skew=Fixed(0.1),

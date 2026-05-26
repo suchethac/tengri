@@ -21,11 +21,6 @@
 Age-dust-metallicity degeneracy: why UV photometry is critical
 ==============================================================
 
-.. image:: images/sphx_glr_plot_usecase_age_dust_degeneracy_001.png
-   :alt: plot usecase age dust degeneracy
-   :class: sphx-glr-single-img
-
-
 Two synthetic galaxies with identical SDSS ugriz photometry — one old and
 dust-poor, one young and dust-rich — produce wildly different SED fits.
 Adding GALEX FUV/NUV observation breaks the degeneracy by constraining the

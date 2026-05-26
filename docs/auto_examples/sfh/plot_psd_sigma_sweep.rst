@@ -21,11 +21,6 @@
 PSD amplitude σ controls burst magnitude in stochastic SFHs
 ===========================================================
 
-.. image:: images/sphx_glr_plot_psd_sigma_sweep_001.png
-   :alt: plot psd sigma sweep
-   :class: sphx-glr-single-img
-
-
 The amplitude σ of the power spectral density sets how dramatically star
 formation fluctuates around the smooth trend: σ ≈ 0 means nearly constant SFR,
 large σ produces dramatic bursts that leave imprints in UV slope, optical

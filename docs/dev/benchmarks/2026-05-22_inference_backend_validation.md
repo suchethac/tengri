@@ -165,7 +165,7 @@ through every parameter — no broken pieces, no zero rows.
 | `met_logzsol` | -0.900 | -0.889 | -0.887 ± 0.135 | -0.891 ± 0.105 | -0.918 ± 0.119 |
 | `sfh_dpl_alpha` | 2.550 | 2.452 | 2.494 ± 1.008 | 2.461 ± 1.028 | 2.547 ± 1.443 |
 | `sfh_dpl_beta` | 1.550 | 1.685 | 1.669 ± 0.490 | 1.881 ± 0.477 | 2.055 ± 0.589 |
-| `sfh_dpl_log_peak_sfr` | 1.000 | 1.028 | 1.028 ± 0.085 | 1.053 ± 0.082 | 1.084 ± 0.108 |
+| `sfh_dpl_log_total_mass` | 1.000 | 1.028 | 1.028 ± 0.085 | 1.053 ± 0.082 | 1.084 ± 0.108 |
 | `sfh_dpl_tau_gyr` | 6.050 | 7.207 | 7.065 ± 1.987 | 7.499 ± 1.890 | 8.121 ± 2.327 |
 
 The four methods agree on every posterior mean within ≤ 0.5σ of

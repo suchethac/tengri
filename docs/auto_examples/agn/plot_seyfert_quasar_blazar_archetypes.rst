@@ -21,11 +21,6 @@
 AGN archetypes: Seyfert, quasar, and LIRG/Sy across bolometric luminosity
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :alt: plot seyfert quasar blazar archetypes
-   :class: sphx-glr-single-img
-
-
 Three distinct AGN types overlaid to show how AGN morphology and obscuration
 evolve with luminosity:
 
