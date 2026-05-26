@@ -180,6 +180,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
 .. toctree::
    :caption: Examples
    :maxdepth: 1
+   :titlesonly:
    :hidden:
 
    auto_examples/index

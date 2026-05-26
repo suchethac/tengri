@@ -9,7 +9,13 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
 
 /* ── Palette tokens ──────────────────────────────────────────────────── */
-:root {
+/* Furo binds all its --color-* tokens on ``body`` (not ``:root``), so the
+   light-mode override must also live on ``body`` to win the cascade.
+   Defining the brand tokens on both ``:root`` (so the hero and sidebar
+   rules can read them above body) and on ``body`` (so they override
+   Furo's Furo-default values) is the cleanest fix. */
+:root,
+body {
     /* Light mode (Furo default) */
     --tg-bg: #FAFBFC;
     --tg-surface: #FFFFFF;
@@ -187,7 +193,15 @@ code, pre, kbd, samp {
 }
 
 /* ── Hero block on landing page ──────────────────────────────────────── */
+/* Flex column instead of just ``text-align: center`` so block-level
+   children (the logo <img>, the <h1>) are centred relative to the same
+   flex axis rather than each fending for itself. Furo's h1 rule carries
+   a heading-anchor offset that ``text-align`` alone doesn't fully
+   neutralise. */
 .tg-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     text-align: center;
     padding: 2.5rem 1rem 1.5rem;
     margin: 0 0 2.5rem;
@@ -195,7 +209,7 @@ code, pre, kbd, samp {
 }
 .tg-hero__logo {
     display: block;
-    margin: 0 auto 1.25rem;
+    margin: 0 0 1.25rem;
     width: 140px;
     height: auto;
     filter: drop-shadow(0 0 24px rgba(122, 184, 232, 0.18));
@@ -212,8 +226,17 @@ body[data-theme="light"] .tg-hero__logo {
     font-size: 2.8rem;
     font-weight: 700;
     margin: 0 0 0.5rem;
+    padding: 0;             /* override Furo's heading padding */
     letter-spacing: -0.03em;
     color: var(--tg-text);
+    line-height: 1.1;
+    border: none;
+}
+/* Furo injects a heading-anchor link (¶) into every <h1> that nudges
+   the visible glyphs off-centre by a pixel or two even when invisible.
+   Hide it inside the hero. */
+.tg-hero__title .headerlink {
+    display: none;
 }
 .tg-hero__tagline {
     font-size: 1.2rem;
@@ -321,5 +344,17 @@ code.literal {
 }
 .sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > input.toctree-checkbox,
 .sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > label {
+    display: none;
+}
+/* Even with the toctree dropped, sphinx walks the in-page h2 section
+   headings of auto_examples/index.html into the sidebar as anchor links
+   (#quick-start, #recipes, etc.). The parent toctree's ``:titlesonly:``
+   stops that on most builds; this is a CSS fallback for the rest. */
+.sidebar-tree a[href*="auto_examples/index.html#"],
+.sidebar-tree a[href*="auto_examples/index#"] {
+    display: none;
+}
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index.html#"]),
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index#"]) {
     display: none;
 }
