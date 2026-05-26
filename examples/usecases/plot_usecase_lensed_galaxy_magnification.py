@@ -226,7 +226,7 @@ plt.show()
 print("\n" + "=" * 70)
 print("STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)")
 print("=" * 70)
-print(f"\nIntrinsic (unlensed) magnitudes:")
+print("\nIntrinsic (unlensed) magnitudes:")
 print("-" * 70)
 for j, band in enumerate(bands):
     print(
@@ -235,9 +235,9 @@ for j, band in enumerate(bands):
     )
 
 print(f"\nJWST NIRCam 5σ detection limit: {mag_5sigma_limit:.1f} AB")
-print(f"(Rieke+2023, NIRCam module performance)")
+print("(Rieke+2023, NIRCam module performance)")
 
-print(f"\nMagnified magnitudes and detectability:")
+print("\nMagnified magnitudes and detectability:")
 print("-" * 70)
 for i, mu in enumerate(magnifications):
     print(f"\nμ = {mu:6.1f}:")

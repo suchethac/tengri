@@ -32,7 +32,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np

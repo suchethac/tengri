@@ -38,7 +38,6 @@ import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -124,6 +123,9 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Uniform(11.0, 13.0),  # Bugfix: promote swept param to FREE
+        "log_mbh": tengri.Uniform(6.0, 10.0),  # Bugfix: promote swept param to FREE
     },
     redshift=tengri.Fixed(0.05),
 )

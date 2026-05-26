@@ -16,15 +16,17 @@ programs (https://arxiv.org/abs/1811.02361); JAX documentation on vmap
 (https://jax.readthedocs.io/en/latest/api_reference/jax.numpy.vmap.html).
 """
 
+<<<<<<< HEAD
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
+=======
+>>>>>>> f4e63b3a (docs(examples): fix 9 gallery plots flagged in audit)
 import time
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

@@ -46,6 +46,8 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Uniform(10.0, 14.0),  # Bugfix: promote swept param to FREE
     },
     redshift=tengri.Fixed(0.05),
 )
