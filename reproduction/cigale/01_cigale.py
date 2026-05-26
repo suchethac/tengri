@@ -96,8 +96,8 @@ figs_dir.mkdir(exist_ok=True)
 
 
 def save_fig(filename: str) -> None:
+    """Save figure to ``_figs/`` and leave it open so nbconvert embeds it inline."""
     plt.savefig(str(figs_dir / filename), dpi=150, bbox_inches="tight")
-    plt.close()
 
 
 def _assert_comparable(arr_c, arr_t, *, name: str) -> None:
@@ -426,7 +426,6 @@ for law, label, kw in cigale_laws:
 ax_c.legend(fontsize=10); ax_c.grid(True, alpha=0.3)
 fig_c.tight_layout()
 fig_c.savefig(str(figs_dir / "04_dust_attenuation_cigale.png"), dpi=150, bbox_inches="tight")
-plt.close(fig_c)
 
 tengri_laws = [
     ("calzetti", "Calzetti+2000"),
@@ -476,7 +475,6 @@ for law, label in tengri_laws:
 ax_t.legend(fontsize=10); ax_t.grid(True, alpha=0.3)
 fig_t.tight_layout()
 fig_t.savefig(str(figs_dir / "04_dust_attenuation_tengri.png"), dpi=150, bbox_inches="tight")
-plt.close(fig_t)
 
 
 # %% [markdown]
@@ -539,7 +537,6 @@ for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "05_dust_attenuation_applied.png"), dpi=150, bbox_inches="tight")
-plt.close()
 
 
 # %% [markdown]
@@ -599,7 +596,6 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
-plt.close()
 
 
 # %% [markdown]
@@ -620,7 +616,6 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "07_panchromatic_full.png"), dpi=150, bbox_inches="tight")
-plt.close()
 
 
 # %% [markdown]
