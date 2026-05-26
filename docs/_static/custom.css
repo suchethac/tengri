@@ -329,3 +329,15 @@ code.literal {
 .sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > label {
     display: none;
 }
+/* Even with the toctree dropped, sphinx walks the in-page h2 section
+   headings of auto_examples/index.html into the sidebar as anchor links
+   (#quick-start, #recipes, etc.). The parent toctree's ``:titlesonly:``
+   stops that on most builds; this is a CSS fallback for the rest. */
+.sidebar-tree a[href*="auto_examples/index.html#"],
+.sidebar-tree a[href*="auto_examples/index#"] {
+    display: none;
+}
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index.html#"]),
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index#"]) {
+    display: none;
+}
