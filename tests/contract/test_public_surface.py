@@ -112,6 +112,7 @@ EXPECTED_ALL = frozenset(
         "clear_cache",
         "doctor",
         "download_ssp",
+        "list_available_ssps",
         "list_known_ssps",
         "register_component",
         # Exceptions
