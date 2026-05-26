@@ -96,8 +96,8 @@ figs_dir.mkdir(exist_ok=True)
 
 
 def save_fig(filename: str) -> None:
+    """Save figure to ``_figs/`` and leave it open so nbconvert embeds it inline."""
     plt.savefig(str(figs_dir / filename), dpi=150, bbox_inches="tight")
-    plt.close()
 
 
 def _assert_comparable(arr_c, arr_t, *, name: str) -> None:
@@ -426,7 +426,6 @@ for law, label, kw in cigale_laws:
 ax_c.legend(fontsize=10); ax_c.grid(True, alpha=0.3)
 fig_c.tight_layout()
 fig_c.savefig(str(figs_dir / "04_dust_attenuation_cigale.png"), dpi=150, bbox_inches="tight")
-plt.close(fig_c)
 
 tengri_laws = [
     ("calzetti", "Calzetti+2000"),
@@ -476,7 +475,6 @@ for law, label in tengri_laws:
 ax_t.legend(fontsize=10); ax_t.grid(True, alpha=0.3)
 fig_t.tight_layout()
 fig_t.savefig(str(figs_dir / "04_dust_attenuation_tengri.png"), dpi=150, bbox_inches="tight")
-plt.close(fig_t)
 
 
 # %% [markdown]
@@ -535,11 +533,12 @@ ax_l1.plot(w_c_nd, L_c_nd, "C0-", linewidth=1.5)
 ax_r1.plot(s_nd.wave, s_nd.sed_intrinsic, "C1-", linewidth=1.5)
 ax_l2.plot(w_c_d, L_c_d, "C0-", linewidth=1.5)
 ax_r2.plot(s_d.wave, s_d.derived["sed_dust_attenuated"], "C1-", linewidth=1.5)
+_ymax = float(np.asarray(s_nd.sed_intrinsic).max())
 for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
+    ax.set_ylim(_ymax * 1e-6, _ymax * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "05_dust_attenuation_applied.png"), dpi=150, bbox_inches="tight")
-plt.close()
 
 
 # %% [markdown]
@@ -599,7 +598,6 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
-plt.close()
 
 
 # %% [markdown]
@@ -620,7 +618,6 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "07_panchromatic_full.png"), dpi=150, bbox_inches="tight")
-plt.close()
 
 
 # %% [markdown]
@@ -783,9 +780,12 @@ save_fig("09_agn_skirtor.png")
 # CIGALE's `xray` module follows Yang et al. (2020): an AGN corona
 # power law tied to L_2500, plus an HMXB / LMXB contribution scaled by
 # stellar mass and SFR, all attenuated by photoelectric absorption at
-# the chosen log N_H. tengri ships the same physics as `xray.simple`
-# (Aird+2017 SFR-X-ray scaling + Lusso & Risaliti 2016 AGN corona).
-# Both panels show the AGN-dominated fiducial.
+# the chosen log N_H. tengri currently ships only `xray.simple`
+# (Aird+2017 SFR-X-ray scaling + Lusso & Risaliti 2016 AGN corona) —
+# the photoelectric N_H attenuation and the Compton turnover above
+# ~100 keV are not yet in. Tracked under #440; once that lands the
+# code-swap is the commented-out `xray={"type": "yang20", ...}` line
+# below. Both panels show the AGN-dominated fiducial.
 
 # %%
 sed_x = C.run_chain([
@@ -812,12 +812,20 @@ m_x = SEDModel.build(
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
           "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
           "*": FIXED},
-    agn={"type": "silva04", "agn_log_lbol": Fixed(11.5), "*": FIXED},
+    agn={"type": "composable",
+         "disc": {"type": "multicolor", "*": FIXED},
+         "torus": {"type": "skirtor", "*": FIXED},
+         "agn_log_lbol": Fixed(11.5), "*": FIXED},
     xray={"type": "simple"},
+    # Once tengri#440 lands, swap to the full Yang+2020 model so we
+    # also reproduce CIGALE's Compton turnover and photoelectric N_H:
+    # xray={"type": "yang20", "xray_alpha_ox": Fixed(-1.4),
+    #       "xray_log_nh": Fixed(22.0), "*": FIXED},
     redshift=Fixed(0.0),
 )
-w_t, sed_t = m_x.predict_rest_sed({})
-w_t = np.asarray(w_t); sed_t = np.asarray(sed_t)
+state_x = m_x.predict_state({})
+w_t = np.asarray(state_x.wave)
+sed_t = np.asarray(state_x.derived.get("sed_xray", state_x.sed_intrinsic))
 e_kev_t = 12.398 / w_t
 m_t = (e_kev_t >= 0.3) & (e_kev_t <= 200) & (sed_t > 0)
 
@@ -885,10 +893,11 @@ try:
         radio={"type": "condon92", "*": FIXED},
         redshift=Fixed(0.0),
     )
-    w_t, sed_t = m_r.predict_rest_sed({})
-    w_t = np.asarray(w_t); sed_t = np.asarray(sed_t)
+    state_r = m_r.predict_state({})
+    w_t = np.asarray(state_r.wave)
+    sed_t = np.asarray(state_r.derived.get("sed_radio", state_r.sed_intrinsic))
     nu_t = 2.998e18 / w_t / 1e9
-    mt = (nu_t >= 0.1) & (nu_t <= 100)
+    mt = (nu_t >= 0.1) & (nu_t <= 100) & (sed_t > 0)
     ax_r.plot(nu_t[mt], sed_t[mt], "C1-", linewidth=1.4, label="radio.condon92")
     ax_r.legend(fontsize=9)
 except Exception:
@@ -902,10 +911,13 @@ save_fig("11_radio_synchrotron.png")
 # ## §12 IGM transmission
 #
 # CIGALE applies Meiksin (2006) IGM attenuation inside its
-# `redshifting` module. tengri ships both Inoue+Iwata (2014) — the
-# current default — and Madau (1995). At z = 3, 5, 7 the Lyman series
-# eats the rest-UV, the continuum suppression after 912 Å (1 + z)
-# growing rapidly with z.
+# `redshifting` module — Lyman series **and** the diffuse-IGM Lyα
+# forest continuum suppression, so transmission redward of the Lyman
+# limit at z = 3 sits at ~0.18-0.25 rather than 1. tengri currently
+# ships Inoue+Iwata (2014) and Madau (1995); both implement only the
+# Lyman series step structure and miss the diffuse forest continuum.
+# A `igm.meiksin06` port is tracked under #440; once it lands swap to
+# the commented-out `igm={"type": "meiksin06"}` line below.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()
@@ -950,6 +962,9 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
         dust={"type": "two_component", "tau_bc": Fixed(0.0),
               "tau_diff": Fixed(0.0), "*": FIXED},
         igm={"type": "inoue14"},
+        # Once tengri#440 lands, swap to igm.meiksin06 to also reproduce
+        # CIGALE's diffuse Lyα-forest continuum suppression:
+        # igm={"type": "meiksin06"},
         redshift=Fixed(z),
     )
     m_no = SEDModel.build(
