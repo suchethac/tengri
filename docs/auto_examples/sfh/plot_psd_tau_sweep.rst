@@ -21,15 +21,24 @@
 PSD timescale τ controls burst duration in stochastic SFHs
 ==========================================================
 
+.. image:: images/sphx_glr_plot_psd_tau_sweep_001.png
+   :alt: plot psd tau sweep
+   :class: sphx-glr-single-img
+
+
 The damping timescale τ (in Myr) of the power spectral density governs how
 long star-formation bursts persist. Short τ means rapid flickering; long τ
 means sustained episodes that leave their imprint on the SED. We vary τ
 across the prior range with the burst amplitude σ fixed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-72
+.. GENERATED FROM PYTHON SOURCE LINES 10-76
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -52,7 +61,7 @@ across the prior range with the burst amplitude σ fixed.
             "type": "field_psd",
             "*": tengri.FIXED,
             "mean": "tsnorm",
-            "tsnorm_log_peak_sfr": 1.0,
+            "tsnorm_log_total_mass": 1.0,
             "tsnorm_peak_lbt_gyr": 3.0,
             "tsnorm_width_gyr": 2.0,
             "tsnorm_skew": 0.3,

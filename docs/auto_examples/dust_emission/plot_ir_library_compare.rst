@@ -21,6 +21,11 @@
 Dust IR-emission library comparison at fixed L_dust
 ====================================================
 
+.. image:: images/sphx_glr_plot_ir_library_compare_001.png
+   :alt: plot ir library compare
+   :class: sphx-glr-single-img
+
+
 All seven shipped dust IR-emission libraries reprocessing the same
 absorbed UV power into the IR, normalised so the integrated
 ``L_IR(8–1000 μm)`` is identical across curves. The differences then
@@ -37,10 +42,14 @@ Libraries compared:
 - ``astrodust`` — Hensley & Draine 2023 unified grain model
 - ``bosa``      — BOSA template set (Boquien et al. CIGALE)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-99
+.. GENERATED FROM PYTHON SOURCE LINES 21-103
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

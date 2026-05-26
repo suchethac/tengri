@@ -21,6 +21,11 @@
 Attenuation law leaves a distinct UV-slope fingerprint
 =========================================================
 
+.. image:: images/sphx_glr_plot_dust_law_uv_slope_response_001.png
+   :alt: plot dust law uv slope response
+   :class: sphx-glr-single-img
+
+
 For a fixed star-forming galaxy with τ_V = 1 (a moderate
 attenuation), six common attenuation laws produce six visibly
 different reddened UV slopes β. The intrinsic SED has β ≈ −2.3;
@@ -33,10 +38,14 @@ Pair with ``plot_uv_slope_age`` (intrinsic β vs age) — the two
 together explain why the IRX–β diagram is so band-, age-, and
 law-dependent in the literature.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-102
+.. GENERATED FROM PYTHON SOURCE LINES 17-106
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -76,7 +85,7 @@ law-dependent in the literature.
         ("noll09",       "Noll+2009",         "C5"),
     ]
     SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 0.05,
-           "width_gyr": 0.05, "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+           "width_gyr": 0.05, "log_total_mass": 10.0, "skew": 0.0, "trunc": 13.0}
     ssp = tengri.load_ssp()
 
 

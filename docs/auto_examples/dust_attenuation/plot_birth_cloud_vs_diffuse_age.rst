@@ -32,16 +32,18 @@ are unaffected by birth-cloud dust — only diffuse attenuation remains.
 
 Reference: Charlot & Fall 2000, ApJ, 539, 718.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-104
+.. GENERATED FROM PYTHON SOURCE LINES 16-106
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -79,7 +81,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
                 "*": tengri.FIXED,
                 "peak_lbt_gyr": float(peak_lbt_gyr),
                 "width_gyr": 0.1,  # narrow width to approximate single age
-                "log_peak_sfr": 0.0,  # normalized scale
+                "log_total_mass": 10.0,  # normalized scale
             },
             dust={
                 "type": "two_component",

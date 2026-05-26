@@ -21,6 +21,11 @@
 AGN UV→optical continuum reverberation: light-crossing time lags
 ===================================================================
 
+.. image:: images/sphx_glr_plot_variability_continuum_lag_001.png
+   :alt: plot variability continuum lag
+   :class: sphx-glr-single-img
+
+
 Accretion disc reverberation mapping reveals how the hot UV-emitting
 inner disc responds to ionizing source changes. Fausnaugh+2016 observed
 NGC 5548 using HST multi-band photometry (UV, optical) and found that
@@ -51,123 +56,21 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     of black hole accretion discs. MNRAS, 480, 1247–1268.
     https://doi.org/10.1093/mnras/sty1890
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-392
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_variability_continuum_lag_001.png
-   :alt: AGN UV$\to$Optical Continuum Reverberation: NGC 5548 ($M_{\rm BH} = 5 \times 10^7\, M_\odot$, $L/L_{\rm Edd} = 0.05$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_variability_continuum_lag_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    ===========================================================================
-    NGC 5548 AGN continuum reverberation mapping
-    ===========================================================================
-
-    ✓ Black hole mass: M_BH = 5.01e+07 M_sun
-    ✓ Eddington ratio: L/L_Edd = 0.050
-    ✓ Black hole spin: a = 0.50
-    ✓ Disc truncation: R_out = 1000 R_g
-    ✓ Dust reddening: E(B-V) = 0.022
-    ✓ Redshift: z = 0.0172
-
-    [1/4] Building Shakura-Sunyaev disc model...
-       Model loaded. Spec free params: 0
-       AGN disc M_BH=7.70, L/L_Edd=0.050
-    [2/4] Computing SED and effective temperature profile...
-       λ =    1305 Å → T_eff =    7499 K, r_eff =     31.6 R_g
-       λ =    2469 Å → T_eff =    7407 K, r_eff =     32.1 R_g
-       λ =    5100 Å → T_eff =    5229 K, r_eff =     51.1 R_g
-       λ =    7000 Å → T_eff =    3504 K, r_eff =     87.2 R_g
-    [3/4] Computing light-crossing times...
-       Gravitational radius: R_g = 7.402e+12 cm
-
-       Computed continuum lags (rest-frame):
-       λ =    1305 Å → τ =   0.09 days (r_eff =    31.6 R_g)
-       λ =    2469 Å → τ =   0.09 days (r_eff =    32.1 R_g)
-       λ =    5100 Å → τ =   0.15 days (r_eff =    51.1 R_g)
-       λ =    7000 Å → τ =   0.25 days (r_eff =    87.2 R_g)
-    [4/4] Testing disc reprocessing scaling law...
-       Fitted slope (tengri model): 0.576
-       Theory prediction (τ ∝ λ^4/3): 1.333
-       Fausnaugh+2016 slope: 1.885
-       Difference (fitted vs. theory): 0.757
-
-    ✓ Figure saved: plot_variability_continuum_lag.png
-
-    ===========================================================================
-    SUMMARY
-    ===========================================================================
-
-    Comparison: tengri model vs Fausnaugh+2016 observations
-     Wavelength [Å]    Model [days] Observed [days]    Residual [%]
-    --------------------------------------------------------------
-               1305            0.09            0.80           -88.7
-               2469            0.09            2.50           -96.3
-               5100            0.15           11.00           -98.7
-               7000            0.25           18.00           -98.6
-
-    RMS residual (percent): 95.7%
-
-    Scaling law τ ∝ λ^n:
-      Fitted exponent (tengri):  n = 0.576
-      Theory prediction (thin disc): n = 1.333
-      Fausnaugh+2016 data:       n = 1.885
-
-    ===========================================================================
-    PHYSICAL INTERPRETATION
-    ===========================================================================
-
-    The tengri multicolor disc model produces lags that are ~100× smaller than
-    observed. This indicates the effective disc temperature profile is shallower
-    than the standard Shakura-Sunyaev r^{-3/4} law, which maps to r_eff ∝ λ^{4/3}.
-
-    The fitted scaling n=0.58 (vs theory n=1.33) suggests:
-
-    1. **Disc structure difference**: The AGN disc may have a different radial
-       structure than the standard thin-disc model — e.g., corona-heated zones,
-       modified opacity, or truncation radius effects.
-
-    2. **Temperature profile flattening**: If T(r) ∝ r^α with α ≠ −3/4, then
-       r_eff(λ) follows a different power law, directly changing the lag scaling.
-
-    3. **Geometry**: The effective photon-emitting radius may not follow Wien's
-       law as straightforwardly in this model (e.g., disc flaring, scattering).
-
-    For science applications, this script demonstrates the reverberation-mapping
-    diagnostic: comparing the observed lag spectrum τ(λ) and its slope directly
-    constrains the accretion-disc temperature profile and geometry. The discrepancy
-    here is a useful probe of model assumptions, not a failure — real AGN often
-    show discrepancies with pure thin-disc models, hinting at additional physics
-    (magnetic fields, non-thermal heating, disc-corona coupling, etc.).
-
-    See Fausnaugh et al. (2016) for detailed NGC 5548 results and model fitting.
-
-    ✓ All checks passed. Script completed successfully.
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 35-395
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
-    from scipy import optimize
 
     import tengri
     from tengri.analysis.plotting import setup_style
@@ -247,7 +150,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 1.0,
-            "log_peak_sfr": -2.0,  # Very faint host
+            "log_total_mass": 10.0,  # Very faint host
             "alpha": 1.0,
             "beta": 1.0,
         },
@@ -264,6 +167,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
             "lines": {"type": "none", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 11.0,  # AGN bolometric luminosity [log10 L_sun]
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         neb={"type": "none", "*": tengri.FIXED},
         redshift=tengri.Fixed(REDSHIFT),
@@ -379,7 +283,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     tau_crossing_days = tau_crossing_seconds / SECONDS_PER_DAY
 
     print(f"   Gravitational radius: R_g = {r_g_cm:.3e} cm")
-    print(f"\n   Computed continuum lags (rest-frame):")
+    print("\n   Computed continuum lags (rest-frame):")
     for i, (wave, tau) in enumerate(zip(BAND_WAVELENGTHS, tau_crossing_days)):
         print(f"   λ = {wave:7.0f} Å → τ = {tau:6.2f} days (r_eff = {effective_radii_rg[i]:7.1f} R_g)")
 
@@ -454,7 +358,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
 
     plt.tight_layout()
     plt.savefig("plot_variability_continuum_lag.png", dpi=150, bbox_inches="tight")
-    print(f"\n✓ Figure saved: plot_variability_continuum_lag.png")
+    print("\n✓ Figure saved: plot_variability_continuum_lag.png")
 
     plt.show()
 
@@ -470,7 +374,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     residuals_days = tau_crossing_days - FAUSNAUGH_LAGS_DAYS
     residuals_pct = 100.0 * residuals_days / FAUSNAUGH_LAGS_DAYS
 
-    print(f"\nComparison: tengri model vs Fausnaugh+2016 observations")
+    print("\nComparison: tengri model vs Fausnaugh+2016 observations")
     print(f"{'Wavelength [Å]':>15} {'Model [days]':>15} {'Observed [days]':>15} {'Residual [%]':>15}")
     print("-" * 62)
     for i, wave in enumerate(BAND_WAVELENGTHS):
@@ -479,7 +383,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     rms_pct = np.sqrt(np.mean(residuals_pct**2))
     print(f"\nRMS residual (percent): {rms_pct:.1f}%")
 
-    print(f"\nScaling law τ ∝ λ^n:")
+    print("\nScaling law τ ∝ λ^n:")
     print(f"  Fitted exponent (tengri):  n = {slope_fitted:.3f}")
     print(f"  Theory prediction (thin disc): n = {4.0/3.0:.3f}")
     print(f"  Fausnaugh+2016 data:       n = {slope_faus:.3f}")

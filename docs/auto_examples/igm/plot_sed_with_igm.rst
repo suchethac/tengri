@@ -21,6 +21,11 @@
 Full galaxy SED with IGM absorption applied at multiple redshifts
 ==================================================================
 
+.. image:: images/sphx_glr_plot_sed_with_igm_001.png
+   :alt: plot sed with igm
+   :class: sphx-glr-single-img
+
+
 A young Lyman-break galaxy SED is built once at rest frame, then
 redshifted to a sequence of observed-frame epochs (``z = 1, 3, 5, 7``)
 with the Inoue et al. 2014 IGM transmission stamped on top. The
@@ -38,10 +43,14 @@ References:
 - Inoue et al. 2014, MNRAS, 442, 1805
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-95
+.. GENERATED FROM PYTHON SOURCE LINES 23-100
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -63,7 +72,7 @@ References:
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     }

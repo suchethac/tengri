@@ -21,6 +21,11 @@
 Strong-lensing magnification: EoR galaxy detection boost
 =========================================================
 
+.. image:: images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
+   :alt: plot usecase lensed galaxy magnification
+   :class: sphx-glr-single-img
+
+
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
 
@@ -40,78 +45,14 @@ References:
 - Bouwens, R. J., et al. 2022, ApJ, 931, 160 (EoR LBGs)
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-246
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
-   :alt: Strong-lensed z=7 LAE: JWST NIRCam detection thresholds
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    ======================================================================
-    STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)
-    ======================================================================
-
-    Intrinsic (unlensed) magnitudes:
-    ----------------------------------------------------------------------
-      JWST_F150W          :  28.14 AB (2.020e-31 erg/s/Hz)
-      JWST_F200W          :  28.19 AB (1.926e-31 erg/s/Hz)
-      JWST_F277W          :  28.06 AB (2.164e-31 erg/s/Hz)
-      JWST_F356W          :  27.81 AB (2.731e-31 erg/s/Hz)
-      JWST_F444W          :  27.86 AB (2.608e-31 erg/s/Hz)
-
-    JWST NIRCam 5σ detection limit: 28.0 AB
-    (Rieke+2023, NIRCam module performance)
-
-    Magnified magnitudes and detectability:
-    ----------------------------------------------------------------------
-
-    μ =    1.0:
-      JWST_F150W          :  28.14 AB  [✗ faint]
-      JWST_F200W          :  28.19 AB  [✗ faint]
-      JWST_F277W          :  28.06 AB  [✗ faint]
-      JWST_F356W          :  27.81 AB  [✓ DETECT]
-      JWST_F444W          :  27.86 AB  [✓ DETECT]
-
-    μ =    5.0:
-      JWST_F150W          :  26.39 AB  [✓ DETECT]
-      JWST_F200W          :  26.44 AB  [✓ DETECT]
-      JWST_F277W          :  26.31 AB  [✓ DETECT]
-      JWST_F356W          :  26.06 AB  [✓ DETECT]
-      JWST_F444W          :  26.11 AB  [✓ DETECT]
-
-    μ =   20.0:
-      JWST_F150W          :  24.88 AB  [✓ DETECT]
-      JWST_F200W          :  24.94 AB  [✓ DETECT]
-      JWST_F277W          :  24.81 AB  [✓ DETECT]
-      JWST_F356W          :  24.56 AB  [✓ DETECT]
-      JWST_F444W          :  24.61 AB  [✓ DETECT]
-
-    μ =  100.0:
-      JWST_F150W          :  23.14 AB  [✓ DETECT]
-      JWST_F200W          :  23.19 AB  [✓ DETECT]
-      JWST_F277W          :  23.06 AB  [✓ DETECT]
-      JWST_F356W          :  22.81 AB  [✓ DETECT]
-      JWST_F444W          :  22.86 AB  [✓ DETECT]
-
-    ======================================================================
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 24-250
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -147,7 +88,7 @@ References:
 
     # For a z=7 LAE-like galaxy (Schaerer+2003), use a recent starburst:
     # peak_lbt_gyr ≈ 0.05 Gyr (recent, ~50 Myr old at z=7)
-    # log_peak_sfr ≈ 0.5 → SFR ≈ 3 M_sun/yr (moderate for z~7)
+    # log_total_mass ≈ 0.5 → SFR ≈ 3 M_sun/yr (moderate for z~7)
     # Dust is minimal at z~7 (optical depth tau_bc ≈ 0.1)
 
     model = tengri.SEDModel.build(
@@ -155,7 +96,7 @@ References:
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Fixed(0.5),  # 3 M_sun/yr
+            "log_total_mass": 10.0,  # 3 M_sun/yr
             "peak_lbt_gyr": tengri.Fixed(0.05),  # 50 Myr old (z=7 LAE regime)
             "width_gyr": tengri.Fixed(0.1),  # 100 Myr width
             "skew": tengri.Fixed(-0.3),  # slight left skew (recent burst)
@@ -313,7 +254,7 @@ References:
     print("\n" + "=" * 70)
     print("STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)")
     print("=" * 70)
-    print(f"\nIntrinsic (unlensed) magnitudes:")
+    print("\nIntrinsic (unlensed) magnitudes:")
     print("-" * 70)
     for j, band in enumerate(bands):
         print(
@@ -322,9 +263,9 @@ References:
         )
 
     print(f"\nJWST NIRCam 5σ detection limit: {mag_5sigma_limit:.1f} AB")
-    print(f"(Rieke+2023, NIRCam module performance)")
+    print("(Rieke+2023, NIRCam module performance)")
 
-    print(f"\nMagnified magnitudes and detectability:")
+    print("\nMagnified magnitudes and detectability:")
     print("-" * 70)
     for i, mu in enumerate(magnifications):
         print(f"\nμ = {mu:6.1f}:")

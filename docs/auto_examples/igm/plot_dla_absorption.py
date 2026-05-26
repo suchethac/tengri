@@ -11,6 +11,10 @@ deepen the Lyman forest and suppress flux in the UV-to-optical SED.
 Reference: Wolfe et al. 2005, ARA&A, 43, 861 (DLA review and cross-sections).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

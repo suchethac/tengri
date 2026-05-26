@@ -21,6 +21,11 @@
 AGN X-ray hard-tail rollover: exponential cutoff E_cut governs high-energy turnover
 ===================================================================================
 
+.. image:: images/sphx_glr_plot_E_cut_sweep_001.png
+   :alt: plot E cut sweep
+   :class: sphx-glr-single-img
+
+
 The X-ray power-law spectrum steepens above an exponential cutoff E_cut.
 Compact coronae with low optical depth have low E_cut (~100 keV); thick,
 optically-deep coronae extend to higher E_cut (~1 TeV). Variation of E_cut
@@ -29,10 +34,14 @@ changes in coronal geometry or magnetic field.
 
 Reference: Wilkins et al. 2020, MNRAS, 493, 5548.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-49
+.. GENERATED FROM PYTHON SOURCE LINES 13-56
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -50,13 +59,16 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548.
     wavelength = jnp.logspace(np.log10(0.0124), np.log10(124.0), 512)
     wave_keV = 12.398 / np.array(wavelength)
 
+    # L_bol = 1e45 erg/s → L_2500 via Hopkins+2007 BC=5.15
+    L_2500 = 1.0e45 / (5.15 * 1.199e15)
+
     ecut_values = np.array([100.0, 200.0, 300.0, 500.0, 1000.0])
     norm = mpl.colors.Normalize(vmin=ecut_values.min(), vmax=ecut_values.max())
     cmap = plt.get_cmap("viridis")
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for ecut in ecut_values:
-        l_xray = xray_agn_corona(wavelength, L_agn_bol=1e45, gamma=1.8, E_cut=ecut, alpha_ox=-1.4)
+        l_xray = xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, gamma=1.8, E_cut=float(ecut))
         ax.loglog(wave_keV, np.array(l_xray), lw=1.4, color=cmap(norm(ecut)))
 
     ax.set_xlim(0.1, 1000)

@@ -18,65 +18,63 @@
 .. _sphx_glr_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py:
 
 
-Panchromatic SED: Milky Way Analog
-==================================
+SyntaxError
+===========
 
-A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across
-the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).
-
-Star formation history follows a double power-law with recent sustained
-activity. Dust attenuates UV/optical and re-emits in the infrared.
-Radio continuum from star-forming regions and X-rays from stellar binaries
-are included.
-
-Reading order: stellar continuum (grey) → dust-attenuated stellar
-(faded) → dust emission (warm FIR + cold submm) → radio (cm-wavelength)
-→ X-ray (from accreting binaries).
-
-**References:**
- - Kennicutt & Evans (2012) [1]_ for MW analog SFR calibration
- - Bruzual & Charlot (2003) [2]_ for stellar population synthesis
- - Dale et al. (2014) [3]_ for dust emission model
-
-.. [1] Kennicutt, R. C., & Evans, N. J. (2012).
-   *Annu. Rev. Astron. Astrophys.* **50**, 531–608.
-   https://doi.org/10.1146/annurev-astro-081811-146504
-
-.. [2] Bruzual, G., & Charlot, S. (2003).
-   *Mon. Not. R. Astron. Soc.* **344**, 1000–1028.
-   https://doi.org/10.1046/j.1365-8711.2003.06897.x
-
-.. [3] Dale, D. A., et al. (2014).
-   *Astrophys. J.* **784**, 83.
-   https://doi.org/10.1088/0004-637X/784/1/83
-
-.. GENERATED FROM PYTHON SOURCE LINES 34-150
+.. image:: images/sphx_glr_plot_panchromatic_milky_way_analog_001.png
+   :alt: plot panchromatic milky way analog
+   :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
+Example script with invalid Python syntax
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/multiwavelength/plot_panchromatic_milky_way_analog.py", line 147, in <module>
-        _script_dir = os.path.dirname(os.path.abspath(__file__))
-                                                      ^^^^^^^^
-    NameError: name '__file__' is not defined
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 1-170
 
 .. code-block:: Python
 
+    """
+    Panchromatic SED: Milky Way Analog
+    ==================================
+
+    A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across
+    the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).
+
+    Star formation history follows a double power-law with recent sustained
+    activity. Dust attenuates UV/optical and re-emits in the infrared.
+    Radio continuum from star-forming regions and X-rays from stellar binaries
+    are included.
+
+    Reading order: stellar continuum (grey) → dust-attenuated stellar
+    (faded) → dust emission (warm FIR + cold submm) → radio (cm-wavelength)
+    → X-ray (from accreting binaries).
+
+    **References:**
+     - Kennicutt & Evans (2012) [1]_ for MW analog SFR calibration
+     - Bruzual & Charlot (2003) [2]_ for stellar population synthesis
+     - Dale et al. (2014) [3]_ for dust emission model
+
+    .. [1] Kennicutt, R. C., & Evans, N. J. (2012).
+       *Annu. Rev. Astron. Astrophys.* **50**, 531–608.
+       https://doi.org/10.1146/annurev-astro-081811-146504
+
+    .. [2] Bruzual, G., & Charlot, S. (2003).
+       *Mon. Not. R. Astron. Soc.* **344**, 1000–1028.
+       https://doi.org/10.1046/j.1365-8711.2003.06897.x
+
+    .. [3] Dale, D. A., et al. (2014).
+       *Astrophys. J.* **784**, 83.
+       https://doi.org/10.1088/0004-637X/784/1/83
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import os
     import warnings
 
     import matplotlib
+
     matplotlib.use("Agg")
     import jax
     import matplotlib.pyplot as plt
@@ -94,15 +92,22 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
 
     # MW analog: moderate-mass, sustained star formation with a recent uptick
     # Double power law: τ_gyr = 13 Gyr (age of universe proxy), mild cusp
-    # log_peak_sfr ≈ 0 → peak SFR ~ 1 Msun/yr, log10 scaling
+    # log_total_mass ≈ 0 → peak SFR ~ 1 Msun/yr, log10 scaling
     HOST = dict(
         sfh={
             "type": "dpl",
             "*": tengri.FIXED,
+    <<<<<<< HEAD
+            "tau_gyr": 9.0,  # Main growth timescale
+            "log_total_mass": 0.35,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
+            "alpha": 0.8,  # Early rise
+            "beta": 0.5,  # Late decline
+    =======
             "tau_gyr": 9.0,          # Main growth timescale
-            "log_peak_sfr": 0.35,    # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
+            "log_total_mass": 10.0,    # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
             "alpha": 0.8,            # Early rise
             "beta": 0.5,             # Late decline
+    >>>>>>> 22c20410 (refactor(sfh): complete repo-wide sweep of log_total_mass → log_total_mass)
         },
         redshift=tengri.Fixed(0.05),  # z=0.05 for cosmic variance context
     )
@@ -112,8 +117,8 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
     DUST_ON = {
         "type": "two_component",
         "*": tengri.FIXED,
-        "tau_diff": 0.35,                               # Diffuse ISM optical depth
-        "tau_bc": 0.45,                                 # Birth cloud optical depth
+        "tau_diff": 0.35,  # Diffuse ISM optical depth
+        "tau_bc": 0.45,  # Birth cloud optical depth
         "emission": {"type": "dale2014", "*": tengri.FIXED},  # FIR + submm reprocessing
     }
 
@@ -141,17 +146,25 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
         ("Stellar continuum", "#666666", dict(dust=DUST_OFF)),
         ("Attenuated by dust", "#999999", dict(dust=DUST_ON)),
         ("+ Dust emission", "#dd7733", dict(dust=DUST_ON, neb={"type": "cue", "*": tengri.FIXED})),
-        ("+ Radio (SF regions)", "#3366cc", dict(
-            dust=DUST_ON,
-            neb={"type": "cue", "*": tengri.FIXED},
-            radio={"type": "condon92", "*": tengri.FIXED},
-        )),
-        ("+ X-ray (XRBs)", "#9933cc", dict(
-            dust=DUST_ON,
-            neb={"type": "cue", "*": tengri.FIXED},
-            radio={"type": "condon92", "*": tengri.FIXED},
-            xray={"type": "simple", "*": tengri.FIXED},
-        )),
+        (
+            "+ Radio (SF regions)",
+            "#3366cc",
+            dict(
+                dust=DUST_ON,
+                neb={"type": "cue", "*": tengri.FIXED},
+                radio={"type": "condon92", "*": tengri.FIXED},
+            ),
+        ),
+        (
+            "+ X-ray (XRBs)",
+            "#9933cc",
+            dict(
+                dust=DUST_ON,
+                neb={"type": "cue", "*": tengri.FIXED},
+                radio={"type": "condon92", "*": tengri.FIXED},
+                xray={"type": "simple", "*": tengri.FIXED},
+            ),
+        ),
     ]
 
     fig, ax = plt.subplots(figsize=(9.0, 5.5))
@@ -188,11 +201,6 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
     _script_dir = os.path.dirname(os.path.abspath(__file__))
     _outfile = os.path.join(_script_dir, "plot_panchromatic_milky_way_analog.png")
     plt.savefig(_outfile, dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 21.048 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py:

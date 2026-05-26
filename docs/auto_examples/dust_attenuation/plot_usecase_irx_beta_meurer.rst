@@ -21,6 +21,11 @@
 IRX–β diagram: infra-red excess vs UV slope (Meurer+1999)
 ===========================================================
 
+.. image:: images/sphx_glr_plot_usecase_irx_beta_meurer_001.png
+   :alt: plot usecase irx beta meurer
+   :class: sphx-glr-single-img
+
+
 The **IRX–β relation** connects the UV continuum slope β (1250–2600 Å) with
 the infrared excess IRX = log₁₀(L_IR / L_UV). This diagram reveals dust
 reddening and star formation rate indicators in galaxies. Here we:
@@ -38,33 +43,18 @@ reddening and star formation rate indicators in galaxies. Here we:
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-371
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/dust_attenuation/plot_usecase_irx_beta_meurer.py", line 344, in <module>
-        save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
-                                 ^^^^^^^^
-    NameError: name '__file__' is not defined
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 22-375
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -200,7 +190,7 @@ reddening and star formation rate indicators in galaxies. Here we:
         "*": tengri.FIXED,
         "peak_lbt_gyr": 0.05,  # 50 Myr lookback
         "width_gyr": 0.05,      # 50 Myr width
-        "log_peak_sfr": 1.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
+        "log_total_mass": 10.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
         "skew": 0.0,
         "trunc": 13.0,          # max lookback time
     }
@@ -382,6 +372,7 @@ reddening and star formation rate indicators in galaxies. Here we:
 
     fig.tight_layout()
     import pathlib
+
     save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
     plt.savefig(str(save_path), dpi=150, bbox_inches="tight")
     print(f"\nSaved: {save_path}")

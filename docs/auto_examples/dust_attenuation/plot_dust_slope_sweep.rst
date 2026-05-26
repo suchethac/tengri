@@ -21,6 +21,11 @@
 Dust attenuation curve slope controls UV vs optical hardness
 ==============================================================
 
+.. image:: images/sphx_glr_plot_dust_slope_sweep_001.png
+   :alt: plot dust slope sweep
+   :class: sphx-glr-single-img
+
+
 The power-law slope ``δ`` steepens (negative) or flattens (positive) UV
 attenuation relative to the optical, controlling whether dust absorbs more
 or less light at short wavelengths. We vary δ with elevated τ_bc and τ_diff
@@ -28,10 +33,14 @@ to make slope effects visible (low dust opacities wash out the continuum slope).
 
 Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-72
+.. GENERATED FROM PYTHON SOURCE LINES 12-76
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,7 +65,7 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",

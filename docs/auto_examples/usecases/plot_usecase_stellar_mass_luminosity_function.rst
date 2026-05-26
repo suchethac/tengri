@@ -47,10 +47,14 @@ References:
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-356
+.. GENERATED FROM PYTHON SOURCE LINES 32-360
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
     from pathlib import Path

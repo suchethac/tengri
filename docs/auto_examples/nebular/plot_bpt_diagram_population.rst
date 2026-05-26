@@ -35,27 +35,14 @@ References:
     Kewley+2001, ApJ, 556, 121 (SF/AGN demarcation)
     Kauffmann+2003, MNRAS, 346, 1055 (SF/composite line)
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-176
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 19-180
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -98,7 +85,7 @@ References:
             model = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.5,
-                     "tau_gyr": 0.1, "log_peak_sfr": 0.5},
+                     "tau_gyr": 0.1, "log_total_mass": 10.0},
                 dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
                 neb={"type": "cue", "*": tengri.FIXED,
                      "neb_logU": tengri.Fixed(logu), "neb_logZ_gas": tengri.Fixed(logz)},
@@ -143,7 +130,7 @@ References:
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.0,
-                 "tau_gyr": 0.15, "log_peak_sfr": 0.3},
+                 "tau_gyr": 0.15, "log_total_mass": 10.0},
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
             neb={"type": "cue", "*": tengri.FIXED,
                  "neb_logU": tengri.Fixed(config["logu"]),
@@ -213,11 +200,6 @@ References:
     fig.tight_layout()
     plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
     plt.close()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (4 minutes 41.828 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

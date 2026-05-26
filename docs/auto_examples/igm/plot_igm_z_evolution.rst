@@ -21,6 +21,11 @@
 Lyman forest deepens with redshift: high-z IGM opacity suppresses UV flux
 ==========================================================================
 
+.. image:: images/sphx_glr_plot_igm_z_evolution_001.png
+   :alt: plot igm z evolution
+   :class: sphx-glr-single-img
+
+
 The intergalactic medium (IGM) opacity increases dramatically with redshift
 due to the expanding neutral hydrogen fraction. We sweep redshift z ∈ {2, 3, 4, 5, 6, 7, 8}
 on Inoue et al. (2014) IGM transmission curves, showing how the Lyman alpha
@@ -29,10 +34,14 @@ observed wavelengths at higher z, suppressing flux blueward of the break.
 
 Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-50
+.. GENERATED FROM PYTHON SOURCE LINES 13-54
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

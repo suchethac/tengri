@@ -33,28 +33,16 @@ time.
    :alt: plot_continuity_prior_visualisation
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-131
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/sfh/plot_continuity_prior_visualisation.py", line 127, in <module>
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-                                                     ^^^^^^^^
-    NameError: name '__file__' is not defined
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 18-132
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+    import os
 
     import jax.random as jr
     import matplotlib.pyplot as plt
@@ -162,12 +150,7 @@ time.
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    import os
-
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    png_path = os.path.join(script_dir, "plot_continuity_prior_visualisation.png")
-    plt.savefig(png_path, dpi=150, bbox_inches="tight")
-    plt.show()
+    plt.savefig("plot_continuity_prior_visualisation.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_continuity_prior_visualisation.py:

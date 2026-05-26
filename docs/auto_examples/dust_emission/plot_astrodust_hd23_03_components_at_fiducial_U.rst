@@ -21,13 +21,22 @@
 Astrodust+PAH per-component decomposition
 =========================================
 
+.. image:: images/sphx_glr_plot_astrodust_hd23_03_components_at_fiducial_U_001.png
+   :alt: plot astrodust hd23 03 components at fiducial U
+   :class: sphx-glr-single-img
+
+
 Per-component breakdown (Astrodust continuum, PAHs, spinning dust) at the
 Hensley & Draine 2023 fiducial ionization parameter :math:`\log_{10} U = 0.2`.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-63
+.. GENERATED FROM PYTHON SOURCE LINES 8-67
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

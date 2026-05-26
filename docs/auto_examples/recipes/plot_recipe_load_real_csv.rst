@@ -21,14 +21,23 @@
 Load and fit photometry from CSV
 ================================
 
+.. image:: images/sphx_glr_plot_recipe_load_real_csv_001.png
+   :alt: plot recipe load real csv
+   :class: sphx-glr-single-img
+
+
 How do I load measured photometry from a table and fit it? This recipe
 generates mock photometry for 3 galaxies and fits each one independently
 with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-98
+.. GENERATED FROM PYTHON SOURCE LINES 9-102
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +66,7 @@ with a MAP fit, demonstrating the workflow for catalogue-scale SED fitting.
             sfh={
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 0.5,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 3.0,
                 "width_gyr": 2.0,
                 "skew": 0.0,

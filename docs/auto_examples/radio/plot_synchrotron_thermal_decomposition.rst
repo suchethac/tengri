@@ -21,6 +21,11 @@
 Radio SED decomposition: synchrotron vs thermal free-free
 =========================================================
 
+.. image:: images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
+   :alt: plot synchrotron thermal decomposition
+   :class: sphx-glr-single-img
+
+
 Decompose a star-forming galaxy's radio SED into its physical components:
 synchrotron (steep, slope ~ -0.8) from supernova remnants and thermal
 free-free (flat, slope ~ -0.1) from HII regions. At radio frequencies,
@@ -37,21 +42,14 @@ Murphy, E. J., et al. 2011, ApJ, 737, 67
 Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
   (FIR-radio correlation and physical origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-135
-
-
-
-.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
-   :alt: plot synchrotron thermal decomposition
-   :srcset: /auto_examples/radio/images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-139
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

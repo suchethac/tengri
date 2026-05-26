@@ -21,6 +21,11 @@
 The Star-Forming Main Sequence: M*-SFR Galaxy Population
 =========================================================================
 
+.. image:: images/sphx_glr_plot_usecase_main_sequence_recovery_001.png
+   :alt: plot usecase main sequence recovery
+   :class: sphx-glr-single-img
+
+
 The Speagle et al. 2014 star-forming main sequence defines the locus of
 star-forming galaxies in the log SFR vs. log M* plane. This example generates
 30 mock star-forming galaxies by sampling M* uniformly and computing SFR
@@ -38,21 +43,14 @@ References:
 - Speagle et al. 2014, ApJS, 214, 15 (main sequence definition)
 - Whitaker et al. 2014, ApJ, 795, 104 (sSFR evolution)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-193
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_main_sequence_recovery_001.png
-   :alt: plot usecase main sequence recovery
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_main_sequence_recovery_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-197
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -139,7 +137,7 @@ References:
         # Build one reference model to confirm tengri integration
         model_ref = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5, "alpha": 1.5, "beta": 1.0},
+            sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0, "alpha": 1.5, "beta": 1.0},
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
             redshift=tengri.Fixed(0.0),
         )

@@ -21,6 +21,11 @@
 Alpha-element enhancement in quiescent stellar populations
 ===========================================================
 
+.. image:: images/sphx_glr_plot_alpha_enhanced_population_001.png
+   :alt: plot alpha enhanced population
+   :class: sphx-glr-single-img
+
+
 The stellar populations in massive elliptical galaxies are typically
 α-enhanced ([α/Fe] > 0) due to rapid star formation timescales that
 terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005).
@@ -38,42 +43,14 @@ into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
     - Thomas et al. 2005 (MNRAS 357, 1113) — age–metallicity–[α/Fe] diagnostics
     - Conroy & van Dokkum 2012 (ApJ 747, 69) — stellar population models
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-161
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_alpha_enhanced_population_001.png
-   :alt: Age = 5.0 Gyr, Z = 0.0 dex (solar), z = 0.05, Mg b / Fe5270 diagnostic region (zoomed)
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_alpha_enhanced_population_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-
-    === Alpha-element enhancement diagnostics ===
-    Age: 5.0 Gyr | Metallicity: Z = 0.0 dex | Redshift: 0.05
-
-    All four models use the same SSP age & metallicity, varying only [α/Fe].
-    Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster
-    star-formation timescale (less iron-peak enrichment from supernovae Ia).
-
-      [α/Fe] = 0.0 dex (typical for elliptical: 0.0–0.6)
-      [α/Fe] = 0.2 dex (typical for elliptical: 0.0–0.6)
-      [α/Fe] = 0.4 dex (typical for elliptical: 0.0–0.6)
-      [α/Fe] = 0.6 dex (typical for elliptical: 0.0–0.6)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 23-166
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -113,7 +90,7 @@ into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
             "*": tengri.FIXED,
             "peak_lbt_gyr": AGE_GYR,
             "width_gyr": 0.01,  # Narrow burst to isolate age
-            "log_peak_sfr": 11.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.5,
         },
@@ -207,9 +184,9 @@ into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
     print("\n=== Alpha-element enhancement diagnostics ===")
     print(f"Age: {AGE_GYR} Gyr | Metallicity: Z = {MET_LOGZSOL} dex | Redshift: {REDSHIFT}")
     print(
-        f"\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
-        f"Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
-        f"star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
+        "\nAll four models use the same SSP age & metallicity, varying only [α/Fe].\n"
+        "Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster\n"
+        "star-formation timescale (less iron-peak enrichment from supernovae Ia).\n"
     )
     for alpha_fe in ALPHA_FE_SWEEP:
         print(f"  [α/Fe] = {alpha_fe:.1f} dex (typical for elliptical: 0.0–0.6)")

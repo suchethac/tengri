@@ -18,8 +18,7 @@ pip install -e ".[dev]"
 ```
 
 Editable installs are recommended for any work that touches the
-forward model — physics modules are still being refined and the API
-is pre-1.0.
+forward model.
 
 ## Optional extras
 
@@ -39,7 +38,7 @@ pip install -e ".[all]"
 
 - Python ≥ 3.11
 - JAX ≥ 0.4.20
-- DSPS 0.4.6 (pinned — 0.4.7 removed `CosmoParams`)
+- DSPS 0.4.6 (pinned; 0.4.7 removed `CosmoParams`)
 - NIFTy ≥ 8.5 with the `re` extra
 - NumPy, Matplotlib, h5py
 
@@ -74,7 +73,7 @@ bash scripts/setup_ssp.sh
 ```
 
 The full catalogue of pre-formatted grids (BC03, BPASS, FSPS,
-ProGeny — 46 templates) lives at the
+ProGeny; 46 templates) lives at the
 [public mirror](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
 
 ## Verify your install

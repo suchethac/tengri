@@ -21,6 +21,11 @@
 The age–dust degeneracy on the optical g − r color
 ====================================================
 
+.. image:: images/sphx_glr_plot_usecase_age_dust_2d_001.png
+   :alt: plot usecase age dust 2d
+   :class: sphx-glr-single-img
+
+
 A 5 Gyr stellar population with no dust is nearly indistinguishable
 from a 1 Gyr population reddened by ``τ_diff = 0.4`` when observed in
 optical broadband colors alone. This is the central degeneracy that
@@ -36,10 +41,14 @@ References:
 - Conroy 2013, ARA&A, 51, 393 (§3)
 - Worthey 1994, ApJS, 95, 107 (age/Z degeneracy origin)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-99
+.. GENERATED FROM PYTHON SOURCE LINES 20-103
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -63,7 +72,7 @@ References:
             "*": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(0.1, 13.0),
             "width_gyr": 0.3,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.5,
         },

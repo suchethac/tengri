@@ -21,6 +21,11 @@
 Type 1 vs Type 2 AGN: Unified viewing-angle classification
 ===========================================================
 
+.. image:: images/sphx_glr_plot_type1_type2_unified_model_001.png
+   :alt: plot type1 type2 unified model
+   :class: sphx-glr-single-img
+
+
 Unified AGN models explain the Type 1/Type 2 dichotomy as a **purely geometric
 effect** — the same accretion disc + dusty torus system appears as:
 
@@ -42,33 +47,14 @@ References
 .. [1] Urry, C. M., & Padovani, P. 1995, PASP, 107, 803
    "Unified Schemes for Radio-Loud Active Galactic Nuclei"
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-153
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Building Type 1 (face-on, BLR) model...
-    Building Type 2 (edge-on, NLR) model...
-    Saved: plot_type1_type2_unified_model.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 26-157
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

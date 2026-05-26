@@ -21,6 +21,11 @@
 ULIRG→QSO evolutionary sequence: dust-obscured starburst to bare quasar
 =======================================================================
 
+.. image:: images/sphx_glr_plot_ulirg_to_qso_transition_001.png
+   :alt: plot ulirg to qso transition
+   :class: sphx-glr-single-img
+
+
 Sanders et al. (1988) proposed that Ultra-Luminous Infrared Galaxies (ULIRGs)
 are the dust-shrouded precursors to optical QSOs. This sequence traces
 progressive unveiling of a buried AGN through five stages:
@@ -37,23 +42,17 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 **References:**
 
 - Sanders et al. (1988) ApJ 325, 74: ULIRG/QSO connection hypothesis
+
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-166
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
-   :alt: plot ulirg to qso transition
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 24-171
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

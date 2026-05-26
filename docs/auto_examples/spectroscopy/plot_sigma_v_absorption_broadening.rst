@@ -21,27 +21,25 @@
 Velocity-dispersion broadening of stellar absorption features
 ================================================================
 
+.. image:: images/sphx_glr_plot_sigma_v_absorption_broadening_001.png
+   :alt: plot sigma v absorption broadening
+   :class: sphx-glr-single-img
+
+
 The Mg b 5170 Å region of an old stellar population observed at
 spectral resolution R = 3000, convolved with increasing stellar
 velocity dispersion ``σ_v`` from 50 to 400 km/s. The classic kinematic
 diagnostic — line core depth tracks σ_v, asymmetric wings appear with
 rotational broadening (not modelled here, sigma only).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-73
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_sigma_v_absorption_broadening_001.png
-   :alt: plot sigma v absorption broadening
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_sigma_v_absorption_broadening_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 11-77
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -70,7 +68,7 @@ rotational broadening (not modelled here, sigma only).
         ssp,
         observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 7.0,
-             "width_gyr": 1.5, "log_peak_sfr": 1.0,
+             "width_gyr": 1.5, "log_total_mass": 10.0,
              "skew": 0.0, "trunc": 13.5},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.0, "tau_bc": 0.0},

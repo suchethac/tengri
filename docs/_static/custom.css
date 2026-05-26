@@ -1,5 +1,21 @@
 /* tengri docs — custom overrides for Furo theme */
 
+/* ── Sidebar: collapse the Examples gallery to a single entry ──────────
+   Sphinx-gallery registers ~19 section indexes (and ~170 per-script
+   pages) into the global toctree, which Furo dutifully emits into the
+   sidebar regardless of :maxdepth:. The result is 200+ nav entries
+   under "Examples gallery". We want one button. The cards on the
+   gallery page itself are the navigation surface. */
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ ul,
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ input,
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ label {
+    display: none !important;
+}
+/* Drop the now-redundant "has-children" affordance from the same entry. */
+.sidebar-tree li.toctree-l1.has-children:has(> a[href*="auto_examples/index"]) {
+    padding-left: 0;
+}
+
 /* ── Sidebar logo ─────────────────────────────────────────────────────
    Large logo centred above the "tengri" title. */
 .sidebar-logo-container {

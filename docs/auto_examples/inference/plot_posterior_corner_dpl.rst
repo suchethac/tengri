@@ -21,54 +21,36 @@
 Posterior corner plot from MCMC: double-power-law SFH
 =====================================================
 
+.. image:: images/sphx_glr_plot_posterior_corner_dpl_001.png
+   :alt: plot posterior corner dpl
+   :class: sphx-glr-single-img
+
+
 Demonstrates MCMC parameter estimation and posterior covariance structure
 after fitting mock 5-band SDSS photometry with a double-power-law (dpl) star
 formation history. The corner plot visualizes all 1-D marginalized posteriors
 and 2-D joint distributions, with blue lines marking the injected truth values.
 
 The model has four free parameters in the SFH: alpha (rise), beta (decline),
-tau_gyr (timescale), and log_peak_sfr (normalization). The posterior reveals
+tau_gyr (timescale), and log_total_mass (normalization). The posterior reveals
 parameter degeneracies between SFH shape and dust attenuation.
 
 Reference: Foreman-Mackey 2016, corner.py (https://arxiv.org/abs/1606.02919);
 Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-93
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/inference/plot_posterior_corner_dpl.py", line 67, in <module>
-        posterior = forward.fit(
-                    ^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/forward_model.py", line 537, in fit
-        return fitter.run(method, key=key, **kwargs)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/inference/fitter.py", line 1794, in run
-        method = resolve_method(method)
-                 ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/inference/fitter.py", line 183, in resolve_method
-        raise ParameterError(
-    tengri.config.exceptions.ParameterError: Unknown method: 'nuts'. Valid names: auto, laplace, map, mcmc, mcmc_adjusted_mclmc, mcmc_dynamic_hmc, mcmc_ess, mcmc_ghmc, mcmc_hmc, mcmc_mclmc, mcmc_nuts, mcmc_raytrace, native_vi_linear, native_vi_nonlinear, nss, pathfinder, vi, vi_linear, vi_linear_fast, vi_nonlinear, vi_nonlinear_fast. See Fitter.run() docstring for details.
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 17-104
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import corner
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -104,7 +86,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
         sfh_dpl_alpha=2.5,
         sfh_dpl_beta=1.2,
         sfh_dpl_tau_gyr=8.0,
-        sfh_dpl_log_peak_sfr=1.1,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.3,
     )
     mock = model.mock(truth, snr=20.0, key=key)
@@ -116,16 +98,24 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     posterior = forward.fit(
         mock.flux_obs,
         mock.noise,
-        method="nuts",
-        warmup=500,
-        samples=500,
+        method="mcmc_nuts",
+        n_warmup=500,
+        n_samples=500,
         verbose=False,
     )
 
-    # Extract samples and parameter names for the corner plot
+    # Extract samples and parameter names for the corner plot. Filter to
+    # columns with non-trivial posterior variance — fixed params and tightly
+    # constrained ones end up as effectively zero-range columns and
+    # corner.corner refuses to plot them.
     samples_dict = posterior.samples
-    param_names = list(samples_dict.keys())
-    samples_array = np.array([samples_dict[p] for p in param_names]).T
+    EPS = 1e-8
+    param_names = [
+        p
+        for p in samples_dict
+        if np.asarray(samples_dict[p]).std() > EPS * abs(np.asarray(samples_dict[p]).mean() + 1.0)
+    ]
+    samples_array = np.array([np.asarray(samples_dict[p]) for p in param_names]).T
     truths = [float(truth[p]) for p in param_names]
 
     # --- Create corner plot ---

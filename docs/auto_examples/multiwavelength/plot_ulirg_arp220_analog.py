@@ -14,6 +14,10 @@ Anchor parameters chosen to land at ``L_IR ≈ 10^{12.3} L_sun``,
 similar to Arp 220's bolometric output.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

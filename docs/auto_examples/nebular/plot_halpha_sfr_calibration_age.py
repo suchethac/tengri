@@ -8,10 +8,16 @@ breaks at young (<10 Myr; insufficient ionizing photons) and old (>100 Myr;
 all stars too old to ionize) populations.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
+
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
+
 import tengri
 from tengri.analysis.plotting import setup_style
 

@@ -21,6 +21,11 @@
 Prospector prior families: continuity vs bursty vs Dirichlet vs PSB
 ====================================================================
 
+.. image:: images/sphx_glr_plot_prospector_priors_compare_001.png
+   :alt: plot prospector priors compare
+   :class: sphx-glr-single-img
+
+
 Tengri ships the non-parametric SFH priors that appear most often in
 Prospector papers, all with the *published* prior on the SFR ratios:
 
@@ -46,21 +51,14 @@ edges via :func:`~tengri.make_agebins_from_zred` requires passing
 ``bin_edges_gyr`` through the composer, which is a separate plumbing
 follow-up.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-100
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_prospector_priors_compare_001.png
-   :alt: plot prospector priors compare
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_prospector_priors_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 30-104
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

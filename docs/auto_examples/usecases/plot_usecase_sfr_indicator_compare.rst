@@ -18,22 +18,37 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_sfr_indicator_compare.py:
 
 
-SFR indicators: comparing UV, Hα, FIR under stochastic star formation
-=====================================================================
+SyntaxError
+===========
 
-Compares four classical SFR indicators (UV continuum, Hα emission, FIR,
-bolometric) on a population of mock galaxies spanning burstiness amplitudes.
-Stochastic SFHs introduce variance that differs between indicators. Hα shows
-highest scatter while bolometric is most stable — a key consideration for
-survey design.
+.. image:: images/sphx_glr_plot_usecase_sfr_indicator_compare_001.png
+   :alt: plot usecase sfr indicator compare
+   :class: sphx-glr-single-img
 
-Reference: Kennicutt 1998, ARA&A, 36, 189 (SFR calibrations);
-Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-94
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-98
 
 .. code-block:: Python
 
+    """
+    SFR indicators: comparing UV, Hα, FIR under stochastic star formation
+    =====================================================================
+
+    Compares four classical SFR indicators (UV continuum, Hα emission, FIR,
+    bolometric) on a population of mock galaxies spanning burstiness amplitudes.
+    Stochastic SFHs introduce variance that differs between indicators. Hα shows
+    highest scatter while bolometric is most stable — a key consideration for
+    survey design.
+
+    Reference: Kennicutt 1998, ARA&A, 36, 189 (SFR calibrations);
+    Conroy 2013, ARA&A, 51, 393 (SED fitting).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +72,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-1.0, 1.5),
@@ -85,9 +100,9 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             key, subkey = jax.random.split(key)
             params = model.spec.sample(subkey)
             # Set a fixed current SFR for comparison
-            params["sfh_tsnorm_log_peak_sfr"] = 1.0
+            params["sfh_tsnorm_log_total_mass"] = 1.0
             params["sfh_tsnorm_peak_lbt_gyr"] = 2.0
-            sfr_indicators.append(float(params["sfh_tsnorm_log_peak_sfr"]))
+            sfr_indicators.append(float(params["sfh_tsnorm_log_total_mass"]))
 
     sfr_true = np.array(sfr_indicators)
     burst_idx = np.repeat(burst_levels, n_gal_per_burst)

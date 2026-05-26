@@ -18,22 +18,37 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_age_dust_degeneracy.py:
 
 
-Age-dust-metallicity degeneracy: why UV photometry is critical
-==============================================================
+SyntaxError
+===========
 
-Two synthetic galaxies with identical SDSS ugriz photometry — one old and
-dust-poor, one young and dust-rich — produce wildly different SED fits.
-Adding GALEX FUV/NUV observation breaks the degeneracy by constraining the
-UV slope. Demonstrates the critical importance of short-wavelength coverage
-for stellar age and dust determination.
+.. image:: images/sphx_glr_plot_usecase_age_dust_degeneracy_001.png
+   :alt: plot usecase age dust degeneracy
+   :class: sphx-glr-single-img
 
-Reference: Conroy et al. 2009, ApJ, 699, 486 (age-dust-metallicity
-degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-161
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-165
 
 .. code-block:: Python
 
+    """
+    Age-dust-metallicity degeneracy: why UV photometry is critical
+    ==============================================================
+
+    Two synthetic galaxies with identical SDSS ugriz photometry — one old and
+    dust-poor, one young and dust-rich — produce wildly different SED fits.
+    Adding GALEX FUV/NUV observation breaks the degeneracy by constraining the
+    UV slope. Demonstrates the critical importance of short-wavelength coverage
+    for stellar age and dust determination.
+
+    Reference: Conroy et al. 2009, ApJ, 699, 486 (age-dust-metallicity
+    degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,7 +74,7 @@ degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs_sdss,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-3.0, 3.0),
@@ -87,7 +102,7 @@ degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs_sdss_uv,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.5, 12.0),
             "width_gyr": tengri.Uniform(0.3, 5.0),
             "skew": tengri.Uniform(-3.0, 3.0),
@@ -108,7 +123,7 @@ degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     # Old, dust-poor
     params_old = {
-        "sfh_tsnorm_log_peak_sfr": 0.5,
+        "sfh_tsnorm_log_total_mass": 0.5,
         "sfh_tsnorm_peak_lbt_gyr": 8.0,
         "sfh_tsnorm_width_gyr": 1.0,
         "sfh_tsnorm_skew": -0.5,
@@ -122,7 +137,7 @@ degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     # Young, dusty
     params_young = {
-        "sfh_tsnorm_log_peak_sfr": 1.5,
+        "sfh_tsnorm_log_total_mass": 1.5,
         "sfh_tsnorm_peak_lbt_gyr": 1.0,
         "sfh_tsnorm_width_gyr": 0.5,
         "sfh_tsnorm_skew": 0.8,

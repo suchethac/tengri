@@ -18,55 +18,48 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_main_sequence_cosmic_evolution.py:
 
 
-Star-forming main sequence cosmic evolution: z=0 → z=2
-========================================================
+SyntaxError
+===========
 
-The star-forming main sequence (MS) defines a tight relation between stellar
-mass (M*) and star formation rate (SFR) for actively forming galaxies. This
-example demonstrates how the MS **shifts upward by ~0.7 dex** from z=0 to z=2,
-reflecting the Universe's peak epoch of star formation.
-
-**Left panel (z=0):** 30 mock galaxies with varied normalization, overlaid
-against the Speagle+2014 z~0 MS reference.
-
-**Right panel (z=2):** Same construction at z=2, overlaid against Whitaker+2014
-z~2 MS relation, showing the upward shift in SFR at fixed M*.
-
-The physical origin: at high-z, galaxies accrete gas more rapidly, fuel higher
-SFR densities, and produce stellar populations faster than at z=0. By z~0.1,
-this epochal overdensity has declined and quenching becomes more prevalent.
-
-References:
-- Speagle et al. 2014, ApJ, 164, 14 (z~0 main sequence)
-- Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence)
-- Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
-
-.. GENERATED FROM PYTHON SOURCE LINES 25-212
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_001.png
-   :alt: z = 0.05, z = 2.00
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_001.png
+.. image:: images/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_001.png
+   :alt: plot usecase main sequence cosmic evolution
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
+Example script with invalid Python syntax
 
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 1-216
 
 .. code-block:: Python
 
+    """
+    Star-forming main sequence cosmic evolution: z=0 → z=2
+    ========================================================
+
+    The star-forming main sequence (MS) defines a tight relation between stellar
+    mass (M*) and star formation rate (SFR) for actively forming galaxies. This
+    example demonstrates how the MS **shifts upward by ~0.7 dex** from z=0 to z=2,
+    reflecting the Universe's peak epoch of star formation.
+
+    **Left panel (z=0):** 30 mock galaxies with varied normalization, overlaid
+    against the Speagle+2014 z~0 MS reference.
+
+    **Right panel (z=2):** Same construction at z=2, overlaid against Whitaker+2014
+    z~2 MS relation, showing the upward shift in SFR at fixed M*.
+
+    The physical origin: at high-z, galaxies accrete gas more rapidly, fuel higher
+    SFR densities, and produce stellar populations faster than at z=0. By z~0.1,
+    this epochal overdensity has declined and quenching becomes more prevalent.
+
+    References:
+    - Speagle et al. 2014, ApJ, 164, 14 (z~0 main sequence)
+    - Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence)
+    - Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -177,25 +170,25 @@ References:
     ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
 
     # Build a star-forming model with a flexible SFH
-    # Use dpl (double-power-law) SFH with free log_peak_sfr (normalization)
+    # Use dpl (double-power-law) SFH with free log_total_mass (normalization)
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": tengri.FIXED,
-             "log_peak_sfr": tengri.Uniform(-1.0, 3.0)},
+             "log_total_mass": 10.0, 3.0)},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.0, "tau_bc": 0.0},
         neb={"type": "cue", "*": tengri.FIXED},
     )
 
-    # Sample baseline parameters (all fixed except log_peak_sfr)
+    # Sample baseline parameters (all fixed except log_total_mass)
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
-    # Two redshifts, 30 galaxies each with varied log_peak_sfr
+    # Two redshifts, 30 galaxies each with varied log_total_mass
     n_galaxies = 30
     redshifts = [0.05, 2.0]
 
-    # Generate log_peak_sfr values spanning ~1.5 dex range
-    log_peak_sfr_vals = np.linspace(-0.5, 2.0, n_galaxies)
+    # Generate log_total_mass values spanning ~1.5 dex range
+    log_total_mass_vals = np.linspace(-0.5, 2.0, n_galaxies)
 
     fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.5))
 
@@ -204,10 +197,10 @@ References:
         m_stars = []
         sfr_nows = []
 
-        for log_peak_sfr in log_peak_sfr_vals:
+        for log_total_mass in log_total_mass_vals:
             p = {
                 **baseline,
-                "sfh_dpl_log_peak_sfr": jnp.float64(log_peak_sfr),
+                "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
             }
 
             # Predict SFH: returns dict with "t_gyr" and "sfr_mean"
@@ -254,11 +247,6 @@ References:
     fig.tight_layout(rect=[0, 0.05, 1, 1])
     plt.savefig("plot_usecase_main_sequence_cosmic_evolution.png",
                 dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.712 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_main_sequence_cosmic_evolution.py:

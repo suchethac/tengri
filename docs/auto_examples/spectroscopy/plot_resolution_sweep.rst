@@ -21,6 +21,11 @@
 Instrumental Resolution Sweep: Hα Line Blending
 =================================================
 
+.. image:: images/sphx_glr_plot_resolution_sweep_001.png
+   :alt: plot resolution sweep
+   :class: sphx-glr-single-img
+
+
 Demonstrate how instrumental resolution affects spectral line profile visibility
 by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500
 (DESI), 2000 (KMOS), 5000 (MUSE), and 25000 (HARPS). The Hα + [N II] complex
@@ -37,12 +42,17 @@ This example demonstrates:
 
 Reference: Oxygen doublet [O III] λλ4959,5007 and forbidden nitrogen
 [N II] λλ6549,6585 are kinematically degenerate with Balmer lines at
+
 low instrumental resolution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-127
+.. GENERATED FROM PYTHON SOURCE LINES 24-132
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -69,7 +79,7 @@ low instrumental resolution.
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
+             "log_total_mass": 10.0, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
              "skew": -0.2, "trunc": 2.0},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
@@ -99,7 +109,7 @@ low instrumental resolution.
             ssp,
             observation=obs,
             sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
+                 "log_total_mass": 10.0, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
                  "skew": -0.2, "trunc": 2.0},
             dust={"type": "two_component", "*": tengri.FIXED,
                   "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},

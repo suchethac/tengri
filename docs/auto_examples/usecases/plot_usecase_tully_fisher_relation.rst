@@ -18,34 +18,44 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_tully_fisher_relation.py:
 
 
-Tully-Fisher Relation: Baryonic Mass — Rotation Velocity Scaling
-==================================================================
+SyntaxError
+===========
 
-The Tully-Fisher relation is a tight empirical correlation between the
-baryonic mass of disc galaxies and their observed rotation velocity,
-parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).
+Example script with invalid Python syntax
 
-This example constructs 30 mock disc-like galaxies spanning stellar masses
-from 1e9 to 1e11 M_sun via a log_peak_sfr sweep, assigns circular velocity
-from the McGaugh+2000 baryonic TF scaling law, and then computes rest-frame
-optical (SDSS r-band) absolute magnitude using tengri.predict_photometry.
-
-The resulting (log V_circ, M_r) scatter demonstrates the TF relation's
-predictive power: galaxies populate a tight sequence linking rotation velocity
-to intrinsic luminosity. The McGaugh+2000 empirical TF fit is overlaid as
-reference (originally calibrated in K-band; optical correlations follow similar
-slope). Verification: mock galaxies follow the expected TF scaling with scatter
-consistent with observational samples.
-
-References:
-  - Tully & Fisher 1977, ApJ, 211, 31 (original relation)
-  - McGaugh 2000, ApJ, 541, L33 (baryonic TF relation)
-  - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
-
-.. GENERATED FROM PYTHON SOURCE LINES 26-228
+.. GENERATED FROM PYTHON SOURCE LINES 1-232
 
 .. code-block:: Python
 
+    """
+    Tully-Fisher Relation: Baryonic Mass — Rotation Velocity Scaling
+    ==================================================================
+
+    The Tully-Fisher relation is a tight empirical correlation between the
+    baryonic mass of disc galaxies and their observed rotation velocity,
+    parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).
+
+    This example constructs 30 mock disc-like galaxies spanning stellar masses
+    from 1e9 to 1e11 M_sun via a log_total_mass sweep, assigns circular velocity
+    from the McGaugh+2000 baryonic TF scaling law, and then computes rest-frame
+    optical (SDSS r-band) absolute magnitude using tengri.predict_photometry.
+
+    The resulting (log V_circ, M_r) scatter demonstrates the TF relation's
+    predictive power: galaxies populate a tight sequence linking rotation velocity
+    to intrinsic luminosity. The McGaugh+2000 empirical TF fit is overlaid as
+    reference (originally calibrated in K-band; optical correlations follow similar
+    slope). Verification: mock galaxies follow the expected TF scaling with scatter
+    consistent with observational samples.
+
+    References:
+      - Tully & Fisher 1977, ApJ, 211, 31 (original relation)
+      - McGaugh 2000, ApJ, 541, L33 (baryonic TF relation)
+      - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -120,14 +130,14 @@ References:
     # Use SDSS r-band (available locally) as proxy for K-band magnitudes
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 
-    # Model: double-power-law SFH (dpl) with free log_peak_sfr normalization
+    # Model: double-power-law SFH (dpl) with free log_total_mass normalization
     # For disc-like galaxies, set dust to near-zero (typical for nearby spirals)
     # Fix redshift to z=0 (local universe TF sample)
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
         sfh={"type": "dpl", "*": tengri.FIXED,
-             "log_peak_sfr": tengri.Uniform(-1.0, 3.0)},
+             "log_total_mass": 10.0, 3.0)},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.05, "tau_bc": 0.05},
         neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5},
@@ -142,18 +152,18 @@ References:
     # ==============================================================================
 
     n_galaxies = 30
-    log_peak_sfr_vals = np.linspace(-0.5, 2.3, n_galaxies)
+    log_total_mass_vals = np.linspace(-0.5, 2.3, n_galaxies)
 
     # Pre-allocate storage
     log_m_stars = []
     log_v_circs = []
     m_r_abs = []
 
-    # Loop over log_peak_sfr to generate population
-    for log_peak_sfr in log_peak_sfr_vals:
+    # Loop over log_total_mass to generate population
+    for log_total_mass in log_total_mass_vals:
         p = {
             **baseline,
-            "sfh_dpl_log_peak_sfr": jnp.float64(log_peak_sfr),
+            "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
         }
 
         # Predict SFH (rest-frame, independent of redshift)

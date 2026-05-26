@@ -18,41 +18,45 @@
 .. _sphx_glr_auto_examples_photometry_plot_red_sequence_blue_cloud.py:
 
 
-Red Sequence vs Blue Cloud Bimodality
-======================================
+SyntaxError
+===========
 
-Galaxy colour–magnitude diagram showing the distinct red and blue populations.
-We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25
-star-forming galaxies (continuous SFR) — varying stellar mass via
-``log_peak_sfr``. Each sample is placed at ``z = 0.05``, computing
-``u − r`` colour and rest-frame ``M_r`` magnitude. The colour bimodality and
-green valley are key signatures of galaxy assembly across cosmic time (Strateva
-et al. 2001 SDSS, Baldry et al. 2004).
-
-Physical insight made obvious:
-
-- **Red sequence** (old, quiescent): no ongoing star formation, minimal dust,
-  ``u − r ≈ 2.5`` due to 4000 Å Balmer break in the ``u`` band
-- **Blue cloud** (young, star-forming): hot O/B stars dominate UV, moderate
-  dust extinction, ``u − r ≈ 1.0–1.5``
-- **Green valley** (intermediate): transitional populations; sparse in modern
-  surveys due to fast quenching timescales
-
-.. GENERATED FROM PYTHON SOURCE LINES 22-163
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_red_sequence_blue_cloud_001.png
+.. image:: images/sphx_glr_plot_red_sequence_blue_cloud_001.png
    :alt: plot red sequence blue cloud
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_red_sequence_blue_cloud_001.png
    :class: sphx-glr-single-img
 
 
+Example script with invalid Python syntax
 
-
+.. GENERATED FROM PYTHON SOURCE LINES 1-167
 
 .. code-block:: Python
 
+    """
+    Red Sequence vs Blue Cloud Bimodality
+    ======================================
+
+    Galaxy colour–magnitude diagram showing the distinct red and blue populations.
+    We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25
+    star-forming galaxies (continuous SFR) — varying stellar mass via
+    ``log_total_mass``. Each sample is placed at ``z = 0.05``, computing
+    ``u − r`` colour and rest-frame ``M_r`` magnitude. The colour bimodality and
+    green valley are key signatures of galaxy assembly across cosmic time (Strateva
+    et al. 2001 SDSS, Baldry et al. 2004).
+
+    Physical insight made obvious:
+
+    - **Red sequence** (old, quiescent): no ongoing star formation, minimal dust,
+      ``u − r ≈ 2.5`` due to 4000 Å Balmer break in the ``u`` band
+    - **Blue cloud** (young, star-forming): hot O/B stars dominate UV, moderate
+      dust extinction, ``u − r ≈ 1.0–1.5``
+    - **Green valley** (intermediate): transitional populations; sparse in modern
+      surveys due to fast quenching timescales
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -101,7 +105,7 @@ Physical insight made obvious:
         Returns
         -------
         model : SEDModel
-            Galaxy SED model with log_peak_sfr as free parameter (stellar mass knob).
+            Galaxy SED model with log_total_mass as free parameter (stellar mass knob).
         """
         return tengri.SEDModel.build(
             ssp,
@@ -111,7 +115,7 @@ Physical insight made obvious:
                 "*": tengri.FIXED,
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
-                "log_peak_sfr": tengri.Uniform(-0.5, 2.0),  # stellar mass knob
+                "log_total_mass": 10.0, 2.0),  # stellar mass knob
                 "skew": 0.0,
                 "trunc": 13.0,
             },
@@ -148,7 +152,7 @@ Physical insight made obvious:
         m_r_mags = np.empty(n_samples)
 
         for i, log_sfr in enumerate(log_sfr_grid):
-            params = {**baseline, "log_peak_sfr": float(log_sfr)}
+            params = {**baseline, "log_total_mass": 10.0}
 
             # Compute photometry: [u, r]
             flux = _flux(model, params)
@@ -162,7 +166,7 @@ Physical insight made obvious:
 
             # Absolute magnitude (rest-frame, no K-correction applied)
             # For simplicity, assume all galaxies have similar distance modulus;
-            # rank by luminosity via log_peak_sfr
+            # rank by luminosity via log_total_mass
             m_r_abs = m_r - 2.5 * log_sfr
 
             u_r_colors[i] = u_r
