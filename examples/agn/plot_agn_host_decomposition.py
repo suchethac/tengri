@@ -4,7 +4,7 @@ AGN host-galaxy decomposition: disentangling Seyfert contributions
 
 A Seyfert galaxy SED is decomposed photometrically by varying the AGN
 contribution fraction ``agn_frac`` from 0 (pure host) to 1.0 (pure AGN)
-to 0.5 (composite). This demonstrates how to isolate the AGN contribution
+to 0.5 (composite). how to isolate the AGN contribution
 from the host galaxy using a single model and varying a structural
 parameter — useful for diagnosing photometric AGN contamination.
 

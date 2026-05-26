@@ -21,7 +21,7 @@ For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.
 
-This demonstrates the forward model: stellar mass → SED → rest-frame
+the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:

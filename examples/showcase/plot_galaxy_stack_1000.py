@@ -1,5 +1,5 @@
 """
-Stacking 1000 galaxies in seconds with JAX vmap
+Stacking 1000 galaxies with jax.vmap
 ================================================
 
 This gallery demonstrates population-scale analysis: draw 1,000 galaxy parameters

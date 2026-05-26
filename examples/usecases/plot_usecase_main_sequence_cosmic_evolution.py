@@ -1,5 +1,5 @@
 """
-Star-forming main sequence cosmic evolution: z=0 → z=2
+Star-forming main sequence: z = 0 → 2
 ========================================================
 
 The star-forming main sequence (MS) defines a tight relation between stellar

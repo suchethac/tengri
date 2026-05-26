@@ -7,7 +7,7 @@ a shared population-level metallicity parameter. The hierarchical model
 pools information across galaxies to tighten constraints on the
 population-level mean — a key differentiator of tengri's inference stack.
 
-This example demonstrates Bayesian hierarchical modeling: individual
+Bayesian hierarchical modeling: individual
 galaxy posteriors are weakly constrained (scatter ~0.3 dex in
 met_logzsol), but the population-level hyperprior is sharp (~0.05 dex).
 This pooling effect is the foundation of population-level SED fitting and

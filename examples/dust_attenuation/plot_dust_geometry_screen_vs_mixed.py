@@ -7,7 +7,7 @@ Dust geometry determines how dust affects starlight. A **screen**
 distributed with stars) is more gentle:
 ``transmission = (1 - exp(-τ_λ)) / τ_λ``.
 
-This example shows both geometries applied to the *same intrinsic SED*
+both geometries applied to the *same intrinsic SED*
 at the *same V-band optical depth* (τ_V = 0.5, 1.0, 2.0). Despite
 identical τ_V, the resulting SEDs are qualitatively different — mixed
 geometry produces less attenuation in the UV, creating a shallower

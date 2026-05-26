@@ -5,7 +5,7 @@ Alpha-element enhancement in quiescent stellar populations
 The stellar populations in massive elliptical galaxies are typically
 α-enhanced ([α/Fe] > 0) due to rapid star formation timescales that
 terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005).
-This example demonstrates how increasing [α/Fe] shifts absorption features —
+increasing [α/Fe] shifts absorption features —
 particularly the Mg b and Fe5270 indices — which serve as diagnostics of
 star-formation history timescale.
 

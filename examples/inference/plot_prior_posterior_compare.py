@@ -3,7 +3,7 @@ Prior vs posterior: data-driven parameter constraints
 =====================================================
 
 Bayesian inference refines broad priors (uniform distributions) into
-narrow posteriors using observed data. This script shows three key
+narrow posteriors using observed data. three key
 parameters (age of peak SFR, stellar metallicity, dust optical depth)
 as priors (dashed gray lines) and posteriors (blue histograms) after
 fitting mock 5-band photometry. The red vertical line marks the injected

@@ -8,7 +8,7 @@ dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6,
 (9.7 μm Si–O stretch) and AGN heating suppress PAH and introduce continuum
 growth in AGN-dominated systems. We model three templates: (a) pure starburst
 (no AGN), (b) pure AGN (no star formation), and (c) composite with
-AGN fraction = 0.5. This illustrates the diagnostic power of mid-IR
+AGN fraction = 0.5. the diagnostic power of mid-IR
 spectroscopy: PAH strength probes star formation rate, while continuum
 slope and silicate depth reveal AGN heating and dust temperature.
 
