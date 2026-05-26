@@ -780,9 +780,12 @@ save_fig("09_agn_skirtor.png")
 # CIGALE's `xray` module follows Yang et al. (2020): an AGN corona
 # power law tied to L_2500, plus an HMXB / LMXB contribution scaled by
 # stellar mass and SFR, all attenuated by photoelectric absorption at
-# the chosen log N_H. tengri ships the same physics as `xray.simple`
-# (Aird+2017 SFR-X-ray scaling + Lusso & Risaliti 2016 AGN corona).
-# Both panels show the AGN-dominated fiducial.
+# the chosen log N_H. tengri currently ships only `xray.simple`
+# (Aird+2017 SFR-X-ray scaling + Lusso & Risaliti 2016 AGN corona) —
+# the photoelectric N_H attenuation and the Compton turnover above
+# ~100 keV are not yet in. Tracked under #440; once that lands the
+# code-swap is the commented-out `xray={"type": "yang20", ...}` line
+# below. Both panels show the AGN-dominated fiducial.
 
 # %%
 sed_x = C.run_chain([
@@ -814,6 +817,10 @@ m_x = SEDModel.build(
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(11.5), "*": FIXED},
     xray={"type": "simple"},
+    # Once tengri#440 lands, swap to the full Yang+2020 model so we
+    # also reproduce CIGALE's Compton turnover and photoelectric N_H:
+    # xray={"type": "yang20", "xray_alpha_ox": Fixed(-1.4),
+    #       "xray_log_nh": Fixed(22.0), "*": FIXED},
     redshift=Fixed(0.0),
 )
 state_x = m_x.predict_state({})
@@ -904,10 +911,13 @@ save_fig("11_radio_synchrotron.png")
 # ## §12 IGM transmission
 #
 # CIGALE applies Meiksin (2006) IGM attenuation inside its
-# `redshifting` module. tengri ships both Inoue+Iwata (2014) — the
-# current default — and Madau (1995). At z = 3, 5, 7 the Lyman series
-# eats the rest-UV, the continuum suppression after 912 Å (1 + z)
-# growing rapidly with z.
+# `redshifting` module — Lyman series **and** the diffuse-IGM Lyα
+# forest continuum suppression, so transmission redward of the Lyman
+# limit at z = 3 sits at ~0.18-0.25 rather than 1. tengri currently
+# ships Inoue+Iwata (2014) and Madau (1995); both implement only the
+# Lyman series step structure and miss the diffuse forest continuum.
+# A `igm.meiksin06` port is tracked under #440; once it lands swap to
+# the commented-out `igm={"type": "meiksin06"}` line below.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()
@@ -952,6 +962,9 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
         dust={"type": "two_component", "tau_bc": Fixed(0.0),
               "tau_diff": Fixed(0.0), "*": FIXED},
         igm={"type": "inoue14"},
+        # Once tengri#440 lands, swap to igm.meiksin06 to also reproduce
+        # CIGALE's diffuse Lyα-forest continuum suppression:
+        # igm={"type": "meiksin06"},
         redshift=Fixed(z),
     )
     m_no = SEDModel.build(

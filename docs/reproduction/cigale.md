@@ -135,6 +135,16 @@ tengri's `xray.simple` over `log N_H ∈ {20, 22, 24}`.
 
 ![X-ray N_H sweep](_figs/10_xray_nh_sweep.png)
 
+```{note}
+tengri's `xray.simple` is a placeholder: it has the AGN corona power-law
+and the Aird+2017 SFR-X-ray scaling but **no photoelectric N_H
+attenuation** and **no Compton turnover above ~100 keV**. The Yang+2020
+faithful port is tracked under
+[tengri #440](https://github.com/suchethac/tengri/issues/440); once that
+lands the notebook will swap `xray.simple` → `xray.yang20` and the panel
+should overlay.
+```
+
 ## §11 Radio
 
 CIGALE `radio` (q_IR = 2.5, α_SF = 0.8) vs tengri `radio.condon92`.
@@ -148,6 +158,17 @@ Transmission curves at z = 3, 5, 7.
 
 ![IGM transmission](_figs/12_igm_transmission.png)
 
+```{note}
+CIGALE's Meiksin includes both the Lyman series **and** the diffuse-IGM
+Lyα forest continuum suppression, so at z = 3 transmission sits at
+~0.18-0.25 redward of the Lyman limit. tengri's `igm.inoue14` and
+`igm.madau` currently implement only the Lyman series step structure
+(0 below the limit, 1 above). The `igm.meiksin06` port is tracked under
+[tengri #440](https://github.com/suchethac/tengri/issues/440); once that
+lands the notebook will swap `igm.inoue14` → `igm.meiksin06` and the two
+panels should overlay.
+```
+
 ## Scope of the comparison
 
 | Layer | tengri | CIGALE / x-cigale | Expected agreement |
@@ -158,8 +179,8 @@ Transmission curves at z = 3, 5, 7.
 | Dust attenuation | Calzetti, Charlot & Fall | Calzetti, modified | A_V within prior width |
 | Dust emission | Draine & Li, Dale, THEMIS | Draine & Li, Dale, THEMIS | residual at FIR — [#415](https://github.com/suchethac/tengri/issues/415) |
 | AGN | disc + SKIRTOR + Cue BLR/NLR | x-cigale (Yang+ 2020) | composable now emits — [#417](https://github.com/suchethac/tengri/issues/417) closed |
-| X-ray | photoelectric + Compton (N_H) | x-cigale X-ray | identical attenuation curve |
-| IGM | Madau, Inoue | Meiksin | sub-percent above 1216 Å rest |
+| X-ray | `xray.simple` placeholder | x-cigale Yang+2020 | Yang20 port tracked — [#440](https://github.com/suchethac/tengri/issues/440) |
+| IGM | Madau, Inoue14 | Meiksin 2006 | Meiksin06 port tracked — [#440](https://github.com/suchethac/tengri/issues/440) |
 
 Where tengri intentionally departs from CIGALE, the departure is documented
 inline above. The main two are the SFH prior (CIGALE uses grid templates;
