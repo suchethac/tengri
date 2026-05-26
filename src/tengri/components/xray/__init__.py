@@ -35,6 +35,15 @@ register_xray_model(
     citation="Yang+2020 / X-CIGALE (MNRAS 491, 740)",
     short_doc="AGN corona via alpha_ox(L_2500) + Lehmer+16 XRBs + thermal hot gas",
 )(xray_total)
+# ``yang20`` is a CIGALE-compatible alias of ``simple``: the underlying
+# tengri X-ray component already implements the Yang+2020 physics
+# (alpha_ox corona + Morrison & McCammon 1983 N_H + Compton scattering +
+# Lehmer+2016 XRBs). The alias closes the discoverability half of #440.
+register_xray_model(
+    "yang20",
+    citation="Yang et al. 2020 (MNRAS 491, 4276)",
+    short_doc="Alias of 'simple'; use this name for CIGALE pcigale.sed_modules.xray parity",
+)(xray_total)
 
 __all__ = [
     "XRAY_MODELS",

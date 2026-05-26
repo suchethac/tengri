@@ -958,13 +958,15 @@ class SEDModel:
         self._uses_dla = getattr(spec, "dla", False)
         self._igm_patchy = getattr(spec, "igm_patchy", False)
         self._igm_model = getattr(spec, "igm_model", "inoue")
-        _valid = {"inoue", "madau"}
+        _valid = {"inoue", "madau", "meiksin06"}
         if self._igm_model not in _valid:
             raise ValueError(
                 f"igm_model={self._igm_model!r} not recognised. Choose from: {sorted(_valid)}"
             )
         if self._igm_model == "madau":
             from tengri.components.igm import igm_transmission_madau as _igm_fn
+        elif self._igm_model == "meiksin06":
+            from tengri.components.igm import igm_transmission_meiksin06 as _igm_fn
         else:
             from tengri.components.igm import igm_transmission as _igm_fn
         self._igm_fn = _igm_fn
@@ -3027,42 +3029,23 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes (via ``predict_photometry`` or ``predict_luminosity``).
+        **JIT-compatible**: yes (routes through :meth:`predict_photometry`).
 
-        Uses :func:`dsps.calc_obs_mag` when available (cosmology-aware),
-        falls back to conversion from photometric flux otherwise.
+        Derived from :meth:`predict_photometry` via the AB definition
+        :math:`m_\\mathrm{AB} = -2.5 \\log_{10}(F_\\nu) - 48.6`. Issue
+        #436: routing instead through :func:`dsps.calc_obs_mag` used a
+        different filter-convolution convention (Bessell & Murphy 2012
+        photon-counting form :math:`\\int T F_\\nu \\, d\\lambda/\\lambda`)
+        than ``predict_photometry`` (Tokunaga & Vacca 2005
+        :math:`\\int \\lambda T F_\\nu \\, d\\lambda`), giving 5–40 mmag
+        zero-point offsets in SDSS bands. Both APIs must use the same
+        convention; deriving the magnitude from the flux is the only
+        choice that is correct by construction.
         """
         if self.filter_waves is None:
             raise ValueError("No filters set.")
-
-        try:
-            from dsps import calc_obs_mag
-
-            from tengri.cosmology import DEFAULT_COSMO
-
-            sed_lsun = self.predict_luminosity(params)
-            z = self._get_redshift(params)
-            cosmo = DEFAULT_COSMO
-
-            mags = []
-            for fw, ft in zip(self.filter_waves, self.filter_trans):
-                m = calc_obs_mag(
-                    self.ssp_data.ssp_wave,
-                    sed_lsun,
-                    fw,
-                    ft,
-                    z,
-                    cosmo.Om0,
-                    cosmo.w0,
-                    cosmo.wa,
-                    cosmo.h,
-                )
-                mags.append(m)
-            return jnp.array(mags)
-
-        except ImportError:
-            flux = self.predict_photometry(params)
-            return ab_mag_from_flux(flux)
+        flux = self.predict_photometry(params)
+        return ab_mag_from_flux(flux)
 
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.

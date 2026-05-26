@@ -401,9 +401,9 @@ class Parameters:
         self.foreground_law = kwargs.pop("foreground_law", "cardelli")
         self.foreground_rv = float(kwargs.pop("foreground_rv", 3.1))
         self.apply_igm = kwargs.pop("apply_igm", True)
-        # IGM transmission model: 'inoue' (default) or 'madau'. Stored as a
-        # structural setting so the grammar-layer choice propagates through
-        # to :meth:`SEDModel._init_igm` (#344).
+        # IGM transmission model: 'inoue' (default), 'madau', or 'meiksin06'.
+        # Stored as a structural setting so the grammar-layer choice
+        # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
         self.igm_model = kwargs.pop("igm_model", "inoue")
 
         # ── Nebular emission ──────────────────────────────────────

@@ -243,6 +243,7 @@ _IGM_TYPE_ALIASES = {
     "inoue14": "inoue",
     "inoue": "inoue",
     "madau": "madau",
+    "meiksin06": "meiksin06",
 }
 
 
@@ -254,7 +255,14 @@ def _valid_radio_types() -> frozenset[str]:
 
 
 def _valid_xray_types() -> frozenset[str]:
-    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`."""
+    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`.
+
+    ``"yang20"`` is registered in :data:`XRAY_MODELS` as an alias of
+    ``"simple"``: tengri's X-ray component already implements the
+    Yang+2020 physics (alpha_ox corona + Morrison & McCammon 1983 N_H +
+    Compton/Thomson scattering) -- only the user-facing name was
+    missing. See ``components/xray/xray.py`` for the formulas.
+    """
     from tengri.components.xray import XRAY_MODELS
 
     return frozenset(XRAY_MODELS.keys())
@@ -789,15 +797,16 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
-    # Map type to apply_igm
+    # Map type to apply_igm + igm_model
     if igm_type == "none":
         result["apply_igm"] = False
     else:
-        # Both madau and inoue14 -> apply_igm=True
+        # madau, inoue14, meiksin06 -> apply_igm=True
         result["apply_igm"] = True
-        # Propagate the model choice. _init_igm speaks 'inoue'/'madau';
-        # 'inoue14' is the grammar-level name — normalise to the canonical
-        # form here so the user's selection isn't silently dropped (#344).
+        # Propagate the model choice. _init_igm speaks 'inoue'/'madau'/
+        # 'meiksin06'; 'inoue14' is the grammar-level name — normalise to
+        # the canonical form here so the user's selection isn't silently
+        # dropped (#344, #440).
         result["igm_model"] = _IGM_TYPE_ALIASES[igm_type]
 
     # Handle optional IGM subkeys
@@ -1362,13 +1371,23 @@ def _resolve_value(
     # by removing the group prefix
     short_name = _extract_short_name(param_name, group_dict)
 
-    # Check for per-param override
+    # Accept either the short form ('logU') or the full-prefixed form
+    # ('neb_logU') as a per-param override key. The validator already
+    # admits both names (see _short_names_for_group), so silently
+    # dropping the full-prefix form here would be a footgun (issue #424).
+    override_key = None
     if short_name in group_dict:
-        val = group_dict[short_name]
+        override_key = short_name
+    elif param_name != short_name and param_name in group_dict:
+        override_key = param_name
+
+    # Check for per-param override
+    if override_key is not None:
+        val = group_dict[override_key]
 
         # Validate that this key is actually a parameter (not 'type', '*', etc.)
         structural_keys = {"type", "*", "law_bc", "law_diff", "emission", "patchy", "dla"}
-        if short_name in structural_keys:
+        if override_key in structural_keys:
             # These are structural keys, not parameters
             return registry_default, "registry_default"
 
