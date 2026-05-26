@@ -21,15 +21,24 @@
 Quenching morphology sets the age mix and resulting SED colors
 ==============================================================
 
+.. image:: images/sphx_glr_plot_sfh_quenching_compare_001.png
+   :alt: plot sfh quenching compare
+   :class: sphx-glr-single-img
+
+
 Four quenching scenarios—constant SFR, exponential decline, sharp truncation,
 and recent burst—produce distinct SED shapes. Constant SFR yields a young,
 blue galaxy; sharp quenching creates old red colors; a recent burst injects
 young stars atop an old population. The SED reveals the full assembly history.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-119
+.. GENERATED FROM PYTHON SOURCE LINES 10-123
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -54,7 +63,7 @@ young stars atop an old population. The SED reveals the full assembly history.
             "alpha": 0.1,
             "beta": 0.1,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
@@ -69,7 +78,7 @@ young stars atop an old population. The SED reveals the full assembly history.
             "alpha": 1.0,
             "beta": 2.0,
             "tau_gyr": 2.0,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
@@ -84,7 +93,7 @@ young stars atop an old population. The SED reveals the full assembly history.
             "alpha": 3.0,
             "beta": 3.0,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.2,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),
@@ -96,7 +105,7 @@ young stars atop an old population. The SED reveals the full assembly history.
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.2,
             "width_gyr": 0.5,
             "skew": 0.3,

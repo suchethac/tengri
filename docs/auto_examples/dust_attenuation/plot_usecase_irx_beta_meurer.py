@@ -20,10 +20,13 @@ reddening and star formation rate indicators in galaxies. Here we:
   UV-to-IR conversions in high-z star-forming galaxies.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -159,7 +162,7 @@ SFH_BASE = {
     "*": tengri.FIXED,
     "peak_lbt_gyr": 0.05,  # 50 Myr lookback
     "width_gyr": 0.05,      # 50 Myr width
-    "log_peak_sfr": 1.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
+    "log_total_mass": 10.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
     "skew": 0.0,
     "trunc": 13.0,          # max lookback time
 }
@@ -341,6 +344,7 @@ ax.text(
 
 fig.tight_layout()
 import pathlib
+
 save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
 plt.savefig(str(save_path), dpi=150, bbox_inches="tight")
 print(f"\nSaved: {save_path}")

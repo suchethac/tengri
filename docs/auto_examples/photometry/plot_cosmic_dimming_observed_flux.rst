@@ -47,22 +47,19 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
    :alt: plot_cosmic_dimming_observed_flux
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-185
-
-
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 32-188
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 
     from pathlib import Path
 
     import jax
-    import jax.numpy as jnp
     import matplotlib
 
     matplotlib.use("Agg")
@@ -112,7 +109,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         sfh={
             "type": "tsnorm",  # Truncated normal SFH (analytic burst)
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,  # peak SFR = 10 Msun/yr
+            "log_total_mass": 10.0,  # peak SFR = 10 Msun/yr
             "peak_lbt_gyr": 0.5,  # peak at age = 0.5 Gyr lookback time
             "width_gyr": 0.2,  # narrow gaussian → bursty
             "skew": 0.0,
@@ -148,7 +145,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             sfh={
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 1.0,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 0.5,
                 "width_gyr": 0.2,
                 "skew": 0.0,
@@ -210,11 +207,6 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         str(script_dir / "plot_cosmic_dimming_observed_flux.png"), dpi=150, bbox_inches="tight"
     )
     plt.close()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.650 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

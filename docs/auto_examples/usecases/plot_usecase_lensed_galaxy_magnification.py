@@ -22,6 +22,10 @@ References:
 - Rieke, M. J., et al. 2023, PASP, 135, 028001 (JWST NIRCam performance)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -56,7 +60,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
 # For a z=7 LAE-like galaxy (Schaerer+2003), use a recent starburst:
 # peak_lbt_gyr ≈ 0.05 Gyr (recent, ~50 Myr old at z=7)
-# log_peak_sfr ≈ 0.5 → SFR ≈ 3 M_sun/yr (moderate for z~7)
+# log_total_mass ≈ 0.5 → SFR ≈ 3 M_sun/yr (moderate for z~7)
 # Dust is minimal at z~7 (optical depth tau_bc ≈ 0.1)
 
 model = tengri.SEDModel.build(
@@ -64,7 +68,7 @@ model = tengri.SEDModel.build(
     observation=obs,
     sfh={
         "type": "tsnorm",
-        "log_peak_sfr": tengri.Fixed(0.5),  # 3 M_sun/yr
+        "log_total_mass": 10.0,  # 3 M_sun/yr
         "peak_lbt_gyr": tengri.Fixed(0.05),  # 50 Myr old (z=7 LAE regime)
         "width_gyr": tengri.Fixed(0.1),  # 100 Myr width
         "skew": tengri.Fixed(-0.3),  # slight left skew (recent burst)
@@ -222,7 +226,7 @@ plt.show()
 print("\n" + "=" * 70)
 print("STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)")
 print("=" * 70)
-print(f"\nIntrinsic (unlensed) magnitudes:")
+print("\nIntrinsic (unlensed) magnitudes:")
 print("-" * 70)
 for j, band in enumerate(bands):
     print(
@@ -231,9 +235,9 @@ for j, band in enumerate(bands):
     )
 
 print(f"\nJWST NIRCam 5σ detection limit: {mag_5sigma_limit:.1f} AB")
-print(f"(Rieke+2023, NIRCam module performance)")
+print("(Rieke+2023, NIRCam module performance)")
 
-print(f"\nMagnified magnitudes and detectability:")
+print("\nMagnified magnitudes and detectability:")
 print("-" * 70)
 for i, mu in enumerate(magnifications):
     print(f"\nμ = {mu:6.1f}:")

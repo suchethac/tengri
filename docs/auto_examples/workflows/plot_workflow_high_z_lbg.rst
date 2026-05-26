@@ -18,22 +18,37 @@
 .. _sphx_glr_auto_examples_workflows_plot_workflow_high_z_lbg.py:
 
 
-High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST
-======================================================================
+SyntaxError
+===========
 
-Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W)
-and HST (F814W) broadband photometry. The characteristic Lyman-break signature
-(sharp UV dropout at observed ~4 micron) constrains age and metallicity even
-with just 4 bands. Demonstrates recovery of the young starburst component
-from the dropout depth.
+.. image:: images/sphx_glr_plot_workflow_high_z_lbg_001.png
+   :alt: plot workflow high z lbg
+   :class: sphx-glr-single-img
 
-Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
-Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-149
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-153
 
 .. code-block:: Python
 
+    """
+    High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST
+    ======================================================================
+
+    Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W)
+    and HST (F814W) broadband photometry. The characteristic Lyman-break signature
+    (sharp UV dropout at observed ~4 micron) constrains age and metallicity even
+    with just 4 bands. Demonstrates recovery of the young starburst component
+    from the dropout depth.
+
+    Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
+    Conroy 2013, ARA&A, 51, 393 (SED fitting).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -62,7 +77,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0, 2.5),
             "peak_lbt_gyr": tengri.Uniform(0.1, 2.0),
             "width_gyr": tengri.Uniform(0.05, 1.0),
             "skew": tengri.Fixed(0.5),
@@ -82,7 +97,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     # Generate mock data
     key = jax.random.PRNGKey(42)
     truth_params = {
-        "sfh_tsnorm_log_peak_sfr": 1.2,
+        "sfh_tsnorm_log_total_mass": 1.2,
         "sfh_tsnorm_peak_lbt_gyr": 0.3,
         "sfh_tsnorm_width_gyr": 0.2,
         "sfh_tsnorm_skew": 0.5,

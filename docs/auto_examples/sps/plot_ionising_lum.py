@@ -14,6 +14,10 @@ each SSP age at solar metallicity for four bundled bare-stellar
 grids and overlay the curves.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

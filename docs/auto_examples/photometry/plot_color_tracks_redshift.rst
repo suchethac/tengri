@@ -21,6 +21,11 @@
 Photometric colour tracks vs redshift
 ========================================
 
+.. image:: images/sphx_glr_plot_color_tracks_redshift_001.png
+   :alt: plot color tracks redshift
+   :class: sphx-glr-single-img
+
+
 How does a galaxy's location in colour–colour space evolve with
 redshift? We compute SDSS ``g − r`` and ``r − z`` colours for two
 galaxy populations — a young star-forming and an old quiescent —
@@ -38,10 +43,14 @@ Useful intuition this figure makes obvious:
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-105
+.. GENERATED FROM PYTHON SOURCE LINES 22-109
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -72,7 +81,7 @@ Useful intuition this figure makes obvious:
                 "*": tengri.FIXED,
                 "peak_lbt_gyr": peak_lbt,
                 "width_gyr": width,
-                "log_peak_sfr": 1.0,
+                "log_total_mass": 10.0,
                 "skew": 0.0,
                 "trunc": 13.0,
             },

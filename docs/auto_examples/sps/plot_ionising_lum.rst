@@ -21,6 +21,11 @@
 Ionising-photon production rate vs SSP age
 ============================================
 
+.. image:: images/sphx_glr_plot_ionising_lum_001.png
+   :alt: plot ionising lum
+   :class: sphx-glr-single-img
+
+
 The hydrogen-ionising photon production rate ``Q_H`` of a simple
 stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars
 die. Different SSP libraries predict different ``Q_H(t)`` because
@@ -32,10 +37,14 @@ We integrate ``L_ν / (h ν)`` blueward of the Lyman limit (912 Å) at
 each SSP age at solar metallicity for four bundled bare-stellar
 grids and overlay the curves.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-93
+.. GENERATED FROM PYTHON SOURCE LINES 16-97
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

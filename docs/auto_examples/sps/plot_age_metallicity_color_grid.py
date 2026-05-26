@@ -14,6 +14,10 @@ centred at the appropriate lookback time, fixed dust extinction,
 and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -52,7 +56,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 1.0,  # Will override per grid point
         "width_gyr": 0.05,
-        "log_peak_sfr": 11.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },

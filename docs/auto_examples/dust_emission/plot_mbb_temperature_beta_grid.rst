@@ -21,6 +21,11 @@
 Modified blackbody: T_dust × β grid
 =====================================
 
+.. image:: images/sphx_glr_plot_mbb_temperature_beta_grid_001.png
+   :alt: plot mbb temperature beta grid
+   :class: sphx-glr-single-img
+
+
 Casey 2012 modified blackbody dust SEDs across the canonical fitter's
 two knobs — dust temperature ``T_dust`` and emissivity index ``β``.
 Each curve in the top panel is a fixed ``β = 1.8`` MBB swept in T;
@@ -31,10 +36,14 @@ power-law index per Δβ = 1.
 Useful when interpreting FIR fits as the ``(T, β)`` degeneracy
 projected onto a single sub-mm photometric point.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-95
+.. GENERATED FROM PYTHON SOURCE LINES 15-99
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

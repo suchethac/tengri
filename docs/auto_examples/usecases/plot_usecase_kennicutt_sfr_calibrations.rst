@@ -39,26 +39,18 @@ SFH is constant for ≳ 100 Myr. Departures from the 1:1 line for any
 indicator measure the bias from violating the constant-SFR
 assumption — see also ``plot_usecase_sfr_indicator_compare.py``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-101
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_kennicutt_sfr_calibrations_001.png
-   :alt: plot usecase kennicutt sfr calibrations
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_kennicutt_sfr_calibrations_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 18-115
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -72,9 +64,9 @@ assumption — see also ``plot_usecase_sfr_indicator_compare.py``.
     L_SUN_ERG_S = 3.839e33
 
     # Kennicutt 1998 (Salpeter IMF) calibrations
-    K98_UV = 1.4e-28        # M_sun / yr / (erg / s / Hz)
-    K98_HA = 7.9e-42        # M_sun / yr / (erg / s)
-    K98_IR = 4.5e-44        # M_sun / yr / (erg / s)
+    K98_UV = 1.4e-28  # M_sun / yr / (erg / s / Hz)
+    K98_HA = 7.9e-42  # M_sun / yr / (erg / s)
+    K98_IR = 4.5e-44  # M_sun / yr / (erg / s)
 
     SSP = tengri.load_ssp()
 
@@ -83,9 +75,13 @@ assumption — see also ``plot_usecase_sfr_indicator_compare.py``.
         model = tengri.SEDModel.build(
             SSP,
             sfh={"type": "const", "*": tengri.FIXED, "log_sfr": float(log_sfr)},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.0, "tau_bc": 0.0,
-                  "emission": {"type": "dale2014", "*": tengri.FIXED}},
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": 0.0,
+                "tau_bc": 0.0,
+                "emission": {"type": "dale2014", "*": tengri.FIXED},
+            },
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -118,25 +114,32 @@ assumption — see also ``plot_usecase_sfr_indicator_compare.py``.
     sfr_uv = K98_UV * L_uv
     sfr_ha = K98_HA * L_ha
     sfr_ir = K98_IR * L_ir
-    sfr_in = 10.0 ** log_sfr_grid
+    sfr_in = 10.0**log_sfr_grid
 
     fig, ax = plt.subplots(figsize=(6.4, 5.0))
     diag = np.array([1e-3, 1e3])
     ax.plot(diag, diag, color="0.55", lw=0.8, ls="--", label="1:1")
-    ax.loglog(sfr_in, sfr_uv, "o-", color="#3377cc", lw=1.6, ms=6,
-              label=r"K98 UV (1500 Å)")
-    ax.loglog(sfr_in, np.where(sfr_ha > 0, sfr_ha, np.nan), "s-",
-              color="#cc3333", lw=1.6, ms=6, label=r"K98 H$\alpha$")
-    ax.loglog(sfr_in, sfr_ir, "^-", color="#cc8833", lw=1.6, ms=6,
-              label=r"K98 $L_{\rm IR}$")
-    ax.set(xlim=(1e-2, 1e2), ylim=(1e-3, 1e3),
-           xlabel=r"input SFR  [$M_\odot\,$yr$^{-1}$]",
-           ylabel=r"SFR from K98 indicator  [$M_\odot\,$yr$^{-1}$]")
+    ax.loglog(sfr_in, sfr_uv, "o-", color="#3377cc", lw=1.6, ms=6, label=r"K98 UV (1500 Å)")
+    ax.loglog(
+        sfr_in,
+        np.where(sfr_ha > 0, sfr_ha, np.nan),
+        "s-",
+        color="#cc3333",
+        lw=1.6,
+        ms=6,
+        label=r"K98 H$\alpha$",
+    )
+    ax.loglog(sfr_in, sfr_ir, "^-", color="#cc8833", lw=1.6, ms=6, label=r"K98 $L_{\rm IR}$")
+    ax.set(
+        xlim=(1e-2, 1e2),
+        ylim=(1e-3, 1e3),
+        xlabel=r"input SFR  [$M_\odot\,$yr$^{-1}$]",
+        ylabel=r"SFR from K98 indicator  [$M_\odot\,$yr$^{-1}$]",
+    )
     ax.legend(frameon=False, fontsize=9, loc="upper left")
 
     fig.tight_layout()
-    plt.savefig("plot_usecase_kennicutt_sfr_calibrations.png", dpi=150,
-                bbox_inches="tight")
+    plt.savefig("plot_usecase_kennicutt_sfr_calibrations.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py:

@@ -31,10 +31,14 @@ registry.
    :alt: plot_filter_curves
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-66
+.. GENERATED FROM PYTHON SOURCE LINES 16-70
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     from pathlib import Path
 

@@ -10,6 +10,10 @@ Chabrier, Kroupa, and Salpeter at 1 Gyr, solar metallicity. The NIR
 Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

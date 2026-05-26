@@ -21,6 +21,11 @@
 UV-IR energy balance: absorbed = re-emitted
 =============================================
 
+.. image:: images/sphx_glr_plot_uv_ir_energy_balance_001.png
+   :alt: plot uv ir energy balance
+   :class: sphx-glr-single-img
+
+
 The Charlot & Fall 2000 two-component dust model conserves energy:
 every UV photon attenuated by the dust must come back out as IR
 re-emission. We sweep ``τ_diff`` from 0 to 2 mag and on each step
@@ -34,10 +39,14 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-104
+.. GENERATED FROM PYTHON SOURCE LINES 18-108
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

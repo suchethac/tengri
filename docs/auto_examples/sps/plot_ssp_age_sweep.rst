@@ -21,6 +21,11 @@
 Stellar Population Aging: SSP at Solar Metallicity
 ==================================================
 
+.. image:: images/sphx_glr_plot_ssp_age_sweep_001.png
+   :alt: plot ssp age sweep
+   :class: sphx-glr-single-img
+
+
 A single stellar population transitions from UV-dominated (young, hot)
 to NIR-dominated (old, red) with age. Peak-normalized λF_λ on log-log axes
 makes the temperature inversion visible across five representative ages
@@ -28,10 +33,14 @@ at solar metallicity.
 
 Reference: DSPS SSP grid (Conroy et al. 2009).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-51
+.. GENERATED FROM PYTHON SOURCE LINES 12-55
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

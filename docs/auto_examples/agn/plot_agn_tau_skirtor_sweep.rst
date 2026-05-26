@@ -21,15 +21,24 @@
 SKIRTOR torus: optical depth governs silicate feature strength
 ==============================================================
 
+.. image:: images/sphx_glr_plot_agn_tau_skirtor_sweep_001.png
+   :alt: plot agn tau skirtor sweep
+   :class: sphx-glr-single-img
+
+
 The 9.7 μm optical depth ``tau_97`` controls the strength of silicate
 dust absorption/emission in the mid-infrared. Thin tori (tau ~3) show
 weak features and more continuum; thick tori (tau ~11) develop deep
 absorption troughs or bright emission depending on viewing angle.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-73
+.. GENERATED FROM PYTHON SOURCE LINES 10-78
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +62,7 @@ absorption troughs or bright emission depending on viewing angle.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -65,6 +74,7 @@ absorption troughs or bright emission depending on viewing angle.
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 11.0,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )

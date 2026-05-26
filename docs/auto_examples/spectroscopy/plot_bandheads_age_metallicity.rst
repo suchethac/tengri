@@ -21,6 +21,11 @@
 Stellar absorption bandheads: age and metallicity anti-correlation
 ===================================================================
 
+.. image:: images/sphx_glr_plot_bandheads_age_metallicity_001.png
+   :alt: plot bandheads age metallicity
+   :class: sphx-glr-single-img
+
+
 Stellar absorption features, especially the Mg b and Fe5270 line strengths,
 encode both age and metallicity in a classical anti-correlation pattern:
 at fixed metallicity, both features strengthen with age (population becomes
@@ -37,6 +42,7 @@ This two-panel comparison shows:
 
 Both indices are computed from high-resolution spectra (R=2000) in the
 5050–5350 Å rest-frame optical window using Trager+1998 and Worthey+1994
+
 line definitions. Reproduces the cluster age-dating diagnostics of
 Trager+2000 [1]_.
 
@@ -50,21 +56,14 @@ References
    and Population Diagnostics," ApJS 94, 687.
    https://doi.org/10.1086/192220
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-267
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_bandheads_age_metallicity_001.png
-   :alt: plot bandheads age metallicity
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_bandheads_age_metallicity_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 35-272
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -177,7 +176,7 @@ References
             "*": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
             "width_gyr": 0.05,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
@@ -220,7 +219,7 @@ References
                     "*": tengri.FIXED,
                     "peak_lbt_gyr": age,
                     "width_gyr": 0.05,
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 10.0,
                     "skew": 0.0,
                     "trunc": 13.0,
                 },

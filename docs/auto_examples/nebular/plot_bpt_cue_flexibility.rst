@@ -21,16 +21,25 @@
 Cue nebular knobs affect BPT positions individually
 ====================================================
 
+.. image:: images/sphx_glr_plot_bpt_cue_flexibility_001.png
+   :alt: plot bpt cue flexibility
+   :class: sphx-glr-single-img
+
+
 The Cue neural emulator responds to 12+ parameters. We show how each knob
 (ionization, metallicity, density, abundances, ionizing slope) moves a
 galaxy on the BPT-N plane ``log [OIII]/Hβ`` vs ``log [NII]/Hα``. Each
 panel sweeps one parameter while holding fiducial values fixed. Kewley+2001
 and Kauffmann+2003 demarcations shown for reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-95
+.. GENERATED FROM PYTHON SOURCE LINES 11-99
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -71,7 +80,7 @@ and Kauffmann+2003 demarcations shown for reference.
                     "alpha": 1.0,
                     "beta": 2.5,
                     "tau_gyr": 0.05,
-                    "log_peak_sfr": 1.0,
+                    "log_total_mass": 10.0,
                 },
                 "dust": {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
                 "neb": {

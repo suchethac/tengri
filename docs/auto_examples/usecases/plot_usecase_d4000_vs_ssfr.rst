@@ -21,6 +21,11 @@
 D_n(4000) – specific SFR: the Kauffmann+2003 sequence
 =======================================================
 
+.. image:: images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
+   :alt: plot usecase d4000 vs ssfr
+   :class: sphx-glr-single-img
+
+
 The Kauffmann+2003 separation of star-forming and quiescent SDSS
 galaxies plotted as a sample track: stellar-burst age varied from
 30 Myr to 11 Gyr (single-burst SSP), with each model giving a
@@ -32,21 +37,14 @@ star formation, weak break). Old populations climb to
 The Kauffmann+2003 green-valley cut at ``D_n(4000) ≈ 1.5`` is the
 horizontal divider.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-87
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
-   :alt: plot usecase d4000 vs ssfr
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-91
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -75,7 +73,7 @@ horizontal divider.
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED,
              "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
-             "width_gyr": 0.05, "log_peak_sfr": 1.0,
+             "width_gyr": 0.05, "log_total_mass": 10.0,
              "skew": 0.0, "trunc": 13.0},
         dust={"type": "two_component", "*": tengri.FIXED,
               "tau_diff": 0.0, "tau_bc": 0.0},

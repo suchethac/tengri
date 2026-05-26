@@ -21,6 +21,11 @@
 Dust attenuation laws across the galaxy zoo
 =============================================
 
+.. image:: images/sphx_glr_plot_galactic_zoo_dust_laws_001.png
+   :alt: plot galactic zoo dust laws
+   :class: sphx-glr-single-img
+
+
 Four named attenuation laws applied to the *same* intrinsic SED at the
 *same* V-band optical depth (τ_V = 1.0), illustrating how dust geometry
 and grain-size composition vary across the local universe.
@@ -44,26 +49,18 @@ combining both regimes.
 References: Cardelli et al. (1989), Calzetti et al. (2000),
 Gordon et al. (2003), Kriek & Conroy (2013).
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-129
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_galactic_zoo_dust_laws_001.png
-   :alt: plot galactic zoo dust laws
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_galactic_zoo_dust_laws_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 28-132
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -92,7 +89,7 @@ Gordon et al. (2003), Kriek & Conroy (2013).
         "*": tengri.FIXED,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.0,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     }

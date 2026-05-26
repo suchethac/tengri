@@ -21,6 +21,11 @@
 SSP Grid: Age and Metallicity Evolution
 =======================================
 
+.. image:: images/sphx_glr_plot_ssp_grid_001.png
+   :alt: plot ssp grid
+   :class: sphx-glr-single-img
+
+
 Four-panel overview of the DSPS SSP grid: age evolution at fixed metallicity,
 metallicity evolution at fixed age, monochromatic flux vs age, and color-color
 diagram across the full grid. Shows how stellar populations age from UV-hot
@@ -28,10 +33,14 @@ to IR-red as they cool.
 
 Reference: DSPS SSP grid (Conroy et al. 2009).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-152
+.. GENERATED FROM PYTHON SOURCE LINES 12-156
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

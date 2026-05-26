@@ -1,18 +1,17 @@
 # Tengri
 
 Tengri is a panchromatic galaxy SED inference library, written in
-JAX. The same forward model handles stars, dust, nebular emission,
-AGN, and the IGM, from X-rays out to the radio, and every sampler we
-ship — MAP, Laplace, Pathfinder, NUTS, ray-tracing MCMC, nested
-sampling, geoVI, and hierarchical population fits — runs against it.
-Gradients are available everywhere, and they are exact.
+JAX. The same forward model covers stellar populations, dust,
+nebular emission, AGN, and the IGM, from X-rays out to the radio.
+Inference is
+modular too: the `Fitter` interface borrows optimisers from `optax`,
+samplers from `BlackJAX`, and variational inference from
+`NIFTy.re`. Gradients are available everywhere, and they are exact.
 
-This is pre-1.0 research code, developed as a community effort. The
-public API is still moving in places, several physics modules are
-being independently human-verified, and the Paper I draft is in
-preparation. The repository will move to the `tengri-project`
-GitHub organisation shortly; collaborative development and issue
-tracking will live there going forward.
+Tengri is pre-1.0 and developed as a community effort. The public
+API is still moving in places, and the repository will move to the
+`tengri-project` GitHub organisation shortly, where collaborative
+development and issue tracking will live going forward.
 
 ---
 
@@ -27,10 +26,11 @@ originates from; no religious claim or appropriation is intended.*
 
 ## At a glance
 
-The forward model is one object. Stars, dust, nebular gas, AGN, IGM,
-radio, and X-ray are all registered components that compose into a
-single SED chain. There is no separate fast path for grid fits and
-slow path for Bayesian inference; both run against the same code.
+The forward model is one object. Stellar populations, dust, nebular
+emission, AGN, IGM, radio, and X-ray are all registered components
+that compose into a single SED chain. There is no separate fast path
+for grid fits and slow path for Bayesian inference; both run against
+the same code.
 
 Everything is differentiable. Pure-JAX components mean JIT compilation
 and `vmap` come for free, and autodiff is clean from the SSP grid
@@ -45,8 +45,8 @@ you set, which are free, and which fell back to library defaults.
 ```python
 import jax
 from tengri import (
-    SEDModel, Parameters, Fitter, ForwardModel,
-    Uniform, Gaussian, Observation, Photometry, load_ssp_data,
+    SEDModel, Fitter, ForwardModel,
+    Observation, Photometry, load_ssp_data, recipes,
 )
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -54,73 +54,87 @@ obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(8, 12),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
-    sfh_tsnorm_width_gyr=Uniform(0.5, 5),
-    met_logzsol=Gaussian(-0.3, 0.2),
-    dust_tau_bc=Uniform(0, 4),
-    redshift=0.1,
-)
-sed     = SEDModel(spec, ssp, observation=obs)
+sed     = SEDModel.build(ssp_data=ssp, observation=obs,
+                         **recipes.star_forming_photometry())
 forward = ForwardModel.build(sed=sed, observation=obs)
 
 key  = jax.random.PRNGKey(0)
-mock = sed.mock(spec.sample(key), key=key)
+mock = sed.mock(sed.spec.sample(key), key=key)
 
 fitter = Fitter(forward, mock["flux_obs"], mock["noise"])
 result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```
 
-The full walkthrough — how the mock is constructed, what the priors
-do, how to read the corner plot — is in
-[`notebooks/00_quickstart.py`](spine/00_quickstart).
+## Discover what's installed
 
-## Where to go next
+The registries are introspectable from Python. `summary()` prints the
+live count of every component, sampler, recipe, and SSP grid the
+running install knows about; `help()` is a curated cheat-sheet with
+the most common entry points.
 
-If you are new, read the [Overview](overview) and then work through
-the [quickstart notebook](spine/00_quickstart). If you are coming from
-CIGALE, Prospector, or BAGPIPES, the [Reproduction](reproduction/index)
-section is where the cross-validation against those codes lives.
-Developers and contributors should start with
-[`docs/dev/forward-model-architecture.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/forward-model-architecture.md)
-and the
-[ADR index](https://github.com/suchethac/tengri/tree/main/docs/adr).
+```python
+import tengri
 
-## Inference methods
+tengri.summary()            # live counts across every registry
+tengri.help()               # curated cheat-sheet
+tengri.list_sfh_models()    # also list_nebular_backends, list_dust_laws, ...
+tengri.describe("skirtor")  # paper, parameters, units, citation
+tengri.search("torus")      # full-text across the registry
+tengri.doctor()             # install + JAX backend + SSP files
+```
 
-| Method | Call | Best for |
-|--------|------|----------|
-| MAP | `fitter.run("map")` | Point estimates, initialisation, warm-starts |
-| Laplace | `fitter.run("laplace")` | Gaussian posterior from the Hessian at MAP |
-| Pathfinder | `fitter.run("pathfinder")` | Fast approximate posterior; good NUTS warm-start |
-| NUTS | `fitter.run("mcmc_nuts")` | Reference posterior for D ≲ 30 |
-| Ray-tracing | `fitter.run("mcmc_raytrace")` | Exact MCMC; tolerates noisy gradients; scales past D = 30 |
-| Nested sampling | `fitter.run("nss")` | Bayesian evidence for model comparison |
-| Population | `PopulationSEDModel` + `ForwardModel.build(population=...)` | Shared hyperparameters across galaxy samples |
-| geoVI / `vi_native` | `fitter.run("vi")` / `"vi_native"` | **Paper II preview.** High-D stochastic SFHs (D ≈ 137+) |
-
-`tengri.list_inference_methods()` returns the live registry,
-including experimental backends (MCLMC, ghMC, ESS, …).
+Nothing in the table updates by hand: a model registered through
+`@register_agn_model` shows up in `summary()` without a documentation
+edit. The same commands are mirrored on the CLI
+(`python -m tengri summary`, …).
 
 ## Citation
 
-Tengri is research software. If it shows up in a publication, please
-cite the methods paper and the upstream codes whose physics and
-samplers we are building on. The full BibTeX block and the
-acknowledgement list are on the [Citing tengri](citation) page. While
-Paper I is in preparation, the shortest in-text citation is:
+Tengri does component-level citation. Every physics block, SSP grid,
+and inference backend carries its own citation, so the BibTeX for a
+fit is assembled from what actually ran:
+
+```python
+print(tengri.cite_all(result))   # BibTeX for every component that ran
+```
+
+This keeps the acknowledgement section of a paper honest as you swap
+a dust law or a sampler. The full block (methods paper, SSP grids,
+nebular and AGN templates, samplers) lives on the
+[Citing tengri](citation) page. While Paper I is in preparation, the
+shortest in-text citation is:
 
 > Cooray et al., *tengri: A Differentiable Framework for
 > High-Dimensional Bayesian Inference from Galaxy Spectral Energy
 > Distributions*, in prep. (2026).
 
-For automatic, fit-specific BibTeX:
+## How this was built
 
-```python
-print(tengri.cite_all(result))
-```
+The majority of tengri was developed in roughly two months in close
+collaboration between a human author and AI agents, across the
+physics modules, the inference layer, and the test suite. Human and
+AI agents working together is a deliberate part of the design
+philosophy going forward. We are now in the trust-building phase,
+verifying every component against established codes and keeping the
+development trail open (including an `AGENTS.md` in the repo) so
+the trust is earned empirically rather than asserted.
+
+## Get involved
+
+Contributors at every level, from anywhere in the world, are
+welcome. Open an issue, send a PR, or write. If a science case you
+care about isn't supported yet (a new emission mechanism, a
+non-standard observation mode, a sampler from a paper you read last
+week), that's exactly the conversation we want to have. The
+longer-term ambition is for tengri to be a unifying platform for the
+kinds of inference that high-dimensional, modular, differentiable
+forward models make possible.
+
+For anything that doesn't fit in an issue (collaborations, the
+`tengri-project` org move, joining the project), write to
+[astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) or
+[cooraysuchetha@gmail.com](mailto:cooraysuchetha@gmail.com).
 
 ## License
 

@@ -21,6 +21,11 @@
 Non-parametric SFH families compared
 ======================================
 
+.. image:: images/sphx_glr_plot_sfh_nonparametric_compare_001.png
+   :alt: plot sfh nonparametric compare
+   :class: sphx-glr-single-img
+
+
 The parametric SFH atlas (``plot_sfh_form_compare.py``) shows seven
 classical analytic SFH shapes. Beyond those, tengri ships three
 non-parametric families that bin the mass formed in successive lookback
@@ -38,10 +43,14 @@ reference. The dispersion of each family is the visual prior — wide
 clouds mean the form is permissive, narrow clouds mean the form is
 restrictive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-93
+.. GENERATED FROM PYTHON SOURCE LINES 22-97
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

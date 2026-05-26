@@ -21,6 +21,11 @@
 Dust-emission model family at fixed L_abs
 =========================================
 
+.. image:: images/sphx_glr_plot_dust_emission_models_001.png
+   :alt: plot dust emission models
+   :class: sphx-glr-single-img
+
+
 All six dust-emission ingredients shipped with tengri, called with the same
 absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature
 (35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop
@@ -28,10 +33,14 @@ sharply blue-ward of the warm-dust peak; template-based libraries (DL07, DL14,
 Dale+2014) carry PAH features in the 3-20 μm window. Template models silently
 skip if the data files aren't available.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-106
+.. GENERATED FROM PYTHON SOURCE LINES 12-110
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

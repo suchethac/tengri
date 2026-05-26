@@ -18,38 +18,47 @@
 .. _sphx_glr_auto_examples_inference_plot_hierarchical_population_fit.py:
 
 
-Hierarchical population fit with shared metallicity hyperprior
-==============================================================
+SyntaxError
+===========
 
-Fit a population of 50 mock galaxies under a hierarchical prior on
-a shared population-level metallicity parameter. The hierarchical model
-pools information across galaxies to tighten constraints on the
-population-level mean — a key differentiator of tengri's inference stack.
+Example script with invalid Python syntax
 
-This example demonstrates Bayesian hierarchical modeling: individual
-galaxy posteriors are weakly constrained (scatter ~0.3 dex in
-met_logzsol), but the population-level hyperprior is sharp (~0.05 dex).
-This pooling effect is the foundation of population-level SED fitting and
-is absent from most single-galaxy SED codes (Conroy 2013).
-
-The mock population is anchored to SDSS-DR16 LRG metallicities (Conroy
-et al. 2014): mean log(Z/Z☉) ≈ 0.05, intrinsic scatter 0.15 dex. We
-jointly fit photometry across the population using tengri.PopulationFitter
-and VI (variational inference).
-
-References: Conroy et al. 2014, ApJ, 780, 33 (LRG spectroscopic
-metallicities); Gelman et al. 2013, Bayesian Data Analysis (hierarchical
-prior framework).
-
-.. GENERATED FROM PYTHON SOURCE LINES 25-319
+.. GENERATED FROM PYTHON SOURCE LINES 1-335
 
 .. code-block:: Python
 
+    """
+    Hierarchical population fit with shared metallicity hyperprior
+    ==============================================================
+
+    Fit a population of 50 mock galaxies under a hierarchical prior on
+    a shared population-level metallicity parameter. The hierarchical model
+    pools information across galaxies to tighten constraints on the
+    population-level mean — a key differentiator of tengri's inference stack.
+
+    This example demonstrates Bayesian hierarchical modeling: individual
+    galaxy posteriors are weakly constrained (scatter ~0.3 dex in
+    met_logzsol), but the population-level hyperprior is sharp (~0.05 dex).
+    This pooling effect is the foundation of population-level SED fitting and
+    is absent from most single-galaxy SED codes (Conroy 2013).
+
+    The mock population is anchored to SDSS-DR16 LRG metallicities (Conroy
+    et al. 2014): mean log(Z/Z☉) ≈ 0.05, intrinsic scatter 0.15 dex. We
+    jointly fit photometry across the population using tengri.PopulationFitter
+    and VI (variational inference).
+
+    References: Conroy et al. 2014, ApJ, 780, 33 (LRG spectroscopic
+    metallicities); Gelman et al. 2013, Bayesian Data Analysis (hierarchical
+    prior framework).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -89,7 +98,7 @@ prior framework).
                 "alpha": tengri.Uniform(0.5, 3.0),
                 "beta": tengri.Uniform(0.3, 2.0),
                 "tau_gyr": tengri.Uniform(1.0, 8.0),
-                "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+                "log_total_mass": 10.0, 1.5),
             },
             dust={
                 "type": "two_component",
@@ -107,7 +116,7 @@ prior framework).
     # ── Generate mock population ─────────────────────────────────────────────
     N_GALAXIES = 50
     np.random.seed(42)
-    jax.random.seed(99)
+    _key = jax.random.PRNGKey(99)
 
     # Sample the true population hyperparameters:
     true_pop_mean = 0.05  # log(Z/Z☉), anchored to SDSS LRG
@@ -132,11 +141,13 @@ prior framework).
 
         # Generate mock photometry (SNR ~20 for SDSS-like):
         mock = model_template.mock(truth, snr=20.0, key=key)
-        galaxies_data.append({
-            "flux_obs": mock.flux_obs,
-            "noise": mock.noise,
-            "true_met": true_met_logzsol[i],
-        })
+        galaxies_data.append(
+            {
+                "flux_obs": mock.flux_obs,
+                "noise": mock.noise,
+                "true_met": true_met_logzsol[i],
+            }
+        )
 
     # ── Fit individual galaxies first (naive baseline) ───────────────────────
     # We'll fit a few galaxies individually to show per-galaxy constraints
@@ -156,20 +167,19 @@ prior framework).
             n_samples=3,
             verbose=False,
         )
-        individual_posteriors.append({
-            "params": post_i.params,
-            "samples": post_i.samples,
-            "true_met": galaxies_data[i]["true_met"],
-        })
+        individual_posteriors.append(
+            {
+                "params": post_i.params,
+                "samples": post_i.samples,
+                "true_met": galaxies_data[i]["true_met"],
+            }
+        )
 
     # ── Hierarchical fit (population-level pooling) ──────────────────────────
     # Build a single shared model template for the population:
     hfitter = tengri.PopulationFitter(
         model_template,
-        data=[
-            {"flux_obs": g["flux_obs"], "noise": g["noise"]}
-            for g in galaxies_data
-        ],
+        data=[{"flux_obs": g["flux_obs"], "noise": g["noise"]} for g in galaxies_data],
     )
 
     # Run hierarchical variational inference:
@@ -264,7 +274,14 @@ prior framework).
         ax.grid(True, alpha=0.3)
     else:
         # Fallback: show the available shared samples
-        ax.text(0.5, 0.5, "Population-level hyperparameter\ntracking not yet exposed in API;\nsee docs for details.", ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "Population-level hyperparameter\ntracking not yet exposed in API;\nsee docs for details.",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
         ax.set_title("Population posterior")
 
     # Axis [1, 1]: Histogram of individual met_logzsol vs. population distribution
@@ -290,7 +307,8 @@ prior framework).
     # Overlay population truth (expected distribution):
     met_grid = np.linspace(-0.5, 0.5, 100)
     pop_pdf = (
-        1.0 / (np.sqrt(2 * np.pi) * true_pop_scatter)
+        1.0
+        / (np.sqrt(2 * np.pi) * true_pop_scatter)
         * np.exp(-0.5 * ((met_grid - true_pop_mean) / true_pop_scatter) ** 2)
     )
     ax.plot(
@@ -329,12 +347,16 @@ prior framework).
     print("Population posterior statistics:")
     if "met_logzsol_mean" in result.shared_samples:
         pop_mean_samples = result.shared_samples["met_logzsol_mean"]
-        print(f"  Population mean: {np.median(pop_mean_samples):.4f} "
-              f"(16%-84%: {np.percentile(pop_mean_samples, 16):.4f}–{np.percentile(pop_mean_samples, 84):.4f})")
+        print(
+            f"  Population mean: {np.median(pop_mean_samples):.4f} "
+            f"(16%-84%: {np.percentile(pop_mean_samples, 16):.4f}–{np.percentile(pop_mean_samples, 84):.4f})"
+        )
         pop_scatter_samples = result.shared_samples.get("met_logzsol_scatter", [])
         if len(pop_scatter_samples) > 0:
-            print(f"  Population scatter: {np.median(pop_scatter_samples):.4f} "
-                  f"(16%-84%: {np.percentile(pop_scatter_samples, 16):.4f}–{np.percentile(pop_scatter_samples, 84):.4f})")
+            print(
+                f"  Population scatter: {np.median(pop_scatter_samples):.4f} "
+                f"(16%-84%: {np.percentile(pop_scatter_samples, 16):.4f}–{np.percentile(pop_scatter_samples, 84):.4f})"
+            )
     print()
     print("Key result: Hierarchical pooling sharpens the population-level")
     print("hyperparameter constraint by ~5-10×, enabling precise demographics.")

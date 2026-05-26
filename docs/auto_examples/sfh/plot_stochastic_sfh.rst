@@ -21,16 +21,25 @@
 Stochastic SFH samples from GP-correlated fields with different burstiness
 ==========================================================================
 
+.. image:: images/sphx_glr_plot_stochastic_sfh_001.png
+   :alt: plot stochastic sfh
+   :class: sphx-glr-single-img
+
+
 Generate stochastic star-formation histories using the Fourier-space GP
 correlated field model, governed by a damped-random-walk power spectrum.
 Left panel shows mild burstiness (σ=0.3, τ=300 Myr); right shows strong
 burstiness (σ=1.0, τ=100 Myr). Five realizations appear in each panel,
 with the smooth mean SFH overlaid.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-64
+.. GENERATED FROM PYTHON SOURCE LINES 11-68
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -54,7 +63,7 @@ with the smooth mean SFH overlaid.
 
     # --- Smooth mean SFH ---
     mean_sfr = tengri.tsnorm(
-        t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+        t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
     )
 
     # --- Generate GP realizations at two different PSD settings ---

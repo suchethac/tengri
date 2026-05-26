@@ -21,6 +21,11 @@
 Kauffmann+2003 D_n(4000) vs Hδ_A Diagram
 =========================================
 
+.. image:: images/sphx_glr_plot_d4000_hdelta_diagram_001.png
+   :alt: plot d4000 hdelta diagram
+   :class: sphx-glr-single-img
+
+
 Population diagnostics: single-burst SSP populations (3 SFH shapes × 5 ages
 × 3 metallicities = 45 points) colored by SFH shape and marked by
 metallicity. The Hδ_A vs D_n(4000) diagram discriminates starburst
@@ -36,37 +41,18 @@ References
 .. [3] Balogh, M. L., Morris, S. L., Yee, H. K. C., et al. 1999,
        ApJ, 527, 54 (D_n(4000) break strength)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-232
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_d4000_hdelta_diagram_001.png
-   :alt: plot d4000 hdelta diagram
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_d4000_hdelta_diagram_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 20-236
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -155,11 +141,11 @@ References
     # Three SFH widths under tsnorm, scanned over age and Z. tsnorm accepts
     # peak_lbt_gyr so the inner loop can vary the burst lookback time.
     sfh_shapes = [
-        ("instantaneous", {"type": "tsnorm", "width_gyr": 0.05, "log_peak_sfr": 1.0,
+        ("instantaneous", {"type": "tsnorm", "width_gyr": 0.05, "log_total_mass": 10.0,
                             "skew": 0.0, "trunc": 13.5}),
-        ("extended",      {"type": "tsnorm", "width_gyr": 0.50, "log_peak_sfr": 0.5,
+        ("extended",      {"type": "tsnorm", "width_gyr": 0.50, "log_total_mass": 10.0,
                             "skew": 0.0, "trunc": 13.5}),
-        ("rising",        {"type": "tsnorm", "width_gyr": 0.30, "log_peak_sfr": 0.0,
+        ("rising",        {"type": "tsnorm", "width_gyr": 0.30, "log_total_mass": 10.0,
                             "skew": 1.5, "trunc": 13.5}),
     ]
     ages_gyr = np.array([0.5, 1.0, 2.0, 4.0, 5.5])  # avoid SSP step at 6 Gyr (#299)
@@ -260,6 +246,7 @@ References
 
     # Legend for shapes (compact)
     from matplotlib.patches import Patch
+
     legend_patches = [Patch(facecolor=colors[i], label=labels_shape[i]) for i in range(len(sfh_shapes))]
     ax.legend(handles=legend_patches, loc="upper left", fontsize=9, title="SFH shape")
 
@@ -274,11 +261,6 @@ References
     )
 
     plt.savefig("plot_d4000_hdelta_diagram.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (4 minutes 31.808 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_d4000_hdelta_diagram.py:

@@ -18,22 +18,37 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py:
 
 
-JWST NIRCam color-color diagnostics for high-z galaxy classification
-====================================================================
+SyntaxError
+===========
 
-Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3),
-and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs
-F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color
-diagnostics separate spectral types and enable redshift estimation in the
-rest-frame UV-to-IR with minimal prior knowledge.
+.. image:: images/sphx_glr_plot_usecase_jwst_color_color_001.png
+   :alt: plot usecase jwst color color
+   :class: sphx-glr-single-img
 
-Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
-Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-174
+Example script with invalid Python syntax
+
+.. GENERATED FROM PYTHON SOURCE LINES 1-178
 
 .. code-block:: Python
 
+    """
+    JWST NIRCam color-color diagnostics for high-z galaxy classification
+    ====================================================================
+
+    Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3),
+    and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs
+    F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color
+    diagnostics separate spectral types and enable redshift estimation in the
+    rest-frame UV-to-IR with minimal prior knowledge.
+
+    Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
+    Conroy 2013, ARA&A, 51, 393 (SED fitting).
+    """
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -71,7 +86,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+                "log_total_mass": 10.0, 1.5),
                 "peak_lbt_gyr": tengri.Uniform(0.2, 2.0),
                 "width_gyr": tengri.Uniform(0.5, 3.0),
                 "skew": tengri.Uniform(-1.0, 1.0),
@@ -104,7 +119,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-0.5, 0.5),
+                "log_total_mass": 10.0, 0.5),
                 "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
                 "width_gyr": tengri.Uniform(0.5, 1.5),
                 "skew": tengri.Uniform(-1.5, 0.0),
@@ -138,7 +153,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(1.0, 2.5),
+                "log_total_mass": 10.0, 2.5),
                 "peak_lbt_gyr": tengri.Uniform(0.5, 3.0),
                 "width_gyr": tengri.Uniform(1.0, 4.0),
                 "skew": tengri.Uniform(-0.5, 1.0),

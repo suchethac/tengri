@@ -21,6 +21,11 @@
 SSP library comparison at a fixed age and metallicity
 ======================================================
 
+.. image:: images/sphx_glr_plot_sps_library_compare_001.png
+   :alt: plot sps library compare
+   :class: sphx-glr-single-img
+
+
 Different stellar population synthesis codes use different stellar
 spectral libraries, isochrone families, and binary treatments. The
 SED of a ~1 Gyr-old, solar-metallicity simple stellar population
@@ -36,10 +41,14 @@ into the grid at fixed ``log U``) and bare-stellar variants; we use
 bare-stellar wherever available so the differences trace stellar
 physics, not nebular treatment.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-92
+.. GENERATED FROM PYTHON SOURCE LINES 20-96
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -70,7 +79,7 @@ physics, not nebular treatment.
         "*": tengri.FIXED,
         "peak_lbt_gyr": 1.0,
         "width_gyr": 0.05,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     }

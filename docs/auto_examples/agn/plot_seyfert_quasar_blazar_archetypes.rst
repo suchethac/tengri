@@ -21,6 +21,11 @@
 AGN archetypes: Seyfert, quasar, and LIRG/Sy across bolometric luminosity
 ==========================================================================
 
+.. image:: images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
+   :alt: plot seyfert quasar blazar archetypes
+   :class: sphx-glr-single-img
+
+
 Three distinct AGN types overlaid to show how AGN morphology and obscuration
 evolve with luminosity:
 
@@ -37,23 +42,17 @@ evolve with luminosity:
    narrow-line region visible; bridging the Seyfert–quasar continuum.
 
 This archetype figure is the diagnostic for understanding how AGN
+
 classification depends on viewing angle, accretion rate, and dust geometry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-229
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :alt: plot seyfert quasar blazar archetypes
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 24-234
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

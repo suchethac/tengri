@@ -21,6 +21,11 @@
 Quenching pathways: fast vs slow termination of star formation
 ==============================================================
 
+.. image:: images/sphx_glr_plot_quenching_pathway_compare_001.png
+   :alt: plot quenching pathway compare
+   :class: sphx-glr-single-img
+
+
 Compare three star-formation histories representing distinct quenching scenarios:
 (1) Constantly star-forming (no quenching), (2) Slowly quenched exponential decay
 (tau=4 Gyr, peak 6 Gyr ago), and (3) Rapidly quenched post-starburst (truncated
@@ -28,21 +33,14 @@ skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhib
 markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting
 how quenching timescale imprints on observable photometry and spectroscopy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-132
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_quenching_pathway_compare_001.png
-   :alt: plot quenching pathway compare
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_quenching_pathway_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 12-136
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -69,7 +67,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
         },
         {
             "name": "Slow quench (τ=4 Gyr)",
-            "sfh": {"type": "dexp", "*": tengri.FIXED, "tau_gyr": 4.0, "log_peak_sfr": 1.0},
+            "sfh": {"type": "dexp", "*": tengri.FIXED, "tau_gyr": 4.0, "log_total_mass": 10.0},
             "color": "#ff7f0e",
         },
         {
@@ -77,7 +75,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             "sfh": {
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 1.2,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 2.0,
                 "width_gyr": 0.3,
                 "skew": 1.0,

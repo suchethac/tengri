@@ -21,6 +21,11 @@
 Big Blue Bump: multicolor disc temperature evolution with black-hole mass
 ==========================================================================
 
+.. image:: images/sphx_glr_plot_agn_bbb_mbh_sweep_001.png
+   :alt: plot agn bbb mbh sweep
+   :class: sphx-glr-single-img
+
+
 The Shakura-Sunyaev thin disc model shows how the big blue bump (BBB) peak
 shifts to longer wavelengths as black-hole mass increases. At fixed Eddington
 ratio ``log(L_bol / L_Edd) = -1.0``, the disc temperature scales as
@@ -32,21 +37,14 @@ Sweeping ``agn_log_mbh`` from 6 to 9.5 (6 to ~3e9 solar masses) at fixed
 Eddington ratio samples the range from stellar-mass-like accretion physics to
 supermassive black holes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-96
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_bbb_mbh_sweep_001.png
-   :alt: plot agn bbb mbh sweep
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_bbb_mbh_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-100
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -73,7 +71,7 @@ supermassive black holes.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },

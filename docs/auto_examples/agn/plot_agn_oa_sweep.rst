@@ -21,15 +21,24 @@
 SKIRTOR torus: opening angle controls exposed disc fraction
 ============================================================
 
+.. image:: images/sphx_glr_plot_agn_oa_sweep_001.png
+   :alt: plot agn oa sweep
+   :class: sphx-glr-single-img
+
+
 The torus opening angle (``oa_skirtor``) sets how much of the central
 disc is visible. A narrower torus (smaller opening angle) hides the disc
 and relies on reprocessed torus emission; a more open torus exposes the
 hot disc continuum and shifts the SED blueward.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-73
+.. GENERATED FROM PYTHON SOURCE LINES 10-78
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -53,7 +62,7 @@ hot disc continuum and shifts the SED blueward.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -65,6 +74,7 @@ hot disc continuum and shifts the SED blueward.
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 11.0,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )

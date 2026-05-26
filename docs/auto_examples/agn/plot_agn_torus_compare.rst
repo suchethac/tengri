@@ -21,6 +21,11 @@
 AGN dusty torus: library comparison at fixed L_bol
 =====================================================
 
+.. image:: images/sphx_glr_plot_agn_torus_compare_001.png
+   :alt: plot agn torus compare
+   :class: sphx-glr-single-img
+
+
 Six dusty-torus libraries reprocessing the same accretion-disc
 continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
 inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)
@@ -37,10 +42,14 @@ Torus libraries (the six production selectors under
 - ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-84
+.. GENERATED FROM PYTHON SOURCE LINES 21-88
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

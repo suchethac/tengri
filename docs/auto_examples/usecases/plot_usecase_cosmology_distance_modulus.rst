@@ -40,49 +40,14 @@ References
 * Riess et al. 2022: ApJL, 934, L7 (local H0=73.04±1.04 km/s/Mpc)
 * Hubble tension review: Di Valentino et al. 2021, Nature Astron., 5, 629
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-138
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:120: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) STIXGeneral.
-      fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:121: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) STIXGeneral.
-      plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
-    Hubble Tension: Distance Modulus Shifts
-    ============================================================
-    Redshift     μ_Planck     μ_Riess      Δμ (mmag)   
-    ------------------------------------------------------------
-    0.050        36.816       36.643       -172.10     
-    0.076        37.775       37.604       -171.46     
-    0.117        38.753       38.582       -170.49     
-    0.178        39.755       39.586       -169.03     
-    0.272        40.788       40.621       -166.87     
-    0.416        41.855       41.692       -163.79     
-    0.635        42.956       42.797       -159.65     
-    0.970        44.081       43.926       -154.62     
-    1.481        45.213       45.064       -149.33     
-    2.262        46.337       46.193       -144.56     
-    ------------------------------------------------------------
-    |Δμ| at z=3.0: 141.90 mmag
-
-    Interpretation: Under Riess H0=73 km/s/Mpc vs. Planck H0=67.4,
-    the distance modulus is SMALLER (galaxy appears BRIGHTER) by ~0.14 mag at z=3.
-    This difference accumulates with redshift and is a key signature of the Hubble tension.
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 24-142
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -111,7 +76,7 @@ References
     # Fixed SED parameters from the recipe (all FIXED)
     # This is a simple, non-degerate model: age + dust opacity only
     params_fixed = {
-        "sfh_const_log_sfr": 0.0,
+        "sfh_const_log_total_mass": 0.0,
         "dust_tau": 0.1,  # Small dust opacity
         "redshift": 0.0,  # Will be overridden per-redshift
     }

@@ -21,42 +21,31 @@
 Hα SFR calibration breaks at young ages
 ========================================
 
+.. image:: images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
+   :alt: plot halpha sfr calibration age
+   :class: sphx-glr-single-img
+
+
 Murphy+2011 SFR-Hα relation requires ionizing photons from stars younger
 than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration
 breaks at young (<10 Myr; insufficient ionizing photons) and old (>100 Myr;
 all stars too old to ionize) populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-53
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
-   :alt: plot halpha sfr calibration age
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 10-59
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
+
     import jax
     import matplotlib.pyplot as plt
     import numpy as np
+
     import tengri
     from tengri.analysis.plotting import setup_style
 
@@ -95,11 +84,6 @@ all stars too old to ionize) populations.
     ax.legend(loc="upper left", fontsize=9)
     ax.grid(True, which="both", alpha=0.3, linestyle=":", linewidth=0.5)
     plt.savefig("plot_halpha_sfr_calibration_age.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 44.371 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:

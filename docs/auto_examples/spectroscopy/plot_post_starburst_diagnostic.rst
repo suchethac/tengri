@@ -21,6 +21,11 @@
 Post-Starburst K+A Diagnostic: Hδ_A vs Time Since Quench
 =========================================================
 
+.. image:: images/sphx_glr_plot_post_starburst_diagnostic_001.png
+   :alt: plot post starburst diagnostic
+   :class: sphx-glr-single-img
+
+
 A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer
 absorption lines (high Hδ_A) with no emission, visible only in a narrow
 window after a recent burst of star formation has been abruptly quenched.
@@ -37,6 +42,7 @@ shut off in galaxies — a key driver of the red sequence in the local universe.
 
 References
 ----------
+
 .. [1] Dressler, A., & Gunn, J. E. 1992, ApJS, 78, 1
        (K+A galaxies in the Coma cluster)
 .. [2] French, K. D., Yang, Y., Zabludoff, A., et al. 2018, ApJ, 862, 2
@@ -45,32 +51,14 @@ References
 .. [3] Worthey, G., & Ottaviani, D. L. 1997, ApJS, 111, 377
        (Hδ_A window definitions and optical index calibrations)
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-219
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_post_starburst_diagnostic_001.png
-   :alt: plot post starburst diagnostic
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_post_starburst_diagnostic_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 30-224
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -170,7 +158,7 @@ References
             "*": tengri.FIXED,
             "peak_lbt_gyr": tsq,
             "width_gyr": 0.2,  # ~200 Myr width: moderate extended burst
-            "log_peak_sfr": 0.8,  # ~6 Msun/yr SFR (brighter, more typical)
+            "log_total_mass": 10.0,  # ~6 Msun/yr SFR (brighter, more typical)
             "skew": 0.0,
             "trunc": 13.5,
         }
@@ -261,11 +249,6 @@ References
 
     plt.tight_layout()
     plt.savefig("plot_post_starburst_diagnostic.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 37.744 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_post_starburst_diagnostic.py:
