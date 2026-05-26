@@ -108,9 +108,7 @@ ax_n2o2.text(0.05, 0.93, "low-ion proxy", transform=ax_n2o2.transAxes, fontsize=
 ax_r23.plot(twelve_oh, np.log10(r23), color="C4", lw=1.6)
 ax_r23.set_ylabel(r"$\log\,R_{23}$ ([$\mathrm{O\,II}$]+[$\mathrm{O\,III}$])/H$\beta$)")
 ax_r23.set_xlabel(r"$12 + \log(\mathrm{O/H})$")
-ax_r23.text(
-    0.05, 0.93, "Pagel et al. 1979", transform=ax_r23.transAxes, fontsize=8, color="0.4"
-)
+ax_r23.text(0.05, 0.93, "Pagel et al. 1979", transform=ax_r23.transAxes, fontsize=8, color="0.4")
 
 # Hide the 6th panel
 ax_sii_oii.axis("off")

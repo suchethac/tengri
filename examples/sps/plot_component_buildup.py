@@ -28,7 +28,6 @@ which blocks a particular dataset can constrain.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -43,9 +42,13 @@ ssp = tengri.load_ssp()
 
 # Common base: tsnorm SFH, no AGN, no IGM, no dust, no nebular.
 BASE_SFH = {
-    "type": "tsnorm", "*": tengri.FIXED,
-    "log_peak_sfr": 0.5, "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-    "skew": 0.3, "trunc": 3.0,
+    "type": "tsnorm",
+    "*": tengri.FIXED,
+    "log_peak_sfr": 0.5,
+    "peak_lbt_gyr": 3.0,
+    "width_gyr": 2.0,
+    "skew": 0.3,
+    "trunc": 3.0,
 }
 
 
@@ -63,36 +66,57 @@ STAGES = [
     ),
     build(
         "3. + dust attenuation",
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.35, "tau_bc": 0.4},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.35, "tau_bc": 0.4},
     ),
     build(
         "4. + dust IR emission",
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.35, "tau_bc": 0.4,
-              "emission": {"type": "dale2014", "*": tengri.FIXED}},
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 0.35,
+            "tau_bc": 0.4,
+            "emission": {"type": "dale2014", "*": tengri.FIXED},
+        },
     ),
     build(
         "5. + AGN",
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.35, "tau_bc": 0.4,
-              "emission": {"type": "dale2014", "*": tengri.FIXED}},
-        agn={"type": "composable", "*": tengri.FIXED,
-             "log_lbol": 11.5,
-             "disc": {"type": "multicolor", "*": tengri.FIXED},
-             "torus": {"type": "none"}, "lines": {"type": "none"},
-             "feii": {"type": "none"}, "atten": {"type": "none"}},
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 0.35,
+            "tau_bc": 0.4,
+            "emission": {"type": "dale2014", "*": tengri.FIXED},
+        },
+        agn={
+            "type": "composable",
+            "*": tengri.FIXED,
+            "log_lbol": 11.5,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "none"},
+            "lines": {"type": "none"},
+            "feii": {"type": "none"},
+            "atten": {"type": "none"},
+        },
     ),
     build(
         "6. + IGM",
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.35, "tau_bc": 0.4,
-              "emission": {"type": "dale2014", "*": tengri.FIXED}},
-        agn={"type": "composable", "*": tengri.FIXED,
-             "log_lbol": 11.5,
-             "disc": {"type": "multicolor", "*": tengri.FIXED},
-             "torus": {"type": "none"}, "lines": {"type": "none"},
-             "feii": {"type": "none"}, "atten": {"type": "none"}},
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 0.35,
+            "tau_bc": 0.4,
+            "emission": {"type": "dale2014", "*": tengri.FIXED},
+        },
+        agn={
+            "type": "composable",
+            "*": tengri.FIXED,
+            "log_lbol": 11.5,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "none"},
+            "lines": {"type": "none"},
+            "feii": {"type": "none"},
+            "atten": {"type": "none"},
+        },
         apply_igm=True,
     ),
 ]

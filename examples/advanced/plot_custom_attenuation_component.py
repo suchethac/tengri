@@ -29,8 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.dust.attenuation import calzetti as _calzetti_law
-from tengri.components.dust.attenuation import cardelli as _cardelli_law
+from tengri.components.dust.attenuation import calzetti as _calzetti_law, cardelli as _cardelli_law
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 
@@ -64,12 +63,9 @@ class CalzettiPlusBump(SEDModelComponent):
 
     def predict(self, p, sed_in, wave):
         k_calz = _calzetti_law(wave)
-        lam2 = wave ** 2
-        lam0_sq = 2175.0 ** 2
-        drude = (
-            p["eb"] * p["gamma"] ** 2 * lam2
-            / ((lam2 - lam0_sq) ** 2 + p["gamma"] ** 2 * lam2)
-        )
+        lam2 = wave**2
+        lam0_sq = 2175.0**2
+        drude = p["eb"] * p["gamma"] ** 2 * lam2 / ((lam2 - lam0_sq) ** 2 + p["gamma"] ** 2 * lam2)
         k_eff = k_calz + drude
         atten = jnp.exp(-p["tau_v"] * k_eff)
         sed_out = sed_in * atten
@@ -99,18 +95,17 @@ sed_out, published = mybump.predict(p, flat_sed, wave)
 A_bump = np.asarray(sed_out)
 
 # Sanity print so the gallery card body shows the registration.
-print(f"SEDModelComponent registered as '{CalzettiPlusBump.name}' "
-      f"with parameters {sorted(p.keys())}")
-print(f"  L_absorbed published in state.derived: "
-      f"{float(published['L_absorbed']):.3e} erg/s")
+print(
+    f"SEDModelComponent registered as '{CalzettiPlusBump.name}' with parameters {sorted(p.keys())}"
+)
+print(f"  L_absorbed published in state.derived: {float(published['L_absorbed']):.3e} erg/s")
 
 # ─── Figure ──────────────────────────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(7.0, 4.4))
 wave_np = np.asarray(wave)
 ax.plot(wave_np, A_calz, color="C0", lw=1.5, label="Calzetti+2000 (built-in)")
 ax.plot(wave_np, A_card, color="C2", lw=1.5, label="Cardelli+1989 MW (built-in)")
-ax.plot(wave_np, A_bump, color="C3", lw=1.5,
-        label=r"Calzetti + 2175 Å bump  (custom, $E_b=2.5$)")
+ax.plot(wave_np, A_bump, color="C3", lw=1.5, label=r"Calzetti + 2175 Å bump  (custom, $E_b=2.5$)")
 ax.axvline(2175.0, color="0.6", lw=0.5, ls="--")
 ax.text(2175.0, 0.9, " 2175 Å", color="0.4", fontsize=8, va="top")
 ax.set_xlabel(r"Rest-frame wavelength  [$\mathrm{\AA}$]")

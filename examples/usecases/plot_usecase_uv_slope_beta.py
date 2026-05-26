@@ -133,6 +133,7 @@ for i, tau in enumerate(tau_grid):
 # RIGHT PANEL: Age-dust degeneracy via 2D heatmap
 # ==============================================================================
 
+
 def _beta_uv(wave, l_nu):
     """Compute UV slope β where F_λ ∝ λ^β using Calzetti+1994 windows."""
     f_lam = l_nu * C_AA_PER_S / wave**2
