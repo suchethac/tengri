@@ -884,10 +884,11 @@ try:
         radio={"type": "condon92", "*": FIXED},
         redshift=Fixed(0.0),
     )
-    w_t, sed_t = m_r.predict_rest_sed({})
-    w_t = np.asarray(w_t); sed_t = np.asarray(sed_t)
+    state_r = m_r.predict_state({})
+    w_t = np.asarray(state_r.wave)
+    sed_t = np.asarray(state_r.derived.get("sed_radio", state_r.sed_intrinsic))
     nu_t = 2.998e18 / w_t / 1e9
-    mt = (nu_t >= 0.1) & (nu_t <= 100)
+    mt = (nu_t >= 0.1) & (nu_t <= 100) & (sed_t > 0)
     ax_r.plot(nu_t[mt], sed_t[mt], "C1-", linewidth=1.4, label="radio.condon92")
     ax_r.legend(fontsize=9)
 except Exception:
