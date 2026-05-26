@@ -95,7 +95,15 @@ def _panel(ax, arr, vmin, vmax, label, n_contours=10):
     mesh = ax.pcolormesh(
         LOGZ_GRID, LOGU_GRID, arr, cmap="RdYlBu_r", vmin=vmin, vmax=vmax, shading="auto"
     )
-    cs = ax.contour(LOGZ_GRID, LOGU_GRID, arr, levels=n_contours, colors="0.15", linewidths=0.5, alpha=0.6)
+    cs = ax.contour(
+        LOGZ_GRID,
+        LOGU_GRID,
+        arr,
+        levels=n_contours,
+        colors="0.15",
+        linewidths=0.5,
+        alpha=0.6,
+    )
     ax.clabel(cs, fmt="%.1f", fontsize=7, inline=True, inline_spacing=2)
     ax.text(
         0.05,

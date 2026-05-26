@@ -29,6 +29,7 @@ import jax.numpy as jnp
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import tengri
 from tengri.analysis.plotting import setup_style
@@ -73,7 +74,8 @@ for fesc in fesc_values:
     wave, sed = seds_by_fesc[fesc]
     nu = 2.998e18 / wave
     nu_l_nu = nu * sed
-    ax.loglog(wave, nu_l_nu, color=cmap(norm(fesc)), lw=1.5, label=f"$f_{{\\mathrm{{esc}}}} = {fesc:.1f}$")
+    label = f"$f_{{\\mathrm{{esc}}}} = {fesc:.1f}$"
+    ax.loglog(wave, nu_l_nu, color=cmap(norm(fesc)), lw=1.5, label=label)
 
 ax.set_xlim(800, 3e4)
 ax.set_ylim(1e40, 5e43)
@@ -84,7 +86,6 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"$f_{\mathrm{esc}}$", fontsize=10)
 
 # Inset: zoom on Lyman continuum region (800–1350 Å)
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 ax_inset = inset_axes(ax, width="35%", height="35%", loc="lower left", borderpad=1.5)
 for fesc in fesc_values:
     wave, sed = seds_by_fesc[fesc]
