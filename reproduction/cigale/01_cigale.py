@@ -83,6 +83,14 @@ _F_CONT_OVER_LINES = 0.44
 TAU_DIFF_FIDUCIAL = _R_V_CALZETTI * _F_CONT_OVER_LINES * _E_BV_LINES / 1.086
 TAU_BC_FIDUCIAL = _R_V_CALZETTI * (1.0 - _F_CONT_OVER_LINES) * _E_BV_LINES / 1.086
 
+# Metallicity pin — CIGALE bc03(metallicity=0.02) is Z_abs = 0.02 (≈ Z_⊙).
+# tengri's met_logzsol = log10(Z/Z_⊙) with Z_⊙ = 10**LOG10_ZSUN ≈ 0.0142
+# (Asplund+2009). Pin explicitly so the comparison is bit-aligned regardless
+# of registry-default convention.
+LOG10_ZSUN = -1.848
+MET_LOGZSOL = float(np.log10(0.02) - LOG10_ZSUN)  # ≈ +0.149
+STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
+
 figs_dir = Path(__file__).parent / "_figs"
 figs_dir.mkdir(exist_ok=True)
 
@@ -251,6 +259,7 @@ t_c, sfr_c = C.sfh_curve(
 
 m_sfh = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -299,11 +308,12 @@ save_fig("02_sfh_tau.png")
 # %%
 try:
     t_c2, sfr_c2 = C.sfh_curve(
-        "sfh2exp", age_main=5000, tau_main=500, age_burst=200, tau_burst=300,
-        f_burst=0.2, normalise=True,
+        "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
+        f_burst=0.2, sfr_0=1.0, normalise=True,
     )
     m_dexp = SEDModel.build(
         ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
         sfh={"type": "dexp", "tau_gyr": Fixed(0.5), "start_gyr": Fixed(0.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -348,6 +358,7 @@ w_c, L_c = C.to_lnu(sed_c)
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -432,6 +443,7 @@ ax_t.set_ylabel(r"$A_\lambda / A_V$")
 ax_t.set_title(r"tengri attenuation laws  ($\tau_V = 0.3$)")
 m_int = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -444,6 +456,7 @@ for law, label in tengri_laws:
     try:
         m_att = SEDModel.build(
             ssp_data=ssp,
+            stellar=STELLAR_FIDUCIAL,
             sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
                  "log_total_mass": Fixed(0.0), "*": FIXED},
             dust={"type": "two_component", "law_bc": law, "law_diff": law,
@@ -492,6 +505,7 @@ w_c_d, L_c_d = C.to_lnu(sed_c_dust)
 
 m_nd = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -501,6 +515,7 @@ s_nd = m_nd.predict_state({})
 
 m_d = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
@@ -535,6 +550,14 @@ plt.close()
 # same templates internally and enforces energy balance:
 # $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$ to floating-point.
 # The residual annotation makes that explicit.
+#
+# Compared to CIGALE's `dale2014.process()`, the integrated FIR
+# luminosity (10⁶–10⁷ Å) reads ~1.8× brighter on the tengri side at
+# matched α and matched absorbed energy. The shape of the
+# stellar + Calzetti continuum below 1 µm reproduces to ~1 %; the
+# residual is isolated to the Dale template-side normalisation and is
+# tracked in tengri#415. The energy-balance annotation below confirms
+# the residual is *not* a missing clamp on the tengri side.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -548,6 +571,7 @@ w_c_ir, L_c_ir = C.to_lnu(sed_c_ir)
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
@@ -608,20 +632,29 @@ plt.close()
 # parameters. Cue requires the bare-stellar SSP that this notebook
 # already loaded.
 #
-# The CIGALE panel here shows the stellar baseline. The bundled CIGALE
-# install in many environments doesn't ship the `nebular` template
-# library, so the comparison stays one-sided in that case.
+# Both panels show the stellar baseline (dashed) and the same SFH with
+# nebular added (solid). At matched logU = -2.0, Z_gas = Z_⊙, the two
+# emission paths agree to ~1 % across UV–NIR (consistency_audit.py §8).
 
 # %%
+_sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
+                                age_burst=20, f_burst=0.0, sfr_A=1.0,
+                                normalise=True))
 sed_c_st = C.run_chain([
-    ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
-                        age_burst=20, f_burst=0.0, sfr_A=1.0, normalise=True)),
-    ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+    _sfh_args, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
 ])
 w_c_st, L_c_st = C.to_lnu(sed_c_st)
 
+sed_c_neb = C.run_chain([
+    _sfh_args, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+    ("nebular", dict(logU=-2.0, zgas=0.02, ne=100, f_esc=0.0, f_dust=0.0,
+                     lines_width=300.0, emission=True, line_list="")),
+])
+w_c_neb, L_c_neb = C.to_lnu(sed_c_neb)
+
 m_no_neb = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
@@ -631,6 +664,7 @@ s_no_neb = m_no_neb.predict_state({})
 
 m_neb = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     neb={"type": "cue", "*": FIXED},
@@ -641,9 +675,10 @@ s_neb = m_neb.predict_state({})
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r,
-        label_l="pcigale  stellar baseline",
-        label_r="tengri  stellar + Cue (Li+2024)")
-ax_l.plot(w_c_st, L_c_st, "k-", linewidth=1.5, label="BC03 stellar")
+        label_l="pcigale  CLOUDY nebular",
+        label_r="tengri  Cue nebular (Li+2024)")
+ax_l.plot(w_c_st, L_c_st, "k--", linewidth=1.0, alpha=0.5, label="stellar only")
+ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.5, label="+ nebular")
 ax_l.legend(fontsize=9)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
           linewidth=1.0, alpha=0.5, label="stellar only")
@@ -658,24 +693,30 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # %% [markdown]
 # ## §9 AGN
 #
-# CIGALE's `fritz2006` torus next to tengri's `agn.silva04` —
-# different geometry (smooth Fritz vs power-law Silva), shown at the
-# same i = 45° viewing angle and the same L_bol. A direct
-# Fritz-vs-Fritz comparison will be possible once tengri's Fritz
-# implementation lands. tengri's `agn.skirtor` block is the closer
-# match for CIGALE's `skirtor2016` and is exercised in §10.
+# CIGALE's `skirtor2016` torus library is plotted on the left as the
+# AGN-only contribution at viewing angle i = 30°, τ_9.7 = 7.
+#
+# On the right, the equivalent tengri composable AGN
+# (`agn = {type: composable, disc: multicolor, torus: skirtor, ...}`)
+# is built with `agn_log_lbol = 10` (≈ L_sun × 10¹⁰). The pipeline
+# *publishes* `L_agn_bol` correctly through `predict_state.derived`,
+# but the AGN spectrum is currently dropped before it reaches
+# `predict_rest_sed` — so the right panel only shows the stellar+dust
+# baseline. Tracked in tengri#417.
 
 # %%
+_sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
+                                  age_burst=20, f_burst=0.0, sfr_A=1.0,
+                                  normalise=True))
 sed_c_base = C.run_chain([
-    ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
-                        age_burst=20, f_burst=0.0, sfr_A=1.0, normalise=True)),
-    ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+    _sfh_args_d, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
     ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
 ])
 w_base, L_base = C.to_lnu(sed_c_base)
 
 m_agn_base = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
@@ -686,48 +727,54 @@ s_agn_base = m_agn_base.predict_state({})
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r,
-        label_l="pcigale  fritz2006 (AGN only)",
-        label_r="tengri  agn.silva04 (AGN only)")
+        label_l="pcigale  skirtor2016 (AGN only)",
+        label_r="tengri  agn[disc+torus skirtor] (AGN only)")
 ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.4, label="stellar + dust")
 
-try:
-    sed_fritz = C.run_chain([
-        ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
-                            age_burst=20, f_burst=0.0, sfr_A=1.0, normalise=True)),
-        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
-        ("fritz2006", dict(i=45, fracAGN=0.3, disk=0, torus=1)),
-    ])
-    w_fritz, L_fritz = C.to_lnu(sed_fritz)
-    L_fritz_contrib = L_fritz - U.regrid(w_base, L_base, w_fritz)
-    ax_l.plot(w_fritz, L_fritz_contrib, "C0-", linewidth=1.5, label="Fritz+2006  i=45°")
-except Exception:
-    pass
+sed_skirtor = C.run_chain([
+    _sfh_args_d, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+    ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+    ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
+                         disk_type=1, delta=0, fracAGN=0.3,
+                         lambda_fracAGN="0/0", law=0, EBV=0.03,
+                         temperature=100.0, emissivity=1.6)),
+])
+w_skirt, L_skirt = C.to_lnu(sed_skirtor)
+L_skirt_contrib = np.maximum(L_skirt - U.regrid(w_base, L_base, w_skirt), 1e-50)
+ax_l.plot(w_skirt, L_skirt_contrib, "C0-", linewidth=1.5,
+          label="SKIRTOR  i=30°  τ_9.7=7")
+ax_l.set_xscale("log"); ax_l.set_yscale("log")
+_ymax_l = max(float(L_skirt_contrib.max()), float(np.asarray(L_base).max()))
+ax_l.set_ylim(_ymax_l * 1e-6, _ymax_l * 2)
 ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
 
-try:
-    m_silva = SEDModel.build(
-        ssp_data=ssp,
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-             "log_total_mass": Fixed(0.0), "*": FIXED},
-        dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
-              "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
-        agn={"type": "silva04", "agn_log_lbol": Fixed(10.0),
-             "agn_cos_inc": Fixed(0.707), "*": FIXED},
-        redshift=Fixed(0.0),
-    )
-    s_silva = m_silva.predict_state({})
-    L_silva_contrib = s_silva.sed_intrinsic - s_agn_base.sed_intrinsic
-    ax_r.plot(s_silva.wave, L_silva_contrib, "C1-", linewidth=1.5,
-              label="Silva+2004  i=45°")
-except Exception:
-    pass
-ax_r.plot(s_agn_base.wave, np.zeros_like(s_agn_base.wave), "k--",
+m_agn = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+          "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
+    agn={"type": "composable",
+         "disc": {"type": "multicolor", "*": FIXED},
+         "torus": {"type": "skirtor", "*": FIXED},
+         "agn_log_lbol": Fixed(10.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+s_agn = m_agn.predict_state({})
+L_agn_contrib = np.maximum(np.asarray(s_agn.sed_intrinsic)
+                           - np.asarray(s_agn_base.sed_intrinsic), 1e-50)
+ax_r.plot(s_agn.wave, L_agn_contrib, "C1-", linewidth=1.5,
+          label="composable disc + SKIRTOR torus")
+ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--",
           linewidth=1.0, alpha=0.4, label="stellar + dust")
+ax_r.set_xscale("log"); ax_r.set_yscale("log")
+_ymax = max(float(L_agn_contrib.max()), float(s_agn_base.sed_intrinsic.max()))
+ax_r.set_ylim(_ymax * 1e-6, _ymax * 2)
 ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
 
 fig.tight_layout()
-save_fig("09_agn_fritz_vs_silva.png")
+save_fig("09_agn_skirtor.png")
 
 
 # %% [markdown]
@@ -758,6 +805,7 @@ m_c = (e_kev_c >= 0.3) & (e_kev_c <= 200) & (L_x > 0)
 
 m_x = SEDModel.build(
     ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component",
@@ -826,6 +874,7 @@ except Exception:
 try:
     m_r = SEDModel.build(
         ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
         sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component",
@@ -895,6 +944,7 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     # against an igm='none' baseline at the same redshift.
     m_igm = SEDModel.build(
         ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
         sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0),
@@ -904,6 +954,7 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     )
     m_no = SEDModel.build(
         ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
         sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0),
