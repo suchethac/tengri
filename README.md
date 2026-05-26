@@ -6,18 +6,17 @@
 [![License: BSD-3](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)](LICENSE)
 
 Tengri is a panchromatic galaxy SED inference library, written in
-JAX. The same forward model covers stars, dust, nebular gas, AGN, IGM,
-radio, and X-ray, and every inference backend we ship (MAP, Laplace,
-Pathfinder, NUTS, ray-tracing MCMC, nested sampling, NIFTy geoVI,
-hierarchical population fits) talks to it through one `Fitter`
-interface. Gradients are available everywhere, and they are exact.
+JAX. The same forward model covers stellar populations, dust,
+nebular emission, AGN, IGM, radio, and X-ray. Inference is modular too: the `Fitter`
+interface borrows optimisers from `optax`, samplers from `BlackJAX`,
+and variational inference from `NIFTy.re`, so a new backend lands as
+a registration rather than a port. Gradients are available
+everywhere, and they are exact.
 
-This is pre-1.0 research code, developed as a community effort. The
-API is still moving in places, several physics modules are being
-independently human-verified, and the Paper I draft is in
-preparation. The repository will move to the `tengri-project` GitHub
-organisation shortly; collaborative development and issue tracking
-will live there going forward.
+Tengri is pre-1.0 and developed as a community effort. The API is
+still moving in places, and the repository will move to the
+`tengri-project` GitHub organisation shortly, where collaborative
+development and issue tracking will live going forward.
 
 **Documentation:** [suchethacooray.com/tengri](https://suchethacooray.com/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks)
 
@@ -49,13 +48,21 @@ sampling engine.
 The full philosophy and an architecture flow chart are on the
 [Overview](https://suchethacooray.com/tengri/overview.html) page.
 
-## Status and provenance
+## How this was built
 
-This codebase was initially drafted with AI assistance (Claude Code) and
-is being human-verified module by module. The per-component status table
-lives at [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md);
-modules marked PENDING there have not been independently cross-checked and
-should not be used for publication-grade science yet.
+The majority of tengri was developed in roughly two months in close
+collaboration between a human author and AI agents, across the
+physics modules, the inference layer, and the test suite. Human and
+AI agents working together is a deliberate part of the design
+philosophy going forward. We are now in the trust-building phase,
+verifying every component against established codes and keeping the
+development trail open (including [`AGENTS.md`](AGENTS.md) in the
+repo) so the trust is earned empirically rather than asserted. The
+per-component status table lives at
+[docs/dev/verification-protocol.md](docs/dev/verification-protocol.md);
+modules marked PENDING there have not been independently
+cross-checked and should not be used for publication-grade science
+yet.
 
 ## Installation
 
@@ -73,13 +80,13 @@ cd tengri
 pip install -e ".[dev]"
 ```
 
-**Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6 (pinned — 0.4.7 removed `CosmoParams`), NIFTy 8.5+ with the `re` extra.
+**Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6 (pinned; 0.4.7 removed `CosmoParams`), NIFTy 8.5+ with the `re` extra.
 
 **JAX backends:**
 
-- **CPU** — default, no extra setup.
-- **CUDA** — `pip install -e ".[gpu]"`, then follow [JAX's CUDA notes](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
-- **Apple Silicon** — `jax-metal` is experimental and produces numerical discrepancies on the stochastic SFH path. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust.
+- **CPU**: default, no extra setup.
+- **CUDA**: `pip install -e ".[gpu]"`, then follow [JAX's CUDA notes](https://jax.readthedocs.io/en/latest/installation.html#gpu-support).
+- **Apple Silicon**: `jax-metal` is experimental and produces numerical discrepancies on the stochastic SFH path. Set `JAX_PLATFORMS=cpu` for any fit you intend to trust.
 
 ### Verify your install
 
@@ -109,9 +116,10 @@ bash scripts/setup_ssp.sh
 
 ```python
 import jax
+import tengri
 from tengri import (
-    SEDModel, Parameters, Fitter, ForwardModel,
-    Uniform, Gaussian, Observation, Photometry, load_ssp_data,
+    SEDModel, Fitter, ForwardModel,
+    Observation, Photometry, load_ssp_data, recipes,
 )
 
 ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
@@ -119,28 +127,27 @@ obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-spec = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(8, 12),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
-    sfh_tsnorm_width_gyr=Uniform(0.5, 5),
-    met_logzsol=Gaussian(-0.3, 0.2),
-    dust_tau_bc=Uniform(0, 4),
-    redshift=0.1,
-)
-sed = SEDModel(spec, ssp, observation=obs)
+# Pick a curated recipe and let it set sensible priors + defaults.
+sed = SEDModel.build(ssp_data=ssp, observation=obs,
+                     **recipes.star_forming_photometry())
 forward = ForwardModel.build(sed=sed, observation=obs)
 
 key = jax.random.PRNGKey(0)
-mock = sed.mock(spec.sample(key), key=key)
+mock = sed.mock(sed.spec.sample(key), key=key)
 
 fitter = Fitter(forward, mock["flux_obs"], mock["noise"])
 result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```
 
-For real data, pass your own `(flux, noise)` to `Fitter`. Full walkthrough in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
+For real data, pass your own `(flux, noise)` to `Fitter`. The full
+walkthrough is in [`notebooks/00_quickstart.py`](notebooks/00_quickstart.py).
 
-The nested-dict / recipe builder (`SEDModel.build(..., sfh={...}, dust={...})`) is the recommended path for new code; the flat-kwarg `Parameters(...)` form shown above still works and is fine for one-off fits. See [`notebooks/04_building_models.py`](notebooks/04_building_models.py) for the grammar.
+If you want more control than a recipe gives you, build the model
+with the nested-dict grammar (`SEDModel.build(..., sfh={'type': 'dpl',
+'*': FREE, 'beta': Uniform(1, 3)}, dust={...}, neb={...})`). See
+[`notebooks/04_building_models.py`](notebooks/04_building_models.py)
+for the grammar; `tengri.recipes` shows the curated starting points.
 
 ## Tutorials
 
@@ -186,32 +193,21 @@ These read the registries directly, so a model registered via `@register_agn_mod
 
 ## Inference backends
 
-`Parameters` declares priors. `SEDModel` ties priors, an SSP grid, and an `Observation` into a differentiable SED chain. `ForwardModel` wraps the chain into a single `.predict(params)` interface that every backend consumes. `Fitter` drives the chosen backend and returns a `Posterior`.
+`Parameters` declares priors. `SEDModel` ties priors, an SSP grid, and an `Observation` into a differentiable SED chain. `ForwardModel` wraps the chain into a single `.predict(params)` interface that every backend consumes. `Fitter` drives the chosen backend and returns a `Posterior`. The samplers themselves are pulled in from `optax`, `BlackJAX`, and `NIFTy.re`, plus a population layer that runs hierarchical fits on top.
 
-| Backend       | Command                            | Notes                                                   |
-|---------------|------------------------------------|---------------------------------------------------------|
-| MAP           | `fitter.run("map")`                | Adam optimization; point estimate / warm-start          |
-| Laplace       | `fitter.run("laplace")`            | Gaussian posterior from the Hessian at the MAP          |
-| Pathfinder    | `fitter.run("pathfinder")`         | Fast approximate posterior                              |
-| NUTS          | `fitter.run("mcmc_nuts")`          | No-U-Turn; primary MCMC for D ≲ 30                      |
-| Ray-tracing   | `fitter.run("mcmc_raytrace")`      | Ensemble sampler for higher-D problems                  |
-| Nested        | `fitter.run("nss")`                | Nested sampling; produces Bayesian evidence             |
-| geoVI         | `fitter.run("vi")`                 | NIFTy geoVI for stochastic-field SFHs (Paper II preview)|
-| Population    | `PopulationSEDModel` + `ForwardModel.build(population=...)` | Hierarchical fits with shared parameters across galaxies |
-
-`tengri.list_inference_methods()` shows the full set including experimental backends (MCLMC, ghMC, ESS, etc.).
+`tengri.list_inference_methods()` returns the live registry, including the experimental backends.
 
 ## What's modular
 
-Stars come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny). The SFH layer
-covers parametric families (15+, registry-driven), non-parametric
-reconstructions (Leja+ continuity, Dirichlet), and stochastic fields
-(IFT correlated fields with PSD-governed burstiness). Dust is swappable
-on both the attenuation and emission sides. Nebular emission has four
-backends (`baked_in`, `cue`, `cloudy_grid`, `cb19`). AGN spans disc,
-torus, BLR/NLR, and IR re-emission, unified across optical, IR, and
-X-ray. IGM, radio, and X-ray sit alongside as components, not
-afterthoughts.
+Stellar populations come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny).
+The SFH layer covers parametric families (15+, registry-driven),
+non-parametric reconstructions (Leja+ continuity, Dirichlet), and
+stochastic fields (IFT correlated fields with PSD-governed
+burstiness). Dust is swappable on both the attenuation and emission
+sides. Nebular emission has four backends (`baked_in`, `cue`,
+`cloudy_grid`, `cb19`). AGN spans disc, torus, BLR/NLR, and IR
+re-emission, unified across optical, IR, and X-ray. IGM, radio, and
+X-ray sit alongside as components, not afterthoughts.
 
 Every physics component is a pure JAX function, so `jit`, `vmap`, and
 `grad` compose through the whole forward model. `tengri.cite_all()`
@@ -219,22 +215,35 @@ returns BibTeX for every SSP, model, and code used in a fit.
 
 ## Community
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — bug reports, feature requests, pull requests
-- [GOVERNANCE.md](GOVERNANCE.md) — decision-making
+- [CONTRIBUTING.md](CONTRIBUTING.md): bug reports, feature requests, pull requests
+- [GOVERNANCE.md](GOVERNANCE.md): decision-making
 - [.github/CODE_OF_CONDUCT.md](.github/CODE_OF_CONDUCT.md)
 - [.github/SECURITY.md](.github/SECURITY.md)
 - [.github/SUPPORT.md](.github/SUPPORT.md)
-- [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md) — component verification status
-- [CHANGELOG.md](CHANGELOG.md) · [ROADMAP.md](ROADMAP.md)
+- [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md): component verification status
+- [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTORS.md](CONTRIBUTORS.md)
+
+Contributors at every level, from anywhere in the world, are
+welcome. If a science case you care about isn't supported yet (a
+new emission mechanism, a non-standard observation mode, a sampler
+from a paper you read last week), that's exactly the conversation we
+want to have. The longer-term ambition is for tengri to be a
+unifying platform for the kinds of inference that high-dimensional,
+modular, differentiable forward models make possible.
+
+For anything that doesn't fit in an issue (collaborations, the
+`tengri-project` org move, joining the project), write to
+[astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) or
+[cooraysuchetha@gmail.com](mailto:cooraysuchetha@gmail.com).
 
 ## Reproduction
 
 Cross-validation against the established panchromatic SED codes is
 catalogued in
 [docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
-The first comparison is against [CIGALE](https://cigale.lam.fr/) —
+The first comparison is against [CIGALE](https://cigale.lam.fr/),
 component-for-component agreement on the AGN, dust, nebular, and
-X-ray paths — with a side-by-side notebook in the works. Prospector,
+X-ray paths, with a side-by-side notebook in the works. Prospector,
 BAGPIPES, MAGPHYS, x-cigale, GRAHSP, and Synthesizer follow.
 
 ## Citation

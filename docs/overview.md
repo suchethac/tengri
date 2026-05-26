@@ -13,83 +13,38 @@ Tengri is a panchromatic galaxy SED inference library written in
 [DSPS](https://github.com/ArgonneCPAC/dsps). A single forward model
 covers stellar populations, dust attenuation and emission, nebular
 gas, AGN, the IGM, radio, and X-ray, all driven by one shared set of
-physical parameters. The samplers we ship — MAP, Laplace,
-Pathfinder, NUTS, ray-tracing MCMC, nested sampling, geoVI, and
-hierarchical population fits — all talk to that same model. We
-never maintain a fast template-marginalised path next to a slow
-Bayesian one, and we never derive a gradient by hand.
+physical parameters. Inference is also modular: the `Fitter`
+interface delegates to optimisers from `optax`, samplers from
+`BlackJAX`, and variational inference from `NIFTy.re`, so adopting a
+new backend is a registration, not a port.
 
-This is a community effort. The codebase is open, the physics
-modules are being independently human-verified, and contributions —
-new SFH families, dust laws, AGN templates, observation modes,
-samplers — are welcome. The repository will move to the
-`tengri-project` organisation on GitHub shortly, which is where
-collaborative development and issue tracking will live going
-forward.
+Contributions are welcome (new SFH families, dust laws, AGN
+templates, observation modes, samplers) through the issue tracker
+on the `tengri-project` GitHub organisation, which the repository
+will move to shortly.
 
 ## Philosophy
 
-The shape of the codebase is driven by what survey-scale,
-high-dimensional galaxy SED inference needs.
-
-Catalogue inference is expensive. Nested sampling typically wants
-$\sim 10^6$ likelihood calls per galaxy, so $10^6$ galaxies is
-$\sim 10^{12}$ forward evaluations. That is many CPU-years even with
-a neural emulator, and the emulator brings its own training cost,
-approximation error, and dimensionality ceiling. JIT-compiling the
-real physical model gets us down to tens of microseconds per call on
-a single core, with no surrogate in the loop.
-
-High-dimensional posteriors need exact gradients. Bursty SFHs
-modelled as correlated random fields live in $\sim 100$-parameter
-spaces, and hierarchical population fits add more on top. HMC,
-variational inference, and Laplace approximation make those regimes
-reachable, but only if the forward model is differentiable end to
-end. Finite differences are too noisy once interpolation gets
-involved, and hand-derived gradients become unmaintainable as soon
-as you compose a dust law with a non-parametric SFH and an emulated
-nebular spectrum.
-
-The physical models keep changing. New SFH families, new dust laws,
-new AGN templates, new nebular grids show up every year. A code that
-entangles physics with sampling forces its users to re-derive
-sampler-specific quantities every time something in the physics
-moves. We want adding a new component to be one file, with no edits
-to the inference engine.
-
-That gives the codebase a consistent shape:
-
 The forward model is the artifact. Inference is a thin shell on top
-of it. Switching from a MAP point estimate to NUTS to geoVI to a
-nested-sampling evidence calculation is a one-line change.
-
-Physics lives in components, instruments live in observation. A dust
-law is physics. A fiber aperture correction is an instrument. You
-should not have to think about aperture corrections when you are
-choosing between Calzetti and Charlot & Fall, and we wrote the layer
-boundaries to make sure you don't have to.
-
-We try hard to keep the user-facing surface astronomer-readable. A
-new contributor should be able to add a dust attenuation law in one
-sitting, in one file, without learning the inference layer. Building
-a model in tengri (`SEDModel.build(sfh={'type': 'dpl', '*': FREE,
-'beta': Uniform(1, 3)}, dust=..., neb=...)`) reads like a recipe
-rather than a configuration file, and `model.spec.summary()` will
-tell you which parameters you set, which are free, and which fell
-back to library defaults.
+of it, so switching backend is a one-line change and the gradient
+never has to be re-derived. Physics lives in components, instruments
+live in observation, so a dust law and a fiber aperture correction
+never end up in the same file. Adding a new physics component, or a
+new sampler from BlackJAX, optax, or NIFTy, is a registration, with
+no edits to anything else.
 
 ## What's modular
 
 | Layer | What you can swap |
 |---|---|
-| Stellar SSP | BC03, BPASS, FSPS, ProGeny — any HDF5 file in the DSPS schema |
+| Stellar SSP | BC03, BPASS, FSPS, ProGeny: any HDF5 file in the DSPS schema |
 | SFH | parametric (about 15 families), non-parametric (Leja+ continuity, Dirichlet), and stochastic (IFT correlated fields with PSD-governed burstiness) |
 | Dust attenuation | Calzetti, Cardelli, Charlot & Fall two-component, Salim, Kriek & Conroy, others |
 | Dust emission | Draine & Li, Dale, THEMIS |
 | Nebular | `baked_in`, `cue` (emulator), `cloudy_grid`, `cb19` |
 | AGN | accretion disc, SKIRTOR torus, BLR/NLR through Cue, optional X-ray and radio |
 | IGM | Madau, Inoue |
-| Inference | MAP, Laplace, Pathfinder, NUTS, ray-tracing MCMC, nested sampling, geoVI, hierarchical population fits |
+| Inference | optimisers from `optax`, samplers from `BlackJAX`, variational inference from `NIFTy.re`, plus hierarchical / population extensions on top |
 
 `tengri.summary()` prints the live count for every registry, and
 new components register themselves; nothing in this table is updated
@@ -102,8 +57,7 @@ the layer below it through one small Protocol.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Inference        MAP · Laplace · Pathfinder · NUTS · NSS   │
-│                   geoVI · Population (hierarchical)         │
+│  Inference        optax · BlackJAX · NIFTy.re · Population  │
 │       ↳ asks ForwardModel for log p(data | params)          │
 └─────────────────────────────────────────────────────────────┘
                   │  knows nothing about physics
@@ -178,7 +132,7 @@ the validator that checks the `reads`/`publishes` graph is closed; a
 just runs both in sequence, with the SED chain first so that spatial
 components can read mass, age, or colour state if they need it.
 There is no special-casing for stellar atmospheres, hierarchical
-SFHs, or per-age morphology — those are all components or
+SFHs, or per-age morphology. Those are all components or
 sub-models, slotted in through the same interface.
 
 ### ForwardModel
@@ -208,9 +162,9 @@ joint photometry + fiber-spectrum fits a one-liner at the
 `ForwardModel` level rather than a hack inside an SED component.
 `Imaging` and joint observations follow the same pattern.
 
-The whole architecture turns the most common galaxy SED inference setup —
-broadband photometry of the whole galaxy plus a fiber spectrum of
-the inner core — into a clean composition rather than a slab
+The whole architecture turns the most common galaxy SED inference
+setup (broadband photometry of the whole galaxy plus a fiber spectrum
+of the inner core) into a clean composition rather than a slab
 approximation. The fiber sees the Sérsic core; the broadband sees
 core plus envelope; the spatial component models the profile, the
 observation integrates it through the fiber footprint, and only
@@ -218,13 +172,12 @@ then are predictions compared to data.
 
 ### Likelihood and inference
 
-The likelihood scores `Observation.predict(params)` against the data
-through whichever model is appropriate (Gaussian, Student-t, or a
-composite of several). Inference sits one layer above, asking the
-forward model for $\log p(\text{data} \mid \text{params})$ and
-nothing else. Switching samplers does not change the forward model,
-the components, the observation layer, or the likelihood. Each layer
-keeps its own concerns.
+The likelihood (Gaussian, Student-t, or a composite) scores
+`Observation.predict(params)` against the data. Inference sits one
+layer above, asking the forward model for
+$\log p(\text{data} \mid \text{params})$ and nothing else, which is
+why `optax`, `BlackJAX`, and `NIFTy.re` plug in without touching the
+physics.
 
 ## Why JAX
 
@@ -246,8 +199,8 @@ loop yourself. The same source file runs on CPU, GPU, and TPU, which
 is the only reason hierarchical population fits over thousands of
 galaxies are practically affordable.
 
-The discipline JAX imposes — pure functions, declared array shapes,
-no in-place mutation inside a JIT, no Python `if` on a traced value —
+The discipline JAX imposes (pure functions, declared array shapes,
+no in-place mutation inside a JIT, no Python `if` on a traced value)
 takes some getting used to. We have tried to absorb most of that cost
 in the library, so that a user calling `fitter.run(...)` does not have
 to think about traced arrays.
