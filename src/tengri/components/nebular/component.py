@@ -679,29 +679,23 @@ class NebularSEDComponent:
             and self._state.filter_waves is not None
             and self._state.filter_trans is not None
         ):
-            from tengri.observation.photometry import compute_flux_density
+            from tengri.observation.photometry import lnu_filter_integral
 
             z = jnp.asarray(params.get("redshift", 0.0))
-            inv_cosmology = 4.0 * jnp.pi * 1.0**2 / (1.0 + z)
-            nebular_phot_lnu_precomp = (
-                jnp.asarray(
-                    [
-                        compute_flux_density(
-                            nebular_sed,
-                            state.wave,
-                            fw,
-                            ft,
-                            redshift=z,
-                            dl_cm=jnp.asarray(1.0),
-                        )
-                        for fw, ft in zip(
-                            self._state.filter_waves,
-                            self._state.filter_trans,
-                            strict=False,
-                        )
-                    ]
-                )
-                * inv_cosmology
+            # Filter-integrate nebular_sed directly via ``lnu_filter_integral``
+            # (ADR-0016, #398.e). Replaces the previous
+            # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
+            # that applied and immediately undid the (1+z)/(4π d_L²)
+            # dimming. Publishes the bare filter-integrated rest-frame L_ν.
+            nebular_phot_lnu_precomp = jnp.asarray(
+                [
+                    lnu_filter_integral(nebular_sed, state.wave, fw, ft, redshift=z)
+                    for fw, ft in zip(
+                        self._state.filter_waves,
+                        self._state.filter_trans,
+                        strict=False,
+                    )
+                ]
             )
             derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
 

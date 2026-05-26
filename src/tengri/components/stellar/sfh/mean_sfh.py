@@ -675,6 +675,84 @@ def delayed_exponential(
     return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
+def sfhdelayed(
+    t_lookback: jnp.ndarray,
+    log_total_mass: float,
+    tau: float,
+    age: float,
+) -> jnp.ndarray:
+    """τ-delayed SFH — matches CIGALE ``sfh_delayed`` / Bagpipes ``delayed`` (#406).
+
+    .. math::
+
+       \\mathrm{SFR}(T) \\propto T \\, \\exp(-T / \\tau),
+       \\quad T = \\mathrm{age} - t_{\\mathrm{lb}} \\geq 0
+
+    SFR rises from 0 at galaxy formation (``T = 0``), peaks at cosmic-time
+    ``T = τ`` (lookback ``age − τ``), and declines toward the present
+    (``T = age``). Zero before formation (``t_lb > age``).
+
+    Distinct from :func:`declining_exponential` (registered as ``"tau"``),
+    which peaks at galaxy formation (FSPS ``sfh=1`` / Bagpipes
+    ``exponential``). The two functions have the same parameter set but
+    physically different shapes — see "Notes" below for the comparison.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+    tau : float
+        Timescale [yr]. Cosmic-time location of the SFR peak relative
+        to galaxy formation.
+    age : float
+        Galaxy age [yr] = lookback time of formation. Required ``> τ``
+        for the peak to lie inside the observable window.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr]. Mass-conserving:
+        ``trapezoid(out, t_lookback) == 10**log_total_mass`` to
+        floating-point precision.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` primitives.
+
+    **Comparison with the ``"tau"`` shape** (``declining_exponential``):
+
+    +-----------------------+------------------------+--------------------------+
+    | Registry name         | Peak in cosmic time T  | Upstream equivalents     |
+    +=======================+========================+==========================+
+    | ``tengri.tau``        | T = 0 (formation)      | FSPS ``sfh=1``,          |
+    |                       |                        | Bagpipes ``exponential`` |
+    +-----------------------+------------------------+--------------------------+
+    | ``tengri.delayed``    | T = τ                  | CIGALE ``sfh_delayed``,  |
+    | (this function)       |                        | Bagpipes ``delayed``     |
+    +-----------------------+------------------------+--------------------------+
+
+    Reproduction-notebook audit (#385) traced a wavelength-dependent
+    CIGALE-vs-tengri drift to comparing ``tengri.tau`` against
+    ``CIGALE.sfhdelayed`` — physically different SFHs with the same
+    name. This function closes that gap.
+
+    References
+    ----------
+    .. [1] M. Boquien et al., "CIGALE: a Python Code Investigating
+       Galaxy Emission," A&A 622, A103 (2019).
+       https://doi.org/10.1051/0004-6361/201834156
+    .. [2] A. C. Carnall et al., "Inferring the star formation histories
+       of massive quiescent galaxies with Bagpipes," MNRAS 480, 4379
+       (2018). https://doi.org/10.1093/mnras/sty2169
+    """
+    dt = age - t_lookback  # cosmic time elapsed since galaxy formation
+    raw = dt * jnp.exp(-dt / tau)
+    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), raw, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
+
+
 def declining_exponential(
     t_lookback: jnp.ndarray,
     log_total_mass: float,
@@ -687,6 +765,12 @@ def declining_exponential(
     ``0 <= T <= age``. Converting T = age - t_lb gives a shape that *increases*
     going back in lookback time (galaxy formed with highest SFR, declining to
     the present). This is opposite to ``exponential``.
+
+    **NOT the same as CIGALE ``sfh_delayed`` / Bagpipes ``delayed``** — those
+    peak at cosmic time T = τ, not T = 0. For that shape use
+    :func:`sfhdelayed` (registered as ``"delayed"``). Confusing the two
+    silently produced a wavelength-dependent residual in the CIGALE
+    reproduction audit (#385, #406).
 
     Rescaled so the integrated mass equals ``10**log_total_mass``.
 

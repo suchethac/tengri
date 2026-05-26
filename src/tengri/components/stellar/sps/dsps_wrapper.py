@@ -246,25 +246,32 @@ def load_ssp_data(filepath: str) -> SSPData:
             download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     with h5py.File(filepath, "r") as f:
-        mass_remaining = None
+        ssp_lg_age_gyr = jnp.array(f["ssp_lg_age_gyr"][:])
+        ssp_lgmet = jnp.array(f["ssp_lgmet"][:])
+
+        # IMF discovery (#307): HDF5 attribute wins, else parse filename
+        # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
+        # plots can introspect the assumed IMF without grepping the
+        # filename. Resolved before ``ssp_mass_remaining`` so the
+        # surviving-mass synthesiser can pick the right DSPS calibration.
+        imf = _detect_imf(f, fp.name)
+
         if "ssp_mass_remaining" in f:
             mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
+        else:
+            mass_remaining = _synthesize_mass_remaining(
+                filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
+            )
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
             alpha_fe = jnp.array(f["ssp_alpha_fe"][:])
 
-        # IMF discovery (#307): HDF5 attribute wins, else parse filename
-        # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
-        # plots can introspect the assumed IMF without grepping the
-        # filename.
-        imf = _detect_imf(f, fp.name)
-
         return SSPData(
             ssp_wave=jnp.array(f["ssp_wave"][:]),
             ssp_flux=jnp.array(f["ssp_flux"][:]),
-            ssp_lg_age_gyr=jnp.array(f["ssp_lg_age_gyr"][:]),
-            ssp_lgmet=jnp.array(f["ssp_lgmet"][:]),
+            ssp_lg_age_gyr=ssp_lg_age_gyr,
+            ssp_lgmet=ssp_lgmet,
             ssp_mass_remaining=mass_remaining,
             ssp_alpha_fe=alpha_fe,
             imf=imf,
@@ -305,6 +312,73 @@ def _detect_imf(h5_file, filename: str) -> str:
         if low in _KNOWN_IMFS:
             return low
     return "unknown"
+
+
+def _synthesize_mass_remaining(
+    filepath, ssp_lg_age_gyr: jnp.ndarray, ssp_lgmet: jnp.ndarray, imf_tag=None
+) -> jnp.ndarray:
+    """Fill missing ssp_mass_remaining when the SSP HDF5 lacks the table.
+
+    Uses :func:`dsps.imf.surviving_mstar.surviving_mstar`, a 9-parameter
+    sigmoid fit to FSPS with shipped per-IMF calibrations (Chabrier,
+    Salpeter, Kroupa, van Dokkum). This is the same fallback diffsky and
+    other DSPS-stack codes use, so tengri's reported surviving masses stay
+    bit-aligned with that ecosystem.
+
+    Resolves the IMF via :func:`_detect_imf` (HDF5 attribute → filename
+    tail → ``"unknown"``). When the IMF is ``"unknown"`` or absent, falls
+    back to Chabrier with a one-shot ``UserWarning`` naming the file and
+    convention. The DSPS sigmoid agrees with FSPS to 1–2 % including at
+    young ages, where the IMF-turnoff integrator in
+    :mod:`tengri.components.stellar.sps.mass_remaining` undercounts mass
+    return by missing MS/post-MS stellar-wind losses (e.g. 0% vs 2-3% at
+    1 Myr).
+
+    Returns
+    -------
+    array, shape (n_met, n_age)
+        Surviving mass fraction broadcast over the metallicity axis (Z
+        dependence is dropped here by design; the table-supplied version,
+        when present, is what carries it).
+    """
+    import warnings
+
+    from dsps.imf.surviving_mstar import (
+        CHABRIER_PARAMS,
+        KROUPA_PARAMS,
+        SALPETER_PARAMS,
+        VAN_DOKKUM_PARAMS,
+        surviving_mstar,
+    )
+
+    _IMF_PARAMS = {
+        "chabrier": CHABRIER_PARAMS,
+        "salpeter": SALPETER_PARAMS,
+        "kroupa": KROUPA_PARAMS,
+        "van_dokkum": VAN_DOKKUM_PARAMS,
+    }
+
+    if isinstance(imf_tag, bytes):
+        imf_tag = imf_tag.decode("utf-8", errors="replace")
+    imf = (imf_tag or "unknown").strip().lower()
+    params = _IMF_PARAMS.get(imf, CHABRIER_PARAMS)
+    if imf not in _IMF_PARAMS:
+        warnings.warn(
+            f"SSP file {filepath!s} has no 'ssp_mass_remaining' table and "
+            f"IMF could not be resolved (got {imf!r}); synthesising "
+            "surviving-mass fractions from dsps.imf.surviving_mstar with "
+            "the Chabrier-fit-to-FSPS parameters. Set the 'imf' HDF5 "
+            "attribute or use a filename suffix matching _detect_imf's "
+            "_KNOWN_IMFS to silence, or port the upstream table for a "
+            "bit-exact match.",
+            UserWarning,
+            stacklevel=3,
+        )
+
+    # surviving_mstar takes log10(age/yr): ssp_lg_age_gyr is log10(age/Gyr).
+    lg_age_yr = ssp_lg_age_gyr + 9.0
+    f_surv_age = surviving_mstar(lg_age_yr, **params)
+    return jnp.broadcast_to(f_surv_age, (ssp_lgmet.shape[0], lg_age_yr.shape[0]))
 
 
 def load_ssp_data_dsps(filepath: str) -> SSPData:

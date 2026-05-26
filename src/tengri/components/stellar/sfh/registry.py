@@ -620,6 +620,44 @@ _register(
     short_doc="Declining exponential SFH (FSPS/bagpipes)",
 )
 
+# --- delayed (τ-delayed, matches CIGALE sfh_delayed / Bagpipes 'delayed') ---
+# SFR(T) ∝ T · exp(-T/τ) with T = age - t_lb. Rises from 0 at formation,
+# peaks at cosmic-time τ-after-formation (lookback age − τ), declines to
+# present. Distinct from ``tau`` above — see #406 for the audit that
+# surfaced the convention mismatch.
+_register(
+    SFHModelSpec(
+        name="delayed",
+        fn=sfhdelayed,
+        params={
+            "sfh_delayed_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+            ),
+            "sfh_delayed_tau_gyr": ParamDef(
+                "Timescale (Gyr) — cosmic-time location of SFR peak",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_delayed_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr); must be > τ",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_delayed_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_delayed_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_delayed_age_gyr": ("age", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="τ-delayed SFH (CIGALE sfh_delayed / Bagpipes 'delayed')",
+    citation="Boquien et al. 2019 (CIGALE); Carnall et al. 2018 (Bagpipes)",
+)
+
 # --- const_exp (constant + exponential decline — "quenching at time T") ---
 _register(
     SFHModelSpec(
