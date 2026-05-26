@@ -21,11 +21,6 @@
 The six headline dust attenuation laws span MW, SMC, and starburst geometries
 =============================================================================
 
-.. image:: images/sphx_glr_plot_attenuation_law_compare_001.png
-   :alt: plot attenuation law compare
-   :class: sphx-glr-single-img
-
-
 The tengri library offers six attenuation laws covering the morphology-geometry
 spectrum: Milky Way (Cardelli), SMC (Pei), starburst (Calzetti, Conroy),
 and theoretical models (Kriek & Conroy, power law). At fixed τ_V = 1, their

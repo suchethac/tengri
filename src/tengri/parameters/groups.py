@@ -88,6 +88,37 @@ from tengri.parameters.sentinels import FIXED, FREE
 __all__ = ["parameters_to_groups", "parse_groups"]
 
 
+# Canonical fixed-default values that override the prior-midpoint rule
+# (``registry_default.unstandardize(0.0)``) used by the wildcard-FIXED
+# resolver. The midpoint is rarely what the user actually wants for a
+# default — e.g. ``Uniform(-2.0, 0.2)`` for ``met_logzsol`` gives -0.9,
+# which silently injected a ~0.85 dex Z offset in CIGALE comparisons
+# (#412). Conventions here are chosen to match the canonical
+# external-library defaults (FSPS / Bagpipes / Prospector).
+_CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
+    # met_logzsol = log10(Z/Z⊙); 0.0 = solar — matches FSPS ``logzsol=0.0``
+    # and Bagpipes ``metallicity=1.0 Z⊙``.
+    "met_logzsol": 0.0,
+    "met_logzsol_0": 0.0,
+    "met_logzsol_final": 0.0,
+    "met_logzsol_old": 0.0,
+    "met_logzsol_young": 0.0,
+    "met_logzsol_burst": 0.0,
+}
+
+
+def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
+    """Pick the fixed value used when wildcard-FIXED collapses a free param.
+
+    Returns the canonical convention from ``_CANONICAL_FIXED_DEFAULTS`` when
+    present, else falls back to the prior midpoint
+    ``registry_default.unstandardize(0.0)``.
+    """
+    if param_name in _CANONICAL_FIXED_DEFAULTS:
+        return _CANONICAL_FIXED_DEFAULTS[param_name]
+    return float(registry_default.unstandardize(0.0))
+
+
 # Ensure SEDModelComponent subclasses are imported and registered.
 # This populates _REGISTRY so the resolver can consult it.
 def _ensure_registry_loaded() -> None:
@@ -441,8 +472,9 @@ def parse_groups(**kwargs) -> Parameters:
                     if registry_default.is_fixed:
                         resolved_kwargs[param_name] = registry_default
                     else:
-                        center = registry_default.unstandardize(0.0)
-                        resolved_kwargs[param_name] = Fixed(float(center))
+                        resolved_kwargs[param_name] = Fixed(
+                            _default_fixed_value(param_name, registry_default)
+                        )
                     provenance[param_name] = "user_fixed"
                 else:
                     if isinstance(val, Distribution):
@@ -1318,8 +1350,10 @@ def _resolve_value(
             if registry_default.is_fixed:
                 return registry_default, "user_fixed"
             else:
-                center = registry_default.unstandardize(0.0)
-                return Fixed(float(center)), "user_fixed"
+                return (
+                    Fixed(_default_fixed_value(param_name, registry_default)),
+                    "user_fixed",
+                )
         elif isinstance(val, Distribution):
             # Explicit distribution: use as-is
             tag = "user_fixed" if val.is_fixed else "user_prior"
@@ -1337,8 +1371,10 @@ def _resolve_value(
             if registry_default.is_fixed:
                 return registry_default, "wildcard_fixed"
             else:
-                center = registry_default.unstandardize(0.0)
-                return Fixed(float(center)), "wildcard_fixed"
+                return (
+                    Fixed(_default_fixed_value(param_name, registry_default)),
+                    "wildcard_fixed",
+                )
         else:
             # Bad wildcard value — only FREE or FIXED are accepted in the '*' slot
             raise ValueError(
@@ -1352,8 +1388,10 @@ def _resolve_value(
     if registry_default.is_fixed:
         return registry_default, "registry_default"
     else:
-        center = registry_default.unstandardize(0.0)
-        return Fixed(float(center)), "registry_default"
+        return (
+            Fixed(_default_fixed_value(param_name, registry_default)),
+            "registry_default",
+        )
 
 
 def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
