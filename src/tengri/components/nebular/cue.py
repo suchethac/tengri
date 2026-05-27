@@ -975,6 +975,7 @@ class CueBackend:
             np.array(ssp_data.ssp_wave),
             np.array(ssp_data.ssp_flux),
             np.array(ssp_data.ssp_lgmet),
+            ssp_log_age_yr=np.array(ssp_data.ssp_lg_age_gyr) + 9.0,
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])
