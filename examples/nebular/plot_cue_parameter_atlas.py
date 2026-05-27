@@ -1,6 +1,6 @@
 """
-Comprehensive sweep of the Cue nebular parameters
-==================================================
+Comprehensive 2D sweep of ionization parameter and metallicity (Cue)
+====================================================================
 
 Cue (Li, Leja & Speagle 2023) maps a four-dimensional HII region
 control space — ionization parameter ``log U``, gas-phase metallicity
@@ -18,8 +18,14 @@ Diagnostics shown (read all from the rest-frame line list):
 - ``[O III] 5007 / [O II] 3727``  — ``O32`` (ionization parameter)
 - ``[N II] 6583 / [O II] 3727``    — ``N2O2`` (gas metallicity)
 
+The 2D grid subsumes 1D slices: varying logU alone at fixed metallicity
+(ionization-hardness diagnostic) and varying metallicity alone (abundance
+evolution). See the heatmap contours for guidance on how the diagnostics
+respond along each axis.
+
 References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
+- Kewley & Dolphin 2002, ApJ, 549, 716 (logU diagnostics)
 - Kewley+2019, ARA&A, 57, 511 (modern line-diagnostics review)
 """
 
@@ -83,12 +89,21 @@ for i, logu in enumerate(LOGU_GRID):
         n2o2[i, j] = float(lines.nii_6584 / lines.oii)
 
 
-def _panel(ax, arr, vmin, vmax, label):
+def _panel(ax, arr, vmin, vmax, label, n_contours=10):
+    """Plot 2D heatmap with contours showing 1D structure."""
     arr = np.where(arr > 0, np.log10(arr), np.nan)
     mesh = ax.pcolormesh(
         LOGZ_GRID, LOGU_GRID, arr, cmap="RdYlBu_r", vmin=vmin, vmax=vmax, shading="auto"
     )
-    cs = ax.contour(LOGZ_GRID, LOGU_GRID, arr, levels=8, colors="0.15", linewidths=0.5, alpha=0.7)
+    cs = ax.contour(
+        LOGZ_GRID,
+        LOGU_GRID,
+        arr,
+        levels=n_contours,
+        colors="0.15",
+        linewidths=0.5,
+        alpha=0.6,
+    )
     ax.clabel(cs, fmt="%.1f", fontsize=7, inline=True, inline_spacing=2)
     ax.text(
         0.05,

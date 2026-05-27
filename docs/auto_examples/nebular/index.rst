@@ -1,5 +1,3 @@
-:orphan:
-
 
 
 .. _sphx_glr_auto_examples_nebular:
@@ -189,7 +187,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Nebular free-free, free-bound, and two-photon emission respond to gas-phase metallicity (``logZ_gas``) through changes in metal cooling efficiency and ionization balance. metallicity sensitivity of the nebular continuum at fixed ionization parameter.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Nebular free-free, free-bound, and two-photon emission respond to gas-phase metallicity (``logZ_gas``) through changes in metal cooling efficiency and ionization balance. This example demonstrates the metallicity sensitivity of the nebular continuum at fixed ionization parameter.">
 
 .. only:: html
 

@@ -121,8 +121,12 @@ _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
 _LOG_C = jnp.log10(_C_CGS)
 
-# Maximum SSP age contributing to nebular emission
-_MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
+# Maximum SSP age contributing to nebular emission. Re-exported from
+# ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
+# and the downstream forward filter (here) share one source of truth.
+from tengri.components.nebular.ionizing_spectrum import (
+    MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,
+)
 
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
@@ -975,6 +979,7 @@ class CueBackend:
             np.array(ssp_data.ssp_wave),
             np.array(ssp_data.ssp_flux),
             np.array(ssp_data.ssp_lgmet),
+            ssp_log_age_yr=np.array(ssp_data.ssp_lg_age_gyr) + 9.0,
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])

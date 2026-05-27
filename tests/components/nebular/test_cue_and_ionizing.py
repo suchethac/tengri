@@ -115,6 +115,53 @@ class TestIonizingParamsTable:
         chex.assert_shape(ionspec, (7,))
         chex.assert_tree_all_finite(ionspec)
 
+    @pytest.mark.regression_bug
+    def test_float32_ssp_does_not_overflow(self, ssp, tmp_path, monkeypatch):
+        """Float32 SSP flux must not overflow the Q_H integration (issue #458).
+
+        SSPs may ship in float32 (e.g. BC03-from-CIGALE) to save disk. The
+        Q_H integration ``trapezoid(flux * L_SUN / (h*nu), nu)`` produces
+        intermediates ~ 1e30 and integrates over ~ 1e16 Hz bandwidth (~ 1e46),
+        well above float32's 3.4e38 max. Without an explicit float64 cast,
+        ``logqion_table`` collapses to ``inf`` for every (Z, age) bin and
+        downstream Cue emits ~zero nebular SED silently.
+
+        The test guards against regressions by re-running the fit fresh —
+        bypassing both the in-memory ``_IONSPEC_TABLE_CACHE`` and the disk
+        cache (#448). Without these isolations, a pre-fix cache hit would
+        return finite values from a prior good run and the test would
+        vacuously pass even with the bug reintroduced.
+        """
+        from tengri.components.nebular import ionizing_spectrum as ions_mod
+        from tengri.components.nebular.ionizing_spectrum import (
+            precompute_ionizing_params_table,
+        )
+
+        # Isolate from prior runs: clear in-memory cache; redirect disk
+        # cache dir to a tmp path so no pre-existing .npz can be loaded.
+        ions_mod._IONSPEC_TABLE_CACHE.clear()
+        monkeypatch.setattr(ions_mod, "_ionspec_disk_cache_dir", lambda: tmp_path)
+
+        # Use slice indices known to contain ionising-bright young bins.
+        # FSPS prsc-miles fixture: lgmet[0] ≈ −4, ages[0:10] cover 0.3–1 Myr,
+        # well within the regime where (flux × L_sun / (h × nu)) is ~ 1e30+
+        # and the trapezoid integration overflows float32 if not cast.
+        wave_f32 = np.asarray(ssp.ssp_wave, dtype=np.float32)
+        flux_f32 = np.asarray(ssp.ssp_flux[:2, :10, :], dtype=np.float32)
+        lgmet_f32 = np.asarray(ssp.ssp_lgmet[:2], dtype=np.float32)
+        assert flux_f32.dtype == np.float32, "test setup: flux must be float32"
+
+        result = precompute_ionizing_params_table(wave_f32, flux_f32, lgmet_f32)
+        logq = np.asarray(result["logqion_table"])
+        assert not np.any(np.isinf(logq)), (
+            "Q_H integration overflowed float32 — logqion_table contains inf"
+        )
+        # Young (< 10 Myr) bins of a bare-stellar SSP should yield realistic Q_H.
+        assert logq.max() > 40.0, (
+            f"max logqion = {logq.max():.2f}; expected > 40 for a young bare "
+            f"stellar SSP. Bug is likely back."
+        )
+
     def test_precompute_is_memoized(self, ssp_data_wne):
         """Repeat calls with the same SSP grid must hit the cache (issue #416).
 

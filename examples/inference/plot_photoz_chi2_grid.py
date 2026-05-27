@@ -51,7 +51,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 # Template: star-forming with age ~2 Gyr, modest dust.
 model_template = tengri.SEDModel.build(
-    tengri.load_ssp(),
+    tengri.load_ssp("fsps_prsc_miles_chabrier"),
     observation=obs,
     sfh={
         "type": "tsnorm",
@@ -91,13 +91,13 @@ truth_params.update(
     dust_slope=-0.7,
     neb_logU=-3.0,
     neb_logZ_gas=0.0,
-    log_mstar=log_mstar_true,
+    sfh_dpl_log_peak_sfr=log_mstar_true,
     redshift=z_true,
 )
 
 # Create a model at truth z to generate mock data.
 model_truth = tengri.SEDModel.build(
-    tengri.load_ssp(),
+    tengri.load_ssp("fsps_prsc_miles_chabrier"),
     observation=obs,
     sfh={
         "type": "tsnorm",
@@ -140,7 +140,7 @@ for i, z in enumerate(z_grid):
     for j, log_mstar in enumerate(log_mstar_grid):
         # Build model at this redshift.
         model_z = tengri.SEDModel.build(
-            tengri.load_ssp(),
+            tengri.load_ssp("fsps_prsc_miles_chabrier"),
             observation=obs,
             sfh={
                 "type": "tsnorm",
@@ -164,7 +164,7 @@ for i, z in enumerate(z_grid):
 
         # Predict photometry at this stellar mass.
         grid_params = dict(truth_params)
-        grid_params["log_mstar"] = log_mstar
+        grid_params["sfh_dpl_log_peak_sfr"] = log_mstar
         flux_pred = np.asarray(model_z.predict_photometry(grid_params))
 
         # Compute χ².

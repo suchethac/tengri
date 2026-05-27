@@ -1,14 +1,20 @@
 r"""
-Minimum radiation field U_min: DL07 and THEMIS agree on the FIR peak
-====================================================================
+Minimum radiation field U_min: DL07 vs THEMIS FIR peak and sweep
+================================================================
 
 The starlight intensity floor U_min sets the temperature of the diffuse-ISM
-component in template-based dust libraries. We compare the Draine & Li
-2007 grid (fixed q_PAH = 2.5%) and the THEMIS grid (fixed q_HAC = 0.17) at
-three matched U_min values to highlight that the FIR-peak position is
-remarkably consistent between the two grain-physics paradigms, while THEMIS
-predicts a stronger mid-IR continuum from its hydrogenated amorphous carbon
-component.
+component in template-based dust libraries. Two perspectives:
+
+(Top) Fixed U_min comparison: the Draine & Li 2007 grid (fixed q_PAH = 2.5%)
+and the THEMIS grid (fixed q_HAC = 0.17) at three matched U_min values
+highlight that the FIR-peak position is remarkably consistent between the two
+grain-physics paradigms, while THEMIS predicts a stronger mid-IR continuum from
+its hydrogenated amorphous carbon component.
+
+(Bottom) U_min sweep normalized by L_IR (8–1000 μm) shows how both libraries
+respond to radiation-field intensity: higher U_min → hotter dust → FIR peak
+shifted blueward. At matched U_min, THEMIS peaks roughly 2× redder than DL07
+due to lower equilibrium temperature in its grain mix.
 
 References:
     Draine, B.T. & Li, A. 2007, ApJ, 657, 810.
@@ -22,9 +28,11 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 import warnings
 
 import h5py
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri import data_path
 from tengri.analysis.plotting import setup_style
 
@@ -86,4 +94,76 @@ ax.set(
 )
 ax.legend(loc="lower right", frameon=False, fontsize=8, ncol=2)
 fig.tight_layout()
+
+# --- Add bottom panel: U_min sweep (from plot_umin_sweep.py) ---
+C_AA_PER_S = 2.998e18
+UMIN_VALUES = [0.1, 1.0, 5.0, 25.0]
+LIB_TYPES = ["draine_li2007", "themis"]
+LINESTYLES = {
+    "draine_li2007": "-",
+    "themis": "--",
+}
+COLORS_SWEEP = plt.cm.viridis(np.linspace(0.1, 0.9, len(UMIN_VALUES)))
+
+recipe = {"sfh": {"type": "const", "*": tengri.FIXED, "log_sfr": 1.0}}
+ssp = tengri.load_ssp()
+
+fig_sweep = plt.figure(figsize=(8, 5))
+ax_sweep = fig_sweep.add_subplot(111)
+
+for lib_type in LIB_TYPES:
+    for i, umin in enumerate(UMIN_VALUES):
+        model = tengri.SEDModel.build(
+            ssp,
+            **recipe,
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": 1.0,
+                "tau_bc": 1.5,
+                "emission": {
+                    "type": lib_type,
+                    "*": tengri.FIXED,
+                    "umin": umin,
+                    "gamma_dl": 0.01,
+                    "qpah": 2.5,
+                },
+            },
+            redshift=tengri.Fixed(0.05),
+        )
+        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        out = model.predict_rest_sed(p)
+        wave = np.asarray(out.wavelength)
+        nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
+        ir = (wave > 8e4) & (wave < 1e7)
+        if ir.sum() < 5:
+            continue
+        nu_ir = C_AA_PER_S / wave[ir]
+        order = np.argsort(nu_ir)
+        l_ir = np.trapezoid(np.asarray(out.sed)[ir][order], nu_ir[order])
+        if l_ir > 0:
+            nu_l_nu = nu_l_nu / l_ir
+        label = rf"$U_{{\min}}$ = {umin:.1f} ({lib_type.replace('_', ' ')})"
+        ax_sweep.loglog(
+            wave,
+            nu_l_nu,
+            color=COLORS_SWEEP[i],
+            ls=LINESTYLES[lib_type],
+            lw=1.4,
+            label=label,
+        )
+
+ax_sweep.set(
+    xscale="log",
+    yscale="log",
+    xlim=(3e4, 5e6),
+    ylim=(1e-3, 2.0),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
+)
+ax_sweep.set_title("FIR peak migration with $U_{\\min}$ — DL07 (solid) vs THEMIS (dashed)")
+ax_sweep.legend(frameon=False, fontsize=7, loc="lower left", ncol=2)
+fig_sweep.tight_layout()
+fig_sweep.savefig("plot_umin_cross_library_sweep.png", dpi=150, bbox_inches="tight")
+
 plt.savefig("plot_umin_cross_library.png", dpi=150, bbox_inches="tight")

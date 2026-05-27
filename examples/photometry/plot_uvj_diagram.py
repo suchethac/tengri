@@ -72,7 +72,7 @@ baseline_sf = dict(sf_model.spec.sample(jax.random.PRNGKey(0)))
 
 for i, tau_v in enumerate(tau_v_grid):
     # tau_v is the birth-cloud optical depth; map to tau_bc
-    params = {**baseline_sf, "dust_two_component_tau_bc": tau_v}
+    params = {**baseline_sf, "dust_tau_bc": tau_v}
     flux = _flux(sf_model, params)
     sf_uv[i], sf_vj[i] = _colors_from_flux(flux[0], flux[1], flux[2])
 

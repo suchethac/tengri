@@ -42,11 +42,9 @@ setup_style()
 
 # Resolve the absolute SSP path in the parent so the child subprocess can
 # load it directly without relying on cwd-walking.
-import tengri  # parent import; the children still spawn fresh Python.
 from pathlib import Path as _Path
 
-_DATA = next(p / "data" for p in _Path.cwd().resolve().parents
-             if (p / "data").exists())
+_DATA = next(p / "data" for p in _Path.cwd().resolve().parents if (p / "data").exists())
 _SSP_PATH = str(next(_DATA.glob("ssp_*.h5")))
 
 CHILD_SOURCE = textwrap.dedent(
@@ -110,7 +108,10 @@ def run_subprocess(cache_dir):
     t0 = time.perf_counter()
     proc = subprocess.run(
         [sys.executable, "-c", CHILD_SOURCE],
-        env=env, capture_output=True, text=True, check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
     )
     parent_wall = time.perf_counter() - t0
     last_line = proc.stdout.strip().splitlines()[-1]
@@ -130,7 +131,7 @@ maps = np.array([r["map"] for r in results])
 
 # ─── Figure: subprocess wall time, stacked by phase ────────────────────────
 fig, ax = plt.subplots(figsize=(6.6, 4.0))
-labels = ["Run 1\n(cold cache)"] + [f"Run {i+2}\n(warm cache)" for i in range(N_RUNS - 1)]
+labels = ["Run 1\n(cold cache)"] + [f"Run {i + 2}\n(warm cache)" for i in range(N_RUNS - 1)]
 x = np.arange(N_RUNS)
 
 # Stack: import, build (model construction), MAP fit (forward + grad
@@ -140,24 +141,30 @@ remainder = walls - (imports + builds + maps)
 remainder = np.clip(remainder, 0.0, None)
 
 ax.bar(x, imports, color="C0", label="import tengri")
-ax.bar(x, builds, bottom=imports, color="C3",
-       label="SEDModel.build")
-ax.bar(x, maps, bottom=imports + builds, color="C1",
-       label="MAP fit (forward + grad + optimiser compile)")
-ax.bar(x, remainder, bottom=imports + builds + maps, color="0.7",
-       label="process overhead")
+ax.bar(x, builds, bottom=imports, color="C3", label="SEDModel.build")
+ax.bar(
+    x,
+    maps,
+    bottom=imports + builds,
+    color="C1",
+    label="MAP fit (forward + grad + optimiser compile)",
+)
+ax.bar(x, remainder, bottom=imports + builds + maps, color="0.7", label="process overhead")
 
 # Total-wall-time annotation above each bar.
 for xi, total in zip(x, walls):
-    ax.text(xi, total + 0.15, f"{total:.2f} s", ha="center",
-            fontsize=9, fontweight="bold")
+    ax.text(xi, total + 0.15, f"{total:.2f} s", ha="center", fontsize=9, fontweight="bold")
 
 speedup = walls[0] / walls[1:].mean()
 ax.text(
-    0.98, 0.95,
+    0.98,
+    0.95,
     f"warm-cache speedup: {speedup:.1f}x",
-    transform=ax.transAxes, ha="right", va="top",
-    fontsize=10, color="0.2",
+    transform=ax.transAxes,
+    ha="right",
+    va="top",
+    fontsize=10,
+    color="0.2",
     bbox=dict(facecolor="white", edgecolor="0.7", boxstyle="round,pad=0.4"),
 )
 
@@ -165,7 +172,6 @@ ax.set_xticks(x)
 ax.set_xticklabels(labels, fontsize=9)
 ax.set_ylabel("Subprocess wall time  [s]")
 ax.set_ylim(0, walls.max() * 1.25)
-ax.legend(frameon=False, fontsize=8.5, loc="upper right",
-          bbox_to_anchor=(1.0, 0.88))
+ax.legend(frameon=False, fontsize=8.5, loc="upper right", bbox_to_anchor=(1.0, 0.88))
 
 fig.savefig("plot_jit_cache_speedup.png", dpi=150, bbox_inches="tight")
