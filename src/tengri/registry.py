@@ -479,6 +479,12 @@ _DUST_EMISSION_MENU: tuple[dict[str, str], ...] = (
         "citation": "Casey 2012 (MNRAS 425, 3094)",
         "short_doc": "Single-temperature modified blackbody (analytic)",
     },
+    {
+        "name": "schreiber2016",
+        "status": "production",
+        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
+        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+    },
 )
 
 

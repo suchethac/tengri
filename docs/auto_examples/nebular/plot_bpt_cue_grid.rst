@@ -31,7 +31,7 @@ Show how the Cue neural emulator (Li+2025) maps the 2D parameter space
 constant log U (varying metallicity) and constant log Z (varying ionization)
 show the full grid's coverage and demarcation positions.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-105
+.. GENERATED FROM PYTHON SOURCE LINES 10-102
 
 .. code-block:: Python
 
@@ -91,26 +91,23 @@ show the full grid's coverage and demarcation positions.
                 neb={
                     "type": "cue",
                     "*": tengri.FIXED,
-                    "neb_logU": tengri.Fixed(logu),
-                    "neb_logZ_gas": tengri.Fixed(logz),
+                    "logU": tengri.Fixed(logu),
+                    "logZ_gas": tengri.Fixed(logz),
                 },
                 redshift=tengri.Fixed(0.05),
             )
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            out = model.predict_rest_sed(params)
-            lines = out.emission_lines
-            if lines is not None:
-                lines_dict = dict(lines)
-                ha = lines_dict.get(6562.79, 1e-20)
-                hb = lines_dict.get(4860.2, 1e-20)
-                nii = lines_dict.get(6583.34, 1e-20)
-                oiii = lines_dict.get(5008.24, 1e-20)
-                if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
-                    log_n2_ha = np.log10(nii / ha)
-                    log_o3_hb = np.log10(oiii / hb)
-                    color_idx = np.where(logu_grid == logu)[0][0]
-                    color = plt.cm.viridis(color_idx / len(logu_grid))
-                    ax.scatter(log_n2_ha, log_o3_hb, s=30, c=[color], alpha=0.6)
+            lines = model.predict_emission_lines(params)
+            ha = float(lines.halpha)
+            hb = float(lines.hbeta)
+            nii = float(lines.nii_6584)
+            oiii = float(lines.oiii_5007)
+            if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
+                log_n2_ha = np.log10(nii / ha)
+                log_o3_hb = np.log10(oiii / hb)
+                color_idx = np.where(logu_grid == logu)[0][0]
+                color = plt.cm.viridis(color_idx / len(logu_grid))
+                ax.scatter(log_n2_ha, log_o3_hb, s=30, c=[color], alpha=0.6)
 
     ax.text(-1.3, -0.5, "SF", fontsize=10, color="#1f77b4", ha="center")
     ax.text(0.1, 0.8, "Composite", fontsize=10, color="#ff7f0e", ha="center")

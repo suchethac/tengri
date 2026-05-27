@@ -56,7 +56,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
     of black hole accretion discs. MNRAS, 480, 1247–1268.
     https://doi.org/10.1093/mnras/sty1890
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-440
+.. GENERATED FROM PYTHON SOURCE LINES 35-441
 
 .. code-block:: Python
 
@@ -168,6 +168,7 @@ Kubota, A., & Done, C. (2018). The most fundamental physical parameters
             "torus": {"type": "none", "*": tengri.FIXED},
             "lines": {"type": "none", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "agn_frac": 1.0,
             "log_lbol": 11.0,  # AGN bolometric luminosity [log10 L_sun]
             "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },

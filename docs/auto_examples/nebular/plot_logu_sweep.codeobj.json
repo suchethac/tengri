@@ -53,15 +53,6 @@
    "name": "environ"
   }
  ],
- "plt.cm.ScalarMappable": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot.cm",
-   "module_short": "matplotlib.pyplot.cm",
-   "name": "ScalarMappable"
-  }
- ],
  "plt.get_cmap": [
   {
    "is_class": false,

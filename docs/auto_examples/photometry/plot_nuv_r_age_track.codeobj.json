@@ -8,6 +8,15 @@
    "name": "PRNGKey"
   }
  ],
+ "np.abs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "abs"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -26,6 +35,15 @@
    "name": "concatenate"
   }
  ],
+ "np.diff": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "diff"
+  }
+ ],
  "np.empty_like": [
   {
    "is_class": false,
@@ -33,6 +51,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "empty_like"
+  }
+ ],
+ "np.isfinite": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "isfinite"
   }
  ],
  "np.linspace": [
@@ -60,6 +87,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "logspace"
+  }
+ ],
+ "np.where": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "where"
   }
  ],
  "os.environ": [

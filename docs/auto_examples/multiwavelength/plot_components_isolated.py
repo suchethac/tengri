@@ -90,7 +90,7 @@ for x, name in [(1000, "UV"), (5500, "optical"), (1e5, "MIR"), (1e8, "radio")]:
     ax.text(x, 4e44, name, fontsize=7, color="0.5", ha="center", alpha=0.7)
 
 ax.set(
-    xlim=(10, 3e9),
+    xlim=(10, 1e10),
     ylim=(1e35, 1e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",

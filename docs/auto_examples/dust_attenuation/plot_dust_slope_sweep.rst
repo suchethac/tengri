@@ -72,7 +72,7 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
             "*": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
-            "dust_slope": tengri.Uniform(-1.5, 0.5),
+            "slope": tengri.Uniform(-1.5, 0.5),
         },
         redshift=tengri.Fixed(0.1),
     )

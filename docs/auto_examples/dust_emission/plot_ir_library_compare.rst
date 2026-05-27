@@ -114,7 +114,7 @@ Libraries compared:
 
     ax.set(
         xlim=(1e4, 1e7),
-        ylim=(2e-3, 3.0),
+        ylim=(1e-4, 3.0),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
     )

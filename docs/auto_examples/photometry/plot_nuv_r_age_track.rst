@@ -43,7 +43,7 @@ SED as young, hot stars fade and the older stellar population emerges.
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of colour-colour diagnostic diagrams used in photometric surveys
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-105
+.. GENERATED FROM PYTHON SOURCE LINES 22-123
 
 .. code-block:: Python
 
@@ -113,7 +113,25 @@ SED as young, hot stars fade and the older stellar population emerges.
         flux = _flux(model, params)
         nuv_r[i] = _color_from_flux(flux[0], flux[1])
 
-    ax.plot(np.log10(age_grid), nuv_r, lw=2.5, color="#1f77b4", label="Bare stellar SSP", zorder=3)
+    # Mask NaN/Inf AND drop any point that's an obvious outlier (the tsnorm SFH
+    # near the SSP grid edge produces unphysical photometric jumps; we keep only
+    # the contiguous monotonic segment where NUV-r is increasing smoothly).
+    mask = np.isfinite(nuv_r) & (nuv_r > 1.5) & (nuv_r < 7.0)
+    log_age = np.log10(age_grid)
+    # Drop the discontinuous tail: find the first big NUV-r drop (≥0.5 mag in
+    # one step) and truncate there.
+    diffs = np.diff(nuv_r[mask])
+    bad = np.where(np.abs(diffs) > 0.5)[0]
+    if len(bad):
+        cut = bad[0] + 1
+        log_age_plot = log_age[mask][:cut]
+        nuv_r_plot = nuv_r[mask][:cut]
+    else:
+        log_age_plot = log_age[mask]
+        nuv_r_plot = nuv_r[mask]
+
+    ax.plot(log_age_plot, nuv_r_plot, lw=2.5, color="#1f77b4",
+            label="Bare stellar SSP", zorder=3)
 
     # Green valley band (Wyder+2007, Schiminovich+2007)
     gv_min, gv_max = 4.0, 5.0

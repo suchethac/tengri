@@ -70,7 +70,7 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
             "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_logZ_gas": tengri.Uniform(-1.5, 0.3)},
+        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": tengri.Uniform(-1.5, 0.3)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

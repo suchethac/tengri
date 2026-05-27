@@ -38,7 +38,7 @@ model = tengri.SEDModel.build(
         "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_dig_frac": tengri.Uniform(0.0, 0.8)},
+    neb={"type": "cue", "*": tengri.FIXED, "dig_frac": tengri.Uniform(0.0, 0.8)},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -140,6 +140,7 @@ model = tengri.SEDModel.build(
         "torus": {"type": "none", "*": tengri.FIXED},
         "lines": {"type": "none", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "agn_frac": 1.0,
         "log_lbol": 11.0,  # AGN bolometric luminosity [log10 L_sun]
         "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
     },

@@ -77,7 +77,8 @@ def make_model_template():
             "tau_diff": tengri.Uniform(0.0, 1.5),
             "slope": -0.7,
         },
-        met={
+        stellar={
+            "*": tengri.FIXED,
             "logzsol": tengri.Uniform(-0.5, 0.5),  # Per-galaxy metallicity
         },
         redshift=tengri.Fixed(0.05),  # Low-z anchor; typical for SDSS LRGs

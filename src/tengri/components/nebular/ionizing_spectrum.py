@@ -23,9 +23,6 @@ try:
 except ImportError:  # numpy < 1.26
     from numpy import trapz as _np_trapz  # type: ignore[no-redef]
 
-# Physical constants
-from tengri.utils.physics_constants import L_SUN as _LSUN
-
 # Module-level memoization for ``precompute_ionizing_params_table``.
 #
 # Same SSP → identical ionizing-parameter table. The scipy curve-fit loop
@@ -34,6 +31,22 @@ from tengri.utils.physics_constants import L_SUN as _LSUN
 # fingerprint of the SSP wavelength + metallicity grids (small, fast to
 # hash); flux identity is established by matching grids since SSP files
 # pair a unique flux cube with a unique (wave, lgmet) pair.
+#
+# The cache also persists to disk under ``<jax_cache_dir>/ionspec_tables/``,
+# keyed on a SHA-256 of the fingerprint. This matters because the scipy
+# curve-fits underlying the table aren't bit-stable across processes
+# (BLAS threading + LAPACK perturbations → coefficient differences in
+# the last few ULPs). Those coefficients then bake into the JAX trace as
+# constants, so cross-process processes produce slightly different HLO
+# modules → the persistent XLA cache misses on every Cue compile. Loading
+# a bit-identical table from disk on every process keeps the HLO stable
+# and lets the JAX persistent cache actually hit on cold-start runs.
+import hashlib as _hashlib
+import os as _os
+from pathlib import Path as _Path
+
+from tengri.utils.physics_constants import L_SUN as _LSUN
+
 _IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
 
 
@@ -45,6 +58,94 @@ def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.n
         bytes(np.asarray(ssp_wave).tobytes()),
         bytes(np.asarray(ssp_lgmet).tobytes()),
     )
+
+
+def _fingerprint_hash(key: tuple) -> str:
+    """SHA-256 of the fingerprint, hex-encoded, for use as a disk filename."""
+    h = _hashlib.sha256()
+    h.update(repr(key[:2]).encode())  # shape + dtype
+    h.update(key[2])  # raw wave bytes
+    h.update(key[3])  # raw lgmet bytes
+    return h.hexdigest()
+
+
+def _ionspec_disk_cache_dir() -> _Path:
+    """Resolve the on-disk ionspec table cache directory.
+
+    Co-locates with the JAX persistent cache so wiping one wipes the other.
+    """
+    env_dir = _os.environ.get("TENGRI_JAX_CACHE_DIR", "").strip()
+    if env_dir:
+        base = _Path(env_dir).expanduser()
+    else:
+        xdg = _os.environ.get("XDG_CACHE_HOME", "").strip()
+        base = (_Path(xdg).expanduser() if xdg else _Path.home() / ".cache") / "tengri_jax_cache"
+    out = base / "ionspec_tables"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def _load_ionspec_disk(key: tuple) -> dict | None:
+    """Load a cached ionspec table from disk if it exists, else return None."""
+    try:
+        path = _ionspec_disk_cache_dir() / f"{_fingerprint_hash(key)}.npz"
+        if not path.exists():
+            return None
+        with np.load(path) as data:
+            return {
+                "ionspec_table": data["ionspec_table"],
+                "logqion_table": data["logqion_table"],
+                "n_met": int(data["n_met"]),
+                "n_age": int(data["n_age"]),
+            }
+    except (OSError, ValueError, KeyError):
+        # Corrupted file / permission issue → treat as miss
+        return None
+
+
+def _store_ionspec_disk(key: tuple, result: dict) -> None:
+    """Persist an ionspec table to disk. Failures are silently swallowed."""
+    try:
+        path = _ionspec_disk_cache_dir() / f"{_fingerprint_hash(key)}.npz"
+        np.savez(
+            path,
+            ionspec_table=result["ionspec_table"],
+            logqion_table=result["logqion_table"],
+            n_met=np.asarray(result["n_met"]),
+            n_age=np.asarray(result["n_age"]),
+        )
+    except OSError:
+        pass
+
+
+class _single_thread_blas:
+    """Context manager forcing single-threaded BLAS / OpenMP.
+
+    The piecewise-power-law fits in :func:`precompute_ionizing_params_table`
+    use scipy / numpy linear algebra under the hood. Multi-threaded BLAS
+    introduces non-determinism (thread scheduling perturbs the last ULPs of
+    the LSQ solution), and those bits then bake into the JAX trace as
+    constants — so different processes produce different HLO modules. Pinning
+    BLAS / OpenMP to one thread for the duration of the fit loop gives
+    bit-identical coefficients across processes and is also slightly faster
+    on small (~10×80) SSP grids where the per-call overhead dominates.
+
+    Falls back to a no-op if ``threadpoolctl`` is unavailable.
+    """
+
+    def __enter__(self):
+        try:
+            from threadpoolctl import threadpool_limits
+
+            self._ctx = threadpool_limits(limits=1)
+        except ImportError:
+            self._ctx = None
+        return self
+
+    def __exit__(self, *exc):
+        if self._ctx is not None:
+            self._ctx.__exit__(*exc)
+        return False
 
 
 def _fit_segment(
@@ -387,13 +488,24 @@ def precompute_ionizing_params_table(
     code handles these gracefully via clipping and default fallback values.
 
     """
-    # Memoize: same SSP grid → identical result, but the scipy curve-fit
-    # loop below costs ~6 s and is re-entered on every ``SEDModel.build``
-    # that constructs a fresh ``CueBackend`` (see issue #416).
+    # Memoize: same SSP grid → identical result. Two-tier cache:
+    # 1. In-process dict for fast repeat builds within a single process
+    #    (introduced in #418).
+    # 2. On-disk ``.npz`` keyed on a SHA-256 of the SSP fingerprint, so
+    #    cold processes load a bit-identical table instead of re-fitting.
+    #    Without this, scipy's curve-fits perturb the coefficients by a
+    #    few ULPs each run, and those bits bake into the JAX trace as
+    #    constants → the JAX persistent compilation cache misses on every
+    #    fresh process. The single_thread_blas wrapper below removes the
+    #    remaining BLAS-threading non-determinism inside the fits.
     key = _ssp_fingerprint(ssp_wave, ssp_flux, ssp_lgmet)
     cached = _IONSPEC_TABLE_CACHE.get(key)
     if cached is not None:
         return cached
+    disk_cached = _load_ionspec_disk(key)
+    if disk_cached is not None:
+        _IONSPEC_TABLE_CACHE[key] = disk_cached
+        return disk_cached
 
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
@@ -401,30 +513,31 @@ def precompute_ionizing_params_table(
 
     wave_np = np.asarray(ssp_wave)
 
-    for im in range(n_met):
-        for ia in range(n_age):
-            flux_np = np.asarray(ssp_flux[im, ia, :])
+    with _single_thread_blas():
+        for im in range(n_met):
+            for ia in range(n_age):
+                flux_np = np.asarray(ssp_flux[im, ia, :])
 
-            # Skip if no ionizing flux
-            ionizing_mask = wave_np <= HI_LIMIT
-            if np.max(flux_np[ionizing_mask]) <= 0:
-                continue
+                # Skip if no ionizing flux
+                ionizing_mask = wave_np <= HI_LIMIT
+                if np.max(flux_np[ionizing_mask]) <= 0:
+                    continue
 
-            try:
-                result = fit_ionizing_spectrum(wave_np, flux_np)
-                ionspec_table[im, ia, 0] = result["ionspec_index1"]
-                ionspec_table[im, ia, 1] = result["ionspec_index2"]
-                ionspec_table[im, ia, 2] = result["ionspec_index3"]
-                ionspec_table[im, ia, 3] = result["ionspec_index4"]
-                ionspec_table[im, ia, 4] = result["ionspec_logLratio1"]
-                ionspec_table[im, ia, 5] = result["ionspec_logLratio2"]
-                ionspec_table[im, ia, 6] = result["ionspec_logLratio3"]
-                logqion_table[im, ia] = result["gas_logqion"]
-            except (ValueError, IndexError, RuntimeError):
-                # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
-                # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
-                # RuntimeError: scipy optimization failed to converge
-                continue
+                try:
+                    fit = fit_ionizing_spectrum(wave_np, flux_np)
+                    ionspec_table[im, ia, 0] = fit["ionspec_index1"]
+                    ionspec_table[im, ia, 1] = fit["ionspec_index2"]
+                    ionspec_table[im, ia, 2] = fit["ionspec_index3"]
+                    ionspec_table[im, ia, 3] = fit["ionspec_index4"]
+                    ionspec_table[im, ia, 4] = fit["ionspec_logLratio1"]
+                    ionspec_table[im, ia, 5] = fit["ionspec_logLratio2"]
+                    ionspec_table[im, ia, 6] = fit["ionspec_logLratio3"]
+                    logqion_table[im, ia] = fit["gas_logqion"]
+                except (ValueError, IndexError, RuntimeError):
+                    # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
+                    # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
+                    # RuntimeError: scipy optimization failed to converge
+                    continue
 
     result = {
         "ionspec_table": ionspec_table,
@@ -433,6 +546,7 @@ def precompute_ionizing_params_table(
         "n_age": n_age,
     }
     _IONSPEC_TABLE_CACHE[key] = result
+    _store_ionspec_disk(key, result)
     return result
 
 

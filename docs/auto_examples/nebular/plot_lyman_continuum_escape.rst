@@ -39,7 +39,7 @@ References
 .. [2] Steidel et al. 2018, "The Low-z Lyman Continuum Survey",
     ApJ, 869, 123
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-127
+.. GENERATED FROM PYTHON SOURCE LINES 18-121
 
 .. code-block:: Python
 
@@ -79,13 +79,7 @@ References
             "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={
-            "type": "cue",
-            "*": tengri.FIXED,
-            "neb_fesc": tengri.Uniform(0.0, 1.0),
-            "neb_logU": -2.5,
-            "neb_logZ_gas": -0.5,
-        },
+        neb={"type": "cue", "*": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0), "logU": -2.5, "logZ_gas": -0.5},
         redshift=tengri.Fixed(0.05),
     )
 

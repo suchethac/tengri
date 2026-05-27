@@ -66,7 +66,7 @@ LINE_NAMES = ["Halpha", "OIII_5007"]
 # integrates over line amplitudes (faster, but requires eline_catalog).
 
 # Load SSP data
-ssp = tengri.load_ssp()
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # Build observation: photometry + emission lines (via rest-frame spectral template)
 # Strategy: fit photometry + line EWs simultaneously. The SEDModel forward pass
@@ -136,7 +136,7 @@ truth.update(
     sfh_tsnorm_skew=0.3,  # Slight asymmetry
     dust_tau_diff=0.1,  # ISM attenuation: A_V ~ 0.2
     dust_tau_bc=0.2,  # Birth cloud: additional reddening
-    log_mstar=log_mstar_true,
+    sfh_dpl_log_peak_sfr=log_mstar_true,
 )
 
 # Mock photometry + spectrum with realistic S/N
@@ -145,10 +145,14 @@ mock_phot = model.mock(truth, snr=10.0, key=k_phot)
 flux_phot_obs = np.asarray(mock_phot.flux_obs)
 noise_phot_obs = np.asarray(mock_phot.noise)
 
-# Mock spectrum at high resolution to measure lines
+# Mock spectrum at high resolution to measure lines.
+# Build the spec-only model with the same photometry observation so that
+# `.mock(...)` (which always wants flux+noise on photometry too) doesn't trip
+# the "No filters set" guard.
 model_spec_only = tengri.SEDModel.build(
     ssp,
     observation=tengri.Observation(
+        photometry=tengri.Photometry.from_names(PHOT_BANDS),
         spectroscopy=tengri.Spectroscopy(
             wave_obs=wave_rest * (1 + z_true),
             resolution=None,

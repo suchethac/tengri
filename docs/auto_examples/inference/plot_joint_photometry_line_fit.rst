@@ -101,7 +101,7 @@ integrates over line amplitudes (faster, but requires eline_catalog).
 
 
     # Load SSP data
-    ssp = tengri.load_ssp()
+    ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
     # Build observation: photometry + emission lines (via rest-frame spectral template)
     # Strategy: fit photometry + line EWs simultaneously. The SEDModel forward pass
@@ -167,7 +167,7 @@ Truth: young, moderately dusty star-former
 H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
 [OIII] EW ~ 300 A (high excitation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 127-167
+.. GENERATED FROM PYTHON SOURCE LINES 127-171
 
 .. code-block:: Python
 
@@ -183,7 +183,7 @@ H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
         sfh_tsnorm_skew=0.3,  # Slight asymmetry
         dust_tau_diff=0.1,  # ISM attenuation: A_V ~ 0.2
         dust_tau_bc=0.2,  # Birth cloud: additional reddening
-        log_mstar=log_mstar_true,
+        sfh_dpl_log_peak_sfr=log_mstar_true,
     )
 
     # Mock photometry + spectrum with realistic S/N
@@ -192,10 +192,14 @@ H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
     flux_phot_obs = np.asarray(mock_phot.flux_obs)
     noise_phot_obs = np.asarray(mock_phot.noise)
 
-    # Mock spectrum at high resolution to measure lines
+    # Mock spectrum at high resolution to measure lines.
+    # Build the spec-only model with the same photometry observation so that
+    # `.mock(...)` (which always wants flux+noise on photometry too) doesn't trip
+    # the "No filters set" guard.
     model_spec_only = tengri.SEDModel.build(
         ssp,
         observation=tengri.Observation(
+            photometry=tengri.Photometry.from_names(PHOT_BANDS),
             spectroscopy=tengri.Spectroscopy(
                 wave_obs=wave_rest * (1 + z_true),
                 resolution=None,
@@ -212,12 +216,12 @@ H-alpha EW ~ 250 A (Schaerer 2003, young starburst)
     noise_spec_obs = np.asarray(mock_spec.noise)
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 168-170
+.. GENERATED FROM PYTHON SOURCE LINES 172-174
 
 Compare posterior widths for photo-z and dust parameters.
 Strategy: fit photometry alone (degenerate), then photometry+spectrum (tight).
 
-.. GENERATED FROM PYTHON SOURCE LINES 171-205
+.. GENERATED FROM PYTHON SOURCE LINES 175-209
 
 .. code-block:: Python
 
@@ -256,13 +260,13 @@ Strategy: fit photometry alone (degenerate), then photometry+spectrum (tight).
     )
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 206-209
+.. GENERATED FROM PYTHON SOURCE LINES 210-213
 
 Key quantities for degeneracy assessment:
 - Redshift posterior width (even though z is fixed, model photo-z sensitivity shows)
 - A_V posterior width (dust constraint)
 
-.. GENERATED FROM PYTHON SOURCE LINES 210-252
+.. GENERATED FROM PYTHON SOURCE LINES 214-256
 
 .. code-block:: Python
 
@@ -309,11 +313,11 @@ Key quantities for degeneracy assessment:
     plt.savefig("plot_joint_photometry_line_fit_posteriors.png", dpi=150, bbox_inches="tight")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 253-254
+.. GENERATED FROM PYTHON SOURCE LINES 257-258
 
 Show 2-D degeneracies in the joint fit.
 
-.. GENERATED FROM PYTHON SOURCE LINES 255-273
+.. GENERATED FROM PYTHON SOURCE LINES 259-277
 
 .. code-block:: Python
 
@@ -336,11 +340,11 @@ Show 2-D degeneracies in the joint fit.
     plt.savefig("plot_joint_photometry_line_fit_corner.png", dpi=150, bbox_inches="tight")
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 274-275
+.. GENERATED FROM PYTHON SOURCE LINES 278-279
 
 Photometry residuals
 
-.. GENERATED FROM PYTHON SOURCE LINES 276-332
+.. GENERATED FROM PYTHON SOURCE LINES 280-336
 
 .. code-block:: Python
 

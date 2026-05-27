@@ -555,6 +555,37 @@ class TestEdgeCases:
         assert isinstance(params, Parameters)
         assert "redshift" in params.all_params
 
+    def test_full_prefix_override_under_star_fixed(self):
+        """Issue #424: per-param override under '*': FIXED must accept the
+        full-prefixed key (``neb_logU``) as well as the short form
+        (``logU``). Previously the full-prefix form was silently dropped,
+        leaving the default in place — a silent footgun for new users.
+        """
+        # Short form (always worked).
+        short = parse_groups(
+            neb={"type": "cue", "*": FIXED, "logU": Fixed(-2.5)},
+            redshift=Fixed(0.01),
+        )
+        # Full-prefix form (regressed silently before #424).
+        full = parse_groups(
+            neb={"type": "cue", "*": FIXED, "neb_logU": Fixed(-2.5)},
+            redshift=Fixed(0.01),
+        )
+        assert float(short._distributions["neb_logU"].value) == -2.5
+        assert float(full._distributions["neb_logU"].value) == -2.5
+
+    def test_full_prefix_override_in_sfh_group(self):
+        """Full-prefixed SFH keys (``sfh_dpl_alpha``) also resolve."""
+        params = parse_groups(
+            sfh={
+                "type": "dpl",
+                "*": FIXED,
+                "sfh_dpl_alpha": Fixed(7.0),
+            },
+            redshift=Fixed(0.1),
+        )
+        assert float(params._distributions["sfh_dpl_alpha"].value) == 7.0
+
     def test_multiple_dust_law_params(self):
         """dust with both law_bc and law_diff should work."""
         params = parse_groups(

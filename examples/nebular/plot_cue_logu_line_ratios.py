@@ -45,8 +45,8 @@ model = tengri.SEDModel.build(
     neb={
         "type": "cue",
         "*": tengri.FIXED,
-        "neb_logZ_gas": -0.5,
-        "neb_logU": tengri.Uniform(-4.0, -1.0),
+        "logZ_gas": -0.5,
+        "logU": tengri.Uniform(-4.0, -1.0),
     },
     redshift=tengri.Fixed(0.05),
 )

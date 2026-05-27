@@ -41,7 +41,7 @@ model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
     dust=DUST,
-    neb={"type": "cue", "*": tengri.FIXED, "neb_fesc_lya": tengri.Uniform(0.0, 1.0)},
+    neb={"type": "cue", "*": tengri.FIXED, "fesc_lya": tengri.Uniform(0.0, 1.0)},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -89,24 +89,6 @@
    "name": "linspace"
   }
  ],
- "np.log": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "log"
-  }
- ],
- "np.max": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "max"
-  }
- ],
  "np.ndarray": [
   {
    "is_class": false,

@@ -31,7 +31,7 @@ Intrinsic dust reddening ``ebv`` (E(B−V)) reddens the continuum via
 extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from
 unobscured type-1 QSO colours to moderately dust-enshrouded systems.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-79
+.. GENERATED FROM PYTHON SOURCE LINES 10-80
 
 .. code-block:: Python
 
@@ -73,6 +73,7 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "agn_frac": 1.0,
             "log_lbol": 11.0,
             "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
             "grahsp_ebv": tengri.Uniform(0.0, 0.4),  # Bugfix: promote swept param to FREE

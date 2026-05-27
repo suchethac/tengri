@@ -64,7 +64,7 @@ Shows [OIII] and H-alpha regions on a young starburst.
             "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
+        neb={"type": "cue", "*": tengri.FIXED, "logU": tengri.Fixed(-3.0)},
         redshift=tengri.Fixed(0.0),
     )
 

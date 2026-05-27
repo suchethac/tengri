@@ -394,23 +394,6 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Minimum radiation field intensity U_{\min} controls diffuse dust heating — higher U_{\min} → hotter dust → FIR peak shifted blueward. DL07 (Draine &amp; Li 2007) and THEMIS (Jones et al. 2017) are overlaid so that their response to U_{\min} can be compared on the same axes.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_umin_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_umin_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">U_min sweep: DL07 vs THEMIS FIR peak migration</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Dust re-radiates absorbed starlight across a broad range of temperatures: colder dust (e.g., diffuse cirrus at ~20 K) peaks in the far-infrared (~250 μm), while warmer dust grains (e.g., starburst regions at ~40 K) peak at shorter wavelengths (~50–100 μm).">
 
 .. only:: html
@@ -458,6 +441,5 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_themis_alpha_sweep
    /auto_examples/dust_emission/plot_themis_qhac_sweep
    /auto_examples/dust_emission/plot_umin_cross_library
-   /auto_examples/dust_emission/plot_umin_sweep
    /auto_examples/dust_emission/plot_warm_cold_dust_decomposition
 

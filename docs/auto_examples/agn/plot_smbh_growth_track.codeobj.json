@@ -107,6 +107,15 @@
    "name": "build"
   }
  ],
+ "tengri.Uniform": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Uniform"
+  }
+ ],
  "tengri.load_ssp": [
   {
    "is_class": false,
