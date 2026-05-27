@@ -147,12 +147,23 @@ def _interpolate_and_normalize(
     point: tuple,
     l_scale: float,
 ) -> jnp.ndarray:
-    """Interpolate a template grid and normalize to physical luminosity.
+    r"""Interpolate a template grid and normalize to physical L_ν.
+
+    SKIRTOR v3 templates are stored as L_λ-like (the download script does
+    ``disk /= wl`` and normalises by ``trapezoid(dust, wl)`` — issue #459).
+    The original implementation integrated the L_λ array against the
+    frequency grid and treated the output as L_ν, leaving the returned
+    array with L_λ shape — so νL_ν (the visible torus IR bump) peaked at
+    ~5 µm instead of the SKIRTOR 30–50 µm thermal bump.
+
+    Fix: normalise the bolometric integral in the wavelength variable
+    (matching the convention used at template-build time) and convert
+    L_λ → L_ν at the end via L_ν = L_λ × λ²/c.
 
     Parameters
     ----------
     grid_jax : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
-        Template grid. [dimensionless, per unit luminosity]
+        L_λ-like template grid [erg/s/Å, normalised per unit bolometric].
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
@@ -164,7 +175,7 @@ def _interpolate_and_normalize(
     point : tuple
         (tau, p, q, oa, cos_inc) query point.
     l_scale : float
-        Luminosity scale factor [erg s^-1].
+        Bolometric luminosity scale factor [erg/s].
 
     Returns
     -------
@@ -174,14 +185,22 @@ def _interpolate_and_normalize(
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp.interp`` and ``jax.vmap``.
+
+    **Citation**: matches CIGALE skirtor2016 processing (see
+    ``scripts/download_skirtor_templates.py``).
     """
     template = interp_nd_triweight(grid_jax, axes, edges, point)
-    sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
-    nu = _wavelength_to_nu(wavelength)
-    idx_sort = jnp.argsort(nu)
-    integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
-    return l_scale * sed / integral_safe
+    # Bolometric integral on the *template* wavelength grid (full UV–FIR
+    # coverage). Using the user wave grid would clip the FIR tail and
+    # over-normalise on truncated grids; trapezoid in λ matches the
+    # download script's normalisation convention.
+    integral_lam = jnp.trapezoid(template, wave_grid)
+    integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
+    template_lam = l_scale * template / integral_safe  # erg/s/Å
+    sed_lam = jnp.interp(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
+    # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
+    c_aa_per_s = 2.99792458e18
+    return sed_lam * wavelength**2 / c_aa_per_s
 
 
 def _compute_intrinsic_30deg_luminosity(
