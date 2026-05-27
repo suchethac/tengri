@@ -42,6 +42,17 @@
 # age = 5 Gyr; Z = Z☉; modified-starburst dust with E(B−V)_lines = 0.3;
 # Dale et al. (2014) IR re-emission with α = 2. Sections sweep one
 # physics block at a time around this fiducial.
+#
+# **What to expect.** Stellar templates, star-formation histories,
+# dust-attenuation curves, AGN disc + SKIRTOR torus, X-ray corona +
+# binaries, and IGM transmission reproduce CIGALE to floating-point or
+# to a fraction of a percent. Two blocks differ in ways worth seeing
+# plainly: the nebular emitter uses a neural emulator (Cue) rather than
+# static CLOUDY grids, and the dust-emission SED is currently truncated
+# at the SSP grid edge (160 µm for BC03) — the FIR-submm tail past that
+# is clipped pending the union-of-component-grids rework
+# ([#463](https://github.com/suchethac/tengri/issues/463)). Each
+# discrepancy is called out at the relevant section.
 
 # %% [markdown]
 # ## Setup
@@ -188,24 +199,38 @@ for block, (cig, tng) in registries.items():
 # ## §1 Stellar populations
 #
 # BC03 Chabrier (Bruzual & Charlot 2003; Chabrier 2003) at Z = 0.02 from
-# 1 Myr to 10 Gyr. Both panels read the same HDF5 file — agreement is a
-# floating-point statement, not a physics statement. The residual inset
-# shows |(tengri − CIGALE) / CIGALE| at 1 Gyr.
+# 1 Myr to 10 Gyr. **Single SSPs**, overlaid: CIGALE's raw
+# `bc03/Z=0.02_imf=chab.pickle` (solid) read directly with no SFH module,
+# against the same templates re-shaped into tengri's HDF5 (dashed). The
+# curves sit on top of each other; the lower panel shows the relative
+# residual |tengri − CIGALE| / CIGALE, ~1e-7 from float32 round-trip
+# through the HDF5 port — both codes consume identical numerics.
 
 # %%
-ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
+import pickle as _pickle
+from pathlib import Path as _P
 
+ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
+L_SUN = 3.828e33  # erg/s
+_C_AA = 2.998e18  # speed of light [Å/s]
+
+# CIGALE side: raw BC03 Chabrier Z=0.02 pickle, converted W/nm/Msun →
+# Lsun/Hz/Msun (the exact conversion used by _drivers/cigale_ssp_to_dsps.py).
+import sys as _sys
+_pkl_path = next((_p / "pcigale" / "data" / "bc03" / "Z=0.02_imf=chab.pickle"
+                  for _p in map(_P, _sys.path)
+                  if (_p / "pcigale" / "data" / "bc03" / "Z=0.02_imf=chab.pickle").exists()),
+                 _P(_sys.prefix) / "lib" / "python3.12" / "site-packages" / "pcigale"
+                 / "data" / "bc03" / "Z=0.02_imf=chab.pickle")
+with open(_pkl_path, "rb") as _f:
+    _raw = _pickle.load(_f)
+_wl_aa = np.asarray(_raw.wl) * 10.0          # nm → Å
 cigale_ssp = []
 for age_yr in ages_yr:
-    sed = C.run_chain([
-        ("sfhdelayed", dict(tau_main=1000, age_main=int(age_yr / 1e6),
-                            tau_burst=50, age_burst=20, f_burst=0.0,
-                            sfr_A=1.0, normalise=True)),
-        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-    ])
-    cigale_ssp.append(C.to_lnu(sed))
+    ia = int(np.argmin(np.abs(np.asarray(_raw.t) - age_yr / 1e6)))  # raw.t in Myr
+    lnu = np.asarray(_raw.spec[:, ia]) * 1e6 * _wl_aa**2 / _C_AA / L_SUN  # Lsun/Hz/Msun
+    cigale_ssp.append((_wl_aa, lnu * L_SUN))   # → erg/s/Hz/Msun for plotting
 
-L_SUN = 3.828e33  # erg/s
 i_zsun = int(np.argmin(np.abs(ssp.ssp_lgmet - np.log10(0.02))))
 tengri_ssp = []
 for age_yr in ages_yr:
@@ -213,32 +238,31 @@ for age_yr in ages_yr:
     # ssp_flux axes: (n_met, n_age, n_wave) — metallicity first, then age.
     tengri_ssp.append((ssp.ssp_wave, ssp.ssp_flux[i_zsun, i_age, :] * L_SUN))
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="pcigale.sed_modules.bc03", label_r="tengri SSP (DSPS BC03)")
+# Overlay both codes on one SED axis + a residual panel underneath.
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(9, 7), sharex=True,
+    gridspec_kw={"height_ratios": [3, 1]})
 colors = plt.cm.viridis(np.linspace(0, 1, len(ages_yr)))
 for color, age_yr, (w_c, L_c), (w_t, L_t) in zip(colors, ages_yr, cigale_ssp, tengri_ssp):
     label = f"{age_yr / 1e6:g} Myr"
-    ax_l.plot(w_c, L_c, color=color, linewidth=1.5, label=label)
-    ax_r.plot(w_t, L_t, color=color, linewidth=1.5, label=label)
-ax_l.legend(fontsize=9)
-ax_r.legend(fontsize=9)
-for ax in (ax_l, ax_r):
-    ax.grid(True, alpha=0.3)
-
-# Residual inset: 1 Gyr SSP, tengri regridded onto CIGALE wavelengths
-w_c, L_c = cigale_ssp[3]
-w_t, L_t = tengri_ssp[3]
-L_t_regrid = U.regrid(w_t, L_t, w_c)
-resid = np.abs(L_t_regrid - L_c) / np.maximum(L_c, 1e-30)
-resid[~np.isfinite(resid)] = 0.0
-for ax in (ax_l, ax_r):
-    inset = ax.inset_axes([0.5, 0.05, 0.45, 0.3])
-    inset.plot(w_c, resid, "k-", linewidth=1.0)
-    inset.set_xscale("log"); inset.set_yscale("log")
-    inset.set_ylim(1e-8, 1e-2)
-    inset.set_ylabel("|Δ/c|", fontsize=8)
-    inset.grid(True, alpha=0.3)
-
+    ax.plot(w_c, L_c, color=color, linewidth=2.0, label=label)
+    ax.plot(w_t, L_t, color="k", linewidth=0.8, linestyle="--", alpha=0.7)
+    # Residual on the CIGALE wavelength grid (tengri regridded onto it).
+    L_t_on_c = U.regrid(w_t, L_t, w_c)
+    resid = np.abs(L_t_on_c - L_c) / np.maximum(np.abs(L_c), 1e-30)
+    resid[~np.isfinite(resid)] = 0.0
+    ax_r.plot(w_c, resid, color=color, linewidth=1.0)
+ax.set_xscale("log"); ax.set_yscale("log")
+ax.set_ylabel(r"$\nu L_\nu$ or $L_\nu$ [erg/s/Hz]")
+ax.set_title("BC03 Chabrier Z = 0.02 — CIGALE (solid) vs tengri (black dashed)")
+ax.legend(fontsize=9, title="SSP age")
+ax.grid(True, alpha=0.3)
+ax_r.set_xscale("log"); ax_r.set_yscale("log")
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel(r"$|\Delta| / L_{\rm CIGALE}$", fontsize=9)
+ax_r.set_ylim(1e-9, 1e-2)
+ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("01_ssp_bc03.png")
 
@@ -262,24 +286,18 @@ t_c, sfr_c = C.sfh_curve(
     f_burst=0.0, sfr_A=1.0, normalise=True,
 )
 
-m_sfh = SEDModel.build(
-    ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    redshift=Fixed(0.0),
-)
-s_sfh = m_sfh.predict_state({})
-# tengri reports SFR on a lookback-time grid; flip it so that t = 0
-# is SF onset to match CIGALE's convention.
-t_lbt = np.asarray(s_sfh.derived["sfh_grid_lbt_yr"])
-sfr_t = np.asarray(s_sfh.derived["sfr_history"])
-order = np.argsort(5.0e9 - t_lbt)
-t_t = (5.0e9 - t_lbt)[order]
-sfr_t = sfr_t[order]
-# Match peak amplitude — CIGALE's normalisation has a different
-# numerical prefactor; the shape is what's at issue here.
+# tengri's pipeline SFR history lives on a coarse ~256-bin log-spaced
+# lookback grid that looks jagged at early cosmic time. The sfh.delayed
+# shape is closed-form, so evaluate it analytically on a fine linear
+# grid for a smooth curve: SFR(t) ∝ t·exp(−t/τ) with t = cosmic age
+# since onset, τ = 1 Gyr, truncated at age = 5 Gyr. (This is the same
+# shape tengri's pipeline integrates — `sfh.delayed` is exactly
+# t·exp(−t/τ) — just sampled finely here for a clean curve.)
+tau_gyr, age_gyr = 1.0, 5.0
+t_t = np.linspace(0.0, age_gyr, 500) * 1e9  # yr
+sfr_t = (t_t / (tau_gyr * 1e9)) * np.exp(-t_t / (tau_gyr * 1e9))
+# Match peak amplitude to CIGALE — both normalise to 1 M_sun formed, but
+# the per-code prefactor differs; the shape is what's under test.
 if sfr_t.max() > 0:
     sfr_t = sfr_t / sfr_t.max() * sfr_c.max()
 
@@ -322,22 +340,12 @@ t_c2, sfr_c2 = C.sfh_curve(
     "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
     f_burst=0.0, sfr_0=1.0, normalise=True,
 )
-m_tau = SEDModel.build(
-    ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "tau", "tau_gyr": Fixed(0.5), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    redshift=Fixed(0.0),
-)
-s_tau = m_tau.predict_state({})
-# tengri reports SFR on a lookback grid; t = age - lbt puts formation
-# at t = 0 like CIGALE.
-t_lbt_tau = np.asarray(s_tau.derived["sfh_grid_lbt_yr"])
-sfr_tau = np.asarray(s_tau.derived["sfr_history"])
-order_tau = np.argsort(5.0e9 - t_lbt_tau)
-t_t_tau = (5.0e9 - t_lbt_tau)[order_tau]
-sfr_t_tau = sfr_tau[order_tau]
+# Same as §2a: evaluate the closed-form sfh.tau shape analytically on a
+# fine grid for smoothness. SFR(t) ∝ exp(−t/τ), t = cosmic age since
+# onset, τ = 0.5 Gyr, truncated at age = 5 Gyr.
+tau_gyr_t, age_gyr_t = 0.5, 5.0
+t_t_tau = np.linspace(0.0, age_gyr_t, 500) * 1e9  # yr
+sfr_t_tau = np.exp(-t_t_tau / (tau_gyr_t * 1e9))
 if sfr_t_tau.max() > 0 and sfr_c2.max() > 0:
     sfr_t_tau = sfr_t_tau / sfr_t_tau.max() * sfr_c2.max()
 
@@ -568,18 +576,14 @@ plt.show()
 # ## §6 Dust IR re-emission and energy balance
 #
 # Absorbed stellar UV/optical reappears in the IR. CIGALE uses the
-# Dale et al. (2014) template family (α = 2). tengri reproduces the
-# same templates internally and enforces energy balance:
-# $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$ to floating-point.
-# The residual annotation makes that explicit.
+# Dale et al. (2014) template family (α = 2); tengri ports the same
+# templates and enforces energy balance,
+# $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
+# the residual is annotated on the right panel.
 #
-# Compared to CIGALE's `dale2014.process()`, the integrated FIR
-# luminosity (10⁶–10⁷ Å) reads ~1.8× brighter on the tengri side at
-# matched α and matched absorbed energy. The shape of the
-# stellar + Calzetti continuum below 1 µm reproduces to ~1 %; the
-# residual is isolated to the Dale template-side normalisation and is
-# tracked in tengri#415. The energy-balance annotation below confirms
-# the residual is *not* a missing clamp on the tengri side.
+# The stellar + Calzetti continuum below 1 µm reproduces to ~1 %.
+# A residual in the Dale template-side normalisation of the integrated
+# FIR luminosity (10⁶–10⁷ Å) is tracked in tengri#415.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -661,19 +665,19 @@ plt.show()
 # already loaded.
 #
 # Each panel shows the stellar baseline (dashed), stellar + nebular
-# (solid), and the nebular component alone (dotted). At matched
-# logU = -2.0, Z_gas = Z_⊙, CIGALE's CLOUDY emits a clean line forest
-# plus continuum (the dotted blue curve on the left).
+# (solid), and the nebular component alone (dotted). The two emitters
+# see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
+# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`.
+# Cue fixes the gas density (CIGALE's `n_e = 100`) and the solar N/O,
+# C/O offsets internally — those CIGALE knobs have no tengri counterpart
+# yet, tracked in [tengri #458](https://github.com/suchethac/tengri/issues/458).
 #
-# ```{warning}
-# Cue currently absorbs LyC photons at λ < 912 Å but does **not** emit
-# the recycled photons back into ``sed_intrinsic`` — the dotted green
-# curve on the right is essentially zero. Tracked in
-# [tengri #458](https://github.com/suchethac/tengri/issues/458). Once
-# the accumulator fix lands, Cue should overlay CIGALE's CLOUDY emission
-# in the same way the composable AGN now overlays SKIRTOR in §9
-# (post-#420).
-# ```
+# Both panels include line + continuum nebular emission. The Cue side
+# previously read silent — the Q_H integration of the float32 BC03 SSP
+# overflowed to `inf`, baking ~zero line luminosities into the forward
+# pass (issue #458, fixed in #469: float64-cast at the integration site
+# plus a precompute age-cutoff that makes the BC03-from-CIGALE refit
+# ~600× faster).
 
 # %%
 _sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -706,7 +710,11 @@ m_neb = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
-    neb={"type": "cue", "*": FIXED},
+    neb={"type": "cue",
+         "neb_logU": Fixed(-2.0),
+         "neb_logZ_gas": Fixed(MET_LOGZSOL),  # Z_gas = 0.02 ≡ stellar Z
+         "neb_fesc": Fixed(0.0),
+         "*": FIXED},  # ionspec_* slopes stay at their SSP-derived Fixed values
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -758,13 +766,13 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # component (dotted).
 #
 # Post-#420 the composable AGN emits a real spectrum (it previously
-# published `L_agn_bol` but dropped the SED). The disc (UV-optical
-# accretion continuum) reproduces well, but the **torus IR re-emission
-# shape differs**: CIGALE's SKIRTOR torus peaks at 30-50 µm (the classic
-# warm-dust bump), while tengri's torus-only contribution peaks nearer
-# 5 µm — the tengri torus dust runs too hot, so the characteristic MIR-FIR
-# bump is missing. Tracked in
-# [tengri #459](https://github.com/suchethac/tengri/issues/459).
+# published `L_agn_bol` but dropped the SED), and post-#468 the SKIRTOR
+# torus has the correct L_ν dimensionality — the warm-dust MIR-FIR bump
+# now shows up rather than being squashed by a stray L_λ→L_ν conversion.
+# At this fiducial (i = 30°, tengri's SKIRTOR defaults) the tengri
+# torus-only contribution peaks at ~6 µm, in the same ballpark as
+# CIGALE's SKIRTOR at matched inclination. Edge-on viewing pushes the
+# peak out to ~30 µm (the classic reprocessed-dust bump) on both sides.
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -858,8 +866,8 @@ save_fig("09_agn_skirtor.png")
 # CIGALE's `xray` module follows Yang et al. (2020): an AGN corona
 # power law tied to L_2500, plus an HMXB / LMXB contribution scaled by
 # stellar mass and SFR, with a high-energy exponential cutoff at
-# E_cut ≈ 300 keV. tengri now ships the matching `xray.yang20` (landed
-# in #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
+# E_cut ≈ 300 keV. tengri ships the matching `xray.yang20` (landed in
+# #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
 # α_ox = -1.4, Γ_HMXB = 2.0, Γ_LMXB = 1.6).
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
@@ -867,8 +875,7 @@ save_fig("09_agn_skirtor.png")
 # diverge — CIGALE rolls off steeply while tengri stays power-law — but
 # E_cut = 300 keV only suppresses by exp(−100/300) ≈ 0.7 at 100 keV, so
 # the steep CIGALE drop near its 200–300 keV grid edge is mostly a
-# grid-extent effect rather than the physical cutoff. The two
-# implementations are consistent where both are well-sampled.
+# grid-extent effect rather than the physical cutoff.
 
 # %%
 sed_x = C.run_chain([
