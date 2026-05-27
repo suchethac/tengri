@@ -751,16 +751,20 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # %% [markdown]
 # ## §9 AGN
 #
-# CIGALE's `skirtor2016` torus library is plotted on the left as the
-# AGN-only contribution at viewing angle i = 30°, τ_9.7 = 7.
+# CIGALE's `skirtor2016` torus library (Stalevski+2016) on the left vs
+# tengri's composable AGN with the same SKIRTOR torus on the right, both
+# at viewing angle i = 30°, τ_9.7 = 7. Each panel shows the stellar+dust
+# baseline (dashed), the full SED with AGN (solid), and the AGN-only
+# component (dotted).
 #
-# On the right, the equivalent tengri composable AGN
-# (`agn = {type: composable, disc: multicolor, torus: skirtor, ...}`)
-# is built with `agn_log_lbol = 10` (≈ L_sun × 10¹⁰). The pipeline
-# *publishes* `L_agn_bol` correctly through `predict_state.derived`,
-# but the AGN spectrum is currently dropped before it reaches
-# `predict_rest_sed` — so the right panel only shows the stellar+dust
-# baseline. Tracked in tengri#417.
+# Post-#420 the composable AGN emits a real spectrum (it previously
+# published `L_agn_bol` but dropped the SED). The disc (UV-optical
+# accretion continuum) reproduces well, but the **torus IR re-emission
+# shape differs**: CIGALE's SKIRTOR torus peaks at 30-50 µm (the classic
+# warm-dust bump), while tengri's torus-only contribution peaks nearer
+# 5 µm — the tengri torus dust runs too hot, so the characteristic MIR-FIR
+# bump is missing. Tracked in
+# [tengri #459](https://github.com/suchethac/tengri/issues/459).
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
