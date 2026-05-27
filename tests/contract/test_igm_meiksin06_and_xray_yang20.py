@@ -77,7 +77,10 @@ def test_meiksin06_jit_and_grad_safe():
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp()
+    try:
+        return tengri.load_ssp()
+    except FileNotFoundError as exc:
+        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
 
 
 def test_meiksin06_builds_through_grammar(ssp):

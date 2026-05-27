@@ -44,7 +44,10 @@ def _lnu_integrate(L_nu: np.ndarray, wave: np.ndarray, wmin: float, wmax: float)
 
 @pytest.fixture(scope="module")
 def intrinsic_sed():
-    ssp = tengri.load_ssp()
+    try:
+        ssp = tengri.load_ssp()
+    except FileNotFoundError as exc:
+        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},

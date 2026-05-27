@@ -32,7 +32,10 @@ def test_schreiber2016_listed():
 
 def test_schreiber2016_builds_and_balances():
     """Acceptance #2+#3: end-to-end build + energy-balance."""
-    ssp = tengri.load_ssp()
+    try:
+        ssp = tengri.load_ssp()
+    except FileNotFoundError as exc:
+        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
 
     m = tengri.SEDModel.build(
         ssp,

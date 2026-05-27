@@ -26,7 +26,10 @@ pytestmark = pytest.mark.contract
 
 @pytest.fixture(scope="module")
 def model():
-    ssp = tengri.load_ssp()
+    try:
+        ssp = tengri.load_ssp()
+    except FileNotFoundError as exc:
+        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
     obs = tengri.Observation(
         photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     )
