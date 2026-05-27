@@ -18,22 +18,19 @@
 .. _sphx_glr_auto_examples_nebular_plot_lyman_continuum_escape.py:
 
 
-Lyman continuum escape fraction effect on ionizing photons
-==========================================================
+Lyman-continuum escape fraction reshapes the SED around the 912 A edge
+=======================================================================
 
 .. image:: images/sphx_glr_plot_lyman_continuum_escape_001.png
    :alt: plot lyman continuum escape
    :class: sphx-glr-single-img
 
 
-The Lyman continuum (λ < 912 Å rest) is the primary source of ionizing photons
-for nebular emission. Escape fraction ``f_esc`` sets the fraction of ionizing
-photons that escape the ISM without being absorbed. Higher ``f_esc`` increases
-ionizing photon loss and suppresses nebular line emission.
-
-This example focuses on the LyC region (rest 800–1300 Å) to clearly show
-how ionizing photon escape changes the SED around the Lyman edge for a
-star-forming galaxy at z = 0.05.
+We zoom on the Lyman-continuum region (rest 800-1300 A) and sweep
+the escape fraction f_esc to show how the 912 A discontinuity
+deepens as more ionising photons leave the ISM unabsorbed. Companion
+to ``plot_fesc_sweep.py``, which projects the same physics into
+optical line-ratio diagnostics.
 
 References
 ----------
@@ -42,43 +39,14 @@ References
 .. [2] Steidel et al. 2018, "The Low-z Lyman Continuum Survey",
     ApJ, 869, 123
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-112
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_lyman_continuum_escape_001.png
-   :alt: plot lyman continuum escape
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_lyman_continuum_escape_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Saved plot_lyman_continuum_escape.png
-    f_esc=0.0: LyC/non-LyC flux ratio = 0.00
-      Mean LyC sed: 0.000e+00, Mean non-LyC sed: 2.135e+29
-    f_esc=0.1: LyC/non-LyC flux ratio = 0.00
-      Mean LyC sed: 7.212e+22, Mean non-LyC sed: 2.135e+29
-    f_esc=0.3: LyC/non-LyC flux ratio = 0.00
-      Mean LyC sed: 2.164e+23, Mean non-LyC sed: 2.135e+29
-    f_esc=0.5: LyC/non-LyC flux ratio = 0.00
-      Mean LyC sed: 3.606e+23, Mean non-LyC sed: 2.135e+29
-    f_esc=0.7: LyC/non-LyC flux ratio = 0.00
-      Mean LyC sed: 5.049e+23, Mean non-LyC sed: 2.135e+29
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 18-127
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -108,10 +76,16 @@ References
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_fesc": tengri.Uniform(0.0, 1.0), "neb_logU": -2.5, "neb_logZ_gas": -0.5},
+        neb={
+            "type": "cue",
+            "*": tengri.FIXED,
+            "neb_fesc": tengri.Uniform(0.0, 1.0),
+            "neb_logU": -2.5,
+            "neb_logZ_gas": -0.5,
+        },
         redshift=tengri.Fixed(0.05),
     )
 
@@ -139,7 +113,13 @@ References
         nu = 2.998e18 / wave_obs  # frequency in Hz
         nu_l_nu = nu * sed
 
-        ax.loglog(wave_obs, nu_l_nu, color=cmap(norm(fesc)), lw=1.4, label=f"$f_{{\\mathrm{{esc}}}} = {fesc:.1f}$")
+        ax.loglog(
+            wave_obs,
+            nu_l_nu,
+            color=cmap(norm(fesc)),
+            lw=1.4,
+            label=f"$f_{{\\mathrm{{esc}}}} = {fesc:.1f}$",
+        )
 
     # Set limits to focus on Lyman continuum and edge region (obs 840–1350 Å, rest-frame equivalent at z=0.05)
     ax.set_xlim(840, 1350)
@@ -169,12 +149,9 @@ References
         if len(above_edge) > 0 and len(below_edge) > 0:
             ratio = np.mean(below_edge) / np.mean(above_edge)
             print(f"f_esc={fesc:.1f}: LyC/non-LyC flux ratio = {ratio:.2f}")
-            print(f"  Mean LyC sed: {np.mean(below_edge):.3e}, Mean non-LyC sed: {np.mean(above_edge):.3e}")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.680 seconds)
+            print(
+                f"  Mean LyC sed: {np.mean(below_edge):.3e}, Mean non-LyC sed: {np.mean(above_edge):.3e}"
+            )
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyman_continuum_escape.py:

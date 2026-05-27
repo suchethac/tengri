@@ -19,12 +19,6 @@
 
 
 Mock JWST NIRSpec G395M spectrum of a z=7 star-forming galaxy
-==============================================================
-
-.. image:: images/sphx_glr_plot_jwst_nirspec_high_z_spectrum_001.png
-   :alt: plot jwst nirspec high z spectrum
-   :class: sphx-glr-single-img
-
 
 High-redshift star-forming galaxy with strong rest-frame UV and optical
 emission lines redshifted into the JWST NIRSpec G395M window (2.9–5.1 μm).
@@ -35,38 +29,18 @@ Demonstrates redshift-induced line migration and relative strength in
 the high-z star-forming regime, useful for planning JWST observations
 at z ≳ 6.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-128
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_jwst_nirspec_high_z_spectrum_001.png
-   :alt: plot jwst nirspec high z spectrum
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_jwst_nirspec_high_z_spectrum_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Saved: plot_jwst_nirspec_high_z_spectrum.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 13-145
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -86,10 +60,15 @@ at z ≳ 6.
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED,
-             "tau_gyr": 0.05, "log_peak_sfr": 1.8, "alpha": 3.5, "beta": 2.2},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.08, "tau_bc": 0.15},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "tau_gyr": 0.05,
+            "log_total_mass": 10.0,
+            "alpha": 3.5,
+            "beta": 2.2,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.08, "tau_bc": 0.15},
         neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -1.0, "logU": -2.0},
         redshift=tengri.Fixed(7.0),
     )
@@ -162,11 +141,21 @@ at z ≳ 6.
             # Label with rest wavelength, staggering height for readability
             y_pos = ymax * (0.82 + 0.08 * (hash(lam_rest) % 3))
             ax.text(
-                lam_obs_um, y_pos,
+                lam_obs_um,
+                y_pos,
                 f"{line_name}\n({lam_rest:.1f} Å)",
-                fontsize=7, color="C1", ha="center", va="top",
-                rotation=0, bbox=dict(boxstyle="round,pad=0.3", facecolor="white",
-                                       edgecolor="C1", alpha=0.8, linewidth=0.5)
+                fontsize=7,
+                color="C1",
+                ha="center",
+                va="top",
+                rotation=0,
+                bbox=dict(
+                    boxstyle="round,pad=0.3",
+                    facecolor="white",
+                    edgecolor="C1",
+                    alpha=0.8,
+                    linewidth=0.5,
+                ),
             )
 
     ax.set_xlim(2.9, 5.1)
@@ -176,11 +165,6 @@ at z ≳ 6.
 
     plt.savefig("plot_jwst_nirspec_high_z_spectrum.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_jwst_nirspec_high_z_spectrum.png")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.584 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_jwst_nirspec_high_z_spectrum.py:

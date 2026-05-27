@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_photometry:
 
@@ -17,6 +17,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The 4000 Å break is a sharp discontinuity in the stellar continuum at the boundary between the Balmer and Paschen series, caused by hydrogen Lyman absorption blanketing in the overlying atmosphere. In the rest frame it sits at 4000 Å for all galaxies. In the observer frame, the break shifts to longer wavelengths with increasing redshift: z × 4000 Å. This is why different photometric bands probe the break at different redshifts — the fundamental principle behind photo-z estimation and dust/age degeneracies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_balmer_break_redshift_evolution_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_balmer_break_redshift_evolution`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Balmer break (4000 Å) position in observed-frame filters vs redshift</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="How does a galaxy&#x27;s location in colour–colour space evolve with redshift? We compute SDSS g − r and r − z colours for two galaxy populations — a young star-forming and an old quiescent — across z = 0 to 3, with arrows marking the integer redshift stops. This is the reference picture for photometric redshift classifiers and for stellar-template grids.">
 
 .. only:: html
@@ -29,6 +46,23 @@ Filter curves and photometric fitting.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Photometric colour tracks vs redshift</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="How does the observed photometric flux of a FIXED-luminosity galaxy decline with redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 Msun/yr) across z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing the three physical effects:">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_cosmic_dimming_observed_flux_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_cosmic_dimming_observed_flux`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cosmic dimming and K-correction with redshift</div>
     </div>
 
 
@@ -51,7 +85,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare filter coverage from three different photometric surveys on the same mock galaxy SED — SDSS (optical ugriz), 2MASS (NIR JHKs), and HST (UV/optical ACS). Demonstrates how filter placement controls which spectral features are captured. Each panel overlays the filter throughputs (orange) on the same underlying SED (blue).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The same star-forming galaxy SED is intercepted by three different filter sets — SDSS ugriz (optical), 2MASS JHKs (near-infrared), and HST ACS F435W/F606W/F814W (UV-optical). Each panel overlays the survey&#x27;s throughputs on the shared SED so the reader sees, at a glance, which spectral features (the 4000-Å break, H-alpha + [N II], the 1.6-um stellar bump) fall inside each band.">
 
 .. only:: html
 
@@ -62,7 +96,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Filter Set Comparison</div>
+      <div class="sphx-glr-thumbnail-title">Filter placement decides which spectral features a survey can see</div>
     </div>
 
 
@@ -102,6 +136,23 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="How do K-corrections vary with redshift for different galaxy populations? K-corrections quantify the shift in filter response as galaxies move to higher redshifts: K(z) = −2.5 log₁₀[(1+z) × F_ν(z) / F_ν(0)] for a fixed rest-frame filter. We compute K(z) for the SDSS r-band across four galaxy types — young star-forming, old star-forming, red-sequence elliptical, and post-starburst — from z = 0.01 to z = 2.0. This illustrates why stellar mass measurements require careful K-corrections at high redshift and why colour-matched template sets dominate photometric redshift algorithms.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_k_correction_grid_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_k_correction_grid`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">K-corrections as a function of redshift for different SED types</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The NUV−r colour is a sensitive probe of stellar age in galaxies. We show how a single-burst star formation history (tsnorm, truncated-skew-normal) evolves across the GALEX green valley (NUV−r ≈ 4–5 mag) as the stellar population ages from 0.05 to 5.5 Gyr. The colour exhibits a sharp discontinuity as the stellar population cools through the transition between young, UV-bright stars and older, redder populations.">
 
 .. only:: html
@@ -119,7 +170,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generate a mock galaxy with SDSS ugriz photometry and fit it using tengri&#x27;s variational inference. Shows observed vs model photometry with error bars and residuals.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A higher-redshift counterpart to the SDSS quickstart fit. We mock JWST NIRCam wide-band photometry of a star-forming galaxy at z=3 (S/N=15), run a MAP fit, and show the recovered SED + per-band residuals. NIRCam samples the rest-frame UV-optical at this redshift, so the SFH and dust attenuation are the dominant levers.">
 
 .. only:: html
 
@@ -130,13 +181,13 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Photometric SED Fit</div>
+      <div class="sphx-glr-thumbnail-title">Recovering a z=3 galaxy from JWST NIRCam photometry</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy colour–magnitude diagram showing the distinct red and blue populations. We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25 star-forming galaxies (continuous SFR) — varying stellar mass via log_peak_sfr. Each sample is placed at z = 0.05, computing u − r colour and rest-frame M_r magnitude. The colour bimodality and green valley are key signatures of galaxy assembly across cosmic time (Strateva et al. 2001 SDSS, Baldry et al. 2004).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy colour–magnitude diagram showing the distinct red and blue populations. We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25 star-forming galaxies (continuous SFR) — varying stellar mass via log_total_mass. Each sample is placed at z = 0.05, computing u − r colour and rest-frame M_r magnitude. The colour bimodality and green valley are key signatures of galaxy assembly across cosmic time (Strateva et al. 2001 SDSS, Baldry et al. 2004).">
 
 .. only:: html
 
@@ -153,7 +204,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Rest-frame stellar continuum overlaid with redshifted SDSS ugriz transmission curves at z ∈ {0.1, 0.5, 1.0, 2.0}. The plot shows which features each band actually samples as a galaxy moves out — the textbook source of k-correction sign.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Same rest-frame star-forming SED at four observed redshifts, with the SDSS ugriz throughputs plotted in their observed position so the reader sees which rest-frame features each band samples. The Balmer break enters the u band by z=1; by z=2 the bands fall longward of the 4000-A break entirely. This is the geometric source of the k-correction&#x27;s sign.">
 
 .. only:: html
 
@@ -164,13 +215,13 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Filter Sampling Across Redshift</div>
+      <div class="sphx-glr-thumbnail-title">SDSS ugriz sweep through a galaxy SED as z grows from 0.1 to 2</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep signal-to-noise ratio (SNR) from {3, 5, 10, 30, 100} on a fixed mock photometric galaxy in SDSS ugriz. Demonstrates how measurement uncertainty affects photometric precision. Higher SNR = tighter error bars.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Same star-forming galaxy, same SDSS ugriz set, three signal-to-noise levels (5, 20, 100). For each S/N we mock the photometry, run a MAP fit, and overlay the recovered SED on the truth. The figure surfaces the expected scaling — posterior offset and band-by-band residuals shrink as 1/SNR — and makes the inference cost concrete: even at S/N=5 the dust amplitude is degenerate enough that a single MAP run misses it by ~0.3 mag in the u band.">
 
 .. only:: html
 
@@ -181,7 +232,7 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">S/N Ratio Parameter Sweep</div>
+      <div class="sphx-glr-thumbnail-title">Posterior width tracks 1/SNR for fixed-truth SDSS photometry</div>
     </div>
 
 
@@ -204,7 +255,24 @@ Filter curves and photometric fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The WISE color-color diagram (Stern et al. 2012) is a powerful tool for separating AGN from star-forming galaxies using mid-infrared colors. The diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while star-forming galaxies have cooler dust emission (Rayleigh-Jeans slope at long wavelengths).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The UVJ (U−V vs V−J) diagram is a classic method for separating star-forming from quiescent galaxies. We populate it with four model tracks: (1) constant star-forming galaxies with varying dust optical depth, (2) an old quiescent population, (3) a post-starburst galaxy, and (4) a dusty starburst. The grey box marks the &quot;quiescent region&quot; from Williams+2009, a visual guide for identifying passive galaxies.">
+
+.. only:: html
+
+  .. image:: /auto_examples/photometry/images/thumb/sphx_glr_plot_uvj_diagram_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/photometry/plot_uvj_diagram`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The UVJ colour–colour diagram</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The WISE color-color diagram (Stern et al. 2012) is a tool for separating AGN from star-forming galaxies using mid-infrared colors. The diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while star-forming galaxies have cooler dust emission (Rayleigh-Jeans slope at long wavelengths).">
 
 .. only:: html
 
@@ -229,16 +297,20 @@ Filter curves and photometric fitting.
 .. toctree::
    :hidden:
 
+   /auto_examples/photometry/plot_balmer_break_redshift_evolution
    /auto_examples/photometry/plot_color_tracks_redshift
+   /auto_examples/photometry/plot_cosmic_dimming_observed_flux
    /auto_examples/photometry/plot_filter_curves
    /auto_examples/photometry/plot_filter_set_comparison
    /auto_examples/photometry/plot_filter_throughput_overlay
    /auto_examples/photometry/plot_galaxy_with_filters
+   /auto_examples/photometry/plot_k_correction_grid
    /auto_examples/photometry/plot_nuv_r_age_track
    /auto_examples/photometry/plot_photometric_fit
    /auto_examples/photometry/plot_red_sequence_blue_cloud
    /auto_examples/photometry/plot_redshift_filter_grid
    /auto_examples/photometry/plot_snr_sweep
    /auto_examples/photometry/plot_spitzer_irac_agn_wedge
+   /auto_examples/photometry/plot_uvj_diagram
    /auto_examples/photometry/plot_wise_agn_color_color
 

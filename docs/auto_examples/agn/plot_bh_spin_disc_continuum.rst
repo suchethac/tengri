@@ -28,25 +28,18 @@ Black hole spin effect on accretion disc UV peak temperature
 
 The dimensionless spin parameter a* determines the innermost stable circular
 orbit (ISCO). Higher spin pushes ISCO inward, raising peak disc temperature
-and shifting the UV bump bluer. This demonstrates the classic Kerr black hole
+and shifting the UV bump bluer. the classic Kerr black hole
 effect on thin disc accretion: Schwarzschild (a*=0) → near-extremal Kerr
 (a*=0.998).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-75
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_bh_spin_disc_continuum_001.png
-   :alt: plot bh spin disc continuum
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_bh_spin_disc_continuum_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 11-83
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -70,7 +63,7 @@ effect on thin disc accretion: Schwarzschild (a*=0) → near-extremal Kerr
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -84,6 +77,10 @@ effect on thin disc accretion: Schwarzschild (a*=0) → near-extremal Kerr
             "log_lbol": 11.5,
             "log_mbh": 8.0,
             "log_ledd": -0.5,
+            "frac": 1.0,  # without this the composable AGN is multiplied by zero
+            # Promote a_spin to FREE so the sweep at predict time actually flows;
+            # a bare tengri.FREE at per-param level is swallowed by '*: FIXED'.
+            "a_spin": tengri.Uniform(0.0, 0.998),
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -104,7 +101,7 @@ effect on thin disc accretion: Schwarzschild (a*=0) → near-extremal Kerr
         ax.loglog(wave, nu_l_nu, color=cmap(norm(a_spin)), lw=1.5, label=f"a* = {a_spin:.3f}")
 
     ax.set_xlim(100, 3000)
-    ax.set_ylim(1e40, 1e45)
+    ax.set_ylim(5e43, 2e45)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
     ax.legend(loc="upper right", framealpha=0.95)

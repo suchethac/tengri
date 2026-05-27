@@ -1,0 +1,137 @@
+{
+ "cosmology.PLANCK18": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "PLANCK18"
+  }
+ ],
+ "cosmology.angular_diameter_distance_mpc": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "angular_diameter_distance_mpc"
+  }
+ ],
+ "cosmology.comoving_distance_mpc": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "comoving_distance_mpc"
+  }
+ ],
+ "cosmology.distance_modulus": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "distance_modulus"
+  }
+ ],
+ "cosmology.luminosity_distance_mpc": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.cosmology",
+   "module_short": "tengri.cosmology",
+   "name": "luminosity_distance_mpc"
+  }
+ ],
+ "jax.vmap": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax",
+   "module_short": "jax",
+   "name": "vmap"
+  }
+ ],
+ "jnp.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "asarray"
+  }
+ ],
+ "np.argmax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "argmax"
+  }
+ ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
+  }
+ ],
+ "np.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "linspace"
+  }
+ ],
+ "np.log10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "log10"
+  }
+ ],
+ "plt.Line2D": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "Line2D"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "setup_style": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
+  }
+ ]
+}

@@ -34,10 +34,14 @@ revealing the sharp ~10 Myr transition; (right) full transmission spectra for
 
 Reference: Charlot & Fall 2000, ApJ, 539, 718 (age-dependent dust attenuation).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-60
+.. GENERATED FROM PYTHON SOURCE LINES 13-64
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -30,10 +30,14 @@ Emission per H per ionization parameter U across the Hensley & Draine 2023
 grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
 (U-independent) but rises steeply with U in MIR.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-56
+.. GENERATED FROM PYTHON SOURCE LINES 9-60
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -29,10 +29,14 @@ Astrodust+PAH size distribution
 Per-H grain volume distribution versus grain radius for the Hensley & Draine
 2023 fiducial size distribution (MW high-latitude :math:`R_V=3.1` sightline).
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-50
+.. GENERATED FROM PYTHON SOURCE LINES 8-54
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

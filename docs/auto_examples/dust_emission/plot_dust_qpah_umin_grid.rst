@@ -18,22 +18,31 @@
 .. _sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py:
 
 
-Dust IR SED: q_PAH × U_min Grid
-===============================
+The q_PAH and U_min knobs move PAH amplitude and FIR peak independently
+========================================================================
 
 .. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
    :alt: plot dust qpah umin grid
    :class: sphx-glr-single-img
 
 
-2D grid of dust IR emission showing how PAH mass fraction and radiation-field
-hardness independently shape the mid- and far-infrared SED. Uses Draine & Li
-2007 templates across parameter space.
+A 2-D grid on the Draine & Li 2007 template library: rows step through
+PAH mass fraction q_PAH (controls mid-IR PAH-feature strength),
+columns through the minimum radiation field U_min (sets the diffuse
+dust temperature, i.e. the FIR peak position). The two axes act
+nearly orthogonally — a surprise for anyone who would lump them
+together as "PAH knobs."
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-73
+Reference: Draine & Li 2007, ApJ, 657, 810.
+
+.. GENERATED FROM PYTHON SOURCE LINES 14-82
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

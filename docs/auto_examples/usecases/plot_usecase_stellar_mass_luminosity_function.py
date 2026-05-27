@@ -21,7 +21,7 @@ For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.
 
-This demonstrates the forward model: stellar mass → SED → rest-frame
+the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:
@@ -29,6 +29,10 @@ References:
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 from pathlib import Path

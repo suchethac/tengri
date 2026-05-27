@@ -37,6 +37,7 @@ monotonically with :math:`L_{\rm bol}`.
 Bands sampled:
 
 - **Hard X-ray**: 2–10 keV (:math:`\lambda = 1.24–6.2 \,\mathrm{\AA}`)
+
 - **Soft X-ray**: 0.5–2 keV (:math:`\lambda = 6.2–24.8 \,\mathrm{\AA}`)
 - **Optical-UV**: 1000–7000 Å
 - **Mid-IR**: 5–30 μm
@@ -49,28 +50,14 @@ References
 .. [1] Hopkins, A. M., et al., 2007, ApJ, 654, 731.
 .. [2] Duras, F., et al., 2020, A&A, 642, A204.
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-152
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/agn/plot_agn_bolometric_correction.py", line 102, in <module>
-        sed = xray_agn_corona(
-              ^^^^^^^^^^^^^^^^
-    TypeError: xray_agn_corona() got an unexpected keyword argument 'L_agn_bol'
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 35-158
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -138,13 +125,14 @@ References
         L_sun_erg = 3.828e33  # erg/s
         L_bol_erg = 10.0**log_lbol * L_sun_erg
 
-        # Compute X-ray SED via the public API.
+        # Convert L_bol → L_2500 via Hopkins+2007 BC=5.15 and call the
+        # CIGALE-faithful new corona signature (post-#329).
+        L_2500 = L_bol_erg / (5.15 * 1.199e15)
         sed = xray_agn_corona(
             wavelength,
-            L_agn_bol=L_bol_erg,
+            l_2500_30deg_erg_hz=L_2500,
             gamma=X_RAY_GAMMA,
             E_cut=X_RAY_E_CUT,
-            alpha_ox=X_RAY_ALPHA_OX,
         )
         sed = np.asarray(sed)
 

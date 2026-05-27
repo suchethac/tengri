@@ -26,7 +26,7 @@ baryonic mass of disc galaxies and their observed rotation velocity,
 parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).
 
 This example constructs 30 mock disc-like galaxies spanning stellar masses
-from 1e9 to 1e11 M_sun via a log_peak_sfr sweep, assigns circular velocity
+from 1e9 to 1e11 M_sun via a log_total_mass sweep, assigns circular velocity
 from the McGaugh+2000 baryonic TF scaling law, and then computes rest-frame
 optical (SDSS r-band) absolute magnitude using tengri.predict_photometry.
 
@@ -42,10 +42,14 @@ References:
   - McGaugh 2000, ApJ, 541, L33 (baryonic TF relation)
   - Verheijen 2001, ApJ, 563, 694 (optical TF calibration)
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-228
+.. GENERATED FROM PYTHON SOURCE LINES 26-233
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -111,7 +115,8 @@ References:
     from pathlib import Path
 
     repo_root = next(
-        p for p in [Path.cwd(), *Path.cwd().parents]
+        p
+        for p in [Path.cwd(), *Path.cwd().parents]
         if (p / "data" / "fsps_prsc_miles_chabrier.h5").exists()
     )
     ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
@@ -120,16 +125,14 @@ References:
     # Use SDSS r-band (available locally) as proxy for K-band magnitudes
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 
-    # Model: double-power-law SFH (dpl) with free log_peak_sfr normalization
+    # Model: double-power-law SFH (dpl) with free log_total_mass normalization
     # For disc-like galaxies, set dust to near-zero (typical for nearby spirals)
     # Fix redshift to z=0 (local universe TF sample)
     model = tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": tengri.FIXED,
-             "log_peak_sfr": tengri.Uniform(-1.0, 3.0)},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.05, "tau_bc": 0.05},
+        sfh={"type": "dpl", "*": tengri.FIXED, "log_total_mass": 10.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
         neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5},
         redshift=tengri.Fixed(0.0),
     )
@@ -142,18 +145,18 @@ References:
     # ==============================================================================
 
     n_galaxies = 30
-    log_peak_sfr_vals = np.linspace(-0.5, 2.3, n_galaxies)
+    log_total_mass_vals = np.linspace(-0.5, 2.3, n_galaxies)
 
     # Pre-allocate storage
     log_m_stars = []
     log_v_circs = []
     m_r_abs = []
 
-    # Loop over log_peak_sfr to generate population
-    for log_peak_sfr in log_peak_sfr_vals:
+    # Loop over log_total_mass to generate population
+    for log_total_mass in log_total_mass_vals:
         p = {
             **baseline,
-            "sfh_dpl_log_peak_sfr": jnp.float64(log_peak_sfr),
+            "sfh_dpl_log_total_mass": jnp.float64(log_total_mass),
         }
 
         # Predict SFH (rest-frame, independent of redshift)
@@ -197,9 +200,14 @@ References:
 
     # Scatter plot: mock galaxies
     ax.scatter(
-        log_v_circs, m_r_abs,
-        c="C0", s=60, alpha=0.65, edgecolor="0.3", lw=0.5,
-        label=r"Mock disc galaxies ($n=30$)"
+        log_v_circs,
+        m_r_abs,
+        c="C0",
+        s=60,
+        alpha=0.65,
+        edgecolor="0.3",
+        lw=0.5,
+        label=r"Mock disc galaxies ($n=30$)",
     )
 
     # Published McGaugh+2000 relation (originally in K-band)
@@ -215,21 +223,13 @@ References:
     # Optical TF: m_opt ≈ -21.0 - 1.2 * (log M_baryon - 11)
     m_r_plot = -21.0 - 1.2 * (log_m_plot - 11.0)
 
-    ax.plot(
-        log_v_plot, m_r_plot,
-        "k--", lw=2.0, alpha=0.7,
-        label=r"McGaugh+2000 TF (optical)"
-    )
+    ax.plot(log_v_plot, m_r_plot, "k--", lw=2.0, alpha=0.7, label=r"McGaugh+2000 TF (optical)")
 
     # Fit a line to mock data for slope verification
     z_fit = np.polyfit(log_v_circs, m_r_abs, 1)
     v_fit = np.array([log_v_circs.min(), log_v_circs.max()])
     m_r_fit = np.polyval(z_fit, v_fit)
-    ax.plot(
-        v_fit, m_r_fit,
-        "C1--", lw=1.5, alpha=0.6,
-        label=f"Mock fit (slope={z_fit[0]:.2f})"
-    )
+    ax.plot(v_fit, m_r_fit, "C1--", lw=1.5, alpha=0.6, label=f"Mock fit (slope={z_fit[0]:.2f})")
 
     # Formatting
     ax.set_xlabel(r"$\log V_{\mathrm{circ}}$ [km/s]", fontsize=12)
@@ -241,9 +241,14 @@ References:
 
     # Title and annotation
     ax.text(
-        0.05, 0.95, r"Baryonic Tully-Fisher: $M_{\mathrm{baryon}} \propto V_{\mathrm{circ}}^4$",
-        transform=ax.transAxes, fontsize=11, fontweight="bold",
-        verticalalignment="top", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5)
+        0.05,
+        0.95,
+        r"Baryonic Tully-Fisher: $M_{\mathrm{baryon}} \propto V_{\mathrm{circ}}^4$",
+        transform=ax.transAxes,
+        fontsize=11,
+        fontweight="bold",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
     )
 
     fig.tight_layout()

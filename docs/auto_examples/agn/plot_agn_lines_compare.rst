@@ -39,10 +39,14 @@ not shipped with the gallery):
 - ``blr``     — Broad-line region (Cracco+2016 photoionization grid)
 - ``qsogen``  — Temple+2021 empirical type-1 lines
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-90
+.. GENERATED FROM PYTHON SOURCE LINES 18-94
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

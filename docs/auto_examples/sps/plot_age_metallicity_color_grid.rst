@@ -37,21 +37,14 @@ Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
 centred at the appropriate lookback time, fixed dust extinction,
 and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-112
-
-
-
-.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_age_metallicity_color_grid_001.png
-   :alt: plot age metallicity color grid
-   :srcset: /auto_examples/sps/images/sphx_glr_plot_age_metallicity_color_grid_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-116
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -68,7 +61,7 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
     # Age and metallicity grids
     LOG10_AGES_GYR = np.linspace(-2.0, 1.1, 13)  # log10(t/Gyr)
-    AGES_GYR = 10.0 ** LOG10_AGES_GYR
+    AGES_GYR = 10.0**LOG10_AGES_GYR
     MET_LOGZSOL = np.linspace(-2.0, 0.4, 10)
 
     # Filter setup: NUV, u, g, r
@@ -91,7 +84,7 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
             "*": tengri.FIXED,
             "peak_lbt_gyr": 1.0,  # Will override per grid point
             "width_gyr": 0.05,
-            "log_peak_sfr": 11.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
@@ -148,11 +141,6 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
     fig.tight_layout()
     plt.savefig("plot_age_metallicity_color_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.738 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_age_metallicity_color_grid.py:

@@ -31,10 +31,14 @@ Large β means rapid quenching and an old stellar population; small β means
 a gentle tail and more mixed ages. We vary β across its prior range with every
 other parameter fixed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-64
+.. GENERATED FROM PYTHON SOURCE LINES 10-68
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,7 +63,7 @@ other parameter fixed.
             "beta": tengri.Uniform(0.3, 10.0),
             "alpha": 1.5,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.1),

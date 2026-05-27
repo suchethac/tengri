@@ -42,10 +42,14 @@ the pure Calzetti law applied here as the reference.
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust
 attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-154
+.. GENERATED FROM PYTHON SOURCE LINES 21-158
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -73,7 +77,7 @@ attenuation law).
             "alpha": 1.5,
             "beta": 2.0,
             "tau_gyr": 0.1,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",

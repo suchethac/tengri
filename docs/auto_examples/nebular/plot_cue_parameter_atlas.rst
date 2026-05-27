@@ -46,10 +46,14 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 - Kewley+2019, ARA&A, 57, 511 (modern line-diagnostics review)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-119
+.. GENERATED FROM PYTHON SOURCE LINES 25-123
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -75,7 +79,7 @@ References:
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
             "alpha": 3.0,
             "beta": 2.0,
         },

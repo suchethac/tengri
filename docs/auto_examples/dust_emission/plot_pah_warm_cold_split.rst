@@ -46,27 +46,19 @@ SED shapes:
 This script sweeps the two knobs independently to show how the
 dust SED morphology responds.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-118
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_pah_warm_cold_split_001.png
-   :alt: plot pah warm cold split
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_pah_warm_cold_split_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 25-121
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 

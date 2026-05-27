@@ -34,10 +34,14 @@ starbursts emit stronger radio across all frequencies. We sweep L_IR over
 
 Reference: Bell 2003, ApJ 586, 794.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-55
+.. GENERATED FROM PYTHON SOURCE LINES 13-59
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

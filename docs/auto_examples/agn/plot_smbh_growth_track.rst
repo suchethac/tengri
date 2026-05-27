@@ -42,21 +42,14 @@ References:
 - Soltan, A. 1982, MNRAS, 200, 115 — AGN mass density evolution
 - King, A. 2003, ApJ, 596, L27 — AGN feedback on galaxy growth
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-198
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_smbh_growth_track_001.png
-   :alt: plot smbh growth track
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_smbh_growth_track_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-203
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -83,7 +76,7 @@ References:
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 2.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -141,13 +134,18 @@ References:
         label="Super-Eddington (L > L_Edd)",
     )
     ax_track.loglog(
-        mbh_plot, lbol_edd_lambda1, "r-", lw=1.5, alpha=0.5, label=r"Eddington limit (L = L$_{\mathrm{Edd}}$)"
+        mbh_plot,
+        lbol_edd_lambda1,
+        "r-",
+        lw=1.5,
+        alpha=0.5,
+        label=r"Eddington limit (L = L$_{\mathrm{Edd}}$)",
     )
 
     # Plot growth track: connect stages with arrows
     for i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
-        mbh = 10.0 ** log_mbh
-        lbol = 10.0 ** log_lbol
+        mbh = 10.0**log_mbh
+        lbol = 10.0**log_lbol
         ax_track.plot(
             mbh,
             lbol,
@@ -164,8 +162,8 @@ References:
     for i in range(len(STAGES) - 1):
         _, log_mbh_i, log_lbol_i, _, _, _ = STAGES[i]
         _, log_mbh_j, log_lbol_j, _, _, _ = STAGES[i + 1]
-        mbh_i, lbol_i = 10.0 ** log_mbh_i, 10.0 ** log_lbol_i
-        mbh_j, lbol_j = 10.0 ** log_mbh_j, 10.0 ** log_lbol_j
+        mbh_i, lbol_i = 10.0**log_mbh_i, 10.0**log_lbol_i
+        mbh_j, lbol_j = 10.0**log_mbh_j, 10.0**log_lbol_j
         # Draw arrow with slight offset to avoid overlap with markers
         ax_track.arrow(
             mbh_i * 1.1,
@@ -207,13 +205,9 @@ References:
     C_AA_PER_S = 2.998e18
 
     # Top-left: Dormant + Merger
-    for ax_idx, stages_pair in enumerate(
-        [(STAGES[0], STAGES[1]), (STAGES[2], STAGES[3])]
-    ):
+    for ax_idx, stages_pair in enumerate([(STAGES[0], STAGES[1]), (STAGES[2], STAGES[3])]):
         ax = ax_seds[ax_idx]
-        for stage_idx, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(
-            stages_pair
-        ):
+        for stage_idx, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(stages_pair):
             params = {
                 **baseline,
                 "agn_log_mbh": jnp.float64(log_mbh),

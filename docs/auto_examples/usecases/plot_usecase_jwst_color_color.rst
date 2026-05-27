@@ -35,10 +35,14 @@ rest-frame UV-to-IR with minimal prior knowledge.
 Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
 Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-174
+.. GENERATED FROM PYTHON SOURCE LINES 14-178
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -76,7 +80,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": tengri.Uniform(0.2, 2.0),
                 "width_gyr": tengri.Uniform(0.5, 3.0),
                 "skew": tengri.Uniform(-1.0, 1.0),
@@ -109,7 +113,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-0.5, 0.5),
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": tengri.Uniform(7.0, 11.0),
                 "width_gyr": tengri.Uniform(0.5, 1.5),
                 "skew": tengri.Uniform(-1.5, 0.0),
@@ -143,7 +147,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
             observation=obs,
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(1.0, 2.5),
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": tengri.Uniform(0.5, 3.0),
                 "width_gyr": tengri.Uniform(1.0, 4.0),
                 "skew": tengri.Uniform(-0.5, 1.0),

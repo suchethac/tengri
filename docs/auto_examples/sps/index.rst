@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_sps:
 
 Stellar Population Synthesis
@@ -50,6 +48,23 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Alpha-element enhancement in quiescent stellar populations</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Tengri assembles a galaxy SED out of named blocks that can each be toggled on or off at build time. We construct six models that successively add one more block, then overlay the rest-frame \nu L_\nu after each addition. Every block has a visible signature somewhere in the SED:">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_component_buildup_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_component_buildup`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Building the panchromatic SED component by component</div>
     </div>
 
 
@@ -269,6 +284,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
    /auto_examples/sps/plot_age_metallicity_color_grid
    /auto_examples/sps/plot_alpha_enhanced_population
+   /auto_examples/sps/plot_component_buildup
    /auto_examples/sps/plot_fnu_vs_flambda_units
    /auto_examples/sps/plot_ionising_lum
    /auto_examples/sps/plot_mass_to_light_band_comparison

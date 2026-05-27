@@ -11,6 +11,10 @@ Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
 (X-ray binaries in galaxies, ARA&A, 44, 323).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

@@ -18,27 +18,36 @@
 .. _sphx_glr_auto_examples_xray_plot_xray_sf.py:
 
 
-X-ray binary scaling: HMXB traces current SFR, LMXB traces stellar mass
-======================================================================
+X-ray binary luminosity scales with SFR (HMXB) and stellar mass (LMXB)
+========================================================================
 
 .. image:: images/sphx_glr_plot_xray_sf_001.png
    :alt: plot xray sf
    :class: sphx-glr-single-img
 
 
-X-ray binaries (XRBs) are among the brightest X-ray sources in galaxies.
-High-mass XRBs (HMXBs) form copiously during starbursts and scale ~SFR,
-while low-mass XRBs (LMXBs) are long-lived remnants scaling with integrated
-stellar mass. This demo isolates the SFR and M_* dependencies separately on
-a starburst galaxy template to show how the XRB spectral luminosity responds
-to both the recent star formation rate and the accumulated stellar mass.
+X-ray binaries (XRBs) are the dominant X-ray sources in star-forming
+galaxies once an AGN is excluded. High-mass XRBs trace the recent
+star-formation rate (Mineo+2012), while low-mass XRBs trace the
+integrated stellar mass (Lehmer+2019). The two scalings have different
+spectral shapes too: HMXBs are slightly harder, LMXBs slightly softer.
+Two side-by-side sweeps — SFR (left) at fixed M_star = 1e11 M_sun, and
+M_star (right) at fixed SFR = 10 M_sun/yr — separate the two channels
+on the same axes.
 
-Reference: Lehmer et al. 2019, ApJ, 878, 122 (L_X−SFR−M_* scaling relations).
+References
+----------
+- Mineo, Gilfanov & Sunyaev 2012, MNRAS 419, 2095 (HMXB-SFR).
+- Lehmer et al. 2019, ApJ 878, 122 (combined L_X-SFR-M_star).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-126
+.. GENERATED FROM PYTHON SOURCE LINES 19-75
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,98 +65,38 @@ Reference: Lehmer et al. 2019, ApJ, 878, 122 (L_X−SFR−M_* scaling relations)
     wavelength = jnp.logspace(np.log10(0.1), np.log10(100.0), 512)
     wave_keV = 12.398 / np.array(wavelength)
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
-
-    # Panel 1: SFR sweep at fixed M_*
-    ax = axes[0, 0]
-    sfr_values = np.array([0.1, 1.0, 10.0, 100.0])
-    norm_sfr = mpl.colors.Normalize(vmin=sfr_values.min(), vmax=sfr_values.max())
     cmap = plt.get_cmap("viridis")
+    sfr_values = np.logspace(-1.0, 2.0, 9)
+    mstar_values = np.logspace(8.0, 12.5, 9)
+    sfr_norm = mpl.colors.LogNorm(vmin=sfr_values.min(), vmax=sfr_values.max())
+    mstar_norm = mpl.colors.LogNorm(vmin=mstar_values.min(), vmax=mstar_values.max())
 
+    fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.4), sharey=True)
+
+    # Left: SFR sweep at fixed M_star (HMXB-dominated when SFR is high)
+    ax = axes[0]
     for sfr in sfr_values:
-        l_xrb = xray_xrb(wavelength, sfr=sfr, stellar_mass=1e11)
-        ax.loglog(wave_keV, np.array(l_xrb), lw=1.4, color=cmap(norm_sfr(sfr)))
-
-    ax.set_xlim(0.1, 100)
-    ax.set_ylim(1e20, 1e32)
-    ax.set_xlabel(r"Energy [keV]")
-    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-    ax.text(
-        0.05, 0.95, "a) SFR variation", transform=ax.transAxes, verticalalignment="top", fontsize=10
+        l_xrb = np.asarray(xray_xrb(wavelength, sfr=float(sfr), stellar_mass=1.0e11))
+        ax.loglog(wave_keV, l_xrb, color=cmap(sfr_norm(sfr)), lw=1.3)
+    ax.set(
+        xlim=(0.1, 100.0),
+        ylim=(1.0e20, 1.0e32),
+        xlabel="Energy [keV]",
+        ylabel=r"$L_\nu$  [erg s$^{-1}$ Hz$^{-1}$]",
     )
+    cbar1 = fig.colorbar(plt.cm.ScalarMappable(norm=sfr_norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar1.set_label(r"SFR  [M$_\odot$ yr$^{-1}$]")
+    ax.text(0.04, 0.95, r"$M_\star = 10^{11}\,M_\odot$", transform=ax.transAxes, va="top", fontsize=9)
 
-    cbar1 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_sfr, cmap=cmap), ax=ax, pad=0.01)
-    cbar1.set_label(r"SFR [M$_\odot$/yr]")
-
-    # Panel 2: M_* sweep at fixed SFR
-    ax = axes[0, 1]
-    mstar_values = np.array([1e9, 1e10, 1e11, 1e12])
-    norm_mstar = mpl.colors.Normalize(vmin=mstar_values.min(), vmax=mstar_values.max())
-
+    # Right: M_star sweep at fixed SFR (LMXB grows with old population)
+    ax = axes[1]
     for m_star in mstar_values:
-        l_xrb = xray_xrb(wavelength, sfr=10.0, stellar_mass=m_star)
-        ax.loglog(wave_keV, np.array(l_xrb), lw=1.4, color=cmap(norm_mstar(m_star)))
-
-    ax.set_xlim(0.1, 100)
-    ax.set_ylim(1e20, 1e32)
-    ax.set_xlabel(r"Energy [keV]")
-    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-    ax.text(
-        0.05,
-        0.95,
-        "b) Stellar mass variation",
-        transform=ax.transAxes,
-        verticalalignment="top",
-        fontsize=10,
-    )
-
-    cbar2 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mstar, cmap=cmap), ax=ax, pad=0.01)
-    cbar2.set_label(r"$M_*$ [M$_\odot$]")
-
-    # Panel 3: Fine SFR grid
-    ax = axes[1, 0]
-    sfr_fine = np.logspace(-1.0, 2.0, 20)
-    norm_fine = mpl.colors.Normalize(vmin=sfr_fine.min(), vmax=sfr_fine.max())
-
-    for sfr in sfr_fine:
-        l_xrb = xray_xrb(wavelength, sfr=sfr, stellar_mass=1e11)
-        ax.loglog(wave_keV, np.array(l_xrb), lw=1.0, color=cmap(norm_fine(sfr)), alpha=0.7)
-
-    ax.set_xlim(0.1, 100)
-    ax.set_ylim(1e20, 1e32)
-    ax.set_xlabel(r"Energy [keV]")
-    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-    ax.text(
-        0.05, 0.95, "c) Fine SFR sweep", transform=ax.transAxes, verticalalignment="top", fontsize=10
-    )
-
-    cbar3 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_fine, cmap=cmap), ax=ax, pad=0.01)
-    cbar3.set_label(r"SFR [M$_\odot$/yr]")
-
-    # Panel 4: Fine M_* grid
-    ax = axes[1, 1]
-    mstar_fine = np.logspace(8.0, 12.5, 20)
-    norm_mfine = mpl.colors.Normalize(vmin=mstar_fine.min(), vmax=mstar_fine.max())
-
-    for m_star in mstar_fine:
-        l_xrb = xray_xrb(wavelength, sfr=10.0, stellar_mass=m_star)
-        ax.loglog(wave_keV, np.array(l_xrb), lw=1.0, color=cmap(norm_mfine(m_star)), alpha=0.7)
-
-    ax.set_xlim(0.1, 100)
-    ax.set_ylim(1e20, 1e32)
-    ax.set_xlabel(r"Energy [keV]")
-    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-    ax.text(
-        0.05,
-        0.95,
-        "d) Fine stellar mass sweep",
-        transform=ax.transAxes,
-        verticalalignment="top",
-        fontsize=10,
-    )
-
-    cbar4 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mfine, cmap=cmap), ax=ax, pad=0.01)
-    cbar4.set_label(r"$M_*$ [M$_\odot$]")
+        l_xrb = np.asarray(xray_xrb(wavelength, sfr=10.0, stellar_mass=float(m_star)))
+        ax.loglog(wave_keV, l_xrb, color=cmap(mstar_norm(m_star)), lw=1.3)
+    ax.set(xlim=(0.1, 100.0), xlabel="Energy [keV]")
+    cbar2 = fig.colorbar(plt.cm.ScalarMappable(norm=mstar_norm, cmap=cmap), ax=ax, pad=0.01)
+    cbar2.set_label(r"$M_\star$  [M$_\odot$]")
+    ax.text(0.04, 0.95, r"SFR $= 10\,M_\odot$ yr$^{-1}$", transform=ax.transAxes, va="top", fontsize=9)
 
     fig.tight_layout()
     plt.savefig("plot_xray_sf.png", dpi=150, bbox_inches="tight")

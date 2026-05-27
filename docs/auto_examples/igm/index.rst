@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_igm:
 
@@ -29,23 +29,6 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">DLA column density sculpts the Lyman alpha forest at z=3</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Two commonly-used IGM absorption models differ significantly in the Lyman-continuum regime. The Inoue et al. (2014) model captures Lyman-series absorption and Lyman-continuum opacity in detail; the Madau (1995) model provides a simpler analytical approximation. At fixed z=4, we show both models on the same axis to reveal their differences blueward of 912 Å rest-frame, where the discontinuity matters most for photometric SED fitting.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_igm_model_comparison_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_igm_model_comparison`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Inoue+2014 vs Madau+1995: IGM transmission models diverge at Lyman limit</div>
     </div>
 
 
@@ -136,7 +119,7 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer observed wavelengths. This example shows how the Lyman dropout sweeps across the optical and near-infrared bands at z = 3, 4, 5, 6, 7, progressively absorbing shorter-wavelength photometry and dropping it out of optical surveys.">
+    <div class="sphx-glr-thumbcontainer" tooltip="As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer observed wavelengths. the Lyman dropout sweeps across the optical and near-infrared bands at z = 3, 4, 5, 6, 7, progressively absorbing shorter-wavelength photometry and dropping it out of optical surveys.">
 
 .. only:: html
 
@@ -179,7 +162,6 @@ Intergalactic medium absorption and Lyman-forest effects on observed SEDs.
    :hidden:
 
    /auto_examples/igm/plot_dla_absorption
-   /auto_examples/igm/plot_igm_model_comparison
    /auto_examples/igm/plot_igm_models_comparison
    /auto_examples/igm/plot_igm_redshift
    /auto_examples/igm/plot_igm_z_evolution

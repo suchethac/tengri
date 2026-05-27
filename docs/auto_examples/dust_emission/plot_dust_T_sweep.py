@@ -7,6 +7,10 @@ Higher T shifts the peak blueward into the mid-IR; lower T shifts it
 redward toward the submillimeter.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

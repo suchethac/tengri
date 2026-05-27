@@ -36,27 +36,19 @@ plots the 3–30 μm rest-frame SED, annotating silicate band centers.
 
 Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-120
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_silicate_features_001.png
-   :alt: SKIRTOR torus: silicate features across inclinations
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_silicate_features_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 15-136
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -80,7 +72,7 @@ Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -92,6 +84,7 @@ Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 12.5,  # log10(L_bol / L_sun)
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -141,10 +134,22 @@ Reference: Stalevski et al. (2012, 2016); Hao et al. (2007).
     y_min, y_max = ax.get_ylim()
     ax.axvline(silicate_9p7, color="gray", linestyle="--", alpha=0.5, linewidth=1.2)
     ax.axvline(silicate_18, color="gray", linestyle="--", alpha=0.5, linewidth=1.2)
-    ax.text(silicate_9p7, y_max * 0.95, "9.7 μm", fontsize=9, ha="center",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
-    ax.text(silicate_18, y_max * 0.90, "18 μm", fontsize=9, ha="center",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7))
+    ax.text(
+        silicate_9p7,
+        y_max * 0.95,
+        "9.7 μm",
+        fontsize=9,
+        ha="center",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
+    )
+    ax.text(
+        silicate_18,
+        y_max * 0.90,
+        "18 μm",
+        fontsize=9,
+        ha="center",
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.7),
+    )
 
     ax.set_xlim(3, 30)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mu$m]", fontsize=11)

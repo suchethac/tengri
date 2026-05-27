@@ -4,7 +4,7 @@ Gas-phase metallicity effect on nebular continuum
 
 Nebular free-free, free-bound, and two-photon emission respond to gas-phase
 metallicity (``logZ_gas``) through changes in metal cooling efficiency and
-ionization balance. This example demonstrates the metallicity sensitivity of
+ionization balance. metallicity sensitivity of
 the nebular continuum at fixed ionization parameter.
 
 Single rest-frame νLν trace (1000–10000 Å) across four gas metallicities
@@ -17,6 +17,10 @@ References:
   Galactic Nuclei*, 2nd ed., University Science Books
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue nebular model)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -47,7 +51,7 @@ model = tengri.SEDModel.build(
         "alpha": 1.2,
         "beta": 2.0,
         "tau_gyr": 0.5,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
     neb={

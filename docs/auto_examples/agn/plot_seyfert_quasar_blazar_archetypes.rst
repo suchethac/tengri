@@ -42,23 +42,17 @@ evolve with luminosity:
    narrow-line region visible; bridging the Seyfert–quasar continuum.
 
 This archetype figure is the diagnostic for understanding how AGN
+
 classification depends on viewing angle, accretion rate, and dust geometry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-229
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :alt: plot seyfert quasar blazar archetypes
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 24-235
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -80,6 +74,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
     COMMON = dict(
         redshift=tengri.Fixed(0.0),  # Rest-frame only (predict_rest_sed)
     )
+
 
     def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
         """Build an AGN archetype model.
@@ -141,8 +136,8 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         sfr_log=-10.0,  # Pure AGN, negligible starburst
         dust_config={
             "type": "two_component",
-            "tau_diff": 0.1,       # Minimal diffuse dust
-            "tau_bc": 3.0,         # Heavy birth-cloud attenuation in front of AGN
+            "tau_diff": 0.1,  # Minimal diffuse dust
+            "tau_bc": 3.0,  # Heavy birth-cloud attenuation in front of AGN
             "*": tengri.FIXED,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
@@ -166,8 +161,8 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         sfr_log=-10.0,  # Pure AGN
         dust_config={
             "type": "two_component",
-            "tau_diff": 0.0,       # No diffuse dust
-            "tau_bc": 0.0,         # No birth-cloud attenuation
+            "tau_diff": 0.0,  # No diffuse dust
+            "tau_bc": 0.0,  # No birth-cloud attenuation
             "*": tengri.FIXED,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
@@ -191,8 +186,8 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         sfr_log=2.0,  # ~100 M_sun / yr ongoing starburst
         dust_config={
             "type": "two_component",
-            "tau_diff": 1.5,       # Moderate diffuse dust from starburst
-            "tau_bc": 1.0,         # Moderate birth-cloud attenuation
+            "tau_diff": 1.5,  # Moderate diffuse dust from starburst
+            "tau_bc": 1.0,  # Moderate birth-cloud attenuation
             "*": tengri.FIXED,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },

@@ -89,31 +89,13 @@
    "name": "percentile"
   }
  ],
- "os.path.abspath": [
+ "os.environ": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "os.path",
-   "module_short": "os.path",
-   "name": "abspath"
-  }
- ],
- "os.path.dirname": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "os.path",
-   "module_short": "os.path",
-   "name": "dirname"
-  }
- ],
- "os.path.join": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "os.path",
-   "module_short": "os.path",
-   "name": "join"
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.savefig": [
@@ -123,15 +105,6 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
   }
  ],
  "plt.subplots": [

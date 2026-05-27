@@ -18,30 +18,39 @@
 .. _sphx_glr_auto_examples_usecases_plot_usecase_emission_line_pcc.py:
 
 
-Emission-line pseudo-color-color diagram for redshift classification
-=====================================================================
+Emission-line ratios from a baked-in nebular SSP SED
+=====================================================
 
 .. image:: images/sphx_glr_plot_usecase_emission_line_pcc_001.png
    :alt: plot usecase emission line pcc
    :class: sphx-glr-single-img
 
 
-Demonstrates emission-line diagnostics using [OIII]/Hbeta, [NII]/Halpha
-ratios across a population mock sample. At different redshifts, nebular
-lines shift into different broadband filters creating photometric signatures
-useful for photo-z and ionization state estimation.
+Demonstrates how the SSP-baked nebular emission shapes the
+[OIII] λ5007 / Hβ and [NII] λ6584 / Hα ratios as stellar
+metallicity is varied across the grid. The line fluxes are
+extracted directly from the predicted rest-frame SED via
+continuum-subtracted boxcar integration — no toy formulas.
 
-Reference: Lamareille 2006, A&A, 459, 411 (emission-line photo-z);
-Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
+Note: with the default ``neb='ssp'`` (baked-in) backend the
+discrete ``Prediction.lines.halpha`` / ``.hbeta`` / ``.bpt_*``
+accessors return NaN — the line content lives only inside the
+SSP grid spectrum, not as a separate catalogue. See issue #361
+for the per-backend status of the discrete-line API.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-96
+Reference: Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
+
+.. GENERATED FROM PYTHON SOURCE LINES 19-113
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
-    import jax
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -51,73 +60,81 @@ Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+    LINES = {
+        "halpha": 6564.7,
+        "hbeta": 4862.7,
+        "oiii_5007": 5008.3,
+        "nii_6584": 6585.4,
+    }
+    # Half-width of the boxcar around each line centre [Angstrom].
+    LINE_HALF_WIDTH = 8.0
+    # Local continuum is averaged in two side bands offset from the line.
+    CONT_OFFSET = 30.0
+    CONT_HALF_WIDTH = 8.0
+
+
+    def boxcar_line_flux(wave, sed, line_centre):
+        """Continuum-subtracted boxcar flux around a single line."""
+        line_mask = np.abs(wave - line_centre) < LINE_HALF_WIDTH
+        blue_mask = np.abs(wave - (line_centre - CONT_OFFSET)) < CONT_HALF_WIDTH
+        red_mask = np.abs(wave - (line_centre + CONT_OFFSET)) < CONT_HALF_WIDTH
+        cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
+        return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
+
+
     ssp = tengri.load_ssp()
 
-    # Build model for emission-line diagnostics
-    model = tengri.SEDModel.build(
-        ssp,
-        sfh={
-            "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(0.0, 2.0),
-            "peak_lbt_gyr": tengri.Fixed(2.0),
-            "width_gyr": tengri.Fixed(1.0),
-            "skew": tengri.Fixed(0.2),
-            "trunc": tengri.Fixed(3.0),
-            "logzsol": tengri.Fixed(-0.1),
-        },
-        dust={
-            "type": "two_component",
-            "*": tengri.FIXED,
-            "tau_bc": 0.2,
-            "tau_diff": 0.1,
-            "slope": -0.7,
-        },
-    )
+    logzsol_grid = np.linspace(-1.0, 0.2, 12)
+    log_o3_hb = []
+    log_n2_ha = []
 
-    # Generate population across redshifts
-    key = jax.random.PRNGKey(123)
-    redshifts = np.linspace(0.02, 0.2, 8)
-    log_oiii_hb = []
-    log_nii_ha = []
-    z_vals = []
+    for logz in logzsol_grid:
+        model = tengri.SEDModel.build(
+            ssp,
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "log_total_mass": 10.0,
+                "peak_lbt_gyr": 2.0,
+                "width_gyr": 1.0,
+                "skew": 0.2,
+                "trunc": 3.0,
+                "logzsol": float(logz),
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_bc": 0.2,
+                "tau_diff": 0.1,
+                "slope": -0.7,
+            },
+        )
 
-    for z in redshifts:
-        for _i in range(5):
-            key, subkey = jax.random.split(key)
-            params = model.spec.sample(subkey)
-            params["redshift"] = z
-            params["sfh_tsnorm_log_peak_sfr"] = np.random.uniform(0.5, 1.5)
+        pred = model.predict_rest_sed({"redshift": 0.05})
+        wave = np.asarray(pred.wavelength)
+        sed = np.asarray(pred.sed)
 
-            sfr = float(params["sfh_tsnorm_log_peak_sfr"])
-            # Synthetic line ratios
-            ha = 1.0
-            hb = 0.3
-            nii = 0.1 * (1.0 + sfr)
-            oiii = 0.15 * (1.0 + sfr)
+        fluxes = {name: boxcar_line_flux(wave, sed, lam) for name, lam in LINES.items()}
+        log_o3_hb.append(np.log10(max(fluxes["oiii_5007"] / fluxes["hbeta"], 1e-3)))
+        log_n2_ha.append(np.log10(max(fluxes["nii_6584"] / fluxes["halpha"], 1e-3)))
 
-            log_nii_ha.append(np.log10(max(nii / ha, 1e-3)))
-            log_oiii_hb.append(np.log10(max(oiii / hb, 1e-3)))
-            z_vals.append(z)
-
-    # Plot
-    fig, ax = plt.subplots(figsize=(8, 7))
-
+    fig, ax = plt.subplots(figsize=(7.5, 6.5))
     sc = ax.scatter(
-        log_nii_ha,
-        log_oiii_hb,
-        c=z_vals,
+        log_n2_ha,
+        log_o3_hb,
+        c=logzsol_grid,
         cmap="viridis",
-        s=60,
+        s=80,
         edgecolors="k",
         lw=0.5,
     )
     cbar = fig.colorbar(sc, ax=ax, pad=0.01)
-    cbar.set_label("Redshift")
+    cbar.set_label(r"log $Z_\star / Z_\odot$")
 
-    ax.set_xlabel(r"log [NII]$\lambda$6583 / H$\alpha$")
+    ax.set_xlabel(r"log [NII]$\lambda$6584 / H$\alpha$")
     ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$")
-    ax.set_xlim(-1.5, 0.5)
-    ax.set_ylim(-1.0, 1.0)
+    ax.set_xlim(-2.0, 0.5)
+    ax.set_ylim(-2.0, 1.5)
 
     fig.tight_layout()
     plt.savefig("plot_usecase_emission_line_pcc.png", dpi=150, bbox_inches="tight")

@@ -46,31 +46,14 @@ different angles.
 **Reference:** Stalevski et al. 2016, MNRAS, clumpy 3D radiative-transfer
 modeling of dusty obscuring structures around AGN.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-115
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-   :alt: plot skirtor inclination sweep
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved plot_skirtor_inclination_sweep.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 25-119
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

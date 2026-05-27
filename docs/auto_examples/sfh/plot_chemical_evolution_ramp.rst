@@ -22,7 +22,7 @@ Metallicity evolution: three scenarios for Z(t) and resulting SED
 ===================================================================
 
 The chemical composition of stars encodes the assembly history of galaxies.
-This figure demonstrates three metallicity evolution pathways available in
+three metallicity evolution pathways available in
 tengri: (1) constant solar Z, (2) linear ramp from Z = 0.1 Zsun to Zsun
 over 13 Gyr of cosmic time, and (3) two-step enrichment (low-metallicity
 plateau at early times, then a sharp jump at lookback time 8 Gyr ago).
@@ -39,10 +39,14 @@ stronger UV absorption and altered optical/near-IR colors.
 
 Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundations).
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-253
+.. GENERATED FROM PYTHON SOURCE LINES 23-257
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import os
     import warnings
@@ -75,7 +79,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     spec_delta = tengri.Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_tau_gyr=1.0,
-        sfh_dpl_log_peak_sfr=1.0,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.1,
         met_mode="delta",
         redshift=0.0,
@@ -86,7 +90,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     spec_ramp = tengri.Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_tau_gyr=1.0,
-        sfh_dpl_log_peak_sfr=1.0,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.1,
         met_mode="ramp",
         redshift=0.0,
@@ -97,7 +101,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     spec_twostep = tengri.Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_tau_gyr=1.0,
-        sfh_dpl_log_peak_sfr=1.0,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.1,
         met_mode="two_step",
         redshift=0.0,
@@ -146,7 +150,7 @@ Reference: Searle, L. 1971, ApJ, 168, 327 (galactic chemical evolution foundatio
     # ─────────────────────────────────────────────────────────────────────────
     # SSP data stores ages in log10(Gyr); convert to linear Gyr for interpolation
     ssp_lg_ages_gyr = np.asarray(ssp.ssp_lg_age_gyr)
-    ssp_ages_gyr = 10.0 ** ssp_lg_ages_gyr
+    ssp_ages_gyr = 10.0**ssp_lg_ages_gyr
     ssp_ages_yr = ssp_ages_gyr * 1e9
     lookback_time_gyr = AGE_UNIVERSE_GYR - ssp_ages_gyr
 

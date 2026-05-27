@@ -39,27 +39,18 @@ quiescent populations (NUV−r > 5). At intermediate ages (1–2 Gyr), the NUV�
 color jumps ~2 magnitudes, reflecting the rapid evolution of the UV-to-optical
 SED as young, hot stars fade and the older stellar population emerges.
 
-This figure illustrates:
-
 - the NUV−r color jump across the green valley (age ~ 1–2 Gyr)
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of colour-colour diagnostic diagrams used in photometric surveys
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-105
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_nuv_r_age_track_001.png
-   :alt: plot nuv r age track
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_nuv_r_age_track_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-105
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -84,15 +75,13 @@ This figure illustrates:
 
 
     # Load filters: GALEX NUV and SDSS r
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(["galex_nuv", "sdss_r"])
-    )
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(["galex_nuv", "sdss_r"]))
 
     # Age grid: avoid the problematic SSP age boundary at 6 Gyr (#299)
     # Use two separate grids: young ages (0.05 to 1.5 Gyr) and old ages (1.5 to 5.5 Gyr)
     # to capture the green valley crossing with fine resolution
     age_young = np.logspace(-1.3, 0.18, 35)  # 0.05 to 1.5 Gyr
-    age_old = np.linspace(1.5, 5.5, 45)      # 1.5 to 5.5 Gyr with uniform spacing
+    age_old = np.linspace(1.5, 5.5, 45)  # 1.5 to 5.5 Gyr with uniform spacing
     age_grid = np.concatenate([age_young[age_young < 1.5], age_old])
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
@@ -106,7 +95,7 @@ This figure illustrates:
             "*": tengri.FIXED,
             "peak_lbt_gyr": 0.1,  # Very young burst
             "width_gyr": 0.05,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },

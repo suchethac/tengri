@@ -134,6 +134,15 @@
    "name": "zeros_like"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "pathlib.Path": [
   {
    "is_class": false,

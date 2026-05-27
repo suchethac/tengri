@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_recipes:
 
 Recipes
@@ -18,6 +16,23 @@ saving/loading a posterior to disk.
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The astronomer&#x27;s-eye-view of the tengri ingest path. Starting from a single CSV row of SDSS ugriz fluxes and per-band errors (the same shape pandas would hand you from a survey catalogue), we parse the row, build the photometric Observation from the column names, fit with MAP, and overlay the recovered SED on the observed bands with normalised residuals.">
+
+.. only:: html
+
+  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_real_data_fit_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/recipes/plot_real_data_fit`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">From a CSV row to a MAP SED fit, end to end</div>
+    </div>
+
 
 .. raw:: html
 
@@ -38,7 +53,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Optical broadband photometry constrains metallicity weakly, so the prior carries real information. We mock a star-forming galaxy at log Z/Zsun = -0.5 in five SDSS bands at S/N=20, then fit it twice under the same model — once with a uniform Z prior, once with a Gaussian prior centred on 0 with sigma=0.3. The posteriors shift by ~0.3 dex toward each prior&#x27;s preferred region, illustrating how informative external priors propagate through a tengri inference.">
 
 .. only:: html
 
@@ -49,7 +64,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Prior sensitivity: uniform vs Gaussian on metallicity</div>
+      <div class="sphx-glr-thumbnail-title">Metallicity prior choice moves the photometric posterior by ~0.3 dex</div>
     </div>
 
 
@@ -131,6 +146,7 @@ saving/loading a posterior to disk.
 .. toctree::
    :hidden:
 
+   /auto_examples/recipes/plot_real_data_fit
    /auto_examples/recipes/plot_recipe_compare
    /auto_examples/recipes/plot_recipe_compare_priors
    /auto_examples/recipes/plot_recipe_custom_filter

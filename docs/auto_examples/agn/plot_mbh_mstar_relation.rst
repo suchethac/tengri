@@ -53,67 +53,19 @@ to verify consistency within the observed scatter (~0.3 dex).
        mass and total galaxy stellar mass in the local universe. The Astrophysical
        Journal, 813(2), 82. https://doi.org/10.1088/0004-637X/813/2/82
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-339
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_mbh_mstar_relation_001.png
-   :alt: plot mbh mstar relation
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_mbh_mstar_relation_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    ======================================================================
-    Kormendy & Ho (2013) relation: log M_BH = 8.39 + 1.16 · log M_*
-    ======================================================================
-    Gal  1: log M_* (target/obs) = 9.00/9.00 | log M_BH = 18.83 | log λ_Edd = -1.52
-    Gal  2: log M_* (target/obs) = 9.27/9.27 | log M_BH = 19.15 | log λ_Edd = -1.68
-    Gal  3: log M_* (target/obs) = 9.55/9.55 | log M_BH = 19.46 | log λ_Edd = -1.63
-    Gal  4: log M_* (target/obs) = 9.82/9.82 | log M_BH = 19.78 | log λ_Edd = -1.12
-    Gal  5: log M_* (target/obs) = 10.09/10.09 | log M_BH = 20.10 | log λ_Edd = -2.02
-    Gal  6: log M_* (target/obs) = 10.36/10.36 | log M_BH = 20.41 | log λ_Edd = -1.75
-    Gal  7: log M_* (target/obs) = 10.64/10.64 | log M_BH = 20.73 | log λ_Edd = -2.43
-    Gal  8: log M_* (target/obs) = 10.91/10.91 | log M_BH = 21.04 | log λ_Edd = -1.12
-    Gal  9: log M_* (target/obs) = 11.18/11.18 | log M_BH = 21.36 | log λ_Edd = -1.19
-    Gal 10: log M_* (target/obs) = 11.45/11.45 | log M_BH = 21.68 | log λ_Edd = -2.60
-    Gal 11: log M_* (target/obs) = 11.73/11.73 | log M_BH = 21.99 | log λ_Edd = -1.19
-    Gal 12: log M_* (target/obs) = 12.00/12.00 | log M_BH = 22.31 | log λ_Edd = -2.51
-
-    ======================================================================
-    Reines & Volonteri (2015) relation: log M_BH = 8.0 + 1.1 · log M_*
-    ======================================================================
-    Gal  1: log M_* (target/obs) = 9.00/9.00 | log M_BH = 17.90 | log λ_Edd = -1.42
-    Gal  2: log M_* (target/obs) = 9.27/9.27 | log M_BH = 18.20 | log λ_Edd = -1.11
-    Gal  3: log M_* (target/obs) = 9.55/9.55 | log M_BH = 18.50 | log λ_Edd = -2.69
-    Gal  4: log M_* (target/obs) = 9.82/9.82 | log M_BH = 18.80 | log λ_Edd = -1.85
-    Gal  5: log M_* (target/obs) = 10.09/10.09 | log M_BH = 19.10 | log λ_Edd = -2.13
-    Gal  6: log M_* (target/obs) = 10.36/10.36 | log M_BH = 19.40 | log λ_Edd = -1.67
-    Gal  7: log M_* (target/obs) = 10.64/10.64 | log M_BH = 19.70 | log λ_Edd = -2.44
-    Gal  8: log M_* (target/obs) = 10.91/10.91 | log M_BH = 20.00 | log λ_Edd = -2.07
-    Gal  9: log M_* (target/obs) = 11.18/11.18 | log M_BH = 20.30 | log λ_Edd = -1.41
-    Gal 10: log M_* (target/obs) = 11.45/11.45 | log M_BH = 20.60 | log λ_Edd = -2.61
-    Gal 11: log M_* (target/obs) = 11.73/11.73 | log M_BH = 20.90 | log λ_Edd = -1.93
-    Gal 12: log M_* (target/obs) = 12.00/12.00 | log M_BH = 21.20 | log λ_Edd = -2.54
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 32-346
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -131,6 +83,7 @@ to verify consistency within the observed scatter (~0.3 dex).
     # ============================================================================
     # M_BH–M_* Scaling Relations
     # ============================================================================
+
 
     def mbh_from_mstar_kormendy2013(log_mstar: float) -> float:
         """
@@ -188,7 +141,7 @@ to verify consistency within the observed scatter (~0.3 dex).
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -199,6 +152,9 @@ to verify consistency within the observed scatter (~0.3 dex).
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+            "log_lbol": tengri.Uniform(11.0, 13.0),  # Bugfix: promote swept param to FREE
+            "log_mbh": tengri.Uniform(6.0, 10.0),  # Bugfix: promote swept param to FREE
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -220,7 +176,7 @@ to verify consistency within the observed scatter (~0.3 dex).
 
     # Eddington ratio bounds: λ_Edd ∈ [0.001, 0.1]
     log_edd_min = np.log10(0.001)  # -3.0
-    log_edd_max = np.log10(0.1)    # -1.0
+    log_edd_max = np.log10(0.1)  # -1.0
 
     # ============================================================================
     # Kormendy & Ho (2013) relation
@@ -241,19 +197,19 @@ to verify consistency within the observed scatter (~0.3 dex).
 
         # Compute L_Edd and L_bol
         # L_Edd(M_BH) = LEDD_SUN_COEFF * M_BH [M_sun] [L_sun]
-        log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
+        log_ledd = np.log10(LEDD_SUN_COEFF * (10.0**log_mbh_relation))
         log_lbol = log_edd + log_ledd
 
-        # Scale log_peak_sfr to achieve the target stellar mass via binary search
-        # M_* ∝ log_peak_sfr, so we can adjust it linearly in log space
+        # Scale log_total_mass to achieve the target stellar mass via binary search
+        # M_* ∝ log_total_mass, so we can adjust it linearly in log space
         baseline = dict(baseline_sample)
         m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
         log_mstar_baseline = np.log10(m_star_baseline)
         delta_log_mstar = log_mstar_target - log_mstar_baseline
 
-        # Adjust log_peak_sfr proportionally
-        baseline["sfh_dpl_log_peak_sfr"] = (
-            float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
+        # Adjust log_total_mass proportionally
+        baseline["sfh_dpl_log_total_mass"] = (
+            float(baseline["sfh_dpl_log_total_mass"]) + delta_log_mstar
         )
 
         # Construct parameters for this galaxy
@@ -274,7 +230,7 @@ to verify consistency within the observed scatter (~0.3 dex).
         results_kormendy["log_lbol"].append(log_lbol)
 
         print(
-            f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
+            f"Gal {i + 1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
             f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
         )
 
@@ -298,18 +254,18 @@ to verify consistency within the observed scatter (~0.3 dex).
         log_edd = float(jax.random.uniform(subkey, minval=log_edd_min, maxval=log_edd_max))
 
         # Compute L_Edd and L_bol
-        log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
+        log_ledd = np.log10(LEDD_SUN_COEFF * (10.0**log_mbh_relation))
         log_lbol = log_edd + log_ledd
 
-        # Scale log_peak_sfr to achieve the target stellar mass
+        # Scale log_total_mass to achieve the target stellar mass
         baseline = dict(baseline_sample)
         m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
         log_mstar_baseline = np.log10(m_star_baseline)
         delta_log_mstar = log_mstar_target - log_mstar_baseline
 
-        # Adjust log_peak_sfr proportionally
-        baseline["sfh_dpl_log_peak_sfr"] = (
-            float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
+        # Adjust log_total_mass proportionally
+        baseline["sfh_dpl_log_total_mass"] = (
+            float(baseline["sfh_dpl_log_total_mass"]) + delta_log_mstar
         )
 
         # Construct parameters
@@ -330,7 +286,7 @@ to verify consistency within the observed scatter (~0.3 dex).
         results_reines["log_lbol"].append(log_lbol)
 
         print(
-            f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
+            f"Gal {i + 1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
             f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
         )
 

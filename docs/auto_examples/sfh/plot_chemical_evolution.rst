@@ -32,10 +32,14 @@ leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity
 relation across galactic radii. Together they show how star formation and
 galactic winds control the Z(t) history.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-100
+.. GENERATED FROM PYTHON SOURCE LINES 11-104
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

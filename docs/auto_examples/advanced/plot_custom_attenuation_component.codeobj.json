@@ -1,0 +1,126 @@
+{
+ "SEDModelComponent": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.sed_model_component",
+   "module_short": "tengri.components",
+   "name": "SEDModelComponent"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "SEDModelComponent"
+  }
+ ],
+ "Uniform": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri",
+   "name": "Uniform"
+  }
+ ],
+ "_calzetti_law": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.dust.attenuation",
+   "module_short": "tengri.components.dust",
+   "name": "calzetti"
+  }
+ ],
+ "_cardelli_law": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.dust.attenuation",
+   "module_short": "tengri.components.dust",
+   "name": "cardelli"
+  }
+ ],
+ "jnp.exp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "exp"
+  }
+ ],
+ "jnp.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "linspace"
+  }
+ ],
+ "jnp.ones_like": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "ones_like"
+  }
+ ],
+ "jnp.trapezoid": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "trapezoid"
+  }
+ ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
+  }
+ ],
+ "np.exp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "exp"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "setup_style": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
+   "name": "setup_style"
+  }
+ ],
+ "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "warnings",
+   "module_short": "warnings",
+   "name": "filterwarnings"
+  }
+ ]
+}

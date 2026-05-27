@@ -16,6 +16,10 @@ References:
   - Vazdekis et al. 2010 (MILES): MNRAS 404, 1639
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt
@@ -29,11 +33,11 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # Representative subset of shipped SSP libraries: BC03, FSPS (MILES + C3K), BPASS, ProGeny
 ssp_names = [
-    "bc03_pdva_stelib_chabrier",      # BC03 with Padova 1994 isochrones
-    "fsps_prsc_miles_chabrier",       # FSPS + Padova 2000 + MILES library
-    "fsps_mist_c3k_a_chabrier",       # FSPS + MIST + C3K
-    "bpss_stars_c3k_a_chabrier",      # BPASS binary star synthesis
-    "pgny_mist_c3k_chabrier",         # ProGeny + MIST
+    "bc03_pdva_stelib_chabrier",  # BC03 with Padova 1994 isochrones
+    "fsps_prsc_miles_chabrier",  # FSPS + Padova 2000 + MILES library
+    "fsps_mist_c3k_a_chabrier",  # FSPS + MIST + C3K
+    "bpss_stars_c3k_a_chabrier",  # BPASS binary star synthesis
+    "pgny_mist_c3k_chabrier",  # ProGeny + MIST
 ]
 
 # Target age (Gyr) for cross-section and Z (log10 absolute)
@@ -79,8 +83,10 @@ for ssp_name, color in zip(ssp_names, colors):
             label=ssp_name.replace("_chabrier", "").replace("_", " "),
         )
 
-        print(f"✓ {ssp_name}: age index {age_idx} ({age_gyr[age_idx]:.2f} Gyr), "
-              f"Z index {z_idx} ({log_z[z_idx]:.2f} log10 Z)")
+        print(
+            f"✓ {ssp_name}: age index {age_idx} ({age_gyr[age_idx]:.2f} Gyr), "
+            f"Z index {z_idx} ({log_z[z_idx]:.2f} log10 Z)"
+        )
 
     except FileNotFoundError as e:
         print(f"⊘ {ssp_name}: {e}")

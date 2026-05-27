@@ -43,15 +43,18 @@ reddening and star formation rate indicators in galaxies. Here we:
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-371
+.. GENERATED FROM PYTHON SOURCE LINES 22-381
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -66,18 +69,20 @@ reddening and star formation rate indicators in galaxies. Here we:
     ERG_PER_UM = 1.0e-12  # erg to μ units conversion
 
     # UV slope fitting windows (wide gaps, clean continua)
-    WINDOWS_UV = np.array([
-        [1268, 1284],    # ISM window 1
-        [1309, 1316],    # ISM window 2
-        [1342, 1371],    # Si II / O I
-        [1407, 1515],    # CI / Fe II
-        [1562, 1583],    # Si II
-        [1677, 1740],    # N I / C II
-        [1760, 1833],    # Al II / Fe II
-        [1866, 1890],    # Al III
-        [1930, 1950],    # C I
-        [2400, 2580],    # optical continuum (clean)
-    ])
+    WINDOWS_UV = np.array(
+        [
+            [1268, 1284],  # ISM window 1
+            [1309, 1316],  # ISM window 2
+            [1342, 1371],  # Si II / O I
+            [1407, 1515],  # CI / Fe II
+            [1562, 1583],  # Si II
+            [1677, 1740],  # N I / C II
+            [1760, 1833],  # Al II / Fe II
+            [1866, 1890],  # Al III
+            [1930, 1950],  # C I
+            [2400, 2580],  # optical continuum (clean)
+        ]
+    )
 
 
     def _fit_uv_slope(wave: np.ndarray, f_lam: np.ndarray) -> float:
@@ -186,10 +191,10 @@ reddening and star formation rate indicators in galaxies. Here we:
         "type": "tsnorm",
         "*": tengri.FIXED,
         "peak_lbt_gyr": 0.05,  # 50 Myr lookback
-        "width_gyr": 0.05,      # 50 Myr width
-        "log_peak_sfr": 1.0,    # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
+        "width_gyr": 0.05,  # 50 Myr width
+        "log_total_mass": 10.0,  # SFR peak = 10 M☉/yr (arbitrary; scales L_IR/L_UV ratio)
         "skew": 0.0,
-        "trunc": 13.0,          # max lookback time
+        "trunc": 13.0,  # max lookback time
     }
 
     # Redshift
@@ -215,10 +220,10 @@ reddening and star formation rate indicators in galaxies. Here we:
         dust_config = {
             "type": "two_component",
             "*": tengri.FIXED,
-            "tau_bc": 0.0,           # birth cloud attenuation (fixed to zero)
-            "tau_diff": tau_diff,    # sweep diffuse attenuation
-            "slope": -0.7,           # typical Calzetti slope
-            "law_bc": "calzetti",    # Calzetti+2000 law
+            "tau_bc": 0.0,  # birth cloud attenuation (fixed to zero)
+            "tau_diff": tau_diff,  # sweep diffuse attenuation
+            "slope": -0.7,  # typical Calzetti slope
+            "law_bc": "calzetti",  # Calzetti+2000 law
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         }
 
@@ -369,6 +374,7 @@ reddening and star formation rate indicators in galaxies. Here we:
 
     fig.tight_layout()
     import pathlib
+
     save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
     plt.savefig(str(save_path), dpi=150, bbox_inches="tight")
     print(f"\nSaved: {save_path}")
@@ -377,9 +383,9 @@ reddening and star formation rate indicators in galaxies. Here we:
     # Verification: Check extrema
     # ============================================================================
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("VERIFICATION SUMMARY")
-    print("="*70)
+    print("=" * 70)
     print(f"β range:        {beta_values.min():+.2f} to {beta_values.max():+.2f}")
     print(f"IRX range:      {irx_values.min():+.2f} to {irx_values.max():+.2f}")
     print(f"τ_diff range:   {tau_diff_used.min():.2f} to {tau_diff_used.max():.2f}")
@@ -391,9 +397,13 @@ reddening and star formation rate indicators in galaxies. Here we:
     print()
     idx_min_tau = np.argmin(tau_diff_used)
     idx_max_tau = np.argmax(tau_diff_used)
-    print(f"Measured (τ_diff=0):   β={beta_values[idx_min_tau]:+.2f}, IRX={irx_values[idx_min_tau]:+.2f} ✓")
-    print(f"Measured (τ_diff=4):   β={beta_values[idx_max_tau]:+.2f}, IRX={irx_values[idx_max_tau]:+.2f} ✓")
-    print("="*70)
+    print(
+        f"Measured (τ_diff=0):   β={beta_values[idx_min_tau]:+.2f}, IRX={irx_values[idx_min_tau]:+.2f} ✓"
+    )
+    print(
+        f"Measured (τ_diff=4):   β={beta_values[idx_max_tau]:+.2f}, IRX={irx_values[idx_max_tau]:+.2f} ✓"
+    )
+    print("=" * 70)
 
     plt.show()
 

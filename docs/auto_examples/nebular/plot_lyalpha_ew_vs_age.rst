@@ -43,38 +43,18 @@ spectral evolution across age and metallicity.
 Schaerer 2003 (A&A 397, 527) — Ionizing photon production in massive
 starburst populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-143
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_lyalpha_ew_vs_age_001.png
-   :alt: plot lyalpha ew vs age
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_lyalpha_ew_vs_age_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Peak EW(Lyα): 861003461.1 Å at age 1.0 Myr
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 22-146
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -191,11 +171,6 @@ starburst populations.
     plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
 
     print(f"Peak EW(Lyα): {np.nanmax(ew_lya):.1f} Å at age {ages_myr[np.nanargmax(ew_lya)]:.1f} Myr")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (1 minutes 51.752 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_sfh:
 
 Star Formation Histories
@@ -65,6 +63,23 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Chemical evolution: How SFH and outflows shape metal enrichment history</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The chemical composition of stars encodes the assembly history of galaxies. three metallicity evolution pathways available in tengri: (1) constant solar Z, (2) linear ramp from Z = 0.1 Zsun to Zsun over 13 Gyr of cosmic time, and (3) two-step enrichment (low-metallicity plateau at early times, then a sharp jump at lookback time 8 Gyr ago).">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_chemical_evolution_ramp_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_chemical_evolution_ramp`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Metallicity evolution: three scenarios for Z(t) and resulting SED</div>
     </div>
 
 
@@ -240,6 +255,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The field SFH employs a damped random walk (DRW) power spectral density (PSD) to govern stochastic star formation history realizations. Two parameters control the prior distribution of SFR time-variability:">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_burstiness_prior_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_psd_burstiness_prior`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">PSD-Governed Stochastic SFH Prior: Burstiness Corner Cases</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The amplitude σ of the power spectral density sets how dramatically star formation fluctuates around the smooth trend: σ ≈ 0 means nearly constant SFR, large σ produces dramatic bursts that leave imprints in UV slope, optical colors, and stellar masses. We vary σ across its prior range with the timescale τ fixed.">
 
 .. only:: html
@@ -391,6 +423,23 @@ Parametric and stochastic star formation history models.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A common SED-fitting failure mode: pick a smooth parametric SFH (delayed exponential, tau-model, lognormal) for a galaxy whose true star-formation history has short-timescale bursts. The continuum-anchored bands (optical, NIR) absorb the mass and the fit looks plausible — but the UV bands, where young O/B stars dominate, carry the residual of the recent burst.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_wrong_model_trap_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_wrong_model_trap`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Fitting a stochastic SFH with a smooth parametric prior leaves a UV residual</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -404,6 +453,7 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_bursty_continuity_sigma_schedule
    /auto_examples/sfh/plot_bursty_recovery
    /auto_examples/sfh/plot_chemical_evolution
+   /auto_examples/sfh/plot_chemical_evolution_ramp
    /auto_examples/sfh/plot_continuity_prior_visualisation
    /auto_examples/sfh/plot_dexp_tau_sweep
    /auto_examples/sfh/plot_dpl_alpha_beta_grid
@@ -414,6 +464,7 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_prospector_priors_compare
    /auto_examples/sfh/plot_psd_alternatives
    /auto_examples/sfh/plot_psd_burstiness
+   /auto_examples/sfh/plot_psd_burstiness_prior
    /auto_examples/sfh/plot_psd_sigma_sweep
    /auto_examples/sfh/plot_psd_tau_sweep
    /auto_examples/sfh/plot_quenching_pathway_compare
@@ -423,4 +474,5 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_sfh_quenching_compare
    /auto_examples/sfh/plot_stochastic_sfh
    /auto_examples/sfh/plot_two_burst_observability
+   /auto_examples/sfh/plot_wrong_model_trap
 

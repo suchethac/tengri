@@ -29,45 +29,18 @@ post-starburst galaxy, and (4) a dusty starburst. The grey box
 marks the "quiescent region" from Williams+2009, a visual guide
 for identifying passive galaxies.
 
-This figure demonstrates how dust, age, and star formation
+dust, age, and star formation
 history shape a galaxy's position in the UVJ plane — a
 workhorse diagnostic for photometric surveys.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-187
-
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/photometry/plot_uvj_diagram.py", line 72, in <module>
-        flux = _flux(sf_model, params)
-               ^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/examples/photometry/plot_uvj_diagram.py", line 33, in _flux
-        return np.asarray(model.predict_photometry(params))
-                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 2812, in predict_photometry
-        return self.predict_observables_jit(params).phot_fnu
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 4210, in predict_observables_jit
-        check_unknown_params(params, self._param_map)
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/parameters/translate.py", line 494, in check_unknown_params
-        raise UnknownParameterError(_unknown_param_msg(unrecognized, param_map))
-    tengri.config.exceptions.UnknownParameterError: Unrecognized parameter names passed to Model: ['dust_two_component_tau_bc'].
-      'dust_two_component_tau_bc' → did you mean ['dust_tau_bc', 'shock_component']?
-
-    Valid free + fixed parameter names: see ``model.spec.summary()`` or ``list(model.spec.param_map_public_keys())``.
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 17-191
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -137,7 +110,7 @@ workhorse diagnostic for photometric surveys.
             "*": tengri.FIXED,
             "peak_lbt_gyr": 10.0,
             "width_gyr": 0.5,
-            "log_peak_sfr": 0.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
@@ -160,7 +133,7 @@ workhorse diagnostic for photometric surveys.
             "*": tengri.FIXED,
             "peak_lbt_gyr": 1.0,
             "width_gyr": 0.2,
-            "log_peak_sfr": 1.2,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },

@@ -47,33 +47,14 @@ References
 .. [1] Urry, C. M., & Padovani, P. 1995, PASP, 107, 803
    "Unified Schemes for Radio-Loud Active Galactic Nuclei"
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-153
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Building Type 1 (face-on, BLR) model...
-    Building Type 2 (edge-on, NLR) model...
-    Saved: plot_type1_type2_unified_model.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 26-155
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -147,9 +128,7 @@ References
     nu_lnu_type2 = nu_type2 * sed_type2
 
     # Create side-by-side comparison
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(12.0, 4.5), sharey=True, gridspec_kw={"hspace": 0.0}
-    )
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.0, 4.5), sharey=True, gridspec_kw={"hspace": 0.0})
 
     # Type 1 (face-on): blue continuum, prominent broad lines
     ax1.loglog(wave_type1, nu_lnu_type1, color="#1f77b4", lw=2.0)

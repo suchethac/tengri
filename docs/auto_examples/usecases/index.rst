@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_usecases:
 
 Use Cases
@@ -55,6 +53,23 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Optical photometry alone cannot uniquely break the degeneracy between stellar age, dust attenuation, and redshift — a fundamental limitation in photo-z and SED fitting. Three physically distinct galaxy populations can produce nearly identical SDSS ugriz photometry:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_age_dust_redshift_degeneracy_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_age_dust_redshift_degeneracy`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">The age-dust-redshift degeneracy in photometry</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The Balmer decrement measures dust attenuation via hydrogen recombination line ratios: H-alpha / H-beta is sensitive to extinction (Calzetti et al. 2000). Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the Calzetti+2000 expectation.">
 
 .. only:: html
@@ -67,6 +82,40 @@ emission-line Pearson coefficients.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Balmer Decrement Tests Dust Attenuation on Emission Lines</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Observed-frame flux of a rest-frame SED depends on cosmological distances, which vary with H0 and Ω_M. This example quantifies the Hubble tension (H0 tension between local measurements ~73 km/s/Mpc and CMB measurements ~67.4 km/s/Mpc) by showing how apparent magnitude shifts by ~0.15 mag across cosmic time.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_cosmology_distance_modulus_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_cosmology_distance_modulus`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Hubble Tension: Cosmology-dependent distance modulus</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="tengri.cosmology exposes the standard FRW distances — comoving, luminosity, angular-diameter — and lookback time as pure-JAX functions over a Planck-18 default. They are differentiable, JIT-able, and interchangeable with astropy&#x27;s API for tengri&#x27;s own forward model.">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_cosmology_ladder_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_cosmology_ladder`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Cosmological distance ladder and the K-correction for a flat SED</div>
     </div>
 
 
@@ -123,7 +172,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates emission-line diagnostics using [OIII]/Hbeta, [NII]/Halpha ratios across a population mock sample. At different redshifts, nebular lines shift into different broadband filters creating photometric signatures useful for photo-z and ionization state estimation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how the SSP-baked nebular emission shapes the [OIII] λ5007 / Hβ and [NII] λ6584 / Hα ratios as stellar metallicity is varied across the grid. The line fluxes are extracted directly from the predicted rest-frame SED via continuum-subtracted boxcar integration — no toy formulas.">
 
 .. only:: html
 
@@ -134,7 +183,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Emission-line pseudo-color-color diagram for redshift classification</div>
+      <div class="sphx-glr-thumbnail-title">Emission-line ratios from a baked-in nebular SSP SED</div>
     </div>
 
 
@@ -219,7 +268,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Strong-lensing magnification: EoR galaxy detection boost</div>
+      <div class="sphx-glr-thumbnail-title">Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100</div>
     </div>
 
 
@@ -236,7 +285,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Star-forming main sequence cosmic evolution: z=0 → z=2</div>
+      <div class="sphx-glr-thumbnail-title">Star-forming main sequence: z = 0 → 2</div>
     </div>
 
 
@@ -293,6 +342,23 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The cosmic star formation rate density (SFRD) — the total stellar mass created per unit time per unit comoving volume — rises from z~0 to peak at z~2, then declines toward higher redshift. Madau &amp; Dickinson 2014 assembled multi-wavelength observational data and fit a smooth analytic form:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_sfh_to_madau_dickinson_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Madau-Dickinson 2014 cosmic SFRD(z) from a population of mock galaxies</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Compares four classical SFR indicators (UV continuum, Hα emission, FIR, bolometric) on a population of mock galaxies spanning burstiness amplitudes. Stochastic SFHs introduce variance that differs between indicators. Hα shows highest scatter while bolometric is most stable — a key consideration for survey design.">
 
 .. only:: html
@@ -327,6 +393,23 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The stellar mass function (SMF) describes the number density of galaxies as a function of stellar mass, a fundamental probe of galaxy assembly. The Schechter function provides an excellent fit to observed SMF across cosmic time:">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_stellar_mass_luminosity_function_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_stellar_mass_luminosity_function`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar Mass and Luminosity Functions from Mock Survey</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="UV slope (β) is degenerate between dust optical depth and stellar age: young dusty and old dust-free populations both show red UV continua. This script sweeps BOTH dust (τ_diff ∈ [0, 1.5]) and stellar age (t_burst ∈ [0.01, 10] Gyr) on a single-burst SFH (tsnorm) and plots the resulting UV slope β as a 2D heatmap. We expect the age and dust axes to BOTH affect β: old stars are redder, dust reddens UV.">
 
 .. only:: html
@@ -344,6 +427,23 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The Tully-Fisher relation is a tight empirical correlation between the baryonic mass of disc galaxies and their observed rotation velocity, parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_tully_fisher_relation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_tully_fisher_relation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Tully-Fisher Relation: Baryonic Mass — Rotation Velocity Scaling</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The infrared excess (IRX = L_IR / L_FUV) versus UV-continuum slope β diagram (Meurer+1999) is the standard tool for inferring attenuation in unresolved star-forming galaxies. We mock a population of star-forming galaxies with a fixed SFH and a range of diffuse dust optical depths, measure each galaxy&#x27;s β by fitting a power-law to its rest-frame UV continuum (1268–2580 Å, Calzetti+1994 windows), and overplot the empirical Meurer+1999 starburst relation.">
 
 .. only:: html
@@ -356,6 +456,23 @@ emission-line Pearson coefficients.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">The IRX–β relation emerges from the dust model</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A cornerstone of dust modeling is energy conservation: the UV light absorbed by dust must be re-radiated in the infrared. This example constructs 15 tengri SEDModels with optical depth τ_V ∈ {0, 0.1, ..., 4} and validates that integrated infrared luminosity (8–1000 μm) matches the absorbed UV (912–3000 Å rest-frame).">
+
+.. only:: html
+
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_uv_to_ir_bolometric_balance_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/usecases/plot_usecase_uv_to_ir_bolometric_balance`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Dust energy balance: L_IR = L_UV_absorbed across opacity variations</div>
     </div>
 
 
@@ -388,7 +505,10 @@ emission-line Pearson coefficients.
 
    /auto_examples/usecases/plot_usecase_age_dust_2d
    /auto_examples/usecases/plot_usecase_age_dust_degeneracy
+   /auto_examples/usecases/plot_usecase_age_dust_redshift_degeneracy
    /auto_examples/usecases/plot_usecase_balmer_decrement_av
+   /auto_examples/usecases/plot_usecase_cosmology_distance_modulus
+   /auto_examples/usecases/plot_usecase_cosmology_ladder
    /auto_examples/usecases/plot_usecase_d4000_age
    /auto_examples/usecases/plot_usecase_d4000_vs_ssfr
    /auto_examples/usecases/plot_usecase_dropout_selection_z3
@@ -402,9 +522,13 @@ emission-line Pearson coefficients.
    /auto_examples/usecases/plot_usecase_main_sequence_recovery
    /auto_examples/usecases/plot_usecase_mass_completeness
    /auto_examples/usecases/plot_usecase_sdss_lrg_stack_template
+   /auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson
    /auto_examples/usecases/plot_usecase_sfr_indicator_compare
    /auto_examples/usecases/plot_usecase_sfr_uv_ir_consistency
+   /auto_examples/usecases/plot_usecase_stellar_mass_luminosity_function
    /auto_examples/usecases/plot_usecase_tau_age_2d_uv_slope
+   /auto_examples/usecases/plot_usecase_tully_fisher_relation
    /auto_examples/usecases/plot_usecase_uv_slope_beta
+   /auto_examples/usecases/plot_usecase_uv_to_ir_bolometric_balance
    /auto_examples/usecases/plot_usecase_uvj_diagram
 

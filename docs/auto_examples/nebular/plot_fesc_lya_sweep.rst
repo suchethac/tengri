@@ -30,10 +30,14 @@ The Lyα-specific escape fraction ``f_esc_lya`` sets what fraction of Lyα
 photons can escape the ISM without scattering. Higher ``f_esc_lya`` suppresses
 the Lyα emission line while leaving other nebular lines unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-88
+.. GENERATED FROM PYTHON SOURCE LINES 9-92
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +61,7 @@ the Lyα emission line while leaving other nebular lines unchanged.
         "alpha": 3.0,
         "beta": 2.0,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     }
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
 

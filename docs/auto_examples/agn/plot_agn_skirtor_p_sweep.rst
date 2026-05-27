@@ -31,10 +31,14 @@ index ``p``. Steeper profiles (higher p) concentrate more dust closer to the
 disc, reducing the mid-IR peak temperature and shifting flux toward the far-IR.
 Flatter profiles distribute dust more uniformly and hotter on average.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-73
+.. GENERATED FROM PYTHON SOURCE LINES 10-78
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +62,7 @@ Flatter profiles distribute dust more uniformly and hotter on average.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -70,6 +74,7 @@ Flatter profiles distribute dust more uniformly and hotter on average.
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 11.0,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )

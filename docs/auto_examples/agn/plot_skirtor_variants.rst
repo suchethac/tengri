@@ -32,10 +32,14 @@ radiation that depends strongly on two parameters: viewing angle
 Face-on systems show a smooth thermal continuum; edge-on systems develop
 deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-94
+.. GENERATED FROM PYTHON SOURCE LINES 11-99
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +61,7 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -69,6 +73,7 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
             "log_lbol": 11.0,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )

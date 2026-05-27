@@ -35,27 +35,14 @@ References:
     Kewley+2001, ApJ, 556, 121 (SF/AGN demarcation)
     Kauffmann+2003, MNRAS, 346, 1055 (SF/composite line)
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-176
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 19-227
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -97,11 +84,21 @@ References:
             # Build a minimal star-forming model
             model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.5,
-                     "tau_gyr": 0.1, "log_peak_sfr": 0.5},
+                sfh={
+                    "type": "dpl",
+                    "*": tengri.FIXED,
+                    "alpha": 1.0,
+                    "beta": 2.5,
+                    "tau_gyr": 0.1,
+                    "log_total_mass": 10.0,
+                },
                 dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
-                neb={"type": "cue", "*": tengri.FIXED,
-                     "neb_logU": tengri.Fixed(logu), "neb_logZ_gas": tengri.Fixed(logz)},
+                neb={
+                    "type": "cue",
+                    "*": tengri.FIXED,
+                    "neb_logU": tengri.Fixed(logu),
+                    "neb_logZ_gas": tengri.Fixed(logz),
+                },
                 redshift=tengri.Fixed(0.05),
             )
 
@@ -142,12 +139,21 @@ References:
         # Build high-ionization model
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.0,
-                 "tau_gyr": 0.15, "log_peak_sfr": 0.3},
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "alpha": 1.0,
+                "beta": 2.0,
+                "tau_gyr": 0.15,
+                "log_total_mass": 10.0,
+            },
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
-            neb={"type": "cue", "*": tengri.FIXED,
-                 "neb_logU": tengri.Fixed(config["logu"]),
-                 "neb_logZ_gas": tengri.Fixed(config["logz"])},
+            neb={
+                "type": "cue",
+                "*": tengri.FIXED,
+                "neb_logU": tengri.Fixed(config["logu"]),
+                "neb_logZ_gas": tengri.Fixed(config["logz"]),
+            },
             redshift=tengri.Fixed(0.05),
         )
 
@@ -175,33 +181,61 @@ References:
 
     # Demarcation lines
     mask_k = log_nii_ha_grid < 0.47
-    ax.plot(log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=2.0,
-            label="Kewley+2001 (SF/AGN)")
+    ax.plot(
+        log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=2.0, label="Kewley+2001 (SF/AGN)"
+    )
     mask_kauff = log_nii_ha_grid < 0.05
-    ax.plot(log_nii_ha_grid[mask_kauff], log_oiii_hb_kauff[mask_kauff], "k--", lw=1.8,
-            label="Kauffmann+2003 (SF/composite)")
+    ax.plot(
+        log_nii_ha_grid[mask_kauff],
+        log_oiii_hb_kauff[mask_kauff],
+        "k--",
+        lw=1.8,
+        label="Kauffmann+2003 (SF/composite)",
+    )
 
     # Region labels
-    ax.text(-1.35, -0.65, "Star\nForming", fontsize=11, color="#1f77b4",
-            fontweight="bold", ha="center")
-    ax.text(0.0, 0.6, "Composite", fontsize=11, color="#ff7f0e",
-            fontweight="bold", ha="center")
-    ax.text(0.3, 1.2, "Seyfert/\nLINER", fontsize=11, color="#d62728",
-            fontweight="bold", ha="center")
+    ax.text(
+        -1.35, -0.65, "Star\nForming", fontsize=11, color="#1f77b4", fontweight="bold", ha="center"
+    )
+    ax.text(0.0, 0.6, "Composite", fontsize=11, color="#ff7f0e", fontweight="bold", ha="center")
+    ax.text(0.3, 1.2, "Seyfert/\nLINER", fontsize=11, color="#d62728", fontweight="bold", ha="center")
 
     # Plot star-forming galaxy population
-    ax.scatter(sf_log_nii_ha, sf_log_oiii_hb, s=60, c="#1f77b4", alpha=0.5,
-              edgecolors="#1f77b4", lw=1.0, label="SF galaxies (40)")
+    ax.scatter(
+        sf_log_nii_ha,
+        sf_log_oiii_hb,
+        s=60,
+        c="#1f77b4",
+        alpha=0.5,
+        edgecolors="#1f77b4",
+        lw=1.0,
+        label="SF galaxies (40)",
+    )
 
     # Plot AGN models (larger markers)
-    ax.scatter(agn_log_nii_ha, agn_log_oiii_hb, s=200, marker="^", c="#d62728",
-              edgecolors="black", lw=1.5, label="AGN models (5)", zorder=10)
+    ax.scatter(
+        agn_log_nii_ha,
+        agn_log_oiii_hb,
+        s=200,
+        marker="^",
+        c="#d62728",
+        edgecolors="black",
+        lw=1.5,
+        label="AGN models (5)",
+        zorder=10,
+    )
 
     # Label AGN points
     for x, y, label in zip(agn_log_nii_ha, agn_log_oiii_hb, agn_labels):
-        ax.annotate(label, (x, y), xytext=(8, 8), textcoords="offset points",
-                   fontsize=8, alpha=0.7, bbox=dict(boxstyle="round,pad=0.3",
-                   facecolor="yellow", alpha=0.3))
+        ax.annotate(
+            label,
+            (x, y),
+            xytext=(8, 8),
+            textcoords="offset points",
+            fontsize=8,
+            alpha=0.7,
+            bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3),
+        )
 
     ax.set_xlabel(r"log [NII]$\lambda$6583 / H$\alpha$", fontsize=13, fontweight="bold")
     ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$", fontsize=13, fontweight="bold")
@@ -213,11 +247,6 @@ References:
     fig.tight_layout()
     plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
     plt.close()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (4 minutes 41.828 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

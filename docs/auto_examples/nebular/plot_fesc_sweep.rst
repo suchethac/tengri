@@ -18,22 +18,31 @@
 .. _sphx_glr_auto_examples_nebular_plot_fesc_sweep.py:
 
 
-Ionizing photon escape suppresses nebular emission
-===================================================
+Escape fraction suppresses the optical line ratios, not just amplitudes
+========================================================================
 
 .. image:: images/sphx_glr_plot_fesc_sweep_001.png
    :alt: plot fesc sweep
    :class: sphx-glr-single-img
 
 
-Escape fraction ``f_esc`` sets what fraction of ionizing photons reach the
-ISM. Higher ``f_esc`` suppresses all nebular emission lines since fewer
-photons remain to ionize gas.
+We sweep the ionising-photon escape fraction f_esc from 0 to 0.9 at
+fixed log U and metallicity, and read out the response in
+diagnostic-ratio space ([O III]/Hbeta etc.). Companion to
+``plot_lyman_continuum_escape.py``, which shows the same physics in
+SED space focused on the Lyman edge.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-65
+Reference: Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction
+formalism).
+
+.. GENERATED FROM PYTHON SOURCE LINES 14-74
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,7 +68,7 @@ photons remain to ionize gas.
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={"type": "cue", "*": tengri.FIXED, "neb_fesc": tengri.Uniform(0.0, 1.0)},

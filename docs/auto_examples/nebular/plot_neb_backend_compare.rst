@@ -39,10 +39,14 @@ Reference:
 - Byler et al. 2017 ApJ 840 44 (BakedIn line treatment in FSPS/DSPS)
 - Li, Leja & Speagle 2023 ApJ 956 23 (Cue emulator)
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-96
+.. GENERATED FROM PYTHON SOURCE LINES 18-100
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

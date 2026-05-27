@@ -36,21 +36,14 @@ ApJ 748, 142 [2]_.
    :alt: plot_spitzer_irac_agn_wedge
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-234
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_spitzer_irac_agn_wedge_001.png
-   :alt: plot spitzer irac agn wedge
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_spitzer_irac_agn_wedge_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 21-239
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
     from pathlib import Path
@@ -84,6 +77,7 @@ ApJ 748, 142 [2]_.
         photometry=tengri.Photometry.from_names(irac_bands, cache_dir=str(cache_dir))
     )
 
+
     # --- Helper: draw SF galaxy with randomized params from prior ---
     def sample_sf_galaxy(ssp, key, redshift):
         """
@@ -97,7 +91,7 @@ ApJ 748, 142 [2]_.
             observation=tengri.Observation(photometry=obs_irac.photometry),
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-1.0, 1.5),
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": tengri.Uniform(0.5, 10.0),
                 "width_gyr": tengri.Uniform(0.3, 4.0),
                 "skew": tengri.Uniform(-2.0, 2.0),
@@ -264,11 +258,6 @@ ApJ 748, 142 [2]_.
     #
     # .. [2] Donley JL, et al. 2012, ApJ 748, 142 (arXiv:1202.3816)
     #        "Spitzer Quasar and ULIRG Evolution Study (SQUIRES)"
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.450 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py:

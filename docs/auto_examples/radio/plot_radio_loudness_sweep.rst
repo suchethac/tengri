@@ -35,10 +35,14 @@ We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and
 
 Reference: Kellermann et al. 1989, ApJ 345, 171.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-55
+.. GENERATED FROM PYTHON SOURCE LINES 14-59
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

@@ -34,36 +34,18 @@ but small dynamic range of [N II]/H-alpha (Marino et al. 2013), and the
 famous double-valued R23 ratio which peaks near 12 + log(O/H) ≈ 8.3
 (Pagel et al. 1979).
 
-This demonstrates why observers cannot uniquely invert a single line
+why observers cannot uniquely invert a single line
 ratio to metallicity without breaking the R23 degeneracy or adopting a
 secondary diagnostic.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-83
-
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_line_ratios_metallicity_evolution_001.png
-   :alt: plot line ratios metallicity evolution
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_line_ratios_metallicity_evolution_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 17-96
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -84,12 +66,16 @@ secondary diagnostic.
     # Build model with free logZ_gas parameter spanning the diagnostic range
     model = tengri.SEDModel.build(
         SSP,
-        sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.05,
-             "log_peak_sfr": 1.5, "alpha": 4.0, "beta": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED,
-             "logZ_gas": tengri.Uniform(-2.0, 0.5)},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "tau_gyr": 0.05,
+            "log_total_mass": 10.0,
+            "alpha": 4.0,
+            "beta": 2.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": tengri.Uniform(-2.0, 0.5)},
         redshift=tengri.Fixed(0.0),
     )
 
@@ -121,20 +107,20 @@ secondary diagnostic.
 
     ax.plot(twelve_oh, log_o3hb, color="C0", lw=2.0, label=r"$[\mathrm{O\,III}]/\mathrm{H}\beta$")
     ax.plot(twelve_oh, log_n2ha, color="C3", lw=2.0, label=r"$[\mathrm{N\,II}]/\mathrm{H}\alpha$")
-    ax.plot(twelve_oh, log_r23, color="C2", lw=2.0, label=r"$R_{23}$ ([$\mathrm{O\,II}$]+[$\mathrm{O\,III}$])/H$\beta$)")
+    ax.plot(
+        twelve_oh,
+        log_r23,
+        color="C2",
+        lw=2.0,
+        label=r"$R_{23}$ ([$\mathrm{O\,II}$]+[$\mathrm{O\,III}$])/H$\beta$)",
+    )
 
     ax.legend(loc="upper left", fontsize=10, framealpha=0.9)
     ax.set_xlabel(r"$12 + \log(\mathrm{O/H})$", fontsize=11)
     ax.set_ylabel(r"$\log\,(\mathrm{line\,ratio})$", fontsize=11)
     ax.grid(True, alpha=0.3, linestyle=":")
 
-    plt.savefig("plot_line_ratios_metallicity_evolution.png", dpi=150,
-                bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 8.229 seconds)
+    plt.savefig("plot_line_ratios_metallicity_evolution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_line_ratios_metallicity_evolution.py:

@@ -32,10 +32,14 @@ Varying ``agn_log_lbol`` from 10 to 14 (in log10 L_sun) sweeps four orders of
 magnitude in disc luminosity, comparable to typical Seyfert through bright-QSO
 regimes. The spectral shape (slope, peak position) remains nearly fixed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-73
+.. GENERATED FROM PYTHON SOURCE LINES 11-79
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,7 +63,7 @@ regimes. The spectral shape (slope, peak position) remains nearly fixed.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -70,6 +74,8 @@ regimes. The spectral shape (slope, peak position) remains nearly fixed.
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+            "log_lbol": tengri.Uniform(10.0, 14.0),  # Bugfix: promote swept param to FREE
         },
         redshift=tengri.Fixed(0.05),
     )

@@ -19,12 +19,16 @@ main sequence, compute their instantaneous SFR from tengri models, bin in
 redshift, compute SFRD per comoving volume element, and show the population
 average matches the Madau & Dickinson 2014 fit.
 
-This demonstrates that from a proper sample spanning M* space and correcting
+that from a proper sample spanning M* space and correcting
 for cosmic volume, galaxy-level SFR integrates to the observed SFRD history.
 
 Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 (arXiv:1403.0007; "Cosmic Star Formation History")
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -209,10 +213,14 @@ print("-" * 70)
 # Peak location
 idx_peak_pop = np.argmax(sfrd_pop)
 idx_peak_md = np.argmax(psi_md14)
-print(f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
-      f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³")
-print(f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
-      f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³")
+print(
+    f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
+    f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³"
+)
+print(
+    f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
+    f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³"
+)
 print("\nInterpretation:")
 print("  - SFRD rises from z~0 to peak at z~2")
 print("  - Declines toward z~3+ as the universe ages")

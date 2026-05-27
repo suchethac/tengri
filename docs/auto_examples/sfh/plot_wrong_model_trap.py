@@ -1,120 +1,177 @@
 """
-The Wrong-SEDModel Trap: Parametric Bias in Derived Quantities
-============================================================
+Fitting a stochastic SFH with a smooth parametric prior leaves a UV residual
+============================================================================
 
-A smooth (parametric) model fits a bursty galaxy with χ² ≈ 1 but
-systematically underestimates recent SFR by up to 10×. The trap:
-good residuals do not guarantee unbiased physical parameters.
+A common SED-fitting failure mode: pick a smooth parametric SFH (delayed
+exponential, tau-model, lognormal) for a galaxy whose true star-formation
+history has short-timescale bursts. The continuum-anchored bands (optical,
+NIR) absorb the mass and the fit looks plausible — but the UV bands, where
+young O/B stars dominate, carry the residual of the recent burst.
 
-.. sphx-glr-precomputed-img:
+We mock a galaxy with a *dpl + field* stochastic SFH (mean double-power-law
+modulated by a damped-random-walk Gaussian process), then fit it with a
+*dexp* (delayed exponential) — the same physics minus the burstiness. The
+top panel shows the rest-frame SED of truth and fit; the bottom panel shows
+broadband residuals divided by the photometric noise. UV bands sit
+systematically off, NIR bands recover.
 
-.. image:: images/sphx_glr_plot_wrong_model_trap_001.png
-   :alt: plot_wrong_model_trap
-   :class: sphx-glr-single-img
-
+The misspecification penalty is the structure in the residuals, not the
+chi-squared total — which is why purely numerical convergence checks miss
+this failure mode (Leja et al. 2019; Carnall et al. 2019; Iyer et al. 2019).
 """
+
+import warnings
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import (
-    Fitter,
-    Fixed,
-    Observation,
-    Parameters,
-    SEDModel,
-    Spectroscopy,
-    Uniform,
-    load_ssp,
-    setup_style,
-)
+import tengri
+from tengri.analysis.plotting import setup_style
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+BANDS = [
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
+]
+Z = 0.05
+SNR = 30.0  # generous: the trap should be visible above shot noise.
 
-ssp = load_ssp()
-wave_obs = jnp.linspace(3800.0, 9200.0, 200)
-obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
+ssp = tengri.load_ssp()
 
-# --- True bursty model ---
-spec_stoch = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    sfh_field_psd_sigma=Fixed(2.5),
-    sfh_field_psd_tau_myr=Fixed(15.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.0),
-    mean_sfh_type=["tsnorm", "field"],
+# ─── Truth: dpl mean + field modulator (stochastic, bursty) ──────────────────
+truth_model = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={
+        "type": ["dpl", "field"],
+        "*": tengri.FIXED,
+        # Smooth backbone — peaks ~2 Gyr ago, falls toward present.
+        "alpha": 3.0,
+        "beta": 2.0,
+        "tau_gyr": 2.0,
+        "log_peak_sfr": 1.0,
+        # Stochastic burstiness — DRW with sigma ~ 0.8 dex on an 80 Myr
+        # timescale gives recent-burst structure clearly visible in UV.
+        "psd_sigma": 0.8,
+        "psd_tau_myr": 80.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.25, "tau_bc": 0.3},
+    redshift=tengri.Fixed(Z),
 )
-model_stoch = SEDModel(spec_stoch, ssp, observation=obs)
 
-key = jax.random.PRNGKey(7)
-true_params = {**spec_stoch.sample(key)}
-true_params["sfh_field_psd_sigma"] = jnp.array(2.5)
-true_params["sfh_field_psd_tau_myr"] = jnp.array(15.0)
-mock = model_stoch.mock_spectrum(true_params, wave_obs, snr=30.0, key=key)
+# Seed picked so the GP realisation has a recent (<~100 Myr) excursion —
+# without a recent feature there is no trap to diagnose.
+key_truth = jax.random.PRNGKey(7)
+truth = dict(truth_model.spec.sample(key_truth))
+mock = truth_model.mock(truth, snr=SNR, key=jax.random.PRNGKey(0))
 
-# --- Wrong (smooth) model ---
-spec_smooth = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
-    sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
-    sfh_tsnorm_skew=Uniform(-3.0, 3.0),
-    sfh_tsnorm_trunc=Uniform(1.0, 10.0),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    redshift=Fixed(0.0),
-    mean_sfh_type="tsnorm",
+# ─── Wrong model: smooth delayed exponential, no field ───────────────────────
+fit_model = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={
+        "type": "dexp",
+        "*": tengri.FREE,
+        "start_gyr": tengri.Fixed(0.0),
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": tengri.Uniform(0.0, 1.5),
+        "tau_bc": tengri.Uniform(0.0, 1.5),
+    },
+    redshift=tengri.Fixed(Z),
 )
-model_smooth = SEDModel(spec_smooth, ssp, observation=obs)
 
-fitter_smooth = Fitter(model_smooth, mock.flux_obs, mock.noise, data_type="spectroscopy")
-map_smooth = fitter_smooth.run("map", n_steps=400, verbose=False)
-
-# --- Compare SFHs ---
-sfh_true = model_stoch.predict_sfh(true_params)
-sfh_fit = model_smooth.predict_sfh(map_smooth.params)
-t_gyr = np.array(sfh_true["t_gyr"])
-
-fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-
-# Left: SFH comparison
-ax = axes[0]
-ax.fill_between(
-    t_gyr, 0, np.array(sfh_true["sfr_full"]), alpha=0.35, color="#d62728", label="True (bursty)"
+forward = tengri.ForwardModel.build(sed=fit_model, observation=obs)
+posterior = forward.fit(
+    mock.flux_obs,
+    mock.noise,
+    method="map",
+    optimizer="adam",
+    n_steps=400,
+    verbose=False,
 )
-ax.plot(t_gyr, sfh_true["sfr_full"], color="#d62728", lw=1.2)
-ax.plot(t_gyr, sfh_fit["sfr_mean"], color="#1f77b4", lw=2.0, ls="--", label="Smooth model MAP")
-ax.set_xlabel("Lookback time [Gyr]")
-ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
-ax.set_title("SFH: True vs Smooth SEDModel Fit")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(0, 13)
+fit_params = posterior.params
 
-# Right: residuals χ
-residuals = (
-    np.array(mock.flux_obs) - np.array(model_smooth.predict_spectrum(map_smooth.params))
-) / np.array(mock.noise)
-ax = axes[1]
-ax.plot(np.array(wave_obs), residuals, "k-", lw=0.6, alpha=0.7)
-ax.axhline(0, color="grey", lw=0.5)
-ax.axhspan(-1, 1, alpha=0.1, color="grey")
-chi2_red = float(jnp.mean(jnp.array(residuals) ** 2))
-ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$(d - m) / \sigma$")
-ax.set_title(f"Residuals: reduced χ² = {chi2_red:.2f} (looks good!)")
+# ─── Photometry + rest-frame SED for plotting ────────────────────────────────
+flux_obs = np.asarray(mock.flux_obs)
+noise = np.asarray(mock.noise)
+flux_fit = np.asarray(fit_model.predict_photometry(fit_params))
+wave_eff = np.array([float(jnp.mean(w)) for w in obs.photometry.filter_waves])
 
-fig.suptitle("Wrong-SEDModel Trap: χ² ≈ 1 but SFH is wrong", fontsize=11, y=1.02)
-fig.tight_layout()
-plt.savefig("plot_wrong_model_trap.png", dpi=150, bbox_inches="tight")
-plt.show()
+sed_truth = truth_model.predict_rest_sed(truth)
+sed_fit = fit_model.predict_rest_sed(fit_params)
+wave_rest = np.asarray(sed_truth.wavelength)
+wave_obs = wave_rest * (1.0 + Z)
+
+
+def _scale_to_r(sed_arr):
+    idx = np.argmin(np.abs(wave_obs - wave_eff[BANDS.index("sdss_r")]))
+    return flux_obs[BANDS.index("sdss_r")] / sed_arr[idx]
+
+
+fnu_truth = _scale_to_r(np.asarray(sed_truth.sed)) * np.asarray(sed_truth.sed)
+fnu_fit = _scale_to_r(np.asarray(sed_fit.sed)) * np.asarray(sed_fit.sed)
+
+# ─── Figure: SED + residuals ────────────────────────────────────────────────
+fig, (ax_sed, ax_res) = plt.subplots(
+    2,
+    1,
+    figsize=(7.0, 5.4),
+    sharex=True,
+    gridspec_kw={"height_ratios": [3, 1], "hspace": 0.05},
+)
+
+vis = (wave_obs > 1.3e3) & (wave_obs < 2.5e4)
+ax_sed.plot(
+    wave_obs[vis], fnu_truth[vis], color="0.4", lw=0.9, label="Truth (dpl + stochastic field)"
+)
+ax_sed.plot(
+    wave_obs[vis], fnu_fit[vis], color="C3", lw=0.9, alpha=0.85, label="MAP fit (dexp, smooth)"
+)
+ax_sed.errorbar(
+    wave_eff,
+    flux_obs,
+    yerr=noise,
+    fmt="o",
+    color="k",
+    ms=4.5,
+    capsize=2,
+    label=f"Mock (S/N = {SNR:.0f})",
+)
+ax_sed.set_xscale("log")
+ax_sed.set_yscale("log")
+ax_sed.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax_sed.legend(frameon=False, fontsize=8, loc="lower right")
+
+residual = (flux_fit - flux_obs) / noise
+band_colour = ["C0" if w < 4e3 else "0.3" for w in wave_eff]
+ax_res.axhspan(-1, 1, color="0.85", alpha=0.5, zorder=0)
+ax_res.axhline(0.0, color="0.4", lw=0.6)
+for w, r, c in zip(wave_eff, residual, band_colour):
+    ax_res.plot(w, r, "o", color=c, ms=6)
+ax_res.set_xscale("log")
+ax_res.set_xlabel(r"Observed wavelength  [$\mathrm{\AA}$]")
+ax_res.set_ylabel(r"$(F_\mathrm{fit} - F_\mathrm{obs}) / \sigma$")
+ylim = max(4.0, 1.2 * float(np.abs(residual).max()))
+ax_res.set_ylim(-ylim, ylim)
+ax_res.axvspan(1e3, 4e3, color="C0", alpha=0.08, zorder=-1)
+ax_res.text(
+    2e3, ylim * 0.75, "UV: model misspecification", color="C0", fontsize=8, ha="center", va="top"
+)
+
+fig.savefig("plot_wrong_model_trap.png", dpi=150, bbox_inches="tight")

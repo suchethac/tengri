@@ -32,10 +32,14 @@ affect line ratios and diagnostic positions. Four-panel layout shows
 velocity and density sequences on BPT, line ratios vs velocity, and
 magnetic field strength.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-137
+.. GENERATED FROM PYTHON SOURCE LINES 11-141
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

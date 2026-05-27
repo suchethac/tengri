@@ -39,10 +39,14 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-104
+.. GENERATED FROM PYTHON SOURCE LINES 18-108
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

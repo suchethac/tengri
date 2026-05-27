@@ -42,23 +42,17 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 **References:**
 
 - Sanders et al. (1988) ApJ 325, 74: ULIRG/QSO connection hypothesis
+
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-166
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
-   :alt: plot ulirg to qso transition
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 24-169
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -170,9 +164,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         wave = np.asarray(out.wavelength)
         sed = np.asarray(out.sed)
         nu_l_nu = (C_AA_PER_S / wave) * sed
-        seds.append(
-            {"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu}
-        )
+        seds.append({"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu})
 
     # ============================================================================
     # Plot: ULIRG→QSO sequence on a single νLν panel
