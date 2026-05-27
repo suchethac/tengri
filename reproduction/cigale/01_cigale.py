@@ -671,14 +671,12 @@ plt.show()
 # C/O offsets internally — those CIGALE knobs have no tengri counterpart
 # yet, tracked in [tengri #458](https://github.com/suchethac/tengri/issues/458).
 #
-# ```{warning}
-# Cue currently absorbs LyC photons at λ < 912 Å but does **not** emit
-# the recycled photons back into ``sed_intrinsic`` — the dotted green
-# curve on the right is essentially zero, also tracked in #458. Once
-# the accumulator fix lands, Cue should overlay CIGALE's CLOUDY emission
-# in the same way the composable AGN now overlays SKIRTOR in §9
-# (post-#420).
-# ```
+# Both panels include line + continuum nebular emission. The Cue side
+# previously read silent — the Q_H integration of the float32 BC03 SSP
+# overflowed to `inf`, baking ~zero line luminosities into the forward
+# pass (issue #458, fixed in #469: float64-cast at the integration site
+# plus a precompute age-cutoff that makes the BC03-from-CIGALE refit
+# ~600× faster).
 
 # %%
 _sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
