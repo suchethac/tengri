@@ -9,6 +9,10 @@ strengths depend on mean stellar age, holding metallicity and dust fixed.
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

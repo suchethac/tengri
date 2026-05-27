@@ -26,7 +26,9 @@ from tengri.sps.dsps_wrapper import (
 
 print("Loading SSP data and filters...")
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 fw = obs.photometry.filter_waves
 ft = obs.photometry.filter_trans
 
@@ -34,7 +36,7 @@ spec = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -191,7 +193,7 @@ spec_cal = ParamSpec(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),

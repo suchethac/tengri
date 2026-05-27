@@ -19,6 +19,10 @@ References:
 - Bouwens et al. (2022), ApJ, 931, 160 — JWST LAE survey at z~5
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import corner
@@ -48,7 +52,7 @@ log_mstar_true = 9.0  # LAE mass scale (10^9 Msun)
 
 # Mock photometry: JWST/NIRCam F150W, F277W, F356W (rest-frame UV-optical)
 # These filters straddle the Lyman break at z~5, making photo-z degenerate.
-PHOT_BANDS = ["jwst_nircam_f150w", "jwst_nircam_f277w", "jwst_nircam_f356w"]
+PHOT_BANDS = ["jwst_f150w", "jwst_f277w", "jwst_f356w"]
 
 # Emission lines: H-alpha + [OIII]5007 (strongest lines accessible at z~5)
 # Rest-frame H-alpha = 6564.61 A -> observed = 32823 A (beyond JWST NIRCam!)
@@ -68,9 +72,7 @@ ssp = tengri.load_ssp()
 # Strategy: fit photometry + line EWs simultaneously. The SEDModel forward pass
 # includes nebular continuum + lines from the CUE model, so we capture physical
 # line-to-continuum coupling.
-obs_phot = tengri.Observation(
-    photometry=tengri.Photometry.from_names(PHOT_BANDS)
-)
+obs_phot = tengri.Observation(photometry=tengri.Photometry.from_names(PHOT_BANDS))
 
 # For this example, we fit photometry only and post-fit measure line EWs
 # (full joint phot+line likelihood is in development).
@@ -128,7 +130,7 @@ truth = dict(model.spec.sample(key))
 
 # Override to star-forming archetype
 truth.update(
-    sfh_tsnorm_log_peak_sfr=1.5,  # ~30 Msun/yr peak
+    sfh_tsnorm_log_total_mass=10.0,  # ~30 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=1.0,  # Young: 1 Gyr lookback
     sfh_tsnorm_width_gyr=0.5,  # Narrow burst
     sfh_tsnorm_skew=0.3,  # Slight asymmetry
@@ -178,7 +180,9 @@ result_phot = fitter_phot.fit(
     n_samples=6,
     verbose=False,
 )
-print(f"Photometry-only fit complete: {len(result_phot.samples[list(result_phot.samples.keys())[0]])} posterior samples")
+print(
+    f"Photometry-only fit complete: {len(result_phot.samples[list(result_phot.samples.keys())[0]])} posterior samples"
+)
 
 # Fit 2: Joint photometry + spectrum (breaks degeneracies)
 print("\n=== FIT 2: Joint photometry + spectrum (degeneracy broken) ===")
@@ -194,7 +198,9 @@ result_joint = fitter_joint.fit(
     n_samples=6,
     verbose=False,
 )
-print(f"Joint fit complete: {len(result_joint.samples[list(result_joint.samples.keys())[0]])} posterior samples")
+print(
+    f"Joint fit complete: {len(result_joint.samples[list(result_joint.samples.keys())[0]])} posterior samples"
+)
 
 # %% Analyze posterior comparison: Photo-z and dust attenuation
 #
@@ -203,10 +209,11 @@ print(f"Joint fit complete: {len(result_joint.samples[list(result_joint.samples.
 # - A_V posterior width (dust constraint)
 
 # Extract posterior statistics
-params_to_plot = ["dust_tau_bc", "sfh_tsnorm_log_peak_sfr", "dust_tau_diff"]
+params_to_plot = ["dust_tau_bc", "sfh_tsnorm_log_total_mass", "dust_tau_diff"]
 
 fig, axes = plt.subplots(
-    1, len(params_to_plot),
+    1,
+    len(params_to_plot),
     figsize=(12, 3.5),
 )
 
@@ -315,7 +322,9 @@ print("=" * 70)
 print("\nKey findings:")
 print(f"  - Photo-z degeneracy width (phot-only):  {np.std(samples_phot):.4f}")
 print(f"  - Constraint tightening (joint):         {np.std(samples_joint):.4f}×")
-print(f"  - Constraint improvement:                {np.std(samples_phot) / np.std(samples_joint):.2f}×")
+print(
+    f"  - Constraint improvement:                {np.std(samples_phot) / np.std(samples_joint):.2f}×"
+)
 print("\nFigures saved:")
 print("  - plot_joint_photometry_line_fit_posteriors.png")
 print("  - plot_joint_photometry_line_fit_corner.png")

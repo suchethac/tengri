@@ -24,6 +24,10 @@ References
    "Unified Schemes for Radio-Loud Active Galactic Nuclei"
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -96,9 +100,7 @@ nu_lnu_type1 = nu_type1 * sed_type1
 nu_lnu_type2 = nu_type2 * sed_type2
 
 # Create side-by-side comparison
-fig, (ax1, ax2) = plt.subplots(
-    1, 2, figsize=(12.0, 4.5), sharey=True, gridspec_kw={"hspace": 0.0}
-)
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.0, 4.5), sharey=True, gridspec_kw={"hspace": 0.0})
 
 # Type 1 (face-on): blue continuum, prominent broad lines
 ax1.loglog(wave_type1, nu_lnu_type1, color="#1f77b4", lw=2.0)

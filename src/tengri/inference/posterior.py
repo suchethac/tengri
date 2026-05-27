@@ -1817,7 +1817,6 @@ class Posterior:
             "sfh_alpha": r"$\alpha$",
             "sfh_beta": r"$\beta$",
             "sfh_tau_peak_gyr": r"$\tau_{\rm peak}$ (Gyr)",
-            "sfh_peak_sfr": r"SFR$_{\rm peak}$",
             "psd_sigma": r"$\sigma_{\rm burst}$",
             "psd_tau_myr": r"$\tau_{\rm burst}$ (Myr)",
             "met_logzsol": r"log Z",

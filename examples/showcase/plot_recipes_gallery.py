@@ -1,5 +1,5 @@
 """
-Curated recipes for common science cases
+recipes for common science cases
 =========================================
 
 Each recipe is a nested-dict configuration — drop-in templates for common galaxy
@@ -16,6 +16,10 @@ panchromatic AGN:
 All models are sampled at default prior medians to display the characteristic
 SED shape of each recipe.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import os
 import warnings

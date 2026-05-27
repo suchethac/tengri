@@ -62,6 +62,66 @@ class FilterCurve:
 
 
 @jax.jit
+def lnu_filter_integral(
+    L_nu_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    filter_wave: jnp.ndarray,
+    filter_trans: jnp.ndarray,
+    redshift: float,
+) -> jnp.ndarray:
+    r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
+
+    Returns the filter-weighted rest-frame specific luminosity — no
+    cosmological dimming. The flux conversion is a separate step
+    (compose with :func:`lnu_to_fnu` or :func:`compute_flux_density`).
+
+    .. math::
+
+        L_\nu^{\rm filter}
+        = \frac{\int L_\nu(\lambda_{\rm rest}=\lambda_{\rm obs}/(1+z))
+                T(\lambda_{\rm obs}) \, \lambda_{\rm obs} \, d\lambda_{\rm obs}}
+               {\int T(\lambda_{\rm obs}) \, \lambda_{\rm obs} \, d\lambda_{\rm obs}}
+
+    Parameters
+    ----------
+    L_nu_rest : array, shape (n_wave,)
+        Rest-frame specific luminosity [erg/s/Hz].
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid [Ångstrom].
+    filter_wave : array, shape (n_filt,)
+        Filter wavelength grid [Ångstrom], in observed frame.
+    filter_trans : array, shape (n_filt,)
+        Filter transmission (dimensionless, 0–1).
+    redshift : float
+        Source redshift z.
+
+    Returns
+    -------
+    L_nu_filter : float
+        Filter-weighted rest-frame L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad-safe.** Pure ``jnp`` primitives.
+
+    Introduced in #398.e (per ADR-0016) to give components publishing
+    ``_phot_lnu_precomp`` tensors a named function for "the L_ν step",
+    without forcing them to call :func:`compute_flux_density` with
+    ``dl_cm=1.0`` and then undo the cosmology factor.
+
+    See Also
+    --------
+    compute_flux_density : The full L→F conversion (composes this with
+        :func:`lnu_to_fnu`).
+    """
+    wave_obs = wave_rest * (1.0 + redshift)
+    L_on_filter = jnp.interp(filter_wave, wave_obs, L_nu_rest, left=0.0, right=0.0)
+    num = jnp.trapezoid(L_on_filter * filter_trans * filter_wave, filter_wave)
+    den = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
+    return num / jnp.maximum(den, 1e-30)
+
+
+@jax.jit
 def compute_flux_density(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
@@ -138,20 +198,11 @@ def compute_flux_density(
     pad_filters : Stack variable-length filter arrays.
 
     """
-    # Redshift the SED: observed wavelength = rest * (1+z)
-    wave_obs = wave_rest * (1.0 + redshift)
-
-    # Interpolate SED onto filter wavelength grid
-    sed_on_filter = jnp.interp(filter_wave, wave_obs, sed_rest, left=0.0, right=0.0)
-
-    # Filter-weighted integral: int(SED * T * lam dlam) / int(T * lam dlam)
-    numerator = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
-    denominator = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
-
-    # Scale: (1+z) / (4 pi dL^2) for flux density using lnu_to_fnu conversion
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-
-    return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
+    # Composition of the two canonical operations (ADR-0016, 2026-05):
+    #   1. ``lnu_filter_integral`` — filter-weighted rest-frame L_ν
+    #   2. ``lnu_to_fnu`` — apply (1+z) / (4π d_L²) cosmological dimming
+    L_nu_filter = lnu_filter_integral(sed_rest, wave_rest, filter_wave, filter_trans, redshift)
+    return lnu_to_fnu(L_nu_filter, dl_cm, redshift)
 
 
 def pad_filters(filter_waves: list, filter_trans: list):

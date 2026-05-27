@@ -43,7 +43,7 @@ def parametric_spec():
     """Parametric tsnorm spec (no GP field)."""
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -61,7 +61,7 @@ def stochastic_spec():
     """Stochastic tsnorm + field spec."""
     return Parameters(
         mean_sfh_type=["tsnorm", "field"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -85,7 +85,7 @@ def dpl_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -256,14 +256,14 @@ class TestGradients:
         def loss(p):
             return jnp.sum(parametric_model.predict_photometry(p))
 
-        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_peak_sfr"])
+        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_total_mass"])
 
         def loss_scalar(x):
             p = dict(typical_params)
-            p["sfh_tsnorm_log_peak_sfr"] = x
+            p["sfh_tsnorm_log_total_mass"] = x
             return float(jnp.sum(parametric_model.predict_photometry(p)))
 
-        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_peak_sfr"]))
+        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_total_mass"]))
         np.testing.assert_allclose(
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
@@ -272,14 +272,14 @@ class TestGradients:
         def loss(p):
             return parametric_model.predict_derived(p)["stellar_mass"]
 
-        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_peak_sfr"])
+        grad_jax = float(jax.grad(loss)(typical_params)["sfh_tsnorm_log_total_mass"])
 
         def loss_scalar(x):
             p = dict(typical_params)
-            p["sfh_tsnorm_log_peak_sfr"] = x
+            p["sfh_tsnorm_log_total_mass"] = x
             return float(parametric_model.predict_derived(p)["stellar_mass"])
 
-        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_peak_sfr"]))
+        grad_fd = fd_grad(loss_scalar, float(typical_params["sfh_tsnorm_log_total_mass"]))
         np.testing.assert_allclose(
             grad_jax, grad_fd, rtol=1e-3, err_msg=f"autodiff={grad_jax:.4e}, FD={grad_fd:.4e}"
         )
@@ -513,7 +513,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -529,7 +529,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -551,7 +551,7 @@ class TestDustEmissionForwardModel:
             sfh_dpl_alpha=Fixed(1.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(8.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),

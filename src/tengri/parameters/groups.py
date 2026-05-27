@@ -88,6 +88,37 @@ from tengri.parameters.sentinels import FIXED, FREE
 __all__ = ["parameters_to_groups", "parse_groups"]
 
 
+# Canonical fixed-default values that override the prior-midpoint rule
+# (``registry_default.unstandardize(0.0)``) used by the wildcard-FIXED
+# resolver. The midpoint is rarely what the user actually wants for a
+# default — e.g. ``Uniform(-2.0, 0.2)`` for ``met_logzsol`` gives -0.9,
+# which silently injected a ~0.85 dex Z offset in CIGALE comparisons
+# (#412). Conventions here are chosen to match the canonical
+# external-library defaults (FSPS / Bagpipes / Prospector).
+_CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
+    # met_logzsol = log10(Z/Z⊙); 0.0 = solar — matches FSPS ``logzsol=0.0``
+    # and Bagpipes ``metallicity=1.0 Z⊙``.
+    "met_logzsol": 0.0,
+    "met_logzsol_0": 0.0,
+    "met_logzsol_final": 0.0,
+    "met_logzsol_old": 0.0,
+    "met_logzsol_young": 0.0,
+    "met_logzsol_burst": 0.0,
+}
+
+
+def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
+    """Pick the fixed value used when wildcard-FIXED collapses a free param.
+
+    Returns the canonical convention from ``_CANONICAL_FIXED_DEFAULTS`` when
+    present, else falls back to the prior midpoint
+    ``registry_default.unstandardize(0.0)``.
+    """
+    if param_name in _CANONICAL_FIXED_DEFAULTS:
+        return _CANONICAL_FIXED_DEFAULTS[param_name]
+    return float(registry_default.unstandardize(0.0))
+
+
 # Ensure SEDModelComponent subclasses are imported and registered.
 # This populates _REGISTRY so the resolver can consult it.
 def _ensure_registry_loaded() -> None:
@@ -176,33 +207,57 @@ def _valid_dust_emission_types() -> frozenset[str]:
     return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
 
 
-#: Valid nebular types.
-_VALID_NEBULAR_TYPES = {
-    "none",
-    "ssp",
-    "cue",
-    "cloudy",
-    "cb19",
+def _valid_nebular_types() -> frozenset[str]:
+    """Derive accepted ``neb.type`` values from :data:`NEBULAR_MODELS`.
+
+    Mirrors the IGM / radio / X-ray derivation (#355): the validator
+    reads the runtime registry rather than maintaining a parallel
+    hand-written set. Adding a new nebular backend = one
+    ``register_nebular_model`` call in
+    ``components/nebular/__init__.py``; this validator picks it up
+    automatically. ADR-0005 / ADR-0008.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    return frozenset(NEBULAR_MODELS.keys())
+
+
+def _valid_igm_types() -> frozenset[str]:
+    """Derive accepted ``igm.type`` values from :data:`IGM_MODELS`.
+
+    Following ADR-0005 / ADR-0008 (single source of truth), the
+    grammar-layer validator views the runtime registry directly rather
+    than maintaining a parallel hand-written set. Adding a new IGM
+    transmission model = one ``register_igm_model`` call in
+    ``components/igm/__init__.py``; this validator picks it up
+    automatically.
+    """
+    from tengri.components.igm import IGM_MODELS
+
+    return frozenset(IGM_MODELS.keys())
+
+
+#: Map grammar-layer IGM names to the canonical form consumed by
+#: :meth:`SEDModel._init_igm` (which only accepts ``'inoue'`` / ``'madau'``).
+_IGM_TYPE_ALIASES = {
+    "inoue14": "inoue",
+    "inoue": "inoue",
+    "madau": "madau",
 }
 
-#: Valid IGM types.
-_VALID_IGM_TYPES = {
-    "none",
-    "madau",
-    "inoue14",
-}
 
-#: Valid radio types.
-_VALID_RADIO_TYPES = {
-    "none",
-    "condon92",
-}
+def _valid_radio_types() -> frozenset[str]:
+    """Derive accepted ``radio.type`` values from :data:`RADIO_MODELS`."""
+    from tengri.components.radio import RADIO_MODELS
 
-#: Valid X-ray types.
-_VALID_XRAY_TYPES = {
-    "none",
-    "simple",
-}
+    return frozenset(RADIO_MODELS.keys())
+
+
+def _valid_xray_types() -> frozenset[str]:
+    """Derive accepted ``xray.type`` values from :data:`XRAY_MODELS`."""
+    from tengri.components.xray import XRAY_MODELS
+
+    return frozenset(XRAY_MODELS.keys())
 
 
 def _valid_dust_laws() -> frozenset[str]:
@@ -417,8 +472,9 @@ def parse_groups(**kwargs) -> Parameters:
                     if registry_default.is_fixed:
                         resolved_kwargs[param_name] = registry_default
                     else:
-                        center = registry_default.unstandardize(0.0)
-                        resolved_kwargs[param_name] = Fixed(float(center))
+                        resolved_kwargs[param_name] = Fixed(
+                            _default_fixed_value(param_name, registry_default)
+                        )
                     provenance[param_name] = "user_fixed"
                 else:
                     if isinstance(val, Distribution):
@@ -488,7 +544,17 @@ def parse_groups(**kwargs) -> Parameters:
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_groups = {
+        "sfh",
+        "stellar",
+        "dust",
+        "neb",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+        "foreground",
+    }
     result = {}
 
     for group_name, group_dict in groups.items():
@@ -524,6 +590,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_radio(group_dict, result)
         elif group_name == "xray":
             _translate_xray(group_dict, result)
+        elif group_name == "foreground":
+            _translate_foreground(group_dict, result)
         elif group_name == "agn":
             _translate_agn(group_dict, result)
 
@@ -539,8 +607,23 @@ def _translate_structural(groups: dict) -> dict:
 
 
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
-    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`."""
+    """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
+
+    Also forwards the (non-parametric only) ``bin_edges_gyr`` structural
+    kwarg through to :func:`resolve_sfh` so users can override the
+    bin layout for ``prospector_beta`` / ``continuity`` / etc. from the
+    nested-dict grammar (#337).
+    """
     sfh_type = sfh_dict.get("type")
+
+    # ``bin_edges_gyr`` is a structural setting (array of bin edges in
+    # Gyr) that only applies to non-parametric SFHs. Surface it as a
+    # top-level kwarg so ``Parameters.__init__`` can pop it and forward
+    # to ``resolve_sfh(mean_sfh_type, bin_edges_gyr=...)`` via
+    # ``_build_legacy``. The wildcard ``'*': FREE / FIXED`` does NOT
+    # apply to this — it's a config, not a free parameter.
+    if "bin_edges_gyr" in sfh_dict:
+        result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
 
     if sfh_type is None:
         result["mean_sfh_type"] = ["dpl", "field"]
@@ -669,8 +752,9 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
     neb_type = neb_dict.get("type", "none")
 
     # Validate type
-    if neb_type not in _VALID_NEBULAR_TYPES:
-        suggestions = difflib.get_close_matches(neb_type, _VALID_NEBULAR_TYPES, n=2, cutoff=0.6)
+    valid_neb = _valid_nebular_types()
+    if neb_type not in valid_neb:
+        suggestions = difflib.get_close_matches(neb_type, valid_neb, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown nebular type '{neb_type}'.{suggest_str}")
 
@@ -683,6 +767,11 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
+        # #303: opt into the full Cue catalogue (~271 species) instead
+        # of the default 128 CLOUDY/FSPS subset so users can read
+        # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
+        if neb_dict.get("full_catalogue", False):
+            result["cue_full_catalogue"] = True
     elif neb_type == "cloudy":
         result["nebular"] = True
     elif neb_type == "cb19":
@@ -694,8 +783,9 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     igm_type = igm_dict.get("type", "madau")
 
     # Validate type
-    if igm_type not in _VALID_IGM_TYPES:
-        suggestions = difflib.get_close_matches(igm_type, _VALID_IGM_TYPES, n=2, cutoff=0.6)
+    valid_igm = _valid_igm_types()
+    if igm_type not in valid_igm:
+        suggestions = difflib.get_close_matches(igm_type, valid_igm, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
@@ -705,6 +795,10 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     else:
         # Both madau and inoue14 -> apply_igm=True
         result["apply_igm"] = True
+        # Propagate the model choice. _init_igm speaks 'inoue'/'madau';
+        # 'inoue14' is the grammar-level name — normalise to the canonical
+        # form here so the user's selection isn't silently dropped (#344).
+        result["igm_model"] = _IGM_TYPE_ALIASES[igm_type]
 
     # Handle optional IGM subkeys
     if igm_dict.get("patchy", False):
@@ -719,12 +813,47 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     radio_type = radio_dict.get("type", "none")
 
     # Validate type
-    if radio_type not in _VALID_RADIO_TYPES:
-        suggestions = difflib.get_close_matches(radio_type, _VALID_RADIO_TYPES, n=2, cutoff=0.6)
+    valid_radio = _valid_radio_types()
+    if radio_type not in valid_radio:
+        suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
 
     result["radio"] = radio_type != "none"
+
+
+#: Valid laws for the MW foreground screen (#297). Only the closed-form
+#: laws that take a single ``R_V`` parameter are usable as a foreground
+#: screen — host-dust laws with two free knobs (slope, bump, ...) would
+#: collide with the host ``dust`` block's parameter prefix.
+_VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
+
+
+def _translate_foreground(fg_dict: dict, result: dict) -> None:
+    """Translate the ``foreground`` group (MW screen) — see #297.
+
+    Flat layout: ``foreground={'ebmv_mw': 0.05, 'law': 'cardelli', 'rv': 3.1}``.
+    Surfaces three top-level kwargs on ``Parameters`` so the SEDModel can
+    apply the screen in the observed-frame SED path, after IGM and
+    redshifting, independently from the host-galaxy ``dust`` block.
+    """
+    ebmv = fg_dict.get("ebmv_mw", 0.0)
+    law = fg_dict.get("law", "cardelli")
+    rv = fg_dict.get("rv", 3.1)
+    if law not in _VALID_FOREGROUND_LAWS:
+        suggestions = difflib.get_close_matches(law, _VALID_FOREGROUND_LAWS, n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(
+            f"Unknown foreground law {law!r}. Valid: "
+            f"{sorted(_VALID_FOREGROUND_LAWS)}.{suggest_str}"
+        )
+    if float(ebmv) < 0:
+        raise ValueError(f"foreground.ebmv_mw must be >= 0, got {ebmv}")
+    if float(rv) <= 0:
+        raise ValueError(f"foreground.rv must be > 0, got {rv}")
+    result["foreground_ebmv_mw"] = float(ebmv)
+    result["foreground_law"] = law
+    result["foreground_rv"] = float(rv)
 
 
 def _translate_xray(xray_dict: dict, result: dict) -> None:
@@ -732,8 +861,9 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     xray_type = xray_dict.get("type", "none")
 
     # Validate type
-    if xray_type not in _VALID_XRAY_TYPES:
-        suggestions = difflib.get_close_matches(xray_type, _VALID_XRAY_TYPES, n=2, cutoff=0.6)
+    valid_xray = _valid_xray_types()
+    if xray_type not in valid_xray:
+        suggestions = difflib.get_close_matches(xray_type, valid_xray, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
 
@@ -748,11 +878,11 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*"}),
+    "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
     "dust.emission": frozenset({"type", "*"}),
-    "neb": frozenset({"type", "*"}),
+    "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "radio": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
@@ -762,6 +892,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn.lines": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
     "agn.atten": frozenset({"type", "*"}),
+    "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
 
 
@@ -778,6 +909,37 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
             continue
         out.add(full_name)
         out.add(_extract_short_name(full_name, {}))
+    return out
+
+
+def _short_names_for_registered_type(type_name: str | None) -> set[str]:
+    """Short + full param names declared by a user-registered SEDModelComponent
+    subclass selected via ``type=<type_name>``.
+
+    The per-group validator only sees params that already live on the
+    structural ``Parameters`` instance. User-registered subclasses
+    (``class MyDust(SEDModelComponent): T = Uniform(...)``) aren't in
+    that pool yet, so a per-parameter override like ``"T": Fixed(35)``
+    is rejected before the build can wire the subclass in (#391).
+
+    Returns both the short name (``T``) and the prefixed full name
+    (``dust_T``) so either spelling is accepted in the user's group dict.
+    """
+    if not type_name:
+        return set()
+    try:
+        from tengri.components.sed_model_component import _REGISTRY
+    except Exception:
+        return set()
+    cls = _REGISTRY.get(type_name)
+    if cls is None:
+        return set()
+    prefix = getattr(cls, "parameter_prefix", "")
+    priors = getattr(cls, "_priors", {}) or {}
+    out: set[str] = set()
+    for short in priors:
+        out.add(short)
+        out.add(f"{prefix}{short}")
     return out
 
 
@@ -843,12 +1005,21 @@ def _validate_user_keys(
             # dust.emission group path).
             param_names = param_names | _short_names_for_group("dust.emission", param_partition)
 
+        # User-registered SEDModelComponent subclasses (#391): if the
+        # group dict picks a custom ``type``, add that subclass's
+        # declared short/full param names to the accepted set.
+        if isinstance(top_val.get("type"), str):
+            param_names = param_names | _short_names_for_registered_type(top_val["type"])
+
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 
         # Recurse into sub-block dicts.
         if top_key == "dust" and isinstance(top_val.get("emission"), dict):
             sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
             sub_params = _short_names_for_group("dust.emission", param_partition)
+            sub_params = sub_params | _short_names_for_registered_type(
+                top_val["emission"].get("type") if isinstance(top_val["emission"], dict) else None
+            )
             _check_dict_keys(
                 "dust.emission", top_val["emission"], sub_allowed | sub_params, param_partition
             )
@@ -860,6 +1031,7 @@ def _validate_user_keys(
                 sub_group = f"agn.{sub_name}"
                 sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
                 sub_params = _short_names_for_group(sub_group, param_partition)
+                sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
                 # Cross-level: sub-block dict may also legitimately carry
                 # shared AGN param names.
                 _check_dict_keys(
@@ -1003,6 +1175,12 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     (agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
     agn_attenuation_block). Omitted blocks default to 'none'.
 
+    A top-level ``'type'`` key picks a non-composable monolithic AGN model
+    registered in :data:`tengri.components.agn.AGN_MODELS` (e.g.
+    ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``). When
+    ``type='composable'`` (or absent), the sub-block selectors are honoured.
+    Mixing a non-composable ``type`` with sub-blocks is an error.
+
     Parameters
     ----------
     agn_dict : dict
@@ -1013,8 +1191,32 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     Raises
     ------
     ValueError
-        If unknown block type or invalid block specification.
+        If unknown block type, unknown model type, or invalid block
+        specification.
     """
+    # Top-level 'type' selects a monolithic AGN model when not 'composable'.
+    # Previously this key was silently dropped and the model collapsed to
+    # composable-with-all-none-blocks, which emits identically zero — a
+    # silent-failure footgun (closes #417 second case).
+    top_type = agn_dict.get("type")
+    if top_type is not None and top_type != "composable":
+        # Reject mixing a monolithic ``type`` with sub-block selectors —
+        # the two surfaces are mutually exclusive.
+        used_blocks = sorted(k for k in _AGN_SUBBLOCK_KEYS if k in agn_dict)
+        if used_blocks:
+            raise ValueError(
+                f"agn['type']={top_type!r} selects a monolithic AGN model, "
+                f"but sub-block keys {used_blocks} are also present. Drop "
+                f"the sub-blocks, or remove 'type' and let the composable "
+                f"runner use the per-block selectors."
+            )
+        # Forward ``type`` to ``agn_model`` and skip the block-selector
+        # plumbing. Unknown model names are validated lazily by
+        # ``resolve_agn_model`` at predict time, where the available list
+        # is fully populated (some models register late through plugins).
+        result["agn_model"] = top_type
+        return
+
     # Activate composable model
     result["agn_model"] = "composable"
 
@@ -1178,8 +1380,10 @@ def _resolve_value(
             if registry_default.is_fixed:
                 return registry_default, "user_fixed"
             else:
-                center = registry_default.unstandardize(0.0)
-                return Fixed(float(center)), "user_fixed"
+                return (
+                    Fixed(_default_fixed_value(param_name, registry_default)),
+                    "user_fixed",
+                )
         elif isinstance(val, Distribution):
             # Explicit distribution: use as-is
             tag = "user_fixed" if val.is_fixed else "user_prior"
@@ -1197,8 +1401,10 @@ def _resolve_value(
             if registry_default.is_fixed:
                 return registry_default, "wildcard_fixed"
             else:
-                center = registry_default.unstandardize(0.0)
-                return Fixed(float(center)), "wildcard_fixed"
+                return (
+                    Fixed(_default_fixed_value(param_name, registry_default)),
+                    "wildcard_fixed",
+                )
         else:
             # Bad wildcard value — only FREE or FIXED are accepted in the '*' slot
             raise ValueError(
@@ -1212,8 +1418,10 @@ def _resolve_value(
     if registry_default.is_fixed:
         return registry_default, "registry_default"
     else:
-        center = registry_default.unstandardize(0.0)
-        return Fixed(float(center)), "registry_default"
+        return (
+            Fixed(_default_fixed_value(param_name, registry_default)),
+            "registry_default",
+        )
 
 
 def _extract_short_name(full_param_name: str, group_dict: dict) -> str:

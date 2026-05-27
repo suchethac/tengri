@@ -30,11 +30,14 @@ to verify consistency within the observed scatter (~0.3 dex).
        Journal, 813(2), 82. https://doi.org/10.1088/0004-637X/813/2/82
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -52,6 +55,7 @@ LEDD_SUN_COEFF = 3.2e4  # L_Edd / (M_BH / M_sun) in L_sun units
 # ============================================================================
 # M_BH–M_* Scaling Relations
 # ============================================================================
+
 
 def mbh_from_mstar_kormendy2013(log_mstar: float) -> float:
     """
@@ -109,7 +113,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -120,6 +124,9 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "log_lbol": tengri.Uniform(11.0, 13.0),  # Bugfix: promote swept param to FREE
+        "log_mbh": tengri.Uniform(6.0, 10.0),  # Bugfix: promote swept param to FREE
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -141,7 +148,7 @@ results_reines = {"log_mstar": [], "log_mbh_relation": [], "log_mbh_obs": [], "l
 
 # Eddington ratio bounds: λ_Edd ∈ [0.001, 0.1]
 log_edd_min = np.log10(0.001)  # -3.0
-log_edd_max = np.log10(0.1)    # -1.0
+log_edd_max = np.log10(0.1)  # -1.0
 
 # ============================================================================
 # Kormendy & Ho (2013) relation
@@ -162,19 +169,19 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
 
     # Compute L_Edd and L_bol
     # L_Edd(M_BH) = LEDD_SUN_COEFF * M_BH [M_sun] [L_sun]
-    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
+    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0**log_mbh_relation))
     log_lbol = log_edd + log_ledd
 
-    # Scale log_peak_sfr to achieve the target stellar mass via binary search
-    # M_* ∝ log_peak_sfr, so we can adjust it linearly in log space
+    # Scale log_total_mass to achieve the target stellar mass via binary search
+    # M_* ∝ log_total_mass, so we can adjust it linearly in log space
     baseline = dict(baseline_sample)
     m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
     log_mstar_baseline = np.log10(m_star_baseline)
     delta_log_mstar = log_mstar_target - log_mstar_baseline
 
-    # Adjust log_peak_sfr proportionally
-    baseline["sfh_dpl_log_peak_sfr"] = (
-        float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
+    # Adjust log_total_mass proportionally
+    baseline["sfh_dpl_log_total_mass"] = (
+        float(baseline["sfh_dpl_log_total_mass"]) + delta_log_mstar
     )
 
     # Construct parameters for this galaxy
@@ -195,7 +202,7 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     results_kormendy["log_lbol"].append(log_lbol)
 
     print(
-        f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
+        f"Gal {i + 1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
         f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
     )
 
@@ -219,18 +226,18 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     log_edd = float(jax.random.uniform(subkey, minval=log_edd_min, maxval=log_edd_max))
 
     # Compute L_Edd and L_bol
-    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0 ** log_mbh_relation))
+    log_ledd = np.log10(LEDD_SUN_COEFF * (10.0**log_mbh_relation))
     log_lbol = log_edd + log_ledd
 
-    # Scale log_peak_sfr to achieve the target stellar mass
+    # Scale log_total_mass to achieve the target stellar mass
     baseline = dict(baseline_sample)
     m_star_baseline = float(model.predict_sfh_quantities(baseline).stellar_mass)
     log_mstar_baseline = np.log10(m_star_baseline)
     delta_log_mstar = log_mstar_target - log_mstar_baseline
 
-    # Adjust log_peak_sfr proportionally
-    baseline["sfh_dpl_log_peak_sfr"] = (
-        float(baseline["sfh_dpl_log_peak_sfr"]) + delta_log_mstar
+    # Adjust log_total_mass proportionally
+    baseline["sfh_dpl_log_total_mass"] = (
+        float(baseline["sfh_dpl_log_total_mass"]) + delta_log_mstar
     )
 
     # Construct parameters
@@ -251,7 +258,7 @@ for i, log_mstar_target in enumerate(log_mstar_grid):
     results_reines["log_lbol"].append(log_lbol)
 
     print(
-        f"Gal {i+1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
+        f"Gal {i + 1:2d}: log M_* (target/obs) = {log_mstar_target:.2f}/{log_mstar_obs:.2f} | "
         f"log M_BH = {log_mbh_relation:.2f} | log λ_Edd = {log_edd:.2f}"
     )
 

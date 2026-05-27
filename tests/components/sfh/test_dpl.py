@@ -30,7 +30,7 @@ class TestSFHForms:
             (
                 "dpl",
                 {
-                    "sfh_dpl_log_peak_sfr": 0.0,
+                    "sfh_dpl_log_total_mass": 0.0,
                     "sfh_dpl_alpha": 2.0,
                     "sfh_dpl_beta": 1.0,
                     "sfh_dpl_tau_gyr": 3.0,
@@ -39,7 +39,7 @@ class TestSFHForms:
             (
                 "lnorm",
                 {
-                    "sfh_lnorm_log_peak_sfr": 0.0,
+                    "sfh_lnorm_log_total_mass": 0.0,
                     "sfh_lnorm_peak_lbt_gyr": 3.0,
                     "sfh_lnorm_width_gyr": 1.0,
                 },
@@ -47,7 +47,7 @@ class TestSFHForms:
             (
                 "tsnorm",
                 {
-                    "sfh_tsnorm_log_peak_sfr": 0.0,
+                    "sfh_tsnorm_log_total_mass": 0.0,
                     "sfh_tsnorm_peak_lbt_gyr": 3.0,
                     "sfh_tsnorm_width_gyr": 2.0,
                     "sfh_tsnorm_skew": 0.0,

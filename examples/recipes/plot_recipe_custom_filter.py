@@ -7,6 +7,10 @@ recipe generates a synthetic Gaussian filter at 2 μm and pairs it with
 SDSS optical bands, then predicts the full SED and photometry.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp
@@ -47,7 +51,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
         "skew": 0.2,

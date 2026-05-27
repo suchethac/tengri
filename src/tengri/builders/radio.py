@@ -33,7 +33,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.parameters.groups import _VALID_RADIO_TYPES
+from tengri.parameters.groups import _valid_radio_types
 from tengri.parameters.registry import recipe_parameters
 
 _PREFIXES = ("radio_",)
@@ -60,7 +60,7 @@ def _discover_params(variant: str) -> list[str]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
-    for variant in sorted(_VALID_RADIO_TYPES):
+    for variant in sorted(_valid_radio_types()):
         factories[variant] = make_factory(
             variant=variant,
             short_params=_discover_params(variant),

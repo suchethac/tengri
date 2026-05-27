@@ -3,7 +3,7 @@ Prior vs posterior: data-driven parameter constraints
 =====================================================
 
 Bayesian inference refines broad priors (uniform distributions) into
-narrow posteriors using observed data. This script shows three key
+narrow posteriors using observed data. three key
 parameters (age of peak SFR, stellar metallicity, dust optical depth)
 as priors (dashed gray lines) and posteriors (blue histograms) after
 fitting mock 5-band photometry. The red vertical line marks the injected
@@ -11,6 +11,10 @@ truth value.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -47,7 +51,7 @@ truth = dict(model.spec.sample(key))
 truth.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
-    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_skew=0.3,
     sfh_tsnorm_trunc=10.0,
     met_logzsol=-0.2,
