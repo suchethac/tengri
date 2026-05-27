@@ -1176,13 +1176,72 @@ class SEDModel:
 
         self._uses_xray = getattr(spec, "xray", False)
 
-        if self._uses_radio or self._uses_xray:
-            from tengri.utils.wavelength import make_panchromatic_grid
+        # ── Master rest-wavelength grid (issue #463) ─────────────────
+        #
+        # Build the rest-frame wavelength grid as the sorted union of:
+        #   (a) the SSP grid (fine UV–NIR sampling),
+        #   (b) every attached component's native template grid (dust IR
+        #       templates, AGN torus/disc libraries, …), and
+        #   (c) analytic radio / X-ray extension wings for components that
+        #       have no template grid but operate at extreme wavelengths.
+        #
+        # The native-grid registry lives in
+        # ``tengri.forward.wavelength_extension``. Components that don't
+        # declare a native grid (analytic dust models, IGM transmission, …)
+        # contribute nothing and are correctly evaluated on whatever master
+        # grid the orchestrator hands them. See ADR-comment in #463.
+        from tengri.forward.wavelength_extension import collect_native_wavelength_grids
+        from tengri.utils.wavelength import (
+            RADIO_WAVE_MAX,
+            XRAY_WAVE_MIN,
+            make_union_grid,
+        )
 
-            self._rest_wavelength = make_panchromatic_grid(
+        component_grids = collect_native_wavelength_grids(
+            dust_emission_model=getattr(self, "_dust_emission_model", None),
+            agn_model=getattr(self, "_agn_model", None),
+            agn_torus_block=getattr(self, "_agn_torus_block", None),
+            agn_disc_block=getattr(self, "_agn_disc_block", None),
+        )
+
+        # Analytic radio/X-ray wings: only used when those components are
+        # enabled AND nothing else already covers the extreme end of the
+        # spectrum. ``make_union_grid`` deduplicates overlap so it's safe to
+        # add these unconditionally when the flag is set.
+        extra_wings: list[np.ndarray] = []
+        ssp_min = float(np.asarray(ssp_data.ssp_wave).min())
+        ssp_max = float(np.asarray(ssp_data.ssp_wave).max())
+
+        if self._uses_xray and ssp_min > XRAY_WAVE_MIN:
+            n_dec = np.log10(ssp_min) - np.log10(XRAY_WAVE_MIN)
+            n_pts = max(int(n_dec * 20), 2)
+            extra_wings.append(
+                np.logspace(np.log10(XRAY_WAVE_MIN), np.log10(ssp_min), n_pts, endpoint=False)
+            )
+
+        if self._uses_radio:
+            # Pick the longest wavelength reached by any template; extend the
+            # radio wing past that point so the synchrotron tail has node
+            # coverage even when dust templates don't already cover it.
+            template_max = max((float(g.max()) for g in component_grids), default=ssp_max)
+            radio_min = max(template_max, ssp_max)
+            if radio_min < RADIO_WAVE_MAX:
+                n_dec = np.log10(RADIO_WAVE_MAX) - np.log10(radio_min)
+                n_pts = max(int(n_dec * 20), 2)
+                extra_wings.append(
+                    np.logspace(
+                        np.log10(radio_min),
+                        np.log10(RADIO_WAVE_MAX),
+                        n_pts,
+                        endpoint=True,
+                    )[1:]
+                )
+
+        if component_grids or extra_wings:
+            self._rest_wavelength = make_union_grid(
                 ssp_data.ssp_wave,
-                extend_xray=self._uses_xray,
-                extend_radio=self._uses_radio,
+                *component_grids,
+                *extra_wings,
             )
         else:
             self._rest_wavelength = ssp_data.ssp_wave
