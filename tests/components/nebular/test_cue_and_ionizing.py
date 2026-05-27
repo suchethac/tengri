@@ -116,7 +116,7 @@ class TestIonizingParamsTable:
         chex.assert_tree_all_finite(ionspec)
 
     @pytest.mark.regression_bug
-    def test_float32_ssp_does_not_overflow(self, ssp):
+    def test_float32_ssp_does_not_overflow(self, ssp, tmp_path, monkeypatch):
         """Float32 SSP flux must not overflow the Q_H integration (issue #458).
 
         SSPs may ship in float32 (e.g. BC03-from-CIGALE) to save disk. The
@@ -125,11 +125,27 @@ class TestIonizingParamsTable:
         well above float32's 3.4e38 max. Without an explicit float64 cast,
         ``logqion_table`` collapses to ``inf`` for every (Z, age) bin and
         downstream Cue emits ~zero nebular SED silently.
+
+        The test guards against regressions by re-running the fit fresh —
+        bypassing both the in-memory ``_IONSPEC_TABLE_CACHE`` and the disk
+        cache (#448). Without these isolations, a pre-fix cache hit would
+        return finite values from a prior good run and the test would
+        vacuously pass even with the bug reintroduced.
         """
+        from tengri.components.nebular import ionizing_spectrum as ions_mod
         from tengri.components.nebular.ionizing_spectrum import (
             precompute_ionizing_params_table,
         )
 
+        # Isolate from prior runs: clear in-memory cache; redirect disk
+        # cache dir to a tmp path so no pre-existing .npz can be loaded.
+        ions_mod._IONSPEC_TABLE_CACHE.clear()
+        monkeypatch.setattr(ions_mod, "_ionspec_disk_cache_dir", lambda: tmp_path)
+
+        # Use slice indices known to contain ionising-bright young bins.
+        # FSPS prsc-miles fixture: lgmet[0] ≈ −4, ages[0:10] cover 0.3–1 Myr,
+        # well within the regime where (flux × L_sun / (h × nu)) is ~ 1e30+
+        # and the trapezoid integration overflows float32 if not cast.
         wave_f32 = np.asarray(ssp.ssp_wave, dtype=np.float32)
         flux_f32 = np.asarray(ssp.ssp_flux[:2, :10, :], dtype=np.float32)
         lgmet_f32 = np.asarray(ssp.ssp_lgmet[:2], dtype=np.float32)

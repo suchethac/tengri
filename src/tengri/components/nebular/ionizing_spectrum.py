@@ -473,8 +473,11 @@ def fit_ionizing_spectrum(
 #: Max log10(age/yr) at which Cue's downstream Q_H weighting can still receive
 #: a non-zero contribution. Bins older than this have ``weighted_qh`` zeroed in
 #: :meth:`CueBackend._compute_weighted_cue_params`, so fitting them here is
-#: pure waste. Kept in sync with ``cue._MAX_NEB_LOG_AGE``.
-_PRECOMPUTE_MAX_LOG_AGE_YR: float = 8.0  # 100 Myr
+#: pure waste. Single source of truth for both the precompute cutoff (here)
+#: and the downstream forward filter (``cue.MAX_NEB_LOG_AGE``, which re-exports
+#: this constant). Lives in :mod:`ionizing_spectrum` rather than :mod:`cue`
+#: to avoid a circular import (``cue`` already depends on this module).
+MAX_NEB_LOG_AGE: float = 8.0  # 100 Myr
 
 
 def precompute_ionizing_params_table(
@@ -500,7 +503,7 @@ def precompute_ionizing_params_table(
         Metallicity grid in log10(Z). [log10(Z)]
     ssp_log_age_yr : array, shape (n_age,), optional
         log10(age/yr) for each age bin. When provided, bins older than
-        :data:`_PRECOMPUTE_MAX_LOG_AGE_YR` (100 Myr) are skipped without
+        :data:`MAX_NEB_LOG_AGE` (100 Myr) are skipped without
         invoking scipy — a ~140× speedup for unusually fine age grids
         (BC03-from-CIGALE has 13700 ages of which only ~10 are young).
         When ``None`` (legacy callers), every bin is attempted; the per-bin
@@ -558,7 +561,7 @@ def precompute_ionizing_params_table(
     # downstream Q_H weighting threshold. Saves ~99 % of fits on fine-age
     # grids (e.g. BC03-from-CIGALE: 13700 ages → ~10 young bins).
     if ssp_log_age_yr is not None:
-        young_age_mask = np.asarray(ssp_log_age_yr) <= _PRECOMPUTE_MAX_LOG_AGE_YR
+        young_age_mask = np.asarray(ssp_log_age_yr) <= MAX_NEB_LOG_AGE
     else:
         young_age_mask = np.ones(n_age, dtype=bool)
 
