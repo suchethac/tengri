@@ -15,6 +15,7 @@ from tengri.components.igm.igm import (
     igm_transmission_madau,
     igm_transmission_patchy,
 )
+from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
 
 # Populate the runtime registry. ``_VALID_IGM_TYPES`` in
 # ``parameters/groups.py`` derives from ``IGM_MODELS.keys()``. The
@@ -39,6 +40,11 @@ register_igm_model(
     citation="Madau 1995 (ApJ 441, 18)",
     short_doc="Original Lyman-forest mean transmission",
 )(igm_transmission_madau)
+register_igm_model(
+    "meiksin06",
+    citation="Meiksin 2006 (MNRAS 365, 807)",
+    short_doc="Smooth Ly-alpha forest continuum + LLS damping (matches CIGALE)",
+)(igm_transmission_meiksin06)
 
 __all__ = [
     "IGM_MODELS",
@@ -47,6 +53,7 @@ __all__ = [
     "dla_transmission_obs",
     "igm_transmission",
     "igm_transmission_madau",
+    "igm_transmission_meiksin06",
     "igm_transmission_patchy",
     "register_igm_model",
 ]
