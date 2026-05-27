@@ -91,12 +91,16 @@ LOG10_ZSUN = -1.848
 MET_LOGZSOL = float(np.log10(0.02) - LOG10_ZSUN)  # ≈ +0.149
 STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
 
-figs_dir = Path(__file__).parent / "_figs"
+# Notebook-vs-script compatible: ``__file__`` is undefined when this
+# is run via nbclient (the kernel's resources path is set to the
+# reproduction/cigale/ directory instead), so fall back to the CWD.
+_HERE = Path(__file__).resolve().parent if "__file__" in dir() else Path.cwd().resolve()
+figs_dir = _HERE / "_figs"
 figs_dir.mkdir(exist_ok=True)
 
 
 def save_fig(filename: str) -> None:
-    """Save figure to ``_figs/`` and leave it open so nbconvert embeds it inline."""
+    """Save figure to ``_figs/`` and leave it open so the inline backend embeds it."""
     plt.savefig(str(figs_dir / filename), dpi=150, bbox_inches="tight")
 
 
@@ -117,7 +121,7 @@ def _assert_comparable(arr_c, arr_t, *, name: str) -> None:
 # that tengri reads — same numerical SSPs on both sides.
 
 # %%
-ssp_file = Path(__file__).parent / "_drivers" / "data" / "bc03_from_cigale.h5"
+ssp_file = _HERE / "_drivers" / "data" / "bc03_from_cigale.h5"
 ssp = load_ssp_data(str(ssp_file.resolve()))
 print(
     f"BC03 Chabrier SSP: {ssp.ssp_wave.shape[0]} wavelengths, "
@@ -206,7 +210,8 @@ i_zsun = int(np.argmin(np.abs(ssp.ssp_lgmet - np.log10(0.02))))
 tengri_ssp = []
 for age_yr in ages_yr:
     i_age = int(np.argmin(np.abs(ssp.ssp_lg_age_gyr - np.log10(age_yr / 1e9))))
-    tengri_ssp.append((ssp.ssp_wave, ssp.ssp_flux[i_age, i_zsun, :] * L_SUN))
+    # ssp_flux axes: (n_met, n_age, n_wave) — metallicity first, then age.
+    tengri_ssp.append((ssp.ssp_wave, ssp.ssp_flux[i_zsun, i_age, :] * L_SUN))
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r, label_l="pcigale.sed_modules.bc03", label_r="tengri SSP (DSPS BC03)")
@@ -302,42 +307,54 @@ save_fig("02_sfh_tau.png")
 # %% [markdown]
 # ### Declining exponential
 #
-# CIGALE `sfh2exp` (main + burst) vs tengri `sfh.dexp`. Shape only:
-# both codes integrate analytically, the prefactor convention differs.
+# CIGALE `sfh2exp` is a main-exponential plus optional burst; setting
+# ``f_burst = 0`` reduces it to a single declining exponential starting
+# at galaxy formation. tengri's `sfh.tau` is the same shape (FSPS sfh=1
+# / Bagpipes "exponential"). Plotted with linear cosmic-age axis so the
+# decay from formation is readable on both sides.
+#
+# tengri's `sfh.dexp` is a *delayed* exponential (∝ t exp(-t/τ)) — a
+# different shape that peaks at τ rather than at formation; it's the
+# right counterpart for CIGALE's `sfhdelayed`, already shown above.
 
 # %%
-try:
-    t_c2, sfr_c2 = C.sfh_curve(
-        "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
-        f_burst=0.2, sfr_0=1.0, normalise=True,
-    )
-    m_dexp = SEDModel.build(
-        ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
-        sfh={"type": "dexp", "tau_gyr": Fixed(0.5), "start_gyr": Fixed(0.0),
-             "log_total_mass": Fixed(0.0), "*": FIXED},
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-        redshift=Fixed(0.0),
-    )
-    s_dexp = m_dexp.predict_state({})
-    t_d = np.max(s_dexp.derived["sfh_grid_lbt_yr"]) - s_dexp.derived["sfh_grid_lbt_yr"]
-    sfr_d = s_dexp.derived["sfr_history"]
+t_c2, sfr_c2 = C.sfh_curve(
+    "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
+    f_burst=0.0, sfr_0=1.0, normalise=True,
+)
+m_tau = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "tau", "tau_gyr": Fixed(0.5), "age_gyr": Fixed(5.0),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+s_tau = m_tau.predict_state({})
+# tengri reports SFR on a lookback grid; t = age - lbt puts formation
+# at t = 0 like CIGALE.
+t_lbt_tau = np.asarray(s_tau.derived["sfh_grid_lbt_yr"])
+sfr_tau = np.asarray(s_tau.derived["sfr_history"])
+order_tau = np.argsort(5.0e9 - t_lbt_tau)
+t_t_tau = (5.0e9 - t_lbt_tau)[order_tau]
+sfr_t_tau = sfr_tau[order_tau]
+if sfr_t_tau.max() > 0 and sfr_c2.max() > 0:
+    sfr_t_tau = sfr_t_tau / sfr_t_tau.max() * sfr_c2.max()
 
-    fig, ax_l, ax_r = U.two_panel_fig()
-    for ax, title in (
-        (ax_l, "pcigale.sed_modules.sfh2exp"),
-        (ax_r, "tengri sfh.dexp"),
-    ):
-        ax.set_xscale("log"); ax.set_yscale("log")
-        ax.set_xlabel("Cosmic age [yr]"); ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-        ax.grid(True, alpha=0.3)
-        ax.set_title(title)
-    ax_l.plot(t_c2, sfr_c2, "C0-", linewidth=2.0)
-    ax_r.plot(t_d, sfr_d, "C1-", linewidth=2.0)
-    fig.tight_layout()
-    save_fig("02b_sfh_dexp.png")
-except Exception as exc:  # pragma: no cover
-    print(f"  sfh.dexp panel skipped: {exc}")
+fig, ax_l, ax_r = U.two_panel_fig()
+for ax, title in (
+    (ax_l, "pcigale.sed_modules.sfh2exp  (f_burst = 0, τ_main = 500 Myr)"),
+    (ax_r, "tengri sfh.tau  (τ = 0.5 Gyr, age = 5 Gyr)"),
+):
+    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
+    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+    ax.set_xlim(0, 5)
+    ax.grid(True, alpha=0.3)
+    ax.set_title(title)
+ax_l.plot(t_c2 / 1e9, sfr_c2, "C0-", linewidth=2.0)
+ax_r.plot(t_t_tau / 1e9, sfr_t_tau, "C1-", linewidth=2.0)
+fig.tight_layout()
+save_fig("02b_sfh_dexp.png")
 
 
 # %% [markdown]
@@ -399,12 +416,17 @@ save_fig("03_stellar_sed.png")
 # Each CIGALE attenuation module exposes its strength under a different
 # parameter name. Pass the law-specific value that corresponds to
 # A_V ≈ 1.2 (≈ E(B-V)_lines = 0.3 in the modified-starburst convention).
+# Same four laws on both sides, matched name-for-name. CIGALE's
+# `modified_starburst` corresponds to tengri's Leitherer+02 modification
+# of Calzetti+00 (same UV curve choice); CIGALE's `modified_CF00`
+# corresponds to tengri's `noll09` (Noll-style power-law modifier on
+# CF00 base).
 cigale_laws = [
     ("dustatt_calzleit", "Calzetti+2000",
      dict(E_BVs_young=0.3)),
-    ("dustatt_modified_CF00", "Charlot & Fall 2000",
+    ("dustatt_modified_CF00", "Charlot & Fall 2000 + Noll+09",
      dict(Av_ISM=1.2)),
-    ("dustatt_modified_starburst", "Mod. starburst",
+    ("dustatt_modified_starburst", "Mod. starburst (Leitherer+02)",
      dict(E_BV_lines=0.3)),
     ("dustatt_powerlaw", "Power law",
      dict(Av_young=1.2)),
@@ -429,10 +451,9 @@ fig_c.savefig(str(figs_dir / "04_dust_attenuation_cigale.png"), dpi=150, bbox_in
 
 tengri_laws = [
     ("calzetti", "Calzetti+2000"),
-    ("salim", "Salim+2018"),
-    ("conroy2010", "Conroy+2010"),
+    ("noll09", "Charlot & Fall 2000 + Noll+09"),
+    ("leitherer02", "Mod. starburst (Leitherer+02)"),
     ("power_law", "Power law"),
-    ("noll09", "Noll+2009"),
 ]
 
 fig_t, ax_t = plt.subplots(1, 1, figsize=(10, 6))
@@ -475,6 +496,7 @@ for law, label in tengri_laws:
 ax_t.legend(fontsize=10); ax_t.grid(True, alpha=0.3)
 fig_t.tight_layout()
 fig_t.savefig(str(figs_dir / "04_dust_attenuation_tengri.png"), dpi=150, bbox_inches="tight")
+plt.show()
 
 
 # %% [markdown]
@@ -539,6 +561,7 @@ for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "05_dust_attenuation_applied.png"), dpi=150, bbox_inches="tight")
+plt.show()
 
 
 # %% [markdown]
@@ -594,10 +617,15 @@ ax_r.text(0.98, 0.05,
           fr"$|L_{{\rm IR}} - L_{{\rm abs}}|/L_{{\rm abs}} = {residual:.1e}$",
           transform=ax_r.transAxes, fontsize=9, ha="right", va="bottom",
           bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7))
+# Match x-range so the FIR peak is visible on both panels.
+_xmin = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
+_xmax = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
 for ax in (ax_l, ax_r):
+    ax.set_xlim(_xmin, _xmax)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
+plt.show()
 
 
 # %% [markdown]
@@ -613,11 +641,14 @@ U.panel(ax_l, ax_r,
         label_r="tengri  sfh.delayed + dust.dale2014")
 ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
 ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
+_xmin_p = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
+_xmax_p = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
 for ax in (ax_l, ax_r):
-    ax.set_xlim(1e0, 1e10)
+    ax.set_xlim(_xmin_p, _xmax_p)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "07_panchromatic_full.png"), dpi=150, bbox_inches="tight")
+plt.show()
 
 
 # %% [markdown]
@@ -629,9 +660,20 @@ fig.savefig(str(figs_dir / "07_panchromatic_full.png"), dpi=150, bbox_inches="ti
 # parameters. Cue requires the bare-stellar SSP that this notebook
 # already loaded.
 #
-# Both panels show the stellar baseline (dashed) and the same SFH with
-# nebular added (solid). At matched logU = -2.0, Z_gas = Z_⊙, the two
-# emission paths agree to ~1 % across UV–NIR (consistency_audit.py §8).
+# Each panel shows the stellar baseline (dashed), stellar + nebular
+# (solid), and the nebular component alone (dotted). At matched
+# logU = -2.0, Z_gas = Z_⊙, CIGALE's CLOUDY emits a clean line forest
+# plus continuum (the dotted blue curve on the left).
+#
+# ```{warning}
+# Cue currently absorbs LyC photons at λ < 912 Å but does **not** emit
+# the recycled photons back into ``sed_intrinsic`` — the dotted green
+# curve on the right is essentially zero. Tracked in
+# [tengri #458](https://github.com/suchethac/tengri/issues/458). Once
+# the accumulator fix lands, Cue should overlay CIGALE's CLOUDY emission
+# in the same way the composable AGN now overlays SKIRTOR in §9
+# (post-#420).
+# ```
 
 # %%
 _sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -674,14 +716,33 @@ fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r,
         label_l="pcigale  CLOUDY nebular",
         label_r="tengri  Cue nebular (Li+2024)")
+# CIGALE side — dashed stellar + solid (stellar+nebular) + dotted
+# nebular-only (the line forest + smooth continuum that CLOUDY adds).
+L_c_neb_only = np.maximum(L_c_neb - U.regrid(w_c_st, L_c_st, w_c_neb), 1e-30)
 ax_l.plot(w_c_st, L_c_st, "k--", linewidth=1.0, alpha=0.5, label="stellar only")
-ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.5, label="+ nebular")
-ax_l.legend(fontsize=9)
+ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
+          label="stellar + CLOUDY nebular")
+ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
+ax_l.legend(fontsize=8)
+# tengri side — Cue currently absorbs LyC at <912 Å but does not emit
+# the recycled photons back into ``sed_intrinsic`` (tracked in #458).
+# Plot the (essentially zero) Cue-only contribution so the gap is
+# visible against the CIGALE CLOUDY emission on the left panel.
+L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
+                          - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
           linewidth=1.0, alpha=0.5, label="stellar only")
-ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.5, label="+ Cue")
-ax_r.legend(fontsize=9)
+ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7,
+          label="stellar + Cue")
+ax_r.plot(s_neb.wave, L_t_neb_only, "C1:", linewidth=1.4,
+          label="Cue nebular only (≈ 0 — #458)")
+ax_r.legend(fontsize=8)
+_xmin_n = float(min(w_c_neb.min(), float(np.asarray(s_neb.wave).min())))
+_xmax_n = float(max(w_c_neb.max(), float(np.asarray(s_neb.wave).max())))
+_ymax_n = max(float(L_c_neb.max()), float(np.asarray(s_neb.sed_intrinsic).max()))
 for ax in (ax_l, ax_r):
+    ax.set_xlim(_xmin_n, _xmax_n)
+    ax.set_ylim(_ymax_n * 1e-6, _ymax_n * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("08_nebular_cue_vs_cloudy.png")
@@ -722,12 +783,8 @@ m_agn_base = SEDModel.build(
 )
 s_agn_base = m_agn_base.predict_state({})
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r,
-        label_l="pcigale  skirtor2016 (AGN only)",
-        label_r="tengri  agn[disc+torus skirtor] (AGN only)")
-ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.4, label="stellar + dust")
-
+# Full SED with and without AGN on both sides — clearer than the
+# differential plot when one side has X-ray + the other doesn't.
 sed_skirtor = C.run_chain([
     _sfh_args_d, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
     ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
@@ -737,13 +794,6 @@ sed_skirtor = C.run_chain([
                          temperature=100.0, emissivity=1.6)),
 ])
 w_skirt, L_skirt = C.to_lnu(sed_skirtor)
-L_skirt_contrib = np.maximum(L_skirt - U.regrid(w_base, L_base, w_skirt), 1e-50)
-ax_l.plot(w_skirt, L_skirt_contrib, "C0-", linewidth=1.5,
-          label="SKIRTOR  i=30°  τ_9.7=7")
-ax_l.set_xscale("log"); ax_l.set_yscale("log")
-_ymax_l = max(float(L_skirt_contrib.max()), float(np.asarray(L_base).max()))
-ax_l.set_ylim(_ymax_l * 1e-6, _ymax_l * 2)
-ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
 
 m_agn = SEDModel.build(
     ssp_data=ssp,
@@ -752,23 +802,47 @@ m_agn = SEDModel.build(
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
+    # CIGALE's `fracAGN = 0.3` ties L_AGN to the stellar bolometric.
+    # At our fiducial (1 M_sun formed, age 5 Gyr), stellar L_bol ≈
+    # 0.5 L_sun, so 0.3/0.7 × 0.5 ≈ 0.21 L_sun → log_lbol ≈ -0.68
+    # roughly matches the CIGALE AGN strength on the same axis.
     agn={"type": "composable",
          "disc": {"type": "multicolor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(10.0), "*": FIXED},
+         "agn_log_lbol": Fixed(-0.68), "*": FIXED},
     redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
-L_agn_contrib = np.maximum(np.asarray(s_agn.sed_intrinsic)
-                           - np.asarray(s_agn_base.sed_intrinsic), 1e-50)
-ax_r.plot(s_agn.wave, L_agn_contrib, "C1-", linewidth=1.5,
-          label="composable disc + SKIRTOR torus")
+
+fig, ax_l, ax_r = U.two_panel_fig()
+U.panel(ax_l, ax_r,
+        label_l="pcigale  + SKIRTOR2016 (i = 30°, τ_9.7 = 7)",
+        label_r="tengri  agn[disc+torus skirtor]")
+# CIGALE side — full chain (stellar+dust dashed, full +SKIRTOR solid,
+# AGN-only differential to show what SKIRTOR adds).
+L_skirt_only = np.maximum(L_skirt - U.regrid(w_base, L_base, w_skirt), 1e-50)
+ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.5, label="stellar + dust")
+ax_l.plot(w_skirt, L_skirt, "C0-", linewidth=1.5, alpha=0.7, label="stellar + dust + SKIRTOR")
+ax_l.plot(w_skirt, L_skirt_only, "C0:", linewidth=1.5, label="SKIRTOR component only")
+ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
+# tengri side — same three-line layout. ``derived['sed_agn']`` carries
+# the disc + torus contribution; ``sed_intrinsic`` is the full SED with
+# everything; dashed baseline is the no-AGN build.
+L_t_agn_only = np.maximum(np.asarray(s_agn.derived["sed_agn"]), 1e-50)
 ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--",
-          linewidth=1.0, alpha=0.4, label="stellar + dust")
-ax_r.set_xscale("log"); ax_r.set_yscale("log")
-_ymax = max(float(L_agn_contrib.max()), float(s_agn_base.sed_intrinsic.max()))
-ax_r.set_ylim(_ymax * 1e-6, _ymax * 2)
+          linewidth=1.0, alpha=0.5, label="stellar + dust")
+ax_r.plot(s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
+          label="stellar + dust + AGN")
+ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
+          label="composable disc + SKIRTOR torus only")
 ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
+
+# Bound the y-axis to a reasonable 6 decades so log-zero autoscale
+# doesn't blow up the panels at the X-ray edge.
+_ymax_a = max(float(np.asarray(L_skirt).max()),
+              float(np.asarray(s_agn.sed_intrinsic).max()))
+for ax in (ax_l, ax_r):
+    ax.set_ylim(_ymax_a * 1e-6, _ymax_a * 2)
 
 fig.tight_layout()
 save_fig("09_agn_skirtor.png")
