@@ -28,12 +28,8 @@ def _flux(model, params):
 # Baseline LBG model: young, dusty, star-forming
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
-obs_hsc = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["hsc_r", "hsc_i"])
-)
-obs_des = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["des_r", "des_i"])
-)
+obs_hsc = tengri.Observation(photometry=tengri.Photometry.from_names(["hsc_r", "hsc_i"]))
+obs_des = tengri.Observation(photometry=tengri.Photometry.from_names(["des_r", "des_i"]))
 
 # Two LBG-like populations
 models = {}
@@ -89,7 +85,14 @@ for pop_name, pop_models in models.items():
 
     # HSC: solid line, DES: dashed
     ax.plot(z_grid, ri_hsc, color=colors_plot[pop_name], lw=2.0, label=f"{pop_name} (HSC)")
-    ax.plot(z_grid, ri_des, color=colors_plot[pop_name], lw=2.0, linestyle="--", label=f"{pop_name} (DECam)")
+    ax.plot(
+        z_grid,
+        ri_des,
+        color=colors_plot[pop_name],
+        lw=2.0,
+        linestyle="--",
+        label=f"{pop_name} (DECam)",
+    )
 
 # Shade the Lyman break window (z ≈ 3.5–4.5)
 ax.axvspan(3.5, 4.5, alpha=0.08, color="gray", label="Lyman break zone")

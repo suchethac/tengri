@@ -50,8 +50,7 @@ for delta in delta_values:
 
 # Mark the 2175 Å bump for reference
 ax.axvline(0.2175, ls=":", color="red", lw=1.0, alpha=0.6)
-ax.text(0.2175, ax.get_ylim()[1] * 0.95, "2175 Å", fontsize=8,
-        ha="center", color="red", alpha=0.7)
+ax.text(0.2175, ax.get_ylim()[1] * 0.95, "2175 Å", fontsize=8, ha="center", color="red", alpha=0.7)
 
 ax.set_xlim(0.15, 0.35)
 ax.set_xlabel(r"Wavelength [$\mu$m]")

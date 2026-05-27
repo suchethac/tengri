@@ -9,6 +9,7 @@ processing; if modular, the sum should reconstruct the total.
 """
 
 import warnings
+
 import jax
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,9 +22,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    ),
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
 dust_cfg = {
@@ -63,9 +62,7 @@ lnu_total = np.asarray(sed_total.sed)
 model_stellar = tengri.SEDModel.build(ssp, sfh=sfh_cfg, redshift=tengri.Fixed(0.05))
 lnu_stellar = np.asarray(model_stellar.predict_rest_sed(params).sed)
 
-model_dust = tengri.SEDModel.build(
-    ssp, sfh=sfh_cfg, dust=dust_cfg, redshift=tengri.Fixed(0.05)
-)
+model_dust = tengri.SEDModel.build(ssp, sfh=sfh_cfg, dust=dust_cfg, redshift=tengri.Fixed(0.05))
 lnu_dust = np.asarray(model_dust.predict_rest_sed(params).sed)
 
 lnu_dust_emission = lnu_dust - lnu_stellar
@@ -76,10 +73,25 @@ max_residual = np.max(np.abs(lnu_total - lnu_reconstructed)) / np.max(np.abs(lnu
 fig, ax = plt.subplots(figsize=(7.5, 5.0))
 ax.loglog(wave, wave * lnu_total, color="k", lw=2.0, label="Total (model)", zorder=10)
 ax.loglog(wave, wave * lnu_stellar, color="C0", lw=1.4, alpha=0.8, label="Stellar")
-ax.loglog(wave, wave * np.maximum(lnu_dust_emission, 1e-40), color="C1", lw=1.4, alpha=0.8, label="Dust emission")
-ax.loglog(wave, wave * np.maximum(lnu_nebular, 1e-40), color="C2", lw=1.4, alpha=0.8, label="Nebular")
-ax.loglog(wave, wave * np.maximum(lnu_reconstructed, 1e-40), "k--", lw=1.0, alpha=0.6,
-          label=f"Sum (max resid: {max_residual:.1e})")
+ax.loglog(
+    wave,
+    wave * np.maximum(lnu_dust_emission, 1e-40),
+    color="C1",
+    lw=1.4,
+    alpha=0.8,
+    label="Dust emission",
+)
+ax.loglog(
+    wave, wave * np.maximum(lnu_nebular, 1e-40), color="C2", lw=1.4, alpha=0.8, label="Nebular"
+)
+ax.loglog(
+    wave,
+    wave * np.maximum(lnu_reconstructed, 1e-40),
+    "k--",
+    lw=1.0,
+    alpha=0.6,
+    label=f"Sum (max resid: {max_residual:.1e})",
+)
 
 ax.set_xlabel(r"$\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")

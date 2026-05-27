@@ -23,11 +23,20 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # UV slope windows: Calzetti convention (10 wavelength bins, 1268–2580 Å)
-WINDOWS = np.array([
-    [1268, 1284], [1309, 1316], [1342, 1371], [1407, 1515],
-    [1562, 1583], [1677, 1740], [1760, 1833], [1866, 1890],
-    [1930, 1950], [2400, 2580],
-])
+WINDOWS = np.array(
+    [
+        [1268, 1284],
+        [1309, 1316],
+        [1342, 1371],
+        [1407, 1515],
+        [1562, 1583],
+        [1677, 1740],
+        [1760, 1833],
+        [1866, 1890],
+        [1930, 1950],
+        [2400, 2580],
+    ]
+)
 C_AA_PER_S = 2.998e18
 
 
@@ -41,15 +50,32 @@ def _beta_uv(wave, l_nu):
     return float(slope)
 
 
-SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 0.05, "width_gyr": 0.05,
-       "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+SFH = {
+    "type": "tsnorm",
+    "*": tengri.FIXED,
+    "peak_lbt_gyr": 0.05,
+    "width_gyr": 0.05,
+    "log_peak_sfr": 1.0,
+    "skew": 0.0,
+    "trunc": 13.0,
+}
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
+
 def _model(av, rv):
-    return tengri.SEDModel.build(ssp, sfh=SFH,
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0,
-              "tau_diff": av / 1.086, "law_diff": "cardelli", "Rv": rv},
-        redshift=tengri.Fixed(0.05))
+    return tengri.SEDModel.build(
+        ssp,
+        sfh=SFH,
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.0,
+            "tau_diff": av / 1.086,
+            "law_diff": "cardelli",
+            "Rv": rv,
+        },
+        redshift=tengri.Fixed(0.05),
+    )
 
 
 av_grid = np.linspace(0.1, 3.0, 16)
@@ -62,8 +88,7 @@ for i, av in enumerate(av_grid):
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict_rest_sed(p)
         BETA_GRID[j, i] = _beta_uv(np.asarray(out.wavelength), np.asarray(out.sed))
-REFS = [(1.0, 2.8, "SMC"), (1.0, 3.16, "LMC"), (1.0, 3.1, "MW (diffuse)"),
-        (1.0, 4.05, "Calzetti")]
+REFS = [(1.0, 2.8, "SMC"), (1.0, 3.16, "LMC"), (1.0, 3.1, "MW (diffuse)"), (1.0, 4.05, "Calzetti")]
 
 fig, ax = plt.subplots(figsize=(7.5, 5.0))
 
@@ -87,10 +112,17 @@ cbar.set_label(r"$\beta_{{\rm UV}}$ (Calzetti convention)")
 
 # Mark standard references
 for av, rv, label in REFS:
-    ax.plot(av, rv, marker="o", markersize=8, markerfacecolor="white",
-            markeredgecolor="black", markeredgewidth=1.2, zorder=5)
-    ax.text(av + 0.08, rv + 0.08, label, fontsize=9, color="black",
-            fontweight="bold", zorder=5)
+    ax.plot(
+        av,
+        rv,
+        marker="o",
+        markersize=8,
+        markerfacecolor="white",
+        markeredgecolor="black",
+        markeredgewidth=1.2,
+        zorder=5,
+    )
+    ax.text(av + 0.08, rv + 0.08, label, fontsize=9, color="black", fontweight="bold", zorder=5)
 
 ax.set(
     xlabel=r"$A_V$ (extinction in V-band) [mag]",

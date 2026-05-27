@@ -75,13 +75,17 @@ for tau_diff in tau_diffs:
 
     # L = ∫ L_ν dν.  np.trapz needs frequency in INCREASING order.
     mask_uv_opt = (wave >= 912.0) & (wave <= 30000.0)
-    nu_uv = nu[mask_uv_opt]; order = np.argsort(nu_uv)
-    L_absorbed = float(np.trapz(
-        (sed_int[mask_uv_opt] - sed_full[mask_uv_opt])[order],
-        nu_uv[order],
-    ))
+    nu_uv = nu[mask_uv_opt]
+    order = np.argsort(nu_uv)
+    L_absorbed = float(
+        np.trapz(
+            (sed_int[mask_uv_opt] - sed_full[mask_uv_opt])[order],
+            nu_uv[order],
+        )
+    )
     mask_fir = (wave >= 80000.0) & (wave <= 1.0e7)
-    nu_fir = nu[mask_fir]; order = np.argsort(nu_fir)
+    nu_fir = nu[mask_fir]
+    order = np.argsort(nu_fir)
     L_emitted = float(np.trapz(sed_full[mask_fir][order], nu_fir[order]))
     ratio = L_emitted / L_absorbed if L_absorbed > 0 else np.nan
     ratios.append(ratio)
@@ -94,7 +98,9 @@ L_abs_list = np.array(L_abs_list)
 L_emit_list = np.array(L_emit_list)
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.5))
-ax_l.errorbar(tau_diffs, ratios, fmt="o", markersize=8, lw=2, color="C0", label="L_emit / L_absorb")
+ax_l.errorbar(
+    tau_diffs, ratios, fmt="o", markersize=8, lw=2, color="C0", label="L_emit / L_absorb"
+)
 ax_l.axhline(1.0, ls="--", color="grey", lw=1, alpha=0.7, label="Expected")
 ax_l.set_xlabel(r"$\tau_{\rm diff}$"), ax_l.set_ylabel("Ratio")
 ax_l.legend(frameon=False, fontsize=9), ax_l.grid(True, alpha=0.3)

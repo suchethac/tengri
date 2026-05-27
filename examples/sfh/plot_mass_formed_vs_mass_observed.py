@@ -58,32 +58,54 @@ for tau in tau_values:
     m_formed.append(float(q.stellar_mass))
     m_surv.append(float(q.stellar_mass) * (1.0 - R))
     t_mw.append(age_mw_yr / 1e9)
-m_formed = np.array(m_formed); m_surv = np.array(m_surv); t_mw = np.array(t_mw)
+m_formed = np.array(m_formed)
+m_surv = np.array(m_surv)
+t_mw = np.array(t_mw)
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11.5, 4.2))
 norm = mpl.colors.Normalize(vmin=tau_values.min(), vmax=tau_values.max())
 cmap = plt.get_cmap("viridis")
 
-ax_l.plot([0, m_formed.max() * 1.05], [0, m_formed.max() * 1.05],
-          "k--", lw=1.0, alpha=0.4, label="1:1  (no return)")
-ax_l.scatter(m_formed, m_surv, c=tau_values, cmap=cmap, s=70,
-             edgecolor="k", lw=0.4, zorder=3)
-ax_l.set(xlabel=r"$M_{\rm formed} = \int\!\mathrm{SFR}\,\mathrm{d}t$  [M$_\odot$]",
-         ylabel=r"$M_*$ surviving  [M$_\odot$]", xlim=(0, m_formed.max() * 1.05),
-         ylim=(0, m_formed.max() * 1.05))
+ax_l.plot(
+    [0, m_formed.max() * 1.05],
+    [0, m_formed.max() * 1.05],
+    "k--",
+    lw=1.0,
+    alpha=0.4,
+    label="1:1  (no return)",
+)
+ax_l.scatter(m_formed, m_surv, c=tau_values, cmap=cmap, s=70, edgecolor="k", lw=0.4, zorder=3)
+ax_l.set(
+    xlabel=r"$M_{\rm formed} = \int\!\mathrm{SFR}\,\mathrm{d}t$  [M$_\odot$]",
+    ylabel=r"$M_*$ surviving  [M$_\odot$]",
+    xlim=(0, m_formed.max() * 1.05),
+    ylim=(0, m_formed.max() * 1.05),
+)
 ax_l.legend(frameon=False, fontsize=9, loc="upper left")
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax_l, pad=0.02)
 cb.set_label(r"$\tau$ [Gyr]")
 
 t_grid = np.logspace(6, 10.2, 200)
-ax_r.semilogx(t_grid, conroy09_return_fraction(t_grid),
-              color="0.3", lw=1.6, label="Conroy+2009 fit")
-ax_r.scatter(t_mw * 1e9, 1.0 - m_surv / m_formed, c=tau_values,
-             cmap=cmap, s=60, edgecolor="k", lw=0.4, zorder=3,
-             label=r"mass-weighted age of $\tau$ models")
-ax_r.set(xlabel=r"$t$ (mass-weighted age) [yr]",
-         ylabel=r"Return fraction  $R(t) = 1 - M_*/M_{\rm formed}$",
-         xlim=(1e6, 1.5e10), ylim=(0, 0.55))
+ax_r.semilogx(
+    t_grid, conroy09_return_fraction(t_grid), color="0.3", lw=1.6, label="Conroy+2009 fit"
+)
+ax_r.scatter(
+    t_mw * 1e9,
+    1.0 - m_surv / m_formed,
+    c=tau_values,
+    cmap=cmap,
+    s=60,
+    edgecolor="k",
+    lw=0.4,
+    zorder=3,
+    label=r"mass-weighted age of $\tau$ models",
+)
+ax_r.set(
+    xlabel=r"$t$ (mass-weighted age) [yr]",
+    ylabel=r"Return fraction  $R(t) = 1 - M_*/M_{\rm formed}$",
+    xlim=(1e6, 1.5e10),
+    ylim=(0, 0.55),
+)
 ax_r.legend(frameon=False, fontsize=9, loc="upper left")
 
 fig.tight_layout()

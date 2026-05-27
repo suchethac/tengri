@@ -48,12 +48,16 @@ obs = tengri.Observation(spectroscopy=spec)
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "alpha": 3.0, "beta": 0.3, "tau_gyr": 0.03, "log_peak_sfr": 1.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_bc": 0.0, "tau_diff": 0.05},
-    neb={"type": "cue", "*": tengri.FIXED,
-         "logU": tengri.Fixed(-2.5), "fesc": tengri.Fixed(0.0)},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 3.0,
+        "beta": 0.3,
+        "tau_gyr": 0.03,
+        "log_peak_sfr": 1.0,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.05},
+    neb={"type": "cue", "*": tengri.FIXED, "logU": tengri.Fixed(-2.5), "fesc": tengri.Fixed(0.0)},
     redshift=tengri.Fixed(Z),
 )
 
@@ -81,9 +85,12 @@ ax.axvline(6585.28, color="0.55", lw=0.4, ls=":")  # [NII] 6584
 ax.text(6564.61, 1.20, "Hα", fontsize=8, color="0.4", ha="center")
 ax.text(6549.86, 1.27, "[NII]", fontsize=7, color="0.4", ha="center")
 
-ax.set(xlim=(6480, 6680), yscale="log",
-       xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-       ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalised at 6600-6650 Å)")
+ax.set(
+    xlim=(6480, 6680),
+    yscale="log",
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalised at 6600-6650 Å)",
+)
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")
 

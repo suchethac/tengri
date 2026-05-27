@@ -18,7 +18,6 @@ import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -37,17 +36,20 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "dpl",
         "*": tengri.FIXED,
-        "alpha": 5.0,           # steep early assembly
+        "alpha": 5.0,  # steep early assembly
         "beta": 2.0,
         "tau_gyr": 1.0,
         "log_peak_sfr": 1.5,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED,
-         "neb_logU": tengri.Uniform(-4.0, -2.0),
-         "neb_logZ_gas": tengri.Uniform(-2.0, 0.5),
-         "neb_fesc": 0.0,
-         "neb_fesc_lya": 0.0},
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "neb_logU": tengri.Uniform(-4.0, -2.0),
+        "neb_logZ_gas": tengri.Uniform(-2.0, 0.5),
+        "neb_fesc": 0.0,
+        "neb_fesc_lya": 0.0,
+    },
     redshift=tengri.Fixed(0.0),
 )
 
@@ -80,8 +82,15 @@ cf = ax.contourf(log_z_vals, log_u_vals, ratio_grid, levels=levels, cmap="RdYlBu
 
 # Overlay contour line at the Case B reference value
 case_b_ratio = 2.86
-cs = ax.contour(log_z_vals, log_u_vals, ratio_grid, levels=[case_b_ratio],
-               colors="black", linewidths=2.0, linestyles="--")
+cs = ax.contour(
+    log_z_vals,
+    log_u_vals,
+    ratio_grid,
+    levels=[case_b_ratio],
+    colors="black",
+    linewidths=2.0,
+    linestyles="--",
+)
 ax.clabel(cs, inline=True, fontsize=9, fmt=f"Case B = {case_b_ratio:.2f}")
 
 ax.set_xlabel(r"$\log_{10}(Z_{\mathrm{gas}}/Z_{\odot})$")

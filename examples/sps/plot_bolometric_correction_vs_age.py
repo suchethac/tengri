@@ -22,8 +22,8 @@ References:
 
 import warnings
 
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
@@ -44,11 +44,11 @@ flux = np.asarray(ssp.ssp_flux)
 L_nu = flux[i_zsun] if flux.ndim == 3 else flux
 
 bands = [
-    ("FUV",  1350, 1750),
-    ("NUV",  1900, 2700),
-    ("g",    4000, 5500),
-    ("r",    5500, 6800),
-    ("K",   20000, 24000),
+    ("FUV", 1350, 1750),
+    ("NUV", 1900, 2700),
+    ("g", 4000, 5500),
+    ("r", 5500, 6800),
+    ("K", 20000, 24000),
 ]
 
 nu = C_AA_S / wave
@@ -59,7 +59,8 @@ L_bol = np.trapz(L_nu[:, ord_nu], nu[ord_nu], axis=1)
 BC = {}
 for name, lo, hi in bands:
     mask = (wave >= lo) & (wave <= hi)
-    nu_b = nu[mask]; order = np.argsort(nu_b)
+    nu_b = nu[mask]
+    order = np.argsort(nu_b)
     L_b = np.trapz(L_nu[:, mask][:, order], nu_b[order], axis=1)
     BC[name] = 2.5 * np.log10(np.where(L_b > 0, L_bol / L_b, np.nan))
 
@@ -69,9 +70,11 @@ for (name, *_), c in zip(bands, cmap_colors):
     ax.plot(log_age_yr, BC[name], color=c, lw=1.6, label=name)
 
 ax.axhline(0, color="0.75", lw=0.6)
-ax.set(xlabel=r"$\log_{10}\,t$ [yr]",
-       ylabel=r"BC$_X = M_{\rm bol} - M_X = 2.5\,\log_{10}(L_{\rm bol}/L_X)$",
-       xlim=(log_age_yr.min(), log_age_yr.max()))
+ax.set(
+    xlabel=r"$\log_{10}\,t$ [yr]",
+    ylabel=r"BC$_X = M_{\rm bol} - M_X = 2.5\,\log_{10}(L_{\rm bol}/L_X)$",
+    xlim=(log_age_yr.min(), log_age_yr.max()),
+)
 ax.legend(frameon=False, fontsize=9, title="band", title_fontsize=9)
 
 fig.tight_layout()

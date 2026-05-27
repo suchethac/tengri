@@ -15,10 +15,8 @@ Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 """
 
 import warnings
-from io import StringIO
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -57,7 +55,10 @@ model_cue = tengri.SEDModel.build(
     redshift=tengri.Fixed(0.01),
 )
 model_none = tengri.SEDModel.build(
-    ssp, sfh=sfh, dust=dust, neb={"type": "none", "*": tengri.FIXED},
+    ssp,
+    sfh=sfh,
+    dust=dust,
+    neb={"type": "none", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.01),
 )
 

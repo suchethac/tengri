@@ -7,9 +7,9 @@ Lyman-alpha forest, comparing tengri's Madau+1995 model to manual calculation
 from published coefficients (Madau 1995 Table 1, Eq. 15).
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import numpy as np
 
 import tengri
 from tengri.igm import igm_transmission_madau
@@ -39,6 +39,7 @@ madau_table1 = {
     "j=18": (914.576, 3.1644e-4),
 }
 
+
 # ── Manual Lyman-series line opacity (Madau Eq. 15) ────────────────────────
 def tau_lyman_series_manual(wave_obs, z_source):
     """
@@ -46,7 +47,7 @@ def tau_lyman_series_manual(wave_obs, z_source):
     for λ_j ≤ λ_obs ≤ λ_j(1+z), per Madau+1995 Eq. 15 (Table 1).
     """
     tau = np.zeros_like(wave_obs, dtype=float)
-    for name, (lam_j, a_j) in madau_table1.items():
+    for _name, (lam_j, a_j) in madau_table1.items():
         lam_max = lam_j * (1.0 + z_source)
         in_range = (wave_obs >= lam_j) & (wave_obs <= lam_max)
         tau = np.where(in_range, tau + a_j * (wave_obs / lam_j) ** 3.46, tau)
@@ -74,22 +75,42 @@ rel_error_line = residual_line / np.maximum(np.abs(tau_lyman_manual), 1e-6)
 # ── Left panel: τ_LS vs λ_obs ──────────────────────────────────────────────
 fig, (ax_left, ax_right) = plt.subplots(1, 2, figsize=(10.0, 4.0))
 
-ax_left.plot(wave_forest, tau_lyman_manual, "s--", lw=1.4,
-             label="Manual (Madau Eq. 15, Table 1)", markersize=6, color="C1")
-ax_left.plot(wave_forest, tau_total_tengri, "o-", lw=1.4,
-             label="tengri igm_transmission_madau", markersize=6, color="C0")
+ax_left.plot(
+    wave_forest,
+    tau_lyman_manual,
+    "s--",
+    lw=1.4,
+    label="Manual (Madau Eq. 15, Table 1)",
+    markersize=6,
+    color="C1",
+)
+ax_left.plot(
+    wave_forest,
+    tau_total_tengri,
+    "o-",
+    lw=1.4,
+    label="tengri igm_transmission_madau",
+    markersize=6,
+    color="C0",
+)
 ax_left.set_xlabel(r"$\lambda_{\mathrm{obs}}$ [Å]", fontsize=11)
 ax_left.set_ylabel(r"$\tau_{\mathrm{LS}}$ [dimensionless]", fontsize=11)
 ax_left.legend(frameon=False, fontsize=9)
 ax_left.grid(True, alpha=0.3)
 
 # ── Right panel: relative residual ─────────────────────────────────────────
-ax_right.plot(wave_forest, rel_error_line * 100, "s-", lw=1.4, markersize=6,
-              color="C2", label="Relative error")
+ax_right.plot(
+    wave_forest,
+    rel_error_line * 100,
+    "s-",
+    lw=1.4,
+    markersize=6,
+    color="C2",
+    label="Relative error",
+)
 ax_right.axhline(+10, color="gray", linestyle=":", alpha=0.6, lw=1)
 ax_right.axhline(-10, color="gray", linestyle=":", alpha=0.6, lw=1)
-ax_right.fill_between(wave_forest, -10, +10, alpha=0.1, color="gray",
-                      label="±10% band")
+ax_right.fill_between(wave_forest, -10, +10, alpha=0.1, color="gray", label="±10% band")
 ax_right.set_xlabel(r"$\lambda_{\mathrm{obs}}$ [Å]", fontsize=11)
 ax_right.set_ylabel(r"Relative error [%]", fontsize=11)
 ax_right.legend(frameon=False, fontsize=9)

@@ -49,6 +49,7 @@ axes = np.atleast_1d(axes).flatten()
 
 ks_stats = {}
 
+
 def _log_uniform_cdf(x, lo, hi):
     """CDF for LogUniform distribution."""
     return np.log(x / lo) / np.log(hi / lo)
@@ -83,8 +84,16 @@ for idx, (param_name, samples_arr) in enumerate(param_samples.items()):
     if cdf_fn is not None:
         ks_stat = stats.kstest(samples_arr, cdf_fn)[0]
         ks_stats[param_name] = ks_stat
-        ax.text(0.98, 0.97, f"KS = {ks_stat:.4f}", transform=ax.transAxes, fontsize=8,
-                ha="right", va="top", bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+        ax.text(
+            0.98,
+            0.97,
+            f"KS = {ks_stat:.4f}",
+            transform=ax.transAxes,
+            fontsize=8,
+            ha="right",
+            va="top",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+        )
 
     ax.set_xlabel(param_name, fontsize=9)
     ax.set_ylabel("Density", fontsize=9)

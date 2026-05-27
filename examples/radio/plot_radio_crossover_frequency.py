@@ -47,9 +47,15 @@ fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.5, 4.4))
 
 for alpha in alpha_sf_vals:
     c = compute_radio_components(
-        wavelength=wave, L_ir=1e11 * L_SUN, L_agn_bol=0.0, q_ir=2.64,
-        alpha_sf=alpha, sfr_mode="bell2003", include_freefree=True,
-        T_e=1e4, alpha_ff=-0.1,
+        wavelength=wave,
+        L_ir=1e11 * L_SUN,
+        L_agn_bol=0.0,
+        q_ir=2.64,
+        alpha_sf=alpha,
+        sfr_mode="bell2003",
+        include_freefree=True,
+        T_e=1e4,
+        alpha_ff=-0.1,
     )
     L_sync = np.asarray(c["synchrotron"])
     L_ff = np.asarray(c["freefree"])
@@ -59,22 +65,32 @@ for alpha in alpha_sf_vals:
     col = cmap(norm(alpha))
     ax.loglog(nu_ghz, L_sync, color=col, lw=0.7, ls="--", alpha=0.55)
     ax.loglog(nu_ghz, L_ff, color=col, lw=0.7, ls=":", alpha=0.55)
-    ax.loglog(nu_ghz, L_tot, color=col, lw=1.7,
-              label=rf"$\alpha_{{\rm sf}} = {alpha:.1f}$")
+    ax.loglog(nu_ghz, L_tot, color=col, lw=1.7, label=rf"$\alpha_{{\rm sf}} = {alpha:.1f}$")
     ax2.semilogx(nu_ghz, f_th, color=col, lw=1.6)
 
-ax.set(xlim=(0.1, 300), ylim=(5e27, 5e30),
-       xlabel=r"$\nu$ [GHz]",
-       ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.set(
+    xlim=(0.1, 300),
+    ylim=(5e27, 5e30),
+    xlabel=r"$\nu$ [GHz]",
+    ylabel=r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]",
+)
 ax.legend(frameon=False, fontsize=8, loc="upper right")
-ax.text(0.03, 0.05,
-        "dashed = synchrotron   dotted = free-free   solid = total",
-        transform=ax.transAxes, fontsize=8, color="0.4")
+ax.text(
+    0.03,
+    0.05,
+    "dashed = synchrotron   dotted = free-free   solid = total",
+    transform=ax.transAxes,
+    fontsize=8,
+    color="0.4",
+)
 
 ax2.axhline(0.5, color="0.7", ls="--", lw=0.7)
-ax2.set(xlim=(0.1, 300), ylim=(0, 1),
-        xlabel=r"$\nu$ [GHz]",
-        ylabel=r"thermal fraction  $L_{\rm ff} / L_{\rm total}$")
+ax2.set(
+    xlim=(0.1, 300),
+    ylim=(0, 1),
+    xlabel=r"$\nu$ [GHz]",
+    ylabel=r"thermal fraction  $L_{\rm ff} / L_{\rm total}$",
+)
 ax2.text(0.4, 0.55, "f$_{th}$=0.5", fontsize=8, color="0.5")
 
 fig.tight_layout()

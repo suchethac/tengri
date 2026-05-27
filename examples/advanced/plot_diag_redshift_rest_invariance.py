@@ -15,7 +15,6 @@ coupling bug.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -56,7 +55,7 @@ for z in z_vals:
         sed_0 = sed_z.sed
     else:
         # Max relative difference (exclude zeros)
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             rel_diff = np.abs(sed_z.sed - sed_0) / np.abs(sed_0)
             rel_diff = rel_diff[np.isfinite(rel_diff)]
             max_rel_diff = np.max(rel_diff) if len(rel_diff) > 0 else 0.0
@@ -66,14 +65,23 @@ max_rel_diffs = np.array(max_rel_diffs)
 
 # Plot: max relative difference vs redshift
 fig, ax = plt.subplots(figsize=(6, 4.2))
-ax.semilogy(z_vals[1:], max_rel_diffs, marker='o', markersize=8, lw=1.5,
-            color='C0', markerfacecolor='white', markeredgewidth=1.5)
-ax.axhline(1e-3, color='gray', linestyle='--', lw=1, alpha=0.5,
-           label=r'$10^{-3}$ (warning threshold)')
+ax.semilogy(
+    z_vals[1:],
+    max_rel_diffs,
+    marker="o",
+    markersize=8,
+    lw=1.5,
+    color="C0",
+    markerfacecolor="white",
+    markeredgewidth=1.5,
+)
+ax.axhline(
+    1e-3, color="gray", linestyle="--", lw=1, alpha=0.5, label=r"$10^{-3}$ (warning threshold)"
+)
 ax.set_xlabel(r"Redshift $z$")
 ax.set_ylabel(r"Max relative difference vs $z=0$ SED")
 ax.legend(frameon=False, fontsize=9)
-ax.grid(True, alpha=0.3, which='both')
+ax.grid(True, alpha=0.3, which="both")
 
 fig.tight_layout()
 plt.savefig("plot_diag_redshift_rest_invariance.png", dpi=150, bbox_inches="tight")

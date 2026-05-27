@@ -23,9 +23,7 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
-obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"])
-)
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"]))
 
 
 def _build_template(peak_lbt, width, tau_diff):
@@ -41,6 +39,7 @@ def _build_template(peak_lbt, width, tau_diff):
 
 model_dust = _build_template(2.0, 2.0, 0.8)
 model_old = _build_template(10.5, 1.0, 0.05)
+
 
 def _colors(model, params, z_grid):
     """Compute u-g and g-r colors across redshifts."""
@@ -68,14 +67,33 @@ for z_m, color in [(0.5, "#d62728"), (2.0, "#1f77b4")]:
     idx = int(np.argmin(np.abs(z_grid - z_m)))
     ug, gr = (ug_dust, gr_dust) if color == "#d62728" else (ug_old, gr_old)
     j = min(idx + 5, len(z_grid) - 1)
-    ax.arrow(ug[idx], gr[idx], ug[j] - ug[idx], gr[j] - gr[idx],
-             head_width=0.08, head_length=0.05, fc=color, ec=color, alpha=0.6, zorder=2)
+    ax.arrow(
+        ug[idx],
+        gr[idx],
+        ug[j] - ug[idx],
+        gr[j] - gr[idx],
+        head_width=0.08,
+        head_length=0.05,
+        fc=color,
+        ec=color,
+        alpha=0.6,
+        zorder=2,
+    )
 
 # Mark collision point
 dist = np.sqrt((ug_dust - ug_old) ** 2 + (gr_dust - gr_old) ** 2)
 i_int = np.argmin(dist)
-ax.scatter(ug_dust[i_int], gr_dust[i_int], s=200, marker="*", color="gold", ec="k",
-           lw=1.2, zorder=10, label=f"Collision at z≈{z_grid[i_int]:.2f}")
+ax.scatter(
+    ug_dust[i_int],
+    gr_dust[i_int],
+    s=200,
+    marker="*",
+    color="gold",
+    ec="k",
+    lw=1.2,
+    zorder=10,
+    label=f"Collision at z≈{z_grid[i_int]:.2f}",
+)
 
 ax.set(
     xlabel=r"$u - g$ [AB mag]",

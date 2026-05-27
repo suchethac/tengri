@@ -50,10 +50,10 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(42)))
 # Probe metallicity grid: inside, at boundary, outside
 fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 met_values = [
-    met_min + 0.3,        # Well inside
-    met_max - 0.1,        # Near max
-    met_max,              # Exactly at max
-    met_max + 0.2,        # Outside grid
+    met_min + 0.3,  # Well inside
+    met_max - 0.1,  # Near max
+    met_max,  # Exactly at max
+    met_max + 0.2,  # Outside grid
 ]
 titles = [
     f"Met = {met_values[0]:.3f}\n(inside grid)",
@@ -73,9 +73,15 @@ for ax, met, title in zip(axes.flat, met_values, titles):
 
         if not ok.any():
             ax.text(
-                0.5, 0.5, "All NaN",
-                ha="center", va="center", transform=ax.transAxes,
-                fontsize=12, color="red", weight="bold"
+                0.5,
+                0.5,
+                "All NaN",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=12,
+                color="red",
+                weight="bold",
             )
         else:
             wave, sed = wave[ok], sed[ok]
@@ -88,9 +94,14 @@ for ax, met, title in zip(axes.flat, met_values, titles):
     except Exception as e:
         msg = type(e).__name__
         ax.text(
-            0.5, 0.5, f"Error:\n{msg}",
-            ha="center", va="center", transform=ax.transAxes,
-            fontsize=10, color="red"
+            0.5,
+            0.5,
+            f"Error:\n{msg}",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=10,
+            color="red",
         )
 
     ax.set_title(title, fontsize=10)

@@ -14,8 +14,6 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
 import warnings
 
-import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -89,10 +87,14 @@ mean_error = rel_error.mean()
 # Flag any discrepancies > 5%
 large_errors = rel_error > 0.05
 if large_errors.any():
-    print(f"WARNING: {large_errors.sum()} / {len(rel_error)} parameter combos have > 5% discrepancy")
+    print(
+        f"WARNING: {large_errors.sum()} / {len(rel_error)} parameter combos have > 5% discrepancy"
+    )
     for i in np.where(large_errors)[0]:
-        print(f"  log_peak_sfr={log_peak_sfr_colors[i]:.1f}: "
-              f"manual={m_manual[i]:.3e}, lib={m_lib[i]:.3e}, rel_err={rel_error[i]:.3%}")
+        print(
+            f"  log_peak_sfr={log_peak_sfr_colors[i]:.1f}: "
+            f"manual={m_manual[i]:.3e}, lib={m_lib[i]:.3e}, rel_err={rel_error[i]:.3%}"
+        )
 
 # Plot
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
@@ -107,8 +109,12 @@ lim_min = min(m_lib.min(), m_manual.min())
 lim_max = max(m_lib.max(), m_manual.max())
 ax.plot([lim_min, lim_max], [lim_min, lim_max], "k--", lw=1, alpha=0.5, label="1:1")
 
-cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01,
-                    label=r"$\log_{10}(\mathrm{SFR}_{\rm peak})$")
+cbar = fig.colorbar(
+    plt.cm.ScalarMappable(norm=norm, cmap=cmap),
+    ax=ax,
+    pad=0.01,
+    label=r"$\log_{10}(\mathrm{SFR}_{\rm peak})$",
+)
 ax.set_xlabel(r"$M_{\rm formed}$ (library) [M$_\odot$]")
 ax.set_ylabel(r"$M_{\rm formed}$ (manual trapz) [M$_\odot$]")
 ax.set_xscale("log")

@@ -36,17 +36,25 @@ warnings.filterwarnings("ignore")
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    )
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 model = tengri.SEDModel.build(
     ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.5, "beta": 2.5,
-         "tau_gyr": 0.5, "log_peak_sfr": 1.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": tengri.Uniform(0.0, 2.0), "tau_bc": 0.2},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 1.5,
+        "beta": 2.5,
+        "tau_gyr": 0.5,
+        "log_peak_sfr": 1.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": tengri.Uniform(0.0, 2.0),
+        "tau_bc": 0.2,
+    },
     redshift=tengri.Fixed(0.05),
 )
 
