@@ -1,4 +1,4 @@
-"""
+r"""
 Cosmological distance ladder and the K-correction for a flat SED
 ================================================================
 
@@ -35,6 +35,7 @@ cosmo = cosmology.PLANCK18
 z = np.linspace(0.001, 6.0, 400)
 # Cosmology helpers are scalar-in / scalar-out for stable JIT; vmap once.
 import jax
+
 _d_c = jax.vmap(lambda zi: cosmology.comoving_distance_mpc(zi, cosmo=cosmo))
 _d_l = jax.vmap(lambda zi: cosmology.luminosity_distance_mpc(zi, cosmo=cosmo))
 _d_a = jax.vmap(lambda zi: cosmology.angular_diameter_distance_mpc(zi, cosmo=cosmo))
@@ -46,7 +47,9 @@ mu = np.asarray(_mu(jnp.asarray(z)))
 k_corr = -2.5 * np.log10(1.0 + z)  # closed form for flat F_nu in observed band
 
 fig, (ax_d, ax_k) = plt.subplots(
-    2, 1, figsize=(6.4, 5.6),
+    2,
+    1,
+    figsize=(6.4, 5.6),
     gridspec_kw={"height_ratios": [1.4, 1], "hspace": 0.32},
 )
 
@@ -55,16 +58,14 @@ ax_d.plot(z, d_l, color="C3", lw=1.5, label=r"Luminosity  $d_L = (1+z)\,d_C$")
 ax_d.plot(z, d_a, color="C2", lw=1.5, label=r"Angular diameter  $d_A = d_C/(1+z)$")
 z_turn = z[np.argmax(d_a)]
 ax_d.axvline(z_turn, color="0.4", lw=0.6, ls="--")
-ax_d.text(z_turn, d_a.max() * 1.03, f" $d_A$ peaks at $z={z_turn:.2f}$",
-          fontsize=8, color="0.3")
+ax_d.text(z_turn, d_a.max() * 1.03, f" $d_A$ peaks at $z={z_turn:.2f}$", fontsize=8, color="0.3")
 ax_d.set_ylabel("Distance  [Mpc]")
 ax_d.set_xlabel("Redshift")
 ax_d.legend(frameon=False, fontsize=8.5, loc="upper left")
 
 ax_k.plot(z, mu, color="C0", lw=1.5, label=r"Distance modulus  $\mu(z)$  [mag]")
 ax_k2 = ax_k.twinx()
-ax_k2.plot(z, k_corr, color="C3", lw=1.5,
-           label=r"K-correction for flat $F_\nu$  [mag]")
+ax_k2.plot(z, k_corr, color="C3", lw=1.5, label=r"K-correction for flat $F_\nu$  [mag]")
 ax_k2.tick_params(axis="y", colors="C3")
 ax_k2.spines["right"].set_color("C3")
 ax_k2.set_ylabel(r"$K(z)$  [mag]", color="C3")
@@ -77,7 +78,8 @@ lines = [
     plt.Line2D([], [], color="C0", lw=1.5),
     plt.Line2D([], [], color="C3", lw=1.5),
 ]
-ax_k.legend(lines, [r"$\mu(z)$  [mag]", r"$K(z)$  [mag]"],
-            frameon=False, fontsize=8.5, loc="lower right")
+ax_k.legend(
+    lines, [r"$\mu(z)$  [mag]", r"$K(z)$  [mag]"], frameon=False, fontsize=8.5, loc="lower right"
+)
 
 fig.savefig("plot_usecase_cosmology_ladder.png", dpi=150, bbox_inches="tight")
