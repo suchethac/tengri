@@ -188,13 +188,14 @@ for block, (cig, tng) in registries.items():
 # ## §1 Stellar populations
 #
 # BC03 Chabrier (Bruzual & Charlot 2003; Chabrier 2003) at Z = 0.02 from
-# 1 Myr to 10 Gyr. **Single SSPs on both sides** — the left panel reads
-# CIGALE's raw `bc03/Z=0.02_imf=chab.pickle` directly (no SFH module),
-# the right reads the same templates re-shaped into tengri's HDF5. They
-# are the same numbers: the port is bit-identical (ratio = 1.000 across
-# UV–NIR at every age), so this is a floating-point check, not a physics
-# one. Younger SSPs are UV-bright with a deep Lyman break; the break
-# only deepens with age — that shape is BC03, identical in both codes.
+# 1 Myr to 10 Gyr. **Single SSPs**, overlaid: CIGALE's raw
+# `bc03/Z=0.02_imf=chab.pickle` (solid) read directly with no SFH module,
+# and the same templates re-shaped into tengri's HDF5 (dashed). The
+# curves sit on top of each other; the lower panel shows the relative
+# residual |tengri − CIGALE| / CIGALE, which is ~1e-7 (float32 round-trip
+# through the HDF5 port) across UV–NIR at every age. This is a
+# floating-point check, not a physics one — younger SSPs are UV-bright
+# with a deep Lyman break that only deepens with age, identical in both.
 
 # %%
 import pickle as _pickle
@@ -228,16 +229,31 @@ for age_yr in ages_yr:
     # ssp_flux axes: (n_met, n_age, n_wave) — metallicity first, then age.
     tengri_ssp.append((ssp.ssp_wave, ssp.ssp_flux[i_zsun, i_age, :] * L_SUN))
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="pcigale BC03 (raw pickle)", label_r="tengri SSP (DSPS BC03)")
+# Overlay both codes on one SED axis + a residual panel underneath.
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(9, 7), sharex=True,
+    gridspec_kw={"height_ratios": [3, 1]})
 colors = plt.cm.viridis(np.linspace(0, 1, len(ages_yr)))
 for color, age_yr, (w_c, L_c), (w_t, L_t) in zip(colors, ages_yr, cigale_ssp, tengri_ssp):
     label = f"{age_yr / 1e6:g} Myr"
-    ax_l.plot(w_c, L_c, color=color, linewidth=1.5, label=label)
-    ax_r.plot(w_t, L_t, color=color, linewidth=1.5, label=label)
-for ax in (ax_l, ax_r):
-    ax.legend(fontsize=9)
-    ax.grid(True, alpha=0.3)
+    ax.plot(w_c, L_c, color=color, linewidth=2.0, label=label)
+    ax.plot(w_t, L_t, color="k", linewidth=0.8, linestyle="--", alpha=0.7)
+    # Residual on the CIGALE wavelength grid (tengri regridded onto it).
+    L_t_on_c = U.regrid(w_t, L_t, w_c)
+    resid = np.abs(L_t_on_c - L_c) / np.maximum(np.abs(L_c), 1e-30)
+    resid[~np.isfinite(resid)] = 0.0
+    ax_r.plot(w_c, resid, color=color, linewidth=1.0)
+ax.set_xscale("log"); ax.set_yscale("log")
+ax.set_ylabel(r"$\nu L_\nu$ or $L_\nu$ [erg/s/Hz]")
+ax.set_title("BC03 Chabrier Z = 0.02 — CIGALE (solid) vs tengri (black dashed)")
+ax.legend(fontsize=9, title="SSP age")
+ax.grid(True, alpha=0.3)
+ax_r.set_xscale("log"); ax_r.set_yscale("log")
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel(r"$|\Delta| / L_{\rm CIGALE}$", fontsize=9)
+ax_r.set_ylim(1e-9, 1e-2)
+ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("01_ssp_bc03.png")
 
