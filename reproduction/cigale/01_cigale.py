@@ -865,8 +865,8 @@ save_fig("09_agn_skirtor.png")
 # CIGALE's `xray` module follows Yang et al. (2020): an AGN corona
 # power law tied to L_2500, plus an HMXB / LMXB contribution scaled by
 # stellar mass and SFR, with a high-energy exponential cutoff at
-# E_cut ≈ 300 keV. tengri now ships the matching `xray.yang20` (landed
-# in #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
+# E_cut ≈ 300 keV. tengri ships the matching `xray.yang20` (landed in
+# #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
 # α_ox = -1.4, Γ_HMXB = 2.0, Γ_LMXB = 1.6).
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
@@ -874,8 +874,7 @@ save_fig("09_agn_skirtor.png")
 # diverge — CIGALE rolls off steeply while tengri stays power-law — but
 # E_cut = 300 keV only suppresses by exp(−100/300) ≈ 0.7 at 100 keV, so
 # the steep CIGALE drop near its 200–300 keV grid edge is mostly a
-# grid-extent effect rather than the physical cutoff. The two
-# implementations are consistent where both are well-sampled.
+# grid-extent effect rather than the physical cutoff.
 
 # %%
 sed_x = C.run_chain([
