@@ -42,6 +42,16 @@
 # age = 5 Gyr; Z = Z☉; modified-starburst dust with E(B−V)_lines = 0.3;
 # Dale et al. (2014) IR re-emission with α = 2. Sections sweep one
 # physics block at a time around this fiducial.
+#
+# **What to expect.** The stellar templates, star-formation histories,
+# dust-attenuation curves, AGN accretion disc, and intergalactic
+# transmission reproduce CIGALE to floating-point or to a fraction of a
+# percent — where the two codes implement the same physics, they agree.
+# A few blocks differ in ways worth seeing plainly: the nebular emitter
+# uses a neural emulator (Cue) rather than static CLOUDY grids, and the
+# AGN torus and far-infrared dust coverage are still maturing. Each such
+# difference is called out at the relevant section rather than hidden —
+# an honest reproduction is more useful than a flattering one.
 
 # %% [markdown]
 # ## Setup
