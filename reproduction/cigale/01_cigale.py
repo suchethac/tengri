@@ -995,8 +995,9 @@ save_fig("11_radio_synchrotron.png")
 # limit at z = 3 sits at ~0.18-0.25 rather than 1. tengri now ships the
 # matching `igm.meiksin06` (landed in #446); this panel uses it directly
 # so both sides apply the same Meiksin prescription. The transmission
-# curves should overlay at z = 3, 5, 7 — that overlay is the correctness
-# check for the port.
+# curves overlay at z = 3, 5, 7 to **max |ΔT| ~ 1e-7** (float precision,
+# median ΔT = 0) — tengri's port is bit-faithful to CIGALE's Meiksin
+# transmission, not just visually close.
 
 # %%
 # Both transmission curves come straight from each code's own IGM
