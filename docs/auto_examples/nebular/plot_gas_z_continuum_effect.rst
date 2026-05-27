@@ -28,7 +28,7 @@ Gas-phase metallicity effect on nebular continuum
 
 Nebular free-free, free-bound, and two-photon emission respond to gas-phase
 metallicity (``logZ_gas``) through changes in metal cooling efficiency and
-ionization balance. This example demonstrates the metallicity sensitivity of
+ionization balance. metallicity sensitivity of
 the nebular continuum at fixed ionization parameter.
 
 Single rest-frame νLν trace (1000–10000 Å) across four gas metallicities
@@ -41,32 +41,25 @@ References:
   Galactic Nuclei*, 2nd ed., University Science Books
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue nebular model)
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-102
+.. GENERATED FROM PYTHON SOURCE LINES 20-116
 
 
 
 .. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_gas_z_continuum_effect_001.png
-   :alt: plot gas z continuum effect
+   :alt: Nebular continuum sensitivity to gas-phase metallicity (residual vs. lowest-Z)
    :srcset: /auto_examples/nebular/images/sphx_glr_plot_gas_z_continuum_effect_001.png
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -97,13 +90,14 @@ References:
             "alpha": 1.2,
             "beta": 2.0,
             "tau_gyr": 0.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
         neb={
             "type": "cue",
             "*": tengri.FIXED,
-            "logU": -2.0,  # Fixed ionization parameter
+            # NB: short-form keys inside the `neb` group (full `neb_*` is silently ignored)
+            "logU": -2.0,
             "logZ_gas": tengri.Uniform(-2.0, 0.5),
         },
         redshift=tengri.Fixed(0.0),
@@ -117,43 +111,47 @@ References:
     colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
     labels = [f"$Z_{{\\rm gas}}/Z_\\odot = 10^{{{z:.1f}}}$" for z in logz_values]
 
-    fig, ax = plt.subplots(figsize=(8.0, 5.5))
-
-    for logz, color, label in zip(logz_values, colors, labels):
+    # Compute SEDs at each metallicity AND a reference baseline (lowest Z) so we
+    # can visualise the *nebular* response — the stellar continuum dominates by
+    # factors of 10–100 at these wavelengths, so plotting νLν directly hides
+    # everything. We show the fractional residual against the lowest-Z model.
+    seds = []
+    for logz in logz_values:
         params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
         pred = model.predict_rest_sed(params)
+        seds.append(np.asarray(pred.sed))
+    wave = np.asarray(pred.wavelength)
+    ref = seds[0]  # logz = -1.5 baseline
 
-        wave = np.asarray(pred.wavelength)
-        sed = np.asarray(pred.sed)
+    mask = (wave >= 1000) & (wave <= 1e4)
 
-        # Convert L_nu [erg/s/Hz] to nu*L_nu [erg/s]
-        nu = 2.998e18 / wave  # Hz
-        nu_l_nu = nu * sed
-
-        # Plot only 1000-10000 Å
-        mask = (wave >= 1000) & (wave <= 1e4)
-        ax.loglog(
+    fig, ax = plt.subplots(figsize=(8.0, 5.5))
+    for sed, color, label in zip(seds, colors, labels):
+        delta = (sed - ref) / ref
+        ax.semilogx(
             wave[mask],
-            nu_l_nu[mask],
+            100.0 * delta[mask],
             color=color,
             lw=2.0,
             label=label,
-            alpha=0.85,
+            alpha=0.9,
         )
 
-    ax.set_xlim(900, 1.1e4)
+    ax.axhline(0.0, color="0.4", lw=0.6, ls=":")
+    ax.set_xlim(1000, 1e4)
     ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=12)
-    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]", fontsize=12)
-    ax.legend(fontsize=10, frameon=True, loc="lower left")
+    ax.set_ylabel(
+        r"$\Delta L_\nu / L_\nu(Z_{\rm gas}=10^{-1.5}Z_\odot)$  [%]", fontsize=12
+    )
+    ax.set_title(
+        "Nebular continuum sensitivity to gas-phase metallicity (residual vs. lowest-Z)",
+        fontsize=11,
+    )
+    ax.legend(fontsize=10, frameon=True, loc="best")
     ax.grid(True, alpha=0.25, which="both")
 
     fig.tight_layout()
     plt.savefig("plot_gas_z_continuum_effect.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.999 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_gas_z_continuum_effect.py:

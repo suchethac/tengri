@@ -30,10 +30,25 @@ Ionizing photon production declines rapidly with stellar population age
 (~t^-1). We show how nebular line strength evolves from young (50 Myr)
 to old (5 Gyr) populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-64
+.. GENERATED FROM PYTHON SOURCE LINES 9-68
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_neb_age_dependence_001.png
+   :alt: plot neb age dependence
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_neb_age_dependence_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,7 +74,7 @@ to old (5 Gyr) populations.
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": tengri.Uniform(0.05, 5.0),
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
         neb={"type": "cue", "*": tengri.FIXED},
