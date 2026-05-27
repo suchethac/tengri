@@ -47,22 +47,48 @@ Silva, Maiolino & Granato 2004, MNRAS 355, 973.
 .. code-block:: pytb
 
     Traceback (most recent call last):
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/agn/plot_skirtor_vs_smooth_torus.py", line 67, in <module>
-        wave_skir, l_skir = predict_with_torus("skirtor")
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/agn/plot_skirtor_vs_smooth_torus.py", line 68, in <module>
+        wave_silv, l_silv = predict_with_torus("silva04")
                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/agn/plot_skirtor_vs_smooth_torus.py", line 47, in predict_with_torus
-        model = tengri.SEDModel.build(
-                ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 4929, in build
-        spec = parse_groups(**groups)
-               ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 538, in parse_groups
-        _validate_user_keys(kwargs, structural_params, param_partition)
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 1023, in _validate_user_keys
-        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 1072, in _check_dict_keys
-        raise ValueError(
-    ValueError: Unknown key 'log_sfr' in group 'sfh'. Valid structural keys for this group are: ['*', 'bin_edges_gyr', 'type'].
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/agn/plot_skirtor_vs_smooth_torus.py", line 62, in predict_with_torus
+        out = model.predict_rest_sed(p)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 2343, in predict_rest_sed
+        state = self.predict_state(params)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 4147, in predict_state
+        return run_components(
+               ^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/orchestrator.py", line 691, in run_components
+        state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/component.py", line 313, in apply
+        L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/unified.py", line 279, in __call__
+        return self.callable(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/blocks/registry.py", line 68, in composable
+        return composable_agn_l_nu(
+               ^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/blocks/runner.py", line 461, in composable_agn_l_nu
+        return agn_frac * compose_l_nu(
+                          ^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/blocks/runner.py", line 378, in compose_l_nu
+        L_lambda_torus = torus_fn(
+                         ^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/blocks/torus_blocks.py", line 147, in silva04_torus_block
+        L_nu = silva04_analytic(
+               ^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/silva04.py", line 249, in silva04_analytic
+        return _load_silva04_default()(*args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/silva04.py", line 218, in _load_silva04_default
+        return create_silva04_from_grid(_find_silva04_grid())
+                                        ^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/silva04.py", line 213, in _find_silva04_grid
+        raise FileNotFoundError(_NOT_FOUND_MSG)
+    FileNotFoundError: Silva+04 torus grid not found. Build it with: python scripts/build_silva04_grid.py --input /tmp/AGNfitter/models/TORUS/S04.pickle
 
 
 
@@ -91,7 +117,7 @@ Silva, Maiolino & Granato 2004, MNRAS 355, 973.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
     ssp = tengri.load_ssp()
 

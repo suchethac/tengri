@@ -653,13 +653,6 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
    "name": "download_ssp"

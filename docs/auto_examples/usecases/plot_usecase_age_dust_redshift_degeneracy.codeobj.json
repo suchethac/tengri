@@ -100,6 +100,15 @@
    "name": "PRNGKey"
   }
  ],
+ "m_r_target": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
  "np.all": [
   {
    "is_class": false,
@@ -244,6 +253,29 @@
    "name": "std"
   }
  ],
+ "observation": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.observation.observation",
+   "module_short": "tengri",
+   "name": "Observation"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.observation",
+   "module_short": "tengri",
+   "name": "Observation"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Observation"
+  }
+ ],
  "os.environ": [
   {
    "is_class": false,
@@ -322,6 +354,66 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "tight_layout"
+  }
+ ],
+ "sdss_filters": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.observation.photometry_config",
+   "module_short": "tengri",
+   "name": "Photometry"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.observation",
+   "module_short": "tengri",
+   "name": "Photometry"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Photometry"
+  }
+ ],
+ "ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar.sps.dsps_wrapper",
+   "module_short": "tengri.components.stellar.sps",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar.sps",
+   "module_short": "tengri.components.stellar.sps",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar",
+   "module_short": "tengri.components.stellar",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components",
+   "module_short": "tengri.components",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SSPData"
   }
  ],
  "tengri.FIXED": [

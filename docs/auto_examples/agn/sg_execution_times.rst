@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.092** total execution time for 31 files **from auto_examples/agn**:
+**00:02.282** total execution time for 31 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,20 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
-     - 00:01.850
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_richards2006_template.py` (``plot_richards2006_template.py``)
-     - 00:01.165
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``plot_alpha_ox_uv_xray_connection.py``)
-     - 00:01.048
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_custom_torus_extension.py` (``plot_custom_torus_extension.py``)
-     - 00:00.015
+     - 00:02.219
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_vs_smooth_torus.py` (``plot_skirtor_vs_smooth_torus.py``)
-     - 00:00.013
+     - 00:00.063
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -80,6 +71,12 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_type12.py` (``plot_agn_type12.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``plot_alpha_ox_uv_xray_connection.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_composable_block_toggles.py` (``plot_composable_block_toggles.py``)
      - 00:00.000
      - 0.0
@@ -102,6 +99,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_reverberation_size_luminosity.py` (``plot_reverberation_size_luminosity.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_richards2006_template.py` (``plot_richards2006_template.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py` (``plot_seyfert_quasar_blazar_archetypes.py``)

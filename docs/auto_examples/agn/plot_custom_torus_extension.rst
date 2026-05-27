@@ -21,6 +21,11 @@
 Registering a custom AGN torus model and using it through ``SEDModel.build``
 =============================================================================
 
+.. image:: images/sphx_glr_plot_custom_torus_extension_001.png
+   :alt: plot custom torus extension
+   :class: sphx-glr-single-img
+
+
 The collaborator workflow for adding a new AGN model. We define a toy
 single-temperature blackbody torus, register it with
 ``register_agn_model``, confirm it is discoverable through
@@ -38,31 +43,15 @@ class — see ``docs/dev/sed-model-components.md``.
 .. GENERATED FROM PYTHON SOURCE LINES 19-135
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/agn/plot_custom_torus_extension.py", line 93, in <module>
-        model_skirtor = tengri.SEDModel.build(
-                        ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 4929, in build
-        spec = parse_groups(**groups)
-               ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 538, in parse_groups
-        _validate_user_keys(kwargs, structural_params, param_partition)
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 1023, in _validate_user_keys
-        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 1072, in _check_dict_keys
-        raise ValueError(
-    ValueError: Unknown key 'log_sfr' in group 'sfh'. Valid structural keys for this group are: ['*', 'bin_edges_gyr', 'type'].
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_custom_torus_extension_001.png
+   :alt: plot custom torus extension
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_custom_torus_extension_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-
-
-|
 
 .. code-block:: Python
 
@@ -135,7 +124,7 @@ class — see ``docs/dev/sed-model-components.md``.
     registered = {m["name"] for m in tengri.list_agn_models(status="experimental")}
     assert "demo_greybody_torus" in registered, "Registration failed"
 
-    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
     LOG_LBOL = 12.0
     ssp = tengri.load_ssp()
@@ -182,6 +171,11 @@ class — see ``docs/dev/sed-model-components.md``.
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_custom_torus_extension.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.219 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_custom_torus_extension.py:

@@ -42,6 +42,15 @@
    "name": "PRNGKey"
   }
  ],
+ "l_skir": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
  "np.abs": [
   {
    "is_class": false,
@@ -373,6 +382,15 @@
    "module": "warnings",
    "module_short": "warnings",
    "name": "filterwarnings"
+  }
+ ],
+ "wave_skir": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
   }
  ]
 }

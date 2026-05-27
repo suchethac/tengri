@@ -51,12 +51,28 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 .. code-block:: pytb
 
     Traceback (most recent call last):
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_sfh_to_madau_dickinson.py", line 70, in <module>
-        SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
-              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/stellar/sps/dsps_wrapper.py", line 179, in load_ssp
-        raise FileNotFoundError(
-    FileNotFoundError: SSP file 'data/fsps_prsc_miles_chabrier.h5' not found in any ancestor of /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases. Place the file under <project_root>/data/ or call tengri.download_ssp('<short_name>') to fetch a bundled SSP.
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_sfh_to_madau_dickinson.py", line 90, in <module>
+        model = tengri.SEDModel.build(
+                ^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 4930, in build
+        return cls(
+               ^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 499, in __init__
+        param_map_deltas.append(self._init_nebular(spec, ssp_data))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 1009, in _init_nebular
+        self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/nebular/cue.py", line 950, in __init__
+        self.weights = load_cue_weights(weights_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/nebular/cue.py", line 366, in load_cue_weights
+        npz = dict(np.load(npz_path, allow_pickle=True))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+        fid = stack.enter_context(open(os.fspath(file), "rb"))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/data/cue_weights.npz'
 
 
 

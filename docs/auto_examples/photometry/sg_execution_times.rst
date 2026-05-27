@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:25.862** total execution time for 16 files **from auto_examples/photometry**:
+**00:00.147** total execution time for 16 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -32,19 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_k_correction_grid.py` (``plot_k_correction_grid.py``)
-     - 00:20.037
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py` (``plot_cosmic_dimming_observed_flux.py``)
-     - 00:04.949
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
+     - 00:00.147
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_balmer_break_redshift_evolution.py` (``plot_balmer_break_redshift_evolution.py``)
-     - 00:00.799
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
-     - 00:00.077
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py` (``plot_cosmic_dimming_observed_flux.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_curves.py` (``plot_filter_curves.py``)
@@ -57,6 +54,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_k_correction_grid.py` (``plot_k_correction_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_nuv_r_age_track.py` (``plot_nuv_r_age_track.py``)

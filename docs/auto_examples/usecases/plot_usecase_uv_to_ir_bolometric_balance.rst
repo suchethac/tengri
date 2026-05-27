@@ -321,11 +321,6 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         print("\n✓ Energy balance validated: L_IR ≈ L_UV_absorbed (±10%)")
 
 
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.022 seconds)
-
-
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py:
 
 .. only:: html

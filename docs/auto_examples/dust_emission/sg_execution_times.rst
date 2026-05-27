@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.829** total execution time for 23 files **from auto_examples/dust_emission**:
+**00:01.398** total execution time for 23 files **from auto_examples/dust_emission**:
 
 .. container::
 
@@ -32,14 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``plot_bosa_grid.py``)
-     - 00:00.542
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_umin_cross_library.py` (``plot_umin_cross_library.py``)
-     - 00:00.276
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_logu_cross_library.py` (``plot_logu_cross_library.py``)
-     - 00:00.011
+     - 00:01.398
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_01_size_distribution.py` (``plot_astrodust_hd23_01_size_distribution.py``)
      - 00:00.000
@@ -63,6 +57,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_astrodust_hd23_08_polarized_emission.py` (``plot_astrodust_hd23_08_polarized_emission.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``plot_bosa_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_ltir_sweep.py` (``plot_bosa_ltir_sweep.py``)
@@ -96,6 +93,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_qhac_sweep.py` (``plot_themis_qhac_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_umin_cross_library.py` (``plot_umin_cross_library.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py` (``plot_warm_cold_dust_decomposition.py``)

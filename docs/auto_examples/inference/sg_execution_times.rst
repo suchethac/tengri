@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**06:29.272** total execution time for 11 files **from auto_examples/inference**:
+**00:00.352** total execution time for 11 files **from auto_examples/inference**:
 
 .. container::
 
@@ -32,14 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_inference_plot_posterior_corner_dpl.py` (``plot_posterior_corner_dpl.py``)
-     - 06:28.948
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_photoz_chi2_grid.py` (``plot_photoz_chi2_grid.py``)
-     - 00:00.280
+     - 00:00.260
      - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_joint_photometry_line_fit.py` (``plot_joint_photometry_line_fit.py``)
-     - 00:00.042
+     - 00:00.090
      - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_multichain_speedup.py` (``plot_multichain_speedup.py``)
      - 00:00.002
@@ -54,6 +51,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_method_comparison.py` (``plot_method_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_posterior_corner_dpl.py` (``plot_posterior_corner_dpl.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_posterior_predictive_check.py` (``plot_posterior_predictive_check.py``)

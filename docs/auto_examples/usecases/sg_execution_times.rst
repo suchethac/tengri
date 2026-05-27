@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.107** total execution time for 28 files **from auto_examples/usecases**:
+**00:00.754** total execution time for 28 files **from auto_examples/usecases**:
 
 .. container::
 
@@ -33,22 +33,19 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py` (``plot_usecase_uv_to_ir_bolometric_balance.py``)
-     - 00:05.022
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_distance_modulus.py` (``plot_usecase_cosmology_distance_modulus.py``)
-     - 00:01.076
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py` (``plot_usecase_age_dust_redshift_degeneracy.py``)
-     - 00:00.003
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py` (``plot_usecase_stellar_mass_luminosity_function.py``)
-     - 00:00.002
+     - 00:00.346
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py` (``plot_usecase_sfh_to_madau_dickinson.py``)
-     - 00:00.002
+     - 00:00.271
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py` (``plot_usecase_age_dust_redshift_degeneracy.py``)
+     - 00:00.080
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py` (``plot_usecase_stellar_mass_luminosity_function.py``)
+     - 00:00.041
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_tully_fisher_relation.py` (``plot_usecase_tully_fisher_relation.py``)
-     - 00:00.002
+     - 00:00.016
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``plot_usecase_age_dust_2d.py``)
      - 00:00.000
@@ -57,6 +54,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_balmer_decrement_av.py` (``plot_usecase_balmer_decrement_av.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_distance_modulus.py` (``plot_usecase_cosmology_distance_modulus.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_ladder.py` (``plot_usecase_cosmology_ladder.py``)

@@ -85,7 +85,7 @@ def demo_greybody_torus(
 registered = {m["name"] for m in tengri.list_agn_models(status="experimental")}
 assert "demo_greybody_torus" in registered, "Registration failed"
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 LOG_LBOL = 12.0
 ssp = tengri.load_ssp()
