@@ -765,13 +765,13 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # component (dotted).
 #
 # Post-#420 the composable AGN emits a real spectrum (it previously
-# published `L_agn_bol` but dropped the SED). The disc (UV-optical
-# accretion continuum) reproduces well, but the **torus IR re-emission
-# shape differs**: CIGALE's SKIRTOR torus peaks at 30-50 µm (the classic
-# warm-dust bump), while tengri's torus-only contribution peaks nearer
-# 5 µm — the tengri torus dust runs too hot, so the characteristic MIR-FIR
-# bump is missing. Tracked in
-# [tengri #459](https://github.com/suchethac/tengri/issues/459).
+# published `L_agn_bol` but dropped the SED), and post-#468 the SKIRTOR
+# torus has the correct L_ν dimensionality — the warm-dust MIR-FIR bump
+# now shows up rather than being squashed by a stray L_λ→L_ν conversion.
+# At this fiducial (i = 30°, tengri's SKIRTOR defaults) the tengri
+# torus-only contribution peaks at ~6 µm, in the same ballpark as
+# CIGALE's SKIRTOR at matched inclination. Edge-on viewing pushes the
+# peak out to ~30 µm (the classic reprocessed-dust bump) on both sides.
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
