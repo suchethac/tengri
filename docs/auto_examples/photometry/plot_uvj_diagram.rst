@@ -35,6 +35,33 @@ workhorse diagnostic for photometric surveys.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-191
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/photometry/plot_uvj_diagram.py", line 55, in <module>
+        sf_model = tengri.SEDModel.build(
+                   ^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 4929, in build
+        spec = parse_groups(**groups)
+               ^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 538, in parse_groups
+        _validate_user_keys(kwargs, structural_params, param_partition)
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 1023, in _validate_user_keys
+        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/parameters/groups.py", line 1072, in _check_dict_keys
+        raise ValueError(
+    ValueError: Unknown key 'log_sfr' in group 'sfh'. Valid structural keys for this group are: ['*', 'bin_edges_gyr', 'type'].
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

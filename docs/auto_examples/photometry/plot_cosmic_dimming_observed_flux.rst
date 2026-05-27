@@ -49,6 +49,12 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-188
 
+
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -207,6 +213,11 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
         str(script_dir / "plot_cosmic_dimming_observed_flux.png"), dpi=150, bbox_inches="tight"
     )
     plt.close()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.949 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

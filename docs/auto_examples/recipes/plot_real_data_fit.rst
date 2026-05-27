@@ -21,6 +21,11 @@
 From a CSV row to a MAP SED fit, end to end
 ============================================
 
+.. image:: images/sphx_glr_plot_real_data_fit_001.png
+   :alt: plot real data fit
+   :class: sphx-glr-single-img
+
+
 The astronomer's-eye-view of the tengri ingest path. Starting from a
 single CSV row of SDSS *ugriz* fluxes and per-band errors (the same
 shape pandas would hand you from a survey catalogue), we parse the
@@ -33,6 +38,17 @@ galaxies); this script focuses on the *parsing* and *single-row*
 workflow that catalogue work begins with.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-97
+
+
+
+.. image-sg:: /auto_examples/recipes/images/sphx_glr_plot_real_data_fit_001.png
+   :alt: plot real data fit
+   :srcset: /auto_examples/recipes/images/sphx_glr_plot_real_data_fit_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -117,6 +133,11 @@ workflow that catalogue work begins with.
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
     plt.savefig("plot_real_data_fit.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.862 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_real_data_fit.py:

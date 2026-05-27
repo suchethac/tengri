@@ -21,6 +21,11 @@
 Posterior corner plot from MCMC: double-power-law SFH
 =====================================================
 
+.. image:: images/sphx_glr_plot_posterior_corner_dpl_001.png
+   :alt: plot posterior corner dpl
+   :class: sphx-glr-single-img
+
+
 Demonstrates MCMC parameter estimation and posterior covariance structure
 after fitting mock 5-band SDSS photometry with a double-power-law (dpl) star
 formation history. The corner plot visualizes all 1-D marginalized posteriors
@@ -34,6 +39,17 @@ Reference: Foreman-Mackey 2016, corner.py (https://arxiv.org/abs/1606.02919);
 Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-104
+
+
+
+.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_posterior_corner_dpl_001.png
+   :alt: plot posterior corner dpl
+   :srcset: /auto_examples/inference/images/sphx_glr_plot_posterior_corner_dpl_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -124,6 +140,11 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     )
 
     plt.savefig("plot_posterior_corner_dpl.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (6 minutes 28.948 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_posterior_corner_dpl.py:

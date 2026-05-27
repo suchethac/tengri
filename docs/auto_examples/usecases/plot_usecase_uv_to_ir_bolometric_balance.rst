@@ -43,6 +43,42 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
 .. GENERATED FROM PYTHON SOURCE LINES 25-263
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_uv_to_ir_bolometric_balance.py", line 114, in <module>
+        model_intrinsic = SEDModel.build(
+                          ^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 4930, in build
+        return cls(
+               ^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 499, in __init__
+        param_map_deltas.append(self._init_nebular(spec, ssp_data))
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py", line 1009, in _init_nebular
+        self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/nebular/cue.py", line 950, in __init__
+        self.weights = load_cue_weights(weights_path)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/nebular/cue.py", line 366, in load_cue_weights
+        npz = dict(np.load(npz_path, allow_pickle=True))
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/numpy/lib/_npyio_impl.py", line 451, in load
+        fid = stack.enter_context(open(os.fspath(file), "rb"))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/data/cue_weights.npz'
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -283,6 +319,11 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         print("File an issue with the above table and commit hash.")
     else:
         print("\n✓ Energy balance validated: L_IR ≈ L_UV_absorbed (±10%)")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.022 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py:

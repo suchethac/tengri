@@ -49,6 +49,24 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-351
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_stellar_mass_luminosity_function.py", line 133, in <module>
+        repo_root = next(
+                    ^^^^^
+    StopIteration
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

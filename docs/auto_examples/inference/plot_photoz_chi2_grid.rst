@@ -54,6 +54,12 @@ redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
     warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 34-36
 
 We use a basic star-forming template: truncated-skew-normal SFH + Calzetti
@@ -101,6 +107,22 @@ dust attenuation. Redshift and stellar mass are the free parameters on the grid.
         neb={"type": "cue", "*": tengri.FIXED},
         redshift=tengri.Fixed(0.0),  # will vary on grid
     )
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/inference/plot_photoz_chi2_grid.py", line 54, in <module>
+        tengri.load_ssp("fsps_prsc_miles_chabrier"),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/stellar/sps/dsps_wrapper.py", line 179, in load_ssp
+        raise FileNotFoundError(
+    FileNotFoundError: SSP file 'data/fsps_prsc_miles_chabrier.h5' not found in any ancestor of /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/inference. Place the file under <project_root>/data/ or call tengri.download_ssp('<short_name>') to fetch a bundled SSP.
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 77-126

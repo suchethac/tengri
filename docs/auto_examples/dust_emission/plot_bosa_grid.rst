@@ -21,6 +21,11 @@
 BOSA library: PAH features and FIR peak depend on both sSFR and L_TIR
 =====================================================================
 
+.. image:: images/sphx_glr_plot_bosa_grid_001.png
+   :alt: plot bosa grid
+   :class: sphx-glr-single-img
+
+
 The BOSA infrared template library is parametrised jointly by total
 infrared luminosity log L_TIR and specific star formation rate log sSFR.
 Neither axis alone tells the full story: at fixed sSFR the FIR peak
@@ -32,6 +37,17 @@ in a single figure rather than two skinny 1-D loops.
 Reference: BOSA infrared template library (Berta et al. and successors).
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-79
+
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_bosa_grid_001.png
+   :alt: plot bosa grid
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_bosa_grid_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 

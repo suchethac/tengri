@@ -42,6 +42,23 @@ on SDSS template K-corrections.
 
 .. GENERATED FROM PYTHON SOURCE LINES 25-213
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/forward/sed_model.py:487: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -232,6 +249,11 @@ on SDSS template K-corrections.
     script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
     plt.savefig(str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight")
     plt.close()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 20.037 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_k_correction_grid.py:

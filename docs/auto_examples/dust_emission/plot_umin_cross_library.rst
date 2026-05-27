@@ -21,6 +21,11 @@
 Minimum radiation field U_min: DL07 and THEMIS agree on the FIR peak
 ====================================================================
 
+.. image:: images/sphx_glr_plot_umin_cross_library_001.png
+   :alt: plot umin cross library
+   :class: sphx-glr-single-img
+
+
 The starlight intensity floor U_min sets the temperature of the diffuse-ISM
 component in template-based dust libraries. We compare the Draine & Li
 2007 grid (fixed q_PAH = 2.5%) and the THEMIS grid (fixed q_HAC = 0.17) at
@@ -34,6 +39,17 @@ References:
     Jones, A.P. et al. 2013/2017 — THEMIS model series.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-90
+
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_umin_cross_library_001.png
+   :alt: plot umin cross library
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_umin_cross_library_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 

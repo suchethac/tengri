@@ -44,6 +44,24 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-233
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_tully_fisher_relation.py", line 94, in <module>
+        repo_root = next(
+                    ^^^^^
+    StopIteration
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

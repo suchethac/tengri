@@ -51,6 +51,22 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 
 .. GENERATED FROM PYTHON SOURCE LINES 33-197
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Saved: plot_balmer_break_redshift_evolution.png
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**07:47.861** total execution time for 28 files **from auto_examples/nebular**:
+**00:00.007** total execution time for 28 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -33,28 +33,13 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_diagram_population.py` (``plot_bpt_diagram_population.py``)
-     - 04:41.828
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_lyalpha_ew_vs_age.py` (``plot_lyalpha_ew_vs_age.py``)
-     - 01:51.752
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_halpha_sfr_calibration_age.py` (``plot_halpha_sfr_calibration_age.py``)
-     - 00:44.371
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_ratios_metallicity_evolution.py` (``plot_line_ratios_metallicity_evolution.py``)
-     - 00:08.229
+     - 00:00.004
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_logu_line_ratios.py` (``plot_cue_logu_line_ratios.py``)
-     - 00:07.727
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_gas_z_continuum_effect.py` (``plot_gas_z_continuum_effect.py``)
-     - 00:06.999
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_lyman_continuum_escape.py` (``plot_lyman_continuum_escape.py``)
-     - 00:06.680
+     - 00:00.001
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_qh_vs_age_metallicity.py` (``plot_qh_vs_age_metallicity.py``)
-     - 00:00.274
+     - 00:00.001
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
      - 00:00.000
@@ -86,6 +71,15 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``plot_fesc_sweep.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_gas_z_continuum_effect.py` (``plot_gas_z_continuum_effect.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_halpha_sfr_calibration_age.py` (``plot_halpha_sfr_calibration_age.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_ratios_metallicity_evolution.py` (``plot_line_ratios_metallicity_evolution.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``plot_line_sigma_sweep.py``)
      - 00:00.000
      - 0.0
@@ -93,6 +87,12 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``plot_logz_gas_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_lyalpha_ew_vs_age.py` (``plot_lyalpha_ew_vs_age.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_lyman_continuum_escape.py` (``plot_lyman_continuum_escape.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_age_dependence.py` (``plot_neb_age_dependence.py``)

@@ -45,6 +45,26 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-230
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_sfh_to_madau_dickinson.py", line 70, in <module>
+        SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/stellar/sps/dsps_wrapper.py", line 179, in load_ssp
+        raise FileNotFoundError(
+    FileNotFoundError: SSP file 'data/fsps_prsc_miles_chabrier.h5' not found in any ancestor of /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases. Place the file under <project_root>/data/ or call tengri.download_ssp('<short_name>') to fetch a bundled SSP.
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

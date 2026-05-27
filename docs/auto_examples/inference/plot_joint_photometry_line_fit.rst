@@ -62,6 +62,12 @@ References:
     warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 42-48
 
 Typical properties:
@@ -87,6 +93,12 @@ Typical properties:
     # Rest-frame H-alpha = 6564.61 A -> observed = 32823 A (beyond JWST NIRCam!)
     # But mock data: we use rest-frame lines as "equivalent widths"
     LINE_NAMES = ["Halpha", "OIII_5007"]
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 63-66
@@ -125,6 +137,22 @@ integrates over line amplitudes (faster, but requires eline_catalog).
     )
 
     print(f"Joint observation: {obs_joint.n_data_phot} phot + {obs_joint.n_data_spec} spec pixels")
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/inference/plot_joint_photometry_line_fit.py", line 69, in <module>
+        ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/stellar/sps/dsps_wrapper.py", line 179, in load_ssp
+        raise FileNotFoundError(
+    FileNotFoundError: SSP file 'data/fsps_prsc_miles_chabrier.h5' not found in any ancestor of /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/inference. Place the file under <project_root>/data/ or call tengri.download_ssp('<short_name>') to fetch a bundled SSP.
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 95-100

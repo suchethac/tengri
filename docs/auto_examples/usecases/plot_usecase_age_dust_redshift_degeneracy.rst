@@ -44,6 +44,26 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-383
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_age_dust_redshift_degeneracy.py", line 41, in <module>
+        ssp = tengri.load_ssp('fsps_prsc_miles_chabrier')
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/stellar/sps/dsps_wrapper.py", line 179, in load_ssp
+        raise FileNotFoundError(
+    FileNotFoundError: SSP file 'data/fsps_prsc_miles_chabrier.h5' not found in any ancestor of /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases. Place the file under <project_root>/data/ or call tengri.download_ssp('<short_name>') to fetch a bundled SSP.
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

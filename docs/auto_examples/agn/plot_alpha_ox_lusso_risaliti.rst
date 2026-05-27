@@ -36,6 +36,23 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-133
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    α_OX values: min=-0.129, max=-0.090
+    Log L_2500: min=28.05, max=31.52
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

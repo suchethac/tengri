@@ -21,6 +21,11 @@
 Three empirical alpha_OX-L_2500 prescriptions diverge at the quasar peak
 ==========================================================================
 
+.. image:: images/sphx_glr_plot_alpha_ox_relations_001.png
+   :alt: plot alpha ox relations
+   :class: sphx-glr-single-img
+
+
 The CIGALE-faithful corona derives the X-ray normalisation from
 ``L_2500`` via the empirical alpha_OX-L_2500 correlation. tengri ships
 three published parametrisations:
@@ -42,6 +47,17 @@ References
 - Lusso & Risaliti 2017, A&A 602, A79.
 
 .. GENERATED FROM PYTHON SOURCE LINES 25-106
+
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_alpha_ox_relations_001.png
+   :alt: plot alpha ox relations
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_alpha_ox_relations_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 

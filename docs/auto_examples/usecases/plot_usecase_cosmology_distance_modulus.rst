@@ -42,6 +42,45 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-140
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_cosmology_distance_modulus.py:122: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) STIXGeneral.
+      fig.tight_layout()
+    /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/usecases/plot_usecase_cosmology_distance_modulus.py:123: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) STIXGeneral.
+      plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
+    Hubble Tension: Distance Modulus Shifts
+    ============================================================
+    Redshift     μ_Planck     μ_Riess      Δμ (mmag)   
+    ------------------------------------------------------------
+    0.050        36.808       36.643       -164.17     
+    0.076        37.767       37.604       -163.76     
+    0.117        38.745       38.582       -163.13     
+    0.178        39.748       39.586       -162.19     
+    0.272        40.782       40.621       -160.80     
+    0.416        41.851       41.692       -158.81     
+    0.635        42.953       42.797       -156.12     
+    0.970        44.079       43.926       -152.86     
+    1.481        45.213       45.064       -149.42     
+    2.262        46.339       46.193       -146.31     
+    ------------------------------------------------------------
+    |Δμ| at z=3.0: 144.59 mmag
+
+    Interpretation: Under Riess H0=73 km/s/Mpc vs. Planck H0=67.4,
+    the distance modulus is SMALLER (galaxy appears BRIGHTER) by ~0.14 mag at z=3.
+    This difference accumulates with redshift and is a key signature of the Hubble tension.
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

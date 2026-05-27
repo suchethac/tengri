@@ -34,6 +34,26 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-93
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/dust_emission/plot_logu_cross_library.py", line 47, in <module>
+        pah = load_pahspec_or_raise(data_path("pahspec_draine2021.h5"))
+                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/_data_setup.py", line 54, in data_path
+        raise FileNotFoundError(
+    FileNotFoundError: Data file 'data/pahspec_draine2021.h5' not found in any ancestor of /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/dust_emission. Place it under <project_root>/data/.
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

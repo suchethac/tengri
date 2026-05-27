@@ -21,6 +21,11 @@
 Richards+2006 empirical Type-1 quasar template alongside physical discs
 ========================================================================
 
+.. image:: images/sphx_glr_plot_richards2006_template_001.png
+   :alt: plot richards2006 template
+   :class: sphx-glr-single-img
+
+
 Three accretion-disc backbones at the same bolometric anchor
 (log L_bol / L_sun = 12.5): the Richards et al. 2006 empirical mean
 Type-1 SDSS quasar template, the Temple, Hewett & Banerji 2021
@@ -36,6 +41,17 @@ template); Temple, Hewett & Banerji 2021, MNRAS 508, 737 (QSOgen);
 Kubota & Done 2018, MNRAS 480, 1247 (multicolour disc).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-77
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_richards2006_template_001.png
+   :alt: plot richards2006 template
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_richards2006_template_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
