@@ -91,10 +91,10 @@ sphinx_gallery_conf = {
     # data. Run `make html` locally and commit the regenerated auto_examples/
     # before pushing if you want fresh galleries.
     "plot_gallery": "False" if os.environ.get("CI", "").lower() == "true" else "True",
-    # Skip re-execution of examples whose source + md5 haven't changed since
-    # the last build. Cuts incremental regen from ~25 min to seconds when
-    # only one example changed. The ignore_pattern above already hides the
-    # OOM-prone NUTS/VI scripts, so parallel execution is safe for the rest.
+    # Skip re-execution of examples whose source + md5 haven't changed since the
+    # last build. Cuts incremental regen from ~25 min to seconds when only one
+    # example changed. The ignore_pattern above already hides the OOM-prone
+    # NUTS/VI scripts, so parallel execution is safe for the remaining ones.
     "run_stale_examples": True,
     "parallel": int(os.environ.get("TENGRI_GALLERY_PARALLEL", "2")),
     "remove_config_comments": True,

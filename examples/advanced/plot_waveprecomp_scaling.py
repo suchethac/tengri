@@ -31,7 +31,6 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 

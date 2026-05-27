@@ -36,9 +36,16 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 BANDS = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
 ]
 Z = 0.1
 N_DRAWS = 200
@@ -47,9 +54,11 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 ssp = tengri.load_ssp()
 
 model = tengri.SEDModel.build(
-    ssp, observation=obs,
+    ssp,
+    observation=obs,
     sfh={
-        "type": "tsnorm", "*": tengri.FIXED,
+        "type": "tsnorm",
+        "*": tengri.FIXED,
         # Tight informative priors: a star-forming galaxy in the local
         # Universe with SFR ~ 0.3-10 M_sun/yr, peak ~ 1-6 Gyr ago,
         # moderate width and trunc. These make the envelope narrow enough
@@ -58,10 +67,12 @@ model = tengri.SEDModel.build(
         "log_peak_sfr": tengri.Uniform(-0.5, 1.0),
         "peak_lbt_gyr": tengri.Uniform(1.0, 6.0),
         "width_gyr": tengri.Uniform(1.0, 3.0),
-        "skew": 0.3, "trunc": 3.0,
+        "skew": 0.3,
+        "trunc": 3.0,
     },
     dust={
-        "type": "two_component", "*": tengri.FIXED,
+        "type": "two_component",
+        "*": tengri.FIXED,
         "tau_diff": tengri.Uniform(0.0, 0.6),
         "tau_bc": tengri.Uniform(0.0, 0.8),
     },
@@ -91,8 +102,9 @@ fig, ax = plt.subplots(figsize=(6.8, 4.2))
 ax.fill_between(wave_eff, q05, q95, color="C0", alpha=0.18, label="prior 5–95 %")
 ax.fill_between(wave_eff, q16, q84, color="C0", alpha=0.32, label="prior 16–84 %")
 ax.plot(wave_eff, q50, color="C0", lw=1.2, label="prior median")
-ax.errorbar(wave_eff, flux_obs, yerr=noise, fmt="o", color="k", ms=4.5,
-            capsize=2, label="mock observation")
+ax.errorbar(
+    wave_eff, flux_obs, yerr=noise, fmt="o", color="k", ms=4.5, capsize=2, label="mock observation"
+)
 
 ax.set_xscale("log")
 ax.set_yscale("log")
