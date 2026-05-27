@@ -32,10 +32,25 @@ radiation that depends strongly on two parameters: viewing angle
 Face-on systems show a smooth thermal continuum; edge-on systems develop
 deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-94
+.. GENERATED FROM PYTHON SOURCE LINES 11-100
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_variants_001.png
+   :alt: Face-on ($\cos \theta \approx 1$), Face-on ($\cos \theta \approx 1$), Edge-on ($\cos \theta \approx 0.3$), Edge-on ($\cos \theta \approx 0.3$)
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_variants_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +72,7 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -68,7 +83,9 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "agn_frac": 1.0,
             "log_lbol": 11.0,
+            "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -119,6 +136,11 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
     fig.tight_layout()
     plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.106 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_variants.py:

@@ -159,12 +159,17 @@ class _single_thread_blas:
         return False
 
 
+_LOG_H = np.log10(_H_PLANCK)
+_LN10 = np.log(10.0)
+
+
 def _fit_segment(
     seg_wave: np.ndarray,
     seg_flux: np.ndarray,
     norm: float,
+    init: tuple[float, float] | None = None,
 ) -> np.ndarray:
-    """Fit power-law model to a single ionization-regime segment.
+    r"""Fit power-law model to a single ionization-regime segment.
 
     **Internal helper** — fits L_ν ∝ λ^α to one wavelength segment using
     least-squares regression with a photon-count constraint to preserve Q_H.
@@ -177,6 +182,12 @@ def _fit_segment(
         Normalized segment flux (already multiplied by norm factor for stability)
     norm : float
         Normalization factor applied to flux (used to denormalize log_A later)
+    init : (float, float), optional
+        Initial guess ``(slope, log_norm)``. When ``None`` (default), an
+        endpoint-derived linear fit in log-log is used. Pass canonical
+        values from a reference SSP to reduce convergence iterations and
+        prevent the optimizer from drifting into bound corners on noisy
+        segments.
 
     Returns
     -------
@@ -186,11 +197,17 @@ def _fit_segment(
 
     Notes
     -----
-    Uses scipy L-BFGS-B optimization to minimize:
-        0.5 * ||log_flux - pred||^2 + 0.5 * len(seg) * (log_Q - log_Q_pred)^2
+    Uses scipy SLSQP with an analytical gradient to minimise:
 
-    Constraint term ensures photon rate Q_H matches the input SED, preventing
-    slope-fitting from drifting when flux amplitude is small or noisy.
+    .. math::
+
+       L = 0.5 \sum (\log f - (\alpha \log \lambda + b))^2
+         + 0.5 N (\log Q_\mathrm{true} - \log Q_\mathrm{pred}(\alpha, b))^2
+
+    The analytical gradient mirrors :func:`yi-jia-li/cue/utils.py
+    :gradient_func_loglinear_analytical` — passing it explicitly to scipy
+    avoids finite-difference Jacobian evaluations (~3× more objective calls
+    per iteration) and matches Cue's upstream optimisation strategy.
 
     """
     from scipy.optimize import minimize
@@ -202,9 +219,12 @@ def _fit_segment(
     log_wave = np.log10(seg_wave)
     log_flux = np.log10(np.maximum(seg_flux, 1e-99))
 
-    # Initial guess: linear fit in log-log
-    init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
-    init_norm = log_flux[-1] - init_slope * log_wave[-1]
+    # Initial guess: canonical if provided, else endpoint-derived linear fit
+    if init is None:
+        init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
+        init_norm = log_flux[-1] - init_slope * log_wave[-1]
+    else:
+        init_slope, init_norm = float(init[0]), float(init[1])
 
     # Q_H for this segment — cast to float64 defensively. Per-segment
     # magnitudes are typically smaller than the full-LyC integration in
@@ -215,31 +235,42 @@ def _fit_segment(
     Q_seg = np.abs(_np_trapz(integrand[::-1], x=nu[::-1]))
     log_Q = np.log10(max(Q_seg, 1e-99))
 
-    def objective(
-        params,
-        _log_wave=log_wave,
-        _seg_wave=seg_wave,
-        _log_flux=log_flux,
-        _log_Q=log_Q,
-    ):
-        """Compute power-law residual and Q_H constraint for ionizing spectrum fitting."""
-        pred = params[1] + params[0] * _log_wave
-        log_Q_pred = (
-            params[1]
-            - np.log10(_H_PLANCK)
-            + np.log10(
-                np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-            )
-        )
-        return (
-            0.5 * np.sum((_log_flux - pred) ** 2)
-            + 0.5 * len(_seg_wave) * (_log_Q - log_Q_pred) ** 2
-        )
+    # Precompute constants used by both objective and gradient
+    xmin = seg_wave[0]
+    xmax = seg_wave[-1]
+    ln_xmin = np.log(xmin)
+    ln_xmax = np.log(xmax)
+    n_data = len(seg_wave)
+
+    def objective(params):
+        alpha, b = params[0], params[1]
+        pred = b + alpha * log_wave
+        x_max_alpha = xmax**alpha
+        x_min_alpha = xmin**alpha
+        log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
+        term1 = 0.5 * np.sum((log_flux - pred) ** 2)
+        term2 = 0.5 * n_data * (log_Q - log_Q_pred) ** 2
+        return term1 + term2
+
+    def gradient(params):
+        # Analytical gradient — mirrors Cue's gradient_func_loglinear_analytical
+        # (https://github.com/yi-jia-li/cue/blob/main/src/cue/utils.py).
+        alpha, b = params[0], params[1]
+        x_max_alpha = xmax**alpha
+        x_min_alpha = xmin**alpha
+        denom = x_max_alpha - x_min_alpha
+        term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
+        term_sum = b + alpha * log_wave - log_flux
+        d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+        grad_slope = np.sum(term_sum * log_wave) + (n_data / _LN10) * term_Q * d_logQ_dα
+        grad_norm = np.sum(term_sum) + n_data * term_Q
+        return np.array([grad_slope, grad_norm])
 
     res = minimize(
         objective,
         [init_slope, init_norm],
-        method="L-BFGS-B",
+        jac=gradient,
+        method="SLSQP",
         bounds=[(-40, 100), (-200, 100)],
     )
     coeff = np.array(res.x)
