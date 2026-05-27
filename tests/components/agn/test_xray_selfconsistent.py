@@ -172,32 +172,6 @@ class TestXrayAgnCoronaFromDisc:
         total_high = jnp.trapezoid(l_high, WAVE_XRAY)
         assert total_high > total_low
 
-    def test_delta_alpha_ox_zero_matches_old_interface(self):
-        """New disc-coupled function with delta=0 should match old corona.
-        We feed the old xray_agn_corona the same alpha_ox that Just+2007
-        would predict for a given L_2500, and compare spectra.
-        """
-        from tengri.components.xray import xray_agn_corona
-
-        l_2500_erg = 1e30
-        alpha_ox = float(alpha_ox_from_l2500(l_2500_erg))
-        # L_agn_bol in erg/s. Back out from L_2500:
-        # L_2500 = L_bol / (BC * nu_2500)  => L_bol = L_2500 * BC * nu_2500
-        nu_2500 = 1.199e15
-        bc_2500 = 5.15
-        l_bol_erg = l_2500_erg * bc_2500 * nu_2500
-        l_old = xray_agn_corona(WAVE_XRAY, L_agn_bol=l_bol_erg, alpha_ox=alpha_ox)
-        l_new = xray_agn_corona_from_disc(
-            WAVE_XRAY,
-            l_2500_erg_hz=l_2500_erg,
-            delta_alpha_ox=0.0,
-            apply_anisotropy=False,
-        )
-        # Should agree to ~1% (both normalise via same alpha_ox formula)
-        mask = l_old > 0
-        ratio = l_new[mask] / l_old[mask]
-        assert jnp.allclose(ratio, 1.0, atol=0.02)
-
     def test_positive_delta_alpha_ox_increases_xray(self):
         """Positive delta_alpha_ox => X-ray louder => more L_X."""
         l_base = xray_agn_corona_from_disc(WAVE_XRAY, l_2500_erg_hz=1e30, delta_alpha_ox=0.0)

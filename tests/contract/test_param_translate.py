@@ -43,7 +43,7 @@ class TestBuildParamMap:
 
     def test_tsnorm_has_sfh_params(self):
         pm = _build_param_map(["tsnorm"])
-        assert "sfh_tsnorm_log_peak_sfr" in pm
+        assert "sfh_tsnorm_log_total_mass" in pm
         assert "sfh_tsnorm_peak_lbt_gyr" in pm
 
     def test_tsnorm_has_non_sfh_params(self):

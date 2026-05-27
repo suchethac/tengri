@@ -87,7 +87,7 @@ class TestSFHParametricVsSynthesizer:
         t_yr = _sfh_age_grid()
         peak_age_yr = 5e9
         sigma_yr = 2e9  # synthesizer sigma
-        log_peak_sfr = 1.0
+        log_total_mass = 1.0
 
         sfh_synth = Gaussian(
             peak_age=unyt_quantity(peak_age_yr, "yr"),
@@ -101,17 +101,21 @@ class TestSFHParametricVsSynthesizer:
         sfr_tengri = np.array(
             gaussian_sfh_fn(
                 jnp.array(t_yr),
-                log_peak_sfr=log_peak_sfr,
+                log_total_mass=log_total_mass,
                 peak_lbt=peak_age_yr,
                 width=width_yr,
             )
         )
 
-        # Normalize synthesizer to same peak SFR for comparison.
-        # Use the true analytical peak (evaluated at exact peak_age_yr) rather than
-        # sfr_synth.max() to avoid ~0.8% bias from log-spaced grid not hitting the peak.
-        sfr_peak_synth = sfh_synth._sfr(peak_age_yr)  # = 1.0 for Gaussian at peak
-        sfr_synth_normed = sfr_synth / sfr_peak_synth * 10.0**log_peak_sfr
+        # Normalize synthesizer SFR curve to match tengri's total integrated mass.
+        # After NEW normalization, tengri's integral = 10^log_total_mass.
+        # Compute synthesizer integral and scale accordingly.
+        dt_yr = np.abs(np.diff(t_yr))
+        synth_integral = np.sum(0.5 * (sfr_synth[:-1] + sfr_synth[1:]) * dt_yr)
+        target_mass = 10.0**log_total_mass
+        sfr_synth_normed = (
+            sfr_synth * (target_mass / synth_integral) if synth_integral > 0 else sfr_synth
+        )
         mask = sfr_synth_normed > 1e-3 * sfr_synth_normed.max()
         diffs = _rel_diff(sfr_tengri[mask], sfr_synth_normed[mask])
         assert diffs.max() < 0.001, f"Gaussian SFH max relative diff: {diffs.max():.4f}"

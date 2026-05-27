@@ -11,6 +11,10 @@ the ionizing spectrum flexibility and provides smooth gradients through
 metallicity, density, and ionization parameters for joint SED fitting.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -35,7 +39,7 @@ model = tengri.SEDModel.build(
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": 0.05,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     neb={
@@ -73,8 +77,24 @@ for logu in logu_values:
 fig, ax = plt.subplots(figsize=(7, 5))
 
 valid_logu = logu_values[: len(o32_ratio)]
-ax.plot(valid_logu, o32_ratio, "o-", lw=2.0, ms=4, label=r"$\log([{\rm OIII}]/[{\rm OII}])$ (O32)", color="C0")
-ax.plot(valid_logu, o3hb_ratio, "s-", lw=2.0, ms=4, label=r"$\log([{\rm OIII}]/{\rm H\beta})$", color="C1")
+ax.plot(
+    valid_logu,
+    o32_ratio,
+    "o-",
+    lw=2.0,
+    ms=4,
+    label=r"$\log([{\rm OIII}]/[{\rm OII}])$ (O32)",
+    color="C0",
+)
+ax.plot(
+    valid_logu,
+    o3hb_ratio,
+    "s-",
+    lw=2.0,
+    ms=4,
+    label=r"$\log([{\rm OIII}]/{\rm H\beta})$",
+    color="C1",
+)
 
 ax.set_xlabel(r"Ionization parameter $\log U$", fontsize=12)
 ax.set_ylabel(r"Log line ratio", fontsize=12)

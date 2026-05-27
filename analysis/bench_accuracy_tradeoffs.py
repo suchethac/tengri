@@ -55,7 +55,7 @@ def _make_smooth_spec(*, redshift=0.1, dust_tau_bc=1.0, dust_law_bc="power_law")
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_bc=Fixed(dust_tau_bc),
         dust_tau_diff=Fixed(0.3),
@@ -81,18 +81,19 @@ def study_mixed_precision(ssp, obs, *, n_draws=20):
     print("\n" + "=" * 74)
     print("STUDY 1: Mixed precision error (float32 vs float64)")
     print("=" * 74)
-    print(f"{'z':>5s}  {'tau_bc':>6s}  {'mean_err':>10s}  {'max_err':>10s}  "
-          f"{'worst_band':>10s}")
+    print(f"{'z':>5s}  {'tau_bc':>6s}  {'mean_err':>10s}  {'max_err':>10s}  {'worst_band':>10s}")
     print("-" * 50)
 
     rows = []
     for z in redshifts:
         for tau_bc in dust_values:
             spec = _make_smooth_spec(redshift=z, dust_tau_bc=tau_bc)
-            model_f64 = Model(spec, ssp, observation=obs, forward_dtype="float64",
-                              precompute=False)
-            model_f32 = Model(spec, ssp, observation=obs, forward_dtype="float32",
-                              precompute=False)
+            model_f64 = Model(
+                spec, ssp, observation=obs, forward_dtype="float64", precompute=False
+            )
+            model_f32 = Model(
+                spec, ssp, observation=obs, forward_dtype="float32", precompute=False
+            )
 
             all_rel = []
             for i in range(n_draws):
@@ -108,13 +109,16 @@ def study_mixed_precision(ssp, obs, *, n_draws=20):
             max_err = float(np.max(all_rel))
             worst_band = FILTER_NAMES[int(np.argmax(np.max(all_rel, axis=0)))]
 
-            rows.append({
-                "z": z, "tau_bc": tau_bc,
-                "mean_err": mean_err, "max_err": max_err,
-                "worst_band": worst_band,
-            })
-            print(f"{z:5.2f}  {tau_bc:6.1f}  {mean_err:10.2e}  {max_err:10.2e}  "
-                  f"{worst_band:>10s}")
+            rows.append(
+                {
+                    "z": z,
+                    "tau_bc": tau_bc,
+                    "mean_err": mean_err,
+                    "max_err": max_err,
+                    "worst_band": worst_band,
+                }
+            )
+            print(f"{z:5.2f}  {tau_bc:6.1f}  {mean_err:10.2e}  {max_err:10.2e}  {worst_band:>10s}")
 
     return rows
 
@@ -154,10 +158,14 @@ def study_precompute_accuracy(ssp, obs, *, n_draws=20):
         max_err = float(np.max(all_rel))
         worst_band = FILTER_NAMES[int(np.argmax(np.max(all_rel, axis=0)))]
 
-        rows.append({
-            "law": law, "mean_err": mean_err, "max_err": max_err,
-            "worst_band": worst_band,
-        })
+        rows.append(
+            {
+                "law": law,
+                "mean_err": mean_err,
+                "max_err": max_err,
+                "worst_band": worst_band,
+            }
+        )
         print(f"{law:>16s}  {mean_err:10.2e}  {max_err:10.2e}  {worst_band:>10s}")
 
     return rows
@@ -261,7 +269,8 @@ def main():
         description="Benchmark precision vs speed tradeoffs in tengri."
     )
     parser.add_argument(
-        "--quick", action="store_true",
+        "--quick",
+        action="store_true",
         help="Quick mode: fewer parameter draws and shorter RT chains.",
     )
     args = parser.parse_args()

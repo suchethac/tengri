@@ -7,7 +7,7 @@ colder dust (e.g., diffuse cirrus at ~20 K) peaks in the far-infrared
 (~250 μm), while warmer dust grains (e.g., starburst regions at ~40 K)
 peak at shorter wavelengths (~50–100 μm).
 
-This script demonstrates how the **U_min** parameter of the Draine & Li
+the **U_min** parameter of the Draine & Li
 (2007) dust emission model controls the balance between warm and cold
 grain populations. By varying ``dust_umin`` while holding ``dust_qpah``
 fixed, we show the dust temperature decomposition:
@@ -35,6 +35,10 @@ References
    *The Astrophysical Journal*, 787(1), 35.
    https://doi.org/10.1088/0004-637X/787/1/35
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -89,6 +93,7 @@ def _build_model(u_min: float) -> tuple:
             "type": "draine_li2007",
             "*": tengri.FIXED,
             "qpah": 2.5,  # Fixed PAH mass fraction
+            "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
         },
     }
 

@@ -9,6 +9,10 @@ Face-on systems show a smooth thermal continuum; edge-on systems develop
 deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -42,6 +46,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "agn_frac": 1.0,
         "log_lbol": 11.0,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
     },
     redshift=tengri.Fixed(0.05),
 )

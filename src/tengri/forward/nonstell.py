@@ -337,7 +337,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_frac_val = 1.0
                 agn_bol_erg = 10.0**agn_log_lbol * LSUN_ERG_PER_S
             else:
-                agn_frac_val = p.get("agn_frac", 0.0)
+                agn_frac_val = p.get("agn_frac", 1.0)
                 nu_agn = _c_aa / ssp_wave_f64
                 L_bol_stellar = -jnp.trapezoid(sed, nu_agn)
                 agn_bol_erg = L_bol_stellar * agn_frac_val

@@ -43,12 +43,16 @@ class TestFe2PseudoContinuum:
         assert jnp.any(result > 0.0)
 
     def test_optical_bump_present(self, wavelength):
-        """The 4570 A optical Fe II bump should be the dominant optical feature."""
+        """The 4570 A optical Fe II bump should be the dominant optical feature.
+
+        The original test compared to 3500-3800 A, but the PyQSOFit templates
+        have significant residual flux there from the UV/optical template
+        overlap. A genuinely Fe-II-quiet window is 5800-6100 A, where the
+        Boroson-Green optical template has dropped close to zero.
+        """
         result = _fe2_pseudo_continuum(wavelength, fwhm_kms=3000.0, fe2_strength=1.0)
-        # Find flux near 4570 A
         mask_4570 = (wavelength > 4500.0) & (wavelength < 4650.0)
-        # Find flux in a quiet region (e.g., 3500-3800 A between UV and optical)
-        mask_quiet = (wavelength > 3500.0) & (wavelength < 3800.0)
+        mask_quiet = (wavelength > 5800.0) & (wavelength < 6100.0)
         assert jnp.mean(result[mask_4570]) > 10.0 * jnp.mean(result[mask_quiet])
 
     def test_uv_bump_present(self, wavelength):

@@ -19,6 +19,10 @@ Libraries compared:
 - ``bosa``      — BOSA template set (Boquien et al. CIGALE)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -82,7 +86,7 @@ for (lib, label), color in zip(LIBS, COLORS):
 
 ax.set(
     xlim=(1e4, 1e7),
-    ylim=(2e-3, 3.0),
+    ylim=(1e-4, 3.0),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu\,/\,L_{\rm IR}$  [Hz$^{-1}$]",
 )

@@ -1,5 +1,5 @@
 """
-Stacking 1000 galaxies in seconds with JAX vmap
+Stacking 1000 galaxies with jax.vmap
 ================================================
 
 This gallery demonstrates population-scale analysis: draw 1,000 galaxy parameters
@@ -18,13 +18,17 @@ This technique is essential for:
 
 Reference: Eisenstein et al. 2003, ApJ 585, 694–717 (SDSS DR1 spectral stacking);
 Bradbury et al. 2018, arXiv:1811.02361 (JAX documentation).
+
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import time
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -41,10 +45,7 @@ C_AA_PER_S = 2.998e18
 
 # Build the model from a standard recipe
 BARE = tengri.load_ssp("fsps_prsc_miles_chabrier")
-model = tengri.SEDModel.build(
-    ssp_data=BARE,
-    **recipes.star_forming_photometry()
-)
+model = tengri.SEDModel.build(ssp_data=BARE, **recipes.star_forming_photometry())
 
 print(f"Model built with {len(model.spec.free_params)} free parameters.")
 
@@ -136,7 +137,7 @@ print(
     f"  Median rest-frame L_ν range: "
     f"{nu_l_nu_median.min():.2e} — {nu_l_nu_median.max():.2e} erg/s\n"
     f"  16–84 span at 5500 Å: "
-    f"{nu_l_nu_p84[np.argmin(np.abs(wavelength - 5500))]/nu_l_nu_p16[np.argmin(np.abs(wavelength - 5500))]:.2f}× "
+    f"{nu_l_nu_p84[np.argmin(np.abs(wavelength - 5500))] / nu_l_nu_p16[np.argmin(np.abs(wavelength - 5500))]:.2f}× "
     f"(dynamical range across prior)\n"
     f"  Throughput: {N_GALAXIES / repeat_time:.0f} galaxies/sec (post-compilation)"
 )

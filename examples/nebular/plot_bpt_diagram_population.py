@@ -17,6 +17,10 @@ References:
     Kauffmann+2003, MNRAS, 346, 1055 (SF/composite line)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -57,8 +61,14 @@ for logu in logu_array:
         # Build a minimal star-forming model
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.5,
-                 "tau_gyr": 0.1, "log_peak_sfr": 0.5},
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "alpha": 1.0,
+                "beta": 2.5,
+                "tau_gyr": 0.1,
+                "log_total_mass": 10.0,
+            },
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
             neb={"type": "cue", "*": tengri.FIXED,
                  "logU": tengri.Fixed(logu), "logZ_gas": tengri.Fixed(logz)},
@@ -102,8 +112,14 @@ for config in agn_configs:
     # Build high-ionization model
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.0,
-             "tau_gyr": 0.15, "log_peak_sfr": 0.3},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.0,
+            "tau_gyr": 0.15,
+            "log_total_mass": 10.0,
+        },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
         neb={"type": "cue", "*": tengri.FIXED,
              "logU": tengri.Fixed(config["logu"]),
@@ -135,33 +151,61 @@ fig, ax = plt.subplots(figsize=(9, 8))
 
 # Demarcation lines
 mask_k = log_nii_ha_grid < 0.47
-ax.plot(log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=2.0,
-        label="Kewley+2001 (SF/AGN)")
+ax.plot(
+    log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=2.0, label="Kewley+2001 (SF/AGN)"
+)
 mask_kauff = log_nii_ha_grid < 0.05
-ax.plot(log_nii_ha_grid[mask_kauff], log_oiii_hb_kauff[mask_kauff], "k--", lw=1.8,
-        label="Kauffmann+2003 (SF/composite)")
+ax.plot(
+    log_nii_ha_grid[mask_kauff],
+    log_oiii_hb_kauff[mask_kauff],
+    "k--",
+    lw=1.8,
+    label="Kauffmann+2003 (SF/composite)",
+)
 
 # Region labels
-ax.text(-1.35, -0.65, "Star\nForming", fontsize=11, color="#1f77b4",
-        fontweight="bold", ha="center")
-ax.text(0.0, 0.6, "Composite", fontsize=11, color="#ff7f0e",
-        fontweight="bold", ha="center")
-ax.text(0.3, 1.2, "Seyfert/\nLINER", fontsize=11, color="#d62728",
-        fontweight="bold", ha="center")
+ax.text(
+    -1.35, -0.65, "Star\nForming", fontsize=11, color="#1f77b4", fontweight="bold", ha="center"
+)
+ax.text(0.0, 0.6, "Composite", fontsize=11, color="#ff7f0e", fontweight="bold", ha="center")
+ax.text(0.3, 1.2, "Seyfert/\nLINER", fontsize=11, color="#d62728", fontweight="bold", ha="center")
 
 # Plot star-forming galaxy population
-ax.scatter(sf_log_nii_ha, sf_log_oiii_hb, s=60, c="#1f77b4", alpha=0.5,
-          edgecolors="#1f77b4", lw=1.0, label="SF galaxies (40)")
+ax.scatter(
+    sf_log_nii_ha,
+    sf_log_oiii_hb,
+    s=60,
+    c="#1f77b4",
+    alpha=0.5,
+    edgecolors="#1f77b4",
+    lw=1.0,
+    label="SF galaxies (40)",
+)
 
 # Plot AGN models (larger markers)
-ax.scatter(agn_log_nii_ha, agn_log_oiii_hb, s=200, marker="^", c="#d62728",
-          edgecolors="black", lw=1.5, label="AGN models (5)", zorder=10)
+ax.scatter(
+    agn_log_nii_ha,
+    agn_log_oiii_hb,
+    s=200,
+    marker="^",
+    c="#d62728",
+    edgecolors="black",
+    lw=1.5,
+    label="AGN models (5)",
+    zorder=10,
+)
 
 # Label AGN points
 for x, y, label in zip(agn_log_nii_ha, agn_log_oiii_hb, agn_labels):
-    ax.annotate(label, (x, y), xytext=(8, 8), textcoords="offset points",
-               fontsize=8, alpha=0.7, bbox=dict(boxstyle="round,pad=0.3",
-               facecolor="yellow", alpha=0.3))
+    ax.annotate(
+        label,
+        (x, y),
+        xytext=(8, 8),
+        textcoords="offset points",
+        fontsize=8,
+        alpha=0.7,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3),
+    )
 
 ax.set_xlabel(r"log [NII]$\lambda$6583 / H$\alpha$", fontsize=13, fontweight="bold")
 ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$", fontsize=13, fontweight="bold")

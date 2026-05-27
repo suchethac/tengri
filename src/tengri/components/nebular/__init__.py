@@ -63,6 +63,11 @@ Usage::
 
 from pathlib import Path
 
+from tengri.components.nebular._models import (
+    NEBULAR_MODELS,
+    NebularRegistryEntry,
+    register_nebular_model,
+)
 from tengri.components.nebular._protocol import NebularBackend, NebularContinuumUnavailableError
 from tengri.components.nebular._shared import NebularContinuumFallback
 from tengri.components.nebular.agn_nebular import (
@@ -115,7 +120,44 @@ from tengri.components.nebular.shock import (
 
 _DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
 
+
+# Populate the runtime registry. Grammar-layer names match the keys the
+# dict-grammar API has accepted historically (``none`` / ``ssp`` /
+# ``cue`` / ``cloudy`` / ``cb19``) — these are the user contract, so
+# don't rename them. The ``callable`` field carries the backend class
+# where there is one; the actual dispatch still happens in
+# :func:`tengri.parameters.groups._translate_neb`, which sets the
+# ``nebular_ssp`` / ``nebular_cue`` / ``nebular`` flags on
+# :class:`Parameters`. ``_VALID_NEBULAR_TYPES`` is derived from
+# :data:`NEBULAR_MODELS.keys()` (#331 / ADR-0005 / ADR-0008).
+register_nebular_model(
+    "none",
+    short_doc="Disable nebular emission (continuum + lines)",
+)(None)
+register_nebular_model(
+    "ssp",
+    citation="DSPS / FSPS SSP-internal",
+    short_doc="Emission baked into SSP grid; zero free params (BakedInBackend)",
+)(BakedInBackend)
+register_nebular_model(
+    "cue",
+    citation="Li et al. 2025 (CUE neural emulator)",
+    short_doc="Neural-network Cloudy emulator with 12 free params (CueBackend)",
+)(CueBackend)
+register_nebular_model(
+    "cloudy",
+    citation="Byler+2017 / Cloudy grids",
+    short_doc="Trilinear interp on Cloudy photoionisation grid (CloudyGridBackend)",
+)(CloudyGridBackend)
+register_nebular_model(
+    "cb19",
+    citation="Charlot & Bruzual 2019 / Martinez-Paredes+2023 (3MdB_17)",
+    short_doc="6D CB19 lines-only nebular grid (CB19SEDComponent)",
+)(CB19SEDComponent)
+
+
 __all__ = [
+    "NEBULAR_MODELS",
     "_DEFAULT_CUE_WEIGHTS_PATH",
     "BakedInBackend",
     "BakedInNebularWarning",
@@ -144,12 +186,14 @@ __all__ = [
     "NebularBackend",
     "NebularContinuumFallback",
     "NebularContinuumUnavailableError",
+    "NebularRegistryEntry",
     "ShockBackend",
     "SynthesizerGridData",
     "SynthesizerNLRBackend",
     "build_cloudy23_deck",
     "compute_shock_sed",
     "mix_dig_emission",
+    "register_nebular_model",
     "shock_line_ratios",
 ]
 

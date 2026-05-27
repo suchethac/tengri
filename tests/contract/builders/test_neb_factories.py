@@ -10,11 +10,11 @@ import pytest
 pytestmark = pytest.mark.contract
 
 from tengri import FIXED, Uniform, builders, parse_groups
-from tengri.parameters.groups import _VALID_NEBULAR_TYPES
+from tengri.parameters.groups import _valid_nebular_types
 
 
 def test_every_nebular_type_has_a_factory() -> None:
-    assert set(builders.neb.available()) == set(_VALID_NEBULAR_TYPES)
+    assert set(builders.neb.available()) == set(_valid_nebular_types())
 
 
 def test_none_and_ssp_expose_only_wildcard() -> None:
