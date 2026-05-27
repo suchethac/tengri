@@ -29,11 +29,15 @@ obs = tengri.Observation(
     photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]),
 )
 model = tengri.SEDModel.build(
-    ssp_data=ssp, observation=obs,
+    ssp_data=ssp,
+    observation=obs,
     sfh={"type": "dpl", "*": tengri.FREE},
     dust={
-        "type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
-        "*": tengri.FREE, "emission": {"type": "dale2014", "*": tengri.FIXED},
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "law_diff": "calzetti",
+        "*": tengri.FREE,
+        "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
     neb={"type": "cue", "*": tengri.FREE},
     redshift=tengri.FREE,
@@ -52,11 +56,13 @@ p_ref["sfh_dpl_log_peak_sfr"] += 2.0
 p_ref["dust_tau_bc"] = jnp.clip(p_ref["dust_tau_bc"] + 1.5, 0, 2.0)
 p_ref["met_logzsol"] = jnp.clip(p_ref["met_logzsol"] - 1.0, -2.0, 0.2)
 
+
 # Objective: reduced chi-squared
 def objective(params_dict):
     model_phot = model.predict_photometry(params_dict)
     residual = (model_phot - photometry_obs) / (noise + 1e-12)
-    return jnp.sum(residual ** 2) / len(residual)
+    return jnp.sum(residual**2) / len(residual)
+
 
 # Compute autodiff gradients
 grad_autodiff = jax.grad(objective)(p_ref)

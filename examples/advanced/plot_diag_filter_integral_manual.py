@@ -93,7 +93,9 @@ ax.axhline(-10.0, color="lightcoral", linestyle=":", lw=0.8, alpha=0.4)
 
 # Data points: color by magnitude of residual
 colors = ["C0" if np.abs(r) < 10 else "C3" for r in residuals_mmag]
-ax.scatter(wave_eff_array / 1e4, residuals_mmag, s=100, alpha=0.7, color=colors, lw=1.5, edgecolors="k")
+ax.scatter(
+    wave_eff_array / 1e4, residuals_mmag, s=100, alpha=0.7, color=colors, lw=1.5, edgecolors="k"
+)
 
 # Labels and formatting
 ax.set_xscale("log")

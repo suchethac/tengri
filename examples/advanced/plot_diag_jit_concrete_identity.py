@@ -69,7 +69,7 @@ f_phot = model.predict_photometry
 f_phot_jit = jax.jit(f_phot)
 
 diffs_phot = []
-for i in range(n_samples):
+for _ in range(n_samples):
     key, subkey = jax.random.split(key)
     # Sample random SFH parameters
     param_vals = jax.random.uniform(subkey, shape=(len(free_names),))
@@ -92,12 +92,12 @@ for i in range(n_samples):
 # Predict and compare emission lines (Cue model)
 # ============================================================================
 diffs_lines = []
-has_cue = hasattr(model, 'predict_emission_lines') and callable(model.predict_emission_lines)
+has_cue = hasattr(model, "predict_emission_lines") and callable(model.predict_emission_lines)
 if has_cue:
     f_lines = model.predict_emission_lines
     f_lines_jit = jax.jit(f_lines)
 
-    for i in range(n_samples):
+    for _ in range(n_samples):
         key, subkey = jax.random.split(key)
         param_vals = jax.random.uniform(subkey, shape=(len(free_names),))
         params = dict(baseline)
@@ -129,9 +129,7 @@ if has_cue:
 # ============================================================================
 # Plot histograms
 # ============================================================================
-fig, axes = plt.subplots(
-    1, 2 if diffs_lines else 1, figsize=(8.5 if diffs_lines else 5, 3.5)
-)
+fig, axes = plt.subplots(1, 2 if diffs_lines else 1, figsize=(8.5 if diffs_lines else 5, 3.5))
 
 if diffs_lines:
     axes_list = [axes[0], axes[1]]
@@ -164,7 +162,9 @@ if diffs_lines:
         edgecolor="black",
         alpha=0.7,
     )
-    ax.axvline(np.log10(1e-10), color="red", linestyle="--", linewidth=1.5, label="1e-10 threshold")
+    ax.axvline(
+        np.log10(1e-10), color="red", linestyle="--", linewidth=1.5, label="1e-10 threshold"
+    )
     ax.set_xlabel(r"$\log_{10}(\max \Delta_{\rm rel})$")
     ax.set_ylabel("Count")
     ax.set_title("predict_emission_lines")

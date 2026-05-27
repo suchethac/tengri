@@ -15,7 +15,6 @@ import os
 import warnings
 
 import jax
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -27,9 +26,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    )
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
 
 baseline_spec = {
@@ -46,7 +43,7 @@ models_precomp = {
         ssp,
         observation=obs,
         approx=tengri.WavePrecomp(n_z=n_z, z_min=0.0, z_max=3.0),
-        **baseline_spec
+        **baseline_spec,
     )
     for n_z in n_z_grid
 }
@@ -90,9 +87,7 @@ x_pos = np.arange(len(band_names))
 colors = plt.cm.RdYlGn_r(np.linspace(0, 1, len(test_redshifts)))
 
 for i, z in enumerate(test_redshifts):
-    phot = np.asarray(
-        model_best.predict_photometry({**baseline_params, "redshift": float(z)})
-    )
+    phot = np.asarray(model_best.predict_photometry({**baseline_params, "redshift": float(z)}))
     frac_err = np.abs(phot - reference_phot[z]) / np.maximum(np.abs(reference_phot[z]), 1e-30)
     ax_right.scatter(x_pos, frac_err, s=100, alpha=0.7, color=colors[i], label=f"z={z:.1f}")
 
@@ -106,4 +101,6 @@ ax_right.axhline(1e-4, color="C3", linestyle="--", lw=1.5, alpha=0.7)
 
 fig.tight_layout()
 script_dir = os.path.dirname(os.path.abspath(__file__))
-plt.savefig(os.path.join(script_dir, "plot_diag_waveprecomp_accuracy.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(script_dir, "plot_diag_waveprecomp_accuracy.png"), dpi=150, bbox_inches="tight"
+)

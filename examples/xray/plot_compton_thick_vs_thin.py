@@ -46,16 +46,17 @@ cmap = plt.get_cmap("viridis")
 norm = mpl.colors.Normalize(vmin=log_nh_vals.min(), vmax=log_nh_vals.max())
 
 # Intrinsic spectrum (log N_H = 15, unobscured)
-l_intr = np.array(
-    xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, log_nh=15.0)
-)
+l_intr = np.array(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, log_nh=15.0))
 ax.loglog(wave_keV, l_intr, color="0.5", ls="--", lw=1.2, label="intrinsic (N_H=0)")
 
 # Sweep over N_H
 for log_nh in log_nh_vals:
     l_obs = np.array(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, log_nh=log_nh))
     ax.loglog(
-        wave_keV, l_obs, lw=1.4, color=cmap(norm(log_nh)),
+        wave_keV,
+        l_obs,
+        lw=1.4,
+        color=cmap(norm(log_nh)),
     )
 
 # Mark the 2–10 keV band
@@ -70,13 +71,12 @@ ax.set_ylim(1e16, 3e21)
 ax.set_xlabel("Energy [keV]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 
-cbar = fig.colorbar(
-    plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
-)
+cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"$\log_{10}\,N_H$  [cm$^{-2}$]")
 cbar.ax.axhline(24.0, color="k", lw=1.4)
-cbar.ax.text(1.4, 24.0, "Compton-thick", rotation=90,
-             va="center", ha="left", fontsize=8, color="k")
+cbar.ax.text(
+    1.4, 24.0, "Compton-thick", rotation=90, va="center", ha="left", fontsize=8, color="k"
+)
 
 fig.tight_layout()
 plt.savefig("plot_compton_thick_vs_thin.png", dpi=150, bbox_inches="tight")

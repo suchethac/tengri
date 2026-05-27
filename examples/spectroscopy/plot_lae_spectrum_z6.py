@@ -12,7 +12,6 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -40,20 +39,29 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "tau_gyr": 0.01,        # Very young: 10 Myr timescale
-         "log_peak_sfr": 0.5,    # Modest star formation rate
-         "alpha": 3.5,           # Rising early SFR
-         "beta": 2.5},           # Declining late SFR
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.02,      # Minimal diffuse dust
-          "tau_bc": 0.05},       # Minimal birth cloud dust
-    neb={"type": "cue", "*": tengri.FIXED,
-         "logU": -2.5,           # Low ionization parameter
-         "logZ_gas": -1.0,       # Low metallicity: Z ~ 0.1 Zsun
-         "fesc": 0.1,            # Hydrogen ionizing photon escape
-         "fesc_lya": 0.3},       # Lyα escape fraction (realistic for LAE)
-    igm={"type": "inoue14"},     # Inoue et al. 2014 IGM attenuation
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.01,  # Very young: 10 Myr timescale
+        "log_peak_sfr": 0.5,  # Modest star formation rate
+        "alpha": 3.5,  # Rising early SFR
+        "beta": 2.5,
+    },  # Declining late SFR
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": 0.02,  # Minimal diffuse dust
+        "tau_bc": 0.05,
+    },  # Minimal birth cloud dust
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "logU": -2.5,  # Low ionization parameter
+        "logZ_gas": -1.0,  # Low metallicity: Z ~ 0.1 Zsun
+        "fesc": 0.1,  # Hydrogen ionizing photon escape
+        "fesc_lya": 0.3,
+    },  # Lyα escape fraction (realistic for LAE)
+    igm={"type": "inoue14"},  # Inoue et al. 2014 IGM attenuation
     redshift=tengri.Fixed(6.0),
 )
 
@@ -95,20 +103,28 @@ lyman_break_obs_aa = LYMAN_BREAK_REST * rest_to_obs
 # Figure: Two-Panel Layout
 # ============================================================================
 fig, (ax_full, ax_lya) = plt.subplots(
-    2, 1, figsize=(9.5, 6.5),
-    gridspec_kw={"height_ratios": [2, 1.5], "hspace": 0.35}
+    2, 1, figsize=(9.5, 6.5), gridspec_kw={"height_ratios": [2, 1.5], "hspace": 0.35}
 )
 
 # ---- Panel 1: Full spectrum (7000–13000 Å) ----
-ax_full.plot(wave_obs_aa, f_lam_obs, color="C0", lw=1.3, label="Observed spectrum (IGM attenuated)")
+ax_full.plot(
+    wave_obs_aa, f_lam_obs, color="C0", lw=1.3, label="Observed spectrum (IGM attenuated)"
+)
 
 # Lyman break annotation
-ax_full.axvline(lyman_break_obs_aa, color="C3", lw=1.0, linestyle="--", alpha=0.7,
-                label=f"Lyman break ({lyman_break_obs_aa:.0f} Å)")
+ax_full.axvline(
+    lyman_break_obs_aa,
+    color="C3",
+    lw=1.0,
+    linestyle="--",
+    alpha=0.7,
+    label=f"Lyman break ({lyman_break_obs_aa:.0f} Å)",
+)
 
 # Lyα emission line annotation
-ax_full.axvline(lya_obs_aa, color="C2", lw=1.2, linestyle="-", alpha=0.8,
-                label=f"Lyα ({lya_obs_aa:.0f} Å)")
+ax_full.axvline(
+    lya_obs_aa, color="C2", lw=1.2, linestyle="-", alpha=0.8, label=f"Lyα ({lya_obs_aa:.0f} Å)"
+)
 
 # Shade IGM blue-wing absorption region (wavelengths blueward of Lyα)
 ax_full.axvspan(7000, lya_obs_aa, alpha=0.06, color="blue", zorder=1)

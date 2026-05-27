@@ -14,8 +14,6 @@ Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
 import warnings
 
 import jax
-import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -40,10 +38,7 @@ model = tengri.SEDModel.build(
         "log_peak_sfr": 1.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED,
-         "logU": -3.0,
-         "logZ_gas": -1.0,
-         "fesc": 0.0},
+    neb={"type": "cue", "*": tengri.FIXED, "logU": -3.0, "logZ_gas": -1.0, "fesc": 0.0},
     redshift=tengri.Fixed(0.0),
 )
 

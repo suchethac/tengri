@@ -18,7 +18,6 @@ import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -34,11 +33,16 @@ KENNICUTT_CHABRIER_COEFF = 4.97e-42  # SFR / L_Ha [Msun/yr / erg/s]
 # Load bare-stellar SSP (Cue requirement)
 model = tengri.SEDModel.build(
     tengri.load_ssp("fsps_prsc_miles_chabrier"),
-    sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 5.0, "beta": 2.0,
-         "tau_gyr": 1.0, "log_peak_sfr": tengri.FREE},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "alpha": 5.0,
+        "beta": 2.0,
+        "tau_gyr": 1.0,
+        "log_peak_sfr": tengri.FREE,
+    },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": -2.5,
-         "neb_fesc": 0.0, "neb_fesc_lya": 0.0},
+    neb={"type": "cue", "*": tengri.FIXED, "neb_logU": -2.5, "neb_fesc": 0.0, "neb_fesc_lya": 0.0},
     redshift=tengri.Fixed(0.0),
 )
 
@@ -79,8 +83,13 @@ implied_coeff_vals = np.array(implied_coeff_vals)
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 mask = ~np.isnan(implied_coeff_vals)
 ax.semilogy(sfr_10myr_vals[mask], implied_coeff_vals[mask], "o-", lw=1.5, ms=6, color="C0")
-ax.axhline(KENNICUTT_CHABRIER_COEFF, color="red", linestyle="--", lw=2.0,
-           label=r"Kennicutt+Chabrier: $4.97 \times 10^{-42}$")
+ax.axhline(
+    KENNICUTT_CHABRIER_COEFF,
+    color="red",
+    linestyle="--",
+    lw=2.0,
+    label=r"Kennicutt+Chabrier: $4.97 \times 10^{-42}$",
+)
 ax.set_xlabel(r"SFR$_{10\mathrm{Myr}}$ [M$_{\odot}$ yr$^{-1}$]")
 ax.set_ylabel(r"Implied coeff: SFR / $L_{\mathrm{H}\alpha}$ [M$_{\odot}$ yr$^{-1}$ erg$^{-1}$ s]")
 ax.legend(frameon=False, fontsize=9)

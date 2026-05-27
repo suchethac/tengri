@@ -7,8 +7,9 @@ Verify tengri's Calzetti implementation against Eq. 1 in Calzetti et al. 2000
 """
 
 import os
-import numpy as np
+
 import matplotlib.pyplot as plt
+import numpy as np
 
 import tengri.analysis.plotting
 from tengri.dust import calzetti
@@ -23,10 +24,10 @@ def published_calzetti_kv(wave_um):
     x = 1.0 / wave_um
 
     # UV: 0.12 - 0.63 μm
-    k_uv = 2.659 * (-2.156 + 1.509*x - 0.198*x**2 + 0.011*x**3) + 4.05
+    k_uv = 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + 4.05
 
     # IR: 0.63 - 2.20 μm
-    k_ir = 2.659 * (-1.857 + 1.040*x) + 4.05
+    k_ir = 2.659 * (-1.857 + 1.040 * x) + 4.05
 
     return np.where(wave_um >= 0.63, k_ir, k_uv)
 
@@ -60,9 +61,8 @@ ax_curve.loglog(wave_um, k_tengri, "C0-", lw=1.4, label="tengri", alpha=0.8)
 ax_curve.loglog(wave_um, k_published, "C1--", lw=1.2, label="Calzetti 2000", alpha=0.7)
 
 # Mark V-band point
-ax_curve.plot(5500.0/1e4, k_v_tengri, "C0o", markersize=7, zorder=5)
-ax_curve.text(5500.0/1e4 * 1.1, k_v_tengri, f"k(V) = {k_v_tengri:.4f}",
-              fontsize=9, va="center")
+ax_curve.plot(5500.0 / 1e4, k_v_tengri, "C0o", markersize=7, zorder=5)
+ax_curve.text(5500.0 / 1e4 * 1.1, k_v_tengri, f"k(V) = {k_v_tengri:.4f}", fontsize=9, va="center")
 
 ax_curve.set(ylabel=r"$k(\lambda)$", ylim=[0.1, 10])
 ax_curve.legend(frameon=False, fontsize=9, loc="upper left")

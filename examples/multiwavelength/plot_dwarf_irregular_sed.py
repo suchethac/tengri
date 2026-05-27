@@ -87,8 +87,12 @@ ax.loglog(
 )
 
 # Annotate emission lines with vertical markers (y placed at SED value + headroom)
-for x_lam, lbl in [(1216, r"Ly$\alpha$"), (4861, r"H$\beta$"),
-                   (5007, "[OIII]5007"), (6563, r"H$\alpha$")]:
+for x_lam, lbl in [
+    (1216, r"Ly$\alpha$"),
+    (4861, r"H$\beta$"),
+    (5007, "[OIII]5007"),
+    (6563, r"H$\alpha$"),
+]:
     j = int(np.argmin(np.abs(wave - x_lam)))
     ax.axvline(x_lam, color="0.7", ls=":", lw=0.6)
     ax.text(x_lam, nu_l_nu[j] * 2.5, " " + lbl, fontsize=8, color="0.4")

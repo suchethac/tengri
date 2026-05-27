@@ -69,13 +69,23 @@ u_min_scaling_temps = np.array(u_min_scaling_temps)
 peak_wavelengths = np.array(peak_wavelengths)
 
 # Left: SED family, Right: temperature comparison
-fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax_l, pad=0.01, label=r"$\log U_{\min}$")
+fig.colorbar(
+    plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax_l, pad=0.01, label=r"$\log U_{\min}$"
+)
 ax_l.set_xlabel(r"$\lambda$ [$\mu$m]")
 ax_l.set_ylabel(r"$\nu F_\nu$ (normalized)")
 ax_l.grid(True, alpha=0.2, which="both")
 
 ax_r.loglog(U_min_values, wien_temps, "o-", lw=2, markersize=8, label="Wien law", color="C0")
-ax_r.loglog(U_min_values, u_min_scaling_temps, "s--", lw=1.5, markersize=7, label=r"$U_{\min}^{1/6}$", color="C1")
+ax_r.loglog(
+    U_min_values,
+    u_min_scaling_temps,
+    "s--",
+    lw=1.5,
+    markersize=7,
+    label=r"$U_{\min}^{1/6}$",
+    color="C1",
+)
 ax_r.set_xlabel(r"$U_{\min}$")
 ax_r.set_ylabel(r"$T_{\rm eff}$ [K]")
 ax_r.legend(frameon=False, fontsize=9)
@@ -90,6 +100,8 @@ print("\nDraine & Li 2007 Temperature Diagnostic")
 print("=" * 70)
 print(f"{'U_min':<10} {'λ [μm]':<12} {'T_Wien':<10} {'T_scaling':<10} {'% Diff':<8}")
 print("-" * 70)
-for um, lam, tw, ts, pct in zip(U_min_values, peak_wavelengths, wien_temps, u_min_scaling_temps, pct_diff):
+for um, lam, tw, ts, pct in zip(
+    U_min_values, peak_wavelengths, wien_temps, u_min_scaling_temps, pct_diff
+):
     print(f"{um:<10.2f} {lam:<12.1f} {tw:<10.1f} {ts:<10.1f} {pct:<8.1f}")
 print(f"Mean agreement: {np.mean(pct_diff):.1f}%")

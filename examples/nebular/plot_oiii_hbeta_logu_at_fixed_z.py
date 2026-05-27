@@ -41,14 +41,22 @@ cmap = plt.get_cmap("viridis")
 for k, logz in enumerate(logz_values):
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.5,
-             "tau_gyr": 0.03, "log_peak_sfr": 1.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED,
-             "logZ_gas": tengri.Fixed(logz),
-             "logU": tengri.Uniform(-3.0, -1.0),
-             "fesc": tengri.Fixed(0.0)},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.5,
+            "tau_gyr": 0.03,
+            "log_peak_sfr": 1.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        neb={
+            "type": "cue",
+            "*": tengri.FIXED,
+            "logZ_gas": tengri.Fixed(logz),
+            "logU": tengri.Uniform(-3.0, -1.0),
+            "fesc": tengri.Fixed(0.0),
+        },
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -56,17 +64,26 @@ for k, logz in enumerate(logz_values):
     for u in logu_grid:
         p = {**baseline, "neb_logU": np.float64(u)}
         lines = model.predict_emission_lines(p)
-        o3 = float(lines.oiii_5007); hb = float(lines.hbeta)
+        o3 = float(lines.oiii_5007)
+        hb = float(lines.hbeta)
         ratio.append(o3 / hb if hb > 0 else np.nan)
     ratio = np.array(ratio)
     good = np.isfinite(ratio)
-    ax.plot(logu_grid[good], ratio[good], marker=markers[k], ms=5, lw=1.5,
-            color=cmap(0.15 + 0.7 * k / (len(logz_values) - 1)),
-            label=rf"$\log Z_{{\rm gas}}/Z_\odot = {logz:+.1f}$")
+    ax.plot(
+        logu_grid[good],
+        ratio[good],
+        marker=markers[k],
+        ms=5,
+        lw=1.5,
+        color=cmap(0.15 + 0.7 * k / (len(logz_values) - 1)),
+        label=rf"$\log Z_{{\rm gas}}/Z_\odot = {logz:+.1f}$",
+    )
 
-ax.set(xlabel=r"Ionisation parameter $\log U$",
-       ylabel=r"$[\mathrm{O\,III}]\,5007 \,/\, \mathrm{H}\beta$",
-       xlim=(-3.05, -0.95))
+ax.set(
+    xlabel=r"Ionisation parameter $\log U$",
+    ylabel=r"$[\mathrm{O\,III}]\,5007 \,/\, \mathrm{H}\beta$",
+    xlim=(-3.05, -0.95),
+)
 ax.legend(frameon=False, fontsize=9, loc="upper left")
 fig.tight_layout()
 plt.savefig("plot_oiii_hbeta_logu_at_fixed_z.png", dpi=150, bbox_inches="tight")

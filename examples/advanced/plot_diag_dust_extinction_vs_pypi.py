@@ -15,7 +15,6 @@ import warnings
 from pathlib import Path
 
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -32,6 +31,7 @@ wave_micron = wave_aa / 1e4
 # Import dust_extinction reference models
 try:
     from dust_extinction.parameter_averages import CCM89, F19, G23
+
     has_dust_extinction = True
 except ImportError:
     has_dust_extinction = False
@@ -58,8 +58,14 @@ if has_dust_extinction:
     # CCM89 from dust_extinction
     ccm89_model = CCM89()
     k_ccm89_ref = ccm89_model.evaluate(x, Rv=3.1)
-    ax_main.loglog(wave_aa, k_ccm89_ref, "C1--", lw=1.2, alpha=0.7,
-                   label="Cardelli+1989 Rv=3.1 (dust_extinction)")
+    ax_main.loglog(
+        wave_aa,
+        k_ccm89_ref,
+        "C1--",
+        lw=1.2,
+        alpha=0.7,
+        label="Cardelli+1989 Rv=3.1 (dust_extinction)",
+    )
 
     # F19 from dust_extinction (newer parametrization)
     f19_model = F19()

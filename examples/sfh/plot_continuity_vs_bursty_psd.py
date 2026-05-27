@@ -17,8 +17,7 @@ import jax.random as jr
 import matplotlib.pyplot as plt
 import numpy as np
 
-import tengri
-from tengri import Fixed, FREE, SEDModel, load_ssp, setup_style
+from tengri import FREE, Fixed, SEDModel, load_ssp, setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -34,6 +33,7 @@ model_field = SEDModel.build(
     redshift=Fixed(0.0),
 )
 
+
 def sample_sfh(model, n_samples=20):
     key = jr.PRNGKey(42)
     samples, age_gyr = [], None
@@ -45,6 +45,7 @@ def sample_sfh(model, n_samples=20):
         if age_gyr is None:
             age_gyr = np.array(sfh["t_gyr"])
     return np.array(samples), age_gyr
+
 
 sfr_cont, age_gyr = sample_sfh(model_cont)
 sfr_field, _ = sample_sfh(model_field)
@@ -59,15 +60,35 @@ for ax, sfr_samples, color, label in [
     for sfr in sfr_samples:
         ax.plot(age_gyr, np.clip(sfr, 1e-2, 1e1), lw=0.6, alpha=0.25, color=color)
     ax.plot(age_gyr, sfr_mean, "darkred", lw=2.2, label="Mean SFH", zorder=5)
-    ax.set(xlabel=r"Lookback Time [Gyr]", xscale="log", yscale="log", xlim=(0.01, 13.8), ylim=(1e-2, 2e0))
+    ax.set(
+        xlabel=r"Lookback Time [Gyr]",
+        xscale="log",
+        yscale="log",
+        xlim=(0.01, 13.8),
+        ylim=(1e-2, 2e0),
+    )
     if ax is ax_cont:
         ax.set_ylabel(r"SFR [M$_\odot$ yr$^{-1}$]")
-    ax.text(0.97, 0.97, label, transform=ax.transAxes, fontsize=11, weight="bold",
-            verticalalignment="top", horizontalalignment="right",
-            bbox=dict(boxstyle="round", facecolor=("wheat" if ax is ax_cont else "lightblue"), alpha=0.6))
+    ax.text(
+        0.97,
+        0.97,
+        label,
+        transform=ax.transAxes,
+        fontsize=11,
+        weight="bold",
+        verticalalignment="top",
+        horizontalalignment="right",
+        bbox=dict(
+            boxstyle="round", facecolor=("wheat" if ax is ax_cont else "lightblue"), alpha=0.6
+        ),
+    )
     ax.grid(True, alpha=0.3, which="both")
 
 fig.legend(["Mean SFH"], loc="upper center", bbox_to_anchor=(0.5, 1.02), fontsize=10)
 fig.tight_layout()
-plt.savefig(os.path.join(os.path.dirname(__file__), "plot_continuity_vs_bursty_psd.png"), dpi=150, bbox_inches="tight")
+plt.savefig(
+    os.path.join(os.path.dirname(__file__), "plot_continuity_vs_bursty_psd.png"),
+    dpi=150,
+    bbox_inches="tight",
+)
 plt.close()

@@ -35,15 +35,21 @@ wave_rest = np.linspace(700.0, 1500.0, 1024)
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 0.05,
-         "log_peak_sfr": 0.8, "alpha": 2.8, "beta": 1.5},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.01, "tau_bc": 0.0},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.05,
+        "log_peak_sfr": 0.8,
+        "alpha": 2.8,
+        "beta": 1.5,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.01, "tau_bc": 0.0},
     redshift=tengri.Fixed(5.0),
 )
 out = model.predict_rest_sed(dict(model.spec.sample(jax.random.PRNGKey(0))))
-L_nu_rest = np.interp(wave_rest, np.asarray(out.wavelength),
-                      np.asarray(out.sed), left=0.0, right=0.0)
+L_nu_rest = np.interp(
+    wave_rest, np.asarray(out.wavelength), np.asarray(out.sed), left=0.0, right=0.0
+)
 L_nu_norm = L_nu_rest / L_nu_rest[np.argmin(np.abs(wave_rest - 1400.0))]
 
 fig, axes = plt.subplots(2, 2, figsize=(10.5, 6.2), sharey="row")
@@ -60,8 +66,9 @@ for col, z in enumerate(REDSHIFTS):
     ax.plot(wave_obs, L_nu_norm * t_ino, color="C3", lw=1.5, label="Inoue+2014")
     ax.axvline(lya_obs, color="0.4", ls=":", lw=0.8)
     ax.axvline(ll_obs, color="0.4", ls=":", lw=0.8)
-    ax.text(0.97, 0.92, f"$z = {z:.0f}$", transform=ax.transAxes,
-            ha="right", va="top", fontsize=10)
+    ax.text(
+        0.97, 0.92, f"$z = {z:.0f}$", transform=ax.transAxes, ha="right", va="top", fontsize=10
+    )
     ax.set(ylabel=r"$L_\nu / L_\nu(1400\,\mathrm{\AA})$", ylim=(0, 1.2))
     if col == 0:
         ax.legend(frameon=False, fontsize=8, loc="upper left")
@@ -73,9 +80,11 @@ for col, z in enumerate(REDSHIFTS):
     ax.axvline(ll_obs, color="0.4", ls=":", lw=0.8)
     ax.text(lya_obs, 1.05, r" Ly$\alpha$", fontsize=8, color="0.4")
     ax.text(ll_obs, 1.05, " LL", fontsize=8, color="0.4")
-    ax.set(ylabel=r"$e^{-\tau_{\rm IGM}}$",
-           xlabel=r"observed $\lambda$ [$\mathrm{\AA}$]",
-           ylim=(-0.02, 1.18))
+    ax.set(
+        ylabel=r"$e^{-\tau_{\rm IGM}}$",
+        xlabel=r"observed $\lambda$ [$\mathrm{\AA}$]",
+        ylim=(-0.02, 1.18),
+    )
 
 fig.tight_layout()
 plt.savefig("plot_inoue_vs_madau_z5_z7.png", dpi=150, bbox_inches="tight")

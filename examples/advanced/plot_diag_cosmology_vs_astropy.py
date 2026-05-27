@@ -52,10 +52,10 @@ max_err_dC = np.max(np.abs(rel_err_dC))
 max_err_age = np.max(np.abs(rel_err_age))
 max_err_dV = np.max(np.abs(rel_err_dV))
 
-print(f"Max relative error d_L: {max_err_dL:.2e} ({max_err_dL*100:.3f}%)")
-print(f"Max relative error d_C: {max_err_dC:.2e} ({max_err_dC*100:.3f}%)")
-print(f"Max relative error age: {max_err_age:.2e} ({max_err_age*100:.3f}%)")
-print(f"Max relative error dV/dz/dΩ: {max_err_dV:.2e} ({max_err_dV*100:.3f}%)")
+print(f"Max relative error d_L: {max_err_dL:.2e} ({max_err_dL * 100:.3f}%)")
+print(f"Max relative error d_C: {max_err_dC:.2e} ({max_err_dC * 100:.3f}%)")
+print(f"Max relative error age: {max_err_age:.2e} ({max_err_age * 100:.3f}%)")
+print(f"Max relative error dV/dz/dΩ: {max_err_dV:.2e} ({max_err_dV * 100:.3f}%)")
 
 # Note: Residuals are driven by parameter differences (astropy's Planck18 differs
 # slightly from Planck 2018 published values), not numerical bugs.
@@ -91,7 +91,9 @@ ax_age.grid(True, alpha=0.3, which="both")
 
 # Age and comoving volume residuals
 ax_dv.semilogx(z_vals, rel_err_age * 1e6, "o-", label="age(z)", color="C1", lw=1.5, ms=6)
-ax_dv.semilogx(z_vals, rel_err_dV * 1e6, "s-", label=r"$dV_c/dz/d\Omega$", color="C2", lw=1.5, ms=6)
+ax_dv.semilogx(
+    z_vals, rel_err_dV * 1e6, "s-", label=r"$dV_c/dz/d\Omega$", color="C2", lw=1.5, ms=6
+)
 ax_dv.axhline(0, color="k", linestyle="--", lw=1, alpha=0.5)
 ax_dv.set_xlabel(r"$z$")
 ax_dv.set_ylabel(r"Relative error [ppm]")
