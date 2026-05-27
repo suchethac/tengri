@@ -124,7 +124,7 @@ _LOG_C = jnp.log10(_C_CGS)
 # Maximum SSP age contributing to nebular emission. Re-exported from
 # ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
 # and the downstream forward filter (here) share one source of truth.
-from tengri.components.nebular.ionizing_spectrum import (  # noqa: E402
+from tengri.components.nebular.ionizing_spectrum import (
     MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,
 )
 
