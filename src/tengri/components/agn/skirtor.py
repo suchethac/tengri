@@ -40,6 +40,11 @@ from tengri.components.agn._phys import (
 from tengri.utils.grid_interp import interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
 
+#: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
+#: Angstrom-grid templates. Matches the value used in
+#: ``tengri.components.agn.blocks.runner.C_AA_PER_S``.
+_C_AA_PER_S: float = 2.99792458e18
+
 
 class SKIRTORComponents(NamedTuple):
     """Separate SKIRTOR spectral components.
@@ -194,13 +199,18 @@ def _interpolate_and_normalize(
     # coverage). Using the user wave grid would clip the FIR tail and
     # over-normalise on truncated grids; trapezoid in λ matches the
     # download script's normalisation convention.
+    #
+    # ``wave_grid`` is monotonically ascending (set at load time in
+    # ``_load_grid_arrays``), so trapezoid integrates correctly without
+    # an explicit ``argsort`` — the prior ``trapezoid(sed[idx_sort],
+    # nu[idx_sort])`` pattern existed because ``nu = c/λ`` was
+    # *descending* and needed reordering. Don't re-add a sort here.
     integral_lam = jnp.trapezoid(template, wave_grid)
     integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
     template_lam = l_scale * template / integral_safe  # erg/s/Å
     sed_lam = jnp.interp(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
     # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
-    c_aa_per_s = 2.99792458e18
-    return sed_lam * wavelength**2 / c_aa_per_s
+    return sed_lam * wavelength**2 / _C_AA_PER_S
 
 
 def _compute_intrinsic_30deg_luminosity(
@@ -256,8 +266,7 @@ def _compute_intrinsic_30deg_luminosity(
     # so interpolate at 2500.0 Å (= 250 nm).
     l_lam_2500 = jnp.interp(2500.0, wave_grid, disk_template)
     # L_ν = L_λ × (λ²/c) where c is in Å/s and λ in Å.
-    c_aa_per_s = 2.99792458e18  # Angstrom per second
-    l_nu_2500 = l_lam_2500 * (2500.0**2 / c_aa_per_s) * norm_fac
+    l_nu_2500 = l_lam_2500 * (2500.0**2 / _C_AA_PER_S) * norm_fac
 
     return lumin_intrin_disk, l_nu_2500
 
