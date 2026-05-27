@@ -74,9 +74,12 @@ def _fit_segment(
     init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
     init_norm = log_flux[-1] - init_slope * log_wave[-1]
 
-    # Q_H for this segment
-    nu = _C_AA / seg_wave
-    integrand = seg_flux / (_H_PLANCK * nu)
+    # Q_H for this segment — cast to float64 defensively. Per-segment
+    # magnitudes are typically smaller than the full-LyC integration
+    # below, but the same overflow path applies on float32 SSPs (see
+    # fit_ionizing_spectrum Q_H block + issue #458).
+    nu = (_C_AA / seg_wave).astype(np.float64)
+    integrand = seg_flux.astype(np.float64) / (_H_PLANCK * nu)
     Q_seg = np.abs(_np_trapz(integrand[::-1], x=nu[::-1]))
     log_Q = np.log10(max(Q_seg, 1e-99))
 
@@ -300,11 +303,23 @@ def fit_ionizing_spectrum(
     # Total Q_H — integrate photon rate over frequency.
     # wave is increasing → nu_all is decreasing.  Both integrand and
     # x must share the same element ordering for np.trapz.
+    #
+    # Cast to float64 for the integration. SSPs may ship in float32 (e.g.
+    # BC03-from-CIGALE) to save disk; ``(flux * L_SUN) / (h * nu)`` then
+    # produces intermediates ~ 1e30 and ``trapezoid`` over the ~ 1e16 Hz
+    # bandwidth integrates to ~ 1e46 — well past float32's 3.4e38 max,
+    # so the running sum overflows to ``inf`` from a few terms in. Result:
+    # every (Z, age) bin in the cached table collapses to ``log10(inf) =
+    # inf``, downstream treats the SSP as wNE / dead, and Cue silently
+    # emits ~zero nebular emission (issue #458). The slope fits above
+    # are float32-safe because ``normalized = flux * 1e-18 / ref_flux``
+    # rescales each segment before fitting.
     ionizing_mask = wave <= HI_LIMIT
-    nu_all = _C_AA / wave[ionizing_mask]
+    flux_iz = flux[ionizing_mask].astype(np.float64)
+    nu_all = (_C_AA / wave[ionizing_mask]).astype(np.float64)
     Q_total = np.abs(
         _np_trapz(
-            (flux[ionizing_mask] * _LSUN) / (_H_PLANCK * nu_all),
+            (flux_iz * _LSUN) / (_H_PLANCK * nu_all),
             x=nu_all,
         )
     )
@@ -323,17 +338,25 @@ def fit_ionizing_spectrum(
     }
 
 
+#: Max log10(age/yr) at which Cue's downstream Q_H weighting can still receive
+#: a non-zero contribution. Bins older than this have ``weighted_qh`` zeroed in
+#: :meth:`CueBackend._compute_weighted_cue_params`, so fitting them here is
+#: pure waste. Kept in sync with ``cue._MAX_NEB_LOG_AGE``.
+_PRECOMPUTE_MAX_LOG_AGE_YR: float = 8.0  # 100 Myr
+
+
 def precompute_ionizing_params_table(
     ssp_wave: np.ndarray,
     ssp_flux: np.ndarray,
     ssp_lgmet: np.ndarray,
+    ssp_log_age_yr: np.ndarray | None = None,
 ) -> dict:
     """Precompute Cue ionizing parameters for a full SSP grid.
 
-    Batch-fits piecewise power laws to all (metallicity, age) SSP spectra.
-    Silently skips SSPs with negligible ionizing flux (age > ~100 Myr).
-    Called once at model initialization; results are stored and interpolated
-    at runtime.
+    Batch-fits piecewise power laws to (metallicity, age) SSP spectra younger
+    than 100 Myr (older bins contribute nothing to Cue's weighted Q_H so they
+    are skipped — ``logqion_table[im, ia] = -99`` for those). Called once at
+    model initialization; results are stored and interpolated at runtime.
 
     Parameters
     ----------
@@ -343,6 +366,13 @@ def precompute_ionizing_params_table(
         SSP spectra on (metallicity, age) grid. [erg/s/Hz/Msun]
     ssp_lgmet : array, shape (n_met,)
         Metallicity grid in log10(Z). [log10(Z)]
+    ssp_log_age_yr : array, shape (n_age,), optional
+        log10(age/yr) for each age bin. When provided, bins older than
+        :data:`_PRECOMPUTE_MAX_LOG_AGE_YR` (100 Myr) are skipped without
+        invoking scipy — a ~140× speedup for unusually fine age grids
+        (BC03-from-CIGALE has 13700 ages of which only ~10 are young).
+        When ``None`` (legacy callers), every bin is attempted; the per-bin
+        ``np.max(flux_iz) <= 0`` early-exit still skips dead bins.
 
     Returns
     -------
@@ -359,8 +389,8 @@ def precompute_ionizing_params_table(
     -----
     **One-time cost**: This function is not JAX-compatible (uses scipy). Call
     once per Cue model initialization and store results (e.g., in h5 file).
-    Precomputation is O(n_met × n_age × n_segments), typically < 1 second
-    for modern SSP grids (n_met ~ 50, n_age ~ 300).
+    Precomputation is O(n_met × n_age_young × n_segments) where n_age_young is
+    the count of bins ≤ 100 Myr; typically < 1 second for modern SSP grids.
 
     **Metadata**: Unfittable SSPs (old ages with zero ionizing flux, corrupted
     data) are left with all parameters = 0 (or −99 for log-space). Downstream
@@ -373,8 +403,18 @@ def precompute_ionizing_params_table(
 
     wave_np = np.asarray(ssp_wave)
 
+    # Optional age-cutoff: skip the scipy fit on bins older than the
+    # downstream Q_H weighting threshold. Saves ~99 % of fits on fine-age
+    # grids (e.g. BC03-from-CIGALE: 13700 ages → ~10 young bins).
+    if ssp_log_age_yr is not None:
+        young_age_mask = np.asarray(ssp_log_age_yr) <= _PRECOMPUTE_MAX_LOG_AGE_YR
+    else:
+        young_age_mask = np.ones(n_age, dtype=bool)
+
     for im in range(n_met):
         for ia in range(n_age):
+            if not young_age_mask[ia]:
+                continue
             flux_np = np.asarray(ssp_flux[im, ia, :])
 
             # Skip if no ionizing flux

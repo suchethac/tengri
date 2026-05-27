@@ -115,6 +115,39 @@ class TestIonizingParamsTable:
         chex.assert_shape(ionspec, (7,))
         chex.assert_tree_all_finite(ionspec)
 
+    @pytest.mark.regression_bug
+    def test_float32_ssp_does_not_overflow(self, ssp):
+        """Float32 SSP flux must not overflow the Q_H integration (issue #458).
+
+        BC03-from-CIGALE and other space-saving SSP grids ship ``ssp_flux``
+        in float32. The Q_H integration ``trapezoid(flux * L_SUN / (h*nu),
+        nu)`` produces intermediates ~ 1e30 and integrates over
+        ~ 1e16 Hz bandwidth (~ 1e46), well above float32's 3.4e38 max.
+        Without an explicit float64 cast, ``logqion_table`` collapses to
+        ``inf`` for every (Z, age) bin and downstream Cue emits ~zero
+        nebular SED silently.
+        """
+        from tengri.components.nebular.ionizing_spectrum import (
+            precompute_ionizing_params_table,
+        )
+
+        wave_f32 = np.asarray(ssp.ssp_wave, dtype=np.float32)
+        flux_f32 = np.asarray(ssp.ssp_flux[:2, :10, :], dtype=np.float32)
+        lgmet_f32 = np.asarray(ssp.ssp_lgmet[:2], dtype=np.float32)
+        assert flux_f32.dtype == np.float32, "test setup: flux must be float32"
+
+        result = precompute_ionizing_params_table(wave_f32, flux_f32, lgmet_f32)
+        logq = np.asarray(result["logqion_table"])
+        assert not np.any(np.isinf(logq)), (
+            "Q_H integration overflowed float32 — logqion_table contains inf"
+        )
+        # Young (< 10 Myr) bins of a bare-stellar SSP should yield realistic Q_H.
+        # The fsps-prsc-miles fixture is bare-stellar so we expect ~46-50.
+        assert logq.max() > 40.0, (
+            f"max logqion = {logq.max():.2f}; expected > 40 for a young bare "
+            f"stellar SSP. Bug is likely back."
+        )
+
 
 # ── Cue backend ───────────────────────────────────────────────────
 
