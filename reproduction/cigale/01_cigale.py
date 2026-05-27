@@ -200,12 +200,10 @@ for block, (cig, tng) in registries.items():
 # BC03 Chabrier (Bruzual & Charlot 2003; Chabrier 2003) at Z = 0.02 from
 # 1 Myr to 10 Gyr. **Single SSPs**, overlaid: CIGALE's raw
 # `bc03/Z=0.02_imf=chab.pickle` (solid) read directly with no SFH module,
-# and the same templates re-shaped into tengri's HDF5 (dashed). The
+# against the same templates re-shaped into tengri's HDF5 (dashed). The
 # curves sit on top of each other; the lower panel shows the relative
-# residual |tengri − CIGALE| / CIGALE, which is ~1e-7 (float32 round-trip
-# through the HDF5 port) across UV–NIR at every age. This is a
-# floating-point check, not a physics one — younger SSPs are UV-bright
-# with a deep Lyman break that only deepens with age, identical in both.
+# residual |tengri − CIGALE| / CIGALE, ~1e-7 from float32 round-trip
+# through the HDF5 port — both codes consume identical numerics.
 
 # %%
 import pickle as _pickle
@@ -577,18 +575,14 @@ plt.show()
 # ## §6 Dust IR re-emission and energy balance
 #
 # Absorbed stellar UV/optical reappears in the IR. CIGALE uses the
-# Dale et al. (2014) template family (α = 2). tengri reproduces the
-# same templates internally and enforces energy balance:
-# $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$ to floating-point.
-# The residual annotation makes that explicit.
+# Dale et al. (2014) template family (α = 2); tengri ports the same
+# templates and enforces energy balance,
+# $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
+# the residual is annotated on the right panel.
 #
-# Compared to CIGALE's `dale2014.process()`, the integrated FIR
-# luminosity (10⁶–10⁷ Å) reads ~1.8× brighter on the tengri side at
-# matched α and matched absorbed energy. The shape of the
-# stellar + Calzetti continuum below 1 µm reproduces to ~1 %; the
-# residual is isolated to the Dale template-side normalisation and is
-# tracked in tengri#415. The energy-balance annotation below confirms
-# the residual is *not* a missing clamp on the tengri side.
+# The stellar + Calzetti continuum below 1 µm reproduces to ~1 %.
+# A residual in the Dale template-side normalisation of the integrated
+# FIR luminosity (10⁶–10⁷ Å) is tracked in tengri#415.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -670,15 +664,17 @@ plt.show()
 # already loaded.
 #
 # Each panel shows the stellar baseline (dashed), stellar + nebular
-# (solid), and the nebular component alone (dotted). At matched
-# logU = -2.0, Z_gas = Z_⊙, CIGALE's CLOUDY emits a clean line forest
-# plus continuum (the dotted blue curve on the left).
+# (solid), and the nebular component alone (dotted). The two emitters
+# see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
+# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`.
+# Cue fixes the gas density (CIGALE's `n_e = 100`) and the solar N/O,
+# C/O offsets internally — those CIGALE knobs have no tengri counterpart
+# yet, tracked in [tengri #458](https://github.com/suchethac/tengri/issues/458).
 #
 # ```{warning}
 # Cue currently absorbs LyC photons at λ < 912 Å but does **not** emit
 # the recycled photons back into ``sed_intrinsic`` — the dotted green
-# curve on the right is essentially zero. Tracked in
-# [tengri #458](https://github.com/suchethac/tengri/issues/458). Once
+# curve on the right is essentially zero, also tracked in #458. Once
 # the accumulator fix lands, Cue should overlay CIGALE's CLOUDY emission
 # in the same way the composable AGN now overlays SKIRTOR in §9
 # (post-#420).
@@ -715,7 +711,11 @@ m_neb = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
-    neb={"type": "cue", "*": FIXED},
+    neb={"type": "cue",
+         "neb_logU": Fixed(-2.0),
+         "neb_logZ_gas": Fixed(MET_LOGZSOL),  # Z_gas = 0.02 ≡ stellar Z
+         "neb_fesc": Fixed(0.0),
+         "*": FIXED},  # ionspec_* slopes stay at their SSP-derived Fixed values
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
 )
