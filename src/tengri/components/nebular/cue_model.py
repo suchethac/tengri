@@ -50,6 +50,7 @@ import jax.numpy as jnp
 
 from tengri.components.nebular.cue import (
     CueBackend,
+    _logq_from_logu,
     _prepare_nn_params,
     predict_all_lines,
     predict_continuum,
@@ -235,10 +236,14 @@ class CueNebularSEDComponent(SEDModelComponent):
         units="dex",
     )
 
-    # Cross-component contract: read ionizing photon rate and stellar age grid
+    # Cross-component contract: read ionizing photon rate (Q_H) and stellar
+    # age grid. ``nion`` is the absolute ionising photon production rate of
+    # the CSP, published by the stellar component as the integral of L_λ /
+    # (hc/λ) below 911.76 Å; ``log10(nion)`` enters Cue as ``gas_logqion``.
     inputs: ClassVar[dict[str, str]] = {
         "ssp_ages_yr": "yr",
         "age_weights": "",
+        "nion": "photons/s",
     }
 
     # Cross-component contract: publish line wavelengths and luminosities
@@ -297,6 +302,7 @@ class CueNebularSEDComponent(SEDModelComponent):
         *,
         ssp_ages_yr: jnp.ndarray | None = None,
         age_weights: jnp.ndarray | None = None,
+        nion: jnp.ndarray | None = None,
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
         """Pure JAX prediction of Cue nebular emission lines and continuum.
 
@@ -376,10 +382,31 @@ class CueNebularSEDComponent(SEDModelComponent):
             gas_logco=gas_logco,
         )
 
-        # Default Q_H (ionizing photon rate)
-        # Used to normalize line luminosities from the NN output
-        gas_logqion = jnp.asarray(49.1)  # typical for young stellar populations
-        gas_logq = logU  # ionization parameter from physics
+        # Strömgren-corrected ionising photon rate at the training reference
+        # geometry (R_S = 1e19 cm); this is the *training* gas_logq subtracted
+        # in the line-luminosity scaling. The actual source ionising rate
+        # ``gas_logqion`` is then added back. Computing this here is what the
+        # legacy ``CueBackend._forward_lines`` path does; an earlier revision
+        # of this file set ``gas_logq = logU`` (~−3 dex), which disagreed with
+        # the legacy path by ~51 dex and was silently masked by the ±100-dex
+        # clip in ``predict_all_lines``. See tests/contract/test_cue_port.py
+        # ``test_cue_sed_component_uses_stromgren_gas_logq``.
+        gas_logq = _logq_from_logu(logU, gas_logn)
+        # Q_H of the modeled CSP, published by the stellar component as
+        # ``nion`` (photons/s, integral below 911.76 Å). Earlier revisions
+        # hardcoded ``gas_logqion = 49.1`` — ~3–4 dex below the Q_H of any
+        # realistic SF galaxy — which made line luminosities correspondingly
+        # under-predicted vs CIGALE / Cloudy. See test_cue_port.py
+        # ``test_cue_sed_component_uses_ssp_derived_qion``.
+        if nion is None:
+            raise KeyError(
+                "CueNebularSEDComponent requires upstream input 'nion' "
+                "(photons/s, integral of ionising luminosity below 911.76 Å) "
+                "from the stellar component. None of the input fed to "
+                "predict() carried 'nion' — check that a stellar component is "
+                "active upstream and published it to state.derived."
+            )
+        gas_logqion = jnp.log10(jnp.maximum(nion, 1.0))
 
         # Predict lines
         line_waves, line_lums = predict_all_lines(
