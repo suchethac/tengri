@@ -93,10 +93,13 @@ sphinx_gallery_conf = {
     "plot_gallery": "False" if os.environ.get("CI", "").lower() == "true" else "True",
     # Skip re-execution of examples whose source + md5 haven't changed since the
     # last build. Cuts incremental regen from ~25 min to seconds when only one
-    # example changed. The ignore_pattern above already hides the OOM-prone
-    # NUTS/VI scripts, so parallel execution is safe for the remaining ones.
+    # example changed.
     "run_stale_examples": True,
-    "parallel": int(os.environ.get("TENGRI_GALLERY_PARALLEL", "2")),
+    # Parallel execution is opt-in via env var (defaults to 1 / serial) because
+    # sphinx-gallery's parallel mode requires `joblib` which isn't a docs-build
+    # dependency in CI. The ignore_pattern above already hides the OOM-prone
+    # NUTS/VI scripts so 2-4 is safe locally if you have joblib installed.
+    "parallel": int(os.environ.get("TENGRI_GALLERY_PARALLEL", "1")),
     "remove_config_comments": True,
     "within_subsection_order": "FileNameSortKey",
     # Order the SECTIONS pedagogically (mirrors _GALLERY_SECTION_ORDER /
