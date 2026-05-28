@@ -77,6 +77,17 @@ from reproduction.cigale._drivers import units as U
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 
+# Unit-sanity guard: every panel below claims percent-level agreement,
+# which rests on the CIGALE-W/nm → tengri-erg/s/Hz converter in
+# ``_drivers/units.py``. A factor-of-10 or 1e7 bug there would silently
+# misshape every comparison. Assert the bolometric round-trip here so the
+# entire notebook trips at Setup if the converter ever drifts.
+_unit_check = U.verify_unit_conversion(rtol=1e-3)
+print(
+    f"unit-conversion bolometric round-trip: "
+    f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
+)
+
 # CIGALE's `sfhdelayed(..., normalise=True)` integrates the τ-delayed
 # shape to 1 M☉ formed. tengri's parametric SFHs adopt the Bagpipes /
 # Prospector convention: every shape is rescaled so that
@@ -276,6 +287,16 @@ save_fig("01_ssp_bc03.png")
 # CIGALE via the `normalise=True` flag, tengri via `log_total_mass = 0.0`.
 # (`sfh.tau` is a separate model — FSPS sfh=1 / Bagpipes "exponential":
 # monotonic decline from formation. Different physics.)
+#
+# **What the right panel actually plots.** Not a fine-grid analytic
+# evaluation of `t·exp(−t/τ)` — that would be a comparison of two
+# closed-form formulas rather than a test of tengri. Instead the panel
+# reads `state.derived["sfr_history"]` off a built `SEDModel`, on the
+# 64-point log-spaced lookback grid the SFH-convolution code actually
+# uses. The stepping near small `t_cosmic` (large lookback) is real;
+# every fit downstream sees this same grid. The printed
+# `∫SFR dt = 1.0000 M☉` check confirms the area integrates to
+# `log_total_mass`, the only test that matters for downstream physics.
 
 # %% [markdown]
 # ### τ-delayed
@@ -286,25 +307,42 @@ t_c, sfr_c = C.sfh_curve(
     f_burst=0.0, sfr_A=1.0, normalise=True,
 )
 
-# tengri's pipeline SFR history lives on a coarse ~256-bin log-spaced
-# lookback grid that looks jagged at early cosmic time. The sfh.delayed
-# shape is closed-form, so evaluate it analytically on a fine linear
-# grid for a smooth curve: SFR(t) ∝ t·exp(−t/τ) with t = cosmic age
-# since onset, τ = 1 Gyr, truncated at age = 5 Gyr. (This is the same
-# shape tengri's pipeline integrates — `sfh.delayed` is exactly
-# t·exp(−t/τ) — just sampled finely here for a clean curve.)
+# tengri's actual pipeline SFR history (not the analytic formula): build
+# a minimal SEDModel with the delayed SFH and read sfr_history off the
+# resulting state. The pipeline samples on a 64-point log-spaced
+# lookback grid — coarse and visibly stepped near early cosmic time.
+# That coarseness is what every fit downstream sees, so plotting it
+# honestly is the test: if the area under this curve doesn't integrate
+# to 1 M☉ formed (= log_total_mass = 0.0), tengri's SFH normalisation
+# is broken regardless of how clean the analytic shape looks.
 tau_gyr, age_gyr = 1.0, 5.0
-t_t = np.linspace(0.0, age_gyr, 500) * 1e9  # yr
-sfr_t = (t_t / (tau_gyr * 1e9)) * np.exp(-t_t / (tau_gyr * 1e9))
-# Match peak amplitude to CIGALE — both normalise to 1 M_sun formed, but
-# the per-code prefactor differs; the shape is what's under test.
-if sfr_t.max() > 0:
-    sfr_t = sfr_t / sfr_t.max() * sfr_c.max()
+_m_sfh = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "delayed", "tau_gyr": Fixed(tau_gyr), "age_gyr": Fixed(age_gyr),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+_state_sfh = _m_sfh.predict_state({})
+_lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
+_sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
+# Convert lookback time → cosmic age since SF onset (consistent with the
+# CIGALE x-axis above): t_cosmic = age_gyr - lbt
+t_t = (age_gyr - _lbt_yr / 1e9) * 1e9  # yr
+sfr_t = _sfr_history
+# Verify normalisation: trapezoid of SFR over cosmic-age axis should be
+# 10**log_total_mass = 1.0 M☉ within numerical accuracy of the 64-pt grid.
+# tengri's pipeline carries sfh_grid in decreasing lookback time, so
+# integrate against the increasing-time order.
+_idx = np.argsort(t_t)
+_mass_formed = float(np.trapezoid(sfr_t[_idx], t_t[_idx]))
+print(f"tengri pipeline ∫SFR dt = {_mass_formed:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, "pcigale.sed_modules.sfhdelayed (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri sfh.delayed (τ_gyr=1, age_gyr=5)"),
+    (ax_r, "tengri pipeline sfr_history (64-pt log-lbt)"),
 ):
     ax.set_xlabel("Cosmic age since SF onset [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
@@ -664,25 +702,32 @@ plt.show()
 # parameters. Cue requires the bare-stellar SSP that this notebook
 # already loaded.
 #
+# **Fiducial choice — young population.** Sections §3–§7 use a 5 Gyr
+# quiescent τ=1 Gyr galaxy (Boquien+2019 reference). Nebular line
+# emission, however, lives almost entirely in the ionising-photon
+# budget of stars ≲ 100 Myr old, and the 5 Gyr quiescent galaxy has
+# almost none. To showcase line emission honestly, §8 swaps to a
+# **τ=300 Myr, age=100 Myr** delayed SFH where Hα and the metal-line
+# forest are physically strong. Same logU, Z_gas, f_esc as the rest of
+# the notebook; only the SFH shifts to a younger reference.
+#
 # Each panel shows the stellar baseline (dashed), stellar + nebular
 # (solid), and the nebular component alone (dotted). The two emitters
 # see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
-# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`.
-# Cue fixes the gas density (CIGALE's `n_e = 100`) and the solar N/O,
-# C/O offsets internally — those CIGALE knobs have no tengri counterpart
-# yet, tracked in [tengri #458](https://github.com/suchethac/tengri/issues/458).
-#
-# Both panels include line + continuum nebular emission. The Cue side
-# previously read silent — the Q_H integration of the float32 BC03 SSP
-# overflowed to `inf`, baking ~zero line luminosities into the forward
-# pass (issue #458, fixed in #469: float64-cast at the integration site
-# plus a precompute age-cutoff that makes the BC03-from-CIGALE refit
-# ~600× faster).
+# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`,
+# `n_e = 100 cm⁻³`. Cue's gas-density and N/O, C/O knobs use their
+# CIGALE-faithful defaults (n_H = 100, solar). After #469 (float64
+# fix) and #477 (Strömgren-corrected Q_H wiring) the Cue forward
+# pipeline is internally consistent.
 
 # %%
-_sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
-                                age_burst=20, f_burst=0.0, sfr_A=1.0,
-                                normalise=True))
+# §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts
+# Myr values directly; tengri takes Gyr via tau_gyr/age_gyr.
+_TAU_MAIN_YOUNG_MYR = 300
+_AGE_MAIN_YOUNG_MYR = 100
+_sfh_args = ("sfhdelayed", dict(tau_main=_TAU_MAIN_YOUNG_MYR, age_main=_AGE_MAIN_YOUNG_MYR,
+                                tau_burst=50, age_burst=20, f_burst=0.0,
+                                sfr_A=1.0, normalise=True))
 sed_c_st = C.run_chain([
     _sfh_args, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
 ])
@@ -695,11 +740,15 @@ sed_c_neb = C.run_chain([
 ])
 w_c_neb, L_c_neb = C.to_lnu(sed_c_neb)
 
+_neb_sfh_kw = {"type": "delayed",
+               "tau_gyr": Fixed(_TAU_MAIN_YOUNG_MYR / 1000),
+               "age_gyr": Fixed(_AGE_MAIN_YOUNG_MYR / 1000),
+               "log_total_mass": Fixed(0.0), "*": FIXED}
+
 m_no_neb = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
+    sfh=_neb_sfh_kw,
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -708,8 +757,7 @@ s_no_neb = m_no_neb.predict_state({})
 m_neb = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
+    sfh=_neb_sfh_kw,
     neb={"type": "cue",
          "neb_logU": Fixed(-2.0),
          "neb_logZ_gas": Fixed(MET_LOGZSOL),  # Z_gas = 0.02 ≡ stellar Z
@@ -732,10 +780,9 @@ ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
           label="stellar + CLOUDY nebular")
 ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
 ax_l.legend(fontsize=8)
-# tengri side — Cue currently absorbs LyC at <912 Å but does not emit
-# the recycled photons back into ``sed_intrinsic`` (tracked in #458).
-# Plot the (essentially zero) Cue-only contribution so the gap is
-# visible against the CIGALE CLOUDY emission on the left panel.
+# tengri side — same three traces (stellar dashed, stellar+Cue solid,
+# Cue-only dotted). Post-#469 / #477 the Cue-only curve carries real
+# line + continuum emission across UV–optical.
 L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
                           - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
@@ -743,7 +790,7 @@ ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
 ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7,
           label="stellar + Cue")
 ax_r.plot(s_neb.wave, L_t_neb_only, "C1:", linewidth=1.4,
-          label="Cue nebular only (≈ 0 — #458)")
+          label="Cue nebular only")
 ax_r.legend(fontsize=8)
 _xmin_n = float(min(w_c_neb.min(), float(np.asarray(s_neb.wave).min())))
 _xmax_n = float(max(w_c_neb.max(), float(np.asarray(s_neb.wave).max())))
