@@ -1203,6 +1203,67 @@ print(
 
 
 # %% [markdown]
+# ## §13 Forward-model timing — order-of-magnitude sanity check
+#
+# Same fiducial galaxy on both sides — τ-delayed SFH, Calzetti dust at
+# `Av = 1`, DL07 IR, Cloudy v25 (BAGPIPES) / Cue v17 (tengri) nebular,
+# Inoue14 IGM at z = 0 — and time a single forward evaluation. Both
+# codes finish a full SED in ~10² ms; they are in the **same
+# performance class** at the public API for a single forward pass.
+#
+# tengri's real speed advantage is **not** the forward call. It is the
+# gradient: `jax.grad` differentiates the JIT'd objective at the cost
+# of roughly one extra forward pass, where any non-JAX code (BAGPIPES,
+# CIGALE) has to fall back to finite differences with `2 × n_params`
+# forward calls. For a 10-parameter model that is a 20× swing.
+#
+# Caveats: timings depend on the JAX cache state, the CPU, and whether
+# tengri's persistent JAX cache is warm. The numbers below are
+# illustrative orders of magnitude, not a benchmark.
+
+# %%
+import time
+
+_comp_b_full_timing = {
+    "redshift": 0.0,
+    "delayed": {
+        "metallicity": 1.0,
+        "age": AGE_GYR_FIDUCIAL,
+        "tau": TAU_GYR_FIDUCIAL,
+        "massformed": LOG_MASS_FIDUCIAL,
+    },
+    "dust": {
+        "type": "Calzetti",
+        "Av": AV_FIDUCIAL,
+        "eta": 1.0,
+        "qpah": QPAH_FIDUCIAL,
+        "umin": UMIN_FIDUCIAL,
+        "gamma": GAMMA_FIDUCIAL,
+    },
+    "nebular": {"logU": -2.0},
+}
+
+# Warm-up
+B._build_model(_comp_b_full_timing)
+_n_b = 20
+_t0 = time.perf_counter()
+for _ in range(_n_b):
+    _mg = B._build_model(_comp_b_full_timing)
+_t_b_per = (time.perf_counter() - _t0) / _n_b
+print(f"§13 BAGPIPES model_galaxy build: {_t_b_per * 1000:.1f} ms / call (warm, n={_n_b})")
+
+# tengri warm-up (compile the JIT). Reuse the §7 build.
+m_full.predict_state({})  # one warm call
+_n_t = 100
+_t0 = time.perf_counter()
+for _ in range(_n_t):
+    _ = m_full.predict_state({})
+_t_t_per = (time.perf_counter() - _t0) / _n_t
+print(f"§13 tengri SEDModel.predict_state:  {_t_t_per * 1000:.1f} ms / call (warm, n={_n_t})")
+print(f"§13 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
+
+
+# %% [markdown]
 # ## Summary
 #
 # Section-by-section, at matched parameters:
