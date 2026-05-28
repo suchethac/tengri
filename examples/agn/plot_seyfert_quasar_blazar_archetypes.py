@@ -77,9 +77,14 @@ def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
         "*": tengri.FIXED,
     }
     agn_dict.update(agn_blocks)
+    # ``sfh.type=const`` is parametrised by total stellar mass over the default
+    # 13.8 Gyr window; convert SFR → mass via M = SFR × Δt (+10.14 dex). The
+    # ``sfr_log=-10`` "negligible host" cases stay essentially zero; the
+    # ``sfr_log=2`` starburst case becomes a realistic ~10^12 M☉ ULIRG host.
+    log_total_mass = sfr_log + 10.14
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": sfr_log},
+        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
         dust=dust_config,
         agn=agn_dict,
         **COMMON,
