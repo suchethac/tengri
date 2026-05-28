@@ -329,7 +329,18 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     # _load_skirtor_default would store DynamicJaxprTracer values that
     # leak out of the trace scope (jax.errors.UnexpectedTracerError).
     with jax.ensure_compile_time_eval():
-        grid_jax = jnp.array(raw["total"])
+        # Prefer the dust-only grid when the v3 HDF5 layout provides it.
+        # The legacy v2 layout only stores ``total = disk + dust``, which
+        # smears the disc UV-optical into the IR normalisation; v3
+        # separates ``disk_emission`` and ``dust_emission`` (see
+        # ``scripts/download_skirtor_templates.py``). For the torus block
+        # we want IR-only — pairing with a separate disc block (e.g.
+        # ``disc/schartmann2005``) avoids the double-counting that
+        # biased the §9 FIR-tail audit (Option D in the #487/#503 audit
+        # threads). For v2 grids we fall back to ``total`` and the user
+        # gets the legacy disc-mixed-in behaviour.
+        _grid_key = "dust" if "dust" in raw else "total"
+        grid_jax = jnp.array(raw[_grid_key])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
         edges = tuple(edges_for_grid(ax) for ax in axes)
@@ -341,7 +352,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
-        agn_cos_inc: float = 0.5,
+        agn_cos_inc: float = 0.86602540378443864,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -364,7 +375,10 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_cos_inc : float
             Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless]
         agn_torus_frac : float
-            Fraction of L_bol reprocessed by the torus. [dimensionless]
+            Fraction of L_bol reprocessed by the torus, integrated
+            over the dust-emission spectrum. With the v3 grid (dust-
+            only template), this is the true covering-factor × dust
+            absorption efficiency. [dimensionless]
 
         Returns
         -------
@@ -459,7 +473,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
-        agn_cos_inc: float = 0.5,
+        agn_cos_inc: float = 0.86602540378443864,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
         **_kwargs,

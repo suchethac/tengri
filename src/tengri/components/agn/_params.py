@@ -115,8 +115,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_cos_inc",
-        Fixed(0.5),
-        "Cosine of inclination (0=edge-on, 1=face-on)",
+        # cos(30°) — matches CIGALE skirtor2016 ``i=30`` default
+        # (Boquien+2019 A&A 622, A103). Previous library default 0.5
+        # (= i=60°) silently disagreed with CIGALE's face-on type-1
+        # convention; the §9 reproduction audit revealed the
+        # inclination mismatch as the dominant source of residual at
+        # the SKIRTOR torus peak.
+        Fixed(0.86602540378443864),
+        "Cosine of inclination (0=edge-on, 1=face-on); default matches CIGALE i=30",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),

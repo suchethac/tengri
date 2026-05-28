@@ -133,7 +133,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
     def cat3d_wind_grid(
         wavelength: jnp.ndarray,
         agn_log_lbol: float = 44.0,
-        agn_cos_inc: float = 0.5,
+        agn_cos_inc: float = 0.86602540378443864,
         agn_a_cat3d: float = -2.0,
         agn_fwd_cat3d: float = 0.45,
         agn_torus_frac: float = 0.5,
