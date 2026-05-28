@@ -160,19 +160,6 @@ class DustSEDComponent:
                 Fixed(-0.7),
                 "Power-law attenuation slope (Charlot-Fall convention) [dimensionless]",
             ),
-            # Per-leaf slopes for Wild+07 / VW07 (closes #500). Default to
-            # the shared ``dust_slope`` so existing models are unchanged;
-            # override (FREE or Fixed(-1.3)) for VW07-style birth clouds.
-            ParamDeclaration(
-                "dust_slope_bc",
-                Fixed(-0.7),
-                "Birth-cloud power-law slope (Wild+07: -1.3) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "dust_slope_diff",
-                Fixed(-0.7),
-                "Diffuse-ISM power-law slope (Wild+07 / CF00: -0.7) [dimensionless]",
-            ),
             ParamDeclaration(
                 "dust_eta_balance",
                 Fixed(1.0),
@@ -359,10 +346,6 @@ class DustSEDComponent:
             t_birth=self.config.t_birth_yr,
             transition_width=self.config.transition_width_dex,
             n_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-            n_slope_bc=jnp.asarray(params["dust_slope_bc"]) if "dust_slope_bc" in params else None,
-            n_slope_diff=jnp.asarray(params["dust_slope_diff"])
-            if "dust_slope_diff" in params
-            else None,
             dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
             dust_delta=jnp.asarray(params.get("dust_delta", 0.0)),
             dust_Rv=jnp.asarray(params.get("dust_Rv", 3.1)),

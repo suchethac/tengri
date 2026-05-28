@@ -38,7 +38,6 @@ __all__ = [
     "quiescent_z0",
     "star_forming_photometry",
     "stochastic_sfh_jwst",
-    "vw07_attenuation",
 ]
 
 
@@ -364,43 +363,4 @@ def dust_demo() -> dict:
             slope=-0.7,
         ),
         redshift=Fixed(0.1),
-    )
-
-
-def vw07_attenuation() -> dict:
-    """Recipe for Wild+2007 two-component attenuation (BAGPIPES VW07 counterpart).
-
-    Wild, Charlot & Disney (2007, MNRAS 381, 543) define a Charlot-and-Fall-like
-    two-component model in which the birth-cloud (n_bc = -1.3) and diffuse-ISM
-    (n_diff = -0.7) attenuation curves have **independent** power-law slopes,
-    unlike the single-slope CF00 form tengri's other recipes default to. This
-    recipe leaves both slopes free with priors centred on the Wild+07 values
-    so a fit can recover the slope ratio that fits the data. Closes #500.
-
-    **SSP requirement:** any.
-
-    **Configuration:**
-    - **SFH**: Delayed double power-law (free)
-    - **Dust**: Two-component power law with FREE per-leaf slopes
-      (``dust_slope_bc`` ~ Uniform(-2.0, -0.5),
-       ``dust_slope_diff`` ~ Uniform(-1.2, -0.3))
-    - **Nebular**: Cue (off by default; turn on by overriding)
-
-    Returns
-    -------
-    dict
-        Nested-dict ready for ``SEDModel.build(**recipes.vw07_attenuation())``.
-    """
-    return dict(
-        sfh=builders.sfh.dpl(defaults=FREE),
-        dust=builders.dust.two_component(
-            defaults=FIXED,
-            law_bc="power_law",
-            law_diff="power_law",
-            tau_bc=Uniform(0.0, 4.0),
-            tau_diff=Uniform(0.0, 3.0),
-            slope_bc=Uniform(-2.0, -0.5),
-            slope_diff=Uniform(-1.2, -0.3),
-        ),
-        redshift=FREE,
     )

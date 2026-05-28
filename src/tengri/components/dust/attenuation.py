@@ -1598,8 +1598,6 @@ def two_component_dust(
     f_obscuration: float = 0.0,
     t_birth: float = 1e7,
     transition_width: float = 0.3,
-    n_slope_bc: float | None = None,
-    n_slope_diff: float | None = None,
     **law_params,
 ) -> jnp.ndarray:
     r"""Two-component dust attenuation following Charlot & Fall (2000) with smooth age transition.
@@ -1693,17 +1691,8 @@ def two_component_dust(
     >>> T.shape
     (64, 300)
     """
-    # Per-leaf slope override: VW07 / Wild+2007 style independent power-law
-    # slopes for birth-cloud and diffuse ISM. Falls back to the shared
-    # ``n_slope`` if a per-leaf slope is not set.
-    bc_params = dict(law_params)
-    diff_params = dict(law_params)
-    if n_slope_bc is not None:
-        bc_params["n_slope"] = n_slope_bc
-    if n_slope_diff is not None:
-        diff_params["n_slope"] = n_slope_diff
-    k_bc = resolve_dust_law(law_bc)(wavelength, **bc_params)
-    k_diff = resolve_dust_law(law_diff)(wavelength, **diff_params)
+    k_bc = resolve_dust_law(law_bc)(wavelength, **law_params)
+    k_diff = resolve_dust_law(law_diff)(wavelength, **law_params)
 
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
