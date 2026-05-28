@@ -46,7 +46,7 @@ DISC_MODELS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()

@@ -716,24 +716,34 @@ plt.show()
 # Each panel shows the stellar baseline (dashed), stellar + nebular
 # (solid), and the nebular component alone (dotted). The two emitters
 # see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
-# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`,
-# `n_e = 100 cm⁻³`. Cue's gas-density and N/O, C/O knobs use their
-# CIGALE-faithful defaults (n_H = 100, solar). After #469 (float64
-# fix) and #477 (Strömgren-corrected Q_H wiring) the Cue forward
-# pipeline is internally consistent.
+# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`.
+# tengri's `CueBackend` exposes `gas_logn`, `gas_logno`, `gas_logco` as
+# continuous parameters that take the CIGALE-faithful values (n_H = 100
+# cm⁻³ → `gas_logn = 2.0`; solar N/O, C/O → `gas_logno = gas_logco = 0.0`)
+# at the midpoint of their priors. (The earlier framing of #458 as
+# "those CIGALE knobs have no tengri counterpart" was wrong — the bug
+# was a silent normalisation in the SEDComponent path, fixed in #477.)
 #
-# **Honest residual.** Even at matched gas inputs, tengri's Cue Hα
-# peak reads **~3.5× lower than CIGALE's CLOUDY** at this fiducial —
-# and the same ~3.5× holds at the 5 Gyr quiescent fiducial used by
-# the rest of the notebook, so it isn't a stress-test artifact. The
-# remaining gap lives downstream of the gas knobs: Cue's neural
-# emulator was trained on a particular CLOUDY release with specific
-# T_e sampling and abundance prescription, and that training set
-# doesn't reproduce CIGALE's bundled CLOUDY grid bit-for-bit. The
-# nebular continuum shape and emission-line ratios reproduce well;
-# the absolute line normalisation does not. A future audit will
-# resolve whether the gap traces to Q_H normalisation, ionising-
-# spectrum power-law fit residuals, or NN-vs-grid offset.
+# Both panels include line + continuum nebular emission. The Cue side
+# previously read silent — three independent defects suppressed line
+# luminosities until late May 2026:
+# (1) Q_H integration in `fit_ionizing_spectrum` overflowed `inf` on
+#     float32 BC03 SSPs (closes #458, fixed in #469).
+# (2) `cue_model.py` set `gas_logq = logU` (~−3 dex) instead of the
+#     Strömgren-corrected value (~+48 dex); a ±100-dex saturation clip
+#     hid the error (fixed in #477; clip tightened to ±50 dex in #480).
+# (3) `gas_logqion` was hardcoded at 49.1 (~3-4 dex below the Q_H of a
+#     real SF galaxy); the SEDComponent now consumes the SSP-aggregated
+#     `nion` published by `StellarSEDComponent` (fixed in #477).
+#
+# **Remaining residual.** Even with all three defects fixed and gas
+# inputs matched, tengri's Cue Hα peak reads **~3.5× lower than
+# CIGALE's CLOUDY** at this fiducial (and the same ratio at 5 Gyr
+# quiescent — not a stress-test artifact). The gap lives downstream
+# of the gas knobs: Cue was trained on Cloudy 17 while CIGALE bundles
+# Cloudy 13.x grids, and Cue's bare-stellar SSP path differs from
+# CIGALE's wNE-SSP convolution. Nebular continuum shape and emission-
+# line ratios reproduce well; the absolute line normalisation does not.
 
 # %%
 # §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts
@@ -795,9 +805,10 @@ ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
           label="stellar + CLOUDY nebular")
 ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
 ax_l.legend(fontsize=8)
-# tengri side — same three traces (stellar dashed, stellar+Cue solid,
-# Cue-only dotted). Post-#469 / #477 the Cue-only curve carries real
-# line + continuum emission across UV–optical.
+# tengri side — post-#469/#477 the Cue-only curve carries real line +
+# continuum emission across UV–optical. Agreement is limited by Cloudy
+# version (17 vs 13.x), bare-stellar vs wNE-SSP path, and line-broadening
+# kernel; see markdown above for the ~3.5× Hα residual.
 L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
                           - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",

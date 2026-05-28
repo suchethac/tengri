@@ -35,7 +35,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_PER_S = 2.998e18
 SPIN_VALUES = (0.0, 0.3, 0.6, 0.9, 0.998)
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()

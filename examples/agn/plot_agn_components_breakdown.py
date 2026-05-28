@@ -34,7 +34,7 @@ C_AA_PER_S = 2.998e18
 
 ssp = tengri.load_ssp()
 COMMON = dict(
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
+    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
