@@ -77,7 +77,8 @@ curves · §5 attenuation applied · §6 dust IR + energy balance ·
 §7 panchromatic · §8 nebular (Cloudy v25 vs Cue v17) · §9 LSF /
 velocity broadening · §10 double-power-law SFH · §11 lognormal SFH ·
 §12 IGM · §13 forward-model timing · §14 SDSS ugriz photometry ·
-§15 metallicity sensitivity.
+§15 metallicity sensitivity · §16 Asada+2025 CGM damping wing ·
+§17 Leja+2019 continuity non-parametric SFH.
 
 AGN, X-ray, and radio sections are skipped — BAGPIPES has no
 counterpart. See `reproduction/cigale/` for those.
@@ -103,10 +104,12 @@ either reproduces the reference, or surfaces a gap.
 | 13 | Forward-model timing | Both codes finish a full SED build in ~80–120 ms / call — same performance class for forward-only use. tengri's real speed advantage is `jax.grad` (~1 extra fwd pass vs `2 × n_params` finite differences for non-JAX codes). |
 | 14 | SDSS ugriz photometry | Shared filter set on both sides → tengri 0.3–0.7 mag brighter, largest in u-band, shrinking toward z. **This is §8 projecting:** the Cue v17 / Cloudy v25 nebular discrepancy dominates the broadband ratio. Removing the nebular block on both sides collapses the residual to §3-level ~0.01 mag. |
 | 15 | Metallicity sensitivity | Z ∈ {0.2, 1, 2.5} Z⊙ at the fiducial SFH on both sides. Both codes track the standard age-metallicity-degeneracy direction (high-Z → redder + deeper Balmer/Mg/Fe absorption). Visual match. |
+| 16 | Asada+2025 CGM damping wing | tengri-only experimental feature (`add_cgm=True`). At z = 7, log_NHI = 22.5 the simplified Lorentzian in tengri produces only ~10⁻⁴ optical depth a few Å redward of Lyα; the published Asada/Totani+06 form predicts O(0.1) over several Å. **Filed as a tengri bug** (units factor + simplified vs full cross-section). |
+| 17 | Leja+2019 continuity SFH | Non-parametric piecewise-constant SFH (the BAGPIPES `Further Examples 2` recipe). Three configurations — flat, recent burst, quenched — match between codes once the convention difference (BAGPIPES indexes `dsfr_i` oldest→youngest, tengri young→old) is reconciled by reversing the ratio array. Hard agreement on the SFR(t) shape at matched parameters. |
 
 ## Open follow-ups surfaced by this comparison
 
-Seven tengri issues were filed while writing this notebook. Each is
+Eight tengri issues were filed while writing this notebook. Each is
 small (≤ 50 LOC) and unblocked from this PR.
 
 - **igm**: `inoue14` returns 0 below the Lyman limit; the Inoue+2014
@@ -133,6 +136,10 @@ small (≤ 50 LOC) and unblocked from this PR.
   birth-cloud and diffuse) has no tengri counterpart. The closest is
   `two_component` with a shared slope — a gap for BAGPIPES users
   who fit with VW07.
+- **igm**: tengri's Asada+2025 CGM damping wing implementation uses a
+  simplified Lorentzian that gives essentially zero absorption
+  redward of Lyα — `_SIGMA_0` value and missing `(ν/ν_α)^4`
+  frequency dependence vs the Totani+06 / Asada published form.
 
 Any percent-level disagreement that does not have a one-sentence
 physics explanation in the figure caption above the audit table is

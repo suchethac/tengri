@@ -1407,6 +1407,194 @@ save_fig("15_metallicity_sweep.png")
 
 
 # %% [markdown]
+# ## §16 CGM damping wing (Asada+2025) — tengri-only experimental feature
+#
+# Inoue+2014 captures the *mean* intergalactic medium but does not
+# include the damping-wing absorption from neutral hydrogen in the
+# **circumgalactic** medium that's important at z > 5 (epoch of
+# reionization). tengri ships an experimental Asada+2025 CGM damping-
+# wing model (arXiv:2410.21543, accepted ApJL) in
+# `tengri.components.igm.igm_transmission` via the `add_cgm=True`
+# switch. BAGPIPES has no counterpart.
+#
+# This panel shows the CGM contribution at z = 7: tengri's Inoue14
+# alone (solid) vs Inoue14 + Asada CGM damping wing (dashed). We push
+# `cgm_log_nhi = 22.5` (well above the default 21.0) to make the wing
+# visible on this plot — at the default the absorption peaks at ~0.5
+# dex at line centre and falls off in a fraction of an Å.
+#
+# **Implementation honesty**. tengri's `_cgm_damping_wing_tau` uses a
+# simplified Lorentzian:
+# `σ(Δν) = σ_0 γ_α/(4π) / [Δν² + (γ_α/4π)²]`.
+# The published Asada+2025 model follows Totani+06 with the full
+# frequency-dependent cross-section
+# `σ_α(ν) = (3λ²f Λ/8π) · Λ (ν/ν_α)⁴ / [4π²(ν−ν_α)² + Λ²(ν/ν_α)⁶/4]`
+# and a different sigmoid evolution
+# `log10(N_HI(z)) = 3.592/(1+exp(−1.841(z−6))) + 18.001`.
+# The simplified form likely underestimates the redward wing extent
+# at high N_HI; filed for follow-up.
+#
+# **Status**: experimental in tengri (`# not yet fully validated
+# against observations`). Three free knobs (`cgm_z_mid`, `cgm_dz`,
+# `cgm_log_nhi`); BAGPIPES users fitting z ≳ 6 spectra should treat
+# these as nuisance parameters with priors informed by Asada+2025.
+
+# %%
+from tengri.components.igm import igm_transmission as _tngigm_with_cgm
+
+Z_CGM = 7.0
+# Two panels: full window (900–1260 Å rest) showing the IGM cliff at
+# Lyα, then a zoom into 1210–1260 Å rest showing the redward damping
+# wing shape — the only place where the Asada CGM separates from
+# pure Inoue14 at high z (where Inoue14 already kills everything
+# blueward).
+wave_rest_full = np.linspace(900.0, 1260.0, 7001)
+wave_rest_zoom = np.linspace(1215.5, 1220.0, 4001)
+
+T_inoue_full = np.asarray(_tngigm_with_cgm(wave_rest_full * (1.0 + Z_CGM), np.asarray(Z_CGM)))
+T_cgm_full = np.asarray(
+    _tngigm_with_cgm(
+        wave_rest_full * (1.0 + Z_CGM), np.asarray(Z_CGM), add_cgm=True, cgm_log_nhi=22.5
+    )
+)
+T_inoue_zoom = np.asarray(_tngigm_with_cgm(wave_rest_zoom * (1.0 + Z_CGM), np.asarray(Z_CGM)))
+T_cgm_zoom = np.asarray(
+    _tngigm_with_cgm(
+        wave_rest_zoom * (1.0 + Z_CGM), np.asarray(Z_CGM), add_cgm=True, cgm_log_nhi=22.5
+    )
+)
+
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5))
+for ax in (ax_l, ax_r):
+    ax.axvline(1215.67, color="grey", linestyle=":", alpha=0.6, label=r"Ly$\alpha$ rest")
+    ax.set_xlabel(r"rest-frame $\lambda$ [Å]")
+    ax.grid(True, alpha=0.3)
+ax_l.plot(wave_rest_full, T_inoue_full, "C0-", linewidth=2.0, label="Inoue14 (no CGM)")
+ax_l.plot(wave_rest_full, T_cgm_full, "C1--", linewidth=2.0, label="Inoue14 + Asada CGM")
+ax_l.set_ylabel(r"transmission $T(\lambda, z)$")
+ax_l.set_xlim(900, 1260)
+ax_l.set_ylim(0, 1.05)
+ax_l.set_title(rf"Full window at $z = {Z_CGM:g}$ — IGM cuts off at Ly$\alpha$")
+ax_l.legend(fontsize=10)
+ax_r.plot(wave_rest_zoom, T_inoue_zoom, "C0-", linewidth=2.0, label="Inoue14 (no CGM)")
+ax_r.plot(wave_rest_zoom, T_cgm_zoom, "C1--", linewidth=2.0, label="Inoue14 + Asada CGM")
+ax_r.set_ylabel(r"transmission $T(\lambda, z)$")
+ax_r.set_xlim(1215.5, 1220.0)
+ax_r.set_ylim(0.0, 1.05)
+ax_r.set_title(r"Redward zoom — Asada damping wing shape")
+ax_r.legend(fontsize=10)
+fig.tight_layout()
+save_fig("16_cgm_asada.png")
+
+# Diagnostic at +5 Å redward of Lyα (1220.67 Å rest), where the
+# damping wing is at its peak effect on observable continuum.
+_idx_red = np.argmin(np.abs(wave_rest_zoom - 1220.67))
+print(
+    f"§16 Asada CGM at z={Z_CGM:g}, λ_rest=1220.67 Å (5 Å redward of Ly-α): "
+    f"T(no CGM) = {T_inoue_zoom[_idx_red]:.3f}, "
+    f"T(with CGM) = {T_cgm_zoom[_idx_red]:.3f}, "
+    f"τ_CGM ≈ {-np.log(max(T_cgm_zoom[_idx_red], 1e-10) / max(T_inoue_zoom[_idx_red], 1e-10)):.3f}"
+)
+
+
+# %% [markdown]
+# ## §17 Non-parametric continuity SFH (Leja+2019)
+#
+# BAGPIPES' workhorse non-parametric SFH (see the Carnall+ "Further
+# Examples 2" notebook, *The Leja2019 non-parametric continuity SFH
+# model*) is the **piecewise-constant SFR with log-ratios between
+# adjacent bins**, with a Student-t prior on the ratios pushing
+# adjacent bins toward equality. tengri ships the same shape under
+# `sfh.type="continuity"` with the same parametrisation.
+#
+# Both codes operate on a 7-bin grid by default:
+#
+# ```
+# bin edges (Gyr lookback): [0, 0.03, 0.1, 0.3, 1, 3, 6, 13.7]
+# free params:              log-ratio between bin i and bin i+1 (×6)
+# prior on each ratio:      StudentT(μ=0, σ=0.3, df=2)
+# ```
+#
+# **Convention warning.** BAGPIPES indexes `dsfr_i` from OLDEST to
+# YOUNGEST (Leja+2019 paper convention): `dsfr_1 = log10(SFR_bin1 /
+# SFR_bin2)` where bin 1 is the oldest. tengri's `ratio_i` indexes from
+# YOUNGEST to OLDEST. Setting the same ratio array on both sides
+# therefore produces **time-reversed** SFR(t) — same physics, different
+# parameter ordering. The panel below uses three configurations with
+# the **arrays reversed on the BAGPIPES side** so both panels show the
+# same SFH shape.
+
+# %%
+# Bin edges shared between codes. Both want them in **increasing**
+# order (lookback time from 0 to age of universe). BAGPIPES expects
+# Myr; tengri expects Gyr.
+_BIN_EDGES_GYR = [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7]
+_BIN_EDGES_MYR_ASC = [e * 1e3 for e in _BIN_EDGES_GYR]
+
+_cases = [
+    ("flat", [0.0] * 6),
+    ("recent burst", [0.0, 0.0, 0.0, 0.0, +0.6, +0.6]),
+    ("quenched", [+0.5, +0.5, 0.0, -0.5, -0.5, -0.5]),
+]
+
+fig, axes = plt.subplots(len(_cases), 2, figsize=(13, 8), sharex=True)
+for row, (label, ratios) in enumerate(_cases):
+    # BAGPIPES side
+    comp_b = {
+        "redshift": 0.0,
+        "continuity": {
+            "metallicity": 1.0,
+            "massformed": LOG_MASS_FIDUCIAL,
+            "bin_edges": _BIN_EDGES_MYR_ASC,
+            # BAGPIPES indexes dsfr_i from OLDEST to YOUNGEST — reverse
+            # the array so the SFR(t) shape matches tengri's young-first
+            # convention.
+            **{f"dsfr{i + 1}": ratios[5 - i] for i in range(6)},
+        },
+    }
+    mg_b_c = B._build_model(comp_b)
+    t_b_c = np.asarray(mg_b_c.sfh.ages, dtype=np.float64)
+    sfr_b_c = np.asarray(mg_b_c.sfh.sfh, dtype=np.float64)
+
+    # tengri side
+    m_c = SEDModel.build(
+        ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
+        sfh={
+            "type": "continuity",
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            **{f"ratio_{i}": Fixed(ratios[i]) for i in range(6)},
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        redshift=Fixed(0.0),
+    )
+    s_c = m_c.predict_state({})
+    lbt_t_c = np.asarray(s_c.derived["sfh_grid_lbt_yr"])
+    sfr_t_c = np.asarray(s_c.derived["sfr_history"])
+
+    ax_l, ax_r = axes[row]
+    ax_l.plot(t_b_c / 1e9, sfr_b_c, "C0-", linewidth=2.0)
+    ax_r.plot(lbt_t_c / 1e9, sfr_t_c, "C1-", linewidth=2.0)
+    for ax in (ax_l, ax_r):
+        ax.set_xlim(0, 13.7)
+        ax.set_yscale("log")
+        ax.set_ylim(1e-1, 1e2)
+        ax.set_ylabel(r"SFR [$M_\odot/\mathrm{yr}$]")
+        ax.grid(True, alpha=0.3)
+        for edge in _BIN_EDGES_GYR:
+            ax.axvline(edge, color="grey", linestyle=":", alpha=0.25)
+    ax_l.set_title(f"BAGPIPES continuity — {label}")
+    ax_r.set_title(f"tengri continuity — {label}")
+
+for ax in axes[-1]:
+    ax.set_xlabel("lookback time [Gyr]")
+
+fig.tight_layout()
+save_fig("17_sfh_continuity_leja.png")
+
+
+# %% [markdown]
 # ## Summary
 #
 # Section-by-section, at matched parameters:
