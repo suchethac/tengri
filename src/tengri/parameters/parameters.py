@@ -352,7 +352,7 @@ class Parameters:
 
         spec = Parameters(
             mean_sfh_type=["dpl", "field"],
-            n_grid=64,
+            n_grid=256,
             # Dust attenuation
             dust_law_bc="kriek_conroy",
             dust_f_obscuration=Uniform(0.0, 0.5),
@@ -387,7 +387,7 @@ class Parameters:
         # ── Settings ──────────────────────────────────────────────
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
-        n_grid = int(kwargs.pop("n_grid", 64))
+        n_grid = int(kwargs.pop("n_grid", 256))
         # Non-parametric SFH bin edges (``prospector_beta`` and other
         # ``_NONPARAM_NAMES`` entries). Stored as a structural setting
         # so ``_build_legacy`` can forward to ``resolve_sfh(...,

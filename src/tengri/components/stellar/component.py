@@ -110,7 +110,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     name: str = "stellar"
     sfh_model: str = "tsnorm"
     field: bool = False
-    n_grid: int = 64
+    n_grid: int = 256
     metallicity_model: str = "delta"
     sps_backend: str = "dsps"
     use_alpha_grid: bool = False

@@ -143,7 +143,7 @@ def build_components(
     sfh_model: str = "tsnorm",
     field: bool = False,
     metallicity_model: str = "delta",
-    n_grid: int = 64,
+    n_grid: int = 256,
     lgmet_scatter: float = 0.2,
     # Nebular
     nebular_backend: str | None = "baked_in",

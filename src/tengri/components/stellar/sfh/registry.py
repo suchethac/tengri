@@ -45,7 +45,6 @@ from tengri.components.stellar.sfh.mean_sfh import (
     buat08,
     constant,
     constant_then_exponential,
-    declining_exponential,
     delayed_bq,
     delayed_exponential,
     dpl,
@@ -561,39 +560,16 @@ _register(
     short_doc="Delayed exponential SFH",
 )
 
-# --- tau (declining exponential, matches FSPS sfh=1 / bagpipes 'exponential') ---
-# SFR(t_lb) = peak * exp(-(age - t_lb)/tau): highest at galaxy formation (t_lb=age),
-# declining to present (t_lb=0).  See declining_exponential for full derivation.
-# Note: this is NOT CIGALE's sfhdelayed (which is tau-delayed and rises from 0
-# at formation). Use ``name="delayed"`` for CIGALE-equivalent SFH.
-_register(
-    SFHModelSpec(
-        name="tau",
-        fn=declining_exponential,
-        params={
-            "sfh_tau_log_total_mass": ParamDef(
-                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
-            ),
-            "sfh_tau_tau_gyr": ParamDef(
-                "e-folding timescale (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 10.0)
-            ),
-            "sfh_tau_age_gyr": ParamDef(
-                "Galaxy age / lookback time of formation (Gyr)",
-                _lo_positive,
-                "must have lo > 0",
-                Uniform(0.5, 13.0),
-            ),
-        },
-        settings={},
-        internal_param_map={
-            "sfh_tau_log_total_mass": ("log_total_mass", 1.0, 0.0),
-            "sfh_tau_tau_gyr": ("tau", 1e9, 0.0),
-            "sfh_tau_age_gyr": ("age", 1e9, 0.0),
-        },
-        composition_type="additive",
-    ),
-    short_doc="Declining exponential SFH (FSPS/bagpipes)",
-)
+# Note: the FSPS / Bagpipes-"exponential" declining-from-formation shape
+# (``declining_exponential`` in :mod:`tengri.components.stellar.sfh.mean_sfh`)
+# is **no longer registered** as ``"tau"``. Confusing it with CIGALE's
+# ``sfhdelayed`` (which is τ-delayed and rises from zero) caused a
+# silent wavelength-dependent residual in early audits — see #406 and
+# the reproduction notebook §2. The only τ-style SFH the registry now
+# exposes is ``"delayed"`` below, which matches CIGALE / Bagpipes
+# ``delayed``. The ``declining_exponential`` function remains importable
+# from :mod:`tengri.components.stellar.sfh.mean_sfh` for users who need
+# the FSPS-``sfh=1`` shape and are willing to compose it manually.
 
 # --- delayed (τ-delayed, matches CIGALE sfh_delayed / Bagpipes 'delayed') ---
 # SFR(T) ∝ T · exp(-T/τ) with T = age - t_lb. Rises from 0 at formation,
