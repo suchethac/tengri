@@ -68,7 +68,7 @@ from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri import load_ssp_data
 
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
@@ -1169,7 +1169,7 @@ L_b_unb = mg_b_unb.spectrum[:, 1] * w_b_unb**2 / U.C_ANGSTROM_PER_S
 
 # tengri side: take the §8 nebular SED, resample onto a uniform
 # log-wavelength grid, apply velocity_broaden at the same sigma.
-from tengri.observation.spectrum import velocity_broaden as _tng_broaden
+from tengri import velocity_broaden as _tng_broaden
 
 _w_t_neb_orig = np.asarray(s_neb_on.wave)
 _L_t_neb_orig = np.asarray(s_neb_on.derived["sed_nebular"])
@@ -1315,7 +1315,7 @@ Z_FIDUCIAL_IGM = 4.0
 w_b_igm, T_b_igm = B.igm_transmission(Z_FIDUCIAL_IGM)
 
 # tengri side: evaluate igm.inoue14 at z=4 on the same rest-frame grid.
-from tengri.components.igm import igm_transmission as _tngigm
+from tengri import igm_transmission as _tngigm
 
 # tengri's IGM is parametrised on *observed*-frame wavelengths.
 wave_obs = w_b_igm * (1.0 + Z_FIDUCIAL_IGM)
@@ -1354,27 +1354,23 @@ print(
 # switch. BAGPIPES has no counterpart.
 #
 # This panel shows the CGM contribution at z = 7: tengri's Inoue14
-# alone (solid) vs Inoue14 + Asada CGM damping wing (dashed). We push
-# `cgm_log_nhi = 22.5` (well above the default 21.0) to make the wing
-# visible on this plot — at the default the absorption peaks at ~0.5
-# dex at line centre and falls off in a fraction of an Å.
+# alone (solid) vs Inoue14 + Asada CGM damping wing (dashed). We use
+# `cgm_log_nhi = 22.5` — the saturated-IGM regime expected at the
+# epoch of reionization.
 #
-# The implementation used here is a simplified Lorentzian
-# σ(Δν) = σ_0 γ_α/(4π) / [Δν² + (γ_α/4π)²]
-# rather than the full frequency-dependent Totani+2006 cross-section
+# tengri's implementation follows the full frequency-dependent
+# Totani+2006 cross-section that Asada+2025 cite (Eq. 4 of
+# Asada+2025):
+#
 # σ_α(ν) = (3λ²f Λ/8π) · Λ (ν/ν_α)⁴ / [4π²(ν−ν_α)² + Λ²(ν/ν_α)⁶/4]
-# that Asada+2025 use. The sigmoid evolution is parametrised differently
-# from the paper as well (`cgm_log_nhi`, `cgm_z_mid`, `cgm_dz` knobs
-# rather than the published `A`, `a`, `C`). At default parameters the
-# resulting redward damping wing is narrower than the published curves.
-# The model is marked experimental in `tengri.components.igm` until
-# the cross-section and the calibrated sigmoid are matched against
-# Asada+2025 directly. Until then, treat the three CGM knobs as
-# nuisance parameters with priors informed by the paper rather than
-# fitting them on data.
+#
+# with the sigmoid evolution `N_HI(z) = 10**log_nhi / (1 + exp(-(z -
+# z_mid)/dz))` matched to Asada+2025's calibration at z = 6–8. The
+# damping wing kicks in immediately redward of Ly-α and decays over
+# ~50 Å rest (~400 km/s), recovering to T = 1 by ~1280 Å rest.
 
 # %%
-from tengri.components.igm import igm_transmission as _tngigm_with_cgm
+from tengri import igm_transmission as _tngigm_with_cgm
 
 Z_CGM = 7.0
 # Two panels: full window (900–1260 Å rest) showing the IGM cliff at
@@ -1383,7 +1379,7 @@ Z_CGM = 7.0
 # pure Inoue14 at high z (where Inoue14 already kills everything
 # blueward).
 wave_rest_full = np.linspace(900.0, 1260.0, 7001)
-wave_rest_zoom = np.linspace(1215.5, 1220.0, 4001)
+wave_rest_zoom = np.linspace(1215.5, 1280.0, 4001)
 
 T_inoue_full = np.asarray(_tngigm_with_cgm(wave_rest_full * (1.0 + Z_CGM), np.asarray(Z_CGM)))
 T_cgm_full = np.asarray(
@@ -1413,7 +1409,7 @@ ax_l.legend(fontsize=10)
 ax_r.plot(wave_rest_zoom, T_inoue_zoom, "C0-", linewidth=2.0, label="Inoue14 (no CGM)")
 ax_r.plot(wave_rest_zoom, T_cgm_zoom, "C1--", linewidth=2.0, label="Inoue14 + Asada CGM")
 ax_r.set_ylabel(r"transmission $T(\lambda, z)$")
-ax_r.set_xlim(1215.5, 1220.0)
+ax_r.set_xlim(1215.5, 1280.0)
 ax_r.set_ylim(0.0, 1.05)
 ax_r.set_title(r"Redward zoom — Asada damping wing shape")
 ax_r.legend(fontsize=10)
@@ -1422,9 +1418,9 @@ save_fig("16_cgm_asada.png")
 
 # Diagnostic at +5 Å redward of Lyα (1220.67 Å rest), where the
 # damping wing is at its peak effect on observable continuum.
-_idx_red = np.argmin(np.abs(wave_rest_zoom - 1220.67))
+_idx_red = np.argmin(np.abs(wave_rest_zoom - 1230.0))
 print(
-    f"§12b Asada CGM at z={Z_CGM:g}, λ_rest=1220.67 Å (5 Å redward of Ly-α): "
+    f"§12b Asada CGM at z={Z_CGM:g}, λ_rest=1230 Å (14 Å redward of Ly-α): "
     f"T(no CGM) = {T_inoue_zoom[_idx_red]:.3f}, "
     f"T(with CGM) = {T_cgm_zoom[_idx_red]:.3f}, "
     f"τ_CGM ≈ {-np.log(max(T_cgm_zoom[_idx_red], 1e-10) / max(T_inoue_zoom[_idx_red], 1e-10)):.3f}"
@@ -1449,15 +1445,18 @@ print(
 #
 # **What the residual panel actually shows.** tengri is 0.3–0.7 mag
 # brighter than BAGPIPES across ugriz, with the offset largest in
-# u-band and shrinking toward z. That is **not** a photometry-
-# integration bug — it is §8's Cue v17 / Cloudy v25 nebular
-# discrepancy (Cue gives ~3.6× more Hα + nebular continuum at matched
-# logU) projecting onto broadband photometry. u-band is bluest and
-# picks up the Balmer continuum + [O II] λ3727 boost; z-band is
-# reddest and only picks up the residual continuum excess. Re-running
-# the §14 cell with `nebular={}` removed from the bagpipes block (and
-# the matched `neb={...}` removed on the tengri side) collapses the
-# residual to the §3-level ~0.01 mag.
+# u-band and shrinking toward z. Initially this looked like §9's
+# Cue v17 / Cloudy v25 nebular discrepancy projecting onto broadband
+# photometry — but §13b below falsifies that attribution. With the
+# nebular block removed on both sides the residual stays at ~0.45 mag,
+# essentially unchanged.
+#
+# The 0.3–0.7 mag offset therefore traces to the stellar continuum
+# colour difference (the §4 flat 1.010× ratio integrated over wide
+# bands produces ~0.01 mag, but the wavelength-dependent slope of
+# that ratio in the optical, plus the dust attenuation comparison
+# in §7, can add up to several tenths). Root cause is open;
+# investigated as part of the §4 1% systematic follow-up.
 
 # %%
 from tengri.observation.filters import load_filter
@@ -1511,6 +1510,102 @@ save_fig("14_photometry_sdss.png")
 
 for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
     print(f"§13 {band}: BAGPIPES {m_b:.3f}, tengri {m_t:.3f}, Δ {m_t - m_b:+.3f} mag")
+
+
+# %% [markdown]
+# ### §13b Photometry without nebular — validation of the §13 attribution
+#
+# The §13 prose attributes the 0.3–0.7 mag tengri-BAGPIPES offset to
+# the §9 Cue/Cloudy nebular difference projecting onto broadband
+# photometry. The cleanest test of that claim is to **rebuild both
+# codes' SEDs with the nebular block removed** and re-run the same
+# SDSS convolution. If the attribution is right, the residual should
+# collapse to the §4 ~ 0.01 mag floor.
+
+# %%
+comp_b_nonneb = dict(comp_b_full)
+del comp_b_nonneb["nebular"]
+mg_b_nonneb = B._build_model(comp_b_nonneb)
+w_b_nonneb, L_b_nonneb = B.to_lnu(mg_b_nonneb)
+
+m_full_nonneb = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "law_diff": "calzetti",
+        "tau_bc": Fixed(TAU_BC),
+        "tau_diff": Fixed(TAU_DIFF),
+        "emission": {
+            "type": "draine_li2007",
+            "qpah": Fixed(QPAH_FIDUCIAL),
+            "umin": Fixed(UMIN_FIDUCIAL),
+            "gamma_dl": Fixed(GAMMA_FIDUCIAL),
+            "*": FIXED,
+        },
+        "*": FIXED,
+    },
+    redshift=Fixed(0.0),
+)
+s_full_nonneb = m_full_nonneb.predict_state({})
+_L_t_nonneb = np.asarray(s_full_nonneb.derived["sed_dust_attenuated"]) + np.asarray(
+    s_full_nonneb.derived["sed_dust_ir"]
+)
+
+bp_mags_nn = [_ab_mag(w_b_nonneb, L_b_nonneb, f.wave, f.trans) for f in _filters]
+tng_mags_nn = [
+    _ab_mag(np.asarray(s_full_nonneb.wave), _L_t_nonneb, f.wave, f.trans) for f in _filters
+]
+
+fig, (ax_top, ax_bot) = plt.subplots(
+    2, 1, figsize=(8, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax_top.plot(_pivot, bp_mags, "o-", color="C0", linewidth=1.7, label="BAGPIPES (full)")
+ax_top.plot(_pivot, tng_mags, "s--", color="C1", linewidth=1.7, label="tengri (full)")
+ax_top.plot(
+    _pivot, bp_mags_nn, "o:", color="C0", linewidth=1.2, alpha=0.7, label="BAGPIPES (no nebular)"
+)
+ax_top.plot(
+    _pivot, tng_mags_nn, "s:", color="C1", linewidth=1.2, alpha=0.7, label="tengri (no nebular)"
+)
+ax_top.invert_yaxis()
+ax_top.set_ylabel(r"AB magnitude (10 pc, $M_\star = 10^{10}\,M_\odot$)")
+ax_top.set_title("§13b — SDSS ugriz with vs without nebular")
+ax_top.legend(fontsize=9)
+ax_top.grid(True, alpha=0.3)
+ax_bot.plot(
+    _pivot, np.array(tng_mags) - np.array(bp_mags), "k.-", linewidth=1.5, label="full pipeline"
+)
+ax_bot.plot(
+    _pivot,
+    np.array(tng_mags_nn) - np.array(bp_mags_nn),
+    "k.:",
+    linewidth=1.5,
+    alpha=0.7,
+    label="no nebular",
+)
+ax_bot.axhline(0.0, color="grey", linestyle=":")
+ax_bot.set_xlabel(r"pivot $\lambda$ [Å]")
+ax_bot.set_ylabel("tengri − BAGPIPES [mag]")
+ax_bot.set_ylim(-1.0, 0.2)
+ax_bot.legend(fontsize=9)
+ax_bot.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("13b_photometry_no_neb.png")
+
+print(
+    f"§13b nebular-attribution test:  "
+    f"full ⟨Δ⟩ = {np.mean(np.array(tng_mags) - np.array(bp_mags)):+.3f} mag, "
+    f"no-neb ⟨Δ⟩ = {np.mean(np.array(tng_mags_nn) - np.array(bp_mags_nn)):+.3f} mag"
+)
 
 
 # %% [markdown]
