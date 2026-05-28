@@ -58,8 +58,10 @@ class ShockNebular(SEDModelComponent):
     name = "shock"
     parameter_prefix = "shock_"
 
-    log_l_halpha = Uniform(38.0, 44.0, description="log Hα luminosity", units="dex (erg/s)")
-    velocity = Uniform(150.0, 1000.0, description="shock velocity", units="km/s")
+    log_l_halpha = Uniform(
+        38.0, 44.0, description="log Hα luminosity", units="dex (erg/s)", default=41.0
+    )
+    velocity = Uniform(150.0, 1000.0, description="shock velocity", units="km/s", default=200.0)
     log_density = Fixed(0.0, description="log pre-shock density", units="dex (cm^-3)")
     b_over_sqrt_n = Fixed(1.0, description="magnetic-field parameter", units="μG")
     line_sigma_aa = Fixed(0.0, description="Gaussian line width", units="Å")

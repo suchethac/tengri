@@ -278,17 +278,23 @@ class TestAnisotropicPolarLuminosity:
         assert not np.isclose(ratio, 1.0)
 
     def test_full_transmission(self):
-        """With extinction=1, luminosity is maximized."""
+        """Absorbed luminosity vanishes at full transmission and grows
+        as transmission falls. The function returns the polar-dust
+        absorbed (= re-emitted) power, NOT the transmitted disc power
+        — see ``polar_dust.py:443`` (and CIGALE ``skirtor2016.py:368``).
+        """
         wavelength = jnp.linspace(100.0, 1e5, 100)
         l_nu = jnp.ones_like(wavelength) * 1e-12
-        l_extinct = anisotropic_polar_luminosity(
+        l_partial = anisotropic_polar_luminosity(
             l_nu, wavelength, 30.0, jnp.ones_like(wavelength) * 0.5
         )
         l_transparent = anisotropic_polar_luminosity(
             l_nu, wavelength, 30.0, jnp.ones_like(wavelength) * 1.0
         )
-        # Full transmission should give higher luminosity
-        assert l_transparent >= l_extinct
+        # Transparent polar dust absorbs nothing -> zero re-emission.
+        # Partial transmission absorbs the complementary fraction.
+        assert float(l_transparent) == 0.0
+        assert float(l_partial) > 0.0
 
     def test_zero_luminosity(self):
         """Zero input luminosity gives zero output."""

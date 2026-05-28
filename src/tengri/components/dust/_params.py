@@ -139,14 +139,16 @@ PARAMS: tuple[ParamDeclaration, ...] = (
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_tau_bc",
-        Uniform(0.0, 4.0),
+        # Charlot & Fall (2000) fiducial: birth-cloud τ_BC ≈ 1.0 (model A).
+        Uniform(0.0, 4.0, default=1.0),
         "Birth cloud optical depth",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
     ),
     ParamDeclaration(
         "dust_tau_diff",
-        Uniform(0.0, 3.0),
+        # Charlot & Fall (2000) fiducial: diffuse-ISM τ_ISM ≈ μ·τ_total ≈ 0.3.
+        Uniform(0.0, 3.0, default=0.3),
         "Diffuse ISM optical depth",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
@@ -206,7 +208,8 @@ ATTENUATION_TWO_COMPONENT_ONLY: frozenset[str] = frozenset({"dust_tau_bc", "dust
 SINGLE_COMPONENT_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_tau_v",
-        Uniform(0.0, 4.0),
+        # Bagpipes canonical "moderately dusty SF galaxy" V-band τ.
+        Uniform(0.0, 4.0, default=1.0),
         "V-band optical depth (uniform screen)",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",

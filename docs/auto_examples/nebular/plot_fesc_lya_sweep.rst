@@ -30,10 +30,25 @@ The Lyα-specific escape fraction ``f_esc_lya`` sets what fraction of Lyα
 photons can escape the ISM without scattering. Higher ``f_esc_lya`` suppresses
 the Lyα emission line while leaving other nebular lines unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-88
+.. GENERATED FROM PYTHON SOURCE LINES 9-92
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
+   :alt: plot fesc lya sweep
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +72,7 @@ the Lyα emission line while leaving other nebular lines unchanged.
         "alpha": 3.0,
         "beta": 2.0,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     }
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1}
 
@@ -65,7 +80,7 @@ the Lyα emission line while leaving other nebular lines unchanged.
         ssp,
         sfh=SFH,
         dust=DUST,
-        neb={"type": "cue", "*": tengri.FIXED, "neb_fesc_lya": tengri.Uniform(0.0, 1.0)},
+        neb={"type": "cue", "*": tengri.FIXED, "fesc_lya": tengri.Uniform(0.0, 1.0)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

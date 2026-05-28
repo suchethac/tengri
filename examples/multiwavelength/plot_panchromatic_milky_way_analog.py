@@ -1,6 +1,5 @@
 """
 Panchromatic SED: Milky Way Analog
-==================================
 
 A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across
 the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).
@@ -33,9 +32,14 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import matplotlib
+
 matplotlib.use("Agg")
 import jax
 import matplotlib.pyplot as plt
@@ -53,15 +57,15 @@ SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # MW analog: moderate-mass, sustained star formation with a recent uptick
 # Double power law: τ_gyr = 13 Gyr (age of universe proxy), mild cusp
-# log_peak_sfr ≈ 0 → peak SFR ~ 1 Msun/yr, log10 scaling
+# log_total_mass ≈ 0 → peak SFR ~ 1 Msun/yr, log10 scaling
 HOST = dict(
     sfh={
         "type": "dpl",
         "*": tengri.FIXED,
-        "tau_gyr": 9.0,          # Main growth timescale
-        "log_peak_sfr": 0.35,    # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
-        "alpha": 0.8,            # Early rise
-        "beta": 0.5,             # Late decline
+        "tau_gyr": 9.0,  # Main growth timescale
+        "log_total_mass": 10.0,  # Peak SFR ~ 2.2 Msun/yr (Kennicutt & Evans 2012)
+        "alpha": 0.8,  # Early rise
+        "beta": 0.5,  # Late decline
     },
     redshift=tengri.Fixed(0.05),  # z=0.05 for cosmic variance context
 )
@@ -71,8 +75,8 @@ HOST = dict(
 DUST_ON = {
     "type": "two_component",
     "*": tengri.FIXED,
-    "tau_diff": 0.35,                               # Diffuse ISM optical depth
-    "tau_bc": 0.45,                                 # Birth cloud optical depth
+    "tau_diff": 0.35,  # Diffuse ISM optical depth
+    "tau_bc": 0.45,  # Birth cloud optical depth
     "emission": {"type": "dale2014", "*": tengri.FIXED},  # FIR + submm reprocessing
 }
 
@@ -100,17 +104,25 @@ RUNS = [
     ("Stellar continuum", "#666666", dict(dust=DUST_OFF)),
     ("Attenuated by dust", "#999999", dict(dust=DUST_ON)),
     ("+ Dust emission", "#dd7733", dict(dust=DUST_ON, neb={"type": "cue", "*": tengri.FIXED})),
-    ("+ Radio (SF regions)", "#3366cc", dict(
-        dust=DUST_ON,
-        neb={"type": "cue", "*": tengri.FIXED},
-        radio={"type": "condon92", "*": tengri.FIXED},
-    )),
-    ("+ X-ray (XRBs)", "#9933cc", dict(
-        dust=DUST_ON,
-        neb={"type": "cue", "*": tengri.FIXED},
-        radio={"type": "condon92", "*": tengri.FIXED},
-        xray={"type": "simple", "*": tengri.FIXED},
-    )),
+    (
+        "+ Radio (SF regions)",
+        "#3366cc",
+        dict(
+            dust=DUST_ON,
+            neb={"type": "cue", "*": tengri.FIXED},
+            radio={"type": "condon92", "*": tengri.FIXED},
+        ),
+    ),
+    (
+        "+ X-ray (XRBs)",
+        "#9933cc",
+        dict(
+            dust=DUST_ON,
+            neb={"type": "cue", "*": tengri.FIXED},
+            radio={"type": "condon92", "*": tengri.FIXED},
+            xray={"type": "simple", "*": tengri.FIXED},
+        ),
+    ),
 ]
 
 fig, ax = plt.subplots(figsize=(9.0, 5.5))

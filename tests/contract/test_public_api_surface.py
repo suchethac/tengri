@@ -83,6 +83,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "search",
         # ── SSP data setup ──────────────────────────────────────────
         "download_ssp",
+        "list_available_ssps",
         "list_known_ssps",
         # ── SSP loaders (closes #496) ───────────────────────────────
         "load_ssp",
@@ -114,12 +115,15 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_dust_emission_models",
         "list_dust_laws",
         "list_filters",
+        "list_igm_models",
         "list_inference_methods",
         "list_nebular_backends",
         "list_parameters",
         "list_plots",
+        "list_radio_models",
         "list_recipes",
         "list_sfh_models",
+        "list_xray_models",
         "ParameterRecord",
         "recipe_parameters",
         "summary",

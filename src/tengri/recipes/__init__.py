@@ -350,7 +350,7 @@ def dust_demo() -> dict:
     return dict(
         sfh=builders.sfh.tsnorm(
             defaults=FIXED,
-            log_peak_sfr=1.0,
+            log_total_mass=10.0,
             peak_lbt_gyr=2.0,
             width_gyr=1.5,
             skew=0.2,

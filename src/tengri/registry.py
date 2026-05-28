@@ -294,6 +294,12 @@ def _usage_hint(name: str, kind: str) -> str:
         return f'Parameters(..., nebular_backend="{name}")'
     if kind == "inference_method":
         return f'fitter.run("{name}")'
+    if kind == "xray_model":
+        return f"SEDModel.build(..., xray={{'type': '{name}'}})"
+    if kind == "radio_model":
+        return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+    if kind == "igm_model":
+        return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
         return f"tengri.{name}  (see list_{name}_models / list_{name}_laws for alternatives)"
     return ""
@@ -484,8 +490,8 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     },
     "schreiber2016": {
         "status": "production",
-        "citation": "Schreiber et al. 2016 (A&A 609, A30)",
-        "short_doc": "Average IR template from Herschel z=0.5–4 stack",
+        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
+        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
     },
     "pah_drude": {
         "status": "production",
@@ -544,32 +550,78 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-def list_nebular_backends() -> _RegistryTable:
-    """List all available nebular emission backends."""
-    raw = [
-        (
-            "baked_in",
-            "production",
-            "DSPS / FSPS SSP-internal",
-            "Emission baked into SSP grid; zero free params",
-        ),
-        ("cue", "production", "Li+2024 (CUE neural emulator)", "Neural-network Cloudy emulator"),
-        ("cloudy_grid", "production", "Byler+2017 grids", "Trilinear interp on Cloudy grid"),
-        ("cb19", "experimental", "Charlot & Bruzual 2019", "Precomputed CB19 nebular grid"),
-    ]
-    return _RegistryTable(
-        [
-            {
-                "name": n,
-                "kind": "nebular_backend",
-                "status": st,
-                "citation": cit,
-                "short_doc": doc,
-                "use": _usage_hint(n, "nebular_backend"),
-            }
-            for (n, st, cit, doc) in raw
-        ]
-    )
+def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
+    """List all registered nebular emission backends.
+
+    Reads :data:`tengri.components.nebular.NEBULAR_MODELS` so the
+    listing stays in lock-step with what the grammar-layer validator
+    will actually accept (#331). The names match the keys consumed by
+    ``SEDModel.build(..., neb={'type': ...})`` — ``'none'`` /
+    ``'ssp'`` / ``'cue'`` / ``'cloudy'`` / ``'cb19'``.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    out = [_entry_to_dict(n, e, kind="nebular_backend") for n, e in NEBULAR_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_xray_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered X-ray emission models.
+
+    The X-ray group composes the AGN corona (Yang+2020 ``alpha_ox(L_2500)``
+    relation), the Lehmer+2016 high- and low-mass X-ray binary fits,
+    and optional thermal hot-gas emission. The ``'none'`` entry disables
+    the whole block.
+
+    See also: :func:`list_radio_models`, :func:`list_igm_models`,
+    :mod:`tengri.builders.xray`.
+    """
+    from tengri.components.xray._models import XRAY_MODELS
+
+    out = [_entry_to_dict(n, e, kind="xray_model") for n, e in XRAY_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_radio_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered radio emission models.
+
+    The radio group adds the Condon+1992 FIR-radio correlation for the
+    star-forming-galaxy contribution plus an optional AGN radio
+    power-law via the radio-loudness parameter. ``'none'`` disables
+    the block.
+
+    See also: :func:`list_xray_models`, :func:`list_igm_models`,
+    :mod:`tengri.builders.radio`.
+    """
+    from tengri.components.radio._models import RADIO_MODELS
+
+    out = [_entry_to_dict(n, e, kind="radio_model") for n, e in RADIO_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_igm_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered IGM transmission models.
+
+    Optional sub-flags on the IGM group (``patchy=True``, ``dla=True``)
+    layer extra free parameters on top of the chosen mean transmission
+    curve. Those are not separate models here — they apply to either
+    ``'inoue14'`` or ``'madau'``.
+
+    See also: :func:`list_xray_models`, :func:`list_radio_models`,
+    :mod:`tengri.builders.igm`.
+    """
+    from tengri.components.igm._models import IGM_MODELS
+
+    out = [_entry_to_dict(n, e, kind="igm_model") for n, e in IGM_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (

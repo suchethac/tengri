@@ -64,6 +64,28 @@ class UnknownParameterError(ParameterError):
     """
 
 
+class ParameterDefaultMissingError(ParameterError):
+    """A parameter was marked FIXED without a physically-motivated default.
+
+    Raised by :func:`tengri.parameters.groups.parse_groups` when the
+    ``'*': FIXED`` wildcard (or an explicit short-form ``FIXED``) is applied
+    to a registry entry whose ``Distribution`` carries no ``default=``. Prior
+    behaviour silently fell back to the midpoint of the prior support, which
+    was an implicit and often physically wrong choice (e.g. ``Uniform(0, 5)``
+    for ``log10(n_H/cm^-3)`` collapsed to 2.5 — 316 cm^-3 — when the
+    CIGALE-faithful value is 2.0).
+
+    Fix: register a default at the declaration site, e.g.
+    ``Uniform(0, 5, default=2.0)``.
+
+    Parameters
+    ----------
+    message : str
+        Human-readable error description naming the offending parameter and
+        suggesting where to add the default.
+    """
+
+
 class ConfigError(TengriError, ValueError):
     """Invalid Config construction or missing fields.
 

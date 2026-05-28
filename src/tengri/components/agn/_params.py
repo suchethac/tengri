@@ -24,8 +24,14 @@ from tengri.protocols.component import ParamDeclaration
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_frac",
-        Fixed(0.0),
-        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
+        Fixed(1.0),
+        "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
+        "multiplier on the composable runner output and as the AGN-to-stellar "
+        "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
+        "configured AGN at full strength'; a wildcard ``'*': FIXED`` on an "
+        "AGN-configured group therefore yields a working AGN (closes #417). "
+        "Set explicitly to 0.0 to disable the AGN while keeping the rest of "
+        "the agn config in place.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
@@ -193,6 +199,22 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Polar dust reddening E(B-V) applied to AGN disc (SMC law); 0 = disabled",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+    ),
+    # Polar dust greybody re-emission (CIGALE skirtor2016 convention,
+    # Casey 2012 modified blackbody added on top of SKIRTOR thermal dust)
+    ParamDeclaration(
+        "agn_polar_T",
+        Fixed(100.0),
+        "Polar dust temperature [K] (CIGALE skirtor2016 default 100 K).",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "agn_polar_beta",
+        Fixed(1.6),
+        "Polar dust emissivity index beta (CIGALE skirtor2016 default 1.6).",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
     ),
     ParamDeclaration(
         "agn_polar_oa",
@@ -387,6 +409,17 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+    ),
+    # CIGALE skirtor2016 disc-shape modulator (Boquien+2019)
+    ParamDeclaration(
+        "agn_cigale_disk_delta",
+        Fixed(0.0),
+        "CIGALE skirtor2016 disc slope modulator (paper delta). "
+        "For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm "
+        "power-law index alpha from its nominal value by -delta (positive "
+        "delta -> shallower optical slope). For 'adaf_lopez2024' block: "
+        "blend weight in [0, 1] interpolating from pure ADAF (0) to pure "
+        "thin disc (1).",
     ),
 )
 

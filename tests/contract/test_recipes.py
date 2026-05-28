@@ -69,7 +69,7 @@ class TestStarFormingPhotometry:
         """DPL params are free (via wildcard)."""
         recipe_dict = recipes.star_forming_photometry()
         spec = parse_groups(**recipe_dict)
-        # DPL should have ~4 free params (alpha, beta, tau_gyr, log_peak_sfr)
+        # DPL should have ~4 free params (alpha, beta, tau_gyr, log_total_mass)
         dpl_free = [p for p in spec.free_params if p.startswith("sfh_dpl_")]
         assert len(dpl_free) >= 3, f"Expected at least 3 free DPL params, got {len(dpl_free)}"
 
