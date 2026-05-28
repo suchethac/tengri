@@ -102,7 +102,7 @@ either reproduces the reference, or surfaces a gap.
 
 ## Open follow-ups surfaced by this comparison
 
-Five tengri issues were filed while writing this notebook. Each is
+Seven tengri issues were filed while writing this notebook. Each is
 small (≤ 50 LOC) and unblocked from this PR.
 
 - **igm**: `inoue14` returns 0 below the Lyman limit; the Inoue+2014
@@ -121,6 +121,14 @@ small (≤ 50 LOC) and unblocked from this PR.
   fast JIT'd Gaussian LSF kernel matching the analytic σ to ~1 %.
   Not in `tengri.observation.*`. BAGPIPES users need a public path
   to apply their `veldisp` / `R_curve` to a tengri spectrum.
+- **investigation**: §3 reports a flat 1.010 × tengri/BAGPIPES ratio
+  in the optical even though both codes consume the **same** SSP
+  numerics and form the **same** total mass. Likely a quadrature or
+  surviving-mass-fraction-convention residual; root cause TBD.
+- **dust**: BAGPIPES' VW07 two-component law (independent slopes for
+  birth-cloud and diffuse) has no tengri counterpart. The closest is
+  `two_component` with a shared slope — a gap for BAGPIPES users
+  who fit with VW07.
 
 Any percent-level disagreement that does not have a one-sentence
 physics explanation in the figure caption above the audit table is
