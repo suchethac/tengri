@@ -42,9 +42,10 @@ evolve with luminosity:
    narrow-line region visible; bridging the Seyfert–quasar continuum.
 
 This archetype figure is the diagnostic for understanding how AGN
+
 classification depends on viewing angle, accretion rate, and dust geometry.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-229
+.. GENERATED FROM PYTHON SOURCE LINES 24-240
 
 
 
@@ -59,6 +60,10 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -80,6 +85,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
     COMMON = dict(
         redshift=tengri.Fixed(0.0),  # Rest-frame only (predict_rest_sed)
     )
+
 
     def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
         """Build an AGN archetype model.
@@ -110,9 +116,14 @@ classification depends on viewing angle, accretion rate, and dust geometry.
             "*": tengri.FIXED,
         }
         agn_dict.update(agn_blocks)
+        # ``sfh.type=const`` is parametrised by total stellar mass over the default
+        # 13.8 Gyr window; convert SFR → mass via M = SFR × Δt (+10.14 dex). The
+        # ``sfr_log=-10`` "negligible host" cases stay essentially zero; the
+        # ``sfr_log=2`` starburst case becomes a realistic ~10^12 M☉ ULIRG host.
+        log_total_mass = sfr_log + 10.14
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": sfr_log},
+            sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
             dust=dust_config,
             agn=agn_dict,
             **COMMON,
@@ -141,8 +152,8 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         sfr_log=-10.0,  # Pure AGN, negligible starburst
         dust_config={
             "type": "two_component",
-            "tau_diff": 0.1,       # Minimal diffuse dust
-            "tau_bc": 3.0,         # Heavy birth-cloud attenuation in front of AGN
+            "tau_diff": 0.1,  # Minimal diffuse dust
+            "tau_bc": 3.0,  # Heavy birth-cloud attenuation in front of AGN
             "*": tengri.FIXED,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
@@ -166,8 +177,8 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         sfr_log=-10.0,  # Pure AGN
         dust_config={
             "type": "two_component",
-            "tau_diff": 0.0,       # No diffuse dust
-            "tau_bc": 0.0,         # No birth-cloud attenuation
+            "tau_diff": 0.0,  # No diffuse dust
+            "tau_bc": 0.0,  # No birth-cloud attenuation
             "*": tengri.FIXED,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
@@ -191,8 +202,8 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         sfr_log=2.0,  # ~100 M_sun / yr ongoing starburst
         dust_config={
             "type": "two_component",
-            "tau_diff": 1.5,       # Moderate diffuse dust from starburst
-            "tau_bc": 1.0,         # Moderate birth-cloud attenuation
+            "tau_diff": 1.5,  # Moderate diffuse dust from starburst
+            "tau_bc": 1.0,  # Moderate birth-cloud attenuation
             "*": tengri.FIXED,
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
@@ -265,6 +276,11 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
     fig.tight_layout()
     plt.savefig("plot_seyfert_quasar_blazar_archetypes.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.978 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py:

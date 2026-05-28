@@ -42,9 +42,10 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 **References:**
 
 - Sanders et al. (1988) ApJ 325, 74: ULIRG/QSO connection hypothesis
+
 - Veilleux et al. (2009) ARA&A 47, 63: ULIRG/QSO transition review
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-166
+.. GENERATED FROM PYTHON SOURCE LINES 24-173
 
 
 
@@ -59,6 +60,10 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -121,9 +126,13 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         # Fiducial bolometric AGN luminosity (log L_bol / L_sun)
         log_lbol = 12.0
 
-        # SFR decreases as AGN fraction increases (energy budget constraint)
-        # At agn_frac=0 (pure starburst): high SFR; at agn_frac=1 (pure QSO): low SFR
+        # SFR decreases as AGN fraction increases (energy budget constraint).
+        # At agn_frac=0 (pure starburst): high SFR; at agn_frac=1 (pure QSO): low SFR.
+        # ``sfh.type=const`` parametrises by total stellar mass over the default
+        # window [start_gyr=0, end_gyr=13.8 Gyr]; convert via M = SFR × Δt:
+        #   log_total_mass = log_sfr + log10(1.38e10 yr) ≈ log_sfr + 10.14
         log_sfr = 1.5 - 2.0 * agn_frac
+        log_total_mass = log_sfr + 10.14
 
         # Dust emission is computed from tau_v (via two-component reddening).
         # tau_diff and tau_bc scale with tau_v; here we use a simple proportionality.
@@ -143,7 +152,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": log_sfr},
+            sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
             dust={
                 "type": "two_component",
                 "*": tengri.FIXED,
@@ -170,9 +179,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         wave = np.asarray(out.wavelength)
         sed = np.asarray(out.sed)
         nu_l_nu = (C_AA_PER_S / wave) * sed
-        seds.append(
-            {"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu}
-        )
+        seds.append({"stage": item["stage"], "wave": wave, "nu_l_nu": nu_l_nu})
 
     # ============================================================================
     # Plot: ULIRG→QSO sequence on a single νLν panel

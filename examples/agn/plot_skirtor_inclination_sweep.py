@@ -59,7 +59,11 @@ inclination_deg = np.array([0.0, 15.0, 30.0, 45.0, 60.0, 75.0, 90.0])
 cos_inc_values = np.cos(np.radians(inclination_deg))
 
 # Minimal SED model: just the AGN disc + torus
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+# Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
+# to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
+# ``const`` SFH parametrises by total mass over [start_gyr, end_gyr]
+# instead.
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
