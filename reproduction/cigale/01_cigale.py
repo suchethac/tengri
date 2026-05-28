@@ -821,20 +821,24 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # %% [markdown]
 # ## §9 AGN
 #
-# CIGALE's `skirtor2016` torus library (Stalevski+2016) on the left vs
-# tengri's composable AGN with the same SKIRTOR torus on the right, both
-# at viewing angle i = 30°, τ_9.7 = 7. Each panel shows the stellar+dust
-# baseline (dashed), the full SED with AGN (solid), and the AGN-only
-# component (dotted).
+# CIGALE's `skirtor2016` AGN package on the left vs tengri's composable
+# AGN on the right, both at the SKIRTOR fiducial (i = 30°, τ_9.7 = 7,
+# oa = 40°, p = q = 1). Each panel shows the stellar + dust baseline
+# (dashed), the full SED with AGN (solid), and the AGN-only component
+# (dotted).
 #
-# Post-#420 the composable AGN emits a real spectrum (it previously
-# published `L_agn_bol` but dropped the SED), and post-#468 the SKIRTOR
-# torus has the correct L_ν dimensionality — the warm-dust MIR-FIR bump
-# now shows up rather than being squashed by a stray L_λ→L_ν conversion.
-# At this fiducial (i = 30°, tengri's SKIRTOR defaults) the tengri
-# torus-only contribution peaks at ~6 µm, in the same ballpark as
-# CIGALE's SKIRTOR at matched inclination. Edge-on viewing pushes the
-# peak out to ~30 µm (the classic reprocessed-dust bump) on both sides.
+# **The disc model differs by construction.** SKIRTOR2016 bundles a
+# specific accretion-disc spectrum (Schartmann+2005-like piecewise
+# power law with the 1200 Å bend) together with the dusty-torus
+# templates — it's a single package. tengri's composable AGN couples
+# a Shakura-Sunyaev multicolor accretion disc to the SKIRTOR torus,
+# so the UV-optical disc continuum is different on each side even
+# though the torus IR is the same templates. The torus L_ν is what
+# #468 fixed; the disc shape is a deliberate model choice (multicolor
+# disc is differentiable in M_BH, ṁ, spin — SKIRTOR's baked-in disc
+# is not). Edge-on viewing pushes the dust peak out to ~30 µm (classic
+# reprocessed-dust bump) on both sides; at face-on i = 30° the dust
+# peak sits at ~6–9 µm on both sides.
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -932,6 +936,14 @@ save_fig("09_agn_skirtor.png")
 # #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
 # α_ox = -1.4, Γ_HMXB = 2.0, Γ_LMXB = 1.6).
 #
+# **AGN strength matched to §9.** Both panels use `agn_log_lbol ≈ −0.68`
+# (CIGALE via `fracAGN=0.3` on 1 M☉ formed, tengri explicit) — the
+# weak-Seyfert level that's consistent with the rest of the notebook's
+# 1 M☉ fiducial. A previous revision of this section used a quasar-
+# strength tengri AGN (log_lbol = 11.5) which made the X-ray flux
+# visible on the plot but compared to CIGALE's Seyfert chain by 12
+# orders of magnitude — apples to oranges.
+#
 # In the well-sampled 1–100 keV band the two corona power laws agree:
 # both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Above ~100 keV the panels
 # diverge — CIGALE rolls off steeply while tengri stays power-law — but
@@ -964,10 +976,17 @@ m_x = SEDModel.build(
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
           "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
           "*": FIXED},
+    # AGN strength matched to CIGALE's chain. CIGALE uses fracAGN=0.3 on
+    # a 1-M☉-formed stellar baseline; the resulting L_AGN_bol ≈
+    # 0.3/(1-0.3) × L_stellar_bol ≈ 0.21 L☉ → log_lbol ≈ −0.68 (same as
+    # §9). Using a quasar-strength tengri AGN here while CIGALE has a
+    # Seyfert-weak one would compare X-ray spectra at ~12 orders of
+    # magnitude apart — the panels would look completely different for
+    # reasons unrelated to the X-ray physics being tested.
     agn={"type": "composable",
          "disc": {"type": "multicolor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(11.5), "*": FIXED},
+         "agn_log_lbol": Fixed(-0.68), "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
 )
