@@ -138,11 +138,14 @@ show the full grid's coverage and demarcation positions.
 
     fig.tight_layout()
     plt.savefig("plot_bpt_cue_grid.png", dpi=150, bbox_inches="tight")
+<<<<<<< HEAD
+=======
 
 
 .. rst-class:: sphx-glr-timing
 
    **Total running time of the script:** (0 minutes 3.985 seconds)
+>>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_cue_grid.py:

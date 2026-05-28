@@ -118,6 +118,7 @@ from tengri.citations import (
 )
 from tengri.components import register_component
 from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.igm import igm_transmission
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
@@ -178,6 +179,15 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
+from tengri.observation.spectral_indices import (
+    STANDARD_COMPOSITE_INDICES,
+    STANDARD_INDICES,
+    CompositeIndexDef,
+    SpectralIndexData,
+    SpectralIndexDef,
+    measure_index_jax,
+)
+from tengri.observation.spectrum import apply_lsf, velocity_broaden
 
 
 class _KernelsRemoved:
@@ -368,7 +378,10 @@ from tengri.registry import (
 __all__ = [
     "FIXED",
     "FREE",
+    "STANDARD_COMPOSITE_INDICES",
+    "STANDARD_INDICES",
     "BackendError",
+    "CompositeIndexDef",
     "ConfigError",
     "Exponential",
     "Fixed",
@@ -387,9 +400,12 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDResult",
+    "SSPData",
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
+    "SpectralIndexData",
+    "SpectralIndexDef",
     "SpectrumPrecomp",
     "StudentT",
     "TengriError",
@@ -397,6 +413,7 @@ __all__ = [
     "Uniform",
     "WavePrecomp",
     "agn",
+    "apply_lsf",
     "builders",
     "citations",
     "cite_components",
@@ -417,11 +434,14 @@ __all__ = [
     "download_ssp",
     "dust",
     "examples",
+    "exp_squared_kernel",
     "explain",
     "filters",
     "fit_batch",
+    "gp_noise_covariance",
     "help",
     "igm",
+    "igm_transmission",
     "inference",
     "io",
     "list_agn_models",
@@ -441,6 +461,10 @@ __all__ = [
     "list_recipes",
     "list_sfh_models",
     "list_xray_models",
+    "load_ssp",
+    "load_ssp_data",
+    "matern32_kernel",
+    "measure_index_jax",
     "nebular",
     "observation",
     "parse_groups",
@@ -459,6 +483,7 @@ __all__ = [
     "summary",
     "tutorial",
     "units",
+    "velocity_broaden",
     "xray",
 ]
 

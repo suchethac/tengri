@@ -150,11 +150,14 @@ References:
         ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)
 
     plt.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
+<<<<<<< HEAD
+=======
 
 
 .. rst-class:: sphx-glr-timing
 
    **Total running time of the script:** (0 minutes 3.925 seconds)
+>>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_flex_tour.py:

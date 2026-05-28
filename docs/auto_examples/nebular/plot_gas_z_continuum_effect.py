@@ -4,7 +4,11 @@ Gas-phase metallicity effect on nebular continuum
 
 Nebular free-free, free-bound, and two-photon emission respond to gas-phase
 metallicity (``logZ_gas``) through changes in metal cooling efficiency and
+<<<<<<< HEAD
+ionization balance. This example demonstrates the metallicity sensitivity of
+=======
 ionization balance. metallicity sensitivity of
+>>>>>>> origin/main
 the nebular continuum at fixed ionization parameter.
 
 Single rest-frame νLν trace (1000–10000 Å) across four gas metallicities
@@ -18,10 +22,13 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue nebular model)
 """
 
+<<<<<<< HEAD
+=======
 import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
+>>>>>>> origin/main
 import warnings
 
 import jax
@@ -51,14 +58,22 @@ model = tengri.SEDModel.build(
         "alpha": 1.2,
         "beta": 2.0,
         "tau_gyr": 0.5,
+<<<<<<< HEAD
+        "log_peak_sfr": 1.0,
+=======
         "log_total_mass": 10.0,
+>>>>>>> origin/main
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
     neb={
         "type": "cue",
         "*": tengri.FIXED,
+<<<<<<< HEAD
+        "logU": -2.0,  # Fixed ionization parameter
+=======
         # NB: short-form keys inside the `neb` group (full `neb_*` is silently ignored)
         "logU": -2.0,
+>>>>>>> origin/main
         "logZ_gas": tengri.Uniform(-2.0, 0.5),
     },
     redshift=tengri.Fixed(0.0),
@@ -72,6 +87,36 @@ logz_values = np.array([-1.5, -0.5, 0.0, 0.3])
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 labels = [f"$Z_{{\\rm gas}}/Z_\\odot = 10^{{{z:.1f}}}$" for z in logz_values]
 
+<<<<<<< HEAD
+fig, ax = plt.subplots(figsize=(8.0, 5.5))
+
+for logz, color, label in zip(logz_values, colors, labels):
+    params = {**baseline, "neb_logZ_gas": jnp.float64(logz)}
+    pred = model.predict_rest_sed(params)
+
+    wave = np.asarray(pred.wavelength)
+    sed = np.asarray(pred.sed)
+
+    # Convert L_nu [erg/s/Hz] to nu*L_nu [erg/s]
+    nu = 2.998e18 / wave  # Hz
+    nu_l_nu = nu * sed
+
+    # Plot only 1000-10000 Å
+    mask = (wave >= 1000) & (wave <= 1e4)
+    ax.loglog(
+        wave[mask],
+        nu_l_nu[mask],
+        color=color,
+        lw=2.0,
+        label=label,
+        alpha=0.85,
+    )
+
+ax.set_xlim(900, 1.1e4)
+ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=12)
+ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]", fontsize=12)
+ax.legend(fontsize=10, frameon=True, loc="lower left")
+=======
 # Compute SEDs at each metallicity AND a reference baseline (lowest Z) so we
 # can visualise the *nebular* response — the stellar continuum dominates by
 # factors of 10–100 at these wavelengths, so plotting νLν directly hides
@@ -109,6 +154,7 @@ ax.set_title(
     fontsize=11,
 )
 ax.legend(fontsize=10, frameon=True, loc="best")
+>>>>>>> origin/main
 ax.grid(True, alpha=0.25, which="both")
 
 fig.tight_layout()

@@ -31,11 +31,43 @@ than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration
 breaks at young (<10 Myr; insufficient ionizing photons) and old (>100 Myr;
 all stars too old to ionize) populations.
 
+<<<<<<< HEAD
+.. GENERATED FROM PYTHON SOURCE LINES 10-53
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
+   :alt: plot halpha sfr calibration age
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
+      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
+
+
+
+
+
+
+|
+=======
 .. GENERATED FROM PYTHON SOURCE LINES 10-68
+>>>>>>> origin/main
 
 .. code-block:: Python
 
 
+<<<<<<< HEAD
+    import warnings
+    import jax
+    import matplotlib.pyplot as plt
+    import numpy as np
+=======
     import os
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
@@ -46,6 +78,7 @@ all stars too old to ionize) populations.
     import matplotlib.pyplot as plt
     import numpy as np
 
+>>>>>>> origin/main
     import tengri
     from tengri.analysis.plotting import setup_style
 
@@ -64,6 +97,10 @@ all stars too old to ionize) populations.
     for age_myr in ages_myr:
         model = tengri.SEDModel.build(
             ssp,
+<<<<<<< HEAD
+            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": log_sfr_true,
+                 "start_gyr": age_myr / 1e3, "end_gyr": 0.0},
+=======
             sfh={
                 "type": "const",
                 "*": tengri.FIXED,
@@ -71,6 +108,7 @@ all stars too old to ionize) populations.
                 "start_gyr": age_myr / 1e3,
                 "end_gyr": 0.0,
             },
+>>>>>>> origin/main
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             neb={"type": "cue", "*": tengri.FIXED},
             redshift=tengri.Fixed(0.0),
@@ -84,17 +122,30 @@ all stars too old to ionize) populations.
     ax.loglog(ages_valid, ratio, "o-", markersize=7, linewidth=1.5, color="C0")
     ax.axhline(1.0, color="0.5", linestyle="--", linewidth=1.0, alpha=0.7, label="Calibration valid")
     ax.fill_between(ages_valid, 0.8, 1.2, color="green", alpha=0.1)
+<<<<<<< HEAD
+    ax.set(xlabel="Constant SFH age [Myr]", ylabel=r"$\mathrm{SFR}_{\mathrm{inferred}} / \mathrm{SFR}_{\mathrm{true}}$",
+           xlim=(0.5, 500), ylim=(0.1, 10))
+=======
     ax.set(
         xlabel="Constant SFH age [Myr]",
         ylabel=r"$\mathrm{SFR}_{\mathrm{inferred}} / \mathrm{SFR}_{\mathrm{true}}$",
         xlim=(0.5, 500),
         ylim=(0.1, 10),
     )
+>>>>>>> origin/main
     ax.legend(loc="upper left", fontsize=9)
     ax.grid(True, which="both", alpha=0.3, linestyle=":", linewidth=0.5)
     plt.savefig("plot_halpha_sfr_calibration_age.png", dpi=150, bbox_inches="tight")
 
 
+<<<<<<< HEAD
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 44.371 seconds)
+
+
+=======
+>>>>>>> origin/main
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:
 
 .. only:: html

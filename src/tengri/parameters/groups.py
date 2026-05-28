@@ -539,6 +539,15 @@ def parse_groups(**kwargs) -> Parameters:
                 group_dict = group_dict[subkey]
             else:
                 group_dict = {}
+        elif group == "igm.dla":
+            # DLA sub-block: prefer the new nested-dict form
+            # ``igm={'dla': {'log_n_hi': ..., ...}}`` (closes #507), but
+            # fall back to the flat form where the builder factories emit
+            # ``igm={'dla': True, 'log_n_hi': ...}`` with the DLA params
+            # at the same level as the ``dla`` flag.
+            igm_dict = kwargs.get("igm") if isinstance(kwargs.get("igm"), dict) else {}
+            dla_val = igm_dict.get("dla", False) if igm_dict else False
+            group_dict = dla_val if isinstance(dla_val, dict) else igm_dict
         elif group == "agn" or group.startswith("agn."):
             # AGN params live in a two-level nest: shared (`agn` itself) and
             # five sub-blocks (`agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`,
@@ -849,7 +858,13 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     if igm_dict.get("patchy", False):
         result["igm_patchy"] = True
 
-    if igm_dict.get("dla", False):
+    # ``dla`` accepts either the legacy boolean form (``dla=True``) or the
+    # nested-dict form ``dla={'log_n_hi': Uniform(...), '*': FREE, ...}`` —
+    # both activate the DLA absorber (closes #507). The per-parameter
+    # overrides inside the dict are resolved by the ``igm.dla`` sub-group
+    # path in :func:`parse_groups`.
+    dla_spec = igm_dict.get("dla", False)
+    if dla_spec:
         result["dla"] = True
 
 
@@ -929,6 +944,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
+    "igm.dla": frozenset({"type", "*"}),
     "radio": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
     "agn": frozenset({"type", "*"}) | _AGN_SUBBLOCK_KEYS,
@@ -1049,6 +1065,12 @@ def _validate_user_keys(
             # level. Treat as a soft acceptance (still resolved via the
             # dust.emission group path).
             param_names = param_names | _short_names_for_group("dust.emission", param_partition)
+        elif top_key == "igm":
+            # The IGM top-level accepts DLA param short names for the
+            # builder-factory output form ``igm={'dla': True, 'log_n_hi': ...}``,
+            # which flattens DLA params at the igm level. The new nested
+            # ``igm={'dla': {...}}`` form is validated separately below.
+            param_names = param_names | _short_names_for_group("igm.dla", param_partition)
 
         # User-registered SEDModelComponent subclasses (#391): if the
         # group dict picks a custom ``type``, add that subclass's
@@ -1059,6 +1081,10 @@ def _validate_user_keys(
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 
         # Recurse into sub-block dicts.
+        if top_key == "igm" and isinstance(top_val.get("dla"), dict):
+            sub_allowed = frozenset({"type", "*"})
+            sub_params = _short_names_for_group("igm.dla", param_partition)
+            _check_dict_keys("igm.dla", top_val["dla"], sub_allowed | sub_params, param_partition)
         if top_key == "dust" and isinstance(top_val.get("emission"), dict):
             sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
             sub_params = _short_names_for_group("dust.emission", param_partition)
@@ -1351,7 +1377,9 @@ def _partition_by_group(
             partition[name] = "xray"
         elif name.startswith("radio_"):
             partition[name] = "radio"
-        elif name.startswith("igm_") or name.startswith("dla_"):
+        elif name.startswith("dla_"):
+            partition[name] = "igm.dla"
+        elif name.startswith("igm_"):
             partition[name] = "igm"
         elif name.startswith("neb_") or name.startswith("ionspec_") or name.startswith("gas_log"):
             partition[name] = "neb"

@@ -25,6 +25,7 @@ Usage::
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -206,13 +207,105 @@ STANDARD_INDICES: dict[str, SpectralIndexDef] = {
 }
 
 
+# ── Composite indices ─────────────────────────────────────────────
+
+
+@dataclasses.dataclass(frozen=True)
+class CompositeIndexDef:
+    """A spectral index that is a function of atomic indices.
+
+    Composite indices break the age-metallicity degeneracy by combining
+    multiple Lick measurements (Worthey & Ottaviani 1997; Thomas, Maraston
+    & Bender 2003). Standard examples include ``[MgFe]'`` (sensitive to
+    [Fe/H] but not [alpha/Fe]) and ``<Fe>`` (the mean of Fe5270 and Fe5335).
+
+    Parameters
+    ----------
+    name : str
+        Human-readable name, e.g. ``"[MgFe]'"`` or ``"<Fe>"``.
+    components : tuple of SpectralIndexDef
+        The atomic indices this composite is built from.
+    combiner : Callable
+        Function that takes one argument per atomic index (in the same
+        order as ``components``) and returns the composite value. Must be
+        JAX-compatible (operate on ``jnp`` arrays) so the composite stays
+        differentiable through ``measure_index_jax``.
+    units : str
+        Units of the composite value, for display only. Default ``"AA"``.
+
+    Examples
+    --------
+    The Thomas+2003 [MgFe]' index::
+
+        from tengri import STANDARD_INDICES, CompositeIndexDef
+
+        mgfe_prime = CompositeIndexDef(
+            name="[MgFe]'",
+            components=(
+                STANDARD_INDICES["Mgb"],
+                STANDARD_INDICES["Fe5270"],
+                STANDARD_INDICES["Fe5335"],
+            ),
+            combiner=lambda mgb, fe1, fe2: jnp.sqrt(
+                jnp.maximum(mgb * (0.72 * fe1 + 0.28 * fe2), 0.0)
+            ),
+        )
+    """
+
+    name: str
+    components: tuple[SpectralIndexDef, ...]
+    combiner: Callable[..., jnp.ndarray]
+    units: str = "AA"
+
+    @property
+    def wave_min(self) -> float:
+        return min(c.wave_min for c in self.components)
+
+    @property
+    def wave_max(self) -> float:
+        return max(c.wave_max for c in self.components)
+
+
+STANDARD_COMPOSITE_INDICES: dict[str, CompositeIndexDef] = {
+    # Thomas, Maraston & Bender 2003, MNRAS 339, 897 — [MgFe]' is the
+    # canonical [alpha/Fe]-insensitive [Fe/H] tracer.
+    "[MgFe]'": CompositeIndexDef(
+        name="[MgFe]'",
+        components=(
+            STANDARD_INDICES["Mgb"],
+            STANDARD_INDICES["Fe5270"],
+            STANDARD_INDICES["Fe5335"],
+        ),
+        combiner=lambda mgb, fe1, fe2: jnp.sqrt(jnp.maximum(mgb * (0.72 * fe1 + 0.28 * fe2), 0.0)),
+    ),
+    # Mean iron (Faber+1985 / Worthey 1994).
+    "<Fe>": CompositeIndexDef(
+        name="<Fe>",
+        components=(STANDARD_INDICES["Fe5270"], STANDARD_INDICES["Fe5335"]),
+        combiner=lambda fe1, fe2: 0.5 * (fe1 + fe2),
+    ),
+    # Higher-order Balmer sums used as age indicators that are insensitive
+    # to abundance ratios (Worthey & Ottaviani 1997).
+    "HdA+HgA": CompositeIndexDef(
+        name="HdA+HgA",
+        components=(STANDARD_INDICES["HdA"], STANDARD_INDICES["HgA"]),
+        combiner=lambda hda, hga: hda + hga,
+    ),
+    "HdF+HgF": CompositeIndexDef(
+        name="HdF+HgF",
+        components=(STANDARD_INDICES["HdF"], STANDARD_INDICES["HgF"]),
+        combiner=lambda hdf, hgf: hdf + hgf,
+    ),
+}
+
+
 # ── JAX-compatible index measurement ──────────────────────────────
 
 
 def measure_index_jax(
     wave_rest: jnp.ndarray,
     flux: jnp.ndarray,
-    index_def: SpectralIndexDef,
+    index_def: SpectralIndexDef | CompositeIndexDef,
 ) -> jnp.ndarray:
     """Measure a spectral index on a rest-frame spectrum.
 
@@ -223,8 +316,9 @@ def measure_index_jax(
         in ``index_def``.
     flux : ndarray, shape (n_pix,)
         Flux density (any consistent units — only ratios matter).
-    index_def : SpectralIndexDef
-        Index definition specifying windows and index type (EW or break).
+    index_def : SpectralIndexDef or CompositeIndexDef
+        Atomic index (EW or break) or a composite that combines several
+        atomic measurements via a user-provided function.
 
     Returns
     -------
@@ -240,6 +334,9 @@ def measure_index_jax(
     **Gradient-safe**: yes — fully differentiable w.r.t. flux.
 
     """
+    if isinstance(index_def, CompositeIndexDef):
+        atomic_values = tuple(measure_index_jax(wave_rest, flux, c) for c in index_def.components)
+        return index_def.combiner(*atomic_values)
     if index_def.index_type == "break":
         return _measure_break(wave_rest, flux, index_def)
     else:

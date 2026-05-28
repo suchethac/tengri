@@ -124,11 +124,14 @@ Models compared (the six production disc selectors under
 
     fig.tight_layout()
     plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
+<<<<<<< HEAD
+=======
 
 
 .. rst-class:: sphx-glr-timing
 
    **Total running time of the script:** (0 minutes 3.947 seconds)
+>>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:
