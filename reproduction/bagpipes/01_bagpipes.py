@@ -989,6 +989,177 @@ print(
 
 
 # %% [markdown]
+# ## §10 Double power-law SFH
+#
+# BAGPIPES' `dblplaw` is the workhorse SFH shape for quiescent-galaxy
+# fitting at JWST cosmic noon — a smooth rise + smooth fall, two slopes
+# `α` (falling) and `β` (rising), turnover time `τ`:
+# :math:`\\mathrm{SFR}(t) \\propto \\bigl[(t/\\tau)^{\\alpha} +
+# (t/\\tau)^{-\\beta}\\bigr]^{-1}`. tengri's `dpl` is the same closed-form
+# shape with the same `(α, β, τ)` parameterisation.
+#
+# **Time-frame convention difference.** BAGPIPES interprets `t` as
+# **cosmic age since the Big Bang**; tengri interprets it as
+# **lookback time since formation** (default `age_gyr` = age of
+# universe). For the same `τ = 3 Gyr`, the BAGPIPES panel peaks near
+# lookback ≈ 11 Gyr (cosmic age ≈ 2.8 Gyr) and tengri peaks near
+# lookback ≈ 3 Gyr — the same closed-form curve, **time-reversed** by
+# the choice of reference frame. Both are correct; researchers reading
+# two papers that both say "double power-law SFH" need to check which
+# convention each code uses.
+
+# %%
+DPL_ALPHA = 1.5
+DPL_BETA = 1.0
+DPL_TAU_GYR = 3.0
+DPL_AGE_GYR = 5.0
+
+t_b_dpl, sfr_b_dpl = B.sfh_curve(
+    sfh_type="delayed", age=DPL_AGE_GYR, tau=1.0, massformed=LOG_MASS_FIDUCIAL
+)  # Placeholder: bagpipes_driver does not (yet) wire dblplaw — see below.
+
+# Build the bagpipes side directly via model_galaxy.sfh inspection.
+_comp_b_dpl = {
+    "redshift": 0.0,
+    "dblplaw": {
+        "alpha": DPL_ALPHA,
+        "beta": DPL_BETA,
+        "tau": DPL_TAU_GYR,
+        "metallicity": 1.0,
+        "massformed": LOG_MASS_FIDUCIAL,
+    },
+}
+_mg_b_dpl = B._build_model(_comp_b_dpl)
+t_b_dpl = np.asarray(_mg_b_dpl.sfh.ages, dtype=np.float64)  # yr lookback
+sfr_b_dpl = np.asarray(_mg_b_dpl.sfh.sfh, dtype=np.float64)  # Msun/yr
+
+m_dpl = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "dpl",
+        "alpha": Fixed(DPL_ALPHA),
+        "beta": Fixed(DPL_BETA),
+        "tau_gyr": Fixed(DPL_TAU_GYR),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+s_dpl = m_dpl.predict_state({})
+_lbt_dpl = np.asarray(s_dpl.derived["sfh_grid_lbt_yr"])
+_sfr_dpl = np.asarray(s_dpl.derived["sfr_history"])
+_mass_b_dpl = float(np.trapezoid(sfr_b_dpl[::-1], t_b_dpl[::-1]))
+_mass_t_dpl = float(np.trapezoid(_sfr_dpl[np.argsort(_lbt_dpl)], _lbt_dpl[np.argsort(_lbt_dpl)]))
+print(
+    f"§10 ∫SFR dt: BAGPIPES = {_mass_b_dpl:.3e} M☉, tengri = {_mass_t_dpl:.3e} M☉ (target 1.0e+10)"
+)
+
+fig, ax_l, ax_r = U.two_panel_fig()
+for ax, title in (
+    (
+        ax_l,
+        f"BAGPIPES dblplaw (α={DPL_ALPHA:g}, β={DPL_BETA:g}, τ={DPL_TAU_GYR:g} Gyr)",
+    ),
+    (ax_r, "tengri dpl (matched parameters)"),
+):
+    ax.set_xlabel("lookback time [Gyr]")
+    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+    ax.set_xlim(0, 13.5)
+    ax.grid(True, alpha=0.3)
+    ax.set_title(title)
+ax_l.plot(t_b_dpl / 1e9, sfr_b_dpl, "C0-", linewidth=2.0)
+ax_l.axvline(
+    DPL_TAU_GYR, color="grey", linestyle=":", alpha=0.6, label=rf"$\tau$ = {DPL_TAU_GYR:g} Gyr"
+)
+ax_l.legend(fontsize=9)
+ax_r.plot(_lbt_dpl / 1e9, _sfr_dpl, "C1-", linewidth=2.0)
+ax_r.axvline(DPL_TAU_GYR, color="grey", linestyle=":", alpha=0.6)
+for ax in (ax_l, ax_r):
+    ax.set_yscale("linear")
+fig.tight_layout()
+save_fig("10_sfh_dblplaw.png")
+
+
+# %% [markdown]
+# ## §11 Lognormal SFH
+#
+# Another BAGPIPES standard, popular for "rejuvenation" tests: a
+# lognormal SFR(t) peaked at `tmax` with full-width-half-max `fwhm`.
+# tengri's `lnorm` is the same shape with a slightly different
+# parameterisation: peak lookback time `peak_lbt_gyr` and log-space
+# width `width_gyr` (dex). To match BAGPIPES' linear-time FWHM we
+# convert: `width_dex ≈ FWHM/(2.355 × tmax × ln 10)` for narrow bursts.
+#
+# **Same time-frame caveat as §10.** BAGPIPES' `tmax` is cosmic age
+# since the Big Bang; tengri's `peak_lbt_gyr` is lookback time.
+# Setting both to the same numeric value places the BAGPIPES peak at
+# lookback ≈ universe_age − tmax (≈ 9.5 Gyr for tmax = 4 Gyr) while
+# tengri's peak is at the literal `peak_lbt_gyr` value. Both plots
+# below use the **same numeric input** and the figures show the same
+# closed-form lognormal shape time-reversed.
+
+# %%
+LN_TMAX_GYR = 4.0
+LN_FWHM_GYR = 2.0
+LN_WIDTH_DEX = LN_FWHM_GYR / (2.355 * LN_TMAX_GYR * np.log(10))
+
+_comp_b_ln = {
+    "redshift": 0.0,
+    "lognormal": {
+        "tmax": LN_TMAX_GYR,
+        "fwhm": LN_FWHM_GYR,
+        "metallicity": 1.0,
+        "massformed": LOG_MASS_FIDUCIAL,
+    },
+}
+_mg_b_ln = B._build_model(_comp_b_ln)
+t_b_ln = np.asarray(_mg_b_ln.sfh.ages, dtype=np.float64)
+sfr_b_ln = np.asarray(_mg_b_ln.sfh.sfh, dtype=np.float64)
+
+m_ln = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "lnorm",
+        "peak_lbt_gyr": Fixed(LN_TMAX_GYR),
+        "width_gyr": Fixed(LN_WIDTH_DEX),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+s_ln = m_ln.predict_state({})
+_lbt_ln = np.asarray(s_ln.derived["sfh_grid_lbt_yr"])
+_sfr_ln = np.asarray(s_ln.derived["sfr_history"])
+
+fig, ax_l, ax_r = U.two_panel_fig()
+for ax, title in (
+    (ax_l, f"BAGPIPES lognormal (tmax={LN_TMAX_GYR:g}, FWHM={LN_FWHM_GYR:g} Gyr)"),
+    (
+        ax_r,
+        f"tengri lnorm (peak={LN_TMAX_GYR:g} Gyr, width={LN_WIDTH_DEX:.3f} dex)",
+    ),
+):
+    ax.set_xlabel("lookback time [Gyr]")
+    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+    ax.set_xlim(0, 13.5)
+    ax.grid(True, alpha=0.3)
+    ax.set_title(title)
+ax_l.plot(t_b_ln / 1e9, sfr_b_ln, "C0-", linewidth=2.0)
+ax_l.axvline(LN_TMAX_GYR, color="grey", linestyle=":", alpha=0.6, label="tmax")
+ax_l.legend(fontsize=9)
+ax_r.plot(_lbt_ln / 1e9, _sfr_ln, "C1-", linewidth=2.0)
+ax_r.axvline(LN_TMAX_GYR, color="grey", linestyle=":", alpha=0.6)
+for ax in (ax_l, ax_r):
+    ax.set_yscale("linear")
+fig.tight_layout()
+save_fig("11_sfh_lognormal.png")
+
+
+# %% [markdown]
 # ## §12 IGM transmission
 #
 # Both codes use the Inoue et al. (2014) IGM transmission tables.

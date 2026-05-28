@@ -72,10 +72,11 @@ persistent cache and finish in under a minute.
 
 ## What the notebook covers
 
-§1 SSPs · §2 SFHs · §3 stellar SED · §4 dust attenuation curves ·
-§5 attenuation applied · §6 dust IR + energy balance ·
-§7 panchromatic · §8 nebular (Cloudy v25 vs Cue v17) ·
-§9 LSF / velocity broadening · §12 IGM.
+§1 SSPs · §2 delayed-τ SFH · §3 stellar SED · §4 dust attenuation
+curves · §5 attenuation applied · §6 dust IR + energy balance ·
+§7 panchromatic · §8 nebular (Cloudy v25 vs Cue v17) · §9 LSF /
+velocity broadening · §10 double-power-law SFH · §11 lognormal SFH ·
+§12 IGM.
 
 AGN, X-ray, and radio sections are skipped — BAGPIPES has no
 counterpart. See `reproduction/cigale/` for those.
@@ -95,6 +96,8 @@ either reproduces the reference, or surfaces a gap.
 | 6 | DL07 dust IR + energy balance | Exact (`L_IR_emitted − L_absorbed = 0` to floating point). |
 | 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. Most of the gap is Cloudy v17 (Cue training set) vs Cloudy v25 (current BAGPIPES) plus bare-stellar vs SFH-integrated ionising-luminosity paths. |
 | 9 | LSF / velocity broadening | tengri `velocity_broaden` matches the analytic Gaussian σ = 150 km/s FWHM (7.78 Å vs 7.73 Å expected) to 0.7 %. BAGPIPES gives 9.5 Å — its native R_spec = 1000 carries ~127 km/s of resolution that adds in quadrature with `veldisp`. Both behaviours are correct; they bracket different conventions of "intrinsic line width". |
+| 10 | Double power-law SFH | Same closed-form shape on both sides, **but applied in different time frames**: BAGPIPES treats `t` as cosmic age since the Big Bang, tengri treats it as lookback since formation. For matched `(α, β, τ)` the two curves are time-reversed images of each other. Not a bug — a convention difference researchers reading two papers should know about. |
+| 11 | Lognormal SFH | Same shape, same time-frame caveat as §10. BAGPIPES `tmax` ≡ cosmic age; tengri `peak_lbt_gyr` ≡ lookback time. |
 | 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. **Filed as a tengri bug.** |
 
 ## Open follow-ups surfaced by this comparison
