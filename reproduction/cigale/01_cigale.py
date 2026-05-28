@@ -69,12 +69,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from reproduction.cigale._drivers import cigale_driver as C, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from reproduction.cigale._drivers import cigale_driver as C
-from reproduction.cigale._drivers import units as U
 
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
@@ -230,6 +229,7 @@ _C_AA = 2.998e18  # speed of light [Å/s]
 # CIGALE side: raw BC03 Chabrier Z=0.02 pickle, converted W/nm/Msun →
 # Lsun/Hz/Msun (the exact conversion used by _drivers/cigale_ssp_to_dsps.py).
 import sys as _sys
+
 _pkl_path = next((_p / "pcigale" / "data" / "bc03" / "Z=0.02_imf=chab.pickle"
                   for _p in map(_P, _sys.path)
                   if (_p / "pcigale" / "data" / "bc03" / "Z=0.02_imf=chab.pickle").exists()),
@@ -265,12 +265,14 @@ for color, age_yr, (w_c, L_c), (w_t, L_t) in zip(colors, ages_yr, cigale_ssp, te
     resid = np.abs(L_t_on_c - L_c) / np.maximum(np.abs(L_c), 1e-30)
     resid[~np.isfinite(resid)] = 0.0
     ax_r.plot(w_c, resid, color=color, linewidth=1.0)
-ax.set_xscale("log"); ax.set_yscale("log")
+ax.set_xscale("log")
+ax.set_yscale("log")
 ax.set_ylabel(r"$\nu L_\nu$ or $L_\nu$ [erg/s/Hz]")
 ax.set_title("BC03 Chabrier Z = 0.02 — CIGALE (solid) vs tengri (black dashed)")
 ax.legend(fontsize=9, title="SSP age")
 ax.grid(True, alpha=0.3)
-ax_r.set_xscale("log"); ax_r.set_yscale("log")
+ax_r.set_xscale("log")
+ax_r.set_yscale("log")
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"$|\Delta| / L_{\rm CIGALE}$", fontsize=9)
 ax_r.set_ylim(1e-9, 1e-2)
@@ -481,7 +483,8 @@ cigale_laws = [
 ]
 
 fig_c, ax_c = plt.subplots(1, 1, figsize=(10, 6))
-ax_c.set_xscale("log"); ax_c.set_yscale("log")
+ax_c.set_xscale("log")
+ax_c.set_yscale("log")
 ax_c.set_xlabel(r"$\lambda$ [Å]")
 ax_c.set_ylabel(r"$A_\lambda / A_V$")
 ax_c.set_title("CIGALE attenuation laws  (E(B−V) = 0.3)")
@@ -493,7 +496,8 @@ for law, label, kw in cigale_laws:
             ax_c.plot(w, A / A_V, linewidth=2.0, label=label)
     except Exception:
         continue
-ax_c.legend(fontsize=10); ax_c.grid(True, alpha=0.3)
+ax_c.legend(fontsize=10)
+ax_c.grid(True, alpha=0.3)
 fig_c.tight_layout()
 fig_c.savefig(str(figs_dir / "04_dust_attenuation_cigale.png"), dpi=150, bbox_inches="tight")
 
@@ -505,7 +509,8 @@ tengri_laws = [
 ]
 
 fig_t, ax_t = plt.subplots(1, 1, figsize=(10, 6))
-ax_t.set_xscale("log"); ax_t.set_yscale("log")
+ax_t.set_xscale("log")
+ax_t.set_yscale("log")
 ax_t.set_xlabel(r"$\lambda$ [Å]")
 ax_t.set_ylabel(r"$A_\lambda / A_V$")
 ax_t.set_title(r"tengri attenuation laws  ($\tau_V = 0.3$)")
@@ -541,7 +546,8 @@ for law, label in tengri_laws:
             ax_t.plot(wave_law, A / A_V, linewidth=2.0, label=label)
     except Exception:
         continue
-ax_t.legend(fontsize=10); ax_t.grid(True, alpha=0.3)
+ax_t.legend(fontsize=10)
+ax_t.grid(True, alpha=0.3)
 fig_t.tight_layout()
 fig_t.savefig(str(figs_dir / "04_dust_attenuation_tengri.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -929,7 +935,8 @@ L_skirt_only = np.maximum(L_skirt - U.regrid(w_base, L_base, w_skirt), 1e-50)
 ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.5, label="stellar + dust")
 ax_l.plot(w_skirt, L_skirt, "C0-", linewidth=1.5, alpha=0.7, label="stellar + dust + SKIRTOR")
 ax_l.plot(w_skirt, L_skirt_only, "C0:", linewidth=1.5, label="SKIRTOR component only")
-ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
+ax_l.legend(fontsize=9)
+ax_l.grid(True, alpha=0.3)
 # tengri side — same three-line layout. ``derived['sed_agn']`` carries
 # the disc + torus contribution; ``sed_intrinsic`` is the full SED with
 # everything; dashed baseline is the no-AGN build.
@@ -940,7 +947,8 @@ ax_r.plot(s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
           label="stellar + dust + AGN")
 ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
           label="composable disc + SKIRTOR torus only")
-ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
+ax_r.legend(fontsize=9)
+ax_r.grid(True, alpha=0.3)
 
 # Bound both axes to the same windows so the panels are visually
 # comparable. Without explicit ``set_xlim``, matplotlib auto-scales
@@ -1031,7 +1039,8 @@ fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
     ax.set_xlabel(r"$E$ [keV]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
 ax_l.set_title("pcigale.sed_modules.xray  (corona + XRB at log $N_H$=22)")
 ax_r.set_title("tengri  xray.yang20  (Yang+2020 corona + XRB)")
@@ -1067,7 +1076,8 @@ fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
     ax.set_xlabel(r"$\nu$ [GHz]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
 ax_l.set_title(r"pcigale.sed_modules.radio  ($q_{IR}=2.5$)")
 ax_r.set_title("tengri  radio.condon92")
@@ -1146,9 +1156,10 @@ save_fig("11_radio_synchrotron.png")
 # `pcigale.sed_modules.redshifting.igm_transmission(wave_nm, z)`; tengri
 # exposes `igm_transmission_meiksin06(wave_obs_AA, z)`. Same prescription,
 # so the curves should overlay.
-from pcigale.sed_modules.redshifting import igm_transmission as cigale_igm
-from tengri.components.igm import igm_transmission_meiksin06
 import jax.numpy as _jnp
+from pcigale.sed_modules.redshifting import igm_transmission as cigale_igm
+
+from tengri.components.igm import igm_transmission_meiksin06
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
@@ -1168,7 +1179,9 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     ax_l.plot(wave_obs_aa, T_c, color=color, linewidth=1.4, label=fr"$z = {z:.0f}$")
     ax_r.plot(wave_obs_aa, T_t, color=color, linewidth=1.4, label=fr"$z = {z:.0f}$")
 
-ax_l.legend(fontsize=9); ax_r.legend(fontsize=9)
+ax_l.legend(fontsize=9)
+
+ax_r.legend(fontsize=9)
 fig.tight_layout()
 save_fig("12_igm_transmission.png")
 
