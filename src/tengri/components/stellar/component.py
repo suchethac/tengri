@@ -926,41 +926,33 @@ class StellarSEDComponent:
             )
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — cubic Hermite
-            # (Catmull-Rom) interp of the ztable at runtime z. Publishes the
-            # same derived keys as the fixed-z path: stellar_phot_lnu_precomp,
+            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — smooth triweight
+            # interp of the ztable at runtime z. Publishes the same derived
+            # keys as the fixed-z path: stellar_phot_lnu_precomp,
             # stellar_phot_moment_precomp, stellar_phot_lnu_per_age_precomp,
             # stellar_phot_moment_per_age_precomp, filter_eff_waves.
             #
-            # Linear interp on a uniform z grid converges as O(h^2) and is
-            # non-monotonic in n_z for fixed test redshifts — the error at a
-            # given z depends on where it lands within a cell, so doubling
-            # n_z can move test points into a less-favourable cell and
-            # increase the error. Cubic Hermite (4-point stencil) is
-            # O(h^4) and converges smoothly. See issue #438.
+            # The original linear z-interp was O(h^2) and non-monotonic in
+            # n_z at fixed test redshifts: doubling the grid can shift a
+            # test point into a less-favourable cell and raise the error.
+            # The triweight kernel (Hearin et al. 2023) is the canonical
+            # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
+            # and SKIRTOR grids — C²-continuous, kernel-supported on the
+            # 3-bandwidth neighbourhood. See issue #438.
+            from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
             ztable = self._state.ssp_phot_ztable
             z = jnp.asarray(params.get("redshift", 0.0))
             z_grid = ztable.z_grid
-            n_z = z_grid.shape[0]
-            i_hi = jnp.clip(jnp.searchsorted(z_grid, z), 1, n_z - 1)
-            i_lo = i_hi - 1
-            i_ll = jnp.clip(i_lo - 1, 0, n_z - 1)
-            i_hh = jnp.clip(i_hi + 1, 0, n_z - 1)
-            z_lo = z_grid[i_lo]
-            z_hi = z_grid[i_hi]
-            t = (z - z_lo) / jnp.maximum(z_hi - z_lo, 1e-12)
+            z_edges = edges_for_grid(z_grid)
+            # Match grid-cell width for the kernel bandwidth (Hearin 2023
+            # convention): smooth across one neighbour on each side.
+            z_scatter = 0.5 * (z_grid[1] - z_grid[0])
+            w_z = compute_grid_weights(z, z_grid, scatter=z_scatter, edges=z_edges)
 
             def _interp(table):
-                # Catmull-Rom cubic Hermite on 4 stencil points.
-                # f(t) = ((a*t + b)*t + c)*t + d with t in [0, 1].
-                y0 = table[i_ll]
-                y1 = table[i_lo]
-                y2 = table[i_hi]
-                y3 = table[i_hh]
-                a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3
-                b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3
-                c = -0.5 * y0 + 0.5 * y2
-                return ((a * t + b) * t + c) * t + y1
+                # table: (n_z, ...). Contract axis 0 with kernel weights.
+                return jnp.tensordot(w_z, table, axes=([0], [0]))
 
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
             ssp_phot_at_z = _interp(ztable.ssp_phot_table)
