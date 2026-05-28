@@ -875,9 +875,17 @@ def igm_transmission_madau(
 # truth (per ADR-0005 / ADR-0008). Each value is the pure-JAX transmission
 # function and shares the public signature ``(wave_obs, z, **kwargs)``.
 
+from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
+
 IGM_TRANSMISSION_MODELS: dict[str, object] = {
     "inoue14": igm_transmission,
     "madau": igm_transmission_madau,
+    # Added by #446 (CIGALE-matching IGM) but #343's refactor missed wiring
+    # this into the canonical registry; the dict-grammar validator and
+    # builder factory both accepted ``"meiksin06"`` while
+    # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not — exactly
+    # the kind of drift the parity contract test was added to catch.
+    "meiksin06": igm_transmission_meiksin06,
 }
 
 #: Back-compat aliases that route to canonical registry keys. The bare

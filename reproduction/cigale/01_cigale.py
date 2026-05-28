@@ -44,15 +44,17 @@
 # physics block at a time around this fiducial.
 #
 # **What to expect.** Stellar templates, star-formation histories,
-# dust-attenuation curves, AGN disc + SKIRTOR torus, X-ray corona +
-# binaries, and IGM transmission reproduce CIGALE to floating-point or
-# to a fraction of a percent. Two blocks differ in ways worth seeing
-# plainly: the nebular emitter uses a neural emulator (Cue) rather than
-# static CLOUDY grids, and the dust-emission SED is currently truncated
-# at the SSP grid edge (160 µm for BC03) — the FIR-submm tail past that
-# is clipped pending the union-of-component-grids rework
-# ([#463](https://github.com/suchethac/tengri/issues/463)). Each
-# discrepancy is called out at the relevant section.
+# dust-attenuation curves, AGN disc + SKIRTOR torus, dust IR through
+# the FIR + Rayleigh-Jeans tail to ~mm, X-ray corona + binaries, IGM
+# transmission, and the radio synchrotron + free-free composite all
+# reproduce CIGALE to floating-point or to a fraction of a percent at
+# matched parameters. One block differs by design: the nebular emitter
+# uses Cue (a neural emulator trained on Cloudy 17, Li et al. 2025)
+# rather than CIGALE's bundled Cloudy 13.x grids. With all gas inputs
+# matched, Cue's Hα reads ~3.5× below CIGALE's CLOUDY — downstream of
+# the gas knobs, traceable to Cloudy version and the bare-stellar vs
+# wNE-SSP convolution path. Each discrepancy is called out at the
+# relevant section.
 
 # %% [markdown]
 # ## Setup
@@ -67,12 +69,11 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from reproduction.cigale._drivers import cigale_driver as C, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from reproduction.cigale._drivers import cigale_driver as C
-from reproduction.cigale._drivers import units as U
 
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
@@ -228,6 +229,7 @@ _C_AA = 2.998e18  # speed of light [Å/s]
 # CIGALE side: raw BC03 Chabrier Z=0.02 pickle, converted W/nm/Msun →
 # Lsun/Hz/Msun (the exact conversion used by _drivers/cigale_ssp_to_dsps.py).
 import sys as _sys
+
 _pkl_path = next((_p / "pcigale" / "data" / "bc03" / "Z=0.02_imf=chab.pickle"
                   for _p in map(_P, _sys.path)
                   if (_p / "pcigale" / "data" / "bc03" / "Z=0.02_imf=chab.pickle").exists()),
@@ -263,12 +265,14 @@ for color, age_yr, (w_c, L_c), (w_t, L_t) in zip(colors, ages_yr, cigale_ssp, te
     resid = np.abs(L_t_on_c - L_c) / np.maximum(np.abs(L_c), 1e-30)
     resid[~np.isfinite(resid)] = 0.0
     ax_r.plot(w_c, resid, color=color, linewidth=1.0)
-ax.set_xscale("log"); ax.set_yscale("log")
+ax.set_xscale("log")
+ax.set_yscale("log")
 ax.set_ylabel(r"$\nu L_\nu$ or $L_\nu$ [erg/s/Hz]")
 ax.set_title("BC03 Chabrier Z = 0.02 — CIGALE (solid) vs tengri (black dashed)")
 ax.legend(fontsize=9, title="SSP age")
 ax.grid(True, alpha=0.3)
-ax_r.set_xscale("log"); ax_r.set_yscale("log")
+ax_r.set_xscale("log")
+ax_r.set_yscale("log")
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"$|\Delta| / L_{\rm CIGALE}$", fontsize=9)
 ax_r.set_ylim(1e-9, 1e-2)
@@ -479,7 +483,8 @@ cigale_laws = [
 ]
 
 fig_c, ax_c = plt.subplots(1, 1, figsize=(10, 6))
-ax_c.set_xscale("log"); ax_c.set_yscale("log")
+ax_c.set_xscale("log")
+ax_c.set_yscale("log")
 ax_c.set_xlabel(r"$\lambda$ [Å]")
 ax_c.set_ylabel(r"$A_\lambda / A_V$")
 ax_c.set_title("CIGALE attenuation laws  (E(B−V) = 0.3)")
@@ -491,7 +496,8 @@ for law, label, kw in cigale_laws:
             ax_c.plot(w, A / A_V, linewidth=2.0, label=label)
     except Exception:
         continue
-ax_c.legend(fontsize=10); ax_c.grid(True, alpha=0.3)
+ax_c.legend(fontsize=10)
+ax_c.grid(True, alpha=0.3)
 fig_c.tight_layout()
 fig_c.savefig(str(figs_dir / "04_dust_attenuation_cigale.png"), dpi=150, bbox_inches="tight")
 
@@ -503,7 +509,8 @@ tengri_laws = [
 ]
 
 fig_t, ax_t = plt.subplots(1, 1, figsize=(10, 6))
-ax_t.set_xscale("log"); ax_t.set_yscale("log")
+ax_t.set_xscale("log")
+ax_t.set_yscale("log")
 ax_t.set_xlabel(r"$\lambda$ [Å]")
 ax_t.set_ylabel(r"$A_\lambda / A_V$")
 ax_t.set_title(r"tengri attenuation laws  ($\tau_V = 0.3$)")
@@ -539,7 +546,8 @@ for law, label in tengri_laws:
             ax_t.plot(wave_law, A / A_V, linewidth=2.0, label=label)
     except Exception:
         continue
-ax_t.legend(fontsize=10); ax_t.grid(True, alpha=0.3)
+ax_t.legend(fontsize=10)
+ax_t.grid(True, alpha=0.3)
 fig_t.tight_layout()
 fig_t.savefig(str(figs_dir / "04_dust_attenuation_tengri.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -619,11 +627,24 @@ plt.show()
 # $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
 # the residual is annotated on the right panel.
 #
-# The stellar + Calzetti continuum below 1 µm reproduces to ~1 %.
-# Post-#476 the master wavelength grid is now the union of every
-# attached component's native grid, so the dust SED extends through
-# the FIR peak and down the Rayleigh-Jeans tail to ~mm — the visible
-# 160-µm truncation in earlier renderings of this notebook is gone.
+# The stellar + Calzetti continuum below 1 µm reproduces to ~1 %. The
+# master wavelength grid is the union of every attached component's
+# native grid, so the dust SED extends through the FIR peak (100 µm)
+# and down the Rayleigh-Jeans tail.
+#
+# **Long-wavelength behaviour.** Past ~10 mm the panels diverge — and
+# the cause is the template port, not the integrator. tengri's
+# `data/dale2014_templates.h5` is built directly from the published
+# Dale et al. (2014) release (`spectra/spectra.0.00AGN.dat`, the
+# full 1496-wavelength × 64-α grid) and carries non-zero luminosity
+# densities out to 225 mm — the longest wavelength in the original
+# publication. CIGALE bundles a separate version of those templates
+# that zeros out everything past ~10 mm. Both codes renormalise to
+# `L_absorbed` at runtime, so the FIR peak matches by energy balance
+# regardless. The tengri νL_ν tail at 10–200 mm sits about three
+# orders of magnitude below the FIR peak; physically negligible for
+# the bolometric budget, visible on log axes, and closer to what
+# Dale et al. actually published than the CIGALE-bundled version.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -677,6 +698,23 @@ plt.show()
 #
 # Same model, viewed across 1 Å (X-ray) to 10 m (radio). What appears
 # in the X-ray and radio panels arrives in §10 and §11.
+#
+# **Two visible differences in the wings — both are §-cross-references,
+# not §7-physics issues:**
+#
+# *Far-UV (λ < 1000 Å):* tengri's panel drops steeply on the blue side
+# of Lyα while CIGALE's tail decays more gradually. The cause is
+# attenuation-law extrapolation outside the law's defined range —
+# Calzetti+2000 was fit on 1200 Å – 22000 Å, and tengri's
+# implementation lets `A_λ/A_V` climb to ~150 at λ < 300 Å while
+# CIGALE's drops cleanly to zero. The panel comparison in §4 shows
+# this directly. Both behaviours are extrapolation choices; neither
+# is more physically motivated than the other.
+#
+# *Long-wavelength tail (λ > 10⁷ Å):* the tengri side carries a small
+# rising νL_ν tail from 10 to 200 mm where CIGALE's reads zero. This
+# is the published-Dale-vs-CIGALE-truncated-Dale template difference
+# documented in §6.
 
 # %%
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
@@ -716,34 +754,30 @@ plt.show()
 # Each panel shows the stellar baseline (dashed), stellar + nebular
 # (solid), and the nebular component alone (dotted). The two emitters
 # see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
-# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`.
-# tengri's `CueBackend` exposes `gas_logn`, `gas_logno`, `gas_logco` as
-# continuous parameters that take the CIGALE-faithful values (n_H = 100
-# cm⁻³ → `gas_logn = 2.0`; solar N/O, C/O → `gas_logno = gas_logco = 0.0`)
-# at the midpoint of their priors. (The earlier framing of #458 as
-# "those CIGALE knobs have no tengri counterpart" was wrong — the bug
-# was a silent normalisation in the SEDComponent path, fixed in #477.)
+# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`,
+# `n_H = 100 cm⁻³` (`gas_logn = 2.0`), solar N/O and C/O
+# (`gas_logno = gas_logco = 0`). The Q_H reaching Cue is the integral
+# of the SSP-convolved ionising spectrum below 911.76 Å, published by
+# the stellar component and consumed by the nebular component on every
+# forward pass.
 #
-# Both panels include line + continuum nebular emission. The Cue side
-# previously read silent — three independent defects suppressed line
-# luminosities until late May 2026:
-# (1) Q_H integration in `fit_ionizing_spectrum` overflowed `inf` on
-#     float32 BC03 SSPs (closes #458, fixed in #469).
-# (2) `cue_model.py` set `gas_logq = logU` (~−3 dex) instead of the
-#     Strömgren-corrected value (~+48 dex); a ±100-dex saturation clip
-#     hid the error (fixed in #477; clip tightened to ±50 dex in #480).
-# (3) `gas_logqion` was hardcoded at 49.1 (~3-4 dex below the Q_H of a
-#     real SF galaxy); the SEDComponent now consumes the SSP-aggregated
-#     `nion` published by `StellarSEDComponent` (fixed in #477).
+# **Remaining residual.** At matched gas inputs, tengri's Cue Hα peak
+# reads **~3.5× lower than CIGALE's CLOUDY** at this fiducial (and the
+# same ratio at the 5 Gyr quiescent reference — not a stress-test
+# artifact). The gap lives downstream of the gas knobs: Cue was trained
+# on Cloudy 17 (Li et al. 2025) while CIGALE bundles Cloudy 13.x grids,
+# and Cue's bare-stellar SSP path differs from CIGALE's wNE-SSP
+# convolution. Nebular continuum shape and emission-line ratios
+# reproduce well; the absolute line normalisation does not.
 #
-# **Remaining residual.** Even with all three defects fixed and gas
-# inputs matched, tengri's Cue Hα peak reads **~3.5× lower than
-# CIGALE's CLOUDY** at this fiducial (and the same ratio at 5 Gyr
-# quiescent — not a stress-test artifact). The gap lives downstream
-# of the gas knobs: Cue was trained on Cloudy 17 while CIGALE bundles
-# Cloudy 13.x grids, and Cue's bare-stellar SSP path differs from
-# CIGALE's wNE-SSP convolution. Nebular continuum shape and emission-
-# line ratios reproduce well; the absolute line normalisation does not.
+# **Grid coverage.** The Cue emulator ships a native continuum grid
+# (~915 Å – 10⁸ Å, 1841 points) inside `cue_weights.npz`. The
+# wavelength-extension registry routes that grid into the master
+# union, so attaching Cue alone is enough to extend the SED past the
+# SSP edge — no `dust.emission` component required. The Cue continuum
+# now plots all the way out to the radio without the artificial
+# 160-µm truncation that earlier versions of the registry left in
+# place when only Cue (and no dust template) was active.
 
 # %%
 # §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts
@@ -805,10 +839,10 @@ ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
           label="stellar + CLOUDY nebular")
 ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
 ax_l.legend(fontsize=8)
-# tengri side — post-#469/#477 the Cue-only curve carries real line +
-# continuum emission across UV–optical. Agreement is limited by Cloudy
-# version (17 vs 13.x), bare-stellar vs wNE-SSP path, and line-broadening
-# kernel; see markdown above for the ~3.5× Hα residual.
+# tengri side — same three traces (stellar dashed, stellar+Cue solid,
+# Cue-only dotted). Agreement is limited by Cloudy version (17 vs
+# 13.x), bare-stellar vs wNE-SSP path, and line-broadening kernel;
+# see markdown above for the ~3.5× Hα residual.
 L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
                           - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
@@ -841,15 +875,20 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # **The disc model differs by construction.** SKIRTOR2016 bundles a
 # specific accretion-disc spectrum (Schartmann+2005-like piecewise
 # power law with the 1200 Å bend) together with the dusty-torus
-# templates — it's a single package. tengri's composable AGN couples
-# a Shakura-Sunyaev multicolor accretion disc to the SKIRTOR torus,
-# so the UV-optical disc continuum is different on each side even
-# though the torus IR is the same templates. The torus L_ν is what
-# #468 fixed; the disc shape is a deliberate model choice (multicolor
-# disc is differentiable in M_BH, ṁ, spin — SKIRTOR's baked-in disc
-# is not). Edge-on viewing pushes the dust peak out to ~30 µm (classic
-# reprocessed-dust bump) on both sides; at face-on i = 30° the dust
-# peak sits at ~6–9 µm on both sides.
+# templates — a single integrated package, smooth from UV through the
+# optical. tengri's composable AGN couples a Shakura-Sunyaev
+# multicolor accretion disc to the SKIRTOR torus, and the multicolor
+# disc carries a hard far-UV bump (<1000 Å) that's well separated from
+# the optical Wien tail — the right panel shows a deep notch around
+# 5000 Å between those two features, where the SKIRTOR-bundled disc
+# instead reads as a continuous rise. The disc shape is a deliberate
+# model choice: the multicolor disc is differentiable in M_BH, ṁ,
+# spin, while SKIRTOR's baked-in disc is not, so anyone fitting an
+# AGN luminosity and Eddington ratio simultaneously wants the
+# composable path even though it diverges visually from a SKIRTOR-
+# package fit. The torus IR uses the same templates and reproduces:
+# face-on i = 30° peaks at ~6–9 µm on both sides; edge-on viewing
+# pushes the dust peak out to ~30 µm (classic reprocessed-dust bump).
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -913,7 +952,8 @@ L_skirt_only = np.maximum(L_skirt - U.regrid(w_base, L_base, w_skirt), 1e-50)
 ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.5, label="stellar + dust")
 ax_l.plot(w_skirt, L_skirt, "C0-", linewidth=1.5, alpha=0.7, label="stellar + dust + SKIRTOR")
 ax_l.plot(w_skirt, L_skirt_only, "C0:", linewidth=1.5, label="SKIRTOR component only")
-ax_l.legend(fontsize=9); ax_l.grid(True, alpha=0.3)
+ax_l.legend(fontsize=9)
+ax_l.grid(True, alpha=0.3)
 # tengri side — same three-line layout. ``derived['sed_agn']`` carries
 # the disc + torus contribution; ``sed_intrinsic`` is the full SED with
 # everything; dashed baseline is the no-AGN build.
@@ -924,7 +964,8 @@ ax_r.plot(s_agn.wave, s_agn.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
           label="stellar + dust + AGN")
 ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
           label="composable disc + SKIRTOR torus only")
-ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
+ax_r.legend(fontsize=9)
+ax_r.grid(True, alpha=0.3)
 
 # Bound both axes to the same windows so the panels are visually
 # comparable. Without explicit ``set_xlim``, matplotlib auto-scales
@@ -950,17 +991,14 @@ save_fig("09_agn_skirtor.png")
 # CIGALE's `xray` module follows Yang et al. (2020): an AGN corona
 # power law tied to L_2500, plus an HMXB / LMXB contribution scaled by
 # stellar mass and SFR, with a high-energy exponential cutoff at
-# E_cut ≈ 300 keV. tengri ships the matching `xray.yang20` (landed in
-# #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
-# α_ox = -1.4, Γ_HMXB = 2.0, Γ_LMXB = 1.6).
+# E_cut ≈ 300 keV. tengri ships the matching `xray.yang20` with the
+# same defaults (Γ_AGN = 1.8, E_cut = 300 keV, α_ox = -1.4,
+# Γ_HMXB = 2.0, Γ_LMXB = 1.6).
 #
 # **AGN strength matched to §9.** Both panels use `agn_log_lbol ≈ −0.68`
-# (CIGALE via `fracAGN=0.3` on 1 M☉ formed, tengri explicit) — the
-# weak-Seyfert level that's consistent with the rest of the notebook's
-# 1 M☉ fiducial. A previous revision of this section used a quasar-
-# strength tengri AGN (log_lbol = 11.5) which made the X-ray flux
-# visible on the plot but compared to CIGALE's Seyfert chain by 12
-# orders of magnitude — apples to oranges.
+# (CIGALE via `fracAGN = 0.3` on 1 M☉ formed, tengri explicit) — the
+# weak-Seyfert level consistent with the rest of the notebook's 1 M☉
+# fiducial.
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
 # both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Above ~100 keV the panels
@@ -1018,7 +1056,8 @@ fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
     ax.set_xlabel(r"$E$ [keV]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
 ax_l.set_title("pcigale.sed_modules.xray  (corona + XRB at log $N_H$=22)")
 ax_r.set_title("tengri  xray.yang20  (Yang+2020 corona + XRB)")
@@ -1054,7 +1093,8 @@ fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
     ax.set_xlabel(r"$\nu$ [GHz]")
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_xscale("log"); ax.set_yscale("log")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
     ax.grid(True, alpha=0.3)
 ax_l.set_title(r"pcigale.sed_modules.radio  ($q_{IR}=2.5$)")
 ax_r.set_title("tengri  radio.condon92")
@@ -1119,11 +1159,11 @@ save_fig("11_radio_synchrotron.png")
 # CIGALE applies Meiksin (2006) IGM attenuation inside its
 # `redshifting` module — Lyman series **and** the diffuse-IGM Lyα
 # forest continuum suppression, so transmission redward of the Lyman
-# limit at z = 3 sits at ~0.18-0.25 rather than 1. tengri now ships the
-# matching `igm.meiksin06` (landed in #446); this panel uses it directly
-# so both sides apply the same Meiksin prescription. The transmission
-# curves overlay at z = 3, 5, 7 to **max |ΔT| ~ 1e-7** (float precision,
-# median ΔT = 0) — tengri's port is bit-faithful to CIGALE's Meiksin
+# limit at z = 3 sits at ~0.18-0.25 rather than 1. tengri ships the
+# matching `igm.meiksin06`; this panel uses it directly so both sides
+# apply the same Meiksin prescription. The transmission curves overlay
+# at z = 3, 5, 7 to **max |ΔT| ~ 1e-7** (float precision, median
+# ΔT = 0) — tengri's port is bit-faithful to CIGALE's Meiksin
 # transmission, not just visually close.
 
 # %%
@@ -1133,9 +1173,10 @@ save_fig("11_radio_synchrotron.png")
 # `pcigale.sed_modules.redshifting.igm_transmission(wave_nm, z)`; tengri
 # exposes `igm_transmission_meiksin06(wave_obs_AA, z)`. Same prescription,
 # so the curves should overlay.
-from pcigale.sed_modules.redshifting import igm_transmission as cigale_igm
-from tengri.components.igm import igm_transmission_meiksin06
 import jax.numpy as _jnp
+from pcigale.sed_modules.redshifting import igm_transmission as cigale_igm
+
+from tengri.components.igm import igm_transmission_meiksin06
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
@@ -1155,7 +1196,9 @@ for color, z in zip(("C0", "C1", "C2"), (3.0, 5.0, 7.0)):
     ax_l.plot(wave_obs_aa, T_c, color=color, linewidth=1.4, label=fr"$z = {z:.0f}$")
     ax_r.plot(wave_obs_aa, T_t, color=color, linewidth=1.4, label=fr"$z = {z:.0f}$")
 
-ax_l.legend(fontsize=9); ax_r.legend(fontsize=9)
+ax_l.legend(fontsize=9)
+
+ax_r.legend(fontsize=9)
 fig.tight_layout()
 save_fig("12_igm_transmission.png")
 

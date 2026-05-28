@@ -77,8 +77,16 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
+    # Aliases (e.g. ``"inoue"`` → ``"inoue14"``) are validator-side back-compat
+    # and don't get a separate user-facing factory — the canonical entry serves
+    # both. Filter them out so ``builders.igm.available()`` only lists canonical
+    # names + ``"none"``. (Contract: ``test_igm_builder_factories_skip_aliases``.)
+    from tengri.components.igm.igm import _IGM_ALIASES
+
     factories: dict[str, Callable[..., dict]] = {}
     for variant in sorted(_valid_igm_types()):
+        if variant in _IGM_ALIASES:
+            continue
         short_params, flag_map = _discover_params(variant)
         factories[variant] = make_factory(
             variant=variant,

@@ -1076,6 +1076,14 @@ class SEDModel:
             delta["neb_logZ_gas"] = ("neb_logZ_gas", 1.0, LOG10_ZSUN)
 
         self._nebular_backend = None
+        # Track which nebular backend is active so the wavelength-extension
+        # registry can route the build to ``native_wave_nebular(...)``. Only
+        # backends that ship a tabulated native grid (Cue's ``cont_wav``)
+        # currently extend the master grid; CLOUDY-grid / CB19 evaluate on
+        # the consumer's grid and contribute nothing here.
+        self._nebular_model = (
+            spec.nebular_mode if spec.nebular_mode not in ("off", "ssp") else None
+        )
         if spec.nebular_mode == "cue":
             from tengri.components.nebular import CueBackend
 
@@ -1196,6 +1204,7 @@ class SEDModel:
 
         component_grids = collect_native_wavelength_grids(
             dust_emission_model=getattr(self, "_dust_emission_model", None),
+            nebular_model=getattr(self, "_nebular_model", None),
             agn_model=getattr(self, "_agn_model", None),
             agn_torus_block=getattr(self, "_agn_torus_block", None),
             agn_disc_block=getattr(self, "_agn_disc_block", None),
