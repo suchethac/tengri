@@ -76,7 +76,8 @@ persistent cache and finish in under a minute.
 curves · §5 attenuation applied · §6 dust IR + energy balance ·
 §7 panchromatic · §8 nebular (Cloudy v25 vs Cue v17) · §9 LSF /
 velocity broadening · §10 double-power-law SFH · §11 lognormal SFH ·
-§12 IGM.
+§12 IGM · §13 forward-model timing · §14 SDSS ugriz photometry ·
+§15 metallicity sensitivity.
 
 AGN, X-ray, and radio sections are skipped — BAGPIPES has no
 counterpart. See `reproduction/cigale/` for those.
@@ -99,6 +100,9 @@ either reproduces the reference, or surfaces a gap.
 | 10 | Double power-law SFH | Same closed-form shape on both sides, **but applied in different time frames**: BAGPIPES treats `t` as cosmic age since the Big Bang, tengri treats it as lookback since formation. For matched `(α, β, τ)` the two curves are time-reversed images of each other. Not a bug — a convention difference researchers reading two papers should know about. |
 | 11 | Lognormal SFH | Same shape, same time-frame caveat as §10. BAGPIPES `tmax` ≡ cosmic age; tengri `peak_lbt_gyr` ≡ lookback time. |
 | 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. **Filed as a tengri bug.** |
+| 13 | Forward-model timing | Both codes finish a full SED build in ~80–120 ms / call — same performance class for forward-only use. tengri's real speed advantage is `jax.grad` (~1 extra fwd pass vs `2 × n_params` finite differences for non-JAX codes). |
+| 14 | SDSS ugriz photometry | Shared filter set on both sides → tengri 0.3–0.7 mag brighter, largest in u-band, shrinking toward z. **This is §8 projecting:** the Cue v17 / Cloudy v25 nebular discrepancy dominates the broadband ratio. Removing the nebular block on both sides collapses the residual to §3-level ~0.01 mag. |
+| 15 | Metallicity sensitivity | Z ∈ {0.2, 1, 2.5} Z⊙ at the fiducial SFH on both sides. Both codes track the standard age-metallicity-degeneracy direction (high-Z → redder + deeper Balmer/Mg/Fe absorption). Visual match. |
 
 ## Open follow-ups surfaced by this comparison
 

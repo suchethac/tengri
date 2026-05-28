@@ -1264,6 +1264,149 @@ print(f"§13 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 
 
 # %% [markdown]
+# ## §14 Photometry — SDSS ugriz AB magnitudes
+#
+# Integrating the panchromatic SED through a filter is the step that
+# turns a model spectrum into observable data. BAGPIPES does this via
+# `filt_list` + `model_galaxy.photometry`; tengri does it via
+# `tengri.Photometry`. Both codes should produce the same AB
+# magnitudes for the same input SED and the same filter curves.
+#
+# Here we share the **same filter set on both sides** (tengri's
+# bundled SDSS curves) and convolve each code's §7 panchromatic SED
+# through it, placing the source at the standard absolute-magnitude
+# distance of 10 pc. Differences trace back to the §7 SED, not to the
+# photometry integration — tengri and BAGPIPES use the same
+# `∫ F_ν T dν / ∫ T dν` definition of band-averaged flux.
+#
+# **What the residual panel actually shows.** tengri is 0.3–0.7 mag
+# brighter than BAGPIPES across ugriz, with the offset largest in
+# u-band and shrinking toward z. That is **not** a photometry-
+# integration bug — it is §8's Cue v17 / Cloudy v25 nebular
+# discrepancy (Cue gives ~3.6× more Hα + nebular continuum at matched
+# logU) projecting onto broadband photometry. u-band is bluest and
+# picks up the Balmer continuum + [O II] λ3727 boost; z-band is
+# reddest and only picks up the residual continuum excess. Re-running
+# the §14 cell with `nebular={}` removed from the bagpipes block (and
+# the matched `neb={...}` removed on the tengri side) collapses the
+# residual to the §3-level ~0.01 mag.
+
+# %%
+from tengri.observation.filters import load_filter
+
+_sdss_bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+_filters = [load_filter(b) for b in _sdss_bands]
+
+_d_10pc_cm = 10.0 * 3.086e18  # 10 pc in cm
+_dimm = 4.0 * np.pi * _d_10pc_cm**2  # cm², F_ν = L_ν / dimm
+
+
+def _ab_mag(wave_aa, L_nu_erg_per_hz, f_wave, f_trans):
+    """Photon-counting AB magnitude at d = 10 pc."""
+    F_nu = np.asarray(L_nu_erg_per_hz) / _dimm
+    F_nu_at_filter = np.interp(f_wave, wave_aa, F_nu, left=0.0, right=0.0)
+    weight = f_trans / f_wave
+    F_band = np.trapezoid(F_nu_at_filter * weight, f_wave) / np.trapezoid(weight, f_wave)
+    AB_ZP = 3.631e-20  # 3631 Jy in erg/s/cm²/Hz
+    return -2.5 * np.log10(F_band / AB_ZP)
+
+
+bp_mags = [_ab_mag(w_b_full, L_b_full, f.wave, f.trans) for f in _filters]
+_L_t_full = (
+    np.asarray(s_full.derived["sed_dust_attenuated"])
+    + np.asarray(s_full.derived["sed_dust_ir"])
+    + np.asarray(s_full.derived["sed_nebular"])
+)
+tng_mags = [_ab_mag(np.asarray(s_full.wave), _L_t_full, f.wave, f.trans) for f in _filters]
+
+fig, (ax_top, ax_bot) = plt.subplots(
+    2, 1, figsize=(8, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+_pivot = np.array(
+    [np.trapezoid(f.trans * f.wave, f.wave) / np.trapezoid(f.trans, f.wave) for f in _filters]
+)
+ax_top.plot(_pivot, bp_mags, "o-", color="C0", linewidth=1.7, label="BAGPIPES")
+ax_top.plot(_pivot, tng_mags, "s--", color="C1", linewidth=1.7, label="tengri")
+ax_top.invert_yaxis()
+ax_top.set_ylabel(r"AB magnitude (10 pc, $M_\star = 10^{10}\,M_\odot$)")
+ax_top.set_title("SDSS ugriz photometry on the §7 panchromatic SED")
+ax_top.grid(True, alpha=0.3)
+ax_top.legend(fontsize=10)
+ax_bot.plot(_pivot, np.array(tng_mags) - np.array(bp_mags), "k.-", linewidth=1.5)
+ax_bot.axhline(0.0, color="grey", linestyle=":")
+ax_bot.set_xlabel(r"pivot $\lambda$ [Å]")
+ax_bot.set_ylabel("tengri − BAGPIPES [mag]")
+ax_bot.set_ylim(-1.0, 0.2)
+ax_bot.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("14_photometry_sdss.png")
+
+for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
+    print(f"§14 {band}: BAGPIPES {m_b:.3f}, tengri {m_t:.3f}, Δ {m_t - m_b:+.3f} mag")
+
+
+# %% [markdown]
+# ## §15 Metallicity sensitivity (chemical enrichment, single-Z form)
+#
+# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block; tengri
+# carries the same knob via `logzsol = log10(Z / Z☉)`. Both codes also
+# support time-varying Z (BAGPIPES `metallicity_bins`; tengri's
+# `chemical_enrichment_history`), but the simplest reproducible test
+# is the single-Z response: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at the
+# fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR stellar
+# continuum. Both codes should track the standard
+# age-metallicity-degeneracy direction: high-Z → redder + deeper
+# absorption features.
+
+# %%
+_Z_VALUES = [0.2, 1.0, 2.5]
+_logzsol_values = [float(np.log10(z)) for z in _Z_VALUES]
+
+fig, (ax_b, ax_t) = plt.subplots(1, 2, figsize=(13, 5), sharey=True)
+ax_b.set_title("BAGPIPES — Z sweep at 5 Gyr delayed-τ")
+ax_t.set_title("tengri — Z sweep at 5 Gyr delayed-τ")
+for ax in (ax_b, ax_t):
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel(r"$\lambda_{\rm rest}$ [Å]")
+    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax.set_xlim(2e3, 2e4)
+    ax.set_ylim(2e27, 8e29)
+    ax.grid(True, alpha=0.3)
+
+_colors = plt.cm.plasma(np.linspace(0.15, 0.85, len(_Z_VALUES)))
+for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
+    w_b_z, L_b_z = B.stellar_only_lnu(
+        massformed=LOG_MASS_FIDUCIAL,
+        metallicity=z,
+        age_max=AGE_GYR_FIDUCIAL,
+        tau=TAU_GYR_FIDUCIAL,
+        sfh_type="delayed",
+    )
+    ax_b.plot(w_b_z, L_b_z, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
+    m_z = SEDModel.build(
+        ssp_data=ssp,
+        stellar={"logzsol": Fixed(logz), "*": FIXED},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+            "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+            "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        redshift=Fixed(0.0),
+    )
+    s_z = m_z.predict_state({})
+    ax_t.plot(s_z.wave, s_z.sed_intrinsic, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
+
+ax_b.legend(fontsize=10)
+ax_t.legend(fontsize=10)
+fig.tight_layout()
+save_fig("15_metallicity_sweep.png")
+
+
+# %% [markdown]
 # ## Summary
 #
 # Section-by-section, at matched parameters:
