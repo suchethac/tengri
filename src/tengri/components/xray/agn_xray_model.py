@@ -94,7 +94,13 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     parameter_prefix: str = "agn_xray_"
 
     # Free parameters
-    gamma = Uniform(1.4, 2.4, description="X-ray photon index", units="dimensionless")
+    gamma = Uniform(
+        1.4,
+        2.4,
+        description="X-ray photon index",
+        units="dimensionless",
+        default=1.9,
+    )
     alpha_ox = Fixed(-1.4, description="Lusso & Risaliti alpha_ox", units="dimensionless")
     e_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
 

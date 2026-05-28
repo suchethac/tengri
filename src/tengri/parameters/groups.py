@@ -79,6 +79,7 @@ True
 from __future__ import annotations
 
 import difflib
+import warnings
 
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
@@ -110,12 +111,48 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
 def _default_fixed_value(param_name: str, registry_default: Distribution) -> float:
     """Pick the fixed value used when wildcard-FIXED collapses a free param.
 
-    Returns the canonical convention from ``_CANONICAL_FIXED_DEFAULTS`` when
-    present, else falls back to the prior midpoint
-    ``registry_default.unstandardize(0.0)``.
+    Resolution order:
+    1. ``_CANONICAL_FIXED_DEFAULTS`` — hand-curated per-name override for
+       parameters whose name carries CIGALE / FSPS / Bagpipes conventions
+       that take precedence over a generic prior default (e.g. ``met_logzsol``
+       across the several stellar metallicity models).
+    2. ``registry_default.default`` — the per-declaration default set on the
+       ``Distribution`` itself via #478 (``Uniform(lo, hi, default=...)``).
+    3. ``ParameterDefaultMissingError`` — every declared free parameter must
+       carry one of the above. The pre-#478 fallback to
+       ``registry_default.unstandardize(0.0)`` (the prior midpoint) is gone:
+       for symmetric ranges the midpoint often coincided with the physical
+       default (``Uniform(-2, 2)`` → 0.0 = solar for ``gas_logno``) but for
+       skewed ranges it silently injected non-physical values (``Uniform(0, 5)``
+       for ``gas_logn = log10(n_H/cm^-3)`` → 2.5 = 316 cm⁻³, three times the
+       CIGALE-canonical 100 cm⁻³). Forcing an explicit default at the
+       declaration site eliminates that class of silent footgun.
     """
     if param_name in _CANONICAL_FIXED_DEFAULTS:
         return _CANONICAL_FIXED_DEFAULTS[param_name]
+    if registry_default.default is not None:
+        return float(registry_default.default)
+    # Defence-in-depth: the contract test
+    # ``tests/contract/test_param_defaults.py`` enforces every declared
+    # parameter carries an explicit ``default=``. If we get here it means
+    # something slipped through (or the user constructed a Distribution by
+    # hand without one). Warn loudly so the gap is visible in stderr / CI
+    # logs, then fall back to the prior midpoint to keep introspection paths
+    # (e.g. ``recipe_parameters`` invoked by ``builders/agn/atten.py`` at
+    # import time) from crashing the whole package. The warning category is
+    # ``UserWarning`` so it shows up by default; do not silence it without
+    # adding the default at the declaration site.
+    warnings.warn(
+        f"Parameter {param_name!r} was marked FIXED via the '*': FIXED "
+        f"wildcard but its registry default carries no explicit "
+        f"``default=``. Falling back to the prior midpoint "
+        f"({registry_default.unstandardize(0.0)!r}); the contract test "
+        f"``tests/contract/test_param_defaults.py`` should be failing in CI "
+        f"to flag this. Fix: set ``default=<physical_value>`` at the "
+        f"declaration site (e.g. ``Uniform(0, 5, default=2.0)``).",
+        UserWarning,
+        stacklevel=3,
+    )
     return float(registry_default.unstandardize(0.0))
 
 

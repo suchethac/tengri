@@ -94,12 +94,14 @@ class CharlotFall(SEDModelComponent):
     tau_bc = Uniform(
         0.0,
         4.0,
+        default=1.0,
         description="birth-cloud V-band optical depth",
         units="dimensionless",
     )
     tau_diff = Uniform(
         0.0,
         4.0,
+        default=0.3,
         description="diffuse-ISM V-band optical depth",
         units="dimensionless",
     )

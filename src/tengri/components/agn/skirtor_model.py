@@ -165,31 +165,75 @@ class SKIRTORTorus(SEDModelComponent):
     config: SKIRTORTorusConfig = field(default_factory=SKIRTORTorusConfig)
 
     # Free parameters — auto-discovered
-    log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
+    log_lbol = Uniform(
+        8.0,
+        14.0,
+        description="AGN bolometric luminosity",
+        units="dex (L_sun)",
+        default=11.0,
+    )
     tau_skirtor = Uniform(
         3.0,
         11.0,
         description="9.7 µm optical depth (Stalevski et al.)",
         units="dimensionless",
+        default=7.0,
     )
     p_skirtor = Uniform(
-        0.0, 1.5, description="Radial dust density gradient", units="dimensionless"
+        0.0,
+        1.5,
+        description="Radial dust density gradient",
+        units="dimensionless",
+        default=1.0,
     )
-    q_skirtor = Uniform(0.0, 1.5, description="Polar dust density gradient", units="dimensionless")
-    oa_skirtor = Uniform(20.0, 60.0, description="Torus half-opening angle", units="deg")
-    cos_inc = Uniform(0.0, 1.0, description="Cosine of inclination", units="dimensionless")
+    q_skirtor = Uniform(
+        0.0,
+        1.5,
+        description="Polar dust density gradient",
+        units="dimensionless",
+        default=1.0,
+    )
+    oa_skirtor = Uniform(
+        20.0,
+        60.0,
+        description="Torus half-opening angle",
+        units="deg",
+        default=40.0,
+    )
+    cos_inc = Uniform(
+        0.0,
+        1.0,
+        description="Cosine of inclination",
+        units="dimensionless",
+        default=0.45,
+    )
     frac_agn = Uniform(
         0.0,
         1.0,
         description="AGN fraction (L_AGN / L_total, CIGALE convention)",
         units="dimensionless",
+        default=0.2,
     )
-    polar_ebv = Uniform(0.0, 0.5, description="Polar dust E(B-V) (Type-1 sightline)", units="mag")
+    polar_ebv = Uniform(
+        0.0,
+        0.5,
+        description="Polar dust E(B-V) (Type-1 sightline)",
+        units="mag",
+        default=0.1,
+    )
     polar_temperature = Uniform(
-        50.0, 200.0, description="Polar dust greybody temperature", units="K"
+        50.0,
+        200.0,
+        description="Polar dust greybody temperature",
+        units="K",
+        default=100.0,
     )
     polar_beta = Uniform(
-        1.0, 2.5, description="Polar dust emissivity index", units="dimensionless"
+        1.0,
+        2.5,
+        description="Polar dust emissivity index",
+        units="dimensionless",
+        default=1.6,
     )
 
     # Cross-component outputs

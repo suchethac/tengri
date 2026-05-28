@@ -428,17 +428,32 @@ _register(
         name="dpl",
         fn=dpl,
         params={
+            # DPL defaults from Carnall+2018 (MNRAS 480, 4379) fiducial galaxy:
+            # α = falling slope ~ 1.5; β = rising ~ 1.0; τ = 3 Gyr turnover.
             "sfh_dpl_alpha": ParamDef(
-                "DPL falling slope", _lo_positive, "must have lo > 0", Uniform(0.1, 5.0)
+                "DPL falling slope",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 5.0, default=1.5),
             ),
             "sfh_dpl_beta": ParamDef(
-                "DPL rising slope", _lo_positive, "must have lo > 0", Uniform(0.1, 3.0)
+                "DPL rising slope",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 3.0, default=1.0),
             ),
             "sfh_dpl_tau_gyr": ParamDef(
-                "DPL turnover time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.1, 12.0)
+                "DPL turnover time (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 12.0, default=3.0),
             ),
             "sfh_dpl_log_total_mass": ParamDef(
-                "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                # Typical galaxy: M_⋆ ~ 10^10 M_⊙.
+                Uniform(7.0, 12.5, default=10.0),
             ),
         },
         settings={},
@@ -1426,11 +1441,21 @@ _register(
         name="field",
         fn=_field_fn_placeholder,
         params={
+            # Stochastic SFH (DRW correlated field) defaults: σ ≈ 0.3 dex
+            # corresponds to a "moderately bursty" galaxy (Caplar & Tacchella
+            # 2019 typical PSD amplitude); τ = 100 Myr matches the Iyer+2020
+            # decorrelation timescale measured from SFR(t) of EAGLE galaxies.
             "sfh_field_psd_sigma": ParamDef(
-                "PSD amplitude (dex)", _lo_nonneg, "must have lo >= 0", Uniform(0.01, 1.0)
+                "PSD amplitude (dex)",
+                _lo_nonneg,
+                "must have lo >= 0",
+                Uniform(0.01, 1.0, default=0.3),
             ),
             "sfh_field_psd_tau_myr": ParamDef(
-                "PSD timescale (Myr)", _lo_positive, "must have lo > 0", Uniform(10.0, 500.0)
+                "PSD timescale (Myr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(10.0, 500.0, default=100.0),
             ),
         },
         settings={
