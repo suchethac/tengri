@@ -899,6 +899,15 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # inclinations: face-on i = 30° peaks at ~6–9 µm on both sides;
 # edge-on viewing pushes the dust peak out to ~30 µm (classic
 # reprocessed-dust bump).
+#
+# **Residual.** Even with matched (i, τ_9.7, oa, p, q) and matched
+# disc luminosity, the tengri AGN-only SED reads ~30 % low at the
+# torus peak (~30 µm) and considerably lower in the FIR tail — the
+# torus dust template has the right peak location but the amplitude
+# scaling and post-peak rolloff don't reproduce CIGALE's bundled
+# normalisation. The disc + UV-NIR continuum matches within a few
+# percent; the discrepancy is isolated to how the torus IR component
+# is scaled relative to the disc, and is a known open audit item.
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -940,21 +949,24 @@ m_agn = SEDModel.build(
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
-    # CIGALE's `fracAGN = 0.3` ties L_AGN to the stellar bolometric.
-    # At our fiducial (1 M_sun formed, age 5 Gyr), stellar L_bol ≈
-    # 0.5 L_sun, so 0.3/0.7 × 0.5 ≈ 0.21 L_sun → log_lbol ≈ -0.68
-    # roughly matches the CIGALE AGN strength on the same axis.
+    # AGN luminosity matched to CIGALE's actual chain output at
+    # ``fracAGN=0.3`` on 1 M☉ formed: CIGALE's ``sed.info["agn.disk_luminosity"]``
+    # reads 1.45e26 W = 0.38 L☉ → ``log_lbol ≈ −0.42`` (the intrinsic
+    # accretion-disc bolometric, before torus reprocessing — what the
+    # composable AGN's ``agn_log_lbol`` parameter actually drives).
+    # An earlier back-of-envelope estimate of −0.68 understated the
+    # luminosity by ~2.6×.
     #
     # ``disc.skirtor`` reads CIGALE's bundled SKIRTOR2016 disc spectrum
     # (Schartmann+2005-like piecewise power law with the 1200 Å bend)
     # straight from the same FITS file the torus templates come from,
-    # so the disc + torus pair matches CIGALE bit-for-bit at matched
-    # ``(i, oa, τ_9.7, p, q)``. The differentiable multicolor disc is
-    # still available — ``disc={"type": "multicolor", ...}``.
+    # so the disc shape matches CIGALE at matched ``(i, oa, τ_9.7, p, q)``.
+    # The differentiable multicolor disc remains available —
+    # ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
          "disc": {"type": "skirtor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.68), "*": FIXED},
+         "agn_log_lbol": Fixed(-0.42), "*": FIXED},
     redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
@@ -1049,17 +1061,18 @@ m_x = SEDModel.build(
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
           "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
           "*": FIXED},
-    # AGN strength matched to CIGALE's chain. CIGALE uses fracAGN=0.3 on
-    # a 1-M☉-formed stellar baseline; the resulting L_AGN_bol ≈
-    # 0.3/(1-0.3) × L_stellar_bol ≈ 0.21 L☉ → log_lbol ≈ −0.68 (same as
-    # §9). Using a quasar-strength tengri AGN here while CIGALE has a
-    # Seyfert-weak one would compare X-ray spectra at ~12 orders of
-    # magnitude apart — the panels would look completely different for
-    # reasons unrelated to the X-ray physics being tested.
+    # AGN strength matched to CIGALE's actual chain output at fracAGN=0.3
+    # on a 1-M☉-formed stellar baseline. CIGALE's
+    # ``sed.info["agn.disk_luminosity"]`` reports 0.38 L☉ →
+    # ``log_lbol ≈ −0.42`` (same as §9; the intrinsic disc bolometric
+    # before torus reprocessing, which is what tengri's ``agn_log_lbol``
+    # parameter drives). Using a quasar-strength tengri AGN here while
+    # CIGALE has a Seyfert-weak one would compare X-ray spectra at
+    # ~12 orders of magnitude apart.
     agn={"type": "composable",
          "disc": {"type": "skirtor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.68), "*": FIXED},
+         "agn_log_lbol": Fixed(-0.42), "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
 )
