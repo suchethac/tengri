@@ -18,10 +18,15 @@ older = redder continuum through dust absorption).
 
 References:
   - Bradbury et al. 2018 (JAX: composable transformations):
+
     arXiv:1811.02693
   - Hearin et al. 2023 (DSPS — differentiable stellar population synthesis):
     arXiv:2308.16742
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -39,9 +44,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 # Build a baseline model: star-forming galaxy at z=0 with 5 SDSS filters
 ssp = tengri.load_ssp()
 obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
-    ),
+    photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]),
 )
 
 # Construct a realistic model with free parameters
@@ -65,10 +68,10 @@ model = tengri.SEDModel.build(
 key = jax.random.PRNGKey(42)
 baseline_params = dict(model.spec.sample(key))
 
-# Four parameters of interest: log_peak_sfr, metallicity, dust tau, age
+# Four parameters of interest: log_total_mass, metallicity, dust tau, age
 # We'll compute ∂(log F_ν) / ∂(log θ) for each band and parameter
 param_names = [
-    "sfh_dpl_log_peak_sfr",
+    "sfh_dpl_log_total_mass",
     "met_logzsol",
     "dust_tau_diff",
     "sfh_dpl_tau_gyr",
@@ -81,6 +84,7 @@ param_labels = [
 ]
 
 band_names = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+
 
 # Function to compute log-log sensitivity: ∂(log F) / ∂(log θ)
 def compute_log_sensitivities(params):

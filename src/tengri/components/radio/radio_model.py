@@ -103,12 +103,28 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
     parameter_prefix: str = "radio_"
 
     # Free parameters
-    q_ir = Uniform(1.0, 3.0, description="FIR-radio correlation parameter", units="dimensionless")
+    q_ir = Uniform(
+        1.0,
+        3.0,
+        description="FIR-radio correlation parameter",
+        units="dimensionless",
+        default=2.4,
+    )
     alpha_sf = Uniform(
-        -1.0, 1.0, description="SFR-driven radio spectral index", units="dimensionless"
+        -1.0,
+        1.0,
+        description="SFR-driven radio spectral index",
+        units="dimensionless",
+        default=-0.7,
     )
     loudness = Fixed(0.0, description="AGN radio loudness", units="dex")
-    alpha_agn = Uniform(-1.0, 0.5, description="AGN radio spectral index", units="dimensionless")
+    alpha_agn = Uniform(
+        -1.0,
+        0.5,
+        description="AGN radio spectral index",
+        units="dimensionless",
+        default=-0.7,
+    )
     T_e = Fixed(8000.0, description="Electron temperature (free-free)", units="K")
     alpha_ff = Fixed(-0.1, description="Free-free spectral index", units="dimensionless")
 

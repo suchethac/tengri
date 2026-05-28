@@ -395,7 +395,7 @@ wavelength-resolved attenuation curves from both codes.
 
 In DSPS's lookback-time convention used by tengri, a declining tau model in cosmic time corresponds to an **increasing** SFR with lookback time (SFR is highest at large t_lb = galaxy formation epoch). `declining_exponential_sfh` implements `SFR(t_lb) = peak * exp(-(age - t_lb)/tau)` which is highest at t_lb=age (galaxy formation) and declines to the present — matching the FSPS/bagpipes convention exactly.
 
-**Verification:** `src/tengri/models/sfh/registry.py:357-386` registers `"tau"` with params `sfh_tau_log_peak_sfr`, `sfh_tau_tau_gyr`, `sfh_tau_age_gyr`.
+**Verification:** `src/tengri/models/sfh/registry.py:357-386` registers `"tau"` with params `sfh_tau_log_total_mass`, `sfh_tau_tau_gyr`, `sfh_tau_age_gyr`.
 
 ---
 

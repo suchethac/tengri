@@ -30,6 +30,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 import warnings
 
@@ -65,56 +68,16 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-import importlib.util
+from pathlib import Path
+from tengri import plot
 
-_repo_data_root = None
-_spec_tengri = importlib.util.find_spec("tengri")
-if _spec_tengri is not None and _spec_tengri.origin:
-    _walk = os.path.dirname(os.path.abspath(_spec_tengri.origin))
-    for _step in range(12):
-        _candidate = os.path.join(_walk, "notebooks", "_plot_style.py")
-        if os.path.isfile(_candidate):
-            sys.path.insert(0, os.path.dirname(_candidate))
-            _repo_data_root = os.path.dirname(os.path.dirname(os.path.abspath(_candidate)))
-            break
-        _parent_walk = os.path.dirname(_walk)
-        if _parent_walk == _walk:
-            break
-        _walk = _parent_walk
+plot.setup_style()
+FIG_DIR = Path("_figs")
+FIG_DIR.mkdir(exist_ok=True)
 
-if _repo_data_root is None:
-    _np_here = os.path.abspath(os.getcwd())
-    while True:
-        if os.path.isfile(os.path.join(_np_here, "_plot_style.py")):
-            sys.path.insert(0, _np_here)
-            _repo_data_root = os.path.dirname(_np_here)
-            break
-        _ppt = os.path.join(_np_here, "notebooks", "_plot_style.py")
-        if os.path.isfile(_ppt):
-            _nbsd = os.path.dirname(_ppt)
-            sys.path.insert(0, _nbsd)
-            _repo_data_root = os.path.dirname(_nbsd)
-            break
-        _parent_here = os.path.dirname(_np_here)
-        if _parent_here == _np_here:
-            break
-        _np_here = _parent_here
-
-if _repo_data_root is not None and os.path.isdir(os.path.join(_repo_data_root, "data")):
-    os.chdir(_repo_data_root)
-elif os.path.isdir(os.path.join(_repo_root, "data")):
-    os.chdir(_repo_root)
-elif os.path.isdir("data"):
-    pass
-elif os.path.isdir(os.path.join("..", "data")):
-    os.chdir("..")
-
-FIGDIR = os.path.join("notebooks", "figures")
-os.makedirs(FIGDIR, exist_ok=True)
-
-from _plot_style import setup_style, COLORS
-
-setup_style()
+# Quickstart palette + 3-galaxy comparison palette (SF / composite / older)
+C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
+GALAXY_COLORS = {"SF": "#3a76d9", "Composite": "#e07a3a", "Older": "#444444"}
 
 # %%
 import tengri as tg
@@ -173,7 +136,7 @@ z_ref = 0.1
 # Star-forming: tsnorm peaking recently, low dust (ionizing photons escape)
 spec_sf = Parameters(
     mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(0.5),  # 3.16 Msun/yr peak
+    sfh_tsnorm_log_total_mass=Fixed(10.0),  # 3.16 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=Fixed(0.3),  # 300 Myr ago
     sfh_tsnorm_width_gyr=Fixed(1.0),
     sfh_tsnorm_skew=Fixed(0.1),
@@ -197,7 +160,7 @@ print(f"  Dust (birth cloud): τ={float(params_sf['dust_tau_bc']):.2f}")
 # Composite/older: slower SFH, some dust (moderates ionizing photons)
 spec_comp = Parameters(
     mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(0.2),  # 1.58 Msun/yr peak
+    sfh_tsnorm_log_total_mass=Fixed(10.0),  # 1.58 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),  # 2 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(3.0),
     sfh_tsnorm_skew=Fixed(0.2),
@@ -221,7 +184,7 @@ print(f"  Dust (birth cloud): τ={float(params_comp['dust_tau_bc']):.2f}")
 # Older/passive-like: very old SFH, high metallicity, high dust
 spec_old = Parameters(
     mean_sfh_type="tsnorm",
-    sfh_tsnorm_log_peak_sfr=Fixed(-0.5),  # 0.32 Msun/yr peak
+    sfh_tsnorm_log_total_mass=Fixed(10.0),  # 0.32 Msun/yr peak
     sfh_tsnorm_peak_lbt_gyr=Fixed(10.0),  # 10 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(4.0),
     sfh_tsnorm_skew=Fixed(0.1),
@@ -303,7 +266,7 @@ for galaxy_type, flux_arr in fluxes_dict.items():
 
 # %%
 # Plot BPT diagram with demarcation curves
-fig, ax = plt.subplots(figsize=(10, 8))
+fig, ax = plt.subplots(figsize=(6.4, 5.4))
 
 # Kauffmann+2003 curve: y = 0.61/(x-0.05) + 1.3
 x_kau = np.linspace(-1.5, 0.05, 200)
@@ -313,46 +276,33 @@ y_kau = 0.61 / (x_kau - 0.05) + 1.3
 x_kew = np.linspace(-1.5, 0.47, 200)
 y_kew = 0.61 / (x_kew - 0.47) + 1.19
 
-ax.plot(x_kau, y_kau, "k--", lw=2, label="Kauffmann+03 (SF/composite)", alpha=0.7)
-ax.plot(x_kew, y_kew, "k-", lw=2, label="Kewley+01 (composite/AGN)", alpha=0.7)
+ax.plot(x_kau, y_kau, color="0.30", ls="--", lw=1.0, label="Kauffmann+03  (SF / composite)")
+ax.plot(x_kew, y_kew, color="0.30", ls="-", lw=1.0, label="Kewley+01  (composite / AGN)")
 
 # Plot the three galaxies
 markers = {"SF": "o", "Composite": "D", "Older": "s"}
-sizes = {"SF": 150, "Composite": 160, "Older": 170}
-colors_bpt = {
-    "SF": COLORS.get("model", "C0"),
-    "Composite": COLORS.get("rt", "C1"),
-    "Older": COLORS.get("data", "C2"),
-}
 
 for galaxy_type in ["SF", "Composite", "Older"]:
     if galaxy_type in bpt_ratios:
         x, y = bpt_ratios[galaxy_type]
         ax.scatter(
             x, y,
-            marker=markers[galaxy_type],
-            s=sizes[galaxy_type],
-            color=colors_bpt[galaxy_type],
-            edgecolors="black",
-            linewidths=2,
-            alpha=0.8,
-            label=galaxy_type,
-            zorder=10,
+            marker=markers[galaxy_type], s=90,
+            color=GALAXY_COLORS[galaxy_type],
+            edgecolor="white", linewidth=0.8,
+            alpha=0.95, label=galaxy_type, zorder=10,
         )
 
-ax.axhline(0, color="0.5", linestyle=":", alpha=0.3, lw=1)
-ax.axvline(0, color="0.5", linestyle=":", alpha=0.3, lw=1)
 ax.set_xlim(-1.5, 0.5)
 ax.set_ylim(-1.0, 1.5)
-ax.set_xlabel(r"$\log_{10}([\mathrm{NII}]\,6584 / \mathrm{H}\alpha)$", fontsize=12)
-ax.set_ylabel(r"$\log_{10}([\mathrm{OIII}]\,5007 / \mathrm{H}\beta)$", fontsize=12)
-ax.set_title("BPT-NII Emission Line Diagnostic", fontsize=13, fontweight="bold")
-ax.legend(loc="lower right", frameon=False, fontsize=11)
-ax.grid(True, alpha=0.2)
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "08_bpt_diagram.png"), dpi=200, bbox_inches="tight")
-plt.show()
-print("\nSaved BPT diagram to notebooks/figures/08_bpt_diagram.png")
+ax.set_xlabel(r"$\log_{10}([\mathrm{NII}]\,6584 / \mathrm{H}\alpha)$")
+ax.set_ylabel(r"$\log_{10}([\mathrm{OIII}]\,5007 / \mathrm{H}\beta)$")
+ax.legend(loc="lower right", frameon=False, fontsize=9)
+ax.text(0.02, 0.96, "BPT-NII diagnostic",
+        transform=ax.transAxes, ha="left", va="top",
+        fontsize=9, color="0.3")
+fig.savefig(FIG_DIR / "08_bpt_diagram.png", dpi=300, bbox_inches="tight")
+fig.savefig(FIG_DIR / "08_bpt_diagram.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## Rest-frame line spectrum zoom
@@ -379,19 +329,12 @@ for galaxy_type, model, params in [("SF", model_sf, params_sf),
         spec_dict[galaxy_type] = np.ones_like(wave_rest) * np.nan
 
 # %%
-# Plot with y-axis masking to avoid matplotlib log-scale autoscale trap
-fig, ax = plt.subplots(figsize=(11, 5))
-
-colors_dict = {
-    "SF": COLORS.get("model", "C0"),
-    "Composite": COLORS.get("rt", "C1"),
-    "Older": COLORS.get("data", "C2"),
-}
+fig, ax = plt.subplots(figsize=(8.6, 4.0))
 
 # Normalise each spectrum by its line-free continuum (median of 6440-6480 Å
-# rest-frame, blueward of [NII]+Hα). The three galaxies have very
-# different total stellar masses, so absolute fluxes span 4+ dex; the
-# pedagogical comparison is line/continuum *contrast*, not amplitude.
+# rest-frame, blueward of [NII]+Hα). The three galaxies have very different
+# stellar masses; the pedagogical comparison is line/continuum *contrast*,
+# not amplitude.
 for galaxy_type in ["SF", "Composite", "Older"]:
     sed = spec_dict[galaxy_type]
     z = float(params_dict[galaxy_type]["redshift"])
@@ -403,40 +346,36 @@ for galaxy_type in ["SF", "Composite", "Older"]:
     valid = np.isfinite(sed_norm) & (sed_norm > 0)
     if valid.sum() > 0:
         ax.semilogy(
-            wave_obs_plot[valid],
-            sed_norm[valid],
-            lw=1.5,
-            label=galaxy_type,
-            color=colors_dict[galaxy_type],
+            wave_obs_plot[valid], sed_norm[valid],
+            lw=1.4, label=galaxy_type, color=GALAXY_COLORS[galaxy_type],
         )
 
-# Annotate key emission lines (rest-frame vacuum λ, assume z=0.1 for display)
+# Annotate key emission lines (rest-frame vacuum λ, displayed at z=0.1)
 lines_annotate = [
-    (6549.86, "[NII]"),
-    (6564.61, "Hα"),
-    (6584.47, "[NII]"),
-    (6717.04, "[SII]"),
-    (6731.47, "[SII]"),
+    (6549.86, "[NII]"), (6564.61, r"H$\alpha$"), (6584.47, "[NII]"),
+    (6717.04, "[SII]"), (6731.47, "[SII]"),
 ]
-
 z_ref_display = 0.1
 for lam, label in lines_annotate:
     lam_obs = lam * (1.0 + z_ref_display)
-    ax.axvline(lam_obs, color="gray", linestyle=":", alpha=0.4, lw=0.8)
-    # Annotations slightly below the top of the plot
-    ax.text(lam_obs, ax.get_ylim()[1] * 0.5, label, fontsize=9, rotation=90,
-            va="top", ha="right", color="gray", alpha=0.7)
+    ax.axvline(lam_obs, color="0.6", ls=":", lw=0.5, alpha=0.6)
+
+# After axes are scaled, place line labels just above the data
+for lam, label in lines_annotate:
+    lam_obs = lam * (1.0 + z_ref_display)
+    ax.text(lam_obs, ax.get_ylim()[1] * 0.65, label,
+            fontsize=8, rotation=90, va="top", ha="right",
+            color="0.4", alpha=0.85)
 
 ax.set_xlim(6450 * (1 + z_ref_display), 6850 * (1 + z_ref_display))
-ax.set_xlabel(f"Observed wavelength [$\\AA$] (z={z_ref_display:.1f})", fontsize=11)
-ax.set_ylabel(r"$f_\nu / f_\nu^{\rm continuum}$ (normalised at 6460 Å rest)", fontsize=11)
-ax.set_title(r"Rest-frame Hα–[NII] Complex", fontsize=13, fontweight="bold")
-ax.legend(loc="upper left", frameon=False, fontsize=11)
-ax.grid(True, alpha=0.2, which="both")
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "08_line_spectrum.png"), dpi=200, bbox_inches="tight")
-plt.show()
-print("Saved line spectrum to notebooks/figures/08_line_spectrum.png")
+ax.set_xlabel(rf"observed wavelength  [$\mathrm{{\AA}}$]   (z = {z_ref_display:.1f})")
+ax.set_ylabel(r"$F_\nu / F_\nu^{\rm cont}$  (normalised at 6460 Å rest)")
+ax.legend(loc="upper left", frameon=False, fontsize=9)
+ax.text(0.99, 0.96, r"H$\alpha$ + [NII] + [SII] complex",
+        transform=ax.transAxes, ha="right", va="top",
+        fontsize=9, color="0.3")
+fig.savefig(FIG_DIR / "08_line_spectrum.png", dpi=300, bbox_inches="tight")
+fig.savefig(FIG_DIR / "08_line_spectrum.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## Hα-derived SFR vs the stellar component
@@ -493,44 +432,34 @@ else:
 
 # %%
 # Plot validation scatter
-fig, ax = plt.subplots(figsize=(8, 8))
+fig, ax = plt.subplots(figsize=(5.4, 5.4))
 
-ax.scatter(
-    sfr_halpha_arr,
-    sfr_10myr_arr,
-    s=80,
-    alpha=0.6,
-    color=COLORS.get("model", "C0"),
-    edgecolors="black",
-    linewidths=1,
-    label="Posterior samples",
-)
-
-# 1:1 line
-x_range = [sfr_halpha_arr.min() - 0.5, sfr_halpha_arr.max() + 0.5]
-ax.plot(x_range, x_range, "k-", lw=2, label="1:1 (perfect agreement)", zorder=1)
-
-# ±0.2 dex band
+x_range = np.array([sfr_halpha_arr.min() - 0.5, sfr_halpha_arr.max() + 0.5])
 ax.fill_between(
-    x_range,
-    np.array(x_range) - 0.2,
-    np.array(x_range) + 0.2,
-    alpha=0.2,
-    color="gray",
-    label="±0.2 dex tolerance",
-    zorder=0,
+    x_range, x_range - 0.2, x_range + 0.2,
+    alpha=0.12, color="0.5", lw=0,
+    label=r"$\pm$0.2 dex band", zorder=0,
+)
+ax.plot(x_range, x_range, color=C_TRUTH, lw=1.0, ls="--",
+        label="1 : 1", zorder=1)
+ax.scatter(
+    sfr_halpha_arr, sfr_10myr_arr,
+    s=22, color=C_POST, alpha=0.85,
+    edgecolor="white", linewidth=0.5,
+    label="posterior samples", zorder=3,
 )
 
-ax.set_xlabel(r"$\log_{10}(\mathrm{SFR}_{\mathrm{H}\alpha}) \, [\mathrm{M}_\odot/\mathrm{yr}]$", fontsize=11)
-ax.set_ylabel(r"$\log_{10}(\mathrm{SFR}_{10\mathrm{Myr}}) \, [\mathrm{M}_\odot/\mathrm{yr}]$", fontsize=11)
-ax.set_title(r"Hα SFR vs SFH: Consistency Check", fontsize=13, fontweight="bold")
-ax.legend(loc="upper left", frameon=False, fontsize=10)
-ax.grid(True, alpha=0.3)
+ax.set_xlabel(r"$\log_{10}\,{\rm SFR}_{\rm H\alpha}\ [M_\odot\,{\rm yr}^{-1}]$")
+ax.set_ylabel(r"$\log_{10}\,{\rm SFR}_{\rm 10\,Myr}\ [M_\odot\,{\rm yr}^{-1}]$")
+ax.set_xlim(x_range)
+ax.set_ylim(x_range)
 ax.set_aspect("equal")
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "08_sfr_validation.png"), dpi=200, bbox_inches="tight")
-plt.show()
-print("Saved SFR validation to notebooks/figures/08_sfr_validation.png")
+ax.legend(loc="upper left", frameon=False, fontsize=9)
+ax.text(0.99, 0.05, r"H$\alpha$ vs SFH consistency",
+        transform=ax.transAxes, ha="right", va="bottom",
+        fontsize=9, color="0.3")
+fig.savefig(FIG_DIR / "08_sfr_validation.png", dpi=300, bbox_inches="tight")
+fig.savefig(FIG_DIR / "08_sfr_validation.pdf", bbox_inches="tight")
 
 # %%
 # Summary statistics

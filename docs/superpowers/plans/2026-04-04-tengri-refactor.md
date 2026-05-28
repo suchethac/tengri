@@ -74,7 +74,7 @@ from tengri.distributions import Uniform
 def test_parameters_alias_works():
     """Parameters is the new name for ParamSpec."""
     params = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         redshift=0.1,
     )
     assert params.n_free >= 1
@@ -939,10 +939,10 @@ def test_sfh_transform_gradient():
 
     ages_gyr = jnp.linspace(0.01, 13.7, 200)
 
-    def sfr_total(log_peak_sfr):
+    def sfr_total(log_total_mass):
         sfr = tsnorm_sfh(
             ages_gyr,
-            log_peak_sfr=log_peak_sfr,
+            log_total_mass=log_total_mass,
             peak_lbt_gyr=5.0,
             width_gyr=2.0,
             skew=0.0,

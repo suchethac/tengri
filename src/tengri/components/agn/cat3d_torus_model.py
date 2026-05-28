@@ -140,20 +140,40 @@ class CAT3DTorus(SEDModelComponent):
     config: CAT3DTorusConfig = field(default_factory=CAT3DTorusConfig)
 
     # Free parameters — auto-discovered
-    log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
-    cos_inc = Uniform(0.0, 1.0, description="Cosine of inclination", units="dimensionless")
+    log_lbol = Uniform(
+        8.0,
+        14.0,
+        description="AGN bolometric luminosity",
+        units="dex (L_sun)",
+        default=11.0,
+    )
+    cos_inc = Uniform(
+        0.0,
+        1.0,
+        description="Cosine of inclination",
+        units="dimensionless",
+        default=0.45,
+    )
     a_cat3d = Uniform(
         -2.5,
         -0.5,
         description="Radial power-law index of clump distribution",
         units="dimensionless",
+        default=-0.5,
     )
-    fwd_cat3d = Uniform(0.0, 1.0, description="Polar-wind mass fraction", units="dimensionless")
+    fwd_cat3d = Uniform(
+        0.0,
+        1.0,
+        description="Polar-wind mass fraction",
+        units="dimensionless",
+        default=0.4,
+    )
     torus_frac = Uniform(
         0.0,
         1.0,
         description="Torus luminosity fraction of L_bol",
         units="dimensionless",
+        default=0.5,
     )
 
     # Cross-component output

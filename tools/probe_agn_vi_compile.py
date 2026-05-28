@@ -35,10 +35,18 @@ REPO = Path(__file__).resolve().parent.parent
 SSP_PATH = REPO / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 FILTER_NAMES = [
-    "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w",
-    "vista_ks", "irac_36", "irac_45",
-    "herschel_160", "herschel_250",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "herschel_160",
+    "herschel_250",
 ]
 
 CONST_RE = re.compile(
@@ -87,7 +95,7 @@ def _build_params_with_agn(agn_model: str | None = None) -> Parameters:
             )
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -128,11 +136,7 @@ def probe_gradient(agn_model: str | None, ssp_data) -> dict[str, Any]:
         build_s = time.perf_counter() - t0
     except Exception as e:
         print(f"  BUILD FAILED: {type(e).__name__}: {e}")
-        return {
-            "agn_model": agn_model,
-            "path": "gradient",
-            "error": f"BUILD: {type(e).__name__}"
-        }
+        return {"agn_model": agn_model, "path": "gradient", "error": f"BUILD: {type(e).__name__}"}
 
     t0 = time.perf_counter()
     try:
@@ -143,11 +147,7 @@ def probe_gradient(agn_model: str | None, ssp_data) -> dict[str, Any]:
         lower_s = time.perf_counter() - t0
     except Exception as e:
         print(f"  LOWER FAILED: {type(e).__name__}: {e}")
-        return {
-            "agn_model": agn_model,
-            "path": "gradient",
-            "error": f"LOWER: {type(e).__name__}"
-        }
+        return {"agn_model": agn_model, "path": "gradient", "error": f"LOWER: {type(e).__name__}"}
 
     constants = _scan_large_constants(hlo)
     total_const_bytes = sum(c[0] for c in constants)
@@ -189,7 +189,7 @@ def main() -> int:
             continue
         print(
             f"| {r['agn_model']!s:<20} "
-            f"| {r['hlo_bytes']/1e6:6.1f} "
+            f"| {r['hlo_bytes'] / 1e6:6.1f} "
             f"| {r['n_large_consts']:>10} "
             f"| {r['largest_const_mb']:>10.1f} "
             f"| {r['largest_shape']:<16} |"

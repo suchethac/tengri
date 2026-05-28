@@ -18,7 +18,7 @@ Usage::
     ssp = load_ssp_data("data/ssp.h5")
     filters = load_filter_set(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -34,6 +34,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import types
 import warnings
@@ -487,6 +488,7 @@ class SEDModel:
 
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
+        self._validate_metallicity_bounds(spec, ssp_data)
 
         # ── Dust (attenuation + emission) ─────────────────────────
         param_map_deltas.append(self._init_dust(spec))
@@ -822,12 +824,37 @@ class SEDModel:
             Parameter map entries for this component:
             public_name -> (internal_name, scale, offset).
         """
-        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(spec.mean_sfh_type)
+        # Forward the (optional) non-parametric bin edges through to
+        # resolve_sfh so prospector_beta / continuity / ... use the
+        # user-supplied edges in the forward pass (#337).
+        _sfh_kwargs = {}
+        _bin_edges = getattr(spec, "bin_edges_gyr", None)
+        if _bin_edges is not None:
+            _sfh_kwargs["bin_edges_gyr"] = _bin_edges
+        sfh_fn, _sfh_params, sfh_param_map, sfh_settings = resolve_sfh(
+            spec.mean_sfh_type, **_sfh_kwargs
+        )
         self._sfh_fn = sfh_fn
         self._sfh_internal_names = {v[0] for v in sfh_param_map.values()}
+        # Per-spec public SFH param names (sfh_X_*). The composer
+        # dispatches per-component on these to avoid collisions when two
+        # additive SFHs share an internal kwarg (e.g. ``log_total_mass``).
+        # See ``composed_fn`` in components/stellar/sfh/registry.py and #372.
+        self._sfh_public_names = set(sfh_param_map.keys())
         self._sfh_settings = sfh_settings
         self._uses_stochastic_sfh = spec.stochastic
         self._gp_kernel = sfh_settings.get("sfh_field_model", "drw")
+
+        # Warn if any burst-width SFH parameter is narrower than the
+        # local SSP grid spacing at the burst peak — see #299. The
+        # forward model interpolates SFR(t) at SSP grid points (not a
+        # bin-integral), so narrow bursts alias as a staircase in
+        # age-sensitive observables.
+        from tengri.components.stellar.sfh._aliasing_warning import (
+            maybe_warn_burst_aliasing,
+        )
+
+        maybe_warn_burst_aliasing(spec, self.ssp_ages_yr)
 
         # Return the base param_map delta (built param_map + dust-model selection)
         return _build_param_map(
@@ -862,6 +889,94 @@ class SEDModel:
             delta.update(_EVOLVING_ALPHA_PARAM_MAP)
 
         return delta
+
+    # Names of every public-API metallicity parameter that resolves to a
+    # log10(Z/Zsun) lookup on the SSP grid. Each lives on the same grid
+    # axis (``ssp_data.ssp_lgmet``) so the bounds check is identical.
+    _MET_LOGZSOL_PARAM_NAMES = (
+        "met_logzsol",
+        "met_logzsol_0",
+        "met_logzsol_final",
+        "met_logzsol_old",
+        "met_logzsol_young",
+        "met_logzsol_burst",
+        "met_logzsol_base",
+    )
+
+    def _validate_metallicity_bounds(self, spec, ssp_data):
+        """Warn / raise if any ``met_logzsol*`` value escapes the SSP grid.
+
+        The forward model interpolates log10(Z/Zsun) onto ``ssp_data.ssp_lgmet``
+        with ``jnp.clip`` at the grid edges and ``jnp.searchsorted`` for the
+        bracket — so an out-of-range value silently clamps to the edge and
+        produces a smooth-but-wrong SED. A MAP/MCMC chain wandering to a
+        prior edge would interpret that plateau as a likelihood maximum
+        (issue #442).
+
+        Catch this at construction time rather than at forward-pass time:
+        the JIT'd predict path can't raise Python exceptions, but build()
+        can.
+
+        Both ``Fixed`` out-of-grid values and ``Uniform`` priors with
+        out-of-grid bounds emit a :class:`UserWarning`. The forward pass
+        still produces a numerical SED (via ``jnp.clip``), but the
+        warning makes the silent-clip path visible. A strict raise was
+        considered but rejected: synthetic / non-Zsun-offset SSPs (e.g.
+        fixture grids in unit tests) sometimes ship lgmet values that
+        live in log10(Z/Zsun) directly rather than absolute log10(Z),
+        and we don't want to lock them out.
+        """
+        if ssp_data is None:
+            return  # synthetic / placeholder construction path
+
+        lgmet = np.asarray(ssp_data.ssp_lgmet)
+        if lgmet.size == 0:
+            return
+
+        # SSP grid stores absolute log10(Z); user-facing params are
+        # log10(Z/Zsun), which differs by LOG10_ZSUN.
+        grid_lo_zsol = float(lgmet.min()) - LOG10_ZSUN
+        grid_hi_zsol = float(lgmet.max()) - LOG10_ZSUN
+
+        distributions = getattr(spec, "_distributions", {})
+        for name in self._MET_LOGZSOL_PARAM_NAMES:
+            dist = distributions.get(name)
+            if dist is None:
+                continue
+            if dist.is_fixed:
+                val = float(dist.value)
+                if not (grid_lo_zsol <= val <= grid_hi_zsol):
+                    import warnings
+
+                    warnings.warn(
+                        f"{name}={val:.3f} is outside the SSP grid metallicity "
+                        f"range [{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
+                        f"log10(Z/Zsun) (absolute grid log10(Z) ∈ "
+                        f"[{lgmet.min():.3f}, {lgmet.max():.3f}]). The forward "
+                        f"model silently clips out-of-range values, producing "
+                        f"a misleadingly smooth SED (issue #442). Either set "
+                        f"{name} inside the grid, or load an SSP whose grid "
+                        f"covers your target metallicity.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
+            else:
+                lo, hi = float(dist.lo), float(dist.hi)
+                if lo < grid_lo_zsol or hi > grid_hi_zsol:
+                    import warnings
+
+                    warnings.warn(
+                        f"{name} prior bounds [{lo:.3f}, {hi:.3f}] extend "
+                        f"beyond the SSP grid metallicity range "
+                        f"[{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
+                        f"log10(Z/Zsun). Samples outside the grid will "
+                        f"silently clip to the edge — a MAP/MCMC chain "
+                        f"wandering there registers a fake likelihood "
+                        f"maximum (issue #442). Tighten the prior to within "
+                        f"the grid range or load an SSP with broader coverage.",
+                        UserWarning,
+                        stacklevel=3,
+                    )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.
@@ -902,6 +1017,22 @@ class SEDModel:
             )
             self._dust_emission_model = "draine_li2007"
 
+        # Template-based dust emission models lazy-load HDF5 grids on first
+        # call. If the first call happens inside a `@jax.jit` scope (the
+        # common Fitter path), `jnp.array(...)` inside the loader creates
+        # `DynamicJaxprTracer` objects that escape the loader's closure,
+        # triggering `UnexpectedTracerError` on subsequent non-JIT calls.
+        # Mirror the `_warm_grid_caches()` pattern used by `_build_precomputed_data`
+        # and force-load at factory time (#390).
+        _TEMPLATE_BASED_EMISSION_MODELS = frozenset(
+            {"draine_li2007", "dl14", "dale2014", "astrodust", "bosa", "themis"}
+        )
+        if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
+            from tengri.components.dust.emission import preload_emission_model
+
+            with contextlib.suppress(Exception):
+                preload_emission_model(self._dust_emission_model)
+
         # Identity entries for dust-emission params now come from the
         # registry-driven auto-derive in ``_build_param_map`` (Step B,
         # ADR-deepening 2026-05-18). The conditional on the active
@@ -911,21 +1042,20 @@ class SEDModel:
         return {}
 
     def _init_igm(self, spec):
-        """Configure IGM absorption and DLA."""
+        """Configure IGM absorption and DLA.
+
+        The IGM model name is looked up in
+        :data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` via
+        :func:`~tengri.components.igm.resolve_igm_model`, which also
+        resolves the back-compat alias ``"inoue"`` -> ``"inoue14"``.
+        """
+        from tengri.components.igm import resolve_igm_model
+
         self._uses_igm = spec.apply_igm
         self._uses_dla = getattr(spec, "dla", False)
         self._igm_patchy = getattr(spec, "igm_patchy", False)
         self._igm_model = getattr(spec, "igm_model", "inoue")
-        _valid = {"inoue", "madau"}
-        if self._igm_model not in _valid:
-            raise ValueError(
-                f"igm_model={self._igm_model!r} not recognised. Choose from: {sorted(_valid)}"
-            )
-        if self._igm_model == "madau":
-            from tengri.components.igm import igm_transmission_madau as _igm_fn
-        else:
-            from tengri.components.igm import igm_transmission as _igm_fn
-        self._igm_fn = _igm_fn
+        self._igm_fn = resolve_igm_model(self._igm_model)
 
     def _init_nebular(self, spec, ssp_data):
         """Configure nebular emission backend and return param_map entries.
@@ -937,7 +1067,7 @@ class SEDModel:
         """
         delta = {}
 
-        if spec.nebular_mode in ("cloudy", "cue"):
+        if spec.nebular_mode in ("cloudy", "cue", "cb19"):
             # ``_NEBULAR_IDENTITY_PARAMS`` removed in Step B (ADR-deepening
             # 2026-05-18); the registry-driven auto-derive in
             # ``_build_param_map`` covers the identity entries. The
@@ -967,6 +1097,14 @@ class SEDModel:
             from tengri.components.nebular import CloudyGridBackend
 
             self._nebular_backend = CloudyGridBackend(spec.cloudy_grid_path, ssp_data)
+        elif spec.nebular_mode == "cb19":
+            # Bug A in #361: ``neb={'type': 'cb19'}`` used to fall through
+            # to the BakedIn ``else`` branch, leaving the user with a model
+            # whose ``_nebular_backend`` was the wrong class — every line
+            # accessor then returned NaN with no warning. Dispatch explicitly.
+            from tengri.components.nebular import CB19Backend
+
+            self._nebular_backend = CB19Backend(ssp_data=ssp_data)
         else:
             from tengri.components.nebular import BakedInBackend
 
@@ -1035,13 +1173,72 @@ class SEDModel:
 
         self._uses_xray = getattr(spec, "xray", False)
 
-        if self._uses_radio or self._uses_xray:
-            from tengri.utils.wavelength import make_panchromatic_grid
+        # ── Master rest-wavelength grid (issue #463) ─────────────────
+        #
+        # Build the rest-frame wavelength grid as the sorted union of:
+        #   (a) the SSP grid (fine UV–NIR sampling),
+        #   (b) every attached component's native template grid (dust IR
+        #       templates, AGN torus/disc libraries, …), and
+        #   (c) analytic radio / X-ray extension wings for components that
+        #       have no template grid but operate at extreme wavelengths.
+        #
+        # The native-grid registry lives in
+        # ``tengri.forward.wavelength_extension``. Components that don't
+        # declare a native grid (analytic dust models, IGM transmission, …)
+        # contribute nothing and are correctly evaluated on whatever master
+        # grid the orchestrator hands them. See ADR-comment in #463.
+        from tengri.forward.wavelength_extension import collect_native_wavelength_grids
+        from tengri.utils.wavelength import (
+            RADIO_WAVE_MAX,
+            XRAY_WAVE_MIN,
+            make_union_grid,
+        )
 
-            self._rest_wavelength = make_panchromatic_grid(
+        component_grids = collect_native_wavelength_grids(
+            dust_emission_model=getattr(self, "_dust_emission_model", None),
+            agn_model=getattr(self, "_agn_model", None),
+            agn_torus_block=getattr(self, "_agn_torus_block", None),
+            agn_disc_block=getattr(self, "_agn_disc_block", None),
+        )
+
+        # Analytic radio/X-ray wings: only used when those components are
+        # enabled AND nothing else already covers the extreme end of the
+        # spectrum. ``make_union_grid`` deduplicates overlap so it's safe to
+        # add these unconditionally when the flag is set.
+        extra_wings: list[np.ndarray] = []
+        ssp_min = float(np.asarray(ssp_data.ssp_wave).min())
+        ssp_max = float(np.asarray(ssp_data.ssp_wave).max())
+
+        if self._uses_xray and ssp_min > XRAY_WAVE_MIN:
+            n_dec = np.log10(ssp_min) - np.log10(XRAY_WAVE_MIN)
+            n_pts = max(int(n_dec * 20), 2)
+            extra_wings.append(
+                np.logspace(np.log10(XRAY_WAVE_MIN), np.log10(ssp_min), n_pts, endpoint=False)
+            )
+
+        if self._uses_radio:
+            # Pick the longest wavelength reached by any template; extend the
+            # radio wing past that point so the synchrotron tail has node
+            # coverage even when dust templates don't already cover it.
+            template_max = max((float(g.max()) for g in component_grids), default=ssp_max)
+            radio_min = max(template_max, ssp_max)
+            if radio_min < RADIO_WAVE_MAX:
+                n_dec = np.log10(RADIO_WAVE_MAX) - np.log10(radio_min)
+                n_pts = max(int(n_dec * 20), 2)
+                extra_wings.append(
+                    np.logspace(
+                        np.log10(radio_min),
+                        np.log10(RADIO_WAVE_MAX),
+                        n_pts,
+                        endpoint=True,
+                    )[1:]
+                )
+
+        if component_grids or extra_wings:
+            self._rest_wavelength = make_union_grid(
                 ssp_data.ssp_wave,
-                extend_xray=self._uses_xray,
-                extend_radio=self._uses_radio,
+                *component_grids,
+                *extra_wings,
             )
         else:
             self._rest_wavelength = ssp_data.ssp_wave
@@ -2016,7 +2213,11 @@ class SEDModel:
             SFR(t) in Msun/yr on the log-age grid.
         """
         # Build kwargs for the composed SFH function
-        kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
+        kw = {
+            k: v
+            for k, v in p.items()
+            if k in self._sfh_internal_names or k in self._sfh_public_names
+        }
 
         # If field is present, compute GP and pass to composed fn
         if self._uses_stochastic_sfh and "xi" in p:
@@ -2045,7 +2246,11 @@ class SEDModel:
         sfr_full : array
             SFR with GP modulation (same as sfr_mean if no field).
         """
-        kw = {k: v for k, v in p.items() if k in self._sfh_internal_names}
+        kw = {
+            k: v
+            for k, v in p.items()
+            if k in self._sfh_internal_names or k in self._sfh_public_names
+        }
         sfr_mean = self._sfh_fn(self.age_yr, **kw)
 
         if self._uses_stochastic_sfh and "xi" in p:
@@ -2098,7 +2303,7 @@ class SEDModel:
             kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)
             kw["agn_cos_inc"] = p.get("agn_cos_inc", 0.5)
             kw["agn_polar_oa"] = p.get("agn_polar_oa", 45.0)
-            kw["agn_frac"] = p.get("agn_frac", 0.0)
+            kw["agn_frac"] = p.get("agn_frac", 1.0)
             kw["agn_a_spin"] = p.get("agn_a_spin", 0.0)
             kw["agn_log_mbh"] = p.get("agn_log_mbh", 7.0)
             kw["agn_log_ledd"] = p.get("agn_log_ledd", -1.0)
@@ -2411,6 +2616,20 @@ class SEDModel:
                 temp=params.get("dla_temp", 1e4),
                 b_turb_kms=params.get("dla_b_turb", 0.0),
             )
+        # MW foreground screen (#297) — final transformation on the
+        # observed-frame SED, independent of host-galaxy dust. Applied
+        # at observed-frame wavelengths so it works for any source
+        # redshift. Skipped when ebmv_mw=0 (the default).
+        if getattr(self.spec, "foreground_ebmv_mw", 0.0) > 0.0:
+            from tengri.components.dust.attenuation import cardelli
+
+            ebmv = jnp.asarray(self.spec.foreground_ebmv_mw)
+            rv = jnp.asarray(self.spec.foreground_rv)
+            # Cardelli returns A(λ)/A(V); A_V = R_V * E(B-V).
+            # T(λ) = 10^(-0.4 * A_V * k(λ))
+            k_lambda = cardelli(wave_obs, dust_Rv=rv)
+            a_v = rv * ebmv
+            sed_obs = sed_obs * jnp.power(10.0, -0.4 * a_v * k_lambda)
         return SEDResult(wavelength=wave_obs, sed=sed_obs)
 
     def predict(self, params):
@@ -2759,7 +2978,7 @@ class SEDModel:
         ----------
         params : dict
             Parameter values using public parameter names (e.g.,
-            ``sfh_tsnorm_log_peak_sfr``, ``met_logzsol``, ``redshift``).
+            ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
 
         Returns
@@ -2912,8 +3131,21 @@ class SEDModel:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif (
+            wave_obs is None
+            and self.observation is not None
+            and getattr(self.observation, "spectroscopy", None) is not None
+            and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
+        ):
+            # Tier-2 fallback documented in the docstring above (#389):
+            # honour observation.spectroscopy.wave_obs so Fitter-driven
+            # spectroscopy fits don't need a manual `model._wave_obs` hack.
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
-            raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
+            raise ValueError(
+                "No wavelength grid. Pass wave_obs, call precompute_spectroscopy(), "
+                "or attach an Observation with spectroscopy.wave_obs set."
+            )
 
         # Use instance default if not overridden
         if wave_chunk_size is None:
@@ -2942,42 +3174,23 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes (via ``predict_photometry`` or ``predict_luminosity``).
+        **JIT-compatible**: yes (routes through :meth:`predict_photometry`).
 
-        Uses :func:`dsps.calc_obs_mag` when available (cosmology-aware),
-        falls back to conversion from photometric flux otherwise.
+        Derived from :meth:`predict_photometry` via the AB definition
+        :math:`m_\\mathrm{AB} = -2.5 \\log_{10}(F_\\nu) - 48.6`. Issue
+        #436: routing instead through :func:`dsps.calc_obs_mag` used a
+        different filter-convolution convention (Bessell & Murphy 2012
+        photon-counting form :math:`\\int T F_\\nu \\, d\\lambda/\\lambda`)
+        than ``predict_photometry`` (Tokunaga & Vacca 2005
+        :math:`\\int \\lambda T F_\\nu \\, d\\lambda`), giving 5–40 mmag
+        zero-point offsets in SDSS bands. Both APIs must use the same
+        convention; deriving the magnitude from the flux is the only
+        choice that is correct by construction.
         """
         if self.filter_waves is None:
             raise ValueError("No filters set.")
-
-        try:
-            from dsps import calc_obs_mag
-
-            from tengri.cosmology import DEFAULT_COSMO
-
-            sed_lsun = self.predict_luminosity(params)
-            z = self._get_redshift(params)
-            cosmo = DEFAULT_COSMO
-
-            mags = []
-            for fw, ft in zip(self.filter_waves, self.filter_trans):
-                m = calc_obs_mag(
-                    self.ssp_data.ssp_wave,
-                    sed_lsun,
-                    fw,
-                    ft,
-                    z,
-                    cosmo.Om0,
-                    cosmo.w0,
-                    cosmo.wa,
-                    cosmo.h,
-                )
-                mags.append(m)
-            return jnp.array(mags)
-
-        except ImportError:
-            flux = self.predict_photometry(params)
-            return ab_mag_from_flux(flux)
+        flux = self.predict_photometry(params)
+        return ab_mag_from_flux(flux)
 
     def predict_luminosity(self, params):
         """Compute rest-frame luminosity SED in solar units.
@@ -4031,6 +4244,15 @@ class SEDModel:
         # chain via ``run_components``. The chain depends only on structural
         # config (spec, ssp_data, filters, approx), all of which are immutable
         # after ``__init__``.
+        # Validate param keys at the orchestrator entry — silent drops
+        # of typo'd or stale override keys produce plausible-looking but
+        # wrong physics. Covers the dict-merge code path that
+        # ``predict_observables_jit`` already guards at line ~4242
+        # (#314). Skip in JIT-runtime threading mode where the JIT
+        # entry point has already validated the caller's dict.
+        if fixed_values is None:
+            check_unknown_params(params, self._param_map)
+
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
             cached = self._build_component_chain()
@@ -4443,6 +4665,7 @@ class SEDModel:
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
+            cue_full_catalogue=bool(getattr(self.spec, "cue_full_catalogue", False)),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_torus_block=getattr(self, "_agn_torus_block", "none"),
@@ -4700,7 +4923,7 @@ class SEDModel:
         wave_obs : array, optional
             Observed-frame wavelength array for spectroscopy.
         priors : dict, optional
-            Parameter priors. Keys may be short names (``"log_peak_sfr"``),
+            Parameter priors. Keys may be short names (``"log_total_mass"``),
             universal short names (``"logzsol"``), or full prefixed names.
             Short names are expanded automatically.
         **model_kwargs
@@ -4767,6 +4990,7 @@ class SEDModel:
         igm=None,
         radio=None,
         xray=None,
+        foreground=None,
         redshift=None,
         apply_igm=None,
         filters=None,
@@ -4839,6 +5063,7 @@ class SEDModel:
                 igm=igm,
                 radio=radio,
                 xray=xray,
+                foreground=foreground,
                 redshift=redshift,
                 apply_igm=apply_igm,
             ).items()

@@ -10,6 +10,10 @@ rest frame, so the IR slope controls K-correction factors and SED fitting degene
 Reference: Cardelli et al. 1989, ApJ, 345, 245 (extended optical extinction).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp

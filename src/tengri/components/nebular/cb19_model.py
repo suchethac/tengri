@@ -92,9 +92,9 @@ class CB19SEDComponent(SEDModelComponent):
     parameter_prefix: str = "neb_"
 
     # Free parameters
-    logU = Uniform(-5.0, 0.0, description="Ionization parameter", units="dex")
+    logU = Uniform(-5.0, 0.0, description="Ionization parameter", units="dex", default=-3.0)
     logZ_gas = Uniform(
-        -2.0, 0.5, description="Gas-phase metallicity log10(Z_gas/Zsun)", units="dex"
+        -2.0, 0.5, description="Gas-phase metallicity log10(Z_gas/Zsun)", units="dex", default=0.0
     )
     fesc = Fixed(0.0, description="Ionizing photon escape fraction", units="dimensionless")
     fesc_lya = Fixed(0.0, description="Lyman-alpha escape fraction", units="dimensionless")

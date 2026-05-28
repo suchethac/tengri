@@ -118,9 +118,27 @@ class XRayAirdSEDComponent(SEDModelComponent):
     parameter_prefix: str = "xray_"
 
     # Free parameters
-    gamma_hmxb = Uniform(1.0, 3.0, description="HMXB spectral index", units="dimensionless")
-    gamma_lmxb = Uniform(1.0, 3.0, description="LMXB spectral index", units="dimensionless")
-    gamma_agn = Uniform(1.0, 3.0, description="AGN X-ray spectral index", units="dimensionless")
+    gamma_hmxb = Uniform(
+        1.0,
+        3.0,
+        description="HMXB spectral index",
+        units="dimensionless",
+        default=2.0,
+    )
+    gamma_lmxb = Uniform(
+        1.0,
+        3.0,
+        description="LMXB spectral index",
+        units="dimensionless",
+        default=1.7,
+    )
+    gamma_agn = Uniform(
+        1.0,
+        3.0,
+        description="AGN X-ray spectral index",
+        units="dimensionless",
+        default=1.9,
+    )
     log_nh = Uniform(
         20.0,
         26.0,
@@ -130,6 +148,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
             "Eq. B6). Compton-thick regime starts at log_nh = 24."
         ),
         units="log10(cm^-2)",
+        default=21.0,
     )
     # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
     # an empirical prior derived from L_2500 via alpha_ox_from_l2500()

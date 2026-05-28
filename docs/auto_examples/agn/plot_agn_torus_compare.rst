@@ -42,10 +42,41 @@ Torus libraries (the six production selectors under
 - ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-84
+.. GENERATED FROM PYTHON SOURCE LINES 21-88
+
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/private/tmp/tengri-split/regen-a/examples/agn/plot_agn_torus_compare.py", line 56, in <module>
+        model = tengri.SEDModel.build(
+                ^^^^^^^^^^^^^^^^^^^^^^
+      File "/private/tmp/tengri-split/regen-a/src/tengri/forward/sed_model.py", line 4929, in build
+        spec = parse_groups(**groups)
+               ^^^^^^^^^^^^^^^^^^^^^^
+      File "/private/tmp/tengri-split/regen-a/src/tengri/parameters/groups.py", line 538, in parse_groups
+        _validate_user_keys(kwargs, structural_params, param_partition)
+      File "/private/tmp/tengri-split/regen-a/src/tengri/parameters/groups.py", line 1023, in _validate_user_keys
+        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
+      File "/private/tmp/tengri-split/regen-a/src/tengri/parameters/groups.py", line 1072, in _check_dict_keys
+        raise ValueError(
+    ValueError: Unknown key 'log_sfr' in group 'sfh'. Valid structural keys for this group are: ['*', 'bin_edges_gyr', 'type'].
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

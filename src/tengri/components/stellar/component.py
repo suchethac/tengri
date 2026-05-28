@@ -430,6 +430,7 @@ class StellarSEDComponent:
             "exp",
             "dexp",
             "tau",
+            "delayed",
             "periodic",
             "buat08",
         )
@@ -515,7 +516,22 @@ class StellarSEDComponent:
             sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
-        sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
+        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
+        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
+        # cutoffs at ``t_lookback = age`` land on grid points instead of
+        # being smeared across the coarser ~3 % log-spaced bins of
+        # ``sfh_lbt_grid``. The closed form also self-normalises through
+        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
+        # exactly. See suchethac/tengri#385.
+        #
+        # The GP-field path still goes through the log grid: ``compute_field_gp``
+        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
+        # GP draw lives on the lookback grid by construction.
+        if self.config.field:
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        else:
+            sfr_on_ssp = sfh_spec.fn(ssp_ages_yr, **sfh_kwargs)
 
         # ── 5. Cosmology: t_obs from redshift ───────────────────────────
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
@@ -790,11 +806,22 @@ class StellarSEDComponent:
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        # ``rest_sed`` from DSPS is in Lsun/Hz (mass scaling included).
-        # Sum the per-age cube — XLA folds the sum into the same kernel
-        # as the einsum and avoids materialising ``rest_sed`` separately.
+        # Use DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs`` in
+        # Lsun/Hz) rather than reconstructing it as
+        # ``total_mass × Σ(weights × ssp_flux)``. The two paths are
+        # mathematically identical when ``total_mass == mstar_obs`` (both
+        # integrate the same SFH), but DSPS computes ``mstar_obs`` via a
+        # cumulative-SFH interpolation while tengri's ``total_mass`` is a
+        # trapezoid integral over the ramp-zeroed ``sfr_asc`` grid. Using
+        # DSPS's value keeps the SED self-consistent with the kernel's
+        # own normalisation (closes #394). The per-age cube ``lnu_age``
+        # below is retained for downstream per-age operations (dust BC
+        # mask, bolometric L_age) and continues to use ``total_mass`` —
+        # the per-age sum is consumed before any wavelength-resolved
+        # quantity reads it, so any residual ``total_mass / mstar_obs``
+        # discrepancy does not propagate into observables.
+        sed_intrinsic = dsps_result.rest_sed * LSUN_ERG_PER_S
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
-        sed_intrinsic = jnp.sum(lnu_age, axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))

@@ -66,10 +66,34 @@ class Sersic(SpatialModelComponent):
     name = "sersic"
     parameter_prefix = "spatial_"
 
-    re_kpc = Uniform(0.1, 20.0, description="Effective radius", units="kpc")
-    n = Uniform(0.5, 8.0, description="Sersic index", units="dimensionless")
-    axis_ratio = Uniform(0.1, 1.0, description="Axis ratio b/a", units="dimensionless")
-    pa_deg = Uniform(-90.0, 90.0, description="Position angle", units="deg")
+    re_kpc = Uniform(
+        0.1,
+        20.0,
+        description="Effective radius",
+        units="kpc",
+        default=1.0,
+    )
+    n = Uniform(
+        0.5,
+        8.0,
+        description="Sersic index",
+        units="dimensionless",
+        default=1.0,
+    )
+    axis_ratio = Uniform(
+        0.1,
+        1.0,
+        description="Axis ratio b/a",
+        units="dimensionless",
+        default=0.7,
+    )
+    pa_deg = Uniform(
+        -90.0,
+        90.0,
+        description="Position angle",
+        units="deg",
+        default=0.0,
+    )
 
     reads: ClassVar[dict[str, str]] = {}
     publishes: ClassVar[dict[str, str]] = {"spatial_profile_2d": ""}

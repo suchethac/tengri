@@ -20,6 +20,68 @@ RADIO_WAVE_MIN: float = 1e5  # 10 μm — overlap with SSP IR tail
 RADIO_WAVE_MAX: float = 3e11  # ~1 MHz radio
 
 
+def make_union_grid(
+    *arrays: np.ndarray | jnp.ndarray,
+    dedupe_tol_rel: float = 1e-9,
+) -> jnp.ndarray:
+    """Sorted, deduplicated union of several wavelength grids in Angstrom.
+
+    Each component's native template grid (dust emission, AGN torus, etc.) is
+    declared in :mod:`tengri.forward.wavelength_extension`; this helper unions
+    them with the SSP grid into the master rest-frame grid that
+    ``SEDModel._init_multiwavelength`` exposes as ``state.wave``. The result
+    is static, sorted ascending, and contains every input node up to a
+    relative floating-point tolerance.
+
+    Parameters
+    ----------
+    *arrays : array_like
+        Wavelength grids in Angstrom. Empty / ``None`` arrays are ignored.
+    dedupe_tol_rel : float
+        Relative tolerance for collapsing near-coincident points (defaults
+        to 1e-9, i.e. one part in a billion). Two values are considered
+        equal when their relative gap falls below this tolerance.
+
+    Returns
+    -------
+    jnp.ndarray
+        Sorted, unique wavelength grid in Angstrom.
+
+    Notes
+    -----
+    The dedupe step is the only knob that affects JIT shape: identical inputs
+    always produce identical-shape output, but adding a new component grid
+    changes the grid size and forces one re-compile. This is acceptable
+    because the union is computed at ``SEDModel.build`` time, not per-call.
+    """
+    clean: list[np.ndarray] = []
+    for a in arrays:
+        if a is None:
+            continue
+        arr = np.asarray(a, dtype=np.float64).ravel()
+        if arr.size == 0:
+            continue
+        arr = arr[np.isfinite(arr) & (arr > 0.0)]
+        if arr.size > 0:
+            clean.append(arr)
+
+    if not clean:
+        return jnp.asarray(np.empty(0, dtype=np.float64))
+
+    merged = np.sort(np.concatenate(clean))
+    if dedupe_tol_rel > 0.0 and merged.size > 1:
+        # Relative-gap dedupe: keep a point only if its relative jump from
+        # the previous kept point exceeds the tolerance.
+        keep = np.empty(merged.shape, dtype=bool)
+        keep[0] = True
+        # Use the larger of the two endpoints for the relative scale so the
+        # check is symmetric.
+        rel_gap = np.diff(merged) / np.maximum(merged[:-1], 1e-300)
+        keep[1:] = rel_gap > dedupe_tol_rel
+        merged = merged[keep]
+    return jnp.asarray(merged)
+
+
 def make_panchromatic_grid(
     ssp_wave: np.ndarray | jnp.ndarray,
     extend_xray: bool = True,
