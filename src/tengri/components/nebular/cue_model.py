@@ -430,7 +430,15 @@ class CueNebularSEDComponent(SEDModelComponent):
                 "predict() carried 'nion' — check that a stellar component is "
                 "active upstream and published it to state.derived."
             )
-        gas_logqion = jnp.log10(jnp.maximum(nion, 1.0))
+        # Sentinel: a sub-photon ``nion`` is unphysical and almost certainly
+        # an upstream contract violation (zero stellar mass, all-quiescent
+        # SFH not publishing Q_H, or an SSP-load bug). Clamp to a log-domain
+        # floor so ``log10`` stays finite for the JIT trace, and route the
+        # complaint through the floor itself: ``gas_logqion = -300`` drives
+        # the ±50-dex clip in ``predict_all_lines`` into uniform saturation
+        # — the same load-loud signature added in #480 for the original
+        # ``gas_logq`` bug. A bug-detection signal, not a silent fix-up.
+        gas_logqion = jnp.log10(jnp.maximum(nion, 1e-300))
 
         # Predict lines
         line_waves, line_lums = predict_all_lines(

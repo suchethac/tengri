@@ -431,6 +431,86 @@ def test_cue_sed_component_requires_nion():
         comp.predict(params, sed_in, wave)  # missing nion → KeyError
 
 
+@pytest.mark.parametrize(
+    "nion_value, expected_logqion",
+    [
+        # Floor: a literal zero ionising-photon rate is unphysical. Clamp to
+        # ``1e-300`` so ``log10`` stays finite for the JIT trace; the result
+        # (≈ −300 dex) drives the ±50-clip in ``predict_all_lines`` into
+        # uniform saturation — the same load-loud signature #480 added for
+        # gas_logq normalisation bugs.
+        (0.0, -300.0),
+        # A small but positive ``nion`` should pass through to log10 cleanly
+        # (no spurious flooring on physically-tiny but legal inputs).
+        (1e-200, -200.0),
+        # The CIGALE / typical SF-galaxy value as a sanity-check anchor.
+        (1e53, 53.0),
+    ],
+)
+def test_cue_sed_component_nion_clamp_handles_degenerate_inputs(
+    monkeypatch, nion_value, expected_logqion
+):
+    """``CueNebularSEDComponent.predict`` must not produce NaN/inf or hide a
+    degenerate ``nion`` from upstream behind a hardcoded floor.
+
+    Regression: PR #477 introduced ``gas_logqion = log10(jnp.maximum(nion, 1.0))``
+    which silently substituted ``log10(1.0) = 0`` when upstream published
+    ``nion = 0`` (zero stellar mass, all-quiescent SFH, or a stellar-component
+    bug). The follow-up uses a log-domain floor (``1e-300``) so the resulting
+    ``gas_logqion ≈ -300`` saturates the ±50-clip uniformly — a visible bug
+    signature rather than a near-physical silent fixup.
+    """
+    import chex
+    import jax.numpy as jnp
+
+    from tengri.components.nebular import cue_model as cue_model_mod
+    from tengri.components.nebular.cue_model import CueNebularSEDComponent
+
+    captured = {}
+
+    def _capture(*, nn_params, weights, gas_logq, gas_logqion):
+        captured["gas_logqion"] = float(jnp.asarray(gas_logqion))
+        wav = jnp.array([6564.61], dtype=jnp.float32)
+        lum = jnp.zeros(1, dtype=jnp.float32)
+        return wav, lum
+
+    def _capture_cont(**_kwargs):
+        wav = jnp.linspace(100.0, 10000.0, 4, dtype=jnp.float32)
+        return wav, jnp.zeros_like(wav)
+
+    monkeypatch.setattr(cue_model_mod, "predict_all_lines", _capture)
+    monkeypatch.setattr(cue_model_mod, "predict_continuum", _capture_cont)
+
+    comp = CueNebularSEDComponent()
+
+    class _StubBackend:
+        weights = object()
+
+    comp.data = _StubBackend()
+
+    params = {
+        "logU": jnp.asarray(-3.0),
+        "logZ_gas": jnp.asarray(-0.3),
+        "ionspec_index1": jnp.asarray(2.0),
+        "ionspec_index2": jnp.asarray(1.5),
+        "ionspec_index3": jnp.asarray(1.0),
+        "ionspec_index4": jnp.asarray(0.5),
+        "ionspec_logLratio1": jnp.asarray(1.0),
+        "ionspec_logLratio2": jnp.asarray(0.5),
+        "ionspec_logLratio3": jnp.asarray(0.5),
+        "gas_logn": jnp.asarray(2.0),
+        "gas_logno": jnp.asarray(0.0),
+        "gas_logco": jnp.asarray(0.0),
+    }
+    wave = jnp.linspace(100.0, 10000.0, 16)
+    sed_in = jnp.zeros_like(wave)
+
+    comp.predict(params, sed_in, wave, nion=jnp.asarray(nion_value))
+
+    chex.assert_tree_all_finite(jnp.asarray(captured["gas_logqion"]))
+    assert captured["gas_logqion"] == pytest.approx(expected_logqion, rel=1e-5, abs=1e-5)
+
+
 def test_cue_predict_all_lines_clip_bounded_at_50dex():
     """The exponent clip in ``predict_all_lines`` must not exceed ±50 dex.
 
