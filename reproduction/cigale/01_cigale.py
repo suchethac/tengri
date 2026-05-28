@@ -843,8 +843,15 @@ ax_l.legend(fontsize=8)
 # Cue-only dotted). Agreement is limited by Cloudy version (17 vs
 # 13.x), bare-stellar vs wNE-SSP path, and line-broadening kernel;
 # see markdown above for the ~3.5× Hα residual.
-L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
-                          - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
+# Attaching Cue extends the master grid to ~10⁸ Å via the
+# native-grid union (cue_weights.npz/cont_wavelength), so s_neb has more
+# points than s_no_neb. Regrid the no-neb baseline onto the with-Cue
+# wave grid before subtracting.
+_s_no_neb_on_neb = U.regrid(
+    np.asarray(s_no_neb.wave), np.asarray(s_no_neb.sed_intrinsic),
+    np.asarray(s_neb.wave),
+)
+L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic) - _s_no_neb_on_neb, 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
           linewidth=1.0, alpha=0.5, label="stellar only")
 ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7,
@@ -872,23 +879,26 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # (dashed), the full SED with AGN (solid), and the AGN-only component
 # (dotted).
 #
-# **The disc model differs by construction.** SKIRTOR2016 bundles a
-# specific accretion-disc spectrum (Schartmann+2005-like piecewise
-# power law with the 1200 Å bend) together with the dusty-torus
-# templates — a single integrated package, smooth from UV through the
-# optical. tengri's composable AGN couples a Shakura-Sunyaev
-# multicolor accretion disc to the SKIRTOR torus, and the multicolor
-# disc carries a hard far-UV bump (<1000 Å) that's well separated from
-# the optical Wien tail — the right panel shows a deep notch around
-# 5000 Å between those two features, where the SKIRTOR-bundled disc
-# instead reads as a continuous rise. The disc shape is a deliberate
-# model choice: the multicolor disc is differentiable in M_BH, ṁ,
-# spin, while SKIRTOR's baked-in disc is not, so anyone fitting an
-# AGN luminosity and Eddington ratio simultaneously wants the
-# composable path even though it diverges visually from a SKIRTOR-
-# package fit. The torus IR uses the same templates and reproduces:
-# face-on i = 30° peaks at ~6–9 µm on both sides; edge-on viewing
-# pushes the dust peak out to ~30 µm (classic reprocessed-dust bump).
+# **`disc.skirtor` reads CIGALE's bundled disc spectrum** straight from
+# the SKIRTOR2016 FITS file (Schartmann+2005-like piecewise power law
+# with the 1200 Å bend) — the same package the torus templates live in.
+# At matched (i, oa, τ_9.7, p, q) the disc + torus pair reproduces
+# CIGALE's `skirtor2016` SED bit-for-bit across UV–FIR.
+#
+# **Alternative.** For users who want a differentiable disc (M_BH, ṁ,
+# spin), the composable AGN still accepts `disc={"type": "multicolor",
+# ...}` — a Shakura-Sunyaev numerically-evaluated disc. That path
+# carries a hard far-UV bump separated from the optical Wien tail by
+# a notch around 5000 Å (the multicolor-disc signature) and visibly
+# diverges from CIGALE in the disc UV continuum even though the torus
+# IR still matches. The reproduction notebook uses `disc.skirtor` for
+# the CIGALE-bit-faithful comparison; production fits choose the
+# physics they need.
+#
+# The torus IR uses the same templates and reproduces at all
+# inclinations: face-on i = 30° peaks at ~6–9 µm on both sides;
+# edge-on viewing pushes the dust peak out to ~30 µm (classic
+# reprocessed-dust bump).
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -934,8 +944,15 @@ m_agn = SEDModel.build(
     # At our fiducial (1 M_sun formed, age 5 Gyr), stellar L_bol ≈
     # 0.5 L_sun, so 0.3/0.7 × 0.5 ≈ 0.21 L_sun → log_lbol ≈ -0.68
     # roughly matches the CIGALE AGN strength on the same axis.
+    #
+    # ``disc.skirtor`` reads CIGALE's bundled SKIRTOR2016 disc spectrum
+    # (Schartmann+2005-like piecewise power law with the 1200 Å bend)
+    # straight from the same FITS file the torus templates come from,
+    # so the disc + torus pair matches CIGALE bit-for-bit at matched
+    # ``(i, oa, τ_9.7, p, q)``. The differentiable multicolor disc is
+    # still available — ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
-         "disc": {"type": "multicolor", "*": FIXED},
+         "disc": {"type": "skirtor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.68), "*": FIXED},
     redshift=Fixed(0.0),
@@ -1040,7 +1057,7 @@ m_x = SEDModel.build(
     # magnitude apart — the panels would look completely different for
     # reasons unrelated to the X-ray physics being tested.
     agn={"type": "composable",
-         "disc": {"type": "multicolor", "*": FIXED},
+         "disc": {"type": "skirtor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.68), "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
