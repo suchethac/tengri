@@ -49,6 +49,64 @@ def wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm):
     return wave_aa, L_nu_erg_per_hz
 
 
+def verify_unit_conversion(rtol: float = 1e-3) -> dict:
+    """Assert ``wnm_to_erg_per_hz_per_aa`` preserves bolometric luminosity.
+
+    Every reproduction-notebook claim of "agrees to a fraction of a percent"
+    rests on the W/nm → erg/s/Hz conversion in
+    :func:`wnm_to_erg_per_hz_per_aa`. A 10× or 1e7× factor-of-units bug
+    there would silently misshape every panel. This function constructs
+    an SED of known bolometric L_λ, runs it through the converter, and
+    independently computes the bolometric integral in the converted
+    units. The two must agree within ``rtol`` (default 1e-3) or this
+    raises.
+
+    Parameters
+    ----------
+    rtol : float
+        Relative tolerance on the bolometric round-trip.
+
+    Returns
+    -------
+    dict
+        ``{"L_bol_in_erg_s": …, "L_bol_out_erg_s": …, "rel_err": …}``.
+
+    Raises
+    ------
+    AssertionError
+        If the round-trip exceeds ``rtol``. Suggests a units bug in
+        :func:`wnm_to_erg_per_hz_per_aa`.
+    """
+    # Build a Gaussian L_λ profile (W/nm) on a UV–NIR grid (91–24000 Å).
+    # Magnitude doesn't matter — the test is a ratio.
+    wave_nm = np.linspace(9.1, 2400.0, 5000)  # 91 Å – 24000 Å
+    L_wnm = np.exp(-((wave_nm - 500.0) ** 2) / (2 * 200.0**2))  # peak at 5000 Å
+    # CIGALE-side bolometric in erg/s: ∫ L_λ dλ, with W → erg/s (×1e7) and
+    # nm units carried through dλ (so the result has W (=erg/s) units after ×1e7).
+    L_bol_in_erg_s = float(np.trapezoid(L_wnm, wave_nm)) * 1e7
+    # Convert and integrate ∫ L_ν dν on the increasing-ν grid.
+    wave_aa, L_nu = wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm)
+    c_aa_per_s = 2.998e18
+    nu = c_aa_per_s / wave_aa[::-1]  # increasing
+    L_nu_rev = L_nu[::-1]
+    L_bol_out_erg_s = float(np.trapezoid(L_nu_rev, nu))
+    rel_err = abs(L_bol_out_erg_s - L_bol_in_erg_s) / L_bol_in_erg_s
+    if rel_err > rtol:
+        raise AssertionError(
+            f"wnm_to_erg_per_hz_per_aa fails bolometric round-trip: "
+            f"L_bol_in={L_bol_in_erg_s:.6e} erg/s, "
+            f"L_bol_out={L_bol_out_erg_s:.6e} erg/s, "
+            f"rel_err={rel_err:.3e} > rtol={rtol:.3e}. "
+            f"A factor-of-10 or 1e7 bug in the converter would silently "
+            f"misshape every CIGALE-vs-tengri panel."
+        )
+    return {
+        "L_bol_in_erg_s": L_bol_in_erg_s,
+        "L_bol_out_erg_s": L_bol_out_erg_s,
+        "rel_err": rel_err,
+    }
+
+
 def regrid(wave_src, y_src, wave_dst):
     """Interpolate in log-log space; zero outside source range.
 

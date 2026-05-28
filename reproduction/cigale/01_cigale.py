@@ -77,6 +77,17 @@ from reproduction.cigale._drivers import units as U
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 
+# Unit-sanity guard: every panel below claims percent-level agreement,
+# which rests on the CIGALE-W/nm → tengri-erg/s/Hz converter in
+# ``_drivers/units.py``. A factor-of-10 or 1e7 bug there would silently
+# misshape every comparison. Assert the bolometric round-trip here so the
+# entire notebook trips at Setup if the converter ever drifts.
+_unit_check = U.verify_unit_conversion(rtol=1e-3)
+print(
+    f"unit-conversion bolometric round-trip: "
+    f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
+)
+
 # CIGALE's `sfhdelayed(..., normalise=True)` integrates the τ-delayed
 # shape to 1 M☉ formed. tengri's parametric SFHs adopt the Bagpipes /
 # Prospector convention: every shape is rescaled so that
@@ -276,6 +287,16 @@ save_fig("01_ssp_bc03.png")
 # CIGALE via the `normalise=True` flag, tengri via `log_total_mass = 0.0`.
 # (`sfh.tau` is a separate model — FSPS sfh=1 / Bagpipes "exponential":
 # monotonic decline from formation. Different physics.)
+#
+# **What the right panel actually plots.** Not a fine-grid analytic
+# evaluation of `t·exp(−t/τ)` — that would be a comparison of two
+# closed-form formulas rather than a test of tengri. Instead the panel
+# reads `state.derived["sfr_history"]` off a built `SEDModel`, on the
+# 64-point log-spaced lookback grid the SFH-convolution code actually
+# uses. The stepping near small `t_cosmic` (large lookback) is real;
+# every fit downstream sees this same grid. The printed
+# `∫SFR dt = 1.0000 M☉` check confirms the area integrates to
+# `log_total_mass`, the only test that matters for downstream physics.
 
 # %% [markdown]
 # ### τ-delayed
@@ -286,25 +307,42 @@ t_c, sfr_c = C.sfh_curve(
     f_burst=0.0, sfr_A=1.0, normalise=True,
 )
 
-# tengri's pipeline SFR history lives on a coarse ~256-bin log-spaced
-# lookback grid that looks jagged at early cosmic time. The sfh.delayed
-# shape is closed-form, so evaluate it analytically on a fine linear
-# grid for a smooth curve: SFR(t) ∝ t·exp(−t/τ) with t = cosmic age
-# since onset, τ = 1 Gyr, truncated at age = 5 Gyr. (This is the same
-# shape tengri's pipeline integrates — `sfh.delayed` is exactly
-# t·exp(−t/τ) — just sampled finely here for a clean curve.)
+# tengri's actual pipeline SFR history (not the analytic formula): build
+# a minimal SEDModel with the delayed SFH and read sfr_history off the
+# resulting state. The pipeline samples on a 64-point log-spaced
+# lookback grid — coarse and visibly stepped near early cosmic time.
+# That coarseness is what every fit downstream sees, so plotting it
+# honestly is the test: if the area under this curve doesn't integrate
+# to 1 M☉ formed (= log_total_mass = 0.0), tengri's SFH normalisation
+# is broken regardless of how clean the analytic shape looks.
 tau_gyr, age_gyr = 1.0, 5.0
-t_t = np.linspace(0.0, age_gyr, 500) * 1e9  # yr
-sfr_t = (t_t / (tau_gyr * 1e9)) * np.exp(-t_t / (tau_gyr * 1e9))
-# Match peak amplitude to CIGALE — both normalise to 1 M_sun formed, but
-# the per-code prefactor differs; the shape is what's under test.
-if sfr_t.max() > 0:
-    sfr_t = sfr_t / sfr_t.max() * sfr_c.max()
+_m_sfh = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "delayed", "tau_gyr": Fixed(tau_gyr), "age_gyr": Fixed(age_gyr),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+_state_sfh = _m_sfh.predict_state({})
+_lbt_yr = np.asarray(_state_sfh.derived["sfh_grid_lbt_yr"])
+_sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
+# Convert lookback time → cosmic age since SF onset (consistent with the
+# CIGALE x-axis above): t_cosmic = age_gyr - lbt
+t_t = (age_gyr - _lbt_yr / 1e9) * 1e9  # yr
+sfr_t = _sfr_history
+# Verify normalisation: trapezoid of SFR over cosmic-age axis should be
+# 10**log_total_mass = 1.0 M☉ within numerical accuracy of the 64-pt grid.
+# tengri's pipeline carries sfh_grid in decreasing lookback time, so
+# integrate against the increasing-time order.
+_idx = np.argsort(t_t)
+_mass_formed = float(np.trapezoid(sfr_t[_idx], t_t[_idx]))
+print(f"tengri pipeline ∫SFR dt = {_mass_formed:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, "pcigale.sed_modules.sfhdelayed (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri sfh.delayed (τ_gyr=1, age_gyr=5)"),
+    (ax_r, "tengri pipeline sfr_history (64-pt log-lbt)"),
 ):
     ax.set_xlabel("Cosmic age since SF onset [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
@@ -582,8 +620,10 @@ plt.show()
 # the residual is annotated on the right panel.
 #
 # The stellar + Calzetti continuum below 1 µm reproduces to ~1 %.
-# A residual in the Dale template-side normalisation of the integrated
-# FIR luminosity (10⁶–10⁷ Å) is tracked in tengri#415.
+# Post-#476 the master wavelength grid is now the union of every
+# attached component's native grid, so the dust SED extends through
+# the FIR peak and down the Rayleigh-Jeans tail to ~mm — the visible
+# 160-µm truncation in earlier renderings of this notebook is gone.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -664,6 +704,15 @@ plt.show()
 # parameters. Cue requires the bare-stellar SSP that this notebook
 # already loaded.
 #
+# **Fiducial choice — young population.** Sections §3–§7 use a 5 Gyr
+# quiescent τ=1 Gyr galaxy (Boquien+2019 reference). Nebular line
+# emission, however, lives almost entirely in the ionising-photon
+# budget of stars ≲ 100 Myr old, and the 5 Gyr quiescent galaxy has
+# almost none. To showcase line emission honestly, §8 swaps to a
+# **τ=300 Myr, age=100 Myr** delayed SFH where Hα and the metal-line
+# forest are physically strong. Same logU, Z_gas, f_esc as the rest of
+# the notebook; only the SFH shifts to a younger reference.
+#
 # Each panel shows the stellar baseline (dashed), stellar + nebular
 # (solid), and the nebular component alone (dotted). The two emitters
 # see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
@@ -682,15 +731,28 @@ plt.show()
 #     float32 BC03 SSPs (closes #458, fixed in #469).
 # (2) `cue_model.py` set `gas_logq = logU` (~−3 dex) instead of the
 #     Strömgren-corrected value (~+48 dex); a ±100-dex saturation clip
-#     hid the error (fixed in #477).
+#     hid the error (fixed in #477; clip tightened to ±50 dex in #480).
 # (3) `gas_logqion` was hardcoded at 49.1 (~3-4 dex below the Q_H of a
 #     real SF galaxy); the SEDComponent now consumes the SSP-aggregated
 #     `nion` published by `StellarSEDComponent` (fixed in #477).
+#
+# **Remaining residual.** Even with all three defects fixed and gas
+# inputs matched, tengri's Cue Hα peak reads **~3.5× lower than
+# CIGALE's CLOUDY** at this fiducial (and the same ratio at 5 Gyr
+# quiescent — not a stress-test artifact). The gap lives downstream
+# of the gas knobs: Cue was trained on Cloudy 17 while CIGALE bundles
+# Cloudy 13.x grids, and Cue's bare-stellar SSP path differs from
+# CIGALE's wNE-SSP convolution. Nebular continuum shape and emission-
+# line ratios reproduce well; the absolute line normalisation does not.
 
 # %%
-_sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
-                                age_burst=20, f_burst=0.0, sfr_A=1.0,
-                                normalise=True))
+# §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts
+# Myr values directly; tengri takes Gyr via tau_gyr/age_gyr.
+_TAU_MAIN_YOUNG_MYR = 300
+_AGE_MAIN_YOUNG_MYR = 100
+_sfh_args = ("sfhdelayed", dict(tau_main=_TAU_MAIN_YOUNG_MYR, age_main=_AGE_MAIN_YOUNG_MYR,
+                                tau_burst=50, age_burst=20, f_burst=0.0,
+                                sfr_A=1.0, normalise=True))
 sed_c_st = C.run_chain([
     _sfh_args, ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
 ])
@@ -703,11 +765,15 @@ sed_c_neb = C.run_chain([
 ])
 w_c_neb, L_c_neb = C.to_lnu(sed_c_neb)
 
+_neb_sfh_kw = {"type": "delayed",
+               "tau_gyr": Fixed(_TAU_MAIN_YOUNG_MYR / 1000),
+               "age_gyr": Fixed(_AGE_MAIN_YOUNG_MYR / 1000),
+               "log_total_mass": Fixed(0.0), "*": FIXED}
+
 m_no_neb = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
+    sfh=_neb_sfh_kw,
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -716,8 +782,7 @@ s_no_neb = m_no_neb.predict_state({})
 m_neb = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
-    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-         "log_total_mass": Fixed(0.0), "*": FIXED},
+    sfh=_neb_sfh_kw,
     neb={"type": "cue",
          "neb_logU": Fixed(-2.0),
          "neb_logZ_gas": Fixed(MET_LOGZSOL),  # Z_gas = 0.02 ≡ stellar Z
@@ -740,13 +805,10 @@ ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
           label="stellar + CLOUDY nebular")
 ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
 ax_l.legend(fontsize=8)
-# tengri side — post-#477 the Cue emission lines should match the CIGALE
-# CLOUDY line forest at the per-line level (Cue is a neural emulator of
-# the same CLOUDY physics for a single H II region, so the agreement is
-# limited by emulator precision, not by the bug fixes themselves). The
-# residual mismatch comes from: (a) Cue trained on Cloudy 17 vs CIGALE's
-# Cloudy 13.x grids, (b) Cue's bare-stellar SSP requirement vs CIGALE's
-# wNE-SSP path, (c) line-broadening kernel differences.
+# tengri side — post-#469/#477 the Cue-only curve carries real line +
+# continuum emission across UV–optical. Agreement is limited by Cloudy
+# version (17 vs 13.x), bare-stellar vs wNE-SSP path, and line-broadening
+# kernel; see markdown above for the ~3.5× Hα residual.
 L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
                           - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
@@ -770,20 +832,24 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # %% [markdown]
 # ## §9 AGN
 #
-# CIGALE's `skirtor2016` torus library (Stalevski+2016) on the left vs
-# tengri's composable AGN with the same SKIRTOR torus on the right, both
-# at viewing angle i = 30°, τ_9.7 = 7. Each panel shows the stellar+dust
-# baseline (dashed), the full SED with AGN (solid), and the AGN-only
-# component (dotted).
+# CIGALE's `skirtor2016` AGN package on the left vs tengri's composable
+# AGN on the right, both at the SKIRTOR fiducial (i = 30°, τ_9.7 = 7,
+# oa = 40°, p = q = 1). Each panel shows the stellar + dust baseline
+# (dashed), the full SED with AGN (solid), and the AGN-only component
+# (dotted).
 #
-# Post-#420 the composable AGN emits a real spectrum (it previously
-# published `L_agn_bol` but dropped the SED), and post-#468 the SKIRTOR
-# torus has the correct L_ν dimensionality — the warm-dust MIR-FIR bump
-# now shows up rather than being squashed by a stray L_λ→L_ν conversion.
-# At this fiducial (i = 30°, tengri's SKIRTOR defaults) the tengri
-# torus-only contribution peaks at ~6 µm, in the same ballpark as
-# CIGALE's SKIRTOR at matched inclination. Edge-on viewing pushes the
-# peak out to ~30 µm (the classic reprocessed-dust bump) on both sides.
+# **The disc model differs by construction.** SKIRTOR2016 bundles a
+# specific accretion-disc spectrum (Schartmann+2005-like piecewise
+# power law with the 1200 Å bend) together with the dusty-torus
+# templates — it's a single package. tengri's composable AGN couples
+# a Shakura-Sunyaev multicolor accretion disc to the SKIRTOR torus,
+# so the UV-optical disc continuum is different on each side even
+# though the torus IR is the same templates. The torus L_ν is what
+# #468 fixed; the disc shape is a deliberate model choice (multicolor
+# disc is differentiable in M_BH, ṁ, spin — SKIRTOR's baked-in disc
+# is not). Edge-on viewing pushes the dust peak out to ~30 µm (classic
+# reprocessed-dust bump) on both sides; at face-on i = 30° the dust
+# peak sits at ~6–9 µm on both sides.
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -860,11 +926,18 @@ ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
           label="composable disc + SKIRTOR torus only")
 ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
 
-# Bound the y-axis to a reasonable 6 decades so log-zero autoscale
-# doesn't blow up the panels at the X-ray edge.
+# Bound both axes to the same windows so the panels are visually
+# comparable. Without explicit ``set_xlim``, matplotlib auto-scales
+# each panel to its widest trace's native grid — the no-AGN baseline
+# (SSP grid, 91 Å – 160 µm) is shorter than the +AGN trace (SKIRTOR
+# grid extends X-ray and FIR), so the two panels would show different
+# x-spans for reasons that look like data but are really cosmetics.
+_xmin_a = float(min(w_skirt.min(), float(np.asarray(s_agn.wave).min())))
+_xmax_a = float(max(w_skirt.max(), float(np.asarray(s_agn.wave).max())))
 _ymax_a = max(float(np.asarray(L_skirt).max()),
               float(np.asarray(s_agn.sed_intrinsic).max()))
 for ax in (ax_l, ax_r):
+    ax.set_xlim(_xmin_a, _xmax_a)
     ax.set_ylim(_ymax_a * 1e-6, _ymax_a * 2)
 
 fig.tight_layout()
@@ -880,6 +953,14 @@ save_fig("09_agn_skirtor.png")
 # E_cut ≈ 300 keV. tengri ships the matching `xray.yang20` (landed in
 # #446) with the same defaults (Γ_AGN = 1.8, E_cut = 300 keV,
 # α_ox = -1.4, Γ_HMXB = 2.0, Γ_LMXB = 1.6).
+#
+# **AGN strength matched to §9.** Both panels use `agn_log_lbol ≈ −0.68`
+# (CIGALE via `fracAGN=0.3` on 1 M☉ formed, tengri explicit) — the
+# weak-Seyfert level that's consistent with the rest of the notebook's
+# 1 M☉ fiducial. A previous revision of this section used a quasar-
+# strength tengri AGN (log_lbol = 11.5) which made the X-ray flux
+# visible on the plot but compared to CIGALE's Seyfert chain by 12
+# orders of magnitude — apples to oranges.
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
 # both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Above ~100 keV the panels
@@ -913,10 +994,17 @@ m_x = SEDModel.build(
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
           "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
           "*": FIXED},
+    # AGN strength matched to CIGALE's chain. CIGALE uses fracAGN=0.3 on
+    # a 1-M☉-formed stellar baseline; the resulting L_AGN_bol ≈
+    # 0.3/(1-0.3) × L_stellar_bol ≈ 0.21 L☉ → log_lbol ≈ −0.68 (same as
+    # §9). Using a quasar-strength tengri AGN here while CIGALE has a
+    # Seyfert-weak one would compare X-ray spectra at ~12 orders of
+    # magnitude apart — the panels would look completely different for
+    # reasons unrelated to the X-ray physics being tested.
     agn={"type": "composable",
          "disc": {"type": "multicolor", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(11.5), "*": FIXED},
+         "agn_log_lbol": Fixed(-0.68), "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -944,9 +1032,22 @@ save_fig("10_xray_nh_sweep.png")
 # ## §11 Radio
 #
 # CIGALE's `radio` module gives a star-forming synchrotron component
-# tied to the IR-to-radio correlation (q_IR after Condon 1992) plus an
-# AGN power-law via radio loudness. tengri ships the same physics as
-# `radio.condon92`. Star-forming only, 100 MHz to 100 GHz.
+# tied to the IR-to-radio correlation (q_IR; CIGALE default `qir_sf = 2.5`,
+# Helou+1985 anchor) plus thermal free-free (Murphy+2011 Eq. 11) plus
+# an AGN power-law via radio loudness. tengri's `radio.condon92` ships
+# the same composite — the registry-name "condon92" anchors to the
+# Condon 1992 framework (ARA&A 30, 575) but the *calibrations* are
+# Bell 2003 (q_IR), Murphy 2011 (free-free), Yang 2020 (AGN).
+#
+# To match CIGALE the tengri build below pins `radio_q_ir = 2.5` and
+# `radio_alpha_sf = 0.8`. tengri's bucket default is `radio_q_ir = 2.64`
+# (Bell 2003 z = 0 anchor); without that override the panels disagree
+# by `10^(2.64 − 2.5) ≈ 1.38×` at 1.4 GHz — exactly q_IR convention,
+# not a physics gap. With the override the residual is **1.5 % at
+# 1.4 GHz** (tengri 1.672e+18 vs CIGALE 1.697e+18 erg/s/Hz), traceable
+# to small differences in the L_IR integration window between
+# `dust.emission.dale2014` and CIGALE's `dale2014` module.
+# Star-forming only, 100 MHz to 100 GHz.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()
@@ -987,7 +1088,15 @@ try:
               "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
               "*": FIXED,
               "emission": {"type": "dale2014", "*": FIXED}},
-        radio={"type": "condon92", "*": FIXED},
+        # Pin q_IR to CIGALE's `qir_sf = 2.5` (CIGALE's default for the
+        # SF synchrotron). tengri's bucket default is `Fixed(2.64)`
+        # (Bell 2003 z=0 anchor); the 0.14 dex difference is exactly the
+        # ~1.4× ratio that otherwise shows up between the panels at
+        # 1.4 GHz. Same `alpha_sf = 0.8`.
+        radio={"type": "condon92",
+               "radio_q_ir": Fixed(2.5),
+               "radio_alpha_sf": Fixed(0.8),
+               "*": FIXED},
         redshift=Fixed(0.0),
     )
     state_r = m_r.predict_state({})
