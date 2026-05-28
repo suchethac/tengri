@@ -44,15 +44,17 @@
 # physics block at a time around this fiducial.
 #
 # **What to expect.** Stellar templates, star-formation histories,
-# dust-attenuation curves, AGN disc + SKIRTOR torus, X-ray corona +
-# binaries, and IGM transmission reproduce CIGALE to floating-point or
-# to a fraction of a percent. Two blocks differ in ways worth seeing
-# plainly: the nebular emitter uses a neural emulator (Cue) rather than
-# static CLOUDY grids, and the dust-emission SED is currently truncated
-# at the SSP grid edge (160 µm for BC03) — the FIR-submm tail past that
-# is clipped pending the union-of-component-grids rework
-# ([#463](https://github.com/suchethac/tengri/issues/463)). Each
-# discrepancy is called out at the relevant section.
+# dust-attenuation curves, AGN disc + SKIRTOR torus, dust IR through
+# the FIR + RJ tail to ~mm (post-#476's union-of-component-grids),
+# X-ray corona + binaries, IGM transmission, and the radio synchrotron
+# + free-free composite all reproduce CIGALE to floating-point or to
+# a fraction of a percent at matched parameters. One block differs by
+# design: the nebular emitter uses Cue (a neural emulator trained on
+# Cloudy 17) rather than CIGALE's bundled Cloudy 13.x grids. With all
+# gas inputs matched, Cue's Hα reads ~3.5× below CIGALE's CLOUDY —
+# downstream of the gas knobs, traceable to Cloudy version + bare-
+# stellar vs wNE-SSP path. Each discrepancy is called out at the
+# relevant section.
 
 # %% [markdown]
 # ## Setup
