@@ -125,18 +125,21 @@ def test_skirtor_and_schartmann_differ() -> None:
 
 
 @pytest.mark.contract
-def test_skirtor_torus_polar_dust_off_by_default() -> None:
-    """agn_polar_ebv=0 must yield zero polar-dust contribution."""
+def test_skirtor_torus_polar_dust_on_by_default() -> None:
+    """agn_polar_ebv default = 0.03 (CIGALE skirtor2016 default); the
+    block's keyword default must match the param-spec default and
+    produce a non-zero polar-dust contribution."""
     torus = resolve_agn_block("torus", "skirtor")
     wave_aa = jnp.geomspace(1e3, 1e7, 300)
     L_default = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
-    L_explicit_off = torus(
+    L_off = torus(
         wave_aa,
         agn_log_lbol=-0.42,
         l5100_disc=jnp.zeros_like(wave_aa),
         agn_polar_ebv=0.0,
     )
-    np.testing.assert_allclose(np.asarray(L_default), np.asarray(L_explicit_off), rtol=1e-7)
+    # Default must DIFFER from explicit-off (proves polar dust is on).
+    assert float(jnp.max(jnp.abs(L_default - L_off))) > 0.0
 
 
 @pytest.mark.bounds
@@ -144,7 +147,12 @@ def test_skirtor_torus_polar_dust_only_adds() -> None:
     """Polar-dust contribution must be non-negative everywhere — never subtract."""
     torus = resolve_agn_block("torus", "skirtor")
     wave_aa = jnp.geomspace(1e3, 1e7, 300)
-    L_off = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
+    L_off = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.0,
+    )
     L_on = torus(
         wave_aa,
         agn_log_lbol=-0.42,
@@ -165,7 +173,12 @@ def test_skirtor_torus_polar_dust_lifts_fir_tail() -> None:
     by a factor >2 — the regression that motivated the audit."""
     torus = resolve_agn_block("torus", "skirtor")
     wave_aa = jnp.geomspace(1e3, 1e7, 400)
-    L_off = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
+    L_off = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.0,
+    )
     L_on = torus(
         wave_aa,
         agn_log_lbol=-0.42,

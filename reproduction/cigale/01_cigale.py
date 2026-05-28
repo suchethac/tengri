@@ -884,10 +884,12 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # bend that CIGALE's module substitutes for the FITS-bundled disc when
 # `disk_type=1` is selected. tengri also ships `disc.skirtor` (the
 # SKIRTOR analytic disc, CIGALE `disk_type=0`) and `disc.adaf_lopez2024`
-# (CIGALE `disk_type=2`). With the default `agn_torus_frac=0.5` and
-# `agn_polar_ebv=0.03` (CIGALE polar-dust default), the disc + torus +
-# Casey-2012 polar-dust greybody reproduces CIGALE's `skirtor2016` SED
-# across UV–NIR (within ~20 %) and the FIR tail (within ~30 %).
+# (CIGALE `disk_type=2`). tengri's library defaults match CIGALE's
+# `skirtor2016` defaults — `agn_torus_frac=0.5` (covering factor),
+# `agn_polar_ebv=0.03` (Casey-2012 polar dust on, T=100 K, β=1.6) — so
+# the disc + torus + polar-dust greybody is engaged automatically with
+# no per-fit overrides. Net agreement vs CIGALE: UV–NIR within ~20 %,
+# FIR tail within ~30 %.
 #
 # **Alternative.** For users who want a differentiable disc (M_BH, ṁ,
 # spin), the composable AGN still accepts `disc={"type": "multicolor",
@@ -903,8 +905,9 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # inclinations: face-on i = 30° peaks at ~6–9 µm on both sides;
 # edge-on viewing pushes the dust peak out to ~30 µm (classic
 # reprocessed-dust bump). The Casey-2012 polar-dust greybody — added
-# on top of the SKIRTOR thermal dust when `agn_polar_ebv > 0`, matching
-# CIGALE — lifts the FIR tail (~100 µm) by a factor of a few.
+# on top of the SKIRTOR thermal dust by default (`agn_polar_ebv=0.03`,
+# composable; set `Fixed(0.0)` to disable) — lifts the FIR tail
+# (~100 µm) by a factor of a few.
 #
 # **Remaining torus-peak residual.** tengri's `torus.skirtor` block
 # interpolates the SKIRTOR `total = disk + dust` template grid rather
@@ -965,19 +968,16 @@ m_agn = SEDModel.build(
     #
     # ``disc.schartmann2005`` matches CIGALE ``skirtor2016 disk_type=1``
     # (the CIGALE default): piecewise power law with the 1200 Å bend.
-    # ``agn_polar_ebv=0.03`` engages the Casey-2012 polar-dust greybody
-    # on top of the SKIRTOR thermal dust, matching CIGALE's
-    # ``skirtor2016`` polar dust (T=100 K, β=1.6 by default).
-    # ``agn_torus_frac`` defaults to 0.5 — earlier attempt to set 1.0
-    # over-shot the torus peak 2.5× (see notebook prose above). The
-    # remaining ~30 % residual at the torus peak is a template-shape
-    # issue, not a normalisation one. The differentiable multicolor
-    # disc remains available — ``disc={"type": "multicolor", ...}``.
+    # tengri inherits the CIGALE defaults for the rest:
+    # ``agn_torus_frac=0.5`` (covering factor), ``agn_polar_ebv=0.03``
+    # (Casey-2012 polar-dust greybody E(B-V), T=100 K, β=1.6) — so the
+    # only AGN parameter the notebook needs to override is the
+    # disc-bolometric scale. The differentiable multicolor disc remains
+    # available — ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.42),
-         "agn_polar_ebv": Fixed(0.03),
          "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -1085,7 +1085,6 @@ m_x = SEDModel.build(
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.42),
-         "agn_polar_ebv": Fixed(0.03),
          "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
