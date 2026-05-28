@@ -21,11 +21,6 @@
 Diffuse ionized gas suppresses strong optical lines
 ===================================================
 
-.. image:: images/sphx_glr_plot_dig_frac_sweep_001.png
-   :alt: plot dig frac sweep
-   :class: sphx-glr-single-img
-
-
 Diffuse ionized gas (DIG) has lower ionization parameter than HII regions,
 shifting galaxies toward the LINER region on the BPT diagram. We vary the
 DIG fraction from pure HII (0) to mixed gas (0.8).

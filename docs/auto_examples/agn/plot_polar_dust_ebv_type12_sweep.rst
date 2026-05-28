@@ -42,6 +42,32 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-130
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
+   :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Building shared AGN model (polar_ebv and cos_inc FREE)...
+    /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/src/tengri/components/agn/blocks/runner.py:453: RecipeWarning: Composable AGN: agn_attenuation_block='polar_dust' but agn_polar_ebv=0 (no extinction applied). Either set agn_polar_ebv > 0 or pick agn_attenuation_block='none'.
+      validate_block_recipe(
+    /Users/suchethacooray/.claude-squad/worktrees/cs/merge-conflicts_18b33d4da24fb250/examples/agn/plot_polar_dust_ebv_type12_sweep.py:127: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+      fig.tight_layout()
+    Saved: plot_polar_dust_ebv_type12_sweep.png
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

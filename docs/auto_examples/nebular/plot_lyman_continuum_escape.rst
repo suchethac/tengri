@@ -21,11 +21,6 @@
 Lyman-continuum escape fraction reshapes the SED around the 912 A edge
 =======================================================================
 
-.. image:: images/sphx_glr_plot_lyman_continuum_escape_001.png
-   :alt: plot lyman continuum escape
-   :class: sphx-glr-single-img
-
-
 We zoom on the Lyman-continuum region (rest 800-1300 A) and sweep
 the escape fraction f_esc to show how the 912 A discontinuity
 deepens as more ionising photons leave the ISM unabsorbed. Companion

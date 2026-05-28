@@ -21,11 +21,6 @@
 Intrinsic UV continuum slope β vs single-burst age
 ====================================================
 
-.. image:: images/sphx_glr_plot_uv_slope_age_001.png
-   :alt: plot uv slope age
-   :class: sphx-glr-single-img
-
-
 Dust-free UV continuum slope of an SSP swept from 10 Myr to 1 Gyr.
 β is fit in the Calzetti+1994 windows (1268–2580 Å) to ``F_λ ∝ λ^β``.
 

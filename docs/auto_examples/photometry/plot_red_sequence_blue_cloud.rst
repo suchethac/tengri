@@ -21,11 +21,6 @@
 Red Sequence vs Blue Cloud Bimodality
 ======================================
 
-.. image:: images/sphx_glr_plot_red_sequence_blue_cloud_001.png
-   :alt: plot red sequence blue cloud
-   :class: sphx-glr-single-img
-
-
 Galaxy colour–magnitude diagram showing the distinct red and blue populations.
 We model two populations — 25 quiescent old galaxies (peak SFH ~8 Gyr) and 25
 star-forming galaxies (continuous SFR) — varying stellar mass via

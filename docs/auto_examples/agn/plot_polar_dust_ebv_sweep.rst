@@ -40,6 +40,17 @@ Reference: Yang et al. 2020, MNRAS 491, 740 (X-CIGALE), Fig. 1.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-95
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_sweep_001.png
+   :alt: plot polar dust ebv sweep
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

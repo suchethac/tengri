@@ -21,11 +21,6 @@
 Fitting a stochastic SFH with a smooth parametric prior leaves a UV residual
 ============================================================================
 
-.. image:: images/sphx_glr_plot_wrong_model_trap_001.png
-   :alt: plot wrong model trap
-   :class: sphx-glr-single-img
-
-
 A common SED-fitting failure mode: pick a smooth parametric SFH (delayed
 exponential, tau-model, lognormal) for a galaxy whose true star-formation
 history has short-timescale bursts. The continuum-anchored bands (optical,

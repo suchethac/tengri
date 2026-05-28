@@ -21,11 +21,6 @@
 AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalisation
 ======================================================================
 
-.. image:: images/sphx_glr_plot_alpha_ox_sweep_001.png
-   :alt: plot alpha ox sweep
-   :class: sphx-glr-single-img
-
-
 The UV-to-X-ray spectral slope alpha_OX (defined as log F_X minus
 log F_UV divided by log nu_X minus log nu_UV) separates X-ray-loud
 quasars (alpha_OX around -1.2, strong X-ray relative to the UV

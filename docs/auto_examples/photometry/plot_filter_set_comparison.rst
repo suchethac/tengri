@@ -21,11 +21,6 @@
 Filter placement decides which spectral features a survey can see
 ==================================================================
 
-.. image:: images/sphx_glr_plot_filter_set_comparison_001.png
-   :alt: plot filter set comparison
-   :class: sphx-glr-single-img
-
-
 The same star-forming galaxy SED is intercepted by three different filter
 sets — SDSS *ugriz* (optical), 2MASS *JHKs* (near-infrared), and HST ACS
 *F435W/F606W/F814W* (UV-optical). Each panel overlays the survey's

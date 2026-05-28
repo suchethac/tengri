@@ -21,11 +21,6 @@
 Cumulative buildup of the GRAHSP AGN recipe, one sub-block at a time
 =====================================================================
 
-.. image:: images/sphx_glr_plot_composable_block_toggles_001.png
-   :alt: plot composable block toggles
-   :class: sphx-glr-single-img
-
-
 The ``agn.disc``, ``agn.lines``, ``agn.feii``, ``agn.torus``,
 ``agn.atten`` sub-blocks of ``SEDModel.build`` are composable: turning
 one on at a time and overlaying the all-on reference (dashed grey)

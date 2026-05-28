@@ -21,11 +21,6 @@
 Ionisation parameter reshapes the full optical SED, not just line ratios
 ==========================================================================
 
-.. image:: images/sphx_glr_plot_logu_sweep_001.png
-   :alt: plot logu sweep
-   :class: sphx-glr-single-img
-
-
 Varying log U from -4 to -1.5 on a young star-forming galaxy at fixed
 metallicity changes every strong optical line simultaneously — Hbeta,
 [O III], Halpha, [N II], [S II] all move together. We plot the full

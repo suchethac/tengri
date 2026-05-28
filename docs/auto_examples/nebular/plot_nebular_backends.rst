@@ -21,11 +21,6 @@
 Cue nebular emulator vs alternatives
 =====================================
 
-.. image:: images/sphx_glr_plot_nebular_backends_001.png
-   :alt: plot nebular backends
-   :class: sphx-glr-single-img
-
-
 Compare Cue (neural emulator; current recommended path) against
 traditional photoionization grids (CloudyGrid) and SSP-embedded nebular.
 Shows [OIII] and H-alpha regions on a young starburst.

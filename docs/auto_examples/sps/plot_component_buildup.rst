@@ -21,11 +21,6 @@
 Building the panchromatic SED component by component
 =====================================================
 
-.. image:: images/sphx_glr_plot_component_buildup_001.png
-   :alt: plot component buildup
-   :class: sphx-glr-single-img
-
-
 Tengri assembles a galaxy SED out of named blocks that can each be toggled
 on or off at build time. We construct six models that successively add one
 more block, then overlay the rest-frame :math:`\nu L_\nu` after each

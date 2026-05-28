@@ -21,11 +21,6 @@
 SED Conventions: F_λ vs F_ν vs νF_ν
 ===================================
 
-.. image:: images/sphx_glr_plot_fnu_vs_flambda_units_001.png
-   :alt: plot fnu vs flambda units
-   :class: sphx-glr-single-img
-
-
 The same stellar population SED looks different depending on the units
 chosen for visualization. a single galaxy SED in three
 complementary representations on a 3-panel grid:

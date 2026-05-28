@@ -21,11 +21,6 @@
 BPT diagram: emission lines from the baked-in nebular SSP
 =========================================================
 
-.. image:: images/sphx_glr_plot_workflow_bpt_classification_001.png
-   :alt: plot workflow bpt classification
-   :class: sphx-glr-single-img
-
-
 Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
 directly from the model's rest-frame SED via continuum-subtracted
 boxcar integration around each line centre, swept across a stellar

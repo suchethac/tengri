@@ -21,11 +21,6 @@
 Dual-epoch star formation: old and recent bursts leave distinct SED signatures
 ==============================================================================
 
-.. image:: images/sphx_glr_plot_sfh_double_burst_001.png
-   :alt: plot sfh double burst
-   :class: sphx-glr-single-img
-
-
 A galaxy with two separated bursts—one at 10 Gyr (old) and one at 0.3 Gyr (recent)—
 produces a SED that blends young hot and old cool stellar populations. Left panel
 shows the optical-to-NIR region in linear scale; right panel shows the full

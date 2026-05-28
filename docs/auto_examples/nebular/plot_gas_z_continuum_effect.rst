@@ -21,11 +21,6 @@
 Gas-phase metallicity effect on nebular continuum
 ==================================================
 
-.. image:: images/sphx_glr_plot_gas_z_continuum_effect_001.png
-   :alt: plot gas z continuum effect
-   :class: sphx-glr-single-img
-
-
 Nebular free-free, free-bound, and two-photon emission respond to gas-phase
 metallicity (``logZ_gas``) through changes in metal cooling efficiency and
 ionization balance. metallicity sensitivity of

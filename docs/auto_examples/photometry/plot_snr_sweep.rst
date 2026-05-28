@@ -21,11 +21,6 @@
 Posterior width tracks 1/SNR for fixed-truth SDSS photometry
 =============================================================
 
-.. image:: images/sphx_glr_plot_snr_sweep_001.png
-   :alt: plot snr sweep
-   :class: sphx-glr-single-img
-
-
 Same star-forming galaxy, same SDSS *ugriz* set, three signal-to-noise
 levels (5, 20, 100). For each S/N we mock the photometry, run a MAP
 fit, and overlay the recovered SED on the truth. The figure surfaces the

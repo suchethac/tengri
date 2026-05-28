@@ -21,11 +21,6 @@
 IRX–β diagram: infra-red excess vs UV slope (Meurer+1999)
 ===========================================================
 
-.. image:: images/sphx_glr_plot_usecase_irx_beta_meurer_001.png
-   :alt: plot usecase irx beta meurer
-   :class: sphx-glr-single-img
-
-
 The **IRX–β relation** connects the UV continuum slope β (1250–2600 Å) with
 the infrared excess IRX = log₁₀(L_IR / L_UV). This diagram reveals dust
 reddening and star formation rate indicators in galaxies. Here we:

@@ -21,11 +21,6 @@
 Recovering a z=3 galaxy from JWST NIRCam photometry
 ====================================================
 
-.. image:: images/sphx_glr_plot_photometric_fit_001.png
-   :alt: plot photometric fit
-   :class: sphx-glr-single-img
-
-
 A higher-redshift counterpart to the SDSS quickstart fit. We mock JWST
 NIRCam wide-band photometry of a star-forming galaxy at z=3 (S/N=15),
 run a MAP fit, and show the recovered SED + per-band residuals. NIRCam

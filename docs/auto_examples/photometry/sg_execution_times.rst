@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.147** total execution time for 16 files **from auto_examples/photometry**:
+**00:00.169** total execution time for 16 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -33,7 +33,7 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
-     - 00:00.147
+     - 00:00.169
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_balmer_break_redshift_evolution.py` (``plot_balmer_break_redshift_evolution.py``)
      - 00:00.000

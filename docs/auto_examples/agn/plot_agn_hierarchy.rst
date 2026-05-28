@@ -21,11 +21,6 @@
 Building up an AGN SED: disc, then torus, then lines
 =====================================================
 
-.. image:: images/sphx_glr_plot_agn_hierarchy_001.png
-   :alt: plot agn hierarchy
-   :class: sphx-glr-single-img
-
-
 Four AGN configurations of increasing physical complexity at the same
 bolometric luminosity (log L_bol = 12.5 in L_sun units) — bare
 multicolour disc, +SKIRTOR torus, +NLR narrow-line forest, and an

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.282** total execution time for 31 files **from auto_examples/agn**:
+**00:03.897** total execution time for 31 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,11 +32,14 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_custom_torus_extension.py` (``plot_custom_torus_extension.py``)
-     - 00:02.219
+   * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py` (``plot_polar_dust_ebv_type12_sweep.py``)
+     - 00:01.914
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust_ebv_sweep.py` (``plot_polar_dust_ebv_sweep.py``)
+     - 00:01.585
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_skirtor_vs_smooth_torus.py` (``plot_skirtor_vs_smooth_torus.py``)
-     - 00:00.063
+     - 00:00.398
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -83,13 +86,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_agn_plot_composable_recipes.py` (``plot_composable_recipes.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_custom_torus_extension.py` (``plot_custom_torus_extension.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_nlr_blr_lines.py` (``plot_nlr_blr_lines.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust_ebv_sweep.py` (``plot_polar_dust_ebv_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py` (``plot_polar_dust_ebv_type12_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_qsogen_spectrum.py` (``plot_qsogen_spectrum.py``)

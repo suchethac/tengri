@@ -21,11 +21,6 @@
 Lyman-alpha profile and IGM blue-wing absorption across redshift
 ==================================================================
 
-.. image:: images/sphx_glr_plot_lyman_alpha_igm_attenuation_001.png
-   :alt: plot lyman alpha igm attenuation
-   :class: sphx-glr-single-img
-
-
 The Lyman-alpha (Lyα) emission line at rest-frame 1216 Å is one of the strongest
 hydrogen recombination features in star-forming galaxies. As the redshift increases
 from z = 2 to z = 7, the IGM becomes progressively opaque at wavelengths

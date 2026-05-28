@@ -21,11 +21,6 @@
 NUV−r colour vs stellar age
 ============================
 
-.. image:: images/sphx_glr_plot_nuv_r_age_track_001.png
-   :alt: plot nuv r age track
-   :class: sphx-glr-single-img
-
-
 The NUV−r colour is a sensitive probe of stellar age in galaxies. We show
 how a single-burst star formation history (tsnorm, truncated-skew-normal)
 evolves across the GALEX green valley (NUV−r ≈ 4–5 mag) as the stellar

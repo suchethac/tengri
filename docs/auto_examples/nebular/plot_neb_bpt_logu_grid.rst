@@ -21,11 +21,6 @@
 Stellar-population age moves a galaxy on the BPT diagram
 =========================================================
 
-.. image:: images/sphx_glr_plot_neb_bpt_logu_grid_001.png
-   :alt: plot neb bpt logu grid
-   :class: sphx-glr-single-img
-
-
 Young massive stars produce harder ionising continua and drive the
 nebular emission toward higher [O III]/Hbeta. We sweep the SFH
 timescale ``tau_gyr`` from 0.1 to 2 Gyr on a single dual power-law

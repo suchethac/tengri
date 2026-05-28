@@ -21,11 +21,6 @@
 Optical line-ratio diagnostics along the metallicity gradient
 =============================================================
 
-.. image:: images/sphx_glr_plot_line_ratios_metallicity_evolution_001.png
-   :alt: plot line ratios metallicity evolution
-   :class: sphx-glr-single-img
-
-
 Three classical strong-line metallicity diagnostics computed as a function
 of gas-phase metallicity (``logZ_gas``). The plot spans 12 + log(O/H) from
 ~7 to ~9 and illustrates key observational features: the saturation of

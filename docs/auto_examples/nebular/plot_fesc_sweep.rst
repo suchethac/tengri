@@ -21,11 +21,6 @@
 Escape fraction suppresses the optical line ratios, not just amplitudes
 ========================================================================
 
-.. image:: images/sphx_glr_plot_fesc_sweep_001.png
-   :alt: plot fesc sweep
-   :class: sphx-glr-single-img
-
-
 We sweep the ionising-photon escape fraction f_esc from 0 to 0.9 at
 fixed log U and metallicity, and read out the response in
 diagnostic-ratio space ([O III]/Hbeta etc.). Companion to

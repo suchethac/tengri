@@ -21,11 +21,6 @@
 The q_PAH and U_min knobs move PAH amplitude and FIR peak independently
 ========================================================================
 
-.. image:: images/sphx_glr_plot_dust_qpah_umin_grid_001.png
-   :alt: plot dust qpah umin grid
-   :class: sphx-glr-single-img
-
-
 A 2-D grid on the Draine & Li 2007 template library: rows step through
 PAH mass fraction q_PAH (controls mid-IR PAH-feature strength),
 columns through the minimum radiation field U_min (sets the diffuse

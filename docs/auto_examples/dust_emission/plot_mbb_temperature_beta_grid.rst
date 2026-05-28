@@ -21,11 +21,6 @@
 Modified blackbody: T_dust × β grid
 =====================================
 
-.. image:: images/sphx_glr_plot_mbb_temperature_beta_grid_001.png
-   :alt: plot mbb temperature beta grid
-   :class: sphx-glr-single-img
-
-
 Casey 2012 modified blackbody dust SEDs across the canonical fitter's
 two knobs — dust temperature ``T_dust`` and emissivity index ``β``.
 Each curve in the top panel is a fixed ``β = 1.8`` MBB swept in T;

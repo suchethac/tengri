@@ -21,11 +21,6 @@
 Metallicity prior choice moves the photometric posterior by ~0.3 dex
 =====================================================================
 
-.. image:: images/sphx_glr_plot_recipe_compare_priors_001.png
-   :alt: plot recipe compare priors
-   :class: sphx-glr-single-img
-
-
 Optical broadband photometry constrains metallicity weakly, so the
 prior carries real information. We mock a star-forming galaxy at
 log Z/Zsun = -0.5 in five SDSS bands at S/N=20, then fit it twice

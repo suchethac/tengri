@@ -21,11 +21,6 @@
 Same AGN, different viewing angle: Type 1 to Type 2 by inclination
 ====================================================================
 
-.. image:: images/sphx_glr_plot_agn_type12_001.png
-   :alt: plot agn type12
-   :class: sphx-glr-single-img
-
-
 The unified AGN model attributes the Type-1 vs Type-2 dichotomy to
 geometry alone. Three inclinations of an identical disc + SKIRTOR
 torus + broad-line region (Type 1, face-on, cos i = 0.95), torus

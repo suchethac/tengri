@@ -21,11 +21,6 @@
 N_H column density sweep: from unobscured to Compton-thick
 ==========================================================
 
-.. image:: images/sphx_glr_plot_xray_nh_sweep_001.png
-   :alt: plot xray nh sweep
-   :class: sphx-glr-single-img
-
-
 The line-of-sight column density ``N_H`` reshapes the AGN X-ray spectrum
 in two regimes: photoelectric absorption (``zphabs``) suppresses the soft
 band roughly as :math:`\exp(-\sigma(E)\,N_H)` with cross-section

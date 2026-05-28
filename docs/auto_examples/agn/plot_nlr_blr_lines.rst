@@ -21,11 +21,6 @@
 Narrow vs broad line region: a velocity-width contrast in two windows
 ======================================================================
 
-.. image:: images/sphx_glr_plot_nlr_blr_lines_001.png
-   :alt: plot nlr blr lines
-   :class: sphx-glr-single-img
-
-
 Identical AGN configuration (multicolour disc + SKIRTOR torus at log
 L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred
 km/s, characteristic Type-2 spectrum) and the other with the broad-line

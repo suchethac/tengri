@@ -21,11 +21,6 @@
 X-ray corona shape across the alpha_OX vs log L_bol plane
 ==========================================================
 
-.. image:: images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
-   :alt: plot agn alpha ox lbol 2d
-   :class: sphx-glr-single-img
-
-
 The X-ray corona response of an AGN depends jointly on bolometric
 luminosity (which sets the X-ray normalisation through the
 Lusso & Risaliti L_X-L_UV correlation) and on the UV-to-X-ray slope

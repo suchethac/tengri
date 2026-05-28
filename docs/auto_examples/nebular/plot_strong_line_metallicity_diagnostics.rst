@@ -21,11 +21,6 @@
 Strong-line gas-phase metallicity diagnostics
 ==============================================
 
-.. image:: images/sphx_glr_plot_strong_line_metallicity_diagnostics_001.png
-   :alt: plot strong line metallicity diagnostics
-   :class: sphx-glr-single-img
-
-
 Four widely-used optical strong-line metallicity diagnostics
 evaluated across the Cue ``logZ_gas`` prior. Each one carries a
 different systematic — Pettini & Pagel 2004 O3N2 saturates at high

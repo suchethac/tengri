@@ -21,11 +21,6 @@
 Panchromatic SED: M82 Starburst Analog
 ======================================
 
-.. image:: images/sphx_glr_plot_m82_starburst_panchromatic_001.png
-   :alt: plot m82 starburst panchromatic
-   :class: sphx-glr-single-img
-
-
 M82 (NGC 3034) is a nearby starburst galaxy with intense nuclear star
 formation (SFR ~ 10 Msun/yr), stellar mass M* ~ 1×10^10 Msun, and
 moderate-to-high dust opacity (τ_V ~ 2 in the starburst core). The

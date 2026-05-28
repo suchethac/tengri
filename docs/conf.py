@@ -71,7 +71,11 @@ sphinx_gallery_conf = {
     # never match. Anchor at start of string with ``^``, run the negative-
     # lookahead against the whole path to exclude any basename already in
     # ``_DO_NOT_EXECUTE``, then ``.*plot_<...>.py$`` to pin the filename.
-    "filename_pattern": rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$",
+    #
+    # Note: each skip stem is anchored with ``\.py`` so a rendered script
+    # ``plot_foo.py`` does NOT spuriously exclude ``plot_foo_extension.py``
+    # (substring collision between stems sharing a prefix).
+    "filename_pattern": rf"^(?!.*(?:{_skip_alt})\.py).*plot_[^/]+\.py$",
     # ignore_pattern HIDES files from the gallery entirely. Used for heavy
     # NUTS/SVI scripts whose runtime + memory footprint OOMs the build (each
     # NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha). These scripts

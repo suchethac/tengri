@@ -21,11 +21,6 @@
 Three AGN recipes built by swapping selectors, not call sites
 ==============================================================
 
-.. image:: images/sphx_glr_plot_composable_recipes_001.png
-   :alt: plot composable recipes
-   :class: sphx-glr-single-img
-
-
 The composable AGN grammar (``agn.disc``, ``agn.torus``, ``agn.lines``,
 ``agn.feii``, ``agn.atten``) lets the user mix sub-blocks across model
 families. Same SEDModel.build call, three different physics tuples:

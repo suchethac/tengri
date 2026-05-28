@@ -21,11 +21,6 @@
 Each tengri SED component shown in isolation
 ==============================================
 
-.. image:: images/sphx_glr_plot_components_isolated_001.png
-   :alt: plot components isolated
-   :class: sphx-glr-single-img
-
-
 Six physics blocks added cumulatively to the same star-forming host
 so the contribution of each is visible at every wavelength.
 
