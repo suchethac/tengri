@@ -25,6 +25,10 @@ import pytest
 import tengri.components.agn.blocks  # noqa: F401 — triggers registrations
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS, resolve_agn_block
 
+# Module taxonomy: most cases verify the registry/adapter contract; the
+# energy-conservation test below carries an explicit ``conservation`` marker.
+pytestmark = pytest.mark.contract
+
 _L_SUN_ERG = 3.828e33
 _CIGALE_BLOCKS = ("skirtor", "schartmann2005", "adaf_lopez2024")
 
@@ -34,6 +38,7 @@ def test_block_registered(name: str) -> None:
     assert name in AGN_BLOCKS["disc"]
 
 
+@pytest.mark.conservation
 @pytest.mark.parametrize("name", _CIGALE_BLOCKS)
 def test_energy_conservation(name: str) -> None:
     """\\int L_lambda dlambda must equal L_bol (Lsun -> erg/s)."""
@@ -46,6 +51,7 @@ def test_energy_conservation(name: str) -> None:
     np.testing.assert_allclose(L_int, L_expected, rtol=0.01)
 
 
+@pytest.mark.bounds
 @pytest.mark.parametrize("name", _CIGALE_BLOCKS)
 def test_positivity(name: str) -> None:
     block = resolve_agn_block("disc", name)
