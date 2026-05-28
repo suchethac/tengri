@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:04.241** total execution time for 9 files **from auto_examples/sps**:
+**00:06.194** total execution time for 14 files **from auto_examples/sps**:
 
 .. container::
 
@@ -32,8 +32,20 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_sps_plot_uv_slope_age.py` (``plot_uv_slope_age.py``)
-     - 00:04.241
+   * - :ref:`sphx_glr_auto_examples_sps_plot_age_metallicity_color_grid.py` (``plot_age_metallicity_color_grid.py``)
+     - 00:02.738
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_fnu_vs_flambda_units.py` (``plot_fnu_vs_flambda_units.py``)
+     - 00:01.433
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_band_comparison.py` (``plot_mass_to_light_band_comparison.py``)
+     - 00:00.841
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_alpha_enhanced_population.py` (``plot_alpha_enhanced_population.py``)
+     - 00:00.656
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_library_shootout.py` (``plot_ssp_library_shootout.py``)
+     - 00:00.525
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ionising_lum.py` (``plot_ionising_lum.py``)
      - 00:00.000
@@ -57,5 +69,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_ssp_metallicity_sweep.py` (``plot_ssp_metallicity_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_sps_plot_uv_slope_age.py` (``plot_uv_slope_age.py``)
      - 00:00.000
      - 0.0

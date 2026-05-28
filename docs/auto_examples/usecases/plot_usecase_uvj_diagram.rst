@@ -180,7 +180,7 @@ Wuyts et al. 2007, ApJ, 655, 51.
     ax.text(0.0, 0.4, "Unobscured SF", fontsize=11, color="#1a4f8b", ha="left")
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_uvj_diagram.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_uvj_diagram.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uvj_diagram.py:

@@ -79,7 +79,7 @@ Reference: Kellermann et al. 1989, ApJ 345, 171.
     cbar.set_label(r"R = log$_{10}$(L$_{5\,\rm GHz}$ / L$_B$)")
 
     fig.tight_layout()
-    fig.savefig("plot_radio_loudness_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_loudness_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_loudness_sweep.py:

@@ -130,7 +130,7 @@ skip if the data files aren't available.
         )
 
     fig.tight_layout()
-    fig.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_emission_models.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_emission_models.py:

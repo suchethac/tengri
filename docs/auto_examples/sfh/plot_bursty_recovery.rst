@@ -101,7 +101,7 @@ illustrating the range of morphologies that each regime produces before inferenc
         ax.set_ylim(bottom=0)
 
     fig.tight_layout()
-    fig.savefig("plot_bursty_recovery.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_bursty_recovery.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_bursty_recovery.py:

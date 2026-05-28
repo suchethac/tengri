@@ -141,7 +141,7 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
     ax.legend(frameon=False)
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_mass_completeness.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_mass_completeness.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_mass_completeness.py:

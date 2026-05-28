@@ -51,4 +51,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"R = log$_{10}$(L$_{5\,\rm GHz}$ / L$_B$)")
 
 fig.tight_layout()
-fig.savefig("plot_radio_loudness_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_radio_loudness_sweep.png", dpi=150, bbox_inches="tight")

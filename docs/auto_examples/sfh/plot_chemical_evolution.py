@@ -96,4 +96,4 @@ ax.set_xlim(-0.5, 14)
 ax.set_ylim(-2.5, 0.5)
 
 fig.tight_layout(rect=[0, 0, 1, 0.97])
-fig.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_chemical_evolution.png", dpi=150, bbox_inches="tight")

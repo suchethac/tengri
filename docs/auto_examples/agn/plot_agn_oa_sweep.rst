@@ -97,7 +97,7 @@ hot disc continuum and shifts the SED blueward.
     cbar.set_label(r"Opening angle $\theta_{\rm oa}$ [°]")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_oa_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_oa_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_oa_sweep.py:

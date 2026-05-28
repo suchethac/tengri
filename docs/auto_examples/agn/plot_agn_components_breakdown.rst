@@ -154,7 +154,7 @@ disc choice barely matters longward of 1 μm), etc.
     )
     ax_bot.legend(frameon=False, fontsize=8, loc="lower right")
 
-    fig.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_components_breakdown.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_components_breakdown.py:

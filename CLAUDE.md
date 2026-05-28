@@ -4,7 +4,7 @@
 
 Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
 
-**Code name:** `tengri` (working name, final TBD).
+**Name:** `tengri`.
 **Paper draft:** *(private paper draft)*
 **Paper I:** Methods + mock recovery. **Paper II:** Real data.
 
@@ -147,7 +147,7 @@ groups = model.spec.to_groups()    # round-trip for inspection/editing
 from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_peak_sfr
+    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
     dust={'type': 'two_component', 'law_bc': 'calzetti', '*': FIXED},
     neb={'type': 'cue', '*': FIXED},
 )
@@ -175,7 +175,7 @@ variant swapping, and round-trip editing. Design plan:
 ## Key conventions
 
 - **Physical constants**: Import from `utils/physics_constants.py` — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue training convention, not IAU 2015).
-- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848`. User-facing `neb_logZ_gas` is Z/Zsun (param_map adds LOG10_ZSUN).
+- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848` (Asplund 2009, **Zsun = 0.0142**, matches MIST). User-facing `met_logzsol` and `neb_logZ_gas` are `log10(Z/Zsun)` (param_map adds LOG10_ZSUN). **Default** `met_logzsol = 0.0` (solar — matches FSPS / Bagpipes). Per-SSP-library Zsun differs: BC03/Padova = 0.0190, PARSEC = 0.0152, BASTI = 0.0200 — see `LOG10_ZSUN_BY_LIBRARY` in `parameters/translate.py`. For bit-exact cross-code comparisons (e.g. CIGALE BC03), reason in **absolute** `log_z_abs = met_logzsol + LOG10_ZSUN` and pin that. See #412 for the audit trace.
 - **ParamSpec free params** use full prefixes: `sfh_dpl_alpha`, `sfh_field_psd_sigma` — NOT shorthand. Check with `spec.free_params`.
 - **PSD timescale**: high-level API is **Myr** (`psd_tau_myr`); internal is **years** (`psd_tau_yr`).
 - **`agn_log_lbol`**: always `log10(L_bol / L_sun)` at API level. AGN functions convert to erg/s internally.
@@ -316,6 +316,49 @@ Test organization:
 Bug fix rule: every fix MUST cite the original paper equation and include a regression test.
 
 Use `chex` for array shape/finite/tree-allclose assertions in tests — see `docs/dev/testing-with-chex.md` for the conventions and conversion recipes.
+
+## Issue / PR labels (apply when opening any new issue or PR)
+
+Every new issue and PR MUST be labelled. Pick at minimum **one area:** label; add **type:**, **cross-cutting**, and GH-default (`bug`/`enhancement`/`documentation`) labels as they apply. Multi-area issues get multiple `area:*` labels.
+
+**Physics areas** (pick if the issue touches that physics subsystem):
+`area:agn` · `area:sfh` · `area:dust` · `area:nebular` · `area:stellar` · `area:xray` · `area:radio` · `area:igm`
+
+**Code areas** (pick if the issue touches that internal/public seam):
+- `area:api` — `SEDModel.build`, builders, registries, public surface (`__init__.py` re-exports)
+- `area:forward` — forward model pipeline, `PipelineState`, kernels, `ForwardModel`
+- `area:observation` — photometry, spectroscopy, filters, noise, apertures
+- `area:inference` — VI/MCMC/NUTS/MAP backends, `InferenceContext`
+- `area:population` — `PopulationSEDModel`, hierarchical PSD fits
+- `area:spatial` — `SpatialSEDModel`, fiber, aperture, multi-component spatial
+- `area:examples` — sphinx-gallery scripts under `docs/examples/`
+- `area:notebooks` — jupytext fundamentals/quickstart notebooks
+- `area:docs` — user/dev docs (not gallery, not ADR)
+- `area:adr` — architecture decision records under `docs/adr/`
+- `area:ci` — GitHub Actions workflows
+- `area:perf` — compile time, runtime, benchmarks
+- `area:tests` — test infra, taxonomy markers, flakes, rehoming
+
+**Type extensions** (on top of `bug`/`enhancement`):
+- `type:refactor` — internal restructure with no behaviour change
+- `type:audit` — parity audit vs CIGALE/Prospector/AGNfitter/Synthesizer (finding discrepancies)
+- `type:parity` — wire up a specific known upstream model or library variant
+
+**Cross-cutting failure classes** (apply liberally — these are searchable patterns):
+- `silent-failure` — silent NaN/Inf returns, dropped kwargs, ignored config (recurring footgun)
+- `jit-safety` — tracer leaks, `ConcretizationTypeError`, safe-gradient patterns
+- `oom` — memory blowups (warmup, mass matrix, compile)
+- `breaking-change` — public API rename or behavioural break
+
+**Examples** (from existing issues):
+- "Cue neb_fesc has no effect on LyC" → `area:nebular`, `bug`
+- "X-ray missing N_H photoelectric absorption" → `area:xray`, `type:parity`
+- "audit: tengri vs CIGALE — stellar normalization 30% low" → `type:audit`, `area:stellar`, `area:dust`, `bug`
+- "Derive _VALID_SFH_TYPES from SFH_REGISTRY" → `area:sfh`, `area:api`, `type:refactor`
+- "NUTS warmup peaks at 20+ GB on D≈8" → `area:inference`, `oom`, `bug`
+- "Tracer leak in Dale 2014 dust IR under jit" → `area:dust`, `jit-safety`, `bug`
+
+Do **not** add: per-component labels (`area:cue`, `area:skirtor`) — too granular; `priority:*` — decays; `area:registry` — covered by title + `type:refactor`.
 
 ## qmd search (MANDATORY before reading files)
 

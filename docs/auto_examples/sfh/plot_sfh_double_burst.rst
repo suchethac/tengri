@@ -156,7 +156,7 @@ panchromatic SED in log-log, revealing the emission from both young and old star
     ax2.grid(True, alpha=0.2, which="both")
 
     fig.tight_layout()
-    fig.savefig("plot_sfh_double_burst.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sfh_double_burst.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_double_burst.py:

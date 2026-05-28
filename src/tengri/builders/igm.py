@@ -35,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.components.igm import IGM_TRANSMISSION_MODELS
+from tengri.parameters.groups import _valid_igm_types
 from tengri.parameters.registry import recipe_parameters
 
 _PREFIXES = ("igm_", "dla_")  # The igm group dict carries both prefixes.
@@ -78,11 +78,7 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
     factories: dict[str, Callable[..., dict]] = {}
-    # Canonical IGM models + the structural "none" sentinel. Aliases
-    # (``"inoue"`` -> ``"inoue14"``) are validator-side back-compat only
-    # and do not get their own factory here.
-    canonical = set(IGM_TRANSMISSION_MODELS.keys()) | {"none"}
-    for variant in sorted(canonical):
+    for variant in sorted(_valid_igm_types()):
         short_params, flag_map = _discover_params(variant)
         factories[variant] = make_factory(
             variant=variant,

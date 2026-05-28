@@ -70,4 +70,4 @@ ax_qir.set_ylabel(r"$q_{\rm IR}$")
 ax_qir.set_ylim(1.5, 3.5)
 
 fig.tight_layout()
-fig.savefig("plot_fir_radio_correlation.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_fir_radio_correlation.png", dpi=150, bbox_inches="tight")

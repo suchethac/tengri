@@ -89,4 +89,4 @@ ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
 ax.legend(frameon=False, fontsize=9)
 
 fig.tight_layout()
-fig.savefig("plot_panchromatic_galaxy.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_panchromatic_galaxy.png", dpi=150, bbox_inches="tight")

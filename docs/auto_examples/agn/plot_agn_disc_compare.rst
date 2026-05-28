@@ -42,10 +42,25 @@ Models compared (the six production disc selectors under
 - ``powerlaw``     — generic power-law disc
 - ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-84
+.. GENERATED FROM PYTHON SOURCE LINES 21-88
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
+   :alt: plot agn disc compare
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -70,7 +85,7 @@ Models compared (the six production disc selectors under
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
@@ -108,7 +123,12 @@ Models compared (the six production disc selectors under
     ax.legend(frameon=False, fontsize=8, loc="lower center")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.947 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

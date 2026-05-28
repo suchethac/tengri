@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.694** total execution time for 1 file **from auto_examples/inference**:
+**00:00.036** total execution time for 6 files **from auto_examples/inference**:
 
 .. container::
 
@@ -32,6 +32,21 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_inference_plot_population_scaling.py` (``plot_population_scaling.py``)
-     - 00:00.694
+   * - :ref:`sphx_glr_auto_examples_inference_plot_photoz_chi2_grid.py` (``plot_photoz_chi2_grid.py``)
+     - 00:00.036
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_convergence.py` (``plot_convergence.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_corner.py` (``plot_corner.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_method_comparison.py` (``plot_method_comparison.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_posterior_predictive_check.py` (``plot_posterior_predictive_check.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_inference_plot_sfh_recovery_test.py` (``plot_sfh_recovery_test.py``)
+     - 00:00.000
      - 0.0

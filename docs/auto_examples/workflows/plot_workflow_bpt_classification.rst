@@ -161,7 +161,7 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
     ax.legend(frameon=False, loc="lower left")
 
     fig.tight_layout()
-    fig.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_bpt_classification.py:

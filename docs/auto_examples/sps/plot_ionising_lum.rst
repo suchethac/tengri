@@ -117,7 +117,7 @@ grids and overlay the curves.
     ax.legend(frameon=False, fontsize=8, loc="upper right")
 
     fig.tight_layout()
-    fig.savefig("plot_ionising_lum.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_ionising_lum.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ionising_lum.py:

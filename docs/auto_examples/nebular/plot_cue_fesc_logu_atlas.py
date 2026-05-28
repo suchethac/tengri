@@ -14,6 +14,10 @@ SSP (the wNE grids bake nebular emission in at fixed conditions and
 cannot vary these knobs).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -35,7 +39,7 @@ SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.3,
-    "log_peak_sfr": 1.5,
+    "log_total_mass": 10.0,
     "alpha": 3.0,
     "beta": 2.0,
 }
@@ -100,4 +104,4 @@ axes[0].set_ylabel(r"ionization parameter $\log\,U$")
 for ax, mesh in zip(axes, [m1, m2, m3]):
     fig.colorbar(mesh, ax=ax, pad=0.02)
 
-fig.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_cue_fesc_logu_atlas.png", dpi=150, bbox_inches="tight")

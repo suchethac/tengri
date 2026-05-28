@@ -32,10 +32,25 @@ affect line ratios and diagnostic positions. Four-panel layout shows
 velocity and density sequences on BPT, line ratios vs velocity, and
 magnetic field strength.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-137
+.. GENERATED FROM PYTHON SOURCE LINES 11-141
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_shock_emission_001.png
+   :alt: BPT: Shock Velocity (200–500 km/s), BPT: Density (200 km/s), BPT: Magnetic Field (250 km/s)
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_shock_emission_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -161,7 +176,7 @@ magnetic field strength.
     ax.set_ylim(-1.2, 1.5)
 
     fig.tight_layout()
-    fig.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_shock_emission.py:

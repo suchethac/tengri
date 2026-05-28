@@ -154,7 +154,7 @@ The age axis is shared so the responses can be compared.
     ax_h.set_xscale("log")
     ax_h.set_xlabel(r"Stellar burst age  [Gyr]")
 
-    fig.savefig("plot_spectral_indices_vs_age.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_spectral_indices_vs_age.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_spectral_indices_vs_age.py:

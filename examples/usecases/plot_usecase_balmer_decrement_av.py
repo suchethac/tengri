@@ -9,14 +9,19 @@ dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha
 and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the
 Calzetti+2000 expectation.
 
-**IMPORTANT:** This script tests whether tengri folds dust attenuation into
-emission line predictions. If the tengri trace is flat with A_V (expected
-ratio stays at intrinsic value regardless of dust), this confirms
-`predict_emission_lines` bypasses diffuse-dust attenuation — filing as bug.
+Status: as of issue #313 fix, ``predict_emission_lines`` now folds in the
+diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
+to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
+the birth-cloud component or the dust normalisation differs slightly from
+the pure Calzetti law applied here as the reference.
 
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust
 attenuation law).
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -44,7 +49,7 @@ model = tengri.SEDModel.build(
         "alpha": 1.5,
         "beta": 2.0,
         "tau_gyr": 0.1,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
     },
     dust={
         "type": "two_component",
@@ -56,8 +61,8 @@ model = tengri.SEDModel.build(
     neb={
         "type": "cue",
         "*": tengri.FIXED,
-        "neb_logZ_gas": -0.2,
-        "neb_logU": -3.0,
+        "logZ_gas": -0.2,
+        "logU": -3.0,
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -139,13 +144,13 @@ ax.grid(True, alpha=0.3)
 ax.text(
     0.98,
     0.05,
-    "If tengri trace is flat: emission_lines bypass dust attenuation (bug)",
+    "After issue #313 fix: tengri now folds diffuse dust into line predictions",
     transform=ax.transAxes,
     fontsize=9,
     va="bottom",
     ha="right",
     style="italic",
-    color="red",
+    color="0.4",
 )
 
 fig.tight_layout()

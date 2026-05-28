@@ -133,4 +133,4 @@ ax.set_ylim(-1.2, 1.5)
 ax.legend(frameon=False, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")

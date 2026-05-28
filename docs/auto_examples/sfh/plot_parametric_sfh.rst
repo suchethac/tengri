@@ -83,7 +83,7 @@ morphologies from smooth exponentials to sharp truncations. No SSP data required
     ax.set_ylim(0, None)
     ax.legend(fontsize=10, frameon=False, ncol=2, loc="upper right")
     fig.tight_layout()
-    fig.savefig("plot_parametric_sfh.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_parametric_sfh.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_parametric_sfh.py:

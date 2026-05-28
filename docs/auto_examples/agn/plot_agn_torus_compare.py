@@ -19,6 +19,10 @@ Torus libraries (the six production selectors under
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -80,4 +84,4 @@ for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (70.0, "FIR")]:
 ax.legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.tight_layout()
-fig.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")

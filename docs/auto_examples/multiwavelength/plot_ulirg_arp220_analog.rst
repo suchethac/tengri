@@ -39,17 +39,6 @@ similar to Arp 220's bolometric output.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-76
 
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_ulirg_arp220_analog_001.png
-   :alt: plot ulirg arp220 analog
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_ulirg_arp220_analog_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -111,12 +100,7 @@ similar to Arp 220's bolometric output.
             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="0.7", lw=0.5))
 
     fig.tight_layout()
-    fig.savefig("plot_ulirg_arp220_analog.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.714 seconds)
+    plt.savefig("plot_ulirg_arp220_analog.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_ulirg_arp220_analog.py:

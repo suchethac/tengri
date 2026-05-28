@@ -73,7 +73,7 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548.
     cbar.set_label(r"Cutoff energy $E_{\rm cut}$ [keV]")
 
     fig.tight_layout()
-    fig.savefig("plot_E_cut_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_E_cut_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_E_cut_sweep.py:

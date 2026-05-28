@@ -150,7 +150,7 @@ Reference: Lehmer et al. 2019, ApJ, 878, 122 (L_X−SFR−M_* scaling relations)
     cbar4.set_label(r"$M_*$ [M$_\odot$]")
 
     fig.tight_layout()
-    fig.savefig("plot_xray_sf.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_xray_sf.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_sf.py:

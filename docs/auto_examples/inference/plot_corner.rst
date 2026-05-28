@@ -108,7 +108,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
         show_titles=False,
     )
 
-    fig.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_corner.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_corner.py:

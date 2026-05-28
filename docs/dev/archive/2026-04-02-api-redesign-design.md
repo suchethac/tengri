@@ -11,7 +11,7 @@ Tengri's current API is powerful but has three friction points that slow down ne
 
 **1. Method string proliferation.** `fitter.run()` accepts 15+ method strings. Eight are variants of the same underlying algorithm (geoVI): `geovi`, `native_geovi`, `mgvi`, `native_mgvi`, `evi`, `native_evi`, `fast_geovi`, `fast_mgvi`, `nifty_geovi`, `nifty_mgvi`, `geovi_nuts`. These are internal backend choices (NIFTy tight loop vs JIT-compiled vs full logging), not distinct scientific methods. Users from BAGPIPES/Prospector think "variational inference," not "NIFTy fast path."
 
-**2. Construction verbosity.** Fitting a galaxy currently requires four separate objects: `ParamSpec` (with long prefix names like `sfh_tsnorm_log_peak_sfr`), `SSPData`, `Observation` (containing `Photometry` and/or `SpectroscopyConfig`), and `Fitter`. A newcomer has to read four different docstrings before writing one line of science.
+**2. Construction verbosity.** Fitting a galaxy currently requires four separate objects: `ParamSpec` (with long prefix names like `sfh_tsnorm_log_total_mass`), `SSPData`, `Observation` (containing `Photometry` and/or `SpectroscopyConfig`), and `Fitter`. A newcomer has to read four different docstrings before writing one line of science.
 
 **3. No first-class chaining.** The common workflow — MAP initialization → variational inference → MCMC validation — requires manually threading `init_from=result` between three separate `fitter.run()` calls. There's no way to express "fit, then validate" as a single pipeline.
 
@@ -137,7 +137,7 @@ model = tengri.Model.from_config(
     wave_obs=None,                                 # set for spectroscopy
     priors={
         # SHORT names — prefix stripped because sfh="tsnorm" is known
-        "log_peak_sfr": Uniform(-1.0, 2.5),
+        "log_total_mass": Uniform(-1.0, 2.5),
         "peak_lbt_gyr": Uniform(0.5, 12.0),
         "width_gyr": Uniform(0.3, 5.0),
         "skew": Uniform(-3.0, 3.0),
@@ -151,8 +151,8 @@ model = tengri.Model.from_config(
 ```
 
 **Key design decisions:**
-- When `sfh="tsnorm"` is provided, the `priors` dict accepts short names (`log_peak_sfr`) instead of the full prefix (`sfh_tsnorm_log_peak_sfr`). The factory expands them internally.
-- When `sfh="dpl+field"` is provided, short names cover both the DPL (`alpha`, `beta`, `log_peak_sfr`) and the stochastic field (`psd_sigma`, `psd_tau_myr`).
+- When `sfh="tsnorm"` is provided, the `priors` dict accepts short names (`log_total_mass`) instead of the full prefix (`sfh_tsnorm_log_total_mass`). The factory expands them internally.
+- When `sfh="dpl+field"` is provided, short names cover both the DPL (`alpha`, `beta`, `log_total_mass`) and the stochastic field (`psd_sigma`, `psd_tau_myr`).
 - `agn="simple"` automatically injects `agn_frac` as a free parameter with a default prior; can be overridden in `priors`.
 - `redshift="free"` makes redshift a free parameter; `redshift=0.1` fixes it.
 - Returns a standard `Model` object — no new class needed.
@@ -163,7 +163,7 @@ model = tengri.Model.from_config(
 # sfh_type → {short_name: full_name}
 _SFH_SHORT_NAMES = {
     "tsnorm": {
-        "log_peak_sfr": "sfh_tsnorm_log_peak_sfr",
+        "log_total_mass": "sfh_tsnorm_log_total_mass",
         "peak_lbt_gyr": "sfh_tsnorm_peak_lbt_gyr",
         "width_gyr": "sfh_tsnorm_width_gyr",
         "skew": "sfh_tsnorm_skew",
@@ -172,7 +172,7 @@ _SFH_SHORT_NAMES = {
     "dpl": {
         "alpha": "sfh_dpl_alpha",
         "beta": "sfh_dpl_beta",
-        "log_peak_sfr": "sfh_dpl_log_peak_sfr",
+        "log_total_mass": "sfh_dpl_log_total_mass",
         "tau_gyr": "sfh_dpl_tau_gyr",
     },
     # "field" additions apply to any sfh that includes "+field"
@@ -304,7 +304,7 @@ pop_result.plot_population()  # sigma-tau scatter with credible contours
 
 - **Don't remove `ParamSpec`** — it's the right abstraction for power users and programmatic construction.
 - **Don't remove `Fitter`** — it's needed for compile-then-run workflows and multi-seed fitting.
-- **Don't make the short names the only way** — `sfh_tsnorm_log_peak_sfr` should always work.
+- **Don't make the short names the only way** — `sfh_tsnorm_log_total_mass` should always work.
 - **Don't merge `Photometry` / `SpectroscopyConfig` / `Observation`** — the current split is clean at the type level; the verbosity comes from construction, not the type design.
 - **Don't add DataFrames as a required dependency** — make pandas/astropy optional imports in `fit_catalog()`.
 
@@ -340,7 +340,7 @@ from tengri import Observation, Photometry
 ssp = load_ssp_data("data/ssp.h5")
 obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"]))
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(-1, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5),
     met_logzsol=Uniform(-2, 0.2),
@@ -360,7 +360,7 @@ model = tengri.Model.from_config(
     filters=["sdss_u", "sdss_g", "sdss_r"],
     redshift=0.1,
     priors=dict(
-        log_peak_sfr=tengri.Uniform(-1, 2.5),
+        log_total_mass=tengri.Uniform(-1, 2.5),
         peak_lbt_gyr=tengri.Uniform(0.5, 12),
         width_gyr=tengri.Uniform(0.3, 5),
         logzsol=tengri.Uniform(-2, 0.2),

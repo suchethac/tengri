@@ -18,8 +18,8 @@
 .. _sphx_glr_auto_examples_nebular_plot_cue_parameter_atlas.py:
 
 
-Comprehensive sweep of the Cue nebular parameters
-==================================================
+Comprehensive 2D sweep of ionization parameter and metallicity (Cue)
+====================================================================
 
 .. image:: images/sphx_glr_plot_cue_parameter_atlas_001.png
    :alt: plot cue parameter atlas
@@ -42,14 +42,35 @@ Diagnostics shown (read all from the rest-frame line list):
 - ``[O III] 5007 / [O II] 3727``  — ``O32`` (ionization parameter)
 - ``[N II] 6583 / [O II] 3727``    — ``N2O2`` (gas metallicity)
 
+The 2D grid subsumes 1D slices: varying logU alone at fixed metallicity
+(ionization-hardness diagnostic) and varying metallicity alone (abundance
+evolution). See the heatmap contours for guidance on how the diagnostics
+respond along each axis.
+
 References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
+- Kewley & Dolphin 2002, ApJ, 549, 716 (logU diagnostics)
 - Kewley+2019, ARA&A, 57, 511 (modern line-diagnostics review)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-119
+.. GENERATED FROM PYTHON SOURCE LINES 31-138
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_cue_parameter_atlas_001.png
+   :alt: plot cue parameter atlas
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_cue_parameter_atlas_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -75,7 +96,7 @@ References:
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
             "alpha": 3.0,
             "beta": 2.0,
         },
@@ -107,12 +128,21 @@ References:
             n2o2[i, j] = float(lines.nii_6584 / lines.oii)
 
 
-    def _panel(ax, arr, vmin, vmax, label):
+    def _panel(ax, arr, vmin, vmax, label, n_contours=10):
+        """Plot 2D heatmap with contours showing 1D structure."""
         arr = np.where(arr > 0, np.log10(arr), np.nan)
         mesh = ax.pcolormesh(
             LOGZ_GRID, LOGU_GRID, arr, cmap="RdYlBu_r", vmin=vmin, vmax=vmax, shading="auto"
         )
-        cs = ax.contour(LOGZ_GRID, LOGU_GRID, arr, levels=8, colors="0.15", linewidths=0.5, alpha=0.7)
+        cs = ax.contour(
+            LOGZ_GRID,
+            LOGU_GRID,
+            arr,
+            levels=n_contours,
+            colors="0.15",
+            linewidths=0.5,
+            alpha=0.6,
+        )
         ax.clabel(cs, fmt="%.1f", fontsize=7, inline=True, inline_spacing=2)
         ax.text(
             0.05,
@@ -143,7 +173,12 @@ References:
         fig.colorbar(mesh, ax=ax, pad=0.01)
 
     fig.tight_layout()
-    fig.savefig("plot_cue_parameter_atlas.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_cue_parameter_atlas.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 41.574 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

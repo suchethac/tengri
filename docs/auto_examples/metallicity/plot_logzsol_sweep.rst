@@ -95,7 +95,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SSP synthesis and metallicity effects).
     cbar.set_label(r"Stellar metallicity $\log Z_\star/Z_\odot$")
 
     fig.tight_layout()
-    fig.savefig("plot_logzsol_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_logzsol_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_sweep.py:

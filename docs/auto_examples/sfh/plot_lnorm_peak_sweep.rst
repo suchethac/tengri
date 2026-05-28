@@ -87,7 +87,7 @@ every other parameter fixed.
     cbar.set_label(r"Peak lookback time [Gyr]")
 
     fig.tight_layout()
-    fig.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_lnorm_peak_sweep.py:

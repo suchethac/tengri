@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.086** total execution time for 5 files **from auto_examples/igm**:
+**00:02.108** total execution time for 9 files **from auto_examples/igm**:
 
 .. container::
 
@@ -32,8 +32,17 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``plot_sed_with_igm.py``)
-     - 00:01.086
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``plot_igm_models_comparison.py``)
+     - 00:00.808
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_alpha_forest_QSO_template.py` (``plot_lyman_alpha_forest_QSO_template.py``)
+     - 00:00.435
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_alpha_igm_attenuation.py` (``plot_lyman_alpha_igm_attenuation.py``)
+     - 00:00.433
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_dropout_redshift_sweep.py` (``plot_lyman_dropout_redshift_sweep.py``)
+     - 00:00.431
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``plot_dla_absorption.py``)
      - 00:00.000
@@ -45,5 +54,8 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``plot_igm_z_evolution.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``plot_sed_with_igm.py``)
      - 00:00.000
      - 0.0

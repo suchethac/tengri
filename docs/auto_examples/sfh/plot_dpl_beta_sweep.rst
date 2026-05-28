@@ -88,7 +88,7 @@ other parameter fixed.
     cbar.set_label(r"DPL falling slope $\beta$")
 
     fig.tight_layout()
-    fig.savefig("plot_dpl_beta_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dpl_beta_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_dpl_beta_sweep.py:

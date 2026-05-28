@@ -39,10 +39,25 @@ not shipped with the gallery):
 - ``blr``     — Broad-line region (Cracco+2016 photoionization grid)
 - ``qsogen``  — Temple+2021 empirical type-1 lines
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-90
+.. GENERATED FROM PYTHON SOURCE LINES 18-94
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
+   :alt: plot agn lines compare
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -64,7 +79,7 @@ not shipped with the gallery):
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.9, len(LINES_MODELS)))
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
@@ -114,7 +129,7 @@ not shipped with the gallery):
     ax.legend(frameon=False, fontsize=8, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_agn_lines_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

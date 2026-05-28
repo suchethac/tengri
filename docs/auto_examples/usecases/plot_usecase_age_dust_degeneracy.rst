@@ -185,7 +185,7 @@ degeneracy); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax.axvspan(1500, 2300, color="red", alpha=0.1, label="UV breaks degeneracy")
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_age_dust_degeneracy.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_age_dust_degeneracy.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_degeneracy.py:

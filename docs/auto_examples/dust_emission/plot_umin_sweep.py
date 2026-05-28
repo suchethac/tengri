@@ -46,4 +46,4 @@ ax.set(
     ylabel=r"$\lambda F_\lambda$ (not normalized)",
 )
 fig.tight_layout()
-fig.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_umin_sweep.png", dpi=150, bbox_inches="tight")

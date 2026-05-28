@@ -66,7 +66,7 @@ Reference: Cardelli et al. 1989, ApJ, 345, 245 (MW); Pei 1992, ApJ, 395, 130 (SM
     ax.legend(fontsize=9, frameon=False, loc="upper left")
 
     fig.tight_layout()
-    fig.savefig("plot_attenuation_law_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_attenuation_law_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_attenuation_law_compare.py:

@@ -81,7 +81,7 @@ Reference: Condon 1992, ApJ 388, 113.
     cbar.set_label(r"$\alpha_{\rm sf}$")
 
     fig.tight_layout()
-    fig.savefig("plot_alpha_sf_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_alpha_sf_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_alpha_sf_sweep.py:

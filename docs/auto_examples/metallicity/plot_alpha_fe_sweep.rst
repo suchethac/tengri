@@ -101,7 +101,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
     cbar.set_label(r"[$\alpha$/Fe]")
 
     fig.tight_layout()
-    fig.savefig("plot_alpha_fe_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_alpha_fe_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_alpha_fe_sweep.py:

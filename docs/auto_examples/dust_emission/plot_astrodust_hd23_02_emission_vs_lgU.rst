@@ -80,7 +80,7 @@ grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
     )
     ax.legend(loc="lower right", frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig("plot_astrodust_hd23_02_emission_vs_lgU.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_astrodust_hd23_02_emission_vs_lgU.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_02_emission_vs_lgU.py:

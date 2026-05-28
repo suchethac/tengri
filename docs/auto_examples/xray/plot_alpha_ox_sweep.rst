@@ -74,7 +74,7 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548 (α_ox correlation study).
     cbar.set_label(r"UV-to-X-ray slope $\alpha_{\rm ox}$")
 
     fig.tight_layout()
-    fig.savefig("plot_alpha_ox_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_alpha_ox_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_alpha_ox_sweep.py:

@@ -35,7 +35,9 @@ from tengri import (
 # Setup
 # ---------------------------------------------------------------------------
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 
 def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
@@ -43,7 +45,7 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0):
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         sfh_field_psd_sigma=Fixed(psd_sigma),
         sfh_field_psd_tau_myr=Fixed(psd_tau_myr),
         met_logzsol=Uniform(-2.0, 0.5),
@@ -74,7 +76,8 @@ def run_hierarchical(galaxies, method="evi", key=None, **kwargs):
     if key is None:
         key = jax.random.PRNGKey(0)
     hfitter = HierarchicalFitter(
-        model_factory, galaxies,
+        model_factory,
+        galaxies,
         psd_sigma_prior=(0.1, 4.0),
         psd_tau_prior=(1.0, 300.0),
     )
@@ -99,21 +102,26 @@ N_GAL = 10
 key = jax.random.PRNGKey(42)
 
 print(f"\nN_gal = {N_GAL}, SNR = 20, 5 SDSS bands\n")
-print(f"{'Config':<35s} {'σ_true':>6s} {'σ_rec':>6s} {'σ_err':>8s} "
-      f"{'τ_true':>6s} {'τ_rec':>8s} {'τ_err':>8s} {'Time':>6s}")
+print(
+    f"{'Config':<35s} {'σ_true':>6s} {'σ_rec':>6s} {'σ_err':>8s} "
+    f"{'τ_true':>6s} {'τ_rec':>8s} {'τ_err':>8s} {'Time':>6s}"
+)
 print("-" * 95)
 
 for cfg in test_configs:
     key, subkey = jax.random.split(key)
-    galaxies = generate_mock_population(
-        N_GAL, cfg["sigma"], cfg["tau"], subkey
-    )
+    galaxies = generate_mock_population(N_GAL, cfg["sigma"], cfg["tau"], subkey)
 
     key, subkey = jax.random.split(key)
     result = run_hierarchical(
-        galaxies, method="evi", key=subkey,
-        n_iterations=50, n_samples=6, n_posterior_samples=500,
-        n_seeds=10, verbose=False,
+        galaxies,
+        method="evi",
+        key=subkey,
+        n_iterations=50,
+        n_samples=6,
+        n_posterior_samples=500,
+        n_seeds=10,
+        verbose=False,
     )
 
     sig_samples = np.array(result.shared_samples["psd_sigma"])
@@ -159,9 +167,14 @@ for n in N_SIZES:
     galaxies_sub = all_galaxies[:n]
     key, subkey = jax.random.split(key)
     result = run_hierarchical(
-        galaxies_sub, method="evi", key=subkey,
-        n_iterations=50, n_samples=6, n_posterior_samples=500,
-        n_seeds=10, verbose=False,
+        galaxies_sub,
+        method="evi",
+        key=subkey,
+        n_iterations=50,
+        n_samples=6,
+        n_posterior_samples=500,
+        n_seeds=10,
+        verbose=False,
     )
 
     sig_s = np.array(result.shared_samples["psd_sigma"])
@@ -195,8 +208,10 @@ if len(ns) >= 3:
     print("\nScaling exponent (expect -0.5):")
     print(f"  σ width ~ N^{A_sig[0]:.2f}")
     print(f"  τ width ~ N^{A_tau[0]:.2f}")
-    print(f"  Verdict: {'PASS' if -0.8 < A_sig[0] < -0.2 else 'FAIL'} (σ), "
-          f"{'PASS' if -0.8 < A_tau[0] < -0.2 else 'FAIL'} (τ)")
+    print(
+        f"  Verdict: {'PASS' if -0.8 < A_sig[0] < -0.2 else 'FAIL'} (σ), "
+        f"{'PASS' if -0.8 < A_tau[0] < -0.2 else 'FAIL'} (τ)"
+    )
 
 # =====================================================================
 # TEST 3: Two populations are separable
@@ -216,14 +231,17 @@ print(f"\nN_per_pop = {N_PER_POP}\n")
 pop_results = {}
 for pop_name, truth in pops.items():
     key, subkey = jax.random.split(key)
-    gals = generate_mock_population(
-        N_PER_POP, truth["sigma"], truth["tau"], subkey
-    )
+    gals = generate_mock_population(N_PER_POP, truth["sigma"], truth["tau"], subkey)
     key, subkey = jax.random.split(key)
     result = run_hierarchical(
-        gals, method="evi", key=subkey,
-        n_iterations=50, n_samples=6, n_posterior_samples=500,
-        n_seeds=10, verbose=False,
+        gals,
+        method="evi",
+        key=subkey,
+        n_iterations=50,
+        n_samples=6,
+        n_posterior_samples=500,
+        n_seeds=10,
+        verbose=False,
     )
     pop_results[pop_name] = result
 
@@ -232,10 +250,14 @@ for pop_name, truth in pops.items():
 
     print(f"  {pop_name}:")
     print(f"    Truth: σ={truth['sigma']}, τ={truth['tau']} Myr")
-    print(f"    Recovered: σ={np.median(sig_s):.2f} "
-          f"[{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]")
-    print(f"               τ={np.median(tau_s):.1f} "
-          f"[{np.percentile(tau_s, 16):.1f}, {np.percentile(tau_s, 84):.1f}] Myr")
+    print(
+        f"    Recovered: σ={np.median(sig_s):.2f} "
+        f"[{np.percentile(sig_s, 16):.2f}, {np.percentile(sig_s, 84):.2f}]"
+    )
+    print(
+        f"               τ={np.median(tau_s):.1f} "
+        f"[{np.percentile(tau_s, 16):.1f}, {np.percentile(tau_s, 84):.1f}] Myr"
+    )
     print(f"    Wall time: {result.wall_time_s:.1f}s")
 
 # Check separation
@@ -295,9 +317,7 @@ for n_gal in [5, 10, 20, 50]:
     _ = vmap_fwd(bp)
     t_fwd = bench(lambda _f=vmap_fwd, _bp=bp: _f(_bp), n=200)
 
-    vmap_grad = jax.jit(
-        jax.grad(lambda bpp: jnp.sum(jax.vmap(model.predict_photometry)(bpp)))
-    )
+    vmap_grad = jax.jit(jax.grad(lambda bpp: jnp.sum(jax.vmap(model.predict_photometry)(bpp))))
     _ = vmap_grad(bp)
     t_grad = bench(lambda _f=vmap_grad, _bp=bp: _f(_bp), n=200)
 

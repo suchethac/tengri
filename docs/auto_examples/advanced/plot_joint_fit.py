@@ -117,4 +117,4 @@ ax.set_ylabel(r"Flux density [$\mu$Jy]")
 ax.legend(frameon=False)
 
 fig.tight_layout()
-fig.savefig("plot_joint_fit.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_joint_fit.png", dpi=150, bbox_inches="tight")

@@ -38,17 +38,6 @@ projected onto a single sub-mm photometric point.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-95
 
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_mbb_temperature_beta_grid_001.png
-   :alt: plot mbb temperature beta grid
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_mbb_temperature_beta_grid_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -130,7 +119,7 @@ projected onto a single sub-mm photometric point.
                         ax=ax_b, pad=0.01)
     cb_b.set_label(r"emissivity index $\beta$   ($T_{\rm dust}$ = 30 K fixed)")
 
-    fig.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py:

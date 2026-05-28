@@ -108,7 +108,7 @@ removes from the intrinsic stellar continuum.
     )
     ax.legend(frameon=False, fontsize=8)
     fig.tight_layout()
-    fig.savefig("plot_sed_components.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_sed_components.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_sed_components.py:

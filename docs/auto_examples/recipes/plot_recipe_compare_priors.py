@@ -131,4 +131,4 @@ ax_text = axes[1].text(
 )
 
 fig.tight_layout()
-fig.savefig("plot_recipe_compare_priors.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_recipe_compare_priors.png", dpi=150, bbox_inches="tight")

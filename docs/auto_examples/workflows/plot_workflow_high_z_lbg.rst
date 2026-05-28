@@ -173,7 +173,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     ax_res.set_xticks(wave_eff)
     ax_res.set_xticklabels(band_labels)
 
-    fig.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_workflow_high_z_lbg.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_high_z_lbg.py:

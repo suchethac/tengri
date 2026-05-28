@@ -109,7 +109,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
     cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")
 
     fig.tight_layout()
-    fig.savefig("plot_radio_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

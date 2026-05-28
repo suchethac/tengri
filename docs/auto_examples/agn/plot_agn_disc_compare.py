@@ -19,6 +19,10 @@ Models compared (the six production disc selectors under
 - ``adaf``         — radiatively inefficient accretion flow (Mahadevan 1997)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -42,7 +46,7 @@ DISC_MODELS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(DISC_MODELS)))
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 ssp = tengri.load_ssp()
@@ -80,4 +84,4 @@ ax.text(2e5, 2e47, "NIR cutoff", color="0.4", fontsize=8, va="top", ha="right")
 ax.legend(frameon=False, fontsize=8, loc="lower center")
 
 fig.tight_layout()
-fig.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")

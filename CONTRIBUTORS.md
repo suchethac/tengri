@@ -1,29 +1,23 @@
 # Contributors
 
-## Maintainers
+## Maintainer
 
-- **Suchetha Cooray** (ORCID: pending) — Lead developer and maintainer.
+- **Suchetha Cooray** ([ORCID 0000-0002-9217-1696](https://orcid.org/0000-0002-9217-1696)). KIPAC Postdoctoral Fellow, Kavli Institute for Particle Astrophysics & Cosmology, Stanford University. Lead developer and maintainer. [website](https://suchethacooray.com/) · [GitHub](https://github.com/suchethac).
 
 ## Contributors
 
-This is the initial public release. Pull requests welcome — contributors who add code or documentation can add their names and ORCIDs to this list.
+This is the initial public release. Pull requests are welcome; when your contribution is merged, add your entry below with your ORCID and a short summary.
 
-## Acknowledgments
+## Acknowledgements
 
-The initial codebase was drafted with AI assistance (Claude Code / Claude Opus 4.5) and subsequently reviewed and refined by the maintainer. We explicitly do not list AI tools as authors.
+The majority of the initial codebase was developed in close collaboration between the maintainer and AI agents (primarily Claude Code), and is being human-verified component by component. We explicitly do not list AI tools as authors. The per-component verification status table lives at [docs/dev/verification-protocol.md](docs/dev/verification-protocol.md).
 
-We thank the developers of JAX, DSPS, NIFTy, and other upstream dependencies that made this project possible.
+We thank the developers of JAX, DSPS, NIFTy, BlackJAX, optax, and the other upstream dependencies that made this project possible.
 
 ## Contributing
 
-To contribute, please open an issue or pull request. When your contribution is merged, add your entry below:
+To contribute, open an issue or pull request. When your contribution is merged, add your entry to the Contributors section using the format:
 
-**New contributor format:**
 ```
-- Name (ORCID: xxxx-xxxx-xxxx-xxxx) — Brief summary of contribution.
-```
-
-For example:
-```
-- Jane Smith (ORCID: 0000-0001-2345-6789) — Nebular physics improvements and cloud-based inference support.
+- Name ([ORCID xxxx-xxxx-xxxx-xxxx](https://orcid.org/xxxx-xxxx-xxxx-xxxx)). Affiliation. Brief summary of contribution.
 ```

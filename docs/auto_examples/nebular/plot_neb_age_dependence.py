@@ -7,6 +7,10 @@ Ionizing photon production declines rapidly with stellar population age
 to old (5 Gyr) populations.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -31,7 +35,7 @@ model = tengri.SEDModel.build(
         "alpha": 1.0,
         "beta": 2.5,
         "tau_gyr": tengri.Uniform(0.05, 5.0),
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
     neb={"type": "cue", "*": tengri.FIXED},
@@ -60,4 +64,4 @@ cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01
 cbar.set_label(r"Peak age [Gyr]")
 
 fig.tight_layout()
-fig.savefig("plot_neb_age_dependence.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_neb_age_dependence.png", dpi=150, bbox_inches="tight")

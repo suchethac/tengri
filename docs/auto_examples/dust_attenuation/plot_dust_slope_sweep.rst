@@ -96,7 +96,7 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
     cbar.set_label(r"Attenuation curve slope $\delta$")
 
     fig.tight_layout()
-    fig.savefig("plot_dust_slope_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_dust_slope_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_slope_sweep.py:

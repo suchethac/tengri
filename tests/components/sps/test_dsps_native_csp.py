@@ -253,7 +253,7 @@ def _make_minimal_spec():
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(2.0),
         sfh_dpl_tau_gyr=Fixed(3.0),
-        sfh_dpl_log_peak_sfr=Fixed(1.0),
+        sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Uniform(-1.5, 0.0),
         dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.2),

@@ -3,7 +3,7 @@ SED Conventions: F_λ vs F_ν vs νF_ν
 ===================================
 
 The same stellar population SED looks different depending on the units
-chosen for visualization. This example shows a single galaxy SED in three
+chosen for visualization. a single galaxy SED in three
 complementary representations on a 3-panel grid:
 
 1. **Left panel (F_λ vs λ):** Flux per unit wavelength. Peak appears
@@ -30,6 +30,10 @@ References:
 - Hogg, D. W., Blanton, M. R., et al. 2002, AJ, 123, 1147 (K-corrections
   and SED unit conventions)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 

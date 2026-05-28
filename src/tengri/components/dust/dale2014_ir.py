@@ -93,6 +93,7 @@ class Dale2014IRSEDComponent(SEDModelComponent):
     alpha_dale = Uniform(
         0.5,
         3.0,
+        default=2.0,
         description="Radiation field power-law index",
         units="dimensionless",
     )

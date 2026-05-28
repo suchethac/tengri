@@ -112,7 +112,7 @@ Mg b traces metallicity on the RGB/AGB branch.
         ax.legend(fontsize=10, frameon=False)
 
     fig.tight_layout()
-    fig.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_spectral_features.py:

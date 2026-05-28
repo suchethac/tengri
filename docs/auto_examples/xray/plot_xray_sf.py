@@ -122,4 +122,4 @@ cbar4 = fig.colorbar(plt.cm.ScalarMappable(norm=norm_mfine, cmap=cmap), ax=ax, p
 cbar4.set_label(r"$M_*$ [M$_\odot$]")
 
 fig.tight_layout()
-fig.savefig("plot_xray_sf.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_xray_sf.png", dpi=150, bbox_inches="tight")

@@ -75,4 +75,4 @@ ax3.set(
 ax3.legend(loc="upper left", frameon=False, fontsize=9)
 
 fig.tight_layout()
-fig.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_astrodust_hd23_06_extinction_and_scattering.png", dpi=150, bbox_inches="tight")

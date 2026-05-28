@@ -477,7 +477,7 @@ setup_style()
 
 ```python
 spec_param = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -513,7 +513,7 @@ convergence_table({"vi": result_geovi_param, "NUTS": result_nuts_param})
 
 ```python
 spec_stoch = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -584,7 +584,7 @@ cause — here you'll see each one labelled."
 # Fiducial galaxy: log M* ~ 10.5, moderate star formation, modest dust, no AGN
 # Parameters chosen to show ALL features: UV, optical, NIR, MIR, FIR, radio
 spec = ParamSpec(
-    sfh_tsnorm_log_peak_sfr=Fixed(1.2),       # SFR ~ 15 Msun/yr
+    sfh_tsnorm_log_total_mass=Fixed(1.2),       # SFR ~ 15 Msun/yr
     sfh_tsnorm_peak_lbt_gyr=Fixed(4.0),        # peak 4 Gyr ago
     sfh_tsnorm_width_gyr=Fixed(2.5),
     sfh_tsnorm_skew=Fixed(0.2),
@@ -1748,7 +1748,7 @@ moving the reader one step closer to a fit. No theory. No options. No decisions.
 
 **Known issues**:
 - `notebooks/00_quickstart.py` uses old `Model.from_config()` API with only 3 free params — update
-  to `Parameters(sfh_tsnorm_log_peak_sfr=Uniform(...), ...)` + `Model(spec_param, ssp_data, observation=obs)`
+  to `Parameters(sfh_tsnorm_log_total_mass=Uniform(...), ...)` + `Model(spec_param, ssp_data, observation=obs)`
   following the canonical source exactly
 - Missing jupytext `formats: notebook_code//py:percent,ipynb` header at top of file — add it
 - Bootstrap uses `from tengri import Model` directly; no `_plot_style.setup_style()` call —

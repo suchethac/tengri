@@ -9,6 +9,10 @@ Face-on systems show a smooth thermal continuum; edge-on systems develop
 deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -29,7 +33,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -40,7 +44,9 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "agn_frac": 1.0,
         "log_lbol": 11.0,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -90,4 +96,4 @@ axes[1, 0].set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 axes[1, 0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
 fig.tight_layout()
-fig.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")

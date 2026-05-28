@@ -79,7 +79,7 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 and Madau 1995, ApJ, 441, 18.
     ax.legend(frameon=False, loc="upper right")
 
     fig.tight_layout()
-    fig.savefig("plot_igm_model_comparison.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_igm_model_comparison.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_igm_model_comparison.py:

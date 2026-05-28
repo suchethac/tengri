@@ -81,7 +81,7 @@ and enhancing PAH relative to continuum.
     )
     ax.legend(loc="lower left", frameon=False, fontsize=8, ncol=2)
     fig.tight_layout()
-    fig.savefig("plot_bosa_ltir_sweep.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_bosa_ltir_sweep.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_bosa_ltir_sweep.py:

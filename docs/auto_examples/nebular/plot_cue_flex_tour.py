@@ -21,6 +21,10 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -39,7 +43,7 @@ SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.3,
-    "log_peak_sfr": 1.5,
+    "log_total_mass": 10.0,
     "alpha": 3.0,
     "beta": 2.0,
 }
@@ -106,4 +110,4 @@ for ax_idx, (param_name, label, n_vals, lo, hi) in enumerate(SWEEPS):
 for ax in axes[:, 0]:
     ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)
 
-fig.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")

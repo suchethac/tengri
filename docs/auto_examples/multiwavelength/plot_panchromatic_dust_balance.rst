@@ -104,7 +104,7 @@ between the attenuation and emission components.
     cbar.set_label(r"Diffuse ISM optical depth $\tau_{\rm diff}$")
 
     fig.tight_layout()
-    fig.savefig("plot_panchromatic_dust_balance.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_dust_balance.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_dust_balance.py:

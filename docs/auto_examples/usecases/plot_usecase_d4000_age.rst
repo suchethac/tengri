@@ -131,7 +131,7 @@ References:
     ax.legend(frameon=False, fontsize=9, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig("plot_usecase_d4000_age.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_usecase_d4000_age.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_d4000_age.py:

@@ -79,7 +79,7 @@ Reference: Bell 2003, ApJ 586, 794.
     cbar.set_label(r"log$_{10}$ L$_{\rm IR}$ [L$_\odot$]")
 
     fig.tight_layout()
-    fig.savefig("plot_radio_lir_relation.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_radio_lir_relation.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_lir_relation.py:

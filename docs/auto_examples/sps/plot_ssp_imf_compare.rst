@@ -80,7 +80,7 @@ Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
     ax.legend(fontsize=8, frameon=False, loc="lower right")
 
     fig.tight_layout()
-    fig.savefig("plot_ssp_imf_compare.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_ssp_imf_compare.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ssp_imf_compare.py:

@@ -74,7 +74,7 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
     cbar.set_label(r"Redshift $z$")
 
     fig.tight_layout()
-    fig.savefig("plot_igm_z_evolution.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_igm_z_evolution.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_igm_z_evolution.py:

@@ -99,7 +99,7 @@ X-ray corona, and radio components, showing how AGN dominate across
     ax.legend(frameon=False, fontsize=9, ncol=2)
 
     fig.tight_layout()
-    fig.savefig("plot_panchromatic_agn.png", dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_agn.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_agn.py:
