@@ -74,6 +74,10 @@ from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel
+
+# load_ssp_data is not yet on the tengri public surface; tracked as a
+# public-API gap and used here from its canonical location until the
+# wrapper lands. Mirrors the reproduction/cigale notebook.
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 warnings.filterwarnings("ignore")
@@ -873,6 +877,118 @@ save_fig("08_nebular.png")
 
 
 # %% [markdown]
+# ## §9 Line-spread function — velocity-broadening parity
+#
+# BAGPIPES' spectroscopy mode applies a Gaussian velocity broadening via
+# the `veldisp` parameter (km/s); the kernel is built in log-wavelength
+# (= velocity) space and convolved into the spectrum before fitting.
+# tengri's equivalent is `tengri.observation.spectrum.velocity_broaden`,
+# which JIT-compiles the same Gaussian convolution in log-λ space.
+#
+# At matched `veldisp`, the broadened Hα profile should have FWHM
+# `2.355 σ_v λ / c`. This panel takes the §8 fiducial nebular SED
+# (10 Myr CSF at `logU = −2`), runs each code's velocity-broadening at
+# `veldisp = 150 km/s` — a typical late-type-galaxy value — and compares
+# the result.
+#
+# **Important honest note.** BAGPIPES' default internal spectral grid
+# has `R_spec = 1000` (FWHM = c/R ≈ 300 km/s, σ ≈ 127 km/s baked in by
+# the resampling kernel). The `veldisp` block adds **in quadrature**
+# on top of this: at `veldisp = 150 km/s`, the effective Hα width is
+# `σ_eff = sqrt(127² + 150²) ≈ 197 km/s`, FWHM ≈ 10 Å. tengri's
+# `velocity_broaden` operates on the unbinned input spectrum and gives
+# back the pure-Gaussian profile at `σ = 150 km/s` (FWHM ≈ 7.7 Å). Both
+# are correct; they just bracket different conventions of "intrinsic
+# line width". For an apples-to-apples comparison you would either
+# raise `R_spec` on the BAGPIPES side or subtract 127 km/s in
+# quadrature from `veldisp`.
+
+# %%
+VELDISP_KMS = 150.0
+VELDISP_SPEC_WAVS = np.arange(6400.0, 6720.0, 0.5)
+
+# BAGPIPES with veldisp on the same young-CSF fiducial used in §8.
+comp_b_lsf = {
+    "redshift": 0.0,
+    "constant": {"metallicity": 1.0, "age_min": 0.0, "age_max": NEB_AGE, "massformed": 9.0},
+    "nebular": {"logU": -2.0},
+    "veldisp": VELDISP_KMS,
+}
+mg_b_lsf = B._build_model(comp_b_lsf, spec_wavs=VELDISP_SPEC_WAVS)
+w_b_lsf = mg_b_lsf.spectrum[:, 0]
+L_b_lsf_lambda = mg_b_lsf.spectrum[:, 1]  # erg/s/Å at z=0
+L_b_lsf = L_b_lsf_lambda * w_b_lsf**2 / U.C_ANGSTROM_PER_S  # erg/s/Hz
+
+# BAGPIPES without veldisp — same spectrum, no broadening, for reference.
+comp_b_unb = dict(comp_b_lsf)
+del comp_b_unb["veldisp"]
+mg_b_unb = B._build_model(comp_b_unb, spec_wavs=VELDISP_SPEC_WAVS)
+w_b_unb = mg_b_unb.spectrum[:, 0]
+L_b_unb = mg_b_unb.spectrum[:, 1] * w_b_unb**2 / U.C_ANGSTROM_PER_S
+
+# tengri side: take the §8 nebular SED, resample onto a uniform
+# log-wavelength grid, apply velocity_broaden at the same sigma.
+# velocity_broaden is the canonical fast FFT-based Gaussian LSF kernel
+# (JIT, gradient-safe, log-λ space). Not yet re-exported under
+# tengri.observation; tracked as a public-API gap.
+from tengri.observation.spectrum import velocity_broaden as _tng_broaden
+
+_w_t_neb_orig = np.asarray(s_neb_on.wave)
+_L_t_neb_orig = np.asarray(s_neb_on.derived["sed_nebular"])
+# Restrict to the Hα window and resample to uniform log-λ for FFT.
+_mask_halpha = (_w_t_neb_orig >= 6400) & (_w_t_neb_orig <= 6720)
+_w_t_halpha = _w_t_neb_orig[_mask_halpha]
+_L_t_halpha = _L_t_neb_orig[_mask_halpha]
+# Uniform log-λ grid for velocity_broaden's FFT.
+_n_uni = 4096
+_w_t_uni = np.geomspace(_w_t_halpha[0], _w_t_halpha[-1], _n_uni)
+_L_t_uni = np.interp(_w_t_uni, _w_t_halpha, _L_t_halpha)
+L_t_lsf = np.asarray(_tng_broaden(_L_t_uni, _w_t_uni, VELDISP_KMS))
+
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5))
+for ax, title in (
+    (ax_l, f"BAGPIPES  veldisp = {VELDISP_KMS:.0f} km/s"),
+    (ax_r, f"tengri  velocity_broaden(σ = {VELDISP_KMS:.0f} km/s)"),
+):
+    ax.set_xlabel(r"$\lambda$ [Å]")
+    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax.set_title(title)
+    ax.set_xlim(6400, 6720)
+    ax.grid(True, alpha=0.3)
+ax_l.plot(w_b_unb, L_b_unb, "lightgrey", linewidth=1.0, label="no broadening")
+ax_l.plot(w_b_lsf, L_b_lsf, "C0-", linewidth=1.8, label="veldisp = 150 km/s")
+ax_l.legend(fontsize=9)
+ax_r.plot(_w_t_uni, _L_t_uni, "lightgrey", linewidth=1.0, label="no broadening")
+ax_r.plot(_w_t_uni, L_t_lsf, "C1-", linewidth=1.8, label="velocity_broaden 150 km/s")
+ax_r.legend(fontsize=9)
+fig.tight_layout()
+save_fig("09_lsf_velbroaden.png")
+
+
+# FWHM check at Hα: σ_v = 150 km/s ↔ FWHM_λ = 2.355 σ_v λ_Hα / c
+_expected_fwhm = 2.355 * VELDISP_KMS / 2.998e5 * 6563.0
+print(f"§9 expected Hα FWHM at σ_v = {VELDISP_KMS:g} km/s: {_expected_fwhm:.3f} Å")
+
+
+def _fwhm(wave, spec, line_wave):
+    """Half-power FWHM about a line centre, ignoring the local continuum."""
+    idx = int(np.argmin(np.abs(wave - line_wave)))
+    half = 0.5 * (spec[idx] + np.median(spec))
+    above = spec > half
+    if not above.any():
+        return float("nan")
+    lo = wave[np.argmax(above)]
+    hi = wave[len(above) - 1 - np.argmax(above[::-1])]
+    return float(hi - lo)
+
+
+print(
+    f"§9 measured Hα FWHM: BAGPIPES = {_fwhm(w_b_lsf, L_b_lsf, 6563.0):.3f} Å, "
+    f"tengri = {_fwhm(_w_t_uni, L_t_lsf, 6563.0):.3f} Å"
+)
+
+
+# %% [markdown]
 # ## §12 IGM transmission
 #
 # Both codes use the Inoue et al. (2014) IGM transmission tables.
@@ -884,6 +1000,10 @@ Z_FIDUCIAL_IGM = 4.0
 w_b_igm, T_b_igm = B.igm_transmission(Z_FIDUCIAL_IGM)
 
 # tengri side: evaluate igm.inoue14 at z=4 on the same rest-frame grid.
+# igm_transmission is the canonical dispatcher for Inoue14 / Madau /
+# Meiksin. Not yet re-exported under tengri.*; tracked as a public-API
+# gap. tengri.list_igm_models() advertises the names but no public
+# call site is wired yet.
 from tengri.components.igm import igm_transmission as _tngigm
 
 # tengri's IGM is parametrised on *observed*-frame wavelengths.
