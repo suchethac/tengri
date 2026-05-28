@@ -747,16 +747,14 @@ plt.show()
 # convolution. Nebular continuum shape and emission-line ratios
 # reproduce well; the absolute line normalisation does not.
 #
-# **Cutoff at the master-grid edge.** The right panel's Cue-only dotted
-# curve stops at λ = 1.6×10⁶ Å (160 µm) while CIGALE's CLOUDY tail
-# continues further. That's the SSP wavelength grid running out, not
-# Cue: §8 attaches no dust-emission component, so the master grid is
-# the SSP grid alone. The published Cue emulator does produce a real
-# continuum past 160 µm — `state.derived["sed_nebular"]` is still
-# rising at the grid edge (~10¹⁹ erg/s/Hz). Attaching any
-# `dust.emission` component triggers the union-of-grids extension out
-# to mm wavelengths and the Cue continuum follows; left out of §8 so
-# the comparison stays nebular-only.
+# **Grid coverage.** The Cue emulator ships a native continuum grid
+# (~915 Å – 10⁸ Å, 1841 points) inside `cue_weights.npz`. The
+# wavelength-extension registry routes that grid into the master
+# union, so attaching Cue alone is enough to extend the SED past the
+# SSP edge — no `dust.emission` component required. The Cue continuum
+# now plots all the way out to the radio without the artificial
+# 160-µm truncation that earlier versions of the registry left in
+# place when only Cue (and no dust template) was active.
 
 # %%
 # §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts

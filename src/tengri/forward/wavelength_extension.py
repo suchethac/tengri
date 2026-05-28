@@ -119,6 +119,22 @@ _AGN_DISC_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 
 # Standalone AGN models that bake their own SED on a native grid (no
 # disc/torus block selection).
+# Nebular emulator native grids ----------------------------------------------
+# Cue (Li et al. 2025) ships its continuum grid inside ``cue_weights.npz``
+# as the ``cont_wav`` array (~1840 points, 915 Å – 10⁸ Å). Without this
+# entry the master grid stays at the SSP edge (~160 µm for BC03), so the
+# rendered Cue continuum visibly cuts off in plots even though the
+# emulator's native output extends to ~10 m. CLOUDY-grid / CB19 nebular
+# backends evaluate exactly on their consumer's wave grid (no native of
+# their own) so they contribute nothing here.
+_NEBULAR_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
+    # The npz key is ``cont_wavelength``; the ``cont_wav`` field on the
+    # in-memory :class:`CueWeights` dataclass is assigned from it in
+    # :func:`tengri.components.nebular.cue.load_cue_weights`.
+    "cue": (("cue_weights.npz", "cont_wavelength", 1.0),),
+}
+
+
 _AGN_MODEL_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     # QSOgen / GRAHSP / Richards2006 are analytic — they evaluate on whatever
     # wavelength grid they're handed. Nothing to declare here yet.
@@ -130,29 +146,43 @@ _AGN_MODEL_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 
 @functools.cache
 def _read_wavelength(filename: str, dataset_path: str, unit_to_aa: float) -> np.ndarray | None:
-    """Read a wavelength array from an HDF5 file, in Angstrom.
+    """Read a wavelength array from an HDF5 or NPZ file, in Angstrom.
 
     Results are cached so repeated lookups across many ``SEDModel.build``
     calls (catalog-fitting, sweeps) only hit the filesystem once.
 
     Returns ``None`` if the file isn't present in any data directory, or if
     the dataset path doesn't exist inside the file.
+
+    File-format dispatch is by extension: ``.npz`` → ``numpy.load`` (used by
+    Cue's ``cue_weights.npz`` which carries ``cont_wav`` alongside the NN
+    parameters); everything else → HDF5 via h5py (the original code path).
     """
     path = _find_data_file(filename)
     if path is None:
         logger.debug("Template file %s not found in data dirs", filename)
         return None
     try:
-        import h5py
-    except ImportError:
-        logger.warning("h5py not installed; cannot read native template grid from %s", filename)
-        return None
-    try:
-        with h5py.File(path, "r") as h:
-            if dataset_path not in h:
-                logger.debug("Dataset %s not present in %s", dataset_path, path)
+        if path.endswith(".npz"):
+            with np.load(path) as data:
+                if dataset_path not in data:
+                    logger.debug("Array %s not present in %s", dataset_path, path)
+                    return None
+                wave = np.asarray(data[dataset_path], dtype=np.float64)
+        else:
+            try:
+                import h5py
+            except ImportError:
+                logger.warning(
+                    "h5py not installed; cannot read native template grid from %s",
+                    filename,
+                )
                 return None
-            wave = np.asarray(h[dataset_path][:], dtype=np.float64)
+            with h5py.File(path, "r") as h:
+                if dataset_path not in h:
+                    logger.debug("Dataset %s not present in %s", dataset_path, path)
+                    return None
+                wave = np.asarray(h[dataset_path][:], dtype=np.float64)
     except OSError as exc:
         logger.warning("Could not open %s: %r", path, exc)
         return None
@@ -188,6 +218,25 @@ def native_wave_dust_emission(name: str | None) -> np.ndarray | None:
     candidates = _DUST_EMISSION_TEMPLATES.get(name)
     if candidates is None:
         logger.debug("No native-grid declaration for dust emission %r", name)
+        return None
+    return _first_present(candidates)
+
+
+def native_wave_nebular(model: str | None) -> np.ndarray | None:
+    """Native wavelength grid [Å] for a nebular emission backend.
+
+    Cue (``"cue"``) ships its continuum grid (~915 Å – 10⁸ Å, 1841 points)
+    inside ``cue_weights.npz`` as the ``cont_wav`` array. Without it the
+    master grid stops at the SSP edge (~160 µm for BC03-from-CIGALE) and
+    Cue's UV-to-mm continuum visibly truncates in plots.
+
+    CLOUDY-grid and CB19 nebular backends evaluate on whatever wave grid
+    they're handed, so they contribute nothing here.
+    """
+    if not model or model in ("none", "off", "ssp", "cloudy", "cb19"):
+        return None
+    candidates = _NEBULAR_TEMPLATES.get(model)
+    if candidates is None:
         return None
     return _first_present(candidates)
 
@@ -231,6 +280,7 @@ def native_wave_agn_model(model: str | None) -> np.ndarray | None:
 def collect_native_wavelength_grids(
     *,
     dust_emission_model: str | None = None,
+    nebular_model: str | None = None,
     agn_model: str | None = None,
     agn_torus_block: str | None = None,
     agn_disc_block: str | None = None,
@@ -244,6 +294,7 @@ def collect_native_wavelength_grids(
     grids: list[np.ndarray] = []
     for w in (
         native_wave_dust_emission(dust_emission_model),
+        native_wave_nebular(nebular_model),
         native_wave_agn_model(agn_model),
         native_wave_agn_torus(agn_torus_block),
         native_wave_agn_disc(agn_disc_block),
