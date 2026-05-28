@@ -137,6 +137,9 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         # T=100K, beta=1.6). ``agn_log_lbol=-0.42`` matches CIGALE's
         # actual sed.info["agn.disk_luminosity"] = 0.38 Lsun at
         # fracAGN=0.3, lambda_fracAGN="0/0".
+        # All tengri AGN defaults match CIGALE skirtor2016 defaults
+        # (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6); only
+        # the disc-bolometric scale ``agn_log_lbol`` is set per fit.
         kw["agn"] = {
             "type": "composable",
             "disc": {"type": "schartmann2005", "*": FIXED},

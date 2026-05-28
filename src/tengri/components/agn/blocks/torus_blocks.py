@@ -86,7 +86,7 @@ def skirtor_torus_block(
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_torus_frac: float = 0.5,
     agn_polar_ebv: float = 0.03,
     agn_polar_T: float = 100.0,
@@ -116,7 +116,8 @@ def skirtor_torus_block(
     agn_oa_skirtor : float, optional
         Half-opening angle [deg]. Default ``40``.
     agn_cos_inc : float, optional
-        :math:`\cos(i)`. Default ``0.5``.
+        :math:`\cos(i)`. Default ``cos(30°) ≈ 0.866`` matching CIGALE
+        ``skirtor2016 i=30`` default.
     agn_torus_frac : float, optional
         Covering factor. Default ``0.5``.
     agn_polar_ebv : float, optional
@@ -229,7 +230,7 @@ def cat3d_wind_torus_block(
     agn_log_lbol: float,
     l5100_disc: Array,
     *,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_a_cat3d: float = -2.0,
     agn_fwd_cat3d: float = 0.2,
     agn_torus_frac: float = 0.5,

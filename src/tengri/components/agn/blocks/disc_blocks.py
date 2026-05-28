@@ -46,7 +46,7 @@ def multicolor_disc_block(
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     **_params,
 ) -> Array:
     r"""Shakura-Sunyaev multi-color thin-disc block.
@@ -96,7 +96,7 @@ def kubota_done_disc_block(
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_f_hard: float = 0.02,
     agn_gamma_warm: float = 2.5,
     agn_kt_warm: float = 0.2,
@@ -164,7 +164,7 @@ def adaf_disc_block(
     agn_r_tr: float = 100.0,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.01,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     **_params,
 ) -> Array:
     r"""ADAF + truncated disc for low-luminosity AGN.

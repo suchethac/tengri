@@ -942,10 +942,11 @@ m_agn = SEDModel.build(
     # (the CIGALE default): piecewise power law with the 1200 Å bend.
     # tengri inherits the CIGALE defaults for the rest:
     # ``agn_torus_frac=0.5`` (covering factor), ``agn_polar_ebv=0.03``
-    # (Casey-2012 polar-dust greybody E(B-V), T=100 K, β=1.6) — so the
-    # only AGN parameter the notebook needs to override is the
-    # disc-bolometric scale. The differentiable multicolor disc remains
-    # available — ``disc={"type": "multicolor", ...}``.
+    # All tengri AGN defaults now match CIGALE ``skirtor2016`` defaults
+    # (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6) — only the
+    # disc-bolometric scale ``agn_log_lbol`` is set per fit. The
+    # differentiable multicolor disc remains available —
+    # ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
@@ -1053,10 +1054,12 @@ m_x = SEDModel.build(
     # parameter drives). Using a quasar-strength tengri AGN here while
     # CIGALE has a Seyfert-weak one would compare X-ray spectra at
     # ~12 orders of magnitude apart.
+    # §10 CIGALE chain uses i=40 (not i=30 like §9); pin tengri to match.
     agn={"type": "composable",
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.42),
+         "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
          "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
