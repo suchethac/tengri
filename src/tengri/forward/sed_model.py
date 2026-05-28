@@ -4670,7 +4670,7 @@ class SEDModel:
             sfh_model=mean_model,
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
-            n_grid=int(getattr(self.spec, "n_grid", 64)),
+            n_grid=int(getattr(self.spec, "n_grid", 256)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,

@@ -1722,7 +1722,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Only include if non-default (default is True)
         result["apply_igm"] = spec.apply_igm
 
-    if spec.n_grid != 64:
+    if spec.n_grid != 256:
         # Only include if non-default
         result["n_grid"] = spec.n_grid
 

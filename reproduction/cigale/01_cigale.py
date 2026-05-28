@@ -296,11 +296,11 @@ save_fig("01_ssp_bc03.png")
 # evaluation of `t·exp(−t/τ)` — that would be a comparison of two
 # closed-form formulas rather than a test of tengri. Instead the panel
 # reads `state.derived["sfr_history"]` off a built `SEDModel`, on the
-# 64-point log-spaced lookback grid the SFH-convolution code actually
-# uses. The stepping near small `t_cosmic` (large lookback) is real;
-# every fit downstream sees this same grid. The printed
-# `∫SFR dt = 1.0000 M☉` check confirms the area integrates to
-# `log_total_mass`, the only test that matters for downstream physics.
+# 256-point log-spaced lookback grid the SFH-convolution code actually
+# uses (default since #514; the earlier 64-pt grid was visibly stepped
+# near formation). The printed `∫SFR dt = 1.0000 M☉` check confirms
+# the area integrates to `log_total_mass`, the only test that matters
+# for downstream physics.
 
 # %% [markdown]
 # ### τ-delayed
@@ -313,12 +313,13 @@ t_c, sfr_c = C.sfh_curve(
 
 # tengri's actual pipeline SFR history (not the analytic formula): build
 # a minimal SEDModel with the delayed SFH and read sfr_history off the
-# resulting state. The pipeline samples on a 64-point log-spaced
-# lookback grid — coarse and visibly stepped near early cosmic time.
-# That coarseness is what every fit downstream sees, so plotting it
-# honestly is the test: if the area under this curve doesn't integrate
-# to 1 M☉ formed (= log_total_mass = 0.0), tengri's SFH normalisation
-# is broken regardless of how clean the analytic shape looks.
+# resulting state. The pipeline samples on the spec's log-spaced
+# lookback grid (n_grid=256 by default) — visibly smooth across the
+# rise-and-decay. That grid is what every fit downstream sees, so
+# plotting it honestly is the test: if the area under this curve doesn't
+# integrate to 1 M☉ formed (= log_total_mass = 0.0), tengri's SFH
+# normalisation is broken regardless of how clean the analytic shape
+# looks.
 tau_gyr, age_gyr = 1.0, 5.0
 _m_sfh = SEDModel.build(
     ssp_data=ssp,
@@ -336,7 +337,7 @@ _sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
 t_t = (age_gyr - _lbt_yr / 1e9) * 1e9  # yr
 sfr_t = _sfr_history
 # Verify normalisation: trapezoid of SFR over cosmic-age axis should be
-# 10**log_total_mass = 1.0 M☉ within numerical accuracy of the 64-pt grid.
+# 10**log_total_mass = 1.0 M☉ within numerical accuracy of the n_grid pipeline.
 # tengri's pipeline carries sfh_grid in decreasing lookback time, so
 # integrate against the increasing-time order.
 _idx = np.argsort(t_t)
@@ -346,7 +347,7 @@ print(f"tengri pipeline ∫SFR dt = {_mass_formed:.4f} M☉ (target: 1.0000 from
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, "pcigale.sed_modules.sfhdelayed (τ=1 Gyr, age=5 Gyr)"),
-    (ax_r, "tengri pipeline sfr_history (64-pt log-lbt)"),
+    (ax_r, "tengri pipeline sfr_history (n_grid=256 log-lbt)"),
 ):
     ax.set_xlabel("Cosmic age since SF onset [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
@@ -365,46 +366,17 @@ save_fig("02_sfh_tau.png")
 
 
 # %% [markdown]
-# ### Declining exponential
+# ### Note on the FSPS / Bagpipes declining-exponential
 #
-# CIGALE `sfh2exp` is a main-exponential plus optional burst; setting
-# ``f_burst = 0`` reduces it to a single declining exponential starting
-# at galaxy formation. tengri's `sfh.tau` is the same shape (FSPS sfh=1
-# / Bagpipes "exponential"). Plotted with linear cosmic-age axis so the
-# decay from formation is readable on both sides.
-#
-# tengri's `sfh.dexp` is a *delayed* exponential (∝ t exp(-t/τ)) — a
-# different shape that peaks at τ rather than at formation; it's the
-# right counterpart for CIGALE's `sfhdelayed`, already shown above.
-
-# %%
-t_c2, sfr_c2 = C.sfh_curve(
-    "sfh2exp", age=5000, tau_main=500, burst_age=200, tau_burst=300,
-    f_burst=0.0, sfr_0=1.0, normalise=True,
-)
-# Same as §2a: evaluate the closed-form sfh.tau shape analytically on a
-# fine grid for smoothness. SFR(t) ∝ exp(−t/τ), t = cosmic age since
-# onset, τ = 0.5 Gyr, truncated at age = 5 Gyr.
-tau_gyr_t, age_gyr_t = 0.5, 5.0
-t_t_tau = np.linspace(0.0, age_gyr_t, 500) * 1e9  # yr
-sfr_t_tau = np.exp(-t_t_tau / (tau_gyr_t * 1e9))
-if sfr_t_tau.max() > 0 and sfr_c2.max() > 0:
-    sfr_t_tau = sfr_t_tau / sfr_t_tau.max() * sfr_c2.max()
-
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax, title in (
-    (ax_l, "pcigale.sed_modules.sfh2exp  (f_burst = 0, τ_main = 500 Myr)"),
-    (ax_r, "tengri sfh.tau  (τ = 0.5 Gyr, age = 5 Gyr)"),
-):
-    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
-    ax.set_xlim(0, 5)
-    ax.grid(True, alpha=0.3)
-    ax.set_title(title)
-ax_l.plot(t_c2 / 1e9, sfr_c2, "C0-", linewidth=2.0)
-ax_r.plot(t_t_tau / 1e9, sfr_t_tau, "C1-", linewidth=2.0)
-fig.tight_layout()
-save_fig("02b_sfh_dexp.png")
+# CIGALE's `sfh2exp(f_burst=0)` and FSPS's `sfh=1` both produce a
+# declining exponential peaking at galaxy formation — a *different*
+# shape from CIGALE's `sfhdelayed` plotted above. tengri intentionally
+# does **not** register this shape as `sfh.tau` (was a #406-era
+# footgun: same name, opposite shape silently). The
+# `declining_exponential` function remains importable from
+# `tengri.components.stellar.sfh.mean_sfh` for power users who need it.
+# The only τ-style SFH in the registry is `delayed` (= CIGALE
+# `sfhdelayed`).
 
 
 # %% [markdown]
