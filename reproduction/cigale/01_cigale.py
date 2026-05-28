@@ -620,8 +620,10 @@ plt.show()
 # the residual is annotated on the right panel.
 #
 # The stellar + Calzetti continuum below 1 µm reproduces to ~1 %.
-# A residual in the Dale template-side normalisation of the integrated
-# FIR luminosity (10⁶–10⁷ Å) is tracked in tengri#415.
+# Post-#476 the master wavelength grid is now the union of every
+# attached component's native grid, so the dust SED extends through
+# the FIR peak and down the Rayleigh-Jeans tail to ~mm — the visible
+# 160-µm truncation in earlier renderings of this notebook is gone.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -719,6 +721,19 @@ plt.show()
 # CIGALE-faithful defaults (n_H = 100, solar). After #469 (float64
 # fix) and #477 (Strömgren-corrected Q_H wiring) the Cue forward
 # pipeline is internally consistent.
+#
+# **Honest residual.** Even at matched gas inputs, tengri's Cue Hα
+# peak reads **~3.5× lower than CIGALE's CLOUDY** at this fiducial —
+# and the same ~3.5× holds at the 5 Gyr quiescent fiducial used by
+# the rest of the notebook, so it isn't a stress-test artifact. The
+# remaining gap lives downstream of the gas knobs: Cue's neural
+# emulator was trained on a particular CLOUDY release with specific
+# T_e sampling and abundance prescription, and that training set
+# doesn't reproduce CIGALE's bundled CLOUDY grid bit-for-bit. The
+# nebular continuum shape and emission-line ratios reproduce well;
+# the absolute line normalisation does not. A future audit will
+# resolve whether the gap traces to Q_H normalisation, ionising-
+# spectrum power-law fit residuals, or NN-vs-grid offset.
 
 # %%
 # §8 young fiducial: τ=300 Myr, age=100 Myr — Hα-bright. CIGALE accepts
