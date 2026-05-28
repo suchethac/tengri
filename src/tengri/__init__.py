@@ -169,9 +169,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     salaris_feh_from_mh,
     salaris_mh_from_feh,
 )
-from tengri.components.stellar.sps.mass_remaining import (
-    compute_mass_remaining_fraction as mass_remaining_fraction,
-)
 from tengri.config.exceptions import (
     BackendError,
     ConfigError,
@@ -444,7 +441,6 @@ __all__ = [
     "list_recipes",
     "list_sfh_models",
     "list_xray_models",
-    "mass_remaining_fraction",
     "nebular",
     "observation",
     "parse_groups",

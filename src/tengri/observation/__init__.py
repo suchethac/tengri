@@ -59,6 +59,7 @@ from tengri.observation.spectrum import (
     blend_emission_lines,
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
+    velocity_broaden,
 )
 
 __all__ = [
@@ -96,4 +97,5 @@ __all__ = [
     "nirspec_g140m_resolution",
     "nirspec_prism_resolution",
     "physics",
+    "velocity_broaden",
 ]

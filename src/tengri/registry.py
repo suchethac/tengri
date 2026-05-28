@@ -426,69 +426,92 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Known dust emission template families. The runtime
-# ``DUST_EMISSION_MODELS`` dict starts empty and is populated lazily
-# when ``register_*_tabulated(grid_path)`` is called with a data file.
-# We advertise the full menu so users can see what's *available* even
-# before loading templates.
-def _emission_entry(d: dict[str, str]) -> dict:
-    """Inject `use` field into a dust-emission menu row."""
-    return {**d, "use": _usage_hint(d["name"], "dust_emission")}
-
-
-_DUST_EMISSION_MENU: tuple[dict[str, str], ...] = (
-    {
-        "name": "dl07",
+# Curated metadata keyed by **canonical runtime** name (as registered in
+# ``DUST_EMISSION_MODELS`` / declared in
+# ``parameters.groups._LAZY_DUST_EMISSION_TYPES``). Any name returned by
+# ``_valid_dust_emission_types()`` that is missing here gets a generic stub
+# row — preferable to silently dropping it (the drift footgun fixed for
+# #495 / #355; ADR-0005 + ADR-0008).
+_DUST_EMISSION_METADATA: dict[str, dict[str, object]] = {
+    "draine_li2007": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
         "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah",
+        "aliases": ("dl07",),
     },
-    {
-        "name": "dl14",
+    "dl07_tabulated": {
+        "status": "production",
+        "citation": "Draine & Li 2007 (ApJ 657, 810)",
+        "short_doc": "Tabulated DL07 templates loaded via register_dl07_tabulated",
+        "aliases": (),
+    },
+    "draine_li2014": {
         "status": "production",
         "citation": "Draine et al. 2014 (ApJ 780, 172)",
         "short_doc": "Updated DL with extended PAH and silicate features",
+        "aliases": ("dl14",),
     },
-    {
-        "name": "dale2014",
+    "draine2021_pah": {
+        "status": "experimental",
+        "citation": "Draine et al. 2021 (ApJ 917, 3)",
+        "short_doc": "Draine+2021 PAH-only emission templates",
+        "aliases": (),
+    },
+    "dale2014": {
         "status": "production",
         "citation": "Dale et al. 2014 (ApJ 784, 83)",
         "short_doc": "SFR-driven empirical IR template family (alpha_sf)",
+        "aliases": (),
     },
-    {
-        "name": "astrodust",
-        "status": "experimental",
-        "citation": "Hensley & Draine 2023 (ApJ 948, 55)",
-        "short_doc": "Astrodust + PAH unified grain model",
+    "casey2012": {
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Modified blackbody + mid-IR power law (T_dust, beta, alpha)",
+        "aliases": (),
     },
-    {
-        "name": "themis",
-        "status": "experimental",
-        "citation": "Jones et al. 2017 (A&A 602, A46)",
-        "short_doc": "THEMIS amorphous-carbon grain model",
-    },
-    {
-        "name": "bosa",
-        "status": "experimental",
-        "citation": "Boquien et al. 2019 (CIGALE BOSA grids)",
-        "short_doc": "BOSA dust SED templates",
-    },
-    {
-        "name": "mbb",
+    "modified_blackbody": {
         "status": "production",
         "citation": "Casey 2012 (MNRAS 425, 3094)",
         "short_doc": "Single-temperature modified blackbody (analytic)",
+        "aliases": ("mbb",),
     },
-    {
-        "name": "schreiber2016",
+    "schreiber2016": {
         "status": "production",
         "citation": "Schreiber et al. 2016 (A&A 589, A35)",
         "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+        "aliases": (),
     },
-)
-
-
-_DUST_EMISSION_MENU = tuple(_emission_entry(d) for d in _DUST_EMISSION_MENU)
+    "pah_drude": {
+        "status": "experimental",
+        "citation": "Smith et al. 2007 (ApJ 656, 770)",
+        "short_doc": "Drude-profile PAH emission features",
+        "aliases": (),
+    },
+    "energy_balance_split": {
+        "status": "experimental",
+        "citation": "da Cunha et al. 2008 (MNRAS 388, 1595)",
+        "short_doc": "Split-temperature energy-balance model (warm + cold dust)",
+        "aliases": (),
+    },
+    "astrodust": {
+        "status": "experimental",
+        "citation": "Hensley & Draine 2023 (ApJ 948, 55)",
+        "short_doc": "Astrodust + PAH unified grain model",
+        "aliases": (),
+    },
+    "themis": {
+        "status": "experimental",
+        "citation": "Jones et al. 2017 (A&A 602, A46)",
+        "short_doc": "THEMIS amorphous-carbon grain model",
+        "aliases": (),
+    },
+    "bosa": {
+        "status": "experimental",
+        "citation": "Boquien et al. 2019 (CIGALE BOSA grids)",
+        "short_doc": "BOSA dust SED templates",
+        "aliases": (),
+    },
+}
 
 
 def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
@@ -498,14 +521,41 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
     **attenuation** laws, see :func:`list_dust_laws`.
 
+    Each row's ``name`` is the canonical runtime registry name accepted by
+    :class:`SEDModel.build` (e.g. ``draine_li2007``); the ``aliases``
+    field lists nicknames documented in the literature. Both forms used to
+    diverge (#495) — this view is now derived from
+    :func:`tengri.parameters.groups._valid_dust_emission_types` so the
+    builder validator and this menu always agree.
+
     Notes
     -----
     Templates are loaded lazily from data files via
-    :func:`register_dl07_tabulated` etc.; this function shows the menu
-    of *available* template families regardless of whether they have
-    been loaded into the runtime ``DUST_EMISSION_MODELS`` dict.
+    :func:`register_dl07_tabulated` etc. Lazy types are advertised even
+    before their grids are loaded, so the menu reflects what's *available
+    to register* — not just what's currently in ``DUST_EMISSION_MODELS``.
     """
-    out = [{**entry, "kind": "dust_emission"} for entry in _DUST_EMISSION_MENU]
+    from tengri.parameters.groups import _valid_dust_emission_types
+
+    canonical_names = _valid_dust_emission_types()
+    out: list[dict] = []
+    for name in canonical_names:
+        meta = _DUST_EMISSION_METADATA.get(
+            name,
+            {
+                "status": "experimental",
+                "citation": "(metadata missing — please file an issue)",
+                "short_doc": "Runtime-registered emission model",
+                "aliases": (),
+            },
+        )
+        row = {
+            "name": name,
+            "kind": "dust_emission",
+            **meta,
+            "use": _usage_hint(name, "dust_emission"),
+        }
+        out.append(row)
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
