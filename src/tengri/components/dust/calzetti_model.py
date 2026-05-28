@@ -88,8 +88,12 @@ class Calzetti(SEDModelComponent):
     name = "calzetti"
     parameter_prefix = "dust_"
 
-    tau_v = Uniform(0.0, 4.0, description="V-band optical depth", units="dimensionless")
-    delta = Uniform(-0.5, 0.5, description="UV slope deviation (Noll+2009)", units="dimensionless")
+    tau_v = Uniform(
+        0.0, 4.0, default=1.0, description="V-band optical depth", units="dimensionless"
+    )
+    delta = Uniform(
+        -0.5, 0.5, default=0.0, description="UV slope deviation (Noll+2009)", units="dimensionless"
+    )
 
     inputs: dict[str, str] = {}  # noqa: RUF012
     outputs: dict[str, str] = {"L_absorbed": "erg/s"}  # noqa: RUF012

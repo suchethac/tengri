@@ -31,6 +31,10 @@
 # the posterior gradient, and how that translates into wall-clock time.
 
 # %%
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 from pathlib import Path
 from time import perf_counter
 
@@ -95,7 +99,7 @@ tau_grid = np.linspace(0.0, 1.5, 30)
 LSFR, TAU = np.meshgrid(log_sfr_grid, tau_grid, indexing="ij")
 
 base = dict(truth)
-free_keys = ("sfh_tsnorm_log_peak_sfr", "dust_tau_bc")
+free_keys = ("sfh_tsnorm_log_total_mass", "dust_tau_bc")
 
 
 def neg_log_post(log_sfr, tau):

@@ -20,7 +20,7 @@ Before any class definition, write runnable pseudocode for three user archetypes
 # NOTE: uses full prefixed param names (no short names); "logzsol" is the one permitted alias
 model = tengri.SEDModel.from_config(
     ssp="data/ssp.h5", sfh="tsnorm", filters=["sdss_g", "sdss_r"],
-    redshift=0.1, priors=dict(sfh_tsnorm_log_peak_sfr=Uniform(-1, 2.5), logzsol=Uniform(-2, 0.2))
+    redshift=0.1, priors=dict(sfh_tsnorm_log_total_mass=Uniform(-1, 2.5), logzsol=Uniform(-2, 0.2))
 )
 result = model.fit(flux, noise)
 result.plot_corner()
@@ -257,7 +257,7 @@ The underscore-prefix system is correct and should be preserved:
 |--------|--------|---------|
 | Metallicity | `met_` | `met_logzsol`, `met_alpha_fe` |
 | Dust attenuation | `dust_` | `dust_tau_bc`, `dust_tau_diff`, `dust_slope` |
-| Star formation | `sfh_{type}_` | `sfh_tsnorm_log_peak_sfr`, `sfh_dpl_alpha` |
+| Star formation | `sfh_{type}_` | `sfh_tsnorm_log_total_mass`, `sfh_dpl_alpha` |
 | GP field | `sfh_field_` | `sfh_field_psd_sigma`, `sfh_field_psd_tau_myr` |
 | Nebular | `neb_` | `neb_logU`, `neb_logZ_gas`, `neb_fesc` |
 | Emission lines | `eline_` | `eline_sigma_kms`, `eline_broad_sigma_kms` |
@@ -272,9 +272,9 @@ The underscore-prefix system is correct and should be preserved:
 The three-layer system is the main source of confusion for new users:
 
 ```
-Layer 1: short names     "log_peak_sfr"            (user convenience)
-Layer 2: public names    "sfh_tsnorm_log_peak_sfr"  (canonical public)
-Layer 3: internal names  "log_peak_sfr"            (internal computation)
+Layer 1: short names     "log_total_mass"            (user convenience)
+Layer 2: public names    "sfh_tsnorm_log_total_mass"  (canonical public)
+Layer 3: internal names  "log_total_mass"            (internal computation)
 ```
 
 Layer 1 and 3 are identical in spelling but mean different things — and the mapping is

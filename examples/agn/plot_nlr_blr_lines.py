@@ -1,143 +1,85 @@
 """
-Narrow and Broad Line Region Emission
-======================================
+Narrow vs broad line region: a velocity-width contrast in two windows
+======================================================================
 
-Plot narrow-line (NLR, FWHM ~500 km/s) and broad-line region (BLR,
-FWHM ~5000 km/s) emission spectra. Shows how BLR vanishes at high
-inclination angles (Type 2 AGN) while NLR remains visible.
+Identical AGN configuration (multicolour disc + SKIRTOR torus at log
+L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred
+km/s, characteristic Type-2 spectrum) and the other with the broad-line
+region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the
+UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Halpha) make the
+velocity-width contrast unmistakable while controlling for continuum.
 
-.. sphx-glr-precomputed-img:
+Companion to ``plot_agn_lines_compare.py``, which sweeps line backbones
+across the full UV-optical range; this script focuses on the kinematic
+fingerprint at fixed library.
 
-.. image:: images/sphx_glr_plot_nlr_blr_lines_001.png
-   :alt: plot_nlr_blr_lines
-   :class: sphx-glr-single-img
-
+Reference: Osterbrock & Ferland 2006, *Astrophysics of Gaseous Nebulae
+and Active Galactic Nuclei* (line classification by FWHM).
 """
 
-# TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+import os
 
-import jax.numpy as jnp
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn import compute_blr_sed, compute_nlr_sed
 
 setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Solar luminosity in cgs
-LSUN_ERG = 3.828e33
+C_AA_PER_S = 2.998e18
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
+DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
-# Wavelength grid: optical/UV
-wavelength = jnp.logspace(np.log10(1200), np.log10(7000), 512)
-wave_angstrom = np.array(wavelength)
-wave_um = wave_angstrom / 1e4
+ssp = tengri.load_ssp()
 
-fig, axes = plt.subplots(2, 2, figsize=(12, 8))
 
-# Disc bolometric luminosity
-L_disc_bol_erg = 10.0**44 * LSUN_ERG  # 10^44 L_sun
-
-# --- Panel 1: NLR vs BLR at fixed covering fraction ---
-ax = axes[0, 0]
-
-covering_frac = 0.1
-fwhm_nlr = 500.0
-fwhm_blr = 5000.0
-
-l_nlr = compute_nlr_sed(
-    wavelength, l_disc_bol_erg=L_disc_bol_erg, covering_fraction=covering_frac, fwhm_kms=fwhm_nlr
-)
-l_blr = compute_blr_sed(
-    wavelength,
-    l_disc_bol_erg=L_disc_bol_erg,
-    covering_fraction=covering_frac,
-    fwhm_kms=fwhm_blr,
-    agn_fe2_strength=1.0,
-)
-
-ax.semilogy(wave_angstrom, np.array(l_nlr) / LSUN_ERG, lw=2.0, label="NLR (FWHM=500 km/s)")
-ax.semilogy(wave_angstrom, np.array(l_blr) / LSUN_ERG, lw=2.0, label="BLR (FWHM=5000 km/s)")
-ax.semilogy(
-    wave_angstrom,
-    (np.array(l_nlr) + np.array(l_blr)) / LSUN_ERG,
-    "k--",
-    lw=1.5,
-    alpha=0.6,
-    label="Total",
-)
-
-# Mark key emission lines
-lines = {"Ly-α": 1216, "C IV": 1549, "H-β": 4861, "[O III]": 5007, "H-α": 6563}
-for lbl, wl in lines.items():
-    ax.axvline(wl, color="gray", ls=":", alpha=0.5, lw=0.7)
-    ax.text(wl, ax.get_ylim()[0] * 1.5, lbl, fontsize=10, rotation=90, color="gray", va="bottom")
-
-ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("NLR vs BLR Spectral Comparison")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(1000, 7000)
-ax.set_ylim(1e-2, 1e30)
-
-# --- Panel 2: BLR strength sweep ---
-ax = axes[0, 1]
-
-for covering_frac in [0.05, 0.10, 0.20]:
-    l_blr = compute_blr_sed(
-        wavelength,
-        l_disc_bol_erg=L_disc_bol_erg,
-        covering_fraction=covering_frac,
-        fwhm_kms=5000.0,
-        agn_fe2_strength=1.0,
+def _build(lines_type):
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh=SFH,
+        dust=DUST,
+        agn={
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "skirtor", "*": tengri.FIXED},
+            "lines": {"type": lines_type, "*": tengri.FIXED},
+        },
+        redshift=tengri.Fixed(0.0),
     )
-    label_txt = f"Covering={covering_frac:.2f}"
-    ax.semilogy(wave_angstrom, np.array(l_blr) / LSUN_ERG, lw=1.5, label=label_txt)
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    wave = np.asarray(out.wavelength)
+    return wave, C_AA_PER_S / wave * np.asarray(out.sed)
 
-ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("BLR: Covering Fraction Sensitivity")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(1000, 7000)
-ax.set_ylim(1e-2, 1e30)
 
-# --- Panel 3: Fe II strength in BLR ---
-ax = axes[1, 0]
+wave_nlr, nl_nlr = _build("nlr")
+wave_blr, nl_blr = _build("blr")
 
-covering_frac = 0.1
-for fe2_strength in [0.0, 0.5, 1.0, 2.0]:
-    l_blr = compute_blr_sed(
-        wavelength,
-        l_disc_bol_erg=L_disc_bol_erg,
-        covering_fraction=covering_frac,
-        fwhm_kms=5000.0,
-        agn_fe2_strength=fe2_strength,
-    )
-    label_fe2 = f"Fe II strength={fe2_strength:.1f}"
-    ax.semilogy(wave_angstrom, np.array(l_blr) / LSUN_ERG, lw=1.5, label=label_fe2)
+UV_LINES = [(1216, r"Ly$\alpha$"), (1549, "C IV"), (1909, "C III]"), (2798, "Mg II")]
+OPT_LINES = [(4861, r"H$\beta$"), (5007, "[O III]"), (6563, r"H$\alpha$"), (6731, "[S II]")]
 
-ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("BLR: Iron Multiplet Strength")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(1000, 7000)
-ax.set_ylim(1e-2, 1e30)
+fig, (ax_uv, ax_opt) = plt.subplots(1, 2, figsize=(11.0, 4.6))
+for ax, xlim, marks in [(ax_uv, (1000, 3000), UV_LINES), (ax_opt, (4500, 7000), OPT_LINES)]:
+    ax.semilogy(wave_nlr, nl_nlr, color="#1f77b4", lw=1.4, label="NLR (Type-2)")
+    ax.semilogy(wave_blr, nl_blr, color="#d62728", lw=1.4, label="BLR (Type-1)")
+    ax.set_xlim(*xlim)
+    ax.set_ylim(1.0e44, 5.0e46)
+    ax.set_xlabel(r"Rest-frame $\lambda$ [$\mathrm{\AA}$]")
+    for wl, name in marks:
+        ax.axvline(wl, color="0.7", ls=":", lw=0.6)
+        ax.text(wl, 2.0e44, name, fontsize=8, color="0.4", rotation=90, va="bottom")
 
-# --- Panel 4: NLR FWHM variations ---
-ax = axes[1, 1]
+ax_uv.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+ax_opt.legend(frameon=False, fontsize=9, loc="upper right")
 
-for fwhm in [300.0, 500.0, 800.0, 1200.0]:
-    l_nlr = compute_nlr_sed(
-        wavelength, l_disc_bol_erg=L_disc_bol_erg, covering_fraction=0.1, fwhm_kms=fwhm
-    )
-    ax.semilogy(wave_angstrom, np.array(l_nlr) / LSUN_ERG, lw=1.5, label=f"FWHM={fwhm:.0f} km/s")
-
-ax.set_xlabel(r"Wavelength [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title("NLR: Line Width Sensitivity")
-ax.legend(fontsize=10, frameon=False)
-ax.set_xlim(1000, 7000)
-ax.set_ylim(1e-2, 1e30)
-
-fig.tight_layout(rect=[0, 0, 1, 0.97])
+fig.tight_layout()
 plt.savefig("plot_nlr_blr_lines.png", dpi=150, bbox_inches="tight")

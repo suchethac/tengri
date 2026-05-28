@@ -43,7 +43,7 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     )
 
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -61,7 +61,7 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     )
     model = SEDModel(spec, ssp, observation=obs)
     true_params = {
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
         "sfh_tsnorm_peak_lbt_gyr": 3.0,
         "sfh_tsnorm_width_gyr": 1.5,
         "sfh_tsnorm_skew": 0.0,

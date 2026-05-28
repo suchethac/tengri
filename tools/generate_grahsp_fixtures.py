@@ -66,21 +66,57 @@ def make_sbpl_fixture():
     cases = [
         # (uvslope, plslope, plbendloc, plbendwidth, lum5100A, cutoff_nm)
         # Default GRAHSP-ish
-        dict(uvslope=0.0, plslope=-1.7, plbendloc=100.0, plbendwidth=1.0, lum5100A=1.0e36, cutoff=10000.0),
+        dict(
+            uvslope=0.0,
+            plslope=-1.7,
+            plbendloc=100.0,
+            plbendwidth=1.0,
+            lum5100A=1.0e36,
+            cutoff=10000.0,
+        ),
         # MRK231-ish (steep)
-        dict(uvslope=0.0, plslope=-1.7, plbendloc=160.0, plbendwidth=0.2, lum5100A=1.0e38, cutoff=10000.0),
+        dict(
+            uvslope=0.0,
+            plslope=-1.7,
+            plbendloc=160.0,
+            plbendwidth=0.2,
+            lum5100A=1.0e38,
+            cutoff=10000.0,
+        ),
         # Flat slope
-        dict(uvslope=0.5, plslope=-1.0, plbendloc=80.0, plbendwidth=2.0, lum5100A=2.5e37, cutoff=-1.0),
+        dict(
+            uvslope=0.5,
+            plslope=-1.0,
+            plbendloc=80.0,
+            plbendwidth=2.0,
+            lum5100A=2.5e37,
+            cutoff=-1.0,
+        ),
         # Sharp bend
-        dict(uvslope=0.0, plslope=-2.5, plbendloc=120.0, plbendwidth=0.5, lum5100A=1.0e35, cutoff=10000.0),
+        dict(
+            uvslope=0.0,
+            plslope=-2.5,
+            plbendloc=120.0,
+            plbendwidth=0.5,
+            lum5100A=1.0e35,
+            cutoff=10000.0,
+        ),
         # Wide bend
-        dict(uvslope=0.0, plslope=-2.0, plbendloc=100.0, plbendwidth=5.0, lum5100A=1.0e36, cutoff=10000.0),
+        dict(
+            uvslope=0.0,
+            plslope=-2.0,
+            plbendloc=100.0,
+            plbendwidth=5.0,
+            lum5100A=1.0e36,
+            cutoff=10000.0,
+        ),
     ]
     spectra = np.zeros((len(cases), wave_nm.size))
     for i, p in enumerate(cases):
         l_agn = p["lum5100A"] / 510.0  # cigale convention: lum5100A = lambda*L_lambda
-        bbb = sbpl_upstream(wave_nm, l_agn, p["uvslope"], p["plslope"], 510.0,
-                            p["plbendloc"], p["plbendwidth"])
+        bbb = sbpl_upstream(
+            wave_nm, l_agn, p["uvslope"], p["plslope"], 510.0, p["plbendloc"], p["plbendwidth"]
+        )
         if p["cutoff"] > 0:
             bbb = bbb * -np.expm1(-(p["cutoff"] / wave_nm))
         spectra[i] = bbb
@@ -89,10 +125,25 @@ def make_sbpl_fixture():
         wave_nm=wave_nm,
         spectra=spectra,
         params=np.array(
-            [(p["uvslope"], p["plslope"], p["plbendloc"], p["plbendwidth"],
-              p["lum5100A"], p["cutoff"]) for p in cases],
-            dtype=[("uvslope", "f8"), ("plslope", "f8"), ("plbendloc", "f8"),
-                   ("plbendwidth", "f8"), ("lum5100A", "f8"), ("cutoff", "f8")],
+            [
+                (
+                    p["uvslope"],
+                    p["plslope"],
+                    p["plbendloc"],
+                    p["plbendwidth"],
+                    p["lum5100A"],
+                    p["cutoff"],
+                )
+                for p in cases
+            ],
+            dtype=[
+                ("uvslope", "f8"),
+                ("plslope", "f8"),
+                ("plbendloc", "f8"),
+                ("plbendwidth", "f8"),
+                ("lum5100A", "f8"),
+                ("cutoff", "f8"),
+            ],
         ),
     )
     return wave_nm.size, len(cases)
@@ -103,9 +154,7 @@ def make_sbpl_fixture():
 # ---------------------------------------------------------------------------
 def biatten_curve_upstream(wave_nm, opt_index, nir_index, norm, lam_break):
     """Verbatim from biattenuation.BiAttenuationLaw.get_attenuation."""
-    return norm * (wave_nm / lam_break) ** np.where(
-        wave_nm < lam_break, opt_index, nir_index
-    )
+    return norm * (wave_nm / lam_break) ** np.where(wave_nm < lam_break, opt_index, nir_index)
 
 
 def make_biatten_fixture():
@@ -143,10 +192,30 @@ def make_biatten_fixture():
 # 3. AGN torus (activategtorus.py)
 # ---------------------------------------------------------------------------
 # Hard-coded torus wave grid from upstream (line 91 of activategtorus.py).
-TORUS_WAVE_UM = np.array([
-    0.360, 0.450, 0.580, 0.750, 1.000, 1.009, 1.019, 1.028, 1.038, 1.047,
-    1.057, 1.067, 1.076, 1.086, 1.096, 1.107, 1.117, 1.127, 1.138, 1.148,
-])  # truncated for brevity in test fixture; full grid loaded from upstream below
+TORUS_WAVE_UM = np.array(
+    [
+        0.360,
+        0.450,
+        0.580,
+        0.750,
+        1.000,
+        1.009,
+        1.019,
+        1.028,
+        1.038,
+        1.047,
+        1.057,
+        1.067,
+        1.076,
+        1.086,
+        1.096,
+        1.107,
+        1.117,
+        1.127,
+        1.138,
+        1.148,
+    ]
+)  # truncated for brevity in test fixture; full grid loaded from upstream below
 
 
 def _load_full_torus_wave():
@@ -182,16 +251,14 @@ def torus_upstream(wave_torus_nm, wave_si_nm, params):
     lum5100A = p["lum5100A"]
 
     l_torus = 2.5 * lum5100A * fcov  # at 12 um (lambda * L_lambda)
-    cool_spectrum = np.exp(-((log_wave - logCOOLlam) / COOLwidth) ** 2)
+    cool_spectrum = np.exp(-(((log_wave - logCOOLlam) / COOLwidth) ** 2))
     hot_spectrum = (
         HOTfcov
         * 10 ** (logCOOLlam - logHOTlam)
-        * np.exp(-((log_wave - logHOTlam) / HOTwidth) ** 2)
+        * np.exp(-(((log_wave - logHOTlam) / HOTwidth) ** 2))
     )
     total_spectrum = cool_spectrum + hot_spectrum
-    torus_spectrum = (
-        l_torus / 12000.0 * total_spectrum / total_spectrum[norm_index]
-    )
+    torus_spectrum = l_torus / 12000.0 * total_spectrum / total_spectrum[norm_index]
     si_spectrum = (
         l_torus
         / 12000.0
@@ -209,17 +276,49 @@ def make_torus_fixture():
     wave_si_nm = np.logspace(np.log10(3000), np.log10(50000), 201)  # 3 um to 50 um
     cases = [
         # Faint AGN, no Si
-        dict(fcov=0.1, Si=0.0, COOLlam=17.0, COOLwidth=0.45, HOTlam=2.0, HOTwidth=0.5,
-             HOTfcov=0.0, lum5100A=1.0e36),
+        dict(
+            fcov=0.1,
+            Si=0.0,
+            COOLlam=17.0,
+            COOLwidth=0.45,
+            HOTlam=2.0,
+            HOTwidth=0.5,
+            HOTfcov=0.0,
+            lum5100A=1.0e36,
+        ),
         # Si emission
-        dict(fcov=0.4, Si=1.0, COOLlam=20.0, COOLwidth=0.5, HOTlam=3.0, HOTwidth=0.5,
-             HOTfcov=1.0, lum5100A=1.0e37),
+        dict(
+            fcov=0.4,
+            Si=1.0,
+            COOLlam=20.0,
+            COOLwidth=0.5,
+            HOTlam=3.0,
+            HOTwidth=0.5,
+            HOTfcov=1.0,
+            lum5100A=1.0e37,
+        ),
         # Si absorption
-        dict(fcov=0.6, Si=-2.0, COOLlam=25.0, COOLwidth=0.4, HOTlam=2.5, HOTwidth=0.4,
-             HOTfcov=2.0, lum5100A=1.0e38),
+        dict(
+            fcov=0.6,
+            Si=-2.0,
+            COOLlam=25.0,
+            COOLwidth=0.4,
+            HOTlam=2.5,
+            HOTwidth=0.4,
+            HOTfcov=2.0,
+            lum5100A=1.0e38,
+        ),
         # Wide cool peak
-        dict(fcov=0.3, Si=0.5, COOLlam=30.0, COOLwidth=0.65, HOTlam=4.0, HOTwidth=0.6,
-             HOTfcov=0.5, lum5100A=1.0e36),
+        dict(
+            fcov=0.3,
+            Si=0.5,
+            COOLlam=30.0,
+            COOLwidth=0.65,
+            HOTlam=4.0,
+            HOTwidth=0.6,
+            HOTfcov=0.5,
+            lum5100A=1.0e36,
+        ),
     ]
     torus_spectra = np.zeros((len(cases), wave_torus_nm.size))
     si_spectra = np.zeros((len(cases), wave_si_nm.size))
@@ -234,11 +333,29 @@ def make_torus_fixture():
         torus_spectra=torus_spectra,
         si_spectra=si_spectra,
         params=np.array(
-            [(p["fcov"], p["Si"], p["COOLlam"], p["COOLwidth"], p["HOTlam"],
-              p["HOTwidth"], p["HOTfcov"], p["lum5100A"]) for p in cases],
-            dtype=[("fcov", "f8"), ("Si", "f8"), ("COOLlam", "f8"),
-                   ("COOLwidth", "f8"), ("HOTlam", "f8"), ("HOTwidth", "f8"),
-                   ("HOTfcov", "f8"), ("lum5100A", "f8")],
+            [
+                (
+                    p["fcov"],
+                    p["Si"],
+                    p["COOLlam"],
+                    p["COOLwidth"],
+                    p["HOTlam"],
+                    p["HOTwidth"],
+                    p["HOTfcov"],
+                    p["lum5100A"],
+                )
+                for p in cases
+            ],
+            dtype=[
+                ("fcov", "f8"),
+                ("Si", "f8"),
+                ("COOLlam", "f8"),
+                ("COOLwidth", "f8"),
+                ("HOTlam", "f8"),
+                ("HOTwidth", "f8"),
+                ("HOTfcov", "f8"),
+                ("lum5100A", "f8"),
+            ],
         ),
     )
     return wave_torus_nm.size
@@ -279,8 +396,7 @@ def parse_mor_netzer_lines(path: Path):
     return rows
 
 
-def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms,
-                   agn_type=1):
+def lines_upstream(wave_nm_grid, lines_rows, lum5100A, A_lines, line_width_kms, agn_type=1):
     """Reproduce activatelines.add_lines for a flat user-provided wave grid."""
     l_agn = lum5100A / 510.0  # W/nm
     l_broad = 0.02 * l_agn * A_lines  # H-beta broad scale [erg/s] / [W/nm]
@@ -316,8 +432,7 @@ def feii_upstream(wave_nm_grid, feii_template_path, lum5100A, A_lines, A_FeII):
     norm_idx = np.argmin(np.abs(wave_rest_angstrom - 4575.0))
     L_lambda = L_lambda / L_lambda[norm_idx]
     wave_template_nm = wave_rest_angstrom / 10.0
-    interp_flux = np.interp(wave_nm_grid, wave_template_nm, L_lambda,
-                             left=0.0, right=0.0)
+    interp_flux = np.interp(wave_nm_grid, wave_template_nm, L_lambda, left=0.0, right=0.0)
     l_broadlines = 0.02 * (lum5100A / 510.0) * A_lines
     return wave_template_nm, L_lambda, interp_flux * A_FeII * l_broadlines
 
@@ -337,12 +452,14 @@ def make_lines_fixture():
     nl = np.zeros((len(cases), wave_nm_grid.size))
     feii = np.zeros((len(cases), wave_nm_grid.size))
     for i, p in enumerate(cases):
-        b, n = lines_upstream(wave_nm_grid, rows, p["lum5100A"], p["A_lines"],
-                              p["line_width_kms"], p["agn_type"])
+        b, n = lines_upstream(
+            wave_nm_grid, rows, p["lum5100A"], p["A_lines"], p["line_width_kms"], p["agn_type"]
+        )
         bl[i] = b
         nl[i] = n
-        _, _, feii_lumin = feii_upstream(wave_nm_grid, feii_template,
-                                         p["lum5100A"], p["A_lines"], p["A_FeII"])
+        _, _, feii_lumin = feii_upstream(
+            wave_nm_grid, feii_template, p["lum5100A"], p["A_lines"], p["A_FeII"]
+        )
         feii[i] = feii_lumin
     np.savez(
         FIXTURE_DIR / "lines.npz",
@@ -352,10 +469,17 @@ def make_lines_fixture():
         feii=feii,
         n_lines=len(rows),
         params=np.array(
-            [(p["lum5100A"], p["A_lines"], p["line_width_kms"], p["agn_type"],
-              p["A_FeII"]) for p in cases],
-            dtype=[("lum5100A", "f8"), ("A_lines", "f8"), ("line_width_kms", "f8"),
-                   ("agn_type", "i4"), ("A_FeII", "f8")],
+            [
+                (p["lum5100A"], p["A_lines"], p["line_width_kms"], p["agn_type"], p["A_FeII"])
+                for p in cases
+            ],
+            dtype=[
+                ("lum5100A", "f8"),
+                ("A_lines", "f8"),
+                ("line_width_kms", "f8"),
+                ("agn_type", "i4"),
+                ("A_FeII", "f8"),
+            ],
         ),
     )
     return len(rows)

@@ -100,7 +100,7 @@ __version__ = "0.1.0"
 import sys
 
 from tengri import builders, components as _components, preprocessing, presets, recipes
-from tengri._data_setup import data_path, download_ssp, list_known_ssps
+from tengri._data_setup import data_path, download_ssp, list_available_ssps, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
     Bibliography,
@@ -158,11 +158,14 @@ from tengri.components.stellar.sfh.registry import (
 )
 from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
+    compute_surviving_mass,
     effective_metallicity,
     has_alpha_grid,
+    interpolate_mass_remaining,
     interpolate_met_alpha,
     load_ssp,
     load_ssp_data,
+    predict_surviving_mass,
     salaris_feh_from_mh,
     salaris_mh_from_feh,
 )
@@ -322,11 +325,14 @@ from tengri.registry import (
     list_dust_emission_models,
     list_dust_laws,
     list_filters,
+    list_igm_models,
     list_inference_methods,
     list_nebular_backends,
     list_plots,
+    list_radio_models,
     list_recipes,
     list_sfh_models,
+    list_xray_models,
     print_components_bibtex,
     search,
     suggest_parameters,
@@ -420,17 +426,21 @@ __all__ = [
     "io",
     "list_agn_models",
     "list_all",
+    "list_available_ssps",
     "list_components",
     "list_dust_emission_models",
     "list_dust_laws",
     "list_filters",
+    "list_igm_models",
     "list_inference_methods",
     "list_known_ssps",
     "list_nebular_backends",
     "list_parameters",
     "list_plots",
+    "list_radio_models",
     "list_recipes",
     "list_sfh_models",
+    "list_xray_models",
     "nebular",
     "observation",
     "parse_groups",
@@ -524,8 +534,11 @@ _CURATED_DIR = (
     "list_agn_models",
     "list_dust_emission_models",
     "list_dust_laws",
+    "list_igm_models",
+    "list_radio_models",
     "list_sfh_models",
     "list_nebular_backends",
+    "list_xray_models",
     "list_filters",
     "list_plots",
     "list_components",

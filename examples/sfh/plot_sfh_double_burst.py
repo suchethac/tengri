@@ -8,6 +8,10 @@ shows the optical-to-NIR region in linear scale; right panel shows the full
 panchromatic SED in log-log, revealing the emission from both young and old stars.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -28,7 +32,7 @@ model_old = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
         "skew": 0.1,
@@ -44,7 +48,7 @@ model_recent = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 0.3,
         "width_gyr": 0.5,
         "skew": 0.3,
@@ -60,7 +64,7 @@ model_double = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 1.5,
         "skew": 0.2,
@@ -111,7 +115,6 @@ ax1.plot(
 )
 ax1.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
 ax1.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-ax1.set_title("Linear Scale (Optical to NIR)", fontsize=11)
 ax1.legend(fontsize=10, frameon=False)
 ax1.grid(True, alpha=0.2)
 
@@ -121,7 +124,6 @@ ax2.loglog(wave, sed_recent, "C1-", lw=2.0, label="Recent burst only")
 ax2.loglog(wave, sed_double, "k--", lw=2.0, label="Double burst")
 ax2.set_xlabel(r"Wavelength [$\AA$]", fontsize=11)
 ax2.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
-ax2.set_title("Log Scale (Full SED)", fontsize=11)
 ax2.set_xlim(1000, 1e6)
 ax2.set_ylim(1e0, 1e7)
 ax2.legend(fontsize=10, frameon=False, loc="lower left")

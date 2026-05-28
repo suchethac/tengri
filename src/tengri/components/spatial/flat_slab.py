@@ -52,7 +52,13 @@ class FlatSlab(SpatialModelComponent):
     name = "flat_slab"
     parameter_prefix = "spatial_"
 
-    radius_kpc = Uniform(0.1, 50.0, description="Disk radius", units="kpc")
+    radius_kpc = Uniform(
+        0.1,
+        50.0,
+        description="Disk radius",
+        units="kpc",
+        default=1.0,
+    )
 
     reads: ClassVar[dict[str, str]] = {}
     publishes: ClassVar[dict[str, str]] = {"spatial_profile_2d": ""}

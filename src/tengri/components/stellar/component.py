@@ -430,6 +430,7 @@ class StellarSEDComponent:
             "exp",
             "dexp",
             "tau",
+            "delayed",
             "periodic",
             "buat08",
         )
@@ -515,7 +516,22 @@ class StellarSEDComponent:
             sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
-        sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
+        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
+        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
+        # cutoffs at ``t_lookback = age`` land on grid points instead of
+        # being smeared across the coarser ~3 % log-spaced bins of
+        # ``sfh_lbt_grid``. The closed form also self-normalises through
+        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
+        # exactly. See suchethac/tengri#385.
+        #
+        # The GP-field path still goes through the log grid: ``compute_field_gp``
+        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
+        # GP draw lives on the lookback grid by construction.
+        if self.config.field:
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        else:
+            sfr_on_ssp = sfh_spec.fn(ssp_ages_yr, **sfh_kwargs)
 
         # ── 5. Cosmology: t_obs from redshift ───────────────────────────
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
@@ -790,11 +806,22 @@ class StellarSEDComponent:
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        # ``rest_sed`` from DSPS is in Lsun/Hz (mass scaling included).
-        # Sum the per-age cube — XLA folds the sum into the same kernel
-        # as the einsum and avoids materialising ``rest_sed`` separately.
+        # Use DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs`` in
+        # Lsun/Hz) rather than reconstructing it as
+        # ``total_mass × Σ(weights × ssp_flux)``. The two paths are
+        # mathematically identical when ``total_mass == mstar_obs`` (both
+        # integrate the same SFH), but DSPS computes ``mstar_obs`` via a
+        # cumulative-SFH interpolation while tengri's ``total_mass`` is a
+        # trapezoid integral over the ramp-zeroed ``sfr_asc`` grid. Using
+        # DSPS's value keeps the SED self-consistent with the kernel's
+        # own normalisation (closes #394). The per-age cube ``lnu_age``
+        # below is retained for downstream per-age operations (dust BC
+        # mask, bolometric L_age) and continues to use ``total_mass`` —
+        # the per-age sum is consumed before any wavelength-resolved
+        # quantity reads it, so any residual ``total_mass / mstar_obs``
+        # discrepancy does not propagate into observables.
+        sed_intrinsic = dsps_result.rest_sed * LSUN_ERG_PER_S
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
-        sed_intrinsic = jnp.sum(lnu_age, axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
@@ -926,24 +953,36 @@ class StellarSEDComponent:
             )
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — linear interp of the
-            # ztable at runtime z. Publishes the same derived keys as the
-            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
-            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
-            # filter_eff_waves.
+            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — smooth triweight
+            # interp of the ztable at runtime z. Publishes the same derived
+            # keys as the fixed-z path: stellar_phot_lnu_precomp,
+            # stellar_phot_moment_precomp, stellar_phot_lnu_per_age_precomp,
+            # stellar_phot_moment_per_age_precomp, filter_eff_waves.
+            #
+            # The original linear z-interp was O(h^2) and non-monotonic in
+            # n_z at fixed test redshifts: doubling the grid can shift a
+            # test point into a less-favourable cell and raise the error.
+            # The triweight kernel (Hearin et al. 2023) is the canonical
+            # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
+            # and SKIRTOR grids — C²-continuous, kernel-supported on the
+            # 3-bandwidth neighbourhood. See issue #438.
+            from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
             ztable = self._state.ssp_phot_ztable
             z = jnp.asarray(params.get("redshift", 0.0))
             z_grid = ztable.z_grid
-            n_z = z_grid.shape[0]
-            i_hi = jnp.clip(jnp.searchsorted(z_grid, z), 1, n_z - 1)
-            i_lo = i_hi - 1
-            z_lo = z_grid[i_lo]
-            z_hi = z_grid[i_hi]
-            frac = (z - z_lo) / jnp.maximum(z_hi - z_lo, 1e-12)
+            z_edges = edges_for_grid(z_grid)
+            # Match grid-cell width for the kernel bandwidth (Hearin 2023
+            # convention): smooth across one neighbour on each side.
+            z_scatter = 0.5 * (z_grid[1] - z_grid[0])
+            w_z = compute_grid_weights(z, z_grid, scatter=z_scatter, edges=z_edges)
+
+            def _interp(table):
+                # table: (n_z, ...). Contract axis 0 with kernel weights.
+                return jnp.tensordot(w_z, table, axes=([0], [0]))
+
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
-            ssp_phot_at_z = (1.0 - frac) * ztable.ssp_phot_table[
-                i_lo
-            ] + frac * ztable.ssp_phot_table[i_hi]
+            ssp_phot_at_z = _interp(ztable.ssp_phot_table)
             # Marginalised + age-resolved LUTs (Phase 3c-3c-iv-a parity).
             stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
@@ -958,9 +997,7 @@ class StellarSEDComponent:
             # Phase 3c-3c-v: Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalised + per-age.
             if ztable.ssp_phot_moment_table is not None:
-                ssp_moment_at_z = (1.0 - frac) * ztable.ssp_phot_moment_table[
-                    i_lo
-                ] + frac * ztable.ssp_phot_moment_table[i_hi]
+                ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
                 stellar_phot_moment_precomp = (
                     total_mass
                     * jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z)
@@ -977,9 +1014,7 @@ class StellarSEDComponent:
                 )
             # Interpolate effective rest-frame wavelengths and publish for
             # downstream consumers (dust LUT, AGN, IGM).
-            eff_waves_at_z = (1.0 - frac) * ztable.eff_waves_rest_table[
-                i_lo
-            ] + frac * ztable.eff_waves_rest_table[i_hi]
+            eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
             derived_overrides["filter_eff_waves"] = eff_waves_at_z
 
         # ── 12. Assemble new state ──────────────────────────────────────

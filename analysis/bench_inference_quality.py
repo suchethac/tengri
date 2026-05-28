@@ -58,11 +58,13 @@ def build_model_and_truth(key):
         sys.exit(0)
 
     ssp = load_ssp_data(str(SSP_FILE))
-    obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+    obs = Observation(
+        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+    )
 
     spec = ParamSpec(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -93,40 +95,82 @@ def get_method_configs(quick: bool):
     """Return {name: (method_str, kwargs)} for each inference method."""
     if quick:
         return {
-            "MAP": ("map", dict(
-                n_steps=500, learning_rate=0.03,
-            )),
-            "vi_native": ("vi_native", dict(
-                n_iterations=5, n_posterior_samples=50,
-            )),
-            "Ray Tracing": ("mcmc_raytrace", dict(
-                n_steps=200, n_burnin=50, n_leapfrog_steps=10,
-            )),
-            "NUTS": ("mcmc_nuts", dict(
-                n_warmup=200, n_samples=200,
-                target_accept_rate=0.85,
-            )),
-            "geovi_nuts": ("geovi_nuts", dict(
-                n_iterations=3, n_posterior_samples=100,
-            )),
+            "MAP": (
+                "map",
+                dict(
+                    n_steps=500,
+                    learning_rate=0.03,
+                ),
+            ),
+            "vi_native": (
+                "vi_native",
+                dict(
+                    n_iterations=5,
+                    n_posterior_samples=50,
+                ),
+            ),
+            "Ray Tracing": (
+                "mcmc_raytrace",
+                dict(
+                    n_steps=200,
+                    n_burnin=50,
+                    n_leapfrog_steps=10,
+                ),
+            ),
+            "NUTS": (
+                "mcmc_nuts",
+                dict(
+                    n_warmup=200,
+                    n_samples=200,
+                    target_accept_rate=0.85,
+                ),
+            ),
+            "geovi_nuts": (
+                "geovi_nuts",
+                dict(
+                    n_iterations=3,
+                    n_posterior_samples=100,
+                ),
+            ),
         }
     return {
-        "MAP": ("map", dict(
-            n_steps=2000, learning_rate=0.03,
-        )),
-        "vi_native": ("vi_native", dict(
-            n_iterations=10, n_posterior_samples=100,
-        )),
-        "Ray Tracing": ("mcmc_raytrace", dict(
-            n_steps=500, n_burnin=100, n_leapfrog_steps=10,
-        )),
-        "NUTS": ("mcmc_nuts", dict(
-            n_warmup=500, n_samples=500,
-            target_accept_rate=0.85,
-        )),
-        "geovi_nuts": ("geovi_nuts", dict(
-            n_iterations=5, n_posterior_samples=200,
-        )),
+        "MAP": (
+            "map",
+            dict(
+                n_steps=2000,
+                learning_rate=0.03,
+            ),
+        ),
+        "vi_native": (
+            "vi_native",
+            dict(
+                n_iterations=10,
+                n_posterior_samples=100,
+            ),
+        ),
+        "Ray Tracing": (
+            "mcmc_raytrace",
+            dict(
+                n_steps=500,
+                n_burnin=100,
+                n_leapfrog_steps=10,
+            ),
+        ),
+        "NUTS": (
+            "mcmc_nuts",
+            dict(
+                n_warmup=500,
+                n_samples=500,
+                target_accept_rate=0.85,
+            ),
+        ),
+        "geovi_nuts": (
+            "geovi_nuts",
+            dict(
+                n_iterations=5,
+                n_posterior_samples=200,
+            ),
+        ),
     }
 
 
@@ -149,31 +193,39 @@ def run_method(model, flux_obs, noise, method_str, key, **kwargs):
 
     # For sampling methods: MAP init first
     map_result = fitter.run(
-        "map", key=key, n_steps=500, learning_rate=0.03, verbose=False,
+        "map",
+        key=key,
+        n_steps=500,
+        learning_rate=0.03,
+        verbose=False,
     )
     key = jax.random.fold_in(key, 1)
 
     # First call (includes XLA compile)
     t0 = time.perf_counter()
     posterior = fitter.run(
-        method_str, init_from=map_result, key=key, verbose=False, **kwargs,
+        method_str,
+        init_from=map_result,
+        key=key,
+        verbose=False,
+        **kwargs,
     )
     if posterior.samples is not None:
-        jax.block_until_ready(
-            jnp.stack([v for v in posterior.samples.values() if v.ndim == 1])
-        )
+        jax.block_until_ready(jnp.stack([v for v in posterior.samples.values() if v.ndim == 1]))
     wall_total = time.perf_counter() - t0
 
     # Second call for runtime-only measurement (compiled)
     key2 = jax.random.fold_in(key, 2)
     t1 = time.perf_counter()
     posterior2 = fitter.run(
-        method_str, init_from=map_result, key=key2, verbose=False, **kwargs,
+        method_str,
+        init_from=map_result,
+        key=key2,
+        verbose=False,
+        **kwargs,
     )
     if posterior2.samples is not None:
-        jax.block_until_ready(
-            jnp.stack([v for v in posterior2.samples.values() if v.ndim == 1])
-        )
+        jax.block_until_ready(jnp.stack([v for v in posterior2.samples.values() if v.ndim == 1]))
     wall_runtime = time.perf_counter() - t1
 
     return posterior2, wall_total, wall_runtime
@@ -194,9 +246,7 @@ def compute_metrics(posterior, true_params, wall_total, wall_runtime):
     }
 
     summary = posterior.summary()
-    scalar_params = [
-        k for k in summary if k != "psd_xi"
-    ]
+    scalar_params = [k for k in summary if k != "psd_xi"]
 
     if posterior.samples is None:
         # MAP: no ESS, compute bias from point estimates
@@ -228,9 +278,7 @@ def compute_metrics(posterior, true_params, wall_total, wall_runtime):
     metrics["ess_per_param"] = ess_scalar
     ess_vals = [v for v in ess_scalar.values() if not np.isnan(v)]
     metrics["ess_min"] = float(min(ess_vals)) if ess_vals else 0.0
-    metrics["ess_per_sec"] = (
-        metrics["ess_min"] / wall_runtime if wall_runtime > 0 else 0.0
-    )
+    metrics["ess_per_sec"] = metrics["ess_min"] / wall_runtime if wall_runtime > 0 else 0.0
 
     # Bias: |median - truth| / |truth|
     biases = {}
@@ -340,10 +388,10 @@ def print_latex_table(all_metrics, kl_proxies):
     print("\\midrule")
 
     for name, m in all_metrics.items():
-        n_samp = f"{m['n_samples']}" if m['n_samples'] > 0 else "---"
-        ess_min = f"{m['ess_min']:.0f}" if m['ess_min'] > 0 else "---"
-        ess_s = f"{m['ess_per_sec']:.1f}" if m['ess_per_sec'] > 0 else "---"
-        cov = f"{m['coverage_68']:.0%}" if not np.isnan(m['coverage_68']) else "---"
+        n_samp = f"{m['n_samples']}" if m["n_samples"] > 0 else "---"
+        ess_min = f"{m['ess_min']:.0f}" if m["ess_min"] > 0 else "---"
+        ess_s = f"{m['ess_per_sec']:.1f}" if m["ess_per_sec"] > 0 else "---"
+        cov = f"{m['coverage_68']:.0%}" if not np.isnan(m["coverage_68"]) else "---"
 
         print(
             f"{name} & {m['wall_total']:.1f} & {m['wall_runtime']:.1f} & "
@@ -397,14 +445,21 @@ def plot_ess_per_sec(all_metrics):
 
     fig, ax = plt.subplots(figsize=(7, 4))
     bars = ax.bar(
-        range(len(methods)), vals,
+        range(len(methods)),
+        vals,
         color=[colors.get(m, "#1f77b4") for m in methods],
-        alpha=0.85, edgecolor="black", linewidth=0.5,
+        alpha=0.85,
+        edgecolor="black",
+        linewidth=0.5,
     )
     for bar, val in zip(bars, vals):
         ax.text(
-            bar.get_x() + bar.get_width() / 2, bar.get_height() * 1.05,
-            f"{val:.1f}", ha="center", va="bottom", fontsize=9,
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() * 1.05,
+            f"{val:.1f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
         )
 
     ax.set_xticks(range(len(methods)))
@@ -430,23 +485,39 @@ def plot_wall_time(all_metrics):
     w = 0.35
 
     bars_total = ax.bar(
-        x - w / 2, totals, w, label="Total (incl. compile)",
-        color="#1f77b4", alpha=0.85,
+        x - w / 2,
+        totals,
+        w,
+        label="Total (incl. compile)",
+        color="#1f77b4",
+        alpha=0.85,
     )
     bars_run = ax.bar(
-        x + w / 2, runtimes, w, label="Runtime only",
-        color="#ff7f0e", alpha=0.85,
+        x + w / 2,
+        runtimes,
+        w,
+        label="Runtime only",
+        color="#ff7f0e",
+        alpha=0.85,
     )
 
     for bar, val in zip(bars_total, totals):
         ax.text(
-            bar.get_x() + bar.get_width() / 2, bar.get_height() * 1.02,
-            f"{val:.1f}s", ha="center", va="bottom", fontsize=8,
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() * 1.02,
+            f"{val:.1f}s",
+            ha="center",
+            va="bottom",
+            fontsize=8,
         )
     for bar, val in zip(bars_run, runtimes):
         ax.text(
-            bar.get_x() + bar.get_width() / 2, bar.get_height() * 1.02,
-            f"{val:.1f}s", ha="center", va="bottom", fontsize=8,
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() * 1.02,
+            f"{val:.1f}s",
+            ha="center",
+            va="bottom",
+            fontsize=8,
         )
 
     ax.set_xticks(x)
@@ -467,7 +538,8 @@ def main():
         description="Benchmark inference quality across methods.",
     )
     parser.add_argument(
-        "--quick", action="store_true",
+        "--quick",
+        action="store_true",
         help="Use fewer samples for a faster run.",
     )
     args = parser.parse_args()
@@ -488,7 +560,12 @@ def main():
 
         try:
             posterior, wall_total, wall_runtime = run_method(
-                model, flux_obs, noise, method_str, run_key, **kwargs,
+                model,
+                flux_obs,
+                noise,
+                method_str,
+                run_key,
+                **kwargs,
             )
             metrics = compute_metrics(posterior, true_params, wall_total, wall_runtime)
             # Stash summary for KL proxy computation

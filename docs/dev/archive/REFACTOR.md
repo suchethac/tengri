@@ -22,9 +22,9 @@ Class naming conventions were never agreed on. The result:
 
 Parameter naming grew into 3 layers with no explicit contract:
 
-- Short user-facing: `log_peak_sfr`
-- Full prefixed public: `sfh_tsnorm_log_peak_sfr`
-- Internal: `log_peak_sfr` (same spelling, type-dependent meaning — silent bug factory)
+- Short user-facing: `log_total_mass`
+- Full prefixed public: `sfh_tsnorm_log_total_mass`
+- Internal: `log_total_mass` (same spelling, type-dependent meaning — silent bug factory)
 
 Module boundaries were never defined. `fitter.py` became a 4305-line god file because nobody
 decided what "inference" owns vs. what "model" owns.

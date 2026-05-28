@@ -62,7 +62,10 @@ PATCHY_PARAMS: tuple[ParamDeclaration, ...] = (
 DLA_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dla_log_n_hi",
-        Uniform(19.0, 22.0),
+        # Damped Lyman-α threshold: log10(N_HI / cm⁻²) = 20.3 (Wolfe+2005 DLA
+        # definition). Picking the threshold as the default means "if you
+        # marked dla_log_n_hi FIXED you got the canonical DLA-floor column".
+        Uniform(19.0, 22.0, default=20.3),
         "log10(N_HI / cm^-2) for foreground DLA absorber (Voigt profile)",
         lambda lo, hi: lo >= 15 and hi <= 24,
         "must be in [15, 24]",

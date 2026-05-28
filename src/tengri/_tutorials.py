@@ -61,7 +61,7 @@ _FIRST_FIT = _Tutorial(
             sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
             sfh_dpl_beta=tengri.Uniform(0.5, 3.0),
             sfh_dpl_tau_gyr=tengri.Uniform(0.5, 8.0),
-            sfh_dpl_log_peak_sfr=tengri.Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=tengri.Uniform(8.0, 12.0),
             dust_tau_diff=tengri.Uniform(0.0, 2.0),
             met_logzsol=tengri.Uniform(-1.5, 0.2),
         )
@@ -649,7 +649,7 @@ _MOCK_RECOVERY = _Tutorial(
             mean_sfh_type="dpl",
             redshift=tengri.Fixed(0.1),
             sfh_dpl_alpha=tengri.Uniform(0.5, 3.0),
-            sfh_dpl_log_peak_sfr=tengri.Uniform(-1, 2.5),
+            sfh_dpl_log_total_mass=tengri.Uniform(8, 12),
             dust_tau_diff=tengri.Uniform(0, 2),
             met_logzsol=tengri.Uniform(-1.5, 0.2),
         )

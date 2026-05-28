@@ -101,7 +101,7 @@ class MAPPINGSSEDComponent(SEDModelComponent):
     parameter_prefix: str = "shock_"
 
     # Free parameters
-    velocity = Uniform(100.0, 1000.0, description="Shock velocity", units="km/s")
+    velocity = Uniform(100.0, 1000.0, description="Shock velocity", units="km/s", default=200.0)
     log_density = Fixed(0.0, description="log10(pre-shock density)", units="cm^-3")
     b_over_sqrt_n = Fixed(1.0, description="Magnetic field B/√n", units="μG cm^(3/2)")
     log_lhalpha = Fixed(

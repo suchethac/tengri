@@ -28,8 +28,8 @@ jax.config.update("jax_enable_x64", True)
 from tengri import Fixed, Model, Observation, Parameters, Photometry, Uniform, load_ssp_data
 from tengri.dust.attenuation import two_component_dust
 from tengri.observation.photometry import compute_flux_density
+from tengri.profiling.timers import _sync, bench
 from tengri.sps.dsps_wrapper import compute_csp_sed, compute_csp_weights, interpolate_metallicity
-from tengri.profiling.timers import bench, _sync
 from tengri.utils.cosmology import luminosity_distance
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ _smooth_spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     met_logzsol=Uniform(-2.0, 0.5),
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 2.0),
@@ -72,7 +72,7 @@ _stoch_spec = Parameters(
     sfh_dpl_alpha=Uniform(0.5, 3.0),
     sfh_dpl_beta=Uniform(0.5, 3.0),
     sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
     sfh_field_psd_sigma=Uniform(0.01, 1.0),
     sfh_field_psd_tau_myr=Uniform(10, 500),
     met_logzsol=Uniform(-2.0, 0.5),
@@ -92,6 +92,7 @@ _CONFIGS = {
 # Exact path step-by-step timing
 # ---------------------------------------------------------------------------
 
+
 def _time_exact_steps(model: Model, params: dict, n: int = N_STEADY) -> dict:
     """Time each pipeline step independently for the exact (unfused) path."""
     p = model._get_internal_params(params)
@@ -101,65 +102,86 @@ def _time_exact_steps(model: Model, params: dict, n: int = N_STEADY) -> dict:
 
     def _phot_loop(sed_arr):
         return jnp.array(
-            [compute_flux_density(sed_arr, ssp.ssp_wave, fw, ft, REDSHIFT, dl_cm)
-             for fw, ft in zip(fw_list, ft_list)]
+            [
+                compute_flux_density(sed_arr, ssp.ssp_wave, fw, ft, REDSHIFT, dl_cm)
+                for fw, ft in zip(fw_list, ft_list)
+            ]
         )
 
     results = {}
 
     # 1. Param conversion (Python-level dict ops, tiny)
-    t_pc, _, compile_pc = bench(lambda: model._get_internal_params(params),
-                                 n=min(n, 500), warmup=1, return_compile_time=True)
+    t_pc, _, compile_pc = bench(
+        lambda: model._get_internal_params(params),
+        n=min(n, 500),
+        warmup=1,
+        return_compile_time=True,
+    )
     results["param_conversion"] = (t_pc, compile_pc)
 
     # 2. SFH
-    t_sfh, sfr, compile_sfh = bench(lambda: model._compute_sfr(p),
-                                     n=min(n, 500), warmup=1, return_compile_time=True)
+    t_sfh, sfr, compile_sfh = bench(
+        lambda: model._compute_sfr(p), n=min(n, 500), warmup=1, return_compile_time=True
+    )
     results["sfh (DPL)"] = (t_sfh, compile_sfh)
 
     # 3. SFR → SSP age grid
     t_interp, sfr_ssp, compile_interp = bench(
         lambda: jnp.interp(model.ssp_log_ages_yr, model.log_age_grid, sfr),
-        n=min(n, 500), warmup=1, return_compile_time=True,
+        n=min(n, 500),
+        warmup=1,
+        return_compile_time=True,
     )
     results["sfr_interpolation"] = (t_interp, compile_interp)
 
     # 4. CSP weights
     t_w, weights, compile_w = bench(
         lambda: compute_csp_weights(sfr_ssp, model.ssp_ages_yr),
-        n=min(n, 500), warmup=1, return_compile_time=True,
+        n=min(n, 500),
+        warmup=1,
+        return_compile_time=True,
     )
     results["csp_weights"] = (t_w, compile_w)
 
     # 5. Metallicity interpolation
     t_met, ssp_at_z, compile_met = bench(
         lambda: interpolate_metallicity(ssp.ssp_flux, ssp.ssp_lgmet, p["log_z_abs"]),
-        n=n, warmup=1, return_compile_time=True,
+        n=n,
+        warmup=1,
+        return_compile_time=True,
     )
     results["met_interpolation"] = (t_met, compile_met)
 
     # 6. Dust attenuation
     t_dust, dust, compile_dust = bench(
         lambda: two_component_dust(
-            ssp.ssp_wave, model.ssp_ages_yr,
-            p["tau_bc"], p["tau_diff"],
+            ssp.ssp_wave,
+            model.ssp_ages_yr,
+            p["tau_bc"],
+            p["tau_diff"],
             n_slope=p["dust_slope"],
         ),
-        n=n, warmup=1, return_compile_time=True,
+        n=n,
+        warmup=1,
+        return_compile_time=True,
     )
     results["dust_attenuation"] = (t_dust, compile_dust)
 
     # 7. CSP SED einsum
     t_sed, sed, compile_sed = bench(
         lambda: compute_csp_sed(weights, ssp_at_z, dust),
-        n=n, warmup=1, return_compile_time=True,
+        n=n,
+        warmup=1,
+        return_compile_time=True,
     )
     results["csp_sed_einsum"] = (t_sed, compile_sed)
 
     # 8. Photometric integration (Python loop, not JIT-able directly)
     t_phot, _, compile_phot = bench(
         lambda: _phot_loop(sed),
-        n=min(n, 100), warmup=1, return_compile_time=True,
+        n=min(n, 100),
+        warmup=1,
+        return_compile_time=True,
     )
     results["photometry (5 filters)"] = (t_phot, compile_phot)
 
@@ -169,6 +191,7 @@ def _time_exact_steps(model: Model, params: dict, n: int = N_STEADY) -> dict:
 # ---------------------------------------------------------------------------
 # Compile time measurement (cold JIT)
 # ---------------------------------------------------------------------------
+
 
 def _measure_compile_time(fn) -> float:
     """Return first-call latency in microseconds (JIT compile + execute)."""
@@ -208,7 +231,7 @@ for config_name, spec in _CONFIGS.items():
     total_steady = sum(v[0] for v in step_timings.values())
     total_compile = sum(v[1] for v in step_timings.values())
 
-    print(f"\n  EXACT PATH")
+    print("\n  EXACT PATH")
     print(f"  {SECTION}")
     print(f"  {'Step':<30s}  {'Steady (μs)':>12s}  {'% total':>8s}  {'1st-call (ms)':>14s}")
     print(f"  {SECTION}")
@@ -216,12 +239,15 @@ for config_name, spec in _CONFIGS.items():
         pct = t_us / total_steady * 100 if total_steady > 0 else 0
         print(f"  {step:<30s}  {t_us:>10.1f}    {pct:>6.1f}%  {c_us / 1e3:>12.1f}")
     print(f"  {SECTION}")
-    print(f"  {'TOTAL (sum of steps)':<30s}  {total_steady:>10.1f}    {'100.0%':>8s}  {total_compile / 1e3:>12.1f}")
+    print(
+        f"  {'TOTAL (sum of steps)':<30s}  {total_steady:>10.1f}    {'100.0%':>8s}  {total_compile / 1e3:>12.1f}"
+    )
     print(f"  {'End-to-end JIT (predict_phot)':<30s}  {t_exact_e2e:>10.1f}")
     print(f"\n  Full-pipeline compile (jax.jit):  {compile_exact_us / 1e3:>8.1f} ms")
 
     # ── FUSED PATH (precomputed approx) ─────────────────────────────────
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model_fused = Model(spec, ssp, observation=obs, precompute=True)
@@ -263,15 +289,19 @@ for config_name, spec in _CONFIGS.items():
         t_ge, _ = bench(lambda: grad_exact(params), n=min(N_STEADY, 100), warmup=3)
 
         # Gradient through the fast path — eliminates wavelength dim from reverse-mode AD
-        grad_fused = jax.jit(jax.grad(lambda p: jnp.sum(model_fused.predict_photometry(p, approx=True))))
+        grad_fused = jax.jit(
+            jax.grad(lambda p: jnp.sum(model_fused.predict_photometry(p, approx=True)))
+        )
         compile_grad_fused_us = _measure_compile_time(lambda: grad_fused(params))
         t_gf, _ = bench(lambda: grad_fused(params), n=N_STEADY, warmup=3)
 
-        print(f"\n  GRADIENTS")
+        print("\n  GRADIENTS")
         print(f"  {SECTION}")
         print(f"  {'':30s}  {'Compile (ms)':>14s}  {'Steady (μs)':>12s}")
         print(f"  {'Exact grad':30s}  {compile_grad_exact_us / 1e3:>12.1f}  {t_ge:>12.1f}")
-        print(f"  {'Fused grad (approx=True)':30s}  {compile_grad_fused_us / 1e3:>12.1f}  {t_gf:>12.1f}")
+        print(
+            f"  {'Fused grad (approx=True)':30s}  {compile_grad_fused_us / 1e3:>12.1f}  {t_gf:>12.1f}"
+        )
         grad_speedup = t_ge / t_gf if t_gf > 0 else float("inf")
         print(f"  Gradient speedup:                              {grad_speedup:>8.1f}×")
     except Exception as e:

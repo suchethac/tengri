@@ -114,7 +114,7 @@ class TestSigmaVParamIntegration:
         from tengri import Fixed, Parameters
 
         spec = Parameters(
-            sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+            sfh_tsnorm_log_total_mass=Fixed(1.0),
             sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),
             sfh_tsnorm_width_gyr=Fixed(0.3),
             sfh_tsnorm_skew=Fixed(0.0),

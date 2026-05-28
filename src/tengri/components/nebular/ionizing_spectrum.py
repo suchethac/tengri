@@ -23,16 +23,153 @@ try:
 except ImportError:  # numpy < 1.26
     from numpy import trapz as _np_trapz  # type: ignore[no-redef]
 
-# Physical constants
+# Module-level memoization for ``precompute_ionizing_params_table``.
+#
+# Same SSP → identical ionizing-parameter table. The scipy curve-fit loop
+# costs ~6 s on a modern MILES grid (15×93 SSPs), and re-runs on every
+# ``SEDModel.build(neb={'type':'cue', ...})``. Cache keyed on a stable
+# fingerprint of the SSP wavelength + metallicity grids (small, fast to
+# hash); flux identity is established by matching grids since SSP files
+# pair a unique flux cube with a unique (wave, lgmet) pair.
+#
+# The cache also persists to disk under ``<jax_cache_dir>/ionspec_tables/``,
+# keyed on a SHA-256 of the fingerprint. This matters because the scipy
+# curve-fits underlying the table aren't bit-stable across processes
+# (BLAS threading + LAPACK perturbations → coefficient differences in
+# the last few ULPs). Those coefficients then bake into the JAX trace as
+# constants, so cross-process processes produce slightly different HLO
+# modules → the persistent XLA cache misses on every Cue compile. Loading
+# a bit-identical table from disk on every process keeps the HLO stable
+# and lets the JAX persistent cache actually hit on cold-start runs.
+import hashlib as _hashlib
+import os as _os
+from pathlib import Path as _Path
+
 from tengri.utils.physics_constants import L_SUN as _LSUN
+
+_IONSPEC_TABLE_CACHE: dict[tuple, dict] = {}
+
+
+def _ssp_fingerprint(ssp_wave: np.ndarray, ssp_flux: np.ndarray, ssp_lgmet: np.ndarray) -> tuple:
+    """Cheap, stable fingerprint for an SSP grid."""
+    return (
+        tuple(ssp_flux.shape),
+        str(ssp_flux.dtype),
+        bytes(np.asarray(ssp_wave).tobytes()),
+        bytes(np.asarray(ssp_lgmet).tobytes()),
+    )
+
+
+def _fingerprint_hash(key: tuple) -> str:
+    """SHA-256 of the fingerprint, hex-encoded, for use as a disk filename."""
+    h = _hashlib.sha256()
+    h.update(repr(key[:2]).encode())  # shape + dtype
+    h.update(key[2])  # raw wave bytes
+    h.update(key[3])  # raw lgmet bytes
+    return h.hexdigest()
+
+
+def _ionspec_disk_cache_dir() -> _Path:
+    """Resolve the on-disk ionspec table cache directory.
+
+    Co-locates with the JAX persistent cache so wiping one wipes the other.
+    """
+    env_dir = _os.environ.get("TENGRI_JAX_CACHE_DIR", "").strip()
+    if env_dir:
+        base = _Path(env_dir).expanduser()
+    else:
+        xdg = _os.environ.get("XDG_CACHE_HOME", "").strip()
+        base = (_Path(xdg).expanduser() if xdg else _Path.home() / ".cache") / "tengri_jax_cache"
+    out = base / "ionspec_tables"
+    out.mkdir(parents=True, exist_ok=True)
+    return out
+
+
+def _load_ionspec_disk(key: tuple) -> dict | None:
+    """Load a cached ionspec table from disk if it exists, else return None.
+
+    Rejects caches whose ``logqion_table`` contains ``inf`` (legacy artefact
+    of the float32 overflow bug — issue #458). Such tables were written by
+    older versions and would silently poison Cue's nebular forward pass on
+    every subsequent process. Treating them as a miss forces a refit, which
+    after the float32 fix yields finite values.
+    """
+    try:
+        path = _ionspec_disk_cache_dir() / f"{_fingerprint_hash(key)}.npz"
+        if not path.exists():
+            return None
+        with np.load(path) as data:
+            logqion = np.asarray(data["logqion_table"])
+            if np.isinf(logqion).any():
+                # Legacy float32-overflow cache — discard.
+                return None
+            return {
+                "ionspec_table": data["ionspec_table"],
+                "logqion_table": logqion,
+                "n_met": int(data["n_met"]),
+                "n_age": int(data["n_age"]),
+            }
+    except (OSError, ValueError, KeyError):
+        # Corrupted file / permission issue → treat as miss
+        return None
+
+
+def _store_ionspec_disk(key: tuple, result: dict) -> None:
+    """Persist an ionspec table to disk. Failures are silently swallowed."""
+    try:
+        path = _ionspec_disk_cache_dir() / f"{_fingerprint_hash(key)}.npz"
+        np.savez(
+            path,
+            ionspec_table=result["ionspec_table"],
+            logqion_table=result["logqion_table"],
+            n_met=np.asarray(result["n_met"]),
+            n_age=np.asarray(result["n_age"]),
+        )
+    except OSError:
+        pass
+
+
+class _single_thread_blas:
+    """Context manager forcing single-threaded BLAS / OpenMP.
+
+    The piecewise-power-law fits in :func:`precompute_ionizing_params_table`
+    use scipy / numpy linear algebra under the hood. Multi-threaded BLAS
+    introduces non-determinism (thread scheduling perturbs the last ULPs of
+    the LSQ solution), and those bits then bake into the JAX trace as
+    constants — so different processes produce different HLO modules. Pinning
+    BLAS / OpenMP to one thread for the duration of the fit loop gives
+    bit-identical coefficients across processes and is also slightly faster
+    on small (~10×80) SSP grids where the per-call overhead dominates.
+
+    Falls back to a no-op if ``threadpoolctl`` is unavailable.
+    """
+
+    def __enter__(self):
+        try:
+            from threadpoolctl import threadpool_limits
+
+            self._ctx = threadpool_limits(limits=1)
+        except ImportError:
+            self._ctx = None
+        return self
+
+    def __exit__(self, *exc):
+        if self._ctx is not None:
+            self._ctx.__exit__(*exc)
+        return False
+
+
+_LOG_H = np.log10(_H_PLANCK)
+_LN10 = np.log(10.0)
 
 
 def _fit_segment(
     seg_wave: np.ndarray,
     seg_flux: np.ndarray,
     norm: float,
+    init: tuple[float, float] | None = None,
 ) -> np.ndarray:
-    """Fit power-law model to a single ionization-regime segment.
+    r"""Fit power-law model to a single ionization-regime segment.
 
     **Internal helper** — fits L_ν ∝ λ^α to one wavelength segment using
     least-squares regression with a photon-count constraint to preserve Q_H.
@@ -45,6 +182,12 @@ def _fit_segment(
         Normalized segment flux (already multiplied by norm factor for stability)
     norm : float
         Normalization factor applied to flux (used to denormalize log_A later)
+    init : (float, float), optional
+        Initial guess ``(slope, log_norm)``. When ``None`` (default), an
+        endpoint-derived linear fit in log-log is used. Pass canonical
+        values from a reference SSP to reduce convergence iterations and
+        prevent the optimizer from drifting into bound corners on noisy
+        segments.
 
     Returns
     -------
@@ -54,11 +197,17 @@ def _fit_segment(
 
     Notes
     -----
-    Uses scipy L-BFGS-B optimization to minimize:
-        0.5 * ||log_flux - pred||^2 + 0.5 * len(seg) * (log_Q - log_Q_pred)^2
+    Uses scipy SLSQP with an analytical gradient to minimise:
 
-    Constraint term ensures photon rate Q_H matches the input SED, preventing
-    slope-fitting from drifting when flux amplitude is small or noisy.
+    .. math::
+
+       L = 0.5 \sum (\log f - (\alpha \log \lambda + b))^2
+         + 0.5 N (\log Q_\mathrm{true} - \log Q_\mathrm{pred}(\alpha, b))^2
+
+    The analytical gradient mirrors :func:`yi-jia-li/cue/utils.py
+    :gradient_func_loglinear_analytical` — passing it explicitly to scipy
+    avoids finite-difference Jacobian evaluations (~3× more objective calls
+    per iteration) and matches Cue's upstream optimisation strategy.
 
     """
     from scipy.optimize import minimize
@@ -70,41 +219,58 @@ def _fit_segment(
     log_wave = np.log10(seg_wave)
     log_flux = np.log10(np.maximum(seg_flux, 1e-99))
 
-    # Initial guess: linear fit in log-log
-    init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
-    init_norm = log_flux[-1] - init_slope * log_wave[-1]
+    # Initial guess: canonical if provided, else endpoint-derived linear fit
+    if init is None:
+        init_slope = (log_flux[-1] - log_flux[0]) / max(log_wave[-1] - log_wave[0], 1e-10)
+        init_norm = log_flux[-1] - init_slope * log_wave[-1]
+    else:
+        init_slope, init_norm = float(init[0]), float(init[1])
 
-    # Q_H for this segment
-    nu = _C_AA / seg_wave
-    integrand = seg_flux / (_H_PLANCK * nu)
+    # Q_H for this segment — cast to float64 defensively. Per-segment
+    # magnitudes are typically smaller than the full-LyC integration in
+    # fit_ionizing_spectrum, but the same overflow path applies on
+    # float32 SSPs (see Q_H block below + issue #458).
+    nu = (_C_AA / seg_wave).astype(np.float64)
+    integrand = seg_flux.astype(np.float64) / (_H_PLANCK * nu)
     Q_seg = np.abs(_np_trapz(integrand[::-1], x=nu[::-1]))
     log_Q = np.log10(max(Q_seg, 1e-99))
 
-    def objective(
-        params,
-        _log_wave=log_wave,
-        _seg_wave=seg_wave,
-        _log_flux=log_flux,
-        _log_Q=log_Q,
-    ):
-        """Compute power-law residual and Q_H constraint for ionizing spectrum fitting."""
-        pred = params[1] + params[0] * _log_wave
-        log_Q_pred = (
-            params[1]
-            - np.log10(_H_PLANCK)
-            + np.log10(
-                np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-            )
-        )
-        return (
-            0.5 * np.sum((_log_flux - pred) ** 2)
-            + 0.5 * len(_seg_wave) * (_log_Q - log_Q_pred) ** 2
-        )
+    # Precompute constants used by both objective and gradient
+    xmin = seg_wave[0]
+    xmax = seg_wave[-1]
+    ln_xmin = np.log(xmin)
+    ln_xmax = np.log(xmax)
+    n_data = len(seg_wave)
+
+    def objective(params):
+        alpha, b = params[0], params[1]
+        pred = b + alpha * log_wave
+        x_max_alpha = xmax**alpha
+        x_min_alpha = xmin**alpha
+        log_Q_pred = b - _LOG_H + np.log10(np.abs((x_max_alpha - x_min_alpha) / alpha))
+        term1 = 0.5 * np.sum((log_flux - pred) ** 2)
+        term2 = 0.5 * n_data * (log_Q - log_Q_pred) ** 2
+        return term1 + term2
+
+    def gradient(params):
+        # Analytical gradient — mirrors Cue's gradient_func_loglinear_analytical
+        # (https://github.com/yi-jia-li/cue/blob/main/src/cue/utils.py).
+        alpha, b = params[0], params[1]
+        x_max_alpha = xmax**alpha
+        x_min_alpha = xmin**alpha
+        denom = x_max_alpha - x_min_alpha
+        term_Q = b + np.log10(np.abs(denom / alpha)) - log_Q - _LOG_H
+        term_sum = b + alpha * log_wave - log_flux
+        d_logQ_dα = (x_max_alpha * ln_xmax - x_min_alpha * ln_xmin) / denom - 1.0 / alpha
+        grad_slope = np.sum(term_sum * log_wave) + (n_data / _LN10) * term_Q * d_logQ_dα
+        grad_norm = np.sum(term_sum) + n_data * term_Q
+        return np.array([grad_slope, grad_norm])
 
     res = minimize(
         objective,
         [init_slope, init_norm],
-        method="L-BFGS-B",
+        jac=gradient,
+        method="SLSQP",
         bounds=[(-40, 100), (-200, 100)],
     )
     coeff = np.array(res.x)
@@ -300,11 +466,23 @@ def fit_ionizing_spectrum(
     # Total Q_H — integrate photon rate over frequency.
     # wave is increasing → nu_all is decreasing.  Both integrand and
     # x must share the same element ordering for np.trapz.
+    #
+    # Cast to float64 for the integration. SSPs may ship in float32 (e.g.
+    # BC03-from-CIGALE) to save disk; ``(flux * L_SUN) / (h * nu)`` then
+    # produces intermediates ~ 1e30 and ``trapezoid`` over the ~ 1e16 Hz
+    # bandwidth integrates to ~ 1e46 — well past float32's 3.4e38 max,
+    # so the running sum overflows to ``inf`` from a few terms in. Result:
+    # every (Z, age) bin in the cached table collapses to ``log10(inf) =
+    # inf``, downstream treats the SSP as wNE / dead, and Cue silently
+    # emits ~zero nebular emission (issue #458). The slope fits above
+    # are float32-safe because ``normalized = flux * 1e-18 / ref_flux``
+    # rescales each segment before fitting.
     ionizing_mask = wave <= HI_LIMIT
-    nu_all = _C_AA / wave[ionizing_mask]
+    flux_iz = flux[ionizing_mask].astype(np.float64)
+    nu_all = (_C_AA / wave[ionizing_mask]).astype(np.float64)
     Q_total = np.abs(
         _np_trapz(
-            (flux[ionizing_mask] * _LSUN) / (_H_PLANCK * nu_all),
+            (flux_iz * _LSUN) / (_H_PLANCK * nu_all),
             x=nu_all,
         )
     )
@@ -323,17 +501,28 @@ def fit_ionizing_spectrum(
     }
 
 
+#: Max log10(age/yr) at which Cue's downstream Q_H weighting can still receive
+#: a non-zero contribution. Bins older than this have ``weighted_qh`` zeroed in
+#: :meth:`CueBackend._compute_weighted_cue_params`, so fitting them here is
+#: pure waste. Single source of truth for both the precompute cutoff (here)
+#: and the downstream forward filter (``cue.MAX_NEB_LOG_AGE``, which re-exports
+#: this constant). Lives in :mod:`ionizing_spectrum` rather than :mod:`cue`
+#: to avoid a circular import (``cue`` already depends on this module).
+MAX_NEB_LOG_AGE: float = 8.0  # 100 Myr
+
+
 def precompute_ionizing_params_table(
     ssp_wave: np.ndarray,
     ssp_flux: np.ndarray,
     ssp_lgmet: np.ndarray,
+    ssp_log_age_yr: np.ndarray | None = None,
 ) -> dict:
     """Precompute Cue ionizing parameters for a full SSP grid.
 
-    Batch-fits piecewise power laws to all (metallicity, age) SSP spectra.
-    Silently skips SSPs with negligible ionizing flux (age > ~100 Myr).
-    Called once at model initialization; results are stored and interpolated
-    at runtime.
+    Batch-fits piecewise power laws to (metallicity, age) SSP spectra younger
+    than 100 Myr (older bins contribute nothing to Cue's weighted Q_H so they
+    are skipped — ``logqion_table[im, ia] = -99`` for those). Called once at
+    model initialization; results are stored and interpolated at runtime.
 
     Parameters
     ----------
@@ -343,6 +532,13 @@ def precompute_ionizing_params_table(
         SSP spectra on (metallicity, age) grid. [erg/s/Hz/Msun]
     ssp_lgmet : array, shape (n_met,)
         Metallicity grid in log10(Z). [log10(Z)]
+    ssp_log_age_yr : array, shape (n_age,), optional
+        log10(age/yr) for each age bin. When provided, bins older than
+        :data:`MAX_NEB_LOG_AGE` (100 Myr) are skipped without
+        invoking scipy — a ~140× speedup for unusually fine age grids
+        (BC03-from-CIGALE has 13700 ages of which only ~10 are young).
+        When ``None`` (legacy callers), every bin is attempted; the per-bin
+        ``np.max(flux_iz) <= 0`` early-exit still skips dead bins.
 
     Returns
     -------
@@ -359,51 +555,84 @@ def precompute_ionizing_params_table(
     -----
     **One-time cost**: This function is not JAX-compatible (uses scipy). Call
     once per Cue model initialization and store results (e.g., in h5 file).
-    Precomputation is O(n_met × n_age × n_segments), typically < 1 second
-    for modern SSP grids (n_met ~ 50, n_age ~ 300).
+    Precomputation is O(n_met × n_age_young × n_segments) where n_age_young is
+    the count of bins ≤ 100 Myr; typically < 1 second for modern SSP grids.
 
     **Metadata**: Unfittable SSPs (old ages with zero ionizing flux, corrupted
     data) are left with all parameters = 0 (or −99 for log-space). Downstream
     code handles these gracefully via clipping and default fallback values.
 
     """
+    # Memoize: same SSP grid → identical result. Two-tier cache:
+    # 1. In-process dict for fast repeat builds within a single process
+    #    (introduced in #418).
+    # 2. On-disk ``.npz`` keyed on a SHA-256 of the SSP fingerprint, so
+    #    cold processes load a bit-identical table instead of re-fitting.
+    #    Without this, scipy's curve-fits perturb the coefficients by a
+    #    few ULPs each run, and those bits bake into the JAX trace as
+    #    constants → the JAX persistent compilation cache misses on every
+    #    fresh process. The single_thread_blas wrapper below removes the
+    #    remaining BLAS-threading non-determinism inside the fits.
+    key = _ssp_fingerprint(ssp_wave, ssp_flux, ssp_lgmet)
+    cached = _IONSPEC_TABLE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    disk_cached = _load_ionspec_disk(key)
+    if disk_cached is not None:
+        _IONSPEC_TABLE_CACHE[key] = disk_cached
+        return disk_cached
+
     n_met, n_age, _ = ssp_flux.shape
     ionspec_table = np.zeros((n_met, n_age, 7))
     logqion_table = np.full((n_met, n_age), -99.0)
 
     wave_np = np.asarray(ssp_wave)
 
-    for im in range(n_met):
-        for ia in range(n_age):
-            flux_np = np.asarray(ssp_flux[im, ia, :])
+    # Optional age-cutoff: skip the scipy fit on bins older than the
+    # downstream Q_H weighting threshold. Saves ~99 % of fits on fine-age
+    # grids (e.g. BC03-from-CIGALE: 13700 ages → ~10 young bins).
+    if ssp_log_age_yr is not None:
+        young_age_mask = np.asarray(ssp_log_age_yr) <= MAX_NEB_LOG_AGE
+    else:
+        young_age_mask = np.ones(n_age, dtype=bool)
 
-            # Skip if no ionizing flux
-            ionizing_mask = wave_np <= HI_LIMIT
-            if np.max(flux_np[ionizing_mask]) <= 0:
-                continue
+    with _single_thread_blas():
+        for im in range(n_met):
+            for ia in range(n_age):
+                if not young_age_mask[ia]:
+                    continue
+                flux_np = np.asarray(ssp_flux[im, ia, :])
 
-            try:
-                result = fit_ionizing_spectrum(wave_np, flux_np)
-                ionspec_table[im, ia, 0] = result["ionspec_index1"]
-                ionspec_table[im, ia, 1] = result["ionspec_index2"]
-                ionspec_table[im, ia, 2] = result["ionspec_index3"]
-                ionspec_table[im, ia, 3] = result["ionspec_index4"]
-                ionspec_table[im, ia, 4] = result["ionspec_logLratio1"]
-                ionspec_table[im, ia, 5] = result["ionspec_logLratio2"]
-                ionspec_table[im, ia, 6] = result["ionspec_logLratio3"]
-                logqion_table[im, ia] = result["gas_logqion"]
-            except (ValueError, IndexError, RuntimeError):
-                # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
-                # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
-                # RuntimeError: scipy optimization failed to converge
-                continue
+                # Skip if no ionizing flux
+                ionizing_mask = wave_np <= HI_LIMIT
+                if np.max(flux_np[ionizing_mask]) <= 0:
+                    continue
 
-    return {
+                try:
+                    fit = fit_ionizing_spectrum(wave_np, flux_np)
+                    ionspec_table[im, ia, 0] = fit["ionspec_index1"]
+                    ionspec_table[im, ia, 1] = fit["ionspec_index2"]
+                    ionspec_table[im, ia, 2] = fit["ionspec_index3"]
+                    ionspec_table[im, ia, 3] = fit["ionspec_index4"]
+                    ionspec_table[im, ia, 4] = fit["ionspec_logLratio1"]
+                    ionspec_table[im, ia, 5] = fit["ionspec_logLratio2"]
+                    ionspec_table[im, ia, 6] = fit["ionspec_logLratio3"]
+                    logqion_table[im, ia] = fit["gas_logqion"]
+                except (ValueError, IndexError, RuntimeError):
+                    # ValueError: invalid input data (NaN, zero flux, wrong wavelength range)
+                    # IndexError: wavelength array doesn't cover ionizing regime (<912 A)
+                    # RuntimeError: scipy optimization failed to converge
+                    continue
+
+    result = {
         "ionspec_table": ionspec_table,
         "logqion_table": logqion_table,
         "n_met": n_met,
         "n_age": n_age,
     }
+    _IONSPEC_TABLE_CACHE[key] = result
+    _store_ionspec_disk(key, result)
+    return result
 
 
 def interpolate_ionizing_params(
