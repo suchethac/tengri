@@ -91,7 +91,16 @@ class TestCueVsTFReference:
 
         CUE JAX returns all 138 lines; TF Emulator filters to 128.
         We match by wavelength to compare the overlapping lines.
+
+        Unit convention: ``predict_nebular_line_luminosities`` returns erg/s
+        (it multiplies by ``L_SUN_CUE = 3.839e33`` at the boundary, see
+        ``cue.py:1481``). The TF reference in ``cue_reference_outputs.npz``
+        is in Lsun. We convert here so the comparison is unit-consistent —
+        prior to #477 this test was silently asserting erg/s ≈ Lsun, which
+        masked any real comparison and was off by a factor of L_sun.
         """
+        from tengri.utils.physics_constants import L_SUN_CUE
+
         params = _TEST_PARAMS[input_idx]
         wav_jax, lum_jax = cue_backend.predict_nebular_line_luminosities(
             cloudyfsps_only=False, **params
@@ -100,7 +109,7 @@ class TestCueVsTFReference:
         wav_ref = reference["line_wavelengths"]
 
         wav_jax_np = np.asarray(wav_jax)
-        lum_jax_np = np.asarray(lum_jax)
+        lum_jax_np = np.asarray(lum_jax) / L_SUN_CUE  # erg/s → Lsun (match TF ref)
 
         # Match TF lines to JAX by wavelength (TF may output fewer)
         n_ref = len(lum_ref)

@@ -137,23 +137,89 @@ class KD18Disc(SEDModelComponent):
     config: KD18DiscConfig = field(default_factory=KD18DiscConfig)
 
     # Free parameters — auto-discovered
-    log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
-    log_mbh = Uniform(6.0, 10.0, description="Black hole mass", units="dex (M_sun)")
-    log_ledd = Uniform(-3.0, 0.0, description="Eddington ratio", units="dex")
-    a_spin = Uniform(0.0, 0.998, description="Black hole spin parameter", units="dimensionless")
-    cos_inc = Uniform(0.01, 1.0, description="Cosine of inclination", units="dimensionless")
-    f_hard = Uniform(0.01, 0.5, description="Corona luminosity fraction", units="dimensionless")
-    gamma_warm = Uniform(
-        1.5, 3.5, description="Warm Comptonization photon index", units="dimensionless"
+    log_lbol = Uniform(
+        8.0,
+        14.0,
+        description="AGN bolometric luminosity",
+        units="dex (L_sun)",
+        default=11.0,
     )
-    kt_warm = Uniform(0.1, 0.5, description="Warm zone electron temperature", units="keV")
-    gamma_hard = Uniform(1.5, 2.5, description="Hard X-ray photon index", units="dimensionless")
-    kt_hot = Uniform(50.0, 200.0, description="Hot corona electron temperature", units="keV")
+    log_mbh = Uniform(
+        6.0,
+        10.0,
+        description="Black hole mass",
+        units="dex (M_sun)",
+        default=8.0,
+    )
+    log_ledd = Uniform(
+        -3.0,
+        0.0,
+        description="Eddington ratio",
+        units="dex",
+        default=-1.5,
+    )
+    a_spin = Uniform(
+        0.0,
+        0.998,
+        description="Black hole spin parameter",
+        units="dimensionless",
+        default=0.5,
+    )
+    cos_inc = Uniform(
+        0.01,
+        1.0,
+        description="Cosine of inclination",
+        units="dimensionless",
+        default=0.8,
+    )
+    f_hard = Uniform(
+        0.01,
+        0.5,
+        description="Corona luminosity fraction",
+        units="dimensionless",
+        default=0.1,
+    )
+    gamma_warm = Uniform(
+        1.5,
+        3.5,
+        description="Warm Comptonization photon index",
+        units="dimensionless",
+        default=2.5,
+    )
+    kt_warm = Uniform(
+        0.1,
+        0.5,
+        description="Warm zone electron temperature",
+        units="keV",
+        default=0.2,
+    )
+    gamma_hard = Uniform(
+        1.5,
+        2.5,
+        description="Hard X-ray photon index",
+        units="dimensionless",
+        default=1.9,
+    )
+    kt_hot = Uniform(
+        50.0,
+        200.0,
+        description="Hot corona electron temperature",
+        units="keV",
+        default=100.0,
+    )
     r_warm_ratio = Uniform(
-        1.1, 5.0, description="Radius ratio R_warm / R_hot", units="dimensionless"
+        1.1,
+        5.0,
+        description="Radius ratio R_warm / R_hot",
+        units="dimensionless",
+        default=3.0,
     )
     frac = Uniform(
-        0.0, 1.0, description="Disc luminosity fraction of L_bol", units="dimensionless"
+        0.0,
+        1.0,
+        description="Disc luminosity fraction of L_bol",
+        units="dimensionless",
+        default=0.5,
     )
 
     # Cross-component output

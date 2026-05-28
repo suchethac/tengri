@@ -97,14 +97,33 @@ class PowerLawDisc(SEDModelComponent):
     config: PowerLawDiscConfig = PowerLawDiscConfig()
 
     # Free parameters — auto-discovered
-    log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
-    alpha = Uniform(-1.5, -0.5, description="Power-law spectral index", units="dimensionless")
-    T_max = Uniform(1e4, 1e6, description="UV cutoff temperature", units="K")
+    log_lbol = Uniform(
+        8.0,
+        14.0,
+        description="AGN bolometric luminosity",
+        units="dex (L_sun)",
+        default=11.0,
+    )
+    alpha = Uniform(
+        -1.5,
+        -0.5,
+        description="Power-law spectral index",
+        units="dimensionless",
+        default=-0.5,
+    )
+    T_max = Uniform(
+        1e4,
+        1e6,
+        description="UV cutoff temperature",
+        units="K",
+        default=1e5,
+    )
     frac = Uniform(
         0.0,
         1.0,
         description="Disc luminosity fraction of L_bol",
         units="dimensionless",
+        default=0.5,
     )
 
     # Cross-component output
