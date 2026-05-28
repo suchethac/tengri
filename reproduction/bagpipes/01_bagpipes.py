@@ -16,46 +16,40 @@
 # %% [markdown]
 # # Reproducing BAGPIPES with tengri
 #
-# BAGPIPES (Carnall et al. 2018) is the workhorse for JWST / UV-continuum
-# / quiescent-galaxy SED fitting. It is the code most reviewers will ask
-# about. This notebook places its physics modules — `delayed`,
-# `constant`, `dust` (Calzetti / Cardelli / Salim / CF00), `nebular`
-# (Cloudy 25 grid), `dust_emission` (Draine & Li 2007), and the Inoue14
-# IGM — next to their tengri equivalents on the same axes, in the same
-# units, at the same parameter values.
+# BAGPIPES (Carnall et al. 2018) is the reference code for galaxy SED
+# fitting at JWST cosmic noon, post-starburst quiescent populations,
+# and rest-UV continuum work at high redshift. This notebook places
+# its physics modules — `delayed`, `constant`, `dust` (Calzetti,
+# Cardelli, Salim, CF00), `nebular` (Cloudy 25), `dust_emission`
+# (Draine & Li 2007), and the Inoue+2014 IGM — next to their tengri
+# equivalents on the same axes, in the same units, at matched
+# parameter values.
 #
-# It serves two purposes:
+# Both codes consume the same numerical templates: BAGPIPES'
+# bundled BC03+MILES Kroupa SSP grid is ported into the DSPS HDF5
+# layout `tengri.load_ssp_data` reads (`_drivers/bagpipes_ssp_to_dsps.py`).
+# Any §1 residual below floating-point precision is interpolation
+# alone.
 #
-# 1. **Trust.** Same parameters in, same SED out. If the codes disagree
-#    at this level the disagreement is in the physics, not in the data
-#    or the fit. Every figure is a hand-off: load BAGPIPES here, load
-#    tengri there, see the same lines.
-# 2. **Bug-hunt.** A component-by-component comparison is the best
-#    bug-discovery tool the project has. Every >5% residual either has
-#    a filed GitHub issue with a minimal reproducer or a physics
-#    explanation in the prose. Nothing gets papered over.
-#
-# Both codes consume the same BC03+MILES Kroupa templates: BAGPIPES'
-# bundled `bc03_miles_stellar_grids.fits` was ported into the DSPS HDF5
-# layout by `_drivers/bagpipes_ssp_to_dsps.py`. Any §1 residual below
-# floating-point precision is interpolation only.
-#
-# The fiducial galaxy throughout: τ-delayed SFH with τ = 1 Gyr,
-# age = 5 Gyr; Z = Z☉; Calzetti dust with `Av = 1.0`; DL07 IR
-# re-emission at `qpah = 2.5`, `umin = 1.0`, `gamma = 0.05`. Sections
-# sweep one block at a time around this fiducial.
+# The fiducial galaxy throughout the SED panels: a τ-delayed star
+# formation history with τ = 1 Gyr formed over 5 Gyr; Z = Z☉; a
+# Calzetti+2000 attenuation law at A_V = 1; and Draine & Li (2007)
+# IR re-emission at (q_PAH, U_min, γ) = (2.5, 1.0, 0.05). Each
+# section then sweeps one physics block around this fiducial so the
+# disagreement attributable to that block can be read off the figure.
 #
 # **What to expect.** Stellar templates, star-formation histories,
-# dust-attenuation curves, dust IR re-emission, and IGM transmission
-# reproduce BAGPIPES to floating-point or to a fraction of a percent at
-# matched parameters. One block differs by design: BAGPIPES'
-# `nebular` ships a Cloudy v25 grid trained inside the SPS code; tengri
-# uses Cue (Li et al. 2025), a neural emulator trained on Cloudy v17.
-# Each discrepancy is called out at the relevant section.
+# dust attenuation, IR re-emission, and the Inoue+2014 IGM reproduce
+# BAGPIPES to floating-point or to a fraction of a percent at matched
+# parameters. The nebular block is the principal exception by
+# construction: BAGPIPES uses Cloudy v25 grids embedded in the
+# stellar population synthesis chain, while tengri uses Cue
+# (Li et al. 2025), a neural emulator trained on Cloudy v17. The
+# resulting Hα ratio is quantified in §9.
 #
-# BAGPIPES has no AGN, X-ray, or radio component, so the CIGALE
-# notebook's §9–§11 are absent here. The tengri AGN / X-ray / radio
-# stack remains available — see `reproduction/cigale/01_cigale.py`.
+# BAGPIPES does not provide AGN, X-ray, or radio components, so those
+# sections are deliberately omitted here. The CIGALE reproduction
+# notebook covers the panchromatic AGN/X-ray/radio stack.
 
 # %% [markdown]
 # ## Setup
@@ -74,10 +68,6 @@ from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel
-
-# load_ssp_data is not yet on the tengri public surface; tracked as a
-# public-API gap and used here from its canonical location until the
-# wrapper lands. Mirrors the reproduction/cigale notebook.
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
 warnings.filterwarnings("ignore")
@@ -1143,17 +1133,16 @@ save_fig("08_nebular.png")
 # `veldisp = 150 km/s` — a typical late-type-galaxy value — and compares
 # the result.
 #
-# **Important honest note.** BAGPIPES' default internal spectral grid
-# has `R_spec = 1000` (FWHM = c/R ≈ 300 km/s, σ ≈ 127 km/s baked in by
-# the resampling kernel). The `veldisp` block adds **in quadrature**
-# on top of this: at `veldisp = 150 km/s`, the effective Hα width is
-# `σ_eff = sqrt(127² + 150²) ≈ 197 km/s`, FWHM ≈ 10 Å. tengri's
-# `velocity_broaden` operates on the unbinned input spectrum and gives
-# back the pure-Gaussian profile at `σ = 150 km/s` (FWHM ≈ 7.7 Å). Both
-# are correct; they just bracket different conventions of "intrinsic
-# line width". For an apples-to-apples comparison you would either
-# raise `R_spec` on the BAGPIPES side or subtract 127 km/s in
-# quadrature from `veldisp`.
+# A subtlety worth flagging. BAGPIPES' default internal spectral
+# grid has `R_spec = 1000` (FWHM = c/R ≈ 300 km/s, σ ≈ 127 km/s),
+# and the `veldisp` Gaussian convolves on top of it. The effective
+# Hα width at `veldisp = 150 km/s` is therefore
+# σ_eff = sqrt(127² + 150²) ≈ 197 km/s, FWHM ≈ 10 Å.
+# tengri's `velocity_broaden` operates on the unbinned input
+# spectrum and returns the pure-Gaussian profile at σ = 150 km/s
+# (FWHM ≈ 7.7 Å). Both behaviours are correct; the comparison
+# requires either oversampling the BAGPIPES grid or subtracting the
+# baseline resolution from `veldisp` in quadrature.
 
 # %%
 VELDISP_KMS = 150.0
@@ -1180,9 +1169,6 @@ L_b_unb = mg_b_unb.spectrum[:, 1] * w_b_unb**2 / U.C_ANGSTROM_PER_S
 
 # tengri side: take the §8 nebular SED, resample onto a uniform
 # log-wavelength grid, apply velocity_broaden at the same sigma.
-# velocity_broaden is the canonical fast FFT-based Gaussian LSF kernel
-# (JIT, gradient-safe, log-λ space). Not yet re-exported under
-# tengri.observation; tracked as a public-API gap.
 from tengri.observation.spectrum import velocity_broaden as _tng_broaden
 
 _w_t_neb_orig = np.asarray(s_neb_on.wave)
@@ -1329,10 +1315,6 @@ Z_FIDUCIAL_IGM = 4.0
 w_b_igm, T_b_igm = B.igm_transmission(Z_FIDUCIAL_IGM)
 
 # tengri side: evaluate igm.inoue14 at z=4 on the same rest-frame grid.
-# igm_transmission is the canonical dispatcher for Inoue14 / Madau /
-# Meiksin. Not yet re-exported under tengri.*; tracked as a public-API
-# gap. tengri.list_igm_models() advertises the names but no public
-# call site is wired yet.
 from tengri.components.igm import igm_transmission as _tngigm
 
 # tengri's IGM is parametrised on *observed*-frame wavelengths.
@@ -1377,21 +1359,19 @@ print(
 # visible on this plot — at the default the absorption peaks at ~0.5
 # dex at line centre and falls off in a fraction of an Å.
 #
-# **Implementation honesty**. tengri's `_cgm_damping_wing_tau` uses a
-# simplified Lorentzian:
-# `σ(Δν) = σ_0 γ_α/(4π) / [Δν² + (γ_α/4π)²]`.
-# The published Asada+2025 model follows Totani+06 with the full
-# frequency-dependent cross-section
-# `σ_α(ν) = (3λ²f Λ/8π) · Λ (ν/ν_α)⁴ / [4π²(ν−ν_α)² + Λ²(ν/ν_α)⁶/4]`
-# and a different sigmoid evolution
-# `log10(N_HI(z)) = 3.592/(1+exp(−1.841(z−6))) + 18.001`.
-# The simplified form likely underestimates the redward wing extent
-# at high N_HI; filed for follow-up.
-#
-# **Status**: experimental in tengri (`# not yet fully validated
-# against observations`). Three free knobs (`cgm_z_mid`, `cgm_dz`,
-# `cgm_log_nhi`); BAGPIPES users fitting z ≳ 6 spectra should treat
-# these as nuisance parameters with priors informed by Asada+2025.
+# The implementation used here is a simplified Lorentzian
+# σ(Δν) = σ_0 γ_α/(4π) / [Δν² + (γ_α/4π)²]
+# rather than the full frequency-dependent Totani+2006 cross-section
+# σ_α(ν) = (3λ²f Λ/8π) · Λ (ν/ν_α)⁴ / [4π²(ν−ν_α)² + Λ²(ν/ν_α)⁶/4]
+# that Asada+2025 use. The sigmoid evolution is parametrised differently
+# from the paper as well (`cgm_log_nhi`, `cgm_z_mid`, `cgm_dz` knobs
+# rather than the published `A`, `a`, `C`). At default parameters the
+# resulting redward damping wing is narrower than the published curves.
+# The model is marked experimental in `tengri.components.igm` until
+# the cross-section and the calibrated sigmoid are matched against
+# Asada+2025 directly. Until then, treat the three CGM knobs as
+# nuisance parameters with priors informed by the paper rather than
+# fitting them on data.
 
 # %%
 from tengri.components.igm import igm_transmission as _tngigm_with_cgm
@@ -1634,7 +1614,7 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 #   0.3–0.7 mag brighter than BAGPIPES — the §9 nebular gap projecting.
 # - **§14 timing.** Both codes finish a full SED in 80–120 ms.
 #
-# Any percent-level disagreement without a one-sentence physics
-# explanation in the prose above this summary has been filed as a
-# GitHub issue against tengri. The closing list of those issues is
-# maintained in `reproduction/bagpipes/README.md`.
+# Every residual that exceeds the noise floor in a panel above has a
+# one-sentence physics explanation attached to it. The companion
+# README (`reproduction/bagpipes/README.md`) holds the audit table
+# plus the outstanding follow-up items tracked against tengri.

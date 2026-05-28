@@ -85,8 +85,9 @@ counterpart. See `reproduction/cigale/` for those.
 
 ## What the comparison found
 
-A 1:1 comparison is the best bug-discovery tool we have. Each block
-either reproduces the reference, or surfaces a gap.
+Component-by-component, at matched parameters. Each block either
+reproduces the BAGPIPES reference numerics, or surfaces a physics or
+convention difference worth flagging for users moving between codes.
 
 | § | Block | Result |
 |---|---|---|
@@ -100,11 +101,11 @@ either reproduces the reference, or surfaces a gap.
 | 9 | LSF / velocity broadening | tengri `velocity_broaden` matches the analytic Gaussian σ = 150 km/s FWHM (7.78 Å vs 7.73 Å expected) to 0.7 %. BAGPIPES gives 9.5 Å — its native R_spec = 1000 carries ~127 km/s of resolution that adds in quadrature with `veldisp`. Both behaviours are correct; they bracket different conventions of "intrinsic line width". |
 | 10 | Double power-law SFH | Same closed-form shape on both sides, **but applied in different time frames**: BAGPIPES treats `t` as cosmic age since the Big Bang, tengri treats it as lookback since formation. For matched `(α, β, τ)` the two curves are time-reversed images of each other. Not a bug — a convention difference researchers reading two papers should know about. |
 | 11 | Lognormal SFH | Same shape, same time-frame caveat as §10. BAGPIPES `tmax` ≡ cosmic age; tengri `peak_lbt_gyr` ≡ lookback time. |
-| 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. **Filed as a tengri bug.** |
+| 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. Tracked as a tengri follow-up. |
 | 13 | Forward-model timing | Both codes finish a full SED build in ~80–120 ms / call — same performance class for forward-only use. tengri's real speed advantage is `jax.grad` (~1 extra fwd pass vs `2 × n_params` finite differences for non-JAX codes). |
 | 14 | SDSS ugriz photometry | Shared filter set on both sides → tengri 0.3–0.7 mag brighter, largest in u-band, shrinking toward z. **This is §8 projecting:** the Cue v17 / Cloudy v25 nebular discrepancy dominates the broadband ratio. Removing the nebular block on both sides collapses the residual to §3-level ~0.01 mag. |
 | 15 | Metallicity sensitivity | Z ∈ {0.2, 1, 2.5} Z⊙ at the fiducial SFH on both sides. Both codes track the standard age-metallicity-degeneracy direction (high-Z → redder + deeper Balmer/Mg/Fe absorption). Visual match. |
-| 16 | Asada+2025 CGM damping wing | tengri-only experimental feature (`add_cgm=True`). At z = 7, log_NHI = 22.5 the simplified Lorentzian in tengri produces only ~10⁻⁴ optical depth a few Å redward of Lyα; the published Asada/Totani+06 form predicts O(0.1) over several Å. **Filed as a tengri bug** (units factor + simplified vs full cross-section). |
+| 16 | Asada+2025 CGM damping wing | tengri-only experimental feature (`add_cgm=True`). At z = 7, log_NHI = 22.5 the simplified Lorentzian in tengri produces only ~10⁻⁴ optical depth a few Å redward of Lyα; the published Asada+2025 / Totani+06 form predicts O(0.1) over several Å. The cross-section and the sigmoid evolution are tracked as a tengri follow-up. |
 | 17 | Leja+2019 continuity SFH | Non-parametric piecewise-constant SFH (the BAGPIPES `Further Examples 2` recipe). Three configurations — flat, recent burst, quenched — match between codes once the convention difference (BAGPIPES indexes `dsfr_i` oldest→youngest, tengri young→old) is reconciled by reversing the ratio array. Hard agreement on the SFR(t) shape at matched parameters. |
 
 ## Open follow-ups surfaced by this comparison
