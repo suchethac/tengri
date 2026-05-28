@@ -394,6 +394,17 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    # CIGALE skirtor2016 disc-shape modulator (Boquien+2019)
+    ParamDeclaration(
+        "agn_cigale_disk_delta",
+        Fixed(0.0),
+        "CIGALE skirtor2016 disc slope modulator (paper delta). "
+        "For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm "
+        "power-law index alpha from its nominal value by -delta (positive "
+        "delta -> shallower optical slope). For 'adaf_lopez2024' block: "
+        "blend weight in [0, 1] interpolating from pure ADAF (0) to pure "
+        "thin disc (1).",
+    ),
 )
 
 __all__ = ["PARAMS"]
