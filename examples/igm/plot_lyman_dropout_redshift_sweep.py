@@ -1,9 +1,8 @@
 """
 Lyman Dropout Redshift Sweep: IGM Absorption Evolution
-======================================================
 
 As redshift increases, the Lyman edge (rest-frame 912 Å) shifts to longer
-observed wavelengths. This example shows how the Lyman dropout sweeps across
+observed wavelengths. the Lyman dropout sweeps across
 the optical and near-infrared bands at :math:`z = 3, 4, 5, 6, 7`, progressively
 absorbing shorter-wavelength photometry and dropping it out of optical surveys.
 
@@ -19,10 +18,13 @@ References:
 - Steidel et al. 1996, AJ, 112, 352 — Dropout-selection origins
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -44,17 +46,17 @@ C_AA_PER_S = 2.998e18
 SFH_CONFIG = {
     "type": "dpl",
     "*": tengri.FIXED,
-    "tau_gyr": 0.01,      # Very short timescale (10 Myr) — young burst
-    "log_peak_sfr": 1.0,  # Moderate star formation rate
-    "alpha": 2.0,         # Rising phase exponent
-    "beta": 2.5,          # Declining phase exponent
+    "tau_gyr": 0.01,  # Very short timescale (10 Myr) — young burst
+    "log_total_mass": 10.0,  # Moderate star formation rate
+    "alpha": 2.0,  # Rising phase exponent
+    "beta": 2.5,  # Declining phase exponent
 }
 
 DUST_CONFIG = {
     "type": "two_component",
     "*": tengri.FIXED,
     "tau_diff": 0.1,  # Diffuse dust
-    "tau_bc": 0.0,    # Minimal birth cloud dust
+    "tau_bc": 0.0,  # Minimal birth cloud dust
 }
 
 # Build and plot
@@ -105,4 +107,3 @@ ax.text(
 
 fig.tight_layout()
 plt.savefig("plot_lyman_dropout_redshift_sweep.png", dpi=150, bbox_inches="tight")
-plt.show()

@@ -9,6 +9,10 @@ velocity and density sequences on BPT, line ratios vs velocity, and
 magnetic field strength.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt

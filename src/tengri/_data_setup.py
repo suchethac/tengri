@@ -6,7 +6,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-__all__ = ["KNOWN_SSP_FILENAMES", "data_path", "download_ssp", "list_known_ssps"]
+__all__ = [
+    "KNOWN_SSP_FILENAMES",
+    "data_path",
+    "download_ssp",
+    "list_available_ssps",
+    "list_known_ssps",
+]
 
 
 def data_path(filename: str) -> Path:
@@ -104,6 +110,86 @@ def list_known_ssps() -> dict[str, str]:
     True
     """
     return _KNOWN_SSPS.copy()
+
+
+def list_available_ssps() -> list[dict]:
+    """Structured view of the SSP catalogue grouped by family and IMF (#307).
+
+    Returns
+    -------
+    list of dict
+        One row per registered SSP. Keys per row::
+
+            {
+                "name": "fsps_prsc_miles_chabrier",
+                "family": "fsps_prsc_miles",
+                "imf": "chabrier",
+                "filename": "fsps_prsc_miles_chabrier.h5",
+                "downloaded": True or False,
+            }
+
+        ``family`` is the SSP name with the IMF suffix stripped (e.g.
+        ``"fsps_prsc_miles"`` from ``"fsps_prsc_miles_chabrier"``).
+        ``downloaded`` is ``True`` iff the file is present under any
+        ``data/`` directory walked upward from ``Path.cwd()`` — the same
+        discovery rule :func:`tengri.load_ssp` uses.
+
+    Examples
+    --------
+    Find every IMF available for the FSPS+MIST+MILES family::
+
+        >>> import tengri
+        >>> rows = tengri.list_available_ssps()
+        >>> {r["imf"] for r in rows if r["family"] == "fsps_mist_c3k_a"}
+        {'chabrier', 'kroupa', 'salpeter'}
+
+    See also
+    --------
+    list_known_ssps : The flat ``name → filename`` mapping that this
+        view groups and enriches.
+    """
+    from tengri.components.stellar.sps.dsps_wrapper import _KNOWN_IMFS
+
+    out: list[dict] = []
+    for name, filename in _KNOWN_SSPS.items():
+        # Strip the trailing IMF token to recover the family stem.
+        imf = "unknown"
+        family = name
+        for token in _KNOWN_IMFS:
+            suffix = "_" + token
+            if name.endswith(suffix):
+                imf = token
+                family = name[: -len(suffix)]
+                break
+        out.append(
+            {
+                "name": name,
+                "family": family,
+                "imf": imf,
+                "filename": filename,
+                "downloaded": _ssp_file_present(filename),
+            }
+        )
+    return sorted(out, key=lambda r: (r["family"], r["imf"]))
+
+
+def _ssp_file_present(filename: str) -> bool:
+    """True iff ``filename`` is found under a ``data/`` dir walked
+    upward from the current working directory.
+
+    Mirrors :func:`tengri.load_ssp`'s ancestor-walk discovery so the
+    ``downloaded`` flag on :func:`list_available_ssps` matches the
+    actual ``load_ssp`` outcome users will see.
+    """
+    cur = Path.cwd().resolve()
+    for _ in range(6):
+        candidate = cur / "data" / filename
+        if candidate.is_file():
+            return True
+        if cur.parent == cur:
+            break
+        cur = cur.parent
+    return False
 
 
 def download_ssp(

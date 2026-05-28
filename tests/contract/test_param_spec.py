@@ -23,11 +23,11 @@ class TestConstruction:
     def test_parametric_tsnorm(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             redshift=0.1,
         )
         assert not spec.stochastic
-        assert "sfh_tsnorm_log_peak_sfr" in spec.free_params
+        assert "sfh_tsnorm_log_total_mass" in spec.free_params
 
     def test_basic_stochastic(self):
         spec = Parameters(
@@ -47,9 +47,9 @@ class TestConstruction:
     def test_shorthand_tuple(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=(0.01, 3.0),
+            sfh_tsnorm_log_total_mass=(0.01, 3.0),
         )
-        dist = spec.get_distribution("sfh_tsnorm_log_peak_sfr")
+        dist = spec.get_distribution("sfh_tsnorm_log_total_mass")
         assert isinstance(dist, Uniform)
         assert dist.lo == 0.01
         assert dist.hi == 3.0
@@ -74,7 +74,7 @@ class TestConstruction:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(-1, 2),
             redshift=0.1,
         )
         assert "sfh_dpl_alpha" in spec.free_params
@@ -84,7 +84,7 @@ class TestConstruction:
         with pytest.raises(ValueError, match="Unknown parameter"):
             Parameters(
                 mean_sfh_type="dpl",
-                sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+                sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             )
 
     def test_tsnorm_rejects_dpl_params(self):
@@ -151,45 +151,45 @@ class TestValidation:
     def test_validate_good_params(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
-        spec.validate({"sfh_tsnorm_log_peak_sfr": jnp.array(0.5)})
+        spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(0.5)})
 
     def test_validate_out_of_bounds(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
         with pytest.raises(ValueError, match="outside bounds"):
-            spec.validate({"sfh_tsnorm_log_peak_sfr": jnp.array(5.0)})
+            spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(5.0)})
 
 
 class TestProperties:
     def test_free_params_list(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 3.0),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 3.0),
             dust_slope=-0.7,
             redshift=0.1,
         )
         free = spec.free_params
-        assert "sfh_tsnorm_log_peak_sfr" in free
+        assert "sfh_tsnorm_log_total_mass" in free
         assert "dust_slope" not in free
 
     def test_fixed_params_list(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             dust_slope=-0.7,
         )
         fixed = spec.fixed_params
         assert "dust_slope" in fixed
-        assert "sfh_tsnorm_log_peak_sfr" not in fixed
+        assert "sfh_tsnorm_log_total_mass" not in fixed
 
     def test_n_free(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             dust_slope=-0.7,
             redshift=0.1,
         )
@@ -204,9 +204,9 @@ class TestProperties:
     def test_get_distribution(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
-        d = spec.get_distribution("sfh_tsnorm_log_peak_sfr")
+        d = spec.get_distribution("sfh_tsnorm_log_total_mass")
         assert isinstance(d, Uniform)
         assert d.lo == -1
 
@@ -217,7 +217,7 @@ class TestProperties:
 
     def test_valid_param_names_property(self):
         spec = Parameters(mean_sfh_type="tsnorm")
-        assert "sfh_tsnorm_log_peak_sfr" in spec.valid_param_names
+        assert "sfh_tsnorm_log_total_mass" in spec.valid_param_names
         assert "sfh_dpl_alpha" not in spec.valid_param_names
 
     def test_mean_sfh_type_property(self):
@@ -251,10 +251,10 @@ class TestSampling:
     def test_sample_free_in_bounds(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
         params = spec.sample(jax.random.PRNGKey(0))
-        val = float(params["sfh_tsnorm_log_peak_sfr"])
+        val = float(params["sfh_tsnorm_log_total_mass"])
         assert -1 <= val <= 2
 
     def test_sample_batch_shapes(self):
@@ -273,10 +273,10 @@ class TestRepr:
     def test_repr_contains_params(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             redshift=0.1,
         )
         r = repr(spec)
-        assert "sfh_tsnorm_log_peak_sfr" in r
+        assert "sfh_tsnorm_log_total_mass" in r
         assert "Uniform" in r
         assert "redshift" in r

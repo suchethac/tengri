@@ -278,8 +278,11 @@ def photometry_from_sfh(
         igm_trans = igm_transmission(wave_obs, redshift)
         sed = sed * igm_trans
 
-    # Luminosity distance
-    dl_cm = luminosity_distance(redshift) if redshift > 0 else 1.0
+    # Luminosity distance — ``luminosity_distance`` already applies the
+    # 10-pc absolute-magnitude convention at z=0 (returns ~3.086e19 cm).
+    # The earlier ``if redshift > 0 else 1.0`` fallback was a 10^19×
+    # flux error at z=0; the dead branch is gone.
+    dl_cm = luminosity_distance(redshift)
 
     # Filter convolution
     filter_waves, filter_trans = _filter_waves_and_trans(filters)
@@ -356,7 +359,9 @@ def spectrum_from_sfh(
         igm_trans = igm_transmission(wave_obs_full, redshift)
         sed = sed * igm_trans
 
-    dl_cm = luminosity_distance(redshift) if redshift > 0 else 1.0
+    # See note in ``sed_from_sfh`` — ``luminosity_distance`` already
+    # handles the z=0 → 10 pc absolute-magnitude convention.
+    dl_cm = luminosity_distance(redshift)
 
     # Compute observed spectrum
     flux = compute_spectrum(sed, wave, wave_obs, redshift, dl_cm)

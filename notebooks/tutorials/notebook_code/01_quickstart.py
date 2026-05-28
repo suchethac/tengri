@@ -99,7 +99,7 @@ print(
 # %%
 # Define the parameter specification
 spec_param = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=10.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -148,7 +148,7 @@ key = jax.random.PRNGKey(42)
 true_params_param = spec_param.sample(key)
 # Override tsnorm to a typical star-forming galaxy (still forming stars now)
 true_params_param = {**true_params_param}
-true_params_param["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+true_params_param["sfh_tsnorm_log_total_mass"] = jnp.array(1.2)
 true_params_param["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params_param["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 true_params_param["sfh_tsnorm_skew"] = jnp.array(0.3)
@@ -427,7 +427,7 @@ for name, res, t in [
 # %%
 # Define the stochastic parameter specification
 spec_stoch = Parameters(
-    sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+    sfh_tsnorm_log_total_mass=10.0, 2.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -457,7 +457,7 @@ key = jax.random.PRNGKey(123)
 true_params_stoch = spec_stoch.sample(key)
 # Override to a typical star-forming galaxy with dramatic burstiness
 true_params_stoch = {**true_params_stoch}
-true_params_stoch["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.2)
+true_params_stoch["sfh_tsnorm_log_total_mass"] = jnp.array(1.2)
 true_params_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 true_params_stoch["sfh_tsnorm_skew"] = jnp.array(0.3)

@@ -1,83 +1,320 @@
-/* tengri docs — custom overrides for Furo theme */
+/* tengri docs — palette, typography, and Furo overrides
+   ──────────────────────────────────────────────────────────────────────
+   Palette: brand #2C4E74 (logo blue) is constant across modes; the
+   accent flips so links/CTAs always carry the brightest blue available
+   on the current background — sky #7AB8E8 on dark, brand itself on
+   light. Background is cool near-black, not pure black.
+*/
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+/* ── Palette tokens ──────────────────────────────────────────────────── */
+/* Furo binds all its --color-* tokens on ``body`` (not ``:root``), so the
+   light-mode override must also live on ``body`` to win the cascade.
+   Defining the brand tokens on both ``:root`` (so the hero and sidebar
+   rules can read them above body) and on ``body`` (so they override
+   Furo's Furo-default values) is the cleanest fix. */
+:root,
+body {
+    /* Light mode (Furo default) */
+    --tg-bg: #FAFBFC;
+    --tg-surface: #FFFFFF;
+    --tg-text: #0F1419;
+    --tg-muted: #57606A;
+    --tg-brand: #1A5078;
+    --tg-accent: #2C4E74;
+    --tg-border: #E1E4E8;
+
+    /* Furo variable bindings — light */
+    --color-background-primary: var(--tg-bg);
+    --color-background-secondary: var(--tg-surface);
+    --color-background-border: var(--tg-border);
+    --color-background-hover: #F0F2F5;
+    --color-foreground-primary: var(--tg-text);
+    --color-foreground-secondary: var(--tg-muted);
+    --color-foreground-muted: var(--tg-muted);
+    --color-foreground-border: var(--tg-border);
+    --color-brand-primary: var(--tg-accent);
+    --color-brand-content: var(--tg-accent);
+    --color-link: var(--tg-accent);
+    --color-link--hover: #1A5078;
+    --color-link-underline: transparent;
+    --color-link-underline--hover: var(--tg-accent);
+    --color-sidebar-background: var(--tg-surface);
+    --color-sidebar-background-border: var(--tg-border);
+    --color-sidebar-link-text: var(--tg-text);
+    --color-sidebar-link-text--top-level: var(--tg-text);
+    --color-sidebar-item-background--hover: #F0F2F5;
+    --color-sidebar-item-background--current: #EAF1F7;
+    --color-sidebar-caption-text: var(--tg-muted);
+    --color-highlighted-background: #FFF2A8;
+    --color-inline-code-background: #F1F3F5;
+    --color-code-background: #F6F8FA;
+    --color-code-foreground: var(--tg-text);
+    --color-card-background: var(--tg-surface);
+    --color-card-marginals-background: var(--tg-bg);
+    --color-admonition-background: var(--tg-surface);
+    --color-table-background: var(--tg-surface);
+    --color-toc-background: var(--tg-surface);
+    --color-toc-item-text--active: var(--tg-accent);
+
+    /* Typography */
+    --font-stack: "IBM Plex Sans", -apple-system, BlinkMacSystemFont,
+                  "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-stack--monospace: "IBM Plex Mono", "SF Mono", Menlo, Consolas,
+                             "Liberation Mono", monospace;
+    --font-stack--headings: "IBM Plex Sans", -apple-system, BlinkMacSystemFont,
+                            "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+    body:not([data-theme="light"]) {
+        --tg-bg: #0F1419;
+        --tg-surface: #161D27;
+        --tg-text: #E6EDF3;
+        --tg-muted: #8B949E;
+        --tg-brand: #2C4E74;
+        --tg-accent: #7AB8E8;
+        --tg-border: #232B36;
+
+        --color-background-primary: var(--tg-bg);
+        --color-background-secondary: var(--tg-surface);
+        --color-background-border: var(--tg-border);
+        --color-background-hover: #1E2530;
+        --color-foreground-primary: var(--tg-text);
+        --color-foreground-secondary: var(--tg-muted);
+        --color-foreground-muted: var(--tg-muted);
+        --color-foreground-border: var(--tg-border);
+        --color-brand-primary: var(--tg-accent);
+        --color-brand-content: var(--tg-accent);
+        --color-link: var(--tg-accent);
+        --color-link--hover: #A8D0F0;
+        --color-link-underline--hover: var(--tg-accent);
+        --color-sidebar-background: var(--tg-surface);
+        --color-sidebar-background-border: var(--tg-border);
+        --color-sidebar-link-text: var(--tg-text);
+        --color-sidebar-link-text--top-level: var(--tg-text);
+        --color-sidebar-item-background--hover: #1E2530;
+        --color-sidebar-item-background--current: #1F2D3D;
+        --color-sidebar-caption-text: var(--tg-muted);
+        --color-highlighted-background: #3D3A1A;
+        --color-inline-code-background: #1E2530;
+        --color-code-background: #161D27;
+        --color-code-foreground: var(--tg-text);
+        --color-card-background: var(--tg-surface);
+        --color-card-marginals-background: var(--tg-bg);
+        --color-admonition-background: var(--tg-surface);
+        --color-table-background: var(--tg-surface);
+        --color-toc-background: var(--tg-surface);
+        --color-toc-item-text--active: var(--tg-accent);
+    }
+}
+
+body[data-theme="dark"] {
+    --tg-bg: #0F1419;
+    --tg-surface: #161D27;
+    --tg-text: #E6EDF3;
+    --tg-muted: #8B949E;
+    --tg-brand: #2C4E74;
+    --tg-accent: #7AB8E8;
+    --tg-border: #232B36;
+
+    --color-background-primary: var(--tg-bg);
+    --color-background-secondary: var(--tg-surface);
+    --color-background-border: var(--tg-border);
+    --color-background-hover: #1E2530;
+    --color-foreground-primary: var(--tg-text);
+    --color-foreground-secondary: var(--tg-muted);
+    --color-foreground-muted: var(--tg-muted);
+    --color-foreground-border: var(--tg-border);
+    --color-brand-primary: var(--tg-accent);
+    --color-brand-content: var(--tg-accent);
+    --color-link: var(--tg-accent);
+    --color-link--hover: #A8D0F0;
+    --color-link-underline--hover: var(--tg-accent);
+    --color-sidebar-background: var(--tg-surface);
+    --color-sidebar-background-border: var(--tg-border);
+    --color-sidebar-link-text: var(--tg-text);
+    --color-sidebar-link-text--top-level: var(--tg-text);
+    --color-sidebar-item-background--hover: #1E2530;
+    --color-sidebar-item-background--current: #1F2D3D;
+    --color-sidebar-caption-text: var(--tg-muted);
+    --color-highlighted-background: #3D3A1A;
+    --color-inline-code-background: #1E2530;
+    --color-code-background: #161D27;
+    --color-code-foreground: var(--tg-text);
+    --color-card-background: var(--tg-surface);
+    --color-card-marginals-background: var(--tg-bg);
+    --color-admonition-background: var(--tg-surface);
+    --color-table-background: var(--tg-surface);
+    --color-toc-background: var(--tg-surface);
+    --color-toc-item-text--active: var(--tg-accent);
+}
+
+/* ── Body & headings ─────────────────────────────────────────────────── */
+body {
+    font-family: var(--font-stack);
+    font-feature-settings: "ss01", "cv11";
+}
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-stack--headings);
+    letter-spacing: -0.01em;
+}
+h1 { font-weight: 700; letter-spacing: -0.02em; }
+code, pre, kbd, samp {
+    font-family: var(--font-stack--monospace);
+}
+
+/* ── Sidebar: collapse the Examples gallery to a single entry ──────────
+   Sphinx-gallery registers ~19 section indexes (and ~170 per-script
+   pages) into the global toctree, which Furo dutifully emits into the
+   sidebar regardless of :maxdepth:. The result is 200+ nav entries
+   under "Examples gallery". We want one button. The cards on the
+   gallery page itself are the navigation surface.
+
+   Two parallel selectors so this works in browsers without ``:has()``
+   (sibling-combinator form) and in browsers with ``:has()`` (descendant
+   form, which also clips any deeper nesting). ``!important`` on every
+   rule because Furo's own sidebar CSS uses ``display: flex`` on the
+   relevant ULs. */
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ ul,
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ input,
+.sidebar-tree li.toctree-l1 > a[href*="auto_examples/index"] ~ label {
+    display: none !important;
+}
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) ul,
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) input.toctree-checkbox,
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) label {
+    display: none !important;
+}
+/* Also clear the chevron icon since there is nothing to expand. */
+.sidebar-tree li.toctree-l1.has-children:has(> a[href*="auto_examples/index"]) > a::after,
+.sidebar-tree li.toctree-l1.has-children:has(> a[href*="auto_examples/index"]) svg {
+    display: none !important;
+}
 
 /* ── Sidebar logo ─────────────────────────────────────────────────────
-   Large logo centred above the "tengri" title. */
-.sidebar-logo-container {
+   Furo's ``.sidebar-brand`` is the <a> wrapping both the logo
+   container and the brand text. Make IT the flex column so logo and
+   wordmark share the same centre axis. */
+.sidebar-brand {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.75rem;
-    padding: 1rem 0 0.25rem;
+    gap: 0.6rem;
+    padding: 1.25rem 1rem 0.75rem;
+    text-decoration: none;
+}
+.sidebar-logo-container {
+    display: flex;
+    justify-content: center;
+    padding: 0;
+    margin: 0;
 }
 .sidebar-logo {
-    max-width: 140px;
+    max-width: 120px;
     height: auto;
     object-fit: contain;
     background: transparent;
+    display: block;
+    margin: 0;
 }
-/* Hide the duplicate dark-mode logo — we use one PNG for both modes. */
-.sidebar-logo.only-dark {
-    display: none !important;
-}
+.sidebar-logo.only-dark { display: none !important; }
 .sidebar-brand-text {
-    font-size: 1.8rem;
+    font-size: 1.6rem;
     font-weight: 600;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
+    color: var(--tg-text);
+    text-align: center;
+    margin: 0;
 }
 
+/* ── Hero block on landing page ──────────────────────────────────────── */
+/* Flex column instead of just ``text-align: center`` so block-level
+   children (the logo <img>, the <h1>) are centred relative to the same
+   flex axis rather than each fending for itself. Furo's h1 rule carries
+   a heading-anchor offset that ``text-align`` alone doesn't fully
+   neutralise. */
+.tg-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 2.5rem 1rem 1.5rem;
+    margin: 0 0 2.5rem;
+    border-bottom: 1px solid var(--tg-border);
+}
+.tg-hero__logo {
+    display: block;
+    margin: 0 0 1.25rem;
+    width: 140px;
+    height: auto;
+    filter: drop-shadow(0 0 24px rgba(122, 184, 232, 0.18));
+}
+@media (prefers-color-scheme: light) {
+    body:not([data-theme="dark"]) .tg-hero__logo {
+        filter: drop-shadow(0 0 16px rgba(44, 78, 116, 0.15));
+    }
+}
+body[data-theme="light"] .tg-hero__logo {
+    filter: drop-shadow(0 0 16px rgba(44, 78, 116, 0.15));
+}
+.tg-hero__title {
+    font-size: 2.8rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+    padding: 0;             /* override Furo's heading padding */
+    letter-spacing: -0.03em;
+    color: var(--tg-text);
+    line-height: 1.1;
+    border: none;
+}
+/* Furo injects a heading-anchor link (¶) into every <h1> that nudges
+   the visible glyphs off-centre by a pixel or two even when invisible.
+   Hide it inside the hero. */
+.tg-hero__title .headerlink {
+    display: none;
+}
+.tg-hero__tagline {
+    font-size: 1.2rem;
+    line-height: 1.45;
+    max-width: 38rem;
+    margin: 0 auto;
+    color: var(--tg-muted);
+    font-weight: 400;
+}
 
-/* ── Notebook output: neutral background ────────────────────────────── */
+/* ── Notebook output cells (nbsphinx) ────────────────────────────────── */
 .nboutput .output_area pre {
-    background-color: var(--color-code-background);
-    color: var(--color-code-foreground);
+    background-color: var(--color-inline-code-background);
+    color: var(--color-foreground-primary);
 }
-/* nbsphinx's default stderr styling is PINK (#fdd) to highlight warnings.
-   JAX's "Assume version compatibility" warnings fire constantly and produce
-   giant pink blocks. Neutralise to the same muted code background. */
 .nboutput .output_area.stderr pre,
 .nboutput .output_area.stderr {
-    background-color: var(--color-code-background) !important;
-    color: var(--color-code-foreground);
+    background-color: var(--color-inline-code-background) !important;
+    color: var(--color-foreground-primary);
     opacity: 0.7;
 }
-/* Hide the whole stderr cell if it contains only JAX/Protobuf boilerplate. */
 .nboutput .output_area.stderr pre:only-child:not(:empty) {
     font-size: 0.78em;
     line-height: 1.3;
 }
-
-/* Notebook text selectable */
 .nboutput .output_area pre,
 .nbinput .input_area pre {
     user-select: text;
     -webkit-user-select: text;
 }
-
-/* ── Notebook cell styling ──────────────────────────────────────────── */
-
-/* Subtle border and spacing for input cells */
-.nbinput {
-    margin-bottom: 0.5rem;
-}
+.nbinput { margin-bottom: 0.5rem; }
 .nbinput .input_area {
     border-left: 3px solid var(--color-brand-primary);
     border-radius: 0 4px 4px 0;
 }
-
-/* Output cells: slightly indented, muted */
-.nboutput {
-    margin-bottom: 1rem;
-}
+.nboutput { margin-bottom: 1rem; }
 .nboutput .output_area {
     border-left: 3px solid var(--color-background-border);
     border-radius: 0 4px 4px 0;
     padding-left: 0.5rem;
 }
-
-/* Output images: centered with subtle shadow.
-   IMPORTANT: force a neutral white background behind figures.
-   nbsphinx's default and some browser dark-mode skins can tint PNG outputs
-   pink/magenta because the images have transparent regions. */
 .nboutput .output_area img,
 .nboutput .output_png img {
     display: block;
@@ -85,12 +322,9 @@
     max-width: 100%;
     border-radius: 4px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
-    background-color: #ffffff;   /* neutral behind transparent PNG regions */
+    background-color: #ffffff;
     padding: 0.25rem;
 }
-
-/* Override any residual pinkish tint that Furo's dark-mode or nbsphinx
-   applies to output containers. */
 .nboutput .output_area,
 .nboutput .output_area.stderr,
 .nboutput .output_area .output_png,
@@ -98,7 +332,7 @@
     background-color: transparent !important;
 }
 
-/* ── Table styling: cleaner borders ─────────────────────────────────── */
+/* ── Tables ──────────────────────────────────────────────────────────── */
 table.docutils {
     border-collapse: collapse;
     width: 100%;
@@ -116,22 +350,20 @@ table.docutils td {
     border-bottom: 1px solid var(--color-background-border);
 }
 
-/* ── Code block improvements ────────────────────────────────────────── */
-
-/* Inline code: softer styling */
+/* ── Inline code ─────────────────────────────────────────────────────── */
 code.literal {
     font-size: 0.85em;
     padding: 0.1em 0.3em;
     border-radius: 3px;
 }
 
-/* ── Admonition styling ─────────────────────────────────────────────── */
+/* ── Admonitions ─────────────────────────────────────────────────────── */
 .admonition {
     margin: 1rem 0;
     border-radius: 4px;
 }
 
-/* ── Print / PDF ────────────────────────────────────────────────────── */
+/* ── Print ───────────────────────────────────────────────────────────── */
 @media print {
     .nboutput .output_area img {
         box-shadow: none;
@@ -139,23 +371,27 @@ code.literal {
     }
 }
 
-/* ── Examples gallery: single sidebar entry, no auto-expanded children ──
- *
- * The auto_examples/index page has a hidden toctree of 19 section
- * pages (sphinx-gallery needs the relationship for prev/next nav).
- * Furo otherwise walks that toctree into the sidebar and shows all 19
- * sections under the "Examples gallery" entry — too noisy.
- *
- * Hide the nested toctree branches under the "Examples gallery" entry
- * and remove the expand/collapse chevron since there's nothing to
- * toggle. The gallery's section pages remain reachable via the
- * thumbnail grid on the gallery landing page and via prev/next links
- * within sphinx-gallery's per-script pages.
- */
+/* ── Gallery sidebar: collapse with no children ──────────────────────── */
+/* Per-section index.rst pages carry :orphan: so the global toctree
+   walker no longer pulls them into the sidebar. These rules are a
+   belt-and-braces fallback in case the toctree post-processor hasn't
+   run for a given build. */
 .sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > ul {
     display: none;
 }
 .sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > input.toctree-checkbox,
 .sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index"]) > label {
+    display: none;
+}
+/* Even with the toctree dropped, sphinx walks the in-page h2 section
+   headings of auto_examples/index.html into the sidebar as anchor links
+   (#quick-start, #recipes, etc.). The parent toctree's ``:titlesonly:``
+   stops that on most builds; this is a CSS fallback for the rest. */
+.sidebar-tree a[href*="auto_examples/index.html#"],
+.sidebar-tree a[href*="auto_examples/index#"] {
+    display: none;
+}
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index.html#"]),
+.sidebar-tree li.toctree-l1:has(> a[href*="auto_examples/index#"]) {
     display: none;
 }

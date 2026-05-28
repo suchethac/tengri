@@ -126,7 +126,7 @@ def _build_tengri_sed(
 
     spec = Parameters(
         mean_sfh_type="const",
-        sfh_const_log_sfr=Fixed(0.0),  # SFR = 1 Msun/yr
+        sfh_const_log_total_mass=Fixed(0.0),  # SFR = 1 Msun/yr
         sfh_const_start_gyr=Fixed(start_gyr),
         sfh_const_end_gyr=Fixed(end_gyr),
         met_logzsol=Fixed(logzsol),
@@ -579,12 +579,20 @@ class TestSFRNormalisation:
         wave1, sed1 = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_log_sfr": 0.0, "sfh_const_start_gyr": 1.0, "sfh_const_end_gyr": 0.0},
+            {
+                "sfh_const_log_total_mass": 0.0,
+                "sfh_const_start_gyr": 1.0,
+                "sfh_const_end_gyr": 0.0,
+            },
         )
         _wave10, sed10 = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_log_sfr": 1.0, "sfh_const_start_gyr": 1.0, "sfh_const_end_gyr": 0.0},
+            {
+                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_start_gyr": 1.0,
+                "sfh_const_end_gyr": 0.0,
+            },
         )
         # Pick optical wavelengths only (where flux is well-defined)
         optical = (wave1 > 3000.0) & (wave1 < 10000.0)
@@ -611,7 +619,11 @@ class TestSFRNormalisation:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_log_sfr": 1.0, "sfh_const_start_gyr": 1.0, "sfh_const_end_gyr": 0.0},
+            {
+                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_start_gyr": 1.0,
+                "sfh_const_end_gyr": 0.0,
+            },
         )
         l_v = _band_avg(wave, sed, 5500.0)
         # Expected range: 10^9 Lsun ×  L_ν,sun/Lsun  to  10^11 Lsun × L_ν,sun/Lsun
@@ -633,7 +645,11 @@ class TestSFRNormalisation:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_log_sfr": 1.0, "sfh_const_start_gyr": 1.0, "sfh_const_end_gyr": 0.0},
+            {
+                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_start_gyr": 1.0,
+                "sfh_const_end_gyr": 0.0,
+            },
         )
         m_formed = 10.0 * 1e9  # 1e10 Msun
         sed_per_msun = sed / m_formed
@@ -676,7 +692,7 @@ class TestDelayedTauSFH:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": 1.0,  # 10 Msun/yr peak
+                "sfh_dexp_log_total_mass": 1.0,  # 10 Msun/yr peak
                 "sfh_dexp_tau_gyr": 1.0,
                 "sfh_dexp_start_gyr": 0.0,
             },
@@ -697,7 +713,7 @@ class TestDelayedTauSFH:
 
         # tau=1 Gyr peak, SF observed at ~3 Gyr after peak
         # M_formed ≈ peak_sfr × tau × e (analytic integral of delayed tau)
-        peak_sfr = 10.0  # Msun/yr (log_peak_sfr=1.0)
+        peak_sfr = 10.0  # Msun/yr (log_total_mass=1.0)
         tau_gyr = 1.0
         m_formed = peak_sfr * tau_gyr * 1e9 * np.e  # Msun
 
@@ -705,7 +721,7 @@ class TestDelayedTauSFH:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": 1.0,
+                "sfh_dexp_log_total_mass": 1.0,
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 0.0,
             },
@@ -732,12 +748,12 @@ class TestDelayedTauSFH:
         _wave_short, sed_short = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
-            {"sfh_dexp_log_peak_sfr": 1.0, "sfh_dexp_tau_gyr": 0.3, "sfh_dexp_start_gyr": 0.0},
+            {"sfh_dexp_log_total_mass": 1.0, "sfh_dexp_tau_gyr": 0.3, "sfh_dexp_start_gyr": 0.0},
         )
         _wave_long, sed_long = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
-            {"sfh_dexp_log_peak_sfr": 1.0, "sfh_dexp_tau_gyr": 3.0, "sfh_dexp_start_gyr": 0.0},
+            {"sfh_dexp_log_total_mass": 1.0, "sfh_dexp_tau_gyr": 3.0, "sfh_dexp_start_gyr": 0.0},
         )
         w = np.asarray(ssp_data.ssp_wave)
         short_color = _band_avg(w, sed_short / (sed_short.max() or 1), 2800.0, 150.0) / _band_avg(
@@ -769,7 +785,7 @@ class TestDPLSFH:
             ssp_data,
             "dpl",
             {
-                "sfh_dpl_log_peak_sfr": 1.0,
+                "sfh_dpl_log_total_mass": 1.0,
                 "sfh_dpl_alpha": 1.5,
                 "sfh_dpl_beta": 5.0,
                 "sfh_dpl_tau_gyr": 3.0,
@@ -800,7 +816,7 @@ class TestDPLSFH:
             ssp_data,
             "dpl",
             {
-                "sfh_dpl_log_peak_sfr": 1.0,
+                "sfh_dpl_log_total_mass": 1.0,
                 "sfh_dpl_alpha": 1.5,
                 "sfh_dpl_beta": 5.0,
                 "sfh_dpl_tau_gyr": tau_gyr,
@@ -828,7 +844,7 @@ class TestDPLSFH:
             ssp_data,
             "dpl",
             {
-                "sfh_dpl_log_peak_sfr": 1.0,
+                "sfh_dpl_log_total_mass": 1.0,
                 "sfh_dpl_alpha": 1.5,
                 "sfh_dpl_beta": 20.0,
                 "sfh_dpl_tau_gyr": 3.0,
@@ -838,7 +854,7 @@ class TestDPLSFH:
             ssp_data,
             "dpl",
             {
-                "sfh_dpl_log_peak_sfr": 1.0,
+                "sfh_dpl_log_total_mass": 1.0,
                 "sfh_dpl_alpha": 1.5,
                 "sfh_dpl_beta": 1.5,
                 "sfh_dpl_tau_gyr": 3.0,
@@ -944,7 +960,11 @@ class TestExpSFH:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
-            {"sfh_dexp_log_peak_sfr": 1.0, "sfh_dexp_tau_gyr": tau_gyr, "sfh_dexp_start_gyr": 0.0},
+            {
+                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_tau_gyr": tau_gyr,
+                "sfh_dexp_start_gyr": 0.0,
+            },
         )
         sed_per_msun = sed / m_formed
 
@@ -973,7 +993,7 @@ def _build_tengri_tau_sed(
     ssp_data,
     tau_gyr: float,
     age_gyr: float,
-    log_peak_sfr: float = 1.0,
+    log_total_mass: float = 1.0,
     logzsol: float = 0.0,
     tau_bc: float = 0.0,
     tau_diff: float = 0.0,
@@ -984,15 +1004,15 @@ def _build_tengri_tau_sed(
     Time conversion: FSPS/bagpipes T_cosmic ↔ tengri t_lb via t_lb = age - T_cosmic.
     """
     sfh_params = {
-        "sfh_tau_log_peak_sfr": log_peak_sfr,
+        "sfh_tau_log_total_mass": log_total_mass,
         "sfh_tau_tau_gyr": tau_gyr,
         "sfh_tau_age_gyr": age_gyr,
     }
     wave, sed = _build_tengri_sed_raw(
         ssp_data, "tau", sfh_params, logzsol=logzsol, tau_bc=tau_bc, tau_diff=tau_diff
     )
-    peak_sfr = 10.0**log_peak_sfr
-    m_formed = _tau_m_formed(peak_sfr, tau_gyr * 1e9, age_gyr * 1e9)
+    total_mass = 10.0**log_total_mass
+    m_formed = _tau_m_formed(total_mass, tau_gyr * 1e9, age_gyr * 1e9)
     return wave, sed / m_formed
 
 
@@ -1000,7 +1020,7 @@ def _build_tengri_tau_sed_table(
     ssp_data,
     tau_gyr: float,
     age_gyr: float,
-    log_peak_sfr: float = 1.0,
+    log_total_mass: float = 1.0,
     logzsol: float = 0.0,
     tau_bc: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -1018,8 +1038,8 @@ def _build_tengri_tau_sed_table(
 
     n = 500
     t_cosmic = np.linspace(0.0, age_gyr, n)  # Gyr, 0 = galaxy formation
-    peak_sfr = 10.0**log_peak_sfr
-    sfr_table = peak_sfr * np.exp(-t_cosmic / tau_gyr)  # Msun/yr
+    total_mass = 10.0**log_total_mass
+    sfr_table = total_mass * np.exp(-t_cosmic / tau_gyr)  # Msun/yr
 
     spec = Parameters(
         mean_sfh_type="table",
@@ -1040,7 +1060,7 @@ def _build_tengri_tau_sed_table(
     wave = np.asarray(result.wavelength)
     sed = np.asarray(result.sed)
 
-    m_formed = _tau_m_formed(peak_sfr, tau_gyr * 1e9, age_gyr * 1e9)
+    m_formed = _tau_m_formed(total_mass, tau_gyr * 1e9, age_gyr * 1e9)
     return wave, sed / m_formed
 
 
@@ -1442,7 +1462,7 @@ def _build_tengri_nebular_sed(
         met_logzsol=Fixed(logzsol),
         sfh_const_start_gyr=Fixed(age_gyr),
         sfh_const_end_gyr=Fixed(0.0),
-        sfh_const_log_sfr=Fixed(log_sfr),
+        sfh_const_log_total_mass=Fixed(log_sfr),
         neb_logU=Fixed(logU),
         neb_logZ_gas=Fixed(logzsol),
         dust_tau_bc=Fixed(tau_bc),
@@ -2968,7 +2988,7 @@ class TestSynthesizerSEDs:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": np.log10(peak_sfr),
+                "sfh_dexp_log_total_mass": np.log10(peak_sfr),
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 0.0,
             },
@@ -3031,7 +3051,11 @@ class TestSMCLMCDustLaw:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_start_gyr": 2.0, "sfh_const_end_gyr": 0.0, "sfh_const_log_sfr": 0.0},
+            {
+                "sfh_const_start_gyr": 2.0,
+                "sfh_const_end_gyr": 0.0,
+                "sfh_const_log_total_mass": 0.0,
+            },
             logzsol=0.0,
             tau_bc=0.0,
             tau_diff=1.0 / 1.086,
@@ -3063,7 +3087,11 @@ class TestSMCLMCDustLaw:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_start_gyr": 2.0, "sfh_const_end_gyr": 0.0, "sfh_const_log_sfr": 0.0},
+            {
+                "sfh_const_start_gyr": 2.0,
+                "sfh_const_end_gyr": 0.0,
+                "sfh_const_log_total_mass": 0.0,
+            },
             logzsol=0.0,
             tau_bc=0.0,
             tau_diff=1.0 / 1.086,
@@ -3095,7 +3123,11 @@ class TestSMCLMCDustLaw:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_start_gyr": 2.0, "sfh_const_end_gyr": 0.0, "sfh_const_log_sfr": 0.0},
+            {
+                "sfh_const_start_gyr": 2.0,
+                "sfh_const_end_gyr": 0.0,
+                "sfh_const_log_total_mass": 0.0,
+            },
             logzsol=0.0,
             tau_bc=0.0,
             tau_diff=1.0 / 1.086,
@@ -3127,7 +3159,11 @@ class TestSMCLMCDustLaw:
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "const",
-            {"sfh_const_start_gyr": 2.0, "sfh_const_end_gyr": 0.0, "sfh_const_log_sfr": 0.0},
+            {
+                "sfh_const_start_gyr": 2.0,
+                "sfh_const_end_gyr": 0.0,
+                "sfh_const_log_total_mass": 0.0,
+            },
             logzsol=0.0,
             tau_bc=0.0,
             tau_diff=1.0 / 1.086,
@@ -3256,7 +3292,7 @@ class TestLognormSFH:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": np.log10(peak_sfr),
+                "sfh_dexp_log_total_mass": np.log10(peak_sfr),
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 7.0,
             },
@@ -3290,7 +3326,7 @@ class TestLognormSFH:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": np.log10(peak_sfr),
+                "sfh_dexp_log_total_mass": np.log10(peak_sfr),
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 7.0,
             },
@@ -3324,7 +3360,7 @@ class TestLognormSFH:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": np.log10(peak_sfr),
+                "sfh_dexp_log_total_mass": np.log10(peak_sfr),
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 7.0,
             },
@@ -3359,7 +3395,7 @@ class TestLognormSFH:
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_peak_sfr": np.log10(peak_sfr),
+                "sfh_dexp_log_total_mass": np.log10(peak_sfr),
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 7.0,
             },

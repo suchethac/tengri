@@ -19,6 +19,10 @@ References:
 - Martin+2007, ApJS, 173, 342 (NUV − r and the green valley)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -61,7 +65,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": tengri.Uniform(0.01, 8.0),
         "width_gyr": 0.05,  # narrow truncation: an explicit quench
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },

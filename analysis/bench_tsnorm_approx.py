@@ -43,7 +43,7 @@ peak_lbt = 5e9
 width = 2e9
 skew = 0.5
 trunc = 3.0
-log_peak_sfr = 1.0
+log_total_mass = 1.0
 
 age = _clamp_age(age_grid)
 x_trunc = (age - peak_lbt) / (width * trunc)
@@ -54,8 +54,8 @@ x_trunc = (age - peak_lbt) / (width * trunc)
 
 
 @jax.jit
-def tsnorm_exact(age, log_peak_sfr, peak_lbt, width, skew, trunc):
-    peak_sfr = 10.0**log_peak_sfr
+def tsnorm_exact(age, log_total_mass, peak_lbt, width, skew, trunc):
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     trunc_factor = 1.0 - jax.scipy.stats.norm.cdf(age, loc=peak_lbt, scale=width * trunc)
     return jnp.maximum(peak_sfr * kernel * trunc_factor, 0.0)
@@ -69,8 +69,8 @@ _LOGISTIC_K = jnp.sqrt(jnp.pi / 8.0) * 2.0  # ≈ 1.2533
 
 
 @jax.jit
-def tsnorm_logistic(age, log_peak_sfr, peak_lbt, width, skew, trunc):
-    peak_sfr = 10.0**log_peak_sfr
+def tsnorm_logistic(age, log_total_mass, peak_lbt, width, skew, trunc):
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     x = (age - peak_lbt) / (width * trunc)
     trunc_factor = 1.0 - jax.nn.sigmoid(_LOGISTIC_K * x)
@@ -86,8 +86,8 @@ _SQRT_2_OVER_PI = jnp.sqrt(2.0 / jnp.pi)
 
 
 @jax.jit
-def tsnorm_tanh(age, log_peak_sfr, peak_lbt, width, skew, trunc):
-    peak_sfr = 10.0**log_peak_sfr
+def tsnorm_tanh(age, log_total_mass, peak_lbt, width, skew, trunc):
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     x = (age - peak_lbt) / (width * trunc)
     phi_x = 0.5 * (1.0 + jnp.tanh(_SQRT_2_OVER_PI * (x + 0.044715 * x**3)))
@@ -101,8 +101,8 @@ def tsnorm_tanh(age, log_peak_sfr, peak_lbt, width, skew, trunc):
 
 
 @jax.jit
-def tsnorm_erfc(age, log_peak_sfr, peak_lbt, width, skew, trunc):
-    peak_sfr = 10.0**log_peak_sfr
+def tsnorm_erfc(age, log_total_mass, peak_lbt, width, skew, trunc):
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     x = (age - peak_lbt) / (width * trunc)
     # Phi(x) = 0.5 * erfc(-x / sqrt(2))
@@ -117,8 +117,8 @@ def tsnorm_erfc(age, log_peak_sfr, peak_lbt, width, skew, trunc):
 
 
 @jax.jit
-def tsnorm_no_trunc(age, log_peak_sfr, peak_lbt, width, skew, _trunc):
-    peak_sfr = 10.0**log_peak_sfr
+def tsnorm_no_trunc(age, log_total_mass, peak_lbt, width, skew, _trunc):
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     return jnp.maximum(peak_sfr * kernel, 0.0)
 
@@ -127,7 +127,7 @@ def tsnorm_no_trunc(age, log_peak_sfr, peak_lbt, width, skew, _trunc):
 # Benchmark
 # ---------------------------------------------------------------
 
-args = (age, log_peak_sfr, peak_lbt, width, skew, trunc)
+args = (age, log_total_mass, peak_lbt, width, skew, trunc)
 
 methods = {
     "No truncation (baseline)": tsnorm_no_trunc,
@@ -143,8 +143,10 @@ ref = tsnorm_exact(*args)
 print("=" * 80)
 print("TSNORM APPROXIMATION BENCHMARK")
 print("=" * 80)
-print(f"Grid: n={n_grid}, peak_lbt={peak_lbt/1e9:.1f} Gyr, width={width/1e9:.1f} Gyr, "
-      f"skew={skew}, trunc={trunc}")
+print(
+    f"Grid: n={n_grid}, peak_lbt={peak_lbt / 1e9:.1f} Gyr, width={width / 1e9:.1f} Gyr, "
+    f"skew={skew}, trunc={trunc}"
+)
 print()
 
 print(f"{'Method':<35s} {'Forward':>10s} {'Gradient':>10s} {'Max |err|':>12s} {'Max rel%':>10s}")
@@ -155,7 +157,9 @@ for name, fn in methods.items():
     t_fwd, result = bench(lambda f=fn: f(*args), n=1000)
 
     # Gradient timing
-    grad_fn = jax.jit(jax.grad(lambda s, f=fn: jnp.sum(f(age, log_peak_sfr, peak_lbt, width, s, trunc))))
+    grad_fn = jax.jit(
+        jax.grad(lambda s, f=fn: jnp.sum(f(age, log_total_mass, peak_lbt, width, s, trunc)))
+    )
     _ = grad_fn(skew)
     t_grad, _ = bench(lambda: grad_fn(skew), n=1000)
 
@@ -176,7 +180,9 @@ for name, fn in methods.items():
     if "baseline" in name:
         print(f"  {name:<35s} {t_fwd:>8.1f} μs {t_grad:>8.1f} μs {'—':>12s} {'—':>10s}")
     else:
-        print(f"  {name:<35s} {t_fwd:>8.1f} μs {t_grad:>8.1f} μs {max_abs:>12.2e} {max_rel:>9.4f}%")
+        print(
+            f"  {name:<35s} {t_fwd:>8.1f} μs {t_grad:>8.1f} μs {max_abs:>12.2e} {max_rel:>9.4f}%"
+        )
 
 # Also test across a range of parameters to find worst-case error
 print("\n" + "=" * 80)
@@ -221,8 +227,8 @@ for mname, mfn in approx_methods.items():
                     if rel_err > worst_rel:
                         worst_rel = rel_err
                         worst_abs = abs_err
-                        worst_params = f"pk={pk/1e9:.0f}G w={w/1e9:.1f}G s={s:.1f} tr={tr:.0f}"
+                        worst_params = f"pk={pk / 1e9:.0f}G w={w / 1e9:.1f}G s={s:.1f} tr={tr:.0f}"
 
-    print(f"  {mname:<20s} {worst_abs:>15.4e} {worst_rel*100:>14.4f}% {worst_params:>35s}")
+    print(f"  {mname:<20s} {worst_abs:>15.4e} {worst_rel * 100:>14.4f}% {worst_params:>35s}")
 
 print("\nDone.")

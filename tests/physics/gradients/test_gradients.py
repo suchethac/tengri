@@ -123,7 +123,7 @@ class TestGradientCorrectness:
         t = jnp.logspace(7, 10, 100)
 
         def sfh_sum(alpha: float) -> float:
-            return jnp.sum(dpl(t, alpha, beta=1.0, tau=1e9, log_peak_sfr=10.0))
+            return jnp.sum(dpl(t, alpha, beta=1.0, tau=1e9, log_total_mass=10.0))
 
         _check_grad_scalar(sfh_sum, 1.5, eps=1e-5, tol=0.005)
 

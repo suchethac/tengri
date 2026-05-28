@@ -95,7 +95,7 @@ def _rest_sed(ssp_data, alpha_fe_value: float):
         met_mode="delta",
         met_alpha_fe=Fixed(alpha_fe_value),
         mean_sfh_type="const",
-        sfh_const_log_sfr=Fixed(0.0),
+        sfh_const_log_total_mass=Fixed(0.0),
         met_logzsol=Fixed(-0.5),
         dust_tau_diff=Fixed(0.0),
         dust_tau_bc=Fixed(0.0),

@@ -45,7 +45,7 @@ def filters():
 def _make_model(ssp_data, filters, **spec_kwargs):
     defaults = dict(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=1.0,
         sfh_tsnorm_peak_lbt_gyr=5.0,
         sfh_tsnorm_width_gyr=2.0,
         sfh_tsnorm_skew=0.0,
@@ -183,7 +183,7 @@ class TestHighBurstiness:
         """psd_sigma=5.0 (very bursty): SED should be finite and positive."""
         spec = Parameters(
             mean_sfh_type=["tsnorm", "field"],
-            sfh_tsnorm_log_peak_sfr=1.0,
+            sfh_tsnorm_log_total_mass=1.0,
             sfh_tsnorm_peak_lbt_gyr=5.0,
             sfh_tsnorm_width_gyr=2.0,
             sfh_tsnorm_skew=0.0,
@@ -208,7 +208,7 @@ class TestHighBurstiness:
         """psd_sigma=2.0 (moderately bursty): derived quantities physical."""
         spec = Parameters(
             mean_sfh_type=["tsnorm", "field"],
-            sfh_tsnorm_log_peak_sfr=1.0,
+            sfh_tsnorm_log_total_mass=1.0,
             sfh_tsnorm_peak_lbt_gyr=5.0,
             sfh_tsnorm_width_gyr=2.0,
             sfh_tsnorm_skew=0.0,

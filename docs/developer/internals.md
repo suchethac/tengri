@@ -85,7 +85,7 @@ parameter names, applying unit conversions where needed:
 
 ```{note}
 `Parameters` free params use full prefixes: `sfh_dpl_alpha`,
-`sfh_dpl_log_peak_sfr`, `sfh_field_psd_sigma`, `sfh_field_xi` -- not
+`sfh_dpl_log_total_mass`, `sfh_field_psd_sigma`, `sfh_field_xi` -- not
 shorthand like `sfh_alpha` or `psd_xi`. Check with `spec.free_params`
 and `spec.sample(key).keys()`.
 ```

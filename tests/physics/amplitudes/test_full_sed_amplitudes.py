@@ -41,7 +41,7 @@ class TestFullSEDAmplitudes:
             pytest.skip("SSP data not available")
         spec = Parameters(
             mean_sfh_type="dpl",
-            sfh_dpl_log_peak_sfr=Fixed(np.log10(3.0)),
+            sfh_dpl_log_total_mass=Fixed(np.log10(3.0)),
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.0),
             sfh_dpl_tau_gyr=Fixed(5.0),
@@ -108,7 +108,7 @@ class TestFullSEDAmplitudes:
         def build(tau):
             spec = Parameters(
                 mean_sfh_type="dpl",
-                sfh_dpl_log_peak_sfr=Fixed(np.log10(3.0)),
+                sfh_dpl_log_total_mass=Fixed(np.log10(3.0)),
                 sfh_dpl_alpha=Fixed(2.0),
                 sfh_dpl_beta=Fixed(1.0),
                 sfh_dpl_tau_gyr=Fixed(5.0),

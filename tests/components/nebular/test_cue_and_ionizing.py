@@ -115,6 +115,96 @@ class TestIonizingParamsTable:
         chex.assert_shape(ionspec, (7,))
         chex.assert_tree_all_finite(ionspec)
 
+    @pytest.mark.regression_bug
+    def test_float32_ssp_does_not_overflow(self, ssp, tmp_path, monkeypatch):
+        """Float32 SSP flux must not overflow the Q_H integration (issue #458).
+
+        SSPs may ship in float32 (e.g. BC03-from-CIGALE) to save disk. The
+        Q_H integration ``trapezoid(flux * L_SUN / (h*nu), nu)`` produces
+        intermediates ~ 1e30 and integrates over ~ 1e16 Hz bandwidth (~ 1e46),
+        well above float32's 3.4e38 max. Without an explicit float64 cast,
+        ``logqion_table`` collapses to ``inf`` for every (Z, age) bin and
+        downstream Cue emits ~zero nebular SED silently.
+
+        The test guards against regressions by re-running the fit fresh —
+        bypassing both the in-memory ``_IONSPEC_TABLE_CACHE`` and the disk
+        cache (#448). Without these isolations, a pre-fix cache hit would
+        return finite values from a prior good run and the test would
+        vacuously pass even with the bug reintroduced.
+        """
+        from tengri.components.nebular import ionizing_spectrum as ions_mod
+        from tengri.components.nebular.ionizing_spectrum import (
+            precompute_ionizing_params_table,
+        )
+
+        # Isolate from prior runs: clear in-memory cache; redirect disk
+        # cache dir to a tmp path so no pre-existing .npz can be loaded.
+        ions_mod._IONSPEC_TABLE_CACHE.clear()
+        monkeypatch.setattr(ions_mod, "_ionspec_disk_cache_dir", lambda: tmp_path)
+
+        # Use slice indices known to contain ionising-bright young bins.
+        # FSPS prsc-miles fixture: lgmet[0] ≈ −4, ages[0:10] cover 0.3–1 Myr,
+        # well within the regime where (flux × L_sun / (h × nu)) is ~ 1e30+
+        # and the trapezoid integration overflows float32 if not cast.
+        wave_f32 = np.asarray(ssp.ssp_wave, dtype=np.float32)
+        flux_f32 = np.asarray(ssp.ssp_flux[:2, :10, :], dtype=np.float32)
+        lgmet_f32 = np.asarray(ssp.ssp_lgmet[:2], dtype=np.float32)
+        assert flux_f32.dtype == np.float32, "test setup: flux must be float32"
+
+        result = precompute_ionizing_params_table(wave_f32, flux_f32, lgmet_f32)
+        logq = np.asarray(result["logqion_table"])
+        assert not np.any(np.isinf(logq)), (
+            "Q_H integration overflowed float32 — logqion_table contains inf"
+        )
+        # Young (< 10 Myr) bins of a bare-stellar SSP should yield realistic Q_H.
+        assert logq.max() > 40.0, (
+            f"max logqion = {logq.max():.2f}; expected > 40 for a young bare "
+            f"stellar SSP. Bug is likely back."
+        )
+
+    def test_precompute_is_memoized(self, ssp_data_wne):
+        """Repeat calls with the same SSP grid must hit the cache (issue #416).
+
+        ``precompute_ionizing_params_table`` runs scipy curve-fits per (met, age)
+        SSP cell; on a full grid this costs ~6 s and was re-entered on every
+        ``SEDModel.build(neb={'type':'cue', ...})``. Memoization keyed on the
+        SSP wavelength + metallicity grids guarantees the second call returns
+        without re-fitting.
+        """
+        import time
+
+        from tengri.components.nebular.ionizing_spectrum import (
+            _IONSPEC_TABLE_CACHE,
+            precompute_ionizing_params_table,
+        )
+
+        ssp = ssp_data_wne
+        wave = np.array(ssp.ssp_wave)
+        flux = np.array(ssp.ssp_flux[:3, :10, :])
+        lgmet = np.array(ssp.ssp_lgmet[:3])
+
+        # Clear any cached entry from prior tests so the first call is cold.
+        _IONSPEC_TABLE_CACHE.clear()
+
+        t0 = time.time()
+        first = precompute_ionizing_params_table(wave, flux, lgmet)
+        cold = time.time() - t0
+
+        t0 = time.time()
+        second = precompute_ionizing_params_table(wave, flux, lgmet)
+        warm = time.time() - t0
+
+        # Same Python object → memoization hit (not a re-fit returning
+        # an equal-but-distinct dict).
+        assert second is first
+
+        # And the warm call must be at least 100x faster than the cold one;
+        # in practice it's microseconds vs seconds. A generous bound keeps
+        # the test stable on slow CI machines.
+        assert warm < max(cold / 100.0, 0.05), (
+            f"second call should be near-instant (cold={cold:.2f}s warm={warm:.4f}s)"
+        )
+
 
 # ── Cue backend ───────────────────────────────────────────────────
 
@@ -266,6 +356,78 @@ class TestCueWithSSP:
             ionspec_logLratio3=float(ionspec[6]),
         )
         assert float(jnp.sum(lum)) > 0, "Should produce positive line emission"
+
+
+# ── Multi-build warm budget (issue #423 / #416 follow-up) ────────
+
+
+class TestCueMultiBuildBudget:
+    """Lock in the per-build cost when many ``SEDModel.build(neb={'type':'cue'})``
+    calls share one process — the pattern the CIGALE-reproduction notebook
+    (``reproduction/cigale/01_cigale.py``) exercises.
+
+    Issue #416 reported ~6 s per build; #418 memoised
+    :func:`precompute_ionizing_params_table` so the second-and-later builds
+    re-use the cached scipy fit. Issue #423 alleged the fix only worked
+    for the scipy step (with Cue still re-tracing per build). We could not
+    reproduce that on origin/main: same-physics builds reuse the structural
+    kernel cache, so the warm cost is dominated by Python-side construction.
+
+    This test guards both regressions at once: if either the ionspec-table
+    cache or the structural-kernel cache stops hitting, the warm budget
+    blows up by 50–100×.
+    """
+
+    def test_six_builds_warm_budget(self, ssp_data_fsps):
+        import os
+        import time
+
+        if not os.path.exists("data/cue_weights.npz"):
+            pytest.skip("Cue weights not found")
+
+        from tengri import FIXED, Fixed, SEDModel
+
+        ssp = ssp_data_fsps
+
+        def _build_one():
+            return SEDModel.build(
+                ssp_data=ssp,
+                sfh={"type": "delayed", "*": FIXED},
+                neb={"type": "cue", "*": FIXED},
+                dust={
+                    "type": "two_component",
+                    "tau_bc": Fixed(0.0),
+                    "tau_diff": Fixed(0.0),
+                    "*": FIXED,
+                },
+                redshift=Fixed(0.0),
+            )
+
+        # Cold build: pays the ionspec-table scipy fit + first JAX trace.
+        # We measure it but only use it as a sanity reference — the bound
+        # is on warm builds, which is what the regression is about.
+        t0 = time.time()
+        _build_one()
+        cold = time.time() - t0
+
+        # Five warm builds back-to-back. With the #418 memoisation and the
+        # structural-kernel cache both hitting, each should be << 1 s.
+        warm_times = []
+        for _ in range(5):
+            t0 = time.time()
+            _build_one()
+            warm_times.append(time.time() - t0)
+
+        warm_total = sum(warm_times)
+        # Generous bound: locally each warm build runs in ~40 ms; CI tends
+        # to be 5-10× slower. Anything over 1 s/build means the cache broke.
+        assert warm_total < 5.0, (
+            f"Five warm Cue builds should complete in << 5 s (cold={cold:.2f}s "
+            f"warm_total={warm_total:.2f}s individual={warm_times}). "
+            f"Likely cause: either precompute_ionizing_params_table memoisation "
+            f"(issue #416 / PR #418) regressed, or the structural-kernel cache "
+            f"stopped hitting on same-physics builds."
+        )
 
 
 # ── Kennicutt 1998 Hα calibration ─────────────────────────────────

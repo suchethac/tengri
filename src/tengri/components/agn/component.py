@@ -321,33 +321,25 @@ class AGNSEDComponent:
             and self._state.filter_waves is not None
             and self._state.filter_trans is not None
         ):
-            from tengri.observation.photometry import compute_flux_density
+            from tengri.observation.photometry import lnu_filter_integral
 
             z = jnp.asarray(params.get("redshift", 0.0))
-            # Filter-integrate L_agn at the source's z, dl_cm=1.
-            # compute_flux_density returns F_nu = (1+z)/(4π·dl²) · Lν_filter,
-            # so undo the cosmology factor to recover the bare rest-frame Lν
-            # — matches the convention of stellar_phot_lnu_precomp.
-            inv_cosmology = 4.0 * jnp.pi * 1.0**2 / (1.0 + z)
-            agn_phot_lnu_precomp = (
-                jnp.asarray(
-                    [
-                        compute_flux_density(
-                            L_agn,
-                            state.wave,
-                            fw,
-                            ft,
-                            redshift=z,
-                            dl_cm=jnp.asarray(1.0),
-                        )
-                        for fw, ft in zip(
-                            self._state.filter_waves,
-                            self._state.filter_trans,
-                            strict=False,
-                        )
-                    ]
-                )
-                * inv_cosmology
+            # Filter-integrate L_agn directly via ``lnu_filter_integral``
+            # (ADR-0016, #398.e). Replaces the previous
+            # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
+            # that applied and immediately undid the (1+z)/(4π d_L²)
+            # dimming. The new helper returns the bare filter-integrated
+            # rest-frame L_ν — matching the publish convention of
+            # ``stellar_phot_lnu_precomp``.
+            agn_phot_lnu_precomp = jnp.asarray(
+                [
+                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                    for fw, ft in zip(
+                        self._state.filter_waves,
+                        self._state.filter_trans,
+                        strict=False,
+                    )
+                ]
             )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
 

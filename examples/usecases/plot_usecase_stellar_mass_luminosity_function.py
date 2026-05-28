@@ -21,7 +21,7 @@ For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.
 
-This demonstrates the forward model: stellar mass → SED → rest-frame
+the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:
@@ -29,6 +29,10 @@ References:
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 from pathlib import Path
@@ -90,41 +94,32 @@ def schechter_sample(
     log10_m_star : ndarray, shape (n_sample,)
         Log10(M_star / M_sun) for each sampled galaxy.
     """
+    # Schechter PDF p(x) ∝ x^α exp(-x) is improper at x=0 for α < -1, so the
+    # original Exponential-proposal rejection sampler had an unbounded
+    # envelope and never terminated. Sample in log-space instead: let
+    # u = log10(x). The PDF transforms as p(u) ∝ x^(α+1) exp(-x) * ln(10),
+    # and for α = -1.45 the exponent (α+1) = -0.45 keeps x^(α+1) bounded
+    # over [10^u_min, 10^u_max], so rejection has a well-defined envelope.
     rng = np.random.RandomState(rng_seed)
-
-    # Generate samples via rejection sampling
-    # Proposal: M/M* ~ Exponential(1); weight by (M/M*)^α
-    samples = []
-    w_max = 0.0  # Track maximum weight seen
-
-    while len(samples) < n_sample:
-        # Generate proposal batch
-        batch_size = max((n_sample - len(samples)) * 3, 1000)
-        x_prop = rng.exponential(scale=1.0, size=batch_size)
-
-        # Compute Schechter weight (unnormalized)
-        # w(x) = x^α * exp(-x) / envelope(x)
-        # Envelope: exponential(x), so w(x) = x^α
-        w = x_prop**alpha
-
-        # Mode of Schechter: d/dx [x^α * exp(-x)] = 0
-        # α*x^(α-1)*exp(-x) - x^α*exp(-x) = 0 → x = α (shift < 0)
-        # For α = -1.45, mode is at negative x (power-law dominates)
-        # Envelope constant: max(x^α) for x in [0, ∞)
-        # Use adaptive max over proposals
-        w_max = max(w_max, np.max(w))
-
-        # Accept/reject
-        u_accept = rng.uniform(0, 1, size=batch_size)
-        accept = u_accept < w / (w_max + 1e-30)
-        samples.extend(x_prop[accept].tolist())
-
-        if len(samples) > n_sample * 2:  # Safety: prevent runaway
+    u_min, u_max = -3.0, 2.0  # log10(M/M*) range — covers faint to ULIRG
+    # Envelope: max of x^(α+1) exp(-x) on the interval is at x = x_min.
+    x_min = 10.0 ** u_min
+    w_envelope = x_min ** (alpha + 1.0) * np.exp(-x_min)
+    samples: list = []
+    for _ in range(100):  # bounded iteration count — never spin forever
+        if len(samples) >= n_sample:
             break
+        batch_size = max((n_sample - len(samples)) * 3, 1000)
+        u_prop = rng.uniform(u_min, u_max, size=batch_size)
+        x_prop = 10.0 ** u_prop
+        w = x_prop ** (alpha + 1.0) * np.exp(-x_prop) / w_envelope
+        u_accept = rng.uniform(0, 1, size=batch_size)
+        samples.extend(u_prop[u_accept < w].tolist())
+    if len(samples) < n_sample:
+        # Fall back to padding (only fires if rejection was pathologically poor).
+        samples = (samples * (1 + n_sample // max(1, len(samples))))[:n_sample]
 
-    m_ratio_log10 = np.array(samples[:n_sample]) / np.log(10.0)
-    log10_m_samples = log10_mstar + m_ratio_log10
-
+    log10_m_samples = log10_mstar + np.array(samples[:n_sample])
     return log10_m_samples
 
 
@@ -190,7 +185,7 @@ for i, log_m_star in enumerate(log_mstar_samples):
     log_sfr = 0.7 * log_m_star - 6.0
 
     params = dict(params_template)
-    params["sfh_dpl_log_sfr"] = float(log_sfr)
+    params["sfh_dpl_log_peak_sfr"] = float(log_sfr)
     params["redshift"] = 0.0  # z=0 for rest-frame
 
     # Predict photometry (returns flux in erg/s/cm²/Hz for each band)
