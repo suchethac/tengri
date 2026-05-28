@@ -30,7 +30,9 @@ class SimpleDustComponent(SEDModelComponent):
 
     name = "test_dust"
     parameter_prefix = "dust_"
-    tau_v = Uniform(0.0, 2.0, description="Emission amplitude", units="dimensionless")
+    tau_v = Uniform(
+        0.0, 2.0, default=0.3, description="Emission amplitude", units="dimensionless"
+    )
 
     outputs = {"L_ir": "erg/s"}
 
@@ -54,7 +56,9 @@ class SimpleDustComponentWithTaylor(SEDModelComponent):
 
     name = "test_dust_taylor"
     parameter_prefix = "dust_taylor_"
-    tau_v = Uniform(0.0, 2.0, description="Emission amplitude", units="dimensionless")
+    tau_v = Uniform(
+        0.0, 2.0, default=0.3, description="Emission amplitude", units="dimensionless"
+    )
     taylor_order = 1
 
     outputs = {"L_ir": "erg/s"}
