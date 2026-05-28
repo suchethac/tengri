@@ -84,6 +84,17 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── SSP data setup ──────────────────────────────────────────
         "download_ssp",
         "list_known_ssps",
+        # ── SSP loaders (closes #496) ───────────────────────────────
+        "load_ssp",
+        "load_ssp_data",
+        "SSPData",
+        # ── Component helpers (closes #497 / #498) ──────────────────
+        # The BAGPIPES reproduction notebook (PR #493) needed direct
+        # callable access to these — tying them to a full SEDModel
+        # build for a curve-only check is unnecessary friction.
+        "igm_transmission",
+        "velocity_broaden",
+        "apply_lsf",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "describe_agn_model",
@@ -169,10 +180,10 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "exp_squared_kernel",
         "gp_noise_covariance",
         "matern32_kernel",
-        # Single-purpose loaders — use `tengri.observation.load_filter_set` /
-        # `tengri.sps.load_ssp_data` instead
+        # Single-purpose loaders — use `tengri.observation.load_filter_set` instead.
+        # (load_ssp_data is RE-PROMOTED to top-level as of #496 — every reproduction
+        # notebook needs it, so back into ALLOWED_TOP_LEVEL it goes.)
         "load_filter_set",
-        "load_ssp_data",
         # Cache machinery — use `tengri.utils.jax_cache.*` /
         # `tengri.inference.jit_engine.*` instead
         "cache_size_bytes",

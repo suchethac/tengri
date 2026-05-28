@@ -139,10 +139,14 @@ def load_ssp(name: str | None = None) -> "SSPData":
         filename = _LOAD_SSP_PRESETS[name]
     elif name in _KNOWN_SSPS:
         filename = _KNOWN_SSPS[name]
-    elif name.endswith(".h5"):
-        filename = name
     else:
-        filename = name + ".h5"
+        # Accept an explicit absolute/relative path to an .h5 file directly
+        # (closes #496 — reproduction notebooks ship SSPs under
+        # ``reproduction/<code>/_drivers/data/`` rather than ``<root>/data/``).
+        as_path = Path(name)
+        if as_path.suffix == ".h5" and as_path.exists():
+            return load_ssp_data(str(as_path))
+        filename = name if name.endswith(".h5") else name + ".h5"
 
     for parent in [Path.cwd(), *Path.cwd().parents]:
         candidate = parent / "data" / filename

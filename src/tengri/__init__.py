@@ -118,6 +118,7 @@ from tengri.citations import (
 )
 from tengri.components import register_component
 from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.igm import igm_transmission
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
@@ -175,6 +176,7 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
+from tengri.observation.spectrum import apply_lsf, velocity_broaden
 
 
 class _KernelsRemoved:
@@ -381,6 +383,7 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDResult",
+    "SSPData",
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
@@ -391,6 +394,7 @@ __all__ = [
     "Uniform",
     "WavePrecomp",
     "agn",
+    "apply_lsf",
     "builders",
     "citations",
     "cite_components",
@@ -416,6 +420,7 @@ __all__ = [
     "fit_batch",
     "help",
     "igm",
+    "igm_transmission",
     "inference",
     "io",
     "list_agn_models",
@@ -431,6 +436,8 @@ __all__ = [
     "list_plots",
     "list_recipes",
     "list_sfh_models",
+    "load_ssp",
+    "load_ssp_data",
     "nebular",
     "observation",
     "parse_groups",
@@ -449,6 +456,7 @@ __all__ = [
     "summary",
     "tutorial",
     "units",
+    "velocity_broaden",
     "xray",
 ]
 

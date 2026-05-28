@@ -110,6 +110,14 @@ EXPECTED_ALL = frozenset(
         "doctor",
         "download_ssp",
         "list_known_ssps",
+        # SSP loaders (closes #496)
+        "load_ssp",
+        "load_ssp_data",
+        "SSPData",
+        # Component helpers (closes #497 / #498)
+        "igm_transmission",
+        "velocity_broaden",
+        "apply_lsf",
         "register_component",
         # Exceptions
         "BackendError",

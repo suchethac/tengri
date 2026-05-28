@@ -70,8 +70,8 @@ _LAMBDA_LYMAN = jnp.array(
     ]
 )
 
-# Lyman limit wavelength
-_LAMBDA_LIMIT = 912.0  # Angstrom
+# Lyman limit wavelength (Inoue et al. 2014 uses 911.8 Å; eazy-py port).
+_LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
 # Shape: (39, 3) — [A_j1, A_j2, A_j3]
@@ -233,56 +233,60 @@ def _tau_lc_laf(
     wave_obs: jnp.ndarray,
     z_source: float,
 ) -> jnp.ndarray:
-    """Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25–27)."""
-    # Absorbers at redshift z_abs contribute for wave_obs = 911.8*(1+z_abs)
-    # So wave_obs must be > 911.8 (rest Lyman limit) and < 911.8*(1+z_source)
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
+    """Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25–27).
 
-    z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
-    # Clamp z_obs >= 0 so fractional exponents (1.2, 3.7, 5.5) never receive a
-    # negative base in the inactive region (wave_obs < lambda_limit). JAX evaluates
-    # all branches regardless of the active mask, so without this clamp the power
-    # expressions produce NaN for short-wavelength photons.
-    z_obs_safe = jnp.maximum(z_obs, 0.0)
+    Ported from eazy-py (Brammer et al.). The piecewise structure is on
+    observed wavelength regimes ``wave_obs ≷ lamL*(1+z1,2)`` and three source-redshift
+    regimes (z_S < 1.2, 1.2 ≤ z_S < 4.7, z_S ≥ 4.7). The active mask
+    ``wave_obs < lamL*(1+z_source)`` naturally extends opacity below the
+    rest-frame Lyman limit (912 Å), where the previous implementation
+    incorrectly returned τ = 0 (closes #494).
+    """
+    lam_L = _LAMBDA_LIMIT
+    z1 = 1.2
+    z2 = 4.7
+    one_plus_zs = 1.0 + z_source
 
-    # Three source-redshift regimes
-    # Regime z_S < 1.2
-    t_low = (
-        0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
-    )
+    # In-range: photon was absorbed at some absorber redshift between 0 and z_source.
+    in_range = wave_obs < lam_L * one_plus_zs
 
-    # Regime 1.2 <= z_S < 4.7
-    t_mid = (
-        2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
-    )
+    # Clamp the wavelength ratio to its physical maximum (1 + z_source) before
+    # raising to fractional powers. Outside ``in_range`` the result is masked to
+    # zero, but JAX evaluates all branches, so the clamp keeps gradients finite
+    # and prevents large-r overflow at long observed wavelengths.
+    r = jnp.minimum(wave_obs / lam_L, one_plus_zs)
 
-    # Regime z_S >= 4.7
-    t_high = (
-        5.22e-4 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        + 2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 1.328e-3 * ((1.0 + z_obs_safe) ** 3.7 - (1.0 + z_source) ** 3.7)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        - 5.15e-5 * ((1.0 + z_obs_safe) ** 5.5 - (1.0 + z_source) ** 5.5)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
+    # ── z_S < 1.2: single observed-wavelength regime ──
+    t_low = 0.3248 * (r**1.2 - one_plus_zs ** (-0.9) * r**2.1)
+
+    # ── 1.2 ≤ z_S < 4.7: two sub-regimes split at wave_obs = lamL*(1+z1) ──
+    above_z1 = wave_obs >= lam_L * (1.0 + z1)
+    t_mid_above = 2.545e-2 * (one_plus_zs**1.6 * r**2.1 - r**3.7)
+    t_mid_below = 2.545e-2 * one_plus_zs**1.6 * r**2.1 + 0.3248 * r**1.2 - 0.2496 * r**2.1
+    t_mid = jnp.where(above_z1, t_mid_above, t_mid_below)
+
+    # ── z_S ≥ 4.7: three sub-regimes split at lamL*(1+z1) and lamL*(1+z2) ──
+    above_z2 = wave_obs > lam_L * (1.0 + z2)
+    between_z1z2 = above_z1 & ~above_z2  # lamL*(1+z1) ≤ wave_obs ≤ lamL*(1+z2)
+    t_hi_top = 5.221e-4 * (one_plus_zs**3.4 * r**2.1 - r**5.5)
+    t_hi_mid = 5.221e-4 * one_plus_zs**3.4 * r**2.1 + 0.2182 * r**2.1 - 2.545e-2 * r**3.7
+    t_hi_bot = 5.221e-4 * one_plus_zs**3.4 * r**2.1 + 0.3248 * r**1.2 - 3.140e-2 * r**2.1
+    t_high = jnp.where(
+        above_z2,
+        t_hi_top,
+        jnp.where(between_z1z2, t_hi_mid, t_hi_bot),
     )
 
     tau = jnp.where(
-        z_source < 1.2,
+        z_source < z1,
         t_low,
-        jnp.where(z_source < 4.7, t_mid, t_high),
+        jnp.where(z_source < z2, t_mid, t_high),
     )
-
-    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
+    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
+    # the path length vanishes at z=0, so transmission must be 1.
+    in_range = in_range & (z_source > 0.0)
+    return jnp.where(in_range, jnp.clip(tau, min=0.0), 0.0)
 
 
 # ── Lyman continuum optical depth (DLA) ───────────────────────────
@@ -292,25 +296,48 @@ def _tau_lc_dla(
     wave_obs: jnp.ndarray,
     z_source: float,
 ) -> jnp.ndarray:
-    """Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28–29)."""
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
-    z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
+    """Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28–29).
 
-    # Two source-redshift regimes
+    Ported from eazy-py (Brammer et al.). At z_S ≥ 2 the formula splits at the
+    observed wavelength ``lamL*(1+z1_DLA)``; below 912 Å rest the opacity is
+    non-zero (closes #494).
+    """
+    lam_L = _LAMBDA_LIMIT
+    z1 = 2.0
+    one_plus_zs = 1.0 + z_source
+
+    in_range = wave_obs < lam_L * one_plus_zs
+    r = jnp.minimum(wave_obs / lam_L, one_plus_zs)
+    # Floor r away from zero so r**-0.3 stays finite under jnp.where (gradient safety).
+    r_safe = jnp.maximum(r, 1e-3)
+
+    # ── z_S < 2 — single observed-wavelength regime ──
     t_low = (
-        0.2113 * (1.0 + z_source) ** 2.0
-        - 7.661e-2 * (1.0 + z_source) ** 2.5 * (1.0 + z_obs) ** (-0.5)
-        - 0.1347 * (1.0 + z_obs) ** 2.0
+        0.2113 * one_plus_zs**2.0 - 0.07661 * one_plus_zs**2.3 * r_safe ** (-0.3) - 0.1347 * r**2.0
     )
 
-    t_high = (
-        4.696e-2 * (1.0 + z_source) ** 3.0
-        - 1.779e-2 * (1.0 + z_source) ** 3.5 * (1.0 + z_obs) ** (-0.5)
-        - 2.916e-2 * (1.0 + z_obs) ** 3.0
+    # ── z_S ≥ 2 — two sub-regimes split at wave_obs = lamL*(1+z1) ──
+    above_z1 = wave_obs >= lam_L * (1.0 + z1)
+    t_hi_above = (
+        0.04696 * one_plus_zs**3.0
+        - 0.01779 * one_plus_zs**3.3 * r_safe ** (-0.3)
+        - 0.02916 * r**3.0
     )
+    t_hi_below = (
+        0.6340
+        + 0.04696 * one_plus_zs**3.0
+        - 0.01779 * one_plus_zs**3.3 * r_safe ** (-0.3)
+        - 0.1347 * r**2.0
+        - 0.2905 * r_safe ** (-0.3)
+    )
+    t_high = jnp.where(above_z1, t_hi_above, t_hi_below)
 
-    tau = jnp.where(z_source < 2.0, t_low, t_high)
-    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
+    tau = jnp.where(z_source < z1, t_low, t_high)
+    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
+    # the path length vanishes at z=0, so transmission must be 1.
+    in_range = in_range & (z_source > 0.0)
+    return jnp.where(in_range, jnp.clip(tau, min=0.0), 0.0)
 
 
 # ── CGM damping wing absorption (Asada et al. 2025) ───────────────

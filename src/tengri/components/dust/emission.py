@@ -1549,3 +1549,13 @@ DUST_EMISSION_MODELS["themis"] = _make_lazy_loader(
     "themis_templates.h5",
     "create_themis_from_grid",
 )
+
+# ── Friendly aliases ─────────────────────────────────────────────
+# Short names commonly used in the literature and surfaced by
+# ``tengri.list_dust_emission_models()``. Without these entries the
+# ``SEDModel.build(..., dust={"emission": {"type": "dl07"}})`` validator
+# (which derives accepted types from this dict) rejected the names that
+# the public introspection helper advertised. Closes #495.
+DUST_EMISSION_MODELS["dl07"] = DUST_EMISSION_MODELS["draine_li2007"]
+DUST_EMISSION_MODELS["dl14"] = DUST_EMISSION_MODELS["draine_li2014"]
+DUST_EMISSION_MODELS["mbb"] = modified_blackbody
