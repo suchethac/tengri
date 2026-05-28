@@ -371,6 +371,15 @@ def run_native_vi(
     minimization) runs inside ``jax.lax.while_loop`` with zero
     Python overhead. Stops automatically when KL converges.
 
+    .. warning::
+       ``vi_native`` and the NIFTy ``vi`` path target the same KL
+       objective but are **not posterior-equivalent**: the SFH PSD
+       timescale ``sfh_field_psd_tau_myr`` has been observed to differ
+       by ~10× between the two paths (e.g. 6 Myr vs 82 Myr on a 137-D
+       stochastic problem). The native path is ~19–25× faster but
+       posterior shape must be validated per-problem before swapping.
+       See ``bench/reports/2026-04-17_native_vs_nifty.md``.
+
     Parameters
     ----------
     init_from : str, Posterior, or None
