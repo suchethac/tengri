@@ -1025,9 +1025,19 @@ save_fig("10_xray_nh_sweep.png")
 # ## §11 Radio
 #
 # CIGALE's `radio` module gives a star-forming synchrotron component
-# tied to the IR-to-radio correlation (q_IR after Condon 1992) plus an
-# AGN power-law via radio loudness. tengri ships the same physics as
-# `radio.condon92`. Star-forming only, 100 MHz to 100 GHz.
+# tied to the IR-to-radio correlation (q_IR; CIGALE default `qir_sf = 2.5`,
+# Helou+1985 anchor) plus thermal free-free (Murphy+2011 Eq. 11) plus
+# an AGN power-law via radio loudness. tengri's `radio.condon92` ships
+# the same composite — the registry-name "condon92" anchors to the
+# Condon 1992 framework (ARA&A 30, 575) but the *calibrations* are
+# Bell 2003 (q_IR), Murphy 2011 (free-free), Yang 2020 (AGN).
+#
+# To match CIGALE bit-for-bit the tengri build below pins `radio_q_ir =
+# 2.5` and `radio_alpha_sf = 0.8`. tengri's bucket default is
+# `radio_q_ir = 2.64` (Bell 2003 z = 0 anchor); without that override
+# the panels disagree by `10^(2.64 - 2.5) ≈ 1.38×` at 1.4 GHz —
+# exactly q_IR convention, not a physics gap.
+# Star-forming only, 100 MHz to 100 GHz.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()
@@ -1068,7 +1078,15 @@ try:
               "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
               "*": FIXED,
               "emission": {"type": "dale2014", "*": FIXED}},
-        radio={"type": "condon92", "*": FIXED},
+        # Pin q_IR to CIGALE's `qir_sf = 2.5` (CIGALE's default for the
+        # SF synchrotron). tengri's bucket default is `Fixed(2.64)`
+        # (Bell 2003 z=0 anchor); the 0.14 dex difference is exactly the
+        # ~1.4× ratio that otherwise shows up between the panels at
+        # 1.4 GHz. Same `alpha_sf = 0.8`.
+        radio={"type": "condon92",
+               "radio_q_ir": Fixed(2.5),
+               "radio_alpha_sf": Fixed(0.8),
+               "*": FIXED},
         redshift=Fixed(0.0),
     )
     state_r = m_r.predict_state({})
