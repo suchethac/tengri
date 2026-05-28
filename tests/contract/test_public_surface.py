@@ -23,8 +23,7 @@ pytestmark = pytest.mark.contract
 # entry pins that the new path still resolves cleanly (no DeprecationWarning).
 _RELOCATED: dict[str, tuple[str, str]] = {
     "LineFluxData": ("tengri.observation", "LineFluxData"),
-    "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
-    "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
+    # (SpectralIndexDef / SpectralIndexData re-promoted to top-level as of #511.)
 }
 
 # Frozen target list. Adding to or removing from this list is a deliberate
@@ -122,6 +121,17 @@ EXPECTED_ALL = frozenset(
         "igm_transmission",
         "velocity_broaden",
         "apply_lsf",
+        # GP-noise kernels + spectral-index helpers (closes #511)
+        "exp_squared_kernel",
+        "matern32_kernel",
+        "gp_noise_covariance",
+        "SpectralIndexDef",
+        "SpectralIndexData",
+        "STANDARD_INDICES",
+        "measure_index_jax",
+        # Composite spectral indices (closes #505)
+        "CompositeIndexDef",
+        "STANDARD_COMPOSITE_INDICES",
         "register_component",
         # Exceptions
         "BackendError",

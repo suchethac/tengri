@@ -179,6 +179,14 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
+from tengri.observation.spectral_indices import (
+    STANDARD_COMPOSITE_INDICES,
+    STANDARD_INDICES,
+    CompositeIndexDef,
+    SpectralIndexData,
+    SpectralIndexDef,
+    measure_index_jax,
+)
 from tengri.observation.spectrum import apply_lsf, velocity_broaden
 
 
@@ -370,7 +378,10 @@ from tengri.registry import (
 __all__ = [
     "FIXED",
     "FREE",
+    "STANDARD_COMPOSITE_INDICES",
+    "STANDARD_INDICES",
     "BackendError",
+    "CompositeIndexDef",
     "ConfigError",
     "Exponential",
     "Fixed",
@@ -393,6 +404,8 @@ __all__ = [
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
+    "SpectralIndexData",
+    "SpectralIndexDef",
     "SpectrumPrecomp",
     "StudentT",
     "TengriError",
@@ -421,9 +434,11 @@ __all__ = [
     "download_ssp",
     "dust",
     "examples",
+    "exp_squared_kernel",
     "explain",
     "filters",
     "fit_batch",
+    "gp_noise_covariance",
     "help",
     "igm",
     "igm_transmission",
@@ -448,6 +463,8 @@ __all__ = [
     "list_xray_models",
     "load_ssp",
     "load_ssp_data",
+    "matern32_kernel",
+    "measure_index_jax",
     "nebular",
     "observation",
     "parse_groups",

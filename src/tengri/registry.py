@@ -662,6 +662,8 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
     ("plot_sfh_comparison", "Overlay multiple SFH(t) curves (e.g. truth vs posterior)"),
     ("plot_corner_comparison", "Two-posterior corner plot (e.g. with truth)"),
     ("safe_corner", "Corner plot wrapper that handles fixed parameters gracefully"),
+    ("plot_1d_posterior", "Marginal histogram of one parameter + median/16/84"),
+    ("plot_calibration", "Chebyshev calibration polynomial with 16/84 band"),
     ("setup_style", "Apply tengri matplotlib style (serif, tight, 150 dpi)"),
     ("diagnostics_table", "ESS / R-hat / divergences table for sampling diagnostics"),
 )

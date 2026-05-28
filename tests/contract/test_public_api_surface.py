@@ -96,6 +96,17 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "igm_transmission",
         "velocity_broaden",
         "apply_lsf",
+        # ── GP-noise kernels + spectral indices (closes #511) ───────
+        "exp_squared_kernel",
+        "matern32_kernel",
+        "gp_noise_covariance",
+        "SpectralIndexDef",
+        "SpectralIndexData",
+        "STANDARD_INDICES",
+        "measure_index_jax",
+        # ── Composite spectral indices (closes #505) ────────────────
+        "CompositeIndexDef",
+        "STANDARD_COMPOSITE_INDICES",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "describe_agn_model",
@@ -180,10 +191,9 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "print_bibtex",
         "print_citations",
         "print_paper_citation",
-        # Noise kernel helpers — use `tengri.observation.noise.*` instead
-        "exp_squared_kernel",
-        "gp_noise_covariance",
-        "matern32_kernel",
+        # (exp_squared_kernel / matern32_kernel / gp_noise_covariance were
+        # re-promoted to top-level as of #511 — they're the standard noise-model
+        # kernels and every spectroscopy fit needs them.)
         # Single-purpose loaders — use `tengri.observation.load_filter_set` instead.
         # (load_ssp_data is RE-PROMOTED to top-level as of #496 — every reproduction
         # notebook needs it, so back into ALLOWED_TOP_LEVEL it goes.)
