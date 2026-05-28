@@ -698,6 +698,23 @@ plt.show()
 #
 # Same model, viewed across 1 Å (X-ray) to 10 m (radio). What appears
 # in the X-ray and radio panels arrives in §10 and §11.
+#
+# **Two visible differences in the wings — both are §-cross-references,
+# not §7-physics issues:**
+#
+# *Far-UV (λ < 1000 Å):* tengri's panel drops steeply on the blue side
+# of Lyα while CIGALE's tail decays more gradually. The cause is
+# attenuation-law extrapolation outside the law's defined range —
+# Calzetti+2000 was fit on 1200 Å – 22000 Å, and tengri's
+# implementation lets `A_λ/A_V` climb to ~150 at λ < 300 Å while
+# CIGALE's drops cleanly to zero. The panel comparison in §4 shows
+# this directly. Both behaviours are extrapolation choices; neither
+# is more physically motivated than the other.
+#
+# *Long-wavelength tail (λ > 10⁷ Å):* the tengri side carries a small
+# rising νL_ν tail from 10 to 200 mm where CIGALE's reads zero. This
+# is the published-Dale-vs-CIGALE-truncated-Dale template difference
+# documented in §6.
 
 # %%
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
