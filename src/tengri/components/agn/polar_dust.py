@@ -439,14 +439,18 @@ def anisotropic_polar_luminosity(
     sin_oa = jnp.sin(jnp.radians(opening_angle_deg))
     aniso_factor = 7.0 / 18.0 - sin_oa**2 / 6.0 - (2.0 / 9.0) * sin_oa**3
 
-    # Apply extinction to the disc spectrum
-    l_nu_extinct = l_nu_disk * extinction_factor
+    # ABSORBED disc flux per unit frequency: (1 - transmission) × L_nu.
+    # ``extinction_factor`` is the wavelength-dependent transmission
+    # (exp(-tau_lambda)); the polar dust absorbs the complementary
+    # fraction. Matches CIGALE skirtor2016.py:368:
+    # ``l_ext = ... × np.trapz(AGN1.disk * (1.0 - ext_fac), x=AGN1.wl)``.
+    l_nu_absorbed = l_nu_disk * (1.0 - extinction_factor)
 
     # Integrate over frequency: convert wavelength integral to frequency integral
     # dnu = -c/lambda^2 dlambda, so |dnu| = c/lambda^2 |dlambda|
     nu = _C_AA / wavelength
     # Use trapezoidal rule on frequency grid (descending order)
-    l_total = jnp.trapezoid(l_nu_extinct[::-1], nu[::-1])
+    l_total = jnp.trapezoid(l_nu_absorbed[::-1], nu[::-1])
 
     # Apply anisotropic geometry factor
     l_total = aniso_factor * l_total
