@@ -117,3 +117,65 @@ def test_skirtor_and_schartmann_differ() -> None:
     L_sc = sc(wave_aa, 10.0)
     rel = float(jnp.max(jnp.abs(L_sk - L_sc)) / jnp.max(L_sk + L_sc))
     assert rel > 0.05
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Polar dust integration in torus/skirtor (CIGALE skirtor2016 parity)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.contract
+def test_skirtor_torus_polar_dust_off_by_default() -> None:
+    """agn_polar_ebv=0 must yield zero polar-dust contribution."""
+    torus = resolve_agn_block("torus", "skirtor")
+    wave_aa = jnp.geomspace(1e3, 1e7, 300)
+    L_default = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
+    L_explicit_off = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.0,
+    )
+    np.testing.assert_allclose(np.asarray(L_default), np.asarray(L_explicit_off), rtol=1e-7)
+
+
+@pytest.mark.bounds
+def test_skirtor_torus_polar_dust_only_adds() -> None:
+    """Polar-dust contribution must be non-negative everywhere — never subtract."""
+    torus = resolve_agn_block("torus", "skirtor")
+    wave_aa = jnp.geomspace(1e3, 1e7, 300)
+    L_off = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
+    L_on = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.03,
+        agn_polar_T=100.0,
+        agn_polar_beta=1.6,
+        agn_oa_skirtor=40.0,
+    )
+    delta = L_on - L_off
+    assert float(delta.min()) >= -1e-30  # numerical floor only
+    assert float(delta.max()) > 0.0  # non-trivial addition somewhere
+
+
+@pytest.mark.conservation
+def test_skirtor_torus_polar_dust_lifts_fir_tail() -> None:
+    """At the §9 CIGALE fiducial, polar dust must lift the 100 µm tail
+    by a factor >2 — the regression that motivated the audit."""
+    torus = resolve_agn_block("torus", "skirtor")
+    wave_aa = jnp.geomspace(1e3, 1e7, 400)
+    L_off = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
+    L_on = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.03,
+        agn_polar_T=100.0,
+        agn_polar_beta=1.6,
+        agn_oa_skirtor=40.0,
+    )
+    # Index nearest 100 µm:
+    i100 = int(np.argmin(np.abs(np.asarray(wave_aa) - 1.0e6)))
+    ratio = float(L_on[i100] / L_off[i100])
+    assert ratio > 2.0, f"100 um lift {ratio:.2f}x — expected >2x"

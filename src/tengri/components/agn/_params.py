@@ -200,6 +200,22 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    # Polar dust greybody re-emission (CIGALE skirtor2016 convention,
+    # Casey 2012 modified blackbody added on top of SKIRTOR thermal dust)
+    ParamDeclaration(
+        "agn_polar_T",
+        Fixed(100.0),
+        "Polar dust temperature [K] (CIGALE skirtor2016 default 100 K).",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "agn_polar_beta",
+        Fixed(1.6),
+        "Polar dust emissivity index beta (CIGALE skirtor2016 default 1.6).",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
     ParamDeclaration(
         "agn_polar_oa",
         Fixed(45.0),
