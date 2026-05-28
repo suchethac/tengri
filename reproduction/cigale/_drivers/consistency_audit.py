@@ -23,12 +23,10 @@ warnings.filterwarnings("ignore")
 from pathlib import Path
 
 import numpy as np
+from reproduction.cigale._drivers import cigale_driver as C, units as U
 
-import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from reproduction.cigale._drivers import cigale_driver as C
-from reproduction.cigale._drivers import units as U
 
 SSP_PATH = Path(__file__).parent / "data" / "bc03_from_cigale.h5"
 
@@ -133,7 +131,19 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
     if with_neb:
         kw["neb"] = {"type": "cue", "*": FIXED}
     if with_agn:
-        kw["agn"] = {"type": "silva04", "*": FIXED}
+        # Mirror reproduction §9 / §10: composable schartmann2005 disc
+        # (CIGALE skirtor2016 disk_type=1 default) + skirtor torus +
+        # polar-dust greybody on at the CIGALE default (E(B-V)=0.03,
+        # T=100K, beta=1.6). ``agn_log_lbol=-0.42`` matches CIGALE's
+        # actual sed.info["agn.disk_luminosity"] = 0.38 Lsun at
+        # fracAGN=0.3, lambda_fracAGN="0/0".
+        kw["agn"] = {
+            "type": "composable",
+            "disc": {"type": "schartmann2005", "*": FIXED},
+            "torus": {"type": "skirtor", "*": FIXED},
+            "agn_log_lbol": Fixed(-0.42),
+            "*": FIXED,
+        }
     return kw
 
 
@@ -209,13 +219,13 @@ except Exception as e:
 # --------------------------------------------------------------------------
 # §9 AGN
 # --------------------------------------------------------------------------
-print("\n--- §9 Stellar+AGN (silva04 vs CIGALE skirtor2016) ---")
+print("\n--- §9 Stellar+AGN (schartmann2005 + skirtor torus + polar dust) ---")
 try:
-    model_agn = SEDModel.build(**fiducial_kwargs(with_agn=True))
+    model_agn = SEDModel.build(**fiducial_kwargs(with_dust=True, with_agn=True))
     wave_t9, sed_t9 = model_agn.predict_rest_sed({})
     tengri_agn_ok = True
 except Exception as e:
-    print(f"  tengri silva04 build/predict failed: {e}")
+    print(f"  tengri composable AGN build/predict failed: {e}")
     tengri_agn_ok = False
 
 try:
@@ -223,9 +233,11 @@ try:
         ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20,
                             f_burst=0.0, sfr_A=1.0, normalise=True)),
         ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-        ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=40,
-                             disk_type=1, delta=-0.36, fracAGN=0.3, law=0, EBV=0.03,
-                             temperature=100, emissivity=1.6)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
+                             disk_type=1, delta=0, fracAGN=0.3,
+                             lambda_fracAGN="0/0", law=0, EBV=0.03,
+                             temperature=100.0, emissivity=1.6)),
     ])
     wave_c9, L_c9 = C.to_lnu(sed_c9)
     cig_agn_ok = True
@@ -234,9 +246,18 @@ except Exception as e:
     cig_agn_ok = False
 
 if tengri_agn_ok and cig_agn_ok:
-    r = common_grid_ratio(wave_c9, L_c9, np.asarray(wave_t9), np.asarray(sed_t9),
-                          lo=1e3, hi=1e7)
-    stats("§9 stellar+AGN (10³-10⁷Å)", r)
+    # Per-band ratios — same bins as §6, plus 30 µm peak and 100 µm tail.
+    bins = [
+        ("§9 UV    (10³-10⁴Å)",         1e3,  1e4),
+        ("§9 opt   (4000-2×10⁴Å)",      4e3,  2e4),
+        ("§9 NIR   (2×10⁴-2×10⁵Å)",     2e4,  2e5),
+        ("§9 MIR   (2×10⁵-1×10⁶Å) [30µm peak]",  2e5,  1e6),
+        ("§9 FIR   (10⁶-10⁷Å) [100µm tail]",     1e6,  1e7),
+        ("§9 full  (10³-10⁷Å)",         1e3,  1e7),
+    ]
+    for label, lo, hi in bins:
+        stats(label, common_grid_ratio(wave_c9, L_c9, np.asarray(wave_t9),
+                                       np.asarray(sed_t9), lo=lo, hi=hi))
 
 
 print("\n" + "=" * 80)

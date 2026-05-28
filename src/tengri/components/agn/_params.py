@@ -192,11 +192,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
-    # Polar dust reddening of AGN disc (Type 1 SMC-law screen)
+    # Polar dust reddening of AGN disc (Type 1 SMC-law screen).
+    # Default 0.03 matches CIGALE skirtor2016 ``EBV`` default — polar dust
+    # is part of the CIGALE-faithful AGN; set Fixed(0.0) explicitly to
+    # disable.
     ParamDeclaration(
         "agn_polar_ebv",
-        Fixed(0.0),
-        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); 0 = disabled",
+        Fixed(0.03),
+        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); "
+        "default 0.03 matches CIGALE skirtor2016. Set 0 to disable.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),

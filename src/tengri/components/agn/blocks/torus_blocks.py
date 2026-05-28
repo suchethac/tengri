@@ -88,7 +88,7 @@ def skirtor_torus_block(
     agn_oa_skirtor: float = 40.0,
     agn_cos_inc: float = 0.5,
     agn_torus_frac: float = 0.5,
-    agn_polar_ebv: float = 0.0,
+    agn_polar_ebv: float = 0.03,
     agn_polar_T: float = 100.0,
     agn_polar_beta: float = 1.6,
     **_params,
@@ -120,8 +120,9 @@ def skirtor_torus_block(
     agn_torus_frac : float, optional
         Covering factor. Default ``0.5``.
     agn_polar_ebv : float, optional
-        Polar dust E(B-V) [mag] (SMC law). Default ``0`` (disabled). At
-        the CIGALE default ``0.03`` adds the Casey-modified-BB FIR bump.
+        Polar dust E(B-V) [mag] (SMC law). Default ``0.03`` (CIGALE
+        ``skirtor2016`` default). Set ``0`` to disable the polar-dust
+        greybody.
     agn_polar_T : float, optional
         Polar dust temperature [K]. Default ``100`` (CIGALE default).
     agn_polar_beta : float, optional
