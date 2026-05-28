@@ -3063,9 +3063,9 @@ class SEDModel:
         wave_obs : array, optional
             Observed-frame wavelength grid [Angstrom]. If None, uses:
 
-            1. Grid from :meth:`precompute_spectroscopy()` if called
-            2. Grid from ``observation.spectroscopy.wave_obs`` if set
-            3. Raises ValueError if neither available
+            1. The grid bound at construction from
+               ``observation.spectroscopy.wave_obs``
+            2. Raises ValueError if no grid is available
 
         wave_chunk_size : int, optional
             If specified, split observed-frame wavelength axis into chunks of
@@ -3105,10 +3105,11 @@ class SEDModel:
 
         All three are convolved in the forward model.
 
-        **Precomputed wavelength grid**: For fixed-redshift models with
-        fixed wavelength grid, call :meth:`precompute_spectroscopy(wave_obs)`
-        at initialization to cache spectroscopy kernels. This enables the
-        hybrid/compositional paths for ~10× speedup vs. exact.
+        **Precomputed wavelength grid**: When the model is built with
+        ``Observation(spectroscopy=Spectroscopy(wave_obs=...))`` the SSP is
+        resampled onto that fixed grid at construction, so each forward
+        spectrum is a cached weighted sum (~1 ms warm) and ``wave_obs`` need
+        not be passed on every call.
 
         **Wavelength-axis chunking**: Set ``wave_chunk_size`` to split the
         observed-frame wavelength axis into ~N/chunk_size chunks and evaluate
@@ -3134,7 +3135,7 @@ class SEDModel:
         --------
         predict_photometry : Filter-integrated flux (simpler, faster).
         predict : Lazy access to all SED and SFH quantities.
-        precompute_spectroscopy : Cache spectroscopy kernels for this grid.
+        predict_photometry : Filter-integrated flux (simpler, faster).
         """
         if wave_obs is None and self._precomputed.spectroscopy is not None:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
@@ -3152,7 +3153,7 @@ class SEDModel:
             wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
             raise ValueError(
-                "No wavelength grid. Pass wave_obs, call precompute_spectroscopy(), "
+                "No wavelength grid. Pass wave_obs, "
                 "or attach an Observation with spectroscopy.wave_obs set."
             )
 
@@ -4008,7 +4009,8 @@ class SEDModel:
         elif wave_obs is None:
             raise ValueError(
                 "predict_spectrum_components requires a wave_obs grid "
-                "(pass it explicitly or call precompute_spectroscopy()."
+                "(pass it explicitly, or build with "
+                "Observation(spectroscopy=Spectroscopy(wave_obs=...)))."
             )
 
         state = self.predict_state(params)
@@ -5078,7 +5080,16 @@ class SEDModel:
             ).items()
             if v is not None
         }
-        from tengri.parameters.groups import parse_groups
+        from tengri.parameters.groups import _TOP_LEVEL_SETTINGS, parse_groups
+
+        # Top-level parameter settings (e.g. ``n_grid``) belong to
+        # ``parse_groups`` / ``Parameters``, not ``__init__``. Pull any that
+        # arrived via ``**model_kwargs`` over to the group dict so that, e.g.,
+        # ``SEDModel.build(..., n_grid=128)`` works instead of raising a
+        # confusing ``__init__() got an unexpected keyword argument`` error.
+        for _key in _TOP_LEVEL_SETTINGS:
+            if _key in model_kwargs:
+                groups[_key] = model_kwargs.pop(_key)
 
         spec = parse_groups(**groups)
         return cls(

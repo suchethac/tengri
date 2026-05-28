@@ -106,3 +106,16 @@ API reference: [API](api/index.md).
    spine/16_simulation_interface
    spine/17_emission_line_measurements
 ```
+
+## Experimental
+
+Work-in-progress notebooks that exercise newer or less-settled capabilities.
+Treated as a staging area — APIs and results here may change.
+
+```{eval-rst}
+.. toctree::
+   :maxdepth: 1
+   :titlesonly:
+
+   spine/experimental/stochastic_sfh_recovery
+```
