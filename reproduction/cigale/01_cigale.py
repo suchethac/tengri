@@ -668,16 +668,24 @@ plt.show()
 # (solid), and the nebular component alone (dotted). The two emitters
 # see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
 # `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`.
-# Cue fixes the gas density (CIGALE's `n_e = 100`) and the solar N/O,
-# C/O offsets internally — those CIGALE knobs have no tengri counterpart
-# yet, tracked in [tengri #458](https://github.com/suchethac/tengri/issues/458).
+# tengri's `CueBackend` exposes `gas_logn`, `gas_logno`, `gas_logco` as
+# continuous parameters that take the CIGALE-faithful values (n_H = 100
+# cm⁻³ → `gas_logn = 2.0`; solar N/O, C/O → `gas_logno = gas_logco = 0.0`)
+# at the midpoint of their priors. (The earlier framing of #458 as
+# "those CIGALE knobs have no tengri counterpart" was wrong — the bug
+# was a silent normalisation in the SEDComponent path, fixed in #477.)
 #
 # Both panels include line + continuum nebular emission. The Cue side
-# previously read silent — the Q_H integration of the float32 BC03 SSP
-# overflowed to `inf`, baking ~zero line luminosities into the forward
-# pass (issue #458, fixed in #469: float64-cast at the integration site
-# plus a precompute age-cutoff that makes the BC03-from-CIGALE refit
-# ~600× faster).
+# previously read silent — three independent defects suppressed line
+# luminosities until late May 2026:
+# (1) Q_H integration in `fit_ionizing_spectrum` overflowed `inf` on
+#     float32 BC03 SSPs (closes #458, fixed in #469).
+# (2) `cue_model.py` set `gas_logq = logU` (~−3 dex) instead of the
+#     Strömgren-corrected value (~+48 dex); a ±100-dex saturation clip
+#     hid the error (fixed in #477).
+# (3) `gas_logqion` was hardcoded at 49.1 (~3-4 dex below the Q_H of a
+#     real SF galaxy); the SEDComponent now consumes the SSP-aggregated
+#     `nion` published by `StellarSEDComponent` (fixed in #477).
 
 # %%
 _sfh_args = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
@@ -732,10 +740,13 @@ ax_l.plot(w_c_neb, L_c_neb, "C0-", linewidth=1.4, alpha=0.7,
           label="stellar + CLOUDY nebular")
 ax_l.plot(w_c_neb, L_c_neb_only, "C0:", linewidth=1.4, label="CLOUDY nebular only")
 ax_l.legend(fontsize=8)
-# tengri side — Cue currently absorbs LyC at <912 Å but does not emit
-# the recycled photons back into ``sed_intrinsic`` (tracked in #458).
-# Plot the (essentially zero) Cue-only contribution so the gap is
-# visible against the CIGALE CLOUDY emission on the left panel.
+# tengri side — post-#477 the Cue emission lines should match the CIGALE
+# CLOUDY line forest at the per-line level (Cue is a neural emulator of
+# the same CLOUDY physics for a single H II region, so the agreement is
+# limited by emulator precision, not by the bug fixes themselves). The
+# residual mismatch comes from: (a) Cue trained on Cloudy 17 vs CIGALE's
+# Cloudy 13.x grids, (b) Cue's bare-stellar SSP requirement vs CIGALE's
+# wNE-SSP path, (c) line-broadening kernel differences.
 L_t_neb_only = np.maximum(np.asarray(s_neb.sed_intrinsic)
                           - np.asarray(s_no_neb.sed_intrinsic), 1e-30)
 ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
@@ -743,7 +754,7 @@ ax_r.plot(s_no_neb.wave, s_no_neb.sed_intrinsic, "k--",
 ax_r.plot(s_neb.wave, s_neb.sed_intrinsic, "C1-", linewidth=1.4, alpha=0.7,
           label="stellar + Cue")
 ax_r.plot(s_neb.wave, L_t_neb_only, "C1:", linewidth=1.4,
-          label="Cue nebular only (≈ 0 — #458)")
+          label="Cue nebular only")
 ax_r.legend(fontsize=8)
 _xmin_n = float(min(w_c_neb.min(), float(np.asarray(s_neb.wave).min())))
 _xmax_n = float(max(w_c_neb.max(), float(np.asarray(s_neb.wave).max())))
