@@ -318,38 +318,37 @@ def _valid_dust_laws() -> frozenset[str]:
     return frozenset(DUST_LAWS.keys())
 
 
-#: Valid AGN disc block types.
-_VALID_AGN_DISC_TYPES = {
-    "none",
-    "powerlaw",
-    "multicolor",
-    "kubota_done",
-    "adaf",
-    "qsogen",
-    "grahsp_sbpl",
-}
+def _agn_block_types(category: str) -> frozenset[str]:
+    """Derive valid AGN block-type names for ``category`` from the registry.
 
-#: Valid AGN torus block types.
-_VALID_AGN_TORUS_TYPES = {
-    "none",
-    "simple",
-    "two_temperature",
-    "nenkova",
-    "skirtor",
-    "silva04",
-    "cat3d_wind",
-    "qsogen",
-    "grahsp",
-}
+    Previously each ``_VALID_AGN_*_TYPES`` set was hand-maintained, which
+    silently drifted whenever a new block was registered without updating
+    this file (#488's ``disc.skirtor`` / ``disc.schartmann2005`` /
+    ``disc.adaf_lopez2024`` landed in :data:`AGN_BLOCKS` but were missing
+    here, so the validator rejected them at build time with "Unknown
+    agn_disc_block type 'skirtor'"). Derive from ``AGN_BLOCKS`` so the
+    block-registration decorator is the single source of truth — the same
+    fix pattern that closed the IGM ``meiksin06`` drift earlier.
+    """
+    # Force-import every block module so its ``@register_agn_block``
+    # decorators have fired. Mirrors the eager imports done by AGN
+    # ``unified.py`` at module-load time; safe to redo here.
+    import tengri.components.agn.blocks.alternates
+    import tengri.components.agn.blocks.disc_blocks
+    import tengri.components.agn.blocks.lines_blocks  # noqa: F401
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
-#: Valid AGN lines block types.
-_VALID_AGN_LINES_TYPES = {
-    "none",
-    "blr",
-    "nlr",
-    "grahsp",
-    "qsogen",
-}
+    return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
+
+
+#: Valid AGN disc block types (derived from ``AGN_BLOCKS['disc']``).
+_VALID_AGN_DISC_TYPES = _agn_block_types("disc")
+
+#: Valid AGN torus block types (derived from ``AGN_BLOCKS['torus']``).
+_VALID_AGN_TORUS_TYPES = _agn_block_types("torus")
+
+#: Valid AGN lines block types (derived from ``AGN_BLOCKS['lines']``).
+_VALID_AGN_LINES_TYPES = _agn_block_types("lines") | {"qsogen"}  # qsogen lives on the qsogen model
 
 #: Valid AGN feii block types.
 _VALID_AGN_FEII_TYPES = {
