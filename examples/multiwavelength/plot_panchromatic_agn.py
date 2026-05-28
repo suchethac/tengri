@@ -8,6 +8,10 @@ X-ray corona, and radio components, showing how AGN dominate across
 0.1 keV through centimeter wavelengths.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp
@@ -18,6 +22,8 @@ import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+
+
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # Wavelength grid: hard X-ray to radio

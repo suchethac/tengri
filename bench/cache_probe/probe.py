@@ -136,7 +136,7 @@ def run_scenario(name: str) -> dict:
     # Phase: import
     t0 = time.perf_counter()
     rss0 = current_rss_gib()
-    import tengri  # noqa
+    import tengri
 
     log.append(
         {
@@ -175,9 +175,7 @@ def run_scenario(name: str) -> dict:
         recipe, method, kwargs, precomp = "mock_recovery_minimal", "map", {}, True
     elif name == "sf_photo":
         recipe, method, kwargs, precomp = "star_forming_photometry", "map", {}, False
-    elif name == "repeat":
-        recipe, method, kwargs, precomp = "mock_recovery_minimal", "map", {}, False
-    elif name == "cache_warm":
+    elif name == "repeat" or name == "cache_warm":
         recipe, method, kwargs, precomp = "mock_recovery_minimal", "map", {}, False
     else:
         raise SystemExit(f"unknown scenario: {name}")

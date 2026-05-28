@@ -43,7 +43,7 @@ def _make_model(ssp):
     )
 
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -67,7 +67,7 @@ def _synthesize_catalog(model, n: int = 4, snr: float = 30.0, seed: int = 0):
 
     key = jax.random.PRNGKey(seed)
     base = {**model.spec.sample(key)}
-    base["sfh_tsnorm_log_peak_sfr"] = jnp.array(1.0)
+    base["sfh_tsnorm_log_total_mass"] = jnp.array(1.0)
     base["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
     base["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 
@@ -103,7 +103,7 @@ def test_fit_batch_map_vmap_returns_finite_map_for_small_catalog(ssp_data_wne):
         assert a.shape[0] == n_gal, f"{name!r} has shape {a.shape}, expected leading {n_gal}"
         assert jnp.all(jnp.isfinite(a)), f"{name!r} produced non-finite MAP estimates"
 
-    # Spot-check: log_peak_sfr should sit well inside its prior bounds
-    log_sfr = result["sfh_tsnorm_log_peak_sfr"]
-    assert jnp.all(log_sfr > -1.0), f"log_peak_sfr hit lower prior: {log_sfr}"
-    assert jnp.all(log_sfr < 2.5), f"log_peak_sfr hit upper prior: {log_sfr}"
+    # Spot-check: log_total_mass should sit well inside its prior bounds
+    log_total_mass = result["sfh_tsnorm_log_total_mass"]
+    assert jnp.all(log_total_mass > -1.0), f"log_total_mass hit lower prior: {log_total_mass}"
+    assert jnp.all(log_total_mass < 2.5), f"log_total_mass hit upper prior: {log_total_mass}"

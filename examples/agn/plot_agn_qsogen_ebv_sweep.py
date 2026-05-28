@@ -8,6 +8,10 @@ extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from
 unobscured type-1 QSO colours to moderately dust-enshrouded systems.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -30,7 +34,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 3.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -41,7 +45,10 @@ model = tengri.SEDModel.build(
         "torus": {"type": "skirtor", "*": tengri.FIXED},
         "lines": {"type": "nlr", "*": tengri.FIXED},
         "*": tengri.FIXED,
+        "agn_frac": 1.0,
         "log_lbol": 11.0,
+        "frac": 1.0,  # Bugfix: composable AGN multiplied by zero without this
+        "grahsp_ebv": tengri.Uniform(0.0, 0.4),  # Bugfix: promote swept param to FREE
     },
     redshift=tengri.Fixed(0.05),
 )

@@ -44,13 +44,13 @@ def test_tuple_prefix_is_accepted_by_slicer():
     comp = StellarSEDComponent()
     params = {
         "redshift": 0.5,
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
         "met_logzsol": -0.2,
         "chem_yield": 0.02,
         "dust_tau_v": 0.3,  # must NOT leak in
     }
     sliced = slice_params_for_component(comp, params)
-    assert "sfh_tsnorm_log_peak_sfr" in sliced
+    assert "sfh_tsnorm_log_total_mass" in sliced
     assert "met_logzsol" in sliced
     assert "chem_yield" in sliced
     assert "redshift" in sliced  # bare-name allowlist

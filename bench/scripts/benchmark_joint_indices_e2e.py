@@ -52,9 +52,16 @@ jax.config.update("jax_enable_x64", True)
 
 SSP_FILE = "data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 FILTERS = [
-    "galex_fuv", "galex_nuv",
-    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-    "2mass_j", "2mass_h", "2mass_ks",
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_h",
+    "2mass_ks",
 ]
 LINE_NAMES = ["Halpha", "Hbeta", "OIII_5007", "OII_3727"]
 LINE_WAVES_REST_AA = jnp.array([6564.61, 4862.68, 5008.24, 3727.09])
@@ -66,14 +73,14 @@ LINE_NPIX = 41  # match reference benchmark_population_native (was 11; HLO no lo
 # joint_information_content.md for the cache-write tradeoff)
 
 INDEX_DEFS = {
-    "D4000":      {"feat": (4050, 4250), "blue": (3750, 3950), "red": None},
-    "Hdelta_A":   {"feat": (4083, 4122), "blue": (4041, 4079), "red": (4128, 4161)},
+    "D4000": {"feat": (4050, 4250), "blue": (3750, 3950), "red": None},
+    "Hdelta_A": {"feat": (4083, 4122), "blue": (4041, 4079), "red": (4128, 4161)},
     # Hbeta_abs (feat 4848-4877) was dropped: overlaps with the Hβ emission-line
     # window (4862±30 Å), causing double-counted likelihood at the same spectrum
     # pixels and a "narrow + biased" σ_PSD posterior. To keep Hβ_abs we'd need
     # explicit covariance between the line flux and the index — not worth the
     # complexity for a single index.
-    "Mgb":        {"feat": (5160, 5193), "blue": (5142, 5161), "red": (5191, 5206)},
+    "Mgb": {"feat": (5160, 5193), "blue": (5142, 5161), "red": (5191, 5206)},
 }
 INDEX_NPIX = 21  # was 5 — undersampling Lick bands biased σ_PSD posterior in the
 # same "narrow + biased" failure mode as n_grid=64 did for SFH; the underresolved
@@ -82,7 +89,7 @@ INDEX_NPIX = 21  # was 5 — undersampling Lick bands biased σ_PSD posterior in
 
 def make_spec() -> Parameters:
     return Parameters(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -153,10 +160,9 @@ def build_joint_grid(include_indices: bool = True):
     line fluxes and Lick-style indices.
     """
     line_centers_obs = LINE_WAVES_REST_AA * (1.0 + Z_FIX)
-    waves_per_line = jnp.stack([
-        jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX)
-        for c in line_centers_obs
-    ])
+    waves_per_line = jnp.stack(
+        [jnp.linspace(c - LINE_WINDOW_AA, c + LINE_WINDOW_AA, LINE_NPIX) for c in line_centers_obs]
+    )
     waves_lines = waves_per_line.reshape(-1)
     if include_indices:
         waves_index, layout = _build_index_grid()
@@ -197,9 +203,7 @@ def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -
     ``_predict_spectrum_compositional`` requires passing the same array
     reference).
     """
-    _, waves_per_line, waves_index, layout = build_joint_grid(
-        include_indices=include_indices
-    )
+    _, waves_per_line, waves_index, layout = build_joint_grid(include_indices=include_indices)
     n_lines = waves_per_line.size
 
     if model.observation is None or model.observation.spectroscopy is None:
@@ -218,9 +222,9 @@ def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -
         spec_lines = spec_all[:n_lines]
         spec_per_line = spec_lines.reshape(LINE_WAVES_REST_AA.shape[0], LINE_NPIX)
         cont = 0.5 * (spec_per_line[:, 0] + spec_per_line[:, -1])
-        line_flux = jax.vmap(
-            lambda f, w, c: jnp.trapezoid(f - c, w)
-        )(spec_per_line, waves_per_line, cont)
+        line_flux = jax.vmap(lambda f, w, c: jnp.trapezoid(f - c, w))(
+            spec_per_line, waves_per_line, cont
+        )
 
         if include_indices:
             spec_idx = spec_all[n_lines:]
@@ -232,8 +236,7 @@ def patch_predict_joint_indices(model: SEDModel, include_indices: bool = True) -
     return model
 
 
-def model_factory(psd_sigma=1.0, psd_tau_myr=50.0, *, ssp_data, obs,
-                  include_indices: bool = True):
+def model_factory(psd_sigma=1.0, psd_tau_myr=50.0, *, ssp_data, obs, include_indices: bool = True):
     spec = make_spec()
     return patch_predict_joint_indices(
         SEDModel(spec, ssp_data, observation=obs),
@@ -241,8 +244,15 @@ def model_factory(psd_sigma=1.0, psd_tau_myr=50.0, *, ssp_data, obs,
     )
 
 
-def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
-                  tau_true=20.0, include_indices: bool = True):
+def make_galaxies(
+    n_gal: int,
+    ssp_data,
+    obs: Observation,
+    key,
+    sigma_true=2.0,
+    tau_true=20.0,
+    include_indices: bool = True,
+):
     template = patch_predict_joint_indices(
         SEDModel(make_spec(), ssp_data, observation=obs),
         include_indices=include_indices,
@@ -263,22 +273,22 @@ def make_galaxies(n_gal: int, ssp_data, obs: Observation, key, sigma_true=2.0,
         # Per-component noise levels
         noise = np.zeros(flux_arr.shape[0])
         # 10% relative noise + absolute floor; match reference benchmark_population_native
-        flux_pl = flux_arr[:n_phot + n_lines]
-        noise[:n_phot + n_lines] = np.abs(flux_pl) * 0.10 + 1e-3
+        flux_pl = flux_arr[: n_phot + n_lines]
+        noise[: n_phot + n_lines] = np.abs(flux_pl) * 0.10 + 1e-3
         # D4000: σ=0.02; EW indices: σ=0.3 Å (Hβ_abs dropped — overlaps Hβ line)
         if include_indices:
-            noise[n_phot + n_lines + 0] = 0.02   # D4000
-            noise[n_phot + n_lines + 1] = 0.3    # Hδ_A
-            noise[n_phot + n_lines + 2] = 0.3    # Mg b
+            noise[n_phot + n_lines + 0] = 0.02  # D4000
+            noise[n_phot + n_lines + 1] = 0.3  # Hδ_A
+            noise[n_phot + n_lines + 2] = 0.3  # Mg b
 
         flux_obs = flux_arr + noise * np.asarray(jax.random.normal(k, shape=flux_arr.shape))
-        galaxies.append({"flux_obs": jnp.asarray(flux_obs),
-                         "noise": jnp.asarray(noise)})
+        galaxies.append({"flux_obs": jnp.asarray(flux_obs), "noise": jnp.asarray(noise)})
     return galaxies
 
 
-def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3,
-            include_indices: bool = True) -> dict:
+def run_one(
+    n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3, include_indices: bool = True
+) -> dict:
     label = "joint+indices" if include_indices else "joint-only"
     print(f"\n=== N={n_gal}  K={K}  {label} ===", flush=True)
     ssp_data = load_ssp_data(SSP_FILE)
@@ -286,13 +296,13 @@ def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3,
 
     key = jax.random.PRNGKey(42)
     t_setup = time.time()
-    galaxies = make_galaxies(n_gal, ssp_data, obs, key,
-                             include_indices=include_indices)
+    galaxies = make_galaxies(n_gal, ssp_data, obs, key, include_indices=include_indices)
     pop = PopulationFitter(
-        lambda psd_sigma=1.0, psd_tau_myr=50.0:
-            model_factory(psd_sigma, psd_tau_myr, ssp_data=ssp_data, obs=obs,
-                          include_indices=include_indices),
-        galaxies, data_type="photometry",
+        lambda psd_sigma=1.0, psd_tau_myr=50.0: model_factory(
+            psd_sigma, psd_tau_myr, ssp_data=ssp_data, obs=obs, include_indices=include_indices
+        ),
+        galaxies,
+        data_type="photometry",
     )
     setup_s = time.time() - t_setup
 
@@ -310,10 +320,8 @@ def run_one(n_gal: int, K: int, n_iter: int = 15, n_samp: int = 3,
     shared = getattr(result, "shared_samples", {}) or {}
     # Existing benches use "psd_sigma" / "psd_tau_myr" keys (not the full
     # "sfh_field_*" names). Probe both for forward-compat.
-    sigma_samp = np.asarray(shared.get("psd_sigma",
-                                       shared.get("sfh_field_psd_sigma", [])))
-    tau_samp = np.asarray(shared.get("psd_tau_myr",
-                                     shared.get("sfh_field_psd_tau_myr", [])))
+    sigma_samp = np.asarray(shared.get("psd_sigma", shared.get("sfh_field_psd_sigma", [])))
+    tau_samp = np.asarray(shared.get("psd_tau_myr", shared.get("sfh_field_psd_tau_myr", [])))
 
     def _sum(arr):
         if arr.size == 0:
@@ -351,21 +359,29 @@ def main() -> None:
     p.add_argument("--Ns", type=int, nargs="+", default=[256, 512, 1024])
     p.add_argument("--K", type=int, default=64)
     p.add_argument("--out", default="analysis/joint_indices_e2e.json")
-    p.add_argument("--no-indices", action="store_true",
-                   help="Disable Lick indices; runs as plain joint-mode for "
-                        "control comparison with vi_scaling_benchmark_joint.json.")
+    p.add_argument(
+        "--no-indices",
+        action="store_true",
+        help="Disable Lick indices; runs as plain joint-mode for "
+        "control comparison with vi_scaling_benchmark_joint.json.",
+    )
     args = p.parse_args()
     include_indices = not args.no_indices
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     rows = []
     import traceback
+
     for n in args.Ns:
         try:
             row = run_one(n, args.K, include_indices=include_indices)
         except Exception as exc:
-            row = {"n_gal": n, "K": args.K, "error": repr(exc),
-                   "traceback": traceback.format_exc()}
+            row = {
+                "n_gal": n,
+                "K": args.K,
+                "error": repr(exc),
+                "traceback": traceback.format_exc(),
+            }
             print(f"ERROR at N={n}: {exc}")
             traceback.print_exc()
         rows.append(row)
@@ -380,9 +396,11 @@ def main() -> None:
             if r.get("n_gal") in args.Ns and r.get("forward_chunk_size") == args.K:
                 ss = r.get("psd_sigma_summary") or {}
                 ts = r.get("psd_tau_summary") or {}
-                print(f"  N={r['n_gal']}  K={r['forward_chunk_size']}  "
-                      f"σ med={ss.get('median')}  std={ss.get('std')}  "
-                      f"τ med={ts.get('median')}")
+                print(
+                    f"  N={r['n_gal']}  K={r['forward_chunk_size']}  "
+                    f"σ med={ss.get('median')}  std={ss.get('std')}  "
+                    f"τ med={ts.get('median')}"
+                )
 
 
 if __name__ == "__main__":

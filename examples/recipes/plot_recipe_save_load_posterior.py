@@ -8,6 +8,10 @@ Posterior objects can be checkpointed for long-running fits or multi-stage
 analysis pipelines.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import tempfile
 import warnings
 from pathlib import Path
@@ -40,7 +44,7 @@ true_params = dict(model.spec.sample(key))
 true_params.update(
     {
         "sfh_tsnorm_peak_lbt_gyr": 2.5,
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
     }
 )
 mock = model.mock(true_params, snr=25.0, key=key)
@@ -65,7 +69,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     # Plot scatter of parameters from loaded posterior
     fig, ax = plt.subplots(figsize=(7.0, 4.2))
 
-    sfr = posterior_loaded.params["sfh_tsnorm_log_peak_sfr"]
+    sfr = posterior_loaded.params["sfh_tsnorm_log_total_mass"]
     met = posterior_loaded.params["met_logzsol"]
 
     ax.scatter(sfr, met, alpha=0.6, s=50, color="C0", edgecolors="k", linewidth=0.5)

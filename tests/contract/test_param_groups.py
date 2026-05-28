@@ -44,11 +44,11 @@ class TestWildcard:
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
-        # dpl has: alpha, beta, tau_gyr, log_peak_sfr
+        # dpl has: alpha, beta, tau_gyr, log_total_mass
         assert "sfh_dpl_alpha" in params.free_params
         assert "sfh_dpl_beta" in params.free_params
         assert "sfh_dpl_tau_gyr" in params.free_params
-        assert "sfh_dpl_log_peak_sfr" in params.free_params
+        assert "sfh_dpl_log_total_mass" in params.free_params
 
     def test_star_fixed_fixes_all_declared_params(self):
         """With '*': FIXED, all params in the group should be fixed."""
@@ -61,7 +61,7 @@ class TestWildcard:
         assert "sfh_dpl_alpha" in params.fixed_params
         assert "sfh_dpl_beta" in params.fixed_params
         assert "sfh_dpl_tau_gyr" in params.fixed_params
-        assert "sfh_dpl_log_peak_sfr" in params.fixed_params
+        assert "sfh_dpl_log_total_mass" in params.fixed_params
 
     def test_star_omitted_defaults_to_fixed(self):
         """When '*' is not present, default behavior is to fix all params."""
@@ -127,7 +127,7 @@ class TestEquivalence:
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Fixed(1.0),
-            # tau_gyr and log_peak_sfr should be free via registry defaults
+            # tau_gyr and log_total_mass should be free via registry defaults
             dust_model="two_component",
             dust_tau_bc=0.0,  # Registry default
             dust_tau_diff=0.0,  # Registry default
@@ -308,6 +308,26 @@ class TestTypeMapping:
         )
         assert params.dla is True
         assert "dla_log_n_hi" in params.all_params
+
+    def test_igm_model_madau_propagated(self):
+        """Regression for #344: igm={'type': 'madau'} must set igm_model='madau'."""
+        params = parse_groups(igm={"type": "madau"}, redshift=Fixed(0.1))
+        assert params.igm_model == "madau"
+
+    def test_igm_model_inoue14_propagated(self):
+        """Regression for #344: igm={'type': 'inoue14'} must select Inoue, not the default."""
+        params = parse_groups(igm={"type": "inoue14"}, redshift=Fixed(0.1))
+        assert params.igm_model == "inoue"
+
+    def test_igm_model_inoue_alias_propagated(self):
+        """The short alias 'inoue' resolves to the canonical 'inoue' name."""
+        params = parse_groups(igm={"type": "inoue"}, redshift=Fixed(0.1))
+        assert params.igm_model == "inoue"
+
+    def test_igm_none_does_not_set_model(self):
+        """igm={'type': 'none'} must not error and must leave igm_model at its default."""
+        params = parse_groups(igm={"type": "none"}, redshift=Fixed(0.1))
+        assert params.apply_igm is False
 
     def test_radio_condon92(self):
         """radio={'type': 'condon92'} should set radio=True."""
@@ -521,7 +541,12 @@ class TestEdgeCases:
             redshift=Fixed(0.1),
         )
         # All dpl params should be fixed
-        for param in ["sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr", "sfh_dpl_log_peak_sfr"]:
+        for param in [
+            "sfh_dpl_alpha",
+            "sfh_dpl_beta",
+            "sfh_dpl_tau_gyr",
+            "sfh_dpl_log_total_mass",
+        ]:
             assert param in params.fixed_params
 
     def test_no_groups_at_all(self):
@@ -529,6 +554,37 @@ class TestEdgeCases:
         params = parse_groups(redshift=Fixed(0.1))
         assert isinstance(params, Parameters)
         assert "redshift" in params.all_params
+
+    def test_full_prefix_override_under_star_fixed(self):
+        """Issue #424: per-param override under '*': FIXED must accept the
+        full-prefixed key (``neb_logU``) as well as the short form
+        (``logU``). Previously the full-prefix form was silently dropped,
+        leaving the default in place — a silent footgun for new users.
+        """
+        # Short form (always worked).
+        short = parse_groups(
+            neb={"type": "cue", "*": FIXED, "logU": Fixed(-2.5)},
+            redshift=Fixed(0.01),
+        )
+        # Full-prefix form (regressed silently before #424).
+        full = parse_groups(
+            neb={"type": "cue", "*": FIXED, "neb_logU": Fixed(-2.5)},
+            redshift=Fixed(0.01),
+        )
+        assert float(short._distributions["neb_logU"].value) == -2.5
+        assert float(full._distributions["neb_logU"].value) == -2.5
+
+    def test_full_prefix_override_in_sfh_group(self):
+        """Full-prefixed SFH keys (``sfh_dpl_alpha``) also resolve."""
+        params = parse_groups(
+            sfh={
+                "type": "dpl",
+                "*": FIXED,
+                "sfh_dpl_alpha": Fixed(7.0),
+            },
+            redshift=Fixed(0.1),
+        )
+        assert float(params._distributions["sfh_dpl_alpha"].value) == 7.0
 
     def test_multiple_dust_law_params(self):
         """dust with both law_bc and law_diff should work."""

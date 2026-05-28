@@ -10,7 +10,7 @@ to longer wavelengths with increasing redshift: z × 4000 Å. This is why
 different photometric bands probe the break at different redshifts — the
 fundamental principle behind photo-z estimation and dust/age degeneracies.
 
-This example shows how a single 2-Gyr-old stellar population appears across
+a single 2-Gyr-old stellar population appears across
 redshift z = 0.5, 1.0, 2.0, 3.0, 4.0 in the observed frame. The top panel
 displays the full nu*F_nu spectrum with HST and JWST filter responses
 overlaid. The bottom panel zooms to the 4000 Å break region, showing exactly
@@ -30,6 +30,10 @@ Reference: For dust absorption modeling and SED fundamentals, see Calzetti
 et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 1000) SSP synthesis code.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -75,7 +79,7 @@ model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 2.0,
         "width_gyr": 0.5,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },

@@ -10,7 +10,7 @@
 
 The single most important design rule is: **the API should mirror the physical hierarchy**. An astronomer reading a tengri model definition should immediately see what physics is present at each layer, which sub-models are active, which parameters are free, and which inference method is appropriate.
 
-Currently, the model is assembled from flat keyword arguments scattered across `ParamSpec`, `Model`, and `Observation`. The physical layers — SFH, SPS, dust, nebular, AGN, observation — are implicit. Users have to know the full parameter name (`sfh_tsnorm_log_peak_sfr`, `dust_tau_bc`, `neb_logU`) and mentally reconstruct the hierarchy from the prefix.
+Currently, the model is assembled from flat keyword arguments scattered across `ParamSpec`, `Model`, and `Observation`. The physical layers — SFH, SPS, dust, nebular, AGN, observation — are implicit. Users have to know the full parameter name (`sfh_tsnorm_log_total_mass`, `dust_tau_bc`, `neb_logU`) and mentally reconstruct the hierarchy from the prefix.
 
 The redesign makes the hierarchy **explicit and introspectable**.
 
@@ -26,7 +26,7 @@ model = tengri.Model.from_config(
     priors={
         "alpha":        Uniform(0.5, 5),
         "beta":         Uniform(0.5, 5),
-        "log_peak_sfr": Uniform(-1, 2.5),
+        "log_total_mass": Uniform(-1, 2.5),
         "psd_sigma":    Uniform(0.01, 1.5),
         "psd_tau_myr":  Uniform(10, 500),
     },
@@ -90,7 +90,7 @@ Model  [D=152, stochastic=True]
 ├── SFH: dpl + field (GP)
 │   ├── dpl_alpha          ~ Uniform(0.5, 5.0)
 │   ├── dpl_beta           ~ Uniform(0.5, 5.0)
-│   ├── dpl_log_peak_sfr   ~ Uniform(-1.0, 2.5)
+│   ├── dpl_log_total_mass   ~ Uniform(-1.0, 2.5)
 │   ├── field_psd_sigma    ~ Uniform(0.01, 1.5)
 │   ├── field_psd_tau_myr  ~ Uniform(10, 500)
 │   └── field_xi           [128-dim GP latent, xi ~ N(0,I)]

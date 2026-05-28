@@ -18,6 +18,7 @@ shut off in galaxies — a key driver of the red sequence in the local universe.
 
 References
 ----------
+
 .. [1] Dressler, A., & Gunn, J. E. 1992, ApJS, 78, 1
        (K+A galaxies in the Coma cluster)
 .. [2] French, K. D., Yang, Y., Zabludoff, A., et al. 2018, ApJ, 862, 2
@@ -26,6 +27,10 @@ References
 .. [3] Worthey, G., & Ottaviani, D. L. 1997, ApJS, 111, 377
        (Hδ_A window definitions and optical index calibrations)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -125,7 +130,7 @@ for i, tsq in enumerate(time_since_quench_gyr):
         "*": tengri.FIXED,
         "peak_lbt_gyr": tsq,
         "width_gyr": 0.2,  # ~200 Myr width: moderate extended burst
-        "log_peak_sfr": 0.8,  # ~6 Msun/yr SFR (brighter, more typical)
+        "log_total_mass": 10.0,  # ~6 Msun/yr SFR (brighter, more typical)
         "skew": 0.0,
         "trunc": 13.5,
     }

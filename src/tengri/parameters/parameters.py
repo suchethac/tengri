@@ -30,7 +30,7 @@ Shorthand tsnorm equivalent::
 
     spec = Parameters(
         mean_sfh_type = "tsnorm",
-        sfh_tsnorm_log_peak_sfr = Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass = Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
@@ -45,7 +45,7 @@ Shorthand DPL equivalent::
         sfh_dpl_alpha    = Uniform(0.5, 3.0),
         sfh_dpl_beta     = Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr  = Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr = Uniform(-1, 2),
+        sfh_dpl_log_total_mass = Uniform(8, 12),
         ...
     )
 """
@@ -294,7 +294,7 @@ class Parameters:
     **AGN** (``agn_model != None``):
 
     ========================== ================= =======================================
-    agn_frac                   Fixed(0.0)        AGN fraction of stellar L_bol
+    agn_frac                   Fixed(1.0)        AGN fraction of stellar L_bol (1.0 = full AGN)
     agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
     agn_alpha                  Fixed(-1.0)       Disc power-law slope
     agn_T_torus                Fixed(1000)       Torus temperature (K)
@@ -341,7 +341,7 @@ class Parameters:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.5, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(8.0, 12.5),
             met_logzsol=Uniform(-2.0, 0.5),
             dust_tau_bc=Uniform(0.0, 2.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -388,7 +388,23 @@ class Parameters:
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
         n_grid = int(kwargs.pop("n_grid", 64))
+        # Non-parametric SFH bin edges (``prospector_beta`` and other
+        # ``_NONPARAM_NAMES`` entries). Stored as a structural setting
+        # so ``_build_legacy`` can forward to ``resolve_sfh(...,
+        # bin_edges_gyr=...)``. Default ``None`` falls back to the
+        # registry's own canonical edges. See #337.
+        self.bin_edges_gyr = kwargs.pop("bin_edges_gyr", None)
+        # MW foreground extinction screen — applied at the
+        # observed-frame SED boundary, independent of host-galaxy dust
+        # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.
+        self.foreground_ebmv_mw = float(kwargs.pop("foreground_ebmv_mw", 0.0))
+        self.foreground_law = kwargs.pop("foreground_law", "cardelli")
+        self.foreground_rv = float(kwargs.pop("foreground_rv", 3.1))
         self.apply_igm = kwargs.pop("apply_igm", True)
+        # IGM transmission model: 'inoue' (default), 'madau', or 'meiksin06'.
+        # Stored as a structural setting so the grammar-layer choice
+        # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
+        self.igm_model = kwargs.pop("igm_model", "inoue")
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
@@ -599,6 +615,11 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        # When True, the Cue orchestrator path publishes the full
+        # ~271-species line catalogue instead of the default 128
+        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
+        # read via ``pred.lines.get(wavelength)``. See #303.
+        self.cue_full_catalogue = kwargs.pop("cue_full_catalogue", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         self._nebular_cb19 = False

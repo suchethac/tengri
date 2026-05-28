@@ -19,6 +19,10 @@ References:
 - King, A. 2003, ApJ, 596, L27 — AGN feedback on galaxy growth
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -44,7 +48,7 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 2.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
         "alpha": 2.0,
         "beta": 2.5,
     },
@@ -53,8 +57,10 @@ model = tengri.SEDModel.build(
         "type": "composable",
         "disc": {"type": "multicolor", "*": tengri.FIXED},
         "*": tengri.FIXED,
-        "frac": 0.95,  # AGN dominates the SED
-        "log_ledd": -1.0,
+        "agn_frac": 1.0,  # turn the composable AGN on (default 0.0 zeros it)
+        "agn_log_ledd": -1.0,
+        "agn_log_mbh": tengri.Uniform(5.0, 10.0),
+        "agn_log_lbol": tengri.Uniform(8.0, 14.0),
     },
     redshift=tengri.Fixed(0.05),
 )
@@ -62,10 +68,10 @@ model = tengri.SEDModel.build(
 # Define four evolutionary stages:
 # (label, log_mbh, log_lbol, color, marker, markersize)
 STAGES = [
-    ("Dormant", 6.0, 9.0, "#2166ac", "o", 120),  # Low mass, low Edd
-    ("Merger accreting", 7.0, 11.0, "#f4a582", "s", 100),  # Intermediate
-    ("QSO peak", 9.0, 13.0, "#d6604d", "*", 250),  # High mass, high Edd
-    ("Fading", 9.0, 11.0, "#92c5de", "D", 90),  # Same mass, lower lbol
+    ("Dormant", 6.0, 9.0, "#2166ac", "o", 25),  # Low mass, low Edd
+    ("Merger accreting", 7.0, 11.0, "#f4a582", "s", 20),  # Intermediate
+    ("QSO peak", 9.0, 13.0, "#d6604d", "*", 50),  # High mass, high Edd
+    ("Fading", 9.0, 11.0, "#92c5de", "D", 18),  # Same mass, lower lbol
 ]
 
 # Eddington luminosity: L_Edd = 3.2e4 * (M / M_sun) * L_sun
@@ -102,13 +108,18 @@ ax_track.fill_between(
     label="Super-Eddington (L > L_Edd)",
 )
 ax_track.loglog(
-    mbh_plot, lbol_edd_lambda1, "r-", lw=1.5, alpha=0.5, label=r"Eddington limit (L = L$_{\mathrm{Edd}}$)"
+    mbh_plot,
+    lbol_edd_lambda1,
+    "r-",
+    lw=1.5,
+    alpha=0.5,
+    label=r"Eddington limit (L = L$_{\mathrm{Edd}}$)",
 )
 
 # Plot growth track: connect stages with arrows
 for i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
-    mbh = 10.0 ** log_mbh
-    lbol = 10.0 ** log_lbol
+    mbh = 10.0**log_mbh
+    lbol = 10.0**log_lbol
     ax_track.plot(
         mbh,
         lbol,
@@ -125,8 +136,8 @@ for i, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(STAGES):
 for i in range(len(STAGES) - 1):
     _, log_mbh_i, log_lbol_i, _, _, _ = STAGES[i]
     _, log_mbh_j, log_lbol_j, _, _, _ = STAGES[i + 1]
-    mbh_i, lbol_i = 10.0 ** log_mbh_i, 10.0 ** log_lbol_i
-    mbh_j, lbol_j = 10.0 ** log_mbh_j, 10.0 ** log_lbol_j
+    mbh_i, lbol_i = 10.0**log_mbh_i, 10.0**log_lbol_i
+    mbh_j, lbol_j = 10.0**log_mbh_j, 10.0**log_lbol_j
     # Draw arrow with slight offset to avoid overlap with markers
     ax_track.arrow(
         mbh_i * 1.1,
@@ -143,17 +154,18 @@ for i in range(len(STAGES) - 1):
 
 # Annotations for physics context
 ax_track.text(
-    1e8,
-    5e12,
+    3e6,
+    3e11,
     "Sub-Eddington",
     fontsize=10,
     color="0.5",
-    rotation=20,
-    alpha=0.6,
+    rotation=0,
+    bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2),
+    zorder=10,
 )
 
-ax_track.set_xlim(3e5, 2e9)
-ax_track.set_ylim(1e8, 5e13)
+ax_track.set_xlim(1e5, 1e10)
+ax_track.set_ylim(5e7, 1e14)
 ax_track.set_xlabel(r"Black hole mass $M_{\mathrm{BH}}$ [$M_\odot$]")
 ax_track.set_ylabel(r"Bolometric luminosity $L_{\mathrm{bol}}$ [$L_\odot$]")
 ax_track.legend(
@@ -168,13 +180,9 @@ ax_track.grid(True, alpha=0.2, which="both")
 C_AA_PER_S = 2.998e18
 
 # Top-left: Dormant + Merger
-for ax_idx, stages_pair in enumerate(
-    [(STAGES[0], STAGES[1]), (STAGES[2], STAGES[3])]
-):
+for ax_idx, stages_pair in enumerate([(STAGES[0], STAGES[1]), (STAGES[2], STAGES[3])]):
     ax = ax_seds[ax_idx]
-    for stage_idx, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(
-        stages_pair
-    ):
+    for stage_idx, (label, log_mbh, log_lbol, color, marker, msize) in enumerate(stages_pair):
         params = {
             **baseline,
             "agn_log_mbh": jnp.float64(log_mbh),
