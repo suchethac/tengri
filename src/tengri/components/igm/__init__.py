@@ -11,9 +11,11 @@ from tengri.components.igm.dla import (
     dla_transmission_obs,
 )
 from tengri.components.igm.igm import (
+    IGM_TRANSMISSION_MODELS,
     igm_transmission,
     igm_transmission_madau,
     igm_transmission_patchy,
+    resolve_igm_model,
 )
 from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
 
@@ -48,6 +50,7 @@ register_igm_model(
 
 __all__ = [
     "IGM_MODELS",
+    "IGM_TRANSMISSION_MODELS",
     "IGMRegistryEntry",
     "dla_transmission",
     "dla_transmission_obs",
@@ -56,4 +59,5 @@ __all__ = [
     "igm_transmission_meiksin06",
     "igm_transmission_patchy",
     "register_igm_model",
+    "resolve_igm_model",
 ]
