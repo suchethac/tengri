@@ -82,7 +82,14 @@ sphinx_gallery_conf = {
         # plot_hierarchical also hits an upstream stochastic-SFH JAX-tracing
         # issue in model.mock() / predict_observables under field SFH — needs
         # a library fix before re-enabling.
-        r"plot_(population_scaling|hierarchical|hierarchical_convergence|prior_posterior_compare)\.py$"
+        r"plot_("
+        r"population_scaling|"
+        r"hierarchical|hierarchical_convergence|"
+        r"prior_posterior_compare|"
+        r"wrong_model_trap|"
+        r"posterior_corner_dpl|"
+        r"joint_photometry_line_fit"
+        r")\.py$"
     ),
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we
