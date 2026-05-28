@@ -25,6 +25,12 @@ import pytest
 import tengri.components.agn.blocks  # noqa: F401 — triggers registrations
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS, resolve_agn_block
 
+# Approved taxonomy marker (see tests/TESTING.md, tools/check_test_markers.py).
+# These tests port CIGALE skirtor2016 published disc spectra into composable
+# disc blocks and pin energy conservation / positivity / linear L_bol scaling
+# against the upstream physics — regression_paper is the right anchor.
+pytestmark = pytest.mark.regression_paper
+
 _L_SUN_ERG = 3.828e33
 _CIGALE_BLOCKS = ("skirtor", "schartmann2005", "adaf_lopez2024")
 
