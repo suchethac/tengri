@@ -19,6 +19,7 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
+from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
 from tengri.utils.physics_constants import C_CGS
 
@@ -340,27 +341,22 @@ def _tau_lc_dla(
     return jnp.where(in_range, jnp.clip(tau, min=0.0), 0.0)
 
 
-# ── CGM damping wing absorption (Asada et al. 2025) ───────────────
-
-# Physical constants for damping wing calculation
-_LAMBDA_LYA = 1215.67  # Angstrom (Ly-alpha rest wavelength)
-_NU_LYA = C_CGS / (_LAMBDA_LYA * 1e-8)  # Hz
-_GAMMA_LYA = 6.265e8  # s^-1 (Ly-alpha natural line width)
-_SIGMA_0 = 5.9e-14  # cm^2 Hz (Ly-alpha cross-section constant: pi*e^2/(m_e*c)*f_12)
+# ── CGM damping wing absorption (Asada et al. 2025 / Totani et al. 2006) ──
 
 
 def _cgm_damping_wing_tau(
     wave_obs: jnp.ndarray,
     z_source: float,
-    z_mid: float = 7.0,
-    dz: float = 0.5,
-    log_nhi: float = 21.0,
+    z_mid: float | None = None,
+    dz: float | None = None,
+    log_nhi: float | None = None,
 ) -> jnp.ndarray:
     r"""CGM damping wing optical depth from neutral hydrogen (Asada et al. 2025).
 
-    At z > 5, neutral hydrogen in the circumgalactic medium produces Lyman-alpha
-    damping wing absorption not captured by the Inoue et al. (2014) model. The damping
-    wing profile is the Lorentzian far-wing of the Lyman-alpha cross-section.
+    At z > 5, neutral hydrogen in the circumgalactic medium produces a redward
+    Lyα damping wing on top of the Inoue+2014 mean IGM. The cross-section is the
+    Totani et al. (2006) Eq. 4 frequency-dependent form, and the column-density
+    evolution defaults to the Asada+2025 paper sigmoid (Eq. 2). Closes #502.
 
     Parameters
     ----------
@@ -368,13 +364,11 @@ def _cgm_damping_wing_tau(
         Observed-frame wavelength. [Å]
     z_source : float
         Redshift of the source. [dimensionless]
-    z_mid : float, optional
-        Redshift midpoint of the sigmoid column density evolution. [dimensionless] Default: 7.0.
-    dz : float, optional
-        Redshift width of the sigmoid. [dimensionless] Default: 0.5.
-    log_nhi : float, optional
-        log10(N_HI / cm^-2) at the plateau. Canonical Asada+2025 value: 21.0 (τ ≈ 0.15 at z=7).
-        log_nhi ≤ 19 is effectively invisible. [dimensionless] Default: 21.0.
+    z_mid, dz, log_nhi : float, optional
+        Legacy sigmoid knobs
+        :math:`N_{\rm HI}(z) = 10^{\rm log\_nhi} / (1 + e^{-(z-z_{\rm mid})/dz})`.
+        If any of the three is supplied the legacy form is used; otherwise the
+        Asada+2025 paper sigmoid is applied with the published coefficients.
 
     Returns
     -------
@@ -383,55 +377,62 @@ def _cgm_damping_wing_tau(
 
     Notes
     -----
-    The column density evolves as:
+    The Asada+2025 (Eq. 2) column-density evolution is
 
     .. math::
 
-        N_{\rm HI}(z) = \frac{N_{\rm HI,0}}{1 + \exp[-(z - z_{\rm mid})/\Delta z]}
+        \log_{10} N_{\rm HI}(z) = \frac{3.592}{1 + e^{-1.841(z - 6)}} + 18.001
 
-    and the damping wing cross-section is the Lorentzian far-wing:
+    and the Lyα cross-section (Totani et al. 2006, Eq. 4) is
 
     .. math::
 
-        \sigma_{\rm DW}(\Delta\nu) = \sigma_0 \frac{\Gamma_{\rm Ly\alpha}/(4\pi)}{(\Delta\nu)^2 + [\Gamma_{\rm Ly\alpha}/(4\pi)]^2}
+        \sigma_\alpha(\nu) = \frac{3 \lambda_\alpha^2 f_{12} \Lambda}{8\pi}
+            \frac{\Lambda (\nu/\nu_\alpha)^4}
+                 {4\pi^2 (\nu - \nu_\alpha)^2 + \Lambda^2 (\nu/\nu_\alpha)^6/4}
 
-    with :math:`\sigma_0 = 5.9 \times 10^{-14}` cm²·Hz and
-    :math:`\Gamma_{\rm Ly\alpha} = 6.265 \times 10^8` s⁻¹.
+    with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient) and
+    :math:`f_{12} = 0.4162` (Morton 2003). Constants come from
+    :mod:`tengri.components.igm.dla`. The previous implementation used a flat
+    Lorentzian with a numerical constant that was ~10⁹ too small.
 
-    **Upstream**: Asada et al. (2025) damping wing model for the epoch of reionization.
+    **Upstream**: Asada et al. (2025), ApJL 983, L2 — column-density evolution;
+    Totani et al. (2006), PASJ 58, 485 — Lyα cross-section.
     """
-    # Sigmoid column density evolution: N_HI rises steeply above z_mid
-    n_hi = (10.0**log_nhi) / (1.0 + jnp.exp(-(z_source - z_mid) / dz))
+    # Column-density evolution N_HI(z) — paper sigmoid by default; legacy form
+    # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
+    if z_mid is not None or dz is not None or log_nhi is not None:
+        z_mid_eff = 7.0 if z_mid is None else z_mid
+        dz_eff = 0.5 if dz is None else dz
+        log_nhi_eff = 21.0 if log_nhi is None else log_nhi
+        n_hi = (10.0**log_nhi_eff) / (1.0 + jnp.exp(-(z_source - z_mid_eff) / dz_eff))
+    else:
+        # Asada+2025 Eq. 2 coefficients (paper sigmoid).
+        log_nhi_z = 3.592 / (1.0 + jnp.exp(-1.841 * (z_source - 6.0))) + 18.001
+        n_hi = 10.0**log_nhi_z
 
-    # Observed Ly-alpha wavelength at source redshift
-    lya_obs = _LAMBDA_LYA * (1.0 + z_source)
+    # The Totani+06 cross-section is in the CGM rest frame (≈ source rest frame).
+    # An observed-frame photon at wave_obs absorbs in the CGM at rest wavelength
+    # wave_obs / (1+z_source); convert to frequency and take Δν off Lyα.
+    lya_obs = _WL_LYA * (1.0 + z_source)
+    wave_rest = wave_obs / (1.0 + z_source)
+    nu_rest = C_CGS / (wave_rest * 1e-8)
+    delta_nu = nu_rest - _NU_LYA
+    nu_ratio = nu_rest / _NU_LYA  # = ν / ν_α
 
-    # Frequency offset from Ly-alpha at the source
-    # nu_obs = c / (wave_obs * 1e-8), nu_lya_obs = c / (lya_obs * 1e-8)
-    # Delta_nu = nu_obs - nu_lya_obs (positive = blueward of Ly-alpha)
-    nu_obs = C_CGS / (wave_obs * 1e-8)
-    nu_lya_obs = C_CGS / (lya_obs * 1e-8)
-    delta_nu = nu_obs - nu_lya_obs
+    # Totani+06 Eq. 4. The (ν/ν_α)^4 factor is what curves the cross-section
+    # away from a flat Lorentzian in the far wing.
+    lam_cm = _WL_LYA * 1e-8
+    prefactor = 3.0 * lam_cm**2 * _F_LYA * _A_LYA / (8.0 * jnp.pi)
+    numerator = _A_LYA * nu_ratio**4
+    denominator = 4.0 * jnp.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4.0
+    sigma_dw = prefactor * numerator / denominator
 
-    # Damping wing cross-section (Lorentzian far-wing approximation)
-    # sigma_DW = sigma_0 * (gamma / (4*pi)) / (delta_nu^2 + (gamma/(4*pi))^2)
-    # In the far wing (|delta_nu| >> gamma/4pi), this simplifies to
-    # sigma_DW ~ sigma_0 * gamma / (4*pi*delta_nu^2)
-    # We use the full Lorentzian for numerical stability near line center.
-    gamma_4pi = _GAMMA_LYA / (4.0 * jnp.pi)
-    sigma_dw = _SIGMA_0 * gamma_4pi / (delta_nu**2 + gamma_4pi**2)
-
-    # Optical depth: only apply redward of Ly-alpha at source (damping wing)
-    # and only for wavelengths near Ly-alpha (within ~200 A observed)
+    # Damping wing is redward of Lyα-at-source and only matters at z > 5
+    # (below this the CGM is essentially ionised).
     tau = n_hi * sigma_dw
-
-    # Only absorb redward of Ly-alpha at source redshift (wave_obs > lya_obs)
-    # The damping wing is the red wing absorption from the CGM
     tau = jnp.where(wave_obs > lya_obs, tau, 0.0)
-
-    # Only apply at z > 5 (below this, CGM is ionized and negligible)
     tau = jnp.where(z_source > 5.0, tau, 0.0)
-
     return jnp.clip(tau, min=0.0)
 
 
@@ -442,9 +443,9 @@ def igm_transmission(
     wave_obs: jnp.ndarray,
     z_source: float,
     add_cgm: bool = False,
-    cgm_z_mid: float = 7.0,
-    cgm_dz: float = 0.5,
-    cgm_log_nhi: float = 21.0,
+    cgm_z_mid: float | None = None,
+    cgm_dz: float | None = None,
+    cgm_log_nhi: float | None = None,
 ) -> jnp.ndarray:
     r"""Compute mean IGM transmission including Lyman-series and continuum absorption.
 
@@ -614,7 +615,7 @@ def _damping_wing_tau(
     tau_GP = 6.45e5 * ((1.0 + z) / 7.0) ** 1.5
 
     # Observed Ly-alpha at source redshift
-    lya_obs = _LAMBDA_LYA * (1.0 + z)
+    lya_obs = _WL_LYA * (1.0 + z)
 
     # Dimensionless wavelength offset: x = lambda_obs/lya_obs - 1
     # x > 0 is redward of Lya (damping wing side)
@@ -622,9 +623,9 @@ def _damping_wing_tau(
 
     # Damping constant: Lambda = Gamma_alpha / (4*pi*nu_alpha)
     # nu_alpha = c / (lambda_alpha * 1e-8)
-    lambda_alpha = _LAMBDA_LYA * 1e-8  # cm
+    lambda_alpha = _WL_LYA * 1e-8  # cm
     nu_alpha = C_CGS / lambda_alpha
-    lambda_damp = _GAMMA_LYA / (4.0 * jnp.pi * nu_alpha)
+    lambda_damp = _A_LYA / (4.0 * jnp.pi * nu_alpha)
 
     # Bubble edge in dimensionless frequency offset:
     # The bubble of radius R_bubble [pMpc] corresponds to a velocity

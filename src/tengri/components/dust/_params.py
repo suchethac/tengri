@@ -156,6 +156,19 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         Fixed(-0.7),
         "Dust power-law index",
     ),
+    # Per-leaf slopes for VW07 / Wild+2007 two-component attenuation. Default
+    # to the same -0.7 as the shared ``dust_slope`` so existing models behave
+    # unchanged; override to -1.3 / -0.7 (or free) for VW07. Closes #500.
+    ParamDeclaration(
+        "dust_slope_bc",
+        Fixed(-0.7),
+        "Birth-cloud power-law index (Wild+07: -1.3)",
+    ),
+    ParamDeclaration(
+        "dust_slope_diff",
+        Fixed(-0.7),
+        "Diffuse-ISM power-law index (Wild+07 / CF00: -0.7)",
+    ),
     ParamDeclaration(
         "dust_f_obscuration",
         Fixed(0.0),
