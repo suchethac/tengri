@@ -91,6 +91,62 @@ class Distribution:
         return False
 
     @property
+    def default(self) -> float | str | None:
+        """Physically-motivated default value when this knob is marked FIXED
+        without an explicit user-supplied value.
+
+        Returns None if no default was registered at construction. Downstream
+        code (``parameters/groups.py``) raises ``ParameterDefaultMissingError``
+        if a registry entry is converted to ``Fixed`` via the ``'*': FIXED``
+        wildcard but the distribution carries no default.
+
+        For ``Fixed(value)``, ``default`` is the value itself — see
+        ``Fixed.default``.
+
+        Returns
+        -------
+        float, str, or None
+            The registered default, or None if no default was set.
+        """
+        return getattr(self, "_default", None)
+
+    def _register_default(self, default: float | None) -> None:
+        """Validate ``default`` against this distribution's bounds and store it.
+
+        Called by every concrete subclass ``__init__`` after ``bounds`` is set.
+        Centralising the validation here keeps the per-subclass boilerplate to
+        a single line.
+
+        Parameters
+        ----------
+        default : float or None
+            Physically-motivated default value, or ``None`` if no default is
+            registered.
+
+        Raises
+        ------
+        ValueError
+            If ``default`` is finite-numeric and falls outside ``self.bounds``.
+        """
+        if default is None:
+            self._default = None
+            return
+        lo, hi = self.bounds
+        # Skip range check for distributions without numeric bounds (Fixed with
+        # string value would return (None, None); never reaches here in practice
+        # because Fixed overrides ``default``).
+        if lo is None or hi is None:
+            self._default = default
+            return
+        if not (lo <= float(default) <= hi):
+            raise ValueError(
+                f"{type(self).__name__}: default={default} is outside bounds "
+                f"[{lo}, {hi}]. Defaults must lie within the prior support so "
+                f"the FIXED-fallback value is consistent with the prior."
+            )
+        self._default = float(default)
+
+    @property
     def bounds(self) -> tuple[float, float]:
         """Lower and upper bounds [lo, hi] for this distribution.
 
@@ -256,13 +312,22 @@ class Uniform(Distribution):
     >>> print(f"log p(0.5): {log_prob:.4f}")  # ≈ 0.0 (log(1) = 0)
     """
 
-    def __init__(self, lo: float, hi: float, description: str = "", *, units: str = ""):
+    def __init__(
+        self,
+        lo: float,
+        hi: float,
+        description: str = "",
+        *,
+        units: str = "",
+        default: float | None = None,
+    ):
         if lo >= hi:
             raise ValueError(f"Uniform requires lo < hi, got lo={lo}, hi={hi}")
         self._lo = float(lo)
         self._hi = float(hi)
         self.description = description
         self.units = units
+        self._register_default(default)
 
     @property
     def lo(self) -> float:
@@ -441,6 +506,7 @@ class Gaussian(Distribution):
         description: str = "",
         *,
         units: str = "",
+        default: float | None = None,
     ):
         if sigma <= 0:
             raise ValueError(f"Gaussian requires sigma > 0, got {sigma}")
@@ -452,6 +518,7 @@ class Gaussian(Distribution):
         self._hi = float(hi)
         self.description = description
         self.units = units
+        self._register_default(default)
 
     @property
     def mu(self) -> float:
@@ -648,13 +715,14 @@ class LogUniform(Distribution):
     >>> print(f"log p(1.0): {log_prob:.4f}")
     """
 
-    def __init__(self, lo: float, hi: float):
+    def __init__(self, lo: float, hi: float, *, default: float | None = None):
         if lo <= 0:
             raise ValueError(f"LogUniform requires lo > 0, got {lo}")
         if lo >= hi:
             raise ValueError(f"LogUniform requires lo < hi, got lo={lo}, hi={hi}")
         self._lo = float(lo)
         self._hi = float(hi)
+        self._register_default(default)
 
     @property
     def lo(self) -> float:
@@ -834,7 +902,13 @@ class LogNormal(Distribution):
     """
 
     def __init__(
-        self, mu: float = 0.0, sigma: float = 1.0, lo: float = 0.0, hi: float = float("inf")
+        self,
+        mu: float = 0.0,
+        sigma: float = 1.0,
+        lo: float = 0.0,
+        hi: float = float("inf"),
+        *,
+        default: float | None = None,
     ):
         if sigma <= 0:
             raise ValueError(f"LogNormal requires sigma > 0, got {sigma}")
@@ -842,6 +916,7 @@ class LogNormal(Distribution):
         self._sigma = float(sigma)
         self._lo = float(lo)
         self._hi = float(hi)
+        self._register_default(default)
 
     @property
     def mu(self) -> float:
@@ -1016,12 +1091,15 @@ class StudentT(Distribution):
         df: float = 3.0,
         lo: float = float("-inf"),
         hi: float = float("inf"),
+        *,
+        default: float | None = None,
     ):
         self._mu = float(mu)
         self._sigma = float(sigma)
         self._df = float(df)
         self._lo = float(lo)
         self._hi = float(hi)
+        self._register_default(default)
 
     @property
     def bounds(self) -> tuple[float, float]:
@@ -1197,6 +1275,17 @@ class Fixed(Distribution):
             Always True for Fixed distributions.
         """
         return True
+
+    @property
+    def default(self) -> float | str:
+        """Return the fixed value — for ``Fixed``, value and default coincide.
+
+        Returns
+        -------
+        float or str
+            The fixed value.
+        """
+        return self._value
 
     @property
     def bounds(self) -> tuple[float, float] | tuple[None, None]:
