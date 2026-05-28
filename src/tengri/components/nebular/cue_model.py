@@ -149,15 +149,24 @@ class CueNebularSEDComponent(SEDModelComponent):
     parameter_prefix: str = "neb_"
 
     # Free parameters — declared as class attributes for auto-discovery
+    # Defaults below match CIGALE's nebular module conventions
+    # (pcigale.sed_modules.nebular: logU=-2.0 to -3.0, Z_gas=Z⊙, n_e=100, solar
+    # N/O & C/O) and the young-SF ``_IONSPEC_DEFAULTS`` baked into
+    # ``CueBackend`` (cue.py:1074-1082, derived from a young starburst SSP).
+    # The 7 ionspec_* slopes/ratios encode the shape of the ionising spectrum
+    # below 912 Å; the ``_IONSPEC_DEFAULTS`` values reproduce a typical young
+    # starburst from BC03/CIGALE.
     logU = Uniform(
         -4.0,
         -2.0,
+        default=-3.0,
         description="Ionization parameter log10(U)",
         units="dex",
     )
     logZ_gas = Uniform(
         -2.0,
         0.5,
+        default=0.0,
         description="Gas-phase metallicity log10(Z_gas/Zsun)",
         units="dex",
     )
@@ -172,66 +181,81 @@ class CueNebularSEDComponent(SEDModelComponent):
         units="dimensionless",
     )
 
-    # Cue ionizing spectrum parameters (7 additional free params)
+    # Cue ionizing spectrum parameters (7 additional free params).
+    # Defaults match ``CueBackend._IONSPEC_DEFAULTS`` at cue.py:1074-1082 —
+    # the young-starburst values derived from a representative BC03 SSP.
     ionspec_index1 = Uniform(
         0.0,
         50.0,
+        default=19.7,
         description="Ionizing spectrum slope segment 1 (HeII, 1-228Å)",
         units="dimensionless",
     )
     ionspec_index2 = Uniform(
         -1.0,
         35.0,
+        default=5.3,
         description="Ionizing spectrum slope segment 2 (OII, 228-353Å)",
         units="dimensionless",
     )
     ionspec_index3 = Uniform(
         -2.0,
         20.0,
+        default=1.6,
         description="Ionizing spectrum slope segment 3 (HeI, 353-504Å)",
         units="dimensionless",
     )
     ionspec_index4 = Uniform(
         -2.0,
         10.0,
+        default=0.6,
         description="Ionizing spectrum slope segment 4 (HI, 504-912Å)",
         units="dimensionless",
     )
     ionspec_logLratio1 = Uniform(
         -1.0,
         12.0,
+        default=3.9,
         description="Ionizing spectrum luminosity ratio segment 2/1",
         units="dex",
     )
     ionspec_logLratio2 = Uniform(
         -1.0,
         3.0,
+        default=0.01,
         description="Ionizing spectrum luminosity ratio segment 3/2",
         units="dex",
     )
     ionspec_logLratio3 = Uniform(
         -1.0,
         3.0,
+        default=0.2,
         description="Ionizing spectrum luminosity ratio segment 4/3",
         units="dex",
     )
 
-    # Cue gas-property parameters (3 additional free params beyond logU/logZ)
+    # Cue gas-property parameters (3 additional free params beyond logU/logZ).
+    # Defaults match CIGALE's nebular convention: n_H = 100 cm⁻³ (log = 2.0),
+    # solar N/O and C/O (log = 0.0). These are the values the user identified
+    # at the start of the #477 investigation as the canonical CIGALE knobs.
     gas_logn = Uniform(
         0.0,
         5.0,
+        default=2.0,
         description="Gas density log10(n_H/cm^-3)",
         units="dex",
     )
     gas_logno = Uniform(
         -2.0,
         2.0,
+        default=0.0,
         description="N/O abundance offset log10(N/O)",
         units="dex",
     )
     gas_logco = Uniform(
         -2.0,
         2.0,
+        default=0.0,
         description="C/O abundance offset log10(C/O)",
         units="dex",
     )

@@ -42,9 +42,27 @@ class Exponential(SpatialModelComponent):
     name = "exponential"
     parameter_prefix = "spatial_"
 
-    rd_kpc = Uniform(0.1, 20.0, description="Disk scale length", units="kpc")
-    axis_ratio = Uniform(0.1, 1.0, description="Axis ratio b/a", units="dimensionless")
-    pa_deg = Uniform(-90.0, 90.0, description="Position angle", units="deg")
+    rd_kpc = Uniform(
+        0.1,
+        20.0,
+        description="Disk scale length",
+        units="kpc",
+        default=1.0,
+    )
+    axis_ratio = Uniform(
+        0.1,
+        1.0,
+        description="Axis ratio b/a",
+        units="dimensionless",
+        default=0.7,
+    )
+    pa_deg = Uniform(
+        -90.0,
+        90.0,
+        description="Position angle",
+        units="deg",
+        default=0.0,
+    )
 
     reads: ClassVar[dict[str, str]] = {}
     publishes: ClassVar[dict[str, str]] = {"spatial_profile_2d": ""}
