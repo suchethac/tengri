@@ -623,8 +623,17 @@ plt.show()
 #
 # The stellar + Calzetti continuum below 1 µm reproduces to ~1 %. The
 # master wavelength grid is the union of every attached component's
-# native grid, so the dust SED extends through the FIR peak and down
-# the Rayleigh-Jeans tail to ~mm.
+# native grid, so the dust SED extends through the FIR peak (100 µm)
+# and down the Rayleigh-Jeans tail.
+#
+# **Long-wavelength behaviour.** Past ~10 mm the panels diverge: the
+# Dale et al. (2014) templates ship with data out to 225 mm (the
+# longest wavelength in the published grid), so tengri's dust SED
+# carries a non-zero νL_ν tail at 10–200 mm — about three orders of
+# magnitude below the FIR peak, physically negligible for the
+# bolometric budget but visible on log axes. CIGALE's `dale2014`
+# module truncates the template earlier; that's why the left panel
+# falls cleanly to zero past ~6×10⁷ Å while the right panel does not.
 
 # %%
 sed_c_ir = C.run_chain([
@@ -829,15 +838,20 @@ save_fig("08_nebular_cue_vs_cloudy.png")
 # **The disc model differs by construction.** SKIRTOR2016 bundles a
 # specific accretion-disc spectrum (Schartmann+2005-like piecewise
 # power law with the 1200 Å bend) together with the dusty-torus
-# templates — it's a single package. tengri's composable AGN couples
-# a Shakura-Sunyaev multicolor accretion disc to the SKIRTOR torus,
-# so the UV-optical disc continuum is different on each side even
-# though the torus IR uses the same templates. The disc shape is a
-# deliberate model choice: the multicolor disc is differentiable in
-# M_BH, ṁ, spin, while SKIRTOR's baked-in disc is not. Edge-on viewing
-# pushes the dust peak out to ~30 µm (classic reprocessed-dust bump)
-# on both sides; at face-on i = 30° the dust peak sits at ~6–9 µm on
-# both sides.
+# templates — a single integrated package, smooth from UV through the
+# optical. tengri's composable AGN couples a Shakura-Sunyaev
+# multicolor accretion disc to the SKIRTOR torus, and the multicolor
+# disc carries a hard far-UV bump (<1000 Å) that's well separated from
+# the optical Wien tail — the right panel shows a deep notch around
+# 5000 Å between those two features, where the SKIRTOR-bundled disc
+# instead reads as a continuous rise. The disc shape is a deliberate
+# model choice: the multicolor disc is differentiable in M_BH, ṁ,
+# spin, while SKIRTOR's baked-in disc is not, so anyone fitting an
+# AGN luminosity and Eddington ratio simultaneously wants the
+# composable path even though it diverges visually from a SKIRTOR-
+# package fit. The torus IR uses the same templates and reproduces:
+# face-on i = 30° peaks at ~6–9 µm on both sides; edge-on viewing
+# pushes the dust peak out to ~30 µm (classic reprocessed-dust bump).
 
 # %%
 _sfh_args_d = ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50,
