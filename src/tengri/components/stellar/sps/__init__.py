@@ -13,3 +13,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     load_ssp_data as load_ssp_data,
     predict_surviving_mass as predict_surviving_mass,
 )
+from tengri.components.stellar.sps.mass_remaining import (
+    compute_mass_remaining_fraction as compute_mass_remaining_fraction,
+)
