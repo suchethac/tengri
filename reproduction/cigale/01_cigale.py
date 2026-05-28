@@ -926,11 +926,18 @@ ax_r.plot(s_agn.wave, L_t_agn_only, "C1:", linewidth=1.5,
           label="composable disc + SKIRTOR torus only")
 ax_r.legend(fontsize=9); ax_r.grid(True, alpha=0.3)
 
-# Bound the y-axis to a reasonable 6 decades so log-zero autoscale
-# doesn't blow up the panels at the X-ray edge.
+# Bound both axes to the same windows so the panels are visually
+# comparable. Without explicit ``set_xlim``, matplotlib auto-scales
+# each panel to its widest trace's native grid — the no-AGN baseline
+# (SSP grid, 91 Å – 160 µm) is shorter than the +AGN trace (SKIRTOR
+# grid extends X-ray and FIR), so the two panels would show different
+# x-spans for reasons that look like data but are really cosmetics.
+_xmin_a = float(min(w_skirt.min(), float(np.asarray(s_agn.wave).min())))
+_xmax_a = float(max(w_skirt.max(), float(np.asarray(s_agn.wave).max())))
 _ymax_a = max(float(np.asarray(L_skirt).max()),
               float(np.asarray(s_agn.sed_intrinsic).max()))
 for ax in (ax_l, ax_r):
+    ax.set_xlim(_xmin_a, _xmax_a)
     ax.set_ylim(_ymax_a * 1e-6, _ymax_a * 2)
 
 fig.tight_layout()
@@ -1032,11 +1039,14 @@ save_fig("10_xray_nh_sweep.png")
 # Condon 1992 framework (ARA&A 30, 575) but the *calibrations* are
 # Bell 2003 (q_IR), Murphy 2011 (free-free), Yang 2020 (AGN).
 #
-# To match CIGALE bit-for-bit the tengri build below pins `radio_q_ir =
-# 2.5` and `radio_alpha_sf = 0.8`. tengri's bucket default is
-# `radio_q_ir = 2.64` (Bell 2003 z = 0 anchor); without that override
-# the panels disagree by `10^(2.64 - 2.5) ≈ 1.38×` at 1.4 GHz —
-# exactly q_IR convention, not a physics gap.
+# To match CIGALE the tengri build below pins `radio_q_ir = 2.5` and
+# `radio_alpha_sf = 0.8`. tengri's bucket default is `radio_q_ir = 2.64`
+# (Bell 2003 z = 0 anchor); without that override the panels disagree
+# by `10^(2.64 − 2.5) ≈ 1.38×` at 1.4 GHz — exactly q_IR convention,
+# not a physics gap. With the override the residual is **1.5 % at
+# 1.4 GHz** (tengri 1.672e+18 vs CIGALE 1.697e+18 erg/s/Hz), traceable
+# to small differences in the L_IR integration window between
+# `dust.emission.dale2014` and CIGALE's `dale2014` module.
 # Star-forming only, 100 MHz to 100 GHz.
 
 # %%
