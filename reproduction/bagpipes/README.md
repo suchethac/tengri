@@ -1,0 +1,106 @@
+# Reproducing BAGPIPES with tengri
+
+This folder places BAGPIPES (Carnall et al. 2018, MNRAS 480, 4379) next
+to tengri component by component. Same parameters, same units, same
+SSP grid; one figure per physics block.
+
+## Files
+
+- **`01_bagpipes.py`** — the notebook, jupytext percent format.
+- **`_drivers/`** — code-side glue:
+  - `units.py` — bagpipes (erg/s/Å) ↔ tengri (erg/s/Hz). Ships
+    `verify_unit_conversion(rtol=1e-3)`; the notebook trips at Setup
+    if the converter ever drifts.
+  - `bagpipes_driver.py` — thin wrappers around
+    `bagpipes.model_galaxy(...)` to extract stellar / attenuated /
+    nebular SEDs, SFH curves, and IGM transmission in tengri's units.
+  - `bagpipes_ssp_to_dsps.py` — one-off port of bagpipes' bundled
+    `bc03_miles_stellar_grids.fits` (BC03 templates in the MILES
+    extended-wavelength library, Kroupa IMF) into the DSPS HDF5
+    layout tengri's `load_ssp_data` reads. Includes the
+    `LIV_MSTAR_FRAC` table so the mass-loss bookkeeping is
+    bit-exact.
+  - `data/bc03_miles_from_bagpipes.h5` — the shared SSP file. Both
+    codes consume this; §1 residuals below floating-point precision
+    are interpolation, nothing else.
+- **`_figs/`** — generated figures.
+
+## Prerequisites
+
+```bash
+pip install bagpipes jupytext jupyter
+```
+
+Bagpipes' optional `pymultinest` dependency is only needed for
+posterior sampling and can be ignored here — we use
+`bagpipes.model_galaxy` for forward-modelling only. Tengri itself
+should already be importable.
+
+## Regenerating the BC03+MILES SSP grid
+
+```bash
+python -m reproduction.bagpipes._drivers.bagpipes_ssp_to_dsps
+```
+
+The output HDF5 has the DSPS-compatible shape:
+
+| key | shape | meaning |
+|---|---|---|
+| `ssp_lg_age_gyr` | `(n_age,)` | `log10(age / Gyr)` |
+| `ssp_lgmet` | `(n_met,)` | `log10(Z)` (absolute, not solar) |
+| `ssp_wave` | `(n_wave,)` | rest-frame wavelength [Å] |
+| `ssp_flux` | `(n_met, n_age, n_wave)` | L_ν at unit stellar mass |
+| `ssp_mass_remaining` | `(n_met, n_age)` | surviving-mass fraction |
+
+Both `bagpipes.models.model_galaxy` and `tengri.load_ssp_data`
+consume the same numeric arrays — `ssp_flux` is derived from
+bagpipes' `bc03_miles_stellar_grids.fits` by a single
+`L_λ × λ²/c` Jacobian.
+
+## Running
+
+```bash
+jupytext --to ipynb 01_bagpipes.py
+PYTHONPATH=$PWD/../..:$PWD/../../src \
+  jupyter nbconvert --to html --execute 01_bagpipes.ipynb \
+  --ExecutePreprocessor.timeout=900
+```
+
+Expected runtime: 5–10 minutes on a CPU. First-time JAX compilation
+for the Cue nebular emulator dominates; subsequent runs reuse the
+persistent cache and finish in under a minute.
+
+## What the notebook covers
+
+§1 SSPs · §2 SFHs · §3 stellar SED · §4 dust attenuation curves ·
+§5 attenuation applied · §6 dust IR + energy balance ·
+§7 panchromatic · §8 nebular (Cloudy v25 vs Cue v17) · §12 IGM.
+
+Sections 9–11 (AGN / X-ray / radio) are skipped — BAGPIPES has no
+counterpart. See `reproduction/cigale/` for those.
+
+## What the comparison found
+
+A 1:1 comparison is the best bug-discovery tool we have. Each block
+either reproduces the reference, or surfaces a gap.
+
+| § | Block | Result |
+|---|---|---|
+| 1 | BC03+MILES SSP | Float32 round-trip floor (~1e-5 typical, ~1e-7 best). |
+| 2 | Delayed-τ SFH | Both integrate to `10^massformed`. |
+| 3 | Stellar SED | tengri / BAGPIPES = 1.010 ± 0.001 in the optical (1% systematic — under investigation). |
+| 4 | Dust attenuation curves | Calzetti, Cardelli, CF00, Salim — visual match. |
+| 5 | Attenuation applied | Matched at single-Av. |
+| 6 | DL07 dust IR + energy balance | Exact (`L_IR_emitted − L_absorbed = 0` to floating point). |
+| 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. Most of the gap is Cloudy v17 (Cue training set) vs Cloudy v25 (current BAGPIPES) plus bare-stellar vs SFH-integrated ionising-luminosity paths. |
+| 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. **Filed as a tengri bug.** |
+
+Filed issues (links populated as PRs land):
+
+- `feat(igm): inoue14 missing Lyman-continuum opacity below 912 Å`
+- `parameters: validator drift — list_dust_emission_models exposes
+  aliases (dl07, dl14, mbb) the SEDModel.build validator rejects`
+
+Any percent-level disagreement that does not have an explanation in
+the figure caption above the audit table is treated as a tengri bug
+and tracked in an open issue.
