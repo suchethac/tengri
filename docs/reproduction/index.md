@@ -15,7 +15,8 @@ why.
 :maxdepth: 1
 
 cigale
+bagpipes
 ```
 
-Comparisons with Prospector, BAGPIPES, MAGPHYS, x-cigale, GRAHSP, and
-Synthesizer will land as their reproduction notebooks come together.
+Comparisons with Prospector, MAGPHYS, x-cigale, GRAHSP, and Synthesizer
+will land as their reproduction notebooks come together.

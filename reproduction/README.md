@@ -7,14 +7,14 @@ holds one comparison.
 ```
 reproduction/
 ├── cigale/                     # Boquien et al. 2019, A&A 622, A103
-├── bagpipes/                   # planned — Carnall et al. 2018
+├── bagpipes/                   # Carnall et al. 2018, MNRAS 480, 4379
 ├── prospector/                 # planned — Johnson et al. 2021
 └── synthesizer/                # planned — Vijayan et al. 2024
 ```
 
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent
 format), thin code-specific driver modules, and the rendered figures.
-The CIGALE folder is the first.
+The CIGALE and BAGPIPES folders are ready; the rest are scaffolds.
 
 ## Running a notebook
 
