@@ -626,14 +626,19 @@ plt.show()
 # native grid, so the dust SED extends through the FIR peak (100 µm)
 # and down the Rayleigh-Jeans tail.
 #
-# **Long-wavelength behaviour.** Past ~10 mm the panels diverge: the
-# Dale et al. (2014) templates ship with data out to 225 mm (the
-# longest wavelength in the published grid), so tengri's dust SED
-# carries a non-zero νL_ν tail at 10–200 mm — about three orders of
-# magnitude below the FIR peak, physically negligible for the
-# bolometric budget but visible on log axes. CIGALE's `dale2014`
-# module truncates the template earlier; that's why the left panel
-# falls cleanly to zero past ~6×10⁷ Å while the right panel does not.
+# **Long-wavelength behaviour.** Past ~10 mm the panels diverge — and
+# the cause is the template port, not the integrator. tengri's
+# `data/dale2014_templates.h5` is built directly from the published
+# Dale et al. (2014) release (`spectra/spectra.0.00AGN.dat`, the
+# full 1496-wavelength × 64-α grid) and carries non-zero luminosity
+# densities out to 225 mm — the longest wavelength in the original
+# publication. CIGALE bundles a separate version of those templates
+# that zeros out everything past ~10 mm. Both codes renormalise to
+# `L_absorbed` at runtime, so the FIR peak matches by energy balance
+# regardless. The tengri νL_ν tail at 10–200 mm sits about three
+# orders of magnitude below the FIR peak; physically negligible for
+# the bolometric budget, visible on log axes, and closer to what
+# Dale et al. actually published than the CIGALE-bundled version.
 
 # %%
 sed_c_ir = C.run_chain([
