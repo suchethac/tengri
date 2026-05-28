@@ -953,24 +953,36 @@ class StellarSEDComponent:
             )
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — linear interp of the
-            # ztable at runtime z. Publishes the same derived keys as the
-            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
-            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
-            # filter_eff_waves.
+            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — smooth triweight
+            # interp of the ztable at runtime z. Publishes the same derived
+            # keys as the fixed-z path: stellar_phot_lnu_precomp,
+            # stellar_phot_moment_precomp, stellar_phot_lnu_per_age_precomp,
+            # stellar_phot_moment_per_age_precomp, filter_eff_waves.
+            #
+            # The original linear z-interp was O(h^2) and non-monotonic in
+            # n_z at fixed test redshifts: doubling the grid can shift a
+            # test point into a less-favourable cell and raise the error.
+            # The triweight kernel (Hearin et al. 2023) is the canonical
+            # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
+            # and SKIRTOR grids — C²-continuous, kernel-supported on the
+            # 3-bandwidth neighbourhood. See issue #438.
+            from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
             ztable = self._state.ssp_phot_ztable
             z = jnp.asarray(params.get("redshift", 0.0))
             z_grid = ztable.z_grid
-            n_z = z_grid.shape[0]
-            i_hi = jnp.clip(jnp.searchsorted(z_grid, z), 1, n_z - 1)
-            i_lo = i_hi - 1
-            z_lo = z_grid[i_lo]
-            z_hi = z_grid[i_hi]
-            frac = (z - z_lo) / jnp.maximum(z_hi - z_lo, 1e-12)
+            z_edges = edges_for_grid(z_grid)
+            # Match grid-cell width for the kernel bandwidth (Hearin 2023
+            # convention): smooth across one neighbour on each side.
+            z_scatter = 0.5 * (z_grid[1] - z_grid[0])
+            w_z = compute_grid_weights(z, z_grid, scatter=z_scatter, edges=z_edges)
+
+            def _interp(table):
+                # table: (n_z, ...). Contract axis 0 with kernel weights.
+                return jnp.tensordot(w_z, table, axes=([0], [0]))
+
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
-            ssp_phot_at_z = (1.0 - frac) * ztable.ssp_phot_table[
-                i_lo
-            ] + frac * ztable.ssp_phot_table[i_hi]
+            ssp_phot_at_z = _interp(ztable.ssp_phot_table)
             # Marginalised + age-resolved LUTs (Phase 3c-3c-iv-a parity).
             stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
@@ -985,9 +997,7 @@ class StellarSEDComponent:
             # Phase 3c-3c-v: Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalised + per-age.
             if ztable.ssp_phot_moment_table is not None:
-                ssp_moment_at_z = (1.0 - frac) * ztable.ssp_phot_moment_table[
-                    i_lo
-                ] + frac * ztable.ssp_phot_moment_table[i_hi]
+                ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
                 stellar_phot_moment_precomp = (
                     total_mass
                     * jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z)
@@ -1004,9 +1014,7 @@ class StellarSEDComponent:
                 )
             # Interpolate effective rest-frame wavelengths and publish for
             # downstream consumers (dust LUT, AGN, IGM).
-            eff_waves_at_z = (1.0 - frac) * ztable.eff_waves_rest_table[
-                i_lo
-            ] + frac * ztable.eff_waves_rest_table[i_hi]
+            eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
             derived_overrides["filter_eff_waves"] = eff_waves_at_z
 
         # ── 12. Assemble new state ──────────────────────────────────────

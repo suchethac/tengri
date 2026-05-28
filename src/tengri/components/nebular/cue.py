@@ -1800,9 +1800,15 @@ def _cue_weights_flatten(cw):
         cw.batched_spec_scale,
         cw.batched_spec_shift,
         cw.batched_sort_idx,
+        # ``line_wav_selections`` is a tuple of int arrays. It must live in
+        # children, not aux_data: arrays in aux trigger a ``ValueError``
+        # ("arrays cannot be passed as metadata fields") on the second JIT
+        # cache lookup, because aux equality compares with ``==`` which
+        # returns an array on ndarray inputs. See issue #464.
+        cw.line_wav_selections,
     )
-    # Non-array aux: strings, int tuples
-    aux_data = (cw.line_names, cw.line_wav_selections, cw.batched_n_lines)
+    # Non-array aux: strings and int tuples only.
+    aux_data = (cw.line_names, cw.batched_n_lines)
     return children, aux_data
 
 
@@ -1830,8 +1836,9 @@ def _cue_weights_unflatten(aux_data, children):
         b_ss,
         b_ssh,
         b_si,
+        line_wav_selections,
     ) = children
-    line_names, line_wav_selections, batched_n_lines = aux_data
+    line_names, batched_n_lines = aux_data
     return CueWeights(
         line_nets=line_nets,
         cont_net=cont_net,

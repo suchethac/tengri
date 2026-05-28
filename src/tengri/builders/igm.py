@@ -13,10 +13,11 @@ that activate additional free parameters:
   ``dla_log_n_hi``, ``dla_z``, ``dla_b_turb``, ``dla_temp`` params.
 
 Variants are introspected from
-:data:`tengri.parameters.groups._VALID_IGM_TYPES`; the activated
-free-param set comes from a one-shot call to
-:func:`tengri.parameters.registry.recipe_parameters`, so adding a new
-DLA / patchy parameter in the registry surfaces here automatically.
+:data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` (canonical names
+only — aliases like ``"inoue"`` are validator-side back-compat and get
+no separate factory); the activated free-param set comes from a one-shot
+call to :func:`tengri.parameters.registry.recipe_parameters`, so adding
+a new DLA / patchy parameter in the registry surfaces here automatically.
 
 Examples
 --------
