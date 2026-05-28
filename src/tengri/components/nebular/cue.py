@@ -762,9 +762,16 @@ def predict_all_lines(
     wav_sorted = weights.nn_line_wav[weights.batched_sort_idx]
 
     # Stay in Lsun internally to avoid 10^x overflow; predict_nebular_sed
-    # converts to erg/s at the boundary.
+    # converts to erg/s at the boundary. The clip is the only defence against
+    # NaN/inf poisoning a JAX gradient if gas_logq / gas_logqion go pathological
+    # (e.g. inf from a float32 SSP overflow in fit_ionizing_spectrum, cf. #469).
+    # ±50 dex is intentionally tight: physical line luminosities sit within
+    # ~±20 dex of Lsun for typical galaxies, so saturation here is a load-loud
+    # signal of an upstream bug. ±100 (the original) was wide enough that the
+    # +51-dex `gas_logq = logU` bug fixed in #477 produced near-physical
+    # silently-wrong output rather than blatantly-saturated output.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    exponent_safe = jnp.clip(exponent, -100.0, 100.0)
+    exponent_safe = jnp.clip(exponent, -50.0, 50.0)
     luminosities = 10.0**exponent_safe
 
     return wav_sorted, luminosities
@@ -825,9 +832,11 @@ def predict_continuum(
 
     # Convert from log10(Lsun/Hz/Q_H) to Lsun/Hz:
     # Internal computation stays in Lsun/Hz to avoid exponent overflow;
-    # converted to erg/s/Hz at predict_nebular_sed return.
+    # converted to erg/s/Hz at predict_nebular_sed return. Clip tightened
+    # from ±100 to ±50 dex in this revision — see predict_all_lines for the
+    # full rationale (#477 follow-up).
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    luminosity = 10.0 ** jnp.clip(exponent, -100.0, 100.0)
+    luminosity = 10.0 ** jnp.clip(exponent, -50.0, 50.0)
 
     # Zero out wavelengths below Lyman limit (Cue convention)
     luminosity = jnp.where(wav_sorted > 911.6, luminosity, 0.0)

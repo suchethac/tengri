@@ -107,6 +107,7 @@ def test_cue_nebular_parity_vs_backend():
     """
     import os
 
+    import chex
     import jax.numpy as jnp
 
     from tengri.components.nebular.cue import CueBackend
@@ -159,23 +160,35 @@ def test_cue_nebular_parity_vs_backend():
         comp_params, sed_in, wave, nion=jnp.asarray(10.0**legacy_logqion)
     )
 
+    # ``cloudyfsps_only=False`` matches the SEDComponent path, which does
+    # not currently apply the cloudyfsps subset filter. Without this both
+    # paths report different line counts (128 vs 138) and the test fails
+    # before any luminosity comparison — that was a bug in my own setup
+    # in #477 surfaced once the weights file landed in CI.
     legacy_wav, legacy_lum = backend._forward_lines(
         {k: jnp.asarray(v) for k, v in backend_params.items()},
+        cloudyfsps_only=False,
     )
 
-    # Match line ordering (both paths sort by wavelength internally).
-    assert published["line_waves"].shape == legacy_wav.shape, (
-        f"line count mismatch: {published['line_waves'].shape} vs {legacy_wav.shape}"
+    # Both paths sort lines by wavelength internally; same shape and waves.
+    chex.assert_equal_shape([published["line_waves"], legacy_wav])
+    chex.assert_trees_all_close(
+        published["line_waves"],
+        legacy_wav,
+        atol=1e-3,
+        custom_message="line wavelengths diverged between the two Cue paths",
     )
-    assert jnp.allclose(published["line_waves"], legacy_wav, rtol=0, atol=1e-3), (
-        "line wavelengths diverged between the two Cue paths"
-    )
-    # Lines span many decades; compare in log space at a tight tolerance.
+    # Lines span many decades; compare in log space at the crossval tolerance.
     log_comp = jnp.log10(jnp.maximum(published["line_lums"], 1e-300))
     log_legacy = jnp.log10(jnp.maximum(legacy_lum, 1e-300))
-    assert jnp.allclose(log_comp, log_legacy, atol=1e-3), (
-        "line luminosities diverge between CueNebularSEDComponent.predict "
-        "and CueBackend._forward_lines — the two paths are out of sync."
+    chex.assert_trees_all_close(
+        log_comp,
+        log_legacy,
+        atol=1e-3,
+        custom_message=(
+            "line luminosities diverge between CueNebularSEDComponent.predict "
+            "and CueBackend._forward_lines — the two paths are out of sync."
+        ),
     )
 
 
@@ -416,6 +429,106 @@ def test_cue_sed_component_requires_nion():
 
     with pytest.raises(KeyError, match="nion"):
         comp.predict(params, sed_in, wave)  # missing nion → KeyError
+
+
+def test_cue_predict_all_lines_clip_bounded_at_50dex():
+    """The exponent clip in ``predict_all_lines`` must not exceed ±50 dex.
+
+    The ±100-dex bound shipped with the original Cue port was wide enough
+    that the +51-dex ``gas_logq = logU`` bug (#477) produced saturated-but-
+    near-physical line luminosities instead of obviously-broken output. ±50
+    dex is the discipline: any normalisation slip ≥ 50 dex now hits the
+    ceiling/floor uniformly and is visible in inspection.
+
+    Source-pinning regression: re-loosening the clip would silently undo
+    that defence. We grep the source rather than calling the function so
+    the assertion fails immediately on any future widening.
+    """
+    import inspect
+
+    from tengri.components.nebular import cue
+
+    source = inspect.getsource(cue.predict_all_lines)
+    assert "jnp.clip(exponent, -50.0, 50.0)" in source, (
+        "predict_all_lines clip widened from ±50 dex; see #477 follow-up for "
+        "why ±100 silently masked the gas_logq normalisation bug."
+    )
+
+    cont_source = inspect.getsource(cue.predict_continuum)
+    assert "jnp.clip(exponent, -50.0, 50.0)" in cont_source, (
+        "predict_continuum clip widened from ±50 dex; same rationale as the "
+        "lines path — keep both clips in lockstep."
+    )
+
+
+def test_cue_predict_all_lines_clip_saturates_on_synthetic_bug():
+    """A synthetic +51-dex error in ``gas_logq`` (the magnitude of the
+    pre-#477 bug) must drive every line to the same saturated clip value,
+    making the bug visually obvious rather than near-physical."""
+    import os
+
+    import chex
+    import jax.numpy as jnp
+
+    from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+    from tengri.components.nebular.cue import load_cue_weights, predict_all_lines
+
+    if not os.path.exists(_DEFAULT_CUE_WEIGHTS_PATH):
+        pytest.skip(f"Cue weights file not found at {_DEFAULT_CUE_WEIGHTS_PATH}")
+    weights = load_cue_weights(str(_DEFAULT_CUE_WEIGHTS_PATH))
+
+    # NN-ready 12-vector (the function broadcasts internally over the 16
+    # batched sub-emulators). Values centred in their training ranges; the
+    # test isn't about absolute luminosities, only about how the clip
+    # responds to a synthetic normalisation error.
+    nn_params = jnp.array(
+        [19.7, 5.3, 1.6, 0.6, 3.9, 0.01, 0.2, 48.5, 2.0, 0.0, 0.0, 0.0],
+        dtype=jnp.float32,
+    )
+    correct_gas_logq = jnp.asarray(48.5)
+    bug_gas_logq = jnp.asarray(-3.0)  # the pre-#477 value
+    gas_logqion = jnp.asarray(52.0)
+
+    _wav, lum_correct = predict_all_lines(
+        nn_params=nn_params,
+        weights=weights,
+        gas_logq=correct_gas_logq,
+        gas_logqion=gas_logqion,
+    )
+    _wav, lum_buggy = predict_all_lines(
+        nn_params=nn_params,
+        weights=weights,
+        gas_logq=bug_gas_logq,
+        gas_logqion=gas_logqion,
+    )
+
+    chex.assert_equal_shape([lum_correct, lum_buggy])
+    chex.assert_tree_all_finite(lum_correct)
+    chex.assert_tree_all_finite(lum_buggy)
+
+    log_correct = jnp.log10(jnp.maximum(lum_correct, 1e-300))
+    log_buggy = jnp.log10(jnp.maximum(lum_buggy, 1e-300))
+
+    # Correct path: a healthy line forest spans many decades.
+    span_correct = float(log_correct.max() - log_correct.min())
+    assert span_correct > 1.0, (
+        f"correct-gas_logq line luminosities should span multiple decades, got {span_correct} dex"
+    )
+
+    # Buggy +51-dex path: the bulk of lines (>90%) hit the +50 clip ceiling
+    # uniformly. A few intrinsically-faint lines may sit below the ceiling
+    # but the bulk is heavily peaked at the saturation value — that is the
+    # bug-detection signal the tight clip provides. Pre-#477 the ±100 clip
+    # let the same lines emerge at ~+99 dex, which looked plausible.
+    saturated_frac = float((log_buggy >= 49.9).mean())
+    assert saturated_frac > 0.9, (
+        f"buggy +51-dex gas_logq should saturate the bulk of lines at the "
+        f"+50 clip ceiling; only {saturated_frac:.1%} reached it. The clip "
+        f"may be too loose to catch this class of normalisation bug."
+    )
+    # And the median is right at the ceiling — the bug signature is a
+    # degenerate distribution at the clip value.
+    assert float(jnp.median(log_buggy)) >= 49.9
 
 
 def test_cue_nebular_precompute_stores_backend():
