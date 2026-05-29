@@ -253,6 +253,31 @@ class AGNSEDComponent:
         agn_log_lbol = jnp.asarray(params["agn_log_lbol"])
         L_agn_bol = jnp.power(10.0, agn_log_lbol) * L_SUN
 
+        # CIGALE-faithful cross-component coupling
+        # ────────────────────────────────────────────────────────────
+        # When ``agn_fracAGN > 0`` we follow CIGALE skirtor2016's
+        # bookkeeping: the AGN dust-IR power is derived from the
+        # stellar dust-absorbed luminosity via
+        # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
+        # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
+        # the existing block normalisation ``l_scale = L_bol × frac``
+        # produces ``l_scale = agn_power``. This way the torus block
+        # API stays unchanged while the higher-level driver matches
+        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
+        # whole-IR default) is assumed; the alternative wavelength-
+        # window flow is not yet wired.
+        agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
+        L_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
+        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
+        _one_minus_frac = jnp.maximum(1.0 - agn_fracAGN, 1e-6)
+        agn_power_from_stellar = L_absorbed * agn_fracAGN / _one_minus_frac
+        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        agn_torus_frac_effective = jnp.where(
+            agn_fracAGN > 0.0,
+            agn_power_from_stellar / jnp.maximum(L_agn_bol, 1e-30),
+            agn_torus_frac_user,
+        )
+
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
         # so it folds into a JIT trace cleanly. If template_data is
@@ -279,7 +304,10 @@ class AGNSEDComponent:
             "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
             "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
             "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
-            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
+            # CIGALE-coupled override: see ``agn_torus_frac_effective``
+            # block above. When ``agn_fracAGN > 0`` this carries the
+            # stellar-derived agn_power; otherwise it's the user value.
+            "agn_torus_frac": agn_torus_frac_effective,
             "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
             "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
             "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),

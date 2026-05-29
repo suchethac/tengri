@@ -117,7 +117,7 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
     }
     if with_dust or with_ir:
         kw["dust"] = {
-            "type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+            "type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
             "tau_bc": Fixed(DUST_TAU_FIDUCIAL["tau_bc"] if with_dust else 0.0),
             "tau_diff": Fixed(DUST_TAU_FIDUCIAL["tau_diff"] if with_dust else 0.0),
             "*": FIXED,
@@ -141,23 +141,21 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         #    §9 fiducial — the intrinsic 4π disc bolometric (the L_bol
         #    that the accretion engine actually produces). PR #492
         #    used ``agn.disk_luminosity`` (observed at i=30°, post-
-        #    extinction) as the reference, which is wrong by ~1.6×.
+        #    extinction) as the reference, which was wrong by ~1.6×.
         #
-        # 2. ``agn_torus_frac = 0.71`` reproduces CIGALE's
-        #    ``agn_power = 0.171 L_sun`` at the §9 fiducial. CIGALE
-        #    derives this from ``dust.luminosity_stellar × fracAGN /
-        #    (1 - fracAGN) = 0.399 × 0.3/0.7``, so it depends on the
-        #    *stellar dust luminosity* — tengri's agn_torus_frac knob
-        #    is a fixed fraction of L_bol, so the mapping to fracAGN
-        #    is stellar-fiducial-specific. 0.71 = 0.171/0.240 is the
-        #    value at this stellar config (BC03, 1 M_sun formed,
-        #    E_BV_lines=0.3, fracAGN=0.3).
+        # 2. ``agn_fracAGN = 0.3`` mirrors CIGALE's actual ``fracAGN``
+        #    parameter (skirtor2016.py:498 with lambda_fracAGN=0/0).
+        #    The AGN component now derives
+        #    ``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)``
+        #    from ``state.derived["L_absorbed"]`` natively (PR #522 —
+        #    cross-component coupling). Replaces the empirically-tuned
+        #    ``agn_torus_frac=0.71`` workaround from earlier audits.
         kw["agn"] = {
             "type": "composable",
             "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
             "torus": {"type": "skirtor", "*": FIXED},
             "agn_log_lbol": Fixed(-0.620),
-            "agn_torus_frac": Fixed(0.71),
+            "agn_fracAGN": Fixed(0.3),
             "*": FIXED,
         }
     return kw
