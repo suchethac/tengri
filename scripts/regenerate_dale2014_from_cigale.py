@@ -85,7 +85,11 @@ def main() -> int:
     print(f"Integration check at alpha=2.0: ∫spec dλ_Å = {integral_check:.6f}  (expect 1.0)")
     assert abs(integral_check - 1.0) < 1e-3, "Template normalisation drift"
 
-    out_path = Path("data/dale2014_templates.h5")
+    # Use a CIGALE-specific filename so it doesn't shadow the
+    # Wyoming-sourced ``dale2014_templates.h5`` which the contract
+    # tests (test_dale2014_official_source.py) pin against the
+    # published Dale et al. 2014 release.
+    out_path = Path("data/dale2014_templates_cigale.h5")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(out_path, "w") as f:
         f.create_dataset("alpha_grid", data=ALPHA_GRID, dtype=np.float64)

@@ -75,6 +75,18 @@ import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
+# Override the ``dale2014`` emission model to use CIGALE-sourced templates
+# for this reproduction notebook. The shipped ``data/dale2014_templates.h5``
+# is the Wyoming-source bit-faithful Dale et al. 2014 release; the audit
+# panel uses ``data/dale2014_templates_cigale.h5`` so it matches CIGALE's
+# actual ``dale2014`` SED template directly. Both files come from
+# ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
+from pathlib import Path as _Path  # noqa: E402
+from tengri.components.dust.emission_templates import register_dale2014_tabulated  # noqa: E402
+_CIGALE_DALE_PATH = _Path(__file__).parent.parent.parent / "data" / "dale2014_templates_cigale.h5"
+if _CIGALE_DALE_PATH.is_file():
+    register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014")
+
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 
