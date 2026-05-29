@@ -528,7 +528,9 @@ from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
 from tengri.inference.vi_config import VIConfig
 from tengri.observation.instrument import Instrument, list_instruments
+from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
+from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
@@ -589,6 +591,8 @@ _CURATED_DIR = (
     "Spectroscopy",
     "NoiseModel",
     "LineList",
+    "LineFluxData",
+    "LineRatioData",
     "Instrument",
     "list_instruments",
     # 3.  Priors / distributions

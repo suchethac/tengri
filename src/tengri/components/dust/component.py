@@ -277,6 +277,18 @@ class DustAttenuationSEDComponent:
             derived_overrides["dust_attenuation_precomp"] = a_lut
             derived_overrides["dust_attenuation_slope_precomp"] = a_slope_lut
 
+        # Phase 5 (SpectrumPrecomp): per-pixel transmission. A spectrum pixel
+        # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact —
+        # no Taylor slope needed (contrast the filter branch above).
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            if self.config.law == "calzetti":
+                k_pix = calzetti(spec_eff)
+            else:
+                law_fn = resolve_dust_law(self.config.law)
+                k_pix = law_fn(spec_eff)
+            derived_overrides["dust_spec_transmission_precomp"] = jnp.exp(-tau_v * k_pix)
+
         return state.with_(
             sed_intrinsic=attenuated,
             sed_attenuated=attenuated,

@@ -685,6 +685,14 @@ class Fitter:
                 args["line_flux_err"] = line_flux_cfg.errors
                 args["line_flux_waves"] = line_flux_cfg.wavelengths
 
+            line_ratio_cfg = getattr(obs, "line_ratios", None)
+            if line_ratio_cfg is not None:
+                # The model ratio is computed from model.observation.line_ratios
+                # in the loss closure; only the observed ratio + error need to
+                # ride along for the Gaussian comparison.
+                args["line_ratio_obs"] = line_ratio_cfg.ratios
+                args["line_ratio_err"] = line_ratio_cfg.errors
+
             index_cfg = getattr(obs, "spectral_indices", None)
             if index_cfg is not None:
                 args["index_obs"] = index_cfg.values

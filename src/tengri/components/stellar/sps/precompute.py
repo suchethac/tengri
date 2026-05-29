@@ -328,6 +328,88 @@ def precompute_spectroscopy(
     )
 
 
+class SpectroscopicZTable(NamedTuple):
+    """Free-z spectroscopy marker carrying the observed pixel grid.
+
+    Unlike the photometric ztable, the SSP flux is **not** pre-tabulated
+    across redshift. A spectrum resolves absorption features that sweep
+    across a fixed observed pixel as ``z`` changes, so interpolating
+    ``ssp_on_pixels`` between z-grid nodes would be inaccurate near any
+    spectral feature (filter integration hides this in the photometric
+    case). Instead, the stellar component re-interpolates the SSP cube to
+    ``wave_obs / (1 + z)`` at runtime — exact and fully differentiable in z.
+
+    Attributes
+    ----------
+    wave_obs_pixels : array, shape (n_pix,)
+        Observed-frame pixel wavelengths [Angstrom] (z-independent).
+    z_min, z_max : float
+        Redshift bounds the table was built for (advisory; runtime z is
+        not clamped to them).
+
+    Notes
+    -----
+    **JIT-compatible**: no — startup marker; leaves are immutable and safe
+    inside JAX operations.
+
+    """
+
+    wave_obs_pixels: jnp.ndarray
+    z_min: float
+    z_max: float
+
+
+def precompute_spectroscopy_ztable(
+    ssp_data,
+    wave_obs_pixels,
+    z_grid=None,
+    z_min=0.001,
+    z_max=3.0,
+    n_z=100,
+) -> SpectroscopicZTable:
+    """Build the free-z spectroscopy marker (observed pixel grid only).
+
+    The free-z spectrum path interpolates the SSP cube to the rest-frame
+    pixel grid ``wave_obs / (1 + z)`` at runtime rather than pre-tabulating
+    across redshift (see :class:`SpectroscopicZTable` for why). This builder
+    therefore just records the observed pixel grid and the z bounds.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        SSP templates (unused here; kept for signature symmetry with the
+        photometric ztable builder).
+    wave_obs_pixels : array, shape (n_pix,)
+        Observed-frame pixel wavelengths [Angstrom].
+    z_grid : array, optional
+        Custom redshift grid; only its min/max are recorded.
+    z_min, z_max : float
+        Redshift bounds [dimensionless].
+    n_z : int
+        Unused (kept for signature symmetry).
+
+    Returns
+    -------
+    SpectroscopicZTable
+        Free-z marker carrying the observed pixel grid.
+
+    Notes
+    -----
+    **JIT-compatible**: no — startup marker.
+    **Gradient-safe**: not applicable (CPU preprocessing).
+
+    """
+    del ssp_data, n_z
+    if z_grid is not None:
+        z_grid = jnp.asarray(z_grid)
+        z_min, z_max = float(z_grid[0]), float(z_grid[-1])
+    return SpectroscopicZTable(
+        wave_obs_pixels=jnp.asarray(wave_obs_pixels),
+        z_min=float(z_min),
+        z_max=float(z_max),
+    )
+
+
 class PhotometricZTable(NamedTuple):
     """Pre-computed SSP broadband fluxes on a redshift grid.
 
