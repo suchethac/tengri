@@ -360,8 +360,20 @@ class DustSEDComponent:
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
         # negative signed area; abs() recovers the positive erg/s.
         # Mirrors forward/pipeline.py:815.
+        #
+        # Lyman-continuum exclusion: photons at λ < 912 Å are absorbed by
+        # H ionisation (→ nebular emission), not by dust grains — they
+        # don't contribute to the dust IR re-emission pool. Matches
+        # CIGALE ``dustatt_modified_starburst`` (a_vs_ebv clips at 91.2
+        # nm, so its energy-balance ∫ stops at 912 Å) without forcing
+        # ``calzetti`` / ``leitherer02`` to zero the polynomial there
+        # — users querying the curve at any wavelength still get a
+        # value, only the dust energy-balance integral excludes those
+        # photons.
         nu = C_AA / wave
         absorbed_lnu = sed_intrinsic_stellar - sed_attenuated
+        # Mask LyC photons out of the L_absorbed integral.
+        absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
         L_absorbed = jnp.abs(jnp.trapezoid(absorbed_lnu, nu))
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)

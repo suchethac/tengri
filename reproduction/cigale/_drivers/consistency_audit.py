@@ -28,6 +28,17 @@ from reproduction.cigale._drivers import cigale_driver as C, units as U
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
+# Use the CIGALE-sourced Dale2014 templates for the audit (CIGALE-faithful
+# comparison). The shipped ``dale2014_templates.h5`` is the Wyoming-source
+# bit-faithful Dale et al. 2014 release pinned by the contract tests; the
+# audit script overrides to the CIGALE-bundled version so the reproduction
+# panel matches CIGALE's actual SED template. Both files come from
+# ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
+from tengri.components.dust.emission_templates import register_dale2014_tabulated
+_CIGALE_DALE_PATH = Path(__file__).parents[3] / "data" / "dale2014_templates_cigale.h5"
+if _CIGALE_DALE_PATH.is_file():
+    register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014")
+
 SSP_PATH = Path(__file__).parent / "data" / "bc03_from_cigale.h5"
 
 # CIGALE `sfhdelayed(normalise=True)` ↔ tengri `log_total_mass = 0.0`

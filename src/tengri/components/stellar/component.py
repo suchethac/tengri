@@ -918,13 +918,45 @@ class StellarSEDComponent:
         # ── 11. Ionising photon production rate (λ < 911.76 Å) ──────────
         # photons/s = ∫_{ν > c/λ_HI} L_ν / (hν) dν, summed over all ages.
         # Mirrors components/nebular/ionizing_spectrum.py:299.
+        #
+        # Partial-bin correction (#537): when 911.76 Å falls between two
+        # grid points (true for BC03's 10 Å sampling: 905 and 915 Å are
+        # the bracketing points), a hard ``wave < 911.76`` mask drops
+        # the 905 → 911.76 portion of the boundary bin entirely. SSP
+        # spectra have a near-discontinuous Lyman drop at 911.76 Å:
+        # ionising flux is well-defined right up to the limit, then
+        # drops to zero. Linear interpolation between 905 and 915 Å
+        # would under-estimate the boundary value (a half-value of the
+        # ionising side); the correct partial-bin contribution treats
+        # ``L_ν`` as constant from the last ionising grid point up to
+        # 911.76 Å — a rectangle, not a trapezium. This matches the
+        # physical Lyman discontinuity and produces a Q_H consistent
+        # with CIGALE's tabulated ``stellar.n_ly`` to within numerical
+        # noise at any SSP grid spacing.
         nu = C_AA / wave
-        ionizing_mask = wave < _HI_LIMIT_AA
+        nu_edge = C_AA / _HI_LIMIT_AA
         integrand = sed_intrinsic / (H_PLANCK * nu)
+        ionizing_mask = wave < _HI_LIMIT_AA
         integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-        # trapezoid(x=nu) with nu decreasing returns a negative value;
-        # take abs to recover the positive photon rate.
-        nion = jnp.abs(jnp.trapezoid(integrand_masked, nu))
+        # Find the last ionising grid point (wave_below < 911.76) and the
+        # first non-ionising one (wave_above ≥ 911.76).
+        idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(len(wave)), -1))
+        idx_above = idx_below + 1
+        nu_below = nu[idx_below]
+        nu_above = nu[idx_above]
+        integrand_below = integrand[idx_below]
+        # Bulk trapezoid integrates over every adjacent pair (including
+        # the (905, 915) boundary bin where one side has ``integrand``
+        # and the other is masked to zero — yielding a triangle of
+        # area ½·integrand_below·|ν_below − ν_above|). For SSPs with a
+        # sharp Lyman discontinuity the *correct* contribution from
+        # that bin is a rectangle from ν_edge to ν_below
+        # (= integrand_below · |ν_below − ν_edge|). Subtract the
+        # triangle, add the rectangle:
+        triangle_overcount = 0.5 * integrand_below * jnp.abs(nu_below - nu_above)
+        rectangle_correct = integrand_below * jnp.abs(nu_below - nu_edge)
+        nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
+        nion = nion_bulk - triangle_overcount + rectangle_correct
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
         # When the pipeline runs on a panchromatic grid (radio/X-ray
