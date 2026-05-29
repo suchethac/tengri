@@ -138,13 +138,31 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         # actual sed.info["agn.disk_luminosity"] = 0.38 Lsun at
         # fracAGN=0.3, lambda_fracAGN="0/0".
         # All tengri AGN defaults match CIGALE skirtor2016 defaults
-        # (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6); only
-        # the disc-bolometric scale ``agn_log_lbol`` is set per fit.
+        # (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6).
+        # Two CIGALE-equivalent settings are set explicitly here:
+        #
+        # 1. ``agn_log_lbol = -0.620`` matches CIGALE's
+        #    ``sed.info["agn.accretion_power"] = 0.240 L_sun`` at the
+        #    §9 fiducial — the intrinsic 4π disc bolometric (the L_bol
+        #    that the accretion engine actually produces). PR #492
+        #    used ``agn.disk_luminosity`` (observed at i=30°, post-
+        #    extinction) as the reference, which is wrong by ~1.6×.
+        #
+        # 2. ``agn_torus_frac = 0.71`` reproduces CIGALE's
+        #    ``agn_power = 0.171 L_sun`` at the §9 fiducial. CIGALE
+        #    derives this from ``dust.luminosity_stellar × fracAGN /
+        #    (1 - fracAGN) = 0.399 × 0.3/0.7``, so it depends on the
+        #    *stellar dust luminosity* — tengri's agn_torus_frac knob
+        #    is a fixed fraction of L_bol, so the mapping to fracAGN
+        #    is stellar-fiducial-specific. 0.71 = 0.171/0.240 is the
+        #    value at this stellar config (BC03, 1 M_sun formed,
+        #    E_BV_lines=0.3, fracAGN=0.3).
         kw["agn"] = {
             "type": "composable",
             "disc": {"type": "schartmann2005", "*": FIXED},
             "torus": {"type": "skirtor", "*": FIXED},
-            "agn_log_lbol": Fixed(-0.42),
+            "agn_log_lbol": Fixed(-0.620),
+            "agn_torus_frac": Fixed(0.71),
             "*": FIXED,
         }
     return kw

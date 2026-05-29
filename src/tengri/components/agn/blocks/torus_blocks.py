@@ -153,7 +153,21 @@ def skirtor_torus_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    L_nu = skirtor_analytic(
+
+    # CIGALE-faithful polar dust integration (closes #487/#503 audit
+    # discrepancy "(b)"): the Casey-2012 modified blackbody is added
+    # to the SKIRTOR thermal dust BEFORE the shape is normalised to
+    # ``L_bol × agn_torus_frac``. This matches CIGALE
+    # ``skirtor2016.py:389-393`` where ``norm = 1/∫(SKIRTOR.dust +
+    # polar_BB) dλ`` includes both contributions. The previous
+    # implementation summed independently-normalised thermal and polar
+    # contributions, double-counting energy by ~l_ext/agn_power.
+
+    # 1) SKIRTOR thermal-dust template (unit-normalised in download
+    # script). ``skirtor_analytic`` returns L_ν scaled to
+    # ``L_bol × agn_torus_frac``; for the CIGALE structure we need the
+    # SHAPE not the scale, so divide back out and re-apply at the end.
+    L_nu_skirtor_scaled = skirtor_analytic(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_tau_skirtor=agn_tau_skirtor,
@@ -163,36 +177,52 @@ def skirtor_torus_block(
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
     )
-    L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
+    L_lambda_thermal = L_nu_skirtor_scaled * _C_AA_PER_S / wave_aa**2
 
-    # CIGALE-faithful polar dust greybody (Casey 2012 modified BB),
-    # added to the SKIRTOR thermal dust. Skipped at agn_polar_ebv=0 by
-    # the linear scaling — no branching needed for JIT.
+    # 2) Polar-dust greybody: Casey 2012 modified BB shape, normalised
+    # so its integrated luminosity equals the disc-absorbed power
+    # ``l_ext`` (CIGALE ``skirtor2016.py:368``).
     k_lambda = smc_extinction_curve(wave_aa)
     tau_lambda = 0.921 * agn_polar_ebv * _RV_SMC * k_lambda
     extinction_factor = jnp.exp(-tau_lambda)
 
-    # Disc proxy: Schartmann (2005) piecewise PL, scaled to L_bol [erg/s].
-    # disc_cigale operates in nm; convert wavelength axis and re-density.
+    # Disc proxy for absorbed power: Schartmann (2005) piecewise PL
+    # scaled to the FACE-ON disc luminosity ∫AGN1.disk that CIGALE
+    # uses in ``skirtor2016.py:368``. ``agn_log_lbol`` represents the
+    # intrinsic 4π-averaged total emitted power (= CIGALE
+    # ``accretion_power``); the face-on disc luminosity is larger by
+    # the hemispherical-aniso factor 1/(7/18) = 18/7 ≈ 2.571, equal
+    # to the inverse of CIGALE's 0.493 × 0.789 = 0.389
+    # transformation in ``skirtor2016.py:407``.
+    _L_DISC_FACE_PER_4PI = 18.0 / 7.0  # = 1/(7/18) ≈ 2.5714
     L_disc_lambda = (
         schartmann2005_disk_spectrum(wave_aa / 10.0, delta=0.0)
         / 10.0
         * (10.0**agn_log_lbol)
         * _L_SUN_ERG
-    )  # [erg/s/Å]
+        * _L_DISC_FACE_PER_4PI
+    )  # [erg/s/Å], integrated face-on luminosity = 18/7 × L_bol_4π
+    L_disc_nu = L_disc_lambda * wave_aa**2 / _C_AA_PER_S
 
     # Anisotropic-geometry-weighted absorbed disc luminosity [erg/s].
-    # anisotropic_polar_luminosity expects L_nu input -> convert.
-    L_disc_nu = L_disc_lambda * wave_aa**2 / _C_AA_PER_S
     l_ext = anisotropic_polar_luminosity(L_disc_nu, wave_aa, agn_oa_skirtor, extinction_factor)
 
-    # Casey 2012 modified BB; integrates over frequency to l_ext.
+    # Polar BB normalised so ∫polar_L_λ dλ = l_ext.
     polar_L_nu = polar_dust_emission(
         l_ext, wave_aa, temperature=agn_polar_T, beta=agn_polar_beta, lambda_0=2.0e6
     )
     polar_L_lambda = polar_L_nu * _C_AA_PER_S / wave_aa**2
 
-    return L_lambda + polar_L_lambda
+    # 3) Combine shapes and re-normalise to total l_scale = L_bol×frac
+    # (CIGALE convention: the sum dust+polar carries the agn_power
+    # total). The thermal portion already integrates to l_scale; the
+    # polar adds l_ext on top, so we rescale by l_scale/(l_scale+l_ext)
+    # so the COMBINED integral equals l_scale. Equivalent to CIGALE's
+    # ``self.SKIRTOR2016.dust += blackbody`` followed by ``norm = 1/∫``.
+    L_bol_erg = (10.0**agn_log_lbol) * _L_SUN_ERG
+    l_scale = L_bol_erg * agn_torus_frac
+    rescale = l_scale / jnp.maximum(l_scale + l_ext, 1e-30)
+    return (L_lambda_thermal + polar_L_lambda) * rescale
 
 
 @register_agn_block("torus", "silva04")
