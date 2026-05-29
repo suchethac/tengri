@@ -617,6 +617,22 @@ plt.show()
 # orders of magnitude below the FIR peak; physically negligible for
 # the bolometric budget, visible on log axes, and closer to what
 # Dale et al. actually published than the CIGALE-bundled version.
+#
+# **Lyman-continuum handling.** tengri's `calzetti` and `leitherer02`
+# attenuation curves polynomial-extend through the FUV; the curves
+# return finite A(λ)/A_V values at any wavelength. CIGALE's
+# `dustatt_modified_starburst` zeros the attenuation curve below
+# 91.2 nm on the assumption that those photons are absorbed by H
+# ionization before reaching dust grains. tengri keeps the curve
+# defined everywhere (`calzetti(λ=500 Å)` returns the polynomial
+# value), and the `L_absorbed` integral that feeds the IR re-emission
+# template clips λ < 912 Å instead. The integral represents a
+# physical claim about which absorbed energy gets re-emitted as dust
+# IR, and Lyman-continuum photons in HII regions go into nebular
+# emission, not dust. The two codes reach the same effective
+# behaviour by different routes: CIGALE zeros the curve; tengri
+# separates the curve (as a data product) from the energy balance
+# (as a physical claim about ionizing photons).
 
 # %%
 sed_c_ir = C.run_chain([
