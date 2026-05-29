@@ -551,7 +551,11 @@ def calzetti(
 
     rv = 4.05
     k_prime = jnp.where(wave_um >= 0.63, k_ir, k_uv)
-    return jnp.clip((k_prime + rv) / rv, 0.0)
+    k = jnp.clip((k_prime + rv) / rv, 0.0)
+    # Lyman-continuum cutoff: λ < 912 Å photons are absorbed by H
+    # ionization, not dust. Matches CIGALE ``dustatt_modified_starburst``
+    # (a_vs_ebv allocates zero attenuation below 91.2 nm).
+    return jnp.where(wavelength < 912.0, 0.0, k)
 
 
 @register_dust_law(
@@ -1167,7 +1171,10 @@ def leitherer02(
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
     k_prime = jnp.where(wavelength <= 1800.0, k_l02, k_calz)
 
-    return jnp.clip(k_prime / rv, 0.0)
+    k = jnp.clip(k_prime / rv, 0.0)
+    # Lyman-continuum cutoff: λ < 912 Å absorbed by H ionization, not
+    # dust (matches CIGALE ``a_vs_ebv``).
+    return jnp.where(wavelength < 912.0, 0.0, k)
 
 
 @register_dust_law(

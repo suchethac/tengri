@@ -50,12 +50,22 @@ _LOG10_ZSUN = -1.8477  # tengri's Asplund-2009 constant (Zsun = 0.0142)
 _Z_ABS_CIGALE = 0.02   # CIGALE bc03(metallicity=0.02) — Padova absolute Z
 MET_LOGZSOL_FIDUCIAL = float(np.log10(_Z_ABS_CIGALE) - _LOG10_ZSUN)  # ≈ +0.149
 
-# CIGALE modified_starburst(E_BV_lines=0.3) ↔ tengri two_component (τ_bc, τ_diff)
-# via Calzetti R_V = 4.05 and the E(B-V)_cont / E(B-V)_lines = 0.44 split.
+# CIGALE ``dustatt_modified_starburst(E_BV_lines=0.3, E_BV_factor=0.44)``
+# applies a SINGLE Calzetti screen to the stellar continuum at
+# ``E_BV_stars = E_BV_factor × E_BV_lines = 0.132`` (and a separate
+# heavier attenuation to nebular lines at the full ``E_BV_lines``).
+# tengri's ``two_component`` (Charlot-Fall) maps via:
+#   tau_diff = R_V × E_BV_stars / 1.086   (single stellar screen, all ages)
+#   tau_bc   = 0                          (CIGALE has no BC-only attenuation)
+# Earlier audit versions used ``tau_bc = R_V × (1-F) × E_BV_lines / 1.086``,
+# which inflated young-star attenuation to the nebular value — that drove
+# tengri ``L_absorbed`` ~19% higher than CIGALE ``dust.luminosity`` at this
+# fiducial. Corrected 2026-05-29 to match CIGALE's actual model.
 _E_BV_LINES, _R_V, _F = 0.3, 4.05, 0.44
+_E_BV_STARS = _F * _E_BV_LINES
 DUST_TAU_FIDUCIAL = {
-    "tau_diff": _R_V * _F * _E_BV_LINES / 1.086,
-    "tau_bc": _R_V * (1.0 - _F) * _E_BV_LINES / 1.086,
+    "tau_diff": _R_V * _E_BV_STARS / 1.086,
+    "tau_bc": 0.0,
 }
 
 print(
