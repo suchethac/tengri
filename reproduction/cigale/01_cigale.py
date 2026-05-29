@@ -947,7 +947,7 @@ m_agn = SEDModel.build(
     # 1/∫dust`` step). The differentiable multicolor disc remains
     # available — ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
-         "disc": {"type": "schartmann2005", "*": FIXED},
+         "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.620),
          # agn_power/accretion_power = 0.171/0.240 at this stellar
@@ -1059,7 +1059,7 @@ m_x = SEDModel.build(
     # magnitude apart. §10 CIGALE chain uses i=40 (not i=30 like §9);
     # pin tengri to match.
     agn={"type": "composable",
-         "disc": {"type": "schartmann2005", "*": FIXED},
+         "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.620),
          "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
