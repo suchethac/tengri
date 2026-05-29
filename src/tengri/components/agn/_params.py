@@ -431,6 +431,21 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "blend weight in [0, 1] interpolating from pure ADAF (0) to pure "
         "thin disc (1).",
     ),
+    # CIGALE skirtor2016 cross-component AGN power coupling
+    ParamDeclaration(
+        "agn_fracAGN",
+        Fixed(0.0),
+        "CIGALE-faithful coupling: AGN dust IR fraction of the total "
+        "(stellar + AGN) dust IR. When > 0, the AGN component derives "
+        "``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)`` from "
+        "``state.derived[\"L_absorbed\"]`` (matches CIGALE "
+        "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
+        "overrides ``agn_torus_frac`` so the torus block's "
+        "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
+        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used.",
+        lambda lo, hi: lo >= 0 and hi < 1.0,
+        "must be in [0, 1)",
+    ),
 )
 
 __all__ = ["PARAMS"]

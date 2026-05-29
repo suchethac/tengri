@@ -266,39 +266,15 @@ def build_components(
         )
     )
 
-    # 2. Nebular (optional)
-    if nebular_backend is not None:
-        components.append(
-            NebularSEDComponent(
-                config=NebularSEDComponentConfig(
-                    backend=nebular_backend,
-                    cue_full_catalogue=cue_full_catalogue,
-                ),
-                backend=nebular_backend_instance,
-            )
-        )
-
-    # 3. AGN (optional)
-    if agn_model is not None:
-        components.append(
-            AGNSEDComponent(
-                config=AGNSEDComponentConfig(
-                    model=agn_model,
-                    agn_disc_block=agn_disc_block,
-                    agn_torus_block=agn_torus_block,
-                    agn_lines_block=agn_lines_block,
-                    agn_feii_block=agn_feii_block,
-                    agn_attenuation_block=agn_attenuation_block,
-                )
-            )
-        )
-
-    # 4. Dust (optional). Two-component (Charlot & Fall 2000) is the
-    # default; ``dust_model="single_component"`` picks the simpler
-    # screen attenuation adapter (no birth-cloud / diffuse split,
-    # parameterised by ``dust_tau_v`` instead of
-    # ``dust_tau_bc``+``dust_tau_diff``). The screen law mirrors
-    # ``dust_law_diff``.
+    # 2. Dust (optional) — runs BEFORE AGN so the AGN component can
+    # read ``state.derived["L_absorbed"]`` for the CIGALE-style
+    # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
+    # coupling (see ``agn/component.py`` and ``agn/_params.py:
+    # agn_fracAGN``). The dust component already passes any non-stellar
+    # contribution through unchanged, so moving it earlier in the
+    # chain doesn't change attenuation semantics for downstream
+    # nebular / AGN / radio / xray (their SEDs aren't subject to
+    # stellar dust attenuation by design).
     if use_dust:
         if dust_model == "single_component":
             components.append(
@@ -316,6 +292,34 @@ def build_components(
                     )
                 )
             )
+
+    # 3. Nebular (optional)
+    if nebular_backend is not None:
+        components.append(
+            NebularSEDComponent(
+                config=NebularSEDComponentConfig(
+                    backend=nebular_backend,
+                    cue_full_catalogue=cue_full_catalogue,
+                ),
+                backend=nebular_backend_instance,
+            )
+        )
+
+    # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
+    # is available for the CIGALE-coupled ``agn_fracAGN`` flow.
+    if agn_model is not None:
+        components.append(
+            AGNSEDComponent(
+                config=AGNSEDComponentConfig(
+                    model=agn_model,
+                    agn_disc_block=agn_disc_block,
+                    agn_torus_block=agn_torus_block,
+                    agn_lines_block=agn_lines_block,
+                    agn_feii_block=agn_feii_block,
+                    agn_attenuation_block=agn_attenuation_block,
+                )
+            )
+        )
 
     # 5-7. Multiwavelength + IGM (each optional)
     if use_radio:

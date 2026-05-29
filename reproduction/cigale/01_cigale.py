@@ -564,7 +564,7 @@ m_d = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -633,7 +633,7 @@ m_ir = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED,
           "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "*": FIXED}},
     redshift=Fixed(0.0),
@@ -905,7 +905,7 @@ m_agn_base = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -928,7 +928,7 @@ m_agn = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "*": FIXED},
-    dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
     # ``agn_log_lbol`` matches CIGALE's ``sed.info["agn.accretion_power"]``
     # at the §9 fiducial: 9.18e25 W = 0.240 L☉ → log_lbol = -0.620.
@@ -950,12 +950,11 @@ m_agn = SEDModel.build(
          "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.620),
-         # agn_power/accretion_power = 0.171/0.240 at this stellar
-         # fiducial (BC03 1 M☉ formed, E_BV_lines=0.3, fracAGN=0.3).
-         # CIGALE's fracAGN couples to dust.luminosity_stellar so the
-         # mapping to tengri's fixed-fraction torus knob is stellar-
-         # dependent — pin it explicitly per fit.
-         "agn_torus_frac": Fixed(0.71),
+         # ``agn_fracAGN = 0.3`` mirrors CIGALE's ``fracAGN`` parameter.
+         # tengri's AGN component reads ``state.derived["L_absorbed"]``
+         # and computes ``agn_power = L_abs × frac/(1-frac)`` exactly
+         # like CIGALE ``skirtor2016.py:498`` (lambda_fracAGN="0/0").
+         "agn_fracAGN": Fixed(0.3),
          "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -1063,7 +1062,7 @@ m_x = SEDModel.build(
          "torus": {"type": "skirtor", "*": FIXED},
          "agn_log_lbol": Fixed(-0.620),
          "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
-         "agn_torus_frac": Fixed(0.71),  # see §9 comment
+         "agn_fracAGN": Fixed(0.3),  # CIGALE-coupled torus power (see §9)
          "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
