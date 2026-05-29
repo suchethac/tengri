@@ -201,4 +201,11 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    performance/index
    performance/memory
    units
+
+.. toctree::
+   :caption: Experimental
+   :maxdepth: 1
+   :hidden:
+
+   spine/experimental/stochastic_sfh_recovery
 ```
