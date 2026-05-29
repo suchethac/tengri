@@ -438,7 +438,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "CIGALE-faithful coupling: AGN dust IR fraction of the total "
         "(stellar + AGN) dust IR. When > 0, the AGN component derives "
         "``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)`` from "
-        "``state.derived[\"L_absorbed\"]`` (matches CIGALE "
+        '``state.derived["L_absorbed"]`` (matches CIGALE '
         "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
         "overrides ``agn_torus_frac`` so the torus block's "
         "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
