@@ -138,16 +138,18 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         #
         # 1. ``agn_log_lbol = -0.620`` matches CIGALE's
         #    ``sed.info["agn.accretion_power"] = 0.240 L_sun`` at the
-        #    §9 fiducial — the intrinsic 4π disc bolometric.
+        #    §9 fiducial — the intrinsic 4π disc bolometric (the L_bol
+        #    that the accretion engine actually produces). PR #492
+        #    used ``agn.disk_luminosity`` (observed at i=30°, post-
+        #    extinction) as the reference, which was wrong by ~1.6×.
         #
         # 2. ``agn_fracAGN = 0.3`` mirrors CIGALE's actual ``fracAGN``
-        #    parameter. The AGN component derives
+        #    parameter (skirtor2016.py:498 with lambda_fracAGN=0/0).
+        #    The AGN component now derives
         #    ``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)``
-        #    from ``state.derived["L_absorbed"]`` (CIGALE
-        #    ``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``) and
-        #    overrides ``agn_torus_frac`` accordingly. This replaces
-        #    the empirically-tuned ``agn_torus_frac=0.71`` workaround
-        #    from earlier audits with true cross-component coupling.
+        #    from ``state.derived["L_absorbed"]`` natively (PR #522 —
+        #    cross-component coupling). Replaces the empirically-tuned
+        #    ``agn_torus_frac=0.71`` workaround from earlier audits.
         kw["agn"] = {
             "type": "composable",
             "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},

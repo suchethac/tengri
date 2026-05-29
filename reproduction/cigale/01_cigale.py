@@ -953,7 +953,8 @@ m_agn = SEDModel.build(
          # ``agn_fracAGN = 0.3`` mirrors CIGALE's ``fracAGN`` parameter.
          # tengri's AGN component reads ``state.derived["L_absorbed"]``
          # and computes ``agn_power = L_abs × frac/(1-frac)`` exactly
-         # like CIGALE ``skirtor2016.py:498`` (lambda_fracAGN="0/0").
+         # like CIGALE ``skirtor2016.py:498`` (lambda_fracAGN="0/0")
+         # via the cross-component coupling shipped in PR #522.
          "agn_fracAGN": Fixed(0.3),
          "*": FIXED},
     redshift=Fixed(0.0),
