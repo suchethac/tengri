@@ -585,6 +585,122 @@ def _load_skirtor_components():
         return None
 
 
+def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
+    r"""Build the SKIRTOR inclination-dependent disc-attenuation factor.
+
+    Returns a callable that produces the wavelength-dependent ratio
+    :math:`\rm SKIRTOR.disk(\lambda; i, \tau, p, q, oa) /
+    SKIRTOR.disk(\lambda; i=0, \tau, p, q, oa)` (face-on baseline).
+    Multiplied with the analytic Schartmann-2005 disc shape, this
+    reproduces CIGALE ``skirtor2016.py:336`` (Boquien+2019)::
+
+        SKIRTOR2016.disk = analytic × SKIRTOR.disk_at_i / AGN1.disk_at_face
+
+    For face-on type-1 (i ≲ 90°−oa, e.g. i=30° with oa=40°), the
+    ratio is near unity at most wavelengths; for type-2 sightlines it
+    captures the clumpy self-attenuation through the equatorial torus
+    that CIGALE's analytic-disc replacement is supposed to preserve.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to a v3 SKIRTOR HDF5 file with ``spectra/disk_emission``.
+
+    Returns
+    -------
+    callable
+        ``att_fn(wavelength, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor,
+        agn_oa_skirtor, agn_cos_inc) -> ndarray`` of shape ``(n_wave,)``,
+        dimensionless attenuation factor. Returns 1.0 everywhere when
+        the disk grid is unavailable (v2 fallback).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — triweight interpolation in JAX.
+
+    **Gradient-safe**: yes.
+    """
+    raw = _load_grid_arrays(grid_path)
+
+    if "disk" not in raw:
+        # v2 grid: no separate disc column, return identity attenuation
+        def _identity_att(wavelength, *_, **__):
+            return jnp.ones_like(jnp.asarray(wavelength))
+
+        return _identity_att
+
+    with jax.ensure_compile_time_eval():
+        disk_grid = jnp.array(raw["disk"])
+        wave_grid = jnp.array(raw["wave"])
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        edges = tuple(edges_for_grid(ax) for ax in axes)
+
+    def disc_attenuation(
+        wavelength: jnp.ndarray,
+        agn_tau_skirtor: float = 7.0,
+        agn_p_skirtor: float = 1.0,
+        agn_q_skirtor: float = 1.0,
+        agn_oa_skirtor: float = 40.0,
+        agn_cos_inc: float = 0.86602540378443864,  # cos(30°)
+    ) -> jnp.ndarray:
+        r"""Wavelength-dependent disc attenuation factor at chosen i.
+
+        Returns ``SKIRTOR.disk(i) / SKIRTOR.disk(i=0)`` interpolated to
+        the requested wavelength grid.
+        """
+        point_i = (
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            agn_cos_inc,
+        )
+        point_face = (
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            1.0,  # cos_inc = 1 = face-on
+        )
+        disk_at_i = interp_nd_triweight(disk_grid, axes, edges, point_i)
+        disk_at_face = interp_nd_triweight(disk_grid, axes, edges, point_face)
+        # Safe ratio: where face-on is zero (shouldn't be, but be safe),
+        # return 0 attenuation (no contribution).
+        ratio_template = jnp.where(
+            disk_at_face > 1e-30,
+            disk_at_i / jnp.maximum(disk_at_face, 1e-30),
+            0.0,
+        )
+        # Interpolate to user wave grid; clip to [0, 1.5] so numerical
+        # noise can't introduce un-physically large amplifications
+        # (face-on baseline is the maximum disc visibility).
+        ratio = jnp.interp(wavelength, wave_grid, ratio_template, left=1.0, right=1.0)
+        return jnp.clip(ratio, 0.0, 1.5)
+
+    return disc_attenuation
+
+
+@functools.cache
+def _load_skirtor_disc_attenuation():
+    """Build SKIRTOR disc attenuation pattern, cached.
+
+    Returns an identity function when the v2 grid is used (no disc grid).
+    """
+    path = _find_skirtor_grid()
+    return create_skirtor_disc_attenuation_from_grid(path)
+
+
+def skirtor_disc_attenuation(*args, **kwargs):
+    r"""SKIRTOR inclination-dependent disc attenuation factor (auto-loaded).
+
+    Wraps :func:`_load_skirtor_disc_attenuation`. Identity-1.0 when the
+    v3 disc grid is unavailable (v2 fallback). See
+    :func:`create_skirtor_disc_attenuation_from_grid` for the signature
+    and physics.
+    """
+    return _load_skirtor_disc_attenuation()(*args, **kwargs)
+
+
 def skirtor_analytic(*args, **kwargs):
     """SKIRTOR torus SED (auto-loaded from tabulated templates).
 

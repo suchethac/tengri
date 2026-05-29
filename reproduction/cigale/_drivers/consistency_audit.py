@@ -154,7 +154,7 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         #    E_BV_lines=0.3, fracAGN=0.3).
         kw["agn"] = {
             "type": "composable",
-            "disc": {"type": "schartmann2005", "*": FIXED},
+            "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
             "torus": {"type": "skirtor", "*": FIXED},
             "agn_log_lbol": Fixed(-0.620),
             "agn_torus_frac": Fixed(0.71),
