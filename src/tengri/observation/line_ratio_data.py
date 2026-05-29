@@ -13,7 +13,7 @@ with that calibration uncertainty.
 
 Usage::
 
-    from tengri import LineRatioData
+    from tengri.observation import LineRatioData
 
     ratios = LineRatioData.from_dict(
         {
@@ -73,7 +73,7 @@ class LineRatioData:
 
     Examples
     --------
-    >>> from tengri import LineRatioData
+    >>> from tengri.observation import LineRatioData
     >>> lrd = LineRatioData.from_dict({("Halpha", "Hbeta"): (4.2, 0.3)})
     >>> lrd.n_ratios
     1

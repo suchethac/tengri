@@ -11,7 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import LineRatioData
+from tengri.observation import LineRatioData
 
 pytestmark = pytest.mark.contract
 
