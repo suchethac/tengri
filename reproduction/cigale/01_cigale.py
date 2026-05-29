@@ -83,7 +83,14 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 # ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
 from pathlib import Path as _Path  # noqa: E402
 from tengri.components.dust.emission_templates import register_dale2014_tabulated  # noqa: E402
-_CIGALE_DALE_PATH = _Path(__file__).parent.parent.parent / "data" / "dale2014_templates_cigale.h5"
+# nbclient kernels don't bind ``__file__``; fall back to cwd so the Setup
+# cell doesn't crash and zero out every downstream panel (issue #540).
+_CIGALE_DALE_PARENT = (
+    _Path(__file__).parent.parent.parent
+    if "__file__" in dir()
+    else _Path.cwd().resolve().parent.parent
+)
+_CIGALE_DALE_PATH = _CIGALE_DALE_PARENT / "data" / "dale2014_templates_cigale.h5"
 if _CIGALE_DALE_PATH.is_file():
     register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014")
 
