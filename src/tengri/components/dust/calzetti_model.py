@@ -130,6 +130,14 @@ class Calzetti(SEDModelComponent):
         # Attenuation factor and the new SED
         atten = jnp.exp(-p["tau_v"] * k_eff)
         sed_out = sed_in * atten
-        # Absorbed luminosity in frequency space
-        L_absorbed = _trapz_freq(sed_in - sed_out, wave)
+        # Absorbed luminosity in frequency space.
+        # Mask Lyman-continuum (λ < 912 Å): those photons are absorbed
+        # by H ionisation (→ nebular emission), not dust grains, so
+        # they don't enter the dust IR re-emission pool. Mirrors the
+        # convention in ``DustSEDComponent.apply`` and matches CIGALE's
+        # effective behaviour without forcing ``calzetti`` to zero in
+        # the FUV.
+        absorbed_lnu = sed_in - sed_out
+        absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
+        L_absorbed = _trapz_freq(absorbed_lnu, wave)
         return sed_out, {"L_absorbed": L_absorbed}
