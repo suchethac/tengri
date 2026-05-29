@@ -551,11 +551,13 @@ def calzetti(
 
     rv = 4.05
     k_prime = jnp.where(wave_um >= 0.63, k_ir, k_uv)
-    k = jnp.clip((k_prime + rv) / rv, 0.0)
-    # Lyman-continuum cutoff: λ < 912 Å photons are absorbed by H
-    # ionization, not dust. Matches CIGALE ``dustatt_modified_starburst``
-    # (a_vs_ebv allocates zero attenuation below 91.2 nm).
-    return jnp.where(wavelength < 912.0, 0.0, k)
+    # Polynomial is extrapolated through the FUV (< 1200 Å) to keep the
+    # dust attenuation defined across the full SED range — users
+    # modelling galaxies where Lyman-continuum dust attenuation matters
+    # need the curve there. (CIGALE's ``a_vs_ebv`` clips at 912 Å on
+    # the assumption that H ionization handles those photons separately;
+    # tengri leaves the choice to the user.)
+    return jnp.clip((k_prime + rv) / rv, 0.0)
 
 
 @register_dust_law(
@@ -1171,10 +1173,11 @@ def leitherer02(
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
     k_prime = jnp.where(wavelength <= 1800.0, k_l02, k_calz)
 
-    k = jnp.clip(k_prime / rv, 0.0)
-    # Lyman-continuum cutoff: λ < 912 Å absorbed by H ionization, not
-    # dust (matches CIGALE ``a_vs_ebv``).
-    return jnp.where(wavelength < 912.0, 0.0, k)
+    # The L02 polynomial is extended through the FUV to keep dust
+    # attenuation defined across the full UV grid. CIGALE clips at
+    # 912 Å on the assumption that H ionization handles Lyman-continuum
+    # photons separately; tengri leaves the choice to the user.
+    return jnp.clip(k_prime / rv, 0.0)
 
 
 @register_dust_law(
