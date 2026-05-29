@@ -107,6 +107,8 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Composite spectral indices (closes #505) ────────────────
         "CompositeIndexDef",
         "STANDARD_COMPOSITE_INDICES",
+        # ── Per-age stellar mass-remaining curve (closes #447) ──────
+        "compute_mass_remaining_fraction",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "describe_agn_model",

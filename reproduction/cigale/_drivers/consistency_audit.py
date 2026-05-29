@@ -131,15 +131,10 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
     if with_neb:
         kw["neb"] = {"type": "cue", "*": FIXED}
     if with_agn:
-        # Mirror reproduction §9 / §10: composable schartmann2005 disc
-        # (CIGALE skirtor2016 disk_type=1 default) + skirtor torus +
-        # polar-dust greybody on at the CIGALE default (E(B-V)=0.03,
-        # T=100K, beta=1.6). ``agn_log_lbol=-0.42`` matches CIGALE's
-        # actual sed.info["agn.disk_luminosity"] = 0.38 Lsun at
-        # fracAGN=0.3, lambda_fracAGN="0/0".
-        # All tengri AGN defaults match CIGALE skirtor2016 defaults
-        # (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6).
-        # Two CIGALE-equivalent settings are set explicitly here:
+        # Mirror reproduction §9 / §10. All tengri AGN library defaults
+        # match CIGALE skirtor2016 defaults (oa=40, tau=7, p=q=1, i=30,
+        # EBV=0.03, T=100, β=1.6). Two CIGALE-equivalent settings are
+        # set explicitly here:
         #
         # 1. ``agn_log_lbol = -0.620`` matches CIGALE's
         #    ``sed.info["agn.accretion_power"] = 0.240 L_sun`` at the

@@ -170,6 +170,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     salaris_feh_from_mh,
     salaris_mh_from_feh,
 )
+from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 from tengri.config.exceptions import (
     BackendError,
     ConfigError,
@@ -418,6 +419,7 @@ __all__ = [
     "citations",
     "cite_components",
     "clear_cache",
+    "compute_mass_remaining_fraction",
     "config",
     "cosmology",
     "data_path",

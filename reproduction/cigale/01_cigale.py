@@ -942,10 +942,10 @@ m_agn = SEDModel.build(
     # All other tengri AGN defaults already match CIGALE skirtor2016
     # defaults (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6,
     # disk_type=1 → ``disc.schartmann2005``). The polar-dust greybody
-    # is integrated into the SKIRTOR thermal-dust normalisation (PR
-    # #519 follow-up — CIGALE skirtor2016.py:389 adds polar BB before
-    # the ``norm = 1/∫dust`` step). The differentiable multicolor
-    # disc remains available — ``disc={"type": "multicolor", ...}``.
+    # is integrated into the SKIRTOR thermal-dust normalisation
+    # (CIGALE skirtor2016.py:389 adds polar BB before the ``norm =
+    # 1/∫dust`` step). The differentiable multicolor disc remains
+    # available — ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},

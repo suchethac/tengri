@@ -132,6 +132,8 @@ EXPECTED_ALL = frozenset(
         # Composite spectral indices (closes #505)
         "CompositeIndexDef",
         "STANDARD_COMPOSITE_INDICES",
+        # Per-age stellar mass-remaining curve (closes #447)
+        "compute_mass_remaining_fraction",
         "register_component",
         # Exceptions
         "BackendError",

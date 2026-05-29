@@ -363,6 +363,12 @@ def lognormal(
     For w=0.3, this is a ~15% shift toward younger ages. peak_lbt is
     best interpreted as the median lookback time, not the linear peak.
 
+    .. warning::
+       **Convention difference from BAGPIPES.** tengri parameterises ``t`` as
+       **lookback time**, while Carnall+2018 / BAGPIPES use **cosmic age
+       since the Big Bang**. Posteriors on ``peak_lbt`` are mirror images
+       across the two codes — not interchangeable. See #514.
+
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
@@ -490,9 +496,18 @@ def dpl(
 ) -> jnp.ndarray:
     """Double power law with log total mass parameterization (canonical).
 
-    Registry-compatible wrapper around the Carnall+2018 double power law.
     The shape ``1 / ((t/tau)^alpha + (t/tau)^-beta)`` is rescaled so the
-    integrated mass equals ``10**log_total_mass`` — the bagpipes convention.
+    integrated mass equals ``10**log_total_mass``.
+
+    .. warning::
+       **Convention difference from BAGPIPES.** tengri parameterises ``t`` as
+       **lookback time** (years since the source's observed epoch), while
+       Carnall et al. (2018) and BAGPIPES parameterise the same shape as
+       **cosmic age since the Big Bang**. The two are mirror images about
+       the age of the universe: at matched ``(alpha, beta, tau)``, tengri's
+       SFR(t) is the time-reverse of BAGPIPES'. To compare fits across
+       codes you must either flip the time axis or convert
+       ``tau_carnall ↔ age_of_universe - tau_lookback``. See #514.
 
     Parameters
     ----------
