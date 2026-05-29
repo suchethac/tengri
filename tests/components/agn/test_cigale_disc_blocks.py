@@ -142,9 +142,14 @@ def test_skirtor_torus_polar_dust_on_by_default() -> None:
     assert float(jnp.max(jnp.abs(L_default - L_off))) > 0.0
 
 
-@pytest.mark.bounds
-def test_skirtor_torus_polar_dust_only_adds() -> None:
-    """Polar-dust contribution must be non-negative everywhere — never subtract."""
+@pytest.mark.conservation
+def test_skirtor_torus_polar_dust_redistributes_energy() -> None:
+    """Polar dust redistributes energy from SKIRTOR thermal-dust peak
+    to the FIR tail — total integrated IR luminosity is conserved
+    (matches CIGALE ``skirtor2016.py:389`` where ``norm = 1/∫(dust +
+    polar)`` includes both contributions). Polar-on lifts the FIR,
+    polar-off lifts the MIR peak; total stays the same.
+    """
     torus = resolve_agn_block("torus", "skirtor")
     wave_aa = jnp.geomspace(1e3, 1e7, 300)
     L_off = torus(
@@ -162,9 +167,13 @@ def test_skirtor_torus_polar_dust_only_adds() -> None:
         agn_polar_beta=1.6,
         agn_oa_skirtor=40.0,
     )
-    delta = L_on - L_off
-    assert float(delta.min()) >= -1e-30  # numerical floor only
-    assert float(delta.max()) > 0.0  # non-trivial addition somewhere
+    # Total IR luminosity should be conserved (within numerical precision)
+    int_off = float(jnp.trapezoid(L_off, wave_aa))
+    int_on = float(jnp.trapezoid(L_on, wave_aa))
+    np.testing.assert_allclose(int_on, int_off, rtol=0.01)
+    # FIR (100 µm) gets the polar bump
+    i100 = int(np.argmin(np.abs(np.asarray(wave_aa) - 1.0e6)))
+    assert float(L_on[i100]) > float(L_off[i100])
 
 
 @pytest.mark.conservation

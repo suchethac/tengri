@@ -930,27 +930,32 @@ m_agn = SEDModel.build(
          "log_total_mass": Fixed(0.0), "*": FIXED},
     dust={"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
-    # AGN luminosity matched to CIGALE's actual chain output at
-    # ``fracAGN=0.3`` on 1 M☉ formed: CIGALE's ``sed.info["agn.disk_luminosity"]``
-    # reads 1.45e26 W = 0.38 L☉ → ``log_lbol ≈ −0.42`` (the intrinsic
-    # accretion-disc bolometric, before torus reprocessing — what the
-    # composable AGN's ``agn_log_lbol`` parameter actually drives).
-    # An earlier back-of-envelope estimate of −0.68 understated the
-    # luminosity by ~2.6×.
+    # ``agn_log_lbol`` matches CIGALE's ``sed.info["agn.accretion_power"]``
+    # at the §9 fiducial: 9.18e25 W = 0.240 L☉ → log_lbol = -0.620.
+    # This is the **intrinsic 4π disc bolometric** (the L_bol that the
+    # accretion engine actually produces); CIGALE derives it from
+    # agn_power × ∫AGN1.disk × norm × 0.493 (skirtor2016.py:507). PR
+    # #492's earlier choice of -0.42 used agn.disk_luminosity (= the
+    # OBSERVED disc lum at i=30°, post-extinction) — the wrong
+    # reference, off by a factor of ~1.6.
     #
-    # ``disc.schartmann2005`` matches CIGALE ``skirtor2016 disk_type=1``
-    # (the CIGALE default): piecewise power law with the 1200 Å bend.
-    # tengri inherits the CIGALE defaults for the rest:
-    # ``agn_torus_frac=0.5`` (covering factor), ``agn_polar_ebv=0.03``
-    # All tengri AGN defaults now match CIGALE ``skirtor2016`` defaults
-    # (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6) — only the
-    # disc-bolometric scale ``agn_log_lbol`` is set per fit. The
-    # differentiable multicolor disc remains available —
-    # ``disc={"type": "multicolor", ...}``.
+    # All other tengri AGN defaults already match CIGALE skirtor2016
+    # defaults (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6,
+    # disk_type=1 → ``disc.schartmann2005``). The polar-dust greybody
+    # is integrated into the SKIRTOR thermal-dust normalisation
+    # (CIGALE skirtor2016.py:389 adds polar BB before the ``norm =
+    # 1/∫dust`` step). The differentiable multicolor disc remains
+    # available — ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.42),
+         "agn_log_lbol": Fixed(-0.620),
+         # agn_power/accretion_power = 0.171/0.240 at this stellar
+         # fiducial (BC03 1 M☉ formed, E_BV_lines=0.3, fracAGN=0.3).
+         # CIGALE's fracAGN couples to dust.luminosity_stellar so the
+         # mapping to tengri's fixed-fraction torus knob is stellar-
+         # dependent — pin it explicitly per fit.
+         "agn_torus_frac": Fixed(0.71),
          "*": FIXED},
     redshift=Fixed(0.0),
 )
@@ -1046,20 +1051,19 @@ m_x = SEDModel.build(
           "tau_bc": Fixed(TAU_BC_FIDUCIAL),
           "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
           "*": FIXED},
-    # AGN strength matched to CIGALE's actual chain output at fracAGN=0.3
-    # on a 1-M☉-formed stellar baseline. CIGALE's
-    # ``sed.info["agn.disk_luminosity"]`` reports 0.38 L☉ →
-    # ``log_lbol ≈ −0.42`` (same as §9; the intrinsic disc bolometric
-    # before torus reprocessing, which is what tengri's ``agn_log_lbol``
-    # parameter drives). Using a quasar-strength tengri AGN here while
-    # CIGALE has a Seyfert-weak one would compare X-ray spectra at
-    # ~12 orders of magnitude apart.
-    # §10 CIGALE chain uses i=40 (not i=30 like §9); pin tengri to match.
+    # ``agn_log_lbol = -0.620`` matches CIGALE's
+    # ``sed.info["agn.accretion_power"] = 0.240 L☉`` (intrinsic 4π
+    # disc bolometric) at the same Seyfert-weak fracAGN=0.3 setup as
+    # §9 — using a quasar-strength tengri AGN here while CIGALE has a
+    # Seyfert-weak one would compare X-ray spectra at ~12 orders of
+    # magnitude apart. §10 CIGALE chain uses i=40 (not i=30 like §9);
+    # pin tengri to match.
     agn={"type": "composable",
          "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.42),
+         "agn_log_lbol": Fixed(-0.620),
          "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
+         "agn_torus_frac": Fixed(0.71),  # see §9 comment
          "*": FIXED},
     xray={"type": "yang20", "*": FIXED},
     redshift=Fixed(0.0),
