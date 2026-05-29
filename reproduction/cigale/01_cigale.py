@@ -947,9 +947,9 @@ m_agn = SEDModel.build(
     # 1/∫dust`` step). The differentiable multicolor disc remains
     # available — ``disc={"type": "multicolor", ...}``.
     agn={"type": "composable",
-         "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
+         "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.620),
+         "agn_log_lbol": Fixed(-0.42),
          # ``agn_fracAGN = 0.3`` mirrors CIGALE's ``fracAGN`` parameter.
          # tengri's AGN component reads ``state.derived["L_absorbed"]``
          # and computes ``agn_power = L_abs × frac/(1-frac)`` exactly
@@ -1059,9 +1059,9 @@ m_x = SEDModel.build(
     # magnitude apart. §10 CIGALE chain uses i=40 (not i=30 like §9);
     # pin tengri to match.
     agn={"type": "composable",
-         "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
+         "disc": {"type": "schartmann2005", "*": FIXED},
          "torus": {"type": "skirtor", "*": FIXED},
-         "agn_log_lbol": Fixed(-0.620),
+         "agn_log_lbol": Fixed(-0.42),
          "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
          "agn_fracAGN": Fixed(0.3),  # CIGALE-coupled torus power (see §9)
          "*": FIXED},

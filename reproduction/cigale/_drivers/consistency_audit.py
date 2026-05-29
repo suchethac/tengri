@@ -152,9 +152,9 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
         #    ``agn_torus_frac=0.71`` workaround from earlier audits.
         kw["agn"] = {
             "type": "composable",
-            "disc": {"type": "schartmann2005_skirtor_atten", "*": FIXED},
+            "disc": {"type": "schartmann2005", "*": FIXED},
             "torus": {"type": "skirtor", "*": FIXED},
-            "agn_log_lbol": Fixed(-0.620),
+            "agn_log_lbol": Fixed(-0.42),
             "agn_fracAGN": Fixed(0.3),
             "*": FIXED,
         }
