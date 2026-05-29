@@ -140,12 +140,21 @@ class StellarSEDComponentState(SEDComponentState):
 
     The ``precompute`` method returns an empty marker or (when wave_precomp
     is enabled) a state carrying the pre-computed SSP×filter LUT (fixed-z)
-    or ztable (free-z).
+    or ztable (free-z). When ``approx=SpectrumPrecomp()`` is set, it instead
+    carries the pre-rebinned SSP×pixel LUT (``ssp_spec_lut``, fixed-z) or
+    its redshift table (``ssp_spec_ztable``, free-z) — the spectroscopic
+    analogue of the photometric LUT.
     """
 
     name: str = "stellar"
     ssp_phot_lut: Any | None = None
     ssp_phot_ztable: Any | None = None
+    # Phase 5 (SpectrumPrecomp): SSP flux pre-rebinned to spectrum pixel
+    # centres in the galaxy rest frame. ``ssp_spec_lut`` is a
+    # :class:`SpectroscopicPrecomputation` (fixed-z); ``ssp_spec_ztable``
+    # is a :class:`SpectroscopicZTable` (free-z).
+    ssp_spec_lut: Any | None = None
+    ssp_spec_ztable: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -288,22 +297,27 @@ class StellarSEDComponent:
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
         redshift_spec: dict[str, Any] | None = None,
+        spec_wave_obs: jnp.ndarray | None = None,
     ) -> StellarSEDComponentState:
-        """Build SSP×filter LUT when approx=WavePrecomp() is set.
+        """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
-        Reads the wave_precomp flag from approx. When True AND filters are
-        provided AND the component has an SSP grid, calls either
-        precompute_photometry() for fixed-z (Phase 3b) or
-        precompute_photometry_ztable() for free-z (Phase 3c-1), storing
-        the result on the returned state. Otherwise returns an empty state
-        marker (Phase 3a behaviour).
+        Reads the ``wave_precomp`` / ``spectrum_precomp`` flags from
+        ``approx``. For ``wave_precomp`` (with ``filters``), calls
+        :func:`precompute_photometry` (fixed-z, Phase 3b) or
+        :func:`precompute_photometry_ztable` (free-z, Phase 3c-1). For
+        ``spectrum_precomp`` (with ``spec_wave_obs``), calls
+        :func:`precompute_spectroscopy` (fixed-z) or
+        :func:`precompute_spectroscopy_ztable` (free-z), pre-rebinning the
+        SSP grid to the spectrum pixel centres in the galaxy rest frame
+        (Phase 5). Otherwise returns an empty state marker.
 
         Parameters
         ----------
         approx : Mapping[str, bool] | None
-            Approximation flags. Reads "wave_precomp".
+            Approximation flags. Reads ``"wave_precomp"`` and
+            ``"spectrum_precomp"``.
         filters : tuple of (filter_wave_obs, filter_trans) pairs, optional
-            Required when wave_precomp=True. Tuple shape:
+            Required when ``wave_precomp=True``. Tuple shape:
             ((fw_0, ft_0), (fw_1, ft_1), ...) where each pair is a pair of
             1-D arrays. The filter_wave is observed-frame.
         redshift_spec : dict[str, Any] | None
@@ -312,9 +326,17 @@ class StellarSEDComponent:
             - mode="fixed", value=float: builds LUT at that fixed z.
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
+        spec_wave_obs : array_like, shape (n_pix,), optional
+            Observed-frame spectrum pixel wavelengths [Angstrom]. Required
+            when ``spectrum_precomp=True``.
         """
         del wave_grid
         approx = approx or {}
+
+        # Phase 5: SpectrumPrecomp — pre-rebin SSP to spectrum pixel centres.
+        if approx.get("spectrum_precomp"):
+            return self._precompute_spectrum(spec_wave_obs, redshift_spec)
+
         if not approx.get("wave_precomp"):
             return StellarSEDComponentState(name=self.name)
 
@@ -364,6 +386,53 @@ class StellarSEDComponent:
                 taylor_correction=True,  # Phase 3c-3c-v: Ψ moment for dust LUT
             )
             return StellarSEDComponentState(name=self.name, ssp_phot_ztable=ztable)
+
+    def _precompute_spectrum(
+        self,
+        spec_wave_obs: jnp.ndarray | None,
+        redshift_spec: dict[str, Any] | None,
+    ) -> StellarSEDComponentState:
+        """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()`` (Phase 5).
+
+        Pre-rebins the SSP flux cube to the spectrum pixel centres in the
+        galaxy rest frame. Unlike the photometric LUT, **no Taylor moment
+        is needed**: a spectrum pixel is a single wavelength, so dust
+        attenuation ``A(λ_pix)`` evaluated at the pixel centre is exact —
+        there is no wide-kernel integral to factorise.
+
+        Fixed-z builds a single :class:`SpectroscopicPrecomputation`; free-z
+        builds a :class:`SpectroscopicZTable` so the rest-frame pixel grid
+        ``wave_obs / (1 + z)`` can be interpolated at runtime.
+        """
+        if spec_wave_obs is None or self.ssp_data is None:
+            # No grid or no SSP — fall back to the full-grid path.
+            return StellarSEDComponentState(name=self.name)
+
+        spec_wave_obs = jnp.asarray(spec_wave_obs)
+
+        if redshift_spec is None or redshift_spec.get("mode") == "fixed":
+            from tengri.components.stellar.sps.precompute import precompute_spectroscopy
+
+            z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
+            lut = precompute_spectroscopy(
+                ssp_data=self.ssp_data,
+                wave_obs_pixels=spec_wave_obs,
+                redshift=z_source,
+                dl_cm=1.0,  # placeholder; cosmology applied at projection time
+            )
+            return StellarSEDComponentState(name=self.name, ssp_spec_lut=lut)
+
+        # mode == "free": build the redshift table.
+        from tengri.components.stellar.sps.precompute import precompute_spectroscopy_ztable
+
+        ztable = precompute_spectroscopy_ztable(
+            ssp_data=self.ssp_data,
+            wave_obs_pixels=spec_wave_obs,
+            z_min=redshift_spec.get("z_min", 0.001),
+            z_max=redshift_spec.get("z_max", 3.0),
+            n_z=redshift_spec.get("n_z", 100),
+        )
+        return StellarSEDComponentState(name=self.name, ssp_spec_ztable=ztable)
 
     def apply(
         self,
@@ -1048,6 +1117,63 @@ class StellarSEDComponent:
             # downstream consumers (dust LUT, AGN, IGM).
             eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
             derived_overrides["filter_eff_waves"] = eff_waves_at_z
+
+        # ── 12c. Stellar spectrum LUT (Phase 5; SpectrumPrecomp) ────────
+        # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
+        # centres in the galaxy rest frame. Publishes:
+        #   - ``stellar_spec_lnu_precomp`` (n_pix,) — rest-frame Lν [erg/s/Hz]
+        #   - ``spec_eff_waves`` (n_pix,) — rest-frame pixel wavelengths [Å]
+        # The latter routes downstream SEDModelComponents (dust / AGN / IGM /
+        # nebular continuum) through their spectrum-LUT branch, mirroring how
+        # ``filter_eff_waves`` drives the photometry LUT path.
+        if self._state is not None and self._state.ssp_spec_lut is not None:
+            ssp_on_pixels = self._state.ssp_spec_lut.ssp_on_pixels  # (n_met, n_age, n_pix)
+            stellar_spec_lnu = (
+                total_mass * jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels) * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
+            # Age-resolved per-pixel LUT for two-component (Charlot & Fall)
+            # dust attenuation at the pixel grid (sum over age == marginalised).
+            stellar_spec_lnu_per_age = (
+                total_mass
+                * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
+            derived_overrides["spec_eff_waves"] = jnp.asarray(
+                self._state.ssp_spec_lut.wave_rest_pixels
+            )
+
+        elif self._state is not None and self._state.ssp_spec_ztable is not None:
+            # Free-z: interpolate the SSP cube to the rest-frame pixel grid
+            # ``wave_obs / (1 + z)`` at runtime. Exact (no z-grid interpolation
+            # of absorption features) and differentiable in z. ``wave`` is
+            # ``ssp.ssp_wave`` and ``ssp_flux_for_csp`` is the (n_met, n_age,
+            # n_wave) cube already used for the full-grid CSP einsum above.
+            from jax import vmap
+
+            z = jnp.asarray(params.get("redshift", 0.0))
+            wave_obs_pix = jnp.asarray(self._state.ssp_spec_ztable.wave_obs_pixels)
+            wave_rest = wave_obs_pix / (1.0 + z)
+            n_met_s, n_age_s = ssp_flux_for_csp.shape[0], ssp_flux_for_csp.shape[1]
+            flat = ssp_flux_for_csp.reshape(n_met_s * n_age_s, -1)
+            interp_flat = vmap(lambda row: jnp.interp(wave_rest, wave, row, left=0.0, right=0.0))(
+                flat
+            )
+            ssp_on_pixels_at_z = interp_flat.reshape(n_met_s, n_age_s, -1)
+            stellar_spec_lnu = (
+                total_mass
+                * jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels_at_z)
+                * LSUN_ERG_PER_S
+            )
+            stellar_spec_lnu_per_age = (
+                total_mass
+                * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels_at_z)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
+            derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
+            derived_overrides["spec_eff_waves"] = wave_rest
 
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(

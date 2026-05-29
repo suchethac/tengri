@@ -1,8 +1,62 @@
 # Spectrum LUT — design
 
-> Status: **design**, pre-implementation. Phase 5 of the WavePrecomp
-> rollout. Lands as a follow-up to PR #167 (WavePrecomp + Taylor on
+> Status: **partially implemented (2026-05-28)**. Phase 5 of the
+> WavePrecomp rollout. Follows PR #167 (WavePrecomp + Taylor on
 > `SEDModelComponent`).
+
+## Implementation status (2026-05-28)
+
+Landed and verified (exact-vs-LUT parity < 0.21% on low-R continuum;
+gradients flow; no regressions):
+
+- **Continuum spectrum precomp (W1).** `approx=SpectrumPrecomp()` now
+  actually engages. The stellar component carries a pre-rebinned
+  SSP×pixel LUT (fixed-z `SpectroscopicPrecomputation`) or re-interpolates
+  the SSP cube to `wave_obs/(1+z)` at runtime (free-z — exact, avoids the
+  feature-sweep error of a z-grid table). It publishes
+  `stellar_spec_lnu_precomp` + `spec_eff_waves`; dust publishes per-pixel
+  transmission (single + two-component — **no Taylor moment**, a pixel is
+  one wavelength so `A(λ_pix)` is exact); `predict_spectrum_via_precomp`
+  composes emitters × transmission × cosmology.
+- **High-R auto-fallback.** `SpectrumPrecomp()` on R > 3000 spectroscopy
+  warns and falls back to the exact path (`_SPECTRUM_PRECOMP_R_MAX`).
+- **Emission lines on the precomp path (W2, option A below).** The
+  line-publishing-backend refusal is **lifted**: `_apply_spec_precomp` now
+  preserves the component's published dict, so a nebular backend's
+  grid-independent `line_waves`/`line_lums` survive the LUT path.
+  `predict_line_fluxes` and `pred.lines.*` are **bit-identical** to the
+  exact path under `SpectrumPrecomp`.
+- **Measured line ratios as data (W4).** New `LineRatioData`
+  (`observation/line_ratio_data.py`), `Observation.line_ratios`,
+  `SEDModel.predict_line_ratios` (single chain eval, precomp==exact), and
+  a `line_ratio_constraint` adapter in the likelihood cohort
+  (`build_likelihood_extras`) + fall-through. Public-API exported.
+
+- **Window-based measurables through precomp (W3).** Fixed the
+  pre-existing `predict_spectral_indices` bug (it passed a custom 2000-pt
+  grid to `predict_spectrum`, which ignores it → shape mismatch). Indices
+  are rest-frame quantities, so they now measure on the **attenuated
+  rest-frame SED** (`predict_rest_sed`) — correct on both exact and
+  precomp paths (dust sets `sed_intrinsic` to the attenuated SED in all
+  cases). D4000 / Dn4000 / Balmer break / Lick EW (12+ standard) work as
+  data; **multiple indices** compose into the cohort together. Added a new
+  `index_type="slope"` so **UV-slope β** is a first-class index
+  (`STANDARD_INDICES["uv_slope_beta"]`), matching `pred.sed.uv_slope_beta`
+  and exact==precomp. **No grid augmentation needed** — measurables read
+  the full rest SED / grid-independent `line_lums`, never the user's
+  coarse pixel grid, so "user provides the grid, measurables always
+  computed" falls out for free. Also dropped the `Observables`
+  `NotImplementedError` for line_fluxes/indices: those are scalar
+  measurables fed to the likelihood via the prediction dict, not
+  projection fields.
+
+Still open: joint photometry+spectroscopy under `SpectrumPrecomp` (raises
+`NotImplementedError` today — needs the phot LUT family built alongside
+the spec LUT). A separate abstract `Measurable` Protocol was considered
+and **declined** (YAGNI): `LineFluxData` / `LineRatioData` /
+`SpectralIndexData` (EW/break/slope) already form an extensible
+measurables family — a new measurable is a new `index_type` or a small
+data container, no protocol churn required.
 
 ## What this is
 

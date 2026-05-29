@@ -73,18 +73,19 @@ def build_observables_class(observation) -> type:
 
     has_phot = bool(getattr(observation, "can_do_photometry", False))
     has_spec = bool(getattr(observation, "can_do_spectroscopy", False))
-    has_lines = bool(getattr(observation, "has_line_fluxes", False))
-    has_indices = bool(getattr(observation, "has_spectral_indices", False))
 
+    # ``Observables`` is the *projection* output only (phot_fnu / spec_fnu and
+    # their rest-frame variants). Scalar measurables — line fluxes, line
+    # ratios, spectral indices — are NOT fields here: they are computed
+    # separately (``predict_line_fluxes`` / ``predict_line_ratios`` /
+    # ``predict_spectral_indices``) and fed to the likelihood via the
+    # prediction dict, so the projection NamedTuple stays a clean
+    # (phot, spec) container regardless of which measurables are configured.
     if has_phot:
         fields.append(("phot_fnu", jnp.ndarray))
         fields.append(("phot_rest_fnu", jnp.ndarray))
     if has_spec:
         fields.append(("spec_fnu", jnp.ndarray))
-    if has_lines:
-        fields.append(("lines_flux", jnp.ndarray))
-    if has_indices:
-        fields.append(("indices", jnp.ndarray))
 
     if not fields:
         # Defensive: no observable channels — give an empty NamedTuple
