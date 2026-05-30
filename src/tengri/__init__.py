@@ -234,6 +234,7 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
+from tengri.observation.photometry import FilterConvention, list_filter_conventions
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
@@ -365,6 +366,7 @@ __all__ = [
     "BackendError",
     "ConfigError",
     "Exponential",
+    "FilterConvention",
     "Fixed",
     "FlatSlab",
     "ForwardModel",
@@ -423,6 +425,7 @@ __all__ = [
     "list_components",
     "list_dust_emission_models",
     "list_dust_laws",
+    "list_filter_conventions",
     "list_filters",
     "list_inference_methods",
     "list_known_ssps",

@@ -109,6 +109,19 @@ IGM_CITATIONS: dict[str, list[str]] = {
     None: [],
 }
 
+# Photometric filter-convolution convention (FilterConvention; ADR-0016).
+# The AB-system foundations apply to any broadband flux; the per-convention
+# entries cite the code each convention reproduces. See docs/units.md.
+PHOTOMETRY_CONVENTION_CITATIONS: dict[str, list[str]] = {
+    # Always relevant when broadband photometry is computed.
+    "core": ["ab_system", "kcorrection", "fukugita1996", "bessell2012", "zacharegkas2025"],
+    # w = 1/lambda — photon-counting; matches FSPS / DSPS / sedpy.
+    "bessell": ["fsps", "dsps", "kcorrection", "fukugita1996"],
+    # w = 1/lambda^2 — energy / flat-in-frequency; matches CIGALE / bagpipes.
+    "energy": ["cigale", "bagpipes"],
+}
+
+
 # Inference backends (values passed to ``Fitter.run(backend=...)``).
 BACKEND_CITATIONS: dict[str, list[str]] = {
     "map": [],
@@ -192,6 +205,7 @@ __all__ = [
     "FUNCTION_CITATIONS",
     "IGM_CITATIONS",
     "NEBULAR_BACKEND_CITATIONS",
+    "PHOTOMETRY_CONVENTION_CITATIONS",
     "cites",
     "register_function_citations",
 ]
