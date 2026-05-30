@@ -39,13 +39,14 @@
 # disagreement attributable to that block can be read off the figure.
 #
 # **What to expect.** Stellar templates, star-formation histories, dust
-# attenuation, and the Inoue+2014 IGM reproduce BAGPIPES to floating-point
-# or to a fraction of a percent at matched parameters. The dust IR matches
-# in *bolometric* luminosity by energy balance, but its spectral shape
-# differs — tengri's DL07 grid peaks colder and is PAH-poor relative to
-# BAGPIPES' (§8, #566). The nebular block is the principal exception by
-# construction: BAGPIPES uses Cloudy v25 grids embedded in the
-# stellar population synthesis chain, while tengri uses Cue
+# attenuation, the Draine & Li (2007) dust IR, and the Inoue+2014 IGM
+# reproduce BAGPIPES to floating-point or to a few percent at matched
+# parameters. (The dust IR shape agreement relies on the DL07 PDR
+# luminosity weighting fixed in #566 — without it the warm component is
+# ~14× under-weighted and the IR comes out spuriously cold.) The nebular
+# block is the principal exception by construction: BAGPIPES uses Cloudy
+# v25 grids embedded in the stellar population synthesis chain, while
+# tengri uses Cue
 # (Li et al. 2025), a neural emulator trained on Cloudy v17. The
 # resulting Hα ratio is quantified in §9.
 #
@@ -901,14 +902,15 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 # balance, `L_IR_emitted ≡ L_absorbed`, to floating point — the residual
 # is annotated on the right panel.
 #
-# **The bolometric IR matches by energy balance, but the spectral shape
-# does not.** At matched `(qpah, umin, gamma)` tengri's DL07 peaks colder
-# (~135 µm vs BAGPIPES' ~87 µm at `umin = 1`; tengri `umin ≈ 5` lands on
-# the BAGPIPES `umin = 1` peak — a ~5× offset in the `umin` scale) and
-# carries less mid-IR PAH/warm-dust emission (~0.5× at 10–30 µm), with the
-# missing energy reappearing in the submm tail. This is a DL07
-# grid/parametrisation difference between the two ports, not an
-# energy-balance failure — tracked in #566.
+# At matched `(qpah, umin, gamma)` the two DL07 SEDs now agree in **shape**
+# as well as bolometrically: both peak near ~130 µm at `umin = 1` and the
+# 30–100 µm and >100 µm bands track BAGPIPES to ~6 %. This required fixing
+# the DL07 power-law (PDR) luminosity weight in tengri (#566): `gamma` is a
+# dust-*mass* fraction, but the PDR dust emits `R = U_max ln(U_max/U_min) /
+# (U_max − U_min) ≈ 14×` more per unit mass (DL07 Eq. 33), so a 5 % mass
+# fraction carries ~40 % of the luminosity. Before the fix the warm
+# component was ~14× under-weighted and the SED came out spuriously cold;
+# FSPS and BAGPIPES both pinned the correct warm shift.
 
 # %%
 QPAH_FIDUCIAL = 2.5
@@ -1775,10 +1777,10 @@ plt.show()
 #   age-metallicity-degeneracy direction. Visual match.
 # - **§6–§8 dust attenuation + IR.** Calzetti curves overlap; CF00 /
 #   Cardelli / Salim differ by construction. With the §7 single-screen
-#   mapping the attenuated optical now matches to ~1 %. The DL07 IR is
-#   energy-balanced (bolometric `L_IR` matches) but its shape differs:
-#   tengri's grid peaks colder (~135 vs ~87 µm) and is PAH-poor (~0.5× at
-#   10–30 µm), a template/`umin`-scale difference tracked in #566.
+#   mapping the attenuated optical matches to ~1 %, and the DL07 IR now
+#   matches in shape too (both peak ~130 µm; 30–100 µm and submm to ~6 %)
+#   after correcting the DL07 PDR luminosity weight (#566) — `gamma` is a
+#   mass fraction but the warm PDR dust emits ~14× more per mass (Eq. 33).
 # - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy v17 (Cue, tengri).
 #   tengri Hα ≈ 3.6 × BAGPIPES Hα — the Cloudy generation difference
 #   plus bare-stellar vs SFH-integrated convolution path.
