@@ -72,6 +72,14 @@ from tengri.components.stellar.sfh.nonparametric import (
 )
 from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.parameters.priors import Distribution, Fixed, StudentT, Uniform
+from tengri.utils.cosmology import age_at_z0
+
+# Age of the universe today [Gyr], from the default cosmology — never a
+# literal. Used as the prior upper bound and default for the dpl/lnorm
+# formation anchors ``sfh_*_age_gyr`` (cosmic time available for star
+# formation = lookback of formation at the Big Bang). Per-fit, users
+# override this with ``cosmology.age_at_z(z)`` at the source redshift.
+_AGE_UNIV_GYR = round(float(age_at_z0()), 3)
 
 # ── Data structures ───────────────────────────────────────────────
 
@@ -404,18 +412,29 @@ _lnorm_spec = SFHModelSpec(
         "sfh_lnorm_log_total_mass": ParamDef(
             "log10 total stellar mass formed [Msun]", _always_true, "", Uniform(7.0, 12.5)
         ),
-        "sfh_lnorm_peak_lbt_gyr": ParamDef(
-            "Peak lookback time (Gyr)", _lo_positive, "must have lo > 0", Uniform(0.5, 12.0)
+        "sfh_lnorm_peak_gyr": ParamDef(
+            "Peak in cosmic time since formation (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, 12.0),
         ),
         "sfh_lnorm_width_gyr": ParamDef(
             "Log-space width (dex)", _lo_positive, "must have lo > 0", Uniform(0.1, 2.0)
+        ),
+        "sfh_lnorm_age_gyr": ParamDef(
+            "Cosmic time for SF (Gyr) = lookback of formation; "
+            "set to age_of_universe(z) for BAGPIPES direction",
+            _lo_positive,
+            "must have lo > 0",
+            Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
         ),
     },
     settings={},
     internal_param_map={
         "sfh_lnorm_log_total_mass": ("log_total_mass", 1.0, 0.0),
-        "sfh_lnorm_peak_lbt_gyr": ("peak_lbt", 1e9, 0.0),
+        "sfh_lnorm_peak_gyr": ("peak", 1e9, 0.0),
         "sfh_lnorm_width_gyr": ("width", 1.0, 0.0),  # already in dex
+        "sfh_lnorm_age_gyr": ("age", 1e9, 0.0),
     },
     composition_type="additive",
 )
@@ -442,10 +461,17 @@ _register(
                 Uniform(0.1, 3.0, default=1.0),
             ),
             "sfh_dpl_tau_gyr": ParamDef(
-                "DPL turnover time (Gyr)",
+                "DPL turnover time (Gyr), cosmic time since formation",
                 _lo_positive,
                 "must have lo > 0",
                 Uniform(0.1, 12.0, default=3.0),
+            ),
+            "sfh_dpl_age_gyr": ParamDef(
+                "Cosmic time for SF (Gyr) = lookback of formation; "
+                "set to age_of_universe(z) for BAGPIPES parity",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, _AGE_UNIV_GYR, default=_AGE_UNIV_GYR),
             ),
             "sfh_dpl_log_total_mass": ParamDef(
                 "log10 total stellar mass formed [Msun]",
@@ -460,6 +486,7 @@ _register(
             "sfh_dpl_alpha": ("alpha", 1.0, 0.0),
             "sfh_dpl_beta": ("beta", 1.0, 0.0),
             "sfh_dpl_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_dpl_age_gyr": ("age", 1e9, 0.0),
             "sfh_dpl_log_total_mass": ("log_total_mass", 1.0, 0.0),
         },
         composition_type="additive",

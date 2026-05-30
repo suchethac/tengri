@@ -270,7 +270,9 @@ class TestToGroupsWildcardCollapse:
         # met_logzsol and met_alpha_fe stay in the sfh group when
         # met_mode == "delta" (default) — only specs that opt into a
         # non-delta chemical-evolution mode (#311) emit a stellar block.
-        dpl_keys = {"alpha", "beta", "tau_gyr", "log_total_mass"}
+        # ``age_gyr`` (formation anchor, #514) joined the dpl param set; it
+        # round-trips with its registry default even when left unspecified.
+        dpl_keys = {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
         met_keys = {"logzsol", "alpha_fe"}
         expected_keys = {"type"} | dpl_keys | met_keys
         assert set(sfh_dict.keys()) == expected_keys

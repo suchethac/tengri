@@ -77,9 +77,7 @@ PALETTE_SEQ = ["#1f4e79", "#2e7ab0", "#4ba6c8", "#e07a3a", "#a02c2c"]  # cool â†
 # Load SSP grid: bare-stellar FSPS+MILES (required by Cue nebular backend
 # used in the canonical recipes; wNE files cannot be paired with Cue).
 _ssp_name = "fsps_prsc_miles_chabrier.h5"
-_repo_root = next(
-    p for p in [Path.cwd(), *Path.cwd().parents] if (p / "pyproject.toml").exists()
-)
+_repo_root = next(p for p in [Path.cwd(), *Path.cwd().parents] if (p / "pyproject.toml").exists())
 ssp = load_ssp_data(str(_repo_root / "data" / _ssp_name))
 
 # Lightweight photometry (pre-downloaded, no SVO API calls)
@@ -389,7 +387,7 @@ sfh_families = [
         "lnorm",
         {
             "sfh_lnorm_log_total_mass": np.log10(1e10),
-            "sfh_lnorm_peak_lbt_gyr": 3.0,
+            "sfh_lnorm_peak_gyr": 3.0,
             "sfh_lnorm_width_gyr": 0.6,
         },
     ),
@@ -459,28 +457,40 @@ for sfh_name, truth_sfh in sfh_families:
     groups_sfh_fig = {
         "sfh": {"type": sfh_name, "*": FIXED, "met_logzsol": Fixed(-0.1)},
         "dust": {
-            "type": "two_component", "law_bc": "calzetti",
-            "tau_bc": Fixed(0.5), "tau_diff": Fixed(0.3), "slope": Fixed(-0.7),
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "tau_bc": Fixed(0.5),
+            "tau_diff": Fixed(0.3),
+            "slope": Fixed(-0.7),
             "emission": {"type": "dale2014"},
         },
         "neb": {"type": "cue", "*": FIXED},
-        "redshift": Fixed(z), "apply_igm": False,
+        "redshift": Fixed(z),
+        "apply_igm": False,
     }
     spec = parse_groups(**groups_sfh_fig)
     model = SEDModel(spec, ssp, observation=observation)
-    truth = {**truth_sfh, "met_logzsol": -0.1, "dust_tau_bc": 0.5,
-             "dust_tau_diff": 0.3, "dust_slope": -0.7, "redshift": z}
+    truth = {
+        **truth_sfh,
+        "met_logzsol": -0.1,
+        "dust_tau_bc": 0.5,
+        "dust_tau_diff": 0.3,
+        "dust_slope": -0.7,
+        "redshift": z,
+    }
     sfr_curve = model.predict_sfh(truth)
     sed = model.predict_rest_sed(truth)
     wave_obs_um = np.asarray(sed.wavelength) * (1.0 + z) / 1e4
     sed_fnu = np.asarray(units.lnu_to_fnu(sed.sed, dl_cm, z))
-    sed_rows.append({
-        "name": sfh_name,
-        "t_gyr": np.asarray(sfr_curve["t_gyr"]),
-        "sfr": np.asarray(sfr_curve["sfr_mean"]),
-        "wave_um": wave_obs_um,
-        "fnu": sed_fnu,
-    })
+    sed_rows.append(
+        {
+            "name": sfh_name,
+            "t_gyr": np.asarray(sfr_curve["t_gyr"]),
+            "sfr": np.asarray(sfr_curve["sfr_mean"]),
+            "wave_um": wave_obs_um,
+            "fnu": sed_fnu,
+        }
+    )
 
 mask_w = (sed_rows[0]["wave_um"] >= 0.1) & (sed_rows[0]["wave_um"] <= 30)
 all_fnu = np.concatenate([r["fnu"][mask_w] for r in sed_rows])
@@ -492,11 +502,18 @@ for row, info in enumerate(sed_rows):
     color = PALETTE_SEQ[row % len(PALETTE_SEQ)]
 
     ax_sfr = fig.add_subplot(gs[row, 0])
-    ax_sfr.loglog(info["t_gyr"], np.maximum(info["sfr"], 1e-3),
-                  lw=1.6, color=color)
-    ax_sfr.text(0.04, 0.88, info["name"], transform=ax_sfr.transAxes,
-                ha="left", va="top", color=color, fontsize=10,
-                weight="bold")
+    ax_sfr.loglog(info["t_gyr"], np.maximum(info["sfr"], 1e-3), lw=1.6, color=color)
+    ax_sfr.text(
+        0.04,
+        0.88,
+        info["name"],
+        transform=ax_sfr.transAxes,
+        ha="left",
+        va="top",
+        color=color,
+        fontsize=10,
+        weight="bold",
+    )
     ax_sfr.set_xlim(1e-3, 14)
     ax_sfr.set_ylim(1e-3, 1e2)
     ax_sfr.set_ylabel(r"SFR  [$M_\odot$ yr$^{-1}$]", fontsize=9)
@@ -506,8 +523,7 @@ for row, info in enumerate(sed_rows):
         ax_sfr.set_xlabel("lookback time  [Gyr]")
 
     ax_sed = fig.add_subplot(gs[row, 1])
-    ax_sed.loglog(info["wave_um"][mask_w], info["fnu"][mask_w],
-                  lw=1.6, color=color)
+    ax_sed.loglog(info["wave_um"][mask_w], info["fnu"][mask_w], lw=1.6, color=color)
     ax_sed.set_xlim(0.1, 30)
     ax_sed.set_ylim(y_lo, y_hi)
     ax_sed.set_ylabel(r"$F_\nu$  [cgs]", fontsize=9)
@@ -641,7 +657,8 @@ _mask_ref = (wave_obs_um >= 0.1) & (wave_obs_um <= 30)
 ax_ref.loglog(
     wave_obs_um[_mask_ref],
     sed_fnu_nodust[_mask_ref],
-    lw=1.6, color=C_TRUTH,
+    lw=1.6,
+    color=C_TRUTH,
     label=r"intrinsic  ($\tau$=0)",
 )
 ax_ref.set_xlabel(r"observed wavelength  [$\mu$m]")
@@ -650,8 +667,16 @@ ax_ref.set_xlim(0.1, 30)
 _ymed_ref = np.median(sed_fnu_nodust[_mask_ref & (sed_fnu_nodust > 0)])
 ax_ref.set_ylim(_ymed_ref / 1e3, _ymed_ref * 30)
 ax_ref.legend(loc="lower right", frameon=False, fontsize=9)
-ax_ref.text(0.02, 0.96, "no attenuation", transform=ax_ref.transAxes,
-            ha="left", va="top", fontsize=9, color="0.3")
+ax_ref.text(
+    0.02,
+    0.96,
+    "no attenuation",
+    transform=ax_ref.transAxes,
+    ha="left",
+    va="top",
+    fontsize=9,
+    color="0.3",
+)
 
 # RIGHT: SEDs with each dust law
 ax_sed = fig.add_subplot(gs[1])
@@ -706,10 +731,19 @@ ax_sed.set_xlabel(r"observed wavelength  [$\mu$m]")
 ax_sed.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_sed.set_xlim(0.1, 30)
 ax_sed.set_ylim(_ymed_sed / 1e3, _ymed_sed * 30)
-ax_sed.legend(loc="lower right", frameon=False, fontsize=8, ncol=2,
-              handlelength=1.5, columnspacing=1.0)
-ax_sed.text(0.02, 0.96, r"after dust  ($\tau_{\rm bc}=0.5,\ \tau_{\rm diff}=0.3$)",
-            transform=ax_sed.transAxes, ha="left", va="top", fontsize=9, color="0.3")
+ax_sed.legend(
+    loc="lower right", frameon=False, fontsize=8, ncol=2, handlelength=1.5, columnspacing=1.0
+)
+ax_sed.text(
+    0.02,
+    0.96,
+    r"after dust  ($\tau_{\rm bc}=0.5,\ \tau_{\rm diff}=0.3$)",
+    transform=ax_sed.transAxes,
+    ha="left",
+    va="top",
+    fontsize=9,
+    color="0.3",
+)
 
 fig.savefig(FIG_DIR / "04_dust_law_grid.png", dpi=300, bbox_inches="tight")
 fig.savefig(FIG_DIR / "04_dust_law_grid.pdf", bbox_inches="tight")
@@ -834,9 +868,16 @@ ax_sed.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_sed.set_xlim(0.1, 1000)
 ax_sed.set_ylim(_ymed_em / 1e4, _ymed_em * 30)
 ax_sed.legend(loc="lower right", frameon=False, fontsize=8, ncol=2)
-ax_sed.text(0.02, 0.96, "stellar + dust IR re-emission",
-            transform=ax_sed.transAxes, ha="left", va="top",
-            fontsize=9, color="0.3")
+ax_sed.text(
+    0.02,
+    0.96,
+    "stellar + dust IR re-emission",
+    transform=ax_sed.transAxes,
+    ha="left",
+    va="top",
+    fontsize=9,
+    color="0.3",
+)
 
 # RIGHT: Energy balance bar chart
 ax_balance = fig.add_subplot(gs[1])
@@ -878,18 +919,27 @@ colors = [PALETTE_SEQ[i % len(PALETTE_SEQ)] for i in range(len(dust_emissions))]
 ax_balance.bar(
     range(len(dust_emissions)),
     l_ir_norm,
-    color=colors, alpha=0.85, edgecolor="white", linewidth=0.6,
+    color=colors,
+    alpha=0.85,
+    edgecolor="white",
+    linewidth=0.6,
 )
-ax_balance.axhline(y=1.0, color=C_DATA, ls="--", lw=1.0,
-                   label="energy balance (=1)", zorder=3)
+ax_balance.axhline(y=1.0, color=C_DATA, ls="--", lw=1.0, label="energy balance (=1)", zorder=3)
 ax_balance.set_ylabel(r"$L_{\rm IR}$  (normalised)")
 ax_balance.set_xticks(range(len(dust_emissions)))
 ax_balance.set_xticklabels(dust_emissions, rotation=20, ha="right", fontsize=8)
 ax_balance.set_ylim(0.8, 1.2)
 ax_balance.legend(loc="lower right", frameon=False, fontsize=8)
-ax_balance.text(0.02, 0.96, "energy conservation",
-                transform=ax_balance.transAxes, ha="left", va="top",
-                fontsize=9, color="0.3")
+ax_balance.text(
+    0.02,
+    0.96,
+    "energy conservation",
+    transform=ax_balance.transAxes,
+    ha="left",
+    va="top",
+    fontsize=9,
+    color="0.3",
+)
 
 fig.savefig(FIG_DIR / "04_dust_emission_grid.png", dpi=300, bbox_inches="tight")
 fig.savefig(FIG_DIR / "04_dust_emission_grid.pdf", bbox_inches="tight")

@@ -353,21 +353,36 @@ norm = gaussian
 def lognormal(
     t_lookback: jnp.ndarray,
     log_total_mass: float,
-    peak_lbt: float,
+    peak: float,
     width: float,
+    age: float,
 ) -> jnp.ndarray:
-    """Log-normal SFH — Gaussian in log10(age) space.
+    r"""Log-normal SFH peaked in cosmic time since formation.
 
-    The mode in log10(age) space is peak_lbt, but the peak in linear
-    time is shifted: t_peak_linear = peak_lbt * 10^{-w^2 * ln(10)}.
-    For w=0.3, this is a ~15% shift toward younger ages. peak_lbt is
-    best interpreted as the median lookback time, not the linear peak.
+    .. math::
 
-    .. warning::
-       **Convention difference from BAGPIPES.** tengri parameterises ``t`` as
-       **lookback time**, while Carnall+2018 / BAGPIPES use **cosmic age
-       since the Big Bang**. Posteriors on ``peak_lbt`` are mirror images
-       across the two codes — not interchangeable. See #514.
+       \mathrm{SFR}(T) \propto
+       \exp\!\Bigl[-\tfrac{1}{2}\bigl(\log_{10} T - \log_{10} T_{\rm peak}\bigr)^2 / w^2\Bigr],
+       \quad T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
+
+    where :math:`T` is **cosmic time since galaxy formation**,
+    :math:`t_{\mathrm{lb}}` is lookback time, :math:`T_{\rm peak}` is
+    ``peak`` and :math:`w` is ``width``. Rescaled so the integrated mass
+    equals ``10**log_total_mass``.
+
+    **Convention.** With ``age`` set to the age of the universe at the
+    source redshift, the peak sits at cosmic time ``peak`` after the Big
+    Bang — the same direction as Carnall+2018 / BAGPIPES ``lognormal``.
+    The time variable handed in is always lookback time; the cosmic-time
+    conversion ``T = age - t_lookback`` happens here. Resolves the
+    time-reversal of #514.
+
+    .. note::
+       This is a log10-space Gaussian, not the exact 1/T ln-space
+       lognormal of Carnall+2018 (which carries a ``1/T`` Jacobian and
+       solves ``(t0, sigma)`` from ``(tmax, fwhm)``). Peak *location* and
+       direction now match; the detailed wing shape differs. See the
+       follow-up issue for full Carnall lognormal parity.
 
     Parameters
     ----------
@@ -376,10 +391,14 @@ def lognormal(
     log_total_mass : float
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
-    peak_lbt : float
-        Peak lookback time [yr]. Converted to log10 internally.
+    peak : float
+        Peak location in cosmic time since formation [yr].
     width : float
-        Width in log10(age) space [dex].
+        Width in log10(T) space [dex].
+    age : float
+        Cosmic time available for star formation [yr] = lookback time of
+        formation. Set to ``age_of_universe(z)`` for BAGPIPES direction.
+        SFR is zero before formation (``t_lookback > age``).
 
     Returns
     -------
@@ -395,16 +414,18 @@ def lognormal(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import lognormal
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = lognormal(t, log_total_mass=10.0, peak_lbt=3e9, width=0.3)
+    >>> sfr = lognormal(t, log_total_mass=10.0, peak=3e9, width=0.3, age=13.6e9)
     >>> sfr.shape
     (64,)
     """
-    age = _clamp_age(t_lookback)
-    log_age = jnp.log10(age)
-    log_peak = jnp.log10(jnp.maximum(peak_lbt, 1e5))
-    exponent = -0.5 * ((log_age - log_peak) / width) ** 2
-    shape = jnp.maximum(jnp.exp(exponent), 0.0)
-    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    T = age - t_lookback
+    T_pos = jnp.where(T > 0.0, T, 1e5)
+    log_T = jnp.log10(T_pos)
+    log_peak = jnp.log10(jnp.maximum(peak, 1e5))
+    exponent = -0.5 * ((log_T - log_peak) / width) ** 2
+    shape = jnp.where(T > 0.0, jnp.exp(exponent), 0.0)
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
 # Short alias registered in SFH_REGISTRY
@@ -492,36 +513,47 @@ def dpl(
     alpha: float,
     beta: float,
     tau: float,
+    age: float,
     log_total_mass: float,
 ) -> jnp.ndarray:
-    """Double power law with log total mass parameterization (canonical).
+    r"""Double power-law SFH (Carnall+2018 / BAGPIPES ``dblplaw``).
 
-    The shape ``1 / ((t/tau)^alpha + (t/tau)^-beta)`` is rescaled so the
-    integrated mass equals ``10**log_total_mass``.
+    .. math::
 
-    .. warning::
-       **Convention difference from BAGPIPES.** tengri parameterises ``t`` as
-       **lookback time** (years since the source's observed epoch), while
-       Carnall et al. (2018) and BAGPIPES parameterise the same shape as
-       **cosmic age since the Big Bang**. The two are mirror images about
-       the age of the universe: at matched ``(alpha, beta, tau)``, tengri's
-       SFR(t) is the time-reverse of BAGPIPES'. To compare fits across
-       codes you must either flip the time axis or convert
-       ``tau_carnall ↔ age_of_universe - tau_lookback``. See #514.
+       \mathrm{SFR}(T) \propto
+       \bigl[(T/\tau)^{\alpha} + (T/\tau)^{-\beta}\bigr]^{-1},
+       \quad T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
+
+    where :math:`T` is **cosmic time since galaxy formation** and
+    :math:`t_{\mathrm{lb}}` is lookback time. The SFR turns over at
+    :math:`T = \tau\,(\beta/\alpha)^{1/(\alpha+\beta)}`. The shape is
+    rescaled so the integrated mass equals ``10**log_total_mass``.
+
+    **Convention.** Matches Carnall et al. (2018) and BAGPIPES
+    ``dblplaw`` exactly when ``age`` is the age of the universe at the
+    source redshift (BAGPIPES measures the double power-law forward
+    from the Big Bang, i.e. formation at ``T = 0``). The time variable
+    handed in is always lookback time; the cosmic-time conversion
+    ``T = age - t_lookback`` happens here, the same way
+    :func:`sfhdelayed` does it. Resolves the time-reversal of #514.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     alpha : float
-        Falling slope exponent [dimensionless]. Typical range: 0.5-4.
+        Falling (late-time) slope exponent [dimensionless]. Typical 0.5-4.
     beta : float
-        Rising slope exponent [dimensionless]. Typical range: 0.3-3.
+        Rising (early-time) slope exponent [dimensionless]. Typical 0.3-3.
     tau : float
-        Turnover timescale [yr].
+        Turnover timescale [yr], in cosmic time since formation.
+    age : float
+        Cosmic time available for star formation [yr] = lookback time of
+        formation. Set to ``age_of_universe(z)`` for BAGPIPES parity.
+        SFR is zero before formation (``t_lookback > age``).
     log_total_mass : float
-        log10 of total stellar mass formed [Msun]. The shape is rescaled so
-        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
+        log10 of total stellar mass formed [Msun]. The shape is rescaled
+        so that ``trapezoid(sfr, t_lookback) = 10**log_total_mass``.
 
     Returns
     -------
@@ -532,19 +564,28 @@ def dpl(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    See :func:`double_powerlaw` for physics details.
+    See :func:`double_powerlaw` for the bare shape (no formation anchor).
 
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri import dpl
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = dpl(t, alpha=1.5, beta=0.5, tau=3e9, log_total_mass=10.0)
+    >>> sfr = dpl(t, alpha=1.5, beta=0.5, tau=3e9, age=13.6e9, log_total_mass=10.0)
     >>> sfr.shape
     (64,)
     """
-    x = t_lookback / tau
-    shape = 1.0 / (x**alpha + x ** (-beta))
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    # Use a *finite* positive dummy (tau, so x = 1) for the masked T <= 0
+    # region rather than jnp.inf: inf**alpha and its derivative are NaN/inf,
+    # and the NaN leaks through the jnp.where VJP, poisoning the gradient
+    # w.r.t. alpha whenever any grid point has lookback >= age. The double-
+    # where keeps both branches finite so the mask cleanly zeroes the dead
+    # region in forward *and* backward passes (same pattern as lognormal).
+    T = age - t_lookback
+    T_safe = jnp.where(T > 0.0, T, tau)
+    x = T_safe / tau
+    shape = jnp.where(T > 0.0, 1.0 / (x**alpha + x ** (-beta)), 0.0)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 

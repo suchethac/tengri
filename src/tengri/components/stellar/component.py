@@ -481,7 +481,20 @@ class StellarSEDComponent:
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
             if public_name in params:
-                sfh_kwargs[internal_name] = jnp.asarray(params[public_name]) * scale + offset
+                raw = params[public_name]
+            else:
+                # Fall back to the registry default for any declared parameter
+                # the caller omitted. Required so callers that pass a partial
+                # params dict (e.g. the low-level run_components path, or flat-
+                # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
+                # still resolve every positional argument of the SFH callable.
+                # Mirrors the dense_basis age_universe injection just below.
+                pdef = sfh_spec.params.get(public_name)
+                default_scalar = pdef.default.default if pdef is not None else None
+                if default_scalar is None:
+                    continue
+                raw = default_scalar
+            sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
 
         # Mode-specific settings that are NOT free parameters.
         # ``dense_basis`` needs an explicit ``age_universe_yr`` derived

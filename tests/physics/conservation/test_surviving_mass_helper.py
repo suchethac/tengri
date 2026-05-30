@@ -31,6 +31,12 @@ from tengri.components.stellar.sfh.mean_sfh import (
 )
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 pytestmark = pytest.mark.conservation
 
 
@@ -89,7 +95,7 @@ class TestSurvivingMassHelper:
     def test_constant_survivor_fraction_scales_linearly(self, f_surv):
         """f_surv ≡ c ⇒ M_surv = c × M_formed."""
         ssp = _make_synthetic_ssp(f_surv_value=f_surv)
-        sfr = dpl(T_LOOKBACK, alpha=1.5, beta=1.0, tau=3e9, log_total_mass=10.0)
+        sfr = dpl(T_LOOKBACK, alpha=1.5, beta=1.0, tau=3e9, age=_AGE_UNIV_YR, log_total_mass=10.0)
         m_surv = float(predict_surviving_mass(sfr, T_LOOKBACK, ssp))
         m_formed = float(jnp.trapezoid(sfr, T_LOOKBACK))
         assert_allclose(m_surv, f_surv * m_formed, rtol=1e-6)
@@ -109,7 +115,9 @@ class TestSurvivingMassHelper:
         """Physical: surviving mass can never exceed formed mass."""
         ssp = _make_synthetic_ssp()  # monotonic decline 1.0 → 0.5
         for log_M in (8.0, 10.0, 11.5):
-            sfr = lognormal(T_LOOKBACK, log_total_mass=log_M, peak_lbt=5e9, width=0.4)
+            sfr = lognormal(
+                T_LOOKBACK, log_total_mass=log_M, peak=5e9, width=0.4, age=_AGE_UNIV_YR
+            )
             m_surv = float(predict_surviving_mass(sfr, T_LOOKBACK, ssp))
             m_formed = float(jnp.trapezoid(sfr, T_LOOKBACK))
             assert m_surv <= m_formed + 1e-6, f"M_surv {m_surv} > M_formed {m_formed}"
@@ -138,7 +146,7 @@ class TestSurvivingMassHelper:
             ssp_lgmet=jnp.array([-2.0, -1.0]),
             ssp_mass_remaining=None,
         )
-        sfr = dpl(T_LOOKBACK, alpha=1.5, beta=1.0, tau=3e9, log_total_mass=10.0)
+        sfr = dpl(T_LOOKBACK, alpha=1.5, beta=1.0, tau=3e9, age=_AGE_UNIV_YR, log_total_mass=10.0)
         with pytest.raises(ValueError, match="ssp_mass_remaining"):
             predict_surviving_mass(sfr, T_LOOKBACK, ssp_no_mr)
 

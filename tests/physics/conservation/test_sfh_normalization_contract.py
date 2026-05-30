@@ -44,6 +44,12 @@ from tengri.components.stellar.sfh.mean_sfh import (
     truncated_skewnormal,
 )
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 # Backwards-compatible aliases used in the parametrize tables below.
 skewnormal_burst = snorm_burst
 skewnormal_trunc_burst = snorm_trunc_burst
@@ -83,13 +89,13 @@ class TestSFHNormalizationContract:
     def test_dpl_normalization(self):
         """dpl(log_total_mass) must conserve mass."""
         self._check_normalization(
-            dpl, T_LOOKBACK, log_total_mass=1.0, alpha=1.5, beta=2.0, tau=3e9
+            dpl, T_LOOKBACK, log_total_mass=1.0, alpha=1.5, beta=2.0, tau=3e9, age=_AGE_UNIV_YR
         )
         self._check_normalization(
-            dpl, T_LOOKBACK, log_total_mass=0.5, alpha=2.0, beta=1.5, tau=2e9
+            dpl, T_LOOKBACK, log_total_mass=0.5, alpha=2.0, beta=1.5, tau=2e9, age=_AGE_UNIV_YR
         )
         self._check_normalization(
-            dpl, T_LOOKBACK, log_total_mass=2.5, alpha=1.0, beta=1.0, tau=5e9
+            dpl, T_LOOKBACK, log_total_mass=2.5, alpha=1.0, beta=1.0, tau=5e9, age=_AGE_UNIV_YR
         )
 
     def test_gaussian_normalization(self):
@@ -107,13 +113,13 @@ class TestSFHNormalizationContract:
     def test_lognormal_normalization(self):
         """lognormal(log_total_mass) must conserve mass."""
         self._check_normalization(
-            lognormal, T_LOOKBACK, log_total_mass=1.0, peak_lbt=5e9, width=1e9
+            lognormal, T_LOOKBACK, log_total_mass=1.0, peak=5e9, width=1e9, age=_AGE_UNIV_YR
         )
         self._check_normalization(
-            lognormal, T_LOOKBACK, log_total_mass=0.5, peak_lbt=6e9, width=0.5e9
+            lognormal, T_LOOKBACK, log_total_mass=0.5, peak=6e9, width=0.5e9, age=_AGE_UNIV_YR
         )
         self._check_normalization(
-            lognormal, T_LOOKBACK, log_total_mass=2.0, peak_lbt=4e9, width=2e9
+            lognormal, T_LOOKBACK, log_total_mass=2.0, peak=4e9, width=2e9, age=_AGE_UNIV_YR
         )
 
     def test_truncated_skewnormal_normalization(self):
@@ -374,10 +380,24 @@ class TestSFHNormalizationContract:
     def test_normalization_scales_linearly(self):
         """Doubling log_total_mass should double the integral (linear scaling)."""
         sfr1 = np.array(
-            dpl(jnp.array(T_LOOKBACK), log_total_mass=1.0, alpha=1.5, beta=2.0, tau=3e9)
+            dpl(
+                jnp.array(T_LOOKBACK),
+                log_total_mass=1.0,
+                alpha=1.5,
+                beta=2.0,
+                tau=3e9,
+                age=_AGE_UNIV_YR,
+            )
         )
         sfr2 = np.array(
-            dpl(jnp.array(T_LOOKBACK), log_total_mass=2.0, alpha=1.5, beta=2.0, tau=3e9)
+            dpl(
+                jnp.array(T_LOOKBACK),
+                log_total_mass=2.0,
+                alpha=1.5,
+                beta=2.0,
+                tau=3e9,
+                age=_AGE_UNIV_YR,
+            )
         )
         integral1 = float(trapezoid(sfr1, T_LOOKBACK))
         integral2 = float(trapezoid(sfr2, T_LOOKBACK))

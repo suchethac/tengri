@@ -60,6 +60,7 @@ sys.path.insert(0, _nb_dir)
 import jax
 import jax.numpy as jnp
 import matplotlib
+
 if "ipykernel" not in sys.modules:
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -98,7 +99,9 @@ print(f"tengri {tg.__version__}")
 # %%
 # Load SSP library (no dust IR emission, keeps compile budget manageable)
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-print(f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
+print(
+    f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ"
+)
 
 # %% [markdown]
 # ## Wavelength grid and emission-line masks
@@ -139,7 +142,9 @@ mask_width = 30.0  # Angstrom (rest-frame) — wide enough to suppress LSF wings
 # Build boolean mask (True = good pixel, False = masked)
 mask_good = np.ones(n_pix, dtype=bool)
 for _line_name, wave_line_rest in emission_lines:
-    in_line = (wave_rest >= wave_line_rest - mask_width) & (wave_rest <= wave_line_rest + mask_width)
+    in_line = (wave_rest >= wave_line_rest - mask_width) & (
+        wave_rest <= wave_line_rest + mask_width
+    )
     mask_good[in_line] = False
 
 n_good = np.sum(mask_good)
@@ -178,7 +183,7 @@ print("Noise: cal_floor=1%, Gaussian likelihood")
 spec_param = Parameters(
     mean_sfh_type="lnorm",
     sfh_lnorm_log_total_mass=Uniform(7.0, 12.5),
-    sfh_lnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
+    sfh_lnorm_peak_gyr=Uniform(0.5, 10.0),
     sfh_lnorm_width_gyr=Uniform(0.5, 5.0),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 1.5),
@@ -200,7 +205,7 @@ print(f"Model built: {spec_param.n_free} free params")
 key = jax.random.PRNGKey(123)
 true_params = {
     "sfh_lnorm_log_total_mass": jnp.array(10.0),
-    "sfh_lnorm_peak_lbt_gyr": jnp.array(3.0),
+    "sfh_lnorm_peak_gyr": jnp.array(3.0),
     "sfh_lnorm_width_gyr": jnp.array(2.0),
     "met_logzsol": jnp.array(-0.2),
     "dust_tau_bc": jnp.array(0.4),
@@ -226,24 +231,47 @@ flux_true_plot = np.where(mask_good, flux_true_np, np.nan)
 
 fig_in, ax_in = plt.subplots(figsize=(8.6, 3.6))
 ax_in.errorbar(
-    wave_obs_np[mask_good], flux_obs_np[mask_good], yerr=flux_err_np[mask_good],
-    fmt="o", ms=2.6, color=C_DATA, alpha=0.85, elinewidth=0.7, capsize=0,
-    mec="white", mew=0.3, label="observed", zorder=3,
+    wave_obs_np[mask_good],
+    flux_obs_np[mask_good],
+    yerr=flux_err_np[mask_good],
+    fmt="o",
+    ms=2.6,
+    color=C_DATA,
+    alpha=0.85,
+    elinewidth=0.7,
+    capsize=0,
+    mec="white",
+    mew=0.3,
+    label="observed",
+    zorder=3,
 )
 ax_in.plot(wave_obs_np, flux_true_plot, color=C_TRUTH, lw=1.0, ls="--", label="truth", zorder=4)
 
 for _name, wave_rest_line in emission_lines:
     w_obs = wave_rest_line * (1.0 + z_spec)
-    ax_in.axvspan(w_obs - mask_width * (1.0 + z_spec),
-                  w_obs + mask_width * (1.0 + z_spec),
-                  alpha=0.08, color="0.4", lw=0, zorder=0)
+    ax_in.axvspan(
+        w_obs - mask_width * (1.0 + z_spec),
+        w_obs + mask_width * (1.0 + z_spec),
+        alpha=0.08,
+        color="0.4",
+        lw=0,
+        zorder=0,
+    )
 
 ax_in.set_xlabel(r"observed wavelength  [$\mathrm{\AA}$]")
 ax_in.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_in.set_xlim(wave_obs_np.min(), wave_obs_np.max())
 ax_in.legend(frameon=False, fontsize=9, loc="upper left")
-ax_in.text(0.99, 0.05, f"z = {z_spec}   SNR ≈ 30   {n_good}/{n_pix} pixels (8 lines masked)",
-           transform=ax_in.transAxes, ha="right", va="bottom", fontsize=8, color="0.3")
+ax_in.text(
+    0.99,
+    0.05,
+    f"z = {z_spec}   SNR ≈ 30   {n_good}/{n_pix} pixels (8 lines masked)",
+    transform=ax_in.transAxes,
+    ha="right",
+    va="bottom",
+    fontsize=8,
+    color="0.3",
+)
 fig_in.savefig(FIG_DIR / "06_spectrum_input.png", dpi=300, bbox_inches="tight")
 fig_in.savefig(FIG_DIR / "06_spectrum_input.pdf", bbox_inches="tight")
 
@@ -276,11 +304,15 @@ for name in spec_param.free_params:
     if name in true_params:
         truth = float(true_params[name])
         med = float(np.percentile(result_spec.samples[name], 50))
-        lo, hi = float(np.percentile(result_spec.samples[name], 16)), \
-                 float(np.percentile(result_spec.samples[name], 84))
+        lo, hi = (
+            float(np.percentile(result_spec.samples[name], 16)),
+            float(np.percentile(result_spec.samples[name], 84)),
+        )
         bias = (med - truth) / truth * 100 if truth != 0 else med - truth
         status = "ok" if (lo <= truth <= hi) else "MISS"
-        print(f"{name:30s} truth={truth:7.3f}  med={med:7.3f}  ±{(hi-lo)/2:6.3f}  [{bias:+5.1f}%]  {status}")
+        print(
+            f"{name:30s} truth={truth:7.3f}  med={med:7.3f}  ±{(hi - lo) / 2:6.3f}  [{bias:+5.1f}%]  {status}"
+        )
 
 # %%
 # ## Posterior spectrum
@@ -292,9 +324,9 @@ N_DRAW = 80
 n_samp = len(result_spec.samples[spec_param.free_params[0]])
 idx = np.linspace(0, n_samp - 1, min(N_DRAW, n_samp)).astype(int)
 draws_list = [{k: v[i] for k, v in result_spec.samples.items()} for i in idx]
-spec_draws = np.stack([
-    np.asarray(model_spec.predict_spectrum(p, wave_obs=wave_obs)) for p in draws_list
-])
+spec_draws = np.stack(
+    [np.asarray(model_spec.predict_spectrum(p, wave_obs=wave_obs)) for p in draws_list]
+)
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 # Suppress the model at masked wavelengths so SSP-baked emission-line spikes
 # don't dominate the y-range; the fit didn't constrain those pixels anyway.
@@ -309,20 +341,42 @@ ax, ax_res = fig.add_subplot(gs[0]), fig.add_subplot(gs[1])
 
 for _name, wave_rest_line in emission_lines:
     w_obs = wave_rest_line * (1.0 + z_spec)
-    ax.axvspan(w_obs - mask_width * (1.0 + z_spec),
-               w_obs + mask_width * (1.0 + z_spec),
-               alpha=0.08, color="0.4", lw=0, zorder=0)
-    ax_res.axvspan(w_obs - mask_width * (1.0 + z_spec),
-                   w_obs + mask_width * (1.0 + z_spec),
-                   alpha=0.08, color="0.4", lw=0, zorder=0)
+    ax.axvspan(
+        w_obs - mask_width * (1.0 + z_spec),
+        w_obs + mask_width * (1.0 + z_spec),
+        alpha=0.08,
+        color="0.4",
+        lw=0,
+        zorder=0,
+    )
+    ax_res.axvspan(
+        w_obs - mask_width * (1.0 + z_spec),
+        w_obs + mask_width * (1.0 + z_spec),
+        alpha=0.08,
+        color="0.4",
+        lw=0,
+        zorder=0,
+    )
 
-ax.fill_between(wave_obs_np, spec_lo_p, spec_hi_p, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
+ax.fill_between(
+    wave_obs_np, spec_lo_p, spec_hi_p, color=C_POST, alpha=0.30, lw=0, label="posterior 68%"
+)
 ax.plot(wave_obs_np, spec_med_p, color=C_POST, lw=1.3, label="posterior median")
 ax.plot(wave_obs_np, flux_true_p, color=C_TRUTH, ls="--", lw=1.0, label="truth")
 ax.errorbar(
-    wave_obs_np[mask_good], flux_obs_np[mask_good], yerr=flux_err_np[mask_good],
-    fmt="o", ms=2.6, color=C_DATA, alpha=0.85, elinewidth=0.7, capsize=0,
-    mec="white", mew=0.3, label="observed", zorder=4,
+    wave_obs_np[mask_good],
+    flux_obs_np[mask_good],
+    yerr=flux_err_np[mask_good],
+    fmt="o",
+    ms=2.6,
+    color=C_DATA,
+    alpha=0.85,
+    elinewidth=0.7,
+    capsize=0,
+    mec="white",
+    mew=0.3,
+    label="observed",
+    zorder=4,
 )
 ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax.set_xlim(wave_obs_np.min(), wave_obs_np.max())
@@ -350,19 +404,54 @@ fig.savefig(FIG_DIR / "06_spectrum_fit.pdf", bbox_inches="tight")
 mask_hb = (wave_obs_np >= 4500 * (1.0 + z_spec)) & (wave_obs_np <= 5500 * (1.0 + z_spec))
 
 fig_z, ax_z = plt.subplots(figsize=(8.6, 3.8))
-ax_z.fill_between(wave_obs_np[mask_hb], spec_lo_p[mask_hb], spec_hi_p[mask_hb],
-                  color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
-ax_z.plot(wave_obs_np[mask_hb], spec_med_p[mask_hb], color=C_POST, lw=1.4, label="posterior median")
-ax_z.plot(wave_obs_np[mask_hb], flux_true_p[mask_hb], color=C_TRUTH, ls="--", lw=1.0, label="truth")
-ax_z.errorbar(
-    wave_obs_np[mask_hb & mask_good], flux_obs_np[mask_hb & mask_good], yerr=flux_err_np[mask_hb & mask_good],
-    fmt="o", ms=3.2, color=C_DATA, alpha=0.85, elinewidth=0.7, capsize=0,
-    mec="white", mew=0.3, label="observed", zorder=4,
+ax_z.fill_between(
+    wave_obs_np[mask_hb],
+    spec_lo_p[mask_hb],
+    spec_hi_p[mask_hb],
+    color=C_POST,
+    alpha=0.30,
+    lw=0,
+    label="posterior 68%",
 )
-ax_z.axvspan(5090 * (1.0 + z_spec), 5200 * (1.0 + z_spec),
-             alpha=0.12, color="#e0a030", lw=0, zorder=0, label="Mgb")
-ax_z.axvspan((4862.68 - 30) * (1.0 + z_spec), (4862.68 + 30) * (1.0 + z_spec),
-             alpha=0.12, color="#3aa050", lw=0, zorder=0, label=r"H$\beta$")
+ax_z.plot(
+    wave_obs_np[mask_hb], spec_med_p[mask_hb], color=C_POST, lw=1.4, label="posterior median"
+)
+ax_z.plot(
+    wave_obs_np[mask_hb], flux_true_p[mask_hb], color=C_TRUTH, ls="--", lw=1.0, label="truth"
+)
+ax_z.errorbar(
+    wave_obs_np[mask_hb & mask_good],
+    flux_obs_np[mask_hb & mask_good],
+    yerr=flux_err_np[mask_hb & mask_good],
+    fmt="o",
+    ms=3.2,
+    color=C_DATA,
+    alpha=0.85,
+    elinewidth=0.7,
+    capsize=0,
+    mec="white",
+    mew=0.3,
+    label="observed",
+    zorder=4,
+)
+ax_z.axvspan(
+    5090 * (1.0 + z_spec),
+    5200 * (1.0 + z_spec),
+    alpha=0.12,
+    color="#e0a030",
+    lw=0,
+    zorder=0,
+    label="Mgb",
+)
+ax_z.axvspan(
+    (4862.68 - 30) * (1.0 + z_spec),
+    (4862.68 + 30) * (1.0 + z_spec),
+    alpha=0.12,
+    color="#3aa050",
+    lw=0,
+    zorder=0,
+    label=r"H$\beta$",
+)
 ax_z.set_xlabel(r"observed wavelength  [$\mathrm{\AA}$]")
 ax_z.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_z.set_xlim(wave_obs_np[mask_hb].min(), wave_obs_np[mask_hb].max())
@@ -387,10 +476,11 @@ fig_corner.savefig(FIG_DIR / "06_corner.pdf", bbox_inches="tight")
 # Two-panel star formation history: SFR(t) on top with 68% band, cumulative
 # formed M⋆ below. Truth dashed.
 
+
 def _sfh(p):
     s = model_spec.predict_state(p)
-    return (np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9,
-            np.asarray(s.derived["sfr_history"]))
+    return (np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9, np.asarray(s.derived["sfr_history"]))
+
 
 sfr_draws_arr, lbt = [], None
 fixed = spec_param.get_fixed_values()
@@ -398,13 +488,18 @@ for i in idx[:60]:
     pdraw = {**fixed, **{k: float(v[i]) for k, v in result_spec.samples.items()}}
     lbt_i, sfr_i = _sfh(pdraw)
     sfr_draws_arr.append(sfr_i)
-    if lbt is None: lbt = lbt_i
+    if lbt is None:
+        lbt = lbt_i
 sfr_draws_arr = np.stack(sfr_draws_arr)
 sfr_lo, sfr_med, sfr_hi = np.percentile(sfr_draws_arr, [16, 50, 84], axis=0)
 lbt_t, sfr_t = _sfh(truth_full)
 
 fig_s, (ax_s, ax_c) = plt.subplots(
-    2, 1, figsize=(7.2, 5.4), sharex=True, gridspec_kw=dict(height_ratios=[2, 1], hspace=0.05),
+    2,
+    1,
+    figsize=(7.2, 5.4),
+    sharex=True,
+    gridspec_kw=dict(height_ratios=[2, 1], hspace=0.05),
 )
 ax_s.fill_between(lbt, sfr_lo, sfr_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
 ax_s.plot(lbt, sfr_med, color=C_POST, lw=1.6, label="posterior median")

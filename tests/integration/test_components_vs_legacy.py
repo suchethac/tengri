@@ -763,7 +763,7 @@ def test_orchestrator_lnorm_close_to_legacy(ssp):
         "lnorm",
         {
             "sfh_lnorm_log_total_mass": 1.0,
-            "sfh_lnorm_peak_lbt_gyr": 3.0,
+            "sfh_lnorm_peak_gyr": 3.0,
             "sfh_lnorm_width_gyr": 1.0,
         },
     )
