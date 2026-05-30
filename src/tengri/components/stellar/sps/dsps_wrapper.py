@@ -92,10 +92,17 @@ class SSPData(NamedTuple):
     # when neither path yields a match. See issue #307 for the discovery
     # gap this closes; the IMF is invisible in the model spec otherwise.
     imf: str = "unknown"
+    # Provenance name the grid was loaded from (filename stem, e.g.
+    # ``ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0``). Surfaced by
+    # :func:`load_ssp_data` so the citation machinery can infer the SPS code,
+    # isochrone set, and spectral library from the
+    # ``<code>_<isochrone>_<library>_<imf>`` token convention. Empty when
+    # unknown. Metadata only — never a JIT leaf.
+    source: str = ""
 
 
 def _sspdata_flatten(s):
-    # ``imf`` is metadata, not a JIT leaf — keep strings out of the trace.
+    # ``imf``/``source`` are metadata, not JIT leaves — keep strings out of the trace.
     children = (
         s.ssp_wave,
         s.ssp_flux,
@@ -104,12 +111,12 @@ def _sspdata_flatten(s):
         s.ssp_mass_remaining,
         s.ssp_alpha_fe,
     )
-    aux = (s.imf,)
+    aux = (s.imf, s.source)
     return children, aux
 
 
 def _sspdata_unflatten(aux, children):
-    return SSPData(*children, imf=aux[0])
+    return SSPData(*children, imf=aux[0], source=aux[1])
 
 
 jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
@@ -279,6 +286,7 @@ def load_ssp_data(filepath: str) -> SSPData:
             ssp_mass_remaining=mass_remaining,
             ssp_alpha_fe=alpha_fe,
             imf=imf,
+            source=fp.stem,
         )
 
 

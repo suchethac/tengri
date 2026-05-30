@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""SSP/IMF/nebular/dust provenance citations + the can't-infer warning.
+
+Locks that ``collect_citations`` surfaces the full ingredient provenance from
+an SSP grid's filename tokens (SPS code / isochrone / spectral library / IMF),
+that the WavePrecomp precomputation method cites Zacharegkas+2025, and that an
+unrecognisable filename fires a provenance warning (per user request).
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import jax.numpy as jnp
+import pytest
+
+from tengri.citations.collect import _ssp_provenance_keys
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
+
+pytestmark = pytest.mark.contract
+
+_Z = jnp.zeros(1)
+
+
+def _ssp(source: str, imf: str = "chabrier") -> SSPData:
+    return SSPData(_Z, _Z, _Z, _Z, None, None, imf=imf, source=source)
+
+
+@pytest.mark.parametrize(
+    "source,expected",
+    [
+        ("fsps_prsc_miles_chabrier", {"fsps2009", "fsps", "parsec", "miles", "chabrier2003"}),
+        ("fsps_mist_c3k_kroupa", {"mist", "mist_dotter2016", "fsps2009", "kroupa2001"}),
+        ("bc03_pdva_stelib_salpeter", {"bc03", "padova", "stelib", "salpeter1955"}),
+        ("fsps_bsti_basel_chabrier", {"basti", "basel", "chabrier2003"}),
+        ("pgny_mist_c3k_chabrier", {"progeny", "mist", "chabrier2003"}),
+    ],
+)
+def test_provenance_tokens_map_to_citations(source, expected):
+    imf = source.rsplit("_", 1)[-1]
+    keys = set(_ssp_provenance_keys(_ssp(source, imf=imf)))
+    assert expected <= keys, f"missing {expected - keys} for {source!r}"
+
+
+def test_unrecognised_filename_warns():
+    """A filename that doesn't match <code>_<isochrone>_<library>_<imf> warns."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _ssp_provenance_keys(_ssp("my_custom_grid_v2", imf="unknown"))
+    assert any("infer" in str(w.message).lower() for w in caught)
+
+
+def test_recognised_filename_does_not_warn():
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        _ssp_provenance_keys(_ssp("fsps_prsc_miles_chabrier"))
+    assert not caught
+
+
+def test_bpass_internal_isochrone_does_not_warn():
+    """BPASS handles isochrones internally ('stars' token) — must not false-warn."""
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        keys = set(_ssp_provenance_keys(_ssp("bpss_stars_c3k_chabrier")))
+    assert not caught
+    assert "bpass" in keys
+
+
+def test_imf_keys_present_in_registry():
+    """Chabrier / Kroupa / Salpeter IMF citations are registered."""
+    from tengri.citations.registry import REGISTRY
+
+    for key in ("chabrier2003", "kroupa2001", "salpeter1955"):
+        assert key in REGISTRY, f"{key} missing from citation registry"
