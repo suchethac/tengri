@@ -1,8 +1,8 @@
 """Render §10 radio + §11 X-ray audit figures — tengri vs CIGALE/X-CIGALE.
 
 Produces two PNGs:
-- ``reproduction/cigale/_figs/audit_10_radio.png``
-- ``reproduction/cigale/_figs/audit_11_xray.png``
+- ``reproduction/cigale/_figs/cigale_audit_10_radio.png``
+- ``reproduction/cigale/_figs/cigale_audit_11_xray.png``
 
 Each shows two panels: SEDs overlaid in the relevant band, and the
 tengri/CIGALE ratio. Mirrors the numerical results printed by
@@ -82,8 +82,8 @@ ax_ratio.text(0.02, 0.92, f"median = {np.median(ratio):.3f}",
 ax_ratio.grid(True, which="both", alpha=0.25)
 
 fig.tight_layout()
-fig.savefig(OUT / "audit_10_radio.png", dpi=140, bbox_inches="tight")
-print(f"wrote {OUT / 'audit_10_radio.png'}  median = {np.median(ratio):.4f}")
+fig.savefig(OUT / "cigale_audit_10_radio.png", dpi=140, bbox_inches="tight")
+print(f"wrote {OUT / 'cigale_audit_10_radio.png'}  median = {np.median(ratio):.4f}")
 
 
 # ---------------------------------------------------------------------------
@@ -161,8 +161,8 @@ ax_ratio.text(0.02, 0.92, note, transform=ax_ratio.transAxes, fontsize=9, va="to
 ax_ratio.grid(True, which="both", alpha=0.25)
 
 fig.tight_layout()
-fig.savefig(OUT / "audit_11_xray.png", dpi=140, bbox_inches="tight")
+fig.savefig(OUT / "cigale_audit_11_xray.png", dpi=140, bbox_inches="tight")
 print(
-    f"wrote {OUT / 'audit_11_xray.png'}  "
+    f"wrote {OUT / 'cigale_audit_11_xray.png'}  "
     f"soft = {np.median(ratio[soft]):.4f}  hard = {np.median(ratio[hard]):.4f}"
 )

@@ -128,13 +128,13 @@ def save_fig(filename: str) -> None:
     plt.savefig(str(figs_dir / filename), dpi=_FIG_DPI, bbox_inches="tight")
 
 
-def _assert_comparable(arr_p, arr_t, *, name: str) -> None:
+def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
     """Guard against shipping a blank or wildly mis-scaled panel."""
-    a_p = np.asarray(arr_p)
+    a_ref = np.asarray(arr_ref)
     a_t = np.asarray(arr_t)
-    assert np.isfinite(a_p).any() and np.isfinite(a_t).any(), f"{name}: NaN-only"
-    assert (a_p > 0).any() and (a_t > 0).any(), f"{name}: zero/negative-only"
-    ratio = a_p.max() / a_t.max()
+    assert np.isfinite(a_ref).any() and np.isfinite(a_t).any(), f"{name}: NaN-only"
+    assert (a_ref > 0).any() and (a_t > 0).any(), f"{name}: zero/negative-only"
+    ratio = a_ref.max() / a_t.max()
     assert 1e-3 < ratio < 1e3, f"{name}: y-scale ratio {ratio:.2e} out of range"
 
 
@@ -213,7 +213,7 @@ ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6, label="float32 round-
 ax_r.legend(loc="upper right", fontsize=8)
 ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("01_ssp_fsps.png")
+save_fig("prospector_01_ssp_fsps.png")
 
 # Median residual in the optical, a useful scalar for the docs page.
 _w_ref, _L_ref = fps_ssp[3]  # 1 Gyr
@@ -281,7 +281,7 @@ ax_l.plot(t_p_cosmic_gyr, sfr_p, "C0-", linewidth=2.0, label=rf"$\tau$ = {TAU_GY
 ax_l.legend(fontsize=9)
 ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
 fig.tight_layout()
-save_fig("02_sfh_delayed.png")
+save_fig("prospector_02_sfh_delayed.png")
 
 
 # %% [markdown]
@@ -316,6 +316,15 @@ U.panel(
     ax_l, ax_r, label_l="Prospector  delayed-τ + FSPS", label_r="tengri  sfh.delayed + FSPS SSP"
 )
 ax_l.plot(w_p, L_p, "C0-", linewidth=1.5)
+ax_l.text(
+    0.05,
+    0.95,
+    rf"$M_\star = 10^{{{LOG_MASS_FIDUCIAL:.0f}}}\,M_\odot$ formed",
+    transform=ax_l.transAxes,
+    fontsize=10,
+    va="top",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+)
 ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
 m_star = 10.0 ** float(s_stellar.derived["log_mstar"])
 ax_r.text(
@@ -331,7 +340,7 @@ for ax in (ax_l, ax_r):
     ax.set_xlim(1e2, 1e6)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("03_stellar_sed.png")
+save_fig("prospector_03_stellar_sed.png")
 
 _mask_opt = (w_p >= 3000) & (w_p <= 10000)
 _t_on_p = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), w_p)
@@ -429,7 +438,7 @@ for sedpy_name, tengri_law, label in _law_pairs:
 ax_l.legend(fontsize=10)
 ax_r.legend(fontsize=10)
 fig.tight_layout()
-save_fig("04_dust_attenuation.png")
+save_fig("prospector_04_dust_attenuation.png")
 
 
 # %% [markdown]
@@ -494,7 +503,7 @@ for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
     ax.set_ylim(_ymax * 1e-6, _ymax * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("05_dust_applied.png")
+save_fig("prospector_05_dust_applied.png")
 
 
 # %% [markdown]
@@ -581,7 +590,7 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(1e24, 1e32)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("06_dust_ir.png")
+save_fig("prospector_06_dust_ir.png")
 
 # Far-IR peak location, a robust scalar diagnostic.
 _p_fir = w_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
@@ -658,7 +667,7 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(1e22, 1e31)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("07_panchromatic.png")
+save_fig("prospector_07_panchromatic.png")
 
 
 # %% [markdown]
@@ -722,7 +731,7 @@ _t_ha = float(L_t_neb[int(np.argmin(np.abs(np.asarray(s_neb.wave) - 6563)))])
 if _p_ha > 0:
     print(f"§8 Hα (6563 Å) tengri Cue / FSPS Byler+2017 = {_t_ha / _p_ha:.2f}×")
 fig.tight_layout()
-save_fig("08_nebular.png")
+save_fig("prospector_08_nebular.png")
 
 
 # %% [markdown]
@@ -804,7 +813,7 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(_peak_agn * 1e-3, _peak_agn * 3)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("09_agn_nenkova.png")
+save_fig("prospector_09_agn_nenkova.png")
 
 _peak_p_agn = w_p_agn[(w_p_agn > 1e4)][np.argmax(L_p_agn[(w_p_agn > 1e4)])]
 _w_t_agn = np.asarray(s_agn.wave)
@@ -845,7 +854,7 @@ ax.set_title(f"Madau (1995) IGM transmission at z = {Z_IGM:g}")
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("12_igm_madau.png")
+save_fig("prospector_12_igm_madau.png")
 
 # Quantify agreement over the Lyman-α forest window.
 _win = (w_p_igm >= 950) & (w_p_igm <= 1216)
@@ -857,15 +866,105 @@ print(
 
 
 # %% [markdown]
+# ## tengri in Prospector-mode — full-SED head-to-head
+#
+# Every section above swept one physics block. This is the whole forward
+# model at once: tengri configured to emulate Prospector end to end — the
+# shared FSPS MIST+MILES SSP, the fiducial τ-delayed SFH, a Calzetti
+# attenuation law, Draine & Li (2007) IR re-emission, and nebular —
+# overlaid on FSPS's own panchromatic output at matched parameters (the §7
+# configuration). The top panel is the overlay; the bottom is the
+# fractional residual `tengri / FSPS − 1` with the ±25 % band shaded.
+# Optical agreement is reported as a normalization ratio and its 16–84 %
+# spread; the nebular emission lines (§8) drive the spread.
+
+# %%
+import chex
+
+# Reuse the §7 panchromatic full SED: tengri's Prospector-mode model and
+# FSPS's own output, both at the fiducial galaxy.
+w_ext, L_ext = np.asarray(w_p_full), np.asarray(L_p_full)
+wave_t = np.asarray(s_full.wave)
+L_t = (
+    np.asarray(s_full.derived["sed_dust_attenuated"])
+    + np.asarray(s_full.derived["sed_dust_ir"])
+    + np.asarray(s_full.derived["sed_nebular"])
+)
+
+# Put tengri on FSPS's wavelength grid so the two compare point for point.
+L_t_on_ext = U.regrid(wave_t, L_t, w_ext)
+chex.assert_equal_shape([L_ext, L_t_on_ext])
+
+mask = (w_ext > 0) & (L_ext > 0) & (L_t_on_ext > 0)
+resid = np.full(w_ext.shape, np.nan, dtype=float)
+resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
+
+# Headline numbers: the optical normalization ratio tengri/FSPS and its
+# 16–84% spread. A constant offset is the documented stellar-SED / mass
+# convention difference (§3); the spread is set by the nebular lines (§8).
+# Separating the two is fairer than one |Δ| that blends a fixed offset
+# with the line gap.
+opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
+ratio_opt = L_t_on_ext[opt] / L_ext[opt]
+norm = float(np.median(ratio_opt))
+p16, p84 = float(np.percentile(ratio_opt, 16)), float(np.percentile(ratio_opt, 84))
+print(
+    f"full-SED head-to-head tengri/FSPS optical (1000–10000 Å): "
+    f"normalization {norm:.2f}×, 16–84% spread {p16:.2f}–{p84:.2f}×"
+)
+_assert_comparable(L_ext, L_t, name="full-SED head-to-head")
+
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(11, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(w_ext, L_ext, "C0-", linewidth=1.5, label="Prospector (FSPS)")
+ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (Prospector-mode)")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1e2, 1e7)
+ax.set_ylim(1e22, 1e31)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+ax.set_title("tengri in Prospector-mode vs FSPS — full panchromatic SED")
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.text(
+    0.02,
+    0.05,
+    rf"tengri/FSPS $= {norm:.2f}\times$ (16–84%: {p16:.2f}–{p84:.2f})",
+    transform=ax.transAxes,
+    fontsize=10,
+    va="bottom",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+)
+
+ax_r.axhspan(-0.25, 0.25, color="0.85", zorder=0)
+ax_r.axhline(0.0, color="0.5", linewidth=0.8)
+ax_r.axhline(norm - 1.0, color="C1", linestyle=":", linewidth=0.9)
+ax_r.plot(w_ext, resid, "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_xlim(1e2, 1e7)
+ax_r.set_ylim(-1.0, 1.0)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel(r"tengri/FSPS $-1$")
+ax_r.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("prospector_full_sed_headtohead.png")
+plt.show()
+
+
+# %% [markdown]
 # ## Summary
 #
 # Component by component, at matched parameters, FSPS-via-Prospector and
 # tengri agree wherever they evaluate the same mathematics — the SSP
 # grid, the SFH shape, the attenuation curves, the dust IR energy
 # balance, and the Madau IGM — and differ in the one place they use
-# different physics inputs, the nebular grid. The per-section scalars
-# printed above (residuals, ratios, peak locations) are the quantitative
-# record; the figures in `_figs/` are the visual one.
+# different physics inputs, the nebular grid. The full-SED head-to-head
+# collects the whole Prospector-mode forward model onto one axis with a
+# fractional-residual panel and an optical normalization ratio with its
+# 16–84 % spread. The
+# per-section scalars printed above (residuals, ratios, peak locations)
+# are the quantitative record; the figures in `_figs/` are the visual one.
 
 # %% [markdown]
 # ## References

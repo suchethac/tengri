@@ -163,7 +163,7 @@ def panel(
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel(r"$\lambda$ [Å]")
-        ax.set_ylabel(r"$\nu L_\nu$ or $L_\nu$ [erg/s/Hz]")
+        ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
     ax_left.set_title(label_l)
     ax_right.set_title(label_r)
     return ax_left, ax_right
