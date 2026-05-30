@@ -50,10 +50,18 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
     # Canonical modified-blackbody (Hildebrand 1983); da Cunha 2013 supplies
     # the CMB-heating correction applied automatically at redshift > 0.
     "modified_blackbody": ["hildebrand1983", "dacunha2013"],
+    "mbb": ["casey2012"],
     "casey2012": ["casey2012"],
     "dale2014": ["dale2014"],
     "draine_li2007": ["draine_li2007"],
+    "dl07": ["draine_li2007"],
     "draine_li2014": ["draine2014"],
+    "dl14": ["draine2014"],
+    "themis": ["jones2013", "jones2017"],
+    "astrodust": ["hensley_draine2023"],
+    "schreiber2016": ["schreiber2016"],
+    "pah_drude": ["smith2007"],
+    "bosa": ["cigale"],
     None: [],
 }
 
@@ -69,7 +77,9 @@ NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     "cue": ["cue"],
     "cloudy": ["cloudy"],
     "mappings": ["mappings"],
-    "baked_in": [],
+    # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
+    # Byler+2017 Cloudy photoionization grids.
+    "baked_in": ["byler2017", "cloudy"],
     "off": [],
     None: [],
 }
@@ -92,7 +102,9 @@ IMF_CITATIONS: dict[str, list[str]] = {
 
 # SPS code that generated the grid (first filename token).
 SSP_CODE_CITATIONS: dict[str, list[str]] = {
-    "fsps": ["fsps2009", "fsps"],  # Conroy, Gunn & White 2009 + Conroy & Gunn 2010
+    # FSPS (Conroy, Gunn & White 2009 + Conroy & Gunn 2010) generated via the
+    # python-fsps interface (Foreman-Mackey et al. 2014).
+    "fsps": ["fsps2009", "fsps", "pythonfsps"],
     "bc03": ["bc03"],
     "bpss": ["bpass"],
     "bpass": ["bpass"],

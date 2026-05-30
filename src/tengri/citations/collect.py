@@ -166,6 +166,10 @@ def _ssp_provenance_keys(ssp: Any) -> list[str]:
         imf_keys, _ = _match(IMF_CITATIONS)
         out.extend(imf_keys)
 
+    # ``wNE`` grids carry baked-in nebular emission (Byler+2017 Cloudy grids).
+    if "wne" in tokens:
+        out.extend(["byler2017", "cloudy"])
+
     # Warn when the stellar-evolution isochrone set and/or the spectral
     # (atmosphere) library cannot be inferred from the filename.
     if not iso_ok or not lib_ok:

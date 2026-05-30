@@ -66,6 +66,23 @@ def test_bpass_internal_isochrone_does_not_warn():
     assert "bpass" in keys
 
 
+def test_wne_grid_cites_byler_nebular():
+    """``wNE`` (with nebular emission) grids cite Byler+2017 + Cloudy."""
+    keys = set(_ssp_provenance_keys(_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0")))
+    assert {"byler2017", "cloudy"} <= keys
+
+
+def test_dust_emission_citations_cover_models():
+    """Every dust-emission model maps to a registered citation (THEMIS → Jones)."""
+    from tengri.citations.associations import DUST_EMISSION_CITATIONS
+    from tengri.citations.registry import REGISTRY
+
+    assert DUST_EMISSION_CITATIONS["themis"] == ["jones2013", "jones2017"]
+    for keys in DUST_EMISSION_CITATIONS.values():
+        for k in keys:
+            assert k in REGISTRY, f"dust-emission citation {k} not registered"
+
+
 def test_imf_keys_present_in_registry():
     """Chabrier / Kroupa / Salpeter IMF citations are registered."""
     from tengri.citations.registry import REGISTRY
