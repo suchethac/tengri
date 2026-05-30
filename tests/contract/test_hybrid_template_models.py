@@ -66,14 +66,19 @@ _DALE_FILE = _DATA_DIR / "dale2014_templates.h5"
 
 
 def _filter_integrate(wave_rest_aa, lnu, filter_waves, filter_trans):
-    """Integrate L_ν through each filter (rest-frame, no redshift)."""
+    """Integrate L_ν through each filter (rest-frame, no redshift).
+
+    Photon-counting Bessell convention (ADR-0017): weight ``T dλ/λ`` — must
+    match :func:`preintegrate_grid` / ``compute_flux_density``.
+    """
     out = np.empty(len(filter_waves))
     for fi, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
         lnu_on_filt = np.interp(fw_np, wave_rest_aa, lnu, left=0.0, right=0.0)
-        num = np.trapezoid(lnu_on_filt * ft_np * fw_np, fw_np)
-        denom = np.trapezoid(ft_np * fw_np, fw_np)
+        w = ft_np / np.where(fw_np > 0, fw_np, 1.0)
+        num = np.trapezoid(lnu_on_filt * w, fw_np)
+        denom = np.trapezoid(w, fw_np)
         out[fi] = num / max(denom, 1e-30)
     return out
 

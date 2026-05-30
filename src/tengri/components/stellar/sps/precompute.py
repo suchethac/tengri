@@ -36,6 +36,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import preintegrate_grid
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
@@ -465,6 +466,7 @@ def precompute_photometry_ztable(
     n_z=100,
     apply_igm=False,
     taylor_correction: bool = False,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
@@ -533,14 +535,17 @@ def precompute_photometry_ztable(
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
 
     # Precompute filter denominators and effective wavelengths (z-independent)
+    # under the bandpass weight w(λ) (ADR-0017): denom = ∫ T w dλ,
+    # λ_eff = ∫ λ T w dλ / ∫ T w dλ — must match preintegrate_grid /
+    # compute_flux_density so the LUT and exact paths agree.
     filter_denoms = []
     eff_waves_obs = []  # observed-frame effective wavelengths (z-independent)
     for fw, ft in zip(filter_waves, filter_trans):
         fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-        filter_denoms.append(_np_trapezoid(ft_np * fw_np, fw_np))
+        tw_np = ft_np * _filter_weight_np(fw_np, convention)
+        filter_denoms.append(_np_trapezoid(tw_np, fw_np))
         eff_waves_obs.append(
-            _np_trapezoid(ft_np * fw_np**2, fw_np)
-            / max(_np_trapezoid(ft_np * fw_np, fw_np), 1e-30)
+            _np_trapezoid(tw_np * fw_np, fw_np) / max(_np_trapezoid(tw_np, fw_np), 1e-30)
         )
     eff_waves_obs = np.array(eff_waves_obs)
 
@@ -561,23 +566,21 @@ def precompute_photometry_ztable(
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
             denom = filter_denoms[f_idx]
+            tw_np = ft_np * _filter_weight_np(fw_np, convention)
 
             ssp_on_filt = _vectorized_interp(fw_np, wave_obs, ssp_flux_np)
-            integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
+            integrand = ssp_on_filt * tw_np[None, None, :]
             num = _np_trapezoid(integrand, fw_np, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
             # Phase 3c-3c-v: Taylor moment Ψ at this z and filter.
-            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) λ_obs dλ_obs / ∫ T_b λ_obs dλ_obs
+            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
             # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
             if taylor_correction:
                 lambda_rest_per_obs = fw_np / (1.0 + z_val)
                 lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
                 moment_integrand = (
-                    ssp_on_filt
-                    * ft_np[None, None, :]
-                    * fw_np[None, None, :]
-                    * lambda_minus_eff[None, None, :]
+                    ssp_on_filt * tw_np[None, None, :] * lambda_minus_eff[None, None, :]
                 )
                 moment_num = _np_trapezoid(moment_integrand, fw_np, axis=-1)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)

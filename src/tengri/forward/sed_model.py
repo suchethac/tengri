@@ -74,6 +74,7 @@ from tengri.parameters.translate import (
     check_unknown_params,
     get_internal_params,
 )
+from tengri.utils.filter_convention import FilterConvention
 from tengri.utils.grid import (
     grid_spacing,
     interpolate_to_linear_time,
@@ -454,6 +455,18 @@ class SEDModel:
             self._approx["ztable"] = False
             self._approx_config: WavePrecomp | None = None
         elif isinstance(approx, WavePrecomp):
+            # The WavePrecomp LUT bakes the filter-convolution convention at
+            # build time (ADR-0017). Only the photon-counting Bessell weight is
+            # threaded through the component preintegration so far; refuse the
+            # energy convention rather than silently producing Bessell fluxes.
+            _phot = getattr(self.observation, "photometry", None)
+            _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
+            if _conv != FilterConvention.BESSELL:
+                raise NotImplementedError(
+                    f"approx=WavePrecomp(...) currently supports only the photon-counting "
+                    f"'bessell' convention, got convention={_conv!r}. Use the exact path "
+                    f"(approx=None) for the energy/CIGALE convention."
+                )
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = True
             self._approx_config = approx
@@ -2845,6 +2858,12 @@ class SEDModel:
         else:
             filter_trans_id = "none"
 
+        # Filter-convolution convention (ADR-0017). The photometry channel
+        # closes over it, so models that differ only in convention must not
+        # share a compiled observables closure.
+        _phot = getattr(self.observation, "photometry", None)
+        phot_convention = str(getattr(_phot, "convention", FilterConvention.BESSELL))
+
         # Dust configuration
         dust_model = str(self._dust_model)
         dust_scheme = str(self._dust_scheme)
@@ -2999,6 +3018,7 @@ class SEDModel:
             filter_wave_shape,
             filter_trans_dtype,
             filter_trans_id,
+            phot_convention,
             dust_model,
             dust_scheme,
             dust_emission_model,
