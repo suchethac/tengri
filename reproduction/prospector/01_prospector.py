@@ -351,21 +351,39 @@ print(
 # three Prospector / FSPS standards — Calzetti+2000 (`dust_type=2`),
 # Charlot & Fall 2000 (the power-law form, `dust_type=0`), and
 # Kriek & Conroy 2013 (`dust_type=4`) — are shown against tengri's
-# `calzetti`, `power_law`, and `kriek_conroy` laws. Each curve is
-# `A(λ)/A_V` normalised at 5500 Å. The tengri curves are derived
-# empirically by differencing attenuated and intrinsic SEDs, so they
-# carry the SSP grid's spectral structure as fine-scale noise. The
-# overall slopes track the analytic `sedpy` laws; the one visible
-# difference is the 2175 Å UV bump, which is sharper in the analytic
-# Kriek & Conroy curve than in tengri's differenced realisation at the
-# default bump strength.
+# `calzetti`, `power_law`, and `kriek_conroy` laws. Both sides evaluate
+# the analytic law directly (tengri via `tengri.dust.list_laws`),
+# normalised to `A(λ)/A_V` at 5500 Å, so the comparison is curve against
+# curve with no SSP-convolution noise in between. The slopes overlay,
+# and the Kriek & Conroy 2175 Å bump appears at the same height on both
+# sides — the bump excess above the local Calzetti baseline is printed
+# below.
 
 # %%
+from tengri.dust import list_laws
+
+# (sedpy name, tengri law name, label) for the three matched laws.
 _law_pairs = [
-    ("calzetti", "calzetti", "Calzetti+2000", {}),
-    ("powerlaw", "power_law", "Charlot & Fall 2000 (power law)", {}),
-    ("conroy", "kriek_conroy", "Kriek & Conroy 2013", {}),
+    ("calzetti", "calzetti", "Calzetti+2000"),
+    ("powerlaw", "power_law", "Charlot & Fall 2000 (power law)"),
+    ("conroy", "kriek_conroy", "Kriek & Conroy 2013"),
 ]
+_tengri_laws = list_laws(headline=False)  # {name: fn(wave_aa) -> k at tau_V=1}
+wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
+
+
+def _norm_AV(wave, A):
+    """A(λ) normalised to A_V at 5500 Å."""
+    return A / A[np.argmin(np.abs(wave - 5500.0))]
+
+
+def _bump_excess(wave, A_over_AV):
+    """2175 Å bump height above the local Calzetti baseline, in A_λ/A_V."""
+    i = np.argmin(np.abs(wave - 2175.0))
+    lo = A_over_AV[np.argmin(np.abs(wave - 1950.0))]
+    hi = A_over_AV[np.argmin(np.abs(wave - 2500.0))]
+    return float(A_over_AV[i] - 0.5 * (lo + hi))
+
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
 for ax, title in (
@@ -381,60 +399,23 @@ for ax, title in (
     ax.grid(True, alpha=0.3)
 ax_l.set_ylabel(r"$A_\lambda / A_V$")
 
-# tengri intrinsic SED, differenced against attenuated builds below.
-m_int = SEDModel.build(
-    ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
-        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
-        "log_total_mass": Fixed(0.0),
-        "*": FIXED,
-    },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    redshift=Fixed(0.0),
-)
-s_int = m_int.predict_state({})
-L_int = np.asarray(s_int.sed_intrinsic)
-wave_law = np.asarray(s_int.wave)
+for sedpy_name, tengri_law, label in _law_pairs:
+    w_p, A_p = P.attenuation_curve(sedpy_name, av=1.0)
+    A_p_norm = _norm_AV(w_p, A_p)
+    ax_l.plot(w_p, A_p_norm, linewidth=2.0, label=label)
 
-for sedpy_name, tengri_law, label, kw in _law_pairs:
-    w_p, A_p = P.attenuation_curve(sedpy_name, av=1.0, **kw)
-    A_pV = A_p[np.argmin(np.abs(w_p - 5500))]
-    if A_pV > 0:
-        ax_l.plot(w_p, A_p / A_pV, linewidth=2.0, label=label)
-    try:
-        m_att = SEDModel.build(
-            ssp_data=ssp,
-            stellar=STELLAR_FIDUCIAL,
-            sfh={
-                "type": "delayed",
-                "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
-                "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
-                "log_total_mass": Fixed(0.0),
-                "*": FIXED,
-            },
-            dust={
-                "type": "two_component",
-                "law_bc": tengri_law,
-                "law_diff": tengri_law,
-                "tau_bc": Fixed(0.4),
-                "tau_diff": Fixed(0.6),
-                "*": FIXED,
-            },
-            redshift=Fixed(0.0),
+    # tengri's law functions are JAX-native but accept array-likes; the
+    # result is wrapped back to NumPy for plotting.
+    A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
+    A_t_norm = _norm_AV(wave_law, A_t)
+    ax_r.plot(wave_law, A_t_norm, linewidth=2.0, label=label)
+
+    if tengri_law == "kriek_conroy":
+        print(
+            f"§4 Kriek & Conroy 2175 Å bump (A_λ/A_V above baseline): "
+            f"sedpy = {_bump_excess(w_p, A_p_norm):.3f}, "
+            f"tengri = {_bump_excess(wave_law, A_t_norm):.3f}"
         )
-        s_att = m_att.predict_state({})
-        L_att = np.asarray(s_att.derived["sed_dust_attenuated"])
-        with np.errstate(divide="ignore", invalid="ignore"):
-            A_t = -2.5 * np.log10(np.maximum(L_att / L_int, 1e-10))
-        A_t = np.nan_to_num(A_t, nan=0.0, posinf=0.0, neginf=0.0)
-        A_tV = A_t[np.argmin(np.abs(wave_law - 5500.0))]
-        if A_tV > 0:
-            ax_r.plot(wave_law, A_t / A_tV, linewidth=2.0, label=label)
-    except Exception as exc:
-        print(f"  skip tengri {tengri_law!r}: {exc}")
 ax_l.legend(fontsize=10)
 ax_r.legend(fontsize=10)
 fig.tight_layout()
