@@ -39,6 +39,12 @@ def base_spec():
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(5.0),
+        # Fix age_gyr (#549): otherwise it is a *free* DPL param, and the
+        # no-emission reference spec has a different free-param set, so the
+        # shared PRNGKey splits differently and age_gyr is sampled to a
+        # different value — changing the stellar SED and faking a ~4% eta=0
+        # "energy-balance" inequivalence (issue #548).
+        sfh_dpl_age_gyr=Fixed(13.0),
         sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Fixed(-0.5),
         dust_tau_bc=Fixed(0.5),
@@ -88,21 +94,25 @@ class TestEnergyBalanceEta:
         ratio = float(ir_from_eta2 / ir_from_eta1)
         np.testing.assert_allclose(ratio, 2.0, rtol=0.05)
 
-    @pytest.mark.xfail(
-        reason="modified_blackbody at eta=0 leaves a ~5% optical SED difference vs "
-        "no-emission (issue #548). Surfaced by the #514 SFH convention fix: the dpl "
-        "forward shape is byte-identical, but the corrected stellar SED pushed this "
-        "latent dust energy-balance inequivalence from <1e-5 to ~5%. Orthogonal to SFH.",
-        strict=True,
-    )
     def test_eta_0_produces_zero_ir(self, synthetic_ssp, base_spec):
-        """eta=0.0 should produce zero dust IR emission."""
-        # Build model with no dust emission as reference
+        """eta=0.0 should produce zero dust IR emission.
+
+        The reference (no-emission) spec must Fix the *same* parameters as
+        ``base_spec`` — including ``sfh_dpl_age_gyr`` (#549). The emission spec
+        carries extra free params (``dust_T``, ``dust_beta_ir``); if a shared
+        param like ``age_gyr`` is left free, the two specs split the same
+        PRNGKey differently and sample it to different values, changing the
+        stellar SED and faking a ~4% eta=0 inequivalence (issue #548 — a test
+        artifact, not an energy-balance bug; the eta=0 path is a strict no-op).
+        """
+        # Build model with no dust emission as reference — Fix the identical
+        # parameter set (incl. age_gyr) so both receive byte-identical inputs.
         spec_no_dust_em = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Fixed(1.5),
             sfh_dpl_beta=Fixed(1.0),
             sfh_dpl_tau_gyr=Fixed(5.0),
+            sfh_dpl_age_gyr=Fixed(13.0),
             sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.5),
             dust_tau_bc=Fixed(0.5),
