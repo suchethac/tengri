@@ -126,6 +126,47 @@ class TestDL07Tabulated:
             f"warm_ratio={warm_ratio:.2f}, cold_ratio={cold_ratio:.2f}"
         )
 
+    @pytest.mark.regression_paper
+    def test_gamma_pdr_luminosity_weight(self, ir_wave):
+        """PDR component carries its DL07 Eq. 33 luminosity weight, not just gamma.
+
+        ``gamma`` is a dust-*mass* fraction, but the power-law-heated PDR dust
+        emits ``R = U_max ln(U_max/U_min) / (U_max - U_min)`` times more per unit
+        mass than the diffuse component (Draine & Li 2007, Eq. 33; alpha=2,
+        U_max=1e6 → R ≈ 13.8 at U_min=1). So a 5 % *mass* fraction puts ~42 % of
+        the *luminosity* in the warm component and shifts the FIR peak markedly
+        bluer. A prior bug normalised the single-U and power-law templates each
+        to unit integral, discarding ``R`` and leaving the PDR emission ~14×
+        too weak (the IR came out spuriously cold). This pins the corrected
+        warm shift against FSPS / BAGPIPES (both land at a ~93 µm centroid).
+        """
+        from tengri.components.dust.emission import resolve_emission_model
+
+        dl07 = resolve_emission_model("draine_li2007")
+        c_aa_s = 2.998e18  # Angstrom/s
+
+        def fir_centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nu_lnu = sed[m] * (c_aa_s / w)
+            log_cen = jnp.sum(jnp.log10(w) * nu_lnu) / jnp.sum(nu_lnu)
+            return float(10.0**log_cen) / 1e4
+
+        cen_diffuse = fir_centroid_um(
+            dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        )
+        cen_pdr = fir_centroid_um(
+            dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
+        )
+        # Diffuse (gamma=0) ≈ 117 µm; with gamma=0.05 the PDR weight warms it to
+        # ≈ 93 µm. The pre-fix bug only reached ≈ 114 µm. Require a substantial
+        # shift; FSPS and BAGPIPES both warm by ~24 µm here.
+        assert cen_diffuse - cen_pdr > 15.0, (
+            f"gamma=0.05 should warm the FIR centroid by the DL07 Eq. 33 PDR "
+            f"weight: diffuse={cen_diffuse:.1f} µm, pdr={cen_pdr:.1f} µm "
+            f"(expected ~117 → ~93 µm; pre-fix bug stalled at ~114 µm)"
+        )
+
     def test_qpah_affects_mir(self, ir_wave):
         """Different q_PAH values should change the MIR (3-20 um) emission."""
         from tengri.components.dust.emission import resolve_emission_model

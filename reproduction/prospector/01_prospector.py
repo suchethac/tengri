@@ -517,12 +517,14 @@ save_fig("prospector_05_dust_applied.png")
 # `L_IR_emitted ≡ L_absorbed`, to floating point; the residual is
 # annotated on the right.
 #
-# **The bolometric IR matches by energy balance, but the spectral shape
-# differs.** At matched `(q_PAH, U_min, γ)` tengri's DL07 peaks colder and
-# is PAH-poor relative to the FSPS grid (the IR band integral is ~0.8× the
-# FSPS value, with the deficit in the mid-IR offset by a submm excess) —
-# a DL07 grid/`U_min`-scale difference, not an energy-balance failure,
-# tracked in #566.
+# At matched `(q_PAH, U_min, γ)` the DL07 IR now agrees with FSPS in shape
+# (both peak near ~130 µm at `U_min = 1`; the 30–100 µm and submm bands
+# track to ~6 %), not just bolometrically. This needed the DL07 power-law
+# (PDR) luminosity-weight fix in tengri (#566): `γ` is a dust-*mass*
+# fraction but the PDR dust emits `R = U_max ln(U_max/U_min)/(U_max −
+# U_min) ≈ 14×` more per unit mass (DL07 Eq. 33). Before the fix the warm
+# component was under-weighted and the IR came out spuriously cold; FSPS
+# and BAGPIPES both pinned the correct shift.
 
 # %%
 w_p_ir, L_p_ir = P.csp_lnu(
@@ -968,11 +970,10 @@ plt.show()
 # Component by component, at matched parameters, FSPS-via-Prospector and
 # tengri agree wherever they evaluate the same mathematics — the SSP
 # grid, the SFH shape, the attenuation curves (with the §5 single-screen
-# mapping), the dust IR *bolometric* energy balance, and the Madau IGM.
-# Two blocks use different physics inputs: the nebular grid (Cue vs
-# Byler+2017, §8) and the DL07 IR *spectral shape* (tengri's grid peaks
-# colder and is PAH-poor at matched (q_PAH, U_min, γ); the bolometric
-# L_IR still matches — §6, #566). The full-SED head-to-head
+# mapping), the DL07 dust IR (shape and energy balance, after the §6 / #566
+# PDR luminosity-weight fix), and the Madau IGM. The remaining difference
+# is the one place they use different physics inputs: the nebular grid (Cue
+# vs Byler+2017, §8). The full-SED head-to-head
 # collects the whole Prospector-mode forward model onto one axis with a
 # fractional-residual panel and an optical normalization ratio with its
 # 16–84 % spread. The

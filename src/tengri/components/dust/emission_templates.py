@@ -34,6 +34,12 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
 )
 
+# Upper bound of the U^-2 power-law radiation-field distribution used to
+# generate the DL07 power-law (PDR) templates (``scripts/convert_dl07_templates.py``
+# writes ``umax_powerlaw = 1e6``). Used to restore the PDR component's
+# relative luminosity via the DL07 Eq. 33 factor (see ``dl07_tabulated``).
+_DL07_UMAX_POWERLAW = 1.0e6
+
 # ── Template search paths (resolved once, reused for all models) ──
 
 _DATA_CANDIDATES = [
@@ -110,7 +116,14 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         """DL07 emission from tabulated templates (Draine & Li 2007).
 
         j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * powerlaw(q_PAH, U_min)
+             + gamma * R * powerlaw(q_PAH, U_min)
+
+        where ``R = U_max ln(U_max/U_min) / (U_max - U_min)`` is the DL07
+        Eq. 33 relative luminosity of the power-law (PDR) component (alpha=2,
+        U_max=1e6). The single-U and power-law templates are each
+        shape-normalised to unit wavelength integral; ``R`` restores the PDR
+        component's higher luminosity per unit dust mass, converting the
+        mass-fraction ``gamma`` into the correct luminosity weighting.
 
         Templates are in L_lambda convention (normalized to integrate to
         1 over wavelength).  This function converts to L_nu (Lsun/Hz)
@@ -161,10 +174,22 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
-        # Mix single-U and power-law components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
+        # Mix single-U (diffuse) and power-law (PDR) components.
+        #
+        # ``dust_gamma_dl`` is the *dust-mass* fraction in the power-law-heated
+        # PDR, but the templates are each shape-normalised (unit integral), which
+        # discards the PDR component's higher luminosity per unit mass. PDR dust
+        # is heated by U from U_min to U_max, so it emits a factor
+        #   R = <U>_pl / U_min = U_max * ln(U_max/U_min) / (U_max - U_min)
+        # more than the diffuse component (Draine & Li 2007, Eq. 33, alpha=2).
+        # Restoring R converts the mass fraction into the correct luminosity
+        # weighting; without it the PDR (warm) emission is under-represented by
+        # ~14x at U_min=1 and the IR SED comes out spuriously cold.
+        umax = _DL07_UMAX_POWERLAW
+        r_power = umax * jnp.log(umax / dust_umin_c) / (umax - dust_umin_c)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+            dust_gamma_dl * r_power
+        ) * _bilinear(powerlaw)
 
         # Interpolate template onto target wavelength grid
         # Template is in L_lambda space (integral over wavelength = 1)
