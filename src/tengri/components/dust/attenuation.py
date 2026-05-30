@@ -581,7 +581,8 @@ def kriek_conroy(
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
     dust_bump_strength : float
-        Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 1.0 (no bump).
+        Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 1.0
+        (full Kriek & Conroy bump; set to 0.0 for no bump).
     dust_delta : float
         Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti).
 
