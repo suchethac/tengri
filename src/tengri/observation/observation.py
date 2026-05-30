@@ -17,6 +17,7 @@ import dataclasses
 import jax.numpy as jnp
 
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.photometry_config import Photometry
 from tengri.observation.spectral_indices import SpectralIndexData
@@ -94,6 +95,7 @@ class Observation:
     noise: NoiseModel | None = None
     line_fluxes: LineFluxData | None = None
     spectral_indices: SpectralIndexData | None = None
+    line_ratios: LineRatioData | None = None
 
     def __post_init__(self):
         if (
@@ -101,10 +103,11 @@ class Observation:
             and self.spectroscopy is None
             and self.line_fluxes is None
             and self.spectral_indices is None
+            and self.line_ratios is None
         ):
             raise ValueError(
-                "Observation requires at least one of "
-                "photometry, spectroscopy, line_fluxes, or spectral_indices."
+                "Observation requires at least one of photometry, spectroscopy, "
+                "line_fluxes, line_ratios, or spectral_indices."
             )
 
     # ── Capability queries ────────────────────────────────────────
@@ -176,6 +179,17 @@ class Observation:
 
         """
         return self.spectral_indices is not None
+
+    @property
+    def has_line_ratios(self) -> bool:
+        """Whether observed emission line ratios are configured.
+
+        Returns
+        -------
+        bool
+            True if line ratio data is configured.
+        """
+        return self.line_ratios is not None
 
     @property
     def is_joint(self) -> bool:
@@ -287,14 +301,22 @@ class Observation:
         return self.spectral_indices.n_indices if self.spectral_indices else 0
 
     @property
+    def n_data_ratios(self) -> int:
+        """Number of emission line ratio data points.
+
+        Returns 0 safely if no line ratio data is configured.
+        """
+        return self.line_ratios.n_ratios if self.line_ratios else 0
+
+    @property
     def n_data(self) -> int:
         """Total number of data points.
 
         Returns
         -------
         int
-            Sum of all photometric, spectroscopic, line flux, and
-            spectral index data points.
+            Sum of all photometric, spectroscopic, line flux, line ratio,
+            and spectral index data points.
 
         Notes
         -----
@@ -302,7 +324,13 @@ class Observation:
         data dimensionality checks and prior/posterior shape validation.
 
         """
-        return self.n_data_phot + self.n_data_spec + self.n_data_lines + self.n_data_indices
+        return (
+            self.n_data_phot
+            + self.n_data_spec
+            + self.n_data_lines
+            + self.n_data_indices
+            + self.n_data_ratios
+        )
 
     # ── Data packing / unpacking ──────────────────────────────────
 
@@ -663,15 +691,13 @@ class Observation:
                 )
             out["spec_fnu"] = flux
 
-        # Phase 2: if observables_type is provided, populate and return NamedTuple
+        # Phase 2: if observables_type is provided, populate and return NamedTuple.
+        # Line fluxes / line ratios / spectral indices are NOT projection
+        # observables — they are scalar measurables computed separately
+        # (predict_line_fluxes / predict_line_ratios / predict_spectral_indices)
+        # and composed into the likelihood via the prediction dict, so their
+        # presence on the Observation no longer blocks the projection here.
         if observables_type is not None:
-            if self.has_line_fluxes or self.has_spectral_indices:
-                raise NotImplementedError(
-                    "observables_type (Phase 2) does not yet support line_fluxes or "
-                    "spectral_indices. This is Phase 3+ territory. Use the dict-returning "
-                    "path (observables_type=None) for now."
-                )
-
             # Compute phot_rest_fnu: rest-frame photometry at z=0, d_L=10pc
             phot_rest = None
             if self.can_do_photometry:
@@ -932,10 +958,44 @@ class Observation:
                 "in state.derived. Build the model with approx=SpectrumPrecomp()."
             )
 
-        # Sum all per-pixel spectrum LUT contributions — rest-frame Lν at the source's z.
+        # Sum all per-pixel emitter contributions — rest-frame Lν at the
+        # source's z. Emitters (stellar, nebular continuum, AGN) publish
+        # ``*_spec_lnu_precomp``; the dust component publishes per-pixel
+        # *transmission* (not an Lν), applied below.
         total_spec_lnu = precomp_contribs[0]
         for c in precomp_contribs[1:]:
             total_spec_lnu = total_spec_lnu + c
+
+        # ── Dust attenuation on the pixel grid ──────────────────────────
+        # A spectrum pixel is a single wavelength, so transmission T(λ_pix)
+        # is exact — no Taylor moment (contrast predict_via_precomp). Dust
+        # attenuates the stellar + nebular-continuum bucket; AGN carries its
+        # own attenuation and is added unattenuated.
+        stellar_phi = state.derived.get("stellar_spec_lnu_precomp")
+        stellar_phi = stellar_phi if stellar_phi is not None else jnp.zeros_like(total_spec_lnu)
+        nebular_phi = state.derived.get("nebular_spec_lnu_precomp")
+        nebular_phi = nebular_phi if nebular_phi is not None else jnp.zeros_like(total_spec_lnu)
+        dust_attenuable = stellar_phi + nebular_phi
+        unattenuated = total_spec_lnu - dust_attenuable
+
+        t_bc = state.derived.get("dust_spec_bc_transmission_precomp")
+        t_diff = state.derived.get("dust_spec_diff_transmission_precomp")
+        t_single = state.derived.get("dust_spec_transmission_precomp")
+        per_age = state.derived.get("stellar_spec_lnu_per_age_precomp")
+
+        if t_bc is not None and t_diff is not None and per_age is not None:
+            # Two-component (Charlot & Fall): T(a, λ) = T_diff(λ)·T_bc(λ)^y(a).
+            y_age = state.derived["dust_young_indicator"]
+            atten_bc_per_age = t_bc[None, :] ** y_age[:, None]  # (n_age, n_pix)
+            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * t_diff
+            # Nebular continuum is not age-resolved → diffuse-only (same
+            # approximation as the photometry path).
+            nebular_attenuated = t_diff * nebular_phi
+            total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
+        elif t_single is not None:
+            # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
+            total_spec_lnu = dust_attenuable * t_single + unattenuated
+        # else: no dust LUT published — leave total_spec_lnu unattenuated.
 
         # Apply cosmology: observed F_ν = L_ν / (4π·d_L²) × (1 + z)
         z = jnp.asarray(params.get("redshift", 0.0))
@@ -952,7 +1012,11 @@ class Observation:
         out = {"spec_fnu": spec_fnu, "spec_rest_fnu": spec_rest_fnu}
 
         if observables_type is not None:
-            return observables_type(spec_fnu=spec_fnu, spec_rest_fnu=spec_rest_fnu)
+            # Only populate fields the per-model Observables NamedTuple
+            # actually declares (it carries spec_fnu but not necessarily
+            # spec_rest_fnu, and may also carry phot_* for joint models).
+            avail = {k: v for k, v in out.items() if k in observables_type._fields}
+            return observables_type(**avail)
         return out
 
     # ── Display ───────────────────────────────────────────────────

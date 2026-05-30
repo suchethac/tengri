@@ -8,7 +8,6 @@ functions and estimates their sizes.
 from __future__ import annotations
 
 import ast
-import os
 import re
 import sys
 from pathlib import Path
@@ -33,7 +32,7 @@ def _parse_file(filepath: str) -> list[ConstantInfo]:
     results = []
 
     try:
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             content = f.read()
     except Exception:
         return results

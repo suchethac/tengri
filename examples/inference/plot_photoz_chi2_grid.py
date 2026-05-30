@@ -13,13 +13,15 @@ Reference: Bolzonella et al. 2000, A&A, 363, 476 (HYPERZ photometric
 redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Rectangle
 
 import tengri
 from tengri.analysis.plotting import setup_style
@@ -33,20 +35,40 @@ warnings.filterwarnings("ignore", message=".*FutureWarning.*")
 # We use a basic star-forming template: truncated-skew-normal SFH + Calzetti
 # dust attenuation. Redshift and stellar mass are the free parameters on the grid.
 
-BANDS = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
-         "vista_y", "vista_j", "vista_h", "vista_k"]
+BANDS = [
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "vista_y",
+    "vista_j",
+    "vista_h",
+    "vista_ks",
+]
 
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 # Template: star-forming with age ~2 Gyr, modest dust.
 model_template = tengri.SEDModel.build(
-    tengri.load_ssp(),
+    tengri.load_ssp("fsps_prsc_miles_chabrier"),
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-         "log_peak_sfr": 1.0, "skew": 0.3, "trunc": 10.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.3, "tau_bc": 0.1, "slope": -0.7},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 3.0,
+        "width_gyr": 2.0,
+        "log_total_mass": 10.0,
+        "skew": 0.3,
+        "trunc": 10.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": 0.3,
+        "tau_bc": 0.1,
+        "slope": -0.7,
+    },
     neb={"type": "cue", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.0),  # will vary on grid
 )
@@ -61,7 +83,7 @@ truth_params = dict(model_template.spec.sample(key))
 truth_params.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
-    sfh_tsnorm_log_peak_sfr=1.0,
+    sfh_tsnorm_log_total_mass=10.0,
     sfh_tsnorm_skew=0.3,
     sfh_tsnorm_trunc=10.0,
     dust_tau_diff=0.3,
@@ -69,19 +91,30 @@ truth_params.update(
     dust_slope=-0.7,
     neb_logU=-3.0,
     neb_logZ_gas=0.0,
-    log_mstar=log_mstar_true,
+    sfh_dpl_log_peak_sfr=log_mstar_true,
     redshift=z_true,
 )
 
 # Create a model at truth z to generate mock data.
 model_truth = tengri.SEDModel.build(
-    tengri.load_ssp(),
+    tengri.load_ssp("fsps_prsc_miles_chabrier"),
     observation=obs,
-    sfh={"type": "tsnorm", "*": tengri.FIXED,
-         "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-         "log_peak_sfr": 1.0, "skew": 0.3, "trunc": 10.0},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.3, "tau_bc": 0.1, "slope": -0.7},
+    sfh={
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 3.0,
+        "width_gyr": 2.0,
+        "log_total_mass": 10.0,
+        "skew": 0.3,
+        "trunc": 10.0,
+    },
+    dust={
+        "type": "two_component",
+        "*": tengri.FIXED,
+        "tau_diff": 0.3,
+        "tau_bc": 0.1,
+        "slope": -0.7,
+    },
     neb={"type": "cue", "*": tengri.FIXED},
     redshift=tengri.Fixed(z_true),
 )
@@ -99,26 +132,39 @@ z_grid = np.linspace(0.5, 5.0, 65)
 log_mstar_grid = np.linspace(9.0, 11.5, 65)
 chi2_grid = np.zeros((z_grid.size, log_mstar_grid.size))
 
-print(f"Computing χ² grid ({z_grid.size} × {log_mstar_grid.size} = {z_grid.size * log_mstar_grid.size} models)...")
+print(
+    f"Computing χ² grid ({z_grid.size} × {log_mstar_grid.size} = {z_grid.size * log_mstar_grid.size} models)..."
+)
 
 for i, z in enumerate(z_grid):
     for j, log_mstar in enumerate(log_mstar_grid):
         # Build model at this redshift.
         model_z = tengri.SEDModel.build(
-            tengri.load_ssp(),
+            tengri.load_ssp("fsps_prsc_miles_chabrier"),
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "peak_lbt_gyr": 3.0, "width_gyr": 2.0,
-                 "log_peak_sfr": 1.0, "skew": 0.3, "trunc": 10.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 0.3, "tau_bc": 0.1, "slope": -0.7},
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "peak_lbt_gyr": 3.0,
+                "width_gyr": 2.0,
+                "log_total_mass": 10.0,
+                "skew": 0.3,
+                "trunc": 10.0,
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": 0.3,
+                "tau_bc": 0.1,
+                "slope": -0.7,
+            },
             neb={"type": "cue", "*": tengri.FIXED},
             redshift=tengri.Fixed(z),
         )
 
         # Predict photometry at this stellar mass.
         grid_params = dict(truth_params)
-        grid_params["log_mstar"] = log_mstar
+        grid_params["sfh_dpl_log_peak_sfr"] = log_mstar
         flux_pred = np.asarray(model_z.predict_photometry(grid_params))
 
         # Compute χ².
@@ -137,7 +183,9 @@ chi2_norm = chi2_grid - chi2_min
 
 # Heatmap: log scale to show structure across orders of magnitude.
 im = ax.contourf(
-    log_mstar_grid, z_grid, chi2_norm,
+    log_mstar_grid,
+    z_grid,
+    chi2_norm,
     levels=np.logspace(-1, 3, 30),
     norm=plt.matplotlib.colors.LogNorm(vmin=0.5, vmax=500),
     cmap="viridis",
@@ -146,7 +194,9 @@ im = ax.contourf(
 # Contours at 1σ, 2σ, 3σ (Δχ² = 2.28, 6.18, 11.83 for 2 DoF).
 sigma_levels = [2.28, 6.18, 11.83]
 cs = ax.contour(
-    log_mstar_grid, z_grid, chi2_norm,
+    log_mstar_grid,
+    z_grid,
+    chi2_norm,
     levels=sigma_levels,
     colors="white",
     linewidths=0.8,
@@ -157,12 +207,18 @@ cs = ax.contour(
 ax.clabel(cs, inline=True, fontsize=7, fmt=r"$%g\sigma$")
 
 # Mark true (z, M*).
-ax.plot(log_mstar_true, z_true, "r*", markersize=18, markeredgecolor="white",
-        markeredgewidth=0.8, label=f"True: z={z_true}, M*=10$^{{{log_mstar_true:.1f}}}$ M$_\\odot$")
+ax.plot(
+    log_mstar_true,
+    z_true,
+    "r*",
+    markersize=18,
+    markeredgecolor="white",
+    markeredgewidth=0.8,
+    label=f"True: z={z_true}, M*=10$^{{{log_mstar_true:.1f}}}$ M$_\\odot$",
+)
 
 # Colorbar.
-cbar = fig.colorbar(im, ax=ax, label=r"$\Delta\chi^2$ (relative to minimum)",
-                   pad=0.01)
+cbar = fig.colorbar(im, ax=ax, label=r"$\Delta\chi^2$ (relative to minimum)", pad=0.01)
 
 ax.set_xlabel(r"$\log_{10}(M_* / M_\odot)$")
 ax.set_ylabel(r"Redshift $z$")

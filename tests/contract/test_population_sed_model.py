@@ -87,13 +87,13 @@ def test_parameter_axes_partitions_shared_and_per_galaxy() -> None:
             "sfh_field_psd_sigma": 1.0,
             "sfh_field_psd_tau_myr": 50.0,
             "sfh_dpl_alpha": jnp.zeros(3),
-            "sfh_dpl_log_peak_sfr": jnp.zeros(3),
+            "sfh_dpl_log_total_mass": jnp.zeros(3),
         }
     )
     assert axes["sfh_field_psd_sigma"] is None
     assert axes["sfh_field_psd_tau_myr"] is None
     assert axes["sfh_dpl_alpha"] == 0
-    assert axes["sfh_dpl_log_peak_sfr"] == 0
+    assert axes["sfh_dpl_log_total_mass"] == 0
 
 
 # ── Forward-time batched ``.run`` path (issue #211 final item) ──────
@@ -108,7 +108,7 @@ def _real_template(synthetic_ssp, simple_observation):
         observation=simple_observation,
         # Keep the SFH simple but with one free per-galaxy parameter so
         # we can verify the vmap actually fans out across galaxies.
-        sfh={"type": "dpl", "*": FIXED, "log_peak_sfr": Uniform(-1.0, 3.0)},
+        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=0.05,

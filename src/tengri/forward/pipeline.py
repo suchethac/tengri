@@ -165,10 +165,35 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
         # which equals ``_n_grid`` here, so reuse directly.
         _sfr_orch_grid = sfr
     else:
-        _kw = {k: v for k, v in p.items() if k in model._sfh_internal_names}
+        # Include both internal and public SFH names so the composer
+        # can dispatch per-component without colliding on shared internal
+        # kwargs (e.g. ``log_total_mass``). See #372.
+        _sfh_public_names = getattr(model, "_sfh_public_names", set())
+        _kw = {
+            k: v for k, v in p.items() if k in model._sfh_internal_names or k in _sfh_public_names
+        }
         _sfr_orch_grid = model._sfh_fn(sfh_lbt_grid_orch, **_kw)
 
-    _sfr_on_ssp_orch = jnp.interp(model.ssp_ages_yr, sfh_lbt_grid_orch, _sfr_orch_grid)
+    # Resample to the SSP age grid. For deterministic (non-GP) parametric
+    # SFHs, evaluate the analytic shape on ``model.ssp_ages_yr`` directly.
+    # The SSP grid is linear-spaced at 1 Myr cadence (13700 bins), so
+    # SF-onset cutoffs land on grid points instead of being smeared across
+    # the coarser log-spaced lookback grid by ``jnp.interp``. The closed
+    # form also self-normalises through ``_renormalize_to_mass``, so total
+    # mass = 10**log_total_mass exactly. See suchethac/tengri#385.
+    #
+    # Stochastic / GP-field SFHs keep the log-grid + interp path: the GP
+    # draw is built on the n_grid log grid by ``compute_field_gp`` and the
+    # kernel's correlation structure can't be transferred to the SSP grid
+    # without rebuilding it.
+    if model.uses_stochastic_sfh:
+        _sfr_on_ssp_orch = jnp.interp(model.ssp_ages_yr, sfh_lbt_grid_orch, _sfr_orch_grid)
+    else:
+        _sfh_public_names = getattr(model, "_sfh_public_names", set())
+        _kw = {
+            k: v for k, v in p.items() if k in model._sfh_internal_names or k in _sfh_public_names
+        }
+        _sfr_on_ssp_orch = model._sfh_fn(model.ssp_ages_yr, **_kw)
 
     _ssp_age_gyr = model.ssp_ages_yr / 1e9
     _T_TABLE_MIN = 0.01

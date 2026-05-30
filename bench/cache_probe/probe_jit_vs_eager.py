@@ -7,15 +7,14 @@ Set JAX_LOG_COMPILES=1 in the environment when running; this file just measures.
 
 from __future__ import annotations
 
-import os
 import sys
 import time
 
 # Use lower threshold so micro-kernels also persist.
 # (Comment this out to see default behaviour.)
 # os.environ.setdefault("TENGRI_JAX_MIN_COMPILE_S", "0.0")  # not yet wired
-
 import jax
+
 import tengri
 
 SSP_PATH = (

@@ -16,11 +16,14 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
 (α_OX–L_UV relation); Tananbaum 1979, ApJ, 234, L9 (definition of α_OX).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
 import jax.numpy as jnp
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -35,7 +38,7 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_peak_sfr": 0.5},
+    sfh={"type": "dpl", "*": tengri.FIXED, "tau_gyr": 3.0, "log_total_mass": 10.0},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05},
     agn={
         "type": "composable",
@@ -59,6 +62,7 @@ lambda_xray_rest = 2.0 * 2.418e-8 * 1e10  # 2 keV in Å (λ = hc/E)
 c_angstrom_per_s = 2.998e18  # c in Å/s
 nu_uv = c_angstrom_per_s / lambda_uv_rest
 nu_xray = c_angstrom_per_s / lambda_xray_rest
+
 
 # Lusso & Risaliti 2016 fit (Eq. 1)
 def lusso_risaliti_fit(log_l_2500):

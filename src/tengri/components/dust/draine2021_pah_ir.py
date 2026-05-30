@@ -129,7 +129,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     config: Draine2021PAHIRConfig = Draine2021PAHIRConfig()
 
     # Free parameters — auto-discovered by base class
-    lgU = Uniform(0.0, 7.0, description="log10(U), starlight intensity", units="dex")
+    lgU = Uniform(0.0, 7.0, default=1.0, description="log10(U), starlight intensity", units="dex")
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}

@@ -69,13 +69,33 @@ class RadioDPL(SEDModelComponent):
 
     # AGN power-law trunk
     alpha_thin = Uniform(
-        -1.5, 0.0, description="thin (high-ν) spectral index", units="dimensionless"
+        -1.5,
+        0.0,
+        description="thin (high-ν) spectral index",
+        units="dimensionless",
+        default=-0.1,
     )
     alpha_thick = Uniform(
-        -0.5, 1.0, description="thick (low-ν) spectral index", units="dimensionless"
+        -0.5,
+        1.0,
+        description="thick (low-ν) spectral index",
+        units="dimensionless",
+        default=0.0,
     )
-    log_nu_t = Uniform(8.0, 11.0, description="log break frequency", units="dex (Hz)")
-    log_nu_cut = Uniform(11.0, 14.0, description="log aging-cutoff frequency", units="dex (Hz)")
+    log_nu_t = Uniform(
+        8.0,
+        11.0,
+        description="log break frequency",
+        units="dex (Hz)",
+        default=9.5,
+    )
+    log_nu_cut = Uniform(
+        11.0,
+        14.0,
+        description="log aging-cutoff frequency",
+        units="dex (Hz)",
+        default=12.5,
+    )
     loudness = Fixed(
         0.0,
         description="AGN radio-loudness log10(L_5GHz/L_B)",

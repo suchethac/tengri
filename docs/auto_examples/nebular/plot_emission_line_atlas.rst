@@ -37,10 +37,28 @@ the strongest visible emission features. Issue #277 means Cue cannot
 be combined with a Photometry/Spectroscopy observation, so this card
 runs in rest-frame-only mode (which is all the atlas needs anyway).
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-98
+.. GENERATED FROM PYTHON SOURCE LINES 16-105
 
+<<<<<<< HEAD
+=======
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
+   :alt: plot emission line atlas
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+>>>>>>> origin/main
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,17 +76,22 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
 
     model = tengri.SEDModel.build(
         tengri.load_ssp("fsps_prsc_miles_chabrier"),
-        sfh={"type": "dpl", "*": tengri.FIXED,
-             "tau_gyr": 0.03, "log_peak_sfr": 1.5, "alpha": 4.0, "beta": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.05, "tau_bc": 0.1},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "tau_gyr": 0.03,
+            "log_total_mass": 10.0,
+            "alpha": 4.0,
+            "beta": 2.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
         neb={"type": "cue", "*": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict_rest_sed(p)
     wave = np.asarray(out.wavelength)
-    f_lam = np.asarray(out.sed) * C_AA_PER_S / wave**2     # F_λ shape proxy
+    f_lam = np.asarray(out.sed) * C_AA_PER_S / wave**2  # F_λ shape proxy
 
     LINES_UV = [
         (1215.67, "Ly$\\alpha$"),
@@ -101,11 +124,9 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
         (6730.82, "[S II]"),
     ]
 
-    fig, (ax_uv, ax_opt) = plt.subplots(2, 1, figsize=(9.5, 5.6),
-                                        gridspec_kw={"hspace": 0.3})
+    fig, (ax_uv, ax_opt) = plt.subplots(2, 1, figsize=(9.5, 5.6), gridspec_kw={"hspace": 0.3})
 
-    for ax, lines, lo, hi in [(ax_uv, LINES_UV, 1100, 3000),
-                              (ax_opt, LINES_OPT, 3200, 6900)]:
+    for ax, lines, lo, hi in [(ax_uv, LINES_UV, 1100, 3000), (ax_opt, LINES_OPT, 3200, 6900)]:
         vis = (wave > lo) & (wave < hi)
         ax.semilogy(wave[vis], f_lam[vis], color="0.15", lw=0.7)
         ymin = float(np.percentile(f_lam[vis][f_lam[vis] > 0], 20))
@@ -114,13 +135,13 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
         for lam, name in lines:
             if lo < lam < hi:
                 ax.axvline(lam, color="0.65", lw=0.35, alpha=0.6)
-                ax.text(lam, ymax * 0.95, name, fontsize=7, color="0.35",
-                        rotation=90, ha="right", va="top")
+                ax.text(
+                    lam, ymax * 0.95, name, fontsize=7, color="0.35", rotation=90, ha="right", va="top"
+                )
         ax.set_xlim(lo, hi)
 
     ax_uv.set_ylabel(r"$F_\lambda$ [arbitrary]")
-    ax_opt.set(xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]",
-               ylabel=r"$F_\lambda$ [arbitrary]")
+    ax_opt.set(xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]", ylabel=r"$F_\lambda$ [arbitrary]")
 
     plt.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")
 

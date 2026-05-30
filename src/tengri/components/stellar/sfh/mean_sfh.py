@@ -17,7 +17,7 @@ Canonical names (short name alias in parentheses):
 - **skewnormal** (snorm): ``truncated_skewnormal`` without truncation (4 params).
 - **gaussian** (norm): ``skewnormal`` with skew=0 (3 params).
 - **lognormal** (lnorm): Gaussian in log10(age) space (3 params).
-- **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_peak_sfr (4 params).
+- **dpl** (canonical): Carnall+2018 BAGPIPES parameterization with log_total_mass (4 params).
 - **double_powerlaw**: Low-level implementation used by ``dpl``.
 - **constant** (const): flat SFR between start and end times (3 params).
 - **exponential** (exp): declining exponential from start (3 params).
@@ -49,6 +49,42 @@ _INV_SQRT2 = 1.0 / jnp.sqrt(2.0)
 
 
 # ── Shared helpers ────────────────────────────────────────────────
+
+
+def _renormalize_to_mass(
+    shape: jnp.ndarray, t_lookback: jnp.ndarray, log_total_mass: float
+) -> jnp.ndarray:
+    """Rescale an unnormalized SFH shape to total stellar mass formed.
+
+    Implements the Bagpipes / Prospector convention: every parametric SFH
+    returns a dimensionless shape that is rescaled so that
+    ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
+
+    Parameters
+    ----------
+    shape : array_like, shape (n_age,)
+        Unnormalized SFR shape [arbitrary units], non-negative.
+    t_lookback : array_like, shape (n_age,)
+        Lookback time grid [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR [Msun/yr] such that ``trapezoid(out, t_lookback) = 10**log_total_mass``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp.trapezoid`` and elementwise ops.
+
+    The mass integral uses :func:`jax.numpy.trapezoid` over ``t_lookback`` so
+    the rescaling is exact at the resolution of the input grid. A 1e-30 floor
+    on ``mass_norm`` prevents division-by-zero for degenerate (all-zero)
+    shapes without changing the answer when the shape is non-trivial.
+    """
+    mass_norm = jnp.trapezoid(shape, t_lookback)
+    return shape * (10.0**log_total_mass) / jnp.maximum(mass_norm, 1e-30)
 
 
 def _clamp_age(t_lookback: jnp.ndarray) -> jnp.ndarray:
@@ -103,7 +139,7 @@ def _skewed_gaussian_kernel(
 
 def truncated_skewnormal(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     peak_lbt: float,
     width: float,
     skew: float,
@@ -119,12 +155,21 @@ def truncated_skewnormal(
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     peak_lbt : float
         Peak lookback time [yr].
     width : float
-        Gaussian width parameter [yr].
+        Gaussian width parameter [yr]. **SSP grid aliasing**: the forward
+        model interpolates ``SFR(t)`` at SSP grid points (a point-sample,
+        not a bin-integral), so a ``width`` narrower than the local SSP
+        grid spacing at the burst peak produces a non-physical staircase
+        as the peak crosses adjacent grid boundaries. Rough minimum:
+        ``width ≳ 0.3 Gyr`` at peaks < 2 Gyr, ``≳ 0.6 Gyr`` past 5 Gyr.
+        See issue #299. ``SEDModel.build`` emits a
+        :class:`SFHBurstAliasingWarning` when the chosen ``width`` is
+        too narrow for the SSP grid.
     skew : float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
     trunc : float
@@ -134,7 +179,8 @@ def truncated_skewnormal(
     Returns
     -------
     ndarray, shape (n_age,)
-        SFR at each lookback time [Msun/yr], non-negative.
+        SFR at each lookback time [Msun/yr], non-negative, integrating to
+        ``10**log_total_mass`` over the input grid.
 
     Notes
     -----
@@ -143,14 +189,15 @@ def truncated_skewnormal(
     **Gradient-safe**: yes — differentiable everywhere except at SFR=0
     (where gradient is ill-defined but finite).
 
-    The SFH is:
+    The SFH shape is:
 
     .. math::
 
-        \\mathrm{SFR}(t) = 10^{\\log_{\\rm peak}} \\, K(t) \\, T(t)
+        S(t) = K(t) \\, T(t)
 
-    where :math:`K(t)` is the skewed Gaussian kernel and :math:`T(t)` is the
-    truncation factor:
+    rescaled by :math:`10^{\\log M_{\\rm tot}} / \\int S(t)\\,dt` so the total
+    stellar mass formed equals :math:`10^{\\log M_{\\rm tot}}`. :math:`K(t)`
+    is the skewed Gaussian kernel and :math:`T(t)` is the truncation factor:
 
     .. math::
 
@@ -185,21 +232,20 @@ def truncated_skewnormal(
     >>> from tengri.components.stellar.sfh import truncated_skewnormal
     >>> t = jnp.linspace(0.0, 13.7e9, 100)
     >>> sfr = truncated_skewnormal(
-    ...     t, log_peak_sfr=1.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=5.0
+    ...     t, log_total_mass=10.0, peak_lbt=5e9, width=2e9, skew=0.0, trunc=5.0
     ... )
     >>> sfr.shape
     (100,)
     """
     age = _clamp_age(t_lookback)
-    peak_sfr = 10.0**log_peak_sfr
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
     # Truncation: 1 - Phi(x) = 0.5 * erfc(x / sqrt(2))
     # Using jax.lax.erfc directly avoids scipy.stats dispatch overhead,
     # producing a simpler XLA graph (~6x faster CDF inside fused kernels).
     x = (age - peak_lbt) / (width * trunc)
     trunc_factor = 0.5 * jax.lax.erfc(x * _INV_SQRT2)
-    sfr = peak_sfr * kernel * trunc_factor
-    return jnp.maximum(sfr, 0.0)
+    shape = jnp.maximum(kernel * trunc_factor, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 # Short alias registered in SFH_REGISTRY
@@ -208,7 +254,7 @@ tsnorm = truncated_skewnormal
 
 def skewnormal(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     peak_lbt: float,
     width: float,
     skew: float,
@@ -221,8 +267,9 @@ def skewnormal(
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     peak_lbt : float
         Peak lookback time [yr].
     width : float
@@ -244,14 +291,14 @@ def skewnormal(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import skewnormal
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = skewnormal(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9, skew=1.0)
+    >>> sfr = skewnormal(t, log_total_mass=10.0, peak_lbt=3e9, width=1e9, skew=1.0)
     >>> sfr.shape
     (64,)
     """
     age = _clamp_age(t_lookback)
-    peak_sfr = 10.0**log_peak_sfr
     kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
-    return jnp.maximum(peak_sfr * kernel, 0.0)
+    shape = jnp.maximum(kernel, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 # Short alias registered in SFH_REGISTRY
@@ -260,7 +307,7 @@ snorm = skewnormal
 
 def gaussian(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     peak_lbt: float,
     width: float,
 ) -> jnp.ndarray:
@@ -270,8 +317,9 @@ def gaussian(
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     peak_lbt : float
         Peak lookback time [yr].
     width : float
@@ -291,11 +339,11 @@ def gaussian(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import gaussian
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = gaussian(t, log_peak_sfr=1.5, peak_lbt=3e9, width=1e9)
+    >>> sfr = gaussian(t, log_total_mass=10.0, peak_lbt=3e9, width=1e9)
     >>> sfr.shape
     (64,)
     """
-    return skewnormal(t_lookback, log_peak_sfr, peak_lbt, width, skew=0.0)
+    return skewnormal(t_lookback, log_total_mass, peak_lbt, width, skew=0.0)
 
 
 # Short alias registered in SFH_REGISTRY
@@ -304,27 +352,53 @@ norm = gaussian
 
 def lognormal(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
-    peak_lbt: float,
+    log_total_mass: float,
+    peak: float,
     width: float,
+    age: float,
 ) -> jnp.ndarray:
-    """Log-normal SFH — Gaussian in log10(age) space.
+    r"""Log-normal SFH peaked in cosmic time since formation.
 
-    The mode in log10(age) space is peak_lbt, but the peak in linear
-    time is shifted: t_peak_linear = peak_lbt * 10^{-w^2 * ln(10)}.
-    For w=0.3, this is a ~15% shift toward younger ages. peak_lbt is
-    best interpreted as the median lookback time, not the linear peak.
+    .. math::
+
+       \mathrm{SFR}(T) \propto
+       \exp\!\Bigl[-\tfrac{1}{2}\bigl(\log_{10} T - \log_{10} T_{\rm peak}\bigr)^2 / w^2\Bigr],
+       \quad T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
+
+    where :math:`T` is **cosmic time since galaxy formation**,
+    :math:`t_{\mathrm{lb}}` is lookback time, :math:`T_{\rm peak}` is
+    ``peak`` and :math:`w` is ``width``. Rescaled so the integrated mass
+    equals ``10**log_total_mass``.
+
+    **Convention.** With ``age`` set to the age of the universe at the
+    source redshift, the peak sits at cosmic time ``peak`` after the Big
+    Bang — the same direction as Carnall+2018 / BAGPIPES ``lognormal``.
+    The time variable handed in is always lookback time; the cosmic-time
+    conversion ``T = age - t_lookback`` happens here. Resolves the
+    time-reversal of #514.
+
+    .. note::
+       This is a log10-space Gaussian, not the exact 1/T ln-space
+       lognormal of Carnall+2018 (which carries a ``1/T`` Jacobian and
+       solves ``(t0, sigma)`` from ``(tmax, fwhm)``). Peak *location* and
+       direction now match; the detailed wing shape differs. See the
+       follow-up issue for full Carnall lognormal parity.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR [Msun/yr].
-    peak_lbt : float
-        Peak lookback time [yr]. Converted to log10 internally.
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled so
+        that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
+    peak : float
+        Peak location in cosmic time since formation [yr].
     width : float
-        Width in log10(age) space [dex].
+        Width in log10(T) space [dex].
+    age : float
+        Cosmic time available for star formation [yr] = lookback time of
+        formation. Set to ``age_of_universe(z)`` for BAGPIPES direction.
+        SFR is zero before formation (``t_lookback > age``).
 
     Returns
     -------
@@ -340,16 +414,18 @@ def lognormal(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import lognormal
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = lognormal(t, log_peak_sfr=1.5, peak_lbt=3e9, width=0.3)
+    >>> sfr = lognormal(t, log_total_mass=10.0, peak=3e9, width=0.3, age=13.6e9)
     >>> sfr.shape
     (64,)
     """
-    age = _clamp_age(t_lookback)
-    peak_sfr = 10.0**log_peak_sfr
-    log_age = jnp.log10(age)
-    log_peak = jnp.log10(jnp.maximum(peak_lbt, 1e5))
-    exponent = -0.5 * ((log_age - log_peak) / width) ** 2
-    return jnp.maximum(peak_sfr * jnp.exp(exponent), 0.0)
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    T = age - t_lookback
+    T_pos = jnp.where(T > 0.0, T, 1e5)
+    log_T = jnp.log10(T_pos)
+    log_peak = jnp.log10(jnp.maximum(peak, 1e5))
+    exponent = -0.5 * ((log_T - log_peak) / width) ** 2
+    shape = jnp.where(T > 0.0, jnp.exp(exponent), 0.0)
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
 # Short alias registered in SFH_REGISTRY
@@ -437,26 +513,47 @@ def dpl(
     alpha: float,
     beta: float,
     tau: float,
-    log_peak_sfr: float,
+    age: float,
+    log_total_mass: float,
 ) -> jnp.ndarray:
-    """Double power law with log-peak SFR parameterization (canonical).
+    r"""Double power-law SFH (Carnall+2018 / BAGPIPES ``dblplaw``).
 
-    Registry-compatible wrapper around the Carnall+2018 double power law.
-    Uses log10(peak_sfr) instead of linear normalization for consistency
-    with other parametric SFH models in the registry.
+    .. math::
+
+       \mathrm{SFR}(T) \propto
+       \bigl[(T/\tau)^{\alpha} + (T/\tau)^{-\beta}\bigr]^{-1},
+       \quad T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
+
+    where :math:`T` is **cosmic time since galaxy formation** and
+    :math:`t_{\mathrm{lb}}` is lookback time. The SFR turns over at
+    :math:`T = \tau\,(\beta/\alpha)^{1/(\alpha+\beta)}`. The shape is
+    rescaled so the integrated mass equals ``10**log_total_mass``.
+
+    **Convention.** Matches Carnall et al. (2018) and BAGPIPES
+    ``dblplaw`` exactly when ``age`` is the age of the universe at the
+    source redshift (BAGPIPES measures the double power-law forward
+    from the Big Bang, i.e. formation at ``T = 0``). The time variable
+    handed in is always lookback time; the cosmic-time conversion
+    ``T = age - t_lookback`` happens here, the same way
+    :func:`sfhdelayed` does it. Resolves the time-reversal of #514.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
     alpha : float
-        Falling slope exponent [dimensionless]. Typical range: 0.5-4.
+        Falling (late-time) slope exponent [dimensionless]. Typical 0.5-4.
     beta : float
-        Rising slope exponent [dimensionless]. Typical range: 0.3-3.
+        Rising (early-time) slope exponent [dimensionless]. Typical 0.3-3.
     tau : float
-        Turnover timescale [yr].
-    log_peak_sfr : float
-        log10 of peak SFR [Msun/yr].
+        Turnover timescale [yr], in cosmic time since formation.
+    age : float
+        Cosmic time available for star formation [yr] = lookback time of
+        formation. Set to ``age_of_universe(z)`` for BAGPIPES parity.
+        SFR is zero before formation (``t_lookback > age``).
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun]. The shape is rescaled
+        so that ``trapezoid(sfr, t_lookback) = 10**log_total_mass``.
 
     Returns
     -------
@@ -467,37 +564,48 @@ def dpl(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    This function wraps :func:`double_powerlaw` with ``norm = 10**log_peak_sfr``.
-    See :func:`double_powerlaw` for physics details.
+    See :func:`double_powerlaw` for the bare shape (no formation anchor).
 
     Examples
     --------
     >>> import jax.numpy as jnp
     >>> from tengri import dpl
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = dpl(t, alpha=1.5, beta=0.5, tau=3e9, log_peak_sfr=1.5)
+    >>> sfr = dpl(t, alpha=1.5, beta=0.5, tau=3e9, age=13.6e9, log_total_mass=10.0)
     >>> sfr.shape
     (64,)
     """
-    peak_sfr = 10.0**log_peak_sfr
-    x = t_lookback / tau
-    return peak_sfr / (x**alpha + x ** (-beta))
+    # Cosmic time since formation; SFR is zero before the galaxy formed.
+    # Use a *finite* positive dummy (tau, so x = 1) for the masked T <= 0
+    # region rather than jnp.inf: inf**alpha and its derivative are NaN/inf,
+    # and the NaN leaks through the jnp.where VJP, poisoning the gradient
+    # w.r.t. alpha whenever any grid point has lookback >= age. The double-
+    # where keeps both branches finite so the mask cleanly zeroes the dead
+    # region in forward *and* backward passes (same pattern as lognormal).
+    T = age - t_lookback
+    T_safe = jnp.where(T > 0.0, T, tau)
+    x = T_safe / tau
+    shape = jnp.where(T > 0.0, 1.0 / (x**alpha + x ** (-beta)), 0.0)
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
 def constant(
     t_lookback: jnp.ndarray,
-    log_sfr: float,
+    log_total_mass: float,
     start: float = 0.0,
     end: float = AGEMAX_YR,
 ) -> jnp.ndarray:
     """Constant SFR between start and end lookback times.
 
+    Shape is a top-hat (1 inside [start, end], 0 outside); rescaled so the
+    integrated mass equals ``10**log_total_mass``.
+
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_sfr : float
-        log10 of constant SFR [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
     start : float
         Younger lookback boundary [yr]. Default 0 (present). Maps from user-facing
         ``sfh_const_end_gyr``.
@@ -522,31 +630,32 @@ def constant(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import constant
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = constant(t, log_sfr=1.0, start=5e8, end=5e9)
+    >>> sfr = constant(t, log_total_mass=10.0, start=5e8, end=5e9)
     >>> sfr.shape
     (64,)
     """
-    sfr = 10.0**log_sfr
     mask = (t_lookback >= start) & (t_lookback <= end)
-    return jnp.where(mask, sfr, 0.0)
+    shape = jnp.where(mask, 1.0, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 def exponential(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     tau: float,
     start: float = 0.0,
 ) -> jnp.ndarray:
-    """Declining exponential SFH.
+    """Declining exponential SFH (in lookback time, from ``start`` outward).
 
-    SFR(t) = peak_sfr * exp(-(t - start) / tau) for t >= start, 0 otherwise.
+    Shape is ``exp(-(t - start) / tau)`` for ``t >= start``, zero otherwise.
+    Rescaled so the integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR at start [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
     tau : float
         e-folding timescale [yr].
     start : float
@@ -566,35 +675,34 @@ def exponential(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = exponential(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
+    >>> sfr = exponential(t, log_total_mass=10.0, tau=2e9, start=1e8)
     >>> sfr.shape
     (64,)
     """
-    peak_sfr = 10.0**log_peak_sfr
     dt = t_lookback - start
-    sfr = peak_sfr * jnp.exp(-dt / tau)
-    return jnp.where(dt >= 0, sfr, 0.0)
+    shape = jnp.where(dt >= 0, jnp.exp(-dt / tau), 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 def delayed_exponential(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     tau: float,
     start: float = 0.0,
 ) -> jnp.ndarray:
-    """Delayed exponential SFH: SFR peaks at start + tau.
+    """Delayed exponential SFH: shape peaks at start + tau.
 
-    SFR(t) = peak_sfr * (dt/tau) * exp(-dt/tau + 1) for t >= start.
-    The +1 in the exponent ensures SFR(start + tau) = peak_sfr.
+    Shape is ``(dt/tau) * exp(-dt/tau + 1)`` for ``t >= start``. Rescaled
+    so the integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR [Msun/yr]. Peak occurs at t = start + tau.
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
     tau : float
-        Timescale [yr]. Peak is at start + tau.
+        Timescale [yr]. Peak shape value occurs at start + tau.
     start : float
         Start lookback time [yr]. Default 0 (present).
 
@@ -612,39 +720,122 @@ def delayed_exponential(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import delayed_exponential
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = delayed_exponential(t, log_peak_sfr=2.0, tau=2e9, start=1e8)
+    >>> sfr = delayed_exponential(t, log_total_mass=10.0, tau=2e9, start=1e8)
     >>> sfr.shape
     (64,)
     """
-    peak_sfr = 10.0**log_peak_sfr
     dt = t_lookback - start
     ratio = dt / tau
-    sfr = peak_sfr * ratio * jnp.exp(-ratio + 1.0)
-    return jnp.where(dt >= 0, jnp.maximum(sfr, 0.0), 0.0)
+    raw = ratio * jnp.exp(-ratio + 1.0)
+    shape = jnp.where(dt >= 0, jnp.maximum(raw, 0.0), 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
-def declining_exponential(
+def sfhdelayed(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     tau: float,
     age: float,
 ) -> jnp.ndarray:
-    """Declining tau SFH in lookback time — matches FSPS sfh=1 / bagpipes 'exponential'.
+    """τ-delayed SFH — matches CIGALE ``sfh_delayed`` / Bagpipes ``delayed`` (#406).
 
-    In cosmic time T, the standard tau model is SFR(T) = peak * exp(-T/tau) for
-    0 <= T <= age. Converting T = age - t_lb gives:
+    .. math::
 
-        SFR(t_lb) = peak * exp(-(age - t_lb) / tau)  for  0 <= t_lb <= age
+       \\mathrm{SFR}(T) \\propto T \\, \\exp(-T / \\tau),
+       \\quad T = \\mathrm{age} - t_{\\mathrm{lb}} \\geq 0
 
-    The SFR *increases* going back in lookback time (galaxy formed with highest SFR,
-    declining to the present). This is opposite to ``exponential``.
+    SFR rises from 0 at galaxy formation (``T = 0``), peaks at cosmic-time
+    ``T = τ`` (lookback ``age − τ``), and declines toward the present
+    (``T = age``). Zero before formation (``t_lb > age``).
+
+    Distinct from :func:`declining_exponential` (registered as ``"tau"``),
+    which peaks at galaxy formation (FSPS ``sfh=1`` / Bagpipes
+    ``exponential``). The two functions have the same parameter set but
+    physically different shapes — see "Notes" below for the comparison.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of peak SFR at galaxy formation [Msun/yr] (at t_lb = age).
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+    tau : float
+        Timescale [yr]. Cosmic-time location of the SFR peak relative
+        to galaxy formation.
+    age : float
+        Galaxy age [yr] = lookback time of formation. Required ``> τ``
+        for the peak to lie inside the observable window.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr]. Mass-conserving:
+        ``trapezoid(out, t_lookback) == 10**log_total_mass`` to
+        floating-point precision.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` primitives.
+
+    **Comparison with the ``"tau"`` shape** (``declining_exponential``):
+
+    +-----------------------+------------------------+--------------------------+
+    | Registry name         | Peak in cosmic time T  | Upstream equivalents     |
+    +=======================+========================+==========================+
+    | ``tengri.tau``        | T = 0 (formation)      | FSPS ``sfh=1``,          |
+    |                       |                        | Bagpipes ``exponential`` |
+    +-----------------------+------------------------+--------------------------+
+    | ``tengri.delayed``    | T = τ                  | CIGALE ``sfh_delayed``,  |
+    | (this function)       |                        | Bagpipes ``delayed``     |
+    +-----------------------+------------------------+--------------------------+
+
+    Reproduction-notebook audit (#385) traced a wavelength-dependent
+    CIGALE-vs-tengri drift to comparing ``tengri.tau`` against
+    ``CIGALE.sfhdelayed`` — physically different SFHs with the same
+    name. This function closes that gap.
+
+    References
+    ----------
+    .. [1] M. Boquien et al., "CIGALE: a Python Code Investigating
+       Galaxy Emission," A&A 622, A103 (2019).
+       https://doi.org/10.1051/0004-6361/201834156
+    .. [2] A. C. Carnall et al., "Inferring the star formation histories
+       of massive quiescent galaxies with Bagpipes," MNRAS 480, 4379
+       (2018). https://doi.org/10.1093/mnras/sty2169
+    """
+    dt = age - t_lookback  # cosmic time elapsed since galaxy formation
+    raw = dt * jnp.exp(-dt / tau)
+    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), raw, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
+
+
+def declining_exponential(
+    t_lookback: jnp.ndarray,
+    log_total_mass: float,
+    tau: float,
+    age: float,
+) -> jnp.ndarray:
+    """Declining tau SFH in lookback time — matches FSPS sfh=1 / bagpipes 'exponential'.
+
+    In cosmic time T, the standard tau model is SFR(T) ∝ exp(-T/tau) for
+    ``0 <= T <= age``. Converting T = age - t_lb gives a shape that *increases*
+    going back in lookback time (galaxy formed with highest SFR, declining to
+    the present). This is opposite to ``exponential``.
+
+    **NOT the same as CIGALE ``sfh_delayed`` / Bagpipes ``delayed``** — those
+    peak at cosmic time T = τ, not T = 0. For that shape use
+    :func:`sfhdelayed` (registered as ``"delayed"``). Confusing the two
+    silently produced a wavelength-dependent residual in the CIGALE
+    reproduction audit (#385, #406).
+
+    Rescaled so the integrated mass equals ``10**log_total_mass``.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
     tau : float
         e-folding timescale [yr]. Larger tau = slower decline.
     age : float
@@ -659,33 +850,32 @@ def declining_exponential(
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives for exponential and masking.
     """
-    peak_sfr = 10.0**log_peak_sfr
     dt = age - t_lookback  # cosmic time elapsed since galaxy formation
-    sfr = peak_sfr * jnp.exp(-dt / tau)
-    return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
+    raw = jnp.exp(-dt / tau)
+    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), raw, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 def constant_then_exponential(
     t_lookback: jnp.ndarray,
-    log_sfr: float,
+    log_total_mass: float,
     tau: float,
     quench_age: float,
     age: float,
 ) -> jnp.ndarray:
     """Constant SFR followed by exponential decline — 'quenching at time T'.
 
-    Constant SFR from formation (age) until quench_age, then exponential
-    decline from quench_age to present. In lookback time:
-
-        SFR(t_lb) = SFR_0 * exp(-(quench_age - t_lb) / tau)  for t_lb < quench_age
-        SFR(t_lb) = SFR_0                                     for quench_age <= t_lb <= age
+    Shape is constant (=1) for ``quench_age <= t_lb <= age`` and declines
+    exponentially as ``exp(-(quench_age - t_lb)/tau)`` for ``t_lb < quench_age``.
+    Rescaled so the integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_sfr : float
-        log10 of constant SFR before quenching [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun], summed over constant and
+        decline phases.
     tau : float
         e-folding decline timescale [yr] after quenching.
     quench_age : float
@@ -702,11 +892,11 @@ def constant_then_exponential(
     -----
     **JIT-compatible**: yes — uses conditional masking via ``jnp.where``.
     """
-    sfr_0 = 10.0**log_sfr
     dt_quench = quench_age - t_lookback
-    declining = sfr_0 * jnp.exp(-dt_quench / tau)
-    sfr = jnp.where(t_lookback >= quench_age, sfr_0, declining)
-    return jnp.where((t_lookback >= 0) & (t_lookback <= age), sfr, 0.0)
+    declining = jnp.exp(-dt_quench / tau)
+    shape_full = jnp.where(t_lookback >= quench_age, 1.0, declining)
+    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age), shape_full, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 def triweight_burst(
@@ -816,7 +1006,7 @@ def delayed_tau(t_lookback: jnp.ndarray, tau: float, norm: float) -> jnp.ndarray
 
 def psb_wild2020(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     age: float,
     tau: float,
     burstage: float,
@@ -827,15 +1017,18 @@ def psb_wild2020(
     """Post-starburst SFH (Wild+2020).
 
     Two-component model: declining exponential for the old stellar population
-    plus a double power law for the recent burst episode. Components are combined
-    via mass-fraction weighting: each normalized to unit mass before mixing.
+    plus a double power law for the recent burst episode. Components are
+    individually normalized to unit mass, mass-fraction mixed via ``fburst``,
+    then the composite is rescaled so total mass formed equals
+    ``10**log_total_mass``.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    log_peak_sfr : float
-        log10 of overall SFR normalization [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun], summed over both
+        old and burst components.
     age : float
         Galaxy age [yr] = lookback time of old component formation.
         Exponential is active for burstage < t < age.
@@ -859,8 +1052,6 @@ def psb_wild2020(
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives and logical masking.
     """
-    peak_sfr = 10.0**log_peak_sfr
-
     # --- Old component: declining exponential between burstage and age ---
     t_cosmic_old = age - t_lookback
     sfr_exp = jnp.exp(-t_cosmic_old / tau)
@@ -876,15 +1067,17 @@ def psb_wild2020(
     mask_burst = t_lookback <= burstage
     sfr_burst = jnp.where(mask_burst, sfr_burst, 0.0)
 
-    # --- Mass-normalize each component using dt-weighted integration ---
+    # --- Mass-normalize each component (per-component unit mass) ---
     # jnp.gradient gives symmetric finite-difference widths; correct for
     # log-spaced grids (DSPS) where bins span very different linear intervals.
     dt = jnp.gradient(t_lookback)
     m_exp = jnp.sum(sfr_exp * dt) + 1e-30
     m_burst = jnp.sum(sfr_burst * dt) + 1e-30
 
-    sfr = peak_sfr * ((1.0 - fburst) * sfr_exp / m_exp + fburst * sfr_burst / m_burst)
-    return jnp.maximum(sfr, 0.0)
+    # --- Composite shape: mass-fraction-weighted mixture ---
+    composite = (1.0 - fburst) * sfr_exp / m_exp + fburst * sfr_burst / m_burst
+    # Final rescale by trapezoid (consistent with all other registered SFHs)
+    return _renormalize_to_mass(jnp.maximum(composite, 0.0), t_lookback, log_total_mass)
 
 
 def powerlaw(
@@ -917,6 +1110,7 @@ def powerlaw(
 
 def delayed_bq(
     t_lookback: jnp.ndarray,
+    log_total_mass: float,
     tau_main_yr: float,
     age_main_yr: float,
     age_bq_yr: float,
@@ -984,7 +1178,7 @@ def delayed_bq(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh.mean_sfh import delayed_bq
     >>> t = jnp.logspace(7, 10.14, 100)
-    >>> sfr = delayed_bq(t, tau_main_yr=2e9, age_main_yr=5e9,
+    >>> sfr = delayed_bq(t, log_total_mass=10.0, tau_main_yr=2e9, age_main_yr=5e9,
     ...     age_bq_yr=500e6, r_sfr=0.1)
     >>> sfr.shape
     (100,)
@@ -994,12 +1188,14 @@ def delayed_bq(
     sfr_delayed = t_tau * jnp.exp(-t_tau) / tau_main_yr
     sfr_at_bq = (t_bq / tau_main_yr) * jnp.exp(-t_bq / tau_main_yr) / tau_main_yr
     sfr_post_bq = r_sfr * sfr_at_bq
-    sfr = jnp.where(t_lookback >= t_bq, sfr_post_bq, sfr_delayed)
-    return jnp.where((t_lookback >= 0) & (t_lookback <= age_main_yr), sfr, 0.0)
+    raw = jnp.where(t_lookback >= t_bq, sfr_post_bq, sfr_delayed)
+    shape = jnp.where((t_lookback >= 0) & (t_lookback <= age_main_yr), raw, 0.0)
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
 def periodic(
     t_lookback: jnp.ndarray,
+    log_total_mass: float,
     delta_bursts_yr: float,
     tau_bursts_yr: float,
     burst_type: int,
@@ -1056,7 +1252,14 @@ def periodic(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh.mean_sfh import periodic
     >>> t = jnp.logspace(6, 10, 100)
-    >>> sfr = periodic(t, delta_bursts_yr=50e6, tau_bursts_yr=20e6, burst_type=0, age_yr=1000e6)
+    >>> sfr = periodic(
+    ...     t,
+    ...     log_total_mass=10.0,
+    ...     delta_bursts_yr=50e6,
+    ...     tau_bursts_yr=20e6,
+    ...     burst_type=0,
+    ...     age_yr=1000e6,
+    ... )
     >>> sfr.shape
     (100,)
     """
@@ -1078,9 +1281,8 @@ def periodic(
     )
 
     mask = (dt >= 0) & (t_lookback[None, :] <= age_yr)
-    sfr = jnp.sum(jnp.where(mask, burst, 0.0), axis=0)
-
-    return jnp.maximum(sfr, 0.0)
+    shape = jnp.sum(jnp.where(mask, burst, 0.0), axis=0)
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
 _BUAT08_VELOCITIES = jnp.array(
@@ -1093,6 +1295,7 @@ _BUAT08_C = jnp.array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -
 
 def buat08(
     t_lookback: jnp.ndarray,
+    log_total_mass: float,
     velocity_km_s: float,
 ) -> jnp.ndarray:
     """Chemically-motivated SFH parameterized by galaxy rotational velocity.
@@ -1156,7 +1359,7 @@ def buat08(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh.mean_sfh import buat08
     >>> t = jnp.logspace(6, 10.14, 100)
-    >>> sfr = buat08(t, velocity_km_s=220.0)
+    >>> sfr = buat08(t, log_total_mass=10.0, velocity_km_s=220.0)
     >>> sfr.shape
     (100,)
     """
@@ -1168,9 +1371,8 @@ def buat08(
 
     t_gyr = jnp.maximum(t_lookback / 1e9, 1e-9)
     log_sfr = a + b * jnp.log10(t_gyr) + c * jnp.sqrt(t_gyr) - 9.0
-    sfr = 10.0**log_sfr
-
-    return jnp.maximum(sfr, 0.0)
+    shape = jnp.maximum(10.0**log_sfr, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 # ── ProSpect spline SFH (Robotham+2020) ─────────────────────────
@@ -1360,7 +1562,7 @@ def spline(
 
 def snorm_burst(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     peak_lbt: float,
     width: float,
     skew: float,
@@ -1369,16 +1571,17 @@ def snorm_burst(
 ) -> jnp.ndarray:
     """Skew-normal SFH with a flat recent burst component (Robotham+2020).
 
-    Adds a constant burst SFR to the skew-normal SFH at lookback times younger
-    than ``burst_age``. The burst represents recent (typically <100 Myr) star
-    formation activity superimposed on the smooth underlying SFH.
+    Adds a constant burst plateau to the skew-normal shape at lookback times
+    younger than ``burst_age``, then rescales the composite so the total
+    integrated mass equals ``10**log_total_mass``.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_peak_sfr : float
-        log10 of peak SFR of the skew-normal component [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun], summed over both
+        smooth and burst components.
     peak_lbt : float
         Peak lookback time of the skew-normal component [yr].
     width : float
@@ -1386,7 +1589,9 @@ def snorm_burst(
     skew : float
         Skewness parameter [dimensionless]. 0 = symmetric, >0 skews toward older ages.
     burst_sfr : float
-        Constant SFR amplitude of the recent burst [Msun/yr]. Set to 0 to disable.
+        Relative burst amplitude [dimensionless]. Ratio of the burst plateau
+        height to the (unnormalized) skew-normal kernel peak; the absolute
+        SFR is set by the global ``log_total_mass`` rescale. Set to 0 to disable.
     burst_age : float
         Lookback time below which the burst is active [yr]. Default 1e8 yr (100 Myr).
 
@@ -1425,19 +1630,24 @@ def snorm_burst(
     >>> from tengri.components.stellar.sfh import snorm_burst
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = snorm_burst(
-    ...     t, log_peak_sfr=1.5, peak_lbt=5e9, width=2e9, skew=0.5, burst_sfr=2.0, burst_age=1e8
+    ...     t, log_total_mass=10.0, peak_lbt=5e9, width=2e9, skew=0.5, burst_sfr=2.0, burst_age=1e8
     ... )
     >>> sfr.shape
     (64,)
     """
-    sfr_snorm = skewnormal(t_lookback, log_peak_sfr, peak_lbt, width, skew)
-    burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
-    return jnp.maximum(sfr_snorm + burst, 0.0)
+    # Build the composite shape WITHOUT mass — use the bare skew kernel,
+    # not the renormalized skewnormal SFR. Otherwise burst_sfr would have
+    # to compete against an already-mass-scaled smooth component.
+    age = _clamp_age(t_lookback)
+    smooth_shape = jnp.maximum(_skewed_gaussian_kernel(age, peak_lbt, width, skew), 0.0)
+    burst_shape = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
+    composite = jnp.maximum(smooth_shape + burst_shape, 0.0)
+    return _renormalize_to_mass(composite, t_lookback, log_total_mass)
 
 
 def snorm_trunc_burst(
     t_lookback: jnp.ndarray,
-    log_peak_sfr: float,
+    log_total_mass: float,
     peak_lbt: float,
     width: float,
     skew: float,
@@ -1455,8 +1665,9 @@ def snorm_trunc_burst(
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time grid [yr].
-    log_peak_sfr : float
-        log10 of peak SFR of the tsnorm component [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun], summed over both
+        smooth and burst components.
     peak_lbt : float
         Peak lookback time [yr].
     width : float
@@ -1466,7 +1677,9 @@ def snorm_trunc_burst(
     trunc : float
         Truncation sharpness [dimensionless]. Larger values = sharper truncation.
     burst_sfr : float
-        Constant burst SFR amplitude [Msun/yr]. Set to 0 to disable.
+        Relative burst amplitude [dimensionless]. Ratio of the burst plateau
+        height to the (unnormalized) tsnorm kernel peak; the absolute SFR is
+        set by the global ``log_total_mass`` rescale. Set to 0 to disable.
     burst_age : float
         Lookback time below which the burst is active [yr].
 
@@ -1509,7 +1722,7 @@ def snorm_trunc_burst(
     >>> t = jnp.logspace(7, 10.14, 64)
     >>> sfr = snorm_trunc_burst(
     ...     t,
-    ...     log_peak_sfr=1.5,
+    ...     log_total_mass=10.0,
     ...     peak_lbt=5e9,
     ...     width=2e9,
     ...     skew=0.5,
@@ -1520,9 +1733,16 @@ def snorm_trunc_burst(
     >>> sfr.shape
     (64,)
     """
-    sfr_tsnorm = truncated_skewnormal(t_lookback, log_peak_sfr, peak_lbt, width, skew, trunc)
-    burst = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
-    return jnp.maximum(sfr_tsnorm + burst, 0.0)
+    # Build the composite shape WITHOUT mass: bare skew kernel × truncation
+    # plus burst plateau, then global rescale to total mass formed.
+    age = _clamp_age(t_lookback)
+    kernel = _skewed_gaussian_kernel(age, peak_lbt, width, skew)
+    x = (age - peak_lbt) / (width * trunc)
+    trunc_factor = 0.5 * jax.lax.erfc(x * _INV_SQRT2)
+    smooth_shape = jnp.maximum(kernel * trunc_factor, 0.0)
+    burst_shape = jnp.where(t_lookback < burst_age, burst_sfr, 0.0)
+    composite = jnp.maximum(smooth_shape + burst_shape, 0.0)
+    return _renormalize_to_mass(composite, t_lookback, log_total_mass)
 
 
 # Short alias registered in SFH_REGISTRY
@@ -1531,23 +1751,23 @@ tsnorm_burst = snorm_trunc_burst
 
 def top_hat(
     t_lookback: jnp.ndarray,
-    amplitude: float,
+    log_total_mass: float,
     t_start: float,
     t_end: float,
     smooth_width: float = 1e8,
 ) -> jnp.ndarray:
     """Top-hat (constant-window) SFH with smooth sigmoid edges.
 
-    A constant SFR amplitude between t_start and t_end, smoothly tapering
-    to zero outside this window via sigmoid functions. Useful for modeling
-    bursty episodes or isolated star-forming events.
+    Constant shape between t_start and t_end, smoothly tapering to zero
+    outside via sigmoid functions. Rescaled so the integrated mass equals
+    ``10**log_total_mass``.
 
     Parameters
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    amplitude : float
-        Constant SFR inside the window [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed in the window [Msun].
     t_start : float
         Older lookback boundary [yr]. Must have t_start > t_end.
     t_end : float
@@ -1594,19 +1814,20 @@ def top_hat(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import top_hat
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = top_hat(t, amplitude=1.0, t_start=5e9, t_end=3e9, smooth_width=1e8)
+    >>> sfr = top_hat(t, log_total_mass=10.0, t_start=5e9, t_end=3e9, smooth_width=1e8)
     >>> sfr.shape
     (64,)
     """
     # Sigmoid functions for smooth edges
     s_start = jax.nn.sigmoid((t_start - t_lookback) / smooth_width)
     s_end = jax.nn.sigmoid((t_lookback - t_end) / smooth_width)
-    return amplitude * s_start * s_end
+    shape = jnp.maximum(s_start * s_end, 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)
 
 
 def gaussian_burst(
     t_lookback: jnp.ndarray,
-    amplitude: float,
+    log_total_mass: float,
     t_peak: float,
     sigma: float,
 ) -> jnp.ndarray:
@@ -1620,8 +1841,8 @@ def gaussian_burst(
     ----------
     t_lookback : array_like, shape (n_age,)
         Lookback time [yr].
-    amplitude : float
-        Peak SFR of the burst [Msun/yr].
+    log_total_mass : float
+        log10 of total stellar mass formed in the burst [Msun].
     t_peak : float
         Peak lookback time (age of burst) [yr].
     sigma : float
@@ -1664,10 +1885,11 @@ def gaussian_burst(
     >>> import jax.numpy as jnp
     >>> from tengri.components.stellar.sfh import gaussian_burst
     >>> t = jnp.logspace(7, 10.14, 64)
-    >>> sfr = gaussian_burst(t, amplitude=5.0, t_peak=1e9, sigma=1e8)
+    >>> sfr = gaussian_burst(t, log_total_mass=8.0, t_peak=1e9, sigma=1e8)
     >>> sfr.shape
     (64,)
     """
     dt = t_lookback - t_peak
     exponent = -0.5 * (dt / sigma) ** 2
-    return amplitude * jnp.exp(exponent)
+    shape = jnp.maximum(jnp.exp(exponent), 0.0)
+    return _renormalize_to_mass(shape, t_lookback, log_total_mass)

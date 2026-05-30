@@ -63,7 +63,7 @@ def test_dpl_signature_lists_expected_params() -> None:
     sig = inspect.signature(builders.sfh.dpl)
     params = list(sig.parameters)
     assert params[0] == "defaults", "wildcard kwarg must come first for ergonomics"
-    assert set(params[1:]) == {"alpha", "beta", "tau_gyr", "log_peak_sfr"}
+    assert set(params[1:]) == {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
     for name, p in sig.parameters.items():
         assert p.kind == inspect.Parameter.KEYWORD_ONLY, name
 
@@ -101,8 +101,8 @@ def test_per_param_override_is_preserved() -> None:
 
 def test_wildcard_plus_explicit_override() -> None:
     pin = Fixed(1.0)
-    out = builders.sfh.dpl(_=FREE, log_peak_sfr=pin)
-    assert out == {"type": "dpl", "*": FREE, "log_peak_sfr": pin}
+    out = builders.sfh.dpl(_=FREE, log_total_mass=pin)
+    assert out == {"type": "dpl", "*": FREE, "log_total_mass": pin}
 
 
 # ── Validation: typos and bad sentinels ───────────────────────────
@@ -141,7 +141,7 @@ def test_const_exp_short_names_resolve_correctly() -> None:
     """
     spec = parse_groups(sfh=builders.sfh.const_exp(_=FREE))
     expected = {
-        "sfh_cexp_log_sfr",
+        "sfh_cexp_log_total_mass",
         "sfh_cexp_tau_gyr",
         "sfh_cexp_quench_gyr",
         "sfh_cexp_age_gyr",

@@ -44,10 +44,25 @@ Per-panel summary:
 References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue)
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-110
+.. GENERATED FROM PYTHON SOURCE LINES 23-114
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_cue_flex_tour_001.png
+   :alt: plot cue flex tour
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_cue_flex_tour_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -67,7 +82,7 @@ References:
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 0.3,
-        "log_peak_sfr": 1.5,
+        "log_total_mass": 10.0,
         "alpha": 3.0,
         "beta": 2.0,
     }
@@ -135,6 +150,14 @@ References:
         ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)
 
     plt.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
+<<<<<<< HEAD
+=======
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.925 seconds)
+>>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_flex_tour.py:

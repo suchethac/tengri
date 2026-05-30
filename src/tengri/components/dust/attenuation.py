@@ -551,6 +551,12 @@ def calzetti(
 
     rv = 4.05
     k_prime = jnp.where(wave_um >= 0.63, k_ir, k_uv)
+    # Polynomial is extrapolated through the FUV (< 1200 Å) to keep the
+    # dust attenuation defined across the full SED range — users
+    # modelling galaxies where Lyman-continuum dust attenuation matters
+    # need the curve there. (CIGALE's ``a_vs_ebv`` clips at 912 Å on
+    # the assumption that H ionization handles those photons separately;
+    # tengri leaves the choice to the user.)
     return jnp.clip((k_prime + rv) / rv, 0.0)
 
 
@@ -567,17 +573,25 @@ def kriek_conroy(
 ) -> jnp.ndarray:
     r"""Kriek & Conroy (2013) modified Calzetti + UV bump + slope delta.
 
-    Default in Prospector. Most flexible single-parameter-family curve. Combines
-    Calzetti + 2175 Å bump + power-law modification.
+    Default attenuation law in Prospector, applied there through FSPS
+    (``dust_type=4``). Reproduces FSPS' construction: a Calzetti baseline
+    tilted by a power law in :math:`\lambda`, plus a 2175 Å Drude bump
+    whose amplitude is **coupled to the slope** via Kriek & Conroy (2013)
+    Eqn 3, with the bump divided by :math:`R_V = 4.05`.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
         Wavelength grid. [Å]
     dust_bump_strength : float
-        Amplitude of 2175 Å UV bump (E_b). [dimensionless] Default: 1.0 (no bump).
+        Multiplier on the KC13-derived bump amplitude
+        :math:`E_b = 0.85 - 1.9\,\delta`. [dimensionless] Default: 1.0,
+        which reproduces FSPS ``dust_type=4`` exactly; set to 0.0 to
+        remove the bump, or scale to weaken/strengthen it.
     dust_delta : float
-        Power-law slope modification. [dimensionless] Default: 0.0 (pure Calzetti).
+        Power-law slope modification :math:`\delta`. [dimensionless]
+        Default: 0.0. Steeper (more negative) :math:`\delta` gives a
+        stronger bump, per KC13 Eqn 3.
 
     Returns
     -------
@@ -588,38 +602,47 @@ def kriek_conroy(
     -----
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
-    The attenuation is:
+    Following FSPS ``attn_curve.f90`` (``dust_type=4``), the unnormalised
+    curve is:
 
     .. math::
 
-        k(\lambda) = k_{\rm Calz}(\lambda) \cdot \left(\frac{\lambda}{5500 \, \text{\AA}}\right)^\delta
-        + E_b \cdot D(\lambda; \lambda_0 = 2175 \, \text{\AA})
+        k'(\lambda) = \left[ k_{\rm Calz}(\lambda)
+        + \frac{E_b}{R_V}\,D(\lambda; \lambda_0 = 2175\,\text{\AA}) \right]
+        \left(\frac{\lambda}{5500\,\text{\AA}}\right)^{\delta},
+        \qquad E_b = 0.85 - 1.9\,\delta
 
-    where :math:`k_{\rm Calz}` is from Calzetti et al. (2000), :math:`E_b` is the bump amplitude,
-    and :math:`D(\lambda; \lambda_0)` is the Drude profile.
+    with :math:`R_V = 4.05`, :math:`k_{\rm Calz}` the Calzetti et al.
+    (2000) curve, and :math:`D` the unit-peak Drude profile. The result
+    is renormalised to :math:`k(5500\,\text{\AA}) = 1`. The
+    ``dust_bump_strength`` multiplier scales :math:`E_b`.
+
+    **Upstream**: ports the FSPS ``dust_type=4`` branch (Conroy, Gunn &
+    White 2009); the slope–bump coupling is Kriek & Conroy (2013) Eqn 3.
 
     References
     ----------
     .. [1] M. Kriek and C. Conroy, "The Dust Attenuation Law in Distant Galaxies:
        Evidence for Variation with Spectral Type," ApJL, 775, L16 (2013).
        https://doi.org/10.1088/2041-8205/775/1/L16
+    .. [2] C. Conroy, J. E. Gunn, M. White, "The Propagation of
+       Uncertainties in Stellar Population Synthesis Modeling. I.,"
+       ApJ, 699, 486 (2009). https://doi.org/10.1088/0004-637X/699/1/486
     """
+    R_V = 4.05
     wave_um = wavelength / 1e4
+    e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)  # KC13 Eqn 3
+
     k_calz = calzetti(wavelength)
     slope_mod = (wavelength / V_BAND_ANGSTROM) ** dust_delta
-    bump = dust_bump_strength * _drude_profile(wave_um)
+    k_unnorm = (k_calz + e_b * _drude_profile(wave_um) / R_V) * slope_mod
 
-    # Compute unnormalized attenuation curve
-    k_unnorm = k_calz * slope_mod + bump
-
-    # Normalize to k(5500 Å) = 1: compute k_unnorm at V-band
+    # Normalize to k(5500 Å) = 1 (slope_mod = 1 at V band).
     v_band_um = V_BAND_ANGSTROM / 1e4
     k_calz_v = calzetti(jnp.array([V_BAND_ANGSTROM]))[0]
-    slope_mod_v = (V_BAND_ANGSTROM / V_BAND_ANGSTROM) ** dust_delta  # = 1.0
-    bump_v = dust_bump_strength * _drude_profile(jnp.array([v_band_um]))[0]
-    k_at_v = k_calz_v * slope_mod_v + bump_v
+    bump_v = e_b * _drude_profile(jnp.array([v_band_um]))[0] / R_V
+    k_at_v = k_calz_v + bump_v
 
-    # Divide by k_at_v to renormalize
     k = k_unnorm / k_at_v
     return jnp.clip(k, 0.0)
 
@@ -1167,6 +1190,10 @@ def leitherer02(
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
     k_prime = jnp.where(wavelength <= 1800.0, k_l02, k_calz)
 
+    # The L02 polynomial is extended through the FUV to keep dust
+    # attenuation defined across the full UV grid. CIGALE clips at
+    # 912 Å on the assumption that H ionization handles Lyman-continuum
+    # photons separately; tengri leaves the choice to the user.
     return jnp.clip(k_prime / rv, 0.0)
 
 

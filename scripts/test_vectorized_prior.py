@@ -21,7 +21,7 @@ ssp = load_ssp_data(str(SSP_FILE))
 print("\nTest 1: All Uniform priors (vectorized path)")
 params_uniform = Parameters(
     redshift=Fixed(1.0),
-    sfh_tsnorm_log_peak_sfr=Uniform(-2, 2),
+    sfh_tsnorm_log_total_mass=Uniform(8, 12),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 10),
     sfh_tsnorm_width_gyr=Uniform(0.1, 5),
     sfh_tsnorm_skew=Uniform(-1, 1),
@@ -70,7 +70,7 @@ from tengri.parameters.priors import Gaussian
 
 params_mixed = Parameters(
     redshift=Fixed(1.0),
-    sfh_tsnorm_log_peak_sfr=Gaussian(-0.5, 1.0, -2, 2),  # Gaussian prior
+    sfh_tsnorm_log_total_mass=Gaussian(10.0, 1.0, 8, 12),  # Gaussian prior
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.1, 10),
     sfh_tsnorm_width_gyr=Uniform(0.1, 5),
     sfh_tsnorm_skew=Uniform(-1, 1),

@@ -253,6 +253,31 @@ class AGNSEDComponent:
         agn_log_lbol = jnp.asarray(params["agn_log_lbol"])
         L_agn_bol = jnp.power(10.0, agn_log_lbol) * L_SUN
 
+        # CIGALE-faithful cross-component coupling
+        # ────────────────────────────────────────────────────────────
+        # When ``agn_fracAGN > 0`` we follow CIGALE skirtor2016's
+        # bookkeeping: the AGN dust-IR power is derived from the
+        # stellar dust-absorbed luminosity via
+        # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
+        # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
+        # the existing block normalisation ``l_scale = L_bol × frac``
+        # produces ``l_scale = agn_power``. This way the torus block
+        # API stays unchanged while the higher-level driver matches
+        # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
+        # whole-IR default) is assumed; the alternative wavelength-
+        # window flow is not yet wired.
+        agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
+        L_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
+        # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
+        _one_minus_frac = jnp.maximum(1.0 - agn_fracAGN, 1e-6)
+        agn_power_from_stellar = L_absorbed * agn_fracAGN / _one_minus_frac
+        agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        agn_torus_frac_effective = jnp.where(
+            agn_fracAGN > 0.0,
+            agn_power_from_stellar / jnp.maximum(L_agn_bol, 1e-30),
+            agn_torus_frac_user,
+        )
+
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
         # so it folds into a JIT trace cleanly. If template_data is
@@ -279,7 +304,10 @@ class AGNSEDComponent:
             "agn_log_mbh": jnp.asarray(params.get("agn_log_mbh", 8.0)),
             "agn_log_ledd": jnp.asarray(params.get("agn_log_ledd", -1.0)),
             "agn_a_spin": jnp.asarray(params.get("agn_a_spin", 0.0)),
-            "agn_torus_frac": jnp.asarray(params.get("agn_torus_frac", 0.5)),
+            # CIGALE-coupled override: see ``agn_torus_frac_effective``
+            # block above. When ``agn_fracAGN > 0`` this carries the
+            # stellar-derived agn_power; otherwise it's the user value.
+            "agn_torus_frac": agn_torus_frac_effective,
             "agn_T_torus": jnp.asarray(params.get("agn_T_torus", 1000.0)),
             "agn_tau_torus": jnp.asarray(params.get("agn_tau_torus", 3.0)),
             "agn_T_hot": jnp.asarray(params.get("agn_T_hot", 1500.0)),
@@ -321,33 +349,25 @@ class AGNSEDComponent:
             and self._state.filter_waves is not None
             and self._state.filter_trans is not None
         ):
-            from tengri.observation.photometry import compute_flux_density
+            from tengri.observation.photometry import lnu_filter_integral
 
             z = jnp.asarray(params.get("redshift", 0.0))
-            # Filter-integrate L_agn at the source's z, dl_cm=1.
-            # compute_flux_density returns F_nu = (1+z)/(4π·dl²) · Lν_filter,
-            # so undo the cosmology factor to recover the bare rest-frame Lν
-            # — matches the convention of stellar_phot_lnu_precomp.
-            inv_cosmology = 4.0 * jnp.pi * 1.0**2 / (1.0 + z)
-            agn_phot_lnu_precomp = (
-                jnp.asarray(
-                    [
-                        compute_flux_density(
-                            L_agn,
-                            state.wave,
-                            fw,
-                            ft,
-                            redshift=z,
-                            dl_cm=jnp.asarray(1.0),
-                        )
-                        for fw, ft in zip(
-                            self._state.filter_waves,
-                            self._state.filter_trans,
-                            strict=False,
-                        )
-                    ]
-                )
-                * inv_cosmology
+            # Filter-integrate L_agn directly via ``lnu_filter_integral``
+            # (ADR-0016, #398.e). Replaces the previous
+            # ``compute_flux_density(..., dl_cm=1) × inv_cosmology`` dance
+            # that applied and immediately undid the (1+z)/(4π d_L²)
+            # dimming. The new helper returns the bare filter-integrated
+            # rest-frame L_ν — matching the publish convention of
+            # ``stellar_phot_lnu_precomp``.
+            agn_phot_lnu_precomp = jnp.asarray(
+                [
+                    lnu_filter_integral(L_agn, state.wave, fw, ft, redshift=z)
+                    for fw, ft in zip(
+                        self._state.filter_waves,
+                        self._state.filter_trans,
+                        strict=False,
+                    )
+                ]
             )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
 

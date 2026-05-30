@@ -156,7 +156,7 @@ def _make_sed_model_pair(
         "sfh_dpl_alpha": Fixed(1.5),
         "sfh_dpl_beta": Fixed(2.0),
         "sfh_dpl_tau_gyr": Fixed(5.0),
-        "sfh_dpl_log_peak_sfr": Fixed(0.0),
+        "sfh_dpl_log_total_mass": Fixed(0.0),
         "met_logzsol": Fixed(-0.5),
         "dust_tau_bc": Fixed(0.0),
         "dust_tau_diff": Fixed(0.0),
@@ -514,7 +514,7 @@ def _make_dust_model_pair(
         "sfh_dpl_alpha": Fixed(1.5),
         "sfh_dpl_beta": Fixed(2.0),
         "sfh_dpl_tau_gyr": Fixed(5.0),
-        "sfh_dpl_log_peak_sfr": Fixed(0.0),
+        "sfh_dpl_log_total_mass": Fixed(0.0),
         "met_logzsol": Fixed(-0.5),
         "dust_tau_bc": Fixed(0.5),  # Enable dust
         "dust_tau_diff": Fixed(0.2),

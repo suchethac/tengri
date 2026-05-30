@@ -22,6 +22,10 @@ References:
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -70,7 +74,7 @@ model = tengri.SEDModel.build(
         "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
         "skew": 0.0,
         "trunc": 13.5,
-        "log_peak_sfr": 0.5,  # ~ log M* = 11 when integrated
+        "log_total_mass": 10.0,  # ~ log M* = 11 when integrated
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(REDSHIFT),
@@ -82,6 +86,7 @@ baseline_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 # --- Generate age samples for population ---
 # Sample N_MODELS ages uniformly within the red-sequence range
 ages_gyr = np.linspace(AGE_GYR_MIN, AGE_GYR_MAX, N_MODELS)
+
 
 # --- Define vmap-friendly predict function ---
 def predict_single_spectrum(age_gyr):
@@ -142,8 +147,7 @@ ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
 ax.legend(frameon=False, fontsize=8, loc="upper right")
 ax.set_title(
-    "SDSS LRG Quiescent Template (z=0.3, R=2000)\n"
-    "Red sequence ages 6–11 Gyr per Thomas+2005"
+    "SDSS LRG Quiescent Template (z=0.3, R=2000)\nRed sequence ages 6–11 Gyr per Thomas+2005"
 )
 
 fig.tight_layout()

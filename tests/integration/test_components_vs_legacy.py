@@ -47,7 +47,7 @@ def stellar_only_model(ssp):
     """Stellar-only model — minimal chain (zero dust, no IGM)."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -68,7 +68,7 @@ _STELLAR_PARAMS = {
     # dust_tau_*) are read from spec by both predict_rest_sed and
     # predict_state (the latter injects via
     # spec.get_fixed_values()). This is the realistic call site.
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 2.0,
     "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": 0.0,
@@ -84,7 +84,7 @@ def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
     succeed — fixed values (met_logzsol, redshift, dust_tau_*) come
     from spec.get_fixed_values()."""
     free_only = {
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
         "sfh_tsnorm_peak_lbt_gyr": 2.0,
         "sfh_tsnorm_width_gyr": 1.0,
         "sfh_tsnorm_skew": 0.0,
@@ -99,7 +99,7 @@ def test_orchestrator_injects_fixed_values_from_spec(stellar_only_model):
 def test_orchestrator_explicit_param_overrides_spec_fixed(stellar_only_model):
     """A param passed explicitly must win over the spec's fixed value."""
     free_only = {
-        "sfh_tsnorm_log_peak_sfr": 1.0,
+        "sfh_tsnorm_log_total_mass": 1.0,
         "sfh_tsnorm_peak_lbt_gyr": 2.0,
         "sfh_tsnorm_width_gyr": 1.0,
         "sfh_tsnorm_skew": 0.0,
@@ -230,7 +230,7 @@ def stellar_field_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm", "field"],
         n_grid=_FIELD_N_GRID,
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -542,7 +542,7 @@ def stellar_chem_evol_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         met_mode="chem_evol",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -616,7 +616,7 @@ def stellar_ramp_model(ssp):
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
         met_mode="ramp",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -709,7 +709,7 @@ def _stellar_only_spec(sfh_name: str, sfh_params: dict):
         # Some params have physical constraints (must be > 0): widths,
         # truncs, burst_sfr, burst_age, peak_lbt. Use multiplicative
         # bounds for those; additive ±1.5 for unconstrained params
-        # like log_peak_sfr and skew.
+        # like log_total_mass and skew.
         # Most time/scale-like params have ``lo >= 0`` constraints in
         # their priors. Use multiplicative bounds for any param whose
         # name does NOT match an unconstrained suffix.
@@ -762,8 +762,8 @@ def test_orchestrator_lnorm_close_to_legacy(ssp):
         ssp,
         "lnorm",
         {
-            "sfh_lnorm_log_peak_sfr": 1.0,
-            "sfh_lnorm_peak_lbt_gyr": 3.0,
+            "sfh_lnorm_log_total_mass": 1.0,
+            "sfh_lnorm_peak_gyr": 3.0,
             "sfh_lnorm_width_gyr": 1.0,
         },
     )
@@ -775,7 +775,7 @@ def test_orchestrator_snorm_close_to_legacy(ssp):
         ssp,
         "snorm",
         {
-            "sfh_snorm_log_peak_sfr": 1.0,
+            "sfh_snorm_log_total_mass": 1.0,
             "sfh_snorm_peak_lbt_gyr": 3.0,
             "sfh_snorm_width_gyr": 1.0,
             "sfh_snorm_skew": 0.0,
@@ -789,7 +789,7 @@ def test_orchestrator_snorm_burst_close_to_legacy(ssp):
         ssp,
         "snorm_burst",
         {
-            "sfh_snorm_burst_log_peak_sfr": 1.0,
+            "sfh_snorm_burst_log_total_mass": 1.0,
             "sfh_snorm_burst_peak_lbt_gyr": 3.0,
             "sfh_snorm_burst_width_gyr": 1.0,
             "sfh_snorm_burst_skew": 0.0,
@@ -805,7 +805,7 @@ def test_orchestrator_tsnorm_burst_close_to_legacy(ssp):
         ssp,
         "tsnorm_burst",
         {
-            "sfh_tsnorm_burst_log_peak_sfr": 1.0,
+            "sfh_tsnorm_burst_log_total_mass": 1.0,
             "sfh_tsnorm_burst_peak_lbt_gyr": 3.0,
             "sfh_tsnorm_burst_width_gyr": 1.0,
             "sfh_tsnorm_burst_skew": 0.0,
@@ -822,7 +822,7 @@ def test_orchestrator_norm_close_to_legacy(ssp):
         ssp,
         "norm",
         {
-            "sfh_norm_log_peak_sfr": 1.0,
+            "sfh_norm_log_total_mass": 1.0,
             "sfh_norm_peak_lbt_gyr": 3.0,
             "sfh_norm_width_gyr": 1.0,
         },
@@ -852,7 +852,7 @@ def test_orchestrator_const_close_to_legacy(ssp):
         ssp,
         "const",
         {
-            "sfh_const_log_sfr": 1.0,
+            "sfh_const_log_total_mass": 1.0,
             "sfh_const_start_gyr": 0.5,
             "sfh_const_end_gyr": 5.0,
         },
@@ -865,7 +865,7 @@ def test_orchestrator_const_exp_close_to_legacy(ssp):
         ssp,
         "const_exp",
         {
-            "sfh_cexp_log_sfr": 1.0,
+            "sfh_cexp_log_total_mass": 1.0,
             "sfh_cexp_tau_gyr": 2.0,
             "sfh_cexp_quench_gyr": 5.0,
             "sfh_cexp_age_gyr": 10.0,
@@ -910,7 +910,7 @@ def _check_with_priors(ssp, sfh_name, priors, sfh_params, rtol=2e-2):
 def test_orchestrator_psb_close_to_legacy(ssp):
     """``psb`` (post-starburst, Wild+ 2020) — orchestrator vs legacy."""
     priors = {
-        "sfh_psb_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_psb_log_total_mass": Uniform(8.0, 12.0),
         "sfh_psb_age_gyr": Uniform(0.5, 13.0),
         "sfh_psb_tau_gyr": Uniform(0.1, 10.0),
         "sfh_psb_burstage_gyr": Uniform(0.01, 5.0),
@@ -919,7 +919,7 @@ def test_orchestrator_psb_close_to_legacy(ssp):
         "sfh_psb_fburst": Uniform(0.01, 0.99),
     }
     sfh_params = {
-        "sfh_psb_log_peak_sfr": 1.0,
+        "sfh_psb_log_total_mass": 1.0,
         "sfh_psb_age_gyr": 5.0,
         "sfh_psb_tau_gyr": 2.0,
         "sfh_psb_burstage_gyr": 0.5,
@@ -936,12 +936,14 @@ def test_orchestrator_psb_close_to_legacy(ssp):
 def test_orchestrator_delayed_bq_close_to_legacy(ssp):
     """``delayed_bq`` (delayed burst-quench SFH) — orchestrator vs legacy."""
     priors = {
+        "sfh_delayed_bq_log_total_mass": Uniform(8.0, 12.0),
         "sfh_delayed_bq_tau_main_gyr": Uniform(0.1, 10.0),
         "sfh_delayed_bq_age_main_gyr": Uniform(0.5, 13.0),
         "sfh_delayed_bq_age_bq_gyr": Uniform(0.01, 5.0),
         "sfh_delayed_bq_r_sfr": Uniform(0.01, 10.0),
     }
     sfh_params = {
+        "sfh_delayed_bq_log_total_mass": 10.0,
         "sfh_delayed_bq_tau_main_gyr": 2.0,
         "sfh_delayed_bq_age_main_gyr": 5.0,
         "sfh_delayed_bq_age_bq_gyr": 1.0,
@@ -994,11 +996,11 @@ def test_orchestrator_exp_close_to_legacy(ssp):
     cutoff edge, which closes only with the SFH-side CSP migration.
     """
     priors = {
-        "sfh_exp_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_exp_log_total_mass": Uniform(8.0, 12.0),
         "sfh_exp_tau_gyr": Uniform(0.1, 10.0),
     }
     sfh_params = {
-        "sfh_exp_log_peak_sfr": 1.0,
+        "sfh_exp_log_total_mass": 1.0,
         "sfh_exp_tau_gyr": 2.0,
     }
     _check_with_priors(ssp, "exp", priors, sfh_params)
@@ -1011,11 +1013,13 @@ def test_orchestrator_periodic_close_to_legacy(ssp):
     similar to const_exp/psb. Closes to <1% with the SFH-side migration.
     """
     priors = {
+        "sfh_periodic_log_total_mass": Uniform(8.0, 12.0),
         "sfh_periodic_delta_bursts_gyr": Uniform(0.01, 1.0),
         "sfh_periodic_tau_bursts_gyr": Uniform(0.001, 0.5),
         "sfh_periodic_age_gyr": Uniform(0.5, 13.0),
     }
     sfh_params = {
+        "sfh_periodic_log_total_mass": 10.0,
         "sfh_periodic_delta_bursts_gyr": 0.5,
         "sfh_periodic_tau_bursts_gyr": 0.05,
         "sfh_periodic_age_gyr": 5.0,
@@ -1026,9 +1030,11 @@ def test_orchestrator_periodic_close_to_legacy(ssp):
 def test_orchestrator_buat08_close_to_legacy(ssp):
     """``buat08`` (Buat+ 2008 velocity-parameterised SFH) — rtol=5e-2."""
     priors = {
+        "sfh_buat08_log_total_mass": Uniform(8.0, 12.0),
         "sfh_buat08_velocity_km_s": Uniform(80.0, 360.0),
     }
     sfh_params = {
+        "sfh_buat08_log_total_mass": 10.0,
         "sfh_buat08_velocity_km_s": 200.0,
     }
     _check_with_priors(ssp, "buat08", priors, sfh_params)
@@ -1037,35 +1043,17 @@ def test_orchestrator_buat08_close_to_legacy(ssp):
 def test_orchestrator_dexp_close_to_legacy(ssp):
     """``dexp`` (delayed exponential) — same caveat as ``exp``."""
     priors = {
-        "sfh_dexp_log_peak_sfr": Uniform(-1.0, 3.0),
+        "sfh_dexp_log_total_mass": Uniform(8.0, 12.0),
         "sfh_dexp_tau_gyr": Uniform(0.1, 10.0),
     }
     sfh_params = {
-        "sfh_dexp_log_peak_sfr": 1.0,
+        "sfh_dexp_log_total_mass": 1.0,
         "sfh_dexp_tau_gyr": 2.0,
     }
     _check_with_priors(ssp, "dexp", priors, sfh_params)
 
 
-def test_orchestrator_tau_close_to_legacy(ssp):
-    """``tau`` SFH parity — closed at machine epsilon by closure-path-A.
-
-    The hard cutoff at ``lookback_time = sfh_tau_age_gyr`` previously
-    produced ~13% rtol divergence between legacy log-space and
-    orchestrator linear-space SFR interpolations. Closure-A in the
-    no-α delta-Z branch of ``forward/pipeline.py`` rebuilds the SFR
-    grid using the orchestrator's exact pattern (n_grid=64, linear
-    lookback-time interpolation), so both paths see the same cutoff
-    representation and agree to ~1e-11.
-    """
-    priors = {
-        "sfh_tau_log_peak_sfr": Uniform(-1.0, 3.0),
-        "sfh_tau_tau_gyr": Uniform(0.1, 10.0),
-        "sfh_tau_age_gyr": Uniform(0.5, 13.0),
-    }
-    sfh_params = {
-        "sfh_tau_log_peak_sfr": 1.0,
-        "sfh_tau_tau_gyr": 2.0,
-        "sfh_tau_age_gyr": 5.0,
-    }
-    _check_with_priors(ssp, "tau", priors, sfh_params)
+# Removed: ``test_orchestrator_tau_close_to_legacy`` (FSPS-style "tau"
+# declining exponential SFH was deregistered 2026-05-28 because its name
+# collided with CIGALE ``sfhdelayed`` semantics — only ``"delayed"``
+# remains. See PR notes and registry.py comment block.

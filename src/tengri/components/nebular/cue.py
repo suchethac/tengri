@@ -121,8 +121,12 @@ _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
 _LOG_C = jnp.log10(_C_CGS)
 
-# Maximum SSP age contributing to nebular emission
-_MAX_NEB_LOG_AGE = 8.0  # log10(100 Myr in yr)
+# Maximum SSP age contributing to nebular emission. Re-exported from
+# ionizing_spectrum.MAX_NEB_LOG_AGE so the precompute (which lives there)
+# and the downstream forward filter (here) share one source of truth.
+from tengri.components.nebular.ionizing_spectrum import (
+    MAX_NEB_LOG_AGE as _MAX_NEB_LOG_AGE,
+)
 
 # Flag to track whether the ionspec defaults warning has been issued (once per process)
 _IONSPEC_DEFAULT_WARNED: bool = False
@@ -758,9 +762,16 @@ def predict_all_lines(
     wav_sorted = weights.nn_line_wav[weights.batched_sort_idx]
 
     # Stay in Lsun internally to avoid 10^x overflow; predict_nebular_sed
-    # converts to erg/s at the boundary.
+    # converts to erg/s at the boundary. The clip is the only defence against
+    # NaN/inf poisoning a JAX gradient if gas_logq / gas_logqion go pathological
+    # (e.g. inf from a float32 SSP overflow in fit_ionizing_spectrum, cf. #469).
+    # ±50 dex is intentionally tight: physical line luminosities sit within
+    # ~±20 dex of Lsun for typical galaxies, so saturation here is a load-loud
+    # signal of an upstream bug. ±100 (the original) was wide enough that the
+    # +51-dex `gas_logq = logU` bug fixed in #477 produced near-physical
+    # silently-wrong output rather than blatantly-saturated output.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    exponent_safe = jnp.clip(exponent, -100.0, 100.0)
+    exponent_safe = jnp.clip(exponent, -50.0, 50.0)
     luminosities = 10.0**exponent_safe
 
     return wav_sorted, luminosities
@@ -821,9 +832,11 @@ def predict_continuum(
 
     # Convert from log10(Lsun/Hz/Q_H) to Lsun/Hz:
     # Internal computation stays in Lsun/Hz to avoid exponent overflow;
-    # converted to erg/s/Hz at predict_nebular_sed return.
+    # converted to erg/s/Hz at predict_nebular_sed return. Clip tightened
+    # from ±100 to ±50 dex in this revision — see predict_all_lines for the
+    # full rationale (#477 follow-up).
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    luminosity = 10.0 ** jnp.clip(exponent, -100.0, 100.0)
+    luminosity = 10.0 ** jnp.clip(exponent, -50.0, 50.0)
 
     # Zero out wavelengths below Lyman limit (Cue convention)
     luminosity = jnp.where(wav_sorted > 911.6, luminosity, 0.0)
@@ -975,6 +988,7 @@ class CueBackend:
             np.array(ssp_data.ssp_wave),
             np.array(ssp_data.ssp_flux),
             np.array(ssp_data.ssp_lgmet),
+            ssp_log_age_yr=np.array(ssp_data.ssp_lg_age_gyr) + 9.0,
         )
         self._ionspec_table = jnp.array(result["ionspec_table"])
         self._logqion_table = jnp.array(result["logqion_table"])
@@ -1786,9 +1800,15 @@ def _cue_weights_flatten(cw):
         cw.batched_spec_scale,
         cw.batched_spec_shift,
         cw.batched_sort_idx,
+        # ``line_wav_selections`` is a tuple of int arrays. It must live in
+        # children, not aux_data: arrays in aux trigger a ``ValueError``
+        # ("arrays cannot be passed as metadata fields") on the second JIT
+        # cache lookup, because aux equality compares with ``==`` which
+        # returns an array on ndarray inputs. See issue #464.
+        cw.line_wav_selections,
     )
-    # Non-array aux: strings, int tuples
-    aux_data = (cw.line_names, cw.line_wav_selections, cw.batched_n_lines)
+    # Non-array aux: strings and int tuples only.
+    aux_data = (cw.line_names, cw.batched_n_lines)
     return children, aux_data
 
 
@@ -1816,8 +1836,9 @@ def _cue_weights_unflatten(aux_data, children):
         b_ss,
         b_ssh,
         b_si,
+        line_wav_selections,
     ) = children
-    line_names, line_wav_selections, batched_n_lines = aux_data
+    line_names, batched_n_lines = aux_data
     return CueWeights(
         line_nets=line_nets,
         cont_net=cont_net,

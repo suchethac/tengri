@@ -140,7 +140,9 @@ from tengri.components.agn.silva04 import silva04_analytic
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.dust.attenuation import prevot_smc
 from tengri.components.radio.radio import radio_total
-from tengri.components.xray.xray import xray_agn_corona
+from tengri.components.xray.xray import (
+    _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
+)
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 
@@ -474,7 +476,7 @@ def multicolor_agn(
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_log_nh_silva: float = 23.0,
     agn_torus_frac: float = 0.5,
     **_kwargs,
@@ -558,7 +560,7 @@ def kubota_done_full_agn(
     agn_log_mbh: float = 8.0,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_f_hard: float = 0.02,
     agn_gamma_warm: float = 2.5,
     agn_kt_warm: float = 0.2,
@@ -669,7 +671,7 @@ def skirtor_agn(
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_torus_frac: float = 0.5,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
@@ -802,7 +804,7 @@ def cat3d_wind_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
     agn_frac: float = 0.1,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_a_cat3d: float = -2.0,
     agn_fwd_cat3d: float = 0.45,
     agn_torus_frac: float = 0.5,
@@ -877,7 +879,7 @@ def adaf_agn(
     agn_r_tr: float = 100.0,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.01,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_torus_frac: float = 0.3,
     agn_log_nh_silva: float = 23.0,
     agn_ebv_disc: float = 0.0,
@@ -974,7 +976,7 @@ def relagn_agn(
     agn_log_mbh: float = 8.0,
     agn_log_mdot: float = -1.0,
     agn_astar: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_torus_frac: float = 0.5,
     agn_log_nh_silva: float = 23.0,
     agn_ebv_disc: float = 0.0,
@@ -1142,7 +1144,7 @@ def _sigmoid_mask(
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_theta_torus: float = 30.0,
     agn_nlr_cf: float = 0.1,
     agn_blr_cf: float = 0.1,
@@ -1478,9 +1480,15 @@ def unified_nlr_blr(
     l_blr = mask_blr * l_blr_raw * polar_trans
 
     # --- X-ray corona (optional) ---
+    # ``unified_nlr_blr`` exposes ``xray_alpha_ox`` as an explicit user
+    # parameter, matching the original Synthesizer / Yang+2020 interface.
+    # The new canonical ``xray_agn_corona(l_2500_30deg_erg_hz, ...)`` path
+    # derives α_OX from L_2500 via Just+2007 instead of accepting it
+    # directly, so we route through the bolometric helper to preserve the
+    # user-facing semantics here.
     l_xray_contrib = jnp.zeros_like(wavelength)
     if include_xray:
-        l_xray_contrib = xray_agn_corona(
+        l_xray_contrib = _xray_agn_corona_legacy(
             wavelength,
             L_agn_bol=l_bol_erg,
             gamma=xray_gamma_agn,

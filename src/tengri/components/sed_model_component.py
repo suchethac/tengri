@@ -649,16 +649,26 @@ class SEDModelComponent:
         Returns
         -------
         mapping[str, ndarray]
-            Published keys for this component, keyed as
-            ``{self.name}_spec_lnu_precomp`` with shape (n_spec_pixel,).
+            ``{self.name}_spec_lnu_precomp`` (the per-pixel contribution)
+            plus every key the component's :meth:`predict` published. The
+            published dict is preserved — **not discarded** — so grid-
+            independent derived quantities survive the LUT path. This is
+            what lets a line-publishing nebular backend (Cue, CloudyGrid)
+            still surface ``line_waves`` / ``line_lums`` under
+            ``SpectrumPrecomp``, so ``predict_line_fluxes``, line ratios,
+            and the ``pred.lines.*`` diagnostics keep working.
         """
-        # Evaluate predict at spectrum pixel centres
-        spec_lnu_precomp, _ = self.predict(
+        # Evaluate predict at spectrum pixel centres. ``published`` carries
+        # grid-independent derived quantities (e.g. nebular line_waves /
+        # line_lums) that must reach state.derived exactly as on the
+        # full-grid path.
+        spec_lnu_precomp, published = self.predict(
             p, jnp.zeros_like(spec_eff_waves), spec_eff_waves, **inputs
         )
 
-        # Publish the per-pixel spectrum contribution
-        return {f"{self.name}_spec_lnu_precomp": spec_lnu_precomp}
+        out = dict(published)
+        out[f"{self.name}_spec_lnu_precomp"] = spec_lnu_precomp
+        return out
 
     def predict_precomp(
         self,

@@ -131,7 +131,9 @@ def plot_psd_corner(results_phot, results_spec):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--method", type=str, default="mcmc_raytrace", choices=["mcmc_raytrace", "vi"])
+    parser.add_argument(
+        "--method", type=str, default="mcmc_raytrace", choices=["mcmc_raytrace", "vi"]
+    )
     args = parser.parse_args()
 
     fit_kwargs = {}

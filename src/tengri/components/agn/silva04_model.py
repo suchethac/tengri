@@ -136,15 +136,26 @@ class Silva04Torus(SEDModelComponent):
     config: Silva04TorusConfig = field(default_factory=Silva04TorusConfig)
 
     # Free parameters — auto-discovered
-    log_lbol = Uniform(8.0, 14.0, description="AGN bolometric luminosity", units="dex (L_sun)")
+    log_lbol = Uniform(
+        8.0,
+        14.0,
+        description="AGN bolometric luminosity",
+        units="dex (L_sun)",
+        default=11.0,
+    )
     log_nh_silva = Uniform(
-        22.0, 25.0, description="Hydrogen column density (Silva et al.)", units="dex (cm^-2)"
+        22.0,
+        25.0,
+        description="Hydrogen column density (Silva et al.)",
+        units="dex (cm^-2)",
+        default=23.5,
     )
     torus_frac = Uniform(
         0.0,
         1.0,
         description="Torus luminosity fraction of L_bol",
         units="dimensionless",
+        default=0.5,
     )
 
     # Cross-component output

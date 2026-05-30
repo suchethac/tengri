@@ -17,9 +17,9 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.polar_dust import polar_dust_extinction
+from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
 
-__all__: list[str] = []  # registrations only
+__all__: list[str] = ["polar_dust_reemission_lnu"]  # registrations only
 
 
 @register_agn_block("attenuation", "polar_dust")
@@ -27,7 +27,7 @@ def polar_dust_attenuation_block(
     wavelength: Array,
     *,
     agn_polar_ebv: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = 0.86602540378443864,
     agn_polar_oa: float = 45.0,
     agn_polar_law: str = "smc",
     **_params,
@@ -75,3 +75,97 @@ def polar_dust_attenuation_block(
         law=agn_polar_law,
     )
     return factor
+
+
+def polar_dust_reemission_lnu(
+    wavelength: Array,
+    l_in: Array,
+    *,
+    agn_polar_ebv: float = 0.0,
+    agn_cos_inc: float = 0.86602540378443864,
+    agn_polar_oa: float = 45.0,
+    agn_polar_temperature: float = 100.0,
+    agn_polar_beta: float = 1.6,
+    agn_polar_law: str = "smc",
+    **_params,
+) -> Array:
+    r"""Compute polar-dust greybody reemission in L_ν units.
+
+    Takes the pre-attenuation SED (in L_λ, erg/s/Å), computes the total
+    absorbed luminosity from the polar dust extinction cross-section, and
+    returns the greybody reemission spectrum in observer-frame L_ν
+    (erg/s/Hz).
+
+    The absorbed luminosity is geometry-independent (Yang+2020 §2.2.2),
+    so reemission is isotropic and visible from all viewing angles.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    l_in : array_like, shape (n_wave,)
+        Pre-attenuation AGN SED in :math:`L_\lambda` [erg/s/Å].
+    agn_polar_ebv : float, optional
+        :math:`E(B-V)` of the polar dust [mag]. Default ``0.0``.
+    agn_cos_inc : float, optional
+        :math:`\cos(i)` (1 = face-on, 0 = edge-on). Default ``0.5``.
+    agn_polar_oa : float, optional
+        Torus half-opening angle [deg, measured from equator]. Default ``45``.
+    agn_polar_temperature : float, optional
+        Dust temperature [K]. Default ``100.0``.
+    agn_polar_beta : float, optional
+        Dust emissivity index [dimensionless]. Default ``1.6``.
+    agn_polar_law : str, optional
+        Extinction law (``"smc"`` / ``"calzetti"`` / ``"gaskell"``).
+        Default ``"smc"``.
+
+    Returns
+    -------
+    l_nu_reemit : ndarray, shape (n_wave,)
+        Reemitted greybody :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    This function computes the geometry-independent absorbed luminosity from
+    :func:`polar_dust_extinction`, integrates it, and passes it to
+    :func:`polar_dust_emission` to compute the FIR greybody. The result is
+    valid for all inclinations and should be added to the attenuated disc SED.
+
+    **JIT-compatible**: yes — uses JAX primitives throughout.
+
+    References
+    ----------
+    .. [1] Yang, A., et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust).
+    """
+    wave_aa = jnp.asarray(wavelength)
+    l_lambda_in = jnp.asarray(l_in)
+
+    # Step 1: compute geometry-independent absorbed fraction per wavelength bin.
+    # polar_dust_extinction returns (l_nu_attenuated, l_absorbed) where l_absorbed
+    # is the per-bin absorbed luminosity (geometry-independent).
+    _l_nu_atten, l_absorbed_per_bin = polar_dust_extinction(
+        l_lambda_in,
+        wave_aa,
+        cos_inc=agn_cos_inc,
+        opening_angle_deg=agn_polar_oa,
+        ebv=agn_polar_ebv,
+        law=agn_polar_law,
+    )
+
+    # Step 2: bolometric absorbed luminosity = ∫ L_λ dλ [erg/s].
+    # l_absorbed_per_bin shares units with l_in (L_λ in erg/s/Å here), so
+    # integrate over wavelength (sorted ascending). Integrating over ν would
+    # mix erg/s/Å with Hz and produce a ~12-dex overshoot in the reemission.
+    idx_w = jnp.argsort(wave_aa)
+    l_absorbed_total = jnp.trapezoid(l_absorbed_per_bin[idx_w], wave_aa[idx_w])
+
+    # Step 3: compute the greybody reemission (returns L_ν in erg/s/Hz).
+    l_nu_reemit = polar_dust_emission(
+        l_absorbed_total,
+        wave_aa,
+        temperature=agn_polar_temperature,
+        beta=agn_polar_beta,
+        lambda_0=2e6,  # 200 μm reference wavelength
+    )
+
+    return l_nu_reemit

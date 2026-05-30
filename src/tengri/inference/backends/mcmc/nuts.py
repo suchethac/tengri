@@ -27,6 +27,75 @@ from tengri.utils.compile_log import compile_timer
 logger = logging.getLogger(__name__)
 
 
+def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bool:
+    """Resolve the ``dense_mass_matrix=None`` auto-policy (#319).
+
+    The auto-policy switches to diagonal at D >= 8 to dodge the
+    documented 20+ GB warmup spike on photometry fits with
+    ``mean_sfh_type="dense_basis"``. Below D = 8 the dense matrix
+    converges faster on tengri's typical age-dust-metallicity
+    posteriors and peaks at ~3-6 GB.
+
+    Pulled out of :func:`run_nuts` so the heuristic is unit-testable
+    without spinning up a full NUTS warmup.
+
+    Parameters
+    ----------
+    dense_mass_matrix : bool or None
+        ``None`` (auto), ``True`` (force dense), or ``False`` (force diagonal).
+    n_dim : int
+        Number of free parameters in the model.
+
+    Returns
+    -------
+    bool
+        Effective ``dense_mass_matrix`` value to pass to the warmup
+        kernel. Explicit ``True`` / ``False`` round-trip unchanged.
+    """
+    if dense_mass_matrix is None:
+        return n_dim < 8
+    return dense_mass_matrix
+
+
+def _maybe_warn_high_memory_nuts(n_dim: int, dense_mass_matrix: bool, spec) -> None:
+    """Warn before NUTS warmup OOMs at D >= 8 with dense mass matrix (#319).
+
+    The trace graph for full mass-matrix adaptation grows quadratically
+    in D and is amplified by SFH variants that publish many per-sample
+    derived quantities (``mean_sfh_type="dense_basis"`` is the
+    documented worst case — peak 22.78 GB on a D=8 photometry fit).
+    Small D <= 7 fits peak at 3-6 GB and are fine.
+
+    Pulled out of :func:`run_nuts` so the heuristic is unit-testable
+    without spinning up a full NUTS warmup.
+    """
+    if not (dense_mass_matrix and n_dim >= 8):
+        return
+    if getattr(spec, "stochastic", False):
+        # Stochastic-SFH fits get a separate, more aggressive warning
+        # higher up in run_nuts already.
+        return
+    heavy_sfh_hint = ""
+    mean_sfh_type = getattr(spec, "mean_sfh_type", None)
+    if mean_sfh_type is not None:
+        types_iter = mean_sfh_type if isinstance(mean_sfh_type, list) else [mean_sfh_type]
+        if any("dense_basis" in str(t) for t in types_iter):
+            heavy_sfh_hint = (
+                " (your mean_sfh_type includes 'dense_basis', which "
+                "amplifies this — peak was 22.78 GB on a D=8 fit in "
+                "the original report)"
+            )
+    warnings.warn(
+        f"NUTS warmup with dense_mass_matrix=True at D={n_dim} can "
+        f"peak at 20+ GB of RAM{heavy_sfh_hint}. If you're on a "
+        "32 GB machine and the fit is OOM-ing, pass "
+        "`dense_mass_matrix=False` (diagonal mass matrix; small "
+        "convergence cost) or switch to `method='mcmc_hmc'` "
+        "(less memory-intensive at warmup). See issue #319.",
+        stacklevel=3,
+    )
+
+
 def run_nuts(
     context,
     *,
@@ -38,7 +107,7 @@ def run_nuts(
     n_chains=1,
     target_accept_rate=0.85,
     max_num_doublings=10,
-    dense_mass_matrix=True,
+    dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
     verbose=True,
 ):
@@ -113,11 +182,19 @@ def run_nuts(
         when NUTS is hitting deep trees, which is workload-specific.
         Compile cost scales with this knob but is typically <3s at
         warm cache (see docs/inference/compilation_diagnostics.md).
-    dense_mass_matrix : bool
+    dense_mass_matrix : bool or None, optional
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and
-        dramatically reduces divergences. Default True. Set False
-        for D>20 where the dense matrix becomes expensive.
+        dramatically reduces divergences.
+
+        Default ``None`` auto-picks based on dimensionality:
+
+        - **D < 8**: dense (warmup peak ~3-6 GB; correlations matter).
+        - **D >= 8**: diagonal (avoids the 20+ GB warmup spike at D=8
+          with `dense_basis` SFH reported in issue #319).
+
+        Pass ``True`` or ``False`` explicitly to override. Explicit
+        ``True`` at D >= 8 emits a memory warning but is honoured.
     pathfinder_warmstart : bool, default False
         Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
         Hessian-derived inverse mass matrix + short step-size refinement)
@@ -172,8 +249,18 @@ def run_nuts(
         init_params,
     )
 
+    n_dim = len(init_flat)
+
+    # Resolve auto-policy (default since #319). Explicit True/False
+    # from the caller is honoured as-is.
+    user_passed_explicit = dense_mass_matrix is not None
+    dense_mass_matrix = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim)
+    if verbose and not user_passed_explicit:
+        policy = "dense (D<8)" if dense_mass_matrix else "diagonal (D>=8, #319)"
+        logger.info("NUTS auto-mass-matrix: %s", policy)
+
     if verbose:
-        n_dim = len(init_flat)
+        _maybe_warn_high_memory_nuts(n_dim, dense_mass_matrix, context.spec)
         # Auto-adjust warnings based on dimensionality
         if n_dim > 20 and not context.spec.stochastic:
             warnings.warn(
@@ -197,7 +284,7 @@ def run_nuts(
     # Dense: O(D²) per step, captures correlations. Good for D≤30.
     # Diagonal: O(D) per step, sufficient when init_from=Posterior
     #   (VI already decorrelated) or D>30.
-    n_dim = len(init_flat)
+    # (``n_dim`` already computed above for the #319 auto-policy.)
     use_dense = dense_mass_matrix
     if dense_mass_matrix and n_dim > 30:
         use_dense = False

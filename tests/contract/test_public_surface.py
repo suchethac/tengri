@@ -23,8 +23,7 @@ pytestmark = pytest.mark.contract
 # entry pins that the new path still resolves cleanly (no DeprecationWarning).
 _RELOCATED: dict[str, tuple[str, str]] = {
     "LineFluxData": ("tengri.observation", "LineFluxData"),
-    "SpectralIndexDef": ("tengri.observation", "SpectralIndexDef"),
-    "SpectralIndexData": ("tengri.observation", "SpectralIndexData"),
+    # (SpectralIndexDef / SpectralIndexData re-promoted to top-level as of #511.)
 }
 
 # Frozen target list. Adding to or removing from this list is a deliberate
@@ -92,12 +91,15 @@ EXPECTED_ALL = frozenset(
         "list_dust_emission_models",
         "list_dust_laws",
         "list_filters",
+        "list_igm_models",
         "list_inference_methods",
         "list_nebular_backends",
         "list_parameters",
         "list_plots",
+        "list_radio_models",
         "list_recipes",
         "list_sfh_models",
+        "list_xray_models",
         "ParameterRecord",
         "recipe_parameters",
         "search",
@@ -109,7 +111,29 @@ EXPECTED_ALL = frozenset(
         "clear_cache",
         "doctor",
         "download_ssp",
+        "list_available_ssps",
         "list_known_ssps",
+        # SSP loaders (closes #496)
+        "load_ssp",
+        "load_ssp_data",
+        "SSPData",
+        # Component helpers (closes #497 / #498)
+        "igm_transmission",
+        "velocity_broaden",
+        "apply_lsf",
+        # GP-noise kernels + spectral-index helpers (closes #511)
+        "exp_squared_kernel",
+        "matern32_kernel",
+        "gp_noise_covariance",
+        "SpectralIndexDef",
+        "SpectralIndexData",
+        "STANDARD_INDICES",
+        "measure_index_jax",
+        # Composite spectral indices (closes #505)
+        "CompositeIndexDef",
+        "STANDARD_COMPOSITE_INDICES",
+        # Per-age stellar mass-remaining curve (closes #447)
+        "compute_mass_remaining_fraction",
         "register_component",
         # Exceptions
         "BackendError",
