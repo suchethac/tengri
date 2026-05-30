@@ -124,7 +124,7 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(_ymax * 1e-6, _ymax * 2)
 
 fig.tight_layout()
-out_path = Path("reproduction/cigale/_figs/09_agn_skirtor.png")
+out_path = Path("reproduction/cigale/_figs/cigale_09_agn_skirtor.png")
 out_path.parent.mkdir(parents=True, exist_ok=True)
 fig.savefig(out_path, dpi=120, bbox_inches="tight")
 print(f"Saved {out_path}")

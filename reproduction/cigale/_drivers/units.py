@@ -9,8 +9,14 @@ References
        Emission. Astronomy & Astrophysics, 622, A103.
 """
 
-import numpy as np
+from __future__ import annotations
+
 import matplotlib.pyplot as plt
+import numpy as np
+
+# Physical constants. CIGALE works in W/nm; the converter below carries the
+# full unit chain explicitly, so only the speed of light is needed here.
+C_ANGSTROM_PER_S: float = 2.998e18
 
 
 def wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm):
@@ -39,12 +45,11 @@ def wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm):
         Luminosity density in erg/s/Hz.
     """
     wave_aa = wave_nm * 10.0
-    c_aa_per_s = 2.998e18  # speed of light in Angstrom/s
 
     # L_ν [erg/s/Hz] = L_λ [W/nm] * (1e7 erg/s / W) * (1 nm / 10 Å)
     #                  * λ² [Å²] / c [Å/s]
     #                = L_λ [W/nm] * 1e6 * λ² [Å²] / c [Å/s]
-    L_nu_erg_per_hz = L_wnm * 1e6 * (wave_aa ** 2) / c_aa_per_s
+    L_nu_erg_per_hz = L_wnm * 1e6 * (wave_aa**2) / C_ANGSTROM_PER_S
 
     return wave_aa, L_nu_erg_per_hz
 
@@ -86,8 +91,7 @@ def verify_unit_conversion(rtol: float = 1e-3) -> dict:
     L_bol_in_erg_s = float(np.trapezoid(L_wnm, wave_nm)) * 1e7
     # Convert and integrate ∫ L_ν dν on the increasing-ν grid.
     wave_aa, L_nu = wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm)
-    c_aa_per_s = 2.998e18
-    nu = c_aa_per_s / wave_aa[::-1]  # increasing
+    nu = C_ANGSTROM_PER_S / wave_aa[::-1]  # increasing
     L_nu_rev = L_nu[::-1]
     L_bol_out_erg_s = float(np.trapezoid(L_nu_rev, nu))
     rel_err = abs(L_bol_out_erg_s - L_bol_in_erg_s) / L_bol_in_erg_s
@@ -107,105 +111,65 @@ def verify_unit_conversion(rtol: float = 1e-3) -> dict:
     }
 
 
-def regrid(wave_src, y_src, wave_dst):
-    """Interpolate in log-log space; zero outside source range.
+def regrid(wave_src: np.ndarray, y_src: np.ndarray, wave_dst: np.ndarray) -> np.ndarray:
+    """Log-log interpolate ``y_src(wave_src)`` onto ``wave_dst``; zero outside.
 
     Parameters
     ----------
     wave_src : array_like, shape (n_src,)
-        Source wavelength grid (must be positive).
+        Source wavelength grid in Angstroms (must be positive).
     y_src : array_like, shape (n_src,)
-        Source flux or SED values (must be positive).
+        Source values (must be positive for the log-log interpolation to
+        be meaningful — non-positive entries are masked).
     wave_dst : array_like, shape (n_dst,)
         Destination wavelength grid.
 
     Returns
     -------
     y_dst : ndarray, shape (n_dst,)
-        Interpolated values on destination grid. Zero outside source
-        wavelength range.
+        Interpolated values on the destination grid; zero outside the
+        source wavelength range.
     """
     wave_src = np.asarray(wave_src)
     y_src = np.asarray(y_src)
     wave_dst = np.asarray(wave_dst)
 
-    # Clamp log-space interpolation to avoid nans/infs from negative values
-    mask_src = (wave_src > 0) & (y_src > 0)
-    if not np.any(mask_src):
+    mask = (wave_src > 0) & (y_src > 0)
+    if not np.any(mask):
         return np.zeros_like(wave_dst)
 
-    log_wave_src = np.log10(wave_src[mask_src])
-    log_y_src = np.log10(y_src[mask_src])
-
-    # Interpolate in log-log space
-    log_y_dst = np.interp(
+    log_y = np.interp(
         np.log10(wave_dst),
-        log_wave_src,
-        log_y_src,
+        np.log10(wave_src[mask]),
+        np.log10(y_src[mask]),
         left=np.nan,
         right=np.nan,
     )
-    y_dst = 10.0 ** log_y_dst
-
-    # Set to zero outside source wavelength range
-    in_range = (wave_dst >= wave_src[mask_src].min()) & (
-        wave_dst <= wave_src[mask_src].max()
-    )
+    y_dst = 10.0**log_y
+    in_range = (wave_dst >= wave_src[mask].min()) & (wave_dst <= wave_src[mask].max())
     y_dst[~in_range] = 0.0
-
     return y_dst
 
 
-def panel(ax_left, ax_right, *, label_l="pcigale.sed_modules", label_r="tengri"):
-    """Configure two SED comparison panels.
-
-    Sets both axes to log-log scale, adds shared x-label (wavelength
-    in Angstroms), y-label (νL_ν or L_ν in erg/s/Hz), and titles.
-
-    Parameters
-    ----------
-    ax_left : matplotlib.axes.Axes
-        Left subplot axes.
-    ax_right : matplotlib.axes.Axes
-        Right subplot axes.
-    label_l : str, optional
-        Title for left panel. Default: "pcigale.sed_modules".
-    label_r : str, optional
-        Title for right panel. Default: "tengri".
-
-    Returns
-    -------
-    ax_left, ax_right : tuple of matplotlib.axes.Axes
-        The configured axes for further use.
-    """
+def panel(
+    ax_left: plt.Axes,
+    ax_right: plt.Axes,
+    *,
+    label_l: str = "pcigale.sed_modules",
+    label_r: str = "tengri",
+) -> tuple[plt.Axes, plt.Axes]:
+    """Configure two SED comparison panels in matched log-log axes."""
     for ax in (ax_left, ax_right):
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlabel(r"$\lambda$ [Å]")
-        ax.set_ylabel(r"$\nu L_\nu$ or $L_\nu$ [erg/s/Hz]")
-
+        ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
     ax_left.set_title(label_l)
     ax_right.set_title(label_r)
-
     return ax_left, ax_right
 
 
-def two_panel_fig(figsize=(12, 4.5)):
-    """Create a standard 2-panel figure for SED comparisons.
-
-    Parameters
-    ----------
-    figsize : tuple, optional
-        Figure size (width, height) in inches. Default: (12, 4.5).
-
-    Returns
-    -------
-    fig : matplotlib.figure.Figure
-        Figure object.
-    ax_left, ax_right : tuple of matplotlib.axes.Axes
-        Left and right subplot axes, with shared y-axis.
-    """
-    fig, (ax_left, ax_right) = plt.subplots(
-        1, 2, sharey=True, figsize=figsize
-    )
+def two_panel_fig(figsize: tuple[float, float] = (12, 4.5)):
+    """Create a standard 2-panel figure for SED comparisons."""
+    fig, (ax_left, ax_right) = plt.subplots(1, 2, sharey=True, figsize=figsize)
     return fig, ax_left, ax_right

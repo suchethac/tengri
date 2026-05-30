@@ -99,9 +99,6 @@ figs_dir = _HERE / "_figs"
 figs_dir.mkdir(exist_ok=True)
 
 
-# Bump _FIG_DPI to 150 for the final docs render; 90 during iterative
-# debug keeps the PNG dimensions under the auto-viewer's 2000-pixel
-# limit so the two-panel figures (§2a, §2b) remain inspectable.
 _FIG_DPI = 150
 
 
@@ -110,13 +107,13 @@ def save_fig(filename: str) -> None:
     plt.savefig(str(figs_dir / filename), dpi=_FIG_DPI, bbox_inches="tight")
 
 
-def _assert_comparable(arr_b, arr_t, *, name: str) -> None:
+def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
     """Guard against shipping a blank or wildly mis-scaled panel."""
-    a_b = np.asarray(arr_b)
+    a_ref = np.asarray(arr_ref)
     a_t = np.asarray(arr_t)
-    assert np.isfinite(a_b).any() and np.isfinite(a_t).any(), f"{name}: NaN-only"
-    assert (a_b > 0).any() and (a_t > 0).any(), f"{name}: zero/negative-only"
-    ratio = a_b.max() / a_t.max()
+    assert np.isfinite(a_ref).any() and np.isfinite(a_t).any(), f"{name}: NaN-only"
+    assert (a_ref > 0).any() and (a_t > 0).any(), f"{name}: zero/negative-only"
+    ratio = a_ref.max() / a_t.max()
     assert 1e-3 < ratio < 1e3, f"{name}: y-scale ratio {ratio:.2e} out of range"
 
 
@@ -210,7 +207,7 @@ ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6, label="float32 round-
 ax_r.legend(loc="upper right", fontsize=8)
 ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("01_ssp_bc03_miles.png")
+save_fig("bagpipes_01_ssp_bc03_miles.png")
 
 
 # %% [markdown]
@@ -303,7 +300,7 @@ ax_r.axvline(TAU_GYR_FIDUCIAL, color="grey", linestyle=":", alpha=0.6)
 ax_r.set_yscale("linear")
 ax_l.set_yscale("linear")
 fig.tight_layout()
-save_fig("02_sfh_delayed.png")
+save_fig("bagpipes_02_sfh_delayed.png")
 
 
 # %% [markdown]
@@ -400,7 +397,7 @@ for ax in (ax_l, ax_r):
     )
     ax.legend(fontsize=9)
 fig.tight_layout()
-save_fig("10_sfh_dblplaw.png")
+save_fig("bagpipes_10_sfh_dblplaw.png")
 
 print(
     f"§2a peak location: BAGPIPES @ lookback {t_b_dpl[np.argmax(sfr_b_dpl)] / 1e9:.2f} Gyr, "
@@ -491,7 +488,7 @@ for ax in (ax_l, ax_r):
     )
     ax.legend(fontsize=9)
 fig.tight_layout()
-save_fig("11_sfh_lognormal.png")
+save_fig("bagpipes_11_sfh_lognormal.png")
 
 print(
     f"§2b peak location: BAGPIPES @ lookback {t_b_ln[np.argmax(sfr_b_ln)] / 1e9:.2f} Gyr, "
@@ -594,7 +591,7 @@ for ax in axes[-1]:
     ax.set_xlabel("lookback time [Gyr]")
 
 fig.tight_layout()
-save_fig("17_sfh_continuity_leja.png")
+save_fig("bagpipes_17_sfh_continuity_leja.png")
 
 
 # %% [markdown]
@@ -662,7 +659,7 @@ for ax in (ax_l, ax_r):
     ax.set_xlim(1e2, 1e6)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("03_stellar_sed.png")
+save_fig("bagpipes_03_stellar_sed.png")
 
 # Median tengri/BAGPIPES ratio in the optical (3000–10000 Å), a useful
 # scalar diagnostic for the docs page.
@@ -737,114 +734,67 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
 ax_b.legend(fontsize=10)
 ax_t.legend(fontsize=10)
 fig.tight_layout()
-save_fig("15_metallicity_sweep.png")
+save_fig("bagpipes_15_metallicity_sweep.png")
 
 
 # %% [markdown]
 # ## §6 Dust attenuation curves
 #
 # BAGPIPES' bundled dust laws — Calzetti+2000, Cardelli+1989 (MW),
-# Charlot & Fall 2000, and the Salim+2018 modification — next to
-# tengri's. Each curve is `A(λ) / A_V` normalised at 5500 Å. tengri's
-# curves are derived empirically by differencing attenuated and
-# intrinsic SEDs at matched τ.
+# Charlot & Fall 2000, and the Salim+2018 modification — shown against
+# tengri's `calzetti`, `cardelli`, `noll09`, and `salim`. Both sides
+# evaluate the analytic law directly (tengri via `tengri.dust.list_laws`),
+# normalised to `A(λ)/A_V` at 5500 Å, so the comparison is curve against
+# curve with no SSP-convolution noise.
 
 # %%
-bagpipes_laws = [
-    ({"type": "Calzetti", "Av": 1.0}, "Calzetti+2000"),
-    ({"type": "Cardelli", "Av": 1.0}, "Cardelli+1989 (MW)"),
-    ({"type": "CF00", "Av": 1.0, "eta": 2.0, "n": -0.7}, "Charlot & Fall 2000"),
-    ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "Salim+2018 (δ=0)"),
+from tengri.dust import list_laws
+
+# (BAGPIPES dust block, tengri law, label) for the four matched laws.
+_law_pairs = [
+    ({"type": "Calzetti", "Av": 1.0}, "calzetti", "Calzetti+2000"),
+    ({"type": "Cardelli", "Av": 1.0}, "cardelli", "Cardelli+1989 (MW)"),
+    ({"type": "CF00", "Av": 1.0, "eta": 2.0, "n": -0.7}, "noll09", "Charlot & Fall 2000"),
+    ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "salim", "Salim+2018 (δ=0)"),
 ]
+_tengri_laws = list_laws(headline=False)  # {name: fn(wave_aa) -> k at tau_V=1}
+wave_law = np.logspace(np.log10(1000.0), np.log10(50000.0), 2000)
 
-fig_b, ax_b = plt.subplots(1, 1, figsize=(10, 6))
-ax_b.set_xscale("log")
-ax_b.set_yscale("log")
-ax_b.set_xlabel(r"$\lambda$ [Å]")
-ax_b.set_ylabel(r"$A_\lambda / A_V$")
-ax_b.set_title("BAGPIPES attenuation laws  ($A_V = 1$)")
-for dust_block, label in bagpipes_laws:
+
+def _norm_AV(wave, A):
+    """A(λ) normalised to A_V at 5500 Å."""
+    return A / A[np.argmin(np.abs(wave - 5500.0))]
+
+
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
+for ax, title in (
+    (ax_l, "bagpipes.model_galaxy attenuation laws"),
+    (ax_r, "tengri attenuation laws"),
+):
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel(r"$\lambda$ [Å]")
+    ax.set_xlim(1e3, 5e4)
+    ax.set_ylim(0.05, 20)
+    ax.set_title(title)
+    ax.grid(True, alpha=0.3)
+ax_l.set_ylabel(r"$A_\lambda / A_V$")
+
+for dust_block, tengri_law, label in _law_pairs:
     try:
-        w, A = B.attenuation_curve(dust_block)
-        A_V = A[np.argmin(np.abs(w - 5500))]
-        if A_V > 0:
-            ax_b.plot(w, A / A_V, linewidth=2.0, label=label)
+        w_b, A_b = B.attenuation_curve(dust_block)
+        ax_l.plot(w_b, _norm_AV(w_b, A_b), linewidth=2.0, label=label)
     except Exception as exc:
-        print(f"  skip {label!r}: {exc}")
-ax_b.set_xlim(1e3, 5e4)
-ax_b.set_ylim(0.05, 20)
-ax_b.legend(fontsize=10)
-ax_b.grid(True, alpha=0.3)
-fig_b.tight_layout()
-save_fig("04_dust_attenuation_bagpipes.png")
+        print(f"  skip BAGPIPES {label!r}: {exc}")
 
-tengri_laws = [
-    ("calzetti", "Calzetti+2000"),
-    ("cardelli", "Cardelli+1989 (MW)"),
-    ("noll09", "CF00-like (Noll+09 mod.)"),
-    ("salim", "Salim+2018"),
-]
-
-fig_t, ax_t = plt.subplots(1, 1, figsize=(10, 6))
-ax_t.set_xscale("log")
-ax_t.set_yscale("log")
-ax_t.set_xlabel(r"$\lambda$ [Å]")
-ax_t.set_ylabel(r"$A_\lambda / A_V$")
-ax_t.set_title(r"tengri attenuation laws  ($\tau_V \approx 1$)")
-m_int = SEDModel.build(
-    ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
-        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
-        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
-    },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    redshift=Fixed(0.0),
-)
-s_int = m_int.predict_state({})
-L_int = s_int.sed_intrinsic
-wave_law = s_int.wave
-for law, label in tengri_laws:
-    try:
-        m_att = SEDModel.build(
-            ssp_data=ssp,
-            stellar=STELLAR_FIDUCIAL,
-            sfh={
-                "type": "delayed",
-                "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
-                "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
-                "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-                "*": FIXED,
-            },
-            dust={
-                "type": "two_component",
-                "law_bc": law,
-                "law_diff": law,
-                "tau_bc": Fixed(0.4),
-                "tau_diff": Fixed(0.6),
-                "*": FIXED,
-            },
-            redshift=Fixed(0.0),
-        )
-        s_att = m_att.predict_state({})
-        L_att = s_att.derived["sed_dust_attenuated"]
-        with np.errstate(divide="ignore", invalid="ignore"):
-            A = -2.5 * np.log10(np.maximum(L_att / L_int, 1e-10))
-        A = np.nan_to_num(A, nan=0.0, posinf=0.0, neginf=0.0)
-        A_V = A[np.argmin(np.abs(wave_law - 5500.0))]
-        if A_V > 0:
-            ax_t.plot(wave_law, A / A_V, linewidth=2.0, label=label)
-    except Exception as exc:
-        print(f"  skip tengri {label!r}: {exc}")
-ax_t.set_xlim(1e3, 5e4)
-ax_t.set_ylim(0.05, 20)
-ax_t.legend(fontsize=10)
-ax_t.grid(True, alpha=0.3)
-fig_t.tight_layout()
-save_fig("04_dust_attenuation_tengri.png")
+    # tengri's law functions are JAX-native but accept array-likes; the
+    # result is wrapped back to NumPy for plotting.
+    A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
+    ax_r.plot(wave_law, _norm_AV(wave_law, A_t), linewidth=2.0, label=label)
+ax_l.legend(fontsize=10)
+ax_r.legend(fontsize=10)
+fig.tight_layout()
+save_fig("bagpipes_04_dust_attenuation.png")
 
 
 # %% [markdown]
@@ -935,7 +885,7 @@ for ax in (ax_l1, ax_r1, ax_l2, ax_r2):
     ax.set_ylim(_ymax * 1e-6, _ymax * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("05_dust_attenuation_applied.png")
+save_fig("bagpipes_05_dust_attenuation_applied.png")
 
 
 # %% [markdown]
@@ -1036,7 +986,7 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(1e24, 1e32)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("06_dust_ir.png")
+save_fig("bagpipes_06_dust_ir.png")
 
 
 # %% [markdown]
@@ -1143,7 +1093,7 @@ if _b_halpha > 0:
         f"SFH-integrated convolution path"
     )
 fig.tight_layout()
-save_fig("08_nebular.png")
+save_fig("bagpipes_08_nebular.png")
 
 
 # %% [markdown]
@@ -1228,7 +1178,7 @@ ax_r.plot(_w_t_uni, _L_t_uni, "lightgrey", linewidth=1.0, label="no broadening")
 ax_r.plot(_w_t_uni, L_t_lsf, "C1-", linewidth=1.8, label="velocity_broaden 150 km/s")
 ax_r.legend(fontsize=9)
 fig.tight_layout()
-save_fig("09_lsf_velbroaden.png")
+save_fig("bagpipes_09_lsf_velbroaden.png")
 
 
 # FWHM check at Hα: σ_v = 150 km/s ↔ FWHM_λ = 2.355 σ_v λ_Hα / c
@@ -1328,7 +1278,7 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(1e22, 1e31)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("07_panchromatic.png")
+save_fig("bagpipes_07_panchromatic.png")
 
 
 # %% [markdown]
@@ -1360,7 +1310,7 @@ ax.set_title(f"Inoue+2014 IGM transmission at z = {Z_FIDUCIAL_IGM}")
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("12_igm_inoue14.png")
+save_fig("bagpipes_12_igm_inoue14.png")
 
 # Quantify agreement.
 _igm_diff = np.abs(T_t_igm - T_b_igm)
@@ -1442,7 +1392,7 @@ ax_r.set_ylim(0.0, 1.05)
 ax_r.set_title(r"Redward zoom — Asada damping wing shape")
 ax_r.legend(fontsize=10)
 fig.tight_layout()
-save_fig("16_cgm_asada.png")
+save_fig("bagpipes_16_cgm_asada.png")
 
 # Diagnostic at +5 Å redward of Lyα (1220.67 Å rest), where the
 # damping wing is at its peak effect on observable continuum.
@@ -1534,7 +1484,7 @@ ax_bot.set_ylabel("tengri − BAGPIPES [mag]")
 ax_bot.set_ylim(-1.0, 0.2)
 ax_bot.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("14_photometry_sdss.png")
+save_fig("bagpipes_14_photometry_sdss.png")
 
 for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
     print(f"§13 {band}: BAGPIPES {m_b:.3f}, tengri {m_t:.3f}, Δ {m_t - m_b:+.3f} mag")
@@ -1627,7 +1577,7 @@ ax_bot.set_ylim(-1.0, 0.2)
 ax_bot.legend(fontsize=9)
 ax_bot.grid(True, alpha=0.3)
 fig.tight_layout()
-save_fig("13b_photometry_no_neb.png")
+save_fig("bagpipes_13b_photometry_no_neb.png")
 
 print(
     f"§13b nebular-attribution test:  "
@@ -1698,6 +1648,93 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 
 
 # %% [markdown]
+# ## tengri in BAGPIPES-mode — full-SED head-to-head
+#
+# Every section above swept one physics block. This is the whole forward
+# model at once: tengri configured to emulate BAGPIPES end to end — the
+# shared BC03+MILES SSP, the fiducial τ-delayed SFH, a Calzetti
+# attenuation law, Draine & Li (2007) IR re-emission, and nebular —
+# overlaid on BAGPIPES' own panchromatic output at matched parameters (the
+# §11 configuration). The top panel is the overlay; the bottom is the
+# fractional residual `tengri / BAGPIPES − 1` with the ±25 % band shaded.
+# Optical agreement is reported as a normalization ratio and its 16–84 %
+# spread; the nebular emission lines (§9) drive the spread.
+
+# %%
+import chex
+
+# Reuse the §11 panchromatic full SED: tengri's BAGPIPES-mode model and
+# BAGPIPES' own output, both at the fiducial galaxy.
+w_ext, L_ext = np.asarray(w_b_full), np.asarray(L_b_full)
+wave_t = np.asarray(s_full.wave)
+L_t = (
+    np.asarray(s_full.derived["sed_dust_attenuated"])
+    + np.asarray(s_full.derived["sed_dust_ir"])
+    + np.asarray(s_full.derived["sed_nebular"])
+)
+
+# Put tengri on BAGPIPES' wavelength grid so the two compare point for point.
+L_t_on_ext = U.regrid(wave_t, L_t, w_ext)
+chex.assert_equal_shape([L_ext, L_t_on_ext])
+
+mask = (w_ext > 0) & (L_ext > 0) & (L_t_on_ext > 0)
+resid = np.full(w_ext.shape, np.nan, dtype=float)
+resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
+
+# Headline numbers: the optical normalization ratio tengri/BAGPIPES and
+# its 16–84% spread. A roughly constant offset reflects how each code
+# maps the fiducial dust and mass conventions; the spread is set by the
+# nebular emission lines (§9). Separating the two is fairer than one |Δ|
+# that blends a fixed offset with the line gap.
+opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
+ratio_opt = L_t_on_ext[opt] / L_ext[opt]
+norm = float(np.median(ratio_opt))
+p16, p84 = float(np.percentile(ratio_opt, 16)), float(np.percentile(ratio_opt, 84))
+print(
+    f"full-SED head-to-head tengri/BAGPIPES optical (1000–10000 Å): "
+    f"normalization {norm:.2f}×, 16–84% spread {p16:.2f}–{p84:.2f}×"
+)
+_assert_comparable(L_ext, L_t, name="full-SED head-to-head")
+
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(11, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(w_ext, L_ext, "C0-", linewidth=1.5, label="BAGPIPES")
+ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (BAGPIPES-mode)")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1e2, 1e7)
+ax.set_ylim(1e22, 1e31)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+ax.set_title("tengri in BAGPIPES-mode vs BAGPIPES — full panchromatic SED")
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.text(
+    0.02,
+    0.05,
+    rf"tengri/BAGPIPES $= {norm:.2f}\times$ (16–84%: {p16:.2f}–{p84:.2f})",
+    transform=ax.transAxes,
+    fontsize=10,
+    va="bottom",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+)
+
+ax_r.axhspan(-0.25, 0.25, color="0.85", zorder=0)
+ax_r.axhline(0.0, color="0.5", linewidth=0.8)
+ax_r.axhline(norm - 1.0, color="C1", linestyle=":", linewidth=0.9)
+ax_r.plot(w_ext, resid, "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_xlim(1e2, 1e7)
+ax_r.set_ylim(-1.0, 1.0)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel(r"tengri/BAGPIPES $-1$")
+ax_r.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("bagpipes_full_sed_headtohead.png")
+plt.show()
+
+
+# %% [markdown]
 # ## Summary
 #
 # Section-by-section, at matched parameters, in the logical flow used
@@ -1744,8 +1781,28 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 #   essentially unchanged (−0.45 mag), so this is the §4 stellar-SED
 #   colour difference, not the §9 nebular gap.
 # - **§14 timing.** Both codes finish a full SED in 80–120 ms.
+# - **full-SED head-to-head.** The whole BAGPIPES-mode forward model on
+#   one axis with a fractional-residual panel and a single optical
+#   normalization ratio + 16–84 % spread; the nebular emission lines
+#   drive the spread.
 #
 # Every residual that exceeds the noise floor in a panel above has a
 # one-sentence physics explanation attached to it. The companion
 # README (`reproduction/bagpipes/README.md`) holds the audit table
 # plus the outstanding follow-up items tracked against tengri.
+
+# %% [markdown]
+# ## References
+#
+# * Carnall et al. 2018, MNRAS 480, 4379 — BAGPIPES
+# * Bruzual & Charlot 2003, MNRAS 344, 1000 — BC03 SSPs
+# * Sánchez-Blázquez et al. 2006, MNRAS 371, 703 — MILES library
+# * Kroupa 2001, MNRAS 322, 231 — IMF
+# * Calzetti et al. 2000, ApJ 533, 682 — starburst attenuation
+# * Cardelli, Clayton & Mathis 1989, ApJ 345, 245 — MW extinction
+# * Charlot & Fall 2000, ApJ 539, 718 — two-component dust
+# * Salim, Boquien & Lee 2018, ApJ 859, 11 — attenuation modification
+# * Draine & Li 2007, ApJ 657, 810 — dust IR emission
+# * Inoue et al. 2014, MNRAS 442, 1805 — IGM absorption
+# * Asada et al. 2025 — CGM damping wing
+# * Li et al. 2025 — Cue nebular emulator
