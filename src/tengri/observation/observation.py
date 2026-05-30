@@ -665,6 +665,7 @@ class Observation:
                 self.photometry._ft_padded,
                 z,
                 dl_cm,
+                convention=self.photometry.convention,
             )[:n_real]
             out["phot_fnu"] = phot
 
@@ -712,6 +713,7 @@ class Observation:
                     self.photometry._ft_padded,
                     jnp.asarray(0.0),
                     jnp.asarray(dl_rest),
+                    convention=self.photometry.convention,
                 )[:n_real]
 
             # Build positional arguments in order: phot_fnu, phot_rest_fnu, spec_fnu

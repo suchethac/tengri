@@ -44,6 +44,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "SpectrumPrecomp",
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
+        "FilterConvention",
         "FlatSlab",
         "Sersic",
         # ── SEDComponent extension surface — demoted; see DEMOTED_BUT_IMPORTABLE
@@ -127,6 +128,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_filter_conventions",
         "list_filters",
         "list_igm_models",
         "list_inference_methods",

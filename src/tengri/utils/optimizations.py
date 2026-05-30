@@ -11,10 +11,13 @@ Key optimizations:
 4. Memory-efficient vmap patterns
 """
 
+import functools
+
 import jax
 import jax.numpy as jnp
 
 from tengri.utils.conversions import lnu_to_fnu
+from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
 
 # ── 1. Hartley transform (from NIFTy.re) ──────────────────────────
 
@@ -155,20 +158,23 @@ def checkpointed_forward_model(model_fn):
 # ── 3. Approximate photometry (Zacharegkas+2025 Section 3) ────────
 
 
-@jax.jit
+@functools.partial(jax.jit, static_argnames=("convention",))
 def precompute_ssp_photometry(
     ssp_flux: jnp.ndarray,
     ssp_wave: jnp.ndarray,
     filter_wave: jnp.ndarray,
     filter_trans: jnp.ndarray,
     redshift: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> jnp.ndarray:
     """Pre-compute SSP broadband fluxes for approximate photometry.
 
-    c_SSP(tau_age, Z) = int T(lambda|z) * L_SSP(lambda|tau_age, Z) * lambda dlambda
-                        / int T(lambda|z) * lambda dlambda
+    c_SSP(tau_age, Z) = int T(lambda|z) * L_SSP(lambda|tau_age, Z) * w(lambda) dlambda
+                        / int T(lambda|z) * w(lambda) dlambda
 
-    This is Equation 7 of Zacharegkas+2025. Once computed, galaxy
+    with the bandpass weight ``w = 1/lambda`` (``BESSELL`` default, matching
+    DSPS/FSPS and :func:`tengri.observation.photometry.compute_flux_density`)
+    or ``w = 1/lambda**2`` (``ENERGY``, CIGALE). Once computed, galaxy
     photometry is just a weighted sum over this grid, eliminating
     the expensive wavelength integral from the MCMC loop.
 
@@ -193,14 +199,15 @@ def precompute_ssp_photometry(
     # Redshift SSP wavelengths to observed frame
     wave_obs = ssp_wave * (1.0 + redshift)
 
-    # Denominator: int T(lambda) * lambda dlambda
-    denom = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
+    # Bandpass weight w(lambda) and denominator int T w dlambda
+    weight = filter_trans * _filter_weight(filter_wave, convention)
+    denom = jnp.trapezoid(weight, filter_wave)
 
     def _single_age(ssp_spectrum):
         """Compute broadband SSP flux through a single filter."""
         # Interpolate SSP onto filter wavelength grid
         sed_on_filter = jnp.interp(filter_wave, wave_obs, ssp_spectrum, left=0.0, right=0.0)
-        num = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
+        num = jnp.trapezoid(sed_on_filter * weight, filter_wave)
         return num / jnp.maximum(denom, 1e-30)
 
     return jax.vmap(_single_age)(ssp_flux)

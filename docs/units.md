@@ -127,8 +127,88 @@ the fit and tag the outputs after.
   2026-04-08). If you're porting an external component, normalise to
   this unit before returning.
 - **Per-band photometry units.** `predict_photometry` returns one F_ν
-  value per filter band, in cgs. The filter integral cancels the
-  per-Hz-per-Å distinction; the output is mean F_ν over the bandpass.
+  value per filter band, in cgs — the bandpass-averaged F_ν. The exact
+  weighting is the *filter-convolution convention*; see the dedicated
+  section below.
+
+## Photometric filter-convolution convention
+
+This section is the **single ground truth** for how tengri turns an SED
+into a broadband flux. Read it before touching any photometry code.
+
+### The formula
+
+The bandpass-averaged flux density through filter `b` is
+
+```
+            ∫ F_ν(λ) T_b(λ) w(λ) dλ
+⟨F_ν⟩_b  =  ───────────────────────
+              ∫ T_b(λ) w(λ) dλ
+```
+
+where `T_b(λ)` is the filter transmission and `w(λ)` is the **bandpass
+weight** set by the convention. For observed-frame photometry the SED is
+first redshifted (`λ_obs = (1+z) λ_rest`) and the result is scaled by
+`(1+z) / (4π d_L²)` (the `lnu_to_fnu` factor) to go from rest-frame `L_ν`
+to observed `F_ν`. The AB magnitude is `m_AB = −2.5 log₁₀(⟨F_ν⟩ / 3631 Jy)`;
+equivalently the AB zero point enters as `AB₀ = 1.13492×10⁻¹³ L_⊙/Hz`
+(3631 Jy at 10 pc), `m = −2.5 log₁₀(∫ F_ν T w dλ / (AB₀ ∫ T w dλ)) …`.
+
+### The two conventions
+
+| Convention | `w(λ)` | Detector model | Matches |
+|---|---|---|---|
+| **`bessell`** (default) | `1/λ` | photon-counting | DSPS, FSPS, sedpy, prospector |
+| **`energy`** | `1/λ²` | energy / flat-in-frequency | CIGALE, bagpipes |
+
+- **`bessell`** is the photon-counting AB convention — the physically
+  correct mean for photon-counting detectors (every optical/NIR CCD) and
+  how the AB system is realised by surveys. `∫ F_ν T dλ/λ ÷ ∫ T dλ/λ`.
+  This is the **default** and matches tengri's own SSP engine (DSPS).
+- **`energy`** is the flat-in-frequency mean, `∫ F_ν T dν ÷ ∫ T dν =
+  ∫ F_ν T dλ/λ² ÷ ∫ T dλ/λ²`. Use it to reproduce CIGALE/bagpipes.
+
+The two agree exactly for a flat-`F_ν` source (the AB reference) and
+diverge by **5–40 mmag**, band- and SED-slope-dependent, for real SEDs.
+Pick the convention the observed catalogue's fluxes were synthesised
+with: optical/NIR broadband → `bessell`; CIGALE-reduced products →
+`energy`.
+
+> **History / correctness note.** Through 2026-05, tengri weighted `F_ν`
+> by `λ` (not `1/λ`) — an f_λ→f_ν units transplant that matched neither
+> convention and biased colours. It is fixed; `bessell` is now bit-faithful
+> to DSPS (pinned by `tests/crossval/test_filter_convention_parity.py`).
+
+### Choosing and introspecting
+
+```python
+import tengri
+tengri.list_filter_conventions()
+# {'bessell': 'Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).',
+#  'energy':  'Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes).'}
+```
+
+The convention is a **build-time** choice: it is baked into the
+preintegrated `WavePrecomp` lookup table, so the exact path
+(`approx=None`) and the precomputed path must use the same convention
+(both default to `bessell`). The kernels
+(`tengri.observation.photometry.compute_flux_density`,
+`utils.grid_interp.preintegrate_grid`) take a `convention=` argument; the
+effective/pivot wavelength and the Taylor dust moment are recomputed
+consistently with `w(λ)`.
+
+### References
+
+- Oke, J. B. 1974, ApJS 27, 21 (AB system).
+- Hogg, Baldry, Blanton & Eisenstein 2002, "The K correction",
+  arXiv:astro-ph/0210394, Eq. 5 (photon-counting AB).
+- Fukugita et al. 1996, AJ 111, 1748, Eq. 7 (FSPS's cited form).
+- Bessell & Murphy 2012, PASP 124, 140 (photonic passbands, pivot λ).
+- Hearin et al. 2023, "DSPS", arXiv:2112.06830 (`w = 1/λ`, `T_Q` = photon
+  transmission probability).
+- Boquien et al. 2019, A&A 622, A103 (CIGALE energy convention).
+- Brown et al. 2016, AJ 152, 102 (interpreting broadband flux; photon vs
+  energy).
 
 ## See also
 
