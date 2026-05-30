@@ -800,17 +800,20 @@ save_fig("bagpipes_04_dust_attenuation.png")
 # %% [markdown]
 # ## §7 Dust attenuation applied
 #
-# Fiducial galaxy with and without attenuation. BAGPIPES uses the
-# Calzetti law at `Av = 1.0`. tengri uses the two-component law with
-# the same Calzetti curve, splitting `Av` between birth-cloud (`τ_bc`)
-# and diffuse (`τ_diff`) components using BAGPIPES' default
-# `t_bc = 0.01 Gyr` and the implicit assumption that birth-cloud and
-# diffuse Av are equal in the single-component Calzetti case.
+# Fiducial galaxy with and without attenuation. BAGPIPES applies the
+# Calzetti law as a single screen at `Av = 1.0` (with `eta = 1`, young
+# and old stars see the same Av). tengri matches that by putting the full
+# Av on the diffuse component — which attenuates all ages equally — and
+# zeroing the birth-cloud term: tengri's `τ_bc` is age-gated to stars
+# younger than ~10 Myr, so the single-screen equivalent is
+# `τ_diff = Av/1.086`, `τ_bc = 0`. (Splitting Av 50/50 between the two
+# would under-attenuate the old population that dominates the 5 Gyr
+# fiducial, leaving the optical ~1.5× too bright — see #562.)
 
 # %%
 AV_FIDUCIAL = 1.0
-TAU_DIFF = AV_FIDUCIAL / 1.086 / 2.0
-TAU_BC = AV_FIDUCIAL / 1.086 / 2.0
+TAU_DIFF = AV_FIDUCIAL / 1.086  # full single screen on the diffuse (all-age) component
+TAU_BC = 0.0  # birth-cloud term off — tengri's τ_bc attenuates only < ~10 Myr stars
 
 w_b_nd, L_b_nd = B.stellar_only_lnu(
     massformed=LOG_MASS_FIDUCIAL,
@@ -872,8 +875,7 @@ U.panel(
     ax_l2,
     ax_r2,
     label_l=rf"BAGPIPES  Calzetti  ($A_V = {AV_FIDUCIAL:g}$)",
-    label_r=rf"tengri  two-component Calzetti  ($\tau_{{BC}}={TAU_BC:.2f}$, "
-    rf"$\tau_{{diff}}={TAU_DIFF:.2f}$)",
+    label_r=rf"tengri  single-screen Calzetti  ($\tau_V={TAU_DIFF:.2f}$)",
 )
 ax_l1.plot(w_b_nd, L_b_nd, "C0-", linewidth=1.5)
 ax_r1.plot(s_nd.wave, s_nd.sed_intrinsic, "C1-", linewidth=1.5)
@@ -1421,20 +1423,16 @@ print(
 # photometry integration — tengri and BAGPIPES use the same
 # `∫ F_ν T dν / ∫ T dν` definition of band-averaged flux.
 #
-# **What the residual panel actually shows.** tengri is 0.3–0.7 mag
-# brighter than BAGPIPES across ugriz, with the offset largest in
-# u-band and shrinking toward z. Initially this looked like §9's
-# Cue v17 / Cloudy v25 nebular discrepancy projecting onto broadband
-# photometry — but §13b below falsifies that attribution. With the
-# nebular block removed on both sides the residual stays at ~0.45 mag,
-# essentially unchanged.
-#
-# The 0.3–0.7 mag offset therefore traces to the stellar continuum
-# colour difference (the §4 flat 1.010× ratio integrated over wide
-# bands produces ~0.01 mag, but the wavelength-dependent slope of
-# that ratio in the optical, plus the dust attenuation comparison
-# in §7, can add up to several tenths). Root cause is open;
-# investigated as part of the §4 1% systematic follow-up.
+# **What the residual panel shows.** With the §7 dust now applied as a
+# single screen matching BAGPIPES (`τ_bc = 0`, full `A_V` on the diffuse
+# component — see §7 and #562), tengri reproduces the BAGPIPES SDSS
+# magnitudes to **≈ 0.02 mag in g/r/i/z and ≈ 0.17 mag in u**. The u-band
+# residual is the bluest band, where the Cue-vs-Cloudy nebular difference
+# (§9) and the steep stellar-UV slope both bite hardest. The earlier
+# 0.3–0.7 mag offset across all bands was the dust-mapping artifact (the
+# old 50/50 `τ_bc`/`τ_diff` split under-attenuated the old population),
+# not a stellar-colour or nebular effect — §13b confirms the residual is
+# now small with or without nebular.
 
 # %%
 from tengri.observation.filters import load_filter
@@ -1491,14 +1489,16 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 
 
 # %% [markdown]
-# ### §13b Photometry without nebular — validation of the §13 attribution
+# ### §13b Photometry without nebular — isolating the small residual
 #
-# The §13 prose attributes the 0.3–0.7 mag tengri-BAGPIPES offset to
-# the §9 Cue/Cloudy nebular difference projecting onto broadband
-# photometry. The cleanest test of that claim is to **rebuild both
-# codes' SEDs with the nebular block removed** and re-run the same
-# SDSS convolution. If the attribution is right, the residual should
-# collapse to the §4 ~ 0.01 mag floor.
+# With the §7 dust applied as a single screen (§13), the tengri–BAGPIPES
+# SDSS residual is already down to a few hundredths of a magnitude. This
+# cell isolates how much of what remains is the §9 Cue/Cloudy nebular
+# difference: rebuild both codes' SEDs with the nebular block removed and
+# re-run the same convolution. The band-averaged residual drops from
+# ⟨Δ⟩ ≈ −0.03 mag (full) to ≈ −0.01 mag (no nebular) — so the leftover is
+# split between the nebular grid difference and the residual §4
+# stellar-continuum colour, both at the ~0.01–0.03 mag level.
 
 # %%
 comp_b_nonneb = dict(comp_b_full)
@@ -1682,10 +1682,11 @@ resid = np.full(w_ext.shape, np.nan, dtype=float)
 resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
 # Headline numbers: the optical normalization ratio tengri/BAGPIPES and
-# its 16–84% spread. A roughly constant offset reflects how each code
-# maps the fiducial dust and mass conventions; the spread is set by the
-# nebular emission lines (§9). Separating the two is fairer than one |Δ|
-# that blends a fixed offset with the line gap.
+# its 16–84% spread. With the §7 dust applied as a single screen, the
+# continuum normalization sits at the bottom of the spread (P16 ≈ 1.0×);
+# the median and upper end are pulled up by the Cue-vs-Cloudy nebular
+# emission lines (§9). Reporting the ratio + spread keeps that line-driven
+# scatter distinct from the continuum match.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))
@@ -1775,16 +1776,17 @@ plt.show()
 #   and now extends below 912 Å (LyC opacity restored). The Asada+2025
 #   CGM damping wing (§12b, tengri-only) produces the full Totani+06
 #   damping-wing shape at z = 7.
-# - **§13 SDSS photometry.** tengri is 0.3–0.7 mag brighter than
-#   BAGPIPES through a shared filter set. §13b falsifies the obvious
-#   guess: removing the nebular block on both sides leaves the offset
-#   essentially unchanged (−0.45 mag), so this is the §4 stellar-SED
-#   colour difference, not the §9 nebular gap.
+# - **§13 SDSS photometry.** With the §7 single-screen dust, tengri
+#   reproduces the BAGPIPES ugriz magnitudes to ≈ 0.02 mag in g/r/i/z and
+#   ≈ 0.17 mag in u. §13b shows the small residual is split between the §9
+#   nebular grid difference (⟨Δ⟩ −0.03 → −0.01 mag without nebular) and the
+#   residual §4 stellar colour. The earlier 0.3–0.7 mag offset was the
+#   50/50 dust-split artifact (#562), now removed.
 # - **§14 timing.** Both codes finish a full SED in 80–120 ms.
 # - **full-SED head-to-head.** The whole BAGPIPES-mode forward model on
-#   one axis with a fractional-residual panel and a single optical
-#   normalization ratio + 16–84 % spread; the nebular emission lines
-#   drive the spread.
+#   one axis with a fractional-residual panel and an optical normalization
+#   ratio + 16–84 % spread. With the dust corrected the continuum sits at
+#   ≈ 1.0× (P16); the nebular emission lines drive the upper spread.
 #
 # Every residual that exceeds the noise floor in a panel above has a
 # one-sentence physics explanation attached to it. The companion

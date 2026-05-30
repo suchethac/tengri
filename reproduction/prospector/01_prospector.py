@@ -444,14 +444,18 @@ save_fig("prospector_04_dust_attenuation.png")
 # %% [markdown]
 # ## §5 Attenuation applied
 #
-# The fiducial galaxy with and without dust. Prospector uses the
-# Calzetti law at A_V = 1 (FSPS `dust_type=2`, `dust2 = A_V/1.086`).
-# tengri uses its two-component Calzetti law, splitting the optical depth
-# evenly between birth-cloud and diffuse components.
+# The fiducial galaxy with and without dust. Prospector applies the
+# Calzetti law as a single screen at A_V = 1 (FSPS `dust_type=2`,
+# `dust2 = A_V/1.086`, `dust1 = 0` — no extra birth-cloud term). tengri
+# matches by putting the full A_V on the diffuse component, which
+# attenuates all ages equally, and zeroing the birth-cloud term — tengri's
+# `τ_bc` attenuates only stars younger than ~10 Myr. (An even split would
+# under-attenuate the old population that dominates the 5 Gyr fiducial,
+# leaving the optical ~1.5× too bright — see #562.)
 
 # %%
-TAU_DIFF = AV_FIDUCIAL / 1.086 / 2.0
-TAU_BC = AV_FIDUCIAL / 1.086 / 2.0
+TAU_DIFF = AV_FIDUCIAL / 1.086  # full single screen on the diffuse (all-age) component
+TAU_BC = 0.0  # birth-cloud term off — matches FSPS dust1 = 0
 
 w_p_nd, L_p_nd = P.csp_lnu(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=0.0)
 w_p_d, L_p_d = P.csp_lnu(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, av=AV_FIDUCIAL, dust_type=2)
@@ -488,10 +492,7 @@ U.panel(
     ax_l2,
     ax_r2,
     label_l=rf"Prospector  Calzetti  ($A_V = {AV_FIDUCIAL:g}$)",
-    label_r=(
-        rf"tengri  two-component Calzetti  "
-        rf"($\tau_{{BC}}={TAU_BC:.2f}$, $\tau_{{diff}}={TAU_DIFF:.2f}$)"
-    ),
+    label_r=rf"tengri  single-screen Calzetti  ($\tau_V={TAU_DIFF:.2f}$)",
 )
 ax_l1.plot(w_p_nd, L_p_nd, "C0-", linewidth=1.5)
 ax_r1.plot(s_nd.wave, s_nd.sed_intrinsic, "C1-", linewidth=1.5)
@@ -876,7 +877,8 @@ print(
 # configuration). The top panel is the overlay; the bottom is the
 # fractional residual `tengri / FSPS − 1` with the ±25 % band shaded.
 # Optical agreement is reported as a normalization ratio and its 16–84 %
-# spread; the nebular emission lines (§8) drive the spread.
+# spread; with the dust applied as a single screen (§5) the whole optical
+# lands at ≈ 1.0× with a percent-level spread.
 
 # %%
 import chex
@@ -900,10 +902,11 @@ resid = np.full(w_ext.shape, np.nan, dtype=float)
 resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
 # Headline numbers: the optical normalization ratio tengri/FSPS and its
-# 16–84% spread. A constant offset is the documented stellar-SED / mass
-# convention difference (§3); the spread is set by the nebular lines (§8).
-# Separating the two is fairer than one |Δ| that blends a fixed offset
-# with the line gap.
+# 16–84% spread. With the §5 dust applied as a single screen matching
+# FSPS `dust_type=2` (`dust1 = 0`), the whole optical lands at ≈ 1.0× with
+# a tight spread — FSPS and tengri agree to a couple of percent across
+# the band, lines included. Reporting the ratio + spread makes that match
+# explicit.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))
