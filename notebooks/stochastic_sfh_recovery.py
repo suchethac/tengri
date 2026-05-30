@@ -229,6 +229,11 @@ truth = {
     **truth,
     "sfh_dpl_alpha": jnp.array(2.0),
     "sfh_dpl_beta": jnp.array(1.5),
+    # Carnall+2018 DPL in cosmic-time-since-formation (tengri #549): SFR peaks at
+    # T = tau, present day is T = age_gyr. Galaxy forms early (age = 12 Gyr, ~0.5
+    # Gyr after the Big Bang at z=0.1) and the peak (tau = 13 Gyr) lies just past
+    # the present, so the mean SFH is still rising at lookback 0.
+    "sfh_dpl_age_gyr": jnp.array(12.0),
     "sfh_dpl_tau_gyr": jnp.array(13.0),
     "sfh_dpl_log_total_mass": jnp.array(11.0),
     "sfh_field_psd_sigma": jnp.array(0.3),
@@ -247,10 +252,20 @@ truth_full = {**fixed_values, **truth}
 # that adds bursts *on top* of the mean. Anchoring the mean — not a single
 # field-perturbed draw — is what keeps the demo galaxy genuinely star-forming.
 TARGET_SFR0 = 20.0  # Msun/yr at lookback 0 (the mean/backbone rate)
-# predict_sfh returns sfr_full ordered by *cosmic time*: index 0 is the Big Bang,
-# index -1 is the observation epoch (lookback 0). Anchor on the LAST bin.
+# Index by the TIME AXIS, not a hard-coded array position: the present epoch is
+# always the smallest lookback time (t_gyr.argmin()), regardless of whether
+# predict_sfh returns cosmic-time or lookback order (the #549 convention fix
+# flipped that ordering). This keeps the anchor correct across conventions.
 _backbone = {**truth_full, "sfh_field_psd_sigma": jnp.array(1e-4)}
-_sfr0 = float(model.predict_sfh(_backbone)["sfr_full"][-1])
+_bb_sfh = model.predict_sfh(_backbone)
+_present = int(np.argmin(np.asarray(_bb_sfh["t_gyr"])))
+_sfr0 = float(np.asarray(_bb_sfh["sfr_full"])[_present])
+if not np.isfinite(_sfr0) or _sfr0 <= 0.0:
+    raise ValueError(
+        f"Backbone present-day SFR is {_sfr0} — cannot anchor. The DPL is "
+        "cosmic-time-since-formation (#549): present-day SFR is nonzero only if "
+        "sfh_dpl_age_gyr > 0 and the turnover (tau_gyr) places SF at lookback 0."
+    )
 truth["sfh_dpl_log_total_mass"] = truth["sfh_dpl_log_total_mass"] + jnp.log10(TARGET_SFR0 / _sfr0)
 truth_full = {**fixed_values, **truth}
 
@@ -277,7 +292,8 @@ wave_eff = np.array(
 )
 
 sfh_true = model.predict_sfh(truth_full)
-print(f"truth recent SFR: {float(sfh_true['sfr_full'][-1]):.2f} Msun/yr")
+_p = int(np.argmin(np.asarray(sfh_true["t_gyr"])))  # present = min lookback
+print(f"truth recent SFR: {float(np.asarray(sfh_true['sfr_full'])[_p]):.2f} Msun/yr")
 print(f"joint data: {data_joint.shape[0]} points ({n_phot} phot + {N_PIX} spec)")
 
 # %%
