@@ -41,8 +41,12 @@ class TestRegistry:
         error_msg = str(exc_info.value)
         assert "nonexistent_key_xyz" in error_msg
         assert "Available keys:" in error_msg
-        # Should suggest at least some keys
-        assert any(key in error_msg for key in ["calzetti2000", "dsps", "fsps"])
+        # Should suggest at least some real keys. The message lists the first
+        # few sorted registry keys, so assert against those (robust to new
+        # registry additions rather than pinning specific names).
+        from tengri.citations.registry import REGISTRY
+
+        assert any(key in error_msg for key in sorted(REGISTRY.keys())[:5])
 
     def test_cite_all_returns_sorted_list(self) -> None:
         """cite_all() must return all citations sorted by key."""

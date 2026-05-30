@@ -32,6 +32,7 @@ EXPECTED_ALL = frozenset(
     {
         # Core
         "Exponential",
+        "FilterConvention",
         "FlatSlab",
         "ForwardModel",
         "Galaxy",
@@ -90,6 +91,7 @@ EXPECTED_ALL = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_filter_conventions",
         "list_filters",
         "list_igm_models",
         "list_inference_methods",

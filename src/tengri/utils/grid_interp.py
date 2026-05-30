@@ -24,6 +24,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 __all__ = [
@@ -156,6 +157,7 @@ def preintegrate_grid(
     axes: tuple[np.ndarray, ...] = (),
     taylor: bool = False,
     energy_normalize: bool = False,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PreintegratedGrid:
     """Precompute filter-integrated photometry from a template grid.
 
@@ -163,11 +165,15 @@ def preintegrate_grid(
     integrals. Supports arbitrary grid dimensionality (e.g. 2D for SSP's
     (n_met, n_age), 3D for CLOUDY's (n_logU, n_Z, n_Q_H), etc.).
 
-    The filter integration formula:
-        Φ = ∫ L_ν(λ_obs) T_b(λ_obs) λ_obs dλ / ∫ T_b(λ_obs) λ_obs dλ
+    The filter integration formula (photon-counting ``BESSELL`` default,
+    weight ``w = 1/λ``; ``ENERGY`` uses ``w = 1/λ²``) matches
+    :func:`tengri.observation.photometry.compute_flux_density`:
+        Φ = ∫ L_ν(λ_obs) T_b(λ_obs) w(λ_obs) dλ / ∫ T_b(λ_obs) w(λ_obs) dλ
 
     When ``taylor=True``, also precomputes the first spectral moment:
-        Ψ = ∫ L_ν(λ) (λ - λ_eff) T(λ) λ dλ / ∫ T(λ) λ dλ
+        Ψ = ∫ L_ν(λ) (λ - λ_eff) T(λ) w(λ) dλ / ∫ T(λ) w(λ) dλ
+    where ``λ_eff = ∫ λ T w dλ / ∫ T w dλ`` is the weight's first moment, so
+    Ψ ≡ 0 for a flat template.
 
     This enables first-order Taylor dust correction at runtime, reducing
     the age-dust-metallicity factorization error by ~5×.
@@ -202,6 +208,11 @@ def preintegrate_grid(
         ``False`` if templates are already normalised at load time
         (Dale2014/Astrodust/BOSA/THEMIS) — the divide is then an
         unnecessary round-trip. Default False.
+    convention : FilterConvention
+        Bandpass weight ``w(λ)``: ``BESSELL`` (default, photon-counting
+        ``1/λ``, matches DSPS) or ``ENERGY`` (``1/λ²``, matches CIGALE). The
+        precomputed LUT bakes the convention in, so it must match the
+        convention used by the exact path at evaluation time.
 
     Returns
     -------
@@ -238,14 +249,17 @@ def preintegrate_grid(
     # Redshift wavelengths to observed frame
     wave_obs = wave_rest * (1.0 + redshift)
 
-    # Compute filter effective wavelengths and integrals
+    # Compute filter effective wavelengths and integrals under weight w(λ).
+    # denom = ∫ T w dλ ;  λ_eff = ∫ λ T w dλ / ∫ T w dλ  (weight first moment,
+    # the self-consistent Taylor expansion centre).
     eff_waves_obs = np.zeros(n_filters)
     filter_denoms = np.zeros(n_filters)
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
-        filter_denoms[f_idx] = _np_trapezoid(ft_np * fw_np, fw_np)
-        eff_waves_obs[f_idx] = _np_trapezoid(ft_np * fw_np**2, fw_np) / np.maximum(
+        tw_np = ft_np * _filter_weight_np(fw_np, convention)
+        filter_denoms[f_idx] = _np_trapezoid(tw_np, fw_np)
+        eff_waves_obs[f_idx] = _np_trapezoid(tw_np * fw_np, fw_np) / np.maximum(
             filter_denoms[f_idx], 1e-30
         )
 
@@ -264,8 +278,8 @@ def preintegrate_grid(
         # Shape: (n_grid_points, n_filter_waves)
         templates_on_filt = _vectorized_interp(fw_np, wave_obs, templates_flat)
 
-        # Integrate: ∫ L_ν T λ dλ
-        weight = ft_np[None, :] * fw_np[None, :]
+        # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
+        weight = (ft_np * _filter_weight_np(fw_np, convention))[None, :]
         integrand = templates_on_filt * weight
         num = _np_trapezoid(integrand, fw_np, axis=-1)
         phot_flat[:, f_idx] = num / np.maximum(denom, 1e-30)
@@ -312,6 +326,7 @@ def preintegrate_lines(
     filter_trans: list[np.ndarray],
     redshift: float,
     axes: tuple[np.ndarray, ...] = (),
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PreintegratedLines:
     """Precompute emission line weights through filters.
 
@@ -319,8 +334,10 @@ def preintegrate_lines(
     via point-sampling of the filter transmission at the observed wavelength
     λ_line_obs = λ_line × (1 + z).
 
-    The weight for line i in filter b is:
-        w_{ib} = T_b(λ_line_obs) × λ_line_obs / ∫ T_b(λ) λ dλ
+    The weight for line i in filter b mirrors the continuum convention
+    (:func:`preintegrate_grid`) so line and continuum combine consistently:
+        w_{ib} = T_b(λ_line_obs) × w(λ_line_obs) / ∫ T_b(λ) w(λ) dλ
+    with ``w = 1/λ`` for ``BESSELL`` (default) and ``w = 1/λ²`` for ``ENERGY``.
 
     Parameters
     ----------
@@ -334,6 +351,9 @@ def preintegrate_lines(
         Source redshift.
     axes : tuple[ndarray, ...]
         Grid axes for interpolation (if the line fluxes are grid-based).
+    convention : FilterConvention
+        Bandpass weight; must match the continuum/exact path. Default
+        ``BESSELL`` (``1/λ``).
 
     Returns
     -------
@@ -347,24 +367,29 @@ def preintegrate_lines(
     # Redshift line wavelengths to observed frame
     line_wavelengths_obs = line_wavelengths * (1.0 + redshift)
 
-    # Compute filter denominators (normalization)
+    # Compute filter denominators (normalization): ∫ T w dλ
     filter_denoms = np.zeros(n_filters)
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
-        filter_denoms[f_idx] = _np_trapezoid(ft_np * fw_np, fw_np)
+        filter_denoms[f_idx] = _np_trapezoid(ft_np * _filter_weight_np(fw_np, convention), fw_np)
 
-    # Compute line weights via point-sampling
+    # Compute line weights via point-sampling: T(λ_line) w(λ_line) / ∫ T w dλ
     line_filter_weights = np.zeros((n_lines, n_filters))
     for line_idx, lam_obs in enumerate(line_wavelengths_obs):
+        lam_arr = np.asarray([lam_obs], dtype=np.float64)
+        w_at_line = float(_filter_weight_np(lam_arr, convention)[0])
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np = np.asarray(fw, dtype=np.float64)
             ft_np = np.asarray(ft, dtype=np.float64)
 
-            # Interpolate transmission at the line's observed wavelength
-            T_at_line = np.interp(lam_obs, fw_np, ft_np)
+            # Interpolate transmission at the line's observed wavelength.
+            # ``left=right=0`` zeroes lines outside the filter passband (np.interp
+            # otherwise returns the edge value, which the 1/λ weight would
+            # amplify for blue out-of-band lines).
+            T_at_line = np.interp(lam_obs, fw_np, ft_np, left=0.0, right=0.0)
             denom = filter_denoms[f_idx]
-            line_filter_weights[line_idx, f_idx] = T_at_line * lam_obs / np.maximum(denom, 1e-30)
+            line_filter_weights[line_idx, f_idx] = T_at_line * w_at_line / np.maximum(denom, 1e-30)
 
     # Convert axes and precompute edges
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)

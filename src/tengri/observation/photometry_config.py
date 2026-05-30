@@ -13,6 +13,7 @@ from collections.abc import Sequence
 import jax.numpy as jnp
 
 from tengri.observation.photometry import FilterCurve
+from tengri.utils.filter_convention import FilterConvention
 
 
 @dataclasses.dataclass(frozen=True)
@@ -86,6 +87,11 @@ class Photometry:
     filters: tuple[FilterCurve, ...] = dataclasses.field(hash=False)
     names: tuple[str, ...] = ()
 
+    # Photometric filter-convolution convention (ADR-0017). ``bessell``
+    # (default, photon-counting 1/lambda; matches DSPS/FSPS) or ``energy``
+    # (1/lambda^2; matches CIGALE). Flows into the exact predict path.
+    convention: FilterConvention = FilterConvention.BESSELL
+
     # Derived fields — set in __post_init__
     filter_waves: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
     filter_trans: tuple[jnp.ndarray, ...] = dataclasses.field(default=(), hash=False, repr=False)
@@ -101,6 +107,11 @@ class Photometry:
     def __post_init__(self):
         if len(self.filters) == 0:
             raise ValueError("Photometry requires at least one filter.")
+
+        # Normalise a string convention (e.g. "energy") to the enum so the
+        # JIT static-argument cache key is stable.
+        if not isinstance(self.convention, FilterConvention):
+            object.__setattr__(self, "convention", FilterConvention(self.convention))
 
         # Derive names from FilterCurve.name if not provided
         if not self.names:
@@ -137,6 +148,7 @@ class Photometry:
     def from_names(
         names: Sequence[str],
         cache_dir: str = "data/filters",
+        convention: FilterConvention | str = FilterConvention.BESSELL,
     ) -> Photometry:
         """Create Photometry from filter registry short names.
 
@@ -147,6 +159,10 @@ class Photometry:
             ``"jwst_f200w"``).
         cache_dir : str, optional
             Directory for cached SVO filter files. Default: ``"data/filters"``.
+        convention : FilterConvention or str, optional
+            Filter-convolution convention: ``"bessell"`` (default,
+            photon-counting 1/lambda; DSPS/FSPS) or ``"energy"`` (1/lambda^2;
+            CIGALE). See :func:`tengri.list_filter_conventions`.
 
         Returns
         -------
@@ -170,7 +186,7 @@ class Photometry:
         from tengri.observation.filters import load_filter_set
 
         _waves, _trans, curves = load_filter_set(list(names), cache_dir=cache_dir)
-        return Photometry(filters=tuple(curves), names=tuple(names))
+        return Photometry(filters=tuple(curves), names=tuple(names), convention=convention)
 
     @staticmethod
     def from_filter_set(
@@ -179,6 +195,7 @@ class Photometry:
             | list[FilterCurve]
             | tuple
         ),
+        convention: FilterConvention | str = FilterConvention.BESSELL,
     ) -> Photometry:
         """Create Photometry from existing filter data.
 
@@ -218,11 +235,11 @@ class Photometry:
                 and isinstance(filter_set[2], list)
             ):
                 curves = filter_set[2]
-                return Photometry(filters=tuple(curves))
+                return Photometry(filters=tuple(curves), convention=convention)
 
             # List/tuple of FilterCurve
             if all(isinstance(f, FilterCurve) for f in filter_set):
-                return Photometry(filters=tuple(filter_set))
+                return Photometry(filters=tuple(filter_set), convention=convention)
 
         raise TypeError(
             f"Expected 3-tuple from load_filter_set() or list of FilterCurve, "
