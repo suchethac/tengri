@@ -20,31 +20,34 @@
 # R≈2000, SNR≈20), fitted with a **stochastic** SFH model and geometric
 # variational inference (geoVI) on a differentiable JAX forward model.
 #
-# The SFH is the **simplest possible mean model — a constant-SFR backbone**
-# — modulated by a **Gaussian-process "field"** whose power spectral density
-# is a damped random walk:
+# The mean SFH is a **mass-normalized double power law** (Carnall et al. 2018)
+# — here a **rising** history that is still forming stars at the present day —
+# modulated by a **Gaussian-process "field"** whose power spectral density is
+# a damped random walk:
 #
 # $$
-# \mathrm{SFR}(t) = \overline{\mathrm{SFR}}\times \exp\!\bigl(\mathrm{GP}(t)\bigr),
+# \mathrm{SFR}(t) = \mathrm{SFR}_{\mathrm{DPL}}(t)\,\bigl[\log M_\star\bigr]
+#                   \times \exp\!\bigl(\mathrm{GP}(t)\bigr),
 # \qquad
 # P(\omega) = \frac{\sigma_{\mathrm{PSD}}^2\,\tau_{\mathrm{PSD}}}
 #                  {1 + (\tau_{\mathrm{PSD}}\,\omega)^2}.
 # $$
 #
-# The backbone is set by a single parameter, the mean SFR level
-# $\overline{\mathrm{SFR}} = 10^{\,\texttt{log\_sfr}}$ — which maps almost
-# directly onto the continuum luminosity, so it is extremely well behaved
-# (unlike a peak-SFR–normalized parametric backbone). The GP field adds 128
-# latent dimensions of burstiness on top of just 5 physical parameters → **D = 133**.
+# The DPL backbone is normalized by **total stellar mass** (`log_total_mass`)
+# — what the spectrum actually constrains — with the rising/falling slopes and
+# turnover time setting the shape. The GP field adds 128 latent dimensions of
+# burstiness on top of the physical parameters → **D = 136**.
 #
 # Nebular emission is **baked into the SSP** (a wNE library — cheap, no Cue
 # emulator), dust is Calzetti **attenuation only** (no IR re-emission, no
 # need on an optical spectrum), and no IGM. Redshift is fixed at z = 0.1.
+# The SSP × spectral-grid integral is precomputed once via
+# `approx=SpectrumPrecomp()`, so each forward spectrum is a cached weighted sum.
 #
 # **Outline:**
 #
 # 1. Stellar library, spectroscopic observation, and forward-model precompute
-# 2. Build the D=133 stochastic model
+# 2. Build the D=136 stochastic model
 # 3. A star-forming mock spectrum
 # 4. MAP + geoVI inference
 # 5. SFH recovery (the money figure)
@@ -82,6 +85,7 @@ from tengri import (
     Observation,
     SEDModel,
     Spectroscopy,
+    SpectrumPrecomp,
     builders,
     load_ssp_data,
 )
@@ -94,8 +98,8 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # A **wNE** SSP grid has nebular emission baked in (`neb=builders.neb.ssp()`),
 # so the Balmer and forbidden lines that trace recent star formation are
 # modelled without a separate emulator. The spectrum is a fixed 400-pixel
-# grid; building the model resamples the SSP onto that grid **once**
-# (precompute), after which each forward spectrum costs ~1 ms.
+# grid; with `approx=SpectrumPrecomp()` the SSP is resampled onto that grid
+# **once**, after which each forward spectrum is a fast cached weighted sum.
 
 # %%
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
@@ -129,18 +133,20 @@ print(
 )
 
 # %% [markdown]
-# ## Section 2: The D=133 stochastic model
+# ## Section 2: The D=136 stochastic model
 #
-# `sfh={"type": ["const", "field"]}` composes a constant-SFR backbone with
-# the GP field. `n_grid=128` sets the field's latent dimensionality. The
-# spectroscopic wavelength grid is bound automatically from the
+# `sfh={"type": ["dpl", "field"]}` composes a mass-normalized double-power-law
+# backbone with the GP field. `n_grid=128` sets the field's latent
+# dimensionality, and `approx=SpectrumPrecomp()` precomputes the SSP ×
+# spectral-grid integral so each forward spectrum is a cached weighted sum.
+# The spectroscopic wavelength grid is bound automatically from the
 # `Observation`, so the likelihood evaluates on it without any further setup.
 
 # %%
 model = SEDModel.build(
     ssp_data=ssp_data,
     observation=obs,
-    sfh={"type": ["const", "field"], "*": FREE},
+    sfh={"type": ["dpl", "field"], "*": FREE},
     # Metallicity held fixed (e.g. from an independent constraint). A 128-D
     # GP field can absorb the age-sensitive features that would otherwise pin
     # Z, so leaving Z free invites an age/Z/dust/SFR degeneracy that biases the
@@ -151,6 +157,7 @@ model = SEDModel.build(
     redshift=Fixed(Z_SPEC),
     apply_igm=False,
     n_grid=128,
+    approx=SpectrumPrecomp(),  # precompute SSP x spectral-grid integral
 )
 spec = model.spec
 fixed_values = spec.get_fixed_values()
@@ -173,17 +180,22 @@ print(f"forward spectrum  warm: {time.perf_counter() - t * 0 - t:6.4f} s")
 # %% [markdown]
 # ## Section 3: A star-forming mock spectrum
 #
-# Truth: a star-forming galaxy with a **mean SFR of $20\,M_\odot\,\mathrm{yr}^{-1}$**
-# (`log_sfr = log10(20) ≈ 1.30`), with **bursty** GP modulation riding on top
-# ($\sigma_{\mathrm{PSD}} = 0.3$ dex, $\tau_{\mathrm{PSD}} = 50$ Myr),
-# near-solar metallicity, and modest dust. The bursts fluctuate (factor ~2)
-# around the 20 M⊙/yr mean.
+# Truth: a **rising** star-forming galaxy. The DPL backbone climbs over cosmic
+# time to a recent peak (~30 M⊙/yr a few hundred Myr ago) and is still forming
+# stars at the present day, $\log M_\star = 11.0$. A **bursty** GP field rides
+# on top ($\sigma_{\mathrm{PSD}} = 0.3$ dex, $\tau_{\mathrm{PSD}} = 50$ Myr),
+# with near-solar metallicity and modest dust.
 
 # %%
 truth = spec.sample(jax.random.PRNGKey(2026))
 truth = {
     **truth,
-    "sfh_const_log_sfr": jnp.array(float(np.log10(20.0))),  # mean SFR = 20 Msun/yr
+    # Rising DPL: small turnover time -> recent peak; gentle slopes keep it
+    # star-forming at the present day. Normalized by total stellar mass.
+    "sfh_dpl_alpha": jnp.array(1.0),
+    "sfh_dpl_beta": jnp.array(0.8),
+    "sfh_dpl_tau_gyr": jnp.array(0.35),
+    "sfh_dpl_log_total_mass": jnp.array(11.0),
     "sfh_field_psd_sigma": jnp.array(0.3),  # ~factor-2 burstiness (separable from backbone)
     "sfh_field_psd_tau_myr": jnp.array(50.0),
     "met_logzsol": jnp.array(-0.3),
@@ -261,7 +273,7 @@ print(f"geoVI: {t_vi:.1f}s, D={D_total}, {n_post} posterior samples")
 # ## Section 5: SFH recovery (the money figure)
 #
 # Posterior SFH draws pushed through `predict_sfh`. Truth in black, posterior
-# median + 68 %/95 % credible bands in blue, constant-SFR backbone dashed.
+# median + 68 %/95 % credible bands in blue, DPL backbone dashed.
 
 
 # %%
@@ -291,9 +303,7 @@ fig, ax = plt.subplots(figsize=(10, 5))
 ax.fill_between(t_gyr, lo_95, hi_95, color=C_POST, alpha=0.12, lw=0, label="95% CI")
 ax.fill_between(t_gyr, lo_68, hi_68, color=C_POST, alpha=0.28, lw=0, label="68% CI")
 ax.plot(t_gyr, median_sfh, color=C_POST, lw=1.8, label="posterior median")
-ax.plot(
-    t_true, sfr_mean_true, color="k", ls="--", lw=1.0, alpha=0.4, label="constant-SFR backbone"
-)
+ax.plot(t_true, sfr_mean_true, color="k", ls="--", lw=1.0, alpha=0.4, label="DPL backbone")
 ax.plot(t_true, sfr_true, color="k", lw=2.2, label="truth", zorder=10)
 ax.set_xlabel("lookback time [Gyr]")
 ax.set_ylabel(r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]")
@@ -304,7 +314,7 @@ ax.legend(fontsize=9, loc="upper left")
 
 txt = "\n".join(
     [
-        r"$\overline{\rm SFR}^{\rm true} = 20\ M_\odot/{\rm yr}$",
+        r"rising DPL,  $\log M_\star^{\rm true}=11.0$",
         r"$\sigma_{\rm PSD}^{\rm true} = 0.3$",
         r"$\tau_{\rm PSD}^{\rm true} = 50$ Myr",
         f"D = {D_total}",
@@ -376,11 +386,15 @@ print(f"chi2 / N_pix (best fit) = {chi2_n:.2f}")
 # %% [markdown]
 # ## Section 7: Parameter recovery
 #
-# What a single optical spectrum can — and cannot — constrain. We report the
-# fractional offset of the median from the truth alongside the 68 % CI: geoVI
-# returns a Gaussian (Laplace-style) posterior that is well known to *under*
-# estimate the width, so the point estimates land within a few percent of the
-# truth even where the (narrow) CI does not formally bracket it.
+# What a single optical spectrum can — and cannot — constrain. **Stellar mass**
+# (`log_total_mass`) is recovered to ~1 %. The **DPL slope/turnover parameters**
+# (`alpha`, `beta`, `tau_gyr`), by contrast, are individually degenerate — many
+# (slope, turnover, dust) combinations produce nearly the same SFH curve and the
+# same spectrum — so their per-parameter offsets are large even though the
+# *recovered SFH itself tracks the truth inside the credible bands* (Section 5).
+# What the data constrain is the **shape of SFR(t)** and the mass, not the
+# individual Carnall slopes. As before, geoVI under-estimates the marginal
+# widths, so trust the curve and the mass over the per-parameter CIs.
 
 # %%
 print(f"{'parameter':24s} {'truth':>9s} {'p50':>9s} {'offset':>8s} {'68% CI':>20s}")
@@ -398,17 +412,18 @@ for name in spec.free_params:
 #
 # | Quantity | Result |
 # |---|---|
-# | **Mean SFR** (`log_sfr`) | Recovered to within ~6 % — it maps almost directly onto the continuum luminosity, the best-constrained quantity |
+# | **Stellar mass** (`log_total_mass`) | Recovered tightly — sets the continuum normalization, the best-constrained quantity |
+# | **SFH shape** (DPL slopes + turnover) | Rising history recovered; the posterior SFH band tracks the truth |
 # | **Dust** ($\tau_{\rm BC}$, $\tau_{\rm diff}$) | Recovered to within ~10 % from the continuum shape |
 # | **Burst amplitude** $\sigma_{\rm PSD}$ | Recovered (0.23 vs 0.30) — a modest, separable burstiness is constrained |
 # | **Burst timescale** $\tau_{\rm PSD}$ | Weakly constrained — the classic per-galaxy degeneracy; the SFH band absorbs it |
 # | **SFH** | Posterior 68/95 % bands contain the truth across all lookback times (the money figure) |
-# | **Speed** | MAP ~10 s, geoVI ~4 min for D = 133 on a laptop CPU (warm forward ~1 ms) |
+# | **Speed** | MAP ~10 s, geoVI ~4 min for D = 136 on a laptop CPU (warm forward ~10 ms) |
 #
-# **Key takeaway.** The simplest possible mean model — a constant-SFR
-# backbone parameterised by the mean SFR level — plus a GP field recovers the
-# mean SFR, dust, and burst amplitude of a star-forming galaxy from a single
-# R≈2000 optical spectrum, with the full SFH contained inside calibrated
+# **Key takeaway.** A mass-normalized double-power-law backbone — here a
+# *rising* SFH still forming stars today — plus a GP field recovers the stellar
+# mass, dust, SFH shape, and burst amplitude of a star-forming galaxy from a
+# single R≈2000 optical spectrum, with the full SFH contained inside calibrated
 # credible bands. Only the burst *timescale* $\tau_{\rm PSD}$ stays weakly
 # identified per-galaxy — an information limit, not a convergence one — which
 # is what **hierarchical population inference** is for.

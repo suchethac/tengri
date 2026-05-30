@@ -130,3 +130,88 @@ class TestDustLawCombinations:
         k = np.array(fn(wl2, **kwargs))
         baseline = 0.5 * (k[0] + k[2])
         assert k[1] > baseline, f"{name}: no UV bump (k(2175)={k[1]:.2f})"
+
+
+class TestKriekConroyMatchesFSPS:
+    """``kriek_conroy`` must reproduce FSPS ``dust_type=4`` (Prospector's path).
+
+    Prospector applies the Kriek & Conroy (2013) law through FSPS, whose
+    ``attn_curve.f90`` (``dust_type=4`` branch) ties the 2175 Å bump
+    amplitude to the slope via KC13 Eqn 3 and divides the Drude term by
+    R_V = 4.05::
+
+        eb    = 0.85 - 1.9 * dust_index            ! KC13 Eqn 3
+        drude = eb*(lam*dlam)**2 / ((lam**2 - lamuvb**2)**2 + (lam*dlam)**2)
+        attn  = tauv*(cal00 + drude/4.05)*(lam/lamv)**dust_index
+
+    These tests pin tengri's curve to that reference, normalised to
+    k(5500 Å) = 1, so a regression in the bump normalisation or the
+    slope-bump coupling trips here.
+    """
+
+    pytestmark = pytest.mark.regression_paper
+
+    WL: ClassVar = np.logspace(np.log10(1200.0), np.log10(22000.0), 3000)
+
+    @staticmethod
+    def _fsps_dust_type4(wl: np.ndarray, delta: float) -> np.ndarray:
+        """Faithful port of FSPS ``attn_curve.f90`` ``dust_type=4`` (tauv=1)."""
+        x = 1e4 / wl  # 1/micron
+        below = wl <= 6300.0
+        cal = np.where(
+            below,
+            1.17 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + 1.78,
+            1.17 * (-1.857 + 1.04 * x) + 1.78,
+        )
+        cal = np.clip(cal, 0.0, None) / 0.44 / 4.05
+        eb = 0.85 - 1.9 * delta  # KC13 Eqn 3
+        dlam, lamuvb = 350.0, 2175.0
+        drude = eb * (wl * dlam) ** 2 / ((wl**2 - lamuvb**2) ** 2 + (wl * dlam) ** 2)
+        return (cal + drude / 4.05) * (wl / 5500.0) ** delta
+
+    @staticmethod
+    def _bump_excess(wl: np.ndarray, k_norm: np.ndarray) -> float:
+        i = int(np.argmin(np.abs(wl - 2175.0)))
+        lo = k_norm[int(np.argmin(np.abs(wl - 1950.0)))]
+        hi = k_norm[int(np.argmin(np.abs(wl - 2500.0)))]
+        return float(k_norm[i] - 0.5 * (lo + hi))
+
+    def _norm(self, k: np.ndarray) -> np.ndarray:
+        return k / k[int(np.argmin(np.abs(self.WL - 5500.0)))]
+
+    @pytest.mark.parametrize("delta", [0.0, -0.4, 0.2])
+    def test_curve_matches_fsps_dust_type4(self, delta):
+        """tengri ``kriek_conroy`` ≈ FSPS ``dust_type=4`` at default coupling."""
+        from tengri.components.dust.attenuation import kriek_conroy
+
+        k_t = self._norm(np.asarray(kriek_conroy(self.WL, dust_delta=delta)))
+        k_f = self._norm(self._fsps_dust_type4(self.WL, delta))
+        # Curves should agree to a few percent across the UV–NIR.
+        rel = np.abs(k_t - k_f) / np.maximum(np.abs(k_f), 1e-3)
+        assert np.median(rel) < 0.03, (
+            f"delta={delta}: median rel diff {np.median(rel):.3f} vs FSPS dust_type=4"
+        )
+
+    def test_bump_excess_matches_fsps_at_delta_zero(self):
+        """At δ=0 the 2175 Å bump excess (A_λ/A_V) matches FSPS (Eb=0.85)."""
+        from tengri.components.dust.attenuation import kriek_conroy
+
+        k_t = self._norm(np.asarray(kriek_conroy(self.WL, dust_delta=0.0)))
+        k_f = self._norm(self._fsps_dust_type4(self.WL, 0.0))
+        e_t = self._bump_excess(self.WL, k_t)
+        e_f = self._bump_excess(self.WL, k_f)
+        assert abs(e_t - e_f) < 0.05, (
+            f"bump excess tengri={e_t:.3f} vs FSPS={e_f:.3f} (expected ~0.17)"
+        )
+
+    def test_bump_couples_to_slope(self):
+        """Steeper (more negative δ) ⇒ stronger bump, per KC13 Eqn 3."""
+        from tengri.components.dust.attenuation import kriek_conroy
+
+        steep = self._bump_excess(
+            self.WL, self._norm(np.asarray(kriek_conroy(self.WL, dust_delta=-0.4)))
+        )
+        flat = self._bump_excess(
+            self.WL, self._norm(np.asarray(kriek_conroy(self.WL, dust_delta=0.2)))
+        )
+        assert steep > flat, f"bump should grow as δ decreases: steep={steep:.3f}, flat={flat:.3f}"

@@ -42,15 +42,19 @@ class SpectralIndexDef:
     name : str
         Human-readable name (e.g. ``"Dn4000"``).
     index_type : str
-        Either ``"EW"`` (equivalent width) or ``"break"`` (flux ratio).
+        ``"EW"`` (equivalent width), ``"break"`` (flux ratio), or
+        ``"slope"`` (power-law spectral slope β over a window — e.g. the
+        UV continuum slope, Calzetti+1994).
     continuum : tuple of tuple
         Continuum/sideband windows as ``((lo1, hi1), (lo2, hi2), ...)``.
         Rest-frame wavelengths in Angstrom.
         For EW indices: blue and red pseudo-continuum sidebands.
         For break indices: exactly two windows (numerator, denominator).
+        For slope indices: unused (pass ``()``); the fit range is ``feature``.
     feature : tuple of float or None
-        Feature window ``(lo, hi)`` in Angstrom. Required for EW indices,
-        None for break indices.
+        Feature window ``(lo, hi)`` in Angstrom. Required for EW indices
+        (the absorption feature) and slope indices (the fit range), None
+        for break indices.
     units : str
         ``"AA"`` for Angstrom (default) or ``"mag"`` for magnitude.
 
@@ -81,12 +85,16 @@ class SpectralIndexDef:
     units: str = "AA"
 
     def __post_init__(self):
-        if self.index_type not in ("EW", "break"):
-            raise ValueError(f"index_type must be 'EW' or 'break', got {self.index_type!r}")
+        if self.index_type not in ("EW", "break", "slope"):
+            raise ValueError(
+                f"index_type must be 'EW', 'break', or 'slope', got {self.index_type!r}"
+            )
         if self.index_type == "EW" and self.feature is None:
             raise ValueError("EW indices require a feature window.")
         if self.index_type == "break" and len(self.continuum) != 2:
             raise ValueError("Break indices require exactly 2 continuum windows.")
+        if self.index_type == "slope" and self.feature is None:
+            raise ValueError("Slope indices require a feature window (the fit range).")
 
     @property
     def wave_min(self) -> float:
@@ -203,6 +211,13 @@ STANDARD_INDICES: dict[str, SpectralIndexDef] = {
         index_type="EW",
         continuum=((4211.00, 4219.75), (4241.00, 4251.00)),
         feature=(4222.25, 4234.75),
+    ),
+    # UV continuum slope β (Calzetti+1994), f_λ ∝ λ^β over 1250–2600 Å.
+    "uv_slope_beta": SpectralIndexDef(
+        name="uv_slope_beta",
+        index_type="slope",
+        continuum=(),
+        feature=(1250.0, 2600.0),
     ),
 }
 
@@ -339,6 +354,8 @@ def measure_index_jax(
         return index_def.combiner(*atomic_values)
     if index_def.index_type == "break":
         return _measure_break(wave_rest, flux, index_def)
+    elif index_def.index_type == "slope":
+        return _measure_slope(wave_rest, flux, index_def)
     else:
         return _measure_ew(wave_rest, flux, index_def)
 
@@ -379,6 +396,31 @@ def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> 
     if idx.units == "mag":
         return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
     return ew
+
+
+def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+    """Power-law spectral slope β over the feature window (e.g. UV slope).
+
+    Fits ``f_λ ∝ λ^β``. With the SED in f_ν units, β = d ln(f_ν)/d ln(λ) − 2
+    (Calzetti+1994 convention — matches
+    :func:`tengri.utils.sed_quantities.compute_uv_slope_beta`). Uses a soft
+    sigmoid window (differentiable) for the weights, then analytic weighted
+    least squares in log-log space.
+    """
+    lo, hi = idx.feature
+    edge_width = 1.0
+    w = jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
+    log_wave = jnp.log(jnp.maximum(wave, 1.0))
+    log_fnu = jnp.log(jnp.maximum(flux, 1e-50))
+
+    sw = jnp.sum(w)
+    sx = jnp.sum(w * log_wave)
+    sy = jnp.sum(w * log_fnu)
+    sxx = jnp.sum(w * log_wave**2)
+    sxy = jnp.sum(w * log_wave * log_fnu)
+    denom = sxx - sx**2 / jnp.maximum(sw, 1e-30)
+    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, 1e-30)) / jnp.maximum(denom, 1e-30)
+    return slope_fnu - 2.0
 
 
 # ── Observed data container ───────────────────────────────────────

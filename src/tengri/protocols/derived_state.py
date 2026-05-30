@@ -193,6 +193,20 @@ class DerivedState:
     dust_spec_lnu_precomp: jnp.ndarray | None = None
     agn_spec_lnu_precomp: jnp.ndarray | None = None
     igm_spec_transmission_precomp: jnp.ndarray | None = None
+    # Age-resolved per-pixel stellar LUT, shape ``(n_age, n_spec_pixel)``,
+    # erg/s/Hz — needed for two-component (Charlot & Fall) dust on the
+    # spectrum LUT path (sum over age == stellar_spec_lnu_precomp).
+    stellar_spec_lnu_per_age_precomp: jnp.ndarray | None = None
+    # Dust transmission at spectrum pixel centres (dimensionless, in [0, 1]).
+    # Unlike photometry, no Taylor moment is needed — a pixel is a single
+    # wavelength, so A(λ_pix) is exact. ``dust_spec_transmission_precomp`` is
+    # the single-component / diffuse transmission; the two-component split
+    # publishes ``dust_spec_bc_transmission_precomp`` (birth cloud) and
+    # ``dust_spec_diff_transmission_precomp`` (diffuse) applied with the
+    # shared ``dust_young_indicator`` age weighting.
+    dust_spec_transmission_precomp: jnp.ndarray | None = None
+    dust_spec_bc_transmission_precomp: jnp.ndarray | None = None
+    dust_spec_diff_transmission_precomp: jnp.ndarray | None = None
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None

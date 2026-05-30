@@ -56,6 +56,7 @@ def _build_prediction(
     index_defs,
     data_args,
     use_components=False,
+    has_line_ratios=False,
 ):
     """Forward-model prediction in one place.
 
@@ -98,6 +99,10 @@ def _build_prediction(
         prediction["line_fluxes"] = model.predict_line_fluxes(
             params, target_wavelengths=data_args["line_flux_waves"]
         )
+    if has_line_ratios:
+        prediction["line_ratios"] = model.predict_line_ratios(
+            params, model.observation.line_ratios
+        )
     if has_indices:
         prediction["indices"] = model.predict_spectral_indices(params, index_defs)
 
@@ -139,6 +144,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
     noise_dof = get_noise_dof(spec) if uses_student_t(spec) else None
     use_censored = fitter.data_mask is not None
     has_line_fluxes = "line_flux_waves" in fitter._data_args
+    has_line_ratios = "line_ratio_obs" in fitter._data_args
     has_indices = "index_obs" in fitter._data_args
     index_defs = None
     if has_indices:
@@ -160,6 +166,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
         data_type == "photometry"
         and not use_components
         and not has_line_fluxes
+        and not has_line_ratios
         and not has_indices
         and hasattr(model, "_get_or_build_predict_observables_jit")
     )
@@ -192,6 +199,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
                 index_defs=index_defs,
                 data_args=data_args,
                 use_components=use_components,
+                has_line_ratios=has_line_ratios,
             )
 
         # Auto-built / user-supplied Likelihood adapter handles the data
@@ -233,6 +241,12 @@ def _build_data_neg_log_likelihood_fn(fitter):
                 ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
             )
             e_lh = e_lh + 0.5 * chi2_lines
+        if has_line_ratios:
+            model_lr = model.predict_line_ratios(params, model.observation.line_ratios)
+            chi2_ratios = jnp.sum(
+                ((data_args["line_ratio_obs"] - model_lr) / data_args["line_ratio_err"]) ** 2
+            )
+            e_lh = e_lh + 0.5 * chi2_ratios
         if has_indices:
             model_idx = model.predict_spectral_indices(params, index_defs)
             chi2_idx = jnp.sum(

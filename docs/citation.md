@@ -67,6 +67,11 @@ glued them together.
 - [CIGALE](https://cigale.lam.fr/): reference panchromatic SED
   fitting code; tengri reproduces its main physics paths for
   cross-validation. See [Reproduction → CIGALE](reproduction/cigale).
+- [Prospector](https://github.com/bd-j/prospector) (Johnson et al.
+  2021): Bayesian SED fitting on FSPS; tengri reproduces its stellar,
+  dust, nebular, AGN-torus, and IGM paths and bit-checks the
+  tengri↔FSPS SSP port. See
+  [Reproduction → Prospector](reproduction/prospector).
 
 ## Inheriting credit automatically
 
