@@ -347,17 +347,22 @@ print(
 # %% [markdown]
 # ## §4 Dust attenuation curves
 #
-# Prospector takes its attenuation laws from `sedpy.attenuation`. The
-# three Prospector / FSPS standards — Calzetti+2000 (`dust_type=2`),
-# Charlot & Fall 2000 (the power-law form, `dust_type=0`), and
-# Kriek & Conroy 2013 (`dust_type=4`) — are shown against tengri's
-# `calzetti`, `power_law`, and `kriek_conroy` laws. Both sides evaluate
-# the analytic law directly (tengri via `tengri.dust.list_laws`),
-# normalised to `A(λ)/A_V` at 5500 Å, so the comparison is curve against
-# curve with no SSP-convolution noise in between. The slopes overlay,
-# and the Kriek & Conroy 2175 Å bump appears at the same height on both
-# sides — the bump excess above the local Calzetti baseline is printed
-# below.
+# The three Prospector / FSPS attenuation standards — Calzetti+2000
+# (`dust_type=2`), Charlot & Fall 2000 (the power-law form,
+# `dust_type=0`), and Kriek & Conroy 2013 (`dust_type=4`) — shown
+# against tengri's `calzetti`, `power_law`, and `kriek_conroy` laws.
+# Both sides evaluate the analytic law directly (tengri via
+# `tengri.dust.list_laws`), normalised to `A(λ)/A_V` at 5500 Å, so the
+# comparison is curve against curve with no SSP-convolution noise.
+#
+# The Kriek & Conroy row is compared against FSPS' own `dust_type=4`
+# curve — the one Prospector actually applies — rather than `sedpy`'s
+# `conroy`. (Those are two different KC13 implementations: FSPS ties the
+# 2175 Å bump amplitude to the slope via KC13 Eqn 3 and divides the
+# Drude by R_V, while `sedpy` scales a Cardelli-relative bump by a fixed
+# `f_bump = 0.6`.) tengri's `kriek_conroy` reproduces the FSPS
+# construction, so the bump excess above the local Calzetti baseline
+# matches; both are printed below.
 
 # %%
 from tengri.dust import list_laws
@@ -387,7 +392,7 @@ def _bump_excess(wave, A_over_AV):
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
 for ax, title in (
-    (ax_l, "Prospector (sedpy.attenuation)"),
+    (ax_l, "Prospector (sedpy + FSPS dust_type=4)"),
     (ax_r, "tengri attenuation laws"),
 ):
     ax.set_xscale("log")
@@ -400,7 +405,12 @@ for ax, title in (
 ax_l.set_ylabel(r"$A_\lambda / A_V$")
 
 for sedpy_name, tengri_law, label in _law_pairs:
-    w_p, A_p = P.attenuation_curve(sedpy_name, av=1.0)
+    if tengri_law == "kriek_conroy":
+        # Prospector applies KC13 through FSPS dust_type=4, not sedpy.conroy.
+        A_p = P.fsps_kriek_conroy_curve(wave_law)
+        w_p = wave_law
+    else:
+        w_p, A_p = P.attenuation_curve(sedpy_name, av=1.0)
     A_p_norm = _norm_AV(w_p, A_p)
     ax_l.plot(w_p, A_p_norm, linewidth=2.0, label=label)
 
@@ -413,7 +423,7 @@ for sedpy_name, tengri_law, label in _law_pairs:
     if tengri_law == "kriek_conroy":
         print(
             f"§4 Kriek & Conroy 2175 Å bump (A_λ/A_V above baseline): "
-            f"sedpy = {_bump_excess(w_p, A_p_norm):.3f}, "
+            f"FSPS dust_type=4 = {_bump_excess(w_p, A_p_norm):.3f}, "
             f"tengri = {_bump_excess(wave_law, A_t_norm):.3f}"
         )
 ax_l.legend(fontsize=10)
