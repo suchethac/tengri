@@ -331,6 +331,46 @@ def attenuation_curve(
     return wave_aa, 1.086 * np.asarray(tau, dtype=np.float64)
 
 
+def fsps_kriek_conroy_curve(wave_aa: np.ndarray, *, dust_index: float = 0.0) -> np.ndarray:
+    """Return FSPS' ``dust_type=4`` Kriek & Conroy curve, k(λ) at tau_V=1.
+
+    This is the law Prospector actually applies (FSPS ``attn_curve.f90``,
+    ``dust_type=4``), not ``sedpy``'s ``conroy``. The two are different
+    KC13 implementations — FSPS ties the 2175 Å bump amplitude to the
+    slope via KC13 Eqn 3 and divides the Drude by :math:`R_V = 4.05`::
+
+        eb = 0.85 - 1.9 * dust_index
+        drude = eb * (lam * dlam) ** 2 / ((lam**2 - lamuvb**2) ** 2 + (lam * dlam) ** 2)
+        k = (cal00 + drude / R_V) * (lam / lamv) ** dust_index
+
+    Parameters
+    ----------
+    wave_aa : array_like, shape (n_wave,)
+        Wavelength grid [Å].
+    dust_index : float
+        Slope modifier :math:`\\delta` (FSPS ``dust_index``). Default 0.
+
+    Returns
+    -------
+    k : ndarray, shape (n_wave,)
+        Attenuation curve at :math:`\\tau_V = 1` (FSPS normalisation, not
+        renormalised to k(5500)=1 — divide by the V-band value for that).
+    """
+    wl = np.asarray(wave_aa, dtype=np.float64)
+    x = 1e4 / wl  # 1/micron
+    below = wl <= 6300.0
+    cal = np.where(
+        below,
+        1.17 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + 1.78,
+        1.17 * (-1.857 + 1.04 * x) + 1.78,
+    )
+    cal = np.clip(cal, 0.0, None) / 0.44 / 4.05
+    eb = 0.85 - 1.9 * dust_index  # KC13 Eqn 3
+    dlam, lamuvb = 350.0, 2175.0
+    drude = eb * (wl * dlam) ** 2 / ((wl**2 - lamuvb**2) ** 2 + (wl * dlam) ** 2)
+    return (cal + drude / 4.05) * (wl / 5500.0) ** dust_index
+
+
 # ---------------------------------------------------------------------------
 # §12 — IGM transmission (FSPS add_igm_absorption, Madau 1995)
 # ---------------------------------------------------------------------------
