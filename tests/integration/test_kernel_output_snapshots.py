@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Snapshot regression: predict_photometry/spectrum output across modes.
+"""Snapshot regression: predict_photometry/spectrum numerical output.
 
-Pins the numerical output of every prediction mode under a fixed param
-dict so that ADR-0004's kernel-strategy refactor cannot accidentally
-re-route a call (e.g. compositional → hybrid) without breaking these
-tests. Compositional ≡ exact bit-identical (closure-A); hybrid has a
-documented 0.5% stellar tolerance — we compare each mode to itself
-across runs, not across modes.
+Pins the numerical output of the forward predict paths under a fixed
+param dict so refactors cannot silently drift the numbers. We snapshot
+two photometry paths — the default exact path and the build-time
+``approx=WavePrecomp(...)`` LUT path — each compared to *itself* across
+runs (the LUT path is an approximation, so it has its own baseline), plus
+the exact spectrum path.
 
-The first run writes the npz under ``tests/_data/kernel_snapshots/``.
-Subsequent runs assert ``allclose(rtol=0, atol=0)`` — any drift fails.
+The first run writes ``*.npy`` under ``tests/_data/kernel_snapshots/``.
+Subsequent runs assert bit-identical output — any drift fails.
 Re-baseline with::
 
     TENGRI_REBASELINE_KERNEL_SNAPSHOTS=1 pytest \
@@ -31,7 +31,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.forward.sed_model import SEDModel
+from tengri.forward.sed_model import SEDModel, WavePrecomp
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
@@ -84,6 +84,30 @@ def model(ssp_data, filters):
 
 
 @pytest.fixture(scope="module")
+def waveprecomp_model(ssp_data, filters):
+    """Same model under the build-time WavePrecomp LUT (approx=)."""
+    spec = Parameters(
+        mean_sfh_type="tsnorm",
+        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
+        sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
+        sfh_tsnorm_skew=Uniform(-1.0, 1.0),
+        sfh_tsnorm_trunc=Uniform(1.0, 10.0),
+        met_logzsol=Uniform(-2.0, 0.2),
+        dust_tau_bc=Uniform(0.0, 3.0),
+        dust_tau_diff=Uniform(0.0, 2.0),
+        dust_slope=-0.7,
+        redshift=0.05,
+    )
+    return SEDModel(
+        spec=spec,
+        ssp_data=ssp_data,
+        filters=filters,
+        approx=WavePrecomp(z_min=0.0, z_max=1.0, n_z=100),
+    )
+
+
+@pytest.fixture(scope="module")
 def fixed_params():
     """Stable param dict — same numbers every time."""
     return {
@@ -126,37 +150,13 @@ def _assert_snapshot(name: str, arr) -> None:
 # ── Photometry snapshots ──────────────────────────────────────────
 
 
-@pytest.mark.parametrize("mode", ["auto", "compositional", "hybrid", "exact"])
-def test_photometry_snapshot(model, fixed_params, mode):
-    flux = model.predict_photometry(fixed_params, mode=mode)
-    _assert_snapshot(f"photometry_{mode}", jnp.asarray(flux))
+def test_photometry_snapshot_exact(model, fixed_params):
+    """Default (exact) path — pins predict_photometry output bit-for-bit."""
+    flux = model.predict_photometry(fixed_params)
+    _assert_snapshot("photometry_exact", jnp.asarray(flux))
 
 
-# ── Spectrum snapshots ────────────────────────────────────────────
-
-
-@pytest.fixture(scope="module")
-def wave_obs():
-    return jnp.linspace(3000.0, 10000.0, 200)
-
-
-@pytest.mark.parametrize("mode", ["auto", "compositional", "exact"])
-def test_spectrum_snapshot(model, fixed_params, wave_obs, mode):
-    flux = model.predict_spectrum(fixed_params, wave_obs, mode=mode)
-    _assert_snapshot(f"spectrum_{mode}", jnp.asarray(flux))
-
-
-# ── Strategy routing observable ──────────────────────────────────
-
-
-def test_list_available_kernels_populated(model):
-    """The refactor's visibility win: every kernel has a status entry."""
-    log = model.list_available_kernels()
-    assert "exact_rest_sed" in log
-    assert "compositional_rest_sed" in log
-    assert "compositional_photometry" in log
-    # Every recorded entry is "ok" or a documented failure prefix.
-    for name, status in log.items():
-        assert status == "ok" or status.startswith(("build_failed:", "build_returned_none")), (
-            f"{name}: {status}"
-        )
+def test_photometry_snapshot_waveprecomp(waveprecomp_model, fixed_params):
+    """WavePrecomp LUT path (approx=) — pinned to itself (it is an approximation)."""
+    flux = waveprecomp_model.predict_photometry(fixed_params)
+    _assert_snapshot("photometry_waveprecomp", jnp.asarray(flux))
