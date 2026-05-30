@@ -16,7 +16,8 @@ why.
 
 cigale
 bagpipes
+prospector
 ```
 
-Comparisons with Prospector, MAGPHYS, x-cigale, GRAHSP, and Synthesizer
-will land as their reproduction notebooks come together.
+Comparisons with MAGPHYS, x-cigale, GRAHSP, and Synthesizer will land as
+their reproduction notebooks come together.
