@@ -24,6 +24,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
@@ -250,12 +256,23 @@ class TestSFHParameterSensitivity:
         """DPL: alpha, beta, tau, log_total_mass all must matter."""
         from tengri.components.stellar.sfh import dpl
 
-        sfr_default = dpl(self._T, alpha=2.0, beta=1.0, tau=5e9, log_total_mass=1.0)
+        # log_total_mass=10.0 (mass normalisation, not peak SFR): keeps SFR
+        # amplitudes ~1 Msun/yr, well above jnp.allclose's default atol=1e-8.
+        sfr_default = dpl(
+            self._T, alpha=2.0, beta=1.0, tau=5e9, age=_AGE_UNIV_YR, log_total_mass=10.0
+        )
 
-        for param, val in [("alpha", 4.0), ("beta", 3.0), ("tau", 2e9), ("log_total_mass", 2.0)]:
+        for param, val in [("alpha", 4.0), ("beta", 3.0), ("tau", 2e9), ("log_total_mass", 11.0)]:
             sfr_mod = dpl(
                 self._T,
-                **{"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_total_mass": 1.0, param: val},
+                **{
+                    "alpha": 2.0,
+                    "beta": 1.0,
+                    "tau": 5e9,
+                    "age": _AGE_UNIV_YR,
+                    "log_total_mass": 10.0,
+                    param: val,
+                },
             )
             assert not jnp.allclose(sfr_default, sfr_mod, rtol=0.01), (
                 f"DPL parameter {param} is IGNORED"
@@ -538,8 +555,22 @@ class TestNotReturningDummies:
             ),
             ("snorm", snorm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5}),
             ("norm", norm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9}),
-            ("lnorm", lnorm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 0.5}),
-            ("dpl", dpl, {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_total_mass": 1.0}),
+            (
+                "lnorm",
+                lnorm,
+                {"log_total_mass": 1.0, "peak": 5e9, "width": 0.5, "age": _AGE_UNIV_YR},
+            ),
+            (
+                "dpl",
+                dpl,
+                {
+                    "alpha": 2.0,
+                    "beta": 1.0,
+                    "tau": 5e9,
+                    "age": _AGE_UNIV_YR,
+                    "log_total_mass": 1.0,
+                },
+            ),
         ]:
             sfr = fn(t, **kwargs)
             total = float(jnp.sum(sfr))

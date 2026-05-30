@@ -32,6 +32,12 @@ from tengri.components.stellar.sfh.mean_sfh import (
     exponential,
 )
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 jax.config.update("jax_enable_x64", True)
 
 # Common time grid: 1 Myr to 13 Gyr in 5000 steps
@@ -163,5 +169,7 @@ class TestDoublePowerlawMassConservation:
     def test_dpl_renormalizes_to_target(self):
         """The registry-facing ``dpl`` rescales the bare shape to 10**log_total_mass."""
         log_total_mass = 10.0
-        mass = _integrate(dpl, alpha=1.5, beta=2.0, tau=3e9, log_total_mass=log_total_mass)
+        mass = _integrate(
+            dpl, alpha=1.5, beta=2.0, tau=3e9, age=_AGE_UNIV_YR, log_total_mass=log_total_mass
+        )
         assert abs(mass - 10.0**log_total_mass) / 10.0**log_total_mass < 0.01

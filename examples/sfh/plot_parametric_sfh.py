@@ -35,9 +35,11 @@ models = {
         t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=1.5
     ),
     "norm (Gaussian)": tengri.norm(t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9),
-    "lnorm (log-normal)": tengri.lnorm(t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=0.3),
+    "lnorm (log-normal)": tengri.lnorm(
+        t_lookback, log_total_mass=10.0, peak=6e9, width=0.3, age=13.6e9
+    ),
     "dpl (double power law)": tengri.dpl(
-        t_lookback, alpha=2.0, beta=1.0, tau=5e9, log_total_mass=10.0
+        t_lookback, alpha=2.0, beta=1.0, tau=5e9, age=13.6e9, log_total_mass=10.0
     ),
     "exponential": tengri.exponential(t_lookback, log_total_mass=10.0, tau=3e9, start=1e9),
     "delayed exponential": tengri.delayed_exponential(

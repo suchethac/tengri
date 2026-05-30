@@ -101,7 +101,7 @@ figs_dir.mkdir(exist_ok=True)
 
 # Bump _FIG_DPI to 150 for the final docs render; 90 during iterative
 # debug keeps the PNG dimensions under the auto-viewer's 2000-pixel
-# limit so the triple-panel figures (§2a, §2b) remain inspectable.
+# limit so the two-panel figures (§2a, §2b) remain inspectable.
 _FIG_DPI = 150
 
 
@@ -312,37 +312,25 @@ save_fig("02_sfh_delayed.png")
 # BAGPIPES' `dblplaw` is the workhorse SFH shape for quiescent-galaxy
 # fitting at JWST cosmic noon — a smooth rise + smooth fall, two slopes
 # `α` (falling) and `β` (rising), turnover time `τ`:
-# :math:`\\mathrm{SFR}(t) \\propto \\bigl[(t/\\tau)^{\\alpha} +
-# (t/\\tau)^{-\\beta}\\bigr]^{-1}`. tengri's `dpl` is the same closed-form
+# :math:`\\mathrm{SFR}(T) \\propto \\bigl[(T/\\tau)^{\\alpha} +
+# (T/\\tau)^{-\\beta}\\bigr]^{-1}`. tengri's `dpl` is the same closed-form
 # shape with the same `(α, β, τ)` parameterisation.
 #
-# **Time-frame convention difference.** BAGPIPES parameterises `t` as
-# **cosmic age since the Big Bang** (the Carnall+2018 convention);
-# tengri's `dpl` (and `lognormal`) parameterise the same closed form
-# in **lookback time**. The two are mirror images about the age of
-# the universe: for matched `(α, β, τ)`, the BAGPIPES panel peaks near
-# lookback ≈ 11 Gyr (cosmic age ≈ 2.6 Gyr, the analytic extremum at
-# `τ·(β/α)^(1/(α+β))`) while tengri peaks near lookback ≈ 2.6 Gyr.
-#
-# tengri's `dpl` and `lognormal` docstrings carry a `.. warning::`
-# block spelling this out (see #514): *"to compare fits across codes
-# you must either flip the time axis or convert
-# τ_carnall ↔ age_of_universe − τ_lookback."* The third panel below
-# demonstrates exactly that conversion — feed tengri's lookback grid
-# back through the Carnall closed form with `t = age_universe −
-# lookback` and the BAGPIPES shape is recovered. Treat the choice as
-# a documented convention to reconcile when moving between codes, not
-# as silent disagreement.
+# **Time frame (#514).** Both codes measure the shape in *cosmic time
+# since formation* :math:`T`, peaking near
+# :math:`T = \\tau\\,(\\beta/\\alpha)^{1/(\\alpha+\\beta)}`. tengri's `dpl`
+# takes an explicit `age_gyr` anchor and converts internally,
+# :math:`T = \\mathrm{age} - t_\\mathrm{lookback}` — the same way
+# `sfhdelayed` does. Feeding it the BAGPIPES age of the universe at the
+# source redshift therefore reproduces the BAGPIPES curve directly, with
+# no axis flip and no `τ_carnall ↔ age − τ_lookback` conversion. The two
+# panels below overlay the *same* shape; before the #514 fix tengri ran
+# the power law on lookback time directly and the curve was mirrored.
 
 # %%
 DPL_ALPHA = 1.5
 DPL_BETA = 1.0
 DPL_TAU_GYR = 3.0
-DPL_AGE_GYR = 5.0
-
-t_b_dpl, sfr_b_dpl = B.sfh_curve(
-    sfh_type="delayed", age=DPL_AGE_GYR, tau=1.0, massformed=LOG_MASS_FIDUCIAL
-)  # Placeholder: bagpipes_driver does not (yet) wire dblplaw — see below.
 
 # Build the bagpipes side directly via model_galaxy.sfh inspection.
 _comp_b_dpl = {
@@ -359,6 +347,11 @@ _mg_b_dpl = B._build_model(_comp_b_dpl)
 t_b_dpl = np.asarray(_mg_b_dpl.sfh.ages, dtype=np.float64)  # yr lookback
 sfr_b_dpl = np.asarray(_mg_b_dpl.sfh.sfh, dtype=np.float64)  # Msun/yr
 
+# Anchor tengri's cosmic-time frame to the *same* age of the universe
+# BAGPIPES used (Planck cosmology at z = 0). Reading it off the model
+# keeps the two codes on one clock regardless of cosmology drift.
+AGE_OF_UNIVERSE_GYR = float(_mg_b_dpl.sfh.age_of_universe) / 1e9
+
 m_dpl = SEDModel.build(
     ssp_data=ssp,
     stellar=STELLAR_FIDUCIAL,
@@ -367,6 +360,7 @@ m_dpl = SEDModel.build(
         "alpha": Fixed(DPL_ALPHA),
         "beta": Fixed(DPL_BETA),
         "tau_gyr": Fixed(DPL_TAU_GYR),
+        "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "*": FIXED,
     },
@@ -379,26 +373,14 @@ _sfr_dpl = np.asarray(s_dpl.derived["sfr_history"])
 _mass_b_dpl = float(np.trapezoid(sfr_b_dpl[::-1], t_b_dpl[::-1]))
 _mass_t_dpl = float(np.trapezoid(_sfr_dpl[np.argsort(_lbt_dpl)], _lbt_dpl[np.argsort(_lbt_dpl)]))
 print(
-    f"§2a ∫SFR dt: BAGPIPES = {_mass_b_dpl:.3e} M☉, tengri = {_mass_t_dpl:.3e} M☉ (target 1.0e+10)"
+    f"§2a ∫SFR dt: BAGPIPES = {abs(_mass_b_dpl):.3e} M☉, "
+    f"tengri = {_mass_t_dpl:.3e} M☉ (target 1.0e+10)"
 )
 
-# Compute the workaround: evaluate Carnall+2018 closed form analytically
-# on the same lookback grid, reading t as cosmic age = age_universe -
-# lookback. This is what tengri _should_ do per its docstring.
-_AGE_UNIV_GYR = 13.7
-_t_cosmic_gyr = _AGE_UNIV_GYR - _lbt_dpl / 1e9
-_x = _t_cosmic_gyr / DPL_TAU_GYR
-_shape_carnall = np.where(_t_cosmic_gyr > 0, 1.0 / (_x**DPL_ALPHA + _x ** (-DPL_BETA)), 0.0)
-_idx_lbt = np.argsort(_lbt_dpl)
-_norm = (10**LOG_MASS_FIDUCIAL) / np.trapezoid(_shape_carnall[_idx_lbt], _lbt_dpl[_idx_lbt])
-_sfr_dpl_carnall = _shape_carnall * _norm
-
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), sharey=True)
-ax_l, ax_m, ax_r = axes
+fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, f"BAGPIPES dblplaw (α={DPL_ALPHA:g}, β={DPL_BETA:g}, τ={DPL_TAU_GYR:g} Gyr)"),
-    (ax_m, "tengri dpl (t = lookback convention)"),
-    (ax_r, "tengri lookback grid, Carnall closed form (workaround)"),
+    (ax_r, f"tengri dpl (age = {AGE_OF_UNIVERSE_GYR:.2f} Gyr)"),
 ):
     ax.set_xlabel("lookback time [Gyr]")
     ax.set_xlim(0, 13.5)
@@ -406,30 +388,24 @@ for ax, title in (
     ax.set_title(title, fontsize=11)
 ax_l.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
 ax_l.plot(t_b_dpl / 1e9, sfr_b_dpl, "C0-", linewidth=2.0)
-ax_l.axvline(
-    DPL_TAU_GYR, color="grey", linestyle=":", alpha=0.6, label=rf"$\tau$ = {DPL_TAU_GYR:g} Gyr"
-)
-ax_l.legend(fontsize=9)
-ax_m.plot(_lbt_dpl / 1e9, _sfr_dpl, "C1-", linewidth=2.0)
-ax_m.axvline(DPL_TAU_GYR, color="grey", linestyle=":", alpha=0.6)
-ax_r.plot(_lbt_dpl / 1e9, _sfr_dpl_carnall, "C2-", linewidth=2.0)
-ax_r.axvline(
-    _AGE_UNIV_GYR - DPL_TAU_GYR * 0.853,
-    color="grey",
-    linestyle=":",
-    alpha=0.6,
-    label=r"analytic peak (cosmic-age)",
-)
-ax_r.legend(fontsize=9)
-for ax in axes:
-    ax.set_yscale("linear")
+ax_r.plot(_lbt_dpl / 1e9, _sfr_dpl, "C1-", linewidth=2.0)
+_peak_lbt_dpl = float(_lbt_dpl[np.argmax(_sfr_dpl)] / 1e9)
+for ax in (ax_l, ax_r):
+    ax.axvline(
+        _peak_lbt_dpl,
+        color="grey",
+        linestyle=":",
+        alpha=0.6,
+        label=f"peak @ {_peak_lbt_dpl:.1f} Gyr lookback",
+    )
+    ax.legend(fontsize=9)
 fig.tight_layout()
 save_fig("10_sfh_dblplaw.png")
 
 print(
     f"§2a peak location: BAGPIPES @ lookback {t_b_dpl[np.argmax(sfr_b_dpl)] / 1e9:.2f} Gyr, "
-    f"tengri dpl @ {_lbt_dpl[np.argmax(_sfr_dpl)] / 1e9:.2f} Gyr (lookback convention), "
-    f"workaround @ {_lbt_dpl[np.argmax(_sfr_dpl_carnall)] / 1e9:.2f} Gyr"
+    f"tengri dpl @ {_peak_lbt_dpl:.2f} Gyr (same cosmic-time frame; "
+    f"residual is SFH-grid discretisation)"
 )
 
 
@@ -438,21 +414,23 @@ print(
 #
 # Another BAGPIPES standard, popular for "rejuvenation" tests: a
 # lognormal SFR(t) peaked at `tmax` with full-width-half-max `fwhm`.
-# tengri's `lnorm` is the same shape with a slightly different
-# parameterisation: peak lookback time `peak_lbt_gyr` and log-space
-# width `width_gyr` (dex). To match BAGPIPES' linear-time FWHM we
-# convert: `width_dex ≈ FWHM/(2.355 × tmax × ln 10)` for narrow bursts.
+# tengri's `lnorm` is the same family with a slightly different
+# parameterisation: peak in cosmic time `peak_gyr` and log-space width
+# `width_gyr` (dex). To match BAGPIPES' linear-time FWHM we convert:
+# `width_dex ≈ FWHM/(2.355 × tmax × ln 10)` for narrow bursts.
 #
-# **Same time-frame convention as §2a (double power-law).** BAGPIPES'
-# `tmax` is cosmic age since the Big Bang; tengri's `lnorm` evaluates
-# the closed form on the lookback grid directly, so `peak_lbt_gyr` is
-# a lookback time. At matched numeric input the BAGPIPES peak sits at
-# lookback ≈ universe_age − tmax (≈ 9.5 Gyr for tmax = 4 Gyr) while
-# tengri's peak sits at the literal `peak_lbt_gyr`. The `lnorm`
-# docstring carries the same `.. warning::` as `dpl` (#514). The
-# right-most panel applies the conversion: evaluate the Carnall+2018
-# lognormal closed form on the tengri lookback grid with
-# `t_cosmic = age_universe − lookback`, recovering the BAGPIPES shape.
+# **Same time frame as §2a (#514).** Like `dpl`, tengri's `lnorm` takes
+# an explicit `age_gyr` anchor and evaluates the shape in cosmic time
+# since formation, `T = age − lookback`, so `peak_gyr` is the cosmic-age
+# peak `tmax` — the same direction as BAGPIPES. Feeding the BAGPIPES age
+# of the universe reproduces the BAGPIPES curve directly. Before #514
+# tengri ran the log-normal on lookback time and the curve was mirrored.
+#
+# **Caveat — shape fidelity.** tengri's `lnorm` is a log10-space Gaussian,
+# not the exact Carnall+2018 1/T ln-space lognormal (which carries a 1/T
+# Jacobian and solves (t0, σ) from (tmax, fwhm)). The #514 fix corrects
+# the *time direction* and peak *location*; the detailed wing shape still
+# differs slightly. Full Carnall-lognormal parity is tracked separately.
 
 # %%
 LN_TMAX_GYR = 4.0
@@ -477,8 +455,9 @@ m_ln = SEDModel.build(
     stellar=STELLAR_FIDUCIAL,
     sfh={
         "type": "lnorm",
-        "peak_lbt_gyr": Fixed(LN_TMAX_GYR),
+        "peak_gyr": Fixed(LN_TMAX_GYR),
         "width_gyr": Fixed(LN_WIDTH_DEX),
+        "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "*": FIXED,
     },
@@ -489,30 +468,10 @@ s_ln = m_ln.predict_state({})
 _lbt_ln = np.asarray(s_ln.derived["sfh_grid_lbt_yr"])
 _sfr_ln = np.asarray(s_ln.derived["sfr_history"])
 
-# Workaround: evaluate Carnall+2018 lognormal on the tengri lookback
-# grid with t = age_universe - lookback. Closed form:
-#   SFR(t_cosmic) ∝ exp(-(ln(t_cosmic) - ln(tmax))² / (2 σ²)) / t_cosmic
-# with σ chosen so the linear-time FWHM matches LN_FWHM_GYR.
-_t_cosmic_ln_gyr = _AGE_UNIV_GYR - _lbt_ln / 1e9
-_sigma_log = LN_WIDTH_DEX * np.log(10)  # convert dex → natural-log σ
-_t_pos = np.maximum(_t_cosmic_ln_gyr, 1e-6)
-_shape_ln_carnall = np.where(
-    _t_cosmic_ln_gyr > 0,
-    np.exp(-((np.log(_t_pos) - np.log(LN_TMAX_GYR)) ** 2) / (2 * _sigma_log**2)) / _t_pos,
-    0.0,
-)
-_idx_lbt_ln = np.argsort(_lbt_ln)
-_norm_ln = (10**LOG_MASS_FIDUCIAL) / np.trapezoid(
-    _shape_ln_carnall[_idx_lbt_ln], _lbt_ln[_idx_lbt_ln] * 1e-9
-)
-_sfr_ln_carnall = _shape_ln_carnall * _norm_ln * 1e-9  # Msun/yr
-
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.5), sharey=True)
-ax_l, ax_m, ax_r = axes
+fig, ax_l, ax_r = U.two_panel_fig()
 for ax, title in (
     (ax_l, f"BAGPIPES lognormal (tmax={LN_TMAX_GYR:g}, FWHM={LN_FWHM_GYR:g} Gyr)"),
-    (ax_m, f"tengri lnorm (t = lookback, peak={LN_TMAX_GYR:g} Gyr)"),
-    (ax_r, "tengri lookback grid, Carnall closed form (workaround)"),
+    (ax_r, f"tengri lnorm (peak={LN_TMAX_GYR:g} Gyr, age={AGE_OF_UNIVERSE_GYR:.2f} Gyr)"),
 ):
     ax.set_xlabel("lookback time [Gyr]")
     ax.set_xlim(0, 13.5)
@@ -520,24 +479,24 @@ for ax, title in (
     ax.set_title(title, fontsize=11)
 ax_l.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
 ax_l.plot(t_b_ln / 1e9, sfr_b_ln, "C0-", linewidth=2.0)
-ax_l.axvline(LN_TMAX_GYR, color="grey", linestyle=":", alpha=0.6, label="tmax")
-ax_l.legend(fontsize=9)
-ax_m.plot(_lbt_ln / 1e9, _sfr_ln, "C1-", linewidth=2.0)
-ax_m.axvline(LN_TMAX_GYR, color="grey", linestyle=":", alpha=0.6)
-ax_r.plot(_lbt_ln / 1e9, _sfr_ln_carnall, "C2-", linewidth=2.0)
-ax_r.axvline(
-    _AGE_UNIV_GYR - LN_TMAX_GYR, color="grey", linestyle=":", alpha=0.6, label=r"age$_U$ − tmax"
-)
-ax_r.legend(fontsize=9)
-for ax in axes:
-    ax.set_yscale("linear")
+ax_r.plot(_lbt_ln / 1e9, _sfr_ln, "C1-", linewidth=2.0)
+_peak_lbt_ln = float(_lbt_ln[np.argmax(_sfr_ln)] / 1e9)
+for ax in (ax_l, ax_r):
+    ax.axvline(
+        _peak_lbt_ln,
+        color="grey",
+        linestyle=":",
+        alpha=0.6,
+        label=f"peak @ {_peak_lbt_ln:.1f} Gyr lookback",
+    )
+    ax.legend(fontsize=9)
 fig.tight_layout()
 save_fig("11_sfh_lognormal.png")
 
 print(
     f"§2b peak location: BAGPIPES @ lookback {t_b_ln[np.argmax(sfr_b_ln)] / 1e9:.2f} Gyr, "
-    f"tengri lnorm @ {_lbt_ln[np.argmax(_sfr_ln)] / 1e9:.2f} Gyr, "
-    f"workaround @ {_lbt_ln[np.argmax(_sfr_ln_carnall)] / 1e9:.2f} Gyr"
+    f"tengri lnorm @ {_peak_lbt_ln:.2f} Gyr (same cosmic-time frame; "
+    f"residual is grid discretisation + log10-vs-Carnall wing shape)"
 )
 
 
@@ -1748,14 +1707,15 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 # - **§1 SSPs.** BC03+MILES Kroupa templates port through the DSPS
 #   HDF5 layout at float32 round-trip precision (~1e-7). Both codes
 #   consume the same numeric SSP arrays.
-# - **§2 parametric SFHs.** Delayed-τ matches BAGPIPES directly
-#   (tengri's `delayed` handles the cosmic-age conversion internally).
-#   Double power-law (§2a) and lognormal (§2b) carry a documented
-#   time-frame convention difference — BAGPIPES uses cosmic-age-since-BB,
-#   tengri's `dpl`/`lnorm` use lookback time (see the `.. warning::` in
-#   their docstrings, #514). The §2a/§2b workaround panels show the
-#   `t = age_universe − lookback` conversion recovering the BAGPIPES
-#   shape. All forms integrate to `10**log_total_mass`.
+# - **§2 parametric SFHs.** Delayed-τ, double power-law (§2a) and
+#   lognormal (§2b) all match BAGPIPES directly: each takes an explicit
+#   `age_gyr` anchor and evaluates the shape in cosmic time since
+#   formation, `T = age − lookback` (#514). Anchored to the BAGPIPES
+#   age of the universe, the two-panel figures overlay the same curve —
+#   no axis flip, no τ conversion. (`lnorm` still uses a log10-Gaussian
+#   rather than the exact Carnall 1/T lognormal, so its wings differ
+#   slightly; direction and peak match.) All forms integrate to
+#   `10**log_total_mass`.
 # - **§3 Leja+19 continuity SFH.** Non-parametric piecewise-constant
 #   SFH. Bit-for-bit agreement on SFR(t) at matched parameters once
 #   the bin-ordering convention is reconciled (BAGPIPES indexes
