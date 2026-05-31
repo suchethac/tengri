@@ -493,6 +493,14 @@ class SynthesizerGridData:
     logn_axis: jnp.ndarray
     line_wavelengths_aa: jnp.ndarray
     log_line_per_qh: jnp.ndarray
+    # log10(Q_H / L_bol) on the six-axis grid [log10(photons/s per W)], i.e. the
+    # disc model's specific ionising luminosity. Lets a caller recover the grid's
+    # own Q_H normalisation instead of assuming an ionising-spectrum slope.
+    log_qh_specific: jnp.ndarray | None = None
+    # Discrete grid line luminosities per unit bolometric, log10(L_line / L_bol),
+    # on the six-axis grid + line axis. Used by the line-ratio parity test.
+    log_line_per_lbol: jnp.ndarray | None = None
+    line_ids: tuple[str, ...] | None = None
 
 
 def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
@@ -540,8 +548,13 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         ionU = jnp.array(f["axes"]["ionisation_parameter"][:])
         nH = jnp.array(f["axes"]["hydrogen_density"][:])
 
-        # Convert to log10 where appropriate
-        mass_axis = jnp.log10(mass_kg)
+        # Convert to log10 where appropriate. The grid stores BH mass in kg; the
+        # backend's API uses log10(M_sun) (and its defaults assume it), so convert
+        # here — otherwise the mass coordinate sits ~30 dex off the grid and is
+        # silently clamped to an edge. M_sun = 1.98841586e30 kg (the grid's own
+        # convention: its mass[0] = 1.988e38 kg is exactly 1e8 M_sun).
+        _M_SUN_KG = 1.98841586e30
+        mass_axis = jnp.log10(mass_kg / _M_SUN_KG)
         eddington_axis = jnp.log10(eddington)
         cosine_axis = cosine_inc  # Linear
         metallicity_axis = jnp.log10(metallicities)
@@ -551,6 +564,9 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         # Load emission lines
         line_wav = jnp.array(f["lines"]["wavelength"][:])
         line_lum = jnp.array(f["lines"]["luminosity"][:])  # (2,2,2,2,2,2,215)
+        line_ids = tuple(
+            i.decode() if isinstance(i, bytes) else str(i) for i in f["lines"]["id"][:]
+        )
 
         # Load log10(specific ionizing luminosity for HI)
         log10_qh_specific = jnp.array(f["log10_specific_ionising_luminosity"]["HI"][:])
@@ -588,6 +604,9 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         logn_axis=logn_axis,
         line_wavelengths_aa=line_wav,
         log_line_per_qh=log_line_per_qh,
+        log_qh_specific=log10_qh_specific,
+        log_line_per_lbol=jnp.log10(jnp.maximum(line_lum, 1e-99)),
+        line_ids=line_ids,
     )
 
 
@@ -642,6 +661,9 @@ class SynthesizerNLRBackend:
     has_continuum = False
 
     def __init__(self, grid_path: str | Path) -> None:
+        # Stored so the lazy singleton accessors can detect a grid-path change
+        # on repeat calls (without it, the second call AttributeErrors).
+        self.grid_path = str(grid_path)
         self.grid = _load_synthesizer_nlr_grid(grid_path)
 
         # Pre-compute triweight edges for all 6 axes at init time.
@@ -773,6 +795,105 @@ class SynthesizerNLRBackend:
         line_lum = (10.0**log_line_per_qh_interp) * (10.0**log_qh) * (1.0 - neb_fesc)
 
         return grid.line_wavelengths_aa, line_lum
+
+    def interp_log_qh_specific(
+        self,
+        log_bh_mass: float = 8.0,
+        log_eddington: float = -0.3,
+        cosine_inclination: float = 0.2,
+        log_metallicity: float = 0.0,
+        log_ionU: float = -1.5,
+        log_nH: float = 4.0,
+    ) -> jnp.ndarray:
+        r"""Interpolate the grid's own specific ionising luminosity log10(Q_H / L_bol).
+
+        This is the disc model's ionising output baked into the grid (Q_H per unit
+        bolometric luminosity, in photons/s per W). Recovering it lets a caller use
+        the grid's own :math:`Q_H` normalisation — the value Synthesizer itself
+        uses — rather than assuming an ionising-spectrum slope. The absolute
+        :math:`\log_{10} Q_H` for a source of bolometric luminosity ``L_bol`` [erg/s]
+        is ``interp_log_qh_specific(...) + log10(L_bol) - 7`` (the −7 converts
+        erg/s to W).
+
+        Parameters
+        ----------
+        log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH : float
+            Grid coordinates (same convention as :meth:`predict_agn_nlr_lines`).
+
+        Returns
+        -------
+        jnp.ndarray
+            Scalar ``log10(Q_H / L_bol)`` [log10(photons/s/W)] at the point.
+        """
+        from tengri.utils.grid_interp import interp_nd_triweight
+
+        grid = self.grid
+        if grid.log_qh_specific is None:
+            raise ValueError("grid carries no log_qh_specific; reload with the current loader")
+
+        sl = grid.log_qh_specific
+        if self._mass_descending:
+            sl = sl[::-1]
+        if self._edd_descending:
+            sl = sl[:, ::-1]
+        if self._cos_descending:
+            sl = sl[:, :, ::-1]
+        if self._met_descending:
+            sl = sl[:, :, :, ::-1]
+        if self._ionU_descending:
+            sl = sl[:, :, :, :, ::-1]
+        if self._nH_descending:
+            sl = sl[:, :, :, :, :, ::-1]
+
+        axes = (
+            self._mass_sorted,
+            self._edd_sorted,
+            self._cos_sorted,
+            self._met_sorted,
+            self._ionU_sorted,
+            self._nH_sorted,
+        )
+        edges = (
+            self._edges_mass,
+            self._edges_edd,
+            self._edges_cos,
+            self._edges_met,
+            self._edges_ionU,
+            self._edges_nH,
+        )
+        point = (log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH)
+        return interp_nd_triweight(sl, axes, edges, point)
+
+
+class SynthesizerBLRBackend(SynthesizerNLRBackend):
+    """Synthesizer CLOUDY c23.01 AGN **broad**-line-region backend.
+
+    The Synthesizer BLR grid shares the NLR grid's structure exactly — the same
+    six axes (BH mass, Eddington ratio, cosine inclination, metallicity,
+    ionisation parameter, hydrogen density) and the same per-:math:`Q_H` line
+    storage — differing only in the tabulated line luminosities (broad permitted
+    lines from dense, high-ionisation gas). So this backend reuses the NLR
+    loader and interpolation wholesale; only the grid *file* and the line set
+    differ. ``predict_agn_blr_lines`` is an alias of the inherited interpolation.
+
+    **Grid data required**: ``test_grid_agn-blr.hdf5`` (downloadable test grid)
+    or a production BLR grid.
+
+    References
+    ----------
+    Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+    """
+
+    name = "synthesizer_blr"
+
+    def predict_agn_blr_lines(self, *args, **kwargs) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Alias for :meth:`SynthesizerNLRBackend.predict_agn_nlr_lines`.
+
+        The grid interpolation is identical; only the underlying grid file (and
+        therefore the line luminosities) differs. Returns ``(wavelengths [Å],
+        luminosities [L_sun])``.
+        """
+        return self.predict_agn_nlr_lines(*args, **kwargs)
 
 
 # ── Feltre+2016 NLR backend ───────────────────────────────────────

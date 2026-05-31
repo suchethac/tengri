@@ -10,20 +10,22 @@ reproduction/
 ├── bagpipes/                   # Carnall et al. 2018, MNRAS 480, 4379
 ├── prospector/                 # Johnson et al. 2021, ApJS 254, 22
 ├── agnfitter/                  # Martínez-Ramírez et al. 2024, A&A 688, A46
-└── synthesizer/                # planned — Vijayan et al. 2024
+└── synthesizer/                # Roper, Lovell, Wilkins et al. 2025, arXiv:2508.03888
 ```
 
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent
 format), thin code-specific driver modules, and the rendered figures.
-The CIGALE, BAGPIPES, Prospector, and AGNFITTER-RX folders are ready;
-Synthesizer is a scaffold. AGNFITTER-RX is the AGN-first member of the
+All five folders are ready. AGNFITTER-RX is the AGN-first member of the
 series — a radio-to-X-ray deep dive on the four accretion-disk and four
 torus libraries — and reads the external code's template libraries
-directly rather than running its fitter.
+directly rather than running its fitter. The Synthesizer notebook focuses
+on the Unified AGN model (disc, NLR, BLR, torus, and the inclination
+geometry), with tengri reading the same Synthesizer Cloudy AGN grids for
+the line regions.
 
 ## Shared conventions
 
-The four ready notebooks are kept uniform so they read as one series:
+The five ready notebooks are kept uniform so they read as one series:
 
 - **Layout.** Each section sweeps one physics block — same SSP on both
   sides, external code (`C0-` solid) against tengri (`C1-`), shared
