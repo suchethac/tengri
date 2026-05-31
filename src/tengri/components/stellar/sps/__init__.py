@@ -15,4 +15,5 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 )
 from tengri.components.stellar.sps.mass_remaining import (
     compute_mass_remaining_fraction as compute_mass_remaining_fraction,
+    compute_mass_remaining_fraction as mass_remaining_fraction,
 )
