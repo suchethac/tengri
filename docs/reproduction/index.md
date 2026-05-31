@@ -14,7 +14,7 @@ with a full-SED head-to-head: tengri configured to emulate the external
 code end to end, overlaid on its own panchromatic output with a residual
 panel and an optical normalization ratio reported with its 16–84% spread.
 
-The three notebooks share a layout, plotting style, and a `## Summary` /
+The notebooks share a layout, plotting style, and a `## Summary` /
 `## References` close so they read as one series:
 
 - **{doc}`cigale`** — CIGALE (Boquien et al. 2019). The widest stack:
@@ -26,6 +26,11 @@ The three notebooks share a layout, plotting style, and a `## Summary` /
 - **{doc}`prospector`** — Prospector / FSPS (Johnson et al. 2021). The
   core forward model: SSPs, delayed-τ SFH, Calzetti / Kriek & Conroy
   attenuation, Draine & Li 2007 IR, the Byler nebular grid, and Madau IGM.
+- **{doc}`agnfitter`** — AGNFITTER-RX (Martínez-Ramírez et al. 2024).
+  An AGN-first, radio-to-X-ray deep dive: the four accretion-disk
+  libraries (R06, SN12, KD18, THB21) and four torus libraries (S04, NK08,
+  SKIRTOR, CAT3D-Wind) head to head, plus the α_ox–L₂₅₀₀ X-ray corona and
+  SPL/DPL radio jets across `8 < log ν/Hz < 20`.
 
 ```{toctree}
 :maxdepth: 1
@@ -33,6 +38,7 @@ The three notebooks share a layout, plotting style, and a `## Summary` /
 cigale
 bagpipes
 prospector
+agnfitter
 ```
 
 Comparisons with MAGPHYS, x-cigale, GRAHSP, and Synthesizer will land as
