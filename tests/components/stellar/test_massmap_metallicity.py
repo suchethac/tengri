@@ -303,7 +303,7 @@ class TestMassmapIntegration:
         params = Parameters(
             met_mode="massmap_box",
             met_logzsol_start=Uniform(-4.0, -2.0),
-            **{"yield": Fixed(0.03)},
+            met_yield=Fixed(0.03),
         )
         assert params.met_mode == "massmap_box"
         # met_logzsol_start should be free
@@ -345,3 +345,36 @@ def test_massmap_lin_is_linear_in_Z_not_logZ():
     # Endpoints: present-day -> Zfinal, oldest -> Zstart.
     assert_allclose(z[0], z_final, rtol=1e-3)
     assert_allclose(z[-1], z_start, rtol=5e-2)
+
+
+@pytest.mark.regression_bug
+def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
+    """massmap_box is reachable through SEDModel.build's dict grammar.
+
+    Regression for two coupled bugs: (1) ProSpect's ``yield`` param is a Python
+    keyword and could not be a builder group key — renamed to ``met_yield``;
+    (2) inference raised "ambiguous" (massmap_box's keys are a superset of
+    massmap_lin's) even when ``met_mode`` was set explicitly. Either one made
+    ``SEDModel.build(stellar={'met_mode': 'massmap_box', ...})`` crash.
+    """
+    from tengri import FIXED, Fixed, SEDModel
+
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp,
+        stellar={
+            "met_mode": "massmap_box",
+            "met_logzsol_start": Fixed(-2.15),
+            "met_logzsol_final": Fixed(0.15),
+            "met_yield": Fixed(0.03),
+            "*": FIXED,
+        },
+        sfh={"type": "const", "log_total_mass": Fixed(10.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        redshift=Fixed(0.0),
+    )
+    state = model.predict_state({})
+    z_hist = np.asarray(state.derived["log_metallicity_history"])
+    assert np.isfinite(z_hist).all()
+    # Monotonic enrichment: present-day (youngest) >= oldest.
+    age = np.asarray(state.derived["sfh_grid_lbt_yr"])
+    assert z_hist[np.argmin(age)] >= z_hist[np.argmax(age)]

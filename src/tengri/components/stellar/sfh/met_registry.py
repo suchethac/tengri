@@ -411,8 +411,12 @@ _register(
                 "",
                 Uniform(-2.0, 0.2),
             ),
-            "yield": MetParamDef(
-                "Fixed nucleosynthetic yield parameter ρ",
+            # ProSpect names this ``yield`` (the nucleosynthetic yield ρ), but
+            # ``yield`` is a Python keyword and cannot be used as a builder
+            # group key, so the user-facing name is ``met_yield`` (consistent
+            # with the ``met_*`` prefix of the other metallicity params).
+            "met_yield": MetParamDef(
+                "Fixed nucleosynthetic yield parameter ρ (ProSpect ``yield``)",
                 lambda lo, hi: lo > 0,
                 "must have lo > 0",
                 Fixed(0.03),
@@ -422,7 +426,7 @@ _register(
         internal_param_map={
             "met_logzsol_start": ("log_z_abs_start", 1.0, LOG10_ZSUN),
             "met_logzsol_final": ("log_z_abs_final", 1.0, LOG10_ZSUN),
-            "yield": ("yield_rho", 1.0, 0.0),
+            "met_yield": ("yield_rho", 1.0, 0.0),
         },
     )
 )
@@ -444,7 +448,7 @@ _register(
 _MET_MODE_DISCRIMINATORS: tuple[tuple[str, frozenset[str]], ...] = (
     ("bins_continuity", frozenset({"met_logzsol_base"})),
     ("bins", frozenset({"met_bin_0"})),
-    ("massmap_box", frozenset({"met_logzsol_start", "yield"})),
+    ("massmap_box", frozenset({"met_logzsol_start", "met_yield"})),
     ("massmap_lin", frozenset({"met_logzsol_start", "met_logzsol_final"})),
     ("two_step", frozenset({"met_step_age_gyr"})),
     ("psb_two_step", frozenset({"met_logzsol_burst"})),
