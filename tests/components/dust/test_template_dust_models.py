@@ -31,8 +31,17 @@ jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
-    """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
-    return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
+    """Central finite difference with a *scale-aware* step.
+
+    ``eps`` is relative to ``|x|`` so the step is meaningful across the wide
+    dynamic range of the parameters tested here. A fixed absolute step (the old
+    behaviour) is catastrophically cancellation-limited for large arguments such
+    as ``L_absorbed ~ 1e10``: ``f(x±1e-4)`` then differs only in ``f``'s 15th
+    significant digit, so the finite-difference reference becomes pure round-off
+    even though the analytic/autodiff gradient is exact.
+    """
+    h = eps * max(abs(x), 1.0)
+    return float((f(x + h) - f(x - h)) / (2.0 * h))
 
 
 # ── Fixtures: synthetic template grids for testing ────────────────

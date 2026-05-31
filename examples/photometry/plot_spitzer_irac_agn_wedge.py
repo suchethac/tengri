@@ -103,7 +103,7 @@ def composite_photometry(ssp, agn_frac, redshift):
         sfh={
             "type": "dpl",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "tau_gyr": 1.5,
             "alpha": 2.0,
             "beta": 2.5,
@@ -117,7 +117,7 @@ def composite_photometry(ssp, agn_frac, redshift):
         agn={
             "type": "composable",
             "*": tengri.FIXED,
-            "agn_frac": agn_frac,         # 0 = pure host, 1 = AGN-dominated
+            "agn_frac": agn_frac,  # 0 = pure host, 1 = AGN-dominated
             "agn_log_lbol": 12.5,
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
@@ -158,9 +158,7 @@ sf_color_y = sf_color_y[mask_sf]
 agn_frac_vals = np.array([0.05, 0.10, 0.20, 0.40, 0.60, 0.80, 0.95])
 z_agn = 0.5
 
-agn_phot = np.array([
-    composite_photometry(ssp, float(f), z_agn) for f in agn_frac_vals
-])
+agn_phot = np.array([composite_photometry(ssp, float(f), z_agn) for f in agn_frac_vals])
 agn_color_x = np.log10(agn_phot[:, 2] / agn_phot[:, 0])
 agn_color_y = np.log10(agn_phot[:, 3] / agn_phot[:, 1])
 
