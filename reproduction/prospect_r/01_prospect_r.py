@@ -856,19 +856,16 @@ save_fig("prospect_r_08_nebular.png")
 # AGN block, so the head-to-head runs the raw SKIRTOR template against tengri's
 # SKIRTOR at the same bolometric luminosity. We read the template directly from
 # ProSpect's `SKIRTOR_interp` — not from `ProSpectSED`, which additionally
-# screens and reprocesses the AGN light through the galaxy's Charlot & Fall dust
-# and would compare a reprocessed spectrum against a bare template. ProSpect's
-# Fritz (2006) library has no tengri equivalent and is not reproduced here.
+# screens and reprocesses the AGN light through the galaxy's Charlot & Fall dust.
+# ProSpect's Fritz (2006) library has no tengri equivalent and is not reproduced.
 #
-# This is the one block where the two disagree in shape, not just normalisation.
-# ProSpect's SKIRTOR template is the expected type-1 SED: an accretion-disc
-# continuum rising through the optical and a torus bump peaking near 10 µm with
-# the 10 µm silicate feature. tengri's default SKIRTOR block instead produces a
-# much colder, torus-dominated spectrum rising into the far-IR (peak ~160 µm)
-# with no disc continuum, and the peak does not move with inclination. The two
-# carry the same bolometric luminosity but distribute it very differently; the
-# tengri default looks too cold for a SKIRTOR torus and is flagged for
-# follow-up. The numbers below record the peak locations on each side.
+# The panels show `νL_ν` — the right way to read a torus SED, where the thermal
+# bump is a true maximum. (In `L_ν` a torus rises into the far-IR simply because
+# `L_ν = νL_ν · λ/c`, which is easy to misread as a cold spectrum.) On both
+# sides the torus `νL_ν` peaks near 10 µm with the 10 µm silicate feature;
+# ProSpect's template additionally carries the accretion-disc continuum shortward
+# of ~1 µm, which tengri's torus-only block here does not include. The peak
+# wavelengths are printed on each side.
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -897,23 +894,33 @@ s_agn = m_agn.predict_state({})
 w_t9 = np.asarray(s_agn.wave)
 L_t9 = np.asarray(s_agn.derived["sed_agn"])
 
+# νL_ν = L_ν · c/λ — the torus thermal bump is a true peak in this quantity.
+nuLnu_p = L_p9 * U.C_ANGSTROM_PER_S / w_p9
+nuLnu_t = L_t9 * U.C_ANGSTROM_PER_S / w_t9
+
 fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="ProSpect  SKIRTOR template", label_r="tengri  SKIRTOR")
-ax_l.plot(w_p9, L_p9, "C0-", linewidth=1.5)
-ax_r.plot(w_t9, L_t9, "C1-", linewidth=1.5)
-_peak_agn = max(float(np.max(L_p9)), float(np.max(L_t9)))
+for ax, lab in ((ax_l, "ProSpect  SKIRTOR template"), (ax_r, "tengri  SKIRTOR")):
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel(r"$\lambda$ [Å]")
+    ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
+    ax.set_title(lab)
+ax_l.plot(w_p9, nuLnu_p, "C0-", linewidth=1.5)
+ax_r.plot(w_t9, nuLnu_t, "C1-", linewidth=1.5)
+_peak_nu = max(float(np.max(nuLnu_p)), float(np.max(nuLnu_t)))
 for ax in (ax_l, ax_r):
     ax.set_xlim(1e2, 1e7)
-    ax.set_ylim(_peak_agn * 1e-4, _peak_agn * 3)
+    ax.set_ylim(_peak_nu * 1e-3, _peak_nu * 3)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_09_agn_skirtor.png")
 
+# Torus bump peak in νL_ν (restrict to λ > 1 µm to skip the disc continuum).
 _mir = w_p9 > 1e4
-_peak_p9 = w_p9[_mir][np.argmax(L_p9[_mir])]
+_peak_p9 = w_p9[_mir][np.argmax(nuLnu_p[_mir])]
 _mir_t = w_t9 > 1e4
-_peak_t9 = w_t9[_mir_t][np.argmax(L_t9[_mir_t])]
-print(f"§9 torus mid-IR peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t9 / 1e4:.1f} µm")
+_peak_t9 = w_t9[_mir_t][np.argmax(nuLnu_t[_mir_t])]
+print(f"§9 torus νLν peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t9 / 1e4:.1f} µm")
 
 
 # %% [markdown]
