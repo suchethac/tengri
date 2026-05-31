@@ -948,10 +948,18 @@ for ax in (ax_l, ax_r):
 fig.tight_layout()
 save_fig("synthesizer_09e_torus.png")
 _pk_s = w_torus_s[(w_torus_s > 1e4)][np.argmax(L_torus_s[(w_torus_s > 1e4)])]
-_wt, _Lt = _torus_tengri["nenkova"]
-_pk_t = _wt[(_wt > 1e4)][np.argmax(_Lt[(_wt > 1e4)])]
+
+
+def _ir_peak_um(wt, lt):
+    m = wt > 1e4
+    return float(wt[m][np.argmax(lt[m])]) / 1e4
+
+
+_pk_nen = _ir_peak_um(*_torus_tengri["nenkova"])
+_pk_2t = _ir_peak_um(*_torus_tengri["two_temperature"])
 print(
-    f"§9e torus mid-IR peak: Synthesizer {_pk_s / 1e4:.1f} µm, tengri/nenkova {_pk_t / 1e4:.1f} µm"
+    f"§9e torus mid-IR peak: Synthesizer (1000 K BB) {_pk_s / 1e4:.1f} µm; "
+    f"tengri two_temperature {_pk_2t:.1f} µm (close), nenkova {_pk_nen:.1f} µm (cooler clumpy RT)"
 )
 
 
