@@ -405,12 +405,14 @@ save_fig("agnfitter_04_dust_attenuation.png")
 #
 # tengri's `schreiber2016` and AGNFITTER-RX's S17 reproduce the same far-IR
 # dust peak (~90 µm, within ~6% in position) — unsurprising, as both come from
-# the Schreiber dust-SED family. They part company in the mid-IR: at matched
-# (T_dust, f_PAH) S17 shows the PAH features at 3–8 µm while tengri's
-# `schreiber2016` emits **none** there, so the 3–20 µm region carries the bulk
-# of the disagreement (the missing PAH emission is tracked for a fix). The
-# legacy DH02_CE01 library peaks noticeably colder (longer wavelength) and
-# broader — the reason AGNFITTER-RX added the more flexible S17 for JWST data.
+# the Schreiber dust-SED family. They part company in the mid-IR: S17 uses the
+# full tabulated PAH templates, while tengri's `schreiber2016` is an *analytic*
+# model (modified blackbody + a few Drude PAH profiles), whose PAH features at
+# 3–8 µm come out much weaker than S17's at matched (T_dust, f_PAH). For
+# PAH-sensitive work the Drude approximation is the limitation (tracked for a
+# fix; a tabulated-S17 port would close it). The legacy DH02_CE01 library peaks
+# noticeably colder and broader — the reason AGNFITTER-RX added S17 for JWST
+# data; tengri has no DH02_CE01 port (its modern relative is `dale2014`).
 
 # %%
 import jax.numpy as jnp
@@ -470,12 +472,13 @@ save_fig("agnfitter_06_cold_dust.png")
 #   genuinely *hotter* than KD18's 3-zone — it peaks in the FUV (~1200 Å) vs
 #   KD18's optical (~3700 Å) — so treat this panel as a related model, not a
 #   match. (The `kubota_done` bug is tracked for a fix.)
-# * **R06 — diverges in the near-IR.** tengri's `richards2006` and
-#   AGNFITTER-RX's R06 are the same Richards+2006 composite, but tengri's
-#   L_ν peaks at 1.2 µm while AGNFITTER-RX's peaks at 3000 Å — up to a 20×
-#   difference redward of 1 µm. This traces to a νL_ν-vs-L_ν convention
-#   mismatch between the two implementations (also tracked for a fix); the UV
-#   continuum and the shared 2500 Å anchor agree.
+# * **R06 — a convention difference, and tengri has it right.** Both use the
+#   Richards+2006 composite, which is tabulated as νF_ν. tengri converts it to
+#   L_ν (divides by ν), so its peak sits at 1.2 µm; AGNFITTER-RX feeds the
+#   νF_ν array to its fitter *as* L_ν (no division), so its R06 "disc" is
+#   effectively νF_ν-shaped and peaks at 3000 Å — a factor-of-ν bluer. The
+#   ~20× near-IR gap is this convention difference, not a tengri error; both
+#   pass through the shared 2500 Å anchor.
 
 # %%
 ANCHOR = 2500.0
@@ -578,9 +581,10 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # port self-check — and they pass: peak-aligned, agreeing to ≲1.6×.
 # `nenkova` is an independent analytic model and runs ~2–4× off in the NIR
 # (parametric vs tabulated). `skirtor` is the loosest: tengri's peaks ~40 µm
-# vs AGNFITTER-RX's ~25 µm because tengri interpolates the SKIRTOR
-# `total = disk + dust` grid rather than the dust-only grid — a known bias,
-# tracked for a fix.
+# vs AGNFITTER-RX's ~25 µm. Both are dust-only (tengri uses the SKIRTOR v3
+# `dust_emission` grid), but tengri interpolates its own v3 template set while
+# AGNFITTER-RX uses the parameter-averaged `SKIRTOR_mean_3p` library — two
+# averagings of the same Stalevski models, so the IR peak lands differently.
 #
 # Two residual pathologies the paper emphasises also live in this plot: the
 # 10 µm silicate feature (NK08/CAT3D can over- or under-predict it depending
