@@ -165,11 +165,22 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     ssp = load_ssp_data(str(ssp_path))
     model = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
-             "log_total_mass": Fixed(10.0), "*": FIXED},
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(10.0),
+            "*": FIXED,
+        },
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-        agn={"type": "composable", "disc": {"type": "kubota_done"}, "torus": {"type": "nenkova"},
-             "lines": {"type": "nlr_synthesizer"}, "agn_log_lbol": Fixed(12.0), "*": FIXED},
+        agn={
+            "type": "composable",
+            "disc": {"type": "kubota_done"},
+            "torus": {"type": "nenkova"},
+            "lines": {"type": "nlr_synthesizer"},
+            "agn_log_lbol": Fixed(12.0),
+            "*": FIXED,
+        },
         redshift=Fixed(0.0),
     )
     sed = np.asarray(model.predict_state({}).derived["sed_agn"])

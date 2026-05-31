@@ -724,6 +724,8 @@ for c, (dt, label) in zip(("C1", "C2"), _disc_models):
     wt, Lt = _disc_tengri[dt]
     ax_r.plot(wt, Lt, c + "-", linewidth=1.5, label=label)
 ax_r.legend(fontsize=9)
+
+
 # Range from the plotted disc curves over the *plotted window* (1e2–1e5 Å) — a
 # global max would be set by the model grid's far-IR edge, not the disc bump.
 def _winmax(w, L, lo=1e2, hi=1e5):
