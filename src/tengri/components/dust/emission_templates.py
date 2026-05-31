@@ -789,6 +789,154 @@ def load_dale2014_templates(filepath: str) -> dict:
     }
 
 
+def create_schreiber2018_from_grid(grid_path: str) -> Callable:
+    r"""Create a Schreiber+2018 (S17) cold-dust model backed by tabulated templates.
+
+    This is the tabulated counterpart of the analytic ``schreiber2016`` model:
+    it shares the two-parameter ``(dust_T, dust_f_pah)`` interface but draws the
+    dust-continuum and PAH shapes from the published Schreiber et al. (2018)
+    library (the ``S17`` cold-dust templates packaged with AGNfitter-rX) rather
+    than a modified-blackbody + Drude-profile approximation. The faithful PAH
+    forest at 6--13 μm is the reason to prefer it over ``schreiber2016`` when
+    reproducing AGNfitter-rX's cold-dust component.
+
+    The grid (``data/schreiber2018_templates.h5``, built by
+    ``scripts/build_schreiber2018_grid.py``) stores dust and PAH templates as
+    *native* relative ``L_nu`` over a shared dust-temperature axis. At runtime
+    the model linearly interpolates both in ``dust_T``, forms AGNfitter-rX's
+    native mixture ``(1 - f_PAH)·dust + f_PAH·PAH``, and renormalises the
+    frequency integral to ``L_absorbed``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``schreiber2018_templates.h5``.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, dust_T=30.0, dust_f_pah=0.05, **kw) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are
+    ``jnp`` primitives.
+
+    The temperature interpolation is node-exact piecewise-linear (matching
+    AGNfitter-rX's nearest/linear template selection), not the smooth-kernel
+    interpolation that smears tabulated peaks.
+
+    References
+    ----------
+    .. [1] Schreiber, C., et al., 2018, A&A, 609, A30
+           (https://doi.org/10.1051/0004-6361/201731506).
+    .. [2] Martinez-Ramirez et al. 2024, A&A, 688, A46 (AGNfitter-rX packaging).
+    """
+    import h5py as _h5py
+    import numpy as np
+
+    with _h5py.File(grid_path, "r") as f:
+        g = f["schreiber2018"]
+        tdust_np = np.asarray(g["tdust"][:], dtype=np.float64)
+        wave_np = np.asarray(g["wavelength"][:], dtype=np.float64)
+        dust_np = np.asarray(g["dust"][:], dtype=np.float64)
+        pah_np = np.asarray(g["pah"][:], dtype=np.float64)
+
+    tdust = jnp.array(tdust_np, dtype=jnp.float64)
+    tmpl_wave = jnp.array(wave_np, dtype=jnp.float64)
+    dust_templates = jnp.array(dust_np, dtype=jnp.float64)
+    pah_templates = jnp.array(pah_np, dtype=jnp.float64)
+
+    def schreiber2018_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_T: float = 30.0,
+        dust_f_pah: float = 0.05,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Schreiber+2018 (S17) cold-dust emission from tabulated templates.
+
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Å].
+        L_absorbed : float
+            Total absorbed luminosity. The output L_nu is in the same units
+            per Hz.
+        dust_T : float
+            Dust temperature [K]. Clipped to the grid range. Default: 30.0.
+        dust_f_pah : float
+            Fractional PAH contribution in [0, 1]. Default: 0.05.
+        **_kwargs
+            Extra keyword arguments (ignored, e.g. ``redshift``).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Cold-dust emission L_ν in ``[L_absorbed units] / Hz``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        """
+        # Node-exact linear interpolation in dust temperature.
+        t = jnp.clip(dust_T, tdust[0], tdust[-1])
+        i = jnp.clip(jnp.searchsorted(tdust, t) - 1, 0, tdust.shape[0] - 2)
+        ft = (t - tdust[i]) / (tdust[i + 1] - tdust[i])
+        dust_T_template = (1.0 - ft) * dust_templates[i] + ft * dust_templates[i + 1]
+        pah_T_template = (1.0 - ft) * pah_templates[i] + ft * pah_templates[i + 1]
+
+        # Resample both onto the requested grid, then mix natively (AGNfitter-rX
+        # mixes the unnormalised dust/PAH L_nu, so the relative amplitude — and
+        # hence the physical meaning of f_PAH — is preserved).
+        dust_on_grid = jnp.interp(wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0)
+        pah_on_grid = jnp.interp(wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0)
+        f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
+        mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
+
+        # Renormalise the frequency integral to L_absorbed (nu descending for
+        # ascending wavelength, so negate for a positive integral).
+        wave_cm = wavelength_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm
+        integral = -jnp.trapezoid(mixed, nu)
+        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+        return norm * mixed
+
+    return schreiber2018_tabulated
+
+
+def load_schreiber2018_templates(filepath: str) -> dict:
+    r"""Load the Schreiber+2018 (S17) cold-dust template grid from HDF5.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``schreiber2018_templates.h5``.
+
+    Returns
+    -------
+    dict
+        JAX-wrapped ``tdust`` [K], ``wavelength`` [Å], ``dust`` and ``pah``
+        ``(n_T, n_wave)`` template arrays (native relative L_nu).
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O is not supported in JIT.
+    """
+    import h5py as _h5py
+    import numpy as np
+
+    with _h5py.File(filepath, "r") as f:
+        g = f["schreiber2018"]
+        return {
+            "tdust": jnp.array(np.array(g["tdust"][:]), dtype=jnp.float64),
+            "wavelength": jnp.array(np.array(g["wavelength"][:]), dtype=jnp.float64),
+            "dust": jnp.array(np.array(g["dust"][:]), dtype=jnp.float64),
+            "pah": jnp.array(np.array(g["pah"][:]), dtype=jnp.float64),
+        }
+
+
 def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:
     r"""Load and register the tabulated Dale+2014 model in the emission registry.
 

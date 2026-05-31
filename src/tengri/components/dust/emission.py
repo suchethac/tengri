@@ -1479,12 +1479,14 @@ from .emission_templates import (
     create_dale2014_from_grid as create_dale2014_from_grid,
     create_dl07_from_grid as create_dl07_from_grid,
     create_dl14_from_grid as create_dl14_from_grid,
+    create_schreiber2018_from_grid as create_schreiber2018_from_grid,
     create_themis_from_grid as create_themis_from_grid,
     load_astrodust_templates as load_astrodust_templates,
     load_bosa_templates as load_bosa_templates,
     load_dale2014_templates as load_dale2014_templates,
     load_dl14_templates as load_dl14_templates,
     load_draine_li_templates as load_draine_li_templates,
+    load_schreiber2018_templates as load_schreiber2018_templates,
     load_themis_templates as load_themis_templates,
     register_astrodust_tabulated as register_astrodust_tabulated,
     register_bosa_tabulated as register_bosa_tabulated,
@@ -1505,6 +1507,16 @@ DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
     "dale2014",
     "dale2014_templates.h5",
     "create_dale2014_from_grid",
+)
+
+# Schreiber et al. (2018) "S17" cold-dust library — the tabulated, real-PAH
+# counterpart of the analytic ``schreiber2016`` model. Same
+# (dust_T, dust_f_pah) interface; ported from AGNfitter-rX
+# (scripts/build_schreiber2018_grid.py).
+DUST_EMISSION_MODELS["schreiber2018"] = _make_lazy_loader(
+    "schreiber2018",
+    "schreiber2018_templates.h5",
+    "create_schreiber2018_from_grid",
 )
 
 
