@@ -33,7 +33,7 @@ skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhib
 markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting
 how quenching timescale imprints on observable photometry and spectroscopy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-132
+.. GENERATED FROM PYTHON SOURCE LINES 12-142
 
 
 
@@ -48,6 +48,10 @@ how quenching timescale imprints on observable photometry and spectroscopy.
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -69,12 +73,18 @@ how quenching timescale imprints on observable photometry and spectroscopy.
     scenarios = [
         {
             "name": "Star-forming (no quench)",
-            "sfh": {"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 0.1, "end_gyr": 13.8},
+            "sfh": {
+                "type": "const",
+                "*": tengri.FIXED,
+                "log_total_mass": 10.64,
+                "start_gyr": 0.1,
+                "end_gyr": 13.8,
+            },
             "color": "#1f77b4",
         },
         {
             "name": "Slow quench (τ=4 Gyr)",
-            "sfh": {"type": "dexp", "*": tengri.FIXED, "tau_gyr": 4.0, "log_peak_sfr": 1.0},
+            "sfh": {"type": "dexp", "*": tengri.FIXED, "tau_gyr": 4.0, "log_total_mass": 10.0},
             "color": "#ff7f0e",
         },
         {
@@ -82,7 +92,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             "sfh": {
                 "type": "tsnorm",
                 "*": tengri.FIXED,
-                "log_peak_sfr": 1.2,
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": 2.0,
                 "width_gyr": 0.3,
                 "skew": 1.0,

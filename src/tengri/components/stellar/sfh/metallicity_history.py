@@ -266,3 +266,212 @@ def tabulated_metallicity_on_ssp_grid(
     """
     ssp_log_yr = ssp_lg_age_gyr + 9.0
     return jnp.interp(ssp_log_yr, met_log_age_yr, met_log_z_abs)
+
+
+@jax.jit
+def massmap_lin_metallicity(
+    ssp_lg_age_gyr: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    sfr_on_ssp: jnp.ndarray,
+    log_z_abs_start: float,
+    log_z_abs_final: float,
+) -> jnp.ndarray:
+    """Linear metallicity mapping tied to cumulative stellar mass formed.
+
+    Implements the ProSpect (Bellstedt+2020) massmap_lin model: metallicity
+    evolves linearly between Zstart (oldest stars) and Zfinal (present day),
+    with the Z(age) ramp driven by the cumulative stellar mass formed
+    over time.
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Log10(age/Gyr) of SSP templates [dimensionless].
+    ssp_ages_yr : array_like, shape (n_age,)
+        Age of each SSP template in years [yr].
+    sfr_on_ssp : array_like, shape (n_age,)
+        Star formation rate at each SSP age [Msun/yr].
+    log_z_abs_start : float
+        log10(Z) absolute at the oldest age (Zstart) [dimensionless].
+    log_z_abs_final : float
+        log10(Z) absolute at the present day (Zfinal) [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        log10(Z) absolute at each SSP age [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses JAX primitives for cumulative integration.
+
+    **Gradient-safe**: yes — all operations are differentiable.
+
+    **Physics:**
+
+    The cumulative mass fraction formed (cmf) is defined as:
+
+    .. math::
+
+        \\text{cmf}(t) = \\frac{\\int_0^t \\text{SFR}(t') dt'}{\\int_0^T \\text{SFR}(t') dt'}
+
+    where :math:`t` is lookback time. Metallicity is then linearly mapped:
+
+    .. math::
+
+        Z(t) = Z_{\\rm start} + (Z_{\\rm final} - Z_{\\rm start}) \\cdot \\text{cmf}(t)
+
+    This ties metallicity directly to the mass assembly history, with cmf→0
+    at the oldest age (Z→Zstart) and cmf→1 at present (Z→Zfinal).
+
+    References
+    ----------
+    .. [1] Bellstedt, S., Forbes, D. A., Robotham, A. S. G., et al.
+           2020, MNRAS 498, 5581.
+           "Galaxy And Mass Assembly (GAMA): the stellar mass content
+           of galaxy groups."
+    """
+    # Input convention: ssp_ages_yr and sfr_on_ssp are in ascending lookback order
+    # (youngest/present-day first, oldest last).
+    #
+    # ProSpect's cmf (cumulative mass fraction) is defined as:
+    #   cmf(age) = 1 - (mass formed AFTER this age) / total_mass
+    # At present (age=0): cmf = 1 (all mass has been formed in the past)
+    # At oldest age: cmf → 0 (almost no mass formed after the oldest time)
+    #
+    # We compute cumulative sum from present (youngest) backwards to oldest,
+    # then convert to cmf.
+
+    # Keep in ascending lookback order (youngest first) for integration
+    # dt[i] = time span from ssp_ages_yr[i] to ssp_ages_yr[i+1]
+    dt = jnp.abs(jnp.diff(ssp_ages_yr))
+    # Average SFR in each interval
+    sfr_mid = 0.5 * (sfr_on_ssp[:-1] + sfr_on_ssp[1:])
+    # Cumulative sum from youngest (present) backward
+    # cumsum_from_youngest[0] = 0 (at present, no mass formed AFTER present)
+    # cumsum_from_youngest[n] = total_mass (at oldest, all mass formed after oldest)
+    mass_in_intervals = sfr_mid * dt
+    cumsum_from_youngest = jnp.concatenate([jnp.zeros(1), jnp.cumsum(mass_in_intervals)])
+
+    # Total mass formed over entire history
+    total_mass = cumsum_from_youngest[-1]
+    total_mass = jnp.maximum(total_mass, 1e-30)
+
+    # CMF = 1 - (mass formed AFTER this age) / total_mass
+    # At youngest (present): cmf = 1 - 0 / total_mass = 1
+    # At oldest: cmf = 1 - total_mass / total_mass = 0 (approximately)
+    cmf = 1.0 - cumsum_from_youngest / total_mass
+
+    # Clamp cmf to [0, 1]
+    cmf = jnp.clip(cmf, 0.0, 1.0)
+
+    # Linear interpolation: Z(age) = Zstart + (Zfinal - Zstart) * cmf
+    z_abs = log_z_abs_start + (log_z_abs_final - log_z_abs_start) * cmf
+    return z_abs
+
+
+@jax.jit
+def massmap_box_metallicity(
+    ssp_lg_age_gyr: jnp.ndarray,
+    ssp_ages_yr: jnp.ndarray,
+    sfr_on_ssp: jnp.ndarray,
+    log_z_abs_start: float,
+    log_z_abs_final: float,
+    yield_rho: float = 0.03,
+) -> jnp.ndarray:
+    """Closed-box chemical evolution metallicity tied to cumulative stellar mass.
+
+    Implements the ProSpect (Bellstedt+2020) massmap_box model: metallicity
+    evolves via a Lynden-Bell fixed-yield closed-box model, with the Z(age)
+    history driven by the cumulative stellar mass formed. This captures
+    self-consistent chemical enrichment with a constant nucleosynthetic yield.
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        Log10(age/Gyr) of SSP templates [dimensionless].
+    ssp_ages_yr : array_like, shape (n_age,)
+        Age of each SSP template in years [yr].
+    sfr_on_ssp : array_like, shape (n_age,)
+        Star formation rate at each SSP age [Msun/yr].
+    log_z_abs_start : float
+        log10(Z) absolute at the oldest age (Zstart) [dimensionless].
+    log_z_abs_final : float
+        log10(Z) absolute at the present day (Zfinal) [dimensionless].
+    yield_rho : float, optional
+        Fixed nucleosynthetic yield parameter [dimensionless].
+        Default 0.03. Controls the rate of metallicity increase per unit mass.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        log10(Z) absolute at each SSP age [dimensionless].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses JAX primitives for cumulative integration and logarithm.
+
+    **Gradient-safe**: yes — all operations are differentiable (uses jnp.log with safe clipping).
+
+    **Physics:**
+
+    The Lynden-Bell closed-box model with fixed yield ρ yields:
+
+    .. math::
+
+        Z(t) = Z_{\\rm start} - ρ \\ln[1 - μ_f \\cdot \\text{cmf}(t)]
+
+    where :math:`\\text{cmf}(t)` is the cumulative mass fraction formed
+    (0 at oldest age → 1 at present), and :math:`μ_f` is the final gas fraction:
+
+    .. math::
+
+        μ_f = 1 - \\exp\\left( -\\frac{Z_{\\rm final} - Z_{\\rm start}}{ρ} \\right)
+
+    The formula assumes:
+    - Zstart and Zfinal are in absolute log10(Z) space
+    - Nucleosynthetic yield ρ is constant throughout cosmic time
+    - All stellar ejecta immediately enrich the ISM (instantaneous mixing)
+
+    In the small-enrichment limit (Zfinal − Zstart ≪ ρ), the model
+    reduces to linear (massmap_lin).
+
+    References
+    ----------
+    .. [1] Bellstedt, S., Forbes, D. A., Robotham, A. S. G., et al.
+           2020, MNRAS 498, 5581.
+           "Galaxy And Mass Assembly (GAMA): the stellar mass content
+           of galaxy groups."
+    .. [2] Robotham, A. S. G., & Obreschkow, D.
+           2015, PASA 32, e033.
+           "ProSpect: Bayesian SED fitting with application to galaxy
+           clustering and SMF estimation."
+    """
+    # Convert absolute log10(Z) to linear Z for the box-model calculation
+    z_start = 10.0**log_z_abs_start
+    z_final = 10.0**log_z_abs_final
+    # Final gas fraction via yield relation
+    mu_final = 1.0 - jnp.exp(-(z_final - z_start) / yield_rho)
+
+    # Compute cumulative mass using same logic as massmap_lin
+    dt = jnp.abs(jnp.diff(ssp_ages_yr))
+    sfr_mid = 0.5 * (sfr_on_ssp[:-1] + sfr_on_ssp[1:])
+    mass_in_intervals = sfr_mid * dt
+    cumsum_from_youngest = jnp.concatenate([jnp.zeros(1), jnp.cumsum(mass_in_intervals)])
+
+    total_mass = cumsum_from_youngest[-1]
+    total_mass = jnp.maximum(total_mass, 1e-30)
+
+    cmf = 1.0 - cumsum_from_youngest / total_mass
+    cmf = jnp.clip(cmf, 0.0, 1.0)
+
+    # Apply closed-box model: Z(t) = Zstart - yield * ln(1 - mu_final * cmf)
+    # Ensure 1 - mu_final * cmf > 0 to avoid log singularity
+    arg = 1.0 - mu_final * cmf
+    arg = jnp.clip(arg, 1e-10, 1.0)
+    z_abs = z_start - yield_rho * jnp.log(arg)
+    # Clamp to [Zstart, Zfinal]
+    z_abs = jnp.clip(z_abs, z_start, z_final)
+    # Convert back to log10(Z)
+    log_z_abs = jnp.log10(z_abs)
+    return log_z_abs

@@ -55,7 +55,7 @@ obs = tengri.Observation(
 sf_model = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 0.5},
+    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 10.63},
     dust={
         "type": "two_component",
         "*": tengri.FIXED,
@@ -128,7 +128,7 @@ psb_uv, psb_vj = _colors_from_flux(flux_psb[0], flux_psb[1], flux_psb[2])
 burst_model = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.5},
+    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.63},
     dust={
         "type": "two_component",
         "*": tengri.FIXED,

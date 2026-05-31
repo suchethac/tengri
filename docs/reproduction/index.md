@@ -26,6 +26,12 @@ The three notebooks share a layout, plotting style, and a `## Summary` /
 - **{doc}`prospector`** — Prospector / FSPS (Johnson et al. 2021). The
   core forward model: SSPs, delayed-τ SFH, Calzetti / Kriek & Conroy
   attenuation, Draine & Li 2007 IR, the Byler nebular grid, and Madau IGM.
+- **{doc}`prospect_r`** — ProSpect (Robotham et al. 2020), the R-based
+  GAMA code, driven live from the notebook through `rpy2`: BC03 SSPs, the
+  skew-normal SFH, its signature metallicity history tied to cumulative
+  stellar mass formed, Charlot & Fall attenuation, Dale 2014 IR, the
+  `emissionLines` nebular model, the SKIRTOR AGN torus, a radio continuum,
+  and the Inoue 2014 IGM.
 - **{doc}`synthesizer`** — Synthesizer (Roper, Lovell, Wilkins et al.
   2025). Focused on the Unified AGN model: accretion disc, narrow- and
   broad-line regions, dusty torus, and the inclination geometry — with
@@ -38,6 +44,7 @@ The three notebooks share a layout, plotting style, and a `## Summary` /
 cigale
 bagpipes
 prospector
+prospect_r
 synthesizer
 ```
 

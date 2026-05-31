@@ -64,7 +64,7 @@ LIBS = [
 COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(LIBS)))
 
 C_AA_PER_S = 2.998e18
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 1.0}
+SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0}
 
 ssp = tengri.load_ssp()
 

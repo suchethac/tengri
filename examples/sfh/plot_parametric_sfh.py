@@ -45,7 +45,7 @@ models = {
     "delayed exponential": tengri.delayed_exponential(
         t_lookback, log_total_mass=10.0, tau=3e9, start=1e9
     ),
-    "constant": tengri.constant(t_lookback, log_sfr=0.5, start=2e9, end=10e9),
+    "constant": tengri.constant(t_lookback, log_total_mass=10.63, start=2e9, end=10e9),
 }
 
 colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f"]

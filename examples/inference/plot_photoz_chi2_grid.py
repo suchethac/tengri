@@ -83,7 +83,7 @@ truth_params = dict(model_template.spec.sample(key))
 truth_params.update(
     sfh_tsnorm_peak_lbt_gyr=3.0,
     sfh_tsnorm_width_gyr=2.0,
-    sfh_tsnorm_log_total_mass=10.0,
+    sfh_tsnorm_log_total_mass=log_mstar_true,
     sfh_tsnorm_skew=0.3,
     sfh_tsnorm_trunc=10.0,
     dust_tau_diff=0.3,
@@ -91,7 +91,6 @@ truth_params.update(
     dust_slope=-0.7,
     neb_logU=-3.0,
     neb_logZ_gas=0.0,
-    sfh_dpl_log_peak_sfr=log_mstar_true,
     redshift=z_true,
 )
 
@@ -164,7 +163,7 @@ for i, z in enumerate(z_grid):
 
         # Predict photometry at this stellar mass.
         grid_params = dict(truth_params)
-        grid_params["sfh_dpl_log_peak_sfr"] = log_mstar
+        grid_params["sfh_tsnorm_log_total_mass"] = log_mstar
         flux_pred = np.asarray(model_z.predict_photometry(grid_params))
 
         # Compute χ².

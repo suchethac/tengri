@@ -46,7 +46,7 @@ SED shapes:
 This script sweeps the two knobs independently to show how the
 dust SED morphology responds.
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-118
+.. GENERATED FROM PYTHON SOURCE LINES 25-121
 
 
 
@@ -62,11 +62,14 @@ dust SED morphology responds.
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
     import jax.numpy as jnp
-    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -95,7 +98,7 @@ dust SED morphology responds.
         }
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0},
+            sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
             dust=dust,
             redshift=tengri.Fixed(0.05),
         )

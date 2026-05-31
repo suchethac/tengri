@@ -318,6 +318,8 @@ class TestMetRegistry:
             "bins_continuity",
             "chem_evol",
             "table",
+            "massmap_lin",
+            "massmap_box",
         }
         assert expected == set(MET_REGISTRY.keys())
 

@@ -37,7 +37,7 @@ scenarios = [
         "sfh": {
             "type": "const",
             "*": tengri.FIXED,
-            "log_sfr": 0.5,
+            "log_total_mass": 10.64,
             "start_gyr": 0.1,
             "end_gyr": 13.8,
         },
