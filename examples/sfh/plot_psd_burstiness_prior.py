@@ -182,9 +182,5 @@ fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.98), ncol
 
 fig.tight_layout(rect=[0, 0, 1, 0.96])
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-png_path = os.path.join(script_dir, "plot_psd_burstiness_prior.png")
-plt.savefig(png_path, dpi=150, bbox_inches="tight")
-plt.close()
+plt.show()
 
-print(f"Saved to {png_path}")

@@ -120,8 +120,7 @@ ax2.text(
 )
 
 fig.tight_layout()
-plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
-plt.close()
+plt.show()
 
 # Print summary
 print("Hubble Tension: Distance Modulus Shifts")

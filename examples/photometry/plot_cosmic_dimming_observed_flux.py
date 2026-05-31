@@ -181,8 +181,4 @@ ax_norm.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5)
 fig.tight_layout()
 
 # Save to script directory
-script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(
-    str(script_dir / "plot_cosmic_dimming_observed_flux.png"), dpi=150, bbox_inches="tight"
-)
-plt.close()
+plt.show()
