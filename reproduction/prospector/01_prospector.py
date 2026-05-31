@@ -21,7 +21,9 @@
 # forward model is FSPS (Conroy, Gunn & White 2009), called through
 # `python-fsps`, with dust-attenuation curves taken from `sedpy`. This
 # notebook places that forward model — single stellar populations, the
-# delayed-τ star formation history, the Calzetti / Charlot & Fall /
+# delayed-τ star formation history *and the non-parametric SFH families
+# Prospector is known for* (continuity, continuity-flex, Dirichlet, and
+# post-starburst), the Calzetti / Charlot & Fall /
 # Kriek & Conroy attenuation laws, the Draine & Li (2007) dust emission,
 # the Byler (2017) nebular grid, the Nenkova (2008) AGN torus, and the
 # Madau (1995) IGM — next to its tengri equivalents on the same axes, in
@@ -73,6 +75,7 @@ if not os.environ.get("SPS_HOME"):
 import warnings
 from pathlib import Path
 
+import jax
 import matplotlib.pyplot as plt
 import numpy as np
 from reproduction.prospector._drivers import prospector_driver as P, units as U
@@ -282,6 +285,374 @@ ax_l.legend(fontsize=9)
 ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
 fig.tight_layout()
 save_fig("prospector_02_sfh_delayed.png")
+
+
+# %% [markdown]
+# ## §2′ Non-parametric star formation histories
+#
+# The delayed-τ form above is the *parametric* SFH. Prospector's defining
+# capability is its family of **non-parametric** histories: piecewise-constant
+# SFR in lookback-time bins, with the bin amplitudes (or mass fractions) free.
+# Prospector builds these in `prospect.models.transforms` — log-SFR ratios or
+# Dirichlet z-fractions → per-bin stellar masses — and feeds the resulting
+# step function to FSPS as a *tabular* SFH (`sfh=3`). tengri implements the
+# same families as analytic step-function SFHs convolved with the SSPs.
+#
+# Each panel below fixes the same 10^10 M⊙, solar-metallicity, dust-free
+# galaxy and sweeps the SFH prescription. The left axis overlays the SFR
+# history both codes evaluate; the right axis overlays the resulting stellar
+# `L_ν`, with the optical median residual annotated. The seven-bin lookback
+# grid is shared, so the binning is identical on both sides:
+#
+# `[0, 0.03, 0.1, 0.3, 1, 3, 6, 13.7] Gyr`.
+#
+# **Convention.** Prospector orders log-SFR ratios from the most recent bin in
+# lookback time; `ratios[j] = log10(SFR_j / SFR_{j+1})`. tengri's `ratio_i`
+# uses the same sign and the same youngest-first ordering, so the *same*
+# numbers drive both codes — the comparison is at matched parameters, not just
+# a matched shape.
+
+# %%
+# Shared seven-bin lookback grid (tengri's DEFAULT_BIN_EDGES_GYR). Passed
+# explicitly to both sides so FSPS and tengri bin the history identically.
+NONPARAM_EDGES_GYR = np.array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
+AGE_UNIV_GYR = float(NONPARAM_EDGES_GYR[-1])  # observation epoch (z = 0)
+
+
+def _step_sfr(agebins, masses):
+    """Step-function SFR [M⊙/yr] per bin and the cosmic-age edges for plotting."""
+    edges_yr = np.concatenate([10.0 ** agebins[:, 0], [10.0 ** agebins[-1, 1]]])
+    sfr_bins = np.asarray(masses) / np.diff(edges_yr)
+    cosmic_edges = AGE_UNIV_GYR - edges_yr / 1e9  # lookback → cosmic age [Gyr]
+    return sfr_bins, cosmic_edges
+
+
+def _plot_step(ax, agebins, masses, color, label):
+    """Draw a piecewise-constant SFR(cosmic age) from (agebins, masses)."""
+    sfr_bins, cosmic_edges = _step_sfr(agebins, masses)
+    for i in range(sfr_bins.shape[0]):
+        ax.plot(
+            [cosmic_edges[i + 1], cosmic_edges[i]],
+            [sfr_bins[i], sfr_bins[i]],
+            color=color,
+            linewidth=2.0,
+            label=label if i == 0 else None,
+        )
+
+
+def _tengri_nonparam(sfh_dict, params=None):
+    """Build a dust-free tengri model from an SFH dict and return its state."""
+    model = SEDModel.build(
+        ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
+        sfh=sfh_dict,
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        redshift=Fixed(0.0),
+    )
+    return model, model.predict_state(params if params is not None else {})
+
+
+def _optical_resid(w_ref, L_ref, w_t, L_t):
+    """Median |Δ|/L over 3000–10000 Å, after regridding tengri onto FSPS."""
+    L_t_on = U.regrid(np.asarray(w_t), np.asarray(L_t), np.asarray(w_ref))
+    m = (w_ref >= 3000) & (w_ref <= 10000) & (L_ref > 0)
+    return float(np.median(np.abs(L_t_on[m] - L_ref[m]) / L_ref[m]))
+
+
+def _sfr_sed_fig(title_sfr):
+    """Two-panel figure: SFR(cosmic age) on the left, stellar L_ν on the right.
+
+    Independent y-axes — unlike ``U.two_panel_fig`` (``sharey=True`` for two
+    SED panels) — because SFR [M⊙/yr] and L_ν [erg/s/Hz] occupy entirely
+    different ranges and must not share a y-scale.
+    """
+    fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12, 4.5))
+    ax_l.set_yscale("linear")  # SFH shape reads best on a linear SFR axis
+    ax_l.set_xlabel("Cosmic age [Gyr]")
+    ax_l.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+    ax_l.set_xlim(0, AGE_UNIV_GYR)
+    # NB: don't pin the y-range before plotting — that freezes the top and
+    # disables autoscale, clipping tall bursts. Each section anchors at 0 via
+    # _anchor_sfr_axis() after its curves are drawn.
+    ax_l.set_title(title_sfr)
+    ax_l.grid(True, alpha=0.3)
+    ax_r.set_xscale("log")
+    ax_r.set_yscale("log")
+    ax_r.set_xlim(1e3, 2e4)
+    ax_r.set_xlabel(r"$\lambda_{\rm rest}$ [Å]")
+    ax_r.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax_r.set_title("Stellar SED")
+    ax_r.grid(True, alpha=0.3)
+    return fig, ax_l, ax_r
+
+
+def _anchor_sfr_axis(ax):
+    """Anchor the SFR axis at 0 while keeping the autoscaled top (no clipping)."""
+    ax.set_ylim(0.0, ax.get_ylim()[1])
+
+
+# %% [markdown]
+# ### §2a Continuity (Leja+2019)
+#
+# The workhorse non-parametric SFH: a Student-t prior on the log-SFR ratios
+# between adjacent bins enforces a smooth, continuous history while still
+# admitting bursts. Here a gently rising history — each bin forms slightly
+# more than the one before it in lookback time. Prospector's
+# `logsfr_ratios_to_masses` and tengri's `continuity` consume the identical
+# ratio array.
+
+# %%
+CONT_RATIOS = np.array([0.3, 0.3, 0.25, 0.2, 0.15, 0.1])  # log10(SFR_j / SFR_{j+1})
+
+ab_cont, m_cont = P.continuity_masses(
+    bin_edges_gyr=NONPARAM_EDGES_GYR, log_total_mass=LOG_MASS_FIDUCIAL, logsfr_ratios=CONT_RATIOS
+)
+w_cont, L_cont = P.csp_lnu_binned(agebins=ab_cont, masses=m_cont, logzsol=MET_LOGZSOL)
+
+_sfh_cont = {"type": "continuity", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "*": FIXED}
+_sfh_cont.update({f"ratio_{i}": Fixed(float(r)) for i, r in enumerate(CONT_RATIOS)})
+_m_cont, _s_cont = _tengri_nonparam(_sfh_cont)
+_assert_comparable(L_cont, _s_cont.sed_intrinsic, name="§2a continuity")
+
+_lbt_c = np.asarray(_s_cont.derived["sfh_grid_lbt_yr"]) / 1e9
+_sfr_c = np.asarray(_s_cont.derived["sfr_history"])
+_res_c = _optical_resid(w_cont, L_cont, _s_cont.wave, _s_cont.sed_intrinsic)
+print(f"§2a continuity: optical median residual {_res_c:.2e}")
+
+fig, ax_l, ax_r = _sfr_sed_fig("Continuity SFH (matched log-SFR ratios)")
+_plot_step(ax_l, ab_cont, m_cont, "C0", "Prospector  (FSPS sfh=3)")
+ax_l.plot(AGE_UNIV_GYR - _lbt_c, _sfr_c, "C1-", linewidth=1.5, label="tengri  continuity")
+ax_l.legend(fontsize=9)
+ax_r.plot(w_cont, L_cont, "C0-", linewidth=1.5, label="Prospector  FSPS")
+ax_r.plot(_s_cont.wave, _s_cont.sed_intrinsic, "C1--", linewidth=1.2, label="tengri")
+ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_c:.1e}", transform=ax_r.transAxes, fontsize=9)
+ax_r.legend(fontsize=9, loc="upper right")
+fig.tight_layout()
+_anchor_sfr_axis(ax_l)
+save_fig("prospector_02a_sfh_continuity.png")
+
+
+# %% [markdown]
+# ### §2b Continuity-flex (Leja+2019)
+#
+# Continuity with *flexible* bin edges: the inner bin widths are themselves
+# derived from the log-SFR ratios under a constant-mass-per-flex-bin
+# constraint, with the youngest and oldest bins anchored. Prospector's
+# `logsfr_ratios_to_masses_flex` derives the bins; tengri's `continuity_flex`
+# reproduces the same Leja+2019 construction. Anchors
+# `[0.0316, 5.012, 13.7] Gyr`, three flex bins.
+
+# %%
+FLEX_ANCHORS_GYR = np.array([0.0316, 5.012, 13.7])
+FLEX_RATIO_YOUNG = 0.4
+FLEX_INNER = np.array([0.2, -0.1])  # 2 inner ratios → 3 flex bins
+FLEX_RATIO_OLD = -0.3
+
+ab_flex, m_flex = P.flex_masses(
+    anchor_edges_gyr=FLEX_ANCHORS_GYR,
+    log_total_mass=LOG_MASS_FIDUCIAL,
+    logsfr_ratio_young=FLEX_RATIO_YOUNG,
+    logsfr_ratios=FLEX_INNER,
+    logsfr_ratio_old=FLEX_RATIO_OLD,
+)
+w_flex, L_flex = P.csp_lnu_binned(agebins=ab_flex, masses=m_flex, logzsol=MET_LOGZSOL)
+
+_sfh_flex = {
+    "type": "continuity_flex",
+    "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+    "ratio_young": Fixed(FLEX_RATIO_YOUNG),
+    "ratio_old": Fixed(FLEX_RATIO_OLD),
+    "flex_0": Fixed(float(FLEX_INNER[0])),
+    "flex_1": Fixed(float(FLEX_INNER[1])),
+    "*": FIXED,
+}
+_m_flex, _s_flex = _tengri_nonparam(_sfh_flex)
+_assert_comparable(L_flex, _s_flex.sed_intrinsic, name="§2b continuity_flex")
+
+_lbt_f = np.asarray(_s_flex.derived["sfh_grid_lbt_yr"]) / 1e9
+_sfr_f = np.asarray(_s_flex.derived["sfr_history"])
+_res_f = _optical_resid(w_flex, L_flex, _s_flex.wave, _s_flex.sed_intrinsic)
+print(f"§2b continuity_flex: optical median residual {_res_f:.2e}")
+
+fig, ax_l, ax_r = _sfr_sed_fig("Continuity-flex SFH (derived bin edges)")
+_plot_step(ax_l, ab_flex, m_flex, "C0", "Prospector  (FSPS sfh=3)")
+ax_l.plot(AGE_UNIV_GYR - _lbt_f, _sfr_f, "C1-", linewidth=1.5, label="tengri  continuity_flex")
+ax_l.legend(fontsize=9)
+ax_r.plot(w_flex, L_flex, "C0-", linewidth=1.5, label="Prospector  FSPS")
+ax_r.plot(_s_flex.wave, _s_flex.sed_intrinsic, "C1--", linewidth=1.2, label="tengri")
+ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_f:.1e}", transform=ax_r.transAxes, fontsize=9)
+ax_r.legend(fontsize=9, loc="upper right")
+fig.tight_layout()
+_anchor_sfr_axis(ax_l)
+save_fig("prospector_02b_sfh_continuity_flex.png")
+
+
+# %% [markdown]
+# ### §2c Dirichlet (Leja+2017)
+#
+# The Dirichlet SFH places a symmetric prior on the fraction of star formation
+# in each bin. We lead with **Prospector's** parametrisation — the one users
+# know: latent z-fractions → SFR fractions → bin masses
+# (`zfrac_to_masses`). tengri implements the same Leja+2017 family but with a
+# different latent variable (a stick-breaking prior on the *mass* fractions),
+# so the two codes' z-values are **not** interchangeable. To compare at a
+# matched, recognisably-Prospector SFH, we draw the history from Prospector's
+# transform and invert tengri's stick-breaking to the z that reproduces those
+# same bin masses. Both codes then evaluate the identical step SFH; the SED is
+# a genuine head-to-head.
+
+# %%
+DIR_ZFRAC = np.array([0.6, 0.5, 0.5, 0.5, 0.4, 0.5])  # Prospector latent z-fractions
+
+ab_dir, m_dir = P.dirichlet_masses(
+    bin_edges_gyr=NONPARAM_EDGES_GYR, log_total_mass=LOG_MASS_FIDUCIAL, z_fraction=DIR_ZFRAC
+)
+w_dir, L_dir = P.csp_lnu_binned(agebins=ab_dir, masses=m_dir, logzsol=MET_LOGZSOL)
+
+
+def _tengri_z_from_massfracs(mass_fracs):
+    """Invert tengri's stick-breaking: mass fractions → latent z (youngest first)."""
+    z = np.zeros(mass_fracs.shape[0] - 1)
+    remaining = 1.0
+    for i in range(z.shape[0]):
+        z[i] = np.clip(mass_fracs[i] / remaining, 1e-6, 1.0 - 1e-6)
+        remaining *= 1.0 - z[i]
+    return z
+
+
+_z_tengri = _tengri_z_from_massfracs(m_dir / m_dir.sum())
+_sfh_dir = {"type": "dirichlet", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "*": FIXED}
+_sfh_dir.update({f"z_{i}": Fixed(float(z)) for i, z in enumerate(_z_tengri)})
+_m_dir, _s_dir = _tengri_nonparam(_sfh_dir)
+_assert_comparable(L_dir, _s_dir.sed_intrinsic, name="§2c dirichlet")
+
+_lbt_d = np.asarray(_s_dir.derived["sfh_grid_lbt_yr"]) / 1e9
+_sfr_d = np.asarray(_s_dir.derived["sfr_history"])
+_res_d = _optical_resid(w_dir, L_dir, _s_dir.wave, _s_dir.sed_intrinsic)
+print(f"§2c dirichlet: optical median residual {_res_d:.2e}")
+
+fig, ax_l, ax_r = _sfr_sed_fig("Dirichlet SFH (Prospector z → matched masses)")
+_plot_step(ax_l, ab_dir, m_dir, "C0", "Prospector  zfrac_to_masses")
+ax_l.plot(AGE_UNIV_GYR - _lbt_d, _sfr_d, "C1-", linewidth=1.5, label="tengri  dirichlet")
+ax_l.legend(fontsize=9)
+ax_r.plot(w_dir, L_dir, "C0-", linewidth=1.5, label="Prospector  FSPS")
+ax_r.plot(_s_dir.wave, _s_dir.sed_intrinsic, "C1--", linewidth=1.2, label="tengri")
+ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_d:.1e}", transform=ax_r.transAxes, fontsize=9)
+ax_r.legend(fontsize=9, loc="upper right")
+fig.tight_layout()
+_anchor_sfr_axis(ax_l)
+save_fig("prospector_02c_sfh_dirichlet.png")
+
+
+# %% [markdown]
+# ### §2d Post-starburst
+#
+# A post-starburst (PSB) galaxy — a recent burst followed by a sharp quench —
+# is the regime that motivated Prospector's dedicated PSB template (Suess+2022,
+# `logsfr_ratios_to_masses_psb`): a young bin `[0, t_last]`, equal-mass flex
+# bins to `t_flex`, and fixed old bins. tengri registers this family as
+# `psb_suess2022` but has **not yet wired it into the DSPS forward pass**, so
+# we cannot forward-model it on the tengri side here.
+#
+# What we *can* do — and what a Prospector user does when not invoking the
+# dedicated template — is express the same burst-then-quench history in the
+# shared **continuity** basis, which both codes forward-model exactly: a sharp
+# negative youngest log-SFR ratio is a recent shutdown. The head-to-head below
+# is that continuity-PSB, at matched ratios on both sides.
+
+# %%
+# Post-starburst as continuity ratios: a burst in the 0.3–1 Gyr bin followed by
+# a sharp quench in the most recent bins. ratios[j] = log10(SFR_j / SFR_{j+1}),
+# j=0 youngest. ratio_2 = -1.3 drops the recent bins well below the burst bin;
+# ratio_3 = +1.3 raises the burst bin above the older baseline.
+PSB_RATIOS = np.array([0.0, -0.3, -1.3, 1.3, 0.2, 0.0])
+
+ab_psb, m_psb = P.continuity_masses(
+    bin_edges_gyr=NONPARAM_EDGES_GYR, log_total_mass=LOG_MASS_FIDUCIAL, logsfr_ratios=PSB_RATIOS
+)
+w_psb, L_psb = P.csp_lnu_binned(agebins=ab_psb, masses=m_psb, logzsol=MET_LOGZSOL)
+
+_sfh_psb = {"type": "continuity", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "*": FIXED}
+_sfh_psb.update({f"ratio_{i}": Fixed(float(r)) for i, r in enumerate(PSB_RATIOS)})
+_m_psb, _s_psb = _tengri_nonparam(_sfh_psb)
+_assert_comparable(L_psb, _s_psb.sed_intrinsic, name="§2d psb")
+
+_lbt_p = np.asarray(_s_psb.derived["sfh_grid_lbt_yr"]) / 1e9
+_sfr_p2 = np.asarray(_s_psb.derived["sfr_history"])
+_res_p = _optical_resid(w_psb, L_psb, _s_psb.wave, _s_psb.sed_intrinsic)
+print(f"§2d post-starburst: optical median residual {_res_p:.2e}")
+
+fig, ax_l, ax_r = _sfr_sed_fig("Post-starburst SFH (recent history, continuity basis)")
+ax_l.set_xlim(9.0, AGE_UNIV_GYR)  # the PSB signature lives in the last few Gyr
+_plot_step(ax_l, ab_psb, m_psb, "C0", "Prospector  continuity-PSB")
+ax_l.plot(AGE_UNIV_GYR - _lbt_p, _sfr_p2, "C1-", linewidth=1.5, label="tengri  continuity-PSB")
+ax_l.legend(fontsize=9)
+ax_r.plot(w_psb, L_psb, "C0-", linewidth=1.5, label="Prospector  FSPS")
+ax_r.plot(_s_psb.wave, _s_psb.sed_intrinsic, "C1--", linewidth=1.2, label="tengri")
+ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_p:.1e}", transform=ax_r.transAxes, fontsize=9)
+ax_r.legend(fontsize=9, loc="upper right")
+fig.tight_layout()
+_anchor_sfr_axis(ax_l)
+save_fig("prospector_02d_sfh_psb.png")
+
+
+# %% [markdown]
+# ### §2e Beyond Prospector — the stochastic IFT field SFH
+#
+# All four families above bin the SFH and free the bin amplitudes. tengri also
+# offers a *continuous* stochastic SFH: a smooth backbone (here a delayed
+# double-power-law) modulated by a Gaussian-process field whose power spectrum
+# encodes the burstiness timescale (Information-Field-Theory correlated field).
+# This has no Prospector counterpart — it is not a binned model — and it is the
+# prior tengri Paper I uses to capture short-timescale fluctuations. Three
+# independent draws at fixed PSD hyperparameters illustrate the family; the
+# right panel shows the corresponding stellar SEDs.
+
+# %%
+_sfh_field = {
+    "type": ["dpl", "field"],
+    "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+    "sfh_dpl_alpha": Fixed(2.0),
+    "sfh_dpl_beta": Fixed(1.0),
+    "sfh_dpl_tau_gyr": Fixed(3.0),
+    "sfh_dpl_age_gyr": Fixed(AGE_UNIV_GYR),
+    "sfh_field_psd_sigma": Fixed(2.0),
+    "sfh_field_psd_tau_myr": Fixed(150.0),
+    "*": FIXED,
+}
+_m_field = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh=_sfh_field,
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+
+fig, ax_l, ax_r = _sfr_sed_fig("Stochastic IFT field SFH (tengri-only)")
+for k, seed in enumerate([3, 11, 29]):
+    _draw = _m_field.spec.sample(jax.random.PRNGKey(seed))
+    _sf = _m_field.predict_state(_draw)
+    _lbt_ift = np.asarray(_sf.derived["sfh_grid_lbt_yr"]) / 1e9
+    ax_l.plot(
+        AGE_UNIV_GYR - _lbt_ift,
+        np.asarray(_sf.derived["sfr_history"]),
+        color=f"C{k}",
+        linewidth=1.3,
+        alpha=0.85,
+        label=f"draw {k + 1}",
+    )
+    ax_r.plot(_sf.wave, _sf.sed_intrinsic, color=f"C{k}", linewidth=1.0, alpha=0.85)
+ax_l.legend(fontsize=9, title="prior draws")
+ax_r.text(
+    0.05,
+    0.05,
+    "no Prospector counterpart\n(continuous, not binned)",
+    transform=ax_r.transAxes,
+    fontsize=9,
+)
+fig.tight_layout()
+_anchor_sfr_axis(ax_l)
+save_fig("prospector_02e_sfh_ift_field.png")
 
 
 # %% [markdown]
@@ -984,6 +1355,9 @@ plt.show()
 # ## References
 #
 # * Johnson, Leja, Conroy & Speagle 2021, ApJS 254, 22 — Prospector
+# * Leja et al. 2017, ApJ 837, 170 — Dirichlet non-parametric SFH
+# * Leja et al. 2019, ApJ 876, 3 — continuity & continuity-flex SFH priors
+# * Suess et al. 2022, ApJ 935, 146 — post-starburst non-parametric SFH
 # * Conroy, Gunn & White 2009, ApJ 699, 486 — FSPS
 # * Conroy & Gunn 2010, ApJ 712, 833 — FSPS calibration
 # * Choi et al. 2016, ApJ 823, 102 — MIST isochrones
