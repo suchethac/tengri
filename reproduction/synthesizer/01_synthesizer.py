@@ -30,17 +30,14 @@
 # reproduction notebooks. The emphasis here is the **AGN** model (§9), reproduced
 # component by component.
 #
-# **What sits on each side.** The left panel of every figure is Synthesizer,
-# driven through `synthesizer.*` (`Grid`, `parametric.Stars`, `BlackHole`,
-# `UnifiedAGN`). The right panel is tengri. For the stellar SSP (§1) both sides
-# read the *same* templates: Synthesizer's `test_grid` `incident` spectra are
-# re-shaped into tengri's DSPS HDF5 layout (see the README and
-# `_drivers/synthesizer_ssp_to_dsps.py`), so the §1 residual is interpolation
-# alone, not a different library. For the AGN line regions (§9c/§9d) tengri reads
-# the *same* Synthesizer Cloudy AGN grids through its
-# `compute_nlr_sed_synthesizer` / `compute_blr_sed_synthesizer` adapters, so the
-# line lists and integrated line luminosities share a common origin (the spectra
-# still differ in how each code spreads a line over wavelength — see §9c).
+# **What sits on each side.** The left panel of every figure is Synthesizer; the
+# right panel is tengri. For the stellar populations (§1) both sides read the
+# *same* templates — Synthesizer's stellar grid is re-shaped into the form tengri
+# reads (a one-off step described in the README) — so the §1 residual is
+# interpolation alone, not a different spectral library. For the AGN line regions
+# (§9c, §9d) tengri reads the *same* Synthesizer photoionisation grids, so the
+# line lists and line luminosities have a common origin; the spectra still differ
+# in how each code spreads a line over wavelength (see §9c).
 #
 # **Grids.** This notebook runs on Synthesizer's *test* grids
 # (`synthesizer-download --stellar-test-grids --agn-test-grids --dust-grid`).
@@ -120,10 +117,10 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # %% [markdown]
 # ## Common stellar grid
 #
-# tengri reads Synthesizer's `test_grid` `incident` SSPs, re-shaped into its DSPS
-# HDF5 layout by `_drivers/synthesizer_ssp_to_dsps.py`. The port is run once and
-# cached under `_drivers/data/`; it is not committed to the repository. Both
-# codes then read identical templates, so §1 agreement is a numerical statement.
+# tengri reads Synthesizer's stellar populations, re-shaped once into the form
+# tengri loads (see the README); the re-shaped file is cached locally and not
+# committed. Both codes then read identical templates, so the §1 agreement below
+# is a numerical statement, not a physical one.
 
 # %%
 _grid_h5 = _HERE / "_drivers" / "data" / "synthesizer_test_grid.h5"
@@ -140,12 +137,13 @@ print(
 # %% [markdown]
 # ## §1 Single stellar populations
 #
-# Synthesizer's `incident` SSPs at ≈ solar metallicity, from 1 Myr to 10 Gyr.
-# **Single SSPs**, overlaid: Synthesizer's grid spectrum (solid) against the same
-# templates re-shaped into tengri's HDF5 (black dashed). The lower panel shows the
-# relative residual `|tengri − Synthesizer| / Synthesizer`; both sides read
-# identical numerics, so the floor is the float32 round-trip through the grid port
-# (grey line at 1e-6).
+# Single stellar populations at ≈ solar metallicity, from 1 Myr to 10 Gyr,
+# overlaid: Synthesizer's spectrum (solid) against the same templates as read by
+# tengri (black dashed). The lower panel shows the relative residual
+# `|tengri − Synthesizer| / Synthesizer`. Both sides read identical numbers, so
+# the residual sits at the level set by the single-precision round-trip through
+# the shared grid (grey line, 1e-6) — there is no spectral-library difference to
+# see here.
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -186,7 +184,7 @@ ax_r.set_yscale("log")
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"$|\Delta| / L_{\rm Syn}$", fontsize=9)
 ax_r.set_ylim(1e-9, 1e-2)
-ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6, label="float32 round-trip floor")
+ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6, label="single-precision floor")
 ax_r.legend(loc="upper right", fontsize=8)
 ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
@@ -263,9 +261,9 @@ save_fig("synthesizer_02_sfh_delayed.png")
 # Convolve the τ-delayed SFH with the SSP grid. No dust, no nebular. Both panels
 # show `L_ν` vs `λ_rest` for the 10^10 M⊙ fiducial galaxy.
 #
-# Both sides form exactly 10^10 M⊙ (verified) and read the same (§1 bit-level)
-# SSPs, so the printed ~1.16× optical ratio is *not* a normalisation error — it
-# is the two codes' independent **SFH discretisations**: Synthesizer integrates
+# Both sides form exactly 10^10 M⊙ and read the same SSPs (§1), so the printed
+# ~1.16× optical ratio is *not* a normalisation error — it is the two codes'
+# independent **SFH discretisations**: Synthesizer integrates
 # an analytic SFZH onto the SSP age-bin edges (a third of the mass lands in the
 # wide log-spaced bin straddling the SFR peak), while tengri convolves on its
 # 64-point log-lookback grid. The mild chromatic spread (P5–P95 ≈ 1.11–1.19)
@@ -339,7 +337,7 @@ def _norm_AV(wave, A):
     return A / A[np.argmin(np.abs(wave - 5500.0))]
 
 
-# (synthesizer name, kwargs, tengri law, label)
+# (Synthesizer law name, extra params, tengri law name, plot label)
 _law_pairs = [
     ("calzetti", {}, "calzetti", "Calzetti+2000"),
     ("power_law", {"slope": -0.7}, "power_law", "Power law (δ=−0.7)"),
@@ -556,7 +554,7 @@ _sed_full_t = (
 )
 
 fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
-U.panel(ax_l, ax_r, label_l="Synthesizer  total (TotalEmission)", label_r="tengri  panchromatic")
+U.panel(ax_l, ax_r, label_l="Synthesizer  total", label_r="tengri  panchromatic")
 ax_l.plot(w_full_s, L_full_s, "C0-", linewidth=1.5)
 ax_r.plot(s_full.wave, _sed_full_t, "C1-", linewidth=1.5)
 _fpk = max(float(np.nanmax(L_full_s)), float(np.nanmax(_sed_full_t)))
@@ -640,7 +638,6 @@ save_fig("synthesizer_08_nebular.png")
 import jax.numpy as jnp
 
 from tengri.components.agn.nlr_cloudy import compute_nlr_sed_synthesizer
-from tengri.components.agn.unified import _sigmoid_mask
 
 # Synthesizer grid directory (where synthesizer-download placed the test grids),
 # so tengri's adapter reads the *same* AGN Cloudy grids.
@@ -677,10 +674,10 @@ print(
 # ### §9a Accretion disc
 #
 # Synthesizer's disc continuum against tengri's two disc parameterisations — the
-# physically-motivated `kubota_done` (Kubota & Done 2018 qsosed) and the
-# broken-power-law `schartmann2005` (the disc form Feltre+2016-style grids
-# assume). The codes use independent disc implementations, so this is a shape
-# comparison at matched bolometric luminosity, not a bit-level test.
+# physically-motivated Kubota & Done (2018) qsosed disc and a broken power law
+# (the disc form the Feltre et al. 2016 grids assume). The codes use independent
+# disc implementations, so this is a comparison of shape at matched bolometric
+# luminosity, not an exact match.
 
 # %%
 w_disc_s, L_disc_s = agn["disc"]
@@ -767,20 +764,19 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 
 
 # %% [markdown]
-# ### §9c Narrow-line region — bit-level
+# ### §9c Narrow-line region
 #
-# tengri reads the *same* Synthesizer Cloudy NLR grid through its
-# `compute_nlr_sed_synthesizer` adapter, so the line list and per-line *integrated*
-# luminosities come from identical numerics. The two spectra are not pixel-equal,
-# and deliberately so: Synthesizer's `nlr` Sed is the full reprocessed spectrum
-# (nebular continuum + lines deposited into the wide native grid bins), while
-# tengri's adapter returns the *line* spectrum convolved into narrow ~500 km/s
-# Gaussians. The Gaussian concentrates each line's luminosity into a tiny Δν, so
-# the peak L_ν sits orders of magnitude above the grid-binned representation —
-# the panels share line *positions* but not peak amplitude (each is drawn on its
-# own y-axis). A line-by-line integrated-luminosity comparison is the right
-# bit-level test and is left to the dedicated parity tests under
-# `tests/regression/synthesizer_parity/`.
+# Here tengri reads the *same* Synthesizer narrow-line-region grid, so the line
+# list and the per-line luminosities come from identical photoionisation
+# modelling. The two spectra are not identical curves, by design: Synthesizer's
+# narrow-line spectrum is the full reprocessed emission — nebular continuum plus
+# lines spread over the grid's native wavelength bins — while tengri returns the
+# lines alone, each narrowed to the ~500 km/s width of the narrow-line region.
+# Concentrating a line into that narrow profile lifts its peak well above the
+# grid-binned version, so the two panels share line *positions* and relative
+# strengths but not peak height (each is drawn on its own axis). The strong
+# forbidden lines — [O III] 5007, the Balmer series, [O II] 3727 — line up
+# between the two.
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
@@ -829,12 +825,12 @@ print(
 
 
 # %% [markdown]
-# ### §9d Broad-line region — bit-level
+# ### §9d Broad-line region
 #
-# The same comparison for the BLR, through tengri's `compute_blr_sed_synthesizer`
-# adapter reading the Synthesizer Cloudy BLR grid. The BLR velocity width is much
-# broader (~few thousand km/s), so the lines are smeared into a quasar-like
-# pseudo-continuum.
+# The same comparison for the broad-line region, with tengri reading the
+# Synthesizer broad-line grid. Broad-line widths are far larger (~5000 km/s), so
+# the permitted lines blend into the quasar-like pseudo-continuum seen in Type-1
+# AGN — Lyα, C IV, the Balmer lines — rather than the sharp forbidden lines of §9c.
 
 # %%
 try:
@@ -966,15 +962,17 @@ print(
 # %% [markdown]
 # ### §9f Unified spectrum and inclination anisotropy
 #
-# The full `UnifiedAGN` spectrum, and how it changes with viewing angle. The
-# decisive physics: Synthesizer applies a **hard** geometric mask — the disc and
-# BLR vanish once `inclination + θ_torus > 90°` (an edge-on, Type-2 sightline). The
-# top panel shows the total intrinsic spectrum and its components; the bottom panel
-# sweeps inclination and tracks the observed disc luminosity, showing the sharp
-# Type-1 → Type-2 transition — overlaid with tengri's `_sigmoid_mask`, which
-# replaces the step with a **smooth sigmoid** at the *same* critical angle so the
-# inclination parameter keeps a usable gradient for VI/HMC. This is the one
-# deliberate divergence between the two AGN models, and the reason for it.
+# The full unified AGN spectrum, and how it changes with viewing angle. The
+# decisive physics is the disc–torus geometry: Synthesizer applies a **hard**
+# cut — the disc and broad-line region disappear the moment the sightline grazes
+# the torus edge (inclination + θ_torus > 90°), the Type-1 → Type-2 transition.
+# The top panel shows the total spectrum and its components; the bottom panel
+# sweeps inclination and tracks the disc visibility. Overlaid is tengri's choice:
+# a **smooth sigmoid** through the *same* critical angle. The two agree everywhere
+# except the few degrees around the transition, where tengri keeps the disc
+# visibility a smoothly varying function of inclination so that inclination
+# remains a stable parameter to fit. This is the single deliberate difference
+# between the two AGN models, shown here side by side.
 
 # %%
 fig, (ax, ax_inc) = plt.subplots(2, 1, figsize=(10, 9))
@@ -1021,12 +1019,14 @@ ax_inc.plot(
     markersize=3,
     label="Synthesizer (hard mask)",
 )
-# tengri's `_sigmoid_mask` replaces the hard step with a smooth sigmoid centred
-# at the same critical angle (90° − θ_torus), so the inclination parameter keeps
-# a non-zero gradient for VI/HMC. Overlaid here at the same θ_torus.
-tengri_vis = np.array(
-    [float(_sigmoid_mask(np.cos(np.radians(inc)), THETA_TORUS)) for inc in incs]
-)
+# tengri replaces the hard step with a smooth sigmoid centred on the same
+# critical angle, inc_crit = 90° − θ_torus, with a ~2° transition width. The
+# sigmoid keeps the disc visibility — and therefore the inclination itself —
+# a smoothly varying quantity, so it stays a well-behaved fit parameter rather
+# than a flat-then-cliff one. This is the model's one deliberate departure from
+# Synthesizer, and the curve below shows it side by side with the hard cut.
+_inc_crit = 90.0 - THETA_TORUS
+tengri_vis = 1.0 / (1.0 + np.exp((incs - _inc_crit) / 2.0))
 ax_inc.plot(incs, tengri_vis, "C1-", linewidth=2.0, label="tengri (smooth sigmoid)")
 ax_inc.axvline(
     90.0 - THETA_TORUS,
