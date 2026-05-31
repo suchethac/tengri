@@ -313,14 +313,16 @@ save_fig("prospect_r_02_sfh.png")
 # metal-poor and young stars metal-rich — which breaks the age–metallicity
 # degeneracy that biases fixed-metallicity fits.
 #
-# tengri implements the **same model**: its `massmap_lin` metallicity mode maps Z
-# linearly through the SFH's cumulative-mass curve, with `met_logzsol_start` /
-# `met_logzsol_final` the primordial and present-day endpoints. The right panels
-# read tengri's `massmap_lin` history from `state.derived["log_metallicity_history"]`
-# at the same `Zstart`/`Zfinal` and the same skew-normal SFH. The lower panels
-# plot Z against cumulative mass fraction — ProSpect's natural variable — where
-# the mapping is a straight line by construction; tengri reproduces it. The
-# half-mass-point ratio (printed) confirms the two agree.
+# tengri implements **both** models. `massmap_lin` maps Z linearly through the SFH's
+# cumulative-mass curve; `massmap_box` is the Lynden-Bell fixed-yield closed box, with
+# the ProSpect `yield` parameter exposed as `met_yield`. Both take `met_logzsol_start` /
+# `met_logzsol_final` as the primordial and present-day endpoints. The right panels read
+# each history from `state.derived["log_metallicity_history"]` at the same
+# `Zstart`/`Zfinal` and the same skew-normal SFH, overlaying the faint ProSpect curves —
+# tengri's solid/dashed lines track them. The lower panels plot Z against cumulative mass
+# fraction (ProSpect's natural variable): `massmap_lin` is a straight line by
+# construction, `massmap_box` the logarithmic closed-box enrichment, and tengri
+# reproduces both. The half-mass-point ratio (printed) confirms the linear case agrees.
 
 # %%
 Z_START, Z_FINAL = 1e-4, Z_SOLAR
@@ -365,13 +367,39 @@ _cmf_sorted = 1.0 - _mass_after / max(_mass_after[-1], 1e-30)  # fraction older 
 _cmf_t = np.empty_like(_cmf_sorted)
 _cmf_t[_o] = _cmf_sorted
 
+# tengri massmap_box — the Lynden-Bell closed box, same SFH and endpoints, with
+# the ProSpect ``yield`` parameter exposed as ``met_yield``.
+m_zmb = SEDModel.build(
+    ssp_data=ssp,
+    stellar={
+        "met_mode": "massmap_box",
+        "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
+        "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
+        "met_yield": Fixed(0.03),
+        "*": FIXED,
+    },
+    sfh={
+        "type": "snorm",
+        "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
+        "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
+        "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+_Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
+
 fig, ((ax_l, ax_r), (ax_l2, ax_r2)) = plt.subplots(2, 2, figsize=(12, 8))
 ax_l.set_title("ProSpect mass-mapped Z history")
 ax_l.plot(age_pro / 1e9, Z_lin / Z_SOLAR, "C0-", lw=2, label="massmap_lin")
 ax_l.plot(age_pro / 1e9, Z_box / Z_SOLAR, "C3--", lw=2, label="massmap_box (yield 0.03)")
-ax_r.set_title("tengri massmap_lin Z history")
-ax_r.plot(age_pro / 1e9, Z_lin / Z_SOLAR, "C0-", lw=1, alpha=0.5, label="ProSpect massmap_lin")
+ax_r.set_title("tengri massmap_lin / massmap_box Z history")
+ax_r.plot(age_pro / 1e9, Z_lin / Z_SOLAR, "C0-", lw=1, alpha=0.4, label="ProSpect lin")
+ax_r.plot(age_pro / 1e9, Z_box / Z_SOLAR, "C3-", lw=1, alpha=0.4, label="ProSpect box")
 ax_r.plot(_age_t / 1e9, _Z_t / Z_SOLAR, "C1-", lw=2, label="tengri massmap_lin")
+ax_r.plot(_age_t / 1e9, _Z_box_t / Z_SOLAR, "C2--", lw=2, label="tengri massmap_box")
 for ax in (ax_l, ax_r):
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_ylabel(r"$Z / Z_\odot$")
@@ -382,9 +410,11 @@ for ax in (ax_l, ax_r):
 ax_l2.set_title("ProSpect — Z vs cumulative mass formed")
 ax_l2.plot(cmf_lin, Z_lin / Z_SOLAR, "C0-", lw=2, label="massmap_lin")
 ax_l2.plot(cmf_lin, Z_box / Z_SOLAR, "C3--", lw=2, label="massmap_box")
-ax_r2.set_title("tengri massmap_lin — Z vs cumulative mass formed")
-ax_r2.plot(cmf_lin, Z_lin / Z_SOLAR, "C0-", lw=1, alpha=0.5, label="ProSpect massmap_lin")
+ax_r2.set_title("tengri massmap_lin / massmap_box — Z vs cumulative mass")
+ax_r2.plot(cmf_lin, Z_lin / Z_SOLAR, "C0-", lw=1, alpha=0.4, label="ProSpect lin")
+ax_r2.plot(cmf_lin, Z_box / Z_SOLAR, "C3-", lw=1, alpha=0.4, label="ProSpect box")
 ax_r2.plot(_cmf_t, _Z_t / Z_SOLAR, "C1-", lw=2, label="tengri massmap_lin")
+ax_r2.plot(_cmf_t, _Z_box_t / Z_SOLAR, "C2--", lw=2, label="tengri massmap_box")
 for ax in (ax_l2, ax_r2):
     ax.set_xlabel("cumulative mass fraction formed")
     ax.set_ylabel(r"$Z / Z_\odot$")
