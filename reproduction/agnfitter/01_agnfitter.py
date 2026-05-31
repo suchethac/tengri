@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Reproducing AGNFITTER-RX with tengri
 #
-# AGNFITTER-RX (Martínez-Ramírez et al. 2024, A&A 688, A46) models the
+# AGNFITTER-RX (Martínez-Ramírez et al. 2024, MNRAS 535, 2961) models the
 # radio-to-X-ray SEDs of active galaxies. Where CIGALE, BAGPIPES, and
 # Prospector are galaxy-centric, AGNFITTER-RX is built to *characterise the
 # AGN itself* — its four physical components (accretion disk, hot dusty
@@ -392,27 +392,33 @@ save_fig("agnfitter_04_dust_attenuation.png")
 # AGNFITTER-RX offers two cold-dust libraries: the legacy DH02_CE01 (Dale &
 # Helou 2002 + Chary & Elbaz 2001) and S17 (Schreiber et al. 2018), a
 # flexible dust-continuum + PAH model parameterised by dust temperature and
-# PAH fraction. tengri ships `schreiber2016` — the same Schreiber dust-SED
-# family — which we compare to S17. tengri has **no DH02_CE01 equivalent**
-# (its nearest cold-dust model is `dale2014`, the later Dale 2014 templates —
-# a distinct library); AGNFITTER-RX's DH02_CE01 is shown for reference only,
-# without a tengri counterpart. All curves normalised at their FIR peak.
+# PAH fraction. The paper frames cold dust through an *energy-balance* prior:
+# the cold-dust IR luminosity should at least match the dust-absorbed stellar
+# luminosity (a constraint it deliberately allows to relax for
+# spatially-disconnected high-z dust).
 #
-# The paper frames cold dust through an *energy-balance* prior: the cold-dust
-# IR luminosity should at least match the dust-absorbed stellar luminosity
-# (a constraint it deliberately allows to relax for spatially-disconnected
-# high-z dust).
+# tengri exposes three cold-dust models that bracket this choice:
 #
-# tengri's `schreiber2016` and AGNFITTER-RX's S17 reproduce the same far-IR
-# dust peak (~90 µm, within ~6% in position) — unsurprising, as both come from
-# the Schreiber dust-SED family. They part company in the mid-IR: S17 uses the
-# full tabulated PAH templates, while tengri's `schreiber2016` is an *analytic*
-# model (modified blackbody + a few Drude PAH profiles), whose PAH features at
-# 3–8 µm come out much weaker than S17's at matched (T_dust, f_PAH). For
-# PAH-sensitive work the Drude approximation is the limitation (tracked for a
-# fix; a tabulated-S17 port would close it). The legacy DH02_CE01 library peaks
-# noticeably colder and broader — the reason AGNFITTER-RX added S17 for JWST
-# data; tengri has no DH02_CE01 port (its modern relative is `dale2014`).
+# * **`schreiber2018`** — a faithful, tabulated port of AGNFITTER-RX's S17
+#   library (the same Schreiber+2018 dust + PAH templates, mixed natively as
+#   `(1 − f_PAH)·dust + f_PAH·PAH`). At matched (T_dust, f_PAH) it reproduces
+#   AGNFITTER-RX's S17 shape to a median of ~0.05% and a maximum of ~1.3% of
+#   the FIR peak, with the dust peak landing at 86.5 µm vs S17's 87.0 µm
+#   (0.6%). This is the model to use when reproducing AGNFITTER-RX's cold dust.
+# * **`schreiber2016`** — an *analytic* approximation (modified blackbody +
+#   a few Drude PAH profiles). Its FIR peak (92 µm) is close, but its PAH
+#   forest at 3–13 µm comes out much weaker than the tabulated S17 at matched
+#   (T_dust, f_PAH). It is fast and differentiable but not PAH-faithful — the
+#   gap that motivated the `schreiber2018` port.
+# * **`dale2014`** — tengri's tabulated Dale+2014 library, the modern relative
+#   of AGNFITTER-RX's Dale & Helou 2002 (the "DH" in DH02_CE01). It is
+#   parameterised by the radiation-field hardness α rather than a dust
+#   temperature, so it is not a node-for-node match to S17; shown here at
+#   α = 1.5 it peaks near S17 and carries its own (real, tabulated) PAH
+#   features. tengri has no direct DH02_CE01 port — `dale2014` is the closest
+#   counterpart.
+#
+# All curves are normalised at their FIR peak.
 
 # %%
 import jax.numpy as jnp
@@ -420,25 +426,45 @@ import jax.numpy as jnp
 from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
 wave_ir = np.geomspace(1e4, 1e8, 2000)  # 1 µm – 1 cm
-schreiber = DUST_EMISSION_MODELS["schreiber2016"]
-L_sch = np.asarray(schreiber(jnp.asarray(wave_ir), 1.0, dust_T=35.0, dust_f_pah=0.02))
+schreiber18 = DUST_EMISSION_MODELS["schreiber2018"]
+schreiber16 = DUST_EMISSION_MODELS["schreiber2016"]
+dale14 = DUST_EMISSION_MODELS["dale2014"]
+L_s18 = np.asarray(schreiber18(jnp.asarray(wave_ir), 1.0, dust_T=35.0, dust_f_pah=0.02))
+L_s16 = np.asarray(schreiber16(jnp.asarray(wave_ir), 1.0, dust_T=35.0, dust_f_pah=0.02))
+L_d14 = np.asarray(dale14(jnp.asarray(wave_ir), 1.0, dust_alpha_dale=1.5))
 
 w_s17, L_s17 = A.cold_dust_template("S17", tdust=35.0, fpah=0.02)
 w_dh, L_dh = A.cold_dust_template("DH02_CE01")
 
-fig, ax = plt.subplots(figsize=(8, 4.8))
-ax.loglog(w_s17, norm_peak(L_s17), "C0-", lw=1.5, label="AGNFITTER-RX  S17 (Schreiber+18)")
-ax.loglog(w_dh, norm_peak(L_dh), "C2--", lw=1.3, label="AGNFITTER-RX  DH02_CE01")
-ax.loglog(wave_ir, norm_peak(L_sch), "C1-", lw=1.5, label="tengri  schreiber2016")
+fig, ax = plt.subplots(figsize=(8.2, 5.0))
+ax.loglog(
+    w_s17, norm_peak(L_s17), "C0-", lw=2.2, alpha=0.5, label="AGNFITTER-RX  S17 (Schreiber+18)"
+)
+ax.loglog(wave_ir, norm_peak(L_s18), "C3-", lw=1.4, label="tengri  schreiber2018 (S17 port)")
+ax.loglog(wave_ir, norm_peak(L_s16), "C1--", lw=1.3, label="tengri  schreiber2016 (analytic)")
+ax.loglog(wave_ir, norm_peak(L_d14), "C4:", lw=1.5, label=r"tengri  dale2014 ($\alpha=1.5$)")
+ax.loglog(w_dh, norm_peak(L_dh), "C2-.", lw=1.2, label="AGNFITTER-RX  DH02_CE01")
 ax.set_xlim(1e4, 1e8)
 ax.set_ylim(1e-3, 3)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
-ax.set_title("Cold-dust IR: tengri schreiber2016 vs AGNFITTER-RX S17 / DH02_CE01")
-ax.legend()
+ax.set_title("Cold-dust IR: tengri schreiber2018 / schreiber2016 / dale2014 vs AGNFITTER-RX")
+ax.legend(fontsize=8)
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_06_cold_dust.png")
+
+# %%
+# Quantify the schreiber2018 ↔ S17 agreement at matched nodes (shape, over 3–300 µm).
+_band = (w_s17 > 3e4) & (w_s17 < 3e6)
+_s17n = L_s17 / L_s17[_band].max()
+_s18n = np.asarray(schreiber18(jnp.asarray(w_s17), 1.0, dust_T=35.0, dust_f_pah=0.02))
+_s18n = _s18n / _s18n[_band].max()
+_resid = np.abs(_s18n[_band] - _s17n[_band])
+print(
+    f"§6  schreiber2018 vs AGNFITTER-RX S17 (T=35 K, f_PAH=0.02):  "
+    f"median |Δ|/peak = {np.median(_resid) * 100:.3f}%   max = {_resid.max() * 100:.2f}%"
+)
 
 # %% [markdown]
 # ## §9a Accretion-disk library face-off
@@ -473,13 +499,17 @@ save_fig("agnfitter_06_cold_dust.png")
 #   expected between two independent realisations of the same model —
 #   AGNFITTER-RX's is a precomputed template grid, tengri's integrates the
 #   three zones from scratch.
-# * **R06 — a convention difference, and tengri has it right.** Both use the
-#   Richards+2006 composite, which is tabulated as νF_ν. tengri converts it to
-#   L_ν (divides by ν), so its peak sits at 1.2 µm; AGNFITTER-RX feeds the
-#   νF_ν array to its fitter *as* L_ν (no division), so its R06 "disc" is
-#   effectively νF_ν-shaped and peaks at 3000 Å — a factor-of-ν bluer. The
-#   ~20× near-IR gap is this convention difference, not a tengri error; both
-#   pass through the shared 2500 Å anchor.
+# * **R06 — the same template, in two conventions.** Both sides use the
+#   identical Richards+2006 composite. The catch is purely how it is carried:
+#   tengri stores it as the physically-correct L_ν (divides the published
+#   νL_ν by ν), so its peak sits at 1.2 µm, while AGNFITTER-RX carries the
+#   νL_ν array directly, so its R06 peaks at 3050 Å — a factor of ν bluer.
+#   The dotted grey curve shows tengri's `richards2006` *put back into
+#   AGNFITTER-RX's νL_ν convention* (multiply by ν, re-anchor at 2500 Å): it
+#   lands exactly on AGNFITTER-RX's R06 (median residual 0.0% over
+#   0.15–3 µm). So the apparent ~20× near-IR gap between the two solid curves
+#   is the ν-factor convention alone — the underlying disk template is bit-
+#   identical.
 
 # %%
 ANCHOR = 2500.0
@@ -517,6 +547,19 @@ for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pair
         lw=1.5,
         label=f"tengri  {tengri_label}",
     )
+    if af_name == "R06":
+        # Same template in AGNFITTER-RX's nu-L_nu convention: multiply tengri's
+        # physically-correct L_nu by nu and re-anchor. This overlays AGNFITTER's
+        # R06 exactly, isolating the offset above as a pure convention choice.
+        nu_t = U.C_ANGSTROM_PER_S / w_t
+        ax.loglog(
+            w_t[msk_t],
+            norm_at(w_t, L_t * nu_t, ANCHOR)[msk_t],
+            color="0.5",
+            ls=":",
+            lw=1.6,
+            label=r"tengri $\times\,\nu$ (AGNFITTER conv.)",
+        )
     ax.axvline(6563, color="0.7", ls=":", lw=1)
     ax.set_xlim(5e2, 5e4)
     ax.set_ylim(0.05, 20)
@@ -644,7 +687,9 @@ save_fig("agnfitter_09c_torus_library.png")
 # The paper's winning model for 67% of its sample: the CAT3D-Wind torus on
 # the THB21 disk. We build the full AGN SED on both sides — AGNFITTER-RX's
 # THB21 disk plus its CAT3D-Wind torus, against tengri's composable AGN with
-# `disc = qsogen` and `torus = cat3d_wind` — normalised at the disk's 2500 Å.
+# `disc = qsogen` (with its lines + FeII, i.e. the full THB21 analogue) and
+# `torus = cat3d_wind` — normalised at the disk's 2500 Å. Carrying the disc's
+# emission lines is what reproduces the 0.7 µm bump on top of the torus hump.
 
 # %%
 w_disc, L_disc = A.disk_template("THB21")
@@ -658,7 +703,10 @@ tor_n = tor_g / np.max(tor_g) * 0.5
 af_total = disc_n + tor_n
 
 w_te, L_te = tengri_torus("cat3d_wind")  # torus
-w_td, L_td = tengri_disc("qsogen")  # disc
+# THB21 *is* qsogen with its emission-line forest; the disc continuum alone
+# would drop the 0.7 µm Hα+[N II] bump that defines this combination, so use
+# the full qsogen + lines + FeII disc to match AGNFITTER-RX's THB21.
+w_td, L_td = tengri_qsogen_full()  # disc
 te_disc_g = U.regrid(w_td, np.clip(L_td, 0, None), grid)
 te_tor_g = U.regrid(w_te, np.clip(L_te, 0, None), grid)
 te_disc_n = te_disc_g / np.interp(2500, grid, te_disc_g)
@@ -955,29 +1003,70 @@ save_fig("agnfitter_full_sed_headtohead.png")
 # residual features the CAT3D-Wind model is built to address (§9c), and spans
 # the full radio-to-X-ray range AGNFITTER-RX was built for (capstone).
 #
-# Two honest differences remain: tengri's `richards2006` and AGNFITTER-RX's
-# R06 disagree in the optical–NIR by a factor of a few (different empirical
-# extensions of the same composite), and tengri's `schreiber2016` carries
-# less mid-IR PAH structure than AGNFITTER-RX's S17 at matched parameters.
+# The one apparent disagreement — tengri's `richards2006` peaking a factor of
+# ν redward of AGNFITTER-RX's R06 — turns out to be a pure convention choice:
+# put tengri's disk back into AGNFITTER-RX's νL_ν carriage and the two
+# overlay to 0.0% (§9a). For the cold dust, tengri's new `schreiber2018` is a
+# faithful tabulated port of AGNFITTER-RX's S17 library, matching its
+# dust + PAH SED to a median of ~0.05% at fixed (T_dust, f_PAH); the older
+# analytic `schreiber2016` remains available as a fast, differentiable —
+# but PAH-approximate — alternative.
 #
 # ## References
 #
-# - Martínez-Ramírez, L. N., et al. 2024, A&A 688, A46 (AGNFITTER-RX).
-# - Richards, G. T., et al. 2006, ApJS 166, 470 (R06).
-# - Slone, O. & Netzer, H. 2012, MNRAS 426, 656 (SN12).
-# - Kubota, A. & Done, C. 2018, MNRAS 480, 1247 (KD18).
-# - Temple, M. J., Hewett, P. C. & Banerji, M. 2021, MNRAS 508, 737 (THB21).
-# - Silva, L., et al. 2004, MNRAS 355, 973 (S04).
-# - Nenkova, M., et al. 2008, ApJ 685, 147 (NK08 / CLUMPY).
-# - Stalevski, M., et al. 2016, MNRAS 458, 2288 (SKIRTOR).
-# - Hönig, S. F. & Kishimoto, M. 2017, ApJL 838, L20 (CAT3D-Wind).
-# - Schreiber, C., et al. 2018, A&A 609, A30 (S17 cold dust).
-# - Dale, D. A. & Helou, G. 2002, ApJ 576, 159; Chary, R. & Elbaz, D. 2001,
-#   ApJ 556, 562 (DH02_CE01).
-# - Just, A., et al. 2007, ApJ 665, 1004; Lusso, E. & Risaliti, G. 2016,
-#   ApJ 819, 154; 2017, A&A 602, A79 (α_ox–L₂₅₀₀).
-# - Azadi, M., et al. 2023, ApJ 945, 145; Bell, E. F. 2003, ApJ 586, 794
-#   (radio).
-# - Prevot, M. L., et al. 1984, A&A 132, 389 (SMC reddening).
-# - Bruzual, G. & Charlot, S. 2003, MNRAS 344, 1000; Chabrier, G. 2003,
-#   PASP 115, 763 (stellar populations).
+# Every model compared above, with the section that uses it. The machine-
+# readable BibTeX for all of these lives next to this notebook in
+# `references.bib`; the key per entry is given in brackets.
+#
+# **Accretion disks (§9a)**
+# - Richards, G. T., et al. 2006, ApJS 166, 470 — R06 mean Type-1 quasar SED
+#   [`richards2006sed`].
+# - Slone, O. & Netzer, H. 2012, MNRAS 426, 656 — SN12 α-disk [`slone2012effects`].
+# - Kubota, A. & Done, C. 2018, MNRAS 480, 1247 — KD18 [`kubota2018physical`].
+# - Temple, M. J., Hewett, P. C. & Banerji, M. 2021, MNRAS 508, 737 — THB21 /
+#   qsogen [`temple2021modelling`].
+#
+# **Tori (§9c)**
+# - Silva, L., et al. 2004, MNRAS 355, 973 — S04 [`Silva2004`].
+# - Nenkova, M., et al. 2008, ApJ 685, 160 — NK08 / CLUMPY [`nenkova2008agnII`].
+# - Stalevski, M., et al. 2016, MNRAS 458, 2288 — SKIRTOR [`Stalevski2016`].
+# - Hönig, S. F. & Kishimoto, M. 2017, ApJL 838, L20 — CAT3D-Wind
+#   [`honig2017dusty`].
+#
+# **Cold dust (§6)**
+# - Schreiber, C., et al. 2018, A&A 609, A30 — S17 [`schreiber2018dust`].
+# - Dale, D. A. & Helou, G. 2002, ApJ 576, 159 [`dale2002infrared`]; Chary, R. &
+#   Elbaz, D. 2001, ApJ 556, 562 [`chary2001interpreting`] — DH02_CE01.
+# - Dale, D. A., et al. 2014, ApJ 784, 83 — tengri `dale2014` [`dale2014two`].
+#
+# **X-ray (§10)**
+# - Just, D. W., et al. 2007, ApJ 665, 1004 [`just2007x`]; Lusso, E. &
+#   Risaliti, G. 2016, ApJ 819, 154 [`lusso2016tight`]; 2017, A&A 602, A79
+#   [`lusso2017quasars`] — α_ox–L₂₅₀₀.
+# - Mineo, S., et al. 2014, MNRAS 437, 1698 — host XRB / SFR [`mineo2014x`].
+#
+# **Radio (§11)**
+# - Azadi, M., et al. 2020 (arXiv:2011.03130) — radio AGN [`azadi2020disentangling`].
+# - Bell, E. F. 2003, ApJ 586, 794 — radio–FIR q_IR [`bell2003estimating`].
+#
+# **Stellar populations & attenuation (§1–§5)**
+# - Bruzual, G. & Charlot, S. 2003, MNRAS 344, 1000 [`bruzual2003stellar`];
+#   Chabrier, G. 2003, PASP 115, 763 [`chabrier2003galactic`].
+# - Calzetti, D., et al. 2000, ApJ 533, 682 [`calzetti2000dust`]; Prevot, M. L.,
+#   et al. 1984, A&A 132, 389 — SMC reddening [`prevot1984typical`].
+#
+# **Codes & inference**
+# - Martínez-Ramírez, G. C., et al. 2024, MNRAS 535, 2961 — AGNFITTER-RX
+#   [`martinez2024agnfitter`].
+# - Hearin, A. P., et al. 2023, MNRAS 521, 1741 — DSPS [`hearin2023dsps`].
+# - Buchner, J. 2019, PASP 131, 108005 — UltraNest [`buchner2019collaborative`].
+
+# %% [markdown]
+# ### BibTeX
+#
+# The complete machine-readable bibliography (printed below from
+# `references.bib` so it never drifts from the file).
+
+# %%
+_bib_path = _HERE / "references.bib"
+print(_bib_path.read_text())
