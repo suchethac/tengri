@@ -902,13 +902,24 @@ save_fig("prospect_r_08_nebular.png")
 # screens and reprocesses the AGN light through the galaxy's Charlot & Fall dust.
 # ProSpect's Fritz (2006) library has no tengri equivalent and is not reproduced.
 #
-# The panels show `νL_ν` — the right way to read a torus SED, where the thermal
-# bump is a true maximum. (In `L_ν` a torus rises into the far-IR simply because
-# `L_ν = νL_ν · λ/c`, which is easy to misread as a cold spectrum.) On both
-# sides the torus `νL_ν` peaks near 10 µm with the 10 µm silicate feature;
-# ProSpect's template additionally carries the accretion-disc continuum shortward
-# of ~1 µm, which tengri's torus-only block here does not include. The peak
-# wavelengths are printed on each side.
+# To make this a fair comparison we pin tengri's SKIRTOR block to ProSpect's
+# `SKIRTOR_interp` defaults — inclination 30°, opening angle 40°, optical depth 1,
+# p=q=1 — and route the full bolometric into the template (`agn_frac_agn=1`, since
+# tengri otherwise scales the AGN down by `frac_agn` as a host-fraction knob). With
+# that, the two carry the **same AGN bolometric** (printed below, agreeing to ~2%).
+#
+# The panels show `νL_ν` — the right way to read a torus SED, where the thermal bump
+# is a true maximum. (In `L_ν` a torus rises into the far-IR simply because
+# `L_ν = νL_ν · λ/c`, easy to misread as a cold spectrum.) The **torus** — the reason
+# tengri carries SKIRTOR at all — matches well: both peak at 9.3 µm with the 10 µm
+# silicate feature (peaks printed). Where the two ports diverge is the **accretion-disc
+# continuum** shortward of ~1 µm: ProSpect's `SKIRTOR_interp` carries a bright,
+# strongly inclination-dependent disc (the UV plateau in the left panel), whereas
+# tengri's tabulated grid emits a disc continuum several × fainter and nearly flat with
+# inclination (printed ratio at 2000 Å). This is a real difference between the two
+# SKIRTOR ports, not a units or plotting effect — and it is minor for tengri's use of
+# the block, where the unobscured accretion-disc light is better supplied by a dedicated
+# disc component than by the torus library's built-in primary source.
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -918,6 +929,12 @@ print(
     f"(template integral)"
 )
 
+# Pin tengri's SKIRTOR to ProSpect's `SKIRTOR_interp` defaults so the two read the
+# *same* point in the Stalevski (2016) library: inclination an=30° (cos_inc=0.866 —
+# a Type-1 sightline that looks into the polar cone and sees the disc), opening angle
+# ct=40°, optical depth ta=1, and p=q=1. ``agn_frac_agn=1`` routes the full bolometric
+# into the template, matching ProSpect's ``lum`` normalisation (tengri otherwise scales
+# the AGN down by ``frac_agn`` as a host-fraction knob).
 m_agn = SEDModel.build(
     ssp_data=ssp,
     stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
@@ -930,12 +947,38 @@ m_agn = SEDModel.build(
         "*": FIXED,
     },
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    agn={"type": "skirtor", "agn_log_lbol": Fixed(_agn_log_lbol), "*": FIXED},
+    agn={
+        "type": "skirtor",
+        "agn_log_lbol": Fixed(_agn_log_lbol),
+        "agn_cos_inc": Fixed(float(np.cos(np.radians(30.0)))),  # ProSpect an=30°
+        "agn_oa_skirtor": Fixed(40.0),  # ProSpect ct=40°
+        "agn_tau_skirtor": Fixed(1.0),  # ProSpect ta=1
+        "agn_p_skirtor": Fixed(1.0),  # ProSpect p=1
+        "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
+        "agn_frac_agn": Fixed(1.0),  # full L_bol into template (match ProSpect lum)
+        "*": FIXED,
+    },
     redshift=Fixed(0.0),
 )
 s_agn = m_agn.predict_state({})
 w_t9 = np.asarray(s_agn.wave)
 L_t9 = np.asarray(s_agn.derived["sed_agn"])
+
+# Confirm both sides carry the same AGN bolometric (sanity on the normalisation).
+_nu_p9 = U.C_ANGSTROM_PER_S / w_p9[::-1]
+_nu_t9 = U.C_ANGSTROM_PER_S / w_t9[::-1]
+_lbol_p9 = float(np.trapezoid(L_p9[::-1], _nu_p9))
+_lbol_t9 = float(np.trapezoid(L_t9[::-1], _nu_t9))
+print(f"§9 AGN bolometric: ProSpect {_lbol_p9:.2e} erg/s, tengri {_lbol_t9:.2e} erg/s")
+
+# Disc continuum at a rest-UV anchor — where the two SKIRTOR ports diverge.
+_uv9 = 2000.0
+_disc_p9 = float(np.interp(_uv9, w_p9, L_p9)) * U.C_ANGSTROM_PER_S / _uv9
+_disc_t9 = float(np.interp(_uv9, w_t9, L_t9)) * U.C_ANGSTROM_PER_S / _uv9
+print(
+    f"§9 disc continuum νLν(2000 Å): ProSpect {_disc_p9:.2e}, "
+    f"tengri {_disc_t9:.2e} ({_disc_t9 / _disc_p9:.2f}×)"
+)
 
 # νL_ν = L_ν · c/λ — the torus thermal bump is a true peak in this quantity.
 nuLnu_p = L_p9 * U.C_ANGSTROM_PER_S / w_p9
@@ -1019,11 +1062,17 @@ fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(ax_l, ax_r, label_l="ProSpect  + radio (free-free + sync)", label_r="tengri  + Condon 92")
 ax_l.plot(w_p11, L_p11, "C0-", linewidth=1.5)
 ax_r.plot(w_t11, L_t11, "C1-", linewidth=1.5)
+# Span the full SED in view (dust-IR peak through the radio tail) so the FIR bump
+# is not clipped at the top of the frame.
+_w_lo, _w_hi = 1e5, 2e9
+_m_p11 = (w_p11 >= _w_lo) & (w_p11 <= _w_hi)
+_m_t11 = (w_t11 >= _w_lo) & (w_t11 <= _w_hi)
+_ymax11 = max(float(np.nanmax(L_p11[_m_p11])), float(np.nanmax(L_t11[_m_t11])))
 for ax in (ax_l, ax_r):
     # Cap at ProSpect's output-grid edge (~2e9 Å) so its grid cutoff is not
     # shown as a spurious feature against tengri's wider grid.
-    ax.set_xlim(1e5, 2e9)
-    ax.set_ylim(1e23, 1e30)
+    ax.set_xlim(_w_lo, _w_hi)
+    ax.set_ylim(_ymax11 * 1e-7, _ymax11 * 3)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("prospect_r_11_radio.png")
