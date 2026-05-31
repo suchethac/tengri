@@ -30,10 +30,25 @@ Sweep hydrocarbon grain content across the THEMIS grid at fixed minimum
 radiation field strength. PAH-like mid-IR features strengthen with q_HAC
 while FIR continuum remains essentially unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-58
+.. GENERATED FROM PYTHON SOURCE LINES 9-62
+
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_themis_qhac_sweep_001.png
+   :alt: plot themis qhac sweep
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_themis_qhac_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

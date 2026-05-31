@@ -45,7 +45,7 @@ model_sf = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 1.5,  # SFR = ~32 Msun/yr (moderate starburst)
+        "log_total_mass": 10.0,  # ~32 Msun/yr over 0.3 Gyr (moderate starburst)
         "start_gyr": 0.3,
         "end_gyr": 0.0,
     },
@@ -81,7 +81,7 @@ model_agn = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": -5.0,  # SFR ≈ 0 (quiescent)
+        "log_total_mass": 5.0,  # SFR ≈ 0 (quiescent)
         "start_gyr": 10.0,
         "end_gyr": 1.0,
     },
@@ -125,7 +125,7 @@ model_composite = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 1.2,  # SFR ~ 16 Msun/yr
+        "log_total_mass": 10.2,  # ~16 Msun/yr over 1 Gyr
         "start_gyr": 1.0,
         "end_gyr": 0.0,
     },

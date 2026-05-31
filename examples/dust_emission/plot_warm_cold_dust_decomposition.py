@@ -99,7 +99,7 @@ def _build_model(u_min: float) -> tuple:
 
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0},
+        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.0},
         dust=dust_config,
         redshift=tengri.Fixed(0.05),
     )
