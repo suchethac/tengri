@@ -43,7 +43,7 @@ def _build(tau_diff):
         sfh={
             "type": "const",
             "*": tengri.FIXED,
-            "log_sfr": 1.0,
+            "log_total_mass": 11.11,
             "start_gyr": 13.0,
             "end_gyr": 0.0,
         },

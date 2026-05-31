@@ -62,7 +62,7 @@ truth_model = tengri.SEDModel.build(
         "alpha": 3.0,
         "beta": 2.0,
         "tau_gyr": 2.0,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 10.0,
         # Stochastic burstiness — DRW with sigma ~ 0.8 dex on an 80 Myr
         # timescale gives recent-burst structure clearly visible in UV.
         "psd_sigma": 0.8,

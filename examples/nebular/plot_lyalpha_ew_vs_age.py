@@ -32,7 +32,6 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.utils.physics_constants import L_SUN
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -75,10 +74,11 @@ ew_lya = []
 for age_myr in ages_myr:
     # Build base model with constant SFH: vary the age via start_gyr/end_gyr window
     # population spans [age_myr / 1000, 0] Gyr (older age at start → younger, present day)
+    log_total_mass_age = np.log10(age_myr * 1e6)
     sfh_config_age = {
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 0.0,
+        "log_total_mass": log_total_mass_age,
         "start_gyr": age_myr / 1e3,
         "end_gyr": 0.0,
     }
@@ -114,7 +114,9 @@ for age_myr in ages_myr:
     if continu_at_lya > 0:
         # EW [Å] = L_line [erg/s] / L_lambda_continuum [erg/s/Å]
         # `lines.lya` is already in erg/s (verified empirically).
-        continu_lambda = continu_at_lya * C_AA_PER_S / (wave_lya ** 2)  # L_nu [erg/s/Hz] → L_lambda [erg/s/Å]
+        continu_lambda = (
+            continu_at_lya * C_AA_PER_S / (wave_lya**2)
+        )  # L_nu [erg/s/Hz] → L_lambda [erg/s/Å]
         ew = lya_lum / continu_lambda
     else:
         ew = np.nan
