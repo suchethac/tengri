@@ -13,15 +13,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-from numpy.testing import assert_allclose, assert_array_less
+from numpy.testing import assert_allclose
 
 from tengri.components.stellar.sfh.metallicity_history import (
     massmap_box_metallicity,
     massmap_lin_metallicity,
 )
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.parameters import Parameters
-from tengri.parameters.translate import LOG10_ZSUN
+from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.bounds
 
@@ -105,7 +104,7 @@ class TestMassmapLinMetallicity:
             ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
         )
         # Convert back to linear Z to check sign (should be monotonically decreasing)
-        z_linear = 10.0 ** result
+        z_linear = 10.0**result
         dz = jnp.diff(z_linear)
         # Allow for small numerical noise
         tolerance = 1e-14 * jnp.mean(z_linear)
@@ -187,7 +186,7 @@ class TestMassmapBoxMetallicity:
         result = massmap_box_metallicity(
             ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
         )
-        z_linear = 10.0 ** result
+        z_linear = 10.0**result
         dz = jnp.diff(z_linear)
         tolerance = 1e-14 * jnp.mean(z_linear)
         assert jnp.all(dz <= tolerance), f"Non-monotonic: dz = {dz}, tolerance = {tolerance}"
@@ -249,13 +248,12 @@ class TestMassmapBoxMetallicity:
             ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final
         )
         result_box = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp,
-            log_z_start, log_z_final, yield_rho
+            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho
         )
         # In the small-enrichment limit, they should be similar
         # (within ~5% relative error in Z space)
-        z_lin = 10.0 ** result_lin
-        z_box = 10.0 ** result_box
+        z_lin = 10.0**result_lin
+        z_box = 10.0**result_box
         rel_err = jnp.abs(z_box - z_lin) / (z_lin + 1e-20)
         assert jnp.all(rel_err < 0.1), f"Limit test failed: max rel_err = {jnp.max(rel_err)}"
 
@@ -265,17 +263,15 @@ class TestMassmapBoxMetallicity:
         log_z_start, log_z_final = log_z_abs_values
 
         result_large_yield = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp,
-            log_z_start, log_z_final, yield_rho=0.05
+            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho=0.05
         )
         result_small_yield = massmap_box_metallicity(
-            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp,
-            log_z_start, log_z_final, yield_rho=0.01
+            ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start, log_z_final, yield_rho=0.01
         )
         # With smaller yield, metallicity grows more slowly
         # At intermediate ages, large_yield should be higher
-        z_large = 10.0 ** result_large_yield
-        z_small = 10.0 ** result_small_yield
+        z_large = 10.0**result_large_yield
+        z_small = 10.0**result_small_yield
         mid_idx = len(ssp_lg_age_gyr) // 2
         assert float(z_large[mid_idx]) > float(z_small[mid_idx])
 
