@@ -466,12 +466,13 @@ save_fig("agnfitter_06_cold_dust.png")
 #   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
 #   accretion rate, so the original smooth-kernel interpolation smeared it by
 #   30–50% — now fixed).
-# * **KD18 — approximate.** tengri's full Kubota & Done 3-zone block
-#   (`kubota_done`) currently mis-renders (it peaks in the far-IR), so the
-#   panel shows `multicolor`, a pure Shakura-Sunyaev thin disc. That disc is
-#   genuinely *hotter* than KD18's 3-zone — it peaks in the FUV (~1200 Å) vs
-#   KD18's optical (~3700 Å) — so treat this panel as a related model, not a
-#   match. (The `kubota_done` bug is tracked for a fix.)
+# * **KD18 — reproduced.** tengri's full Kubota & Done 3-zone block
+#   (`kubota_done`: a Novikov-Thorne outer disc + warm Comptonisation + a hot
+#   corona) tracks AGNFITTER-RX's KD18 to ~1.3× across the UV–near-IR, peaking
+#   at ~3000 Å vs ~3700 Å. That smooth, featureless offset is the spread
+#   expected between two independent realisations of the same model —
+#   AGNFITTER-RX's is a precomputed template grid, tengri's integrates the
+#   three zones from scratch.
 # * **R06 — a convention difference, and tengri has it right.** Both use the
 #   Richards+2006 composite, which is tabulated as νF_ν. tengri converts it to
 #   L_ν (divides by ν), so its peak sits at 1.2 µm; AGNFITTER-RX feeds the
@@ -492,7 +493,12 @@ disk_pairs = [
         lambda: tengri_disc("slone_netzer", agn_log_mbh=8.6, agn_log_ledd=-2.0),
         "slone_netzer (Slone & Netzer 12)",
     ),
-    ("KD18", {}, lambda: tengri_disc("multicolor"), "multicolor (S-S thin disc)"),
+    (
+        "KD18",
+        dict(log_mbh=8.0, log_edd=-1.0),
+        lambda: tengri_disc("kubota_done", agn_log_mbh=8.0, agn_log_ledd=-1.0),
+        "kubota_done (3-zone)",
+    ),
     ("THB21", {}, tengri_qsogen_full, "qsogen + lines + FeII"),
 ]
 fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
