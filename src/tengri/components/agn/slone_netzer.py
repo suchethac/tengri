@@ -38,8 +38,6 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.utils.grid_interp import interp_nd_triweight
-from tengri.utils.interpolation import edges_for_grid
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -92,16 +90,19 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` and triweight interpolation.
+    **JIT-compatible**: yes — pure ``jnp`` and node-exact bilinear interpolation.
 
-    **Gradient-safe**: yes — the triweight kernel is C² across both
-    parameter axes.
+    **Gradient-safe**: yes — bilinear interpolation is piecewise-linear (C⁰)
+    across both parameter axes with finite gradients inside every cell. Linear
+    (rather than a smooth triweight kernel) is required for fidelity: the SN12
+    templates' peak shifts strongly with accretion rate, and a smoothing kernel
+    is not node-exact (cf. #583).
     """
     raw = _load_slone_netzer_arrays(grid_path)
     grid_jax = jnp.asarray(raw["template"])  # (n_mbh, n_edd, n_wave)
     wave_grid = jnp.asarray(raw["wavelength"])
-    axes = (jnp.asarray(raw["log_mbh"]), jnp.asarray(raw["log_edd"]))
-    edges = tuple(edges_for_grid(ax) for ax in axes)
+    mbh_ax = jnp.asarray(raw["log_mbh"])
+    edd_ax = jnp.asarray(raw["log_edd"])
 
     def slone_netzer_grid(
         wavelength: jnp.ndarray,
@@ -142,11 +143,22 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
 
         **JIT-compatible**: yes.
         """
-        template = interp_nd_triweight(
-            grid_jax,
-            axes,
-            edges,
-            (agn_log_mbh, agn_log_ledd),
+        # Node-exact bilinear interpolation over (log_mbh, log_edd). The SN12
+        # templates' peak wavelength varies strongly with accretion rate, so a
+        # smooth triweight kernel (which is not node-exact) smears the peak
+        # across neighbouring nodes by 30-50%; bilinear reproduces the library
+        # templates at grid nodes exactly (cf. the DL14 WavePrecomp fix #583).
+        m = jnp.clip(agn_log_mbh, mbh_ax[0], mbh_ax[-1])
+        e = jnp.clip(agn_log_ledd, edd_ax[0], edd_ax[-1])
+        i = jnp.clip(jnp.searchsorted(mbh_ax, m) - 1, 0, mbh_ax.shape[0] - 2)
+        j = jnp.clip(jnp.searchsorted(edd_ax, e) - 1, 0, edd_ax.shape[0] - 2)
+        fm = (m - mbh_ax[i]) / (mbh_ax[i + 1] - mbh_ax[i])
+        fe = (e - edd_ax[j]) / (edd_ax[j + 1] - edd_ax[j])
+        template = (
+            (1.0 - fm) * (1.0 - fe) * grid_jax[i, j]
+            + (1.0 - fm) * fe * grid_jax[i, j + 1]
+            + fm * (1.0 - fe) * grid_jax[i + 1, j]
+            + fm * fe * grid_jax[i + 1, j + 1]
         )
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
