@@ -53,6 +53,7 @@ Shorthand DPL equivalent::
 from __future__ import annotations
 
 import copy
+import zlib
 
 import jax
 import jax.numpy as jnp
@@ -74,6 +75,17 @@ from tengri.parameters.priors import (
 )
 
 __all__ = ["SETTINGS_KEYS", "Parameters"]
+
+
+def _stable_param_seed(name: str) -> int:
+    """Deterministic 32-bit seed for a parameter name's sampling substream.
+
+    Uses ``zlib.crc32`` rather than the built-in ``hash``: ``hash`` is salted
+    per process (``PYTHONHASHSEED``) and would make ``Parameters.sample``
+    irreproducible across runs. crc32 of the UTF-8 bytes is stable everywhere
+    and fits the int32 domain ``jax.random.fold_in`` expects.
+    """
+    return int(zlib.crc32(name.encode("utf-8")) & 0x7FFFFFFF)
 
 
 # ── Parameters class ───────────────────────────────────────────────────
@@ -1399,14 +1411,32 @@ class Parameters:
         >>> samples = spec.sample(key)
         >>> print(sorted(samples.keys()))
         ['redshift', 'sfh_dpl_alpha', 'sfh_dpl_beta']
+
+        Per-parameter substreams
+        ------------------------
+        Each parameter is drawn from a substream derived from its **name**
+        (``fold_in(key, crc32(name))``), not from its position in a
+        ``jax.random.split``. This guarantees that a given parameter samples
+        to the same value for a given ``key`` **regardless of which other
+        parameters are free in the spec**.
+
+        Without this, two specs sharing a free parameter but differing in
+        their free-parameter set (e.g. one adds ``dust_emission`` →
+        free ``dust_T``/``dust_beta_ir``) would split the key differently and
+        draw the *shared* parameter to different values — a silent footgun
+        that surfaced in #548 (an eta=0 "energy-balance" inequivalence that
+        was really two galaxies with different sampled ``sfh_dpl_age_gyr``)
+        and #563. crc32 (not the salted built-in ``hash``) keeps the mapping
+        reproducible across processes.
         """
-        keys = jax.random.split(key, len(self._distributions) + 1)
         params = {}
-        for i, name in enumerate(sorted(self._distributions.keys())):
-            params[name] = self._distributions[name].sample(keys[i])
+        for name in sorted(self._distributions.keys()):
+            subkey = jax.random.fold_in(key, _stable_param_seed(name))
+            params[name] = self._distributions[name].sample(subkey)
 
         if self.stochastic:
-            params["sfh_field_xi"] = jax.random.normal(keys[-1], shape=(self._n_grid,))
+            xi_key = jax.random.fold_in(key, _stable_param_seed("sfh_field_xi"))
+            params["sfh_field_xi"] = jax.random.normal(xi_key, shape=(self._n_grid,))
 
         return self.resolve_mirrors(params)
 
