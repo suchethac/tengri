@@ -642,6 +642,20 @@ save_fig("synthesizer_08_nebular.png")
 # inclination-dependent mask). We reproduce each piece against tengri, then the
 # combined spectrum and its inclination dependence.
 #
+# Under the hood the model is one idea applied to each region. The AGN Cloudy
+# grid stores the disc continuum three ways — the **incident** spectrum (the bare
+# disc), the **transmitted** spectrum (disc light that passes through the gas),
+# and the **nebular** spectrum (the lines and continuum the gas re-emits). For
+# the NLR and BLR a covering fraction sets how much of the disc is reprocessed
+# (transmitted + nebular) versus escapes untouched; the energy the gas absorbs
+# comes back out as emission lines. The torus does the same in the infrared,
+# reprocessing the disc luminosity it intercepts into warm-dust emission. The
+# geometry then closes the model: for a sightline grazing the torus edge
+# (`inclination + θ_torus > 90°`) the disc and BLR are hidden (a Type-2 view),
+# while the NLR — sitting outside the torus — stays visible at every angle. That
+# incident/transmitted/escaped accounting, repeated per region and gated by the
+# inclination mask, is what fans the model out into the components below (§9a–§9f).
+#
 # The Synthesizer black hole is driven by `(mass, accretion_rate_eddington)` (the
 # grid axes), with `inclination` and `theta_torus` setting the geometry. Its
 # bolometric luminosity maps to tengri's `agn_log_lbol = log10(L_bol / L⊙)`.
