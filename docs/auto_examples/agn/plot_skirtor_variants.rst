@@ -136,11 +136,14 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
     fig.tight_layout()
     plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
+<<<<<<< HEAD
+=======
 
 
 .. rst-class:: sphx-glr-timing
 
    **Total running time of the script:** (0 minutes 2.106 seconds)
+>>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_variants.py:

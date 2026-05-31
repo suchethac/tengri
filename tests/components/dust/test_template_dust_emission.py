@@ -126,6 +126,47 @@ class TestDL07Tabulated:
             f"warm_ratio={warm_ratio:.2f}, cold_ratio={cold_ratio:.2f}"
         )
 
+    @pytest.mark.regression_paper
+    def test_gamma_pdr_luminosity_weight(self, ir_wave):
+        """PDR component carries its DL07 Eq. 33 luminosity weight, not just gamma.
+
+        ``gamma`` is a dust-*mass* fraction, but the power-law-heated PDR dust
+        emits ``R = U_max ln(U_max/U_min) / (U_max - U_min)`` times more per unit
+        mass than the diffuse component (Draine & Li 2007, Eq. 33; alpha=2,
+        U_max=1e6 → R ≈ 13.8 at U_min=1). So a 5 % *mass* fraction puts ~42 % of
+        the *luminosity* in the warm component and shifts the FIR peak markedly
+        bluer. A prior bug normalised the single-U and power-law templates each
+        to unit integral, discarding ``R`` and leaving the PDR emission ~14×
+        too weak (the IR came out spuriously cold). This pins the corrected
+        warm shift against FSPS / BAGPIPES (both land at a ~93 µm centroid).
+        """
+        from tengri.components.dust.emission import resolve_emission_model
+
+        dl07 = resolve_emission_model("draine_li2007")
+        c_aa_s = 2.998e18  # Angstrom/s
+
+        def fir_centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nu_lnu = sed[m] * (c_aa_s / w)
+            log_cen = jnp.sum(jnp.log10(w) * nu_lnu) / jnp.sum(nu_lnu)
+            return float(10.0**log_cen) / 1e4
+
+        cen_diffuse = fir_centroid_um(
+            dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        )
+        cen_pdr = fir_centroid_um(
+            dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
+        )
+        # Diffuse (gamma=0) ≈ 117 µm; with gamma=0.05 the PDR weight warms it to
+        # ≈ 93 µm. The pre-fix bug only reached ≈ 114 µm. Require a substantial
+        # shift; FSPS and BAGPIPES both warm by ~24 µm here.
+        assert cen_diffuse - cen_pdr > 15.0, (
+            f"gamma=0.05 should warm the FIR centroid by the DL07 Eq. 33 PDR "
+            f"weight: diffuse={cen_diffuse:.1f} µm, pdr={cen_pdr:.1f} µm "
+            f"(expected ~117 → ~93 µm; pre-fix bug stalled at ~114 µm)"
+        )
+
     def test_qpah_affects_mir(self, ir_wave):
         """Different q_PAH values should change the MIR (3-20 um) emission."""
         from tengri.components.dust.emission import resolve_emission_model
@@ -436,6 +477,76 @@ class TestDL14ExtendedRange:
             "Different alpha values should give different spectra"
         )
 
+    @pytest.mark.regression_paper
+    def test_dl14_gamma_pdr_luminosity_weight(self, ir_wave):
+        """DL14 PDR component carries its DL14/DL07 Eq. 33 luminosity weight.
+
+        As for DL07, ``gamma`` is a dust-*mass* fraction and the power-law
+        (PDR) dust emits ``R(U_min, U_max=1e7, alpha)`` times more per unit
+        mass (Draine et al. 2014). A bug normalised the single-U and power-law
+        templates each to unit integral, dropping ``R`` and leaving the warm
+        PDR emission far too weak. This pins the corrected warm shift and its
+        ordering in the (variable) slope ``alpha``: shallower slopes (more
+        high-U dust) warm more.
+        """
+        from tengri.components.dust.emission import draine_li2014
+
+        c_aa_s = 2.998e18
+
+        def fir_centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nu_lnu = sed[m] * (c_aa_s / w)
+            return float(10.0 ** (jnp.sum(jnp.log10(w) * nu_lnu) / jnp.sum(nu_lnu))) / 1e4
+
+        cen_diffuse = fir_centroid_um(
+            draine_li2014(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        )
+        cen_a2 = fir_centroid_um(
+            draine_li2014(
+                ir_wave,
+                1e10,
+                dust_umin=1.0,
+                dust_gamma_dl=0.05,
+                dust_qpah=2.5,
+                dust_alpha_dl14=2.0,
+            )
+        )
+        cen_a1 = fir_centroid_um(
+            draine_li2014(
+                ir_wave,
+                1e10,
+                dust_umin=1.0,
+                dust_gamma_dl=0.05,
+                dust_qpah=2.5,
+                dust_alpha_dl14=1.0,
+            )
+        )
+        # gamma=0.05 must warm the FIR centroid substantially (pre-fix: ~2 um);
+        # and a shallow slope (alpha=1) warms more than alpha=2.
+        assert cen_diffuse - cen_a2 > 12.0, (
+            f"DL14 gamma=0.05 (alpha=2) should warm the FIR centroid by the Eq. 33 "
+            f"PDR weight: diffuse={cen_diffuse:.1f} µm, pdr={cen_a2:.1f} µm"
+        )
+        assert cen_a1 < cen_a2, (
+            f"shallower alpha=1 should warm more than alpha=2: "
+            f"alpha1={cen_a1:.1f} µm, alpha2={cen_a2:.1f} µm"
+        )
+
+    def test_dl14_pdr_weight_grad_safe_at_alpha_pole(self, ir_wave):
+        """d(SED)/d(alpha) is finite at the alpha=2 integrable pole."""
+        from tengri.components.dust.emission import draine_li2014
+
+        def total(alpha):
+            return jnp.sum(
+                draine_li2014(
+                    ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_alpha_dl14=alpha
+                )
+            )
+
+        grad = jax.grad(total)(2.0)
+        chex.assert_tree_all_finite(grad)
+
     def test_dl14_extended_qpah_range(self, ir_wave):
         """DL14 should handle extended q_PAH range (up to 7.32%)."""
         from tengri.components.dust.emission import draine_li2014
@@ -515,3 +626,106 @@ class TestDL14ExtendedRange:
 
         dust_emission = _resolve_lazy_bucket("_DUST_EMISSION_PARAMS")
         assert "dust_alpha_dl14" in dust_emission
+
+
+class TestAstrodustPDR:
+    """Astrodust (Hensley & Draine 2023) PDR component is built and weighted."""
+
+    @pytest.fixture
+    def ir_wave(self):
+        return jnp.logspace(4, 7, 3000)
+
+    @pytest.mark.regression_paper
+    def test_astrodust_gamma_warms_and_is_energy_balanced(self, ir_wave):
+        """gamma drives a physical warm shift and energy balance holds.
+
+        The H&D 2023 file ships only a single-U grid; the loader builds the PDR
+        component by integrating the per-U spectra over dM/dU ∝ U^-2, and the
+        forward applies the DL07 Eq. 33 luminosity weight R + renormalises to
+        L_absorbed. Before this, ``powerlaw`` was a copy of ``single_u`` and
+        gamma was a no-op (#571). Astrodust is a DL07-family model, so its
+        gamma warming should track DL07 (centroid ~117->93 µm there); here we
+        require a substantial, energy-conserving shift.
+        """
+        from tengri.components.dust.emission import resolve_emission_model
+
+        ad = resolve_emission_model("astrodust")
+        c_aa_s = 2.998e18
+
+        def centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nl = sed[m] * (c_aa_s / w)
+            return float(10.0 ** (jnp.sum(jnp.log10(w) * nl) / jnp.sum(nl))) / 1e4
+
+        sed0 = ad(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        sed5 = ad(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
+        shift = centroid_um(sed0) - centroid_um(sed5)
+        assert shift > 12.0, (
+            f"astrodust gamma=0.05 should warm the FIR centroid (DL07-family): "
+            f"shift={shift:.1f} µm (pre-fix: 0 µm — PDR was a copy of single_u)"
+        )
+        # Energy balance: ∫ L_nu dν = L_absorbed for any gamma.
+        for gamma in (0.0, 0.05, 0.3):
+            sed = ad(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=gamma, dust_qpah=2.5)
+            l_ir = float(-jnp.trapezoid(sed, c_aa_s / ir_wave))
+            assert 0.9 < l_ir / 1e10 < 1.1, (
+                f"astrodust energy balance broken at gamma={gamma}: "
+                f"L_IR/L_absorbed={l_ir / 1e10:.3f}"
+            )
+
+
+class TestThemisPDR:
+    """THEMIS (Jones+2017) PDR is built from the direct FSPS/DustEM grids."""
+
+    @pytest.fixture
+    def ir_wave(self):
+        return jnp.logspace(4, 7, 3000)
+
+    @pytest.mark.regression_paper
+    def test_themis_gamma_warms_and_is_energy_balanced(self, ir_wave):
+        """gamma drives a physical warm shift; energy balance holds.
+
+        THEMIS templates are now built from the FSPS/DustEM grids
+        (``THEMIS_MW3.1_*.dat``), where the power-law column carries its real
+        DustEM relative luminosity — so ``gamma`` (a mass fraction) warms the
+        SED directly, no analytic R needed. Previously the built ``powerlaw``
+        was a duplicate of ``single_u`` and gamma was a no-op (#571).
+        """
+        from tengri.components.dust.emission import resolve_emission_model
+
+        th = resolve_emission_model("themis")
+        c_aa_s = 2.998e18
+
+        def centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nl = sed[m] * (c_aa_s / w)
+            return float(10.0 ** (jnp.sum(jnp.log10(w) * nl) / jnp.sum(nl))) / 1e4
+
+        sed0 = th(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        sed5 = th(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
+        shift = centroid_um(sed0) - centroid_um(sed5)
+        assert shift > 12.0, (
+            f"themis gamma=0.05 should warm the FIR centroid (real DustEM PDR): "
+            f"shift={shift:.1f} µm (pre-fix: ~3 µm — powerlaw was a copy of single_u)"
+        )
+        for gamma in (0.0, 0.05, 0.3):
+            sed = th(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=gamma, dust_qpah=2.5)
+            l_ir = float(-jnp.trapezoid(sed, c_aa_s / ir_wave))
+            assert 0.9 < l_ir / 1e10 < 1.1, (
+                f"themis energy balance broken at gamma={gamma}: L_IR/L_absorbed={l_ir / 1e10:.3f}"
+            )
+
+    def test_themis_powerlaw_distinct_from_single_u(self):
+        """The built PDR template is a real, distinct spectrum (not a copy)."""
+        from tengri.components.dust.emission_templates import load_themis_templates
+
+        t = load_themis_templates("data/themis_templates.h5")
+        single = np.asarray(t["single_u"])
+        power = np.asarray(t["powerlaw"])
+        # Distinct in shape: the power-law (PDR) is warmer, so the ratio of its
+        # short-to-long-wavelength content differs from single_u.
+        assert not np.allclose(single / single.max(), power / power.max(), atol=1e-3), (
+            "themis powerlaw must be a real PDR spectrum, not a copy of single_u (#571)"
+        )

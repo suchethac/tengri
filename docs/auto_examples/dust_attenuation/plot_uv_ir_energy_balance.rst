@@ -39,10 +39,25 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-104
+.. GENERATED FROM PYTHON SOURCE LINES 18-108
+
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_ir_energy_balance_001.png
+   :alt: plot uv ir energy balance
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_ir_energy_balance_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -67,7 +82,7 @@ integration error.
             sfh={
                 "type": "const",
                 "*": tengri.FIXED,
-                "log_sfr": 1.0,
+                "log_total_mass": 11.11,
                 "start_gyr": 13.0,
                 "end_gyr": 0.0,
             },

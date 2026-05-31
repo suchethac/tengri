@@ -24,6 +24,8 @@ References
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
+
 # ── UV Slope (Calzetti et al. 1994) ────────────────────────────────
 
 
@@ -330,10 +332,13 @@ def rest_frame_luminosity(
     l_nu: jnp.ndarray,
     filter_wave_aa: jnp.ndarray,
     filter_trans: jnp.ndarray,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> float:
     r"""Synthetic rest-frame luminosity through a filter.
 
-    Computes rest-frame photometry by convolving L_ν with a filter response.
+    Computes rest-frame photometry by convolving L_ν with a filter response,
+    using the same bandpass weight as the observed-frame kernel so rest- and
+    observed-frame photometry are consistent (matching DSPS ``calc_rest_flux``).
 
     Parameters
     ----------
@@ -345,6 +350,10 @@ def rest_frame_luminosity(
         Filter wavelength grid in Ångstrom. [Å]
     filter_trans : array_like, shape (n_filter,)
         Filter transmission (normalized to peak = 1). [dimensionless]
+    convention : FilterConvention, optional
+        Bandpass weight. ``BESSELL`` (default) is photon-counting
+        (:math:`w=1/\lambda`, matches DSPS ``calc_rest_flux``); ``ENERGY``
+        is :math:`w=1/\lambda^2` (CIGALE).
 
     Returns
     -------
@@ -359,9 +368,12 @@ def rest_frame_luminosity(
 
     .. math::
 
-        L = \frac{\int T(\lambda) L_\nu(\lambda) d\lambda}{\int T(\lambda) d\lambda}
+        L = \frac{\int T(\lambda) L_\nu(\lambda) w(\lambda) d\lambda}
+                 {\int T(\lambda) w(\lambda) d\lambda}
 
-    where T(λ) is the filter transmission.
+    where T(λ) is the filter transmission and :math:`w(\lambda)` the bandpass
+    weight (:math:`1/\lambda` for ``BESSELL``, :math:`1/\lambda^2` for
+    ``ENERGY``).
 
     The filter is interpolated to the wavelength grid of the SED using
     linear interpolation with zero-padding outside the filter range.
@@ -375,9 +387,10 @@ def rest_frame_luminosity(
         right=0.0,
     )
 
-    # Weighted average
-    numerator = jnp.trapezoid(filter_trans_interp * l_nu, wavelength_aa)
-    denominator = jnp.trapezoid(filter_trans_interp, wavelength_aa)
+    # Weighted average with bandpass weight w(lambda)
+    weight = filter_trans_interp * _filter_weight(wavelength_aa, convention)
+    numerator = jnp.trapezoid(weight * l_nu, wavelength_aa)
+    denominator = jnp.trapezoid(weight, wavelength_aa)
 
     return jnp.where(denominator > 0.0, numerator / denominator, 0.0)
 

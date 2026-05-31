@@ -360,8 +360,20 @@ class DustSEDComponent:
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
         # negative signed area; abs() recovers the positive erg/s.
         # Mirrors forward/pipeline.py:815.
+        #
+        # Lyman-continuum exclusion: photons at λ < 912 Å are absorbed by
+        # H ionisation (→ nebular emission), not by dust grains — they
+        # don't contribute to the dust IR re-emission pool. Matches
+        # CIGALE ``dustatt_modified_starburst`` (a_vs_ebv clips at 91.2
+        # nm, so its energy-balance ∫ stops at 912 Å) without forcing
+        # ``calzetti`` / ``leitherer02`` to zero the polynomial there
+        # — users querying the curve at any wavelength still get a
+        # value, only the dust energy-balance integral excludes those
+        # photons.
         nu = C_AA / wave
         absorbed_lnu = sed_intrinsic_stellar - sed_attenuated
+        # Mask LyC photons out of the L_absorbed integral.
+        absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
         L_absorbed = jnp.abs(jnp.trapezoid(absorbed_lnu, nu))
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
@@ -454,6 +466,35 @@ class DustSEDComponent:
             # → 1 for log_t << log_t_birth (young), 0 for log_t >> log_t_birth (old).
             y_age = 1.0 / (1.0 + 10.0 ** ((log_t - log_t_birth) / transition))
             derived_overrides["dust_young_indicator"] = y_age
+
+        # Phase 5 (SpectrumPrecomp): per-pixel BC + diffuse transmission.
+        # T_bc(λ_pix), T_diff(λ_pix) are exact at the pixel — no Taylor slope.
+        # The young indicator y(a) is reused to weight the per-age BC layer in
+        # ``predict_spectrum_via_precomp``.
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            from tengri.components.dust.attenuation import resolve_dust_law
+
+            tau_bc = jnp.asarray(params["dust_tau_bc"])
+            tau_diff = jnp.asarray(params["dust_tau_diff"])
+            n_slope = jnp.asarray(params.get("dust_slope", -0.7))
+            law_bc_fn = resolve_dust_law(self.config.law_bc)
+            law_diff_fn = resolve_dust_law(self.config.law_diff)
+            t_bc_pix = jnp.exp(-tau_bc * law_bc_fn(spec_eff, n_slope=n_slope))
+            t_diff_pix = jnp.exp(-tau_diff * law_diff_fn(spec_eff, n_slope=n_slope))
+            derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
+            derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
+
+            # Young-star indicator y(a) on the SSP age grid (same sigmoid as
+            # the filter branch) — published even when only the spectrum LUT
+            # is active.
+            if "dust_young_indicator" not in derived_overrides:
+                t_birth = self.config.t_birth_yr
+                transition = self.config.transition_width_dex
+                log_t = jnp.log10(jnp.maximum(ssp_ages_yr, 1.0))
+                log_t_birth = jnp.log10(t_birth)
+                y_age = 1.0 / (1.0 + 10.0 ** ((log_t - log_t_birth) / transition))
+                derived_overrides["dust_young_indicator"] = y_age
 
         return state.with_(
             sed_intrinsic=sed_total,

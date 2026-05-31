@@ -234,8 +234,15 @@ def convert(input_dir: str, output_path: str) -> None:
     # j_nu_per_Mdust = j_nu / (m_H * (M_dust/M_gas)) * 4*pi
     # But for energy-balance normalization, we just need the SED *shape*
     # normalized so integral = 1. The absolute scaling comes from L_absorbed.
+    #
+    # NOTE: single_u and powerlaw are EACH normalised to unit integral, which
+    # discards their *relative* DL07 power. The power-law (PDR) component emits
+    # R = U_max ln(U_max/U_min)/(U_max - U_min) times more per unit dust mass
+    # (Draine & Li 2007, Eq. 33). That factor is restored at runtime in
+    # ``emission_templates.dl07_tabulated`` so that ``gamma`` is applied as a
+    # mass fraction, not a luminosity fraction. Do NOT bake R in here as well.
 
-    # Normalize each template to unit integral (shape only)
+    # Normalize each template to unit integral (shape only; forward restores R)
     c_um = 2.99792458e14  # c in um/s
     nu_from_um = c_um / wave_um  # Hz
 
@@ -287,9 +294,11 @@ def convert(input_dir: str, output_path: str) -> None:
         f.attrs["n_wave"] = n_wave
         f.attrs["umax_powerlaw"] = 1e6
         f.attrs["description"] = (
-            "DL07 IR emission templates for tengri. "
-            "Usage: j_nu = (1-gamma)*single_u[iq,iu] + gamma*powerlaw[iq,iu], "
-            "then multiply by L_absorbed for energy balance normalization."
+            "DL07 IR emission templates for tengri. single_u and powerlaw are "
+            "each shape-normalised (unit integral). Usage: "
+            "j_nu = (1-gamma)*single_u[iq,iu] + gamma*R*powerlaw[iq,iu] with "
+            "R = U_max*ln(U_max/U_min)/(U_max-U_min) (DL07 Eq. 33 PDR luminosity "
+            "weight), then multiply by L_absorbed for energy-balance normalisation."
         )
 
     # Summary

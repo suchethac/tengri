@@ -25,16 +25,25 @@ sensitivity, directly linking observable bands to PSD timescales.
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
+
 
 def compute_green_function(
-    ssp_flux_at_z, ssp_wave, filter_wave=None, filter_trans=None, wave_target=None
+    ssp_flux_at_z,
+    ssp_wave,
+    filter_wave=None,
+    filter_trans=None,
+    wave_target=None,
+    convention=FilterConvention.BESSELL,
 ):
     """Compute Green's function G(t_age) for a filter or wavelength.
 
     G(t_age) = flux contribution per unit stellar mass at age t_age.
 
-    For photometry: G = int L_SSP(lambda|t_age) * T(lambda) * lambda dlambda
-                        / int T(lambda) * lambda dlambda
+    For photometry: G = int L_SSP(lambda|t_age) * T(lambda) * w(lambda) dlambda
+                        / int T(lambda) * w(lambda) dlambda
+    with ``w = 1/lambda`` (``BESSELL`` default, matches DSPS/FSPS) or
+    ``w = 1/lambda**2`` (``ENERGY``, CIGALE).
 
     For a single wavelength: G = L_SSP(wave_target | t_age)
 
@@ -60,12 +69,13 @@ def compute_green_function(
 
     if filter_wave is not None and filter_trans is not None:
         # Photometric Green's function
-        denom = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
+        weight = filter_trans * _filter_weight(filter_wave, convention)
+        denom = jnp.trapezoid(weight, filter_wave)
         greens = jnp.zeros(n_age)
 
         for i in range(n_age):
             ssp_on_filt = jnp.interp(filter_wave, ssp_wave, ssp_flux_at_z[i], left=0.0, right=0.0)
-            num = jnp.trapezoid(ssp_on_filt * filter_trans * filter_wave, filter_wave)
+            num = jnp.trapezoid(ssp_on_filt * weight, filter_wave)
             greens = greens.at[i].set(num / jnp.maximum(denom, 1e-30))
         return greens
 

@@ -62,6 +62,17 @@ _DO_NOT_EXECUTE = sorted(
 # negative-lookahead below still matches every plot_*.py.
 _skip_alt = "|".join(_DO_NOT_EXECUTE) or "__never_match_anything__"
 
+# Scoped regen escape hatch: set ``TENGRI_GALLERY_ONLY`` to a comma-separated
+# list of example basenames (e.g. ``plot_qpah_sweep,plot_tdust_vs_lir``) to
+# execute *only* those scripts on the next ``make html``. Used after a library
+# change that alters a handful of figures, so the heavy NUTS/VI scripts (and
+# everything else) are left as-is instead of re-running. Empty/unset keeps the
+# default disk-driven behaviour.
+import re as _re
+
+_only = os.environ.get("TENGRI_GALLERY_ONLY", "").strip()
+_only_alt = "|".join(_re.escape(b) for b in _only.split(",") if b.strip())
+
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
@@ -71,7 +82,9 @@ sphinx_gallery_conf = {
     # never match. Anchor at start of string with ``^``, run the negative-
     # lookahead against the whole path to exclude any basename already in
     # ``_DO_NOT_EXECUTE``, then ``.*plot_<...>.py$`` to pin the filename.
-    "filename_pattern": rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$",
+    "filename_pattern": (
+        rf"(?:{_only_alt})\.py$" if _only_alt else rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$"
+    ),
     # ignore_pattern HIDES files from the gallery entirely. Used for heavy
     # NUTS/SVI scripts whose runtime + memory footprint OOMs the build (each
     # NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha). These scripts
@@ -297,15 +310,20 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
         inserted = False
         for i, line in enumerate(lines):
             out.append(line)
-            if (not inserted and i + 1 < len(lines)
-                    and lines[i + 1].strip()
-                    and set(lines[i + 1].strip()) <= {"="}):
+            if (
+                not inserted
+                and i + 1 < len(lines)
+                and lines[i + 1].strip()
+                and set(lines[i + 1].strip()) <= {"="}
+            ):
                 out.append(lines[i + 1])
-                out += ["",
-                        f".. image:: {img}",
-                        f"   :alt: {stem.replace('_', ' ')}",
-                        "   :class: sphx-glr-single-img",
-                        ""]
+                out += [
+                    "",
+                    f".. image:: {img}",
+                    f"   :alt: {stem.replace('_', ' ')}",
+                    "   :class: sphx-glr-single-img",
+                    "",
+                ]
                 for j in range(i + 2, len(lines)):
                     out.append(lines[j])
                 inserted = True
@@ -324,6 +342,7 @@ def setup(app):
     # per-script RSTs but BEFORE sphinx parses any source, which is exactly
     # the window we need to mutate the RSTs on disk.
     app.connect("env-before-read-docs", _inject_missing_image_directives)
+
 
 # -- MyST configuration ------------------------------------------------------
 

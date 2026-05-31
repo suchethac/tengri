@@ -20,6 +20,12 @@ from tengri.components.stellar.sfh.registry import (
     resolve_sfh,
 )
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -57,10 +63,13 @@ class TestResolveSingle:
         assert "sfh_tsnorm_log_total_mass" in params
         assert "sfh_tsnorm_peak_lbt_gyr" in params
 
-    def test_dpl_returns_4_params(self):
+    def test_dpl_returns_5_params(self):
+        # 5 params after #514: alpha, beta, tau, age (formation anchor),
+        # log_total_mass.
         _fn, params, _param_map, _settings = resolve_sfh("dpl")
-        assert len(params) == 4
+        assert len(params) == 5
         assert "sfh_dpl_alpha" in params
+        assert "sfh_dpl_age_gyr" in params
 
     def test_const_returns_3_params(self):
         _fn, params, _param_map, _settings = resolve_sfh("const")
@@ -161,8 +170,9 @@ class TestResolveComposed:
             sfh_exp_tau_gyr=2e9,
             sfh_exp_start_gyr=0.0,
             sfh_lnorm_log_total_mass=8.5,
-            sfh_lnorm_peak_lbt_gyr=3e9,
+            sfh_lnorm_peak_gyr=3e9,
             sfh_lnorm_width_gyr=0.3,
+            sfh_lnorm_age_gyr=_AGE_UNIV_YR,
         )
         m_total = float(jnp.trapezoid(sfr, t))
         expected = 10**10.0 + 10**9.5 + 10**8.5

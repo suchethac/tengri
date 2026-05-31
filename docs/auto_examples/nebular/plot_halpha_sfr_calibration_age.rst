@@ -31,7 +31,18 @@ than ~10 Myr. Constant-SFR models at ages 1–300 Myr show the calibration
 breaks at young (<10 Myr; insufficient ionizing photons) and old (>100 Myr;
 all stars too old to ionize) populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-68
+.. GENERATED FROM PYTHON SOURCE LINES 10-69
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
+   :alt: plot halpha sfr calibration age
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_halpha_sfr_calibration_age_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -62,12 +73,13 @@ all stars too old to ionize) populations.
     sfr_inferred, ages_valid = [], []
 
     for age_myr in ages_myr:
+        log_total_mass_true = log_sfr_true + np.log10(age_myr * 1e6)
         model = tengri.SEDModel.build(
             ssp,
             sfh={
                 "type": "const",
                 "*": tengri.FIXED,
-                "log_sfr": log_sfr_true,
+                "log_total_mass": log_total_mass_true,
                 "start_gyr": age_myr / 1e3,
                 "end_gyr": 0.0,
             },

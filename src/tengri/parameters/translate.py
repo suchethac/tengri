@@ -161,14 +161,16 @@ _SFH_SHORT_NAMES: dict[str, dict[str, str]] = {
     },
     "lnorm": {
         "log_total_mass": "sfh_lnorm_log_total_mass",
-        "peak_lbt_gyr": "sfh_lnorm_peak_lbt_gyr",
+        "peak_gyr": "sfh_lnorm_peak_gyr",
         "width_gyr": "sfh_lnorm_width_gyr",
+        "age_gyr": "sfh_lnorm_age_gyr",
     },
     "dpl": {
         "alpha": "sfh_dpl_alpha",
         "beta": "sfh_dpl_beta",
         "log_total_mass": "sfh_dpl_log_total_mass",
         "tau_gyr": "sfh_dpl_tau_gyr",
+        "age_gyr": "sfh_dpl_age_gyr",
     },
     "delayed": {
         "tau_gyr": "sfh_delayed_tau_gyr",

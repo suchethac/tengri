@@ -763,7 +763,7 @@ def test_orchestrator_lnorm_close_to_legacy(ssp):
         "lnorm",
         {
             "sfh_lnorm_log_total_mass": 1.0,
-            "sfh_lnorm_peak_lbt_gyr": 3.0,
+            "sfh_lnorm_peak_gyr": 3.0,
             "sfh_lnorm_width_gyr": 1.0,
         },
     )
@@ -1053,25 +1053,7 @@ def test_orchestrator_dexp_close_to_legacy(ssp):
     _check_with_priors(ssp, "dexp", priors, sfh_params)
 
 
-def test_orchestrator_tau_close_to_legacy(ssp):
-    """``tau`` SFH parity — closed at machine epsilon by closure-path-A.
-
-    The hard cutoff at ``lookback_time = sfh_tau_age_gyr`` previously
-    produced ~13% rtol divergence between legacy log-space and
-    orchestrator linear-space SFR interpolations. Closure-A in the
-    no-α delta-Z branch of ``forward/pipeline.py`` rebuilds the SFR
-    grid using the orchestrator's exact pattern (n_grid=64, linear
-    lookback-time interpolation), so both paths see the same cutoff
-    representation and agree to ~1e-11.
-    """
-    priors = {
-        "sfh_tau_log_total_mass": Uniform(8.0, 12.0),
-        "sfh_tau_tau_gyr": Uniform(0.1, 10.0),
-        "sfh_tau_age_gyr": Uniform(0.5, 13.0),
-    }
-    sfh_params = {
-        "sfh_tau_log_total_mass": 1.0,
-        "sfh_tau_tau_gyr": 2.0,
-        "sfh_tau_age_gyr": 5.0,
-    }
-    _check_with_priors(ssp, "tau", priors, sfh_params)
+# Removed: ``test_orchestrator_tau_close_to_legacy`` (FSPS-style "tau"
+# declining exponential SFH was deregistered 2026-05-28 because its name
+# collided with CIGALE ``sfhdelayed`` semantics — only ``"delayed"``
+# remains. See PR notes and registry.py comment block.

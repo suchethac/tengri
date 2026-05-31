@@ -1,0 +1,199 @@
+# SPDX-License-Identifier: BSD-3-Clause
+r"""Slone & Netzer (2012) alpha-disc accretion-disk model.
+
+The Slone & Netzer (2012 [1]_) optically-thick, geometrically-thin alpha-disc
+templates, interpolated over ``(log M_BH, log Mdot/Mdot_Edd)`` from a
+precomputed HDF5 grid built from AGNfitter-rX's ``SN12.pickle`` by
+``scripts/build_slone_netzer_grid.py``.
+
+Ported from AGNfitter-rX (Martinez-Ramirez et al. 2024 [2]_), whose
+``MODEL_AGNfitter.BBB`` consumes the same template library. This is the
+fourth of AGNfitter-rX's four accretion-disk libraries (alongside Richards+2006
+``richards2006``, Kubota & Done 2018 ``multicolor``/``kubota_done``, and
+Temple+2021 ``qsogen``).
+
+Eddington axis
+--------------
+The SN12 SED stores 12 accretion-rate columns; AGNfitter-rX labels them with
+``logEddra-values[:12]`` ∈ ``[-4.0, -1.96]`` (the build script reproduces this
+exactly). The grid therefore spans the sub-Eddington regime; the template is
+shape-only and renormalised to ``agn_log_lbol`` at runtime.
+
+References
+----------
+.. [1] O. Slone and H. Netzer, "The effect of disc winds on the optical and
+   ultraviolet emission lines of active galactic nuclei," MNRAS, 426, 656
+   (2012). doi:10.1111/j.1365-2966.2012.21699.x.
+.. [2] L. N. Martinez-Ramirez, et al., "AGNFITTER-RX: Modeling the
+   radio-to-X-ray spectral energy distributions of AGNs," A&A, 688, A46
+   (2024). doi:10.1051/0004-6361/202449329. arXiv:2405.12111.
+"""
+
+from __future__ import annotations
+
+import functools
+from collections.abc import Callable
+from pathlib import Path
+
+import jax.numpy as jnp
+import numpy as np
+
+from tengri.utils.grid_interp import interp_nd_triweight
+from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+
+__all__ = [
+    "create_slone_netzer_from_grid",
+    "slone_netzer_analytic",
+]
+
+_C_AA_PER_S: float = 2.99792458e18  # speed of light [Å·Hz]
+
+
+def _wavelength_to_nu(wavelength: jnp.ndarray) -> jnp.ndarray:
+    """Convert wavelength [Å] to frequency [Hz]."""
+    return _C_AA_PER_S / wavelength
+
+
+def _load_slone_netzer_arrays(grid_path: str) -> dict:
+    """Load raw numpy arrays from the Slone & Netzer grid HDF5."""
+    import h5py
+
+    with h5py.File(grid_path, "r") as f:
+        g = f["slone_netzer"]
+        return {
+            "log_mbh": np.asarray(g["log_mbh"][:], dtype=np.float64),
+            "log_edd": np.asarray(g["log_edd"][:], dtype=np.float64),
+            "wavelength": np.asarray(g["wavelength"][:], dtype=np.float64),
+            "template": np.asarray(g["template"][:], dtype=np.float64),
+        }
+
+
+def create_slone_netzer_from_grid(grid_path: str) -> Callable:
+    """Load the SN12 grid and return a JAX-native interpolation closure.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``slone_netzer_disc_grid.h5``.
+
+    Returns
+    -------
+    callable
+        ``fn(wavelength, agn_log_lbol, agn_log_mbh, agn_log_ledd, **_)
+        -> L_nu [erg/s/Hz]``.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``grid_path`` does not exist.
+    KeyError
+        If the grid file is missing any dataset under ``/slone_netzer``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` and triweight interpolation.
+
+    **Gradient-safe**: yes — the triweight kernel is C² across both
+    parameter axes.
+    """
+    raw = _load_slone_netzer_arrays(grid_path)
+    grid_jax = jnp.asarray(raw["template"])  # (n_mbh, n_edd, n_wave)
+    wave_grid = jnp.asarray(raw["wavelength"])
+    axes = (jnp.asarray(raw["log_mbh"]), jnp.asarray(raw["log_edd"]))
+    edges = tuple(edges_for_grid(ax) for ax in axes)
+
+    def slone_netzer_grid(
+        wavelength: jnp.ndarray,
+        agn_log_lbol: float = 11.0,
+        agn_log_mbh: float = 8.6,
+        agn_log_ledd: float = -2.0,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        r"""Slone & Netzer (2012) disc SED at a single ``(M_BH, Mdot/Mdot_Edd)``.
+
+        Parameters
+        ----------
+        wavelength : array_like, shape (n_wave,)
+            Rest-frame wavelength grid. [Å]
+        agn_log_lbol : float, optional
+            ``log10(L_bol / L_sun)``. Default 11.0.
+        agn_log_mbh : float, optional
+            ``log10(M_BH / M_sun)``. Default 8.6.
+        agn_log_ledd : float, optional
+            ``log10(Mdot / Mdot_Edd)``. Default −2.0.
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Spectral luminosity density. [erg/s/Hz]
+
+        Notes
+        -----
+        .. math::
+
+            L_\nu(\lambda) = L_{\rm bol}\,
+                             \frac{T(\lambda;\,\log M_{\rm BH},\,\log\dot m)}
+                                  {\int T(\nu;\,\log M_{\rm BH},\,\log\dot m)
+                                   \,\mathrm{d}\nu}
+
+        with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot`. The
+        template is shape-only; ``agn_log_lbol`` sets the normalisation.
+
+        **JIT-compatible**: yes.
+        """
+        template = interp_nd_triweight(
+            grid_jax,
+            axes,
+            edges,
+            (agn_log_mbh, agn_log_ledd),
+        )
+        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        nu = _wavelength_to_nu(wavelength)
+        idx_sort = jnp.argsort(nu)
+        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
+        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        l_scale = 10.0**agn_log_lbol * _LSUN_ERG
+        return l_scale * sed / integral_safe
+
+    return slone_netzer_grid
+
+
+_GRID_SEARCH_PATHS: tuple[str, ...] = (
+    "data/slone_netzer_disc_grid.h5",
+    "slone_netzer_disc_grid.h5",
+)
+
+_NOT_FOUND_MSG = (
+    "Slone & Netzer (2012) disc grid not found. Build it with: "
+    "python scripts/build_slone_netzer_grid.py "
+    "--input /tmp/AGNfitter-rX/models/BBB/SN12.pickle"
+)
+
+
+def _find_grid() -> str:
+    base = Path(__file__).resolve().parents[4]
+    for rel in _GRID_SEARCH_PATHS:
+        for candidate in (base / rel, Path(rel)):
+            if candidate.is_file():
+                return str(candidate)
+    raise FileNotFoundError(_NOT_FOUND_MSG)
+
+
+@functools.cache
+def _load_default() -> Callable:
+    return create_slone_netzer_from_grid(_find_grid())
+
+
+def slone_netzer_analytic(*args, **kwargs) -> jnp.ndarray:
+    """Slone & Netzer (2012) disc (auto-loaded from the packaged HDF5 grid).
+
+    Thin wrapper that loads the default grid once and delegates to the
+    interpolation closure from :func:`create_slone_netzer_from_grid`.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density. [erg/s/Hz]
+    """
+    return _load_default()(*args, **kwargs)

@@ -19,6 +19,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
@@ -114,10 +120,16 @@ class TestDPLPhysics:
         from tengri.components.stellar.sfh import dpl
 
         tau = 5e9
-        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=1.0, tau=tau, log_total_mass=1.0)
+        age = _AGE_UNIV_YR
+        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])
-        assert abs(peak_lbt / tau - 1.0) < 0.30, (
-            f"DPL peak at {peak_lbt / 1e9:.1f} Gyr, expected near {tau / 1e9:.1f} Gyr"
+        # New convention (#514): the shape is in cosmic time since formation,
+        # T = age - t_lookback, so the turnover lands near T = tau, i.e. at
+        # lookback age - tau. Compare in cosmic time, matching BAGPIPES dblplaw.
+        t_peak_cosmic = age - peak_lbt
+        assert abs(t_peak_cosmic / tau - 1.0) < 0.30, (
+            f"DPL peak at cosmic time {t_peak_cosmic / 1e9:.1f} Gyr, "
+            f"expected near tau = {tau / 1e9:.1f} Gyr"
         )
 
     def test_alpha_controls_decline(self):
@@ -125,8 +137,9 @@ class TestDPLPhysics:
         from tengri.components.stellar.sfh import dpl
 
         tau = 5e9
-        sfr_steep = dpl(T_LOOKBACK, alpha=4.0, beta=1.0, tau=tau, log_total_mass=1.0)
-        sfr_shallow = dpl(T_LOOKBACK, alpha=1.0, beta=1.0, tau=tau, log_total_mass=1.0)
+        age = _AGE_UNIV_YR
+        sfr_steep = dpl(T_LOOKBACK, alpha=4.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
+        sfr_shallow = dpl(T_LOOKBACK, alpha=1.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
 
         # At recent times (small lookback), steep alpha → lower SFR
         recent = T_LOOKBACK < 1e9
@@ -139,7 +152,7 @@ class TestDPLPhysics:
         from tengri.components.stellar.sfh import dpl
 
         tau = 3e9
-        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=2.0, tau=tau, log_total_mass=1.0)
+        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=2.0, tau=tau, age=_AGE_UNIV_YR, log_total_mass=1.0)
         peak_idx = int(jnp.argmax(sfr))
         # Check that SFR is roughly symmetric in log-time around peak
         chex.assert_tree_all_finite(sfr)
@@ -197,13 +210,17 @@ class TestSkewNormalPhysics:
         """Log-normal: Gaussian in log-time → asymmetric in linear time."""
         from tengri.components.stellar.sfh import lnorm
 
-        sfr = lnorm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=3e9, width=0.5)
+        # New convention (#514): log-normal in cosmic time T = age - t_lookback,
+        # peaked at T = peak. The log-normal's long tail extends toward larger T
+        # (= smaller lookback = younger), the same direction as Carnall+2018 /
+        # BAGPIPES lognormal.
+        sfr = lnorm(T_LOOKBACK, log_total_mass=1.0, peak=3e9, width=0.5, age=_AGE_UNIV_YR)
         peak_idx = int(jnp.argmax(sfr))
 
-        # Should have a longer tail toward older ages (larger lookback)
+        # Long tail now points toward smaller lookback (larger cosmic time T).
         mass_old = float(jnp.trapezoid(sfr[peak_idx:], T_LOOKBACK[peak_idx:]))
         mass_young = float(jnp.trapezoid(sfr[:peak_idx], T_LOOKBACK[:peak_idx]))
-        assert mass_old > mass_young, "Log-normal should have longer old-age tail"
+        assert mass_young > mass_old, "Log-normal long tail should point toward younger ages"
 
 
 # ── 6. TRIWEIGHT BURST — compact burst component ──────────────────
@@ -383,8 +400,8 @@ class TestAllSFHUniversalPhysics:
         },
         "snorm": {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5},
         "norm": {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9},
-        "lnorm": {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 0.5},
-        "dpl": {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_total_mass": 1.0},
+        "lnorm": {"log_total_mass": 1.0, "peak": 5e9, "width": 0.5, "age": _AGE_UNIV_YR},
+        "dpl": {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "age": _AGE_UNIV_YR, "log_total_mass": 1.0},
     }
 
     @pytest.fixture(params=list(_SFH_CONFIGS.keys()))

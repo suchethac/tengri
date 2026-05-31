@@ -181,7 +181,7 @@ class SFHConfig:
     """
 
     mean_type: tuple[str, ...] = ("dpl",)
-    n_grid: int = 64
+    n_grid: int = 256
     evolving_metallicity: bool = False
     alpha_fe_evolving: bool = False
     chem_evol: bool = False

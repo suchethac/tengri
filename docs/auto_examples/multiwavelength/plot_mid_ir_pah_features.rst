@@ -32,7 +32,7 @@ dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6,
 (9.7 μm Si–O stretch) and AGN heating suppress PAH and introduce continuum
 growth in AGN-dominated systems. We model three templates: (a) pure starburst
 (no AGN), (b) pure AGN (no star formation), and (c) composite with
-AGN fraction = 0.5. This illustrates the diagnostic power of mid-IR
+AGN fraction = 0.5. the diagnostic power of mid-IR
 spectroscopy: PAH strength probes star formation rate, while continuum
 slope and silicate depth reveal AGN heating and dust temperature.
 
@@ -40,7 +40,7 @@ References:
   Smith et al. 2007, ApJ, 656, 770 (PAH feature identification).
   Hao et al. 2007, ApJL, 655, L77 (silicate absorption in AGN).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-269
+.. GENERATED FROM PYTHON SOURCE LINES 19-272
 
 
 
@@ -50,29 +50,19 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/parameters/parameters.py:419: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
-      validate_block_recipe(
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/agn/blocks/runner.py:440: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
-      validate_block_recipe(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -94,7 +84,7 @@ References:
         sfh={
             "type": "const",
             "*": tengri.FIXED,
-            "log_sfr": 1.5,  # SFR = ~32 Msun/yr (moderate starburst)
+            "log_total_mass": 10.0,  # ~32 Msun/yr over 0.3 Gyr (moderate starburst)
             "start_gyr": 0.3,
             "end_gyr": 0.0,
         },
@@ -102,7 +92,7 @@ References:
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": 0.5,  # diffuse dust: moderate optical depth
-            "tau_bc": 1.2,    # birth cloud opacity: birth clouds
+            "tau_bc": 1.2,  # birth cloud opacity: birth clouds
             "emission": {
                 "type": "dale2014",  # Dale et al. 2014 dust SED
                 "*": tengri.FIXED,
@@ -130,15 +120,15 @@ References:
         sfh={
             "type": "const",
             "*": tengri.FIXED,
-            "log_sfr": -5.0,  # SFR ≈ 0 (quiescent)
+            "log_total_mass": 5.0,  # SFR ≈ 0 (quiescent)
             "start_gyr": 10.0,
             "end_gyr": 1.0,
         },
         dust={
             "type": "two_component",
             "*": tengri.FIXED,
-            "tau_diff": 1.5,    # warm dust around AGN
-            "tau_bc": 0.0,      # no birth clouds
+            "tau_diff": 1.5,  # warm dust around AGN
+            "tau_bc": 0.0,  # no birth clouds
             "emission": {
                 "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
                 "*": tengri.FIXED,
@@ -153,8 +143,8 @@ References:
                 "type": "skirtor",
                 "*": tengri.FIXED,
             },
-            "log_lbol": 12.0,    # AGN bolometric luminosity: ~1e12 Lsun
-            "frac": 1.0,         # 100% AGN (no stellar contribution to near/mid-IR)
+            "log_lbol": 12.0,  # AGN bolometric luminosity: ~1e12 Lsun
+            "frac": 1.0,  # 100% AGN (no stellar contribution to near/mid-IR)
             "*": tengri.FIXED,
         },
         redshift=tengri.Fixed(0.05),
@@ -174,7 +164,7 @@ References:
         sfh={
             "type": "const",
             "*": tengri.FIXED,
-            "log_sfr": 1.2,     # SFR ~ 16 Msun/yr
+            "log_total_mass": 10.2,  # ~16 Msun/yr over 1 Gyr
             "start_gyr": 1.0,
             "end_gyr": 0.0,
         },
@@ -197,8 +187,8 @@ References:
                 "type": "skirtor",
                 "*": tengri.FIXED,
             },
-            "log_lbol": 11.5,    # AGN bolometric luminosity: ~3e11 Lsun
-            "frac": 0.5,         # 50% AGN, 50% stellar
+            "log_lbol": 11.5,  # AGN bolometric luminosity: ~3e11 Lsun
+            "frac": 0.5,  # 50% AGN, 50% stellar
             "*": tengri.FIXED,
         },
         redshift=tengri.Fixed(0.05),
@@ -318,6 +308,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_mid_ir_pah_features.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.236 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_mid_ir_pah_features.py:

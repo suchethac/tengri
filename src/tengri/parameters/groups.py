@@ -318,38 +318,37 @@ def _valid_dust_laws() -> frozenset[str]:
     return frozenset(DUST_LAWS.keys())
 
 
-#: Valid AGN disc block types.
-_VALID_AGN_DISC_TYPES = {
-    "none",
-    "powerlaw",
-    "multicolor",
-    "kubota_done",
-    "adaf",
-    "qsogen",
-    "grahsp_sbpl",
-}
+def _agn_block_types(category: str) -> frozenset[str]:
+    """Derive valid AGN block-type names for ``category`` from the registry.
 
-#: Valid AGN torus block types.
-_VALID_AGN_TORUS_TYPES = {
-    "none",
-    "simple",
-    "two_temperature",
-    "nenkova",
-    "skirtor",
-    "silva04",
-    "cat3d_wind",
-    "qsogen",
-    "grahsp",
-}
+    Previously each ``_VALID_AGN_*_TYPES`` set was hand-maintained, which
+    silently drifted whenever a new block was registered without updating
+    this file (#488's ``disc.skirtor`` / ``disc.schartmann2005`` /
+    ``disc.adaf_lopez2024`` landed in :data:`AGN_BLOCKS` but were missing
+    here, so the validator rejected them at build time with "Unknown
+    agn_disc_block type 'skirtor'"). Derive from ``AGN_BLOCKS`` so the
+    block-registration decorator is the single source of truth — the same
+    fix pattern that closed the IGM ``meiksin06`` drift earlier.
+    """
+    # Force-import every block module so its ``@register_agn_block``
+    # decorators have fired. Mirrors the eager imports done by AGN
+    # ``unified.py`` at module-load time; safe to redo here.
+    import tengri.components.agn.blocks.alternates
+    import tengri.components.agn.blocks.disc_blocks
+    import tengri.components.agn.blocks.lines_blocks  # noqa: F401
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
-#: Valid AGN lines block types.
-_VALID_AGN_LINES_TYPES = {
-    "none",
-    "blr",
-    "nlr",
-    "grahsp",
-    "qsogen",
-}
+    return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
+
+
+#: Valid AGN disc block types (derived from ``AGN_BLOCKS['disc']``).
+_VALID_AGN_DISC_TYPES = _agn_block_types("disc")
+
+#: Valid AGN torus block types (derived from ``AGN_BLOCKS['torus']``).
+_VALID_AGN_TORUS_TYPES = _agn_block_types("torus")
+
+#: Valid AGN lines block types (derived from ``AGN_BLOCKS['lines']``).
+_VALID_AGN_LINES_TYPES = _agn_block_types("lines") | {"qsogen"}  # qsogen lives on the qsogen model
 
 #: Valid AGN feii block types.
 _VALID_AGN_FEII_TYPES = {
@@ -540,6 +539,15 @@ def parse_groups(**kwargs) -> Parameters:
                 group_dict = group_dict[subkey]
             else:
                 group_dict = {}
+        elif group == "igm.dla":
+            # DLA sub-block: prefer the new nested-dict form
+            # ``igm={'dla': {'log_n_hi': ..., ...}}`` (closes #507), but
+            # fall back to the flat form where the builder factories emit
+            # ``igm={'dla': True, 'log_n_hi': ...}`` with the DLA params
+            # at the same level as the ``dla`` flag.
+            igm_dict = kwargs.get("igm") if isinstance(kwargs.get("igm"), dict) else {}
+            dla_val = igm_dict.get("dla", False) if igm_dict else False
+            group_dict = dla_val if isinstance(dla_val, dict) else igm_dict
         elif group == "agn" or group.startswith("agn."):
             # AGN params live in a two-level nest: shared (`agn` itself) and
             # five sub-blocks (`agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`,
@@ -850,7 +858,13 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     if igm_dict.get("patchy", False):
         result["igm_patchy"] = True
 
-    if igm_dict.get("dla", False):
+    # ``dla`` accepts either the legacy boolean form (``dla=True``) or the
+    # nested-dict form ``dla={'log_n_hi': Uniform(...), '*': FREE, ...}`` —
+    # both activate the DLA absorber (closes #507). The per-parameter
+    # overrides inside the dict are resolved by the ``igm.dla`` sub-group
+    # path in :func:`parse_groups`.
+    dla_spec = igm_dict.get("dla", False)
+    if dla_spec:
         result["dla"] = True
 
 
@@ -930,6 +944,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
+    "igm.dla": frozenset({"type", "*"}),
     "radio": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
     "agn": frozenset({"type", "*"}) | _AGN_SUBBLOCK_KEYS,
@@ -1050,6 +1065,12 @@ def _validate_user_keys(
             # level. Treat as a soft acceptance (still resolved via the
             # dust.emission group path).
             param_names = param_names | _short_names_for_group("dust.emission", param_partition)
+        elif top_key == "igm":
+            # The IGM top-level accepts DLA param short names for the
+            # builder-factory output form ``igm={'dla': True, 'log_n_hi': ...}``,
+            # which flattens DLA params at the igm level. The new nested
+            # ``igm={'dla': {...}}`` form is validated separately below.
+            param_names = param_names | _short_names_for_group("igm.dla", param_partition)
 
         # User-registered SEDModelComponent subclasses (#391): if the
         # group dict picks a custom ``type``, add that subclass's
@@ -1060,6 +1081,10 @@ def _validate_user_keys(
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 
         # Recurse into sub-block dicts.
+        if top_key == "igm" and isinstance(top_val.get("dla"), dict):
+            sub_allowed = frozenset({"type", "*"})
+            sub_params = _short_names_for_group("igm.dla", param_partition)
+            _check_dict_keys("igm.dla", top_val["dla"], sub_allowed | sub_params, param_partition)
         if top_key == "dust" and isinstance(top_val.get("emission"), dict):
             sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
             sub_params = _short_names_for_group("dust.emission", param_partition)
@@ -1352,7 +1377,9 @@ def _partition_by_group(
             partition[name] = "xray"
         elif name.startswith("radio_"):
             partition[name] = "radio"
-        elif name.startswith("igm_") or name.startswith("dla_"):
+        elif name.startswith("dla_"):
+            partition[name] = "igm.dla"
+        elif name.startswith("igm_"):
             partition[name] = "igm"
         elif name.startswith("neb_") or name.startswith("ionspec_") or name.startswith("gas_log"):
             partition[name] = "neb"
@@ -1695,7 +1722,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Only include if non-default (default is True)
         result["apply_igm"] = spec.apply_igm
 
-    if spec.n_grid != 64:
+    if spec.n_grid != 256:
         # Only include if non-default
         result["n_grid"] = spec.n_grid
 

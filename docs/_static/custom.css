@@ -151,6 +151,28 @@ body[data-theme="dark"] {
     --color-toc-item-text--active: var(--tg-accent);
 }
 
+/* ── Root background in dark mode ────────────────────────────────────────
+   Furo paints the page background on <html> as well as <body>:
+       .skip-to-content, body, html { background: var(--color-background-primary) }
+   Our dark-mode token overrides above are scoped to <body>, so <html>
+   (i.e. :root) keeps the LIGHT --color-background-primary from the :root
+   block. The content <article> is transparent
+   (--color-content-background: transparent), so that light root background
+   shows straight through as an off-white band in dark mode. Because
+   data-theme lives on <body>, reach the root with :has() (already used
+   below for the gallery sidebar). var(--tg-bg) can't be used here — on
+   <html> it resolves to the light value — so the literals are required. */
+@media (prefers-color-scheme: dark) {
+    html:not(:has(body[data-theme="light"])) {
+        background: #0F1419;
+        color: #E6EDF3;
+    }
+}
+html:has(body[data-theme="dark"]) {
+    background: #0F1419;
+    color: #E6EDF3;
+}
+
 /* ── Body & headings ─────────────────────────────────────────────────── */
 body {
     font-family: var(--font-stack);

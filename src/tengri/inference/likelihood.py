@@ -341,6 +341,15 @@ def build_likelihood_extras(context: InferenceContext):
                 name="line_flux_constraint",
             )
         )
+    if "line_ratio_obs" in data_args:
+        extras.append(
+            GaussianLikelihood(
+                obs=data_args["line_ratio_obs"],
+                err=data_args["line_ratio_err"],
+                channel="line_ratios",
+                name="line_ratio_constraint",
+            )
+        )
     if "index_obs" in data_args:
         extras.append(
             GaussianLikelihood(

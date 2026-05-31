@@ -44,6 +44,12 @@ from tengri.components.stellar.sfh.mean_sfh import (
     tsnorm,
 )
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -203,17 +209,20 @@ class TestDpl:
     """Tests for the registry-compatible DPL with log_total_mass."""
 
     def test_matches_double_powerlaw_shape(self):
-        """dpl shares the bare double_powerlaw shape, scaled to log_total_mass.
+        """dpl is the bare double_powerlaw shape in cosmic-time-since-formation.
 
-        After the 2026-05-25 normalization refactor, ``dpl`` renormalizes the
-        bare ``double_powerlaw`` shape so the integral equals
-        ``10**log_total_mass``. The pointwise ratio between the two outputs
-        is therefore a constant.
+        ``dpl`` evaluates the bare ``double_powerlaw`` shape at
+        ``T = age - t_lookback`` (Carnall+2018 convention; #514) and
+        renormalizes so the integral equals ``10**log_total_mass``. The
+        pointwise ratio against the bare shape evaluated on the same ``T``
+        axis is therefore a constant.
         """
+        age = _AGE_UNIV_YR
         t = jnp.logspace(6, 10, 200)
-        sfr_bare = double_powerlaw(t, alpha=1.5, beta=1.0, tau=3e9, norm=10.0)
-        sfr_new = dpl(t, alpha=1.5, beta=1.0, tau=3e9, log_total_mass=10.0)
-        mask = sfr_bare > 0
+        T = jnp.maximum(age - t, 0.0)
+        sfr_bare = double_powerlaw(T, alpha=1.5, beta=1.0, tau=3e9, norm=10.0)
+        sfr_new = dpl(t, alpha=1.5, beta=1.0, tau=3e9, age=age, log_total_mass=10.0)
+        mask = (sfr_bare > 0) & (T > 0)
         ratio = sfr_new[mask] / sfr_bare[mask]
         assert_allclose(ratio, ratio[0] * jnp.ones_like(ratio), rtol=1e-6)
         assert float(jnp.trapezoid(sfr_new, t)) == pytest.approx(1e10, rel=1e-6)
@@ -222,13 +231,15 @@ class TestDpl:
         """JIT-compatible and differentiable."""
         t = jnp.logspace(6, 10, 100)
         fn = jax.jit(dpl)
-        sfr = fn(t, 1.0, 1.0, 1e9, 1.0)
+        sfr = fn(t, 1.0, 1.0, 1e9, _AGE_UNIV_YR, 1.0)
         chex.assert_tree_all_finite(sfr)
 
         def _loss_lp(lp: float) -> float:
-            return float(jnp.sum(dpl(t, 1.0, 1.0, 1e9, lp)))
+            return float(jnp.sum(dpl(t, 1.0, 1.0, 1e9, _AGE_UNIV_YR, lp)))
 
-        grad_jax = float(jax.grad(lambda lp: jnp.sum(dpl(t, 1.0, 1.0, 1e9, lp)))(1.0))
+        grad_jax = float(
+            jax.grad(lambda lp: jnp.sum(dpl(t, 1.0, 1.0, 1e9, _AGE_UNIV_YR, lp)))(1.0)
+        )
         np.testing.assert_allclose(
             grad_jax,
             fd_grad(_loss_lp, 1.0),
@@ -237,36 +248,37 @@ class TestDpl:
         )
 
     def test_dpl_peak_time(self):
-        """DPL peak occurs at tau (Carnall+2018, MNRAS 480, 4379, Eq. A3).
+        """DPL peaks at cosmic time T=tau after formation (Carnall+2018 Eq. A3).
 
-        For a rising slope α and falling slope β, the analytic peak is at
-        t_peak = tau * (α/β)^(1/(α+β)).  For α=β=1, t_peak = tau.
+        The analytic peak is at cosmic-time-since-formation
+        ``T_peak = tau * (beta/alpha)^(1/(alpha+beta))``; for α=β=1,
+        ``T_peak = tau``. With ``T = age - t_lookback``, the peak in
+        lookback time is at ``age - T_peak`` (#514).
         """
-        tau = 3e9  # yr — peak time in the equal-slope case
+        tau = 3e9  # yr — T_peak in the equal-slope case
+        age = _AGE_UNIV_YR
         t = jnp.logspace(6, 10.2, 5000)
-        sfr = dpl(t, alpha=1.0, beta=1.0, tau=tau, log_total_mass=1.0)
-        t_peak = float(t[jnp.argmax(sfr)])
-        assert abs(t_peak - tau) / tau < 0.05, (
-            f"DPL peak at t={t_peak:.3e} yr, expected tau={tau:.3e} yr (±5%)"
+        sfr = dpl(t, alpha=1.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
+        t_peak_lookback = float(t[jnp.argmax(sfr)])
+        expected = age - tau  # lookback of the cosmic-time peak
+        assert abs(t_peak_lookback - expected) / expected < 0.05, (
+            f"DPL peak at lookback={t_peak_lookback:.3e} yr, "
+            f"expected age-tau={expected:.3e} yr (±5%)"
         )
-        # Monotonicity checks around peak
-        sfr_early = float(jnp.interp(jnp.array(1e9), t, sfr))
-        sfr_at_peak = float(jnp.interp(jnp.array(3e9), t, sfr))
-        sfr_late = float(jnp.interp(jnp.array(10e9), t, sfr))
-        assert sfr_at_peak > sfr_early, "DPL should rise toward tau"
-        assert sfr_at_peak > sfr_late, "DPL should fall after tau"
+        # Monotonicity: SFR rises toward the peak (decreasing lookback from
+        # formation) and falls after it (toward observation).
+        sfr_old = float(jnp.interp(jnp.array(12.5e9), t, sfr))  # near formation
+        sfr_at_peak = float(jnp.interp(jnp.array(expected), t, sfr))
+        sfr_recent = float(jnp.interp(jnp.array(1e9), t, sfr))  # near now
+        assert sfr_at_peak > sfr_old, "DPL should rise after formation"
+        assert sfr_at_peak > sfr_recent, "DPL should fall toward observation"
 
     def test_dpl_mass_conservation(self):
-        """Integrated mass ≈ 10^log_total_mass * tau * B(α,β) within 1%.
-
-        The DPL integral scales as log_total_mass=1 → total formed mass=10 Msun.
-        We verify the trapezoidal integral is physically finite and
-        self-consistent when log_total_mass is doubled (mass doubles).
-        """
+        """log_total_mass increments scale the integrated mass by 10× per dex."""
         t = jnp.logspace(6, 10.2, 10000)
         dt = jnp.diff(t)
-        sfr1 = dpl(t, alpha=1.0, beta=2.0, tau=3e9, log_total_mass=1.0)
-        sfr2 = dpl(t, alpha=1.0, beta=2.0, tau=3e9, log_total_mass=2.0)
+        sfr1 = dpl(t, alpha=1.0, beta=2.0, tau=3e9, age=_AGE_UNIV_YR, log_total_mass=1.0)
+        sfr2 = dpl(t, alpha=1.0, beta=2.0, tau=3e9, age=_AGE_UNIV_YR, log_total_mass=2.0)
         mass1 = float(jnp.sum(0.5 * (sfr1[:-1] + sfr1[1:]) * dt))
         mass2 = float(jnp.sum(0.5 * (sfr2[:-1] + sfr2[1:]) * dt))
         # mass2 should be 10× mass1 (log_total_mass increases norm by 10×)
@@ -380,21 +392,23 @@ class TestLnorm:
     def test_nonnegative(self):
         """SFR is non-negative."""
         t = jnp.logspace(6, 10, 500)
-        sfr = lnorm(t, log_total_mass=1.0, peak_lbt=3e9, width=0.5)
+        sfr = lnorm(t, log_total_mass=1.0, peak=3e9, width=0.5, age=_AGE_UNIV_YR)
         assert jnp.all(sfr >= 0)
 
     def test_peak_in_log_space(self):
-        """Peak should be near peak_lbt."""
-        t = jnp.logspace(6, 10, 5000)
-        sfr = lnorm(t, log_total_mass=1.0, peak_lbt=1e9, width=0.3)
-        peak_t = float(t[jnp.argmax(sfr)])
-        assert abs(jnp.log10(peak_t) - jnp.log10(1e9)) < 0.5
+        """Peak sits at cosmic time `peak` after formation → lookback age-peak."""
+        age = _AGE_UNIV_YR
+        peak = 1e9  # cosmic time since formation
+        t = jnp.logspace(6, 10.2, 5000)
+        sfr = lnorm(t, log_total_mass=1.0, peak=peak, width=0.3, age=age)
+        peak_t_lookback = float(t[jnp.argmax(sfr)])
+        # Peak in cosmic time `peak` ⇒ lookback ≈ age - peak.
+        assert abs(jnp.log10(peak_t_lookback) - jnp.log10(age - peak)) < 0.5
 
     def test_asymmetric_in_linear(self):
         """Log-normal is asymmetric in linear time."""
         t = jnp.logspace(6, 10, 5000)
-        peak_lbt = 3e9
-        sfr = lnorm(t, log_total_mass=1.0, peak_lbt=peak_lbt, width=0.5)
+        sfr = lnorm(t, log_total_mass=1.0, peak=3e9, width=0.5, age=_AGE_UNIV_YR)
         peak_idx = jnp.argmax(sfr)
         # Sum of SFR below peak vs above peak (in linear time) should differ
         sum_below = jnp.sum(sfr[:peak_idx])
@@ -582,8 +596,17 @@ class TestAllModelsJitAndGrad:
             (tsnorm, _TSNORM_KW),
             (snorm, _SNORM_KW),
             (norm, {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9}),
-            (lnorm, {"log_total_mass": 1.0, "peak_lbt": 3e9, "width": 0.5}),
-            (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_total_mass": 1.0}),
+            (lnorm, {"log_total_mass": 1.0, "peak": 3e9, "width": 0.5, "age": _AGE_UNIV_YR}),
+            (
+                dpl,
+                {
+                    "alpha": 1.5,
+                    "beta": 1.0,
+                    "tau": 3e9,
+                    "age": _AGE_UNIV_YR,
+                    "log_total_mass": 1.0,
+                },
+            ),
             (constant, {"log_total_mass": 10.0, "start": 0.0, "end": AGEMAX_YR}),
             (exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
             (delayed_exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}),
@@ -604,7 +627,13 @@ class TestAllModelsJitAndGrad:
             (snorm, _SNORM_KW, "log_total_mass"),
             (
                 dpl,
-                {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_total_mass": 1.0},
+                {
+                    "alpha": 1.5,
+                    "beta": 1.0,
+                    "tau": 3e9,
+                    "age": _AGE_UNIV_YR,
+                    "log_total_mass": 1.0,
+                },
                 "log_total_mass",
             ),
             (exponential, {"log_total_mass": 1.0, "tau": 1e9, "start": 0.0}, "log_total_mass"),
@@ -638,8 +667,17 @@ class TestAllModelsJitAndGrad:
         for fn, kw in [
             (tsnorm, _TSNORM_KW),
             (snorm, _SNORM_KW),
-            (lnorm, {"log_total_mass": 1.0, "peak_lbt": 3e9, "width": 0.5}),
-            (dpl, {"alpha": 1.5, "beta": 1.0, "tau": 3e9, "log_total_mass": 1.0}),
+            (lnorm, {"log_total_mass": 1.0, "peak": 3e9, "width": 0.5, "age": _AGE_UNIV_YR}),
+            (
+                dpl,
+                {
+                    "alpha": 1.5,
+                    "beta": 1.0,
+                    "tau": 3e9,
+                    "age": _AGE_UNIV_YR,
+                    "log_total_mass": 1.0,
+                },
+            ),
         ]:
             sfr = fn(t, **kw)
             assert jnp.all(jnp.isfinite(sfr)), f"NaN in {fn.__name__}"

@@ -284,7 +284,46 @@ def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
         raise ValueError(
             f"SVO returned zero rows for filter '{svo_id}'. Check that the filter ID is correct."
         )
+    _warn_if_energy_detector(svo_id)
     return wave, trans
+
+
+def _warn_if_energy_detector(svo_id: str) -> None:
+    """Warn when SVO marks the filter as an energy-counting detector.
+
+    SVO records ``DetectorType`` per filter: ``"0"`` = energy counter,
+    ``"1"`` = photon counter. tengri's default photometric convention is
+    photon-counting Bessell (``w = 1/λ``; ADR-0017), which assumes a
+    photon-counting transmission curve. For an energy-type curve the user
+    likely wants the energy convention
+    (``Photometry.from_names(..., convention="energy")``); emit a heads-up.
+    Best-effort: silently skips if the metadata is unavailable.
+    """
+    import warnings
+
+    try:
+        from astroquery.svo_fps import SvoFps
+
+        meta = SvoFps.get_filter_list(
+            facility=svo_id.split("/")[0], filter_name=svo_id.split("/")[-1].split(".")[-1]
+        )
+        # Match the exact filterID row and read DetectorType.
+        for row in meta:
+            if str(row.get("filterID", "")) == svo_id:
+                det = str(row.get("DetectorType", "")).strip()
+                if det == "0":
+                    warnings.warn(
+                        f"SVO filter '{svo_id}' is an ENERGY-counting detector "
+                        f"(DetectorType=0). tengri defaults to the photon-counting "
+                        f"'bessell' convention (w=1/λ); for this curve you likely want "
+                        f"Photometry.from_names(..., convention='energy'). "
+                        f"See docs/units.md (Photometric filter-convolution convention).",
+                        stacklevel=3,
+                    )
+                break
+    except Exception:
+        # Metadata lookup is best-effort; never block a filter download on it.
+        pass
 
 
 # ── Public API ────────────────────────────────────────────────────

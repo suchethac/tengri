@@ -63,7 +63,7 @@ def test_dpl_signature_lists_expected_params() -> None:
     sig = inspect.signature(builders.sfh.dpl)
     params = list(sig.parameters)
     assert params[0] == "defaults", "wildcard kwarg must come first for ergonomics"
-    assert set(params[1:]) == {"alpha", "beta", "tau_gyr", "log_total_mass"}
+    assert set(params[1:]) == {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
     for name, p in sig.parameters.items():
         assert p.kind == inspect.Parameter.KEYWORD_ONLY, name
 

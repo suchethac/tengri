@@ -1,4 +1,13 @@
 {
+ "C_AA_PER_S": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
  "age_myr": [
   {
    "is_class": false,
@@ -571,6 +580,15 @@
    "name": "float64"
   }
  ],
+ "continu_lambda": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
+  }
+ ],
  "dust_config": [
   {
    "is_class": false,
@@ -729,6 +747,15 @@
    "module": "jaxlib",
    "module_short": "jaxlib",
    "name": "ArrayImpl"
+  }
+ ],
+ "log_total_mass_age": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
   }
  ],
  "lya_lum": [
@@ -969,6 +996,22 @@
    "name": "nanmax"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "_Environ"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "params": [
   {
    "is_class": false,
@@ -1090,7 +1133,7 @@
    "name": "setup_style"
   }
  ],
- "sfh_config": [
+ "sfh_config_age": [
   {
    "is_class": false,
    "is_explicit": false,

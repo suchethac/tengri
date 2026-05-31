@@ -37,7 +37,13 @@ log_lbol_grid = np.linspace(9.0, 13.0, 7)
 norm = mpl.colors.Normalize(vmin=log_lbol_grid.min(), vmax=log_lbol_grid.max())
 cmap = plt.get_cmap("viridis")
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
+SFH = {
+    "type": "const",
+    "*": tengri.FIXED,
+    "log_total_mass": 10.61,
+    "start_gyr": 13.0,
+    "end_gyr": 0.0,
+}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.5}
 
 ssp = tengri.load_ssp()

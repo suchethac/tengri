@@ -44,7 +44,7 @@ class TestSFHForms:
                 "lnorm",
                 {
                     "sfh_lnorm_log_total_mass": 0.0,
-                    "sfh_lnorm_peak_lbt_gyr": 3.0,
+                    "sfh_lnorm_peak_gyr": 3.0,
                     "sfh_lnorm_width_gyr": 1.0,
                 },
             ),

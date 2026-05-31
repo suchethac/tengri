@@ -23,12 +23,21 @@ warnings.filterwarnings("ignore")
 from pathlib import Path
 
 import numpy as np
+from reproduction.cigale._drivers import cigale_driver as C, units as U
 
-import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from reproduction.cigale._drivers import cigale_driver as C
-from reproduction.cigale._drivers import units as U
+
+# Use the CIGALE-sourced Dale2014 templates for the audit (CIGALE-faithful
+# comparison). The shipped ``dale2014_templates.h5`` is the Wyoming-source
+# bit-faithful Dale et al. 2014 release pinned by the contract tests; the
+# audit script overrides to the CIGALE-bundled version so the reproduction
+# panel matches CIGALE's actual SED template. Both files come from
+# ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
+from tengri.components.dust.emission_templates import register_dale2014_tabulated
+_CIGALE_DALE_PATH = Path(__file__).parents[3] / "data" / "dale2014_templates_cigale.h5"
+if _CIGALE_DALE_PATH.is_file():
+    register_dale2014_tabulated(str(_CIGALE_DALE_PATH), name="dale2014")
 
 SSP_PATH = Path(__file__).parent / "data" / "bc03_from_cigale.h5"
 
@@ -52,12 +61,22 @@ _LOG10_ZSUN = -1.8477  # tengri's Asplund-2009 constant (Zsun = 0.0142)
 _Z_ABS_CIGALE = 0.02   # CIGALE bc03(metallicity=0.02) — Padova absolute Z
 MET_LOGZSOL_FIDUCIAL = float(np.log10(_Z_ABS_CIGALE) - _LOG10_ZSUN)  # ≈ +0.149
 
-# CIGALE modified_starburst(E_BV_lines=0.3) ↔ tengri two_component (τ_bc, τ_diff)
-# via Calzetti R_V = 4.05 and the E(B-V)_cont / E(B-V)_lines = 0.44 split.
+# CIGALE ``dustatt_modified_starburst(E_BV_lines=0.3, E_BV_factor=0.44)``
+# applies a SINGLE Calzetti screen to the stellar continuum at
+# ``E_BV_stars = E_BV_factor × E_BV_lines = 0.132`` (and a separate
+# heavier attenuation to nebular lines at the full ``E_BV_lines``).
+# tengri's ``two_component`` (Charlot-Fall) maps via:
+#   tau_diff = R_V × E_BV_stars / 1.086   (single stellar screen, all ages)
+#   tau_bc   = 0                          (CIGALE has no BC-only attenuation)
+# Earlier audit versions used ``tau_bc = R_V × (1-F) × E_BV_lines / 1.086``,
+# which inflated young-star attenuation to the nebular value — that drove
+# tengri ``L_absorbed`` ~19% higher than CIGALE ``dust.luminosity`` at this
+# fiducial. Corrected 2026-05-29 to match CIGALE's actual model.
 _E_BV_LINES, _R_V, _F = 0.3, 4.05, 0.44
+_E_BV_STARS = _F * _E_BV_LINES
 DUST_TAU_FIDUCIAL = {
-    "tau_diff": _R_V * _F * _E_BV_LINES / 1.086,
-    "tau_bc": _R_V * (1.0 - _F) * _E_BV_LINES / 1.086,
+    "tau_diff": _R_V * _E_BV_STARS / 1.086,
+    "tau_bc": 0.0,
 }
 
 print(
@@ -119,7 +138,7 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
     }
     if with_dust or with_ir:
         kw["dust"] = {
-            "type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti",
+            "type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
             "tau_bc": Fixed(DUST_TAU_FIDUCIAL["tau_bc"] if with_dust else 0.0),
             "tau_diff": Fixed(DUST_TAU_FIDUCIAL["tau_diff"] if with_dust else 0.0),
             "*": FIXED,
@@ -133,7 +152,33 @@ def fiducial_kwargs(*, with_neb: bool = False, with_dust: bool = False,
     if with_neb:
         kw["neb"] = {"type": "cue", "*": FIXED}
     if with_agn:
-        kw["agn"] = {"type": "silva04", "*": FIXED}
+        # Mirror reproduction §9 / §10. All tengri AGN library defaults
+        # match CIGALE skirtor2016 defaults (oa=40, tau=7, p=q=1, i=30,
+        # EBV=0.03, T=100, β=1.6). Two CIGALE-equivalent settings are
+        # set explicitly here:
+        #
+        # 1. ``agn_log_lbol = -0.620`` matches CIGALE's
+        #    ``sed.info["agn.accretion_power"] = 0.240 L_sun`` at the
+        #    §9 fiducial — the intrinsic 4π disc bolometric (the L_bol
+        #    that the accretion engine actually produces). PR #492
+        #    used ``agn.disk_luminosity`` (observed at i=30°, post-
+        #    extinction) as the reference, which was wrong by ~1.6×.
+        #
+        # 2. ``agn_fracAGN = 0.3`` mirrors CIGALE's actual ``fracAGN``
+        #    parameter (skirtor2016.py:498 with lambda_fracAGN=0/0).
+        #    The AGN component now derives
+        #    ``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)``
+        #    from ``state.derived["L_absorbed"]`` natively (PR #522 —
+        #    cross-component coupling). Replaces the empirically-tuned
+        #    ``agn_torus_frac=0.71`` workaround from earlier audits.
+        kw["agn"] = {
+            "type": "composable",
+            "disc": {"type": "schartmann2005", "*": FIXED},
+            "torus": {"type": "skirtor", "*": FIXED},
+            "agn_log_lbol": Fixed(-0.42),
+            "agn_fracAGN": Fixed(0.3),
+            "*": FIXED,
+        }
     return kw
 
 
@@ -209,13 +254,13 @@ except Exception as e:
 # --------------------------------------------------------------------------
 # §9 AGN
 # --------------------------------------------------------------------------
-print("\n--- §9 Stellar+AGN (silva04 vs CIGALE skirtor2016) ---")
+print("\n--- §9 Stellar+AGN (schartmann2005 + skirtor torus + polar dust) ---")
 try:
-    model_agn = SEDModel.build(**fiducial_kwargs(with_agn=True))
+    model_agn = SEDModel.build(**fiducial_kwargs(with_dust=True, with_agn=True))
     wave_t9, sed_t9 = model_agn.predict_rest_sed({})
     tengri_agn_ok = True
 except Exception as e:
-    print(f"  tengri silva04 build/predict failed: {e}")
+    print(f"  tengri composable AGN build/predict failed: {e}")
     tengri_agn_ok = False
 
 try:
@@ -223,9 +268,11 @@ try:
         ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20,
                             f_burst=0.0, sfr_A=1.0, normalise=True)),
         ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-        ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=40,
-                             disk_type=1, delta=-0.36, fracAGN=0.3, law=0, EBV=0.03,
-                             temperature=100, emissivity=1.6)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
+                             disk_type=1, delta=0, fracAGN=0.3,
+                             lambda_fracAGN="0/0", law=0, EBV=0.03,
+                             temperature=100.0, emissivity=1.6)),
     ])
     wave_c9, L_c9 = C.to_lnu(sed_c9)
     cig_agn_ok = True
@@ -234,9 +281,150 @@ except Exception as e:
     cig_agn_ok = False
 
 if tengri_agn_ok and cig_agn_ok:
-    r = common_grid_ratio(wave_c9, L_c9, np.asarray(wave_t9), np.asarray(sed_t9),
-                          lo=1e3, hi=1e7)
-    stats("§9 stellar+AGN (10³-10⁷Å)", r)
+    # Per-band ratios — same bins as §6, plus 30 µm peak and 100 µm tail.
+    bins = [
+        ("§9 UV    (10³-10⁴Å)",         1e3,  1e4),
+        ("§9 opt   (4000-2×10⁴Å)",      4e3,  2e4),
+        ("§9 NIR   (2×10⁴-2×10⁵Å)",     2e4,  2e5),
+        ("§9 MIR   (2×10⁵-1×10⁶Å) [30µm peak]",  2e5,  1e6),
+        ("§9 FIR   (10⁶-10⁷Å) [100µm tail]",     1e6,  1e7),
+        ("§9 full  (10³-10⁷Å)",         1e3,  1e7),
+    ]
+    for label, lo, hi in bins:
+        stats(label, common_grid_ratio(wave_c9, L_c9, np.asarray(wave_t9),
+                                       np.asarray(sed_t9), lo=lo, hi=hi))
+
+
+# --------------------------------------------------------------------------
+# §10 Radio — tengri ``radio_total`` vs CIGALE ``radio`` module
+# --------------------------------------------------------------------------
+#
+# Apples-to-apples for SF synchrotron: both codes use the FIR/radio
+# correlation with a 1.4 GHz reference and L_ν ∝ ν^{-α}, so matched
+# q_IR + α_SF + dust luminosity should give the same SED.
+#
+# AGN radio is **definitionally different**: CIGALE uses
+# R_AGN = L_ν(5GHz)/L_ν(2500Å) referenced against the intrinsic disc;
+# tengri uses log10(L_ν(5GHz)/L_ν(B-band)) and reconstructs L_ν(B) from
+# L_bol via Hopkins+2007 BC_B = 5.15. We turn the AGN component off in
+# both codes for the audit ratio (R_agn = 0, loudness → -inf-effectively)
+# and report only the SF synchrotron.
+print("\n--- §10 Radio (Bell+2003 SF synchrotron — tengri vs CIGALE) ---")
+try:
+    from tengri.components.radio.radio import radio_sfr_bell2003
+    # CIGALE radio chain (SF only — R_agn=0 zeroes AGN radio).
+    sed_c10 = C.run_chain([
+        ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20,
+                            f_burst=0.0, sfr_A=1.0, normalise=True)),
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("dale2014", dict(alpha=2.0)),
+        ("radio", dict(qir_sf=2.58, alpha_sf=0.8, R_agn=0.0, alpha_agn=0.7)),
+    ])
+    wave_c10, L_c10 = C.to_lnu(sed_c10)  # Å, erg/s/Hz
+
+    # CIGALE publishes dust.luminosity in W → erg/s.
+    L_dust_W = float(sed_c10.info["dust.luminosity"])
+    L_dust_erg_per_s = L_dust_W * 1e7
+
+    # Evaluate tengri's SF-synchrotron on CIGALE's radio band wave grid.
+    # Restrict to the clean overlap band: tengri masks below
+    # ``_RADIO_WAVE_MIN_AA = 1e7 Å`` (3 mm); above ~1e11 Å the CIGALE
+    # grid is exhausted. The 1e8–1e10 Å (1 cm–1 m) bracket is the
+    # observational radio band and is where both codes are well-defined.
+    radio_mask = (wave_c10 >= 1e8) & (wave_c10 <= 1e10)
+    wave_radio_c = wave_c10[radio_mask]
+    L_radio_c = L_c10[radio_mask]
+    L_radio_t = np.asarray(
+        radio_sfr_bell2003(
+            wave_radio_c, L_ir=L_dust_erg_per_s, q_ir=2.58, alpha_sf=0.8,
+        )
+    )
+    r = L_radio_t / L_radio_c
+    r = r[np.isfinite(r) & (r > 0)]
+    stats("§10 radio SF (10⁸-10¹⁰Å = 1cm-1m, q_IR=2.58)", r)
+except Exception as e:  # pragma: no cover
+    print(f"  §10 radio panel FAILED: {e}")
+
+
+# --------------------------------------------------------------------------
+# §11 X-ray — tengri ``xray_total`` vs CIGALE ``yang20`` (X-CIGALE)
+# --------------------------------------------------------------------------
+#
+# tengri's xray module was built to follow Yang+2020 (PR #325 added
+# N_H photoelectric + Compton absorption). yang20 in pcigale 2025.1 is
+# the merged X-CIGALE module. The audit feeds matched inputs derived
+# from the CIGALE chain into tengri's ``xray_total`` and compares to
+# CIGALE's ``yang20`` SED in the 0.1–50 Å band (~0.25–124 keV).
+#
+# log_nh = 20.0 in tengri turns absorption off so we compare unabsorbed
+# physics against yang20 (which has no N_H knob).
+print("\n--- §11 X-ray (tengri xray_total vs CIGALE yang20) ---")
+try:
+    from tengri.components.xray.xray import xray_total
+    sed_c11 = C.run_chain([
+        ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20,
+                            f_burst=0.0, sfr_A=1.0, normalise=True)),
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
+                             disk_type=1, delta=0, fracAGN=0.3,
+                             lambda_fracAGN="0/0", law=0, EBV=0.03,
+                             temperature=100.0, emissivity=1.6)),
+        ("yang20", dict(gam=1.8, E_cut=300, alpha_ox=-1.5,
+                        max_dev_alpha_ox=999, angle_coef="0.5 & 0",
+                        det_lmxb=0.0, det_hmxb=0.0)),
+    ])
+    wave_c11, L_c11 = C.to_lnu(sed_c11)
+
+    # Pull matched inputs from the CIGALE chain (convert SI → cgs).
+    sfr = float(sed_c11.info["sfh.sfr100Myrs"])             # Msun/yr
+    mstar = float(sed_c11.info["stellar.m_star"])           # Msun
+    age_m_star_gyr = float(sed_c11.info["stellar.age_m_star"]) * 1e-3
+    metallicity_z = float(sed_c11.info["stellar.metallicity"])
+    Lnu_2500_30deg_W = float(sed_c11.info["agn.intrin_Lnu_2500A_30deg"])
+    Lnu_2500_30deg = Lnu_2500_30deg_W * 1e7                 # erg/s/Hz
+    agn_i_deg = float(sed_c11.info["agn.i"])
+    cos_inc = float(np.cos(np.deg2rad(agn_i_deg)))
+
+    # Restrict to the yang20 native band (1e-2 to 50 Å ~ 0.25-1240 keV).
+    xray_mask = (wave_c11 >= 1e-2) & (wave_c11 <= 50.0)
+    wave_xray_c = wave_c11[xray_mask]
+    L_xray_c = L_c11[xray_mask]
+    L_xray_t = np.asarray(
+        xray_total(
+            wave_xray_c,
+            sfr=sfr,
+            stellar_mass=mstar,
+            metallicity_z=metallicity_z,
+            stellar_age_gyr=age_m_star_gyr,
+            l_2500_30deg=Lnu_2500_30deg,
+            gamma_hmxb=2.0, gamma_lmxb=1.6, gamma_agn=1.8,
+            E_cut=300.0,
+            delta_alpha_ox=0.0,
+            cos_inc=cos_inc, apply_anisotropy=True, a1=0.5, a2=0.0,
+            log_nh=20.0,  # absorption off — yang20 has no N_H knob
+        )
+    )
+    r = L_xray_t / L_xray_c
+    r = r[np.isfinite(r) & (r > 0)]
+
+    # Energy-band sub-stats.  E [keV] = 12.398 / λ[Å].
+    # Energy bands. Restrict to wavelengths where both codes are well-
+    # defined: yang20's native grid runs ~1e-2 to 5 Å with smooth shape.
+    # Tengri's xray_total uses an analytic power-law on the same grid.
+    bins = [
+        ("§11 X-ray 0.1-10keV (1.24-124Å)", 1.24, 124.0),
+        ("§11 soft 0.5-2keV (6.2-24.8Å)", 6.2, 24.8),
+        ("§11 hard 2-10keV (1.24-6.2Å)", 1.24, 6.2),
+    ]
+    for label, lo_aa, hi_aa in bins:
+        sel = (wave_xray_c >= lo_aa) & (wave_xray_c <= hi_aa) & np.isfinite(L_xray_c) & (L_xray_c > 0)
+        if sel.any():
+            stats(label, (L_xray_t / L_xray_c)[sel])
+        else:
+            print(f"  {label} — no overlap")
+except Exception as e:  # pragma: no cover
+    print(f"  §11 X-ray panel FAILED: {e}")
 
 
 print("\n" + "=" * 80)

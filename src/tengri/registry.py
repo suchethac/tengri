@@ -426,90 +426,82 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Curated metadata keyed by **canonical runtime** name (as registered in
-# ``DUST_EMISSION_MODELS`` / declared in
-# ``parameters.groups._LAZY_DUST_EMISSION_TYPES``). Any name returned by
-# ``_valid_dust_emission_types()`` that is missing here gets a generic stub
-# row — preferable to silently dropping it (the drift footgun fixed for
-# #495 / #355; ADR-0005 + ADR-0008).
-_DUST_EMISSION_METADATA: dict[str, dict[str, object]] = {
+# Dust emission metadata keyed by the canonical registry name in
+# ``DUST_EMISSION_MODELS``. Each entry supplies citation/short_doc; the
+# accepted set of build-time names is derived from the live registry (see
+# :func:`list_dust_emission_models` below), so the validator and the
+# introspection helper can never drift apart (closes #495 — same pattern
+# as PR #489 for AGN blocks).
+_DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
+    "dl07": {
+        "status": "production",
+        "citation": "Draine & Li 2007 (ApJ 657, 810)",
+        "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah (alias of draine_li2007)",
+    },
     "draine_li2007": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
         "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah",
-        "aliases": ("dl07",),
     },
-    "dl07_tabulated": {
+    "dl14": {
         "status": "production",
-        "citation": "Draine & Li 2007 (ApJ 657, 810)",
-        "short_doc": "Tabulated DL07 templates loaded via register_dl07_tabulated",
-        "aliases": (),
+        "citation": "Draine et al. 2014 (ApJ 780, 172)",
+        "short_doc": "Updated DL with extended PAH/silicate features (alias of draine_li2014)",
     },
     "draine_li2014": {
         "status": "production",
         "citation": "Draine et al. 2014 (ApJ 780, 172)",
         "short_doc": "Updated DL with extended PAH and silicate features",
-        "aliases": ("dl14",),
-    },
-    "draine2021_pah": {
-        "status": "experimental",
-        "citation": "Draine et al. 2021 (ApJ 917, 3)",
-        "short_doc": "Draine+2021 PAH-only emission templates",
-        "aliases": (),
     },
     "dale2014": {
         "status": "production",
         "citation": "Dale et al. 2014 (ApJ 784, 83)",
         "short_doc": "SFR-driven empirical IR template family (alpha_sf)",
-        "aliases": (),
-    },
-    "casey2012": {
-        "status": "production",
-        "citation": "Casey 2012 (MNRAS 425, 3094)",
-        "short_doc": "Modified blackbody + mid-IR power law (T_dust, beta, alpha)",
-        "aliases": (),
-    },
-    "modified_blackbody": {
-        "status": "production",
-        "citation": "Casey 2012 (MNRAS 425, 3094)",
-        "short_doc": "Single-temperature modified blackbody (analytic)",
-        "aliases": ("mbb",),
-    },
-    "schreiber2016": {
-        "status": "production",
-        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
-        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
-        "aliases": (),
-    },
-    "pah_drude": {
-        "status": "experimental",
-        "citation": "Smith et al. 2007 (ApJ 656, 770)",
-        "short_doc": "Drude-profile PAH emission features",
-        "aliases": (),
-    },
-    "energy_balance_split": {
-        "status": "experimental",
-        "citation": "da Cunha et al. 2008 (MNRAS 388, 1595)",
-        "short_doc": "Split-temperature energy-balance model (warm + cold dust)",
-        "aliases": (),
     },
     "astrodust": {
         "status": "experimental",
         "citation": "Hensley & Draine 2023 (ApJ 948, 55)",
         "short_doc": "Astrodust + PAH unified grain model",
-        "aliases": (),
     },
     "themis": {
         "status": "experimental",
         "citation": "Jones et al. 2017 (A&A 602, A46)",
         "short_doc": "THEMIS amorphous-carbon grain model",
-        "aliases": (),
     },
     "bosa": {
         "status": "experimental",
         "citation": "Boquien et al. 2019 (CIGALE BOSA grids)",
         "short_doc": "BOSA dust SED templates",
-        "aliases": (),
+    },
+    "mbb": {
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Single-temperature modified blackbody (alias of modified_blackbody)",
+    },
+    "modified_blackbody": {
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Single-temperature modified blackbody (analytic)",
+    },
+    "casey2012": {
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Modified blackbody + mid-IR power law (analytic)",
+    },
+    "schreiber2016": {
+        "status": "production",
+        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
+        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+    },
+    "pah_drude": {
+        "status": "production",
+        "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
+        "short_doc": "Drude-profile PAH emission features",
+    },
+    "energy_balance_split": {
+        "status": "experimental",
+        "citation": "tengri internal",
+        "short_doc": "Energy-balance redistribution helper (utility)",
     },
 }
 
@@ -521,41 +513,28 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
     **attenuation** laws, see :func:`list_dust_laws`.
 
-    Each row's ``name`` is the canonical runtime registry name accepted by
-    :class:`SEDModel.build` (e.g. ``draine_li2007``); the ``aliases``
-    field lists nicknames documented in the literature. Both forms used to
-    diverge (#495) — this view is now derived from
-    :func:`tengri.parameters.groups._valid_dust_emission_types` so the
-    builder validator and this menu always agree.
-
-    Notes
-    -----
-    Templates are loaded lazily from data files via
-    :func:`register_dl07_tabulated` etc. Lazy types are advertised even
-    before their grids are loaded, so the menu reflects what's *available
-    to register* — not just what's currently in ``DUST_EMISSION_MODELS``.
+    The set of returned names is derived from the live
+    :data:`DUST_EMISSION_MODELS` registry (which the
+    :meth:`SEDModel.build` validator also consults), so the listing and
+    the validator can never drift apart. Closes #495.
     """
-    from tengri.parameters.groups import _valid_dust_emission_types
+    # Importing the module triggers the ``@register_emission_model`` decorators
+    # plus the lazy-loader bindings at the bottom of ``emission.py``.
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
-    canonical_names = _valid_dust_emission_types()
-    out: list[dict] = []
-    for name in canonical_names:
+    out = []
+    for name in DUST_EMISSION_MODELS:
         meta = _DUST_EMISSION_METADATA.get(
             name,
-            {
-                "status": "experimental",
-                "citation": "(metadata missing — please file an issue)",
-                "short_doc": "Runtime-registered emission model",
-                "aliases": (),
-            },
+            {"status": "production", "citation": "", "short_doc": ""},
         )
-        row = {
+        entry = {
             "name": name,
-            "kind": "dust_emission",
             **meta,
             "use": _usage_hint(name, "dust_emission"),
+            "kind": "dust_emission",
         }
-        out.append(row)
+        out.append(entry)
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -683,6 +662,8 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
     ("plot_sfh_comparison", "Overlay multiple SFH(t) curves (e.g. truth vs posterior)"),
     ("plot_corner_comparison", "Two-posterior corner plot (e.g. with truth)"),
     ("safe_corner", "Corner plot wrapper that handles fixed parameters gracefully"),
+    ("plot_1d_posterior", "Marginal histogram of one parameter + median/16/84"),
+    ("plot_calibration", "Chebyshev calibration polynomial with 16/84 band"),
     ("setup_style", "Apply tengri matplotlib style (serif, tight, 150 dpi)"),
     ("diagnostics_table", "ESS / R-hat / divergences table for sampling diagnostics"),
 )

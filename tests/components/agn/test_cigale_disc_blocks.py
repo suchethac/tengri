@@ -117,3 +117,87 @@ def test_skirtor_and_schartmann_differ() -> None:
     L_sc = sc(wave_aa, 10.0)
     rel = float(jnp.max(jnp.abs(L_sk - L_sc)) / jnp.max(L_sk + L_sc))
     assert rel > 0.05
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Polar dust integration in torus/skirtor (CIGALE skirtor2016 parity)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.contract
+def test_skirtor_torus_polar_dust_on_by_default() -> None:
+    """agn_polar_ebv default = 0.03 (CIGALE skirtor2016 default); the
+    block's keyword default must match the param-spec default and
+    produce a non-zero polar-dust contribution."""
+    torus = resolve_agn_block("torus", "skirtor")
+    wave_aa = jnp.geomspace(1e3, 1e7, 300)
+    L_default = torus(wave_aa, agn_log_lbol=-0.42, l5100_disc=jnp.zeros_like(wave_aa))
+    L_off = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.0,
+    )
+    # Default must DIFFER from explicit-off (proves polar dust is on).
+    assert float(jnp.max(jnp.abs(L_default - L_off))) > 0.0
+
+
+@pytest.mark.conservation
+def test_skirtor_torus_polar_dust_redistributes_energy() -> None:
+    """Polar dust redistributes energy from SKIRTOR thermal-dust peak
+    to the FIR tail — total integrated IR luminosity is conserved
+    (matches CIGALE ``skirtor2016.py:389`` where ``norm = 1/∫(dust +
+    polar)`` includes both contributions). Polar-on lifts the FIR,
+    polar-off lifts the MIR peak; total stays the same.
+    """
+    torus = resolve_agn_block("torus", "skirtor")
+    wave_aa = jnp.geomspace(1e3, 1e7, 300)
+    L_off = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.0,
+    )
+    L_on = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.03,
+        agn_polar_T=100.0,
+        agn_polar_beta=1.6,
+        agn_oa_skirtor=40.0,
+    )
+    # Total IR luminosity should be conserved (within numerical precision)
+    int_off = float(jnp.trapezoid(L_off, wave_aa))
+    int_on = float(jnp.trapezoid(L_on, wave_aa))
+    np.testing.assert_allclose(int_on, int_off, rtol=0.01)
+    # FIR (100 µm) gets the polar bump
+    i100 = int(np.argmin(np.abs(np.asarray(wave_aa) - 1.0e6)))
+    assert float(L_on[i100]) > float(L_off[i100])
+
+
+@pytest.mark.conservation
+def test_skirtor_torus_polar_dust_lifts_fir_tail() -> None:
+    """At the §9 CIGALE fiducial, polar dust must lift the 100 µm tail
+    by a factor >2 — the regression that motivated the audit."""
+    torus = resolve_agn_block("torus", "skirtor")
+    wave_aa = jnp.geomspace(1e3, 1e7, 400)
+    L_off = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.0,
+    )
+    L_on = torus(
+        wave_aa,
+        agn_log_lbol=-0.42,
+        l5100_disc=jnp.zeros_like(wave_aa),
+        agn_polar_ebv=0.03,
+        agn_polar_T=100.0,
+        agn_polar_beta=1.6,
+        agn_oa_skirtor=40.0,
+    )
+    # Index nearest 100 µm:
+    i100 = int(np.argmin(np.abs(np.asarray(wave_aa) - 1.0e6)))
+    ratio = float(L_on[i100] / L_off[i100])
+    assert ratio > 2.0, f"100 um lift {ratio:.2f}x — expected >2x"
