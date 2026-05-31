@@ -607,11 +607,17 @@ te_tor_g = U.regrid(w_te, np.clip(L_te, 0, None), grid)
 te_disc_n = te_disc_g / np.interp(2500, grid, te_disc_g)
 te_tor_n = te_tor_g / np.max(te_tor_g) * 0.5
 te_total = te_disc_n + te_tor_n
+# tengri's cat3d_wind torus grid ends near 1.5e6 Å; mask the sum beyond it so
+# the curve ends cleanly instead of cliffing down to the bare disc tail.
+te_total = np.where(te_tor_g > 0, te_total, np.nan)
 
 fig, ax = plt.subplots(figsize=(8.5, 5))
 ax.loglog(grid, af_total, "C0-", lw=1.6, label="AGNFITTER-RX  THB21 + CAT3D-Wind")
 ax.loglog(grid, te_total, "C1--", lw=1.6, label="tengri  qsogen + cat3d_wind")
-ax.set_xlim(1e3, 1e7)
+# tengri's packaged cat3d_wind grid spans to ~1.5e6 Å (the build's
+# common-wavelength intersection); cap the axis there so the comparison runs
+# only where both torus libraries have data, not into the bare disc tail.
+ax.set_xlim(1e3, 1.5e6)
 ax.set_ylim(1e-3, 5)
 ax.set_xlabel(r"$\lambda$ [Å]")
 ax.set_ylabel(r"$L_\nu$ (disk norm. at 2500 Å)")
@@ -829,47 +835,34 @@ def _assemble(disc_wL, torus_wL, xray_wL, radio_fL, *, f_torus=0.5, f_xray=3e-2,
     return disc + tor + xr + rad
 
 
+# Dedicated radio grid spanning the full DPL (turnover 1e10 → aging cutoff
+# 1e13 Hz); the §11 grid stopped at 1e12 and truncated the jet mid-curve.
+freq_cap = np.geomspace(1e8, 3e13, 800)
+wave_cap = jnp.asarray(U.C_ANGSTROM_PER_S / freq_cap)
+_dpl_kw = dict(radio_loudness=1.0, alpha1=-0.75, alpha2=0.5, log_nu_t=10.0, log_nu_cut=13.0)
+
 # AGNFITTER-RX side.
 w_d, L_d = A.disk_template("THB21")
 w_t, L_t = A.torus_template("CAT3D", incl=0.0)
 xw, xL = A.disk_xray_extension(w_d, norm_at(w_d, L_d, 2500.0) * 1e30, scatter=0.0)
-L_rad_dpl = np.asarray(
-    radio_agn_dpl(
-        jnp.asarray(U.C_ANGSTROM_PER_S / freq),
-        1e45,
-        radio_loudness=1.0,
-        alpha1=-0.75,
-        alpha2=0.5,
-        log_nu_t=10.0,
-        log_nu_cut=13.0,
-    )
-)
-af_sed = _assemble((w_d, L_d), (w_t, L_t), (xw, xL), (freq, L_rad_dpl))
+L_rad_dpl = np.asarray(radio_agn_dpl(wave_cap, 1e45, **_dpl_kw))
+af_sed = _assemble((w_d, L_d), (w_t, L_t), (xw, xL), (freq_cap, L_rad_dpl))
 
 # tengri side.
 wd_t, Ld_t = tengri_disc("qsogen")
 wt_t, Lt_t = tengri_torus("cat3d_wind")
 Lc_t = np.asarray(xray_agn_corona_from_disc(jnp.asarray(wave_x), 1e30, delta_alpha_ox=0.0))
-Lr_t = np.asarray(
-    radio_agn_dpl(
-        jnp.asarray(U.C_ANGSTROM_PER_S / freq),
-        1e45,
-        radio_loudness=1.0,
-        alpha1=-0.75,
-        alpha2=0.5,
-        log_nu_t=10.0,
-        log_nu_cut=13.0,
-    )
-)
-te_sed = _assemble((wd_t, Ld_t), (wt_t, Lt_t), (wave_x, Lc_t), (freq, Lr_t))
+Lr_t = np.asarray(radio_agn_dpl(wave_cap, 1e45, **_dpl_kw))
+te_sed = _assemble((wd_t, Ld_t), (wt_t, Lt_t), (wave_x, Lc_t), (freq_cap, Lr_t))
+
+# Mask where every component is absent (grid edges) so each SED ends cleanly
+# at its own coverage rather than plunging vertically to zero.
+af_plot = np.where(af_sed > 0, nu_grid * af_sed, np.nan)
+te_plot = np.where(te_sed > 0, nu_grid * te_sed, np.nan)
 
 fig, ax = plt.subplots(figsize=(9.5, 5))
-ax.loglog(
-    nu_grid, nu_grid * af_sed, "C0-", lw=1.6, label="AGNFITTER-RX  THB21 + CAT3D + corona + DPL"
-)
-ax.loglog(
-    nu_grid, nu_grid * te_sed, "C1--", lw=1.6, label="tengri  qsogen + cat3d_wind + corona + DPL"
-)
+ax.loglog(nu_grid, af_plot, "C0-", lw=1.6, label="AGNFITTER-RX  THB21 + CAT3D + corona + DPL")
+ax.loglog(nu_grid, te_plot, "C1--", lw=1.6, label="tengri  qsogen + cat3d_wind + corona + DPL")
 for nu_band, name in [(1.4e9, "radio"), (3e13, "IR"), (6e14, "opt"), (4.8e17, "2 keV")]:
     ax.axvline(nu_band, color="0.85", ls=":", lw=1)
     ax.text(
