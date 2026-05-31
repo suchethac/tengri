@@ -32,22 +32,23 @@ class TestIGMConvention:
     def test_observed_frame_input(self):
         """igm_transmission takes observed-frame wavelengths, not rest-frame.
 
-        At z=3: Lya rest 1216 Å → obs 4864 Å. Pass 4864 Å, not 1216 Å.
+        At z=3, rest 1200 Å (just blueward of Lya at 1215.67 Å) lands in the
+        forest at obs 4800 Å. Pass 4800 Å, not 1200 Å.
         The two conventions give very different transmission values.
         """
         z = 3.0
-        # Observed-frame: Lya at z=3 appears at 4864 Å
-        wave_lya_obs = jnp.array([1216.0 * (1 + z)])
-        T_obs = float(igm_transmission(wave_lya_obs, z)[0])
+        # Observed-frame: a forest wavelength (rest 1200 Å) at z=3 appears at 4800 Å
+        wave_forest_obs = jnp.array([1200.0 * (1 + z)])
+        T_obs = float(igm_transmission(wave_forest_obs, z)[0])
 
-        # Passing rest-frame wavelength (WRONG convention): 1216 Å at z=3 → 304 Å observed
+        # Passing rest-frame wavelength (WRONG convention): 1200 Å at z=3 → 300 Å observed
         # that is EUV, should have T → 0 (optically thick)
-        wave_lya_rest = jnp.array([1216.0])
-        T_rest = float(igm_transmission(wave_lya_rest, z)[0])
+        wave_forest_rest = jnp.array([1200.0])
+        T_rest = float(igm_transmission(wave_forest_rest, z)[0])
 
-        # At observed 4864 Å: Lya forest → T ≈ 0.68 (Fan+2006)
+        # At observed 4800 Å (rest 1200 Å): Lya forest → T ≈ 0.68 (Fan+2006)
         assert abs(T_obs - 0.68) < 0.30, (
-            f"Observed-frame convention: T(1216*(1+3)=4864Å)={T_obs:.3f} should be ≈ 0.68"
+            f"Observed-frame convention: T(1200*(1+3)=4800Å)={T_obs:.3f} should be ≈ 0.68"
         )
         # At 1216 Å (would be EUV deep within Lyman limit at z=3): T ≈ 0
         assert T_rest < T_obs, (
@@ -67,10 +68,14 @@ class TestIGMConvention:
         assert T < 0.30, f"Inoue+2014: LyC opacity at rest 900 Å, z=4: T={T:.3f} (expected < 0.30)"
 
     def test_lya_forest_z3(self):
-        """Mean Lya forest transmission at z=3 ≈ 0.68. Fan+2006 AJ 132, Eq. 3."""
+        """Mean Lya forest transmission at z=3 ≈ 0.68. Fan+2006 AJ 132, Eq. 3.
+
+        Probed just blueward of Lya (rest 1200 Å) where the mean forest level
+        applies; at the line edge itself the value is not well-defined.
+        """
         z = 3.0
-        wave_lya_obs = jnp.array([1216.0 * (1 + z)])
-        T = float(igm_transmission(wave_lya_obs, z)[0])
+        wave_forest_obs = jnp.array([1200.0 * (1 + z)])
+        T = float(igm_transmission(wave_forest_obs, z)[0])
         np.testing.assert_allclose(
             T,
             0.68,
@@ -108,9 +113,9 @@ class TestIGMConvention:
         """At fixed observed wavelength, transmission decreases with redshift.
 
         Higher redshift = longer path through more Lya forest absorbers.
-        At obs 4864 Å: T(z=2) > T(z=3) > T(z=4).
+        At obs 3600 Å (blueward of Lya for all three z): T(z=2) > T(z=3) > T(z=4).
         """
-        wave = jnp.array([4864.0])
+        wave = jnp.array([3600.0])
         T2 = float(igm_transmission(wave, 2.0)[0])
         T3 = float(igm_transmission(wave, 3.0)[0])
         T4 = float(igm_transmission(wave, 4.0)[0])

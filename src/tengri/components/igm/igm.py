@@ -26,14 +26,18 @@ from tengri.utils.physics_constants import C_CGS
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
 _N_LINES = 39
 
-# Rest-frame wavelengths of Lyman series lines (Angstrom)
+# Rest-frame wavelengths of Lyman series lines (Angstrom), vacuum.
+# Values match Inoue+2014 Table 2 / eazy-py LAFcoeff.txt exactly. The first
+# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0 — a rounded value put the
+# forest edge ~0.33 Å rest / ~2.6 Å observed at z=7 redward of every other
+# code; see tests/regression/paper/test_igm_inoue.py).
 _LAMBDA_LYMAN = jnp.array(
     [
-        1216.0,
+        1215.67,
         1025.720,
         972.537,
         949.743,
-        937.804,
+        937.803,
         930.748,
         926.226,
         923.150,
