@@ -735,11 +735,6 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
     qpah_grid_closure = jnp.asarray(precomp["qpah_grid"])
     alpha_grid_closure = jnp.asarray(precomp["alpha_grid"])
 
-    single_axes_closure = (qpah_grid_closure, umin_grid_closure)
-    single_edges_closure = tuple(edges_for_grid(ax) for ax in single_axes_closure)
-    pl_axes_closure = (qpah_grid_closure, umin_grid_closure, alpha_grid_closure)
-    pl_edges_closure = tuple(edges_for_grid(ax) for ax in pl_axes_closure)
-
     @jax.jit
     def phot_fn(
         L_absorbed,
@@ -749,23 +744,17 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
         dust_alpha_dl14,
         grid_arrays_traced=None,
     ):
-        # Use traced arrays if provided, else fall back to closure
+        # Use traced arrays if provided, else fall back to closure. Only the
+        # phot grids and the parameter axes are needed — the linear interp below
+        # works directly off the grids, so no triweight bin-edges are built.
         if grid_arrays_traced is not None:
             single_u_phot, powerlaw_phot, qpah_grid, umin_grid, alpha_grid = grid_arrays_traced
-            single_axes = (qpah_grid, umin_grid)
-            single_edges = tuple(edges_for_grid(ax) for ax in single_axes)
-            pl_axes = (qpah_grid, umin_grid, alpha_grid)
-            pl_edges = tuple(edges_for_grid(ax) for ax in pl_axes)
         else:
             single_u_phot = single_u_phot_closure
             powerlaw_phot = powerlaw_phot_closure
             qpah_grid = qpah_grid_closure
             umin_grid = umin_grid_closure
             alpha_grid = alpha_grid_closure
-            single_axes = single_axes_closure
-            single_edges = single_edges_closure
-            pl_axes = pl_axes_closure
-            pl_edges = pl_edges_closure
 
         # Linear (bi/trilinear) interpolation over the parameter grid — the same
         # scheme the exact runtime path uses, so the precomputed filter
