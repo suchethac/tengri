@@ -365,9 +365,13 @@ def massmap_lin_metallicity(
     # Clamp cmf to [0, 1]
     cmf = jnp.clip(cmf, 0.0, 1.0)
 
-    # Linear interpolation: Z(age) = Zstart + (Zfinal - Zstart) * cmf
-    z_abs = log_z_abs_start + (log_z_abs_final - log_z_abs_start) * cmf
-    return z_abs
+    # Linear interpolation in *linear* Z (ProSpect convention, and the docstring
+    # Eq. above): Z(age) = Zstart + (Zfinal - Zstart) * cmf — NOT linear in
+    # log Z (that would be a geometric map, ~2x off at the half-mass point).
+    z_start = 10.0**log_z_abs_start
+    z_final = 10.0**log_z_abs_final
+    z_lin = z_start + (z_final - z_start) * cmf
+    return jnp.log10(jnp.maximum(z_lin, 1e-30))
 
 
 @jax.jit
