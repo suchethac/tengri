@@ -707,21 +707,21 @@ def _hot_corona_lnu(
        fixed [1e-4, 1e4] keV grid.
     """
     kt_safe = jnp.maximum(kt_hot_erg, 1e-30)
-    nu_safe = jnp.maximum(nu, 1e-30)
 
-    # Evaluate shape on the caller's frequency grid (for output).
-    # High-energy cutoff at kT_e; low-energy seed-photon rollover at nu_seed.
-    x = _H_PLANCK * nu / kt_safe
-    x_clip = jnp.clip(x, 0.0, 500.0)
-    seed_roll = jnp.exp(-jnp.clip(nu_seed_hz / nu_safe, 0.0, 700.0))
-    shape = nu ** (1.0 - gamma_hard) * jnp.exp(-x_clip) * seed_roll
+    def _comp_shape(freq):
+        """Band-limited Comptonisation shape: seed rollover x power law x cutoff.
 
-    # Normalize on the fixed internal grid (grid-independent).  The same
-    # seed-photon rollover is applied so the normalisation stays self-consistent.
-    x_norm = _H_PLANCK * _CORONA_NU_GRID / kt_safe
-    x_norm_clip = jnp.clip(x_norm, 0.0, 500.0)
-    seed_roll_norm = jnp.exp(-jnp.clip(nu_seed_hz / _CORONA_NU_GRID, 0.0, 700.0))
-    shape_norm = _CORONA_NU_GRID ** (1.0 - gamma_hard) * jnp.exp(-x_norm_clip) * seed_roll_norm
+        Computed once and reused for both the output grid and the normalisation
+        grid so the two can never drift apart.
+        """
+        freq_safe = jnp.maximum(freq, 1e-30)
+        x_hi = jnp.clip(_H_PLANCK * freq / kt_safe, 0.0, 500.0)  # electron-temperature cutoff
+        x_lo = jnp.clip(nu_seed_hz / freq_safe, 0.0, 700.0)  # seed-photon rollover
+        return freq ** (1.0 - gamma_hard) * jnp.exp(-x_hi) * jnp.exp(-x_lo)
+
+    shape = _comp_shape(nu)
+    # Normalize on the fixed internal grid (grid-independent).
+    shape_norm = _comp_shape(_CORONA_NU_GRID)
     integral = jnp.trapezoid(shape_norm, _CORONA_NU_GRID)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
