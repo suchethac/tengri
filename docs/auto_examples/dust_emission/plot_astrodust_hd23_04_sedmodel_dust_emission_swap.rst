@@ -30,10 +30,25 @@ Compare dust emission templates at fixed infrared luminosity. Shows how
 spectral shape changes across modified-blackbody, Draine+2021 PAHspec, and
 Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-103
+.. GENERATED FROM PYTHON SOURCE LINES 9-107
+
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
+   :alt: plot astrodust hd23 04 sedmodel dust emission swap
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -128,6 +143,11 @@ Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
     ax.legend(loc="lower center", frameon=False, fontsize=10)
     fig.tight_layout()
     plt.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.005 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py:
