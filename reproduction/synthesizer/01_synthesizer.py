@@ -205,9 +205,10 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # formed (Synthesizer via `initial_mass`, tengri via `log_total_mass`).
 #
 # **What the right panel plots.** Not a fine-grid analytic curve — that would
-# compare two formulas. It reads `state.derived["sfr_history"]` off a built
-# `SEDModel`, on the log-spaced lookback grid the SFH-convolution code actually
-# uses. The printed `∫SFR dt` confirms the area integrates to 1 M⊙ formed.
+# compare two formulas. It reads the star formation history straight off a built
+# tengri model, on the log-spaced lookback grid the model actually uses (hence
+# the slightly jagged look). The printed `∫SFR dt` confirms it integrates to
+# 1 M⊙ formed.
 
 # %%
 t_s, sfr_s = S.sfh_curve(tau_gyr=TAU_GYR_FIDUCIAL, max_age_gyr=AGE_GYR_FIDUCIAL)
@@ -1167,9 +1168,11 @@ plt.show()
 # independent physics — the accretion disc (§9a), the torus (§9e), and the
 # disc–torus geometry (§9f, Synthesizer's hard inclination mask vs tengri's smooth
 # treatment) — the comparison is of shape and amplitude, and the differences are
-# the expected ones between independent implementations. The §9 panels reproduce
-# every piece of the `UnifiedAGN` model: disc, transmitted/escaped split, NLR, BLR,
-# torus, and the inclination anisotropy.
+# the expected ones between independent implementations. The §9 panels walk
+# through every piece of the unified AGN model — disc, transmitted/escaped split,
+# narrow- and broad-line regions, torus, and the inclination anisotropy — matching
+# Synthesizer where the inputs are shared and showing exactly where, and why, the
+# two part ways.
 
 # %% [markdown]
 # ## References
