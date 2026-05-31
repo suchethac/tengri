@@ -36,7 +36,7 @@ ApJ 748, 142 [2]_.
    :alt: plot_spitzer_irac_agn_wedge
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-234
+.. GENERATED FROM PYTHON SOURCE LINES 21-235
 
 
 
@@ -51,6 +51,10 @@ ApJ 748, 142 [2]_.
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
     from pathlib import Path
@@ -84,6 +88,7 @@ ApJ 748, 142 [2]_.
         photometry=tengri.Photometry.from_names(irac_bands, cache_dir=str(cache_dir))
     )
 
+
     # --- Helper: draw SF galaxy with randomized params from prior ---
     def sample_sf_galaxy(ssp, key, redshift):
         """
@@ -97,7 +102,7 @@ ApJ 748, 142 [2]_.
             observation=tengri.Observation(photometry=obs_irac.photometry),
             sfh={
                 "type": "tsnorm",
-                "log_peak_sfr": tengri.Uniform(-1.0, 1.5),
+                "log_total_mass": 10.0,
                 "peak_lbt_gyr": tengri.Uniform(0.5, 10.0),
                 "width_gyr": tengri.Uniform(0.3, 4.0),
                 "skew": tengri.Uniform(-2.0, 2.0),
@@ -119,26 +124,37 @@ ApJ 748, 142 [2]_.
         return np.asarray(phot)
 
 
-    # --- Helper: create AGN model with fixed bolometric luminosity ---
-    def agn_photometry(ssp, log_lbol, redshift):
-        """
-        AGN-dominated SED (minimal host) at fixed bolometric luminosity.
-        """
+    # --- Helper: composite (host + AGN) photometry at varying AGN fraction.
+    # IRAC colours are *shape* quantities, so varying the AGN bolometric
+    # luminosity alone leaves them unchanged. What actually moves a galaxy
+    # across the wedge is the relative AGN-to-host contribution in the
+    # mid-IR — that is what we sweep here.
+    def composite_photometry(ssp, agn_frac, redshift):
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             observation=tengri.Observation(photometry=obs_irac.photometry),
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "log_total_mass": 10.0,
+                "tau_gyr": 1.5,
+                "alpha": 2.0,
+                "beta": 2.5,
+            },
             dust={
                 "type": "two_component",
                 "*": tengri.FIXED,
-                "tau_bc": 0.0,
-                "tau_diff": 0.0,
+                "tau_bc": 0.4,
+                "tau_diff": 0.2,
             },
             agn={
+                "type": "composable",
                 "*": tengri.FIXED,
-                "log_lbol": log_lbol,
-                "frac": 1.0,
+                "agn_frac": agn_frac,  # 0 = pure host, 1 = AGN-dominated
+                "agn_log_lbol": 12.5,
                 "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "torus": {"type": "skirtor", "*": tengri.FIXED},
+                "lines": {"type": "nlr", "*": tengri.FIXED},
             },
             redshift=tengri.Fixed(redshift),
         )
@@ -171,18 +187,11 @@ ApJ 748, 142 [2]_.
     sf_color_x = sf_color_x[mask_sf]
     sf_color_y = sf_color_y[mask_sf]
 
-    # --- Generate AGN population (varying log_lbol) ---
-    n_agn = 10
-    log_lbol_vals = np.linspace(11.0, 13.5, n_agn)
-    z_agn = 0.5  # Fixed redshift for AGN sample
+    # --- Composite sweep: host → AGN-dominated, fixed z = 0.5 ---
+    agn_frac_vals = np.array([0.05, 0.10, 0.20, 0.40, 0.60, 0.80, 0.95])
+    z_agn = 0.5
 
-    agn_phot = []
-    for log_lbol in log_lbol_vals:
-        flux = agn_photometry(ssp, log_lbol, z_agn)
-        agn_phot.append(flux)
-
-    agn_phot = np.array(agn_phot)
-
+    agn_phot = np.array([composite_photometry(ssp, float(f), z_agn) for f in agn_frac_vals])
     agn_color_x = np.log10(agn_phot[:, 2] / agn_phot[:, 0])
     agn_color_y = np.log10(agn_phot[:, 3] / agn_phot[:, 1])
 
@@ -222,30 +231,22 @@ ApJ 748, 142 [2]_.
             zorder=3,
         )
 
-    # AGN locus
+    # Composite host+AGN track, coloured by AGN fraction
     scatter_agn = ax.scatter(
         agn_color_x,
         agn_color_y,
-        s=100,
-        alpha=0.8,
-        color="darkred",
+        s=120,
+        c=agn_frac_vals,
+        cmap="autumn_r",
         marker="*",
         edgecolors="darkred",
-        linewidth=0.5,
-        label=f"AGN models (log L_bol = 11.0–13.5, z={z_agn})",
+        linewidth=0.6,
+        label=f"Host + AGN composite (z={z_agn})",
         zorder=4,
     )
-
-    # Annotations on AGN loci
-    for i, log_lbol in enumerate(log_lbol_vals[::2]):  # Label every other AGN
-        ax.text(
-            agn_color_x[i * 2],
-            agn_color_y[i * 2] + 0.08,
-            f"{log_lbol:.1f}",
-            fontsize=8,
-            ha="center",
-            color="darkred",
-        )
+    ax.plot(agn_color_x, agn_color_y, color="darkred", lw=0.8, alpha=0.4, zorder=3)
+    cbar = fig.colorbar(scatter_agn, ax=ax, pad=0.02)
+    cbar.set_label(r"AGN fraction $f_{\rm AGN}$", fontsize=9)
 
     ax.set_xlabel(r"$\log(f_{5.8} / f_{3.6})$", fontsize=11)
     ax.set_ylabel(r"$\log(f_{8.0} / f_{4.5})$", fontsize=11)
@@ -268,7 +269,7 @@ ApJ 748, 142 [2]_.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.450 seconds)
+   **Total running time of the script:** (0 minutes 8.802 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py:

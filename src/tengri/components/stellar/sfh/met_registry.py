@@ -364,6 +364,69 @@ _register(
     )
 )
 
+# ── massmap_lin: Linear metallicity tied to cumulative mass formed ────
+
+_register(
+    MetModelSpec(
+        name="massmap_lin",
+        fn=None,  # handled via massmap_lin_metallicity
+        params={
+            "met_logzsol_start": MetParamDef(
+                "log10(Z/Zsun) at the oldest age (Zstart)",
+                _always_true,
+                "",
+                Uniform(-2.0, 0.2),
+            ),
+            "met_logzsol_final": MetParamDef(
+                "log10(Z/Zsun) at present day (Zfinal)",
+                _always_true,
+                "",
+                Uniform(-2.0, 0.2),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "met_logzsol_start": ("log_z_abs_start", 1.0, LOG10_ZSUN),
+            "met_logzsol_final": ("log_z_abs_final", 1.0, LOG10_ZSUN),
+        },
+    )
+)
+
+# ── massmap_box: Closed-box metallicity tied to cumulative mass formed ────
+
+_register(
+    MetModelSpec(
+        name="massmap_box",
+        fn=None,  # handled via massmap_box_metallicity
+        params={
+            "met_logzsol_start": MetParamDef(
+                "log10(Z/Zsun) at the oldest age (Zstart)",
+                _always_true,
+                "",
+                Uniform(-2.0, 0.2),
+            ),
+            "met_logzsol_final": MetParamDef(
+                "log10(Z/Zsun) at present day (Zfinal)",
+                _always_true,
+                "",
+                Uniform(-2.0, 0.2),
+            ),
+            "yield": MetParamDef(
+                "Fixed nucleosynthetic yield parameter ρ",
+                lambda lo, hi: lo > 0,
+                "must have lo > 0",
+                Fixed(0.03),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "met_logzsol_start": ("log_z_abs_start", 1.0, LOG10_ZSUN),
+            "met_logzsol_final": ("log_z_abs_final", 1.0, LOG10_ZSUN),
+            "yield": ("yield_rho", 1.0, 0.0),
+        },
+    )
+)
+
 
 # ── Auto-inference of met_mode from prior keys ────────────────────
 
@@ -381,6 +444,8 @@ _register(
 _MET_MODE_DISCRIMINATORS: tuple[tuple[str, frozenset[str]], ...] = (
     ("bins_continuity", frozenset({"met_logzsol_base"})),
     ("bins", frozenset({"met_bin_0"})),
+    ("massmap_box", frozenset({"met_logzsol_start", "yield"})),
+    ("massmap_lin", frozenset({"met_logzsol_start", "met_logzsol_final"})),
     ("two_step", frozenset({"met_step_age_gyr"})),
     ("psb_two_step", frozenset({"met_logzsol_burst"})),
     ("ramp", frozenset({"met_logzsol_0", "met_logzsol_final"})),

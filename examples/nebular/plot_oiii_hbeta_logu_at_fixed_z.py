@@ -47,7 +47,7 @@ for k, logz in enumerate(logz_values):
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.03,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={

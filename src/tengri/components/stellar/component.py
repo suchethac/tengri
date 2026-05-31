@@ -31,6 +31,8 @@ import jax.numpy as jnp
 
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
+    massmap_box_metallicity,
+    massmap_lin_metallicity,
     metallicity_bins_continuity_on_ssp_grid,
     metallicity_bins_on_ssp_grid,
     psb_two_step_metallicity,
@@ -774,6 +776,49 @@ class StellarSEDComponent:
             log_metallicity_history = tabulated_metallicity_on_ssp_grid(
                 sfh_lg_age_yr - 9.0, met_log_age_yr, met_log_z_abs
             )
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "massmap_lin":
+            # Linear metallicity tied to cumulative stellar mass formed
+            # (ProSpect Bellstedt+2020 massmap_lin model).
+            log_z_start_abs = jnp.asarray(params["met_logzsol_start"]) + LOG10_ZSUN
+            log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
+            # Per-age metallicity on the SSP grid
+            lgmet_on_ssp_ages = massmap_lin_metallicity(
+                ssp.ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start_abs, log_z_final_abs
+            )
+            # Z(t) on the SFH grid for diagnostics
+            sfh_lg_age_gyr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0)) - 9.0
+            log_metallicity_history = massmap_lin_metallicity(
+                sfh_lg_age_gyr, sfh_lbt_grid, sfr_history, log_z_start_abs, log_z_final_abs
+            )
+            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "massmap_box":
+            # Closed-box chemical evolution tied to cumulative stellar mass formed
+            # (ProSpect Bellstedt+2020 massmap_box model).
+            log_z_start_abs = jnp.asarray(params["met_logzsol_start"]) + LOG10_ZSUN
+            log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
+            yield_rho = jnp.asarray(params.get("yield", 0.03))
+            # Per-age metallicity on the SSP grid
+            lgmet_on_ssp_ages = massmap_box_metallicity(
+                ssp.ssp_lg_age_gyr,
+                ssp_ages_yr,
+                sfr_on_ssp,
+                log_z_start_abs,
+                log_z_final_abs,
+                yield_rho,
+            )
+            # Z(t) on the SFH grid for diagnostics
+            sfh_lg_age_gyr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0)) - 9.0
+            log_metallicity_history = massmap_box_metallicity(
+                sfh_lg_age_gyr,
+                sfh_lbt_grid,
+                sfr_history,
+                log_z_start_abs,
+                log_z_final_abs,
+                yield_rho,
+            )
+            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
             log_z_for_mr = lgmet_on_ssp_ages[0]
         else:  # chem_evol
             from tengri.components.stellar.sfh.chemical_evolution import (

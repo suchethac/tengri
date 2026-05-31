@@ -21,6 +21,11 @@
 Polar dust E(B-V) reddens Type 1 & 2 AGN differently
 =====================================================
 
+.. image:: images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
+   :alt: plot polar dust ebv type12 sweep
+   :class: sphx-glr-single-img
+
+
 Polar dust *disc attenuation* applies only to Type 1 (face-on) sightlines —
 the equatorial torus already screens the disc for Type 2. The bi-conical
 polar dust *absorbs* disc photons regardless of viewing angle, however, and
@@ -41,6 +46,32 @@ References
    https://doi.org/10.1093/mnras/stz3001
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-130
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
+   :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_polar_dust_ebv_type12_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Building shared AGN model (polar_ebv and cos_inc FREE)...
+    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/src/tengri/components/agn/blocks/runner.py:453: RecipeWarning: Composable AGN: agn_attenuation_block='polar_dust' but agn_polar_ebv=0 (no extinction applied). Either set agn_polar_ebv > 0 or pick agn_attenuation_block='none'.
+      validate_block_recipe(
+    /Users/suchethacooray/.claude-squad/worktrees/cs/refresh-repro_18b44877a75456f8/examples/agn/plot_polar_dust_ebv_type12_sweep.py:127: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+      fig.tight_layout()
+    Saved: plot_polar_dust_ebv_type12_sweep.png
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -150,6 +181,11 @@ References
     fig.tight_layout()
     plt.savefig("plot_polar_dust_ebv_type12_sweep.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_polar_dust_ebv_type12_sweep.png")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.368 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:

@@ -39,7 +39,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 2.0,  # 100 Msun/yr sustained
+        "log_total_mass": 10.0,  # 100 Msun/yr over 100 Myr → 1e10 Msun
         "start_gyr": 0.1,
         "end_gyr": 0.0,  # 100 Myr ongoing burst
     },
@@ -66,7 +66,7 @@ model_intrinsic = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 2.0,
+        "log_total_mass": 10.0,
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },
@@ -90,7 +90,7 @@ model_attenuated = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 2.0,
+        "log_total_mass": 10.0,
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },

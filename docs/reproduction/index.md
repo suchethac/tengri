@@ -31,6 +31,12 @@ The notebooks share a layout, plotting style, and a `## Summary` /
   libraries (R06, SN12, KD18, THB21) and four torus libraries (S04, NK08,
   SKIRTOR, CAT3D-Wind) head to head, plus the α_ox–L₂₅₀₀ X-ray corona and
   SPL/DPL radio jets across `8 < log ν/Hz < 20`.
+- **{doc}`prospect_r`** — ProSpect (Robotham et al. 2020), the R-based
+  GAMA code, driven live from the notebook through `rpy2`: BC03 SSPs, the
+  skew-normal SFH, its signature metallicity history tied to cumulative
+  stellar mass formed, Charlot & Fall attenuation, Dale 2014 IR, the
+  `emissionLines` nebular model, the SKIRTOR AGN torus, a radio continuum,
+  and the Inoue 2014 IGM.
 
 ```{toctree}
 :maxdepth: 1
@@ -39,6 +45,7 @@ cigale
 bagpipes
 prospector
 agnfitter
+prospect_r
 ```
 
 Comparisons with MAGPHYS, x-cigale, GRAHSP, and Synthesizer will land as
