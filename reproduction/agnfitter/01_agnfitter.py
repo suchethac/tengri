@@ -393,8 +393,10 @@ save_fig("agnfitter_04_dust_attenuation.png")
 # Helou 2002 + Chary & Elbaz 2001) and S17 (Schreiber et al. 2018), a
 # flexible dust-continuum + PAH model parameterised by dust temperature and
 # PAH fraction. tengri ships `schreiber2016` — the same Schreiber dust-SED
-# family. We overlay tengri's `schreiber2016` against AGNFITTER-RX's S17 and
-# DH02_CE01 templates, all normalised at their FIR peak.
+# family — which we compare to S17. tengri has **no DH02_CE01 equivalent**
+# (its nearest cold-dust model is `dale2014`, the later Dale 2014 templates —
+# a distinct library); AGNFITTER-RX's DH02_CE01 is shown for reference only,
+# without a tengri counterpart. All curves normalised at their FIR peak.
 #
 # The paper frames cold dust through an *energy-balance* prior: the cold-dust
 # IR luminosity should at least match the dust-absorbed stellar luminosity
@@ -457,8 +459,11 @@ save_fig("agnfitter_06_cold_dust.png")
 #   `qsogen` must run *with* its line and FeII blocks (continuum alone misses
 #   it entirely). With them on, tengri's Hα/2500 Å contrast is 4.4 vs THB21's
 #   3.8 — the headline feature is recovered.
-# * **SN12 — reproduced** by the new `slone_netzer` port (UV–optical to ~20%;
-#   they part company only in the faint disc Wien tail).
+# * **SN12 — reproduced** by the new `slone_netzer` port. It interpolates the
+#   108-template grid with node-exact bilinear interpolation, so the SN12 peak
+#   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
+#   accretion rate, so the original smooth-kernel interpolation smeared it by
+#   30–50% — now fixed).
 # * **KD18 — approximate.** tengri's full Kubota & Done 3-zone block
 #   (`kubota_done`) currently mis-renders (it peaks in the far-IR), so the
 #   panel shows `multicolor`, a pure Shakura-Sunyaev thin disc. That disc is
