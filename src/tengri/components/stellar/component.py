@@ -519,6 +519,8 @@ class StellarSEDComponent:
             "bins",
             "bins_continuity",
             "table",
+            "massmap_lin",
+            "massmap_box",
         )
         if self.config.metallicity_model not in _SUPPORTED_MET:
             raise NotImplementedError(

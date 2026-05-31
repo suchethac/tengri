@@ -309,3 +309,39 @@ class TestMassmapIntegration:
         # met_logzsol_start should be free
         free_params = params.free_params
         assert any("met_logzsol_start" in p for p in free_params)
+
+
+@pytest.mark.regression_bug
+def test_massmap_lin_is_linear_in_Z_not_logZ():
+    """massmap_lin maps Z linearly in cumulative mass (ProSpect Zfunc_massmap_lin).
+
+    Regression for the log-vs-linear bug: the original code interpolated in
+    log10(Z), giving a *geometric* map (~2x off vs ProSpect at the half-mass
+    point). For a constant SFR on a uniform age grid, cmf is linear in age, so Z
+    at the mid-age must be the *arithmetic* midpoint (Zstart+Zfinal)/2 — not the
+    geometric mean sqrt(Zstart*Zfinal).
+    """
+    n = 401
+    ages_yr = jnp.linspace(1.0e6, 13.0e9, n)  # uniform grid
+    lg_age_gyr = jnp.log10(ages_yr / 1e9)
+    sfr = jnp.ones(n)  # constant SFR -> cmf linear in age
+    z_start, z_final = 1.0e-4, 2.0e-2
+    log_z = np.asarray(
+        massmap_lin_metallicity(
+            lg_age_gyr, ages_yr, sfr, float(np.log10(z_start)), float(np.log10(z_final))
+        )
+    )
+    z = 10.0**log_z
+    z_mid = float(z[n // 2])  # cmf ~ 0.5
+    arithmetic = 0.5 * (z_start + z_final)
+    geometric = float(np.sqrt(z_start * z_final))
+    (
+        assert_allclose(z_mid, arithmetic, rtol=0.02),
+        (
+            f"massmap_lin at half-mass Z={z_mid:.3e} should be the arithmetic midpoint "
+            f"{arithmetic:.3e} (ProSpect linear map), not the geometric {geometric:.3e}"
+        ),
+    )
+    # Endpoints: present-day -> Zfinal, oldest -> Zstart.
+    assert_allclose(z[0], z_final, rtol=1e-3)
+    assert_allclose(z[-1], z_start, rtol=5e-2)
