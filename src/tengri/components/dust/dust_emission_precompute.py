@@ -275,6 +275,18 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 # omitted from the hybrid path — same approximation as DL07).
 
 
+def _node_bolometric(template_lnu: np.ndarray, tmpl_wave_aa: np.ndarray) -> np.ndarray:
+    """Per-node frequency integral ``∫ L_ν dν`` for an L_ν template grid.
+
+    ``template_lnu`` has shape ``(..., n_wave)``; returns the bolometric over the
+    leading axes. Integrates over increasing frequency (the ``-`` flips the sign
+    introduced by the ascending-wavelength / descending-frequency ordering),
+    matching the exact-path energy balance in ``emission_templates.py``.
+    """
+    nu = _C_CGS / (np.asarray(tmpl_wave_aa) * _AA_TO_CM)  # Hz, descending
+    return -np.trapezoid(np.asarray(template_lnu), nu, axis=-1)
+
+
 def _precompute_dl07_like_photometry(
     templates: dict,
     filter_waves: list[jnp.ndarray],
@@ -283,8 +295,23 @@ def _precompute_dl07_like_photometry(
     q_key: str,
     wave_key: str,
     redshift: float = 0.0,
+    powerlaw_weight: np.ndarray | None = None,
 ) -> dict:
     """Shared precompute for DL07-shape models (Astrodust, THEMIS).
+
+    The exact runtime path forms ``mix = (1-γ)·single_u + γ·W·powerlaw`` and then
+    renormalises it to ``L_absorbed`` by its own frequency integral. By linearity
+    the filter photometry is therefore
+    ``L_abs·[(1-γ)·single_phot + γ·power_phot] / [(1-γ)·single_bol + γ·power_bol]``,
+    so we store *both* the (un-normalised) filter photometry and the per-node
+    bolometric integral of each component, and bake the PDR luminosity weight
+    ``W(U_min)`` into the power-law template here. THEMIS carries its real
+    ∫powerlaw/∫single_u ratio in the template itself (``W = 1``); Astrodust /
+    DL14 use the analytic DL07 Eq. 33 ``R`` (passed via ``powerlaw_weight``).
+
+    ``energy_normalize`` is intentionally **off** — normalising each template to
+    unit integral would discard the relative single_u↔powerlaw luminosity that
+    the energy balance depends on (the #571/#572/#574 PDR-weight family).
 
     Parameters
     ----------
@@ -296,6 +323,9 @@ def _precompute_dl07_like_photometry(
         Key for the second grid axis (``"qpah_grid"`` or ``"qhac_grid"``).
     wave_key : str
         Key for the wavelength array (``"wavelength"`` or ``"wavelength_aa"``).
+    powerlaw_weight : ndarray or None
+        Per-``U_min`` PDR luminosity weight ``W(U_min)`` (shape ``(n_umin,)``)
+        baked into the power-law template. ``None`` ⇒ ``W = 1`` (THEMIS).
     """
     single_u = np.asarray(templates["single_u"])
     powerlaw = np.asarray(templates["powerlaw"])
@@ -303,8 +333,13 @@ def _precompute_dl07_like_photometry(
     umin_grid = np.asarray(templates["umin_grid"])
     q_grid = np.asarray(templates[q_key])
 
-    # Templates already L_ν and pre-normalised at load time
-    # → ``energy_normalize=True`` is an idempotent guard (divides by ≈1).
+    if powerlaw_weight is not None:
+        # Bake W(U_min) per node: powerlaw[q, umin, :] *= W[umin].
+        powerlaw = powerlaw * np.asarray(powerlaw_weight)[None, :, None]
+
+    single_bol = _node_bolometric(single_u, tmpl_wave)  # (n_q, n_umin)
+    power_bol = _node_bolometric(powerlaw, tmpl_wave)  # (n_q, n_umin)
+
     single_u_preint = preintegrate_grid(
         templates=single_u,
         wave_rest=tmpl_wave,
@@ -313,7 +348,7 @@ def _precompute_dl07_like_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(q_grid, umin_grid),
-        energy_normalize=True,
+        energy_normalize=False,
     )
     powerlaw_preint = preintegrate_grid(
         templates=powerlaw,
@@ -323,12 +358,14 @@ def _precompute_dl07_like_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(q_grid, umin_grid),
-        energy_normalize=True,
+        energy_normalize=False,
     )
 
     return {
         "single_u_phot": single_u_preint.phot,
         "powerlaw_phot": powerlaw_preint.phot,
+        "single_u_bol": jnp.asarray(single_bol),
+        "powerlaw_bol": jnp.asarray(power_bol),
         "umin_grid": umin_grid,
         "q_grid": q_grid,
     }
@@ -354,6 +391,8 @@ def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
     """
     single_u_phot_closure = jnp.asarray(precomp["single_u_phot"])
     powerlaw_phot_closure = jnp.asarray(precomp["powerlaw_phot"])
+    single_u_bol_closure = jnp.asarray(precomp["single_u_bol"])
+    powerlaw_bol_closure = jnp.asarray(precomp["powerlaw_bol"])
     umin_grid_closure = jnp.asarray(precomp["umin_grid"])
     q_grid_closure = jnp.asarray(precomp["q_grid"])
     axes_closure = (q_grid_closure, umin_grid_closure)
@@ -361,7 +400,11 @@ def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
 
     @jax.jit
     def phot_fn(L_absorbed, dust_umin, dust_gamma_dl, dust_q, grid_arrays_traced=None):
-        # Use traced arrays if provided, else fall back to closure
+        # Use traced arrays if provided, else fall back to closure. The
+        # per-node bolometric integrals are fixed template constants (not part
+        # of the threaded grid tuple), so they are always closure-captured.
+        single_u_bol = single_u_bol_closure
+        powerlaw_bol = powerlaw_bol_closure
         if grid_arrays_traced is not None:
             single_u_phot, powerlaw_phot, q_grid, umin_grid = grid_arrays_traced
             axes = (q_grid, umin_grid)
@@ -377,7 +420,14 @@ def _build_dl07_like_lookup(precomp: dict, grid_arrays: tuple | None = None):
         point = (dust_q, dust_umin)
         single = interp_nd_triweight(single_u_phot, axes, edges, point)
         power = interp_nd_triweight(powerlaw_phot, axes, edges, point)
-        return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
+        s_bol = interp_nd_triweight(single_u_bol, axes, edges, point)
+        p_bol = interp_nd_triweight(powerlaw_bol, axes, edges, point)
+        g = dust_gamma_dl
+        # Energy balance: L_abs · mix_phot / ∫mix dν (the powerlaw already
+        # carries its PDR luminosity weight W from precompute time).
+        num = (1.0 - g) * single + g * power
+        den = (1.0 - g) * s_bol + g * p_bol
+        return L_absorbed * num / den
 
     return phot_fn
 
@@ -391,8 +441,14 @@ def precompute_astrodust_photometry(
     """Pre-integrate Astrodust+PAH templates (Hensley & Draine 2023).
 
     See :func:`_precompute_dl07_like_photometry`. Free param at runtime is
-    ``dust_qpah``.
+    ``dust_qpah``. The power-law (PDR) template is unit-normalised at load time,
+    so its DL07 Eq. 33 luminosity weight ``R(U_min, U_max, α=2)`` is baked in
+    here per ``U_min`` (matching the exact runtime path).
     """
+    from tengri.components.dust.emission_templates import _pdr_luminosity_weight
+
+    umin_grid = np.asarray(templates["umin_grid"])
+    r_power = np.asarray(_pdr_luminosity_weight(umin_grid, umin_grid[-1], 2.0))
     return _precompute_dl07_like_photometry(
         templates,
         filter_waves,
@@ -400,6 +456,7 @@ def precompute_astrodust_photometry(
         q_key="qpah_grid",
         wave_key="wavelength_aa",
         redshift=redshift,
+        powerlaw_weight=r_power,
     )
 
 
@@ -604,9 +661,16 @@ def precompute_dl14_photometry(
     qpah_grid = np.asarray(templates["qpah_grid"])
     alpha_grid = np.asarray(templates["alpha_grid"])
 
-    # Both grids stored as L_ν but NOT pre-normalised at load (DL14 loader
-    # leaves raw j_ν). The universal ``energy_normalize=True`` divides by
-    # ∫L_ν dν per template so runtime ``L_absorbed * lookup`` is calibrated.
+    # Keep the *raw* single↔power templates (``energy_normalize=False``) and
+    # store per-node bolometric integrals so the lookup can energy-balance
+    # ``L_abs · mix_phot / ∫mix dν`` exactly as the runtime path does (#572).
+    # The DL14 Eq. 33 PDR luminosity weight ``R(U_min, U_max, α)`` is applied
+    # *analytically at runtime* (not baked here): baking it would make the
+    # power-law vary steeply with α and the lookup's triweight interpolation
+    # would smooth it, whereas the exact path applies R at the query point.
+    single_bol = _node_bolometric(single_u, tmpl_wave)  # (n_qpah, n_umin)
+    power_bol = _node_bolometric(powerlaw, tmpl_wave)  # (n_qpah, n_umin, n_alpha)
+
     single_u_preint = preintegrate_grid(
         templates=single_u,
         wave_rest=tmpl_wave,
@@ -615,7 +679,7 @@ def precompute_dl14_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(qpah_grid, umin_grid),
-        energy_normalize=True,
+        energy_normalize=False,
     )
     powerlaw_preint = preintegrate_grid(
         templates=powerlaw,
@@ -625,12 +689,14 @@ def precompute_dl14_photometry(
         redshift=redshift,
         dl_cm=1.0,
         axes=(qpah_grid, umin_grid, alpha_grid),
-        energy_normalize=True,
+        energy_normalize=False,
     )
 
     return {
         "single_u_phot": single_u_preint.phot,
         "powerlaw_phot": powerlaw_preint.phot,
+        "single_u_bol": jnp.asarray(single_bol),
+        "powerlaw_bol": jnp.asarray(power_bol),
         "umin_grid": umin_grid,
         "qpah_grid": qpah_grid,
         "alpha_grid": alpha_grid,
@@ -656,8 +722,15 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
         alpha_grid) passed as JIT-traced inputs. When None, grids are
         closure-captured.
     """
+    from tengri.components.dust.emission_templates import (
+        _DL14_UMAX_POWERLAW,
+        _pdr_luminosity_weight,
+    )
+
     single_u_phot_closure = jnp.asarray(precomp["single_u_phot"])
     powerlaw_phot_closure = jnp.asarray(precomp["powerlaw_phot"])
+    single_u_bol_closure = jnp.asarray(precomp["single_u_bol"])
+    powerlaw_bol_closure = jnp.asarray(precomp["powerlaw_bol"])
     umin_grid_closure = jnp.asarray(precomp["umin_grid"])
     qpah_grid_closure = jnp.asarray(precomp["qpah_grid"])
     alpha_grid_closure = jnp.asarray(precomp["alpha_grid"])
@@ -694,13 +767,53 @@ def build_dl14_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
             pl_axes = pl_axes_closure
             pl_edges = pl_edges_closure
 
-        single = interp_nd_triweight(
-            single_u_phot, single_axes, single_edges, (dust_qpah, dust_umin)
-        )
-        power = interp_nd_triweight(
-            powerlaw_phot, pl_axes, pl_edges, (dust_qpah, dust_umin, dust_alpha_dl14)
-        )
-        return L_absorbed * ((1.0 - dust_gamma_dl) * single + dust_gamma_dl * power)
+        # Linear (bi/trilinear) interpolation over the parameter grid — the same
+        # scheme the exact runtime path uses, so the precomputed filter
+        # photometry matches it exactly (linear interpolation commutes with the
+        # filter integral). interp_nd_triweight (the smooth-gradient kernel used
+        # by the 2D models) is not node-exact and over the steep DL14 α axis
+        # leaves a multi-percent bias.
+        def _idx_frac(grid, x):
+            x = jnp.clip(x, grid[0], grid[-1])
+            n = grid.shape[0]
+            i = jnp.clip(jnp.searchsorted(grid, x) - 1, 0, n - 2)
+            f = (x - grid[i]) / (grid[i + 1] - grid[i])
+            return i, f
+
+        iq, fq = _idx_frac(qpah_grid, dust_qpah)
+        iu, fu = _idx_frac(umin_grid, dust_umin)
+        ia, fa = _idx_frac(alpha_grid, dust_alpha_dl14)
+
+        def _bilinear(grid_data):  # leading axes (q, umin)
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid_data[iq, iu]
+                + (1.0 - fq) * fu * grid_data[iq, iu + 1]
+                + fq * (1.0 - fu) * grid_data[iq + 1, iu]
+                + fq * fu * grid_data[iq + 1, iu + 1]
+            )
+
+        def _trilinear(grid_data):  # leading axes (q, umin, alpha)
+            def _bilin_at(ia_):
+                return (
+                    (1.0 - fq) * (1.0 - fu) * grid_data[iq, iu, ia_]
+                    + (1.0 - fq) * fu * grid_data[iq, iu + 1, ia_]
+                    + fq * (1.0 - fu) * grid_data[iq + 1, iu, ia_]
+                    + fq * fu * grid_data[iq + 1, iu + 1, ia_]
+                )
+
+            return (1.0 - fa) * _bilin_at(ia) + fa * _bilin_at(ia + 1)
+
+        single = _bilinear(single_u_phot)
+        power = _trilinear(powerlaw_phot)
+        s_bol = _bilinear(single_u_bol_closure)
+        p_bol = _trilinear(powerlaw_bol_closure)
+        # DL14 Eq. 33 PDR luminosity weight at the (analytic-exact) query point.
+        r_power = _pdr_luminosity_weight(dust_umin, _DL14_UMAX_POWERLAW, dust_alpha_dl14)
+        g = dust_gamma_dl
+        # Energy balance: L_abs · mix_phot / ∫mix dν.
+        num = (1.0 - g) * single + g * r_power * power
+        den = (1.0 - g) * s_bol + g * r_power * p_bol
+        return L_absorbed * num / den
 
     return phot_fn
 
