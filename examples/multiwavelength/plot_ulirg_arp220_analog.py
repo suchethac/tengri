@@ -37,7 +37,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "const",
         "*": tengri.FIXED,
-        "log_sfr": 2.3,  # ~200 Msun/yr
+        "log_total_mass": 10.3,  # ~200 Msun/yr over 100 Myr → 2e10 Msun
         "start_gyr": 0.1,
         "end_gyr": 0.0,
     },  # 100 Myr burst

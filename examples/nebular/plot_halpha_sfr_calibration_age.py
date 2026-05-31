@@ -34,12 +34,13 @@ fig, ax = plt.subplots(figsize=(7.2, 4.5))
 sfr_inferred, ages_valid = [], []
 
 for age_myr in ages_myr:
+    log_total_mass_true = log_sfr_true + np.log10(age_myr * 1e6)
     model = tengri.SEDModel.build(
         ssp,
         sfh={
             "type": "const",
             "*": tengri.FIXED,
-            "log_sfr": log_sfr_true,
+            "log_total_mass": log_total_mass_true,
             "start_gyr": age_myr / 1e3,
             "end_gyr": 0.0,
         },
