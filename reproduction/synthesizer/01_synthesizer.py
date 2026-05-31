@@ -674,11 +674,12 @@ print(
 # %% [markdown]
 # ### §9a Accretion disc
 #
-# Synthesizer's disc continuum against tengri's two disc parameterisations — the
-# physically-motivated Kubota & Done (2018) qsosed disc and a broken power law
-# (the disc form the Feltre et al. 2016 grids assume). The codes use independent
-# disc implementations, so this is a comparison of shape at matched bolometric
-# luminosity, not an exact match.
+# These AGN grids were generated with Synthesizer's **qsosed** disc (Kubota &
+# Done 2018) — so the matched comparison is against tengri's `kubota_done` disc.
+# We also overlay tengri's broken power-law disc (the form the Feltre et al. 2016
+# grids assume) for context. The codes use independent disc implementations, so
+# this is a comparison of shape at matched bolometric luminosity, not an exact
+# match.
 
 # %%
 w_disc_s, L_disc_s = agn["disc"]
@@ -767,17 +768,20 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 # %% [markdown]
 # ### §9c Narrow-line region
 #
-# Here tengri reads the *same* Synthesizer narrow-line-region grid, so the line
-# list and the per-line luminosities come from identical photoionisation
-# modelling. The two spectra are not identical curves, by design: Synthesizer's
-# narrow-line spectrum is the full reprocessed emission — nebular continuum plus
-# lines spread over the grid's native wavelength bins — while tengri returns the
-# lines alone, each narrowed to the ~500 km/s width of the narrow-line region.
-# Concentrating a line into that narrow profile lifts its peak well above the
-# grid-binned version, so the two panels share line *positions* and relative
-# strengths but not peak height (each is drawn on its own axis). The strong
-# forbidden lines — [O III] 5007, the Balmer series, [O II] 3727 — line up
-# between the two.
+# Here tengri reads the *same* narrow-line-region grid as Synthesizer — the same
+# 215 Cloudy lines, and the disc's own ionising luminosity straight from the grid
+# (rather than an assumed ionising-spectrum slope), so the normalisation is
+# Synthesizer's own. Two things keep the curves from being identical, both by
+# design. First, Synthesizer plots the full reprocessed emission (nebular
+# continuum plus lines spread over the grid's native bins), while tengri returns
+# the lines alone, each narrowed to the ~500 km/s width of the narrow-line region
+# — concentrating a line into that profile lifts its peak above the grid-binned
+# version (so each panel has its own y-axis). Second, tengri interpolates the
+# coarse test grid with a smooth, differentiable kernel rather than a step
+# lookup, the same gradient-friendly choice as the inclination mask in §9f; on a
+# 2-node-per-axis test grid that smooths the line ratios by tens of percent, an
+# offset that shrinks on a finer grid. The strong forbidden lines — [O III] 5007,
+# the Balmer series, [O II] 3727 — still line up.
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
@@ -994,7 +998,7 @@ ax.legend(fontsize=9, ncol=2)
 ax.grid(True, alpha=0.3)
 
 # Inclination sweep: observed-disc luminosity at 5000 Å vs inclination.
-incs = np.linspace(0.0, 89.0, 40)
+incs = np.linspace(0.0, 89.0, 24)
 disc_vis = []
 for inc in incs:
     r = S.agn_unified(

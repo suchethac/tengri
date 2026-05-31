@@ -304,6 +304,7 @@ def compute_nlr_sed_synthesizer(
     neb_logU: float = -2.0,
     neb_logn: float = 4.0,
     neb_logZ_gas: float = -1.8477,
+    use_grid_qh: bool = True,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Synthesizer CLOUDY-grid AGN NLR adapter for ``unified_nlr_blr``.
@@ -351,14 +352,13 @@ def compute_nlr_sed_synthesizer(
         )
 
     backend = get_synthesizer_nlr_backend(grid_path)
-    l_acc_erg = covering_fraction * l_disc_bol_erg
-    # The backend stores line luminosities *per ionizing photon*; the absolute
-    # scale comes from Q_H. Derive log10(Q_H) from the intercepted accretion
-    # luminosity so covering_fraction and l_disc_bol_erg actually drive the
-    # output. Map the photoionisation knobs onto the backend's parameter names
+    log_qh = _resolve_log_qh(
+        backend, l_disc_bol_erg, use_grid_qh,
+        log_bh_mass, log_eddington, cosine_inclination, neb_logZ_gas, neb_logU, neb_logn,
+    )
+    # Map the photoionisation knobs onto the backend's parameter names
     # (log_ionU / log_metallicity / log_nH) — passing the ``neb_*`` aliases lets
     # them fall into ``**_kwargs`` and silently revert to grid defaults.
-    log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl=-1.7)
     line_wave_aa, line_lum_lsun = backend.predict_agn_nlr_lines(
         log_bh_mass=log_bh_mass,
         log_eddington=log_eddington,
@@ -369,13 +369,42 @@ def compute_nlr_sed_synthesizer(
         log_qh=log_qh,
     )
 
-    line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S
+    # Covering fraction scales the observed reprocessed lines (separate from Q_H,
+    # which is the disc's intrinsic ionising output).
+    line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S * covering_fraction
     return _lines_to_lnu(
         wavelength,
         jnp.asarray(line_wave_aa),
         line_lum_erg,
         fwhm_kms,
     )
+
+
+def _resolve_log_qh(
+    backend,
+    l_disc_bol_erg,
+    use_grid_qh,
+    log_bh_mass,
+    log_eddington,
+    cosine_inclination,
+    neb_logZ_gas,
+    neb_logU,
+    neb_logn,
+):
+    r"""Return log10(Q_H [photons/s]) for the line-luminosity normalisation.
+
+    With ``use_grid_qh`` (default) the grid's own specific ionising luminosity is
+    used — ``log10(Q_H) = log10(Q_H/L_bol)_grid + log10(L_bol[erg/s]) - 7`` (the
+    −7 converts erg/s to W) — so tengri reproduces Synthesizer's own disc-model
+    :math:`Q_H` rather than assuming an ionising-spectrum slope. The legacy path
+    derives :math:`Q_H` from the accretion luminosity and an assumed slope.
+    """
+    if use_grid_qh and getattr(backend.grid, "log_qh_specific", None) is not None:
+        log_qh_specific = backend.interp_log_qh_specific(
+            log_bh_mass, log_eddington, cosine_inclination, neb_logZ_gas, neb_logU, neb_logn
+        )
+        return log_qh_specific + jnp.log10(l_disc_bol_erg) - 7.0
+    return _log_qh_from_lacc(l_disc_bol_erg, alpha_pl=-1.7)
 
 
 def compute_blr_sed_synthesizer(
@@ -390,6 +419,7 @@ def compute_blr_sed_synthesizer(
     neb_logU: float = -1.0,
     neb_logn: float = 10.0,
     neb_logZ_gas: float = -1.8477,
+    use_grid_qh: bool = True,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Synthesizer CLOUDY-grid AGN **BLR** adapter for ``unified_nlr_blr``.
@@ -449,11 +479,12 @@ def compute_blr_sed_synthesizer(
         )
 
     backend = get_synthesizer_blr_backend(grid_path)
-    l_acc_erg = covering_fraction * l_disc_bol_erg
-    # See compute_nlr_sed_synthesizer: derive log10(Q_H) from the intercepted
-    # accretion luminosity and map the photoionisation knobs onto the backend's
-    # parameter names so covering_fraction / l_disc_bol_erg drive the amplitude.
-    log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl=-1.7)
+    # Use the grid's own Q_H normalisation (see compute_nlr_sed_synthesizer); the
+    # covering fraction scales the observed lines separately.
+    log_qh = _resolve_log_qh(
+        backend, l_disc_bol_erg, use_grid_qh,
+        log_bh_mass, log_eddington, cosine_inclination, neb_logZ_gas, neb_logU, neb_logn,
+    )
     line_wave_aa, line_lum_lsun = backend.predict_agn_blr_lines(
         log_bh_mass=log_bh_mass,
         log_eddington=log_eddington,
@@ -464,7 +495,7 @@ def compute_blr_sed_synthesizer(
         log_qh=log_qh,
     )
 
-    line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S
+    line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S * covering_fraction
     return _lines_to_lnu(
         wavelength,
         jnp.asarray(line_wave_aa),
