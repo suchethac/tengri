@@ -10,10 +10,14 @@ post-starburst galaxy, and (4) a dusty starburst. The grey box
 marks the "quiescent region" from Williams+2009, a visual guide
 for identifying passive galaxies.
 
-This figure demonstrates how dust, age, and star formation
+dust, age, and star formation
 history shape a galaxy's position in the UVJ plane — a
 workhorse diagnostic for photometric surveys.
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -51,7 +55,7 @@ obs = tengri.Observation(
 sf_model = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 0.5},
+    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 10.63},
     dust={
         "type": "two_component",
         "*": tengri.FIXED,
@@ -68,7 +72,7 @@ baseline_sf = dict(sf_model.spec.sample(jax.random.PRNGKey(0)))
 
 for i, tau_v in enumerate(tau_v_grid):
     # tau_v is the birth-cloud optical depth; map to tau_bc
-    params = {**baseline_sf, "dust_two_component_tau_bc": tau_v}
+    params = {**baseline_sf, "dust_tau_bc": tau_v}
     flux = _flux(sf_model, params)
     sf_uv[i], sf_vj[i] = _colors_from_flux(flux[0], flux[1], flux[2])
 
@@ -83,7 +87,7 @@ quiescent_model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 10.0,
         "width_gyr": 0.5,
-        "log_peak_sfr": 0.0,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
@@ -106,7 +110,7 @@ psb_model = tengri.SEDModel.build(
         "*": tengri.FIXED,
         "peak_lbt_gyr": 1.0,
         "width_gyr": 0.2,
-        "log_peak_sfr": 1.2,
+        "log_total_mass": 10.0,
         "skew": 0.0,
         "trunc": 13.0,
     },
@@ -124,7 +128,7 @@ psb_uv, psb_vj = _colors_from_flux(flux_psb[0], flux_psb[1], flux_psb[2])
 burst_model = tengri.SEDModel.build(
     tengri.load_ssp(),
     observation=obs,
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.5},
+    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.63},
     dust={
         "type": "two_component",
         "*": tengri.FIXED,

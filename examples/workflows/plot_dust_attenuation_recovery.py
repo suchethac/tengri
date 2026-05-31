@@ -49,7 +49,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,
+        "log_total_mass": 11.13,
         "peak_lbt_gyr": 0.5,
         "width_gyr": 0.3,
         "skew": 0.1,
