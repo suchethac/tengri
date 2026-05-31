@@ -25,14 +25,18 @@ from tengri.utils.physics_constants import C_CGS
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
 _N_LINES = 39
 
-# Rest-frame wavelengths of Lyman series lines (Angstrom)
+# Rest-frame wavelengths of Lyman series lines (Angstrom), vacuum.
+# Values match Inoue+2014 Table 2 / eazy-py LAFcoeff.txt exactly. The first
+# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0 — a rounded value placed
+# the forest edge ~0.33 Å rest / ~2.6 Å observed at z=7 redward of every other
+# code, see tests/regression/paper/test_igm_inoue.py).
 _LAMBDA_LYMAN = jnp.array(
     [
-        1216.0,
+        1215.67,
         1025.720,
         972.537,
         949.743,
-        937.804,
+        937.803,
         930.748,
         926.226,
         923.150,
@@ -70,8 +74,8 @@ _LAMBDA_LYMAN = jnp.array(
     ]
 )
 
-# Lyman limit wavelength
-_LAMBDA_LIMIT = 912.0  # Angstrom
+# Lyman limit wavelength (Inoue+2014 / eazy-py convention)
+_LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
 # Shape: (39, 3) — [A_j1, A_j2, A_j3]
@@ -233,56 +237,41 @@ def _tau_lc_laf(
     wave_obs: jnp.ndarray,
     z_source: float,
 ) -> jnp.ndarray:
-    """Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25–27)."""
-    # Absorbers at redshift z_abs contribute for wave_obs = 911.8*(1+z_abs)
-    # So wave_obs must be > 911.8 (rest Lyman limit) and < 911.8*(1+z_source)
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
+    r"""Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25-27).
 
-    z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
-    # Clamp z_obs >= 0 so fractional exponents (1.2, 3.7, 5.5) never receive a
-    # negative base in the inactive region (wave_obs < lambda_limit). JAX evaluates
-    # all branches regardless of the active mask, so without this clamp the power
-    # expressions produce NaN for short-wavelength photons.
-    z_obs_safe = jnp.maximum(z_obs, 0.0)
+    Faithful port of eazy-py ``Inoue14.tLCLAF``. With :math:`r = \lambda_{\rm obs}/\lambda_L`
+    (:math:`\lambda_L = 911.8` Å), absorption applies for
+    :math:`\lambda_{\rm obs} < \lambda_L (1 + z_S)` as a piecewise function of the source
+    redshift regime and of ``r`` (split at :math:`r = 2.2` and :math:`r = 5.7`).
+    """
+    lam_l = _LAMBDA_LIMIT
+    active = wave_obs < lam_l * (1.0 + z_source)
+    r = wave_obs / lam_l
+    zp1 = 1.0 + z_source
 
-    # Three source-redshift regimes
-    # Regime z_S < 1.2
-    t_low = (
-        0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
+    # Regime z_S < 1.2 (Inoue+2014 Eq. 25)
+    t_low = 0.3248 * (r**1.2 - zp1 ** (-0.9) * r**2.1)
+
+    # Regime 1.2 <= z_S < 4.7 (Inoue+2014 Eq. 26): split at r = 2.2 (= 1 + z1LAF)
+    t_mid = jnp.where(
+        r >= 2.2,
+        2.545e-2 * (zp1**1.6 * r**2.1 - r**3.7),
+        2.545e-2 * zp1**1.6 * r**2.1 + 0.3248 * r**1.2 - 0.2496 * r**2.1,
     )
 
-    # Regime 1.2 <= z_S < 4.7
-    t_mid = (
-        2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
+    # Regime z_S >= 4.7 (Inoue+2014 Eq. 27): split at r = 2.2 and r = 5.7 (= 1 + z2LAF)
+    t_high = jnp.where(
+        r > 5.7,
+        5.221e-4 * (zp1**3.4 * r**2.1 - r**5.5),
+        jnp.where(
+            r >= 2.2,
+            5.221e-4 * zp1**3.4 * r**2.1 + 0.2182 * r**2.1 - 2.545e-2 * r**3.7,
+            5.221e-4 * zp1**3.4 * r**2.1 + 0.3248 * r**1.2 - 3.140e-2 * r**2.1,
+        ),
     )
 
-    # Regime z_S >= 4.7
-    t_high = (
-        5.22e-4 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        + 2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 1.328e-3 * ((1.0 + z_obs_safe) ** 3.7 - (1.0 + z_source) ** 3.7)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        - 5.15e-5 * ((1.0 + z_obs_safe) ** 5.5 - (1.0 + z_source) ** 5.5)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
-    )
-
-    tau = jnp.where(
-        z_source < 1.2,
-        t_low,
-        jnp.where(z_source < 4.7, t_mid, t_high),
-    )
-
-    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
+    tau = jnp.where(z_source < 1.2, t_low, jnp.where(z_source < 4.7, t_mid, t_high))
+    return jnp.where(active, tau, 0.0)
 
 
 # ── Lyman continuum optical depth (DLA) ───────────────────────────
@@ -292,25 +281,33 @@ def _tau_lc_dla(
     wave_obs: jnp.ndarray,
     z_source: float,
 ) -> jnp.ndarray:
-    """Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28–29)."""
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
-    z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
+    r"""Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28-29).
 
-    # Two source-redshift regimes
-    t_low = (
-        0.2113 * (1.0 + z_source) ** 2.0
-        - 7.661e-2 * (1.0 + z_source) ** 2.5 * (1.0 + z_obs) ** (-0.5)
-        - 0.1347 * (1.0 + z_obs) ** 2.0
-    )
+    Faithful port of eazy-py ``Inoue14.tLCDLA``. With :math:`r = \lambda_{\rm obs}/\lambda_L`,
+    absorption applies for :math:`\lambda_{\rm obs} < \lambda_L (1 + z_S)`; the high-z regime
+    splits at :math:`r = 3.0` (= 1 + z1DLA).
+    """
+    lam_l = _LAMBDA_LIMIT
+    active = wave_obs < lam_l * (1.0 + z_source)
+    r = wave_obs / lam_l
+    zp1 = 1.0 + z_source
 
-    t_high = (
-        4.696e-2 * (1.0 + z_source) ** 3.0
-        - 1.779e-2 * (1.0 + z_source) ** 3.5 * (1.0 + z_obs) ** (-0.5)
-        - 2.916e-2 * (1.0 + z_obs) ** 3.0
+    # Regime z_S < 2.0 (Inoue+2014 Eq. 28)
+    t_low = 0.2113 * zp1**2.0 - 7.661e-2 * zp1**2.3 * r ** (-0.3) - 0.1347 * r**2.0
+
+    # Regime z_S >= 2.0 (Inoue+2014 Eq. 29): split at r = 3.0 (= 1 + z1DLA)
+    t_high = jnp.where(
+        r >= 3.0,
+        4.696e-2 * zp1**3.0 - 1.779e-2 * zp1**3.3 * r ** (-0.3) - 2.916e-2 * r**3.0,
+        0.6340
+        + 4.696e-2 * zp1**3.0
+        - 1.779e-2 * zp1**3.3 * r ** (-0.3)
+        - 0.1347 * r**2.0
+        - 0.2905 * r ** (-0.3),
     )
 
     tau = jnp.where(z_source < 2.0, t_low, t_high)
-    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
+    return jnp.where(active, tau, 0.0)
 
 
 # ── CGM damping wing absorption (Asada et al. 2025) ───────────────

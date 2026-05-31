@@ -32,22 +32,23 @@ class TestIGMConvention:
     def test_observed_frame_input(self):
         """igm_transmission takes observed-frame wavelengths, not rest-frame.
 
-        At z=3: Lya rest 1216 Å → obs 4864 Å. Pass 4864 Å, not 1216 Å.
+        At z=3, rest-frame 1200 Å (just blueward of Lya at 1215.67 Å) lands in
+        the Lya forest at observed 4800 Å. Pass 4800 Å, not 1200 Å.
         The two conventions give very different transmission values.
         """
         z = 3.0
-        # Observed-frame: Lya at z=3 appears at 4864 Å
-        wave_lya_obs = jnp.array([1216.0 * (1 + z)])
-        T_obs = float(igm_transmission(wave_lya_obs, z)[0])
+        # Observed-frame: a forest wavelength (rest 1200 Å) at z=3 appears at 4800 Å
+        wave_forest_obs = jnp.array([1200.0 * (1 + z)])
+        T_obs = float(igm_transmission(wave_forest_obs, z)[0])
 
-        # Passing rest-frame wavelength (WRONG convention): 1216 Å at z=3 → 304 Å observed
+        # Passing rest-frame wavelength (WRONG convention): 1200 Å at z=3 → 300 Å observed
         # that is EUV, should have T → 0 (optically thick)
-        wave_lya_rest = jnp.array([1216.0])
-        T_rest = float(igm_transmission(wave_lya_rest, z)[0])
+        wave_forest_rest = jnp.array([1200.0])
+        T_rest = float(igm_transmission(wave_forest_rest, z)[0])
 
-        # At observed 4864 Å: Lya forest → T ≈ 0.68 (Fan+2006)
+        # At observed 4800 Å (rest 1200 Å): Lya forest → T ≈ 0.68 (Fan+2006)
         assert abs(T_obs - 0.68) < 0.30, (
-            f"Observed-frame convention: T(1216*(1+3)=4864Å)={T_obs:.3f} should be ≈ 0.68"
+            f"Observed-frame convention: T(1200*(1+3)=4800Å)={T_obs:.3f} should be ≈ 0.68"
         )
         # At 1216 Å (would be EUV deep within Lyman limit at z=3): T ≈ 0
         assert T_rest < T_obs, (
@@ -55,21 +56,29 @@ class TestIGMConvention:
         )
 
     def test_lyman_limit_opacity_z4(self):
-        """Lyman limit (rest 912 Å) is fully opaque at z_source=4.
+        """Substantial (partial) Lyman-limit absorption at z_source=4.
 
-        Inoue+2014 MNRAS 442: τ_LL >> 1 for z > 3.
-        Pass observed-frame wavelength: 912*(1+4) = 4560 Å.
+        In the mean Inoue+2014 model the Lyman limit (rest 911.8 Å) is NOT fully
+        opaque at z=4: T ≈ 0.23 (matches eazy-py exactly; the earlier "T<0.05"
+        expectation was an artifact of a broken LC opacity formula). Pass the
+        observed-frame Lyman-limit wavelength 911.8*(1+4) = 4559 Å.
         """
         z = 4.0
-        wave_ll_obs = jnp.array([912.0 * (1 + z)])  # observed 4560 Å
+        wave_ll_obs = jnp.array([911.8 * (1 + z)])  # observed 4559 Å
         T = float(igm_transmission(wave_ll_obs, z)[0])
-        assert T < 0.05, f"Inoue+2014: Lyman limit opacity at z=4: T={T:.3f} (expected < 0.05)"
+        assert 0.15 < T < 0.32, (
+            f"Inoue+2014: mean Lyman-limit transmission at z=4: T={T:.3f} (expected ≈ 0.23)"
+        )
 
     def test_lya_forest_z3(self):
-        """Mean Lya forest transmission at z=3 ≈ 0.68. Fan+2006 AJ 132, Eq. 3."""
+        """Mean Lya forest transmission at z=3 ≈ 0.68. Fan+2006 AJ 132, Eq. 3.
+
+        Probed just blueward of Lya (rest 1200 Å) where the mean forest level
+        applies; at the line edge itself the value is not well-defined.
+        """
         z = 3.0
-        wave_lya_obs = jnp.array([1216.0 * (1 + z)])
-        T = float(igm_transmission(wave_lya_obs, z)[0])
+        wave_forest_obs = jnp.array([1200.0 * (1 + z)])
+        T = float(igm_transmission(wave_forest_obs, z)[0])
         np.testing.assert_allclose(
             T,
             0.68,
@@ -107,9 +116,9 @@ class TestIGMConvention:
         """At fixed observed wavelength, transmission decreases with redshift.
 
         Higher redshift = longer path through more Lya forest absorbers.
-        At obs 4864 Å: T(z=2) > T(z=3) > T(z=4).
+        At obs 3600 Å (blueward of Lya for all three z): T(z=2) > T(z=3) > T(z=4).
         """
-        wave = jnp.array([4864.0])
+        wave = jnp.array([3600.0])
         T2 = float(igm_transmission(wave, 2.0)[0])
         T3 = float(igm_transmission(wave, 3.0)[0])
         T4 = float(igm_transmission(wave, 4.0)[0])
@@ -119,11 +128,12 @@ class TestIGMConvention:
     def test_no_nan_at_lyman_limit(self):
         """No NaN at exactly the Lyman limit wavelength (numerical edge case).
 
-        Power-law exponents in igm.py clamp z_obs >= 0 to prevent NaN.
-        See CLAUDE.md: 'IGM LAF opacity clamps z_obs >= 0'.
+        The LC opacity is a function of r = wave_obs / lambda_L, which is
+        strictly positive, so the fractional power-laws never see a negative
+        base and the result stays finite at the limit.
         """
         z = 2.0
-        wave_ll = jnp.array([912.0 * (1 + z)])
+        wave_ll = jnp.array([911.8 * (1 + z)])
         T = igm_transmission(wave_ll, z)
         assert jnp.isfinite(T[0]), "igm_transmission: NaN at Lyman limit wavelength"
 
