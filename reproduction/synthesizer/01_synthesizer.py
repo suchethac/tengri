@@ -262,6 +262,14 @@ save_fig("synthesizer_02_sfh_delayed.png")
 #
 # Convolve the τ-delayed SFH with the SSP grid. No dust, no nebular. Both panels
 # show `L_ν` vs `λ_rest` for the 10^10 M⊙ fiducial galaxy.
+#
+# Both sides form exactly 10^10 M⊙ (verified) and read the same (§1 bit-level)
+# SSPs, so the printed ~1.16× optical ratio is *not* a normalisation error — it
+# is the two codes' independent **SFH discretisations**: Synthesizer integrates
+# an analytic SFZH onto the SSP age-bin edges (a third of the mass lands in the
+# wide log-spaced bin straddling the SFR peak), while tengri convolves on its
+# 64-point log-lookback grid. The mild chromatic spread (P5–P95 ≈ 1.11–1.19)
+# follows from the slightly different age weighting, not a shape disagreement.
 
 # %%
 w_s3, L_s3 = S.stellar_sed(
@@ -632,6 +640,7 @@ save_fig("synthesizer_08_nebular.png")
 import jax.numpy as jnp
 
 from tengri.components.agn.nlr_cloudy import compute_nlr_sed_synthesizer
+from tengri.components.agn.unified import _sigmoid_mask
 
 # Synthesizer grid directory (where synthesizer-download placed the test grids),
 # so tengri's adapter reads the *same* AGN Cloudy grids.
@@ -954,7 +963,10 @@ print(
 # BLR vanish once `inclination + θ_torus > 90°` (an edge-on, Type-2 sightline). The
 # top panel shows the total intrinsic spectrum and its components; the bottom panel
 # sweeps inclination and tracks the observed disc luminosity, showing the sharp
-# Type-1 → Type-2 transition.
+# Type-1 → Type-2 transition — overlaid with tengri's `_sigmoid_mask`, which
+# replaces the step with a **smooth sigmoid** at the *same* critical angle so the
+# inclination parameter keeps a usable gradient for VI/HMC. This is the one
+# deliberate divergence between the two AGN models, and the reason for it.
 
 # %%
 fig, (ax, ax_inc) = plt.subplots(2, 1, figsize=(10, 9))
@@ -1001,6 +1013,13 @@ ax_inc.plot(
     markersize=3,
     label="Synthesizer (hard mask)",
 )
+# tengri's `_sigmoid_mask` replaces the hard step with a smooth sigmoid centred
+# at the same critical angle (90° − θ_torus), so the inclination parameter keeps
+# a non-zero gradient for VI/HMC. Overlaid here at the same θ_torus.
+tengri_vis = np.array(
+    [float(_sigmoid_mask(np.cos(np.radians(inc)), THETA_TORUS)) for inc in incs]
+)
+ax_inc.plot(incs, tengri_vis, "C1-", linewidth=2.0, label="tengri (smooth sigmoid)")
 ax_inc.axvline(
     90.0 - THETA_TORUS,
     color="grey",
@@ -1008,13 +1027,16 @@ ax_inc.axvline(
     label=rf"$90°-\theta_{{torus}}$ = {90 - THETA_TORUS:g}°",
 )
 ax_inc.set_xlabel("inclination [degrees]")
-ax_inc.set_ylabel("observed disc (5000 Å), normalised")
-ax_inc.set_title("Disc visibility vs inclination — hard Type-1/Type-2 transition")
+ax_inc.set_ylabel("disc visibility, normalised")
+ax_inc.set_title("Disc visibility vs inclination — hard step vs differentiable sigmoid")
 ax_inc.legend(fontsize=9)
 ax_inc.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("synthesizer_09f_unified_inclination.png")
-print(f"§9f disc visible for inc < {90 - THETA_TORUS:g}°, masked beyond (Synthesizer hard cut).")
+print(
+    f"§9f disc mask (θ_torus={THETA_TORUS:g}°): "
+    f"Synthesizer hard-zeros at inc>{90 - THETA_TORUS:g}°; tengri sigmoid stays differentiable."
+)
 
 
 # %% [markdown]
@@ -1055,6 +1077,74 @@ print(
     f"§12 Inoue14 IGM at z={Z_IGM:g}: "
     f"max |Δ| = {_diff.max():.3e}, median |Δ| = {np.median(_diff):.3e}"
 )
+
+
+# %% [markdown]
+# ## tengri in Synthesizer-mode — full-SED head-to-head
+#
+# Every section above swept one block. This is the whole stellar+dust forward
+# model at once: tengri configured to emulate Synthesizer end to end (the shared
+# SSP, the fiducial τ-delayed SFH, a Calzetti screen, DL07 IR, and Cue nebular)
+# overlaid on Synthesizer's own `TotalEmission` output at matched parameters (the
+# §7 configuration). The top panel is the overlay; the bottom is the fractional
+# residual `tengri / Synthesizer − 1` with the ±25 % band shaded. The optical
+# normalization ratio and its 16–84 % spread are reported — they carry the §3
+# SFH-discretisation offset, which is the dominant stellar-continuum difference.
+
+# %%
+import chex
+
+w_ext, L_ext = np.asarray(w_full_s), np.asarray(L_full_s)
+L_t_on_ext = U.regrid(np.asarray(s_full.wave), _sed_full_t, w_ext)
+chex.assert_equal_shape([L_ext, L_t_on_ext])
+
+mask = (w_ext > 0) & (L_ext > 0) & (L_t_on_ext > 0)
+resid = np.full(w_ext.shape, np.nan, dtype=float)
+resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
+
+opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
+ratio_opt = L_t_on_ext[opt] / L_ext[opt]
+norm = float(np.median(ratio_opt))
+p16, p84 = float(np.percentile(ratio_opt, 16)), float(np.percentile(ratio_opt, 84))
+print(
+    f"full-SED head-to-head tengri/Synthesizer optical (1000–10000 Å): "
+    f"normalization {norm:.2f}×, 16–84% spread {p16:.2f}–{p84:.2f}×"
+)
+_assert_comparable(L_ext, _sed_full_t, name="full-SED head-to-head")
+
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(11, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(w_ext, L_ext, "C0-", linewidth=1.5, label="Synthesizer (TotalEmission)")
+ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (Synthesizer-mode)")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1e2, 1e7)
+_hpk = float(np.nanmax(L_ext))
+ax.set_ylim(_hpk * 1e-5, _hpk * 3)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+ax.set_title("tengri in Synthesizer-mode vs Synthesizer — full panchromatic SED")
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax.text(
+    0.02, 0.05,
+    rf"tengri/Synthesizer $= {norm:.2f}\times$ (16–84%: {p16:.2f}–{p84:.2f})",
+    transform=ax.transAxes, fontsize=10, va="bottom",
+    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
+)
+ax_r.axhspan(-0.25, 0.25, color="0.85", zorder=0)
+ax_r.axhline(0.0, color="0.5", linewidth=0.8)
+ax_r.axhline(norm - 1.0, color="C1", linestyle=":", linewidth=0.9)
+ax_r.plot(w_ext, resid, "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_xlim(1e2, 1e7)
+ax_r.set_ylim(-1.0, 1.0)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel(r"tengri/Syn $-1$")
+ax_r.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("synthesizer_full_sed_headtohead.png")
+plt.show()
 
 
 # %% [markdown]
