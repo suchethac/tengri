@@ -174,6 +174,252 @@ def sfh_curve(
 
 
 # ---------------------------------------------------------------------------
+# §2a–§2d — non-parametric SFHs (Prospector's binned templates → FSPS sfh=3)
+#
+# Prospector does not evaluate its non-parametric SFHs inside FSPS. It bins
+# the history in ``prospect.models.transforms`` (per-bin stellar masses from
+# log-SFR ratios or Dirichlet z-fractions) and feeds the resulting
+# step-function SFR to FSPS as a *tabular* SFH (``sfh=3``,
+# ``set_tabular_sfh``). The wrappers below call the exact transform Prospector
+# uses for each family and return ``(agebins, masses)``; :func:`csp_lnu_binned`
+# turns that pair into the FSPS spectrum. So the SED on the left of each §2x
+# panel is Prospector's own forward model, evaluated at the parameter values
+# the right (tengri) panel uses.
+#
+# Convention (verified against ``transforms.logsfr_ratios_to_masses``):
+# ``logsfr_ratios[j] = log10(SFR_j / SFR_{j+1})`` with ``j = 0`` the most
+# recent bin in lookback time — identical sign and ordering to tengri's
+# ``ratio_i`` (``components/stellar/sfh/nonparametric.py``).
+# ---------------------------------------------------------------------------
+def agebins_from_edges(bin_edges_gyr: np.ndarray) -> np.ndarray:
+    """Build Prospector ``agebins`` from shared lookback-time bin edges.
+
+    Prospector stores age bins as an ``(nbin, 2)`` array of
+    :math:`\\log_{10}` lookback-time edges in **years**, ordered youngest
+    first. tengri expresses the same grid as ``bin_edges_gyr`` (lookback
+    [Gyr], ascending). Passing both sides the same physical edges makes the
+    binning identical; the only adjustment is that a ``0 Gyr`` youngest edge
+    has no :math:`\\log_{10}(\\mathrm{yr})` value, so it is floored to 1 Myr.
+
+    Parameters
+    ----------
+    bin_edges_gyr : array_like, shape (nbin+1,)
+        Lookback-time bin edges [Gyr], ascending (youngest first).
+
+    Returns
+    -------
+    agebins : ndarray, shape (nbin, 2)
+        ``[log10(t_lower_yr), log10(t_upper_yr)]`` per bin, youngest first.
+    """
+    edges_yr = np.asarray(bin_edges_gyr, dtype=np.float64) * 1e9
+    edges_yr = np.maximum(edges_yr, 1e6)  # floor a 0-Gyr youngest edge at 1 Myr
+    log_edges = np.log10(edges_yr)
+    return np.stack([log_edges[:-1], log_edges[1:]], axis=1)
+
+
+def csp_lnu_binned(
+    *,
+    agebins: np.ndarray,
+    masses: np.ndarray,
+    logzsol: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """FSPS spectrum for a binned (step-function) SFH via the ``sfh=3`` path.
+
+    This is the non-parametric analogue of :func:`csp_lnu`. Per-bin stellar
+    masses are converted to a piecewise-constant SFR, handed to FSPS through
+    :meth:`fsps.StellarPopulation.set_tabular_sfh`, and the integrated
+    composite spectrum is read at the epoch of observation.
+
+    Parameters
+    ----------
+    agebins : array_like, shape (nbin, 2)
+        :math:`\\log_{10}` lookback-time bin edges [yr], youngest first — the
+        Prospector convention (see :func:`agebins_from_edges`).
+    masses : array_like, shape (nbin,)
+        Stellar mass formed in each bin [M⊙], aligned with ``agebins``.
+    logzsol : float
+        Stellar metallicity :math:`\\log_{10}(Z/Z_\\odot)`. Default 0 (solar).
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    L_nu : ndarray, shape (n_wave,)
+        Spectral luminosity [erg/s/Hz] for the supplied formed mass (already
+        absolute — *not* per 1 M⊙, since ``masses`` carries the normalisation).
+
+    Notes
+    -----
+    FSPS' tabular SFH is cosmic time (Gyr from the start of star formation,
+    increasing); the bins are reversed from lookback to cosmic time and a
+    duplicated point at each internal edge renders the SFR as a true step.
+    """
+    agebins = np.asarray(agebins, dtype=np.float64)
+    masses = np.asarray(masses, dtype=np.float64)
+    edges_yr = np.concatenate([10.0 ** agebins[:, 0], [10.0 ** agebins[-1, 1]]])
+    widths_yr = np.diff(edges_yr)
+    sfr_bins = masses / widths_yr  # M⊙/yr, youngest-first
+
+    # Lookback edges → cosmic age (Gyr, increasing): oldest edge is t=0.
+    tage_gyr = edges_yr[-1] / 1e9
+    lookback_gyr = edges_yr / 1e9
+    cosmic_edges = (tage_gyr - lookback_gyr)[::-1]  # ascending, [0 .. tage]
+    sfr_cosmic = sfr_bins[::-1]  # SFR per bin, oldest-first to match cosmic_edges
+
+    # Render the step function: two samples per internal edge (ε apart).
+    ages, sfrs = [], []
+    eps = 1e-6  # Gyr
+    for i in range(sfr_cosmic.shape[0]):
+        lo, hi = cosmic_edges[i], cosmic_edges[i + 1]
+        ages += [lo, max(hi - eps, lo + eps / 2)]
+        sfrs += [sfr_cosmic[i], sfr_cosmic[i]]
+    age_tab = np.asarray(ages, dtype=np.float64)
+    sfr_tab = np.asarray(sfrs, dtype=np.float64)
+
+    sp = _get_sp()
+    _reset(sp)
+    sp.params["logzsol"] = logzsol
+    sp.params["sfh"] = 3
+    sp.set_tabular_sfh(age_tab, sfr_tab)
+    return _spectrum(sp, tage_gyr)
+
+
+def continuity_masses(
+    *,
+    bin_edges_gyr: np.ndarray,
+    log_total_mass: float,
+    logsfr_ratios: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-bin masses for the continuity SFH (Leja+2019), fixed bin edges.
+
+    Wraps :func:`prospect.models.transforms.logsfr_ratios_to_masses` — the
+    exact transform Prospector applies for ``continuity_sfh``.
+
+    Parameters
+    ----------
+    bin_edges_gyr : array_like, shape (nbin+1,)
+        Shared lookback-time bin edges [Gyr], ascending.
+    log_total_mass : float
+        :math:`\\log_{10}(M_\\star/M_\\odot)` formed.
+    logsfr_ratios : array_like, shape (nbin-1,)
+        ``log10(SFR_j / SFR_{j+1})``, youngest first.
+
+    Returns
+    -------
+    agebins : ndarray, shape (nbin, 2)
+        Prospector age bins [log10 yr].
+    masses : ndarray, shape (nbin,)
+        Stellar mass formed per bin [M⊙].
+    """
+    from prospect.models import transforms as _T
+
+    agebins = agebins_from_edges(bin_edges_gyr)
+    masses = _T.logsfr_ratios_to_masses(
+        logmass=float(log_total_mass),
+        logsfr_ratios=np.asarray(logsfr_ratios, dtype=np.float64),
+        agebins=agebins,
+    )
+    return agebins, np.asarray(masses, dtype=np.float64)
+
+
+def dirichlet_masses(
+    *,
+    bin_edges_gyr: np.ndarray,
+    log_total_mass: float,
+    z_fraction: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-bin masses for the Dirichlet SFH (Leja+2017), fixed bin edges.
+
+    Wraps :func:`prospect.models.transforms.zfrac_to_masses`.
+
+    Parameters
+    ----------
+    bin_edges_gyr : array_like, shape (nbin+1,)
+        Shared lookback-time bin edges [Gyr], ascending.
+    log_total_mass : float
+        :math:`\\log_{10}(M_\\star/M_\\odot)` formed.
+    z_fraction : array_like, shape (nbin-1,)
+        Stick-breaking z-fractions, youngest first.
+
+    Returns
+    -------
+    agebins : ndarray, shape (nbin, 2)
+        Prospector age bins [log10 yr].
+    masses : ndarray, shape (nbin,)
+        Stellar mass formed per bin [M⊙].
+    """
+    from prospect.models import transforms as _T
+
+    agebins = agebins_from_edges(bin_edges_gyr)
+    masses = _T.zfrac_to_masses(
+        total_mass=10.0 ** float(log_total_mass),
+        z_fraction=np.asarray(z_fraction, dtype=np.float64),
+        agebins=agebins,
+    )
+    return agebins, np.asarray(masses, dtype=np.float64)
+
+
+def flex_masses(
+    *,
+    anchor_edges_gyr: np.ndarray,
+    log_total_mass: float,
+    logsfr_ratio_young: float,
+    logsfr_ratios: np.ndarray,
+    logsfr_ratio_old: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Per-bin masses + derived bins for continuity_flex (Leja+2019).
+
+    Wraps :func:`prospect.models.transforms.logsfr_ratios_to_masses_flex` and
+    :func:`prospect.models.transforms.logsfr_ratios_to_agebins`. Unlike the
+    fixed-bin families, the *flex* bin edges are derived from the ratios under
+    a constant-mass-per-flex-bin constraint, so this returns the derived
+    ``agebins`` too.
+
+    Parameters
+    ----------
+    anchor_edges_gyr : array_like, shape (3,)
+        ``[t_young_end, t_old_start, t_max]`` [Gyr] — the fixed young/old
+        anchor edges (tengri's ``bin_edges_gyr`` for ``continuity_flex``).
+    log_total_mass : float
+        :math:`\\log_{10}(M_\\star/M_\\odot)` formed.
+    logsfr_ratio_young : float
+        ``log10(SFR_young / SFR_flex[0])``.
+    logsfr_ratios : array_like, shape (n_flex-1,)
+        Inner flex log-SFR ratios controlling the flex bin widths.
+    logsfr_ratio_old : float
+        ``log10(SFR_old / SFR_flex[N])``.
+
+    Returns
+    -------
+    agebins : ndarray, shape (nbin, 2)
+        Derived Prospector age bins [log10 yr].
+    masses : ndarray, shape (nbin,)
+        Stellar mass formed per bin [M⊙].
+    """
+    from prospect.models import transforms as _T
+
+    a = np.asarray(anchor_edges_gyr, dtype=np.float64)
+    # Outer anchor bins: youngest [1 Myr, t_young_end], oldest [t_old_start, t_max].
+    outer = np.array(
+        [
+            [np.log10(1e6), np.log10(a[0] * 1e9)],
+            [np.log10(a[1] * 1e9), np.log10(a[2] * 1e9)],
+        ]
+    )
+    derived = _T.logsfr_ratios_to_agebins(
+        logsfr_ratios=np.asarray(logsfr_ratios, dtype=np.float64), agebins=outer
+    )
+    masses = _T.logsfr_ratios_to_masses_flex(
+        logmass=float(log_total_mass),
+        logsfr_ratios=np.asarray(logsfr_ratios, dtype=np.float64),
+        logsfr_ratio_young=np.atleast_1d(np.float64(logsfr_ratio_young)),
+        logsfr_ratio_old=np.atleast_1d(np.float64(logsfr_ratio_old)),
+        agebins=outer,
+    )
+    return np.asarray(derived, dtype=np.float64), np.asarray(masses, dtype=np.float64)
+
+
+# ---------------------------------------------------------------------------
 # §3, §5, §6, §7 — composite stellar populations with optional physics
 # ---------------------------------------------------------------------------
 def csp_lnu(
