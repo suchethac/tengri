@@ -1722,10 +1722,20 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
-        # Mix single-U and PDR components via gamma
+        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+        # dust-mass fraction; the FSPS/DustEM ``powerlaw`` template carries its
+        # real relative luminosity (∫powerlaw/∫single_u ≈ 14-19), so gamma acts
+        # as a luminosity fraction directly — no analytic R needed (cf. DL07).
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
             powerlaw
         )
+
+        # Energy balance: the mix integrates to (1-gamma) + gamma*ratio, so
+        # renormalise to unit frequency integral on the (full) template grid
+        # before scaling by L_absorbed.
+        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
+        t_integral = -jnp.trapezoid(template, nu_tmpl)
+        template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)

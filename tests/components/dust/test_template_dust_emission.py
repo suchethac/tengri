@@ -673,3 +673,59 @@ class TestAstrodustPDR:
                 f"astrodust energy balance broken at gamma={gamma}: "
                 f"L_IR/L_absorbed={l_ir / 1e10:.3f}"
             )
+
+
+class TestThemisPDR:
+    """THEMIS (Jones+2017) PDR is built from the direct FSPS/DustEM grids."""
+
+    @pytest.fixture
+    def ir_wave(self):
+        return jnp.logspace(4, 7, 3000)
+
+    @pytest.mark.regression_paper
+    def test_themis_gamma_warms_and_is_energy_balanced(self, ir_wave):
+        """gamma drives a physical warm shift; energy balance holds.
+
+        THEMIS templates are now built from the FSPS/DustEM grids
+        (``THEMIS_MW3.1_*.dat``), where the power-law column carries its real
+        DustEM relative luminosity — so ``gamma`` (a mass fraction) warms the
+        SED directly, no analytic R needed. Previously the built ``powerlaw``
+        was a duplicate of ``single_u`` and gamma was a no-op (#571).
+        """
+        from tengri.components.dust.emission import resolve_emission_model
+
+        th = resolve_emission_model("themis")
+        c_aa_s = 2.998e18
+
+        def centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nl = sed[m] * (c_aa_s / w)
+            return float(10.0 ** (jnp.sum(jnp.log10(w) * nl) / jnp.sum(nl))) / 1e4
+
+        sed0 = th(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        sed5 = th(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
+        shift = centroid_um(sed0) - centroid_um(sed5)
+        assert shift > 12.0, (
+            f"themis gamma=0.05 should warm the FIR centroid (real DustEM PDR): "
+            f"shift={shift:.1f} µm (pre-fix: ~3 µm — powerlaw was a copy of single_u)"
+        )
+        for gamma in (0.0, 0.05, 0.3):
+            sed = th(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=gamma, dust_qpah=2.5)
+            l_ir = float(-jnp.trapezoid(sed, c_aa_s / ir_wave))
+            assert 0.9 < l_ir / 1e10 < 1.1, (
+                f"themis energy balance broken at gamma={gamma}: L_IR/L_absorbed={l_ir / 1e10:.3f}"
+            )
+
+    def test_themis_powerlaw_distinct_from_single_u(self):
+        """The built PDR template is a real, distinct spectrum (not a copy)."""
+        from tengri.components.dust.emission_templates import load_themis_templates
+
+        t = load_themis_templates("data/themis_templates.h5")
+        single = np.asarray(t["single_u"])
+        power = np.asarray(t["powerlaw"])
+        # Distinct in shape: the power-law (PDR) is warmer, so the ratio of its
+        # short-to-long-wavelength content differs from single_u.
+        assert not np.allclose(single / single.max(), power / power.max(), atol=1e-3), (
+            "themis powerlaw must be a real PDR spectrum, not a copy of single_u (#571)"
+        )
