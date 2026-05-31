@@ -258,5 +258,4 @@ ax.legend(fontsize=10, frameon=False, loc="lower right", ncol=1)
 ax.grid(True, alpha=0.2, linestyle=":")
 
 fig.tight_layout()
-plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
-plt.close()
+plt.show()
