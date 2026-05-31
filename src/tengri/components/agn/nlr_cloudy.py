@@ -353,8 +353,15 @@ def compute_nlr_sed_synthesizer(
 
     backend = get_synthesizer_nlr_backend(grid_path)
     log_qh = _resolve_log_qh(
-        backend, l_disc_bol_erg, use_grid_qh,
-        log_bh_mass, log_eddington, cosine_inclination, neb_logZ_gas, neb_logU, neb_logn,
+        backend,
+        l_disc_bol_erg,
+        use_grid_qh,
+        log_bh_mass,
+        log_eddington,
+        cosine_inclination,
+        neb_logZ_gas,
+        neb_logU,
+        neb_logn,
     )
     # Map the photoionisation knobs onto the backend's parameter names
     # (log_ionU / log_metallicity / log_nH) — passing the ``neb_*`` aliases lets
@@ -482,8 +489,15 @@ def compute_blr_sed_synthesizer(
     # Use the grid's own Q_H normalisation (see compute_nlr_sed_synthesizer); the
     # covering fraction scales the observed lines separately.
     log_qh = _resolve_log_qh(
-        backend, l_disc_bol_erg, use_grid_qh,
-        log_bh_mass, log_eddington, cosine_inclination, neb_logZ_gas, neb_logU, neb_logn,
+        backend,
+        l_disc_bol_erg,
+        use_grid_qh,
+        log_bh_mass,
+        log_eddington,
+        cosine_inclination,
+        neb_logZ_gas,
+        neb_logU,
+        neb_logn,
     )
     line_wave_aa, line_lum_lsun = backend.predict_agn_blr_lines(
         log_bh_mass=log_bh_mass,
