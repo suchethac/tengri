@@ -800,7 +800,7 @@ class StellarSEDComponent:
             # (ProSpect Bellstedt+2020 massmap_box model).
             log_z_start_abs = jnp.asarray(params["met_logzsol_start"]) + LOG10_ZSUN
             log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
-            yield_rho = jnp.asarray(params.get("yield", 0.03))
+            yield_rho = jnp.asarray(params.get("met_yield", 0.03))
             # Per-age metallicity on the SSP grid
             lgmet_on_ssp_ages = massmap_box_metallicity(
                 ssp.ssp_lg_age_gyr,

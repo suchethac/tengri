@@ -753,10 +753,11 @@ class Parameters:
         _evolving_met = kwargs.pop("evolving_metallicity", False)
         _chem_evol = kwargs.pop("chem_evol", False)
 
-        # Snapshot the user's keys before any further popping. Inference
-        # only sees met_/chem_ keys; everything else is irrelevant noise.
-        _inferred_mode = infer_met_mode(set(kwargs.keys()))
-
+        # Inference only sees met_/chem_ keys; everything else is irrelevant
+        # noise. Some modes share parameter keys (e.g. massmap_box's discriminator
+        # is a superset of massmap_lin's), so inference can be genuinely
+        # ambiguous — only run it where it is needed and let an explicit
+        # ``met_mode`` win over an ambiguous inference.
         if _met_mode_explicit is not None:
             if _evolving_met or _chem_evol:
                 raise ValueError(
@@ -764,6 +765,13 @@ class Parameters:
                     "Use met_mode='ramp' instead of evolving_metallicity=True, "
                     "or met_mode='chem_evol' instead of chem_evol=True."
                 )
+            # Consistency guard: only flag a conflict when inference resolves
+            # *unambiguously* to a different mode. An ambiguous inference (the
+            # user already disambiguated by setting met_mode) is not a conflict.
+            try:
+                _inferred_mode = infer_met_mode(set(kwargs.keys()))
+            except ValueError:
+                _inferred_mode = _met_mode_explicit
             if _inferred_mode != "delta" and _inferred_mode != _met_mode_explicit:
                 raise ValueError(
                     f"met_mode={_met_mode_explicit!r} conflicts with parameter "
@@ -783,7 +791,7 @@ class Parameters:
         elif _chem_evol:
             self.met_mode = "chem_evol"
         else:
-            self.met_mode = _inferred_mode
+            self.met_mode = infer_met_mode(set(kwargs.keys()))
 
         # Backward-compat properties for sed_model / pipeline
         self.evolving_metallicity = self.met_mode == "ramp"
