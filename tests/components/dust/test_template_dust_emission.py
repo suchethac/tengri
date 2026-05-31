@@ -626,3 +626,50 @@ class TestDL14ExtendedRange:
 
         dust_emission = _resolve_lazy_bucket("_DUST_EMISSION_PARAMS")
         assert "dust_alpha_dl14" in dust_emission
+
+
+class TestAstrodustPDR:
+    """Astrodust (Hensley & Draine 2023) PDR component is built and weighted."""
+
+    @pytest.fixture
+    def ir_wave(self):
+        return jnp.logspace(4, 7, 3000)
+
+    @pytest.mark.regression_paper
+    def test_astrodust_gamma_warms_and_is_energy_balanced(self, ir_wave):
+        """gamma drives a physical warm shift and energy balance holds.
+
+        The H&D 2023 file ships only a single-U grid; the loader builds the PDR
+        component by integrating the per-U spectra over dM/dU ∝ U^-2, and the
+        forward applies the DL07 Eq. 33 luminosity weight R + renormalises to
+        L_absorbed. Before this, ``powerlaw`` was a copy of ``single_u`` and
+        gamma was a no-op (#571). Astrodust is a DL07-family model, so its
+        gamma warming should track DL07 (centroid ~117->93 µm there); here we
+        require a substantial, energy-conserving shift.
+        """
+        from tengri.components.dust.emission import resolve_emission_model
+
+        ad = resolve_emission_model("astrodust")
+        c_aa_s = 2.998e18
+
+        def centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nl = sed[m] * (c_aa_s / w)
+            return float(10.0 ** (jnp.sum(jnp.log10(w) * nl) / jnp.sum(nl))) / 1e4
+
+        sed0 = ad(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        sed5 = ad(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=2.5)
+        shift = centroid_um(sed0) - centroid_um(sed5)
+        assert shift > 12.0, (
+            f"astrodust gamma=0.05 should warm the FIR centroid (DL07-family): "
+            f"shift={shift:.1f} µm (pre-fix: 0 µm — PDR was a copy of single_u)"
+        )
+        # Energy balance: ∫ L_nu dν = L_absorbed for any gamma.
+        for gamma in (0.0, 0.05, 0.3):
+            sed = ad(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=gamma, dust_qpah=2.5)
+            l_ir = float(-jnp.trapezoid(sed, c_aa_s / ir_wave))
+            assert 0.9 < l_ir / 1e10 < 1.1, (
+                f"astrodust energy balance broken at gamma={gamma}: "
+                f"L_IR/L_absorbed={l_ir / 1e10:.3f}"
+            )

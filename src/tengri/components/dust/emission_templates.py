@@ -930,9 +930,26 @@ def load_astrodust_templates(filepath: str) -> dict:
                     integral = -np.trapezoid(L_nu_total[i], nu_aa)
                     norms[i] = integral if integral > 0 else 1.0
                 L_nu_normed = L_nu_total / norms[:, None]
-                spectra = np.broadcast_to(L_nu_normed[None, :, :], (2, *L_nu_normed.shape)).copy()
-                single_u = spectra
-                powerlaw = spectra
+                # Single-U component: the per-U spectrum at U = U_min, shape-
+                # normalised. Power-law (PDR) component: dust mass distributed
+                # as dM/dU ∝ U^-alpha from U_min to U_max (= max grid U). Each
+                # mass element at field U' emits the per-U spectrum
+                # L_nu_total[U'] (per H ∝ per mass), so integrate the *raw*
+                # per-U spectra over the lgU grid weighted by U'^(1-alpha)
+                # (dU' = U' ln10 dlgU on a uniform-lgU grid), then shape-
+                # normalise. The forward applies the DL07 Eq. 33 relative-power
+                # weight R. Without this the PDR was a copy of single_u and
+                # ``gamma`` was a no-op (see #571).
+                alpha_pdr = 2.0  # DL07-standard slope for the H&D 2023 grid
+                w_pdr = umin_grid ** (1.0 - alpha_pdr)  # mass weight per lgU bin
+                powerlaw_1d = np.zeros_like(L_nu_normed)
+                n_u = umin_grid.shape[0]
+                for iu in range(n_u):
+                    pdr = (L_nu_total[iu:] * w_pdr[iu:, None]).sum(axis=0)
+                    integ = -np.trapezoid(pdr, nu_aa)
+                    powerlaw_1d[iu] = pdr / integ if integ > 0 else pdr
+                single_u = np.broadcast_to(L_nu_normed[None, :, :], (2, *L_nu_normed.shape)).copy()
+                powerlaw = np.broadcast_to(powerlaw_1d[None, :, :], (2, *powerlaw_1d.shape)).copy()
                 already_lnu = True  # we normalised explicitly above
             elif "wavelength_aa" in f:
                 # Standardized HDF5 (already Angstrom + L_nu normalized)
@@ -1204,10 +1221,22 @@ def create_astrodust_from_grid(
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
-        # Mix single-U and PDR components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
+        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+        # dust-mass fraction; weight the PDR template (built in the loader by
+        # integrating the H&D per-U spectra over dM/dU ∝ U^-2) by its DL07
+        # Eq. 33 relative luminosity R so gamma acts as a luminosity fraction
+        # (U_max = max grid U; same fix as DL07/DL14 — see #571).
+        r_power = _pdr_luminosity_weight(dust_umin_c, umin_grid[-1], 2.0)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+            dust_gamma_dl * r_power
+        ) * _bilinear(powerlaw)
+
+        # Energy balance: the R weighting makes the mixed template integrate to
+        # 1 + gamma*(R-1), so renormalise to unit frequency integral on the
+        # (full) template grid before scaling by L_absorbed below.
+        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
+        t_integral = -jnp.trapezoid(template, nu_tmpl)
+        template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
