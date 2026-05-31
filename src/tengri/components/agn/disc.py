@@ -636,53 +636,92 @@ def _hot_corona_lnu(
     l_hot_erg: float,
     gamma_hard: float,
     kt_hot_erg: float,
+    nu_seed_hz: float = 0.0,
 ) -> jnp.ndarray:
-    """Hot corona emission: power law with exponential cutoff.
+    r"""Hot corona emission: thermal-Comptonisation power law with two cutoffs.
 
-    The optically thin, hot corona produces hard X-ray emission:
+    The optically thin, hot corona produces hard X-ray emission via thermal
+    Comptonisation of seed photons. The spectrum is a power law bounded by a
+    high-energy cutoff at the electron temperature *and* a low-energy rollover
+    at the seed-photon energy:
 
-        L_nu ~ nu^(1 - Gamma_hard) * exp(-h*nu / kT_hot)
+    .. math::
 
-    Normalized so that the frequency-integrated luminosity = l_hot_erg.
+        L_\nu \propto \nu^{\,1-\Gamma_{\rm hot}}
+                      \, \exp\!\left(-\frac{h\nu}{kT_{e,\rm hot}}\right)
+                      \, \exp\!\left(-\frac{\nu_{\rm seed}}{\nu}\right)
 
-    The normalization integral is computed on a fixed internal frequency
-    grid matching RELAGN's default [1e-4, 1e4] keV.  This makes the
-    result independent of the caller's wavelength grid, fixing a
-    long-standing bug where the corona's optical contribution varied by
-    factors of 2-4x depending on grid extent.
+    where :math:`\Gamma_{\rm hot}` is the hard X-ray photon index,
+    :math:`kT_{e,\rm hot}` the electron temperature [erg], and
+    :math:`\nu_{\rm seed}` the seed-photon frequency [Hz]. The low-energy
+    rollover :math:`\exp(-\nu_{\rm seed}/\nu)` is the piece that ``nthcomp``
+    carries intrinsically: it tends to 1 for :math:`\nu \gg \nu_{\rm seed}`
+    (leaving the X-ray power law untouched) and to 0 for
+    :math:`\nu \ll \nu_{\rm seed}`. Without it the bare :math:`\nu^{1-\Gamma}`
+    tail rises monotonically toward low frequency for :math:`\Gamma > 1`, so
+    the corona leaks unphysically into the infrared and radio.
+
+    A thermal-Comptonisation spectrum is only defined *between* its seed-photon
+    energy and the electron temperature; there are no Comptonised photons below
+    the seed energy (Kubota & Done 2018 [1]_, Section 2.2).
+
+    Normalised so that the frequency-integrated luminosity equals
+    ``l_hot_erg``. The normalisation integral is computed on a fixed internal
+    frequency grid matching RELAGN's default [1e-4, 1e4] keV, making the result
+    independent of the caller's wavelength grid (fixing an earlier bug where
+    the corona's optical contribution varied by 2-4x with grid extent).
 
     Parameters
     ----------
-    nu : array
+    nu : array_like, shape (n_wave,)
         Frequency [Hz].
     l_hot_erg : float
         Total hot corona luminosity [erg s^-1].
     gamma_hard : float
         Hard X-ray photon index (~1.8).
     kt_hot_erg : float
-        Hot corona temperature [erg] (= kT_hot in erg).
+        Hot corona electron temperature [erg] (= kT_e,hot in erg).
+    nu_seed_hz : float, optional
+        Seed-photon frequency [Hz] setting the low-energy rollover. Default
+        ``0.0`` disables the rollover (legacy bare power law). The three-zone
+        ``kubota_done_disc`` passes the K&D 2018 value
+        :math:`k\,T_{\rm NT}(R_{\rm hot})\,\exp(y_{\rm warm})/h`.
 
     Returns
     -------
-    array
+    ndarray, shape (n_wave,)
         L_nu [erg s^-1 Hz^-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` primitives, no Python branching on
+    traced values.
 
     References
     ----------
-    RELAGN (scotthgn/RELAGN) ``do_nonrelHotCompSpec``: normalizes on a fixed
-    [1e-4, 1e4] keV grid.
+    .. [1] A. Kubota and C. Done, "A physical model of the broadband continuum
+       of AGN and its implications for the UV/X relation and optical
+       variability," MNRAS, 480, 1247 (2018). arXiv:1804.00171.
+       DOI:10.1093/mnras/sty1890. Section 2.2 (seed photons of the hot flow).
+    .. [2] RELAGN (scotthgn/RELAGN) ``do_nonrelHotCompSpec``: normalises on a
+       fixed [1e-4, 1e4] keV grid.
     """
     kt_safe = jnp.maximum(kt_hot_erg, 1e-30)
+    nu_safe = jnp.maximum(nu, 1e-30)
 
-    # Evaluate shape on the caller's frequency grid (for output)
+    # Evaluate shape on the caller's frequency grid (for output).
+    # High-energy cutoff at kT_e; low-energy seed-photon rollover at nu_seed.
     x = _H_PLANCK * nu / kt_safe
     x_clip = jnp.clip(x, 0.0, 500.0)
-    shape = nu ** (1.0 - gamma_hard) * jnp.exp(-x_clip)
+    seed_roll = jnp.exp(-jnp.clip(nu_seed_hz / nu_safe, 0.0, 700.0))
+    shape = nu ** (1.0 - gamma_hard) * jnp.exp(-x_clip) * seed_roll
 
-    # Normalize on the fixed internal grid (grid-independent)
+    # Normalize on the fixed internal grid (grid-independent).  The same
+    # seed-photon rollover is applied so the normalisation stays self-consistent.
     x_norm = _H_PLANCK * _CORONA_NU_GRID / kt_safe
     x_norm_clip = jnp.clip(x_norm, 0.0, 500.0)
-    shape_norm = _CORONA_NU_GRID ** (1.0 - gamma_hard) * jnp.exp(-x_norm_clip)
+    seed_roll_norm = jnp.exp(-jnp.clip(nu_seed_hz / _CORONA_NU_GRID, 0.0, 700.0))
+    shape_norm = _CORONA_NU_GRID ** (1.0 - gamma_hard) * jnp.exp(-x_norm_clip) * seed_roll_norm
     integral = jnp.trapezoid(shape_norm, _CORONA_NU_GRID)
     integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
 
@@ -969,7 +1008,22 @@ def _compute_zone_luminosities(
     l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
     gamma_hard_sc = beloborodov_gamma_hot(l_hot_erg, l_seed_geom)
     gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
-    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg)
+
+    # Seed-photon frequency for the hot flow (K&D 2018, Section 2.2): the seed
+    # photons come from the inner edge of the warm Comptonisation region at
+    # R_hot, boosted by the warm Compton y-parameter,
+    #   kT_seed,hot = k T_NT(R_hot) * exp(y_warm),
+    # with y_warm recovered from Gamma_warm via the standard non-relativistic
+    # thermal-Comptonisation relation Gamma = sqrt(9/4 + 4/y) - 1/2
+    # (Sunyaev & Titarchuk 1980), i.e. y_warm = 4 / [(Gamma_warm + 1/2)^2 - 9/4].
+    # This sets the low-energy rollover so the corona cannot leak into the IR/radio.
+    t_seed_nt = t_warm[0]  # T_NT(R_hot): first (innermost) warm-zone annulus
+    y_warm_denom = jnp.maximum((agn_gamma_warm + 0.5) ** 2 - 2.25, 1e-3)
+    y_warm = jnp.clip(4.0 / y_warm_denom, 0.0, 10.0)
+    t_seed_hot = t_seed_nt * jnp.exp(y_warm)
+    nu_seed_hot = _K_BOLTZ * t_seed_hot / _H_PLANCK
+
+    l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg, nu_seed_hot)
 
     # ── Combine and normalize ─────────────────────────────────────
     l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot

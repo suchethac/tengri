@@ -122,9 +122,10 @@ class TestCoronaFilterTable:
 
         Gamma_grid = np.linspace(1.4, 3.0, 10)
         kT_grid = np.geomspace(10, 500, 8)
+        kTbb_grid = np.geomspace(5e-4, 0.12, 6)  # seed-photon temperature axis
         fw, ft = _make_sdss_like_filters()
-        table = _build_corona_filter_table(Gamma_grid, kT_grid, fw, ft, redshift=0.1)
-        chex.assert_shape(table, (10, 8, 5))
+        table = _build_corona_filter_table(Gamma_grid, kT_grid, kTbb_grid, fw, ft, redshift=0.1)
+        chex.assert_shape(table, (10, 8, 6, 5))
 
     def test_corona_harder_gives_less_optical(self):
         """Steeper Gamma (softer) should give MORE optical flux."""
@@ -132,14 +133,38 @@ class TestCoronaFilterTable:
 
         Gamma_grid = np.linspace(1.4, 3.0, 20)
         kT_grid = np.array([100.0])
+        # Smallest seed temperature: rollover knee sits in the IR, leaving the
+        # optical r-band (well above the knee) governed by the power-law slope.
+        kTbb_grid = np.array([5e-4])
         fw, ft = _make_sdss_like_filters()
-        table = _build_corona_filter_table(Gamma_grid, kT_grid, fw, ft, redshift=0.0)
-        # Shape (20, 1, 5) — r-band (index 2)
-        r_band = table[:, 0, 2]
+        table = _build_corona_filter_table(Gamma_grid, kT_grid, kTbb_grid, fw, ft, redshift=0.0)
+        # Shape (20, 1, 1, 5) — r-band (index 2), seed index 0
+        r_band = table[:, 0, 0, 2]
         # Softer (larger Gamma) = more steep = more UV/optical photons
         # For fixed kT, steeper power law puts more flux at lower frequencies
         # This should generally increase (though depends on normalization)
         assert r_band[-1] > r_band[0], "Softer Gamma should give more optical"
+
+    def test_corona_seed_rollover_suppresses_optical(self):
+        """A higher seed temperature shifts the rollover blueward, removing optical flux.
+
+        The hot corona is a thermal-Comptonisation spectrum bounded below by its
+        seed-photon energy (K&D 2018, Section 2.2). Raising the seed temperature
+        moves the low-energy rollover toward the UV, so the optical r-band — now
+        below the knee — must lose flux relative to a low (IR-knee) seed.
+        """
+        from tengri.components.agn.kd_precompute import _build_corona_filter_table
+
+        Gamma_grid = np.array([1.8])
+        kT_grid = np.array([100.0])
+        kTbb_grid = np.array([5e-4, 0.12])  # IR knee vs EUV knee
+        fw, ft = _make_sdss_like_filters()
+        table = _build_corona_filter_table(Gamma_grid, kT_grid, kTbb_grid, fw, ft, redshift=0.0)
+        r_band_low_seed = table[0, 0, 0, 2]
+        r_band_high_seed = table[0, 0, 1, 2]
+        assert r_band_high_seed < r_band_low_seed, (
+            "Higher seed temperature must suppress optical corona flux"
+        )
 
 
 # ── Test: nthcomp filter table ────────────────────────────────────
@@ -200,7 +225,8 @@ class TestKDPreintegrationPipeline:
         kd = preintegrate_kd_components(fw, ft, redshift=0.1)
         assert kd.n_filters == 5
         assert kd.planck_table.shape[1] == 5
-        assert kd.corona_table.shape[2] == 5
+        assert kd.corona_table.ndim == 4  # (Gamma, kT, kTbb_seed, filters)
+        assert kd.corona_table.shape[3] == 5
 
     def test_preintegrated_vs_full_wavelength(self):
         """Compare preintegrated K&D against full-wavelength computation.
