@@ -26,6 +26,11 @@ The three notebooks share a layout, plotting style, and a `## Summary` /
 - **{doc}`prospector`** — Prospector / FSPS (Johnson et al. 2021). The
   core forward model: SSPs, delayed-τ SFH, Calzetti / Kriek & Conroy
   attenuation, Draine & Li 2007 IR, the Byler nebular grid, and Madau IGM.
+- **{doc}`synthesizer`** — Synthesizer (Roper, Lovell, Wilkins et al.
+  2025). Focused on the Unified AGN model: accretion disc, narrow- and
+  broad-line regions, dusty torus, and the inclination geometry — with
+  tengri reading the same Synthesizer Cloudy AGN grids for the line
+  regions. Stellar, dust, and IGM blocks round out the series.
 
 ```{toctree}
 :maxdepth: 1
@@ -33,7 +38,8 @@ The three notebooks share a layout, plotting style, and a `## Summary` /
 cigale
 bagpipes
 prospector
+synthesizer
 ```
 
-Comparisons with MAGPHYS, x-cigale, GRAHSP, and Synthesizer will land as
-their reproduction notebooks come together.
+Comparisons with MAGPHYS, x-cigale, and GRAHSP will land as their
+reproduction notebooks come together.

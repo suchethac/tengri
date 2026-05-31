@@ -642,6 +642,9 @@ class SynthesizerNLRBackend:
     has_continuum = False
 
     def __init__(self, grid_path: str | Path) -> None:
+        # Stored so the lazy singleton accessors can detect a grid-path change
+        # on repeat calls (without it, the second call AttributeErrors).
+        self.grid_path = str(grid_path)
         self.grid = _load_synthesizer_nlr_grid(grid_path)
 
         # Pre-compute triweight edges for all 6 axes at init time.
@@ -773,6 +776,37 @@ class SynthesizerNLRBackend:
         line_lum = (10.0**log_line_per_qh_interp) * (10.0**log_qh) * (1.0 - neb_fesc)
 
         return grid.line_wavelengths_aa, line_lum
+
+
+class SynthesizerBLRBackend(SynthesizerNLRBackend):
+    """Synthesizer CLOUDY c23.01 AGN **broad**-line-region backend.
+
+    The Synthesizer BLR grid shares the NLR grid's structure exactly — the same
+    six axes (BH mass, Eddington ratio, cosine inclination, metallicity,
+    ionisation parameter, hydrogen density) and the same per-:math:`Q_H` line
+    storage — differing only in the tabulated line luminosities (broad permitted
+    lines from dense, high-ionisation gas). So this backend reuses the NLR
+    loader and interpolation wholesale; only the grid *file* and the line set
+    differ. ``predict_agn_blr_lines`` is an alias of the inherited interpolation.
+
+    **Grid data required**: ``test_grid_agn-blr.hdf5`` (downloadable test grid)
+    or a production BLR grid.
+
+    References
+    ----------
+    Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+    """
+
+    name = "synthesizer_blr"
+
+    def predict_agn_blr_lines(self, *args, **kwargs) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Alias for :meth:`SynthesizerNLRBackend.predict_agn_nlr_lines`.
+
+        The grid interpolation is identical; only the underlying grid file (and
+        therefore the line luminosities) differs. Returns ``(wavelengths [Å],
+        luminosities [L_sun])``.
+        """
+        return self.predict_agn_nlr_lines(*args, **kwargs)
 
 
 # ── Feltre+2016 NLR backend ───────────────────────────────────────

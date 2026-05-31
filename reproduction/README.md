@@ -9,13 +9,15 @@ reproduction/
 ├── cigale/                     # Boquien et al. 2019, A&A 622, A103
 ├── bagpipes/                   # Carnall et al. 2018, MNRAS 480, 4379
 ├── prospector/                 # Johnson et al. 2021, ApJS 254, 22
-└── synthesizer/                # planned — Vijayan et al. 2024
+└── synthesizer/                # Roper, Lovell, Wilkins et al. 2025, arXiv:2508.03888
 ```
 
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent
 format), thin code-specific driver modules, and the rendered figures.
-The CIGALE, BAGPIPES, and Prospector folders are ready; Synthesizer is
-a scaffold.
+All four folders are ready. The Synthesizer notebook focuses on the
+Unified AGN model (disc, NLR, BLR, torus, and the inclination geometry),
+with tengri reading the same Synthesizer Cloudy AGN grids for the line
+regions.
 
 ## Shared conventions
 
