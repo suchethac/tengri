@@ -480,9 +480,7 @@ s_ir = m_ir.predict_state({})
 _L_abs = float(np.asarray(s_ir.derived["L_absorbed"]))
 _L_ir = float(np.asarray(s_ir.derived["L_ir"]))
 _eb_resid = abs(_L_ir - _L_abs) / max(_L_abs, 1e-30)
-print(
-    f"§6 tengri energy balance: L_abs={_L_abs:.3e}, L_IR={_L_ir:.3e}, resid={_eb_resid:.2e}"
-)
+print(f"§6 tengri energy balance: L_abs={_L_abs:.3e}, L_IR={_L_ir:.3e}, resid={_eb_resid:.2e}")
 
 fig, ax_l, ax_r = U.two_panel_fig()
 U.panel(
@@ -721,10 +719,22 @@ for c, (dt, label) in zip(("C1", "C2"), _disc_models):
     wt, Lt = _disc_tengri[dt]
     ax_r.plot(wt, Lt, c + "-", linewidth=1.5, label=label)
 ax_r.legend(fontsize=9)
-_dpk = max(float(L_disc_s.max()), float(np.nanmax(_disc_tengri["kubota_done"][1])))
+# Range from the plotted disc curves over the *plotted window* (1e2–1e5 Å) — a
+# global max would be set by the model grid's far-IR edge, not the disc bump.
+def _winmax(w, L, lo=1e2, hi=1e5):
+    w = np.asarray(w)
+    m = (w >= lo) & (w <= hi)
+    return float(np.nanmax(np.asarray(L)[m])) if m.any() else float(np.nanmax(L))
+
+
+_dpk = max(
+    _winmax(w_disc_s, L_disc_s),
+    _winmax(*_disc_tengri["kubota_done"]),
+    _winmax(*_disc_tengri["schartmann2005"]),
+)
 for ax in (ax_l, ax_r):
     ax.set_xlim(1e2, 1e5)
-    ax.set_ylim(_dpk * 1e-3, _dpk * 3)
+    ax.set_ylim(_dpk * 3e-3, _dpk * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("synthesizer_09a_disc.png")
@@ -967,35 +977,123 @@ print(
 # %% [markdown]
 # ### §9f Unified spectrum and inclination anisotropy
 #
-# The full unified AGN spectrum, and how it changes with viewing angle. The
-# decisive physics is the disc–torus geometry: Synthesizer applies a **hard**
-# cut — the disc and broad-line region disappear the moment the sightline grazes
-# the torus edge (inclination + θ_torus > 90°), the Type-1 → Type-2 transition.
-# The top panel shows the total spectrum and its components; the bottom panel
-# sweeps inclination and tracks the disc visibility. Overlaid is tengri's choice:
-# a **smooth sigmoid** through the *same* critical angle. The two agree everywhere
-# except the few degrees around the transition, where tengri keeps the disc
-# visibility a smoothly varying function of inclination so that inclination
-# remains a stable parameter to fit. This is the single deliberate difference
-# between the two AGN models, shown here side by side.
+# The full unified AGN spectrum, assembled. The **top row** puts Synthesizer's
+# `UnifiedAGN` (left) next to tengri's own unified AGN (right): the qsosed disc
+# and Nenkova torus combined through tengri's composable builder, with the NLR and
+# BLR drawn from the *same* Synthesizer Cloudy grids as §9c/§9d (via the
+# grid-backed `nlr_synthesizer` lines block). Each panel shows the total and its
+# four components on a shared axis — the disc UV bump, the line forest, and the
+# torus IR bump stack into the same broad shape on both sides; the line spikes are
+# narrow-Gaussian on tengri's side and grid-binned on Synthesizer's, as in §9c.
+#
+# The **bottom panel** is the decisive geometry: Synthesizer applies a **hard**
+# cut — the disc and broad-line region vanish the moment the sightline grazes the
+# torus edge (inclination + θ_torus > 90°), the Type-1 → Type-2 transition — while
+# tengri uses a **smooth sigmoid** through the *same* critical angle, keeping disc
+# visibility a differentiable function of inclination so it stays a stable fit
+# parameter. The two agree everywhere except the few degrees around the
+# transition. That is the single deliberate difference between the two AGN models.
 
 # %%
-fig, (ax, ax_inc) = plt.subplots(2, 1, figsize=(10, 9))
+from tengri.components.agn.nlr_cloudy import compute_blr_sed_synthesizer as _blr_syn
 
+
+# Build tengri's own Unified AGN from the same pieces as the panels above:
+# the qsosed disc and Nenkova torus through the composable builder, the NLR via
+# the new grid-backed `nlr_synthesizer` lines block (#588) — i.e. the *same*
+# Cloudy grid as §9c — and the BLR added from the matching grid. Each component
+# is evaluated on the model's own wavelength grid so they sum cleanly.
+def _tengri_agn_component(disc, torus, lines):
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        agn={
+            "type": "composable",
+            "disc": {"type": disc},
+            "torus": {"type": torus},
+            "lines": {"type": lines},
+            "agn_log_lbol": Fixed(agn_log_lbol),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.0),
+    )
+    s = m.predict_state({})
+    return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
+
+
+w_t, L_disc_t = _tengri_agn_component("kubota_done", "none", "none")
+_, L_torus_t = _tengri_agn_component("none", "nenkova", "none")
+_blr_path = str(Path(_SYN_GRID_DIR) / "test_grid_agn-blr.hdf5")
+L_nlr_t = np.asarray(
+    compute_nlr_sed_synthesizer(
+        jnp.asarray(w_t),
+        l_disc_bol_erg=agn["_bolometric_erg_s"],
+        covering_fraction=CF,
+        grid_path=_NLR_GRID_PATH,
+        neb_logU=-2.0,
+        neb_logZ_gas=float(np.log10(BH_Z)),
+    )
+)
+L_blr_t = np.asarray(
+    _blr_syn(
+        jnp.asarray(w_t),
+        l_disc_bol_erg=agn["_bolometric_erg_s"],
+        covering_fraction=CF,
+        grid_path=_blr_path,
+        neb_logU=-1.0,
+        neb_logZ_gas=float(np.log10(BH_Z)),
+    )
+)
+L_tot_t = L_disc_t + L_torus_t + L_nlr_t + L_blr_t
+
+fig = plt.figure(figsize=(13, 9))
+gs = fig.add_gridspec(2, 2, height_ratios=[3, 2])
+ax_s = fig.add_subplot(gs[0, 0])
+ax_t = fig.add_subplot(gs[0, 1], sharey=ax_s)
+ax_inc = fig.add_subplot(gs[1, :])
+
+# Shared y-range from the smooth disc+torus continuum, with headroom for the
+# narrow line spikes (so the continuum isn't squished into the floor).
+_cont = max(
+    _winmax(*agn["disc"], hi=1e7),
+    _winmax(*agn["torus"], hi=1e7),
+    _winmax(w_t, L_disc_t, hi=1e7),
+    _winmax(w_t, L_torus_t, hi=1e7),
+)
+_ylo, _yhi = _cont * 3e-3, _cont * 1e3
+
+# Left: Synthesizer UnifiedAGN total + components.
 w_tot, L_tot = agn["intrinsic"]
-ax.plot(w_tot, L_tot, "k-", linewidth=2.0, label="UnifiedAGN intrinsic (total)")
+ax_s.plot(w_tot, L_tot, "k-", linewidth=2.0, label="total (intrinsic)")
 for key, c in (("disc", "C0"), ("nlr", "C1"), ("blr", "C2"), ("torus", "C3")):
     wk, Lk = agn[key]
-    ax.plot(wk, Lk, color=c, linewidth=1.2, alpha=0.8, label=key)
-ax.set_xscale("log")
-ax.set_yscale("log")
-ax.set_xlim(1e2, 1e7)
-ax.set_ylim(float(L_tot.max()) * 1e-4, float(L_tot.max()) * 2)
-ax.set_xlabel(r"$\lambda$ [Å]")
-ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-ax.set_title(f"Synthesizer UnifiedAGN — components (inc={BH_INC:g}°, θ_torus={THETA_TORUS:g}°)")
-ax.legend(fontsize=9, ncol=2)
-ax.grid(True, alpha=0.3)
+    ax_s.plot(wk, Lk, color=c, linewidth=1.0, alpha=0.8, label=key)
+# Right: tengri unified AGN total + components (qsosed + Nenkova + grid NLR/BLR).
+ax_t.plot(w_t, L_tot_t, "k-", linewidth=2.0, label="total")
+for L, c, lab in (
+    (L_disc_t, "C0", "disc (qsosed)"),
+    (L_nlr_t, "C1", "nlr (grid)"),
+    (L_blr_t, "C2", "blr (grid)"),
+    (L_torus_t, "C3", "torus (Nenkova)"),
+):
+    ax_t.plot(w_t, L, color=c, linewidth=1.0, alpha=0.8, label=lab)
+for axx, title in ((ax_s, "Synthesizer UnifiedAGN"), (ax_t, "tengri unified AGN")):
+    axx.set_xscale("log")
+    axx.set_yscale("log")
+    axx.set_xlim(1e2, 1e7)
+    axx.set_ylim(_ylo, _yhi)
+    axx.set_xlabel(r"$\lambda$ [Å]")
+    axx.set_title(f"{title}  (inc={BH_INC:g}°, θ_torus={THETA_TORUS:g}°)")
+    axx.legend(fontsize=8, ncol=2)
+    axx.grid(True, alpha=0.3)
+ax_s.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 
 # Inclination sweep: observed-disc luminosity at 5000 Å vs inclination.
 incs = np.linspace(0.0, 89.0, 24)
@@ -1140,9 +1238,12 @@ ax.set_title("tengri in Synthesizer-mode vs Synthesizer — full panchromatic SE
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 ax.text(
-    0.02, 0.05,
+    0.02,
+    0.05,
     rf"tengri/Synthesizer $= {norm:.2f}\times$ (16–84%: {p16:.2f}–{p84:.2f})",
-    transform=ax.transAxes, fontsize=10, va="bottom",
+    transform=ax.transAxes,
+    fontsize=10,
+    va="bottom",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
 ax_r.axhspan(-0.25, 0.25, color="0.85", zorder=0)

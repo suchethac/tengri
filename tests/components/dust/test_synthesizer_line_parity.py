@@ -132,3 +132,46 @@ def test_covering_fraction_is_separate_multiplier(backends):
         )
     )
     assert b.max() == pytest.approx(3.0 * a.max(), rel=1e-5)
+
+
+def test_grid_backed_lines_selectable_via_builder(monkeypatch):
+    """SEDModel.build can compose a unified AGN with grid-backed NLR/BLR (#588).
+
+    The composable ``lines`` block exposes ``nlr_synthesizer`` / ``blr_synthesizer``
+    selectors that route to the Synthesizer Cloudy grids, so a unified AGN built
+    through the high-level API uses the same photoionisation grids as the direct
+    adapters — not just the analytic templates.
+    """
+    if not _NLR.exists():
+        pytest.skip(f"Synthesizer AGN test grids not found under {_DATA}")
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    assert "nlr_synthesizer" in AGN_BLOCKS["lines"]
+    assert "blr_synthesizer" in AGN_BLOCKS["lines"]
+
+    monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(_DATA))
+    from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+
+    ssp_path = (
+        Path(__file__).resolve().parents[3]
+        / "reproduction"
+        / "synthesizer"
+        / "_drivers"
+        / "data"
+        / "synthesizer_test_grid.h5"
+    )
+    if not ssp_path.exists():
+        pytest.skip("ported Synthesizer SSP grid not present")
+    ssp = load_ssp_data(str(ssp_path))
+    model = SEDModel.build(
+        ssp_data=ssp,
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+             "log_total_mass": Fixed(10.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        agn={"type": "composable", "disc": {"type": "kubota_done"}, "torus": {"type": "nenkova"},
+             "lines": {"type": "nlr_synthesizer"}, "agn_log_lbol": Fixed(12.0), "*": FIXED},
+        redshift=Fixed(0.0),
+    )
+    sed = np.asarray(model.predict_state({}).derived["sed_agn"])
+    assert np.all(np.isfinite(sed))
+    assert (sed > 0).any()
