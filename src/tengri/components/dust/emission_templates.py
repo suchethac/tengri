@@ -39,6 +39,53 @@ from tengri.utils.physics_constants import (
 # writes ``umax_powerlaw = 1e6``). Used to restore the PDR component's
 # relative luminosity via the DL07 Eq. 33 factor (see ``dl07_tabulated``).
 _DL07_UMAX_POWERLAW = 1.0e6
+# DL14 (Draine et al. 2014) extends the power-law upper bound to U_max = 1e7.
+_DL14_UMAX_POWERLAW = 1.0e7
+
+
+def _pdr_luminosity_weight(umin, umax, alpha):
+    r"""Relative luminosity of the power-law (PDR) vs single-U dust component.
+
+    For a dust-mass distribution ``dM/dU \propto U^{-alpha}`` over
+    ``[U_min, U_max]``, equilibrium dust emits a luminosity ``\propto U``, so
+    the power-law (PDR) component radiates ``R = <U>_pl / U_min`` times more
+    per unit dust mass than the diffuse (``U = U_min``) component
+    (Draine & Li 2007, Eq. 33; Draine et al. 2014). Multiplying the power-law
+    template by ``R`` converts the dust-*mass* fraction ``gamma`` into the
+    correct *luminosity* weighting; without it the warm PDR emission is
+    under-represented (~14x at U_min=1) and the IR SED comes out spuriously
+    cold.
+
+    Closed form (``alpha != 1, 2``), with ``x = U_max/U_min``::
+
+        R = (1 - alpha) / (2 - alpha) * (x ^ {2 - alpha} - 1) / (x ^ {1 - alpha} - 1)
+
+    and the integrable-pole limits ``R = (x-1)/ln x`` at ``alpha=1`` and
+    ``R = x ln x / (x-1)`` at ``alpha=2``.
+
+    Notes
+    -----
+    **JIT/grad-safe**: the general branch evaluates a pole-shifted ``alpha`` so
+    it stays finite, and ``jnp.where`` selects the exact limit forms at
+    ``alpha = 1, 2`` — no NaN leaks through the ``where`` VJP.
+    """
+    x = umax / umin
+    lnx = jnp.log(x)
+    eps = 1e-3
+    near1 = jnp.abs(alpha - 1.0) < eps
+    near2 = jnp.abs(alpha - 2.0) < eps
+    # Shift alpha off the integrable poles in the general branch so it never
+    # evaluates 0/0 (which would poison the gradient even when unselected).
+    a_gen = jnp.where(near1, 1.0 + eps, jnp.where(near2, 2.0 + eps, alpha))
+    a1 = 1.0 - a_gen
+    a2 = 2.0 - a_gen
+    general = (a1 / a2) * (x**a2 - 1.0) / (x**a1 - 1.0)
+    return jnp.where(
+        near1,
+        (x - 1.0) / lnx,
+        jnp.where(near2, x * lnx / (x - 1.0), general),
+    )
+
 
 # ── Template search paths (resolved once, reused for all models) ──
 
@@ -185,8 +232,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         # Restoring R converts the mass fraction into the correct luminosity
         # weighting; without it the PDR (warm) emission is under-represented by
         # ~14x at U_min=1 and the IR SED comes out spuriously cold.
-        umax = _DL07_UMAX_POWERLAW
-        r_power = umax * jnp.log(umax / dust_umin_c) / (umax - dust_umin_c)
+        r_power = _pdr_luminosity_weight(dust_umin_c, _DL07_UMAX_POWERLAW, 2.0)
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
             dust_gamma_dl * r_power
         ) * _bilinear(powerlaw)
@@ -358,7 +404,12 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         """DL14 emission from tabulated templates.
 
         j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * powerlaw(q_PAH, U_min, alpha)
+             + gamma * R * powerlaw(q_PAH, U_min, alpha)
+
+        where ``R = R(U_min, U_max, alpha)`` is the DL14/DL07 Eq. 33 relative
+        luminosity of the power-law (PDR) component (U_max=1e7). It converts the
+        dust-mass fraction ``gamma`` into the correct luminosity weighting; see
+        ``_pdr_luminosity_weight``.
 
         Normalized to L_absorbed via energy balance.
 
@@ -436,10 +487,14 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
             hi = _bilinear_at_alpha(i_a + 1)
             return (1.0 - fa) * lo + fa * hi
 
-        # Mix single-U and power-law components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _trilinear(
-            powerlaw
-        )
+        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+        # dust-mass fraction; weight the PDR template by its DL14 relative
+        # luminosity R(U_min, U_max, alpha) so it is applied as a luminosity
+        # fraction (see ``_pdr_luminosity_weight``; same fix as DL07).
+        r_power = _pdr_luminosity_weight(dust_umin_c, _DL14_UMAX_POWERLAW, dust_alpha_c)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+            dust_gamma_dl * r_power
+        ) * _trilinear(powerlaw)
 
         # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
         # Templates may be stored in arbitrary units; normalization makes scaling exact.

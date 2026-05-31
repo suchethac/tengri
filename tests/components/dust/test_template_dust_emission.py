@@ -477,6 +477,76 @@ class TestDL14ExtendedRange:
             "Different alpha values should give different spectra"
         )
 
+    @pytest.mark.regression_paper
+    def test_dl14_gamma_pdr_luminosity_weight(self, ir_wave):
+        """DL14 PDR component carries its DL14/DL07 Eq. 33 luminosity weight.
+
+        As for DL07, ``gamma`` is a dust-*mass* fraction and the power-law
+        (PDR) dust emits ``R(U_min, U_max=1e7, alpha)`` times more per unit
+        mass (Draine et al. 2014). A bug normalised the single-U and power-law
+        templates each to unit integral, dropping ``R`` and leaving the warm
+        PDR emission far too weak. This pins the corrected warm shift and its
+        ordering in the (variable) slope ``alpha``: shallower slopes (more
+        high-U dust) warm more.
+        """
+        from tengri.components.dust.emission import draine_li2014
+
+        c_aa_s = 2.998e18
+
+        def fir_centroid_um(sed):
+            m = (ir_wave > 3e5) & (ir_wave < 3e6) & (sed > 0)
+            w = ir_wave[m]
+            nu_lnu = sed[m] * (c_aa_s / w)
+            return float(10.0 ** (jnp.sum(jnp.log10(w) * nu_lnu) / jnp.sum(nu_lnu))) / 1e4
+
+        cen_diffuse = fir_centroid_um(
+            draine_li2014(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.0, dust_qpah=2.5)
+        )
+        cen_a2 = fir_centroid_um(
+            draine_li2014(
+                ir_wave,
+                1e10,
+                dust_umin=1.0,
+                dust_gamma_dl=0.05,
+                dust_qpah=2.5,
+                dust_alpha_dl14=2.0,
+            )
+        )
+        cen_a1 = fir_centroid_um(
+            draine_li2014(
+                ir_wave,
+                1e10,
+                dust_umin=1.0,
+                dust_gamma_dl=0.05,
+                dust_qpah=2.5,
+                dust_alpha_dl14=1.0,
+            )
+        )
+        # gamma=0.05 must warm the FIR centroid substantially (pre-fix: ~2 um);
+        # and a shallow slope (alpha=1) warms more than alpha=2.
+        assert cen_diffuse - cen_a2 > 12.0, (
+            f"DL14 gamma=0.05 (alpha=2) should warm the FIR centroid by the Eq. 33 "
+            f"PDR weight: diffuse={cen_diffuse:.1f} µm, pdr={cen_a2:.1f} µm"
+        )
+        assert cen_a1 < cen_a2, (
+            f"shallower alpha=1 should warm more than alpha=2: "
+            f"alpha1={cen_a1:.1f} µm, alpha2={cen_a2:.1f} µm"
+        )
+
+    def test_dl14_pdr_weight_grad_safe_at_alpha_pole(self, ir_wave):
+        """d(SED)/d(alpha) is finite at the alpha=2 integrable pole."""
+        from tengri.components.dust.emission import draine_li2014
+
+        def total(alpha):
+            return jnp.sum(
+                draine_li2014(
+                    ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_alpha_dl14=alpha
+                )
+            )
+
+        grad = jax.grad(total)(2.0)
+        chex.assert_tree_all_finite(grad)
+
     def test_dl14_extended_qpah_range(self, ir_wave):
         """DL14 should handle extended q_PAH range (up to 7.32%)."""
         from tengri.components.dust.emission import draine_li2014
