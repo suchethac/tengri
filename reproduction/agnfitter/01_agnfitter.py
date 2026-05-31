@@ -202,6 +202,30 @@ def tengri_disc_model(model_type, *, log_lbol=11.0):
     return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
 
 
+def tengri_qsogen_full(*, log_lbol=11.0):
+    """tengri's THB21 analogue: qsogen continuum *with* its broad/narrow lines
+    and FeII pseudo-continuum. THB21's defining feature is the emission-line
+    forest (the 0.7 µm Hα+[N II] bump), so the disc-only continuum alone does
+    not reproduce it — the lines and FeII blocks must be switched on."""
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh=SFH_FIDUCIAL,
+        dust=NO_DUST,
+        agn={
+            "type": "composable",
+            "disc": {"type": "qsogen", "*": FIXED},
+            "torus": {"type": "none"},
+            "lines": {"type": "qsogen", "*": FIXED},
+            "feii": {"type": "qsogen_balmer", "*": FIXED},
+            "agn_log_lbol": Fixed(log_lbol),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.0),
+    )
+    s = m.predict_state({})
+    return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
+
+
 def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
     """Isolated tengri torus SED. Returns (wave_aa, L_nu)."""
     torus = {"type": torus_type, "*": FIXED}
@@ -378,12 +402,13 @@ save_fig("agnfitter_04_dust_attenuation.png")
 # high-z dust).
 #
 # tengri's `schreiber2016` and AGNFITTER-RX's S17 reproduce the same far-IR
-# dust peak (~80–100 µm) in position and shape — unsurprising, as both come
-# from the Schreiber dust-SED family. tengri's curve carries less mid-IR PAH
-# structure than S17 at the same (T_dust, f_PAH), so the 3–20 µm region is
-# the place to expect a difference. The legacy DH02_CE01 library peaks
-# noticeably colder (longer wavelength) and broader — the reason AGNFITTER-RX
-# added the more flexible S17 for JWST-era data.
+# dust peak (~90 µm, within ~6% in position) — unsurprising, as both come from
+# the Schreiber dust-SED family. They part company in the mid-IR: at matched
+# (T_dust, f_PAH) S17 shows the PAH features at 3–8 µm while tengri's
+# `schreiber2016` emits **none** there, so the 3–20 µm region carries the bulk
+# of the disagreement (the missing PAH emission is tracked for a fix). The
+# legacy DH02_CE01 library peaks noticeably colder (longer wavelength) and
+# broader — the reason AGNFITTER-RX added the more flexible S17 for JWST data.
 
 # %%
 import jax.numpy as jnp
@@ -426,14 +451,26 @@ save_fig("agnfitter_06_cold_dust.png")
 # block ports the SN12 α-disc grid directly from AGNFITTER-RX's `SN12.pickle`
 # (the M_BH = 8.6, log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on both sides).
 #
-# The continua agree where it matters most. THB21 reproduces the 0.7 µm
-# bump (tengri's `qsogen` carries the same broad lines); SN12 and KD18 track
-# the theory disks' UV–optical curvature off the shared template grids. The
-# R06 panel is the loosest match: tengri's `richards2006` and AGNFITTER-RX's
-# R06 share the same Richards+2006 composite, but their optical–near-IR
-# slopes differ by up to a factor of a few redward of 1 µm — a consequence of
-# how each truncates and extends the empirical template beyond its calibrated
-# range. The shared 2500 Å anchor and UV continuum agree.
+# How well each tengri block matches, panel by panel:
+#
+# * **THB21 — reproduced.** The 0.7 µm bump is an emission-line feature, so
+#   `qsogen` must run *with* its line and FeII blocks (continuum alone misses
+#   it entirely). With them on, tengri's Hα/2500 Å contrast is 4.4 vs THB21's
+#   3.8 — the headline feature is recovered.
+# * **SN12 — reproduced** by the new `slone_netzer` port (UV–optical to ~20%;
+#   they part company only in the faint disc Wien tail).
+# * **KD18 — approximate.** tengri's full Kubota & Done 3-zone block
+#   (`kubota_done`) currently mis-renders (it peaks in the far-IR), so the
+#   panel shows `multicolor`, a pure Shakura-Sunyaev thin disc. That disc is
+#   genuinely *hotter* than KD18's 3-zone — it peaks in the FUV (~1200 Å) vs
+#   KD18's optical (~3700 Å) — so treat this panel as a related model, not a
+#   match. (The `kubota_done` bug is tracked for a fix.)
+# * **R06 — diverges in the near-IR.** tengri's `richards2006` and
+#   AGNFITTER-RX's R06 are the same Richards+2006 composite, but tengri's
+#   L_ν peaks at 1.2 µm while AGNFITTER-RX's peaks at 3000 Å — up to a 20×
+#   difference redward of 1 µm. This traces to a νL_ν-vs-L_ν convention
+#   mismatch between the two implementations (also tracked for a fix); the UV
+#   continuum and the shared 2500 Å anchor agree.
 
 # %%
 ANCHOR = 2500.0
@@ -447,8 +484,8 @@ disk_pairs = [
         lambda: tengri_disc("slone_netzer", agn_log_mbh=8.6, agn_log_ledd=-2.0),
         "slone_netzer (Slone & Netzer 12)",
     ),
-    ("KD18", {}, lambda: tengri_disc("multicolor"), "multicolor (Kubota & Done 18)"),
-    ("THB21", {}, lambda: tengri_disc("qsogen"), "qsogen (Temple+21)"),
+    ("KD18", {}, lambda: tengri_disc("multicolor"), "multicolor (S-S thin disc)"),
+    ("THB21", {}, tengri_qsogen_full, "qsogen + lines + FeII"),
 ]
 fig, axes = plt.subplots(2, 2, figsize=(12, 8), sharex=True, sharey=True)
 for ax, (af_name, af_kw, tengri_fn, tengri_label) in zip(axes.ravel(), disk_pairs):
@@ -533,9 +570,14 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # The four AGNFITTER-RX torus libraries against tengri's, all normalised at
 # their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks were built
 # directly from these same AGNFITTER-RX pickles, so those two panels are a
-# port self-check; `nenkova` and `skirtor` are independent implementations.
+# port self-check — and they pass: peak-aligned, agreeing to ≲1.6×.
+# `nenkova` is an independent analytic model and runs ~2–4× off in the NIR
+# (parametric vs tabulated). `skirtor` is the loosest: tengri's peaks ~40 µm
+# vs AGNFITTER-RX's ~25 µm because tengri interpolates the SKIRTOR
+# `total = disk + dust` grid rather than the dust-only grid — a known bias,
+# tracked for a fix.
 #
-# Two residual pathologies the paper emphasises live in this plot: the
+# Two residual pathologies the paper emphasises also live in this plot: the
 # 10 µm silicate feature (NK08/CAT3D can over- or under-predict it depending
 # on inclination) and the 1.5–5 µm near-IR excess that the CAT3D polar-wind
 # component is designed to fill.
