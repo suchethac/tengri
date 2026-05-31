@@ -1,43 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Stellar population synthesis: SSP grids, IMF, and CSP integration."""
+"""Stellar population synthesis wrappers (DSPS backend)."""
 
-from .csp import build_csp_weights
-from .dsps_wrapper import (
-    SSPData,
-    effective_metallicity,
-    list_available_ssps,
-    list_isochrone_libraries,
-    list_spectral_libraries,
-    load_ssp,
-    mass_remaining_fraction,
-    resolve_ssp_path,
+# Convenience re-exports for `from tengri.sps import ...`
+from tengri.components.stellar.sps.dsps_wrapper import (
+    SSPData as SSPData,
+    compute_csp_weights as compute_csp_weights,
+    compute_surviving_mass as compute_surviving_mass,
+    effective_metallicity as effective_metallicity,
+    interpolate_mass_remaining as interpolate_mass_remaining,
+    interpolate_met_alpha as interpolate_met_alpha,
+    load_ssp as load_ssp,
+    load_ssp_data as load_ssp_data,
+    predict_surviving_mass as predict_surviving_mass,
 )
-
-__all__ = [
-    "SSPData",
-    "build_csp_weights",
-    "effective_metallicity",
-    "list_available_ssps",
-    "list_isochrone_libraries",
-    "list_spectral_libraries",
-    "load_ssp",
-    "mass_remaining_fraction",
-    "resolve_ssp_path",
-]
-
-
-def __getattr__(name):
-    """Lazily expose private SSP helpers without polluting the namespace."""
-    import warnings
-
-    if name == "_PRECOMPUTED_SSP_DTYPE":
-        warnings.warn(
-            "_PRECOMPUTED_SSP_DTYPE is private; import from "
-            "tengri.components.stellar.sps.dsps_wrapper if you really need it.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        from .dsps_wrapper import _PRECOMPUTED_SSP_DTYPE
-
-        return _PRECOMPUTED_SSP_DTYPE
-    raise AttributeError(name)
+from tengri.components.stellar.sps.mass_remaining import (
+    compute_mass_remaining_fraction as compute_mass_remaining_fraction,
+    compute_mass_remaining_fraction as mass_remaining_fraction,
+)
