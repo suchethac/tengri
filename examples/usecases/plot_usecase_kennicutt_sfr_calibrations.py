@@ -58,7 +58,7 @@ SSP = tengri.load_ssp()
 def _measure(log_sfr):
     model = tengri.SEDModel.build(
         SSP,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": float(log_sfr)},
+        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": float(log_sfr + 10.13)},
         dust={
             "type": "two_component",
             "*": tengri.FIXED,

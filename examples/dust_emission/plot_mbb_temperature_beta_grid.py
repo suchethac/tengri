@@ -46,7 +46,7 @@ def _build(t_dust=None, beta=None):
     }
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 1.0},
+        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": 11.13},
         dust=dust,
         redshift=tengri.Fixed(0.05),
     )

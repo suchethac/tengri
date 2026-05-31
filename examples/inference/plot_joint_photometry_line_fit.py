@@ -136,7 +136,6 @@ truth.update(
     sfh_tsnorm_skew=0.3,  # Slight asymmetry
     dust_tau_diff=0.1,  # ISM attenuation: A_V ~ 0.2
     dust_tau_bc=0.2,  # Birth cloud: additional reddening
-    sfh_dpl_log_peak_sfr=log_mstar_true,
 )
 
 # Mock photometry + spectrum with realistic S/N
