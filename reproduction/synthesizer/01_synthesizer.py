@@ -302,8 +302,13 @@ U.panel(
 )
 ax_l.plot(w_s3, L_s3, "C0-", linewidth=1.5)
 ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
+# Floor the y-range to the stellar continuum: the ported grid is clipped at 1e8 Å,
+# so the SED drops to ~0 at the long-λ edge — without a floor the log axis would
+# stretch across ~50 empty decades down to that cliff.
+_s3pk = max(float(np.nanmax(L_s3)), float(np.nanmax(np.asarray(s_stellar.sed_intrinsic))))
 for ax in (ax_l, ax_r):
     ax.set_xlim(1e2, 1e6)
+    ax.set_ylim(_s3pk * 1e-5, _s3pk * 2)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("synthesizer_03_stellar_sed.png")
@@ -791,7 +796,8 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 # lookup, the same gradient-friendly choice as the inclination mask in §9f; on a
 # 2-node-per-axis test grid that smooths the line ratios by tens of percent, an
 # offset that shrinks on a finer grid. The strong forbidden lines — [O III] 5007,
-# the Balmer series, [O II] 3727 — still line up.
+# the Balmer series, [O II] 3727 — still line up. (On the downloadable test grid
+# the NLR and BLR files are identical placeholders — see the §9d caveat.)
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
@@ -846,6 +852,15 @@ print(
 # Synthesizer broad-line grid. Broad-line widths are far larger (~5000 km/s), so
 # the permitted lines blend into the quasar-like pseudo-continuum seen in Type-1
 # AGN — Lyα, C IV, the Balmer lines — rather than the sharp forbidden lines of §9c.
+#
+# **Caveat — the test grids don't yet distinguish NLR from BLR.** Synthesizer's
+# downloadable `test_grid_agn-nlr` and `test_grid_agn-blr` are *byte-identical*
+# placeholders: the BLR file is a copy of the NLR file. So on these grids the
+# Synthesizer NLR (§9c, left) and BLR (here, left) panels are the *same* spectrum,
+# and the only thing that distinguishes tengri's NLR from its BLR is the velocity
+# width applied (500 vs 5000 km/s) — which is why the right-hand panels differ in
+# line *width* but share line *positions*. A genuine NLR-vs-BLR physical contrast
+# (density, ionisation, line ratios) needs the production grids.
 
 # %%
 try:
