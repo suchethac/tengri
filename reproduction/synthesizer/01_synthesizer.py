@@ -611,10 +611,18 @@ U.panel(
 )
 ax_l.plot(w_neb_s, L_neb_s, "C0-", linewidth=1.0)
 ax_r.plot(s_neb.wave, L_neb_t, "C1-", linewidth=1.0)
-_npk = max(float(np.nanmax(L_neb_s)), float(np.nanmax(L_neb_t)))
+# Frame the y-axis on the lines inside the plotted window (900–7000 Å); a global
+# max would be set by a far-UV resonance line off-panel, leaving dead headroom.
+def _winpk(w, L, lo=900.0, hi=7000.0):
+    w = np.asarray(w)
+    m = (w >= lo) & (w <= hi)
+    return float(np.nanmax(L[m])) if m.any() else float(np.nanmax(L))
+
+
+_npk = max(_winpk(w_neb_s, L_neb_s), _winpk(np.asarray(s_neb.wave), L_neb_t))
 for ax in (ax_l, ax_r):
     ax.set_xlim(900, 7000)
-    ax.set_ylim(_npk * 1e-4, _npk * 3)
+    ax.set_ylim(_npk * 1e-3, _npk * 2)
     ax.set_xscale("linear")
     ax.grid(True, alpha=0.3)
 _s_ha = float(L_neb_s[np.argmin(np.abs(w_neb_s - 6563))])
@@ -995,8 +1003,10 @@ print(
 # ### §9f Unified spectrum and inclination anisotropy
 #
 # The full unified AGN spectrum, assembled. The **top row** puts Synthesizer's
-# `UnifiedAGN` (left) next to tengri's own unified AGN (right): the qsosed disc
-# and Nenkova torus combined through tengri's composable builder, with the NLR and
+# `UnifiedAGN` (left) next to tengri's own unified AGN (right): the same model
+# pieces on both sides — the qsosed accretion disc, a 1000 K blackbody torus
+# (Synthesizer's `Blackbody`; tengri's single-temperature `simple` torus), and the
+# NLR and
 # BLR drawn from the *same* Synthesizer Cloudy grids as §9c/§9d (via the
 # grid-backed `nlr_synthesizer` lines block). Each panel shows the total and its
 # four components on a shared axis — the disc UV bump, the line forest, and the
@@ -1046,7 +1056,10 @@ def _tengri_agn_component(disc, torus, lines):
 
 
 w_t, L_disc_t = _tengri_agn_component("kubota_done", "none", "none")
-_, L_torus_t = _tengri_agn_component("none", "nenkova", "none")
+# Match Synthesizer's torus model: a single-temperature blackbody at 1000 K.
+# tengri's "simple" torus is a single-T greybody with agn_T_torus = 1000 K by
+# default, so both panels reprocess the absorbed disc luminosity the same way.
+_, L_torus_t = _tengri_agn_component("none", "simple", "none")
 _blr_path = str(Path(_SYN_GRID_DIR) / "test_grid_agn-blr.hdf5")
 L_nlr_t = np.asarray(
     compute_nlr_sed_synthesizer(
@@ -1084,7 +1097,7 @@ _cont = max(
     _winmax(w_t, L_disc_t, hi=1e7),
     _winmax(w_t, L_torus_t, hi=1e7),
 )
-_ylo, _yhi = _cont * 3e-3, _cont * 1e3
+_ylo, _yhi = _cont * 5e-3, _cont * 50.0
 
 # Left: Synthesizer UnifiedAGN total + components.
 w_tot, L_tot = agn["intrinsic"]
@@ -1098,7 +1111,7 @@ for L, c, lab in (
     (L_disc_t, "C0", "disc (qsosed)"),
     (L_nlr_t, "C1", "nlr (grid)"),
     (L_blr_t, "C2", "blr (grid)"),
-    (L_torus_t, "C3", "torus (Nenkova)"),
+    (L_torus_t, "C3", "torus (1000 K BB)"),
 ):
     ax_t.plot(w_t, L, color=c, linewidth=1.0, alpha=0.8, label=lab)
 for axx, title in ((ax_s, "Synthesizer UnifiedAGN"), (ax_t, "tengri unified AGN")):
