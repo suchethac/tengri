@@ -496,6 +496,7 @@ class StellarSEDComponent:
             "const_exp",
             "continuity_flex",
             "psb",
+            "psb_suess2022",
             "delayed_bq",
             "dense_basis_pure",
             "exp",

@@ -391,6 +391,25 @@ def _anchor_sfr_axis(ax):
     ax.set_ylim(0.0, ax.get_ylim()[1])
 
 
+def _tighten_sed_axis(ax, *wave_lnu_pairs):
+    """Clamp the SED y-range to the data inside the visible 1000–20000 Å window.
+
+    Autoscaling otherwise keys on the full spectrum — including the far-UV and
+    far-IR outside the plotted x-window, where L_ν is orders of magnitude lower
+    — squashing the optical/NIR SED into a thin strip at the top of the panel.
+    """
+    lo, hi = ax.get_xlim()
+    ymax = 0.0
+    for wave, lnu in wave_lnu_pairs:
+        w = np.asarray(wave)
+        lv = np.asarray(lnu)
+        m = (w >= lo) & (w <= hi) & np.isfinite(lv) & (lv > 0)
+        if m.any():
+            ymax = max(ymax, float(lv[m].max()))
+    if ymax > 0:
+        ax.set_ylim(ymax / 50.0, ymax * 2.0)
+
+
 # %% [markdown]
 # ### §2a Continuity (Leja+2019)
 #
@@ -429,6 +448,7 @@ ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_c:.1e}", transform=ax_r.tr
 ax_r.legend(fontsize=9, loc="upper right")
 fig.tight_layout()
 _anchor_sfr_axis(ax_l)
+_tighten_sed_axis(ax_r, (w_cont, L_cont), (_s_cont.wave, _s_cont.sed_intrinsic))
 save_fig("prospector_02a_sfh_continuity.png")
 
 
@@ -484,6 +504,7 @@ ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_f:.1e}", transform=ax_r.tr
 ax_r.legend(fontsize=9, loc="upper right")
 fig.tight_layout()
 _anchor_sfr_axis(ax_l)
+_tighten_sed_axis(ax_r, (w_flex, L_flex), (_s_flex.wave, _s_flex.sed_intrinsic))
 save_fig("prospector_02b_sfh_continuity_flex.png")
 
 
@@ -541,6 +562,7 @@ ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_d:.1e}", transform=ax_r.tr
 ax_r.legend(fontsize=9, loc="upper right")
 fig.tight_layout()
 _anchor_sfr_axis(ax_l)
+_tighten_sed_axis(ax_r, (w_dir, L_dir), (_s_dir.wave, _s_dir.sed_intrinsic))
 save_fig("prospector_02c_sfh_dirichlet.png")
 
 
@@ -550,15 +572,15 @@ save_fig("prospector_02c_sfh_dirichlet.png")
 # A post-starburst (PSB) galaxy — a recent burst followed by a sharp quench —
 # is the regime that motivated Prospector's dedicated PSB template (Suess+2022,
 # `logsfr_ratios_to_masses_psb`): a young bin `[0, t_last]`, equal-mass flex
-# bins to `t_flex`, and fixed old bins. tengri registers this family as
-# `psb_suess2022` but has **not yet wired it into the DSPS forward pass**, so
-# we cannot forward-model it on the tengri side here.
+# bins to `t_flex`, and fixed old bins. tengri implements the same family as
+# `psb_suess2022` and forward-models it through DSPS.
 #
-# What we *can* do — and what a Prospector user does when not invoking the
-# dedicated template — is express the same burst-then-quench history in the
-# shared **continuity** basis, which both codes forward-model exactly: a sharp
-# negative youngest log-SFR ratio is a recent shutdown. The head-to-head below
-# is that continuity-PSB, at matched ratios on both sides.
+# The cleanest *matched-parameter* head-to-head against FSPS uses the shared
+# **continuity** basis — a sharp negative youngest log-SFR ratio is a recent
+# shutdown, and both codes forward-model the continuity SFH exactly. On top of
+# that comparison (blue/green), the grey dotted curve is tengri's dedicated
+# `psb_suess2022` template at matched `t_last`/`t_flex`, showing the parametric
+# PSB shape the family encodes directly.
 
 # %%
 # Post-starburst as continuity ratios: a burst in the 0.3–1 Gyr bin followed by
@@ -582,17 +604,38 @@ _sfr_p2 = np.asarray(_s_psb.derived["sfr_history"])
 _res_p = _optical_resid(w_psb, L_psb, _s_psb.wave, _s_psb.sed_intrinsic)
 print(f"§2d post-starburst: optical median residual {_res_p:.2e}")
 
+# tengri's dedicated Suess+2022 PSB template (now wired into the DSPS forward
+# pass): youngest bin [0, t_last], one flex bin to t_flex, then fixed old bins.
+_sfh_suess = {
+    "type": "psb_suess2022",
+    "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+    "tlast_gyr": Fixed(0.3),
+    "tflex_gyr": Fixed(2.0),
+    "ratio_young": Fixed(-1.5),
+    "ratio_old_0": Fixed(0.2),
+    "ratio_old_1": Fixed(-0.3),
+    "ratio_old_2": Fixed(0.0),
+    "*": FIXED,
+}
+_m_suess, _s_suess = _tengri_nonparam(_sfh_suess)
+_lbt_s = np.asarray(_s_suess.derived["sfh_grid_lbt_yr"]) / 1e9
+_sfr_s = np.asarray(_s_suess.derived["sfr_history"])
+
 fig, ax_l, ax_r = _sfr_sed_fig("Post-starburst SFH (recent history, continuity basis)")
 ax_l.set_xlim(9.0, AGE_UNIV_GYR)  # the PSB signature lives in the last few Gyr
 _plot_step(ax_l, ab_psb, m_psb, "C0", "Prospector  continuity-PSB")
 ax_l.plot(AGE_UNIV_GYR - _lbt_p, _sfr_p2, "C1-", linewidth=1.5, label="tengri  continuity-PSB")
-ax_l.legend(fontsize=9)
+ax_l.plot(
+    AGE_UNIV_GYR - _lbt_s, _sfr_s, ":", color="0.4", linewidth=1.5, label="tengri  psb_suess2022"
+)
+ax_l.legend(fontsize=8)
 ax_r.plot(w_psb, L_psb, "C0-", linewidth=1.5, label="Prospector  FSPS")
 ax_r.plot(_s_psb.wave, _s_psb.sed_intrinsic, "C1--", linewidth=1.2, label="tengri")
 ax_r.text(0.05, 0.05, f"optical median |Δ|/L = {_res_p:.1e}", transform=ax_r.transAxes, fontsize=9)
 ax_r.legend(fontsize=9, loc="upper right")
 fig.tight_layout()
 _anchor_sfr_axis(ax_l)
+_tighten_sed_axis(ax_r, (w_psb, L_psb), (_s_psb.wave, _s_psb.sed_intrinsic))
 save_fig("prospector_02d_sfh_psb.png")
 
 
@@ -629,6 +672,7 @@ _m_field = SEDModel.build(
 )
 
 fig, ax_l, ax_r = _sfr_sed_fig("Stochastic IFT field SFH (tengri-only)")
+_field_seds = []
 for k, seed in enumerate([3, 11, 29]):
     _draw = _m_field.spec.sample(jax.random.PRNGKey(seed))
     _sf = _m_field.predict_state(_draw)
@@ -642,6 +686,7 @@ for k, seed in enumerate([3, 11, 29]):
         label=f"draw {k + 1}",
     )
     ax_r.plot(_sf.wave, _sf.sed_intrinsic, color=f"C{k}", linewidth=1.0, alpha=0.85)
+    _field_seds.append((_sf.wave, _sf.sed_intrinsic))
 ax_l.legend(fontsize=9, title="prior draws")
 ax_r.text(
     0.05,
@@ -652,6 +697,7 @@ ax_r.text(
 )
 fig.tight_layout()
 _anchor_sfr_axis(ax_l)
+_tighten_sed_axis(ax_r, *_field_seds)
 save_fig("prospector_02e_sfh_ift_field.png")
 
 
