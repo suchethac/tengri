@@ -63,7 +63,9 @@ and runs one fit per process — see
 
 ## Speed: no precompute on joint fits yet
 
-`WavePrecomp` accelerates **photometry-only** models; its lookup-table path is
-bypassed whenever spectroscopy is present, and the spectroscopy lookup table
-(`SpectrumPrecomp`) is a Phase-5 work in progress. A joint fit therefore runs
-the exact wave-grid forward pass. See [Known limitations](known_limitations).
+`WavePrecomp` accelerates **photometry-only** models and `SpectrumPrecomp`
+accelerates **spectroscopy-only** models, but neither applies to a *joint*
+photometry + spectroscopy fit: a model takes a single `approx=` object, and a
+joint model built with `SpectrumPrecomp()` raises `NotImplementedError`. A joint
+fit therefore runs the exact wave-grid forward pass (`approx=None`). See
+[Known limitations](known_limitations).

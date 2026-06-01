@@ -669,7 +669,7 @@ spec = ParamSpec(
     noise_frac_cal=Uniform(0.01, 0.15),
 )
 model = Model(spec, ssp)
-model.precompute_spectroscopy(wave_obs)  # manual, easy to forget
+# (old API: a manual spectroscopy-precompute step, easy to forget)
 fitter = Fitter(model, spec_flux, spec_noise, data_type="spectroscopy")
 
 # NEW -- observation declares everything, auto-merge handles params

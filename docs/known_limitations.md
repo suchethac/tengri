@@ -19,13 +19,18 @@ publication-grade until the component you rely on has been cross-validated.**
 
 - **`WavePrecomp` is photometry-only.** It precomputes the SSP × filter
   integrals for a large speedup on photometric fits, with free redshift handled
-  via an interpolation table. It does not apply to spectroscopy, and its
-  lookup-table path is bypassed in joint (photometry + spectroscopy) fits.
-- **`SpectrumPrecomp` is not ready.** The spectroscopy lookup-table path is a
-  Phase-5 work in progress and currently raises during fitting. Use the exact
-  wave-grid path (the default) for spectroscopy and joint fits.
-- **Joint fits cannot combine both precompute paths.** A model accepts a single
-  `approx=` object, so a joint fit runs the exact forward pass either way.
+  via an interpolation table. It does not apply to spectroscopy.
+- **`SpectrumPrecomp` is spectroscopy-only.** It precomputes a per-pixel
+  effective-wavelength continuum lookup table for spectroscopic fits. It runs
+  (it does not raise) and agrees with the exact path to machine precision on
+  the stellar continuum; the two-component birth-cloud dust LUT carries a known
+  ~1% residual. At high spectral resolution it auto-falls-back to the exact
+  wave-grid path with a warning.
+- **Neither precompute path applies to joint (photometry + spectroscopy)
+  fits.** A model accepts a single `approx=` object; a joint model built with
+  `SpectrumPrecomp()` raises `NotImplementedError` (the photometric LUT family
+  is not yet built alongside the spectrum LUT). Build a joint model with
+  `approx=None` (exact) for now.
 
 ## Inference backends
 
