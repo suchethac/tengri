@@ -517,6 +517,23 @@ class SEDModel:
                 "approx=True, approx='wave_precomp') were removed."
             )
 
+        # Part A (joint precompute): on a joint photometry+spectroscopy
+        # observation, any precompute opt-in builds BOTH LUT families. The
+        # approx object's *type* historically selected the family
+        # (WavePrecomp→photometry, SpectrumPrecomp→spectroscopy); for a joint
+        # model we promote to both so the forward pass projects photometry via
+        # ``predict_via_precomp`` AND spectroscopy via
+        # ``predict_spectrum_via_precomp`` (the components publish both LUT
+        # families in one pass). z-grid knobs (n_z/z_min/z_max) come from
+        # whichever object was passed and apply to both families.
+        if (
+            observation is not None
+            and getattr(observation, "is_joint", False)
+            and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
+        ):
+            self._approx["wave_precomp"] = True
+            self._approx["spectrum_precomp"] = True
+
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
         # not a user flag — it switches on transparently when the method is
@@ -531,7 +548,9 @@ class SEDModel:
         self._catalog_z_range: tuple[float, float] | None = None
         if self._approx["wave_precomp"]:
             redshift_dist = spec.get_distribution("redshift")
-            cz = self._approx_config.catalog_z_range if self._approx_config is not None else None
+            # ``catalog_z_range`` is a WavePrecomp-only knob; under a joint
+            # model the config may be a SpectrumPrecomp (no such field).
+            cz = getattr(self._approx_config, "catalog_z_range", None)
             if cz is not None:
                 if redshift_dist.is_fixed:
                     self._approx["ztable"] = True
@@ -4506,17 +4525,22 @@ class SEDModel:
         # contributions. ``predict_spectrum_via_precomp`` folds them through
         # cosmology (and rasterised emission lines) into ``spec_fnu``.
         if self._approx.get("spectrum_precomp") and self.observation.can_do_spectroscopy:
-            if self.observation.can_do_photometry:
-                raise NotImplementedError(
-                    "SpectrumPrecomp on a joint photometry+spectroscopy model is "
-                    "not yet wired (the photometric LUT family must be built "
-                    "alongside the spectrum LUT). For now, build a "
-                    "spectroscopy-only Observation under SpectrumPrecomp, or use "
-                    "approx=None for joint fits."
-                )
-            return self.observation.predict_spectrum_via_precomp(
-                state, full, observables_type=self._Observables
+            # Part A (joint): project the spectrum LUT, and — when the model is
+            # also photometric — the photometry LUT, then merge both families
+            # into one Observables. Each projector sums its own
+            # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family generically;
+            # we collect dicts (observables_type=None) and build the per-model
+            # Observables once so phot_fnu and spec_fnu coexist.
+            out: dict = {}
+            out.update(
+                self.observation.predict_spectrum_via_precomp(state, full, observables_type=None)
             )
+            if self.observation.can_do_photometry and self._approx.get("wave_precomp"):
+                out.update(
+                    self.observation.predict_via_precomp(state, full, observables_type=None)
+                )
+            avail = {k: v for k, v in out.items() if k in self._Observables._fields}
+            return self._Observables(**avail)
 
         kwargs = {}
         if self.observation.can_do_spectroscopy:
@@ -4995,14 +5019,28 @@ class SEDModel:
                         "n_z": getattr(cfg, "n_z", 100),
                     }
 
-                state = stellar.precompute(
+                spec_state = stellar.precompute(
                     ssp_data=stellar.ssp_data,
                     wave_grid=None,
                     approx=self._approx,
                     spec_wave_obs=spec_wave_obs,
                     redshift_spec=redshift_spec,
                 )
-                chain[0] = replace(stellar, _state=state)
+                # Part A (joint): MERGE the spectrum LUT into the stellar state
+                # rather than overwriting it — the photometry-LUT block above
+                # may already have populated ssp_phot_lut/ztable for a joint
+                # model. Spec-only models have no prior phot state, so the merge
+                # is a no-op on the phot fields.
+                prev = stellar._state
+                if prev is not None:
+                    merged = replace(
+                        prev,
+                        ssp_spec_lut=spec_state.ssp_spec_lut,
+                        ssp_spec_ztable=spec_state.ssp_spec_ztable,
+                    )
+                else:
+                    merged = spec_state
+                chain[0] = replace(stellar, _state=merged)
 
         return chain
 

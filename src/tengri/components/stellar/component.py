@@ -335,59 +335,66 @@ class StellarSEDComponent:
         del wave_grid
         approx = approx or {}
 
+        from dataclasses import replace as _replace_state
+
+        state = StellarSEDComponentState(name=self.name)
+
         # Phase 5: SpectrumPrecomp — pre-rebin SSP to spectrum pixel centres.
-        if approx.get("spectrum_precomp"):
-            return self._precompute_spectrum(spec_wave_obs, redshift_spec)
-
-        if not approx.get("wave_precomp"):
-            return StellarSEDComponentState(name=self.name)
-
-        # Phase 3b/3c: requires filters at construction.
-        if filters is None or self.ssp_data is None:
-            # Can't build LUT without filters or SSP grid. Fall back to no-op.
-            return StellarSEDComponentState(name=self.name)
-
-        filter_waves, filter_trans = zip(*filters, strict=False)
-        filter_list = [jnp.asarray(fw) for fw in filter_waves]
-        filter_trans_list = [jnp.asarray(ft) for ft in filter_trans]
-
-        # Dispatch: fixed-z (Phase 3b) or free-z (Phase 3c-1)
-        if redshift_spec is None or redshift_spec.get("mode") == "fixed":
-            # Phase 3c-3a: build the fixed-z LUT at the source's z so the
-            # filter passband is correctly redshifted into the rest frame.
-            # This aligns fixed-mode with free-mode semantics — both LUTs
-            # carry the filter integral at the source's z. Cosmology
-            # ``(1+z)/(4π·dl²)`` is applied in :meth:`Observation.predict_via_precomp`.
-            from tengri.components.stellar.sps.precompute import precompute_photometry
-
-            z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
-            lut = precompute_photometry(
-                ssp_data=self.ssp_data,
-                filter_waves=filter_list,
-                filter_trans=filter_trans_list,
-                redshift=z_source,
-                dl_cm=1.0,  # placeholder; cosmology applied at projection time
-                taylor_correction=True,  # Phase 3c-3c: enables Ψ moment for dust LUT
-            )
-            return StellarSEDComponentState(name=self.name, ssp_phot_lut=lut)
-
-        else:  # mode == "free"
-            # Phase 3c-1 path: build ztable for free-z interpolation.
-            from tengri.components.stellar.sps.precompute import (
-                precompute_photometry_ztable,
+        # Part A (joint): build the spectrum LUT *alongside* the photometry LUT
+        # below (not an early return) so a joint photometry+spectroscopy model
+        # carries BOTH families in one state. ``_precompute_spectrum`` populates
+        # ``ssp_spec_lut`` (fixed-z) or ``ssp_spec_ztable`` (free-z).
+        if approx.get("spectrum_precomp") and spec_wave_obs is not None:
+            spec_state = self._precompute_spectrum(spec_wave_obs, redshift_spec)
+            state = _replace_state(
+                state,
+                ssp_spec_lut=spec_state.ssp_spec_lut,
+                ssp_spec_ztable=spec_state.ssp_spec_ztable,
             )
 
-            ztable = precompute_photometry_ztable(
-                ssp_data=self.ssp_data,
-                filter_waves=filter_list,
-                filter_trans=filter_trans_list,
-                z_min=redshift_spec.get("z_min", 0.001),
-                z_max=redshift_spec.get("z_max", 3.0),
-                n_z=redshift_spec.get("n_z", 100),
-                apply_igm=False,
-                taylor_correction=True,  # Phase 3c-3c-v: Ψ moment for dust LUT
-            )
-            return StellarSEDComponentState(name=self.name, ssp_phot_ztable=ztable)
+        # Phase 3b/3c: photometry SSP×filter LUT. Requires filters + SSP grid.
+        if approx.get("wave_precomp") and filters is not None and self.ssp_data is not None:
+            filter_waves, filter_trans = zip(*filters, strict=False)
+            filter_list = [jnp.asarray(fw) for fw in filter_waves]
+            filter_trans_list = [jnp.asarray(ft) for ft in filter_trans]
+
+            # Dispatch: fixed-z (Phase 3b) or free-z (Phase 3c-1)
+            if redshift_spec is None or redshift_spec.get("mode") == "fixed":
+                # Phase 3c-3a: build the fixed-z LUT at the source's z so the
+                # filter passband is correctly redshifted into the rest frame.
+                # Cosmology ``(1+z)/(4π·dl²)`` is applied in
+                # :meth:`Observation.predict_via_precomp`.
+                from tengri.components.stellar.sps.precompute import precompute_photometry
+
+                z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
+                lut = precompute_photometry(
+                    ssp_data=self.ssp_data,
+                    filter_waves=filter_list,
+                    filter_trans=filter_trans_list,
+                    redshift=z_source,
+                    dl_cm=1.0,  # placeholder; cosmology applied at projection time
+                    taylor_correction=True,  # Phase 3c-3c: Ψ moment for dust LUT
+                )
+                state = _replace_state(state, ssp_phot_lut=lut)
+            else:  # mode == "free"
+                # Phase 3c-1 path: build ztable for free-z interpolation.
+                from tengri.components.stellar.sps.precompute import (
+                    precompute_photometry_ztable,
+                )
+
+                ztable = precompute_photometry_ztable(
+                    ssp_data=self.ssp_data,
+                    filter_waves=filter_list,
+                    filter_trans=filter_trans_list,
+                    z_min=redshift_spec.get("z_min", 0.001),
+                    z_max=redshift_spec.get("z_max", 3.0),
+                    n_z=redshift_spec.get("n_z", 100),
+                    apply_igm=False,
+                    taylor_correction=True,  # Phase 3c-3c-v: Ψ moment for dust LUT
+                )
+                state = _replace_state(state, ssp_phot_ztable=ztable)
+
+        return state
 
     def _precompute_spectrum(
         self,

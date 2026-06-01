@@ -528,21 +528,25 @@ class SEDModelComponent:
         else:
             sed_in = state.sed_intrinsic
 
-        # Check for spectrum LUT mode (Phase 5)
+        # LUT mode(s). A joint photometry+spectroscopy model publishes BOTH
+        # ``spec_eff_waves`` (Phase 5) and ``filter_eff_waves`` (WavePrecomp);
+        # photometry- or spectroscopy-only models publish just one. Run every
+        # LUT branch whose grid is present and UNION the published dicts, so a
+        # single pass emits both ``*_spec_lnu_precomp`` and ``*_phot_lnu_precomp``
+        # families (Part A — joint precompute). The full-grid SED
+        # (``sed_intrinsic``) is intentionally NOT updated on any LUT path.
         spec_eff_waves = state.derived.get("spec_eff_waves")
-        if spec_eff_waves is not None:
-            # SpectrumPrecomp path: compute spectrum LUTs
-            published = self._apply_spec_precomp(p_sliced, sed_in, spec_eff_waves, **input_kwargs)
-            # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
-            new_derived = self._merge_published(state.derived, published)
-            return state.with_(derived=new_derived)
-
-        # Check for WavePrecomp mode
         filter_eff_waves = state.derived.get("filter_eff_waves")
-        if filter_eff_waves is not None:
-            # WavePrecomp path: compute photometry LUTs
-            published = self._apply_precomp(p_sliced, sed_in, filter_eff_waves, **input_kwargs)
-            # Do NOT update sed_intrinsic on the LUT path (only publish LUTs)
+        if spec_eff_waves is not None or filter_eff_waves is not None:
+            published: dict[str, Any] = {}
+            if spec_eff_waves is not None:
+                published.update(
+                    self._apply_spec_precomp(p_sliced, sed_in, spec_eff_waves, **input_kwargs)
+                )
+            if filter_eff_waves is not None:
+                published.update(
+                    self._apply_precomp(p_sliced, sed_in, filter_eff_waves, **input_kwargs)
+                )
             new_derived = self._merge_published(state.derived, published)
             return state.with_(derived=new_derived)
         else:
