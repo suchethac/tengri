@@ -36,11 +36,19 @@ SEDModel.build(..., approx=SpectrumPrecomp()) # spectrum per-pixel LUT     (Phas
 |-----------|--------------|----------------|
 | `None` | Full-resolution exact pipeline. | reference |
 | `WavePrecomp()` | Preintegrated SSP×filter LUT for the stellar (and dust-IR) photometry; non-stellar evaluated at effective wavelengths. | <0.5% (continuum machine-exact post-#616; two-component birth-cloud dust ~0.8-1.5%, see #617) |
-| `SpectrumPrecomp()` | Per-pixel effective-wavelength continuum LUT for spectroscopy (spectroscopy-only; joint raises `NotImplementedError`). High-R auto-falls-back to exact. | same caveats as above |
+| `SpectrumPrecomp()` | Per-pixel effective-wavelength continuum LUT for spectroscopy. High-R auto-falls-back to exact. | same caveats as above |
 
-Internally these select different fused JIT kernels (historically named
-"compositional"/"hybrid"/"exact"); those names are an implementation detail of
-`forward/_kernels/`, not a user-facing API.
+On a **joint** photometry+spectroscopy observation, either opt-in builds *both*
+LUT families and the forward pass projects both channels in one fused kernel
+(`predict_via_precomp` + `predict_spectrum_via_precomp`). Velocity dispersion /
+LSF are not applied on the per-pixel continuum LUT.
+
+Both run inside the same fused, structurally + persistently cached
+`@jax.jit` kernel (`predict_observables_jit`). `predict_observables` runs the
+identical logic eagerly (no compile) for one-off/interactive use; the two share
+one implementation and are bit-identical. Internally the kernel selects
+different strategies (historically named "compositional"/"hybrid"/"exact"); those
+names are an implementation detail of `forward/_kernels/`, not a user-facing API.
 
 ## Benchmarks (Apple M-series CPU, post-JIT warmup, SDSS ugriz, z=0.1, float64)
 
