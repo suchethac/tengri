@@ -77,12 +77,22 @@ sphinx_gallery_conf = {
     # NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha). These scripts
     # still run as standalone demos for advanced users.
     "ignore_pattern": (
-        # Heavy NUTS/SVI scripts whose runtime + memory footprint OOMs the
-        # build (each NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha).
-        # plot_hierarchical also hits an upstream stochastic-SFH JAX-tracing
-        # issue in model.mock() / predict_observables under field SFH — needs
-        # a library fix before re-enabling.
-        r"plot_(population_scaling|hierarchical|hierarchical_convergence|prior_posterior_compare|wrong_model_trap)\.py$"
+        # Scripts hidden from the published gallery, two reasons:
+        #  (1) Heavy NUTS/SVI whose runtime + memory OOMs the build (NUTS
+        #      warmup can peak at 20+ GB per CLAUDE.md gotcha): population_scaling,
+        #      hierarchical*, multichain_speedup (Ray cluster), prior_posterior_compare.
+        #      plot_hierarchical* also hits an upstream stochastic-SFH JAX-tracing
+        #      issue in model.mock() under field SFH.
+        #  (2) Not yet rendered / incomplete, so they would otherwise appear as
+        #      dead figure-less entries: joint_photometry_line_fit ("in
+        #      development"), photoz_chi2_grid, posterior_corner_dpl. Tracked in
+        #      the "re-enable hidden inference gallery examples" issue; the
+        #      source files stay in examples/inference/ for advanced users.
+        r"plot_("
+        r"population_scaling|hierarchical|hierarchical_convergence|prior_posterior_compare"
+        r"|wrong_model_trap|joint_photometry_line_fit|multichain_speedup"
+        r"|photoz_chi2_grid|posterior_corner_dpl"
+        r")\.py$"
     ),
     "download_all_examples": False,
     # Locally we execute (default). On CI (e.g. GitHub Actions sets CI=true) we

@@ -37,10 +37,12 @@ pip install -e ".[docs]"      # sphinx, furo, nbsphinx
 
 ## Requirements
 
-- Python ≥ 3.10
+- Python ≥ 3.11
 - JAX ≥ 0.4.20
-- DSPS ≥ 0.3
-- NIFTy.re ≥ 8.5
+- DSPS 0.4.6 (pinned: `>=0.4.6,<0.4.7`) — 0.4.7 removed `CosmoParams` from
+  `dsps.cosmology.flat_wcdm`, which tengri still imports. Until that migration
+  lands, install exactly 0.4.6.
+- NIFTy.re ≥ 8.5 (the `re` extra)
 - NumPy ≥ 1.24
 - matplotlib ≥ 3.7
 - h5py ≥ 3.0

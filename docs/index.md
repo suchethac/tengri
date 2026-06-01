@@ -15,10 +15,16 @@ from.*
 
 ---
 
-> **Status:** v0.1.0, active development. Core pipeline functional with 2000+ tests. Paper I in preparation.
+> **Status:** v0.1.0, active development. Core pipeline functional with 2000+ tests. Paper I in preparation. See [Known limitations](known_limitations) before using results for publication.
 
-- **[Tutorial spine](spine/00_quickstart)** — notebooks 00 → 08
+**Start here:** [Install](#installation) → [Quickstart (notebook 00)](spine/00_quickstart) →
+[Fitting tutorials (05–07)](spine/05_fitting_photometry) →
+[Choosing an inference method](method_selection) →
+[API reference](api/index).
+
+- **[Tutorial spine](spine/00_quickstart)** — notebooks 00 → 09
 - **[Examples gallery](auto_examples/index)** — one-figure recipes by category
+- **[Recipes](recipes)** — curated starting configurations
 - **[Source on GitHub](https://github.com/suchethac/tengri)**
 
 ## Why tengri
@@ -43,7 +49,8 @@ pip install -e ".[all]"       # + BlackJAX (NUTS) + optax (MAP)
 pip install -e ".[dev]"       # + pytest, ruff, jupytext
 ```
 
-Requirements: Python ≥ 3.10, JAX ≥ 0.4.20, DSPS ≥ 0.3, NIFTy.re ≥ 8.5.
+Requirements: Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6 (pinned — 0.4.7 removed
+`CosmoParams`), NIFTy.re ≥ 8.5.
 
 ## Quick start
 
@@ -175,6 +182,15 @@ and end-to-end workflows.
    :maxdepth: 1
 
    auto_examples/index
+
+.. toctree::
+   :caption: Guides
+   :maxdepth: 1
+
+   recipes
+   joint_fitting
+   method_selection
+   known_limitations
 
 .. toctree::
    :caption: Reference

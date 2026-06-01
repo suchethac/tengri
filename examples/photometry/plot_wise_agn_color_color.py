@@ -2,11 +2,10 @@
 WISE W1–W2 vs W2–W3 Color-Color Diagram with Stern+2012 AGN Wedge
 ==================================================================
 
-The **WISE color-color diagram** (Stern et al. 2012) is a powerful tool for
-separating AGN from star-forming galaxies using mid-infrared colors. The
-diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while
-star-forming galaxies have cooler dust emission (Rayleigh-Jeans slope at
-long wavelengths).
+The WISE color-color diagram (Stern et al. 2012) separates AGN from
+star-forming galaxies using mid-infrared colors. The diagnostic exploits the
+fact that AGN emit power-law SEDs (flat in νLν) while star-forming galaxies
+have cooler dust emission (Rayleigh-Jeans slope at long wavelengths).
 
 Stern et al. (2012) define an AGN wedge in the (W1–W2, W2–W3) color space:
 galaxies with **W1–W2 > 0.8 mag** are classified as AGN-dominated, while

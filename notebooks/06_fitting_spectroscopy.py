@@ -23,12 +23,16 @@
 # [`05_fitting_photometry`](05_fitting_photometry.py)); a single optical
 # spectrum breaks the degeneracy.
 #
-# This notebook builds a 3500–9500 Å rest-frame spectrum with realistic
-# resolution, masks the strong emission lines (Hα, [OIII], [NII], [SII])
-# so they don't bias the continuum fit, marginalizes a multiplicative
-# polynomial for instrumental flux calibration, and runs NUTS. ~3 min on
-# CPU; NUTS compile is slower than for photometry because the spectrum
-# has ~1000 pixels.
+# This notebook builds an R=2000 optical spectrum (200 pixels, rest-frame
+# 3000–8636 Å, observed-frame ~3300–9500 Å at z=0.1), masks the strong
+# emission lines (Hα, Hβ, [OIII], [NII], [SII]) so they don't bias the
+# continuum fit, analytically marginalizes a low-order flux-calibration
+# polynomial (Prospector-style), and runs HMC. A few minutes on CPU.
+#
+# We use HMC (fixed leapfrog length) rather than NUTS here: NUTS's binary
+# tree doubling enlarges the compile graph on a 200-pixel likelihood, and
+# the continuum posterior is well-enough behaved that fixed-L HMC mixes
+# fine with a diagonal mass matrix.
 
 # %%
 import os
@@ -148,12 +152,12 @@ print(f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]}
 # %% [markdown]
 # ## Wavelength grid and emission-line masks
 #
-# Observed-frame wavelength: 3500–9500 Å at z=0.1 (rest: 3000–8636 Å).
-# Resolution R ≈ 2000 → 1000 pixels keeps compile budget tight (~80 s NUTS warmup).
-# Mask 8 emission lines ±10 Å (vacuum wavelengths throughout).
+# Observed-frame wavelength: ~3300–9500 Å at z=0.1 (rest: 3000–8636 Å).
+# Resolution R ≈ 2000 sampled on 200 log-spaced pixels keeps the compile
+# budget tight. Mask 8 emission lines ±10 Å (vacuum wavelengths throughout).
 
 # %%
-# Construct wavelength grid: observed z=0.1 → rest 3000–8636 Å at 1000 pix
+# Construct wavelength grid: observed z=0.1 → rest 3000–8636 Å at 200 pix
 z_spec = 0.1
 wave_rest_lo, wave_rest_hi = 3000.0, 8636.0
 n_pix = 200
@@ -189,7 +193,10 @@ print(f"Observed: {float(wave_obs.min()):.1f}–{float(wave_obs.max()):.1f} Å")
 print(f"Resolution: R = {resolution}, {n_pix} pixels → {n_good} good pixels after masking")
 
 # %%
-# Build Spectroscopy config (no calibration polynomial for simplicity)
+# Build Spectroscopy config. calibration_order=0 means we add no free
+# calibration parameters to the model; instead we let the Fitter
+# analytically marginalize the flux calibration below (cleaner — the
+# calibration nuisance never enters the sampled parameter space).
 spec_config = Spectroscopy(
     wave_obs=wave_obs,
     resolution=resolution,
@@ -285,13 +292,25 @@ fig.savefig(os.path.join(FIGDIR, "06_spectrum_input.png"), dpi=200, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## NUTS inference (diagonal mass matrix)
+# ## HMC inference (diagonal mass matrix)
 #
-# Single NUTS chain with `dense_mass=False` to avoid OOM on 1000-pixel compile.
+# Single HMC chain with a diagonal mass matrix to keep the compile graph
+# bounded on the 200-pixel likelihood. `calibration_marginalize=True`
+# analytically integrates out a low-order Chebyshev flux-calibration
+# polynomial at each likelihood call (Prospector's optimal-calibration
+# trick, Johnson et al. 2021), so the calibration nuisance never enters
+# the sampled space — the posterior is over physics parameters alone.
 
 # %%
 t0 = time.perf_counter()
-fitter_spec = Fitter(model_spec, flux_obs_np, flux_err_np)
+fitter_spec = Fitter(
+    model_spec,
+    flux_obs_np,
+    flux_err_np,
+    data_type="spectroscopy",
+    calibration_marginalize=True,
+    cal_n_poly=2,
+)
 
 result_spec = fitter_spec.run(
     "mcmc_hmc",
@@ -301,9 +320,9 @@ result_spec = fitter_spec.run(
     dense_mass_matrix=False,
     verbose=False,
 )
-t_nuts = time.perf_counter() - t0
+t_hmc = time.perf_counter() - t0
 
-print(f"\nHMC inference: {t_nuts:.1f} s")
+print(f"\nHMC inference: {t_hmc:.1f} s")
 print(f"  {len(result_spec.samples[spec_param.free_params[0]])} samples")
 
 # %%
@@ -342,7 +361,7 @@ spec_median_np = np.array(spec_median)
 ax_spec.plot(wave_obs_np[mask_good], flux_obs_np[mask_good], "o", ms=4,
              color=COLORS.get("data", "C0"), alpha=0.7, label="Data (unmasked)", zorder=3)
 ax_spec.plot(wave_obs_np, spec_median_np, "-", color=COLORS.get("model", "C3"),
-             lw=2, label="NUTS median", zorder=2)
+             lw=2, label="HMC median", zorder=2)
 
 for _line_name, wave_line_rest in emission_lines:
     wave_line_obs = wave_line_rest * (1.0 + z_spec)
@@ -399,12 +418,12 @@ plt.show()
 # %%
 # Plot: corner plot
 # Lightweight manual corner. ``plot_corner_comparison`` (corner.py KDE)
-# OOMs on macOS jetsam at ~24 GB peak when stacked on a 1000-pixel
-# NUTS graph. Histograms are bounded RSS and adequate for tutorial.
+# can spike to ~24 GB peak when stacked on the resident HMC graph;
+# histograms are bounded RSS and adequate for a tutorial.
 # Filter to actually-varying parameters: result.samples may include
 # fixed-as-constant chains (std == 0) which create empty corner cells.
 free_p = [
-    k for k in result_spec.samples.keys()
+    k for k in result_spec.samples
     if float(np.std(np.asarray(result_spec.samples[k]))) > 1e-12
 ]
 n_free_p = len(free_p)
@@ -435,8 +454,11 @@ for i, ki in enumerate(free_p):
         if j == 0:
             ax2.set_ylabel(ki.replace("sfh_lnorm_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
         ax2.tick_params(labelsize=7)
-fig.suptitle(f"Posterior: Age + Metallicity from Optical Continuum ({spec_param.n_free} params, {t_nuts:.0f}s)",
-             y=1.001, fontsize=12)
+fig.suptitle(
+    f"Posterior: age + metallicity from optical continuum "
+    f"(HMC, {spec_param.n_free} params, {t_hmc:.0f}s)",
+    y=1.001, fontsize=12,
+)
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=180, bbox_inches="tight")
 print("Saved 06_corner.png", flush=True)
@@ -445,8 +467,8 @@ print("Saved 06_corner.png", flush=True)
 # Plot: sfh recovery
 fig, ax = plt.subplots(figsize=(10, 4))
 plot_sfh(model_spec, result_spec, true_params=true_params, ax=ax,
-         color=COLORS.get("mcmc_nuts", "C0"), label="NUTS (optical)",
-         method="NUTS")
+         color=COLORS.get("mcmc_hmc", COLORS.get("mcmc_nuts", "C0")), label="HMC (optical)",
+         method="HMC")
 ax.set_title(r"SFH Recovery: Lognormal (peak SFR ~3 Msun/yr, age ~1 Gyr)")
 fig.tight_layout()
 fig.savefig(os.path.join(FIGDIR, "06_sfh_recovery.png"), dpi=200, bbox_inches="tight")
@@ -456,7 +478,7 @@ plt.show()
 print("SUMMARY")
 print("Spectroscopic fitting (optical continuum only):")
 print(f"  Grid:   {n_pix} pixels, {n_good} unmasked (8 emission lines masked)")
-print(f"  Time:   {t_nuts:.1f}s (NUTS warmup + sampling)")
+print(f"  Time:   {t_hmc:.1f}s (HMC warmup + sampling)")
 print("  Model:  lognormal SFH, Calzetti dust, solar metallicity priors")
 print("  Result: Age + metallicity recovered from absorption features (Hβ, Mgb, 4000 Å break)")
 print("\nKey insight: Emission lines must be masked to avoid continuum bias.")

@@ -373,9 +373,10 @@ plt.show()
 # %% [markdown]
 # ## AGN bolometric luminosity sweep
 #
-# AGN contribution scales with `agn_log_lbol = log10(L_bol / L_sun)`.
-# Sweep it on top of a fixed star-forming host and watch the IR/MIR
-# rise above the host as the AGN turns up.
+# The AGN contribution scales with `agn_log_lbol = log10(L_bol / L_sun)`.
+# We use the SKIRTOR torus (Stalevski et al. 2016) — tengri's science-grade
+# AGN model — on a fixed star-forming host, and sweep the luminosity to
+# watch the dust-torus mid-IR bump climb above the host.
 
 # %%
 spec_agn = Parameters(
@@ -388,7 +389,7 @@ spec_agn = Parameters(
     dust_tau_bc=Fixed(0.5),
     dust_tau_diff=Fixed(0.3),
     dust_slope=Fixed(-0.7),
-    agn_model="standard",
+    agn_model="skirtor",
     agn_log_lbol=Fixed(10.0),
     redshift=Fixed(0.05),
 )
@@ -400,19 +401,20 @@ fig, ax = sweep_parameter(
     [9.0, 10.0, 11.0, 12.0, 13.0],
     cmap=SWEEP_CMAPS["agn"],
     label_fmt=r"$\log L_{{\rm bol}}/L_\odot$ = {:.0f}",
-    wave_range=(1000, 1e6),                  # UV through MIR
+    wave_range=(1000, 1e6),                  # UV through far-IR
     log_scale=True,
     normalize_at=None,                       # show absolute scaling
 )
-ax.set_title("AGN turns up: same SF host, log L_bol = 9 → 13")
+ax.set_title(r"SKIRTOR torus on a fixed SF host, $\log L_{\rm bol} = 9 \to 13$")
 fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# Below `log L_bol ≈ 10` the SED is host-dominated; above ~12 the AGN
-# disc dominates the rest-UV through optical and the torus dominates
-# the mid-IR. The crossover band is where AGN/SF decompositions are
-# most identifiable — and most degenerate.
+# Below `log L_bol ≈ 11` the SED is host-dominated. As the luminosity
+# climbs, the SKIRTOR torus lifts the mid-IR (~5–40 µm) above the stellar
+# continuum — the classic AGN signature in MIR photometry. That crossover
+# band is where AGN/host decompositions are most identifiable, and most
+# degenerate with star-forming dust emission.
 
 # %% [markdown]
 # ## Stochastic SFH: PSD-driven burstiness

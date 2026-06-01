@@ -648,15 +648,22 @@ class SEDModel:
     def wave_obs(self):
         """Configured observed-frame spectroscopy wavelength grid, or ``None``.
 
-        Public accessor for the internal ``_wave_obs`` attribute. Returns
-        ``None`` if no spectroscopy grid has been precomputed or configured.
+        Resolves the grid the model actually predicts on, in priority order:
+        an explicitly precomputed grid (``_wave_obs``), then the grid carried
+        by the configured ``Observation``'s spectroscopy channel. Returns
+        ``None`` only when no spectroscopy is configured at all.
 
         Returns
         -------
         ndarray or None
             Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
         """
-        return getattr(self, "_wave_obs", None)
+        explicit = getattr(self, "_wave_obs", None)
+        if explicit is not None:
+            return explicit
+        if self.observation is not None and self.observation.can_do_spectroscopy:
+            return self.observation.spectroscopy.wave_obs
+        return None
 
     @property
     def precomputed(self):
@@ -2912,6 +2919,14 @@ class SEDModel:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif wave_obs is None and (
+            self.observation is not None and self.observation.can_do_spectroscopy
+        ):
+            # Fall back to the grid carried by the configured Observation.
+            # Mirrors the JIT path in ``predict_observables``/``predict_observables_jit``
+            # so the inference loss (which calls ``predict_spectrum(params)`` with
+            # no explicit grid) resolves the same grid the model was built with.
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
             raise ValueError("No wavelength grid. Pass wave_obs or call precompute_spectroscopy()")
 
@@ -3783,6 +3798,12 @@ class SEDModel:
             wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
         elif wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif wave_obs is None and (
+            self.observation is not None and self.observation.can_do_spectroscopy
+        ):
+            # Fall back to the grid carried by the configured Observation
+            # (see ``predict_spectrum`` for rationale).
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
             raise ValueError(
                 "predict_spectrum_components requires a wave_obs grid "
