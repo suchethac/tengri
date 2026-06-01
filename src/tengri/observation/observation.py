@@ -776,7 +776,7 @@ class Observation:
         ------
         ValueError
             If no ``*_phot_lnu_lut`` keys are present (i.e. the model was
-            not built with ``approx={"wave_precomp": True}``).
+            not built with ``approx=WavePrecomp()``).
         NotImplementedError
             If the observation has spectroscopy, line_fluxes, or
             spectral_indices.

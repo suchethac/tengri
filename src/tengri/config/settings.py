@@ -212,7 +212,12 @@ class DustConfig:
         Options: ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
         ``"draine_li2007"``, ``"draine_li2014"``.
     approx : bool
-        Use approximate (fused) photometry path.  Default: ``True``.
+        Deprecated and unused — has no effect on the forward pass. The
+        precompute/LUT path is selected at model build time via
+        ``SEDModel.build(..., approx=WavePrecomp())``, not through
+        ``DustConfig``. Retained as a no-op for backward compatibility;
+        scheduled for removal (see the precompute-naming cleanup issue).
+        Default: ``True``.
 
     Attributes
     ----------
