@@ -235,10 +235,17 @@ class SEDModel:
         Unified observation config (photometry + spectroscopy + emission lines).
         Mutually exclusive with ``filters``.
     precompute : bool, optional
-        Whether to precompute SSP photometry and spectroscopy grids at
-        initialization. Default True activates the Zacharegkas+2025
-        fast-photometry path and enabling caching of spectroscopy grids.
-        Set False to defer computation (useful for batch operations).
+        **Legacy / largely superseded.** Builds the pre-Phase-3
+        ``PrecomputedData`` container (fixed-z SSP photometry/spectroscopy grid
+        defaults). This predates — and is NOT — the fast LUT path: the
+        Zacharegkas+2025 fast-photometry / spectroscopy speedup is selected at
+        build time via ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``
+        (see ``approx`` below), which builds its own LUTs through the component
+        chain and does not consume ``PrecomputedData``. ``precompute`` now only
+        supplies a couple of grid fallbacks for the exact path and is scheduled
+        to be folded into ``approx`` (tracked in the precompute-naming cleanup
+        issue). Default True; leave it unless you know you need the legacy
+        container. Set False to skip building it.
     forward_dtype : str or jnp.dtype, optional
         Dtype for forward model computation. Default ``"float64"`` preserves
         full precision. ``"float32"`` halves memory and gives ~1.5× speedup
