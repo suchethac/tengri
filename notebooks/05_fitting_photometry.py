@@ -136,7 +136,6 @@ from tengri import (
     Photometry,
     SEDModel,
     Uniform,
-    WavePrecomp,
     load_ssp_data,
 )
 
@@ -160,8 +159,7 @@ print(f"SSP: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages
 # `dust_emission` below: longer-wavelength IR data would require the
 # Dale 2014 energy-balance pipeline, which forces hybrid-mode photometry
 # and a much larger compile (~12 GB peak) — not worth it for a tutorial.
-# The `agn_panchromatic` recipe (see `tengri.recipes`) shows the full
-# panchromatic energy-balance treatment.
+# See notebook 11 for the full panchromatic energy-balance treatment.
 filter_names = [
     "galex_fuv", "galex_nuv",
     "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
@@ -194,32 +192,20 @@ spec = Parameters(
     dust_tau_diff=LogUniform(0.01, 1.5),
     dust_slope=Fixed(-0.7),
     # No dust_emission: UV-NIR alone is well-constrained without IR.
+    # Free redshift — pass `approx=WavePrecomp()` to SEDModel and the
+    # ztable interpolation is auto-enabled (free z costs no more compile
+    # time than fixed z). Use `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)`
+    # to override the default sampling.
     redshift=Uniform(0.01, 0.5),
 )
 print(f"\nModel: {spec.n_free} free parameters")
 print(f"  {', '.join(spec.free_params[:5])}...")
 
-# %% [markdown]
-# ## Build the model — with the WavePrecomp lookup table
-#
-# `approx=WavePrecomp()` precomputes the SSP × filter integrals once and
-# projects every forward pass through that table instead of re-integrating
-# the full rest-frame spectrum. The warm photometry call drops from ~7 ms
-# to ~1.5 ms — roughly 5× — which is what makes thousands of NUTS leapfrog
-# steps tractable on a laptop. It is the same setting every entry in
-# `tengri.recipes` uses.
-#
-# Because `redshift` is free, WavePrecomp also builds a redshift table
-# ("ztable") and interpolates the precomputed photometry through it, so a
-# free redshift costs essentially no extra compile. Override the sampling
-# with `WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)` if your prior is wide.
-
-# %%
 t0 = time.perf_counter()
-model = SEDModel(spec, ssp_data, observation=obs, approx=WavePrecomp())
+model = SEDModel(spec, ssp_data, observation=obs)
 t_model = time.perf_counter() - t0
-print(f"  SEDModel construction:  {t_model:.2f} s  (WavePrecomp + auto-ztable for free z)")
-print(f"  Recommended method:     {model.recommend_method()}")
+print(f"  ⏱  SEDModel construction        {t_model:.2f} s  (auto-ztable for free z)")
+print(f"  Recommended method: {model.recommend_method()}")
 
 # Time cold/warm forward passes — the canonical "is JIT working" signal
 t0 = time.perf_counter()
@@ -228,7 +214,7 @@ t_first = time.perf_counter() - t0
 t0 = time.perf_counter()
 _ = model.predict_photometry({**spec.sample(jax.random.PRNGKey(1))})
 t_warm = time.perf_counter() - t0
-print(f"  predict_photometry:  cold={t_first*1e3:.1f} ms, warm={t_warm*1e3:.1f} ms")
+print(f"  ⏱  predict_photometry  cold={t_first*1e3:.1f} ms  warm={t_warm*1e3:.1f} ms")
 
 # %% [markdown]
 # ## Generate mock photometry (SNR=15)
@@ -250,7 +236,7 @@ truth["dust_tau_diff"] = jnp.array(0.25)
 
 t0 = time.perf_counter()
 mock_data = model.mock(truth, snr=15.0, key=key)
-print(f"  Mock generation:  {time.perf_counter()-t0:.2f} s")
+print(f"  ⏱  mock generation              {time.perf_counter()-t0:.2f} s")
 
 print(f"\nTrue parameters (z={float(truth['redshift']):.3f}):")
 for name in spec.free_params[:6]:
@@ -265,28 +251,27 @@ print("FITTING: MAP optimization")
 
 fitter = Fitter(model, mock_data.flux_obs, mock_data.noise)
 
-# NUTS over fixed-L HMC: this 8-D posterior mixes scales (z in [0.01, 0.5]
-# vs sfh_dpl_alpha in [1, 8]) and has shallow, curved degenerate directions.
-# Broadband photometry barely constrains the SFH rise/fall slopes
-# (``sfh_dpl_alpha``/``beta``), so the chain explores long degenerate ridges
-# and registers divergences as it grazes the LogUniform prior edges — see the
-# note in the summary below. We use ``target_accept_rate=0.95`` and a
-# diagonal mass matrix (the dense matrix did not help this geometry) with a
-# long warmup; with WavePrecomp the whole fit is seconds, so a long warmup is
-# essentially free.
+# NUTS over fixed-L HMC: this 8-D photometry posterior has wildly
+# different scales per parameter (z in [0.01, 0.5] vs sfh_dpl_alpha in
+# [1, 8]) and curved age-dust degeneracies. Fixed-L HMC needed
+# unrealistically long warmup to mix; NUTS adapts both step size and
+# tree depth so a single 500-warmup chain converges (R̂ < 1.05).
+# ``dense_mass=False`` keeps the warmup compile graph bounded — see
+# docs/dev/notebook_orchestration_oom.md for why dense_mass NUTS
+# triggers macOS jetsam at >20 GB peak RSS.
 t0 = time.perf_counter()
 result = fitter.run(
     "mcmc_nuts",
-    n_warmup=1000,
+    n_warmup=500,
     n_samples=600,
-    target_accept_rate=0.95,
-    dense_mass_matrix=False,
+    target_accept_rate=0.85,
+    dense_mass_matrix=True,
     verbose=False,
     key=jax.random.PRNGKey(789),
 )
 t_fit = time.perf_counter() - t0
 
-print(f"NUTS: {t_fit:.1f}s  (warmup=1000 + samples=600, single chain)")
+print(f"NUTS: {t_fit:.1f}s  (warmup=500 + samples=600, single chain)")
 print(f"  Divergences: {result.diagnostics.get('n_divergent', 'n/a')}")
 print(f"  Step size:   {result.diagnostics.get('step_size', float('nan')):.4f}")
 print(f"  Samples:     {len(next(iter(result.samples.values())))}")
@@ -329,7 +314,7 @@ for i in range(n_samp_for_derived):
     _derived_lists["sfr_100myr"].append(float(sfhq.sfr_100myr))
     _derived_lists["ssfr"].append(float(sfhq.ssfr))
 derived = {k: np.asarray(v) for k, v in _derived_lists.items()}
-print(f"  Derived properties (loop over {n_samp_for_derived} draws):  {time.perf_counter()-t0:.2f} s", flush=True)
+print(f"  ⏱  derived (loop over {n_samp_for_derived} draws)  {time.perf_counter()-t0:.2f} s", flush=True)
 try:
     stellar_mass = derived.get("stellar_mass")
     sfr_10myr = derived.get("sfr_10myr")
@@ -436,44 +421,47 @@ plt.show()
 # ## Corner plot
 
 # %%
-# Corner plot via corner.py, the community standard. (A standalone
-# corner.corner on extracted numpy samples is ~0.6 s and ~150 MB — the OOM
-# risk is only with KDE comparison plots stacked on the resident NUTS graph.)
-import corner
-
-# Human-readable math labels keyed by free-parameter name.
-LABELS = {
-    "sfh_dpl_log_peak_sfr": r"$\log\,\mathrm{SFR_{peak}}$",
-    "sfh_dpl_tau_gyr": r"$\tau_{\rm SFH}$ [Gyr]",
-    "sfh_dpl_alpha": r"$\alpha$",
-    "sfh_dpl_beta": r"$\beta$",
-    "met_logzsol": r"$\log(Z/Z_\odot)$",
-    "dust_tau_bc": r"$\tau_{\rm bc}$",
-    "dust_tau_diff": r"$\tau_{\rm diff}$",
-    "redshift": r"$z$",
-}
+# Manual lightweight corner: pairwise hist2d + 1D histograms.
+# ``result.plot_corner`` uses corner.py KDE which OOMs on macOS jetsam
+# at 600 samples × 8 params on top of resident NUTS graph. Histograms
+# are bounded peak RSS and visually equivalent for tutorial-grade plots.
 # Filter to actually-varying params (std > 0); fixed chains add empty cells.
-free = [k for k in samples_for_credible if float(np.std(np.asarray(samples_for_credible[k]))) > 1e-12]
-sample_arr = np.column_stack([np.asarray(samples_for_credible[k]) for k in free])
-truths = [float(truth[k]) if k in truth else None for k in free]
+free = [
+    k for k in samples_for_credible.keys()
+    if float(np.std(np.asarray(samples_for_credible[k]))) > 1e-12
+]
+n_free = len(free)
+fig, axes = plt.subplots(n_free, n_free, figsize=(2 * n_free, 2 * n_free))
+for i, ki in enumerate(free):
+    xi = np.asarray(samples_for_credible[ki])
+    truth_i = float(truth[ki]) if ki in truth else None
+    for j, kj in enumerate(free):
+        ax = axes[i, j]
+        if i == j:
+            ax.hist(xi, bins=30, color=COLORS.get("model", "C1"), alpha=0.7, edgecolor="k", lw=0.3)
+            if truth_i is not None:
+                ax.axvline(truth_i, color=COLORS.get("truth", "C2"), ls="--", lw=1.5)
+        elif j < i:
+            xj = np.asarray(samples_for_credible[kj])
+            ax.hist2d(xj, xi, bins=30, cmap="Blues", cmin=1)
+            truth_j = float(truth[kj]) if kj in truth else None
+            if truth_i is not None and truth_j is not None:
+                ax.plot(truth_j, truth_i, "*", ms=12, color=COLORS.get("truth", "C2"), mec="k", mew=0.5)
+        else:
+            ax.set_visible(False)
+        if i < n_free - 1:
+            ax.set_xticklabels([])
+        if j > 0:
+            ax.set_yticklabels([])
+        if i == n_free - 1:
+            ax.set_xlabel(kj.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
+        if j == 0:
+            ax.set_ylabel(ki.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
+        ax.tick_params(labelsize=7)
 
-fig = corner.corner(
-    sample_arr,
-    labels=[LABELS.get(k, k) for k in free],
-    truths=truths,
-    truth_color=COLORS.get("truth", "C2"),
-    show_titles=True,
-    title_fmt=".2f",
-    title_kwargs={"fontsize": 9},
-    label_kwargs={"fontsize": 11},
-    color=COLORS.get("mcmc_nuts", "#336699"),
-    hist_kwargs={"density": True},
-    plot_datapoints=False,
-    fill_contours=True,
-    levels=(0.68, 0.95),
-)
-fig.suptitle(f"Posterior — {len(free)}-D NUTS, {sample_arr.shape[0]} samples", fontsize=13, y=1.02)
-fig.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=150, bbox_inches="tight")
+fig.suptitle(f"Parameter posterior: {n_free}--D NUTS ({len(xi)} samples)", fontsize=12, y=0.995)
+fig.tight_layout()
+plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=180, bbox_inches="tight")
 plt.show()
 print("Saved 05_corner.png", flush=True)
 
@@ -538,20 +526,4 @@ print(
     "Photometry alone leaves age, dust, and metallicity coupled. "
     "06_fitting_spectroscopy.py adds an optical spectrum to break the degeneracy."
 )
-
-# %% [markdown]
-# **On the divergence count.** A few hundred divergent transitions look
-# alarming, but here they are the honest signature of the problem, not a
-# bug in the sampler. Twelve broadband fluxes pin down the well-measured
-# quantities — stellar mass, redshift, total dust — but say little about
-# the *shape* of the star formation history, so `sfh_dpl_alpha` and
-# `sfh_dpl_beta` run along shallow, curved degenerate ridges that graze
-# the LogUniform prior edges. NUTS flags those grazes as divergences. The
-# split-R̂ values above are all < 1.05 and the marginal posteriors on the
-# constrained quantities are reliable; it is the SFH-shape parameters that
-# remain prior-dominated. Adding an optical spectrum
-# ([`06_fitting_spectroscopy`](06_fitting_spectroscopy.py)) collapses these
-# ridges and the divergences along with them.
-
-# %%
 tg.cite(result)

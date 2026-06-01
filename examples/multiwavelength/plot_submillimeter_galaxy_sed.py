@@ -39,7 +39,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 # Redshift and dust parameters of a typical ALMA/SCUBA-2 SMG
 Z_SMG = 3.0
-TAU_V = 3.5  # Heavy visual absorption → most starlight reprocessed into the IR
+TAU_V = 3.5  # Broad visual absorption → powerful dust-to-star conversion
 
 # Physical parameters: M* = 2e11 Msun, SFR = 500 Msun/yr from SFH
 # Implied log_total_mass ≈ 2.7 (peak ~500 Msun/yr)

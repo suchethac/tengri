@@ -160,12 +160,11 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
 | 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
 | 04 | `04_building_models.py`        | the nested-dict / recipe builder                            |
-| 05 | `05_fitting_photometry.py`     | photometric fit, end to end (WavePrecomp + NUTS)            |
-| 06 | `06_fitting_spectroscopy.py`   | spectroscopy with analytic calibration marginalization      |
+| 05 | `05_fitting_photometry.py`     | photometric fit, end to end                                 |
+| 05 | `05_adding_a_model.py`         | registering a new physics block                             |
+| 06 | `06_fitting_spectroscopy.py`   | spectroscopy with calibration nuisance parameters           |
 | 07 | `07_joint_photo_spec.py`       | joint photo + spec to break degeneracies                    |
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR                  |
-| 09 | `09_parameter_sweeps.py`       | how each parameter moves the SED                            |
-| 10 | `10_adding_a_model.py`         | registering a new physics block                             |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 

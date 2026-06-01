@@ -307,7 +307,7 @@ class MyModel(SEDModelComponent):
 | The bare protocol (unchanged)      | `src/tengri/protocols/component.py`                 |
 | The registry that builders consult | `src/tengri/components/sed_model_component.py` (module-level dict populated by `__init_subclass__`) |
 | New model definitions              | `src/tengri/components/<domain>/<name>.py`          |
-| The walked-through example         | `notebooks/10_adding_a_model.py`                    |
+| The walked-through example         | `notebooks/05_adding_a_model.py`                    |
 | The ADR documenting the decision   | `docs/adr/0011-sed-model-component-base.md`         |
 
 ---

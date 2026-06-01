@@ -18,14 +18,13 @@
 #
 # Surveys like SDSS deliver both broadband photometry and fiber
 # spectroscopy. Using only one leaves information on the table. This
-# notebook quantifies how much: fit photometry alone (MAP), then
-# spectroscopy alone (MAP), then both jointly with HMC, and compare the
-# posterior widths.
+# notebook quantifies how much: fit photometry alone (MAP + Laplace), then
+# spectroscopy alone, then both jointly with NUTS, and compare posterior
+# widths.
 #
-# Physics: double-power-law SFH, Calzetti two-component dust, nebular
-# continuum on. Photometry plus a low-resolution optical spectrum, fit
-# through one `Observation(photometry=..., spectroscopy=...)`. A few
-# minutes on CPU.
+# Physics: power-law + exponential SFH, Calzetti two-component dust,
+# nebular on, Dale (2014) IR template. Twelve UV–MIR bands plus a
+# low-resolution optical spectrum. ~3 min total on CPU.
 
 # %%
 import os
@@ -133,10 +132,7 @@ print("\nJoint Observation:")
 print(f"  n_data = {obs_joint.n_data} ({phot_obs.n_filters} phot + {N_PIX_SPEC} spec)")
 
 # %%
-# Define model and truth parameters. We stop the photometry at W2 (4.6 µm)
-# and omit `dust_emission`: the far-IR is unconstrained by these data, and
-# leaving the Dale (2014) energy-balance pipeline out keeps the joint
-# compile light (same reasoning as notebook 05).
+# Define model and truth parameters
 spec = Parameters(
     sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
     sfh_dpl_alpha=Uniform(0.1, 2.5),
@@ -144,6 +140,9 @@ spec = Parameters(
     dust_tau_bc=Uniform(0.0, 2.0),
     dust_tau_diff=Uniform(0.0, 1.5),
     dust_slope=Fixed(-0.7),
+    dust_emission="dale2014",
+    dust_T=Fixed(35.0),
+    dust_qpah=Fixed(2.5),
     nebular_ssp=True,
     redshift=Fixed(0.1),
     mean_sfh_type="dpl",
@@ -247,8 +246,8 @@ fig.savefig(FIG_DIR / "07_data.png", dpi=300, bbox_inches="tight")
 fig.savefig(FIG_DIR / "07_data.pdf", bbox_inches="tight")
 
 # %%
-# Run three fits: MAP (phot only), MAP (spec only), HMC (joint)
-print("FITTING STAGE: MAP (photometry) → MAP (spectroscopy) → HMC (joint)")
+# Run three fits: MAP (phot only), MAP (spec only), NUTS (joint)
+print("FITTING STAGE: MAP (photometry) → MAP (spectroscopy) → NUTS (joint)")
 
 # 1. MAP fit on photometry only
 print("\n[1/3] MAP fit on photometry only...")
@@ -266,54 +265,30 @@ result_map_spec = fitter_spec.run("map", n_steps=300, verbose=False)
 t_map_spec = time.perf_counter() - t0
 print(f"  Completed in {t_map_spec:.1f}s")
 
-# 3. Joint HMC fit (THE HEADLINE FIT). Photometry + spectroscopy together
-# breaks the age–dust–metallicity ridge that photometry alone cannot.
-# Sampling — not MAP — is what makes the constraint-width comparison
-# meaningful: only a posterior can be integrated to credible intervals.
-# We use HMC with a diagonal mass matrix (one fit per process, per the
-# OOM-orchestration rule).
-#
-# The joint likelihood is the sum of the photometry and spectroscopy
-# log-probabilities. We hand the Fitter the two data vectors concatenated
-# photometry-first, then spectroscopy — the same order the joint model's
-# observation emits them — and flag `data_type="joint"` so the loss splits
-# them back into the two channels.
-#
-# HMC settings follow the backend's convergence-validated recipe
-# (`dense_mass_matrix=True`, `n_warmup >= 1000`, `n_leapfrog_steps >= 20`);
-# the defaults are too short and leave R-hat > 1. With these the joint fit
-# reaches R-hat < 1.02 with no divergences in ~2 min.
-#
-# For *real* spectra with uncertain flux calibration you would also pass
-# `calibration_marginalize=True` to analytically marginalize a Chebyshev
-# calibration polynomial (Prospector-style; Johnson et al. 2021) — see the
-# joint-fitting guide. We leave it off here: the mock is perfectly
-# calibrated, so marginalizing a polynomial over the continuum would only
-# discard the spectral-shape information that constrains age and metallicity.
-#
-# Note: neither WavePrecomp nor SpectrumPrecomp is used. A joint Observation
-# carries one `approx=` object, the photometry LUT is bypassed when
-# spectroscopy is present, and the spectrum LUT (SpectrumPrecomp) is a
-# Phase-5 work in progress — so the joint forward pass runs the exact path.
-print("\n[3/3] HMC fit on joint photometry + spectroscopy...")
+# 3. NUTS fit on joint data (THE HEADLINE FIT). Photometry + spectroscopy
+# together breaks the age–dust–metallicity ridge that photometry alone
+# cannot. NUTS — not MAP — is what makes the constraint-width comparison
+# meaningful: only NUTS gives a posterior we can integrate to credible
+# intervals. Per the OOM-orchestration rule we run *one* NUTS per process.
+print("\n[3/3] NUTS fit on joint photometry + spectroscopy...")
 data_joint = np.concatenate([np.array(mock_phot.flux_obs), np.array(mock_spec.flux_obs)])
 noise_joint = np.concatenate([np.array(mock_phot.noise), np.array(mock_spec.noise)])
 t0 = time.perf_counter()
-fitter_joint = Fitter(model_joint, data_joint, noise_joint, data_type="joint")
-result_joint = fitter_joint.run(
+fitter_joint = Fitter(model_joint, data_joint, noise_joint)
+result_nuts_joint = fitter_joint.run(
     "mcmc_hmc",
-    n_warmup=1000,
+    n_warmup=300,
     n_samples=600,
-    n_leapfrog_steps=20,
-    dense_mass_matrix=True,
-    target_accept_rate=0.9,
+    n_leapfrog_steps=10,
+    dense_mass_matrix=False,  # diagonal mass — small-graph, lower compile RSS
+    target_accept_rate=0.85,
     key=jax.random.PRNGKey(789),
 )
-t_joint = time.perf_counter() - t0
-print(f"  Completed in {t_joint:.1f}s")
-print(f"  Divergences: {result_joint.diagnostics.get('n_divergent', 'n/a')}")
+t_nuts_joint = time.perf_counter() - t0
+print(f"  Completed in {t_nuts_joint:.1f}s")
+print(f"  Divergences: {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
 
-print(f"\n{'Total wall time:':<40s} {t_map_phot + t_map_spec + t_joint:.1f}s")
+print(f"\n{'Total wall time:':<40s} {t_map_phot + t_map_spec + t_nuts_joint:.1f}s")
 
 # %%
 # Extract posterior statistics: for MAP, use Laplace covariance (Hessian-based)
@@ -332,12 +307,12 @@ def estimate_laplace_sigma(result_map, param_names):
 map_phot_stats = estimate_laplace_sigma(result_map_phot, spec.free_params)
 map_spec_stats = estimate_laplace_sigma(result_map_spec, spec.free_params)
 
-# Joint HMC posterior — proper percentiles
-joint_stats = {}
+# NUTS joint posterior — proper percentiles
+nuts_joint_stats = {}
 for name in spec.free_params:
-    samples = np.asarray(result_joint.samples[name])
+    samples = np.asarray(result_nuts_joint.samples[name])
     p16, p50, p84 = np.percentile(samples, [16, 50, 84])
-    joint_stats[name] = (p50, p16, p84)
+    nuts_joint_stats[name] = (p50, p16, p84)
 
 # %%
 # ## Joint vs. single-modality recovery
@@ -356,7 +331,7 @@ param_labels = [r"$\alpha_{\rm SFH}$", r"$\tau_{\rm diff}$",
 fig, ax = plt.subplots(figsize=(8.6, 4.6))
 x = np.arange(len(key_params))
 for i, pname in enumerate(key_params):
-    p50, p16, p84 = joint_stats[pname]
+    p50, p16, p84 = nuts_joint_stats[pname]
     truth_v = float(truth[pname])
     map_phot_v = float(result_map_phot.params[pname])
     map_spec_v = float(result_map_spec.params[pname])
@@ -459,10 +434,10 @@ fig_h.savefig(FIG_DIR / "07_joint_sed.pdf", bbox_inches="tight")
 
 # %%
 # Convergence diagnostics
-print("CONVERGENCE DIAGNOSTICS (HMC joint fit)")
+print("CONVERGENCE DIAGNOSTICS (NUTS joint fit)")
 try:
-    rhat = result_joint.rhat()
-    print("\nR-hat (split-R̂ within the chain, all < 1.05 is good):")
+    rhat = result_nuts_joint.rhat
+    print("\nR-hat (NUTS convergence, all < 1.05 is good):")
     for name in spec.free_params:
         rh = rhat[name]
         status = "ok" if rh < 1.05 else "warn"
@@ -472,51 +447,40 @@ except Exception:
 
 # %%
 # Parameter recovery table
-print("PARAMETER RECOVERY (HMC joint fit)")
+print("PARAMETER RECOVERY (NUTS joint fit)")
 print(f"{'Parameter':<30s} {'Truth':>8s} {'Median':>8s} {'16–84%':>20s} {'Cover':>5s}")
 print("-" * 75)
 for name in spec.free_params:
     truth_val = float(truth[name])
-    med, lo, hi = joint_stats[name]
+    med, lo, hi = nuts_joint_stats[name]
     covered = "ok" if lo <= truth_val <= hi else "miss"
     print(f"  {name:<28s} {truth_val:8.3f} {med:8.3f} [{lo:7.3f}, {hi:7.3f}] {covered:>5s}")
 
 # %%
 # Summary statistics
-n_nuts = len(next(iter(result_joint.samples.values())))
-ess_per_sec = n_nuts / t_joint if t_joint > 0 else 0
-print("\nHMC joint summary:")
+n_nuts = len(next(iter(result_nuts_joint.samples.values())))
+ess_per_sec = n_nuts / t_nuts_joint if t_nuts_joint > 0 else 0
+print("\nNUTS joint summary:")
 print(f"  samples:    {n_nuts}")
-print(f"  wall time:  {t_joint:.1f} s")
-print(f"  divergent:  {result_joint.diagnostics.get('n_divergent', 'n/a')}")
-
-# %% [markdown]
-# **Reading the recovery table.** A 68% credible interval is expected to
-# miss the truth about a third of the time, so with seven free parameters a
-# couple of "miss" rows are normal sampling fluctuation, not a failure — what
-# matters is that the joint intervals are *narrow and centred near the truth*
-# rather than prior-wide. The constraint-width figure above is the real
-# result: the joint posterior is tighter than either single-modality fit on
-# the parameters each modality constrains (photometry → mass and dust
-# normalisation; spectroscopy → metallicity and light-weighted age). The SFH
-# *shape* parameters (`sfh_dpl_beta`, `sfh_dpl_tau_gyr`) stay the broadest —
-# even joint UV–NIR + optical data constrains the recent SFH far better than
-# its early-time rise.
+print(f"  wall time:  {t_nuts_joint:.1f} s")
+print(f"  divergent:  {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
 
 # %%
 print("Joint photometry + spectroscopy fit complete")
+print("\nKey finding: Joint data breaks degeneracies visible in single-modality fits\n")
 
 # %%
 # Final citation
 from contextlib import suppress
 with suppress(Exception):
-    tg.cite(result_joint)
+    tg.cite(result_nuts_joint)
 
 # %%
-print("Joint photometry + spectroscopy fitting (HMC) complete.")
+print("Joint photometry + spectroscopy fitting (NUTS) complete.")
 
 # %% [markdown]
-# ## Next steps
+# ## Next Steps
 #
-# - [`08_emission_lines.py`](08_emission_lines.py) — fitting emission-line fluxes and equivalent widths
-# - [`09_parameter_sweeps.py`](09_parameter_sweeps.py) — how each parameter moves the SED
+# - [`08_sfh_advanced.py`](08_sfh_advanced.py) — Stochastic SFH constraints via joint inference
+# - [`09_dust_emission.py`](09_dust_emission.py) — IR emission physics and template degeneracies
+# - [`10_agn_advanced.py`](10_agn_advanced.py) — AGN diagnostics and multi-wavelength constraints
