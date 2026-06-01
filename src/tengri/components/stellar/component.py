@@ -936,22 +936,27 @@ class StellarSEDComponent:
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        # Use DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs`` in
-        # Lsun/Hz) rather than reconstructing it as
-        # ``total_mass × Σ(weights × ssp_flux)``. The two paths are
-        # mathematically identical when ``total_mass == mstar_obs`` (both
-        # integrate the same SFH), but DSPS computes ``mstar_obs`` via a
-        # cumulative-SFH interpolation while tengri's ``total_mass`` is a
-        # trapezoid integral over the ramp-zeroed ``sfr_asc`` grid. Using
-        # DSPS's value keeps the SED self-consistent with the kernel's
-        # own normalisation (closes #394). The per-age cube ``lnu_age``
-        # below is retained for downstream per-age operations (dust BC
-        # mask, bolometric L_age) and continues to use ``total_mass`` —
-        # the per-age sum is consumed before any wavelength-resolved
-        # quantity reads it, so any residual ``total_mass / mstar_obs``
-        # discrepancy does not propagate into observables.
-        sed_intrinsic = dsps_result.rest_sed * LSUN_ERG_PER_S
+        # Reconstruct the CSP SED as ``total_mass × Σ_met(weights × ssp_flux)``
+        # rather than using DSPS's own ``rest_sed`` (= ``sed_unit_mstar ×
+        # mstar_obs``). Both integrate the same SFH and use the same joint
+        # ``weights``; they differ ONLY by the formed-mass scalar:
+        # ``mstar_obs`` is DSPS's cumulative-SFH quadrature on its internal
+        # log-time ``T_TABLE``, whereas ``total_mass`` is the trapezoid
+        # integral on the SSP-age grid. The post-2026-05-25 SFH normalisation
+        # contract defines formed mass as ``trapezoid(sfr, t) = 10**log_total_mass``
+        # (see ``_renormalize_to_mass`` and ``predict_surviving_mass``), so
+        # ``total_mass`` is canonical and ``mstar_obs`` deviates by up to ~6.6%
+        # at low z (large ``t_obs``; the two quadratures coincide for z ≳ 0.1).
+        # Using DSPS's ``rest_sed`` (the #394 choice) silently broke that
+        # contract for the SED at low z and disagreed with every precompute LUT
+        # (which already use ``total_mass``). Reconstructing here makes the
+        # exact SED, the photometry/spectrum LUTs, ``lnu_age``, ``L_age``,
+        # ``age_weights``, and ``pred.stellar_mass`` all honour the one
+        # contract mass. ``ssp_flux_at_age`` (line above) is the per-met-summed
+        # joint-weighted SSP flux per Msun formed; summing over age and scaling
+        # by ``total_mass`` is exactly ``Σ_age lnu_age``. (Reverses #394.)
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
+        sed_intrinsic = lnu_age.sum(axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
