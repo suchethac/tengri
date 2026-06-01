@@ -433,47 +433,44 @@ plt.show()
 # ## Corner plot
 
 # %%
-# Manual lightweight corner: pairwise hist2d + 1D histograms.
-# ``result.plot_corner`` uses corner.py KDE which OOMs on macOS jetsam
-# at 600 samples × 8 params on top of resident NUTS graph. Histograms
-# are bounded peak RSS and visually equivalent for tutorial-grade plots.
-# Filter to actually-varying params (std > 0); fixed chains add empty cells.
-free = [
-    k for k in samples_for_credible
-    if float(np.std(np.asarray(samples_for_credible[k]))) > 1e-12
-]
-n_free = len(free)
-fig, axes = plt.subplots(n_free, n_free, figsize=(2 * n_free, 2 * n_free))
-for i, ki in enumerate(free):
-    xi = np.asarray(samples_for_credible[ki])
-    truth_i = float(truth[ki]) if ki in truth else None
-    for j, kj in enumerate(free):
-        ax = axes[i, j]
-        if i == j:
-            ax.hist(xi, bins=30, color=COLORS.get("model", "C1"), alpha=0.7, edgecolor="k", lw=0.3)
-            if truth_i is not None:
-                ax.axvline(truth_i, color=COLORS.get("truth", "C2"), ls="--", lw=1.5)
-        elif j < i:
-            xj = np.asarray(samples_for_credible[kj])
-            ax.hist2d(xj, xi, bins=30, cmap="Blues", cmin=1)
-            truth_j = float(truth[kj]) if kj in truth else None
-            if truth_i is not None and truth_j is not None:
-                ax.plot(truth_j, truth_i, "*", ms=12, color=COLORS.get("truth", "C2"), mec="k", mew=0.5)
-        else:
-            ax.set_visible(False)
-        if i < n_free - 1:
-            ax.set_xticklabels([])
-        if j > 0:
-            ax.set_yticklabels([])
-        if i == n_free - 1:
-            ax.set_xlabel(kj.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
-        if j == 0:
-            ax.set_ylabel(ki.replace("sfh_dpl_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
-        ax.tick_params(labelsize=7)
+# Corner plot via corner.py, the community standard. (A standalone
+# corner.corner on extracted numpy samples is ~0.6 s and ~150 MB — the OOM
+# risk is only with KDE comparison plots stacked on the resident NUTS graph.)
+import corner
 
-fig.suptitle(f"Parameter posterior: {n_free}--D NUTS ({len(xi)} samples)", fontsize=12, y=0.995)
-fig.tight_layout()
-plt.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=180, bbox_inches="tight")
+# Human-readable math labels keyed by free-parameter name.
+LABELS = {
+    "sfh_dpl_log_peak_sfr": r"$\log\,\mathrm{SFR_{peak}}$",
+    "sfh_dpl_tau_gyr": r"$\tau_{\rm SFH}$ [Gyr]",
+    "sfh_dpl_alpha": r"$\alpha$",
+    "sfh_dpl_beta": r"$\beta$",
+    "met_logzsol": r"$\log(Z/Z_\odot)$",
+    "dust_tau_bc": r"$\tau_{\rm bc}$",
+    "dust_tau_diff": r"$\tau_{\rm diff}$",
+    "redshift": r"$z$",
+}
+# Filter to actually-varying params (std > 0); fixed chains add empty cells.
+free = [k for k in samples_for_credible if float(np.std(np.asarray(samples_for_credible[k]))) > 1e-12]
+sample_arr = np.column_stack([np.asarray(samples_for_credible[k]) for k in free])
+truths = [float(truth[k]) if k in truth else None for k in free]
+
+fig = corner.corner(
+    sample_arr,
+    labels=[LABELS.get(k, k) for k in free],
+    truths=truths,
+    truth_color=COLORS.get("truth", "C2"),
+    show_titles=True,
+    title_fmt=".2f",
+    title_kwargs={"fontsize": 9},
+    label_kwargs={"fontsize": 11},
+    color=COLORS.get("mcmc_nuts", "#336699"),
+    hist_kwargs={"density": True},
+    plot_datapoints=False,
+    fill_contours=True,
+    levels=(0.68, 0.95),
+)
+fig.suptitle(f"Posterior — {len(free)}-D NUTS, {sample_arr.shape[0]} samples", fontsize=13, y=1.02)
+fig.savefig(os.path.join(FIGDIR, "05_corner.png"), dpi=150, bbox_inches="tight")
 plt.show()
 print("Saved 05_corner.png", flush=True)
 

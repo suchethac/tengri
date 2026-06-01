@@ -193,10 +193,10 @@ print(f"Observed: {float(wave_obs.min()):.1f}–{float(wave_obs.max()):.1f} Å")
 print(f"Resolution: R = {resolution}, {n_pix} pixels → {n_good} good pixels after masking")
 
 # %%
-# Build Spectroscopy config. calibration_order=0 means we add no free
-# calibration parameters to the model; instead we let the Fitter
-# analytically marginalize the flux calibration below (cleaner — the
-# calibration nuisance never enters the sampled parameter space).
+# Build Spectroscopy config. calibration_order=0 means no flux-calibration
+# nuisance parameters: the mock is perfectly calibrated, so there is nothing
+# to marginalize. (On real spectra you would set a low order here, or pass
+# calibration_marginalize=True to the Fitter — see the joint-fitting guide.)
 spec_config = Spectroscopy(
     wave_obs=wave_obs,
     resolution=resolution,
@@ -292,32 +292,29 @@ fig.savefig(os.path.join(FIGDIR, "06_spectrum_input.png"), dpi=200, bbox_inches=
 plt.show()
 
 # %% [markdown]
-# ## HMC inference (diagonal mass matrix)
+# ## HMC inference
 #
-# Single HMC chain with a diagonal mass matrix to keep the compile graph
-# bounded on the 200-pixel likelihood. `calibration_marginalize=True`
-# analytically integrates out a low-order Chebyshev flux-calibration
-# polynomial at each likelihood call (Prospector's optimal-calibration
-# trick, Johnson et al. 2021), so the calibration nuisance never enters
-# the sampled space — the posterior is over physics parameters alone.
+# We use the backend's convergence-validated HMC recipe
+# (`dense_mass_matrix=True`, `n_warmup >= 1000`, `n_leapfrog_steps >= 20`);
+# the shorter defaults leave R-hat > 1 on this likelihood.
+#
+# For *real* fiber/slit spectra you would also pass
+# `calibration_marginalize=True` to analytically marginalize a Chebyshev
+# flux-calibration polynomial (Prospector-style; Johnson et al. 2021). We
+# leave it off here because the mock is perfectly calibrated — marginalizing
+# a polynomial over the continuum would just discard the spectral shape that
+# constrains age and metallicity.
 
 # %%
 t0 = time.perf_counter()
-fitter_spec = Fitter(
-    model_spec,
-    flux_obs_np,
-    flux_err_np,
-    data_type="spectroscopy",
-    calibration_marginalize=True,
-    cal_n_poly=2,
-)
+fitter_spec = Fitter(model_spec, flux_obs_np, flux_err_np, data_type="spectroscopy")
 
 result_spec = fitter_spec.run(
     "mcmc_hmc",
-    n_warmup=300,
+    n_warmup=1000,
     n_samples=400,
-    n_leapfrog_steps=10,
-    dense_mass_matrix=False,
+    n_leapfrog_steps=20,
+    dense_mass_matrix=True,
     verbose=False,
 )
 t_hmc = time.perf_counter() - t0
@@ -416,51 +413,43 @@ fig.savefig(os.path.join(FIGDIR, "06_continuum_features.png"), dpi=200, bbox_inc
 plt.show()
 
 # %%
-# Plot: corner plot
-# Lightweight manual corner. ``plot_corner_comparison`` (corner.py KDE)
-# can spike to ~24 GB peak when stacked on the resident HMC graph;
-# histograms are bounded RSS and adequate for a tutorial.
-# Filter to actually-varying parameters: result.samples may include
-# fixed-as-constant chains (std == 0) which create empty corner cells.
-free_p = [
-    k for k in result_spec.samples
-    if float(np.std(np.asarray(result_spec.samples[k]))) > 1e-12
-]
-n_free_p = len(free_p)
-fig, axes = plt.subplots(n_free_p, n_free_p, figsize=(2 * n_free_p, 2 * n_free_p))
-for i, ki in enumerate(free_p):
-    xi = np.asarray(result_spec.samples[ki])
-    truth_i = float(true_params[ki]) if ki in true_params else None
-    for j, kj in enumerate(free_p):
-        ax2 = axes[i, j]
-        if i == j:
-            ax2.hist(xi, bins=30, color=COLORS.get("mcmc_nuts", "C0"), alpha=0.7, edgecolor="k", lw=0.3)
-            if truth_i is not None:
-                ax2.axvline(truth_i, color=COLORS.get("truth", "C2"), ls="--", lw=1.5)
-        elif j < i:
-            xj = np.asarray(result_spec.samples[kj])
-            ax2.hist2d(xj, xi, bins=30, cmap="Blues", cmin=1)
-            tj = float(true_params[kj]) if kj in true_params else None
-            if truth_i is not None and tj is not None:
-                ax2.plot(tj, truth_i, "*", ms=11, color=COLORS.get("truth", "C2"), mec="k", mew=0.5)
-        else:
-            ax2.set_visible(False)
-        if i < n_free_p - 1:
-            ax2.set_xticklabels([])
-        if j > 0:
-            ax2.set_yticklabels([])
-        if i == n_free_p - 1:
-            ax2.set_xlabel(kj.replace("sfh_lnorm_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
-        if j == 0:
-            ax2.set_ylabel(ki.replace("sfh_lnorm_", "").replace("dust_", "d_").replace("met_", ""), fontsize=8)
-        ax2.tick_params(labelsize=7)
-fig.suptitle(
-    f"Posterior: age + metallicity from optical continuum "
-    f"(HMC, {spec_param.n_free} params, {t_hmc:.0f}s)",
-    y=1.001, fontsize=12,
+# Corner plot via corner.py (the community standard). A standalone
+# corner.corner on extracted numpy samples is light; the OOM risk is only
+# with KDE comparison plots stacked on the resident HMC graph.
+import corner
+
+LABELS = {
+    "sfh_lnorm_log_peak_sfr": r"$\log\,\mathrm{SFR_{peak}}$",
+    "sfh_lnorm_peak_lbt_gyr": r"$t_{\rm peak}$ [Gyr]",
+    "sfh_lnorm_width_gyr": r"$\sigma_t$ [Gyr]",
+    "met_logzsol": r"$\log(Z/Z_\odot)$",
+    "dust_tau_bc": r"$\tau_{\rm bc}$",
+    "dust_tau_diff": r"$\tau_{\rm diff}$",
+}
+free_p = [k for k in result_spec.samples if float(np.std(np.asarray(result_spec.samples[k]))) > 1e-12]
+sample_arr = np.column_stack([np.asarray(result_spec.samples[k]) for k in free_p])
+truths = [float(true_params[k]) if k in true_params else None for k in free_p]
+
+fig = corner.corner(
+    sample_arr,
+    labels=[LABELS.get(k, k) for k in free_p],
+    truths=truths,
+    truth_color=COLORS.get("truth", "C2"),
+    show_titles=True,
+    title_fmt=".2f",
+    title_kwargs={"fontsize": 9},
+    label_kwargs={"fontsize": 11},
+    color=COLORS.get("mcmc_hmc", "#336699"),
+    plot_datapoints=False,
+    fill_contours=True,
+    levels=(0.68, 0.95),
 )
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=180, bbox_inches="tight")
+fig.suptitle(
+    f"Posterior: age + metallicity from the optical continuum "
+    f"(HMC, {spec_param.n_free} params, {t_hmc:.0f} s)",
+    y=1.02, fontsize=13,
+)
+fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=150, bbox_inches="tight")
 print("Saved 06_corner.png", flush=True)
 
 # %%
@@ -480,10 +469,9 @@ print("Spectroscopic fitting (optical continuum only):")
 print(f"  Grid:   {n_pix} pixels, {n_good} unmasked (8 emission lines masked)")
 print(f"  Time:   {t_hmc:.1f}s (HMC warmup + sampling)")
 print("  Model:  lognormal SFH, Calzetti dust, solar metallicity priors")
-print("  Result: Age + metallicity recovered from absorption features (Hβ, Mgb, 4000 Å break)")
-print("\nKey insight: Emission lines must be masked to avoid continuum bias.")
-print("Calibration floor (1%) marginalizes over instrumental uncertainty.")
-print("Spectroscopy notebook complete: continuum-only SED fitting (optical absorption features)")
+print("  Result: metallicity and light-weighted age constrained by absorption")
+print("          features (Hβ, Mgb, 4000 Å break); dust and SFH timescale stay")
+print("          degenerate without broadband leverage — see notebook 07.")
 
 # %%
 tg.cite(result_spec)
