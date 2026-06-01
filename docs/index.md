@@ -178,6 +178,16 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/07_joint_photo_spec
 
 .. toctree::
+   :caption: Guides
+   :maxdepth: 1
+   :hidden:
+
+   recipes
+   joint_fitting
+   method_selection
+   known_limitations
+
+.. toctree::
    :caption: Examples
    :maxdepth: 1
    :titlesonly:
