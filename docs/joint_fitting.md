@@ -61,11 +61,23 @@ and runs one fit per process — see
 [Choosing an inference method](method_selection) and
 [Known limitations](known_limitations) for the memory rules.
 
-## Speed: no precompute on joint fits yet
+## Speed: precompute on joint fits
 
-`WavePrecomp` accelerates **photometry-only** models and `SpectrumPrecomp`
-accelerates **spectroscopy-only** models, but neither applies to a *joint*
-photometry + spectroscopy fit: a model takes a single `approx=` object, and a
-joint model built with `SpectrumPrecomp()` raises `NotImplementedError`. A joint
-fit therefore runs the exact wave-grid forward pass (`approx=None`). See
-[Known limitations](known_limitations).
+A joint photometry + spectroscopy fit can use the precompute fast path. On a
+joint observation, **either** opt-in — `approx=WavePrecomp()` or
+`approx=SpectrumPrecomp()` — builds **both** LUT families, and the forward pass
+projects the photometry and spectroscopy channels together inside one fused,
+persistently-cached JIT kernel:
+
+```python
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=Observation(photometry=phot, spectroscopy=spec),
+    approx=WavePrecomp(),   # joint → both photometry + spectrum LUTs
+    ...,
+)
+```
+
+The per-pixel continuum LUT does not apply velocity dispersion / LSF
+(`SpectrumPrecomp`'s documented low-to-medium-R domain); use `approx=None` for
+the exact LSF-convolved spectrum. See [Known limitations](known_limitations).

@@ -17,20 +17,21 @@ publication-grade until the component you rely on has been cross-validated.**
 
 ## Approximations
 
-- **`WavePrecomp` is photometry-only.** It precomputes the SSP × filter
-  integrals for a large speedup on photometric fits, with free redshift handled
-  via an interpolation table. It does not apply to spectroscopy.
-- **`SpectrumPrecomp` is spectroscopy-only.** It precomputes a per-pixel
-  effective-wavelength continuum lookup table for spectroscopic fits. It runs
-  (it does not raise) and agrees with the exact path to machine precision on
-  the stellar continuum; the two-component birth-cloud dust LUT carries a known
-  ~1% residual. At high spectral resolution it auto-falls-back to the exact
-  wave-grid path with a warning.
-- **Neither precompute path applies to joint (photometry + spectroscopy)
-  fits.** A model accepts a single `approx=` object; a joint model built with
-  `SpectrumPrecomp()` raises `NotImplementedError` (the photometric LUT family
-  is not yet built alongside the spectrum LUT). Build a joint model with
-  `approx=None` (exact) for now.
+- **`WavePrecomp` accelerates the photometry channel.** It precomputes the
+  SSP × filter integrals for a large speedup, with free redshift handled via an
+  interpolation table.
+- **`SpectrumPrecomp` accelerates the spectroscopy channel.** It precomputes a
+  per-pixel effective-wavelength continuum lookup table. It agrees with the
+  exact path to machine precision on the stellar continuum; the two-component
+  birth-cloud dust LUT carries a known ~1% residual. At high spectral resolution
+  it auto-falls-back to the exact wave-grid path with a warning.
+- **Joint photometry + spectroscopy is supported under precompute.** On a joint
+  observation, either precompute opt-in (`approx=WavePrecomp()` or
+  `approx=SpectrumPrecomp()`) builds **both** LUT families; the forward pass
+  projects photometry and spectroscopy together inside one fused, cached JIT
+  kernel. Velocity dispersion / LSF are not applied on the per-pixel continuum
+  LUT (`SpectrumPrecomp`'s documented low-to-medium-R domain) — use
+  `approx=None` if you need the exact LSF-convolved spectrum.
 
 ## Inference backends
 
