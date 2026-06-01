@@ -30,6 +30,10 @@ References:
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import jax.numpy as jnp
@@ -53,7 +57,7 @@ age_lookback_gyr = np.array(age_lookback_yr) / 1e9
 # --- Smooth mean SFH (shared across all panels) ---
 # Use a truncated skewed normal SFH peaked at 2 Gyr lookback
 mean_sfr = tengri.tsnorm(
-    age_lookback_yr, log_peak_sfr=0.5, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
+    age_lookback_yr, log_total_mass=10.0, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
 )
 sfr_mean = np.array(mean_sfr)
 
@@ -178,9 +182,5 @@ fig.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 0.98), ncol
 
 fig.tight_layout(rect=[0, 0, 1, 0.96])
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-png_path = os.path.join(script_dir, "plot_psd_burstiness_prior.png")
-plt.savefig(png_path, dpi=150, bbox_inches="tight")
-plt.close()
+plt.show()
 
-print(f"Saved to {png_path}")

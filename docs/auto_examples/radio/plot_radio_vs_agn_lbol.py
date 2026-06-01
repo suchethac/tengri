@@ -13,6 +13,10 @@ This is the figure that motivates separating SF-driven from
 AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -33,7 +37,13 @@ log_lbol_grid = np.linspace(9.0, 13.0, 7)
 norm = mpl.colors.Normalize(vmin=log_lbol_grid.min(), vmax=log_lbol_grid.max())
 cmap = plt.get_cmap("viridis")
 
-SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": 0.5, "start_gyr": 13.0, "end_gyr": 0.0}
+SFH = {
+    "type": "const",
+    "*": tengri.FIXED,
+    "log_total_mass": 10.61,
+    "start_gyr": 13.0,
+    "end_gyr": 0.0,
+}
 DUST = {
     "type": "two_component",
     "*": tengri.FIXED,
@@ -75,7 +85,17 @@ ax.set(
 for nu_ghz, name in [(0.150, "150 MHz"), (1.4, "1.4 GHz"), (10.0, "10 GHz")]:
     lam = 2.998e10 / (nu_ghz * 1.0e9) * 1.0e10
     ax.axvline(lam, color="0.65", lw=0.4, ls=":")
-    ax.text(lam, 2e37, name, fontsize=7, color="0.4", ha="center", rotation=90, va="bottom")
+    ax.text(
+        lam,
+        0.97,
+        name,
+        transform=ax.get_xaxis_transform(),
+        fontsize=7,
+        color="0.4",
+        ha="center",
+        rotation=90,
+        va="top",
+    )
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"$\log\,L_{\rm bol}^{\rm AGN}\,/\,L_\odot$")

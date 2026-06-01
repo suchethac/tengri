@@ -1,0 +1,95 @@
+"""
+Swapping the nebular backend on, then off, on a young starburst
+===============================================================
+
+Hα and [O III]+Hβ are produced by gas reprocessing the ionising
+continuum from O/B stars. Whether they appear in the predicted SED
+depends entirely on the nebular backend the model is built with.
+
+We hold the SFH (a young starburst with peak SFR ≈ 30 yr ago), dust,
+and metallicity fixed, and toggle the nebular block between Cue
+(Li+2024 neural emulator) and ``none`` (stellar continuum only).
+The lines that vanish in the right column are the gas's signature.
+
+Reference: Li et al. 2024, ApJ submitted (Cue emulator).
+"""
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore")
+
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
+
+# A young starburst: peak ~30 Myr ago, still ionising
+sfh = {
+    "type": "dpl",
+    "*": tengri.FIXED,
+    "alpha": 3.0,
+    "beta": 0.3,
+    "tau_gyr": 0.03,
+    "log_total_mass": 10.0,
+}
+dust = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.0}
+
+model_cue = tengri.SEDModel.build(
+    ssp,
+    sfh=sfh,
+    dust=dust,
+    neb={
+        "type": "cue",
+        "*": tengri.FIXED,
+        "neb_logU": tengri.Fixed(-2.5),
+        "neb_logZ_gas": tengri.Fixed(-0.3),
+        "neb_fesc": tengri.Fixed(0.0),
+        "neb_fesc_lya": tengri.Fixed(0.0),
+        "neb_dig_frac": tengri.Fixed(0.0),
+    },
+    redshift=tengri.Fixed(0.01),
+)
+model_none = tengri.SEDModel.build(
+    ssp,
+    sfh=sfh,
+    dust=dust,
+    neb={"type": "none", "*": tengri.FIXED},
+    redshift=tengri.Fixed(0.01),
+)
+
+p_cue = dict(model_cue.spec.sample(jax.random.PRNGKey(0)))
+p_none = {k: v for k, v in p_cue.items() if not k.startswith("neb_")}
+out_cue = model_cue.predict_rest_sed(p_cue)
+out_none = model_none.predict_rest_sed(p_none)
+wave = np.asarray(out_cue.wavelength)
+sed_cue = np.asarray(out_cue.sed)
+# neb='none' yields a shorter rest-frame grid (no Cue emission-line wavelengths),
+# so interpolate it onto the Cue grid to share the wavelength masks below.
+sed_none = np.interp(wave, np.asarray(out_none.wavelength), np.asarray(out_none.sed))
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), sharey=False)
+
+for ax, (lo, hi, lines) in zip(
+    axes,
+    [
+        (4750, 5100, [(4861.33, r"H$\beta$"), (4958.92, r"[O III]"), (5006.84, r"[O III]")]),
+        (6400, 6750, [(6548.05, r"[N II]"), (6564.61, r"H$\alpha$"), (6583.45, r"[N II]")]),
+    ],
+):
+    m = (wave > lo) & (wave < hi)
+    ax.semilogy(wave[m], sed_none[m], color="0.55", lw=1.4, label="neb = none")
+    ax.semilogy(wave[m], sed_cue[m], color="C3", lw=1.4, label="neb = cue")
+    for lam, lbl in lines:
+        ax.axvline(lam, ls=":", color="0.7", lw=0.8)
+        ax.text(lam, ax.get_ylim()[1] * 0.65, " " + lbl, fontsize=8, color="0.4")
+    ax.set_xlabel(r"Rest $\lambda$ [$\mathrm{\AA}$]")
+    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+    ax.legend(frameon=False, fontsize=9, loc="upper left")
+
+fig.tight_layout()
+plt.savefig("plot_swap_nebular_backend.png", dpi=150, bbox_inches="tight")

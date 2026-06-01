@@ -32,7 +32,9 @@ def bench(fn, n=500, warmup=5):
 
 
 ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]))
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
 
 # ---------------------------------------------------------------
 # 1. Standalone: JIT vs non-JIT
@@ -51,7 +53,9 @@ t_jit, _ = bench(lambda: tsnorm_jit(*args), n=1000)
 
 print(f"  Non-JIT:  {t_nojit:>8.1f} μs")
 print(f"  JIT:      {t_jit:>8.1f} μs")
-print(f"  Overhead: {t_nojit - t_jit:>8.1f} μs ({(t_nojit - t_jit)/t_nojit*100:.0f}% is Python dispatch)")
+print(
+    f"  Overhead: {t_nojit - t_jit:>8.1f} μs ({(t_nojit - t_jit) / t_nojit * 100:.0f}% is Python dispatch)"
+)
 
 # ---------------------------------------------------------------
 # 2. erfc-direct variant
@@ -62,18 +66,18 @@ print("=" * 70)
 
 
 @jax.jit
-def tsnorm_scipy_cdf(age, log_peak_sfr, peak_lbt, width, skew, trunc):
+def tsnorm_scipy_cdf(age, log_total_mass, peak_lbt, width, skew, trunc):
     a = _clamp_age(age)
-    peak_sfr = 10.0**log_peak_sfr
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(a, peak_lbt, width, skew)
     trunc_factor = 1.0 - jax.scipy.stats.norm.cdf(a, loc=peak_lbt, scale=width * trunc)
     return jnp.maximum(peak_sfr * kernel * trunc_factor, 0.0)
 
 
 @jax.jit
-def tsnorm_erfc_direct(age, log_peak_sfr, peak_lbt, width, skew, trunc):
+def tsnorm_erfc_direct(age, log_total_mass, peak_lbt, width, skew, trunc):
     a = _clamp_age(age)
-    peak_sfr = 10.0**log_peak_sfr
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(a, peak_lbt, width, skew)
     x = (a - peak_lbt) / (width * trunc)
     trunc_factor = 0.5 * jax.lax.erfc(x / jnp.sqrt(2.0))
@@ -81,9 +85,9 @@ def tsnorm_erfc_direct(age, log_peak_sfr, peak_lbt, width, skew, trunc):
 
 
 @jax.jit
-def tsnorm_tanh_approx(age, log_peak_sfr, peak_lbt, width, skew, trunc):
+def tsnorm_tanh_approx(age, log_total_mass, peak_lbt, width, skew, trunc):
     a = _clamp_age(age)
-    peak_sfr = 10.0**log_peak_sfr
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(a, peak_lbt, width, skew)
     x = (a - peak_lbt) / (width * trunc)
     _c = jnp.sqrt(2.0 / jnp.pi)
@@ -93,9 +97,9 @@ def tsnorm_tanh_approx(age, log_peak_sfr, peak_lbt, width, skew, trunc):
 
 
 @jax.jit
-def kernel_only(age, log_peak_sfr, peak_lbt, width, skew, _trunc):
+def kernel_only(age, log_total_mass, peak_lbt, width, skew, _trunc):
     a = _clamp_age(age)
-    peak_sfr = 10.0**log_peak_sfr
+    peak_sfr = 10.0**log_total_mass
     kernel = _skewed_gaussian_kernel(a, peak_lbt, width, skew)
     return jnp.maximum(peak_sfr * kernel, 0.0)
 
@@ -109,7 +113,9 @@ variants = {
 
 ref = tsnorm_scipy_cdf(*args)
 
-print(f"\n{'Variant':<30s} {'Forward':>10s} {'Gradient':>10s} {'CDF cost':>10s} {'Max |err|':>12s}")
+print(
+    f"\n{'Variant':<30s} {'Forward':>10s} {'Gradient':>10s} {'CDF cost':>10s} {'Max |err|':>12s}"
+)
 print("-" * 75)
 
 baseline_fwd = None
@@ -146,7 +152,7 @@ with warnings.catch_warnings():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=Uniform(0.0, 2.0),
@@ -157,7 +163,7 @@ with warnings.catch_warnings():
     par_dpl = spec_dpl.sample(jax.random.PRNGKey(42))
 
     spec_tsn = ParamSpec(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -176,7 +182,7 @@ with warnings.catch_warnings():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(8.0, 12.0),
         sfh_field_psd_sigma=Uniform(0.01, 1.0),
         sfh_field_psd_tau_myr=Uniform(10, 500),
         met_logzsol=Uniform(-2.0, 0.5),
@@ -189,7 +195,7 @@ with warnings.catch_warnings():
     par_dpl_s = spec_dpl_stoch.sample(jax.random.PRNGKey(42))
 
     spec_tsn_stoch = ParamSpec(
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
         sfh_tsnorm_width_gyr=Uniform(0.5, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -249,7 +255,9 @@ print(f"\n  DPL forward:    {t_dpl_fwd:>8.1f} μs   gradient: {t_dpl_grad:>8.1f}
 print(f"  tsnorm forward: {t_tsn_fwd:>8.1f} μs   gradient: {t_tsn_grad:>8.1f} μs")
 print(f"  Δ forward:      {t_tsn_fwd - t_dpl_fwd:>+8.1f} μs")
 print(f"  Δ gradient:     {t_tsn_grad - t_dpl_grad:>+8.1f} μs")
-print(f"  tsnorm overhead: {(t_tsn_fwd - t_dpl_fwd)/t_dpl_fwd*100:>+.1f}% forward, "
-      f"{(t_tsn_grad - t_dpl_grad)/t_dpl_grad*100:>+.1f}% gradient")
+print(
+    f"  tsnorm overhead: {(t_tsn_fwd - t_dpl_fwd) / t_dpl_fwd * 100:>+.1f}% forward, "
+    f"{(t_tsn_grad - t_dpl_grad) / t_dpl_grad * 100:>+.1f}% gradient"
+)
 
 print("\nDone.")

@@ -31,7 +31,6 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from tengri import (
-    Fitter,
     Observation,
     Parameters,
     Photometry,
@@ -106,7 +105,7 @@ def _build_model(dust_emission: str | None) -> tuple[SEDModel, dict]:
 
     params = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -139,7 +138,9 @@ def probe_predict_sfh_quantities(
 
     # Create batch
     batch_params = {
-        k: jnp.tile(v[None], (batch_size,) + ((1,) * v.ndim if hasattr(v, "ndim") else ())) if hasattr(v, "ndim") else jnp.full((batch_size,), v)
+        k: jnp.tile(v[None], (batch_size,) + ((1,) * v.ndim if hasattr(v, "ndim") else ()))
+        if hasattr(v, "ndim")
+        else jnp.full((batch_size,), v)
         for k, v in sample_params.items()
     }
 
@@ -171,7 +172,9 @@ def probe_predict_sed_quantities(
 
     # Create batch
     batch_params = {
-        k: jnp.tile(v[None], (batch_size,) + ((1,) * v.ndim if hasattr(v, "ndim") else ())) if hasattr(v, "ndim") else jnp.full((batch_size,), v)
+        k: jnp.tile(v[None], (batch_size,) + ((1,) * v.ndim if hasattr(v, "ndim") else ()))
+        if hasattr(v, "ndim")
+        else jnp.full((batch_size,), v)
         for k, v in sample_params.items()
     }
 
@@ -207,7 +210,9 @@ def probe_posterior_derived(
 
     # Simulate what Posterior.derived does: loop over samples and call predict_derived
     batch_params = {
-        k: jnp.tile(v[None], (batch_size,) + ((1,) * v.ndim if hasattr(v, "ndim") else ())) if hasattr(v, "ndim") else jnp.full((batch_size,), v)
+        k: jnp.tile(v[None], (batch_size,) + ((1,) * v.ndim if hasattr(v, "ndim") else ()))
+        if hasattr(v, "ndim")
+        else jnp.full((batch_size,), v)
         for k, v in sample_params.items()
     }
 
@@ -252,12 +257,14 @@ def main() -> int:
             rows.append(probe_predict_sed_quantities(model, sample_params, batch_size=10))
             rows.append(probe_posterior_derived(model, sample_params, batch_size=100))
 
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             print(f"  FAILED: {type(e).__name__}: {e}")
-            rows.append({
-                "dust_emission": dust,
-                "error": f"{type(e).__name__}: {e}",
-            })
+            rows.append(
+                {
+                    "dust_emission": dust,
+                    "error": f"{type(e).__name__}: {e}",
+                }
+            )
 
     # Print summary table
     print("\n" + "=" * 100)
@@ -282,13 +289,13 @@ def main() -> int:
         dust = r.get("dust_emission", "—")[:10] if "dust_emission" in r else "—"
         fn_name = r.get("function", "unknown")[:35]
         print(
-            f"{fn_name:<35} {dust:<10} {r['hlo_bytes']/1e6:8.1f} "
+            f"{fn_name:<35} {dust:<10} {r['hlo_bytes'] / 1e6:8.1f} "
             f"{r['n_large_consts']:>12} {r['largest_const_mb']:>11.1f} "
             f"{r['largest_shape']:<16}"
         )
         if r["constants"]:
             for size, shape, dtype in r["constants"]:
-                print(f"  └─ {size/1e6:6.1f} MB: [{shape}] {dtype}")
+                print(f"  └─ {size / 1e6:6.1f} MB: [{shape}] {dtype}")
 
     # Exit with failure if any analysis path has large constants
     has_issue = any(r.get("n_large_consts", 0) > 0 for r in rows if "error" not in r)

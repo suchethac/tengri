@@ -30,6 +30,10 @@ References:
          absorption at z > 5 (experimental extension to Inoue+2014)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -60,7 +64,7 @@ SFH = {
     "type": "dpl",
     "*": tengri.FIXED,
     "tau_gyr": 0.1,
-    "log_peak_sfr": 1.0,
+    "log_total_mass": 10.0,
     "alpha": 2.5,
     "beta": 1.5,
 }
@@ -98,9 +102,7 @@ wave_rest_out = np.asarray(out_intrinsic.wavelength)
 sed_intrinsic_full = np.asarray(out_intrinsic.sed)
 
 # Interpolate to diagnostic wavelength grid
-sed_intrinsic = np.interp(
-    wave_rest, wave_rest_out, sed_intrinsic_full, left=0, right=0
-)
+sed_intrinsic = np.interp(wave_rest, wave_rest_out, sed_intrinsic_full, left=0, right=0)
 
 # ── Observed-frame wavelengths and IGM transmission ───────────────
 
@@ -114,9 +116,7 @@ transmission_intrinsic = np.ones_like(wave_obs)
 transmission_madau = np.asarray(igm_transmission_madau(wave_obs, z=Z_SOURCE))
 
 # (3) Inoue+2014 (default) model
-transmission_inoue = np.asarray(
-    igm_transmission(wave_obs, z_source=Z_SOURCE, add_cgm=False)
-)
+transmission_inoue = np.asarray(igm_transmission(wave_obs, z_source=Z_SOURCE, add_cgm=False))
 
 # (4) Inoue+2014 with CGM damping wing (Asada+2025 extension)
 transmission_asada = np.asarray(
@@ -205,9 +205,7 @@ print("Saved: plot_igm_models_comparison.png")
 idx_1200 = np.argmin(np.abs(wave_rest - 1200))
 idx_1250 = np.argmin(np.abs(wave_rest - 1250))
 print(f"\nModel comparison at z={Z_SOURCE}:")
-print(
-    f"  Intrinsic SED: peak at {wave_rest[np.argmax(sed_intrinsic_norm)]:.1f} Å"
-)
+print(f"  Intrinsic SED: peak at {wave_rest[np.argmax(sed_intrinsic_norm)]:.1f} Å")
 print(f"  Madau (1995) at 1200 Å: {transmission_madau[idx_1200]:5.2f}")
 print(f"  Inoue+2014 at 1200 Å: {transmission_inoue[idx_1200]:5.2f}")
 print(f"  Asada (CGM) at 1200 Å: {transmission_asada[idx_1200]:5.2f}")

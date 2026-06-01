@@ -294,6 +294,12 @@ def _usage_hint(name: str, kind: str) -> str:
         return f'Parameters(..., nebular_backend="{name}")'
     if kind == "inference_method":
         return f'fitter.run("{name}")'
+    if kind == "xray_model":
+        return f"SEDModel.build(..., xray={{'type': '{name}'}})"
+    if kind == "radio_model":
+        return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+    if kind == "igm_model":
+        return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
         return f"tengri.{name}  (see list_{name}_models / list_{name}_laws for alternatives)"
     return ""
@@ -420,63 +426,84 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Known dust emission template families. The runtime
-# ``DUST_EMISSION_MODELS`` dict starts empty and is populated lazily
-# when ``register_*_tabulated(grid_path)`` is called with a data file.
-# We advertise the full menu so users can see what's *available* even
-# before loading templates.
-def _emission_entry(d: dict[str, str]) -> dict:
-    """Inject `use` field into a dust-emission menu row."""
-    return {**d, "use": _usage_hint(d["name"], "dust_emission")}
-
-
-_DUST_EMISSION_MENU: tuple[dict[str, str], ...] = (
-    {
-        "name": "dl07",
+# Dust emission metadata keyed by the canonical registry name in
+# ``DUST_EMISSION_MODELS``. Each entry supplies citation/short_doc; the
+# accepted set of build-time names is derived from the live registry (see
+# :func:`list_dust_emission_models` below), so the validator and the
+# introspection helper can never drift apart (closes #495 — same pattern
+# as PR #489 for AGN blocks).
+_DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
+    "dl07": {
+        "status": "production",
+        "citation": "Draine & Li 2007 (ApJ 657, 810)",
+        "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah (alias of draine_li2007)",
+    },
+    "draine_li2007": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
         "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah",
     },
-    {
-        "name": "dl14",
+    "dl14": {
+        "status": "production",
+        "citation": "Draine et al. 2014 (ApJ 780, 172)",
+        "short_doc": "Updated DL with extended PAH/silicate features (alias of draine_li2014)",
+    },
+    "draine_li2014": {
         "status": "production",
         "citation": "Draine et al. 2014 (ApJ 780, 172)",
         "short_doc": "Updated DL with extended PAH and silicate features",
     },
-    {
-        "name": "dale2014",
+    "dale2014": {
         "status": "production",
         "citation": "Dale et al. 2014 (ApJ 784, 83)",
         "short_doc": "SFR-driven empirical IR template family (alpha_sf)",
     },
-    {
-        "name": "astrodust",
+    "astrodust": {
         "status": "experimental",
         "citation": "Hensley & Draine 2023 (ApJ 948, 55)",
         "short_doc": "Astrodust + PAH unified grain model",
     },
-    {
-        "name": "themis",
+    "themis": {
         "status": "experimental",
         "citation": "Jones et al. 2017 (A&A 602, A46)",
         "short_doc": "THEMIS amorphous-carbon grain model",
     },
-    {
-        "name": "bosa",
+    "bosa": {
         "status": "experimental",
         "citation": "Boquien et al. 2019 (CIGALE BOSA grids)",
         "short_doc": "BOSA dust SED templates",
     },
-    {
-        "name": "mbb",
+    "mbb": {
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Single-temperature modified blackbody (alias of modified_blackbody)",
+    },
+    "modified_blackbody": {
         "status": "production",
         "citation": "Casey 2012 (MNRAS 425, 3094)",
         "short_doc": "Single-temperature modified blackbody (analytic)",
     },
-)
-
-
-_DUST_EMISSION_MENU = tuple(_emission_entry(d) for d in _DUST_EMISSION_MENU)
+    "casey2012": {
+        "status": "production",
+        "citation": "Casey 2012 (MNRAS 425, 3094)",
+        "short_doc": "Modified blackbody + mid-IR power law (analytic)",
+    },
+    "schreiber2016": {
+        "status": "production",
+        "citation": "Schreiber et al. 2016 (A&A 589, A35)",
+        "short_doc": "Modified-blackbody (beta=1.5) + PAH mix; (T_dust, f_PAH)",
+    },
+    "pah_drude": {
+        "status": "production",
+        "citation": "Smith et al. 2007 (ApJ 656, 770) Drude profiles",
+        "short_doc": "Drude-profile PAH emission features",
+    },
+    "energy_balance_split": {
+        "status": "experimental",
+        "citation": "tengri internal",
+        "short_doc": "Energy-balance redistribution helper (utility)",
+    },
+}
 
 
 def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
@@ -486,14 +513,28 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
     **attenuation** laws, see :func:`list_dust_laws`.
 
-    Notes
-    -----
-    Templates are loaded lazily from data files via
-    :func:`register_dl07_tabulated` etc.; this function shows the menu
-    of *available* template families regardless of whether they have
-    been loaded into the runtime ``DUST_EMISSION_MODELS`` dict.
+    The set of returned names is derived from the live
+    :data:`DUST_EMISSION_MODELS` registry (which the
+    :meth:`SEDModel.build` validator also consults), so the listing and
+    the validator can never drift apart. Closes #495.
     """
-    out = [{**entry, "kind": "dust_emission"} for entry in _DUST_EMISSION_MENU]
+    # Importing the module triggers the ``@register_emission_model`` decorators
+    # plus the lazy-loader bindings at the bottom of ``emission.py``.
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+    out = []
+    for name in DUST_EMISSION_MODELS:
+        meta = _DUST_EMISSION_METADATA.get(
+            name,
+            {"status": "production", "citation": "", "short_doc": ""},
+        )
+        entry = {
+            "name": name,
+            **meta,
+            "use": _usage_hint(name, "dust_emission"),
+            "kind": "dust_emission",
+        }
+        out.append(entry)
     if status:
         out = [m for m in out if m["status"] == status]
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
@@ -509,32 +550,78 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-def list_nebular_backends() -> _RegistryTable:
-    """List all available nebular emission backends."""
-    raw = [
-        (
-            "baked_in",
-            "production",
-            "DSPS / FSPS SSP-internal",
-            "Emission baked into SSP grid; zero free params",
-        ),
-        ("cue", "production", "Li+2024 (CUE neural emulator)", "Neural-network Cloudy emulator"),
-        ("cloudy_grid", "production", "Byler+2017 grids", "Trilinear interp on Cloudy grid"),
-        ("cb19", "experimental", "Charlot & Bruzual 2019", "Precomputed CB19 nebular grid"),
-    ]
-    return _RegistryTable(
-        [
-            {
-                "name": n,
-                "kind": "nebular_backend",
-                "status": st,
-                "citation": cit,
-                "short_doc": doc,
-                "use": _usage_hint(n, "nebular_backend"),
-            }
-            for (n, st, cit, doc) in raw
-        ]
-    )
+def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
+    """List all registered nebular emission backends.
+
+    Reads :data:`tengri.components.nebular.NEBULAR_MODELS` so the
+    listing stays in lock-step with what the grammar-layer validator
+    will actually accept (#331). The names match the keys consumed by
+    ``SEDModel.build(..., neb={'type': ...})`` — ``'none'`` /
+    ``'ssp'`` / ``'cue'`` / ``'cloudy'`` / ``'cb19'``.
+    """
+    from tengri.components.nebular import NEBULAR_MODELS
+
+    out = [_entry_to_dict(n, e, kind="nebular_backend") for n, e in NEBULAR_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_xray_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered X-ray emission models.
+
+    The X-ray group composes the AGN corona (Yang+2020 ``alpha_ox(L_2500)``
+    relation), the Lehmer+2016 high- and low-mass X-ray binary fits,
+    and optional thermal hot-gas emission. The ``'none'`` entry disables
+    the whole block.
+
+    See also: :func:`list_radio_models`, :func:`list_igm_models`,
+    :mod:`tengri.builders.xray`.
+    """
+    from tengri.components.xray._models import XRAY_MODELS
+
+    out = [_entry_to_dict(n, e, kind="xray_model") for n, e in XRAY_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_radio_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered radio emission models.
+
+    The radio group adds the Condon+1992 FIR-radio correlation for the
+    star-forming-galaxy contribution plus an optional AGN radio
+    power-law via the radio-loudness parameter. ``'none'`` disables
+    the block.
+
+    See also: :func:`list_xray_models`, :func:`list_igm_models`,
+    :mod:`tengri.builders.radio`.
+    """
+    from tengri.components.radio._models import RADIO_MODELS
+
+    out = [_entry_to_dict(n, e, kind="radio_model") for n, e in RADIO_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
+
+
+def list_igm_models(*, status: str | None = None) -> _RegistryTable:
+    """List all registered IGM transmission models.
+
+    Optional sub-flags on the IGM group (``patchy=True``, ``dla=True``)
+    layer extra free parameters on top of the chosen mean transmission
+    curve. Those are not separate models here — they apply to either
+    ``'inoue14'`` or ``'madau'``.
+
+    See also: :func:`list_xray_models`, :func:`list_radio_models`,
+    :mod:`tengri.builders.igm`.
+    """
+    from tengri.components.igm._models import IGM_MODELS
+
+    out = [_entry_to_dict(n, e, kind="igm_model") for n, e in IGM_MODELS.items()]
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
 _COMPONENT_DOCS: tuple[tuple[str, str, str], ...] = (
@@ -575,6 +662,8 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
     ("plot_sfh_comparison", "Overlay multiple SFH(t) curves (e.g. truth vs posterior)"),
     ("plot_corner_comparison", "Two-posterior corner plot (e.g. with truth)"),
     ("safe_corner", "Corner plot wrapper that handles fixed parameters gracefully"),
+    ("plot_1d_posterior", "Marginal histogram of one parameter + median/16/84"),
+    ("plot_calibration", "Chebyshev calibration polynomial with 16/84 band"),
     ("setup_style", "Apply tengri matplotlib style (serif, tight, 150 dpi)"),
     ("diagnostics_table", "ESS / R-hat / divergences table for sampling diagnostics"),
 )

@@ -43,7 +43,7 @@ spectral evolution across age and metallicity.
 Schaerer 2003 (A&A 397, 527) — Ionizing photon production in massive
 starburst populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-143
+.. GENERATED FROM PYTHON SOURCE LINES 22-157
 
 
 
@@ -57,9 +57,7 @@ starburst populations.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Peak EW(Lyα): 861003461.1 Å at age 1.0 Myr
+    Peak EW(Lyα): 9.7 Å at age 1.0 Myr
 
 
 
@@ -71,10 +69,13 @@ starburst populations.
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -90,6 +91,8 @@ starburst populations.
 
     # ── Rest-frame Lyα at 1216 Å
     wave_lya = 1216.0
+    # ── Conversion constants for EW
+    C_AA_PER_S = 2.998e18  # speed of light [Å/s]
 
     # ── Age range: 1–30 Myr (young starbursts)
     # Scan ages logarithmically to capture the O-star to WR transition
@@ -99,42 +102,46 @@ starburst populations.
     neb_config = {
         "type": "cue",
         "*": tengri.FIXED,
-        "neb_logZ_gas": 0.0,  # Z = Zsun (log10 Z, absolute)
-        "neb_logU": -2.0,  # ionization parameter
-        "neb_fesc": 0.0,  # no escape fraction
-        "neb_fesc_lya": 1.0,  # all Lyα available (escape in gas frame)
+        # Short-form keys inside the `neb` group; full `neb_*` keys are silently ignored.
+        "logZ_gas": 0.0,
+        "logU": -2.0,
+        "fesc": 0.0,
+        "fesc_lya": 0.0,  # 0 = no resonant destruction → full intrinsic Lyα emission
     }
 
     # ── Dust: no attenuation for clean nebular emission view
     dust_config = {
         "type": "two_component",
         "*": tengri.FIXED,
-        "dust_tau_diff": 0.0,
-        "dust_tau_bc": 0.0,
-    }
-
-    # ── SFH: const (constant star formation) model
-    # Creates a population with constant SFR over time.
-    sfh_config = {
-        "type": "const",
-        "*": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
     }
 
     # ── Collect EW measurements
     ew_lya = []
 
     for age_myr in ages_myr:
-        # Build base model with constant (instantaneous) SFH
+        # Build base model with constant SFH: vary the age via start_gyr/end_gyr window
+        # population spans [age_myr / 1000, 0] Gyr (older age at start → younger, present day)
+        log_total_mass_age = np.log10(age_myr * 1e6)
+        sfh_config_age = {
+            "type": "const",
+            "*": tengri.FIXED,
+            "log_total_mass": log_total_mass_age,
+            "start_gyr": age_myr / 1e3,
+            "end_gyr": 0.0,
+        }
+
         model = tengri.SEDModel.build(
             ssp,
-            sfh=sfh_config,
+            sfh=sfh_config_age,
             dust=dust_config,
             neb=neb_config,
             redshift=tengri.Fixed(0.0),
         )
 
-        # Sample parameters and constrain the age
-        params = dict(model.spec.sample(jax.random.PRNGKey(int(age_myr * 10))))
+        # Sample parameters
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
         # Predict emission lines and rest-frame SED
         lines = model.predict_emission_lines(params)
@@ -151,10 +158,15 @@ starburst populations.
         idx_lya = np.argmin(np.abs(wave - wave_lya))
         continu_at_lya = sed[idx_lya]
 
-        # Compute equivalent width: EW = L_line / L_continuum [Å]
-        # EW measures the line strength relative to the continuum
+        # Compute equivalent width: EW [Å] = L_line [erg/s] / L_lambda_continuum [erg/s/Å]
+        # Convert L_line from Lsun to erg/s, then L_nu to L_lambda via L_lambda = L_nu * c / λ²
         if continu_at_lya > 0:
-            ew = lya_lum / continu_at_lya
+            # EW [Å] = L_line [erg/s] / L_lambda_continuum [erg/s/Å]
+            # `lines.lya` is already in erg/s (verified empirically).
+            continu_lambda = (
+                continu_at_lya * C_AA_PER_S / (wave_lya**2)
+            )  # L_nu [erg/s/Hz] → L_lambda [erg/s/Å]
+            ew = lya_lum / continu_lambda
         else:
             ew = np.nan
 
@@ -195,7 +207,7 @@ starburst populations.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 51.752 seconds)
+   **Total running time of the script:** (0 minutes 3.424 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

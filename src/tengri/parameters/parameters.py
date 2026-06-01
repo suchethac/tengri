@@ -30,7 +30,7 @@ Shorthand tsnorm equivalent::
 
     spec = Parameters(
         mean_sfh_type = "tsnorm",
-        sfh_tsnorm_log_peak_sfr = Uniform(-1, 2),
+        sfh_tsnorm_log_total_mass = Uniform(8, 12),
         sfh_tsnorm_peak_lbt_gyr = Uniform(1, 12),
         sfh_tsnorm_width_gyr = Uniform(0.5, 5),
         sfh_tsnorm_skew = Uniform(-1, 1),
@@ -45,7 +45,7 @@ Shorthand DPL equivalent::
         sfh_dpl_alpha    = Uniform(0.5, 3.0),
         sfh_dpl_beta     = Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr  = Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr = Uniform(-1, 2),
+        sfh_dpl_log_total_mass = Uniform(8, 12),
         ...
     )
 """
@@ -53,6 +53,7 @@ Shorthand DPL equivalent::
 from __future__ import annotations
 
 import copy
+import zlib
 
 import jax
 import jax.numpy as jnp
@@ -74,6 +75,17 @@ from tengri.parameters.priors import (
 )
 
 __all__ = ["SETTINGS_KEYS", "Parameters"]
+
+
+def _stable_param_seed(name: str) -> int:
+    """Deterministic 32-bit seed for a parameter name's sampling substream.
+
+    Uses ``zlib.crc32`` rather than the built-in ``hash``: ``hash`` is salted
+    per process (``PYTHONHASHSEED``) and would make ``Parameters.sample``
+    irreproducible across runs. crc32 of the UTF-8 bytes is stable everywhere
+    and fits the int32 domain ``jax.random.fold_in`` expects.
+    """
+    return int(zlib.crc32(name.encode("utf-8")) & 0x7FFFFFFF)
 
 
 # ── Parameters class ───────────────────────────────────────────────────
@@ -294,7 +306,7 @@ class Parameters:
     **AGN** (``agn_model != None``):
 
     ========================== ================= =======================================
-    agn_frac                   Fixed(0.0)        AGN fraction of stellar L_bol
+    agn_frac                   Fixed(1.0)        AGN fraction of stellar L_bol (1.0 = full AGN)
     agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
     agn_alpha                  Fixed(-1.0)       Disc power-law slope
     agn_T_torus                Fixed(1000)       Torus temperature (K)
@@ -341,7 +353,7 @@ class Parameters:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.5, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 13.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(8.0, 12.5),
             met_logzsol=Uniform(-2.0, 0.5),
             dust_tau_bc=Uniform(0.0, 2.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -352,7 +364,7 @@ class Parameters:
 
         spec = Parameters(
             mean_sfh_type=["dpl", "field"],
-            n_grid=64,
+            n_grid=256,
             # Dust attenuation
             dust_law_bc="kriek_conroy",
             dust_f_obscuration=Uniform(0.0, 0.5),
@@ -387,8 +399,24 @@ class Parameters:
         # ── Settings ──────────────────────────────────────────────
         raw_sfh_type = kwargs.pop("mean_sfh_type", None)
         explicit_stochastic = kwargs.pop("stochastic", None)
-        n_grid = int(kwargs.pop("n_grid", 64))
+        n_grid = int(kwargs.pop("n_grid", 256))
+        # Non-parametric SFH bin edges (``prospector_beta`` and other
+        # ``_NONPARAM_NAMES`` entries). Stored as a structural setting
+        # so ``_build_legacy`` can forward to ``resolve_sfh(...,
+        # bin_edges_gyr=...)``. Default ``None`` falls back to the
+        # registry's own canonical edges. See #337.
+        self.bin_edges_gyr = kwargs.pop("bin_edges_gyr", None)
+        # MW foreground extinction screen — applied at the
+        # observed-frame SED boundary, independent of host-galaxy dust
+        # (#297). ``foreground_ebmv_mw=0.0`` is the no-op default.
+        self.foreground_ebmv_mw = float(kwargs.pop("foreground_ebmv_mw", 0.0))
+        self.foreground_law = kwargs.pop("foreground_law", "cardelli")
+        self.foreground_rv = float(kwargs.pop("foreground_rv", 3.1))
         self.apply_igm = kwargs.pop("apply_igm", True)
+        # IGM transmission model: 'inoue' (default), 'madau', or 'meiksin06'.
+        # Stored as a structural setting so the grammar-layer choice
+        # propagates through to :meth:`SEDModel._init_igm` (#344, #440).
+        self.igm_model = kwargs.pop("igm_model", "inoue")
 
         # ── Nebular emission ──────────────────────────────────────
         self._init_nebular_config(kwargs)
@@ -599,6 +627,11 @@ class Parameters:
         nebular_cue = kwargs.pop("nebular_cue", False)
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
+        # When True, the Cue orchestrator path publishes the full
+        # ~271-species line catalogue instead of the default 128
+        # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
+        # read via ``pred.lines.get(wavelength)``. See #303.
+        self.cue_full_catalogue = kwargs.pop("cue_full_catalogue", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         self._nebular_cb19 = False
@@ -732,10 +765,11 @@ class Parameters:
         _evolving_met = kwargs.pop("evolving_metallicity", False)
         _chem_evol = kwargs.pop("chem_evol", False)
 
-        # Snapshot the user's keys before any further popping. Inference
-        # only sees met_/chem_ keys; everything else is irrelevant noise.
-        _inferred_mode = infer_met_mode(set(kwargs.keys()))
-
+        # Inference only sees met_/chem_ keys; everything else is irrelevant
+        # noise. Some modes share parameter keys (e.g. massmap_box's discriminator
+        # is a superset of massmap_lin's), so inference can be genuinely
+        # ambiguous — only run it where it is needed and let an explicit
+        # ``met_mode`` win over an ambiguous inference.
         if _met_mode_explicit is not None:
             if _evolving_met or _chem_evol:
                 raise ValueError(
@@ -743,6 +777,13 @@ class Parameters:
                     "Use met_mode='ramp' instead of evolving_metallicity=True, "
                     "or met_mode='chem_evol' instead of chem_evol=True."
                 )
+            # Consistency guard: only flag a conflict when inference resolves
+            # *unambiguously* to a different mode. An ambiguous inference (the
+            # user already disambiguated by setting met_mode) is not a conflict.
+            try:
+                _inferred_mode = infer_met_mode(set(kwargs.keys()))
+            except ValueError:
+                _inferred_mode = _met_mode_explicit
             if _inferred_mode != "delta" and _inferred_mode != _met_mode_explicit:
                 raise ValueError(
                     f"met_mode={_met_mode_explicit!r} conflicts with parameter "
@@ -762,7 +803,7 @@ class Parameters:
         elif _chem_evol:
             self.met_mode = "chem_evol"
         else:
-            self.met_mode = _inferred_mode
+            self.met_mode = infer_met_mode(set(kwargs.keys()))
 
         # Backward-compat properties for sed_model / pipeline
         self.evolving_metallicity = self.met_mode == "ramp"
@@ -1370,14 +1411,32 @@ class Parameters:
         >>> samples = spec.sample(key)
         >>> print(sorted(samples.keys()))
         ['redshift', 'sfh_dpl_alpha', 'sfh_dpl_beta']
+
+        Per-parameter substreams
+        ------------------------
+        Each parameter is drawn from a substream derived from its **name**
+        (``fold_in(key, crc32(name))``), not from its position in a
+        ``jax.random.split``. This guarantees that a given parameter samples
+        to the same value for a given ``key`` **regardless of which other
+        parameters are free in the spec**.
+
+        Without this, two specs sharing a free parameter but differing in
+        their free-parameter set (e.g. one adds ``dust_emission`` →
+        free ``dust_T``/``dust_beta_ir``) would split the key differently and
+        draw the *shared* parameter to different values — a silent footgun
+        that surfaced in #548 (an eta=0 "energy-balance" inequivalence that
+        was really two galaxies with different sampled ``sfh_dpl_age_gyr``)
+        and #563. crc32 (not the salted built-in ``hash``) keeps the mapping
+        reproducible across processes.
         """
-        keys = jax.random.split(key, len(self._distributions) + 1)
         params = {}
-        for i, name in enumerate(sorted(self._distributions.keys())):
-            params[name] = self._distributions[name].sample(keys[i])
+        for name in sorted(self._distributions.keys()):
+            subkey = jax.random.fold_in(key, _stable_param_seed(name))
+            params[name] = self._distributions[name].sample(subkey)
 
         if self.stochastic:
-            params["sfh_field_xi"] = jax.random.normal(keys[-1], shape=(self._n_grid,))
+            xi_key = jax.random.fold_in(key, _stable_param_seed("sfh_field_xi"))
+            params["sfh_field_xi"] = jax.random.normal(xi_key, shape=(self._n_grid,))
 
         return self.resolve_mirrors(params)
 

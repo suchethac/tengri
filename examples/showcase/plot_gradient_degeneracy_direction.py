@@ -20,6 +20,10 @@ parameter combinations observations can break.
 """
 
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import os
 import warnings
 
 import matplotlib.pyplot as plt
@@ -40,7 +44,7 @@ FIDUCIAL_PARAMS = {
     "sfh_dpl_alpha": 1.5,
     "sfh_dpl_beta": 2.0,
     "sfh_dpl_tau_gyr": 1.0,
-    "sfh_dpl_log_peak_sfr": 0.5,
+    "sfh_dpl_log_total_mass": 0.5,
     "dust_tau_bc": 0.3,
     "dust_tau_diff": 0.1,
     "redshift": 0.1,
@@ -50,12 +54,10 @@ FIDUCIAL_PARAMS = {
 # Single observation config to demonstrate the concept
 FILTERS = ["sdss_u", "sdss_r", "2mass_j"]
 
-print(f"Building model...")
+print("Building model...")
 
 # Build observation
-observation = tengri.Observation(
-    photometry=tengri.Photometry.from_names(FILTERS)
-)
+observation = tengri.Observation(photometry=tengri.Photometry.from_names(FILTERS))
 
 # Create a minimal model: DPL SFH + Calzetti dust + Cue nebular (fixed)
 model = tengri.SEDModel.build(
@@ -81,13 +83,11 @@ noise = flux_fiducial / snr
 noise_inv = 1.0 / noise**2
 
 # Extract the two degenerate parameters
-free_names = ["sfh_dpl_log_peak_sfr", "dust_tau_bc"]
-flat_fiducial = np.array(
-    [FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]]
-)
+free_names = ["sfh_dpl_log_total_mass", "dust_tau_bc"]
+flat_fiducial = np.array([FIDUCIAL_PARAMS[free_names[0]], FIDUCIAL_PARAMS[free_names[1]]])
 
 # Compute Fisher matrix via finite differences
-print(f"Computing Fisher matrix via finite differences...")
+print("Computing Fisher matrix via finite differences...")
 delta = 1e-5
 fisher = np.zeros((2, 2))
 
@@ -203,9 +203,7 @@ ax.text(
 )
 
 fig.tight_layout()
-output_path = os.path.join(
-    os.path.dirname(__file__), "plot_gradient_degeneracy_direction.png"
-)
+output_path = os.path.join(os.path.dirname(__file__), "plot_gradient_degeneracy_direction.png")
 print(f"\nSaving figure to {output_path}...")
 plt.savefig(output_path, dpi=150, bbox_inches="tight")
 print("Done.")

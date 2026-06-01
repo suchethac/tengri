@@ -21,6 +21,10 @@ non-parametric forms (``continuity``, ``dirichlet``, ``dense_basis``)
 when the data resolve > 5 SFR-bins.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax

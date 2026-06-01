@@ -239,7 +239,7 @@ class TestStandardCatalog:
     def test_all_valid(self):
         for name, idx in STANDARD_INDICES.items():
             assert idx.name == name
-            assert idx.index_type in ("EW", "break")
+            assert idx.index_type in ("EW", "break", "slope")
 
 
 # ── Index measurement ─────────────────────────────────────────────

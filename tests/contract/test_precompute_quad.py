@@ -126,13 +126,15 @@ class TestTaylorCorrectionAccuracy:
         errs_taylor = []
         for f_idx, (fw, ft) in enumerate(zip(fw_list, ft_list)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            # Exact: ∫ SSP · A · T · λ dλ / ∫ T · λ dλ
+            # Exact (photon-counting Bessell, ADR-0017): ∫ SSP·A·T dλ/λ / ∫ T dλ/λ.
+            # Must match the convention used by ``precompute_photometry`` above.
             t_on_ssp = np.interp(wave_obs, fw_np, ft_np, left=0, right=0)
+            w_on_ssp = t_on_ssp / np.where(wave_obs > 0, wave_obs, 1.0)
             dust_on_ssp = dust_fn(wave_obs)
-            denom = np.trapezoid(t_on_ssp * wave_obs, wave_obs)
-            exact = np.trapezoid(
-                ssp_flux_np[0, 0] * dust_on_ssp * t_on_ssp * wave_obs, wave_obs
-            ) / max(denom, 1e-30)
+            denom = np.trapezoid(w_on_ssp, wave_obs)
+            exact = np.trapezoid(ssp_flux_np[0, 0] * dust_on_ssp * w_on_ssp, wave_obs) / max(
+                denom, 1e-30
+            )
 
             lam_eff = float(eff[f_idx])
             A_eff = dust_fn(np.array([lam_eff]))[0]

@@ -31,6 +31,8 @@ import jax.numpy as jnp
 
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
+    massmap_box_metallicity,
+    massmap_lin_metallicity,
     metallicity_bins_continuity_on_ssp_grid,
     metallicity_bins_on_ssp_grid,
     psb_two_step_metallicity,
@@ -110,7 +112,7 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     name: str = "stellar"
     sfh_model: str = "tsnorm"
     field: bool = False
-    n_grid: int = 64
+    n_grid: int = 256
     metallicity_model: str = "delta"
     sps_backend: str = "dsps"
     use_alpha_grid: bool = False
@@ -140,12 +142,21 @@ class StellarSEDComponentState(SEDComponentState):
 
     The ``precompute`` method returns an empty marker or (when wave_precomp
     is enabled) a state carrying the pre-computed SSP×filter LUT (fixed-z)
-    or ztable (free-z).
+    or ztable (free-z). When ``approx=SpectrumPrecomp()`` is set, it instead
+    carries the pre-rebinned SSP×pixel LUT (``ssp_spec_lut``, fixed-z) or
+    its redshift table (``ssp_spec_ztable``, free-z) — the spectroscopic
+    analogue of the photometric LUT.
     """
 
     name: str = "stellar"
     ssp_phot_lut: Any | None = None
     ssp_phot_ztable: Any | None = None
+    # Phase 5 (SpectrumPrecomp): SSP flux pre-rebinned to spectrum pixel
+    # centres in the galaxy rest frame. ``ssp_spec_lut`` is a
+    # :class:`SpectroscopicPrecomputation` (fixed-z); ``ssp_spec_ztable``
+    # is a :class:`SpectroscopicZTable` (free-z).
+    ssp_spec_lut: Any | None = None
+    ssp_spec_ztable: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -288,22 +299,27 @@ class StellarSEDComponent:
         approx: Mapping[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
         redshift_spec: dict[str, Any] | None = None,
+        spec_wave_obs: jnp.ndarray | None = None,
     ) -> StellarSEDComponentState:
-        """Build SSP×filter LUT when approx=WavePrecomp() is set.
+        """Build SSP×filter LUT (WavePrecomp) or SSP×pixel LUT (SpectrumPrecomp).
 
-        Reads the wave_precomp flag from approx. When True AND filters are
-        provided AND the component has an SSP grid, calls either
-        precompute_photometry() for fixed-z (Phase 3b) or
-        precompute_photometry_ztable() for free-z (Phase 3c-1), storing
-        the result on the returned state. Otherwise returns an empty state
-        marker (Phase 3a behaviour).
+        Reads the ``wave_precomp`` / ``spectrum_precomp`` flags from
+        ``approx``. For ``wave_precomp`` (with ``filters``), calls
+        :func:`precompute_photometry` (fixed-z, Phase 3b) or
+        :func:`precompute_photometry_ztable` (free-z, Phase 3c-1). For
+        ``spectrum_precomp`` (with ``spec_wave_obs``), calls
+        :func:`precompute_spectroscopy` (fixed-z) or
+        :func:`precompute_spectroscopy_ztable` (free-z), pre-rebinning the
+        SSP grid to the spectrum pixel centres in the galaxy rest frame
+        (Phase 5). Otherwise returns an empty state marker.
 
         Parameters
         ----------
         approx : Mapping[str, bool] | None
-            Approximation flags. Reads "wave_precomp".
+            Approximation flags. Reads ``"wave_precomp"`` and
+            ``"spectrum_precomp"``.
         filters : tuple of (filter_wave_obs, filter_trans) pairs, optional
-            Required when wave_precomp=True. Tuple shape:
+            Required when ``wave_precomp=True``. Tuple shape:
             ((fw_0, ft_0), (fw_1, ft_1), ...) where each pair is a pair of
             1-D arrays. The filter_wave is observed-frame.
         redshift_spec : dict[str, Any] | None
@@ -312,9 +328,17 @@ class StellarSEDComponent:
             - mode="fixed", value=float: builds LUT at that fixed z.
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
+        spec_wave_obs : array_like, shape (n_pix,), optional
+            Observed-frame spectrum pixel wavelengths [Angstrom]. Required
+            when ``spectrum_precomp=True``.
         """
         del wave_grid
         approx = approx or {}
+
+        # Phase 5: SpectrumPrecomp — pre-rebin SSP to spectrum pixel centres.
+        if approx.get("spectrum_precomp"):
+            return self._precompute_spectrum(spec_wave_obs, redshift_spec)
+
         if not approx.get("wave_precomp"):
             return StellarSEDComponentState(name=self.name)
 
@@ -364,6 +388,53 @@ class StellarSEDComponent:
                 taylor_correction=True,  # Phase 3c-3c-v: Ψ moment for dust LUT
             )
             return StellarSEDComponentState(name=self.name, ssp_phot_ztable=ztable)
+
+    def _precompute_spectrum(
+        self,
+        spec_wave_obs: jnp.ndarray | None,
+        redshift_spec: dict[str, Any] | None,
+    ) -> StellarSEDComponentState:
+        """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()`` (Phase 5).
+
+        Pre-rebins the SSP flux cube to the spectrum pixel centres in the
+        galaxy rest frame. Unlike the photometric LUT, **no Taylor moment
+        is needed**: a spectrum pixel is a single wavelength, so dust
+        attenuation ``A(λ_pix)`` evaluated at the pixel centre is exact —
+        there is no wide-kernel integral to factorise.
+
+        Fixed-z builds a single :class:`SpectroscopicPrecomputation`; free-z
+        builds a :class:`SpectroscopicZTable` so the rest-frame pixel grid
+        ``wave_obs / (1 + z)`` can be interpolated at runtime.
+        """
+        if spec_wave_obs is None or self.ssp_data is None:
+            # No grid or no SSP — fall back to the full-grid path.
+            return StellarSEDComponentState(name=self.name)
+
+        spec_wave_obs = jnp.asarray(spec_wave_obs)
+
+        if redshift_spec is None or redshift_spec.get("mode") == "fixed":
+            from tengri.components.stellar.sps.precompute import precompute_spectroscopy
+
+            z_source = redshift_spec.get("value", 0.0) if redshift_spec else 0.0
+            lut = precompute_spectroscopy(
+                ssp_data=self.ssp_data,
+                wave_obs_pixels=spec_wave_obs,
+                redshift=z_source,
+                dl_cm=1.0,  # placeholder; cosmology applied at projection time
+            )
+            return StellarSEDComponentState(name=self.name, ssp_spec_lut=lut)
+
+        # mode == "free": build the redshift table.
+        from tengri.components.stellar.sps.precompute import precompute_spectroscopy_ztable
+
+        ztable = precompute_spectroscopy_ztable(
+            ssp_data=self.ssp_data,
+            wave_obs_pixels=spec_wave_obs,
+            z_min=redshift_spec.get("z_min", 0.001),
+            z_max=redshift_spec.get("z_max", 3.0),
+            n_z=redshift_spec.get("n_z", 100),
+        )
+        return StellarSEDComponentState(name=self.name, ssp_spec_ztable=ztable)
 
     def apply(
         self,
@@ -425,11 +496,13 @@ class StellarSEDComponent:
             "const_exp",
             "continuity_flex",
             "psb",
+            "psb_suess2022",
             "delayed_bq",
             "dense_basis_pure",
             "exp",
             "dexp",
             "tau",
+            "delayed",
             "periodic",
             "buat08",
         )
@@ -447,6 +520,8 @@ class StellarSEDComponent:
             "bins",
             "bins_continuity",
             "table",
+            "massmap_lin",
+            "massmap_box",
         )
         if self.config.metallicity_model not in _SUPPORTED_MET:
             raise NotImplementedError(
@@ -480,7 +555,20 @@ class StellarSEDComponent:
         sfh_kwargs = {}
         for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
             if public_name in params:
-                sfh_kwargs[internal_name] = jnp.asarray(params[public_name]) * scale + offset
+                raw = params[public_name]
+            else:
+                # Fall back to the registry default for any declared parameter
+                # the caller omitted. Required so callers that pass a partial
+                # params dict (e.g. the low-level run_components path, or flat-
+                # kwarg specs predating the dpl/lnorm ``age`` anchor of #514)
+                # still resolve every positional argument of the SFH callable.
+                # Mirrors the dense_basis age_universe injection just below.
+                pdef = sfh_spec.params.get(public_name)
+                default_scalar = pdef.default.default if pdef is not None else None
+                if default_scalar is None:
+                    continue
+                raw = default_scalar
+            sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
 
         # Mode-specific settings that are NOT free parameters.
         # ``dense_basis`` needs an explicit ``age_universe_yr`` derived
@@ -515,7 +603,22 @@ class StellarSEDComponent:
             sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
 
         # ── 3. Resample to SSP age grid for CSP integration ─────────────
-        sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        # For deterministic (non-GP) parametric SFHs, evaluate the analytic
+        # shape on ``ssp_ages_yr`` directly. The SSP age grid is linear-spaced
+        # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
+        # cutoffs at ``t_lookback = age`` land on grid points instead of
+        # being smeared across the coarser ~3 % log-spaced bins of
+        # ``sfh_lbt_grid``. The closed form also self-normalises through
+        # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
+        # exactly. See suchethac/tengri#385.
+        #
+        # The GP-field path still goes through the log grid: ``compute_field_gp``
+        # builds its DRW kernel keyed on ``n_grid`` and ``d_log_age``, so the
+        # GP draw lives on the lookback grid by construction.
+        if self.config.field:
+            sfr_on_ssp = jnp.interp(ssp_ages_yr, sfh_lbt_grid, sfr_history)
+        else:
+            sfr_on_ssp = sfh_spec.fn(ssp_ages_yr, **sfh_kwargs)
 
         # ── 5. Cosmology: t_obs from redshift ───────────────────────────
         # ``age_at_z`` is JIT-compatible (pure JAX under the hood); keep
@@ -677,6 +780,49 @@ class StellarSEDComponent:
                 sfh_lg_age_yr - 9.0, met_log_age_yr, met_log_z_abs
             )
             log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "massmap_lin":
+            # Linear metallicity tied to cumulative stellar mass formed
+            # (ProSpect Bellstedt+2020 massmap_lin model).
+            log_z_start_abs = jnp.asarray(params["met_logzsol_start"]) + LOG10_ZSUN
+            log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
+            # Per-age metallicity on the SSP grid
+            lgmet_on_ssp_ages = massmap_lin_metallicity(
+                ssp.ssp_lg_age_gyr, ssp_ages_yr, sfr_on_ssp, log_z_start_abs, log_z_final_abs
+            )
+            # Z(t) on the SFH grid for diagnostics
+            sfh_lg_age_gyr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0)) - 9.0
+            log_metallicity_history = massmap_lin_metallicity(
+                sfh_lg_age_gyr, sfh_lbt_grid, sfr_history, log_z_start_abs, log_z_final_abs
+            )
+            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
+            log_z_for_mr = lgmet_on_ssp_ages[0]
+        elif self.config.metallicity_model == "massmap_box":
+            # Closed-box chemical evolution tied to cumulative stellar mass formed
+            # (ProSpect Bellstedt+2020 massmap_box model).
+            log_z_start_abs = jnp.asarray(params["met_logzsol_start"]) + LOG10_ZSUN
+            log_z_final_abs = jnp.asarray(params["met_logzsol_final"]) + LOG10_ZSUN
+            yield_rho = jnp.asarray(params.get("met_yield", 0.03))
+            # Per-age metallicity on the SSP grid
+            lgmet_on_ssp_ages = massmap_box_metallicity(
+                ssp.ssp_lg_age_gyr,
+                ssp_ages_yr,
+                sfr_on_ssp,
+                log_z_start_abs,
+                log_z_final_abs,
+                yield_rho,
+            )
+            # Z(t) on the SFH grid for diagnostics
+            sfh_lg_age_gyr = jnp.log10(jnp.maximum(sfh_lbt_grid, 1.0)) - 9.0
+            log_metallicity_history = massmap_box_metallicity(
+                sfh_lg_age_gyr,
+                sfh_lbt_grid,
+                sfr_history,
+                log_z_start_abs,
+                log_z_final_abs,
+                yield_rho,
+            )
+            # Mass-remaining interpolation: use present-day Z (youngest SSP age).
+            log_z_for_mr = lgmet_on_ssp_ages[0]
         else:  # chem_evol
             from tengri.components.stellar.sfh.chemical_evolution import (
                 chem_evol_metallicity_on_ssp_grid,
@@ -790,11 +936,22 @@ class StellarSEDComponent:
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
-        # ``rest_sed`` from DSPS is in Lsun/Hz (mass scaling included).
-        # Sum the per-age cube — XLA folds the sum into the same kernel
-        # as the einsum and avoids materialising ``rest_sed`` separately.
+        # Use DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs`` in
+        # Lsun/Hz) rather than reconstructing it as
+        # ``total_mass × Σ(weights × ssp_flux)``. The two paths are
+        # mathematically identical when ``total_mass == mstar_obs`` (both
+        # integrate the same SFH), but DSPS computes ``mstar_obs`` via a
+        # cumulative-SFH interpolation while tengri's ``total_mass`` is a
+        # trapezoid integral over the ramp-zeroed ``sfr_asc`` grid. Using
+        # DSPS's value keeps the SED self-consistent with the kernel's
+        # own normalisation (closes #394). The per-age cube ``lnu_age``
+        # below is retained for downstream per-age operations (dust BC
+        # mask, bolometric L_age) and continues to use ``total_mass`` —
+        # the per-age sum is consumed before any wavelength-resolved
+        # quantity reads it, so any residual ``total_mass / mstar_obs``
+        # discrepancy does not propagate into observables.
+        sed_intrinsic = dsps_result.rest_sed * LSUN_ERG_PER_S
         lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
-        sed_intrinsic = jnp.sum(lnu_age, axis=0)
 
         # ── 8. Mass quantities ──────────────────────────────────────────
         log_mstar_formed = jnp.log10(jnp.maximum(jnp.sum(age_weights), 1e-30))
@@ -822,13 +979,45 @@ class StellarSEDComponent:
         # ── 11. Ionising photon production rate (λ < 911.76 Å) ──────────
         # photons/s = ∫_{ν > c/λ_HI} L_ν / (hν) dν, summed over all ages.
         # Mirrors components/nebular/ionizing_spectrum.py:299.
+        #
+        # Partial-bin correction (#537): when 911.76 Å falls between two
+        # grid points (true for BC03's 10 Å sampling: 905 and 915 Å are
+        # the bracketing points), a hard ``wave < 911.76`` mask drops
+        # the 905 → 911.76 portion of the boundary bin entirely. SSP
+        # spectra have a near-discontinuous Lyman drop at 911.76 Å:
+        # ionising flux is well-defined right up to the limit, then
+        # drops to zero. Linear interpolation between 905 and 915 Å
+        # would under-estimate the boundary value (a half-value of the
+        # ionising side); the correct partial-bin contribution treats
+        # ``L_ν`` as constant from the last ionising grid point up to
+        # 911.76 Å — a rectangle, not a trapezium. This matches the
+        # physical Lyman discontinuity and produces a Q_H consistent
+        # with CIGALE's tabulated ``stellar.n_ly`` to within numerical
+        # noise at any SSP grid spacing.
         nu = C_AA / wave
-        ionizing_mask = wave < _HI_LIMIT_AA
+        nu_edge = C_AA / _HI_LIMIT_AA
         integrand = sed_intrinsic / (H_PLANCK * nu)
+        ionizing_mask = wave < _HI_LIMIT_AA
         integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-        # trapezoid(x=nu) with nu decreasing returns a negative value;
-        # take abs to recover the positive photon rate.
-        nion = jnp.abs(jnp.trapezoid(integrand_masked, nu))
+        # Find the last ionising grid point (wave_below < 911.76) and the
+        # first non-ionising one (wave_above ≥ 911.76).
+        idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(len(wave)), -1))
+        idx_above = idx_below + 1
+        nu_below = nu[idx_below]
+        nu_above = nu[idx_above]
+        integrand_below = integrand[idx_below]
+        # Bulk trapezoid integrates over every adjacent pair (including
+        # the (905, 915) boundary bin where one side has ``integrand``
+        # and the other is masked to zero — yielding a triangle of
+        # area ½·integrand_below·|ν_below − ν_above|). For SSPs with a
+        # sharp Lyman discontinuity the *correct* contribution from
+        # that bin is a rectangle from ν_edge to ν_below
+        # (= integrand_below · |ν_below − ν_edge|). Subtract the
+        # triangle, add the rectangle:
+        triangle_overcount = 0.5 * integrand_below * jnp.abs(nu_below - nu_above)
+        rectangle_correct = integrand_below * jnp.abs(nu_below - nu_edge)
+        nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
+        nion = nion_bulk - triangle_overcount + rectangle_correct
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
         # When the pipeline runs on a panchromatic grid (radio/X-ray
@@ -926,24 +1115,36 @@ class StellarSEDComponent:
             )
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — linear interp of the
-            # ztable at runtime z. Publishes the same derived keys as the
-            # fixed-z path: stellar_phot_lnu_precomp, stellar_phot_moment_precomp,
-            # stellar_phot_lnu_per_age_precomp, stellar_phot_moment_per_age_precomp,
-            # filter_eff_waves.
+            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — smooth triweight
+            # interp of the ztable at runtime z. Publishes the same derived
+            # keys as the fixed-z path: stellar_phot_lnu_precomp,
+            # stellar_phot_moment_precomp, stellar_phot_lnu_per_age_precomp,
+            # stellar_phot_moment_per_age_precomp, filter_eff_waves.
+            #
+            # The original linear z-interp was O(h^2) and non-monotonic in
+            # n_z at fixed test redshifts: doubling the grid can shift a
+            # test point into a less-favourable cell and raise the error.
+            # The triweight kernel (Hearin et al. 2023) is the canonical
+            # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
+            # and SKIRTOR grids — C²-continuous, kernel-supported on the
+            # 3-bandwidth neighbourhood. See issue #438.
+            from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+
             ztable = self._state.ssp_phot_ztable
             z = jnp.asarray(params.get("redshift", 0.0))
             z_grid = ztable.z_grid
-            n_z = z_grid.shape[0]
-            i_hi = jnp.clip(jnp.searchsorted(z_grid, z), 1, n_z - 1)
-            i_lo = i_hi - 1
-            z_lo = z_grid[i_lo]
-            z_hi = z_grid[i_hi]
-            frac = (z - z_lo) / jnp.maximum(z_hi - z_lo, 1e-12)
+            z_edges = edges_for_grid(z_grid)
+            # Match grid-cell width for the kernel bandwidth (Hearin 2023
+            # convention): smooth across one neighbour on each side.
+            z_scatter = 0.5 * (z_grid[1] - z_grid[0])
+            w_z = compute_grid_weights(z, z_grid, scatter=z_scatter, edges=z_edges)
+
+            def _interp(table):
+                # table: (n_z, ...). Contract axis 0 with kernel weights.
+                return jnp.tensordot(w_z, table, axes=([0], [0]))
+
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
-            ssp_phot_at_z = (1.0 - frac) * ztable.ssp_phot_table[
-                i_lo
-            ] + frac * ztable.ssp_phot_table[i_hi]
+            ssp_phot_at_z = _interp(ztable.ssp_phot_table)
             # Marginalised + age-resolved LUTs (Phase 3c-3c-iv-a parity).
             stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
@@ -958,9 +1159,7 @@ class StellarSEDComponent:
             # Phase 3c-3c-v: Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalised + per-age.
             if ztable.ssp_phot_moment_table is not None:
-                ssp_moment_at_z = (1.0 - frac) * ztable.ssp_phot_moment_table[
-                    i_lo
-                ] + frac * ztable.ssp_phot_moment_table[i_hi]
+                ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
                 stellar_phot_moment_precomp = (
                     total_mass
                     * jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z)
@@ -977,10 +1176,65 @@ class StellarSEDComponent:
                 )
             # Interpolate effective rest-frame wavelengths and publish for
             # downstream consumers (dust LUT, AGN, IGM).
-            eff_waves_at_z = (1.0 - frac) * ztable.eff_waves_rest_table[
-                i_lo
-            ] + frac * ztable.eff_waves_rest_table[i_hi]
+            eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
             derived_overrides["filter_eff_waves"] = eff_waves_at_z
+
+        # ── 12c. Stellar spectrum LUT (Phase 5; SpectrumPrecomp) ────────
+        # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
+        # centres in the galaxy rest frame. Publishes:
+        #   - ``stellar_spec_lnu_precomp`` (n_pix,) — rest-frame Lν [erg/s/Hz]
+        #   - ``spec_eff_waves`` (n_pix,) — rest-frame pixel wavelengths [Å]
+        # The latter routes downstream SEDModelComponents (dust / AGN / IGM /
+        # nebular continuum) through their spectrum-LUT branch, mirroring how
+        # ``filter_eff_waves`` drives the photometry LUT path.
+        if self._state is not None and self._state.ssp_spec_lut is not None:
+            ssp_on_pixels = self._state.ssp_spec_lut.ssp_on_pixels  # (n_met, n_age, n_pix)
+            stellar_spec_lnu = (
+                total_mass * jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels) * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
+            # Age-resolved per-pixel LUT for two-component (Charlot & Fall)
+            # dust attenuation at the pixel grid (sum over age == marginalised).
+            stellar_spec_lnu_per_age = (
+                total_mass
+                * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
+            derived_overrides["spec_eff_waves"] = jnp.asarray(
+                self._state.ssp_spec_lut.wave_rest_pixels
+            )
+
+        elif self._state is not None and self._state.ssp_spec_ztable is not None:
+            # Free-z: interpolate the SSP cube to the rest-frame pixel grid
+            # ``wave_obs / (1 + z)`` at runtime. Exact (no z-grid interpolation
+            # of absorption features) and differentiable in z. ``wave`` is
+            # ``ssp.ssp_wave`` and ``ssp_flux_for_csp`` is the (n_met, n_age,
+            # n_wave) cube already used for the full-grid CSP einsum above.
+            from jax import vmap
+
+            z = jnp.asarray(params.get("redshift", 0.0))
+            wave_obs_pix = jnp.asarray(self._state.ssp_spec_ztable.wave_obs_pixels)
+            wave_rest = wave_obs_pix / (1.0 + z)
+            n_met_s, n_age_s = ssp_flux_for_csp.shape[0], ssp_flux_for_csp.shape[1]
+            flat = ssp_flux_for_csp.reshape(n_met_s * n_age_s, -1)
+            interp_flat = vmap(lambda row: jnp.interp(wave_rest, wave, row, left=0.0, right=0.0))(
+                flat
+            )
+            ssp_on_pixels_at_z = interp_flat.reshape(n_met_s, n_age_s, -1)
+            stellar_spec_lnu = (
+                total_mass
+                * jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels_at_z)
+                * LSUN_ERG_PER_S
+            )
+            stellar_spec_lnu_per_age = (
+                total_mass
+                * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels_at_z)
+                * LSUN_ERG_PER_S
+            )
+            derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
+            derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
+            derived_overrides["spec_eff_waves"] = wave_rest
 
         # ── 12. Assemble new state ──────────────────────────────────────
         return state.with_(

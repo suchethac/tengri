@@ -21,12 +21,12 @@ from common import FIG_DIR, PAPER_FIG_DIR
 
 # ── Color scheme ──────────────────────────────────────────────────
 C_PRIOR = "#4878d0"  # blue — priors / inputs
-C_SFH = "#6acc65"    # green — SFH model
-C_SED = "#ee854a"    # orange — SED physics
-C_OBS = "#9370b8"    # purple — observable
-C_INF = "#d65f5f"    # red — inference
-C_POST = "#956cb4"   # mauve — posterior output
-C_ARR = "#444444"    # arrow color
+C_SFH = "#6acc65"  # green — SFH model
+C_SED = "#ee854a"  # orange — SED physics
+C_OBS = "#9370b8"  # purple — observable
+C_INF = "#d65f5f"  # red — inference
+C_POST = "#956cb4"  # mauve — posterior output
+C_ARR = "#444444"  # arrow color
 
 
 def rounded_box(ax, cx, cy, w, h, header, sublines, color, fontsize=8.5):

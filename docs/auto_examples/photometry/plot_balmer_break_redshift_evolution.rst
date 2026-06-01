@@ -21,6 +21,11 @@
 Balmer break (4000 Å) position in observed-frame filters vs redshift
 ====================================================================
 
+.. image:: images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :alt: plot balmer break redshift evolution
+   :class: sphx-glr-single-img
+
+
 The 4000 Å break is a sharp discontinuity in the stellar continuum at the
 boundary between the Balmer and Paschen series, caused by hydrogen Lyman
 absorption blanketing in the overlying atmosphere. In the rest frame it
@@ -29,7 +34,7 @@ to longer wavelengths with increasing redshift: z × 4000 Å. This is why
 different photometric bands probe the break at different redshifts — the
 fundamental principle behind photo-z estimation and dust/age degeneracies.
 
-This example shows how a single 2-Gyr-old stellar population appears across
+a single 2-Gyr-old stellar population appears across
 redshift z = 0.5, 1.0, 2.0, 3.0, 4.0 in the observed frame. The top panel
 displays the full nu*F_nu spectrum with HST and JWST filter responses
 overlaid. The bottom panel zooms to the 4000 Å break region, showing exactly
@@ -49,9 +54,14 @@ Reference: For dust absorption modeling and SED fundamentals, see Calzetti
 et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 1000) SSP synthesis code.
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-193
+.. GENERATED FROM PYTHON SOURCE LINES 33-196
 
 
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :alt: plot balmer break redshift evolution
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :class: sphx-glr-single-img
 
 
 .. rst-class:: sphx-glr-script-out
@@ -69,6 +79,10 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -114,7 +128,7 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
             "*": tengri.FIXED,
             "peak_lbt_gyr": 2.0,
             "width_gyr": 0.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
@@ -225,8 +239,7 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
     ax_bot.grid(True, alpha=0.2, which="major")
 
     fig.tight_layout()
-    plt.savefig("plot_balmer_break_redshift_evolution.png", dpi=150, bbox_inches="tight")
-    plt.close()
+    plt.show()
 
     print("Saved: plot_balmer_break_redshift_evolution.png")
 

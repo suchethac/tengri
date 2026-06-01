@@ -735,6 +735,15 @@ def run_nifty_vi(
     approximately Gaussian, then draws samples in that space. Much
     faster than MCMC for high-dimensional problems.
 
+    .. warning::
+       The NIFTy ``vi`` path and ``vi_native`` target the same KL
+       objective but are **not posterior-equivalent**: the SFH PSD
+       timescale ``sfh_field_psd_tau_myr`` has been observed to differ
+       by ~10× between the two paths (e.g. 82 Myr vs 6 Myr on a 137-D
+       stochastic problem). NIFTy is ~19–25× slower but considered the
+       reference; validate per-problem before swapping backends.
+       See ``bench/reports/2026-04-17_native_vs_nifty.md``.
+
     Parameters
     ----------
     n_iterations : int

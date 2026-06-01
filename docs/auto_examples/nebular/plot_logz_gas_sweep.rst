@@ -18,22 +18,41 @@
 .. _sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py:
 
 
-Gas metallicity shifts optical emission line ratios
-===================================================
+Gas metallicity reshapes the optical nebular continuum and line forest
+======================================================================
 
 .. image:: images/sphx_glr_plot_logz_gas_sweep_001.png
    :alt: plot logz gas sweep
    :class: sphx-glr-single-img
 
 
-Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary
-optical metallicity diagnostics. We vary nebular metallicity across
-the abundance range.
+A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in
+``plot_cue_parameter_atlas.py`` and the line-ratio projection in
+``plot_strong_line_metallicity_diagnostics.py``. Reader sees how every
+strong optical line moves together as Z_gas climbs, with [N II]/Halpha
+and [O III]/Hbeta the textbook diagnostics.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-64
+Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
+
+.. GENERATED FROM PYTHON SOURCE LINES 13-72
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_logz_gas_sweep_001.png
+   :alt: plot logz gas sweep
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_logz_gas_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,10 +78,10 @@ the abundance range.
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_logZ_gas": tengri.Uniform(-1.5, 0.3)},
+        neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": tengri.Uniform(-1.5, 0.3)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

@@ -50,10 +50,11 @@ def precompute_skirtor_photometry(
     filter-integrated photometry.  Returns a dict with ``grid_phot``
     and ``axes``.
 
-    Templates are frequency-normalized (matching the runtime normalization
-    in ``skirtor.py``) so that ``build_skirtor_photometry_lookup`` returns
-    L_ν [erg/s/Hz] per L_sun of bolometric luminosity, consistent with the
-    full-wavelength ``agn_emission`` path.
+    Templates are wavelength-normalised and converted L_λ → L_ν (matching the
+    runtime normalisation in ``skirtor.py`` after issue #459) so that
+    ``build_skirtor_photometry_lookup`` returns L_ν [erg/s/Hz] per L_sun of
+    bolometric luminosity, consistent with the full-wavelength ``agn_emission``
+    path.
 
     Parameters
     ----------
@@ -112,25 +113,31 @@ def precompute_skirtor_photometry(
     wave_grid = np.asarray(raw["wave"], dtype=np.float64)
     axes_np = tuple(np.asarray(ax) for ax in raw["axes"])
 
-    # Convert raw dimensionless templates to L_ν [erg/s/Hz per L_sun of L_bol].
-    # This matches the normalization in skirtor.py:
-    #   l_nu_erg = l_bol_erg * torus_frac * template / trapz(template, nu)
-    # Precomputed: lnu_per_lsun = LSUN_ERG * template / trapz(template, nu)
-    # Runtime: l_bol_lsun * torus_frac * lnu_per_lsun  →  L_ν [erg/s/Hz]
-    nu_grid = _C_CGS / (wave_grid * 1e-8)  # Hz (decreasing order)
-    sort_idx = np.argsort(nu_grid)
-    nu_sorted = nu_grid[sort_idx]
+    # Convert raw L_λ-like templates to L_ν [erg/s/Hz per L_sun of L_bol].
+    # SKIRTOR v3 templates are stored as L_λ-like (issue #459), so the
+    # bolometric normalisation must be taken in the *wavelength* variable and
+    # the result converted L_λ → L_ν = L_λ × λ²/c at the end — exactly as the
+    # runtime path in ``skirtor.py:_interpolate_and_normalize`` does. The
+    # previous frequency-integral here treated the L_λ array as L_ν and left
+    # the precomputed LUT with the wrong dimensionality (the WavePrecomp path
+    # missed the #459 fix that landed in skirtor.py).
+    #   Precomputed: lnu_per_lsun = LSUN_ERG * template / trapz(template, λ) × λ²/c
+    #   Runtime:     l_bol_lsun * torus_frac * lnu_per_lsun  →  L_ν [erg/s/Hz]
+    c_aa_per_s = _C_CGS * 1e8  # cm/s → Å/s
 
     *grid_dims, n_wave = grid.shape
     n_pts = int(np.prod(grid_dims)) if grid_dims else 1
     grid_flat = np.array(grid, dtype=np.float64).reshape(n_pts, n_wave)
     lnu_flat = np.empty_like(grid_flat)
 
+    # ``wave_grid`` is monotonically ascending (set in ``_load_grid_arrays``),
+    # so trapezoid integrates correctly in λ without an explicit sort.
     for i in range(n_pts):
         template = grid_flat[i]
-        integral = np.trapezoid(template[sort_idx], nu_sorted)
-        integral_safe = max(abs(integral), 1e-100)
-        lnu_flat[i] = _LSUN_ERG * template / integral_safe
+        integral_lam = np.trapezoid(template, wave_grid)
+        integral_safe = max(abs(integral_lam), 1e-100)
+        template_lam = _LSUN_ERG * template / integral_safe  # erg/s/Å per L_sun
+        lnu_flat[i] = template_lam * wave_grid**2 / c_aa_per_s  # L_λ → L_ν
 
     lnu_grid = lnu_flat.reshape(*grid_dims, n_wave)
 

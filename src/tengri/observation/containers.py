@@ -35,6 +35,7 @@ from __future__ import annotations
 from tengri.observation.instrument import Instrument, list_instruments
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
+from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
@@ -45,6 +46,7 @@ __all__ = [
     "Instrument",
     "LineFluxData",
     "LineList",
+    "LineRatioData",
     "NoiseModel",
     "Observation",
     "Photometry",

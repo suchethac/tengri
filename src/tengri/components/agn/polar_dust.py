@@ -2,14 +2,16 @@
 """Polar dust extinction and greybody reemission for AGN.
 
 Implements the X-CIGALE polar dust model (Yang et al. 2020, Section 2.2.2):
-SMC extinction applied to Type 1 AGN sightlines, with energy-conserving
-greybody FIR reemission.
+bi-conical polar dust with viewing-angle-independent absorption and
+energy-conserving greybody FIR reemission. SMC extinction curve applied
+to observer-frame disc attenuation (Type 1 sightlines only); absorption
+is geometry-independent (Yang+2020 §2.2.2).
 
 The Type 1/2 boundary uses a smooth sigmoid transition for differentiability.
 
 References
 ----------
-- Yang et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust)
+- Yang et al. 2020, MNRAS, 491, 740 (X-CIGALE polar dust § 2.2.2)
 - Gordon et al. 2003, ApJ, 594, 279 (SMC extinction)
 - Pei 1992, ApJ, 395, 130 (SMC parameterization used here)
 """
@@ -243,13 +245,24 @@ def polar_dust_extinction(
     Returns
     -------
     l_nu_attenuated : array, shape (n_wave,)
-        Attenuated luminosity density. Same units as input l_nu.
+        Observer-frame disc luminosity after Type-1-masked attenuation.
+        Same units as input l_nu. Type-2 sightlines are unchanged (mask ≈ 0).
     l_absorbed : array, shape (n_wave,)
-        Absorbed luminosity density (per wavelength bin). Always >= 0.
-        Same units as input l_nu.
+        Absorbed luminosity density (per wavelength bin): bi-conical dust
+        absorbs a fraction (1 - exp(-tau_lambda)) regardless of viewing angle.
+        Always >= 0. Same units as input l_nu.
 
     Notes
     -----
+    **Absorption vs. Attenuation:**
+    - ``l_absorbed`` (geometry-independent) is the disc photon fraction intercepted
+      by the bi-conical polar dust (Yang+2020 §2.2.2). This drives the
+      greybody FIR reemission and is viewed isotropically.
+    - ``l_nu_attenuated`` (Type-1-masked) is the observer-frame disc after
+      passing through the near-cone geometry. Only face-on sightlines see
+      attenuation; edge-on sightlines (Type 2) have the disc already screened
+      by the equatorial torus (handled upstream), so ``l_nu_attenuated = l_nu``.
+
     **JIT-compatible**: yes — uses ``jnp`` primitives and smooth sigmoid.
     """
     # Select extinction law
@@ -272,18 +285,21 @@ def polar_dust_extinction(
     tau_lambda = 0.921 * ebv * r_v * k_lambda
     extinction_factor = jnp.exp(-tau_lambda)  # fraction transmitted
 
+    # Polar-dust absorption is geometry-independent: the bi-conical dust always
+    # intercepts the same disc-photon fraction (set by E(B-V)) regardless of
+    # observer viewing angle. Re-emission is isotropic, so observers at any
+    # inclination see the FIR bump.
+    l_absorbed = jnp.maximum(l_nu * (1.0 - extinction_factor), 0.0)
+
     # Type 1 mask: 1 for face-on (extinct), 0 for edge-on (no effect)
     mask = _type1_mask(cos_inc, opening_angle_deg, sharpness)
 
-    # Effective transmission: mix between full extinction (Type 1) and
-    # no extinction (Type 2)
+    # Observed disc attenuation is gated by Type-1 mask: only face-on sight-lines
+    # look through the near polar cone. Type-2 sightlines have the disc already
+    # screened by the equatorial torus (handled upstream), so we leave l_nu
+    # unchanged here.
     effective_transmission = 1.0 - mask * (1.0 - extinction_factor)
-
     l_nu_attenuated = l_nu * effective_transmission
-    l_absorbed = l_nu - l_nu_attenuated
-
-    # Ensure non-negative (numerical safety)
-    l_absorbed = jnp.maximum(l_absorbed, 0.0)
 
     return l_nu_attenuated, l_absorbed
 
@@ -423,14 +439,18 @@ def anisotropic_polar_luminosity(
     sin_oa = jnp.sin(jnp.radians(opening_angle_deg))
     aniso_factor = 7.0 / 18.0 - sin_oa**2 / 6.0 - (2.0 / 9.0) * sin_oa**3
 
-    # Apply extinction to the disc spectrum
-    l_nu_extinct = l_nu_disk * extinction_factor
+    # ABSORBED disc flux per unit frequency: (1 - transmission) × L_nu.
+    # ``extinction_factor`` is the wavelength-dependent transmission
+    # (exp(-tau_lambda)); the polar dust absorbs the complementary
+    # fraction. Matches CIGALE skirtor2016.py:368:
+    # ``l_ext = ... × np.trapz(AGN1.disk * (1.0 - ext_fac), x=AGN1.wl)``.
+    l_nu_absorbed = l_nu_disk * (1.0 - extinction_factor)
 
     # Integrate over frequency: convert wavelength integral to frequency integral
     # dnu = -c/lambda^2 dlambda, so |dnu| = c/lambda^2 |dlambda|
     nu = _C_AA / wavelength
     # Use trapezoidal rule on frequency grid (descending order)
-    l_total = jnp.trapezoid(l_nu_extinct[::-1], nu[::-1])
+    l_total = jnp.trapezoid(l_nu_absorbed[::-1], nu[::-1])
 
     # Apply anisotropic geometry factor
     l_total = aniso_factor * l_total

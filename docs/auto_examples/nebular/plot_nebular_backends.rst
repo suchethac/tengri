@@ -18,22 +18,48 @@
 .. _sphx_glr_auto_examples_nebular_plot_nebular_backends.py:
 
 
-Cue nebular emulator vs alternatives
-=====================================
+Nebular backends: Cue, CloudyGrid, SSP-embedded, and BakedIn
+===========================================================
 
 .. image:: images/sphx_glr_plot_nebular_backends_001.png
    :alt: plot nebular backends
    :class: sphx-glr-single-img
 
 
-Compare Cue (neural emulator; current recommended path) against
-traditional photoionization grids (CloudyGrid) and SSP-embedded nebular.
-Shows [OIII] and H-alpha regions on a young starburst.
+Compare four nebular emission backends on identical star-forming spectra:
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-73
+1. **Cue** — neural emulator (Li, Leja & Speagle 2023) over CLOUDY parameter space
+2. **CloudyGrid** — traditional CLOUDY photoionization grid (if available)
+3. **SSP-embedded** — nebular lines baked into SSP templates (BakedIn / Byler)
+4. **BakedIn** — wNE SSP with emission in continuum (compare line shapes with Cue)
+
+Shows [OIII] 5007 + H-beta and H-alpha regions. BakedIn and Cue have
+different ionization flexibility — BakedIn pulls lines from SSP metallicity
+grid, Cue samples ionization parameter (log U) independently.
+
+References:
+- Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue neural emulator)
+- Byler et al. 2017, ApJ, 840, 44 (BakedIn SSP-embedded lines)
+
+.. GENERATED FROM PYTHON SOURCE LINES 20-126
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_nebular_backends_001.png
+   :alt: plot nebular backends
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_nebular_backends_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -49,27 +75,47 @@ Shows [OIII] and H-alpha regions on a young starburst.
     warnings.filterwarnings("ignore", message=".*deprecated.*")
 
     ssp_bare = tengri.load_ssp("fsps_prsc_miles_chabrier")
-    model_cue = tengri.SEDModel.build(
-        ssp_bare,
-        sfh={
+    ssp_wne = tengri.load_ssp()  # wNE: BakedIn needs wNE SSP
+
+    # Common SFH/dust/redshift config
+    common_config = {
+        "sfh": {
             "type": "dpl",
             "*": tengri.FIXED,
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.5,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        "dust": {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        "redshift": tengri.Fixed(0.0),
+    }
+
+    # Build Cue (bare-stellar SSP)
+    model_cue = tengri.SEDModel.build(
+        ssp_bare,
         neb={"type": "cue", "*": tengri.FIXED, "neb_logU": tengri.Fixed(-3.0)},
-        redshift=tengri.Fixed(0.0),
+        **common_config,
+    )
+
+    # Build BakedIn (wNE SSP with nebular lines embedded)
+    model_baked = tengri.SEDModel.build(
+        ssp_wne,
+        neb={"type": "ssp", "*": tengri.FIXED},
+        **common_config,
     )
 
     params_cue = dict(model_cue.spec.sample(jax.random.PRNGKey(0)))
+    params_baked = dict(model_baked.spec.sample(jax.random.PRNGKey(0)))
+
     out_cue = model_cue.predict_rest_sed(params_cue)
+    out_baked = model_baked.predict_rest_sed(params_baked)
+
     wave = np.asarray(out_cue.wavelength)
     sed_cue = np.asarray(out_cue.sed)
+    sed_baked = np.asarray(out_baked.sed)
 
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
+    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.2))
 
     regions = [
         (axes[0], 4700, 5100, r"[O III] + H$\beta$ region", 4861, 5007),
@@ -78,13 +124,31 @@ Shows [OIII] and H-alpha regions on a young starburst.
 
     for ax, wmin, wmax, _title, lam_hbeta, lam_main in regions:
         mask = (wave > wmin) & (wave < wmax)
+
+        # Cue (bare-stellar, neural emulator)
         ax.plot(
             np.array(wave[mask]),
             np.array(sed_cue[mask]),
             "k-",
-            lw=1.5,
-            label="Cue",
+            lw=1.8,
+            label="Cue (logU-flexible)",
         )
+
+        # BakedIn (wNE SSP, embedded lines)
+        # Peak-normalize BakedIn to Cue for shape comparison
+        cue_peak = np.nanmax(sed_cue[mask])
+        baked_peak = np.nanmax(sed_baked[mask])
+        if baked_peak > 0:
+            sed_baked_norm = sed_baked[mask] * (cue_peak / baked_peak)
+            ax.plot(
+                np.array(wave[mask]),
+                sed_baked_norm,
+                "C3--",
+                lw=1.5,
+                alpha=0.7,
+                label="BakedIn (SSP-embedded)",
+            )
+
         if lam_hbeta is not None:
             ax.axvline(lam_hbeta, ls=":", color="C1", lw=0.8, alpha=0.6)
             ax.text(lam_hbeta + 5, ax.get_ylim()[1] * 0.9, r"H$\beta$", fontsize=9, color="C1")
@@ -92,9 +156,9 @@ Shows [OIII] and H-alpha regions on a young starburst.
         label_main = r"[O III]" if lam_main == 5007 else r"H$\alpha$"
         ax.text(lam_main + 5, ax.get_ylim()[1] * 0.8, label_main, fontsize=9, color="C2")
 
-        ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-        ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-        ax.legend(frameon=False, fontsize=10)
+        ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=11)
+        ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=11)
+        ax.legend(frameon=False, fontsize=10, loc="upper right")
 
     fig.tight_layout()
     plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")

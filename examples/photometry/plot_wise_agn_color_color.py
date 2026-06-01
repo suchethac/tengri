@@ -2,10 +2,11 @@
 WISE W1–W2 vs W2–W3 Color-Color Diagram with Stern+2012 AGN Wedge
 ==================================================================
 
-The WISE color-color diagram (Stern et al. 2012) separates AGN from
-star-forming galaxies using mid-infrared colors. The diagnostic exploits the
-fact that AGN emit power-law SEDs (flat in νLν) while star-forming galaxies
-have cooler dust emission (Rayleigh-Jeans slope at long wavelengths).
+The **WISE color-color diagram** (Stern et al. 2012) is a tool for
+separating AGN from star-forming galaxies using mid-infrared colors. The
+diagnostic exploits the fact that AGN emit power-law SEDs (flat in νLν) while
+star-forming galaxies have cooler dust emission (Rayleigh-Jeans slope at
+long wavelengths).
 
 Stern et al. (2012) define an AGN wedge in the (W1–W2, W2–W3) color space:
 galaxies with **W1–W2 > 0.8 mag** are classified as AGN-dominated, while
@@ -38,10 +39,13 @@ References
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -70,12 +74,12 @@ keys_sf = jax.random.split(key_sf, n_sf)
 # Priors for SF parameters (sampled from physical ranges, not fixed)
 np.random.seed(42)
 tau_diff_samples = np.random.uniform(0.0, 2.0, n_sf)  # Diffuse dust opacity
-tau_bc_samples = np.random.uniform(0.1, 1.5, n_sf)    # Birth-cloud dust opacity
+tau_bc_samples = np.random.uniform(0.1, 1.5, n_sf)  # Birth-cloud dust opacity
 peak_lbt_gyr_samples = np.random.uniform(1.0, 10.0, n_sf)  # Age of peak SFR
 
 # Fixed parameters for all SF galaxies
 z_gal = 0.1
-log_peak_sfr_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
+log_total_mass_sf = 1.0  # SFR ~ 10 M_sun/yr (reasonable for z~0 SF galaxies)
 
 sf_colors_w1_w2 = []
 sf_colors_w2_w3 = []
@@ -85,10 +89,10 @@ for i in range(n_sf):
     sfh_config = {
         "type": "dpl",
         "*": tengri.FIXED,
-        "log_peak_sfr": log_peak_sfr_sf,
-        "alpha": 1.0,      # Fixed power-law slope (rising)
-        "beta": 1.0,       # Fixed power-law slope (declining)
-        "tau_gyr": 0.5,    # Fixed quenching timescale
+        "log_total_mass": 10.0,
+        "alpha": 1.0,  # Fixed power-law slope (rising)
+        "beta": 1.0,  # Fixed power-law slope (declining)
+        "tau_gyr": 0.5,  # Fixed quenching timescale
     }
 
     dust_config = {
@@ -101,7 +105,7 @@ for i in range(n_sf):
         "emission": {
             "type": "modified_blackbody",
             "*": tengri.FIXED,
-            "T": 35.0,      # Fixed dust temperature (reasonable for star-forming)
+            "T": 35.0,  # Fixed dust temperature (reasonable for star-forming)
             "beta_ir": 1.8,  # Fixed emissivity index
         },
     }
@@ -132,7 +136,7 @@ for i in range(n_sf):
     # flux → mag via F_ν comparison to Vega zeropoints
     vega_f0_w1 = 309.540e-23  # erg/s/cm^2/Hz (WISE W1 Vega zeropoint)
     vega_f0_w2 = 171.787e-23  # erg/s/cm^2/Hz (WISE W2 Vega zeropoint)
-    vega_f0_w3 = 31.674e-23   # erg/s/cm^2/Hz (WISE W3 Vega zeropoint)
+    vega_f0_w3 = 31.674e-23  # erg/s/cm^2/Hz (WISE W3 Vega zeropoint)
 
     mag_w1 = -2.5 * np.log10(w1_flux / vega_f0_w1)
     mag_w2 = -2.5 * np.log10(w2_flux / vega_f0_w2)
@@ -167,10 +171,10 @@ for i in range(n_agn):
     sfh_config = {
         "type": "dpl",
         "*": tengri.FIXED,
-        "log_peak_sfr": -2.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
+        "log_total_mass": 10.0,  # Very suppressed SFR (~0.01 M_sun/yr; minimal stellar)
         "alpha": 1.0,
         "beta": 1.0,
-        "tau_gyr": 0.05,       # Quickly quenched
+        "tau_gyr": 0.05,  # Quickly quenched
     }
 
     dust_config = {

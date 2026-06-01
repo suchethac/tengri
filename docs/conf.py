@@ -62,6 +62,17 @@ _DO_NOT_EXECUTE = sorted(
 # negative-lookahead below still matches every plot_*.py.
 _skip_alt = "|".join(_DO_NOT_EXECUTE) or "__never_match_anything__"
 
+# Scoped regen escape hatch: set ``TENGRI_GALLERY_ONLY`` to a comma-separated
+# list of example basenames (e.g. ``plot_qpah_sweep,plot_tdust_vs_lir``) to
+# execute *only* those scripts on the next ``make html``. Used after a library
+# change that alters a handful of figures, so the heavy NUTS/VI scripts (and
+# everything else) are left as-is instead of re-running. Empty/unset keeps the
+# default disk-driven behaviour.
+import re as _re
+
+_only = os.environ.get("TENGRI_GALLERY_ONLY", "").strip()
+_only_alt = "|".join(_re.escape(b) for b in _only.split(",") if b.strip())
+
 sphinx_gallery_conf = {
     "examples_dirs": ["../examples"],
     "gallery_dirs": ["auto_examples"],
@@ -71,27 +82,26 @@ sphinx_gallery_conf = {
     # never match. Anchor at start of string with ``^``, run the negative-
     # lookahead against the whole path to exclude any basename already in
     # ``_DO_NOT_EXECUTE``, then ``.*plot_<...>.py$`` to pin the filename.
-    "filename_pattern": rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$",
+    "filename_pattern": (
+        rf"(?:{_only_alt})\.py$" if _only_alt else rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$"
+    ),
     # ignore_pattern HIDES files from the gallery entirely. Used for heavy
     # NUTS/SVI scripts whose runtime + memory footprint OOMs the build (each
     # NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha). These scripts
     # still run as standalone demos for advanced users.
     "ignore_pattern": (
-        # Scripts hidden from the published gallery, two reasons:
-        #  (1) Heavy NUTS/SVI whose runtime + memory OOMs the build (NUTS
-        #      warmup can peak at 20+ GB per CLAUDE.md gotcha): population_scaling,
-        #      hierarchical*, multichain_speedup (Ray cluster), prior_posterior_compare.
-        #      plot_hierarchical* also hits an upstream stochastic-SFH JAX-tracing
-        #      issue in model.mock() under field SFH.
-        #  (2) Not yet rendered / incomplete, so they would otherwise appear as
-        #      dead figure-less entries: joint_photometry_line_fit ("in
-        #      development"), photoz_chi2_grid, posterior_corner_dpl. Tracked in
-        #      the "re-enable hidden inference gallery examples" issue; the
-        #      source files stay in examples/inference/ for advanced users.
+        # Heavy NUTS/SVI scripts whose runtime + memory footprint OOMs the
+        # build (each NUTS warmup can peak at 20+ GB per CLAUDE.md gotcha).
+        # plot_hierarchical also hits an upstream stochastic-SFH JAX-tracing
+        # issue in model.mock() / predict_observables under field SFH — needs
+        # a library fix before re-enabling.
         r"plot_("
-        r"population_scaling|hierarchical|hierarchical_convergence|prior_posterior_compare"
-        r"|wrong_model_trap|joint_photometry_line_fit|multichain_speedup"
-        r"|photoz_chi2_grid|posterior_corner_dpl"
+        r"population_scaling|"
+        r"hierarchical|hierarchical_convergence|"
+        r"prior_posterior_compare|"
+        r"wrong_model_trap|"
+        r"posterior_corner_dpl|"
+        r"joint_photometry_line_fit"
         r")\.py$"
     ),
     "download_all_examples": False,
@@ -101,6 +111,15 @@ sphinx_gallery_conf = {
     # data. Run `make html` locally and commit the regenerated auto_examples/
     # before pushing if you want fresh galleries.
     "plot_gallery": "False" if os.environ.get("CI", "").lower() == "true" else "True",
+    # Skip re-execution of examples whose source + md5 haven't changed since the
+    # last build. Cuts incremental regen from ~25 min to seconds when only one
+    # example changed.
+    "run_stale_examples": True,
+    # Parallel execution is opt-in via env var (defaults to 1 / serial) because
+    # sphinx-gallery's parallel mode requires `joblib` which isn't a docs-build
+    # dependency in CI. The ignore_pattern above already hides the OOM-prone
+    # NUTS/VI scripts so 2-4 is safe locally if you have joblib installed.
+    "parallel": int(os.environ.get("TENGRI_GALLERY_PARALLEL", "1")),
     "remove_config_comments": True,
     "within_subsection_order": "FileNameSortKey",
     # Order the SECTIONS pedagogically (mirrors _GALLERY_SECTION_ORDER /
@@ -177,63 +196,59 @@ sphinx_gallery_conf["subsection_order"] = ExplicitOrder(
 
 
 def _fix_gallery_index_toctree(app, *_args, **_kwargs):
-    """Restructure ``auto_examples/index.rst`` for the main sidebar.
+    """Restructure ``auto_examples/index.rst`` and orphan its subsections.
 
-    Sphinx-gallery emits a flat file with ``:orphan:`` at the top, prose
-    title further down, and one ``.. toctree::`` block at the very bottom
-    (after a category heading). We need: (1) no ``:orphan:`` so the page
-    appears in the sidebar; (2) a single toctree right after the page
-    title, with entries reordered per ``_GALLERY_SECTION_ORDER``.
+    Goals:
+      1. The gallery landing page (``auto_examples/index``) participates
+         in the global toctree, so it appears as a single sidebar entry.
+      2. The per-section index pages (``auto_examples/quickstart/index``
+         and friends) are marked ``:orphan:`` so Furo's global toctree
+         walker doesn't pull them into the sidebar as children of the
+         gallery entry. Users still reach them via the thumbnail grid
+         on the gallery landing page and via sphinx-gallery's per-script
+         prev/next nav.
+      3. No ``.. toctree::`` block in the landing page — that block was
+         the channel through which subsections leaked into the sidebar.
 
-    Implemented line-by-line for robustness; regex was brittle against
-    sphinx-gallery's quirky whitespace.
+    Side-effect: each subsection ``index.rst`` gets ``:orphan:`` injected
+    at the top.
     """
     import re
     from pathlib import Path
 
-    path = Path(app.srcdir) / "auto_examples" / "index.rst"
+    auto = Path(app.srcdir) / "auto_examples"
+    path = auto / "index.rst"
     if not path.exists():
         return
 
     lines = path.read_text().splitlines()
 
-    # ── Step 1: find every "/auto_examples/<section>/index.rst" entry line
-    # anywhere in the file, capture them, and remove them. Sphinx-gallery
-    # writes these at the bottom; a previous broken post-processor run may
-    # have moved them somewhere else. Either way: collect all, dedup,
-    # remove from source.
+    # Strip every "/auto_examples/<section>/index.rst" entry line and
+    # remember which sections are present (so we can orphan them below).
     entry_re = re.compile(r"^(\s*)/auto_examples/([^/]+)/index\.rst\s*$")
-    entries: dict[str, str] = {}  # section name → original line (indent preserved)
+    sections: set[str] = set()
     out_lines = []
     for line in lines:
         m = entry_re.match(line)
         if m:
-            entries.setdefault(m.group(2), line)
+            sections.add(m.group(2))
         else:
             out_lines.append(line)
-    if not entries:
-        # Nothing to fix yet; sphinx-gallery hasn't run.
-        return
+    if not sections:
+        return  # sphinx-gallery hasn't run yet
 
-    # ── Step 2: drop any stray ``.. toctree::`` blocks (header + options).
-    # A toctree block: line "``.. toctree::``" then 0+ indented option lines
-    # (``:hidden:``, ``:includehidden:`` …) then a blank line. Without
-    # entries (we already stripped those), the block is empty and should
-    # not survive.
+    # Drop any ``.. toctree::`` blocks (header + indented options + blanks).
     cleaned = []
     i = 0
     while i < len(out_lines):
         line = out_lines[i]
         if line.strip() == ".. toctree::":
-            # Skip the directive line and any directly-following option /
-            # blank lines.
             i += 1
             while i < len(out_lines):
                 nxt = out_lines[i]
                 if not nxt.strip():
                     i += 1
                     continue
-                # ``:option:`` lines start with whitespace + ":"
                 if re.match(r"^\s+:[\w-]+:", nxt):
                     i += 1
                     continue
@@ -242,50 +257,24 @@ def _fix_gallery_index_toctree(app, *_args, **_kwargs):
         cleaned.append(line)
         i += 1
 
-    # ── Step 3: drop the ``:orphan:`` directive so the page is in TOCs.
+    # Drop ``:orphan:`` on the LANDING page so it stays in the sidebar.
     cleaned = [ln for ln in cleaned if ln.strip() != ":orphan:"]
-    # Trim leading blank lines we may have introduced.
     while cleaned and not cleaned[0].strip():
         cleaned.pop(0)
 
-    # ── Step 4: build the new toctree with entries reordered.
-    order = {name: i for i, name in enumerate(_GALLERY_SECTION_ORDER)}
-    ordered_sections = sorted(
-        entries.keys(),
-        key=lambda s: (order.get(s, len(order)), s),
-    )
-    # ``:hidden:`` (no ``:includehidden:``) so the section list shows up
-    # on the gallery page body but does NOT propagate into the parent
-    # sidebar — the gallery is one dropdown, not 19 nested ones.
-    toctree = [
-        ".. toctree::",
-        "   :hidden:",
-        "",
-    ] + [f"   /auto_examples/{s}/index.rst" for s in ordered_sections]
+    path.write_text("\n".join(cleaned) + "\n")
 
-    # ── Step 5: re-emit. Splice the toctree in right after the page
-    # title (the first "===" underline). The toctree must come after at
-    # least one heading so sphinx parses it as page content, not
-    # document-level metadata.
-    title_under_idx = next(
-        (
-            j
-            for j in range(1, len(cleaned))
-            if cleaned[j].startswith("=") and cleaned[j].strip("=") == ""
-        ),
-        None,
-    )
-    if title_under_idx is None:
-        # No title heading found — prepend toctree at top.
-        new_lines = list(toctree) + [""] + cleaned
-    else:
-        new_lines = (
-            cleaned[: title_under_idx + 1]
-            + ["", *toctree, ""]
-            + cleaned[title_under_idx + 1 :]
-        )
-
-    path.write_text("\n".join(new_lines) + "\n")
+    # Inject ``:orphan:`` into each per-section index so sphinx doesn't
+    # walk them into the global sidebar and doesn't warn about pages
+    # missing from any toctree.
+    for section in sections:
+        sub = auto / section / "index.rst"
+        if not sub.exists():
+            continue
+        text = sub.read_text()
+        if text.lstrip().startswith(":orphan:"):
+            continue
+        sub.write_text(":orphan:\n\n" + text.lstrip())
 
 
 def _inject_missing_image_directives(app, *_args, **_kwargs):
@@ -321,15 +310,20 @@ def _inject_missing_image_directives(app, *_args, **_kwargs):
         inserted = False
         for i, line in enumerate(lines):
             out.append(line)
-            if (not inserted and i + 1 < len(lines)
-                    and lines[i + 1].strip()
-                    and set(lines[i + 1].strip()) <= {"="}):
+            if (
+                not inserted
+                and i + 1 < len(lines)
+                and lines[i + 1].strip()
+                and set(lines[i + 1].strip()) <= {"="}
+            ):
                 out.append(lines[i + 1])
-                out += ["",
-                        f".. image:: {img}",
-                        f"   :alt: {stem.replace('_', ' ')}",
-                        "   :class: sphx-glr-single-img",
-                        ""]
+                out += [
+                    "",
+                    f".. image:: {img}",
+                    f"   :alt: {stem.replace('_', ' ')}",
+                    "   :class: sphx-glr-single-img",
+                    "",
+                ]
                 for j in range(i + 2, len(lines)):
                     out.append(lines[j])
                 inserted = True
@@ -348,6 +342,7 @@ def setup(app):
     # per-script RSTs but BEFORE sphinx parses any source, which is exactly
     # the window we need to mutate the RSTs on disk.
     app.connect("env-before-read-docs", _inject_missing_image_directives)
+
 
 # -- MyST configuration ------------------------------------------------------
 
@@ -375,6 +370,7 @@ html_baseurl = "https://suchethac.github.io/tengri/"
 html_title = "tengri"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_js_files = ["two-mode-theme.js"]
 
 html_logo = "_static/tengri-logo.png"
 html_favicon = "_static/tengri-logo.png"
@@ -443,4 +439,9 @@ exclude_patterns = [
     # Not part of the published sidebar (content folded into index.md or omitted)
     "changelog.md",
     "documentation.md",
+    # Spine notebooks not currently in the published sidebar (08 emission
+    # lines + 09 parameter sweeps were the "physics deep dives" section,
+    # dropped from the index in the 2026-05 polish pass).
+    "spine/08_emission_lines.ipynb",
+    "spine/09_parameter_sweeps.ipynb",
 ]

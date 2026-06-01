@@ -241,13 +241,25 @@ class TestCspBenchmark:
     cost is a single elementwise multiply — identical for both methods.
     """
 
-    def _time_fn(self, fn, n_repeats=500):
+    def _time_fn(self, fn, n_repeats=500, n_trials=5):
+        """Min over ``n_trials`` independent (mean-of-``n_repeats``) timings.
+
+        Single-mean timings at the ~10 µs scale are dominated by GC and
+        scheduler noise on shared CI runners — a single hiccup can blow
+        a 10 µs measurement to 50 µs and break the assertion. Outliers
+        always slow timings down, never speed them up, so the trial
+        minimum is the cleanest estimator of the underlying no-noise
+        cost.
+        """
         fn()  # warmup
-        t0 = time.perf_counter()
-        for _ in range(n_repeats):
-            fn()
-        t1 = time.perf_counter()
-        return (t1 - t0) / n_repeats * 1e6  # µs
+        trials = []
+        for _ in range(n_trials):
+            t0 = time.perf_counter()
+            for _ in range(n_repeats):
+                fn()
+            t1 = time.perf_counter()
+            trials.append((t1 - t0) / n_repeats * 1e6)  # µs
+        return min(trials)
 
     def test_precomputed_vs_inline_speed(self):
         """Precomputed age_dt (model._csp_age_dt) should not be slower than inline."""

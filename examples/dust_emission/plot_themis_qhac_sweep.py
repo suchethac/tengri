@@ -7,6 +7,10 @@ radiation field strength. PAH-like mid-IR features strengthen with q_HAC
 while FIR continuum remains essentially unchanged.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import h5py

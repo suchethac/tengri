@@ -100,7 +100,7 @@ __version__ = "0.1.0"
 import sys
 
 from tengri import builders, components as _components, preprocessing, presets, recipes
-from tengri._data_setup import data_path, download_ssp, list_known_ssps
+from tengri._data_setup import data_path, download_ssp, list_available_ssps, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
     Bibliography,
@@ -118,6 +118,7 @@ from tengri.citations import (
 )
 from tengri.components import register_component
 from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.igm import igm_transmission
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
@@ -158,14 +159,18 @@ from tengri.components.stellar.sfh.registry import (
 )
 from tengri.components.stellar.sps.dsps_wrapper import (
     SSPData,
+    compute_surviving_mass,
     effective_metallicity,
     has_alpha_grid,
+    interpolate_mass_remaining,
     interpolate_met_alpha,
     load_ssp,
     load_ssp_data,
+    predict_surviving_mass,
     salaris_feh_from_mh,
     salaris_mh_from_feh,
 )
+from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 from tengri.config.exceptions import (
     BackendError,
     ConfigError,
@@ -175,6 +180,15 @@ from tengri.config.exceptions import (
     TengriIOError,
 )
 from tengri.facade import Galaxy, doctor
+from tengri.observation.spectral_indices import (
+    STANDARD_COMPOSITE_INDICES,
+    STANDARD_INDICES,
+    CompositeIndexDef,
+    SpectralIndexData,
+    SpectralIndexDef,
+    measure_index_jax,
+)
+from tengri.observation.spectrum import apply_lsf, velocity_broaden
 
 
 class _KernelsRemoved:
@@ -234,6 +248,7 @@ from tengri.observation.noise import (
     uses_student_t,
     variable_noise_hamiltonian,
 )
+from tengri.observation.photometry import FilterConvention, list_filter_conventions
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
@@ -322,11 +337,14 @@ from tengri.registry import (
     list_dust_emission_models,
     list_dust_laws,
     list_filters,
+    list_igm_models,
     list_inference_methods,
     list_nebular_backends,
     list_plots,
+    list_radio_models,
     list_recipes,
     list_sfh_models,
+    list_xray_models,
     print_components_bibtex,
     search,
     suggest_parameters,
@@ -362,9 +380,13 @@ from tengri.registry import (
 __all__ = [
     "FIXED",
     "FREE",
+    "STANDARD_COMPOSITE_INDICES",
+    "STANDARD_INDICES",
     "BackendError",
+    "CompositeIndexDef",
     "ConfigError",
     "Exponential",
+    "FilterConvention",
     "Fixed",
     "FlatSlab",
     "ForwardModel",
@@ -381,9 +403,12 @@ __all__ = [
     "PriorPredictive",
     "SEDModel",
     "SEDResult",
+    "SSPData",
     "Sersic",
     "SpatialModel",
     "SpatialSEDModel",
+    "SpectralIndexData",
+    "SpectralIndexDef",
     "SpectrumPrecomp",
     "StudentT",
     "TengriError",
@@ -391,10 +416,12 @@ __all__ = [
     "Uniform",
     "WavePrecomp",
     "agn",
+    "apply_lsf",
     "builders",
     "citations",
     "cite_components",
     "clear_cache",
+    "compute_mass_remaining_fraction",
     "config",
     "cosmology",
     "data_path",
@@ -411,26 +438,38 @@ __all__ = [
     "download_ssp",
     "dust",
     "examples",
+    "exp_squared_kernel",
     "explain",
     "filters",
     "fit_batch",
+    "gp_noise_covariance",
     "help",
     "igm",
+    "igm_transmission",
     "inference",
     "io",
     "list_agn_models",
     "list_all",
+    "list_available_ssps",
     "list_components",
     "list_dust_emission_models",
     "list_dust_laws",
+    "list_filter_conventions",
     "list_filters",
+    "list_igm_models",
     "list_inference_methods",
     "list_known_ssps",
     "list_nebular_backends",
     "list_parameters",
     "list_plots",
+    "list_radio_models",
     "list_recipes",
     "list_sfh_models",
+    "list_xray_models",
+    "load_ssp",
+    "load_ssp_data",
+    "matern32_kernel",
+    "measure_index_jax",
     "nebular",
     "observation",
     "parse_groups",
@@ -449,6 +488,7 @@ __all__ = [
     "summary",
     "tutorial",
     "units",
+    "velocity_broaden",
     "xray",
 ]
 
@@ -524,8 +564,11 @@ _CURATED_DIR = (
     "list_agn_models",
     "list_dust_emission_models",
     "list_dust_laws",
+    "list_igm_models",
+    "list_radio_models",
     "list_sfh_models",
     "list_nebular_backends",
+    "list_xray_models",
     "list_filters",
     "list_plots",
     "list_components",

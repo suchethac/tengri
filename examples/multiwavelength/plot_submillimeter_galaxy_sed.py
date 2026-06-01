@@ -18,7 +18,12 @@ References
 ----------
 - Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
 - Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
+
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -37,7 +42,7 @@ Z_SMG = 3.0
 TAU_V = 3.5  # Heavy visual absorption → most starlight reprocessed into the IR
 
 # Physical parameters: M* = 2e11 Msun, SFR = 500 Msun/yr from SFH
-# Implied log_peak_sfr ≈ 2.7 (peak ~500 Msun/yr)
+# Implied log_total_mass ≈ 2.7 (peak ~500 Msun/yr)
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
@@ -45,9 +50,9 @@ model = tengri.SEDModel.build(
         "type": "dpl",
         "*": tengri.FIXED,
         "alpha": 1.5,  # Shallow decay → high SFR at young ages
-        "beta": 2.0,   # Steep early-time turnover
+        "beta": 2.0,  # Steep early-time turnover
         "tau_gyr": 0.8,  # Recent starburst epoch
-        "log_peak_sfr": 2.7,  # Peak SFR = 10^2.7 ≈ 500 Msun/yr
+        "log_total_mass": 10.0,  # Peak SFR = 10^2.7 ≈ 500 Msun/yr
     },
     dust={
         "type": "two_component",

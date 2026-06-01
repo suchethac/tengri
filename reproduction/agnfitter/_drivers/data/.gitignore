@@ -1,0 +1,7 @@
+# AGNFITTER-RX model template libraries are loaded from an external checkout
+# ($AGNFITTER_HOME, default /tmp/AGNfitter-rX) at notebook runtime, never
+# committed -- see reproduction/agnfitter/README.md. Any ported DSPS grids
+# built here are likewise generated, not tracked.
+*.h5
+*.pickle
+*.fits

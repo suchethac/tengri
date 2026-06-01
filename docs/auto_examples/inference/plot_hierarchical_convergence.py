@@ -4,7 +4,7 @@ Population PSD Recovery: 1/√N Convergence
 
 Hierarchical inference recovers the shared PSD parameters (σ, τ) of a
 galaxy population. The posterior width on σ scales as 1/√N_galaxies,
-while individual fits are far too uncertain. This illustrates why
+while individual fits are far too uncertain. why
 population-level inference is essential for measuring burstiness.
 
 .. sphx-glr-precomputed-img:

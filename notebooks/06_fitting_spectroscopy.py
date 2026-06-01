@@ -36,6 +36,9 @@
 
 # %%
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import sys
 import time
 import warnings
@@ -61,6 +64,7 @@ sys.path.insert(0, _nb_dir)
 import jax
 import jax.numpy as jnp
 import matplotlib
+
 if "ipykernel" not in sys.modules:
     matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -69,85 +73,39 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore", category=FutureWarning)
 
+from pathlib import Path
+
+import tengri as tg
 from tengri import (
     Fitter,
     Fixed,
-    SEDModel,
+    NoiseModel,
     Observation,
     Parameters,
+    SEDModel,
     Spectroscopy,
-    NoiseModel,
     Uniform,
+    cosmology,
     load_ssp_data,
+    plot,
 )
+from tengri.utils.conversions import lnu_to_fnu
 
-import importlib.util
-_repo_data_root = None
-_spec_tengri = importlib.util.find_spec("tengri")
-if _spec_tengri is not None and _spec_tengri.origin:
-    _walk = os.path.dirname(os.path.abspath(_spec_tengri.origin))
-    for _step in range(12):
-        _candidate = os.path.join(_walk, "notebooks", "_plot_style.py")
-        if os.path.isfile(_candidate):
-            sys.path.insert(0, os.path.dirname(_candidate))
-            _repo_data_root = os.path.dirname(os.path.dirname(os.path.abspath(_candidate)))
-            break
-        _parent_walk = os.path.dirname(_walk)
-        if _parent_walk == _walk:
-            break
-        _walk = _parent_walk
+plot.setup_style()
+FIG_DIR = Path("_figs")
+FIG_DIR.mkdir(exist_ok=True)
 
-if _repo_data_root is None:
-    _np_here = os.path.abspath(os.getcwd())
-    while True:
-        if os.path.isfile(os.path.join(_np_here, "_plot_style.py")):
-            sys.path.insert(0, _np_here)
-            _repo_data_root = os.path.dirname(_np_here)
-            break
-        _ppt = os.path.join(_np_here, "notebooks", "_plot_style.py")
-        if os.path.isfile(_ppt):
-            _nbsd = os.path.dirname(_ppt)
-            sys.path.insert(0, _nbsd)
-            _repo_data_root = os.path.dirname(_nbsd)
-            break
-        _parent_here = os.path.dirname(_np_here)
-        if _parent_here == _np_here:
-            break
-        _np_here = _parent_here
+# Quickstart palette
+C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 
-if _repo_data_root is not None and os.path.isdir(os.path.join(_repo_data_root, "data")):
-    os.chdir(_repo_data_root)
-elif os.path.isdir(os.path.join(_repo_root, "data")):
-    os.chdir(_repo_root)
-elif os.path.isdir("data"):
-    pass
-elif os.path.isdir(os.path.join("..", "data")):
-    os.chdir("..")
-
-FIGDIR = os.path.join("notebooks", "figures")
-os.makedirs(FIGDIR, exist_ok=True)
-
-from _plot_style import (
-    COLORS,
-    SPECTRAL_FEATURES,
-    convergence_table,
-    plot_corner_comparison,
-    plot_sfh,
-    safe_corner,
-    setup_style,
-)
-
-setup_style()
-
-# %%
-import tengri as tg
-tg.print_logo()
 print(f"tengri {tg.__version__}")
 
 # %%
 # Load SSP library (no dust IR emission, keeps compile budget manageable)
 ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-print(f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ")
+print(
+    f"SSP grid: {ssp_data.ssp_flux.shape[0]} Z × {ssp_data.ssp_flux.shape[1]} ages × {ssp_data.ssp_flux.shape[-1]} λ"
+)
 
 # %% [markdown]
 # ## Wavelength grid and emission-line masks
@@ -170,6 +128,10 @@ resolution = 2000.0
 # Emission line masks: vacuum wavelengths ± 10 Å (rest-frame)
 # Reference: NIST atomic database + Kershaw+2021, Wilkinson+2024
 emission_lines = [
+    ("[OII]_3726", 3727.10),
+    ("[OII]_3729", 3729.86),
+    ("H_delta", 4102.89),
+    ("H_gamma", 4341.69),
     ("H_beta", 4862.68),
     ("[OIII]_4960", 4960.30),
     ("[OIII]_5007", 5008.24),
@@ -179,12 +141,14 @@ emission_lines = [
     ("[SII]_6718", 6718.29),
     ("[SII]_6732", 6732.67),
 ]
-mask_width = 10.0  # Angstrom (rest-frame)
+mask_width = 30.0  # Angstrom (rest-frame) — wide enough to suppress LSF wings
 
 # Build boolean mask (True = good pixel, False = masked)
 mask_good = np.ones(n_pix, dtype=bool)
 for _line_name, wave_line_rest in emission_lines:
-    in_line = (wave_rest >= wave_line_rest - mask_width) & (wave_rest <= wave_line_rest + mask_width)
+    in_line = (wave_rest >= wave_line_rest - mask_width) & (
+        wave_rest <= wave_line_rest + mask_width
+    )
     mask_good[in_line] = False
 
 n_good = np.sum(mask_good)
@@ -225,8 +189,8 @@ print("Noise: cal_floor=1%, Gaussian likelihood")
 # %%
 spec_param = Parameters(
     mean_sfh_type="lnorm",
-    sfh_lnorm_log_peak_sfr=Uniform(-1.0, 2.0),
-    sfh_lnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
+    sfh_lnorm_log_total_mass=Uniform(7.0, 12.5),
+    sfh_lnorm_peak_gyr=Uniform(0.5, 10.0),
     sfh_lnorm_width_gyr=Uniform(0.5, 5.0),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 1.5),
@@ -242,54 +206,81 @@ model_spec = SEDModel(spec_param, ssp_data, observation=obs)
 print(f"Model built: {spec_param.n_free} free params")
 
 # %%
-# Generate mock spectrum: young, solar metallicity, moderate dust
+# Generate mock spectrum: a 10^10 Msun galaxy with peak SFR ~3 Gyr ago, mild
+# dust, slightly sub-solar metallicity. This is the regime where absorption-
+# line spectroscopy (Hβ + Mgb + 4000 Å break) tightly constrains age × Z.
 key = jax.random.PRNGKey(123)
 true_params = {
-    "sfh_lnorm_log_peak_sfr": jnp.array(0.5),
-    "sfh_lnorm_peak_lbt_gyr": jnp.array(1.0),
-    "sfh_lnorm_width_gyr": jnp.array(1.5),
-    "met_logzsol": jnp.array(-0.05),
-    "dust_tau_bc": jnp.array(0.6),
-    "dust_tau_diff": jnp.array(0.25),
+    "sfh_lnorm_log_total_mass": jnp.array(10.0),
+    "sfh_lnorm_peak_gyr": jnp.array(3.0),
+    "sfh_lnorm_width_gyr": jnp.array(2.0),
+    "met_logzsol": jnp.array(-0.2),
+    "dust_tau_bc": jnp.array(0.4),
+    "dust_tau_diff": jnp.array(0.2),
     "dust_slope": jnp.array(-0.7),
     "redshift": jnp.array(z_spec),
 }
 
-# Generate mock spectrum with 5% noise (SNR ≈ 20 in continuum)
-mock_spec = model_spec.mock_spectrum(true_params, wave_obs=wave_obs, snr=20.0, key=key)
+mock_spec = model_spec.mock_spectrum(true_params, wave_obs=wave_obs, snr=30.0, key=key)
 
-print("\nTrue parameters (young starburst):")
+print("\nTruth (M_* = 10^10 M_sun, age peak ~3 Gyr ago):")
 for name in spec_param.free_params:
     if name in true_params:
         print(f"  {name:30s} = {float(true_params[name]):.4f}")
 
 # %%
-# Plot input spectrum + masks
-fig, ax = plt.subplots(figsize=(13, 4.5))
-
 flux_obs_np = np.array(mock_spec.flux_obs)
 flux_err_np = np.array(mock_spec.noise)
 wave_obs_np = np.array(wave_obs)
+flux_true_np = np.array(mock_spec.flux_true)
 
-ax.errorbar(wave_obs_np[mask_good], flux_obs_np[mask_good], yerr=flux_err_np[mask_good],
-            fmt=".", ms=3, color=COLORS.get("data", "C0"), alpha=0.6, label="Data (unmasked)", zorder=2)
-ax.errorbar(wave_obs_np[~mask_good], flux_obs_np[~mask_good], yerr=flux_err_np[~mask_good],
-            fmt=".", ms=3, color="0.7", alpha=0.3, label="Masked (emission lines)", zorder=1)
+flux_true_plot = np.where(mask_good, flux_true_np, np.nan)
 
-for _line_name, wave_line_rest in emission_lines:
-    wave_line_obs = wave_line_rest * (1.0 + z_spec)
-    ax.axvspan(wave_line_obs - mask_width * (1.0 + z_spec),
-               wave_line_obs + mask_width * (1.0 + z_spec),
-               alpha=0.1, color="red")
+fig_in, ax_in = plt.subplots(figsize=(8.6, 3.6))
+ax_in.errorbar(
+    wave_obs_np[mask_good],
+    flux_obs_np[mask_good],
+    yerr=flux_err_np[mask_good],
+    fmt="o",
+    ms=2.6,
+    color=C_DATA,
+    alpha=0.85,
+    elinewidth=0.7,
+    capsize=0,
+    mec="white",
+    mew=0.3,
+    label="observed",
+    zorder=3,
+)
+ax_in.plot(wave_obs_np, flux_true_plot, color=C_TRUTH, lw=1.0, ls="--", label="truth", zorder=4)
 
-ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax.set_title(f"Mock Optical Spectrum (z={z_spec}, SNR≈20, {n_good} unmasked pixels)")
-ax.legend(loc="upper right", fontsize=9)
-ax.grid(True, alpha=0.2)
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "06_spectrum_input.png"), dpi=200, bbox_inches="tight")
-plt.show()
+for _name, wave_rest_line in emission_lines:
+    w_obs = wave_rest_line * (1.0 + z_spec)
+    ax_in.axvspan(
+        w_obs - mask_width * (1.0 + z_spec),
+        w_obs + mask_width * (1.0 + z_spec),
+        alpha=0.08,
+        color="0.4",
+        lw=0,
+        zorder=0,
+    )
+
+ax_in.set_xlabel(r"observed wavelength  [$\mathrm{\AA}$]")
+ax_in.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax_in.set_xlim(wave_obs_np.min(), wave_obs_np.max())
+ax_in.legend(frameon=False, fontsize=9, loc="upper left")
+ax_in.text(
+    0.99,
+    0.05,
+    f"z = {z_spec}   SNR ≈ 30   {n_good}/{n_pix} pixels (8 lines masked)",
+    transform=ax_in.transAxes,
+    ha="right",
+    va="bottom",
+    fontsize=8,
+    color="0.3",
+)
+fig_in.savefig(FIG_DIR / "06_spectrum_input.png", dpi=300, bbox_inches="tight")
+fig_in.savefig(FIG_DIR / "06_spectrum_input.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## HMC inference
@@ -329,139 +320,225 @@ for name in spec_param.free_params:
     if name in true_params:
         truth = float(true_params[name])
         med = float(np.percentile(result_spec.samples[name], 50))
-        lo, hi = float(np.percentile(result_spec.samples[name], 16)), \
-                 float(np.percentile(result_spec.samples[name], 84))
+        lo, hi = (
+            float(np.percentile(result_spec.samples[name], 16)),
+            float(np.percentile(result_spec.samples[name], 84)),
+        )
         bias = (med - truth) / truth * 100 if truth != 0 else med - truth
         status = "ok" if (lo <= truth <= hi) else "MISS"
-        print(f"{name:30s} truth={truth:7.3f}  med={med:7.3f}  ±{(hi-lo)/2:6.3f}  [{bias:+5.1f}%]  {status}")
+        print(
+            f"{name:30s} truth={truth:7.3f}  med={med:7.3f}  ±{(hi - lo) / 2:6.3f}  [{bias:+5.1f}%]  {status}"
+        )
 
 # %%
-# Plot: spectrum fit + residuals
-fig, (ax_spec, ax_resid) = plt.subplots(2, 1, figsize=(13, 7), gridspec_kw={"height_ratios": [3, 1]})
+# ## Posterior spectrum
+#
+# Posterior 68% band + median, truth dashed, observed data points (masked
+# pixels muted), residuals against the median below.
 
-n_draw = 50
+N_DRAW = 80
 n_samp = len(result_spec.samples[spec_param.free_params[0]])
-thin = max(1, n_samp // n_draw)
-
-for i in range(0, n_samp, thin):
-    draw_params = {k: v[i] for k, v in result_spec.samples.items()}
-    spec_draw = model_spec.predict_spectrum(draw_params, wave_obs=wave_obs)
-    ax_spec.plot(wave_obs_np, np.array(spec_draw), "-", color=COLORS.get("mcmc_nuts", "C0"),
-                 alpha=0.03, lw=0.8, zorder=1)
-
-draw_median = {}
-for k, v in result_spec.samples.items():
-    draw_median[k] = jnp.array(np.percentile(v, 50))
-spec_median = model_spec.predict_spectrum(draw_median, wave_obs=wave_obs)
-spec_median_np = np.array(spec_median)
-
-ax_spec.plot(wave_obs_np[mask_good], flux_obs_np[mask_good], "o", ms=4,
-             color=COLORS.get("data", "C0"), alpha=0.7, label="Data (unmasked)", zorder=3)
-ax_spec.plot(wave_obs_np, spec_median_np, "-", color=COLORS.get("model", "C3"),
-             lw=2, label="HMC median", zorder=2)
-
-for _line_name, wave_line_rest in emission_lines:
-    wave_line_obs = wave_line_rest * (1.0 + z_spec)
-    ax_spec.axvspan(wave_line_obs - mask_width * (1.0 + z_spec),
-                    wave_line_obs + mask_width * (1.0 + z_spec),
-                    alpha=0.15, color="grey", zorder=0)
-
-ax_spec.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax_spec.legend(loc="upper right", fontsize=10)
-ax_spec.grid(True, alpha=0.2)
-ax_spec.set_title("Spectrum Fit: Young Starburst (peak SFR~3 Msun/yr, Z~-0.05, dust constrained)")
-
-resid = (flux_obs_np - spec_median_np) / flux_err_np
-ax_resid.errorbar(wave_obs_np[mask_good], resid[mask_good], yerr=np.ones(np.sum(mask_good)),
-                  fmt=".", ms=4, color=COLORS.get("data", "C0"), alpha=0.7, zorder=2)
-ax_resid.axhline(0, color="k", ls="--", lw=1, zorder=1)
-ax_resid.axhline(1, color="0.5", ls=":", lw=0.8, alpha=0.5)
-ax_resid.axhline(-1, color="0.5", ls=":", lw=0.8, alpha=0.5)
-ax_resid.fill_between(wave_obs_np[[0, -1]], -2, 2, alpha=0.05, color="green", label="|res|<2σ")
-ax_resid.set_ylim(-3.5, 3.5)
-ax_resid.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
-ax_resid.set_ylabel(r"Residual [$\sigma$]")
-ax_resid.legend(loc="upper right", fontsize=9)
-ax_resid.grid(True, alpha=0.2)
-
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "06_spectrum_fit.png"), dpi=200, bbox_inches="tight")
-plt.show()
-
-# %%
-# Plot: hβ–mgb absorption feature zoom
-fig, ax = plt.subplots(figsize=(12, 4.5))
-
-mask_hbeta_mgb = (wave_obs_np >= 4500 * (1.0 + z_spec)) & (wave_obs_np <= 5500 * (1.0 + z_spec))
-
-ax.errorbar(wave_obs_np[mask_hbeta_mgb], flux_obs_np[mask_hbeta_mgb],
-            yerr=flux_err_np[mask_hbeta_mgb],
-            fmt="o", ms=5, color=COLORS.get("data", "C0"), alpha=0.7,
-            label="Data", zorder=2)
-ax.plot(wave_obs_np[mask_hbeta_mgb], spec_median_np[mask_hbeta_mgb], "-",
-        color=COLORS.get("model", "C3"), lw=2.5, label="Model (median)", zorder=1)
-
-ax.axvspan(5090 * (1.0 + z_spec), 5200 * (1.0 + z_spec), alpha=0.1, color="orange", label="Mgb triplet")
-
-ax.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax.set_title(r"Balmer–Mgb Zone: Hβ (age-sensitive), Mgb (metallicity-sensitive)")
-ax.legend(loc="upper right", fontsize=10)
-ax.grid(True, alpha=0.2)
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "06_continuum_features.png"), dpi=200, bbox_inches="tight")
-plt.show()
-
-# %%
-# Corner plot via corner.py (the community standard). A standalone
-# corner.corner on extracted numpy samples is light; the OOM risk is only
-# with KDE comparison plots stacked on the resident HMC graph.
-import corner
-
-LABELS = {
-    "sfh_lnorm_log_peak_sfr": r"$\log\,\mathrm{SFR_{peak}}$",
-    "sfh_lnorm_peak_lbt_gyr": r"$t_{\rm peak}$ [Gyr]",
-    "sfh_lnorm_width_gyr": r"$\sigma_t$ [Gyr]",
-    "met_logzsol": r"$\log(Z/Z_\odot)$",
-    "dust_tau_bc": r"$\tau_{\rm bc}$",
-    "dust_tau_diff": r"$\tau_{\rm diff}$",
-}
-free_p = [k for k in result_spec.samples if float(np.std(np.asarray(result_spec.samples[k]))) > 1e-12]
-sample_arr = np.column_stack([np.asarray(result_spec.samples[k]) for k in free_p])
-truths = [float(true_params[k]) if k in true_params else None for k in free_p]
-
-fig = corner.corner(
-    sample_arr,
-    labels=[LABELS.get(k, k) for k in free_p],
-    truths=truths,
-    truth_color=COLORS.get("truth", "C2"),
-    show_titles=True,
-    title_fmt=".2f",
-    title_kwargs={"fontsize": 9},
-    label_kwargs={"fontsize": 11},
-    color=COLORS.get("mcmc_hmc", "#336699"),
-    plot_datapoints=False,
-    fill_contours=True,
-    levels=(0.68, 0.95),
+idx = np.linspace(0, n_samp - 1, min(N_DRAW, n_samp)).astype(int)
+draws_list = [{k: v[i] for k, v in result_spec.samples.items()} for i in idx]
+spec_draws = np.stack(
+    [np.asarray(model_spec.predict_spectrum(p, wave_obs=wave_obs)) for p in draws_list]
 )
-fig.suptitle(
-    f"Posterior: age + metallicity from the optical continuum "
-    f"(HMC, {spec_param.n_free} params, {t_hmc:.0f} s)",
-    y=1.02, fontsize=13,
+spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
+# Suppress the model at masked wavelengths so SSP-baked emission-line spikes
+# don't dominate the y-range; the fit didn't constrain those pixels anyway.
+spec_lo_p = np.where(mask_good, spec_lo, np.nan)
+spec_med_p = np.where(mask_good, spec_med, np.nan)
+spec_hi_p = np.where(mask_good, spec_hi, np.nan)
+flux_true_p = np.where(mask_good, flux_true_np, np.nan)
+
+fig = plt.figure(figsize=(8.6, 5.4))
+gs = fig.add_gridspec(2, 1, height_ratios=[3, 1], hspace=0.04)
+ax, ax_res = fig.add_subplot(gs[0]), fig.add_subplot(gs[1])
+
+for _name, wave_rest_line in emission_lines:
+    w_obs = wave_rest_line * (1.0 + z_spec)
+    ax.axvspan(
+        w_obs - mask_width * (1.0 + z_spec),
+        w_obs + mask_width * (1.0 + z_spec),
+        alpha=0.08,
+        color="0.4",
+        lw=0,
+        zorder=0,
+    )
+    ax_res.axvspan(
+        w_obs - mask_width * (1.0 + z_spec),
+        w_obs + mask_width * (1.0 + z_spec),
+        alpha=0.08,
+        color="0.4",
+        lw=0,
+        zorder=0,
+    )
+
+ax.fill_between(
+    wave_obs_np, spec_lo_p, spec_hi_p, color=C_POST, alpha=0.30, lw=0, label="posterior 68%"
 )
-fig.savefig(os.path.join(FIGDIR, "06_corner.png"), dpi=150, bbox_inches="tight")
-print("Saved 06_corner.png", flush=True)
+ax.plot(wave_obs_np, spec_med_p, color=C_POST, lw=1.3, label="posterior median")
+ax.plot(wave_obs_np, flux_true_p, color=C_TRUTH, ls="--", lw=1.0, label="truth")
+ax.errorbar(
+    wave_obs_np[mask_good],
+    flux_obs_np[mask_good],
+    yerr=flux_err_np[mask_good],
+    fmt="o",
+    ms=2.6,
+    color=C_DATA,
+    alpha=0.85,
+    elinewidth=0.7,
+    capsize=0,
+    mec="white",
+    mew=0.3,
+    label="observed",
+    zorder=4,
+)
+ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax.set_xlim(wave_obs_np.min(), wave_obs_np.max())
+ax.legend(frameon=False, fontsize=9, loc="upper left")
+plt.setp(ax.get_xticklabels(), visible=False)
+
+# Rest-frame axis on top
+ax_rest = ax.twiny()
+ax_rest.set_xlim(wave_obs_np.min() / (1.0 + z_spec), wave_obs_np.max() / (1.0 + z_spec))
+ax_rest.set_xlabel(rf"rest-frame wavelength  [$\mathrm{{\AA}}$]   (z = {z_spec:.2f})", fontsize=9)
+
+resid = (flux_obs_np - spec_med) / flux_err_np
+ax_res.axhspan(-1, 1, alpha=0.08, color="0.5")
+ax_res.axhline(0, color="0.4", lw=0.8)
+ax_res.plot(wave_obs_np[mask_good], resid[mask_good], ".", ms=2.5, color=C_DATA, alpha=0.85)
+ax_res.set_xlim(wave_obs_np.min(), wave_obs_np.max())
+ax_res.set_ylim(-3.5, 3.5)
+ax_res.set_xlabel(r"observed wavelength  [$\mathrm{\AA}$]")
+ax_res.set_ylabel(r"$(d-m)/\sigma$")
+fig.savefig(FIG_DIR / "06_spectrum_fit.png", dpi=300, bbox_inches="tight")
+fig.savefig(FIG_DIR / "06_spectrum_fit.pdf", bbox_inches="tight")
 
 # %%
-# Plot: sfh recovery
-fig, ax = plt.subplots(figsize=(10, 4))
-plot_sfh(model_spec, result_spec, true_params=true_params, ax=ax,
-         color=COLORS.get("mcmc_hmc", COLORS.get("mcmc_nuts", "C0")), label="HMC (optical)",
-         method="HMC")
-ax.set_title(r"SFH Recovery: Lognormal (peak SFR ~3 Msun/yr, age ~1 Gyr)")
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "06_sfh_recovery.png"), dpi=200, bbox_inches="tight")
-plt.show()
+# ## Hβ + Mgb zoom — age + metallicity diagnostics
+mask_hb = (wave_obs_np >= 4500 * (1.0 + z_spec)) & (wave_obs_np <= 5500 * (1.0 + z_spec))
+
+fig_z, ax_z = plt.subplots(figsize=(8.6, 3.8))
+ax_z.fill_between(
+    wave_obs_np[mask_hb],
+    spec_lo_p[mask_hb],
+    spec_hi_p[mask_hb],
+    color=C_POST,
+    alpha=0.30,
+    lw=0,
+    label="posterior 68%",
+)
+ax_z.plot(
+    wave_obs_np[mask_hb], spec_med_p[mask_hb], color=C_POST, lw=1.4, label="posterior median"
+)
+ax_z.plot(
+    wave_obs_np[mask_hb], flux_true_p[mask_hb], color=C_TRUTH, ls="--", lw=1.0, label="truth"
+)
+ax_z.errorbar(
+    wave_obs_np[mask_hb & mask_good],
+    flux_obs_np[mask_hb & mask_good],
+    yerr=flux_err_np[mask_hb & mask_good],
+    fmt="o",
+    ms=3.2,
+    color=C_DATA,
+    alpha=0.85,
+    elinewidth=0.7,
+    capsize=0,
+    mec="white",
+    mew=0.3,
+    label="observed",
+    zorder=4,
+)
+ax_z.axvspan(
+    5090 * (1.0 + z_spec),
+    5200 * (1.0 + z_spec),
+    alpha=0.12,
+    color="#e0a030",
+    lw=0,
+    zorder=0,
+    label="Mgb",
+)
+ax_z.axvspan(
+    (4862.68 - 30) * (1.0 + z_spec),
+    (4862.68 + 30) * (1.0 + z_spec),
+    alpha=0.12,
+    color="#3aa050",
+    lw=0,
+    zorder=0,
+    label=r"H$\beta$",
+)
+ax_z.set_xlabel(r"observed wavelength  [$\mathrm{\AA}$]")
+ax_z.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax_z.set_xlim(wave_obs_np[mask_hb].min(), wave_obs_np[mask_hb].max())
+ax_z.legend(frameon=False, fontsize=9, loc="upper left", ncol=2)
+fig_z.savefig(FIG_DIR / "06_continuum_features.png", dpi=300, bbox_inches="tight")
+fig_z.savefig(FIG_DIR / "06_continuum_features.pdf", bbox_inches="tight")
+
+# %%
+# ## Posterior corner
+#
+# Uses Posterior.plot_corner with derived stellar_mass + sfr_100myr, truth
+# dashed.
+
+truth_full = {**spec_param.get_fixed_values(), **{k: v for k, v in true_params.items()}}
+fig_corner = result_spec.plot_corner(truths=truth_full, color=C_POST)
+fig_corner.savefig(FIG_DIR / "06_corner.png", dpi=300, bbox_inches="tight")
+fig_corner.savefig(FIG_DIR / "06_corner.pdf", bbox_inches="tight")
+
+# %%
+# ## SFH recovery
+#
+# Two-panel star formation history: SFR(t) on top with 68% band, cumulative
+# formed M⋆ below. Truth dashed.
+
+
+def _sfh(p):
+    s = model_spec.predict_state(p)
+    return (np.asarray(s.derived["sfh_grid_lbt_yr"]) / 1e9, np.asarray(s.derived["sfr_history"]))
+
+
+sfr_draws_arr, lbt = [], None
+fixed = spec_param.get_fixed_values()
+for i in idx[:60]:
+    pdraw = {**fixed, **{k: float(v[i]) for k, v in result_spec.samples.items()}}
+    lbt_i, sfr_i = _sfh(pdraw)
+    sfr_draws_arr.append(sfr_i)
+    if lbt is None:
+        lbt = lbt_i
+sfr_draws_arr = np.stack(sfr_draws_arr)
+sfr_lo, sfr_med, sfr_hi = np.percentile(sfr_draws_arr, [16, 50, 84], axis=0)
+lbt_t, sfr_t = _sfh(truth_full)
+
+fig_s, (ax_s, ax_c) = plt.subplots(
+    2,
+    1,
+    figsize=(7.2, 5.4),
+    sharex=True,
+    gridspec_kw=dict(height_ratios=[2, 1], hspace=0.05),
+)
+ax_s.fill_between(lbt, sfr_lo, sfr_hi, color=C_POST, alpha=0.30, lw=0, label="posterior 68%")
+ax_s.plot(lbt, sfr_med, color=C_POST, lw=1.6, label="posterior median")
+ax_s.plot(lbt_t, sfr_t, color=C_TRUTH, ls="--", lw=1.3, label="truth")
+ax_s.set_ylabel(r"SFR  [$M_\odot$ yr$^{-1}$]")
+ax_s.legend(frameon=False, fontsize=9, loc="upper left")
+plt.setp(ax_s.get_xticklabels(), visible=False)
+
+dt_yr = np.gradient(lbt * 1e9)
+cum_draws = np.flip(np.cumsum(np.flip(sfr_draws_arr * dt_yr[None, :], axis=1), axis=1), axis=1)
+cum_lo, cum_med, cum_hi = np.percentile(cum_draws, [16, 50, 84], axis=0)
+cum_truth = np.flip(np.cumsum(np.flip(sfr_t * dt_yr), axis=0), axis=0)
+ax_c.fill_between(lbt, cum_lo / 1e10, cum_hi / 1e10, color=C_POST, alpha=0.30, lw=0)
+ax_c.plot(lbt, cum_med / 1e10, color=C_POST, lw=1.6)
+ax_c.plot(lbt_t, cum_truth / 1e10, color=C_TRUTH, ls="--", lw=1.3)
+ax_c.set_ylabel(r"cumulative $M_\star$  [$10^{10}\,M_\odot$]")
+
+for axx in (ax_s, ax_c):
+    axx.invert_xaxis()
+    axx.set_xlim(13.5, 0)
+ax_c.set_xlabel("lookback time  [Gyr]")
+fig_s.savefig(FIG_DIR / "06_sfh_recovery.png", dpi=300, bbox_inches="tight")
+fig_s.savefig(FIG_DIR / "06_sfh_recovery.pdf", bbox_inches="tight")
 
 # %%
 print("SUMMARY")
