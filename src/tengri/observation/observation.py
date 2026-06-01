@@ -803,11 +803,13 @@ class Observation:
                 "predict_via_precomp requires at least one *_phot_lnu_precomp in state.derived. "
                 "Build the model with approx=WavePrecomp()."
             )
-        if self.can_do_spectroscopy or self.has_line_fluxes or self.has_spectral_indices:
-            raise NotImplementedError(
-                "predict_via_precomp (Phase 3c-3) handles photometry only. "
-                "Spectroscopy / lines / indices land in Phase 3c-3 final scope."
-            )
+        # Part A (joint): this projector produces ONLY the photometry channel
+        # (phot_fnu / phot_rest_fnu). On a joint photometry+spectroscopy model
+        # the spectrum channel is projected separately by
+        # ``predict_spectrum_via_precomp`` and merged by the caller, and line
+        # fluxes / spectral indices are served by their own grid-independent
+        # predict_* methods — so the presence of spectroscopy/lines/indices is
+        # not a blocker here.
         if not self.can_do_photometry:
             raise ValueError("predict_via_precomp requires photometry to be configured.")
 
