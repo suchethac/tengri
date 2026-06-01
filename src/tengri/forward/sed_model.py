@@ -4502,58 +4502,23 @@ class SEDModel:
                 "model with ``observation=`` set."
             )
 
-        # Auto-delegate to the JIT-fused path for the common case.
-        # The eager dispatch of ~50 small jaxpr ops costs ~7–12 s of
-        # trace+micro-compile per fresh process; predict_observables_jit
-        # fuses them into one HLO and hits the persistent cache.
-        # spectrum_precomp publishes per-pixel LUTs into state.derived
-        # (during the orchestrator chain) and routes through
-        # ``predict_spectrum_via_precomp`` — not yet covered by
-        # predict_observables_jit — so fall through to the eager path when
-        # that approximation is active.
-        if not self._approx.get("spectrum_precomp"):
-            return self.predict_observables_jit(params)
+        # Eager (non-JIT) forward + projection. Runs the SAME ``_impl`` closure
+        # that :meth:`predict_observables_jit` wraps in ``jax.jit`` — one
+        # implementation, so the two are bit-identical by construction (the old
+        # dual implementation was how the spectrum LUT silently diverged). Use
+        # this for one-off / interactive evaluation where the ~7–12 s JIT
+        # trace+compile isn't worth amortising; use :meth:`predict_observables_jit`
+        # (what the Fitter calls) for repeated/inference evaluation, where the
+        # fused kernel is structurally + persistently cached. Both honour the
+        # build-time ``approx=`` (exact / WavePrecomp / SpectrumPrecomp / joint).
+        from tengri.inference._model_cache import _default_owner
 
-        state = self.predict_state(params)
-        full = {**self.spec.get_fixed_values(), **params}
-
-        # Phase 5: SpectrumPrecomp. The stellar component publishes
-        # ``spec_eff_waves`` (rest-frame pixel centres) and
-        # ``stellar_spec_lnu_precomp`` during ``predict_state``; downstream
-        # SEDModelComponents (dust / AGN / IGM / nebular continuum) then route
-        # through their spectrum-LUT branch and publish their own per-pixel
-        # contributions. ``predict_spectrum_via_precomp`` folds them through
-        # cosmology (and rasterised emission lines) into ``spec_fnu``.
-        if self._approx.get("spectrum_precomp") and self.observation.can_do_spectroscopy:
-            # Part A (joint): project the spectrum LUT, and — when the model is
-            # also photometric — the photometry LUT, then merge both families
-            # into one Observables. Each projector sums its own
-            # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family generically;
-            # we collect dicts (observables_type=None) and build the per-model
-            # Observables once so phot_fnu and spec_fnu coexist.
-            out: dict = {}
-            out.update(
-                self.observation.predict_spectrum_via_precomp(state, full, observables_type=None)
-            )
-            if self.observation.can_do_photometry and self._approx.get("wave_precomp"):
-                out.update(
-                    self.observation.predict_via_precomp(state, full, observables_type=None)
-                )
-            avail = {k: v for k, v in out.items() if k in self._Observables._fields}
-            return self._Observables(**avail)
-
-        kwargs = {}
-        if self.observation.can_do_spectroscopy:
-            kwargs.update(
-                wave_obs=self._wave_obs
-                if hasattr(self, "_wave_obs")
-                else self.observation.spectroscopy.wave_obs,
-                sigma_v_kms=self._get_sigma_v_kms(params),
-                lsf_resolution=self._lsf_resolution,
-                lsf_sigma_lib_kms=self._sigma_lib_kms,
-                lsf_n_bins=self._lsf_n_bins,
-            )
-        return self.observation.predict(state, full, observables_type=self._Observables, **kwargs)
+        self._get_or_build_predict_observables_jit()  # ensure cache is populated
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        impl = cache["predict_observables_impl"]
+        return impl(
+            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
+        )
 
     def predict_observables_jit(self, params):
         """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
@@ -4646,6 +4611,13 @@ class SEDModel:
         # routings without colliding. Spectrum stays exact — no spectrum
         # LUT yet.
         use_lut = bool(self._approx.get("wave_precomp")) and not observation.can_do_spectroscopy
+        # Part B: spectrum LUT inside the fused JIT kernel. ``predict_state``
+        # (called within ``_impl``) publishes ``spec_eff_waves`` + the per-pixel
+        # ``*_spec_lnu_precomp`` family via the cached chain, so the projector is
+        # fully JAX-traceable — no eager fallback needed. ``phot_lut`` lets a
+        # JOINT model also project photometry in the same kernel (Part A).
+        spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
+        phot_lut = bool(self._approx.get("wave_precomp"))
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain
         # build runs each component's ``precompute()``, which for the
@@ -4664,6 +4636,24 @@ class SEDModel:
                 template_data=template_data,
             )
             full = {**fixed_values, **params}
+            # Part B: spectrum LUT (and, for a joint model, photometry LUT)
+            # projected inside the fused kernel. Each projector sums its own
+            # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family; collect
+            # dicts and build the per-model Observables once so phot_fnu and
+            # spec_fnu coexist. (Velocity dispersion / LSF are not applied on the
+            # per-pixel continuum LUT — that is SpectrumPrecomp's documented
+            # low-to-medium-R domain.)
+            if spec_lut:
+                out: dict = {}
+                out.update(
+                    observation.predict_spectrum_via_precomp(state, full, observables_type=None)
+                )
+                if observation.can_do_photometry and phot_lut:
+                    out.update(
+                        observation.predict_via_precomp(state, full, observables_type=None)
+                    )
+                avail = {k: v for k, v in out.items() if k in observables_type._fields}
+                return observables_type(**avail)
             if observation.can_do_spectroscopy:
                 return observation.predict(
                     state,
@@ -4683,6 +4673,10 @@ class SEDModel:
 
         jit_fn = jax.jit(_impl)
         cache["predict_observables_jit"] = jit_fn
+        # Cache the un-jitted closure too, so :meth:`predict_observables` can run
+        # the IDENTICAL forward+projection logic eagerly (no XLA compile) without
+        # a second implementation to keep in sync. Same code → bit-identical.
+        cache["predict_observables_impl"] = _impl
         return jit_fn
 
     def _template_data_for_jit(self):
