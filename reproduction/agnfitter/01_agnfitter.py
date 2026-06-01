@@ -629,11 +629,27 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # directly from these same AGNFITTER-RX pickles, so those two panels are a
 # port self-check — and they pass: peak-aligned, agreeing to ≲1.6×.
 # `nenkova` is an independent analytic model and runs ~2–4× off in the NIR
-# (parametric vs tabulated). `skirtor` is the loosest: tengri's peaks ~40 µm
-# vs AGNFITTER-RX's ~25 µm. Both are dust-only (tengri uses the SKIRTOR v3
-# `dust_emission` grid), but tengri interpolates its own v3 template set while
-# AGNFITTER-RX uses the parameter-averaged `SKIRTOR_mean_3p` library — two
-# averagings of the same Stalevski models, so the IR peak lands differently.
+# (parametric vs tabulated).
+#
+# `skirtor` is the interesting one, and the difference is *by design on the
+# AGNFITTER-RX side*. Both panels use the same geometry (opening angle 40°,
+# inclination 30°, τ₉.₇ = 7), and the near-IR agrees closely (1–3 µm), but the
+# IR peak lands at ~40 µm for tengri vs ~25 µm for AGNFITTER-RX. The reason is
+# how each code samples the Stalevski (2016) models. AGNFITTER-RX deliberately
+# fits a *reduced* library: as its §3.2 states, the full SKIRTOR grid was
+# "simplified… by averaging all the models with respect to all but the 3 most
+# relevant parameters" (inclination, opening angle, optical depth) to avoid
+# overfitting sparse mid-IR data — so its `SKIRTOR_mean_3p` is an average over
+# the clumpiness and radial-distribution parameters. tengri instead keeps the
+# full Stalevski grid (τ, p, q, opening angle, inclination) and interpolates
+# it, following the X-CIGALE (Yang et al. 2020) SKIRTOR + polar-dust
+# implementation. So tengri reproduces the un-averaged SKIRTOR that CIGALE-
+# family codes use, while AGNFITTER-RX fits a parameter-collapsed average of
+# the same models; averaging over the clump/radial structure broadens and
+# warms the effective SED, which is what moves the peak. Neither is wrong —
+# they are two intentional reductions of one model. A future direct port of
+# `SKIRTOR_mean_3p` (as was done for `silva04` and `cat3d_wind`) would give a
+# bit-faithful AGNFITTER-RX-style SKIRTOR panel.
 #
 # Two residual pathologies the paper emphasises also live in this plot: the
 # 10 µm silicate feature (NK08/CAT3D can over- or under-predict it depending
@@ -647,8 +663,11 @@ torus_pairs = [
     (
         "SKIRTOR",
         "SKIRTOR",
-        lambda: tengri_torus("skirtor"),
-        "skirtor",
+        # Match AGNFITTER-RX's geometry exactly: oa = 40°, incl = 30°
+        # (cos_inc = cos 30° = 0.866), tau_9.7 = 7 — so the panel compares
+        # the same Stalevski sightline on both sides, not two geometries.
+        lambda: tengri_torus("skirtor", cos_inc=0.8660254, oa_skirtor=40.0, tau_skirtor=7.0),
+        "skirtor (oa 40°, incl 30°, τ 7)",
         dict(oa=40.0, incl=30.0, tau=7.0),
     ),
     (
@@ -1032,6 +1051,8 @@ save_fig("agnfitter_full_sed_headtohead.png")
 # - Stalevski, M., et al. 2016, MNRAS 458, 2288 — SKIRTOR [`Stalevski2016`].
 # - Hönig, S. F. & Kishimoto, M. 2017, ApJL 838, L20 — CAT3D-Wind
 #   [`honig2017dusty`].
+# - Yang, G., et al. 2020, MNRAS 491, 740 — X-CIGALE SKIRTOR + polar dust,
+#   the implementation tengri's `skirtor` follows [`yang2020xcigale`].
 #
 # **Cold dust (§6)**
 # - Schreiber, C., et al. 2018, A&A 609, A30 — S17 [`schreiber2018dust`].
