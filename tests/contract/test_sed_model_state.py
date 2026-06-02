@@ -84,29 +84,6 @@ def test_sed_model_state_is_frozen(minimal_model):
 
 
 @pytest.mark.unit
-def test_precomputed_data_is_frozen(minimal_model):
-    """PrecomputedData should be a frozen dataclass."""
-    assert dataclasses.is_dataclass(minimal_model._precomputed), (
-        "model._precomputed is not a dataclass"
-    )
-    assert minimal_model._precomputed.__dataclass_params__.frozen, (
-        "model._precomputed dataclass is not frozen"
-    )
-
-    # Attempt to mutate should raise FrozenInstanceError
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        minimal_model._precomputed.spectroscopy = None
-
-
-@pytest.mark.unit
-def test_state_precomputed_is_same_object(minimal_model):
-    """model._state.precomputed should reference model._precomputed by identity."""
-    assert minimal_model._state.precomputed is minimal_model._precomputed, (
-        "model._state.precomputed is not the same object as model._precomputed"
-    )
-
-
-@pytest.mark.unit
 @pytest.mark.skip(reason="precompute_spectroscopy deleted in Phase 6 (kernel removal)")
 def test_precompute_spectroscopy_updates_state(minimal_model):
     """precompute_spectroscopy should rebuild _state after updating _precomputed."""

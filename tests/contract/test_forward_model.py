@@ -234,7 +234,7 @@ def test_multi_population_cross_pop_namespaced_extras(sed_model_minimal) -> None
     "attr",
     [
         "wave_obs",
-        "precomputed",
+        "has_fixedz_photometry_precompute",
         "hybrid",
         "z_fixed",
         "dl_cm_fixed",
@@ -312,7 +312,7 @@ def test_forward_model_delegation_walks_into_population_sed_model(
     assert forward.wave_obs is getattr(template, "wave_obs", None) or forward.wave_obs == getattr(
         template, "wave_obs", None
     )
-    assert forward.precomputed is template.precomputed
+    assert forward.has_fixedz_photometry_precompute == template.has_fixedz_photometry_precompute
     assert forward.z_fixed == template.z_fixed
     assert forward.n_grid == template.n_grid
     assert forward.uses_stochastic_sfh == template.uses_stochastic_sfh
