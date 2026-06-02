@@ -121,8 +121,12 @@ def build(obs, approx=None):
     )
 
 
-# Photometry-only gets the WavePrecomp lookup table (fast); the joint model
-# runs the exact path (WavePrecomp is bypassed when a spectrum is present).
+# Photometry-only gets the WavePrecomp lookup table (fast). The joint model
+# uses the exact path here as a deliberate max-accuracy reference; WavePrecomp
+# also works on a joint observation (it builds both the photometry and spectrum
+# LUTs), and additive emitters like the dust IR are filter-integrated exactly
+# under it — only the stellar dust attenuation carries the effective-wavelength
+# approximation.
 model_phot = build(obs_phot, approx=WavePrecomp())
 model_joint = build(obs_joint)
 print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}")
@@ -167,9 +171,9 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 #
 # Both use the same validated HMC recipe (dense mass, n_warmup=1000,
 # n_leapfrog=20). Photometry-only runs through the WavePrecomp lookup table
-# (seconds); the joint fit runs the exact wave-grid path (WavePrecomp is
-# bypassed when a spectrum is present), so it is the slow one — a few minutes.
-# The two run sequentially in one process, per the OOM-orchestration rule.
+# (seconds); the joint fit runs the exact wave-grid path here (the deliberate
+# reference above), so it is the slow one — a few minutes. The two run
+# sequentially in one process, per the OOM-orchestration rule.
 
 # %%
 HMC = dict(n_warmup=1000, n_samples=600, n_leapfrog_steps=20,
