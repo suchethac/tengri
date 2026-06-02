@@ -223,116 +223,6 @@ class PriorPredictive:
 # ── Kernel hierarchy dataclasses ──────────────────────────────────
 
 
-@dataclasses.dataclass(frozen=True)
-class PrecomputedData:
-    """Level 1: Precomputed SSP tensors pre-integrated through filters.
-
-    Data only — no JIT kernels. Built once at ``SEDModel.__init__`` and
-    updated by ``precompute_spectroscopy()`` / ``precompute_ztable()``.
-
-    Attributes
-    ----------
-    photometry : object or None
-        PhotometricPrecomputation for fixed redshift.
-    photometry_ztable : object or None
-        PhotometricZTable for free redshift mode.
-    spectroscopy : object or None
-        SpectroscopicPrecomputation for spectrum prediction.
-    dust_age_weights : ndarray or None
-        Sigmoid weights for two-component dust attenuation, shape (n_age,).
-        [dimensionless]
-    igm_at_effective_wavelengths : ndarray or None
-        IGM transmission T(λ_eff) at filter effective wavelengths, shape
-        (n_filters,). [dimensionless]
-    effective_bandwidths_hz : ndarray or None
-        Effective bandwidth per filter, shape (n_filters,). [Hz]
-    dust_ir_lookup : object or None
-        Preintegrated template-based dust IR photometry lookup.
-    kd_preintegrated : object or None
-        KDPreintegratedData for K&D AGN disc model.
-    skirtor_preintegrated : object or None
-        Preintegrated SKIRTOR torus photometry lookup.
-    silva04_preintegrated : object or None
-        Preintegrated Silva+04 torus photometry lookup.
-    cat3d_preintegrated : object or None
-        Preintegrated CAT3D-Wind torus photometry lookup.
-    powerlaw_disc_preintegrated : object or None
-        Preintegrated powerlaw_disc photometry lookup.
-    ss_disc_preintegrated : object or None
-        Preintegrated Shakura-Sunyaev disc photometry lookup.
-    cigale_disc_preintegrated : object or None
-        Preintegrated CIGALE piecewise-powerlaw disc photometry lookup.
-    qsogen_preintegrated : object or None
-        Preintegrated QSOgen quasar SED photometry lookup.
-
-    Notes
-    -----
-    This is an internal container used by SEDModel. Users do not construct
-    this directly.
-    """
-
-    photometry: object | None = None  # PhotometricPrecomputation (fixed z)
-    photometry_ztable: object | None = None  # PhotometricZTable (free z)
-    spectroscopy: object | None = None  # SpectroscopicPrecomputation
-    dust_age_weights: jnp.ndarray | None = None  # sigmoid weights for two-component dust
-    igm_at_effective_wavelengths: jnp.ndarray | None = None  # IGM T(λ_eff) for fixed z
-    effective_bandwidths_hz: jnp.ndarray | None = None  # Voronoi Δν per filter (Hz)
-    component_grid_arrays: dict[str, tuple] = dataclasses.field(
-        default_factory=dict
-    )  # Registry-driven JIT-traceable arrays per component: {name → (arr1, arr2, ...)}
-    dust_ir_lookup: object | None = None  # Preintegrated template-based dust IR photometry
-    dust_ir_grid_arrays: tuple | None = None  # JIT-traceable IR grid arrays (phonetic-shaped)
-    skirtor_preintegrated: object | None = None  # Preintegrated SKIRTOR torus photometry lookup
-    skirtor_grid_arrays: tuple | None = None  # JIT-traceable SKIRTOR grid arrays (grid_phot, axes)
-    kd_preintegrated: object | None = None  # KDPreintegratedData for K&D AGN disc
-    silva04_preintegrated: object | None = None  # Preintegrated Silva+04 torus photometry lookup
-    cat3d_preintegrated: object | None = None  # Preintegrated CAT3D-Wind torus photometry lookup
-    # ── Shelved precomputes ───────────────────────────────────────────
-    # The fields below are *built and stored* by SEDModel but are NOT yet
-    # read by the photometry kernel (``_kernels/hybrid.py``).  Kernel
-    # consumption requires a paired change per family: (a) gate off the
-    # runtime contribution to ``non_stellar_sed`` when the precompute is
-    # active (otherwise band fluxes double-count), and (b) add the lookup
-    # output to ``non_stellar_phot`` after band integration (mirror the
-    # ``_has_preint_dust_ir`` pattern in hybrid.py around line 1200/1434).
-    # Search for ``# TODO(precompute-consumer)`` in hybrid.py for insertion
-    # sites.  The bundled ``radio_emission`` and ``xray_emission`` functions
-    # need to be refactored to expose per-component subcalls so individual
-    # subcomponents can be gated; line emitters additionally need a line
-    # projection einsum next to the existing CLOUDY block (~line 982-994).
-    silva04_preintegrated: object | None = None  # Preintegrated Silva+04 torus photometry lookup
-    cat3d_preintegrated: object | None = None  # Preintegrated CAT3D-Wind torus photometry lookup
-    powerlaw_disc_preintegrated: object | None = None  # Preintegrated powerlaw_disc photometry
-    ss_disc_preintegrated: object | None = None  # Preintegrated Shakura-Sunyaev disc photometry
-    cigale_disc_preintegrated: object | None = None  # Preintegrated CIGALE disc photometry
-    qsogen_preintegrated: object | None = None  # Preintegrated QSOgen photometry lookup
-    composable_preintegrated: object | None = None  # Preintegrated composable-recipe lookup
-    # ^ Built by tengri.components.agn.blocks.composable_precompute. The
-    # SEDModel populates this when the user sets agn_model='composable' and
-    # provides agn_axis_grids on the spec. Like the radio/xray preints
-    # below, this is stored but **not yet consumed by the kernel** — a
-    # future kernel branch will swap it in without re-touching SEDModel.
-    # Dust analytic emission adapters (PR 3).
-    modified_blackbody_preintegrated: object | None = None  # Preintegrated modified_blackbody dust
-    casey2012_preintegrated: object | None = None  # Preintegrated casey2012 dust
-    pah_drude_preintegrated: object | None = None  # Preintegrated pah_drude dust
-    # Radio analytic adapters (PR 5).
-    radio_synchrotron_preintegrated: object | None = None
-    radio_freefree_preintegrated: object | None = None
-    radio_agn_jet_preintegrated: object | None = None
-    # X-ray analytic adapters (PR 6).
-    xray_xrb_preintegrated: object | None = None
-    xray_corona_preintegrated: object | None = None
-    xray_corona_lopez24_preintegrated: object | None = None
-    shock_mappings_preintegrated: object | None = None  # Preintegrated MAPPINGS shock lines lookup
-    # AGN-nebular line-emitter adapters (PR 4).  These are separate from
-    # stellar nebular (which uses duck-typed CloudyGridBackend interface).
-    # BLR, NLR-Gaussian, and Feltre NLR use direct lookup closures.
-    blr_lookup: object | None = None  # BLR Gaussian emitter lookup closure
-    nlr_gaussian_lookup: object | None = None  # NLR Gaussian emitter lookup closure
-    feltre_nlr_lookup: object | None = None  # Feltre NLR photoionization grid lookup
-
-
 @dataclasses.dataclass
 class CompositionalKernels:
     """Level 2: Full-resolution JIT-compiled kernels.
@@ -418,7 +308,6 @@ class SEDModelState:
 
     spec: object  # Parameters
     ssp_data: object  # SSPData
-    precomputed: PrecomputedData
     filter_waves: object | None  # list of jnp.ndarray
     filter_trans: object | None  # list of jnp.ndarray
     rest_wavelength: jnp.ndarray
