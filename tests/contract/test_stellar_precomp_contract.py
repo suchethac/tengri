@@ -12,7 +12,7 @@ import warnings
 import chex
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import Parameters, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
@@ -49,7 +49,7 @@ def stellar_only_model(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 @pytest.fixture(scope="module")
@@ -72,7 +72,7 @@ def stellar_only_free_z_model(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 _PARAMS = {
@@ -145,7 +145,7 @@ def test_dust_attenuation_precomps_published(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     assert "filter_eff_waves" in state.derived, (
         "Stellar should publish filter_eff_waves when wave_precomp=True"
@@ -182,7 +182,7 @@ def test_two_component_dust_publishes_bc_diff_precomp(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
 
     assert "dust_bc_attenuation_precomp" in state.derived
@@ -228,7 +228,7 @@ def test_agn_phot_lnu_precomp_published(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
     state = m.predict_state(_PARAMS)
     assert "agn_phot_lnu_precomp" in state.derived
     chex.assert_tree_all_finite(state.derived["agn_phot_lnu_precomp"])

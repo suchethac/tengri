@@ -1,22 +1,27 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression: ``StellarSEDComponent`` returns DSPS's own ``rest_sed``
-rather than reconstructing it via ``Σ(weights × ssp_flux) × total_mass``
-(issue #394).
+"""Regression: ``StellarSEDComponent`` builds ``sed_intrinsic`` from the
+trapezoid-contract ``Σ(weights × ssp_flux) × total_mass`` reconstruction —
+**not** from DSPS's own ``rest_sed`` (= ``sed_unit_mstar × mstar_obs``).
 
-The two paths are mathematically identical when ``total_mass == mstar_obs``
-(both integrate the same SFH), but reading DSPS's value keeps the stellar
-SED self-consistent with the kernel's own ``sed_unit_mstar × mstar_obs``
-bookkeeping. The test below pins that:
+History: #394 originally switched ``sed_intrinsic`` TO ``dsps_result.rest_sed``
+for "kernel self-consistency". That was **reversed by #616**: ``mstar_obs``
+(DSPS's cumulative-SFH quadrature) and ``total_mass`` (the trapezoid that
+defines the ``trapezoid(sfr, t) = 10**log_total_mass`` normalization contract)
+diverge by up to ~6.6% at low z (large ``t_obs``). Using ``rest_sed`` silently
+broke that contract for the exact SED at low z and disagreed with every
+precompute LUT (which use ``total_mass``). Reconstructing from ``total_mass``
+makes the exact SED, the photometry/spectrum LUTs, ``lnu_age``, ``L_age``,
+``age_weights``, and ``pred.stellar_mass`` all honour the one contract mass.
+See issues #616 (DSPS quadrature) and #617 (birth-cloud dust LUT residual).
 
-1. ``dsps_result.rest_sed × L_SUN`` equals
-   ``(Σ_m,a (weights × ssp_flux)) × total_mass × L_SUN`` to
-   floating-point precision at every wavelength on a fiducial tau
-   SFH — i.e. there is no per-age "surviving mass" correction baked
-   into DSPS's ``rest_sed`` that the einsum reconstruction misses.
+The tests below pin that:
 
-2. ``model.predict_rest_sed`` returns the DSPS value (not the
-   reconstruction), confirming the wiring at
-   ``components/stellar/component.py:797``.
+1. ``dsps_result.rest_sed`` and the einsum reconstruction with ``total_mass``
+   agree at moderate ``t_obs`` (here 5 Gyr) — the quadratures only diverge at
+   low z (large ``t_obs``); see #616.
+
+2. ``StellarSEDComponent`` wires ``sed_intrinsic`` to the ``total_mass``
+   reconstruction (the contract path), not ``dsps_result.rest_sed``.
 """
 
 from __future__ import annotations
@@ -90,18 +95,23 @@ def test_dsps_rest_sed_matches_einsum_reconstruction():
     )
 
 
-def test_predict_rest_sed_reads_dsps_rest_sed_path():
-    """``StellarSEDComponent.apply()`` must use ``dsps_result.rest_sed``
-    for ``sed_intrinsic`` — not the einsum reconstruction. Pin the wire
-    by re-reading the source so a future "optimisation" can't silently
-    re-introduce the redundant path."""
+def test_sed_intrinsic_uses_total_mass_reconstruction():
+    """``StellarSEDComponent.apply()`` must build ``sed_intrinsic`` from the
+    ``total_mass`` reconstruction (= ``Σ_age lnu_age``), NOT from DSPS's
+    ``rest_sed`` (= ``mstar_obs``-normalized). Pin the wire by re-reading the
+    source so a future change can't silently re-introduce the #394 path that
+    breaks the trapezoid normalization contract at low z (#616)."""
     import inspect
 
     from tengri.components.stellar import component
 
     src = inspect.getsource(component)
-    assert "sed_intrinsic = dsps_result.rest_sed" in src, (
-        "StellarSEDComponent no longer reads dsps_result.rest_sed for "
-        "sed_intrinsic — silent re-introduction of the einsum-reconstruction "
-        "path (#394)."
+    assert "sed_intrinsic = lnu_age.sum(axis=0)" in src, (
+        "StellarSEDComponent no longer builds sed_intrinsic from the total_mass "
+        "reconstruction (Σ_age lnu_age) — this would re-introduce the #394 "
+        "dsps_result.rest_sed path that violates the trapezoid normalization "
+        "contract by up to ~6.6% at low z (see #616)."
+    )
+    assert "sed_intrinsic = dsps_result.rest_sed" not in src, (
+        "sed_intrinsic must not use DSPS's mstar_obs-normalized rest_sed (reversed in #616)."
     )

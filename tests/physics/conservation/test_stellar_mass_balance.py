@@ -11,7 +11,7 @@ import warnings
 import jax.numpy as jnp
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import Parameters, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
@@ -48,7 +48,7 @@ def stellar_only_model(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 _PARAMS = {

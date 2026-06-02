@@ -83,17 +83,33 @@ class TestSpectrumLUTAccuracy:
     """
 
     def test_spectrum_lut_vs_exact_fixed_z(self):
-        ssp_path = _ssp_path()
+        # The per-pixel effective-wavelength LUT is a smooth-CONTINUUM
+        # approximation: it samples the continuum at each pixel centre and
+        # cannot represent delta-like emission lines baked into a wNE SSP.
+        # Validate continuum accuracy on a BARE-stellar SSP (matches the
+        # documented validity domain); line handling is covered by
+        # TestSpectrumLUTLines below.
+        ssp_path = _bare_ssp_path()
         if ssp_path is None:
-            pytest.skip("No SSP grid available under data/.")
+            pytest.skip("No bare-stellar SSP grid available under data/.")
         from tengri import Fixed, Observation, Spectroscopy, load_ssp_data
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 64))
         obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
 
-        m_exact = _build(ssp, obs, None, Fixed(0.05))
-        m_lut = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05))
+        # Diffuse-only dust (tau_bc=0): continuum, mass normalization, and the
+        # diffuse screen all agree to machine precision. This is a sharp guard
+        # for the total_mass-vs-mstar_obs normalization fix (issue #616) — a
+        # regression to the DSPS mstar_obs normalization shows up here as a
+        # 3-6% low-z error. The two-component BIRTH-CLOUD LUT carries a separate
+        # ~0.8-1.5% separable-approximation residual (issue #617), deliberately
+        # excluded here so this test isolates the normalization contract.
+        from tengri import FIXED as _FIXED
+
+        diffuse_dust = {"type": "two_component", "law_bc": "calzetti", "*": _FIXED, "tau_bc": 0.0}
+        m_exact = _build(ssp, obs, None, Fixed(0.05), dust=diffuse_dust)
+        m_lut = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust=diffuse_dust)
         # The LUT path must actually engage (not silently fall through).
         assert m_lut._approx.get("spectrum_precomp") is True
 
@@ -103,20 +119,29 @@ class TestSpectrumLUTAccuracy:
         max_rel = float(
             jnp.max(jnp.abs(spec_lut - spec_exact) / jnp.maximum(jnp.abs(spec_exact), 1e-30))
         )
-        assert max_rel < 1e-2, f"fixed-z max rel err = {max_rel:.4%} exceeds 1%."
+        assert max_rel < 2e-3, f"fixed-z max rel err = {max_rel:.4%} exceeds 0.2%."
 
     def test_spectrum_lut_vs_exact_free_z(self):
-        ssp_path = _ssp_path()
+        # Bare-stellar SSP: continuum-only accuracy check (see fixed-z note).
+        ssp_path = _bare_ssp_path()
         if ssp_path is None:
-            pytest.skip("No SSP grid available under data/.")
+            pytest.skip("No bare-stellar SSP grid available under data/.")
         from tengri import Observation, Spectroscopy, Uniform, load_ssp_data
 
         ssp = load_ssp_data(ssp_path)
         wave_obs = jnp.asarray(np.linspace(4500.0, 7500.0, 64))
         obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
 
-        m_exact = _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift"))
-        m_lut = _build(ssp, obs, SpectrumPrecomp(), Uniform(0.01, 0.5, "redshift"))
+        # Diffuse-only dust — see fixed-z note: isolates the normalization
+        # contract (#616) from the birth-cloud LUT residual (#617). z=0.05 is
+        # the critical low-z case that the mstar_obs normalization broke.
+        from tengri import FIXED as _FIXED
+
+        diffuse_dust = {"type": "two_component", "law_bc": "calzetti", "*": _FIXED, "tau_bc": 0.0}
+        m_exact = _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust=diffuse_dust)
+        m_lut = _build(
+            ssp, obs, SpectrumPrecomp(), Uniform(0.01, 0.5, "redshift"), dust=diffuse_dust
+        )
         for z in (0.05, 0.2, 0.4):
             se = m_exact.predict_observables({"redshift": z}).spec_fnu
             sl = m_lut.predict_observables({"redshift": z}).spec_fnu
