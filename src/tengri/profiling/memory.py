@@ -201,67 +201,12 @@ def profile_memory(model) -> MemoryReport:
             )
         )
 
-    # --- Precomputed photometry ---
-    if model.precomputed.photometry is not None:
-        pc = model.precomputed.photometry
-        f64 = _arr_mb(pc.ssp_phot)
-        entries.append(
-            MemoryEntry(
-                name="Precomp photometry (fixed z)",
-                shape=_shape_str(pc.ssp_phot),
-                f64_mb=f64,
-                f32_mb=f64 / 2,
-                category="precomp",
-            )
-        )
-        if hasattr(pc, "eff_waves_rest") and pc.eff_waves_rest is not None:
-            entries.append(
-                MemoryEntry(
-                    name="Effective wavelengths (rest)",
-                    shape=_shape_str(pc.eff_waves_rest),
-                    f64_mb=_arr_mb(pc.eff_waves_rest),
-                    category="precomp",
-                )
-            )
-
-    # --- Precomputed spectroscopy ---
-    if hasattr(model, "_precomputed") and model.precomputed.spectroscopy is not None:
-        sp = model.precomputed.spectroscopy
-        f64 = _arr_mb(sp.ssp_on_pixels)
-        entries.append(
-            MemoryEntry(
-                name="Precomp spectroscopy",
-                shape=_shape_str(sp.ssp_on_pixels),
-                f64_mb=f64,
-                f32_mb=f64 / 2,
-                category="precomp",
-            )
-        )
-
-    # --- Z-table ---
-    if hasattr(model, "_precomputed") and model.precomputed.photometry_ztable is not None:
-        zt = model.precomputed.photometry_ztable
-        f64 = _arr_mb(zt.ssp_phot_table)
-        entries.append(
-            MemoryEntry(
-                name="Z-table (redshift interpolation)",
-                shape=_shape_str(zt.ssp_phot_table),
-                f64_mb=f64,
-                f32_mb=f64 / 2,
-                category="precomp",
-            )
-        )
-
-    # --- Dust age weights ---
-    if hasattr(model, "_precomputed") and model.precomputed.dust_age_weights is not None:
-        entries.append(
-            MemoryEntry(
-                name="Dust age weights (precomp)",
-                shape=_shape_str(model.precomputed.dust_age_weights),
-                f64_mb=_arr_mb(model.precomputed.dust_age_weights),
-                category="dust",
-            )
-        )
+    # --- Precompute LUTs ---
+    # The legacy ``PrecomputedData`` container (fixed-z photometry, spectroscopy,
+    # z-table, dust-age-weights arrays) was retired (#620). The active LUTs now
+    # live on the per-component cached state under ``approx=WavePrecomp()`` /
+    # ``approx=SpectrumPrecomp()``; per-array memory reporting for them is a
+    # separate follow-up if needed.
 
     # --- Filters ---
     if model.filter_waves is not None:
