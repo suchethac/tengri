@@ -774,6 +774,19 @@ class SEDModel:
         return None
 
     @property
+    def has_fixedz_photometry_precompute(self) -> bool:
+        """Whether this is a fixed-z photometry model (vmap-batch / fast-path eligible).
+
+        Replaces the legacy ``model.precomputed.photometry is not None`` proxy
+        (the ``PrecomputedData`` container is being retired, #620). The legacy
+        container's ``photometry`` slot was populated exactly when a fixed
+        redshift and filters were configured, so this reproduces that boolean
+        without the container. The LUT fast path itself is opt-in via
+        ``approx=WavePrecomp()`` and lives in the component chain.
+        """
+        return self._z_fixed is not None and self.filter_waves is not None
+
+    @property
     def precomputed(self):
         """Container of precomputed forward-model tables (photometry, spectroscopy, …).
 
@@ -781,6 +794,11 @@ class SEDModel:
         container exposes ``photometry``, ``spectroscopy``, ``photometry_ztable``,
         and ``dust_age_weights`` slots; any may be ``None`` if not configured.
         Used by inference / diagnostics to query precompute state.
+
+        .. deprecated::
+            ``PrecomputedData`` is leftover from the pre-Phase-3 hybrid kernel
+            and is being retired (#620). Consumers should use
+            :attr:`has_fixedz_photometry_precompute` for the fast-path gate.
         """
         return self._precomputed
 
