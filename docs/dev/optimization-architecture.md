@@ -35,7 +35,7 @@ SEDModel.build(..., approx=SpectrumPrecomp()) # spectrum per-pixel LUT     (Phas
 | `approx=` | What it does | Error vs exact |
 |-----------|--------------|----------------|
 | `None` | Full-resolution exact pipeline. | reference |
-| `WavePrecomp()` | Preintegrated SSP×filter LUT for the stellar (and dust-IR) photometry; non-stellar evaluated at effective wavelengths. | <0.5% (continuum machine-exact post-#616; two-component birth-cloud dust ~0.8-1.5%, see #617) |
+| `WavePrecomp()` | Preintegrated SSP×filter LUT for stellar photometry (the speedup). Additive emitters (dust IR, radio, X-ray, AGN) are integrated through the true filter transmission — exact. Only the stellar **dust attenuation** uses the effective-wavelength (+Taylor) approximation. | stellar continuum machine-exact; additive emitters exact; stellar dust attenuation ~0.3–0.5% on real filters (Zacharegkas+2025) |
 | `SpectrumPrecomp()` | Per-pixel effective-wavelength continuum LUT for spectroscopy. High-R auto-falls-back to exact. | same caveats as above |
 
 On a **joint** photometry+spectroscopy observation, either opt-in builds *both*
@@ -247,9 +247,12 @@ Used by: SSP metallicity, DL07 (qpah, umin), SKIRTOR (5D), CLOUDY
 ### Taylor correction scope
 
 The spectral moment Ψ corrects the dust factorization error for
-**multiplicative operators** only (dust attenuation).
-It does NOT apply to additive components (nebular, AGN, dust IR) —
-these are evaluated at full wavelength in all modes.
+**multiplicative operators** only (dust attenuation). It is not needed for
+additive components (dust IR, radio, X-ray, AGN): these are computed on the
+full wavelength grid and integrated through the true filter transmission
+(`lnu_filter_integral_batch`), so they are exact under `WavePrecomp` — no
+effective-wavelength approximation. (Nebular emission baked into the SSP grid
+rides along in the stellar Φ-tensor.)
 
 ### Preintegration status by component
 
