@@ -195,18 +195,32 @@ class XRaySEDComponent:
         stellar_mass = 10.0**log_mstar
         L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
 
-        L_xray = xray_total(
-            wave,
-            sfr=sfr,
-            stellar_mass=stellar_mass,
-            L_agn_bol=L_agn_bol,
-            gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
-            gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
-            gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
-            E_cut=jnp.asarray(params["xray_E_cut"]),
-            alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
-        )
+        def _emit(w):
+            return xray_total(
+                w,
+                sfr=sfr,
+                stellar_mass=stellar_mass,
+                L_agn_bol=L_agn_bol,
+                gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
+                gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
+                gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
+                E_cut=jnp.asarray(params["xray_E_cut"]),
+                alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
+            )
+
+        L_xray = _emit(wave)
+        derived_overrides = {"sed_xray": L_xray}
+
+        # Precompute LUT families (#624): X-ray is additive and unattenuated;
+        # the (broken-)power-law is smooth, so the per-filter / per-pixel
+        # effective-wavelength evaluation is an accurate LUT projection.
+        filter_eff = state.derived.get("filter_eff_waves")
+        if filter_eff is not None:
+            derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            derived_overrides["xray_spec_lnu_precomp"] = _emit(spec_eff)
 
         return state.add_intrinsic(L_xray).with_(
-            derived=state.derived.with_(sed_xray=L_xray),
+            derived=state.derived.with_(**derived_overrides),
         )
