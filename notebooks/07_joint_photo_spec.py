@@ -69,12 +69,13 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 # %% [markdown]
 # ## Observation: photometry + an optical spectrum
 #
-# Twelve UV–MIR bands (GALEX → WISE) plus an R≈2000 optical spectrum over the
-# rest-frame 4000–7000 Å window — that covers Hβ, the Mgb triplet, the Fe5270 /
-# Fe5335 blends, and Hα, the features that carry metallicity and light-weighted
-# age. We keep the spectrum at 260 pixels: enough to resolve the indices that
-# break the degeneracy, while keeping the (exact-path) joint forward model fast
-# enough to fit in a few minutes.
+# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like R≈2000 optical spectrum,
+# 3800–9200 Å observed — at z = 0.05 that covers the 4000 Å break, Hβ, the Mgb
+# triplet, the Fe5270 / Fe5335 blends, Hα, and the Ca II triplet, the features
+# that carry metallicity and light-weighted age. We sample the spectrum at 260
+# pixels: enough to resolve the indices that break the degeneracy, and the
+# joint fit time scales with the pixel count (each pixel is one more likelihood
+# term and gradient row).
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -90,7 +91,7 @@ FILTERS = [
     "2mass_j", "2mass_h", "2mass_ks",
     "wise_w1", "wise_w2",
 ]
-WAVE_OBS = jnp.linspace(4000.0 * (1 + Z_GAL), 7000.0 * (1 + Z_GAL), 260)
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage
 
 phot_obs = Photometry.from_names(FILTERS)
 spec_obs = Spectroscopy(wave_obs=WAVE_OBS, resolution=2000)
@@ -171,10 +172,13 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 #
 # Both use the same validated HMC recipe (dense mass, n_warmup=1000,
 # n_leapfrog=20) and both run on lookup tables (WavePrecomp for photometry,
-# SpectrumPrecomp's dual LUT for the joint fit). The joint fit is still the
-# slower of the two — it carries the 260-pixel spectral likelihood and its
-# gradient — at ~10 minutes against the photometry fit's seconds. The two run
-# sequentially in one process, per the OOM-orchestration rule.
+# SpectrumPrecomp's dual LUT for the joint fit). Each fit is a couple of
+# minutes: the recipe does 32,000 gradient evaluations (1600 iterations × 20
+# leapfrog steps), plus a one-time JIT compile of the forward+likelihood
+# kernel. The joint fit is the slower of the two because every spectral pixel
+# adds a likelihood term and a gradient row — its per-evaluation cost scales
+# with the pixel count, not with the number of free parameters. The two fits
+# run sequentially in one process, per the OOM-orchestration rule.
 
 # %%
 HMC = dict(n_warmup=1000, n_samples=600, n_leapfrog_steps=20,
@@ -265,10 +269,10 @@ print(f"\n68% coverage: {n_cov}/{len(params)}")
 # %% [markdown]
 # ## Both datasets on one SED
 #
-# Observed photometry and the optical spectrum on a single F_ν axis, joint
-# posterior model SED behind them, with the spectral window in an inset. A
-# single posterior explains the broadband points and the spectrum at the same
-# time.
+# Observed photometry (labelled by band) and the optical spectrum on a single
+# F_ν axis, joint posterior model SED behind them. The shaded band marks the
+# spectral window, expanded in the inset. A single posterior explains the
+# broadband points and the spectrum at the same time.
 
 # %%
 N_DRAW = 60
@@ -291,29 +295,40 @@ sed_draws = np.stack([sed_fnu(p) for p in draws])
 sed_lo, sed_med, sed_hi = np.percentile(sed_draws, [16, 50, 84], axis=0)
 sed_truth = sed_fnu(truth_full)
 
+BAND_LABELS = ["FUV", "NUV", "u", "g", "r", "i", "z", "J", "H", "Ks", "W1", "W2"]
+
 fig_h, ax = plt.subplots(figsize=(9.2, 5.4))
+ax.axvspan(w_spec_um.min(), w_spec_um.max(), color=C_SPEC, alpha=0.06, lw=0, zorder=0)
 ax.fill_between(w_full_um, sed_lo, sed_hi, color=C_POST, alpha=0.25, lw=0, label="posterior 68%")
 ax.plot(w_full_um, sed_med, color=C_POST, lw=1.2, label="posterior median")
 ax.plot(w_full_um, sed_truth, color=C_TRUTH, lw=1.0, ls="--", label="truth")
 ax.plot(w_spec_um, flux_spec, color=C_SPEC, lw=0.7, alpha=0.85, zorder=4, label="observed spectrum")
 ax.errorbar(wave_eff_um, flux_phot, yerr=n_phot, fmt="o", ms=6.5, color=C_DATA,
             mec="white", mew=0.7, elinewidth=1.1, capsize=2, zorder=6, label="observed photometry")
+for name, x, y, e in zip(BAND_LABELS, wave_eff_um, flux_phot, n_phot):
+    ax.annotate(name, (x, y + e), textcoords="offset points", xytext=(0, 6),
+                ha="center", va="bottom", fontsize=7, color=C_DATA, zorder=7)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(w_full_um.min(), w_full_um.max())
 ax.set_xlabel(r"observed wavelength  [$\mu$m]")
 ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax.set_title("Joint fit: photometry + spectroscopy on one SED")
-ax.legend(frameon=False, fontsize=9, loc="lower center", ncol=3)
+ax.legend(frameon=False, fontsize=9, loc="lower right")
 
+# Inset in the empty upper-left corner (above the rising SED) so it does not
+# cover the spectrum or the NIR photometry.
 spec_draws_arr = np.stack([np.asarray(model_joint.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws])
 sp_lo, sp_med, sp_hi = np.percentile(spec_draws_arr, [16, 50, 84], axis=0)
-axin = ax.inset_axes([0.60, 0.62, 0.37, 0.34])
+axin = ax.inset_axes([0.045, 0.60, 0.36, 0.34], zorder=10)
+axin.set_facecolor("white")
+axin.patch.set_alpha(1.0)
 axin.fill_between(w_spec_um, sp_lo, sp_hi, color=C_POST, alpha=0.30, lw=0)
 axin.plot(w_spec_um, sp_med, color=C_POST, lw=1.0)
 axin.plot(w_spec_um, flux_spec, color=C_SPEC, lw=0.6, alpha=0.85)
 axin.set_xlim(w_spec_um.min(), w_spec_um.max())
 axin.tick_params(labelsize=7)
+axin.set_xlabel(r"$\mu$m", fontsize=7, labelpad=1)
 axin.set_title("spectral window", fontsize=8)
 fig_h.savefig(FIG_DIR / "07_joint_sed.png", dpi=300, bbox_inches="tight")
 plt.show()
@@ -326,6 +341,11 @@ plt.show()
 
 # %%
 fig_corner = post_joint.plot_corner(truths=truth_full, color=C_POST)
+for ax_c in fig_corner.axes:  # readable axis labels in place of parameter keys
+    if ax_c.get_xlabel() in labels:
+        ax_c.set_xlabel(labels[ax_c.get_xlabel()], fontsize=11)
+    if ax_c.get_ylabel() in labels:
+        ax_c.set_ylabel(labels[ax_c.get_ylabel()], fontsize=11)
 fig_corner.savefig(FIG_DIR / "07_corner.png", dpi=200, bbox_inches="tight")
 plt.show()
 
@@ -337,9 +357,9 @@ plt.show()
 # Fitted together through one `Observation`, the posterior is narrower than
 # either alone and recovers the truth the photometry-only fit
 # ([notebook 05](05_fitting_photometry.py)) left degenerate. `SpectrumPrecomp`
-# runs both channels on lookup tables; the joint fit still takes ~10 minutes,
-# but the cost is now the per-pixel spectral likelihood and its gradient, not
-# the forward integration.
+# runs both channels on lookup tables, so the joint fit lands in a couple of
+# minutes; what is left of the cost is the per-pixel spectral likelihood and
+# its gradient, not the forward integration.
 
 # %%
 from contextlib import suppress
