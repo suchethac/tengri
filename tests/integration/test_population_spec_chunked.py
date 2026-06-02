@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import Fixed, Parameters, SEDModel, Uniform
+from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, Uniform
 
 jax.config.update("jax_enable_x64", True)
 
@@ -66,8 +66,18 @@ def wave_obs():
 def test_spectrum_chunked_consistency_multiple_calls(ssp, spec, wave_obs):
     """Spectrum chunking should be consistent across multiple calls."""
     key = jax.random.PRNGKey(100)
-    model_unchunked = SEDModel(spec, ssp, wave_chunk_size=None)
-    model_chunked = SEDModel(spec, ssp, wave_chunk_size=64)
+    model_unchunked = SEDModel(
+        spec,
+        ssp,
+        wave_chunk_size=None,
+        observation=Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs)),
+    )
+    model_chunked = SEDModel(
+        spec,
+        ssp,
+        wave_chunk_size=64,
+        observation=Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs)),
+    )
 
     # Sample a single parameter set
     params = model_unchunked.spec.sample(key)
@@ -77,8 +87,8 @@ def test_spectrum_chunked_consistency_multiple_calls(ssp, spec, wave_obs):
     fluxes_chunked = []
 
     for _ in range(5):
-        flux_u = model_unchunked.predict_spectrum(params, wave_obs, mode="exact")
-        flux_c = model_chunked.predict_spectrum(params, wave_obs, mode="exact")
+        flux_u = model_unchunked.predict_spectrum(params, wave_obs)
+        flux_c = model_chunked.predict_spectrum(params, wave_obs)
 
         fluxes_unchunked.append(flux_u)
         fluxes_chunked.append(flux_c)
@@ -105,13 +115,23 @@ def test_spectrum_chunked_across_wavelengths(ssp, spec):
         wave_obs_max = wave_rest_max * (1.0 + z)
         wave_obs = jnp.logspace(jnp.log10(wave_obs_min), jnp.log10(wave_obs_max), 100)
 
-        model_unchunked = SEDModel(spec, ssp, wave_chunk_size=None)
-        model_chunked = SEDModel(spec, ssp, wave_chunk_size=32)
+        model_unchunked = SEDModel(
+            spec,
+            ssp,
+            wave_chunk_size=None,
+            observation=Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs)),
+        )
+        model_chunked = SEDModel(
+            spec,
+            ssp,
+            wave_chunk_size=32,
+            observation=Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs)),
+        )
 
         params = model_unchunked.spec.sample(jax.random.PRNGKey(101))
 
-        flux_u = model_unchunked.predict_spectrum(params, wave_obs, mode="exact")
-        flux_c = model_chunked.predict_spectrum(params, wave_obs, mode="exact")
+        flux_u = model_unchunked.predict_spectrum(params, wave_obs)
+        flux_c = model_chunked.predict_spectrum(params, wave_obs)
 
         np.testing.assert_allclose(
             flux_c,
@@ -120,27 +140,3 @@ def test_spectrum_chunked_across_wavelengths(ssp, spec):
             atol=1e-15,
             err_msg=f"Mismatch for wave_rest_range={wave_rest_range}",
         )
-
-
-def test_spectrum_chunked_modes_all_match(ssp, spec, wave_obs):
-    """All prediction modes should match when chunked."""
-    model = SEDModel(spec, ssp, wave_chunk_size=64)
-    model.precompute_spectroscopy(wave_obs)
-
-    params = model.spec.sample(jax.random.PRNGKey(102))
-
-    # Get fluxes from different modes (all with chunking)
-    flux_auto = model.predict_spectrum(params, wave_obs, mode="auto", wave_chunk_size=64)
-    flux_compositional = model.predict_spectrum(
-        params, wave_obs, mode="compositional", wave_chunk_size=64
-    )
-    flux_exact = model.predict_spectrum(params, wave_obs, mode="exact", wave_chunk_size=64)
-
-    # auto and compositional should match (auto routes to compositional)
-    np.testing.assert_allclose(
-        flux_auto,
-        flux_compositional,
-        rtol=1e-12,
-        atol=1e-15,
-        err_msg="auto and compositional modes should match",
-    )

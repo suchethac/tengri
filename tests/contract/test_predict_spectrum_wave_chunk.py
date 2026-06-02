@@ -23,6 +23,7 @@ pytestmark = pytest.mark.bounds
 
 jax.config.update("jax_enable_x64", True)
 
+from tengri import Observation, Spectroscopy
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
@@ -89,24 +90,18 @@ def wave_obs_460():
 
 @pytest.fixture(scope="module")
 def model_exact(ssp, spec_photometry_only, wave_obs_460):
-    """Model using exact mode."""
-    model = SEDModel(spec_photometry_only, ssp)
-    return model
+    """Model using the exact path, with spectroscopy configured on the
+    observation (the new API; the removed ``precompute_spectroscopy`` used to
+    attach the grid after construction)."""
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs_460))
+    return SEDModel(spec_photometry_only, ssp, observation=obs)
 
 
 @pytest.fixture(scope="module")
 def model_with_dust_variation(ssp, spec_with_dust_variation, wave_obs_460):
-    """Model with variable dust, exact mode."""
-    model = SEDModel(spec_with_dust_variation, ssp)
-    return model
-
-
-@pytest.fixture(scope="module")
-def model_compositional(ssp, spec_photometry_only, wave_obs_460):
-    """Model with precomputed spectroscopy (compositional mode)."""
-    model = SEDModel(spec_photometry_only, ssp)
-    model.precompute_spectroscopy(wave_obs_460)
-    return model
+    """Model with variable dust, exact path, spectroscopy on the observation."""
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs_460))
+    return SEDModel(spec_with_dust_variation, ssp, observation=obs)
 
 
 def test_wave_chunk_none_default(model_exact, wave_obs_460):
@@ -139,50 +134,6 @@ def test_exact_mode_chunk_sizes_match_unchunked(model_exact, wave_obs_460):
             rtol=1e-12,
             atol=1e-15,
             err_msg=f"Mismatch for chunk_size={chunk_size}",
-        )
-
-
-def test_compositional_mode_chunk_sizes_match(model_compositional, wave_obs_460):
-    """Compositional mode: all chunk sizes should produce bitwise-identical output."""
-    params = model_compositional.spec.sample(jax.random.PRNGKey(43))
-
-    flux_unchunked = model_compositional.predict_spectrum(
-        params, wave_obs_460, wave_chunk_size=None
-    )
-
-    for chunk_size in [32, 64, 128]:
-        flux_chunked = model_compositional.predict_spectrum(
-            params, wave_obs_460, wave_chunk_size=chunk_size
-        )
-
-        np.testing.assert_allclose(
-            flux_chunked,
-            flux_unchunked,
-            rtol=1e-12,
-            atol=1e-15,
-            err_msg=f"Mismatch for chunk_size={chunk_size}",
-        )
-
-
-def test_auto_mode_chunk_sizes_match(model_compositional, wave_obs_460):
-    """Auto mode: should route to compositional and chunk there."""
-    params = model_compositional.spec.sample(jax.random.PRNGKey(44))
-
-    flux_unchunked = model_compositional.predict_spectrum(
-        params, wave_obs_460, wave_chunk_size=None
-    )
-
-    for chunk_size in [32, 64]:
-        flux_chunked = model_compositional.predict_spectrum(
-            params, wave_obs_460, wave_chunk_size=chunk_size
-        )
-
-        np.testing.assert_allclose(
-            flux_chunked,
-            flux_unchunked,
-            rtol=1e-12,
-            atol=1e-15,
-            err_msg=f"Mismatch for chunk_size={chunk_size} in auto mode",
         )
 
 
@@ -234,7 +185,8 @@ def test_chunk_size_1_pixel(model_exact, wave_obs_460):
 
 def test_instance_wave_chunk_size_default(ssp, spec_photometry_only, wave_obs_460):
     """Passing wave_chunk_size to __init__ should set instance default."""
-    model_chunked = SEDModel(spec_photometry_only, ssp, wave_chunk_size=64)
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs_460))
+    model_chunked = SEDModel(spec_photometry_only, ssp, wave_chunk_size=64, observation=obs)
     params = model_chunked.spec.sample(jax.random.PRNGKey(48))
 
     # Should use instance default (64) without explicit kwarg
