@@ -23,7 +23,7 @@
 # the quickstart (`SEDModel.build`, validated HMC) and shows what it does and
 # does not constrain: metallicity and age tighten sharply, but the **absolute
 # dust optical depth stays loose** — a spectrum sets the continuum *shape*, not
-# its normalisation. That gap is exactly what adding photometry closes in
+# its normalisation. Adding photometry closes that gap in
 # [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
@@ -47,6 +47,7 @@ from tengri import (
     Observation,
     SEDModel,
     Spectroscopy,
+    SpectrumPrecomp,
     Uniform,
     builders,
     load_ssp_data,
@@ -79,9 +80,16 @@ Z_GAL = 0.05
 WAVE_OBS = jnp.linspace(4000.0 * (1 + Z_GAL), 7000.0 * (1 + Z_GAL), 260)
 obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 
+# approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centres and
+# projects every forward pass through that lookup table — within ~0.03% of the
+# exact wave-grid spectrum but ~30x faster per evaluation, so a converged HMC
+# fit takes seconds rather than minutes. It is the spectroscopic analogue of
+# WavePrecomp; valid for low-to-medium resolution (R ≲ a few thousand), where
+# the continuum is smooth across a pixel.
 sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
+    approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE),
     dust=builders.dust.two_component(
         defaults=FIXED, law_bc="calzetti",
@@ -120,10 +128,10 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %% [markdown]
 # ## Fit
 #
-# A pure-spectrum likelihood runs the exact wave-grid path (no spectrum lookup
-# table yet), so we use the convergence-validated fixed-length HMC recipe
-# (dense mass, n_warmup=1000, n_leapfrog=20), which mixes this six-parameter
-# posterior cleanly.
+# The convergence-validated fixed-length HMC recipe (dense mass, n_warmup=1000,
+# n_leapfrog=20) mixes this six-parameter posterior cleanly. With
+# `SpectrumPrecomp` the forward pass is the lookup-table path, so the whole fit
+# runs in seconds rather than minutes.
 
 # %%
 t0 = time.perf_counter()
@@ -202,6 +210,5 @@ plt.show()
 #
 # A converged spectroscopy-only fit (R̂ < 1.05) pins stellar age, metallicity,
 # and mass from the absorption features, but leaves the dust normalisation
-# loose. Adding broadband photometry —
-# [`07_joint_photo_spec`](07_joint_photo_spec.py) — fixes the dust and tightens
-# everything: that is the case for joint fitting.
+# loose. [`07_joint_photo_spec`](07_joint_photo_spec.py) adds broadband
+# photometry, which fixes the dust normalisation and tightens the rest.

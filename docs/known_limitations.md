@@ -3,8 +3,8 @@
 tengri is research code under active development (v0.1.0). The forward model
 and inference pipeline work and are covered by 2000+ tests, but the project is
 pre-publication and several capabilities are partial. This page collects the
-limitations a user is most likely to hit. It is deliberately honest — prefer
-reading it before a fit fails to reading it afterwards.
+limitations a user is most likely to hit — better to read it before a fit
+fails than after.
 
 ## Verification status
 
@@ -38,8 +38,8 @@ publication-grade until the component you rely on has been cross-validated.**
 `tengri.list_inference_methods()` tags each backend `primary` or
 `experimental`. Several experimental backends carry explicit `[POOR MIXING]` or
 `[UNSTABLE]` flags in their description (e.g. `mcmc_ghmc`, `mcmc_mclmc`,
-`pathfinder`, `native_vi_*`). Stick to `primary` backends for science and read
-the flag before reaching for an experimental one. See
+`pathfinder`, `native_vi_*`). Stick to `primary` backends for science, and if
+you do try an experimental one, read its flag first. See
 [Choosing an inference method](method_selection).
 
 ## Memory
@@ -53,7 +53,7 @@ NUTS/VI warmup can peak far above the resident forward model — 20+ GB on a
 
 Full operational detail: `docs/dev/notebook_orchestration_oom.md`.
 
-## Physics caveats worth knowing
+## Physics caveats
 
 - **AGN torus:** the toy torus models in `agn/torus.py` are not for science —
   use `agn_model="skirtor"` (SKIRTOR; Stalevski et al. 2016).

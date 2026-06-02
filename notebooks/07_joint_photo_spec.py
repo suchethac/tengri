@@ -20,9 +20,9 @@
 # photometry leaves the SFH shape and the metallicity–dust split prior-
 # dominated. Here we add an optical spectrum covering the metallicity-
 # sensitive absorption features (Hβ, Mgb, the Fe blends) and fit both datasets
-# together. The point is concrete: **the joint posterior is narrower than
-# either single-modality fit, and it pins down the parameters photometry alone
-# cannot** — the spectrum's line depths break the age–metallicity–dust ridge.
+# together. The joint posterior is narrower than either single-dataset fit and
+# pins down parameters photometry alone cannot: the line depths break the
+# age–metallicity–dust ridge.
 #
 # Same machinery as the quickstart and notebook 05 (`SEDModel.build`, validated
 # HMC), with one `Observation` carrying both channels.
@@ -50,6 +50,7 @@ from tengri import (
     SEDModel,
     Spectroscopy,
     Uniform,
+    SpectrumPrecomp,
     WavePrecomp,
     builders,
     cosmology,
@@ -121,14 +122,13 @@ def build(obs, approx=None):
     )
 
 
-# Photometry-only gets the WavePrecomp lookup table (fast). The joint model
-# uses the exact path here as a deliberate max-accuracy reference; WavePrecomp
-# also works on a joint observation (it builds both the photometry and spectrum
-# LUTs), and additive emitters like the dust IR are filter-integrated exactly
-# under it — only the stellar dust attenuation carries the effective-wavelength
-# approximation.
+# Both fits use lookup tables. Photometry-only gets WavePrecomp (SSP × filter
+# LUT). The joint model gets SpectrumPrecomp, which builds both LUT families
+# side by side — the SSP × filter table for the photometry channel and the
+# SSP × pixel table for the spectrum — so neither channel falls back to the
+# slow exact wave-grid integration.
 model_phot = build(obs_phot, approx=WavePrecomp())
-model_joint = build(obs_joint)
+model_joint = build(obs_joint, approx=SpectrumPrecomp())
 print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}")
 
 # %% [markdown]
@@ -170,9 +170,10 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 # ## Two fits: photometry-only, then joint
 #
 # Both use the same validated HMC recipe (dense mass, n_warmup=1000,
-# n_leapfrog=20). Photometry-only runs through the WavePrecomp lookup table
-# (seconds); the joint fit runs the exact wave-grid path here (the deliberate
-# reference above), so it is the slow one — a few minutes. The two run
+# n_leapfrog=20) and both run on lookup tables (WavePrecomp for photometry,
+# SpectrumPrecomp's dual LUT for the joint fit). The joint fit is still the
+# slower of the two — it carries the 260-pixel spectral likelihood and its
+# gradient — at ~10 minutes against the photometry fit's seconds. The two run
 # sequentially in one process, per the OOM-orchestration rule.
 
 # %%
@@ -200,7 +201,7 @@ post_joint = run(model_joint, data_joint, noise_joint, "joint", "joint")
 #
 # The 68% credible width of each free parameter, normalised so the photometry-
 # only width is 1. Bars below 1 mean the joint fit tightened that parameter.
-# Metallicity and the dust split are where the spectrum earns its keep.
+# The largest gains are in metallicity and the dust split.
 
 # %%
 params = model_joint.spec.free_params
@@ -262,12 +263,12 @@ for p in params:
 print(f"\n68% coverage: {n_cov}/{len(params)}")
 
 # %% [markdown]
-# ## Headline figure — both datasets on one SED
+# ## Both datasets on one SED
 #
 # Observed photometry and the optical spectrum on a single F_ν axis, joint
-# posterior model SED behind them, with the spectral window in an inset. One
-# posterior — from one fit — explains the broadband points and the optical
-# spectrum simultaneously.
+# posterior model SED behind them, with the spectral window in an inset. A
+# single posterior explains the broadband points and the spectrum at the same
+# time.
 
 # %%
 N_DRAW = 60
@@ -321,8 +322,7 @@ plt.show()
 # ## Corner — joint posterior
 #
 # Free parameters with truth dashed. The metallicity and dust columns are now
-# tight and centred on the truth — the joint constraint that single-modality
-# fitting could not deliver.
+# tight and centred on the truth — neither dataset managed that on its own.
 
 # %%
 fig_corner = post_joint.plot_corner(truths=truth_full, color=C_POST)
@@ -333,12 +333,13 @@ plt.show()
 # ## Summary
 #
 # Photometry fixes the overall SED shape and stellar mass; the optical spectrum
-# adds the absorption-line depths that pin metallicity and the dust split. Fit
-# jointly through one `Observation`, the posterior is narrower than either alone
-# and recovers the truth the photometry-only fit ([notebook 05](05_fitting_photometry.py))
-# left degenerate. The cost is speed: the joint forward pass runs the exact
-# wave-grid path (no spectrum lookup table yet), so the joint fit is minutes,
-# not seconds.
+# adds the absorption-line depths that pin metallicity and the dust split.
+# Fitted together through one `Observation`, the posterior is narrower than
+# either alone and recovers the truth the photometry-only fit
+# ([notebook 05](05_fitting_photometry.py)) left degenerate. `SpectrumPrecomp`
+# runs both channels on lookup tables; the joint fit still takes ~10 minutes,
+# but the cost is now the per-pixel spectral likelihood and its gradient, not
+# the forward integration.
 
 # %%
 from contextlib import suppress
