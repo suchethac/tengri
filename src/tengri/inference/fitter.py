@@ -2538,7 +2538,7 @@ class Fitter:
             for g in batch
         )
         _use_vmap_map = (
-            method == "map" and self.model.precomputed.photometry is not None and _same_shape
+            method == "map" and self.model.has_fixedz_photometry_precompute and _same_shape
         )
 
         if _use_vmap_map:
@@ -2553,7 +2553,7 @@ class Fitter:
         }
         _use_vmap_mcmc = (
             method in _mcmc_methods
-            and self.model.precomputed.photometry is not None
+            and self.model.has_fixedz_photometry_precompute
             and _same_shape
             and not self.spec.stochastic
         )
