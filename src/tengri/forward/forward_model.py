@@ -103,9 +103,11 @@ class ForwardModel:
         return getattr(self._inner_sed_for_delegation(), "wave_obs", None)
 
     @property
-    def precomputed(self):
-        """Forward-model precompute container delegated from the inner SED."""
-        return getattr(self._inner_sed_for_delegation(), "precomputed", None)
+    def has_fixedz_photometry_precompute(self) -> bool:
+        """Fast-path eligibility, delegated from the inner SED (#620)."""
+        return bool(
+            getattr(self._inner_sed_for_delegation(), "has_fixedz_photometry_precompute", False)
+        )
 
     @property
     def hybrid(self):
