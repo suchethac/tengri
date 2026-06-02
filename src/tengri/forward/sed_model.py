@@ -755,15 +755,23 @@ class SEDModel:
     def wave_obs(self):
         """Configured observed-frame spectroscopy wavelength grid, or ``None``.
 
-        Public accessor for the internal ``_wave_obs`` attribute. Returns
-        ``None`` if no spectroscopy grid has been precomputed or configured.
+        Reports the grid the model predicts spectra on: an explicitly cached
+        ``_wave_obs`` if present, otherwise the configured
+        ``observation.spectroscopy.wave_obs`` (the source of truth, #389/#620).
+        Returns ``None`` only when no spectroscopy grid is configured anywhere.
 
         Returns
         -------
         ndarray or None
             Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
         """
-        return getattr(self, "_wave_obs", None)
+        cached = getattr(self, "_wave_obs", None)
+        if cached is not None:
+            return cached
+        obs = self.observation
+        if obs is not None and getattr(obs, "spectroscopy", None) is not None:
+            return getattr(obs.spectroscopy, "wave_obs", None)
+        return None
 
     @property
     def precomputed(self):
@@ -3249,9 +3257,10 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
-        if wave_obs is None and self._precomputed.spectroscopy is not None:
-            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
-        elif wave_obs is None and hasattr(self, "_wave_obs"):
+        # wave_obs resolution (the legacy ``self._precomputed.spectroscopy``
+        # tier was dead — ``_build_precomputed_data`` never populates it — and
+        # was removed; #620 retires ``PrecomputedData`` entirely).
+        if wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
         elif (
             wave_obs is None
@@ -3259,7 +3268,7 @@ class SEDModel:
             and getattr(self.observation, "spectroscopy", None) is not None
             and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
         ):
-            # Tier-2 fallback documented in the docstring above (#389):
+            # Tier fallback documented in the docstring above (#389):
             # honour observation.spectroscopy.wave_obs so Fitter-driven
             # spectroscopy fits don't need a manual `model._wave_obs` hack.
             wave_obs = self.observation.spectroscopy.wave_obs
@@ -4170,10 +4179,16 @@ class SEDModel:
         is applied; callers that need calibration should compose it on
         top via the user-likelihood Protocol path.
         """
-        if wave_obs is None and self._precomputed.spectroscopy is not None:
-            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
-        elif wave_obs is None and hasattr(self, "_wave_obs"):
+        # (legacy dead ``self._precomputed.spectroscopy`` tier removed — #620)
+        if wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif (
+            wave_obs is None
+            and self.observation is not None
+            and getattr(self.observation, "spectroscopy", None) is not None
+            and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
+        ):
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
             raise ValueError(
                 "predict_spectrum_components requires a wave_obs grid "
