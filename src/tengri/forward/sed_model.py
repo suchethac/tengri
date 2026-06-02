@@ -44,12 +44,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.dust.attenuation import precompute_dust_age_weights
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
-from tengri.components.stellar.sps.precompute import (
-    precompute_photometry,
-)
 from tengri.config.exceptions import ParameterMapError
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.pipeline import (
@@ -60,7 +56,6 @@ from tengri.forward.sed_model_types import (
     CompositionalKernels,
     HybridKernels,
     MockData,
-    PrecomputedData,
     PriorPredictive,
     SEDModelState,
 )
@@ -87,7 +82,6 @@ __all__ = [
     "CompositionalKernels",
     "HybridKernels",
     "MockData",
-    "PrecomputedData",
     "PriorPredictive",
     "SEDModel",
     "SEDModelState",
@@ -235,10 +229,17 @@ class SEDModel:
         Unified observation config (photometry + spectroscopy + emission lines).
         Mutually exclusive with ``filters``.
     precompute : bool, optional
-        Whether to precompute SSP photometry and spectroscopy grids at
-        initialization. Default True activates the Zacharegkas+2025
-        fast-photometry path and enabling caching of spectroscopy grids.
-        Set False to defer computation (useful for batch operations).
+        **Legacy / largely superseded.** Builds the pre-Phase-3
+        ``PrecomputedData`` container (fixed-z SSP photometry/spectroscopy grid
+        defaults). This predates — and is NOT — the fast LUT path: the
+        Zacharegkas+2025 fast-photometry / spectroscopy speedup is selected at
+        build time via ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``
+        (see ``approx`` below), which builds its own LUTs through the component
+        chain and does not consume ``PrecomputedData``. ``precompute`` now only
+        supplies a couple of grid fallbacks for the exact path and is scheduled
+        to be folded into ``approx`` (tracked in the precompute-naming cleanup
+        issue). Default True; leave it unless you know you need the legacy
+        container. Set False to skip building it.
     forward_dtype : str or jnp.dtype, optional
         Dtype for forward model computation. Default ``"float64"`` preserves
         full precision. ``"float32"`` halves memory and gives ~1.5× speedup
@@ -517,6 +518,23 @@ class SEDModel:
                 "approx=True, approx='wave_precomp') were removed."
             )
 
+        # Part A (joint precompute): on a joint photometry+spectroscopy
+        # observation, any precompute opt-in builds BOTH LUT families. The
+        # approx object's *type* historically selected the family
+        # (WavePrecomp→photometry, SpectrumPrecomp→spectroscopy); for a joint
+        # model we promote to both so the forward pass projects photometry via
+        # ``predict_via_precomp`` AND spectroscopy via
+        # ``predict_spectrum_via_precomp`` (the components publish both LUT
+        # families in one pass). z-grid knobs (n_z/z_min/z_max) come from
+        # whichever object was passed and apply to both families.
+        if (
+            observation is not None
+            and getattr(observation, "is_joint", False)
+            and (self._approx.get("wave_precomp") or self._approx.get("spectrum_precomp"))
+        ):
+            self._approx["wave_precomp"] = True
+            self._approx["spectrum_precomp"] = True
+
         # Free-redshift ztable auto-extension. ``ztable`` is an internal
         # extension of ``wave_precomp`` (free-z interpolation on the same LUT),
         # not a user flag — it switches on transparently when the method is
@@ -531,7 +549,9 @@ class SEDModel:
         self._catalog_z_range: tuple[float, float] | None = None
         if self._approx["wave_precomp"]:
             redshift_dist = spec.get_distribution("redshift")
-            cz = self._approx_config.catalog_z_range if self._approx_config is not None else None
+            # ``catalog_z_range`` is a WavePrecomp-only knob; under a joint
+            # model the config may be a SpectrumPrecomp (no such field).
+            cz = getattr(self._approx_config, "catalog_z_range", None)
             if cz is not None:
                 if redshift_dist.is_fixed:
                     self._approx["ztable"] = True
@@ -581,14 +601,18 @@ class SEDModel:
         # ── Validate and freeze parameter map ─────────────────────
         self._validate_and_freeze_param_map(param_map_deltas)
 
-        # ── Kernel hierarchy ──────────────────────────────────────
-        self._precomputed = self._build_precomputed_data(ssp_data, precompute)
+        # ── Warm HDF5 grid caches BEFORE any JIT compilation ──────
+        # (tracer-leak prevention; formerly the side-effect at the top of the
+        # retired ``_build_precomputed_data``, #620). ``precompute`` is now an
+        # accepted-but-ignored legacy kwarg — the fast path is opt-in via
+        # ``approx=WavePrecomp()`` / ``approx=SpectrumPrecomp()``.
+        del precompute
+        self._warm_grid_caches()
 
         # ── Frozen runtime bundle for kernel layer (built BEFORE kernels) ──
         self._state = SEDModelState(
             spec=self.spec,
             ssp_data=self.ssp_data,
-            precomputed=self._precomputed,
             filter_waves=self.filter_waves,
             filter_trans=self.filter_trans,
             rest_wavelength=self._rest_wavelength,
@@ -729,26 +753,36 @@ class SEDModel:
     def wave_obs(self):
         """Configured observed-frame spectroscopy wavelength grid, or ``None``.
 
-        Public accessor for the internal ``_wave_obs`` attribute. Returns
-        ``None`` if no spectroscopy grid has been precomputed or configured.
+        Reports the grid the model predicts spectra on: an explicitly cached
+        ``_wave_obs`` if present, otherwise the configured
+        ``observation.spectroscopy.wave_obs`` (the source of truth, #389/#620).
+        Returns ``None`` only when no spectroscopy grid is configured anywhere.
 
         Returns
         -------
         ndarray or None
             Observed-frame wavelength grid [Angstrom], shape ``(n_pix,)``.
         """
-        return getattr(self, "_wave_obs", None)
+        cached = getattr(self, "_wave_obs", None)
+        if cached is not None:
+            return cached
+        obs = self.observation
+        if obs is not None and getattr(obs, "spectroscopy", None) is not None:
+            return getattr(obs.spectroscopy, "wave_obs", None)
+        return None
 
     @property
-    def precomputed(self):
-        """Container of precomputed forward-model tables (photometry, spectroscopy, …).
+    def has_fixedz_photometry_precompute(self) -> bool:
+        """Whether this is a fixed-z photometry model (vmap-batch / fast-path eligible).
 
-        Public accessor for the internal ``_precomputed`` attribute. The
-        container exposes ``photometry``, ``spectroscopy``, ``photometry_ztable``,
-        and ``dust_age_weights`` slots; any may be ``None`` if not configured.
-        Used by inference / diagnostics to query precompute state.
+        Replaces the legacy ``model.precomputed.photometry is not None`` proxy
+        (the ``PrecomputedData`` container is being retired, #620). The legacy
+        container's ``photometry`` slot was populated exactly when a fixed
+        redshift and filters were configured, so this reproduces that boolean
+        without the container. The LUT fast path itself is opt-in via
+        ``approx=WavePrecomp()`` and lives in the component chain.
         """
-        return self._precomputed
+        return self._z_fixed is not None and self.filter_waves is not None
 
     @property
     def hybrid(self):
@@ -1104,7 +1138,11 @@ class SEDModel:
         # Mirror the `_warm_grid_caches()` pattern used by `_build_precomputed_data`
         # and force-load at factory time (#390).
         _TEMPLATE_BASED_EMISSION_MODELS = frozenset(
-            {"draine_li2007", "dl14", "dale2014", "astrodust", "bosa", "themis"}
+            # NB: include both the canonical ``draine_li2014`` name and its
+            # ``dl14`` alias — the canonical name was missing, so a model built
+            # with emission='draine_li2014' was never preloaded and lazy-loaded
+            # its templates inside the JIT trace (UnexpectedTracerError).
+            {"draine_li2007", "dl14", "draine_li2014", "dale2014", "astrodust", "bosa", "themis"}
         )
         if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
             from tengri.components.dust.emission import preload_emission_model
@@ -1573,672 +1611,19 @@ class SEDModel:
                 pass
 
     def ensure_photometry_precomputed(self) -> bool:
-        """Lazily run photometry precomputation if not yet done.
+        """Deprecated no-op (the legacy ``PrecomputedData`` container was retired, #620).
 
-        Encapsulates the lazy precompute path previously open-coded in
-        :meth:`Fitter._auto_precompute_photometry`. Returns ``True`` if
-        the table was built by this call, ``False`` if it was already
-        present or any of the required inputs (fixed redshift, filters)
-        is missing.
-
-        Migration-2 contract: callers (Fitter, diagnostics, …) should
-        invoke this method instead of mutating ``self._precomputed``
-        directly. The method is idempotent — calling it twice is a no-op.
+        The photometry fast path is now opt-in at build time via
+        ``approx=WavePrecomp()`` and is built through the component chain, not
+        lazily here. Retained as a no-op so existing callers (e.g. the Fitter,
+        whose return value was already discarded) keep working.
 
         Returns
         -------
         bool
-            ``True`` if precomputation ran on this call, ``False`` otherwise.
+            Always ``False`` (nothing is built lazily).
         """
-        if self._precomputed.photometry is not None:
-            return False
-        if self._z_fixed is None or self.filter_waves is None:
-            return False
-
-        from tengri.components.stellar.sps.precompute import precompute_photometry
-
-        self._precomputed.photometry = precompute_photometry(
-            self.ssp_data,
-            self.filter_waves,
-            self.filter_trans,
-            self._z_fixed,
-            self._dl_cm_fixed,
-        )
-        return True
-
-    def _build_precomputed_data(self, ssp_data, precompute):
-        """Build Level 1: precomputed SSP tensors."""
-        # Warm HDF5 grid caches BEFORE any JIT compilation (tracer leak prevention)
-        self._warm_grid_caches()
-
-        # Photometry precomputation (Zacharegkas+2025 Section 3)
-        phot = None
-        if precompute and self._z_fixed is not None and self.filter_waves is not None:
-            # Extract fixed SSP grid parameters and map to axis indices
-            # SSP grid axes: [lgmet, lg_age_gyr]
-            fixed_ssp = {}
-            if "met_logzsol" in self.spec.fixed_params:
-                # met_logzsol is fixed → collapse axis 0 (lgmet).
-                # ssp_lgmet is in absolute log10(Z); convert met_logzsol
-                # (log10 Z/Zsun) to absolute by adding LOG10_ZSUN.
-                dist = self.spec._distributions["met_logzsol"]
-                fixed_ssp[0] = float(dist.value) + LOG10_ZSUN
-
-            phot = precompute_photometry(
-                ssp_data,
-                self.filter_waves,
-                self.filter_trans,
-                self._z_fixed,
-                self._dl_cm_fixed,
-                fixed=fixed_ssp if fixed_ssp else None,
-            )
-
-        # Dust age weights (sigmoid, for exact two-component dust).
-        # Also force-precompute when dust_emission is enabled: the hybrid
-        # photometry kernel's energy-balance branch needs the continuous
-        # sigmoid age weights (binary young/old split underestimates UV
-        # absorption by ~22%). Without this, build_hybrid_photometry hit
-        # an UnboundLocalError that was silently swallowed by the
-        # contextlib.suppress(...) wrapper a few hundred lines below,
-        # forcing every IR-enabled fit through the compositional kernel
-        # — which captures the full 114 MB SSP flux grid as a JIT
-        # constant and explodes compile time (12+ minutes vs <1 minute).
-        # See `docs/dev/quickstart_oom_diagnosis.md`.
-        dust_age_w = None
-        if self._dust_model != "single_component" and (
-            self._dust_scheme == "exact" or self._dust_emission_model is not None
-        ):
-            dust_age_w = precompute_dust_age_weights(self.ssp_ages_yr)
-
-        # IGM at filter effective wavelengths (for hybrid kernel, fixed z)
-        igm_eff = None
-        if (
-            self._uses_igm
-            and self._approx["igm"]
-            and phot is not None
-            and self._z_fixed is not None
-        ):
-            igm_eff = self._igm_fn(phot.effective_wavelengths, self._z_fixed)
-
-        # Voronoi frequency bandwidths for L_absorbed broadband estimate.
-        # Each filter is assigned a non-overlapping frequency interval via
-        # Voronoi tessellation at the filter effective frequencies.  This
-        # converts the naive sum(L_ν) into a proper ∫L_ν dν quadrature.
-        eff_bw = None
-        if phot is not None and self._z_fixed is not None:
-            _c_aa = 2.998e18  # speed of light in Angstrom/s
-            eff_rest = phot.effective_wavelengths / (1.0 + self._z_fixed)
-            eff_nu = _c_aa / eff_rest  # Hz, decreasing order (UV first)
-
-            sort_idx = jnp.argsort(eff_nu)
-            nu_sorted = eff_nu[sort_idx]
-            midpoints = 0.5 * (nu_sorted[:-1] + nu_sorted[1:])
-            lower = nu_sorted[0] - 0.5 * (nu_sorted[1] - nu_sorted[0])
-            upper = nu_sorted[-1] + 0.5 * (nu_sorted[-1] - nu_sorted[-2])
-            edges = jnp.concatenate(
-                [jnp.array([jnp.maximum(lower, 0.0)]), midpoints, jnp.array([upper])]
-            )
-            dnu_sorted = edges[1:] - edges[:-1]
-            unsort_idx = jnp.argsort(sort_idx)
-            eff_bw = dnu_sorted[unsort_idx]
-
-        # CLOUDY nebular preintegration (continuum + lines through filters)
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._nebular_backend is not None
-            and hasattr(self._nebular_backend, "preintegrate_for_photometry")
-        ):
-            # Extract fixed grid parameters and map to axis indices
-            # CLOUDY grid axes: [log_met, log_age, log_U]
-            fixed_cloudy = {}
-            if "met_logzsol" in self.spec.fixed_params:
-                # met_logzsol is fixed → collapse axis 0 (log_met).
-                # CLOUDY grid log_met is absolute log10(Z); convert
-                # met_logzsol (log10 Z/Zsun) by adding LOG10_ZSUN.
-                dist = self.spec._distributions["met_logzsol"]
-                fixed_cloudy[0] = float(dist.value) + LOG10_ZSUN
-            if "neb_logU" in self.spec.fixed_params:
-                # neb_logU is fixed → collapse axis 2 (log_U)
-                dist = self.spec._distributions["neb_logU"]
-                fixed_cloudy[2] = float(dist.value)
-
-            self._nebular_backend.preintegrate_for_photometry(
-                self.filter_waves,
-                self.filter_trans,
-                self._z_fixed,
-                self._dl_cm_fixed,
-                fixed=fixed_cloudy if fixed_cloudy else None,
-            )
-
-        # Dust IR emission template preintegration (for hybrid kernel, fixed z)
-        # For template-based dust models (DL07, Dale2014, etc.), pre-integrate
-        # templates through filters at init time for fast runtime triweight lookup.
-        # Also extract grid arrays for threading as JIT-traced inputs.
-        dust_ir_lookup = None
-        dust_ir_grid_arrays = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._dust_emission_model is not None
-        ):
-            dust_ir_lookup, dust_ir_grid_arrays = self._precompute_dust_ir_photometry()
-
-        # Analytic dust emission model preintegration (PR 3).
-        # Pre-integrate modified_blackbody, casey2012, pah_drude through filters
-        # at init time for fast filter-level triweight lookup.
-        modified_blackbody_preint = None
-        casey2012_preint = None
-        pah_drude_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._dust_emission_model is not None
-        ):
-            # Build separate preintegrated lookups for each analytic dust model,
-            # only when that model is selected. (Allows users to switch models
-            # at runtime without rebuilding.)
-            if self._dust_emission_model == "modified_blackbody":
-                try:
-                    modified_blackbody_preint = self._precompute_dust_analytic_photometry(
-                        "modified_blackbody"
-                    )
-                except Exception as e:
-                    warnings.warn(
-                        f"modified_blackbody dust preintegration failed: {e}. "
-                        "Falling back to full-wavelength evaluation.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
-            elif self._dust_emission_model == "casey2012":
-                try:
-                    casey2012_preint = self._precompute_dust_analytic_photometry("casey2012")
-                except Exception as e:
-                    warnings.warn(
-                        f"casey2012 dust preintegration failed: {e}. "
-                        "Falling back to full-wavelength evaluation.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
-            elif self._dust_emission_model == "pah_drude":
-                try:
-                    pah_drude_preint = self._precompute_dust_analytic_photometry("pah_drude")
-                except Exception as e:
-                    warnings.warn(
-                        f"pah_drude dust preintegration failed: {e}. "
-                        "Falling back to full-wavelength evaluation.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
-
-        # K&D 2018 AGN disc preintegration (for hybrid kernel, fixed z, K&D models)
-        # Pre-integrate the three K&D disc zones through filters at init time
-        # for fast runtime filter-level lookup instead of wavelength-level computation.
-        kd_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model in ("kubota_done_full", "kubota_done_disc")
-        ):
-            from tengri.components.agn.kd_precompute import preintegrate_kd_components
-
-            kd_preint = preintegrate_kd_components(
-                self.filter_waves,
-                self.filter_trans,
-                self._z_fixed,
-            )
-
-        # SKIRTOR torus preintegration (for hybrid kernel, fixed z, SKIRTOR models)
-        # Pre-integrate SKIRTOR torus templates through filters at init time for
-        # fast filter-level triweight lookup instead of wavelength-level computation.
-        skirtor_preint = None
-        skirtor_grid_arrays = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "skirtor"
-        ):
-            try:
-                from tengri.components.agn.skirtor import _find_skirtor_grid
-                from tengri.components.agn.skirtor_precompute import (
-                    build_skirtor_photometry_lookup,
-                    precompute_skirtor_photometry,
-                )
-
-                _grid_path = _find_skirtor_grid()
-                _precomp = precompute_skirtor_photometry(
-                    _grid_path,
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                )
-                # Store grid arrays as JIT-traced kwargs to avoid closure capture
-                skirtor_grid_arrays = (_precomp["grid_phot"], _precomp["axes"])
-                skirtor_preint = build_skirtor_photometry_lookup(
-                    _precomp, grid_arrays_traced=skirtor_grid_arrays
-                )
-            except Exception as e:
-                warnings.warn(
-                    f"SKIRTOR torus preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-                skirtor_grid_arrays = None
-
-        # Silva+04 AGN torus preintegration
-        # Pre-integrate through filters at init time for fast triweight lookup.
-        silva04_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "silva04"
-        ):
-            try:
-                from tengri.components.agn.silva04 import _find_silva04_grid
-                from tengri.components.agn.silva04_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-
-                _grid_path = _find_silva04_grid()
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    grid_path=_grid_path,
-                )
-                silva04_preint = build_lookup(_precomp)
-            except Exception as e:
-                warnings.warn(
-                    f"Silva+04 torus preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # CAT3D-Wind AGN torus preintegration
-        # Pre-integrate through filters at init time for fast triweight lookup.
-        cat3d_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "cat3d_wind"
-        ):
-            try:
-                from tengri.components.agn.cat3d_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-                from tengri.components.agn.cat3d_wind import _find_cat3d_grid
-
-                _grid_path = _find_cat3d_grid()
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    grid_path=_grid_path,
-                )
-                cat3d_preint = build_lookup(_precomp)
-            except Exception as e:
-                warnings.warn(
-                    f"CAT3D-Wind torus preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # Analytic disc model preintegration (powerlaw_disc, ss_disc, cigale_disc)
-        # Pre-integrate through filters at init time for fast triweight lookup.
-        powerlaw_disc_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "powerlaw_disc"
-        ):
-            try:
-                from tengri.components.agn.disc_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="powerlaw_disc",
-                )
-                powerlaw_disc_preint = build_lookup(_precomp, model="powerlaw_disc")
-            except Exception as e:
-                warnings.warn(
-                    f"powerlaw_disc preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        ss_disc_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "ss_disc"
-        ):
-            try:
-                from tengri.components.agn.disc_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="ss_disc",
-                )
-                ss_disc_preint = build_lookup(_precomp, model="ss_disc")
-            except Exception as e:
-                warnings.warn(
-                    f"ss_disc preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        cigale_disc_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "cigale_disc"
-        ):
-            try:
-                from tengri.components.agn.disc_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="cigale_disc",
-                )
-                cigale_disc_preint = build_lookup(_precomp, model="cigale_disc")
-            except Exception as e:
-                warnings.warn(
-                    f"cigale_disc preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # QSOgen quasar SED preintegration
-        # Pre-integrate through filters at init time for fast triweight lookup.
-        qsogen_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "qsogen"
-        ):
-            try:
-                from tengri.components.agn.qsogen_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                )
-                qsogen_preint = build_lookup(_precomp)
-            except Exception as e:
-                warnings.warn(
-                    f"qsogen preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # Composable AGN precompute. Builds a triweight lookup from the
-        # user-supplied recipe + axis grids; mirrors the qsogen branch
-        # above. The user opts in by setting ``agn_axis_grids`` on the
-        # ``Parameters`` spec (a ``dict[str, ndarray]``); when absent we
-        # skip precompute and the runtime path is used.
-        composable_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_model == "composable"
-            and getattr(self.spec, "agn_axis_grids", None)
-        ):
-            try:
-                from tengri.components.agn.blocks import Recipe
-                from tengri.components.agn.blocks.composable_precompute import (
-                    build_lookup as _cmp_build_lookup,
-                    precompute as _cmp_precompute,
-                )
-
-                _recipe = Recipe.from_parameters(
-                    self.spec,
-                    axis_params=tuple(self.spec.agn_axis_grids.keys()),
-                )
-                _precomp = _cmp_precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    recipe=_recipe,
-                    axis_grids=self.spec.agn_axis_grids,
-                )
-                composable_preint = _cmp_build_lookup(_precomp)
-            except Exception as e:
-                warnings.warn(
-                    f"composable AGN preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # Radio analytic precomputes (PR 5).  These build cleanly per the
-        # protocol but the kernel does not yet consume them; they are stored
-        # on PrecomputedData so a future kernel branch can swap in the lookup
-        # without re-touching SEDModel.  See benchmarks: ~5x faster than
-        # runtime evaluation in isolation; see TODOs in
-        # ``components/radio/radio_precompute.py``.
-        radio_synchrotron_preint = None
-        radio_freefree_preint = None
-        radio_agn_jet_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and getattr(self, "_uses_radio", False)
-        ):
-            try:
-                from tengri.components.radio.radio_precompute import (
-                    build_lookup as _radio_build,
-                    precompute as _radio_precompute,
-                )
-
-                if getattr(self, "_radio_sfr_mode", "bell2003") == "bell2003":
-                    _p = _radio_precompute(
-                        self.filter_waves,
-                        self.filter_trans,
-                        redshift=float(self._z_fixed),
-                        parameters=self.spec,
-                        model="radio_synchrotron",
-                    )
-                    radio_synchrotron_preint = _radio_build(_p, model="radio_synchrotron")
-                if getattr(self, "_radio_include_freefree", True):
-                    _p = _radio_precompute(
-                        self.filter_waves,
-                        self.filter_trans,
-                        redshift=float(self._z_fixed),
-                        parameters=self.spec,
-                        model="radio_freefree",
-                    )
-                    radio_freefree_preint = _radio_build(_p, model="radio_freefree")
-                _p = _radio_precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="radio_agn_jet",
-                )
-                radio_agn_jet_preint = _radio_build(_p, model="radio_agn_jet")
-            except Exception as e:
-                warnings.warn(
-                    f"Radio preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # X-ray analytic precomputes (PR 6).  Same caveat as radio: built and
-        # stored; kernel consumption pending.
-        xray_xrb_preint = None
-        xray_corona_preint = None
-        xray_corona_lopez24_preint = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and getattr(self, "_uses_xray", False)
-        ):
-            try:
-                from tengri.components.xray.xray_precompute import (
-                    build_lookup as _xray_build,
-                    precompute as _xray_precompute,
-                )
-
-                _p = _xray_precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="xray_xrb",
-                )
-                xray_xrb_preint = _xray_build(_p, model="xray_xrb")
-                _p = _xray_precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="xray_corona",
-                )
-                xray_corona_preint = _xray_build(_p, model="xray_corona")
-                _p = _xray_precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                    model="xray_corona_lopez24",
-                )
-                xray_corona_lopez24_preint = _xray_build(_p, model="xray_corona_lopez24")
-            except Exception as e:
-                warnings.warn(
-                    f"X-ray preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # Line-emitter precomputes (PR 4) intentionally NOT built here.
-        # The photometry kernel consumes line emission via duck-typed methods
-        # on ``state.nebular_backend`` (see ``CloudyGridBackend.preintegrate_for_photometry``
-        # and ``_kernels/hybrid.py`` lines 169-199), not via PrecomputedData.
-        # Wiring CB19 / MAPPINGS V to the kernel means making each backend
-        # class implement that duck-typed surface (with the precompute adapter
-        # providing the data); AGN-nebular emitters (Feltre, BLR, NLR-Gaussian)
-        # need a new AGN-nebular kernel branch entirely. Each is a separate
-        # follow-up PR with its own equivalence harness.
-
-        # Feltre NLR AGN-nebular precomputation
-        feltre_nlr_lookup = None
-        if (
-            precompute
-            and self._z_fixed is not None
-            and self.filter_waves is not None
-            and self._agn_config is not None
-            and self._agn_config.agn_nlr_backend == "feltre"
-        ):
-            try:
-                from tengri.components.nebular.feltre_precompute import (
-                    build_lookup,
-                    precompute,
-                )
-
-                _precomp = precompute(
-                    self.filter_waves,
-                    self.filter_trans,
-                    redshift=float(self._z_fixed),
-                    parameters=self.spec,
-                )
-                feltre_nlr_lookup = build_lookup(_precomp)
-            except Exception as e:
-                warnings.warn(
-                    f"Feltre NLR preintegration failed: {e}. "
-                    "Falling back to full-wavelength evaluation.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-
-        # Build component_grid_arrays dict from registry. This dict holds
-        # JIT-traceable arrays that can be threaded as kwargs to component
-        # lookups, avoiding closure capture of large constants.
-        component_grid_arrays_dict: dict[str, tuple] = {}
-        if dust_ir_grid_arrays is not None:
-            component_grid_arrays_dict["dust_ir"] = dust_ir_grid_arrays
-        if skirtor_grid_arrays is not None:
-            component_grid_arrays_dict["agn:skirtor"] = skirtor_grid_arrays
-
-        return PrecomputedData(
-            photometry=phot,
-            dust_age_weights=dust_age_w,
-            igm_at_effective_wavelengths=igm_eff,
-            effective_bandwidths_hz=eff_bw,
-            component_grid_arrays=component_grid_arrays_dict,
-            dust_ir_lookup=dust_ir_lookup,
-            dust_ir_grid_arrays=dust_ir_grid_arrays,
-            modified_blackbody_preintegrated=modified_blackbody_preint,
-            casey2012_preintegrated=casey2012_preint,
-            pah_drude_preintegrated=pah_drude_preint,
-            kd_preintegrated=kd_preint,
-            skirtor_preintegrated=skirtor_preint,
-            skirtor_grid_arrays=skirtor_grid_arrays,
-            silva04_preintegrated=silva04_preint,
-            cat3d_preintegrated=cat3d_preint,
-            powerlaw_disc_preintegrated=powerlaw_disc_preint,
-            ss_disc_preintegrated=ss_disc_preint,
-            cigale_disc_preintegrated=cigale_disc_preint,
-            qsogen_preintegrated=qsogen_preint,
-            composable_preintegrated=composable_preint,
-            radio_synchrotron_preintegrated=radio_synchrotron_preint,
-            radio_freefree_preintegrated=radio_freefree_preint,
-            radio_agn_jet_preintegrated=radio_agn_jet_preint,
-            xray_xrb_preintegrated=xray_xrb_preint,
-            xray_corona_preintegrated=xray_corona_preint,
-            xray_corona_lopez24_preintegrated=xray_corona_lopez24_preint,
-            feltre_nlr_lookup=feltre_nlr_lookup,
-        )
+        return False
 
     def _get_internal_params(self, params):
         """Translate public param dict to internal names with unit conversion.
@@ -3223,9 +2608,10 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
-        if wave_obs is None and self._precomputed.spectroscopy is not None:
-            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
-        elif wave_obs is None and hasattr(self, "_wave_obs"):
+        # wave_obs resolution (the legacy ``self._precomputed.spectroscopy``
+        # tier was dead — ``_build_precomputed_data`` never populates it — and
+        # was removed; #620 retires ``PrecomputedData`` entirely).
+        if wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
         elif (
             wave_obs is None
@@ -3233,7 +2619,7 @@ class SEDModel:
             and getattr(self.observation, "spectroscopy", None) is not None
             and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
         ):
-            # Tier-2 fallback documented in the docstring above (#389):
+            # Tier fallback documented in the docstring above (#389):
             # honour observation.spectroscopy.wave_obs so Fitter-driven
             # spectroscopy fits don't need a manual `model._wave_obs` hack.
             wave_obs = self.observation.spectroscopy.wave_obs
@@ -4144,10 +3530,16 @@ class SEDModel:
         is applied; callers that need calibration should compose it on
         top via the user-likelihood Protocol path.
         """
-        if wave_obs is None and self._precomputed.spectroscopy is not None:
-            wave_obs = self._precomputed.spectroscopy.wave_obs_pixels
-        elif wave_obs is None and hasattr(self, "_wave_obs"):
+        # (legacy dead ``self._precomputed.spectroscopy`` tier removed — #620)
+        if wave_obs is None and hasattr(self, "_wave_obs"):
             wave_obs = self._wave_obs
+        elif (
+            wave_obs is None
+            and self.observation is not None
+            and getattr(self.observation, "spectroscopy", None) is not None
+            and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
+        ):
+            wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
             raise ValueError(
                 "predict_spectrum_components requires a wave_obs grid "
@@ -4483,53 +3875,23 @@ class SEDModel:
                 "model with ``observation=`` set."
             )
 
-        # Auto-delegate to the JIT-fused path for the common case.
-        # The eager dispatch of ~50 small jaxpr ops costs ~7–12 s of
-        # trace+micro-compile per fresh process; predict_observables_jit
-        # fuses them into one HLO and hits the persistent cache.
-        # spectrum_precomp publishes per-pixel LUTs into state.derived
-        # (during the orchestrator chain) and routes through
-        # ``predict_spectrum_via_precomp`` — not yet covered by
-        # predict_observables_jit — so fall through to the eager path when
-        # that approximation is active.
-        if not self._approx.get("spectrum_precomp"):
-            return self.predict_observables_jit(params)
+        # Eager (non-JIT) forward + projection. Runs the SAME ``_impl`` closure
+        # that :meth:`predict_observables_jit` wraps in ``jax.jit`` — one
+        # implementation, so the two are bit-identical by construction (the old
+        # dual implementation was how the spectrum LUT silently diverged). Use
+        # this for one-off / interactive evaluation where the ~7–12 s JIT
+        # trace+compile isn't worth amortising; use :meth:`predict_observables_jit`
+        # (what the Fitter calls) for repeated/inference evaluation, where the
+        # fused kernel is structurally + persistently cached. Both honour the
+        # build-time ``approx=`` (exact / WavePrecomp / SpectrumPrecomp / joint).
+        from tengri.inference._model_cache import _default_owner
 
-        state = self.predict_state(params)
-        full = {**self.spec.get_fixed_values(), **params}
-
-        # Phase 5: SpectrumPrecomp. The stellar component publishes
-        # ``spec_eff_waves`` (rest-frame pixel centres) and
-        # ``stellar_spec_lnu_precomp`` during ``predict_state``; downstream
-        # SEDModelComponents (dust / AGN / IGM / nebular continuum) then route
-        # through their spectrum-LUT branch and publish their own per-pixel
-        # contributions. ``predict_spectrum_via_precomp`` folds them through
-        # cosmology (and rasterised emission lines) into ``spec_fnu``.
-        if self._approx.get("spectrum_precomp") and self.observation.can_do_spectroscopy:
-            if self.observation.can_do_photometry:
-                raise NotImplementedError(
-                    "SpectrumPrecomp on a joint photometry+spectroscopy model is "
-                    "not yet wired (the photometric LUT family must be built "
-                    "alongside the spectrum LUT). For now, build a "
-                    "spectroscopy-only Observation under SpectrumPrecomp, or use "
-                    "approx=None for joint fits."
-                )
-            return self.observation.predict_spectrum_via_precomp(
-                state, full, observables_type=self._Observables
-            )
-
-        kwargs = {}
-        if self.observation.can_do_spectroscopy:
-            kwargs.update(
-                wave_obs=self._wave_obs
-                if hasattr(self, "_wave_obs")
-                else self.observation.spectroscopy.wave_obs,
-                sigma_v_kms=self._get_sigma_v_kms(params),
-                lsf_resolution=self._lsf_resolution,
-                lsf_sigma_lib_kms=self._sigma_lib_kms,
-                lsf_n_bins=self._lsf_n_bins,
-            )
-        return self.observation.predict(state, full, observables_type=self._Observables, **kwargs)
+        self._get_or_build_predict_observables_jit()  # ensure cache is populated
+        cache = _default_owner.get_structural_kernel(self.compile_signature())
+        impl = cache["predict_observables_impl"]
+        return impl(
+            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
+        )
 
     def predict_observables_jit(self, params):
         """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
@@ -4622,6 +3984,13 @@ class SEDModel:
         # routings without colliding. Spectrum stays exact — no spectrum
         # LUT yet.
         use_lut = bool(self._approx.get("wave_precomp")) and not observation.can_do_spectroscopy
+        # Part B: spectrum LUT inside the fused JIT kernel. ``predict_state``
+        # (called within ``_impl``) publishes ``spec_eff_waves`` + the per-pixel
+        # ``*_spec_lnu_precomp`` family via the cached chain, so the projector is
+        # fully JAX-traceable — no eager fallback needed. ``phot_lut`` lets a
+        # JOINT model also project photometry in the same kernel (Part A).
+        spec_lut = bool(self._approx.get("spectrum_precomp")) and observation.can_do_spectroscopy
+        phot_lut = bool(self._approx.get("wave_precomp"))
 
         # Warm the component-chain cache OUTSIDE the JIT trace. The chain
         # build runs each component's ``precompute()``, which for the
@@ -4640,6 +4009,22 @@ class SEDModel:
                 template_data=template_data,
             )
             full = {**fixed_values, **params}
+            # Part B: spectrum LUT (and, for a joint model, photometry LUT)
+            # projected inside the fused kernel. Each projector sums its own
+            # ``*_spec_lnu_precomp`` / ``*_phot_lnu_precomp`` family; collect
+            # dicts and build the per-model Observables once so phot_fnu and
+            # spec_fnu coexist. (Velocity dispersion / LSF are not applied on the
+            # per-pixel continuum LUT — that is SpectrumPrecomp's documented
+            # low-to-medium-R domain.)
+            if spec_lut:
+                out: dict = {}
+                out.update(
+                    observation.predict_spectrum_via_precomp(state, full, observables_type=None)
+                )
+                if observation.can_do_photometry and phot_lut:
+                    out.update(observation.predict_via_precomp(state, full, observables_type=None))
+                avail = {k: v for k, v in out.items() if k in observables_type._fields}
+                return observables_type(**avail)
             if observation.can_do_spectroscopy:
                 return observation.predict(
                     state,
@@ -4659,6 +4044,10 @@ class SEDModel:
 
         jit_fn = jax.jit(_impl)
         cache["predict_observables_jit"] = jit_fn
+        # Cache the un-jitted closure too, so :meth:`predict_observables` can run
+        # the IDENTICAL forward+projection logic eagerly (no XLA compile) without
+        # a second implementation to keep in sync. Same code → bit-identical.
+        cache["predict_observables_impl"] = _impl
         return jit_fn
 
     def _template_data_for_jit(self):
@@ -4995,14 +4384,28 @@ class SEDModel:
                         "n_z": getattr(cfg, "n_z", 100),
                     }
 
-                state = stellar.precompute(
+                spec_state = stellar.precompute(
                     ssp_data=stellar.ssp_data,
                     wave_grid=None,
                     approx=self._approx,
                     spec_wave_obs=spec_wave_obs,
                     redshift_spec=redshift_spec,
                 )
-                chain[0] = replace(stellar, _state=state)
+                # Part A (joint): MERGE the spectrum LUT into the stellar state
+                # rather than overwriting it — the photometry-LUT block above
+                # may already have populated ssp_phot_lut/ztable for a joint
+                # model. Spec-only models have no prior phot state, so the merge
+                # is a no-op on the phot fields.
+                prev = stellar._state
+                if prev is not None:
+                    merged = replace(
+                        prev,
+                        ssp_spec_lut=spec_state.ssp_spec_lut,
+                        ssp_spec_ztable=spec_state.ssp_spec_ztable,
+                    )
+                else:
+                    merged = spec_state
+                chain[0] = replace(stellar, _state=merged)
 
         return chain
 

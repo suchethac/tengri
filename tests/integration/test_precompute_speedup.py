@@ -19,6 +19,7 @@ from tengri import (
     Parameters,
     SEDModel,
     Uniform,
+    WavePrecomp,
     load_filter_set,
     load_ssp_data,
 )
@@ -55,46 +56,16 @@ def smooth_spec():
 
 
 # ── Accuracy: fast vs exact ───────────────────────────────────────
-
-
-class TestPrecomputeAccuracy:
-    """Verify approximate photometry matches exact within tolerance."""
-
-    def test_fast_vs_exact_agreement(self, ssp_data, sdss_filters, smooth_spec):
-        """Fast photometry agrees with exact within 1% per band."""
-        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
-        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
-
-        assert model_fast._precomputed.photometry is not None
-        assert model_exact._precomputed.photometry is None
-
-        key = jax.random.PRNGKey(42)
-        params = smooth_spec.sample(key)
-
-        flux_fast = model_fast.predict_photometry(params)
-        flux_exact = model_exact.predict_photometry(params)
-
-        frac_error = jnp.abs(flux_fast - flux_exact) / flux_exact
-        assert float(jnp.max(frac_error)) < 0.01, (
-            f"Max fractional error {float(jnp.max(frac_error)):.4f} > 1%"
-        )
-
-    def test_fast_vs_exact_multiple_params(self, ssp_data, sdss_filters, smooth_spec):
-        """Agreement holds across 10 random parameter sets."""
-        model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
-        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
-
-        for i in range(10):
-            key = jax.random.PRNGKey(i)
-            params = smooth_spec.sample(key)
-
-            flux_fast = model_fast.predict_photometry(params)
-            flux_exact = model_exact.predict_photometry(params)
-
-            frac_error = jnp.abs(flux_fast - flux_exact) / flux_exact
-            assert float(jnp.max(frac_error)) < 0.01, (
-                f"Seed {i}: max error {float(jnp.max(frac_error)):.4f}"
-            )
+#
+# WavePrecomp/SpectrumPrecomp LUT accuracy is validated with controlled
+# configs (diffuse-only dust, machine-exact continuum) in
+# tests/contract/test_stellar_precomp_contract.py and test_spectrum_lut.py.
+# The former benchmark accuracy tests here were vacuous before #620
+# (precompute= did not affect predict_photometry, so they compared the exact
+# path to itself) and are removed; the effective-wavelength dust
+# factorization error on a *dusty* sampled galaxy is several-% in the blue
+# (see #620 / optimization-architecture.md), which is config-dependent and
+# unsuitable for a fixed-tolerance random-draw assertion.
 
 
 # ── Speedup benchmark ─────────────────────────────────────────────
@@ -105,10 +76,8 @@ class TestPrecomputeSpeedup:
 
     def test_gradient_speedup(self, ssp_data, sdss_filters, smooth_spec):
         """Gradient evaluation is >5x faster with precomputation."""
-        from tengri import WavePrecomp
-
         model_fast = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, approx=WavePrecomp())
-        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=False)
+        model_exact = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, approx=None)
 
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model_exact.predict_photometry(params)
@@ -175,7 +144,7 @@ class TestGradientCleanliness:
 
     def test_all_gradients_finite(self, ssp_data, sdss_filters, smooth_spec):
         """All autodiff gradients are finite (no NaN/inf)."""
-        model = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, approx=None)
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model.predict_photometry(params)
         noise = data / 20.0
@@ -191,7 +160,7 @@ class TestGradientCleanliness:
 
     def test_autodiff_matches_finite_differences(self, ssp_data, sdss_filters, smooth_spec):
         """Autodiff gradients match finite differences to 4+ digits."""
-        model = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, precompute=True)
+        model = SEDModel(smooth_spec, ssp_data, filters=sdss_filters, approx=None)
         params = smooth_spec.sample(jax.random.PRNGKey(42))
         data = model.predict_photometry(params)
         noise = data / 20.0
@@ -237,7 +206,7 @@ class TestGradientCleanliness:
             redshift=0.1,
             n_grid=64,
         )
-        model = SEDModel(spec, ssp_data, filters=sdss_filters, precompute=True)
+        model = SEDModel(spec, ssp_data, filters=sdss_filters, approx=None)
         params = spec.sample(jax.random.PRNGKey(42))
         data = model.predict_photometry(params)
         noise = data / 20.0

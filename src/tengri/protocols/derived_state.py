@@ -183,6 +183,15 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+    # Dust IR re-emission per filter (rest-frame Lν, erg/s/Hz). Additive and
+    # unattenuated — summed by predict_via_precomp like the other families.
+    # Published by the two-component dust component under WavePrecomp (#622).
+    dust_emission_phot_lnu_precomp: jnp.ndarray | None = None
+    # Radio (synchrotron + free-free) and X-ray per filter (rest-frame Lν,
+    # erg/s/Hz). Additive, unattenuated power-law emitters summed by
+    # predict_via_precomp under WavePrecomp (#624).
+    radio_phot_lnu_precomp: jnp.ndarray | None = None
+    xray_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (Phase 5, published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component
@@ -191,6 +200,13 @@ class DerivedState:
     stellar_spec_lnu_precomp: jnp.ndarray | None = None
     nebular_spec_lnu_precomp: jnp.ndarray | None = None
     dust_spec_lnu_precomp: jnp.ndarray | None = None
+    # Dust IR re-emission per spectrum pixel (rest-frame Lν, erg/s/Hz);
+    # additive/unattenuated, summed by predict_spectrum_via_precomp (#622).
+    dust_emission_spec_lnu_precomp: jnp.ndarray | None = None
+    # Radio / X-ray per spectrum pixel (rest-frame Lν, erg/s/Hz); additive,
+    # unattenuated, summed by predict_spectrum_via_precomp (#624).
+    radio_spec_lnu_precomp: jnp.ndarray | None = None
+    xray_spec_lnu_precomp: jnp.ndarray | None = None
     agn_spec_lnu_precomp: jnp.ndarray | None = None
     igm_spec_transmission_precomp: jnp.ndarray | None = None
     # Age-resolved per-pixel stellar LUT, shape ``(n_age, n_spec_pixel)``,

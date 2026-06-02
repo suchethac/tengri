@@ -13,7 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import SpectrumPrecomp
+from tengri import SpectrumPrecomp, WavePrecomp
 
 pytestmark = pytest.mark.regression_paper
 
@@ -297,3 +297,98 @@ class TestSpectrumLUTLines:
         assert jnp.isfinite(pred.lines.halpha)
         assert jnp.isfinite(pred.lines.bpt_nii)
         assert jnp.isfinite(pred.lines.balmer_decrement)
+
+
+class TestJointPrecomp:
+    """Part A: a JOINT photometry+spectroscopy model builds BOTH LUT families.
+
+    Either precompute opt-in (``WavePrecomp`` or ``SpectrumPrecomp``) on a joint
+    observation promotes to both families: the forward pass projects photometry
+    via ``predict_via_precomp`` AND spectroscopy via
+    ``predict_spectrum_via_precomp`` in one pass (no ``NotImplementedError``).
+    The spectrum channel is machine-exact vs the exact path on a smooth
+    continuum; the photometry channel matches the photometry-only LUT (its
+    inherent effective-wavelength approximation), so we assert it equals the
+    photometry-only LUT rather than the exact path.
+    """
+
+    @staticmethod
+    def _joint_obs(n_pix=64):
+        from tengri import Observation, Photometry, Spectroscopy
+        from tengri.observation.photometry import FilterCurve
+
+        curves = tuple(
+            FilterCurve(wave=jnp.linspace(lo, hi, 60), trans=jnp.ones(60) * 0.5, name=n)
+            for n, (lo, hi) in {"g": (4000, 5500), "r": (5500, 7000), "i": (7000, 8500)}.items()
+        )
+        return Observation(
+            photometry=Photometry(filters=curves),
+            spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4500.0, 7500.0, n_pix)),
+        )
+
+    @staticmethod
+    def _build_joint(ssp, obs, approx, redshift):
+        import warnings
+
+        from tengri import FIXED, SEDModel
+
+        # Diffuse-only dust isolates the normalization contract from the
+        # birth-cloud LUT residual (#617).
+        dust = {"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.0}
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return SEDModel.build(
+                ssp_data=ssp,
+                observation=obs,
+                sfh={"type": "dpl", "*": FIXED},
+                dust=dust,
+                neb={"type": "none"},
+                redshift=redshift,
+                approx=approx,
+            )
+
+    @pytest.mark.parametrize("approx_factory", [WavePrecomp, SpectrumPrecomp])
+    def test_joint_builds_both_families_and_matches(self, approx_factory):
+        ssp_path = _bare_ssp_path()
+        if ssp_path is None:
+            pytest.skip("No bare-stellar SSP grid available under data/.")
+        from tengri import Fixed, load_ssp_data
+
+        ssp = load_ssp_data(ssp_path)
+        obs = self._joint_obs()
+
+        m_exact = self._build_joint(ssp, obs, None, Fixed(0.05))
+        m_lut = self._build_joint(ssp, obs, approx_factory(), Fixed(0.05))
+
+        # Joint promotes to BOTH LUT families (no NotImplementedError).
+        assert m_lut._approx.get("wave_precomp") is True
+        assert m_lut._approx.get("spectrum_precomp") is True
+
+        oe = m_exact.predict_observables({})
+        ol = m_lut.predict_observables({})  # must not raise
+        # Both channels present and finite.
+        assert jnp.all(jnp.isfinite(ol.phot_fnu))
+        assert jnp.all(jnp.isfinite(ol.spec_fnu))
+        assert ol.phot_fnu.shape == oe.phot_fnu.shape
+        assert ol.spec_fnu.shape == oe.spec_fnu.shape
+
+        # Spectrum channel: machine-exact on the continuum.
+        spec_rel = float(
+            jnp.max(jnp.abs(ol.spec_fnu - oe.spec_fnu) / jnp.maximum(jnp.abs(oe.spec_fnu), 1e-30))
+        )
+        assert spec_rel < 2e-3, f"joint spec max rel err = {spec_rel:.4%}"
+
+        # Photometry channel must equal the photometry-only LUT (its own
+        # effective-wavelength approximation), proving the joint phot family is
+        # built and projected identically to the standalone WavePrecomp path.
+        from tengri import Observation, Photometry
+
+        phot_only = Observation(photometry=Photometry(filters=obs.photometry.filters))
+        m_phot = self._build_joint(ssp, phot_only, WavePrecomp(), Fixed(0.05))
+        phot_only_lut = m_phot.predict_photometry({})
+        phot_rel = float(
+            jnp.max(
+                jnp.abs(ol.phot_fnu - phot_only_lut) / jnp.maximum(jnp.abs(phot_only_lut), 1e-30)
+            )
+        )
+        assert phot_rel < 1e-6, f"joint phot != phot-only LUT: {phot_rel:.6%}"

@@ -148,7 +148,11 @@ def build_dust_atten_component(model):
 
     dt = model._forward_dtype
     ssp_wave = model.ssp_data.ssp_wave.astype(dt)
-    dust_age_w = model.precomputed.dust_age_weights.astype(dt)
+    # Compute the two-component dust age weights inline (the legacy
+    # PrecomputedData.dust_age_weights container was retired, #620).
+    from tengri.components.dust.attenuation import precompute_dust_age_weights
+
+    dust_age_w = precompute_dust_age_weights(model.ssp_ages_yr).astype(dt)
     lsun = dt.type(LSUN_ERG_PER_S)
     law_bc_fn = model._dust_law_bc_fn
     law_diff_fn = model._dust_law_diff_fn

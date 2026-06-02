@@ -143,10 +143,10 @@ def tree(model: SEDModel) -> str:
     z_info = f"z={z_fixed:.4f} [fixed]" if z_fixed is not None else "z [free]"
     if filter_waves is not None:
         n_filt = len(filter_waves)
-        precomp = model.precomputed.photometry
-        precomp_str = "YES (21.6x speedup)" if precomp is not None else "NO"
+        fast = getattr(model, "has_fixedz_photometry_precompute", False)
+        precomp_str = "eligible (build with approx=WavePrecomp())" if fast else "NO"
         lines.append(f"{last} Observation: Photometry [{n_filt} bands] at {z_info}")
-        lines.append(f"    Precomputed: {precomp_str}")
+        lines.append(f"    Fast path: {precomp_str}")
     else:
         wave_obs = getattr(model, "_wave_obs", None)
         if wave_obs is not None:
@@ -205,16 +205,17 @@ def summary(model: SEDModel) -> str:
     else:
         lines.append("  Redshift:    free")
 
-    # Dtype and precomputation
+    # Dtype and precompute fast-path eligibility
     lines.append(f"  Dtype:       {model._forward_dtype}")
-    precomp_parts: list[str] = []
-    if model.precomputed.photometry is not None:
-        precomp_parts.append("photometry")
-    if model.precomputed.spectroscopy is not None:
-        precomp_parts.append("spectroscopy")
-    if model.precomputed.photometry_ztable is not None:
-        precomp_parts.append("z-table")
-    lines.append(f"  Precomputed: {', '.join(precomp_parts) if precomp_parts else 'none'}")
+    approx = getattr(model, "_approx", {}) or {}
+    fast_parts: list[str] = []
+    if approx.get("wave_precomp"):
+        fast_parts.append("photometry LUT")
+    if approx.get("spectrum_precomp"):
+        fast_parts.append("spectrum LUT")
+    lines.append(
+        f"  Fast path:   {', '.join(fast_parts) if fast_parts else 'exact (approx=None)'}"
+    )
 
     # Enabled components
     components: list[str] = []
