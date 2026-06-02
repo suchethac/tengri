@@ -84,34 +84,6 @@ def test_sed_model_state_is_frozen(minimal_model):
 
 
 @pytest.mark.unit
-@pytest.mark.skip(reason="precompute_spectroscopy deleted in Phase 6 (kernel removal)")
-def test_precompute_spectroscopy_updates_state(minimal_model):
-    """precompute_spectroscopy should rebuild _state after updating _precomputed."""
-    model = minimal_model
-
-    # Store original state reference
-    original_precomputed = model._precomputed
-    original_state = model._state
-
-    # Precompute spectroscopy
-    wave_obs = jnp.linspace(3500.0, 7000.0, 200)
-    model.precompute_spectroscopy(wave_obs)
-
-    # Assert precomputed was updated (may be a new object due to dataclasses.replace)
-    assert model._precomputed.spectroscopy is not None, "spectroscopy not precomputed"
-
-    # Assert state was rebuilt and references the new precomputed
-    assert model._state.precomputed is model._precomputed, (
-        "state was not rebuilt or does not reference current precomputed"
-    )
-
-    # Assert spectroscopy is accessible through state
-    assert model._state.precomputed.spectroscopy is not None, (
-        "spectroscopy not accessible through state.precomputed"
-    )
-
-
-@pytest.mark.unit
 def test_state_field_count(minimal_model):
     """SEDModelState should bundle approximately 35+ fields."""
     n_fields = len(dataclasses.fields(minimal_model._state))

@@ -30,7 +30,7 @@ pytestmark = pytest.mark.conservation
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.forward.sed_model import SEDModel
+from tengri.forward.sed_model import SEDModel, WavePrecomp
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -84,11 +84,23 @@ def _base_spec_kwargs():
     )
 
 
-def _photometry_error(model, params, key_a="hybrid", key_b="exact"):
-    """Return per-band fractional error |hybrid - exact| / |exact|."""
-    flux_a = model.predict_photometry(params, mode=key_a)
-    flux_b = model.predict_photometry(params, mode=key_b)
-    return jnp.abs(flux_a - flux_b) / (jnp.abs(flux_b) + 1e-50)
+def _photometry_error(hybrid_model, params):
+    """Return per-band fractional error |hybrid - exact| / |exact|.
+
+    The path is now chosen at build time (the removed call-time
+    ``predict_photometry(..., mode=...)`` kwarg no longer exists). ``hybrid_model``
+    is built with ``approx=WavePrecomp()``; we reconstruct an exact twin from its
+    own structural pieces (spec, SSP, filters) to compare against.
+    """
+    exact_model = SEDModel(
+        hybrid_model.spec,
+        hybrid_model.ssp_data,
+        observation=hybrid_model.observation,
+        approx=None,
+    )
+    flux_hybrid = hybrid_model.predict_photometry(params)
+    flux_exact = exact_model.predict_photometry(params)
+    return jnp.abs(flux_hybrid - flux_exact) / (jnp.abs(flux_exact) + 1e-50)
 
 
 # ── DL07 energy-balance regression ────────────────────────────────
@@ -105,7 +117,7 @@ class TestDL07EnergyBalance:
 
     @pytest.fixture(scope="class")
     def dl07_model(self, ssp_data, filters, dl07_spec):
-        return SEDModel(dl07_spec, ssp_data, filters=filters)
+        return SEDModel(dl07_spec, ssp_data, filters=filters, approx=WavePrecomp())
 
     @pytest.fixture(scope="class")
     def dl07_params(self, dl07_spec):
@@ -122,12 +134,12 @@ class TestDL07EnergyBalance:
 
     def test_dl07_hybrid_photometry_is_finite(self, dl07_model, dl07_params):
         """DL07 hybrid photometry must be finite in all bands."""
-        flux = dl07_model.predict_photometry(dl07_params, mode="hybrid")
+        flux = dl07_model.predict_photometry(dl07_params)
         chex.assert_tree_all_finite(flux)
 
     def test_dl07_hybrid_photometry_is_positive(self, dl07_model, dl07_params):
         """DL07 hybrid photometry must be positive in all bands."""
-        flux = dl07_model.predict_photometry(dl07_params, mode="hybrid")
+        flux = dl07_model.predict_photometry(dl07_params)
         assert jnp.all(flux > 0.0), "DL07 hybrid photometry has non-positive values"
 
 
@@ -145,7 +157,7 @@ class TestDale2014NonRegression:
 
     @pytest.fixture(scope="class")
     def dale_model(self, ssp_data, filters, dale_spec):
-        return SEDModel(dale_spec, ssp_data, filters=filters)
+        return SEDModel(dale_spec, ssp_data, filters=filters, approx=WavePrecomp())
 
     @pytest.fixture(scope="class")
     def dale_params(self, dale_spec):
@@ -184,7 +196,7 @@ class TestTHEMISNonRegression:
 
     @pytest.fixture(scope="class")
     def themis_model(self, ssp_data, filters, themis_spec):
-        return SEDModel(themis_spec, ssp_data, filters=filters)
+        return SEDModel(themis_spec, ssp_data, filters=filters, approx=WavePrecomp())
 
     @pytest.fixture(scope="class")
     def themis_params(self, themis_spec):
@@ -214,7 +226,7 @@ class TestStellarOnlyNonRegression:
 
     @pytest.fixture(scope="class")
     def stellar_model(self, ssp_data, filters, stellar_spec):
-        return SEDModel(stellar_spec, ssp_data, filters=filters)
+        return SEDModel(stellar_spec, ssp_data, filters=filters, approx=WavePrecomp())
 
     @pytest.fixture(scope="class")
     def stellar_params(self, stellar_spec):
@@ -266,7 +278,7 @@ class TestDL07EnergyBalanceWorstCase:
 
     @pytest.fixture(scope="class")
     def dl07_model_young_dusty(self, ssp_data, filters, dl07_spec_young_dusty):
-        return SEDModel(dl07_spec_young_dusty, ssp_data, filters=filters)
+        return SEDModel(dl07_spec_young_dusty, ssp_data, filters=filters, approx=WavePrecomp())
 
     @pytest.fixture(scope="class")
     def dl07_params_young_dusty(self, dl07_spec_young_dusty):
