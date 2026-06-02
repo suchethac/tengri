@@ -157,6 +157,12 @@ class StellarSEDComponentState(SEDComponentState):
     # is a :class:`SpectroscopicZTable` (free-z).
     ssp_spec_lut: Any | None = None
     ssp_spec_ztable: Any | None = None
+    # Zero-padded observed-frame filter curves (n_filters, max_len), carried so
+    # ``apply`` can publish them to ``state.derived`` for the additive-emitter
+    # exact-projection path (dust IR / radio / X-ray / AGN). Static; the same
+    # for fixed-z and free-z (redshift is applied inside the integral).
+    phot_fw_padded: Any | None = None
+    phot_ft_padded: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -354,9 +360,17 @@ class StellarSEDComponent:
 
         # Phase 3b/3c: photometry SSP×filter LUT. Requires filters + SSP grid.
         if approx.get("wave_precomp") and filters is not None and self.ssp_data is not None:
+            from tengri.observation.photometry import pad_filters
+
             filter_waves, filter_trans = zip(*filters, strict=False)
             filter_list = [jnp.asarray(fw) for fw in filter_waves]
             filter_trans_list = [jnp.asarray(ft) for ft in filter_trans]
+
+            # Padded observed-frame filter curves for the additive-emitter exact
+            # projection (published to state.derived in ``apply``). Static and
+            # shared by the fixed-z and free-z LUT paths.
+            fw_pad, ft_pad, _ = pad_filters(filter_list, filter_trans_list)
+            state = _replace_state(state, phot_fw_padded=fw_pad, phot_ft_padded=ft_pad)
 
             # Dispatch: fixed-z (Phase 3b) or free-z (Phase 3c-1)
             if redshift_spec is None or redshift_spec.get("mode") == "fixed":
@@ -1125,6 +1139,9 @@ class StellarSEDComponent:
             derived_overrides["filter_eff_waves"] = jnp.asarray(
                 self._state.ssp_phot_lut.effective_wavelengths_rest
             )
+            if self._state.phot_fw_padded is not None:
+                derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
+                derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
             # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — smooth triweight
@@ -1190,6 +1207,9 @@ class StellarSEDComponent:
             # downstream consumers (dust LUT, AGN, IGM).
             eff_waves_at_z = _interp(ztable.eff_waves_rest_table)
             derived_overrides["filter_eff_waves"] = eff_waves_at_z
+            if self._state.phot_fw_padded is not None:
+                derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
+                derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
 
         # ── 12c. Stellar spectrum LUT (Phase 5; SpectrumPrecomp) ────────
         # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel

@@ -211,12 +211,23 @@ class XRaySEDComponent:
         L_xray = _emit(wave)
         derived_overrides = {"sed_xray": L_xray}
 
-        # Precompute LUT families (#624): X-ray is additive and unattenuated;
-        # the (broken-)power-law is smooth, so the per-filter / per-pixel
-        # effective-wavelength evaluation is an accurate LUT projection.
+        # Precompute LUT families (#624): X-ray is additive and unattenuated.
+        # Photometry: integrate the dense X-ray SED through the true filter
+        # transmission (same integral as the exact path) — exact over the
+        # bandpass, not sampled at one effective wavelength. Spectroscopy: a
+        # pixel is a point-sample, so evaluating at the pixel wavelength is exact.
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
-            derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)
+            fw_pad = state.derived.get("phot_filter_waves_padded")
+            ft_pad = state.derived.get("phot_filter_trans_padded")
+            if fw_pad is not None:
+                from tengri.observation.photometry import lnu_filter_integral_batch
+
+                derived_overrides["xray_phot_lnu_precomp"] = lnu_filter_integral_batch(
+                    L_xray, wave, fw_pad, ft_pad, jnp.asarray(params.get("redshift", 0.0))
+                )
+            else:
+                derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
             derived_overrides["xray_spec_lnu_precomp"] = _emit(spec_eff)

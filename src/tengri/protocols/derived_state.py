@@ -153,6 +153,14 @@ class DerivedState:
     # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,
     # units Å.
     filter_eff_waves: jnp.ndarray | None = None
+    # Zero-padded observed-frame filter curves, published alongside
+    # ``filter_eff_waves`` so additive, unattenuated emitters (dust IR, radio,
+    # X-ray, AGN) can project their dense rest-frame SED through the *true*
+    # filter transmission via ``lnu_filter_integral_batch`` — bit-exact vs the
+    # exact path, instead of sampling at the effective wavelength. Shapes
+    # ``(n_filters, max_len)``; ``phot_filter_waves_padded`` units Å.
+    phot_filter_waves_padded: jnp.ndarray | None = None
+    phot_filter_trans_padded: jnp.ndarray | None = None
     # Spectrum pixel effective wavelengths in the rest frame (Phase 5,
     # published when approx=SpectrumPrecomp() is set). Per-pixel effective
     # wavelengths in the galaxy rest frame, computed as observed wavelengths
