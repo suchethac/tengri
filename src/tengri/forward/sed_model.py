@@ -1138,7 +1138,11 @@ class SEDModel:
         # Mirror the `_warm_grid_caches()` pattern used by `_build_precomputed_data`
         # and force-load at factory time (#390).
         _TEMPLATE_BASED_EMISSION_MODELS = frozenset(
-            {"draine_li2007", "dl14", "dale2014", "astrodust", "bosa", "themis"}
+            # NB: include both the canonical ``draine_li2014`` name and its
+            # ``dl14`` alias — the canonical name was missing, so a model built
+            # with emission='draine_li2014' was never preloaded and lazy-loaded
+            # its templates inside the JIT trace (UnexpectedTracerError).
+            {"draine_li2007", "dl14", "draine_li2014", "dale2014", "astrodust", "bosa", "themis"}
         )
         if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
             from tengri.components.dust.emission import preload_emission_model
@@ -4671,9 +4675,7 @@ class SEDModel:
                     observation.predict_spectrum_via_precomp(state, full, observables_type=None)
                 )
                 if observation.can_do_photometry and phot_lut:
-                    out.update(
-                        observation.predict_via_precomp(state, full, observables_type=None)
-                    )
+                    out.update(observation.predict_via_precomp(state, full, observables_type=None))
                 avail = {k: v for k, v in out.items() if k in observables_type._fields}
                 return observables_type(**avail)
             if observation.can_do_spectroscopy:

@@ -456,6 +456,29 @@ class DustSEDComponent:
             derived_overrides["dust_diff_attenuation_precomp"] = a_diff
             derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
 
+            # IR re-emission on the photometry LUT (#622). The dust IR template
+            # is re-emitted (not attenuated), so we publish a rest-frame Lν per
+            # filter — ``predict_via_precomp`` sums all ``*_phot_lnu_precomp``
+            # families and treats this one as the unattenuated bucket. ``L_ir``
+            # is computed on the full SSP grid above (energy balance is exact;
+            # only the template's *projection* uses the effective wavelength).
+            # Without this the far-IR was ~100% wrong under WavePrecomp.
+            if self.config.emission_model is not None:
+                _em_fn = resolve_emission_model(self.config.emission_model)
+                derived_overrides["dust_emission_phot_lnu_precomp"] = _em_fn(
+                    filter_eff,
+                    L_ir,
+                    dust_T=jnp.asarray(params.get("dust_T", 35.0)),
+                    dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
+                    dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
+                    dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
+                    dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
+                    dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
+                    dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
+                    dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
+                    redshift=jnp.asarray(params.get("redshift", 0.0)),
+                )
+
             # Young-star indicator on the SSP age grid: smooth sigmoid
             # transition around t_birth (matches two_component_dust).
             t_birth = self.config.t_birth_yr
@@ -484,6 +507,25 @@ class DustSEDComponent:
             t_diff_pix = jnp.exp(-tau_diff * law_diff_fn(spec_eff, n_slope=n_slope))
             derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
             derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
+
+            # IR re-emission on the spectrum LUT (#622) — additive, unattenuated,
+            # summed by ``predict_spectrum_via_precomp``. Usually negligible in
+            # the optical but correct for spectra extending into the IR.
+            if self.config.emission_model is not None:
+                _em_fn = resolve_emission_model(self.config.emission_model)
+                derived_overrides["dust_emission_spec_lnu_precomp"] = _em_fn(
+                    spec_eff,
+                    L_ir,
+                    dust_T=jnp.asarray(params.get("dust_T", 35.0)),
+                    dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
+                    dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
+                    dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
+                    dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
+                    dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
+                    dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
+                    dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
+                    redshift=jnp.asarray(params.get("redshift", 0.0)),
+                )
 
             # Young-star indicator y(a) on the SSP age grid (same sigmoid as
             # the filter branch) — published even when only the spectrum LUT
