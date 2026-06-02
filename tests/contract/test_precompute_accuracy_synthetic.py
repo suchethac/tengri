@@ -85,12 +85,20 @@ def _tophat(center_aa: float, frac_width: float = 0.18, n: int = 48):
     return FilterCurve(wave=wave, trans=trans, name=f"b{int(center_aa)}")
 
 
-def _build(ssp, filters, approx, *, emission=None, with_radio=False, with_xray=False):
-    """Build an SEDModel with a dust component (optionally IR re-emission)."""
+def _build(
+    ssp, filters, approx, *, emission=None, with_radio=False, with_xray=False, redshift=None
+):
+    """Build an SEDModel with a dust component (optionally IR re-emission).
+
+    ``redshift`` defaults to ``Fixed(0.05)``; pass a free distribution to
+    exercise the free-z ztable LUT path.
+    """
     import warnings
 
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
 
+    if redshift is None:
+        redshift = Fixed(0.05)
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
     dust = {
         "type": "two_component",
@@ -108,7 +116,7 @@ def _build(ssp, filters, approx, *, emission=None, with_radio=False, with_xray=F
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
-            ssp_data=ssp, observation=obs, redshift=Fixed(0.05), approx=approx, **groups
+            ssp_data=ssp, observation=obs, redshift=redshift, approx=approx, **groups
         )
 
 
@@ -170,6 +178,28 @@ def test_waveprecomp_additive_emitters_are_exact(synthetic_ssp):
     rel = np.abs(pl - pe) / np.maximum(np.abs(pe), 1e-30)
     # The IR band (index 2) is dominated by additive emission → must be exact.
     assert rel[2] < 5e-3, f"IR band additive-emitter err {rel[2]:.3%} (all bands {rel})"
+
+
+@pytest.mark.regression_bug
+def test_waveprecomp_free_z_additive_emitters_exact(synthetic_ssp):
+    """The free-z (ztable) LUT path must also publish the padded filter curves
+    and integrate additive emitters exactly. The #629 plumbing was added to both
+    the fixed-z and free-z branches of the stellar component, so an IR band under
+    a *free* redshift matches the exact path too."""
+    from tengri import Uniform
+
+    z = {"redshift": 0.05}
+    filters = [_tophat(5000.0), _tophat(8000.0), _tophat(8.0e4)]
+    m_exact = _build(
+        synthetic_ssp, filters, None, emission="modified_blackbody", redshift=Uniform(0.01, 0.5)
+    )
+    m_lut = _build(
+        synthetic_ssp, filters, _WP(), emission="modified_blackbody", redshift=Uniform(0.01, 0.5)
+    )
+    pe = np.asarray(m_exact.predict_photometry(z))
+    pl = np.asarray(m_lut.predict_photometry(z))
+    rel = np.abs(pl - pe) / np.maximum(np.abs(pe), 1e-30)
+    assert rel[2] < 1e-2, f"free-z IR additive-emitter err {rel[2]:.3%} (all bands {rel})"
 
 
 @pytest.mark.regression_bug
