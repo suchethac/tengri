@@ -53,6 +53,8 @@ def smooth_spec():
         dust_slope=-0.7,
         redshift=0.1,
     )
+
+
 # ── Accuracy: fast vs exact ───────────────────────────────────────
 #
 # WavePrecomp/SpectrumPrecomp LUT accuracy is validated with controlled
