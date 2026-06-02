@@ -33,6 +33,7 @@ __all__ = [
     "compute_photometry",
     "list_filter_conventions",
     "lnu_filter_integral",
+    "lnu_filter_integral_batch",
     "pad_filters",
 ]
 
@@ -150,6 +151,64 @@ def lnu_filter_integral(
     num = jnp.trapezoid(L_on_filter * weight, filter_wave)
     den = jnp.trapezoid(weight, filter_wave)
     return num / jnp.maximum(den, 1e-30)
+
+
+def lnu_filter_integral_batch(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    fw_padded: jnp.ndarray,
+    ft_padded: jnp.ndarray,
+    redshift,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> jnp.ndarray:
+    r"""Exact rest-frame filter-weighted L_ν of one SED through many filters.
+
+    Vectorised, zero-padding-safe form of :func:`lnu_filter_integral` over a
+    stack of filters ``(n_filters, max_len)``. This is the *exact* per-band
+    projection — the identical interpolate-onto-filter-grid-and-integrate the
+    exact photometry path uses (:func:`compute_flux_density_batch`), minus the
+    cosmological ``lnu_to_fnu`` step (the caller, ``predict_via_precomp``,
+    applies cosmology after summing the L_ν families).
+
+    Used by additive, unattenuated emitters under WavePrecomp — dust IR
+    re-emission, radio, X-ray, AGN — so a band carrying both the stellar
+    continuum and one of these emitters matches the exact path bit-for-bit
+    (only the stellar × dust-attenuation term keeps the effective-wavelength
+    LUT, which is where the speedup lives). Sampling such a component at a
+    single filter pivot is *not* exact when the emitter has structure across
+    the bandpass (PAH features, steep IR rise).
+
+    Parameters
+    ----------
+    sed_rest : array, shape (n_wave,)
+        Rest-frame specific luminosity on ``wave_rest`` [erg/s/Hz].
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid [Ångström], ascending.
+    fw_padded : array, shape (n_filters, max_len)
+        Zero-padded observed-frame filter wavelengths [Ångström].
+    ft_padded : array, shape (n_filters, max_len)
+        Zero-padded filter transmission (dimensionless).
+    redshift : float
+        Source redshift.
+    convention : FilterConvention, optional
+        Bandpass weight (``BESSELL`` 1/λ default, matching the SSP Φ-tensor LUT).
+
+    Returns
+    -------
+    L_nu_filter : array, shape (n_filters,)
+        Filter-weighted rest-frame L_ν per band [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad-safe.** Pure ``jnp`` primitives; ``convention`` static. Zero-pad
+    entries contribute ~0 because ``trans=0`` there and real filters taper to 0
+    at their edges (same assumption as :func:`_compute_flux_density_padded`).
+    """
+
+    def _one(fw, ft):
+        return lnu_filter_integral(sed_rest, wave_rest, fw, ft, redshift, convention)
+
+    return jax.vmap(_one)(fw_padded, ft_padded)
 
 
 @functools.partial(jax.jit, static_argnames=("convention",))

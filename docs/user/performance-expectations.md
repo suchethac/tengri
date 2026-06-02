@@ -54,9 +54,13 @@ Gradient calls (`jax.grad(predict_photometry)`) are 9–19× faster with
 (D=6 parametric to D=137 stochastic field).
 
 **Approximation error budget**:
-- Stellar / dust IR templates: 0–0.4%.
-- Nebular (CLOUDY, baked-in): 0% (precompute is exact).
-- AGN bundle: 3–5% (polar-dust factorisation; revert to compositional when polar dust matters).
+- Stellar continuum: machine-exact (the SSP×filter integral is precomputed).
+- Stellar dust *attenuation*: ~0.3–0.5% on real filters (the effective-wavelength
+  + Taylor approximation of Zacharegkas+2025 — this is the one true approximation,
+  and it's where the speedup comes from).
+- Dust IR, radio, X-ray, AGN (additive emitters): exact — integrated through the
+  true filter transmission, not sampled at the effective wavelength.
+- Nebular (CLOUDY, baked-in): 0% (rides along in the stellar precompute).
 - Typical / kitchen-sink: <1%.
 
 Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md).

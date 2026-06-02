@@ -464,20 +464,31 @@ class DustSEDComponent:
             # only the template's *projection* uses the effective wavelength).
             # Without this the far-IR was ~100% wrong under WavePrecomp.
             if self.config.emission_model is not None:
-                _em_fn = resolve_emission_model(self.config.emission_model)
-                derived_overrides["dust_emission_phot_lnu_precomp"] = _em_fn(
-                    filter_eff,
-                    L_ir,
-                    dust_T=jnp.asarray(params.get("dust_T", 35.0)),
-                    dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
-                    dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
-                    dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
-                    dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
-                    dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
-                    dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
-                    dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
-                    redshift=jnp.asarray(params.get("redshift", 0.0)),
-                )
+                # IR re-emission is additive and unattenuated, so it is projected
+                # through the *true* filter transmission (the same integral the
+                # exact path uses) rather than sampled at the effective
+                # wavelength — exact in bands carrying both the stellar continuum
+                # and structured dust emission (MIR/PAH). The dense ``sed_ir`` is
+                # built on the rest-frame ``wave`` grid above; ``predict_via_precomp``
+                # applies cosmology to the summed L_ν. (Sampling the
+                # self-normalising emission model at the sparse pivots was the
+                # #622 regression that inflated the reddest band ~4×.)
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                if fw_pad is not None:
+                    from tengri.observation.photometry import lnu_filter_integral_batch
+
+                    derived_overrides["dust_emission_phot_lnu_precomp"] = (
+                        lnu_filter_integral_batch(
+                            sed_ir, wave, fw_pad, ft_pad, jnp.asarray(params.get("redshift", 0.0))
+                        )
+                    )
+                else:
+                    # Fallback (padded curves not published): effective-wavelength
+                    # sample of the dense, correctly normalised template.
+                    derived_overrides["dust_emission_phot_lnu_precomp"] = jnp.interp(
+                        filter_eff, wave, sed_ir
+                    )
 
             # Young-star indicator on the SSP age grid: smooth sigmoid
             # transition around t_birth (matches two_component_dust).
@@ -512,19 +523,13 @@ class DustSEDComponent:
             # summed by ``predict_spectrum_via_precomp``. Usually negligible in
             # the optical but correct for spectra extending into the IR.
             if self.config.emission_model is not None:
-                _em_fn = resolve_emission_model(self.config.emission_model)
-                derived_overrides["dust_emission_spec_lnu_precomp"] = _em_fn(
-                    spec_eff,
-                    L_ir,
-                    dust_T=jnp.asarray(params.get("dust_T", 35.0)),
-                    dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
-                    dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
-                    dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
-                    dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
-                    dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
-                    dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
-                    dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
-                    redshift=jnp.asarray(params.get("redshift", 0.0)),
+                # Same fix as the filter branch (#622): sample the dense,
+                # correctly normalised ``sed_ir`` at the spectral pivots rather
+                # than re-evaluating the self-normalising emission model on the
+                # sparse ``spec_eff`` grid (which renormalises L_ir over the
+                # optical window and corrupts the result).
+                derived_overrides["dust_emission_spec_lnu_precomp"] = jnp.interp(
+                    spec_eff, wave, sed_ir
                 )
 
             # Young-star indicator y(a) on the SSP age grid (same sigmoid as

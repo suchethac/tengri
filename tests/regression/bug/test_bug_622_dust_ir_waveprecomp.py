@@ -50,8 +50,10 @@ def _ir_obs():
 @pytest.mark.parametrize("emission", ["dale2014", "draine_li2007", "draine_li2014", "themis"])
 def test_dust_ir_in_waveprecomp_photometry(emission):
     """Far-IR photometry under WavePrecomp must match the exact path (was ~100%
-    off because dust IR was missing). Tolerance covers the effective-wavelength
-    LUT residual (themis's PAH features are the worst case, ~8%)."""
+    off because dust IR was missing). The IR re-emission is now integrated
+    through the true filter transmission (not sampled at the effective
+    wavelength), so the IR bands are essentially exact — even THEMIS's PAH
+    features, which the effective-wavelength sampling missed by ~8%."""
     import warnings
 
     from tengri import FIXED, Fixed, SEDModel, WavePrecomp
@@ -85,6 +87,68 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
     pe = np.asarray(m_exact.predict_photometry({}))
     pl = np.asarray(m_lut.predict_photometry({}))
     rel = np.abs(pl - pe) / np.maximum(np.abs(pe), 1e-30)
-    # Far-IR bands (24/70/160 µm) carry the dust emission — these were ~1.0 before.
-    assert rel[2:].max() < 0.10, f"{emission}: far-IR WavePrecomp err {rel[2:].max():.2%}"
-    assert rel.max() < 0.10, f"{emission}: max WavePrecomp err {rel.max():.2%}"
+    # IR bands (IRAC/24/70/160 µm) carry the dust emission — were ~1.0 before
+    # the family was published, ~8% under effective-wavelength sampling, and are
+    # now exact (filter-integrated): MIPS24/PACS ~0%, IRAC ~0.1%.
+    assert rel[1:].max() < 0.01, f"{emission}: IR WavePrecomp err {rel[1:].max():.2%}"
+    # u-band (index 0) is attenuated stellar — the inherent effective-wavelength
+    # dust-factorisation residual (~1.8% at tau_diff=0.5), not dust emission.
+    assert rel.max() < 0.03, f"{emission}: max WavePrecomp err {rel.max():.2%}"
+
+
+@pytest.mark.parametrize(
+    "filters",
+    [
+        ["sdss_z"],
+        ["sdss_z", "sdss_i"],
+        ["sdss_i", "sdss_z"],
+        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
+    ],
+)
+def test_dust_ir_optical_reddest_band_not_inflated(filters):
+    """Second #622 bug: an *all-optical* filter set has no far-IR band to anchor
+    the IR-template normalisation, so the original ``_em_fn(filter_eff, L_ir)``
+    call renormalised L_ir over a handful of optical pivots and inflated the
+    reddest band by ~4× (293% on ``sdss_z``). The failure was order-dependent —
+    fine when the red band was alone or first, broken when it followed another —
+    because a single pivot integrates to 0 (silently zeroing the band) while two
+    optical pivots give a tiny bogus integral that blows up.
+
+    Dust IR re-emission is negligible (≈0) across an optical bandpass, so every
+    band must match the exact path. The fix samples the dense, correctly
+    normalised ``sed_ir`` at the pivots via ``jnp.interp`` instead.
+    """
+    import warnings
+
+    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+
+    ssp = _ssp_or_skip()
+    obs = Observation(photometry=Photometry.from_names(filters))
+    groups = dict(
+        sfh={"type": "dpl", "*": FIXED},
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_diff": 0.5,  # real attenuation → real L_ir to (not) re-emit in the optical
+            "emission": {"type": "modified_blackbody", "*": FIXED},
+        },
+        neb={"type": "none"},
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m_exact = SEDModel.build(
+            ssp_data=ssp, observation=obs, redshift=Fixed(0.05), approx=None, **groups
+        )
+        m_lut = SEDModel.build(
+            ssp_data=ssp, observation=obs, redshift=Fixed(0.05), approx=WavePrecomp(), **groups
+        )
+    pe = np.asarray(m_exact.predict_photometry({}))
+    pl = np.asarray(m_lut.predict_photometry({}))
+    rel = np.abs(pl - pe) / np.maximum(np.abs(pe), 1e-30)
+    # 5% generously covers the known blue effective-wavelength dust-factorisation
+    # residual (worst case u-band ≈ 2.4% at tau_diff=0.5) while still catching the
+    # regression by 60× — the inflated reddest band was 290%+.
+    assert rel.max() < 0.05, (
+        f"{filters}: WavePrecomp photometry err {rel.max():.2%} (per-band {rel})"
+    )

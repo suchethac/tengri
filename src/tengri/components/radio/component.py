@@ -287,9 +287,23 @@ class RadioSEDComponent:
 
         # Precompute LUT families (#624): radio is additive and unattenuated,
         # summed by predict_via_precomp / predict_spectrum_via_precomp.
+        # Photometry: integrate the dense radio SED through the true filter
+        # transmission (the same integral the exact path uses) so a wide radio
+        # bandpass — over which the (broken-)power-law has real curvature — is
+        # exact, not sampled at one effective wavelength. Spectroscopy: a pixel
+        # is a point-sample, so evaluating at the pixel wavelength is exact.
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
-            derived_overrides["radio_phot_lnu_precomp"] = _emit(filter_eff)
+            fw_pad = state.derived.get("phot_filter_waves_padded")
+            ft_pad = state.derived.get("phot_filter_trans_padded")
+            if fw_pad is not None:
+                from tengri.observation.photometry import lnu_filter_integral_batch
+
+                derived_overrides["radio_phot_lnu_precomp"] = lnu_filter_integral_batch(
+                    L_radio, wave, fw_pad, ft_pad, z
+                )
+            else:
+                derived_overrides["radio_phot_lnu_precomp"] = _emit(filter_eff)
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
             derived_overrides["radio_spec_lnu_precomp"] = _emit(spec_eff)
