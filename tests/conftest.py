@@ -163,7 +163,11 @@ def synthetic_ssp_wide():
     n_met, n_age = 3, 25
     wave = jnp.logspace(2.0, 7.0, 1600)  # 100 Å – 1 mm (1e7 Å)
     ages_gyr = jnp.linspace(-3.0, 1.14, n_age)  # log10(age/Gyr): ~1 Myr – 13.8 Gyr
-    lgmet = jnp.array([-2.5, -1.85, -1.2])  # absolute log10(Z)
+    # Absolute log10(Z) spanning a realistic FSPS-like range: with
+    # LOG10_ZSUN = -1.848 this is logzsol ≈ [-2.15, 0.55], so priors/Fixed values
+    # inside ~[-2, 0.5] are genuinely in-grid (keeps the metallicity-bounds
+    # contract tests meaningful) while ±5/-10 fall outside.
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
     base = (5000.0 / wave) ** 2  # bright in the UV/optical, ~0 in the far-IR
     flux = (
         base[None, None, :]
