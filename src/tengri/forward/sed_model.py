@@ -144,6 +144,13 @@ class WavePrecomp:
     z_min: float | None = None
     z_max: float | None = None
     catalog_z_range: tuple[float, float] | None = None
+    taylor_correction: bool = True
+    """First-order spectral-moment (Ψ) correction to the effective-wavelength dust
+    attenuation (Zacharegkas+2025). ``True`` (default) applies ``A(λ_eff)·Φ +
+    A'(λ_eff)·Ψ`` for both single- and two-component dust, cutting the attenuation
+    residual to ~0.3%. Set ``False`` for the bare ``A(λ_eff)·Φ`` (flat) form —
+    ~0.8–1.5% on the birth-cloud layer, but well below typical SSP/dust template
+    systematics, and slightly cheaper (the Ψ tensor is not built)."""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -188,6 +195,11 @@ class SpectrumPrecomp:
     n_z: int = 100
     z_min: float | None = None
     z_max: float | None = None
+    taylor_correction: bool = True
+    """Kept for API symmetry with :class:`WavePrecomp`. The spectrum LUT evaluates
+    dust attenuation at each pixel wavelength exactly (a pixel is a point, not a
+    bandpass), so there is no effective-wavelength residual to correct and this
+    flag does not change the spectroscopy result."""
 
 
 class SEDModel:
@@ -373,6 +385,7 @@ class SEDModel:
         "ztable": False,
         "spectrum_precomp": False,
         "igm": True,
+        "taylor_correction": True,
     }
 
     #: Maximum spectral resolution R = λ/Δλ for which the SpectrumPrecomp
@@ -516,6 +529,15 @@ class SEDModel:
                 "SpectrumPrecomp() for the spectrum LUT path (Phase 5). "
                 "The pre-3d dict / bool / string forms (e.g. approx={'wave_precomp': True}, "
                 "approx=True, approx='wave_precomp') were removed."
+            )
+
+        # Thread the Taylor-correction toggle (default True) from the config into
+        # the approx dict, so the stellar precompute knows whether to build the Ψ
+        # moment and predict_via_precomp whether to apply it (#617). When the
+        # exact path is selected (config is None) the default True is harmless.
+        if self._approx_config is not None:
+            self._approx["taylor_correction"] = getattr(
+                self._approx_config, "taylor_correction", True
             )
 
         # Part A (joint precompute): on a joint photometry+spectroscopy

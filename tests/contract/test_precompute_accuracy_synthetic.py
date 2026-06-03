@@ -218,3 +218,66 @@ def _WP():
     from tengri import WavePrecomp
 
     return WavePrecomp()
+
+
+@pytest.mark.regression_bug
+def test_taylor_correction_toggle_two_component(synthetic_ssp):
+    """#617: the two-component (Charlot & Fall) dust attenuation now applies the
+    first-order Taylor (Ψ) moment correction under WavePrecomp by default
+    (taylor_correction=True), matching the single-component accuracy. The opt-out
+    taylor_correction=False uses the flat A(λ_eff)·Φ form (larger residual, but
+    well below SSP/dust systematics and slightly cheaper).
+    """
+    import warnings
+
+    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+
+    filters = [_tophat(c) for c in (3500.0, 4800.0, 6200.0, 8000.0)]
+    obs = Observation(photometry=Photometry(filters=tuple(filters)))
+    # Two-component dust with an active birth-cloud layer (tau_bc>0) — this is
+    # where the flat effective-wavelength approximation is worst.
+    dust = {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+        "tau_bc": 0.8,
+        "tau_diff": 0.4,
+    }
+    groups = dict(sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"})
+
+    def build(approx):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return SEDModel.build(
+                ssp_data=synthetic_ssp,
+                observation=obs,
+                redshift=Fixed(0.05),
+                approx=approx,
+                **groups,
+            )
+
+    pe = np.asarray(build(None).predict_photometry({}))
+    p_taylor = np.asarray(build(WavePrecomp()).predict_photometry({}))  # default True
+    p_flat = np.asarray(build(WavePrecomp(taylor_correction=False)).predict_photometry({}))
+
+    rel_taylor = np.abs(p_taylor - pe) / np.abs(pe)
+    rel_flat = np.abs(p_flat - pe) / np.abs(pe)
+
+    # Default (Taylor on) is the more accurate path and stays comfortably sub-%.
+    assert rel_taylor.max() < 0.005, f"taylor-on residual {rel_taylor.max():.3%}"
+    # The Ψ correction must measurably beat the flat form on the BC layer (the
+    # whole point of #617) — guards against the moment term being silently dropped.
+    assert rel_taylor.max() < rel_flat.max(), (
+        f"taylor-on ({rel_taylor.max():.3%}) should beat flat ({rel_flat.max():.3%})"
+    )
+    # Both paths are finite and positive regardless.
+    assert np.all(np.isfinite(p_flat)) and np.all(p_flat > 0)
+
+
+def test_taylor_correction_default_is_true():
+    """The first-moment correction is ON by default; opt out with
+    ``taylor_correction=False`` (SSP/dust systematics usually dominate it)."""
+    from tengri import WavePrecomp
+
+    assert WavePrecomp().taylor_correction is True
+    assert WavePrecomp(taylor_correction=False).taylor_correction is False

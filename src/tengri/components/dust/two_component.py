@@ -455,6 +455,13 @@ class DustSEDComponent:
             derived_overrides["dust_bc_attenuation_slope_precomp"] = a_bc_slope
             derived_overrides["dust_diff_attenuation_precomp"] = a_diff
             derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
+            # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no
+            # division by A) so the two-component Taylor projection (#617) is
+            # NaN-safe where A → 0 (e.g. X-ray/UV bands far off the dust curve):
+            # there T_a' = T_a·(logslope_diff + y·logslope_bc) with T_a = A_diff·A_bc^y → 0,
+            # avoiding the A_bc^(y−1) pole.
+            derived_overrides["dust_bc_log_attenuation_slope_precomp"] = -tau_bc * k_bc_slope
+            derived_overrides["dust_diff_log_attenuation_slope_precomp"] = -tau_diff * k_diff_slope
 
             # IR re-emission on the photometry LUT (#622). The dust IR template
             # is re-emitted (not attenuated), so we publish a rest-frame Lν per

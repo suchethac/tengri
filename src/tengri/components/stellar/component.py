@@ -387,7 +387,9 @@ class StellarSEDComponent:
                     filter_trans=filter_trans_list,
                     redshift=z_source,
                     dl_cm=1.0,  # placeholder; cosmology applied at projection time
-                    taylor_correction=True,  # Phase 3c-3c: Ψ moment for dust LUT
+                    # Ψ moment for the dust-attenuation Taylor correction (#617),
+                    # toggled by approx=WavePrecomp(taylor_correction=...).
+                    taylor_correction=approx.get("taylor_correction", True),
                 )
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
@@ -404,7 +406,9 @@ class StellarSEDComponent:
                     z_max=redshift_spec.get("z_max", 3.0),
                     n_z=redshift_spec.get("n_z", 100),
                     apply_igm=False,
-                    taylor_correction=True,  # Phase 3c-3c-v: Ψ moment for dust LUT
+                    # Ψ moment for the dust-attenuation Taylor correction (#617),
+                    # toggled by approx=WavePrecomp(taylor_correction=...).
+                    taylor_correction=approx.get("taylor_correction", True),
                 )
                 state = _replace_state(state, ssp_phot_ztable=ztable)
 
