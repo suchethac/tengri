@@ -23,7 +23,6 @@ the suite.
 
 from __future__ import annotations
 
-import pathlib
 import warnings
 
 import chex
@@ -31,27 +30,21 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Parameters, SEDModel, WavePrecomp
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.contract
 
-_SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
+
+@pytest.fixture(scope="module")
+def ssp(synthetic_ssp_wide):
+    # #613: synthetic SSP + synthetic filters so the approx-kwarg contract runs
+    # on CI instead of skipping when data/ssp_*.h5 is absent.
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    if not _SSP.exists():
-        pytest.skip(f"SSP not available at {_SSP}")
-    return load_ssp_data(str(_SSP))
-
-
-@pytest.fixture(scope="module")
-def obs():
-    return Observation(
-        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    )
+def obs(synthetic_tophat_obs):
+    return synthetic_tophat_obs
 
 
 @pytest.fixture(scope="module")

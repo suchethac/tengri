@@ -9,8 +9,6 @@ Covers only the wiring — the numerical correctness of
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import jax
 import pytest
 
@@ -22,11 +20,9 @@ from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-_SSP_EXISTS = _SSP_FILE.is_file()
-
-pytestmark = [pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")]
+# #613: structural flag check — runs on the shared synthetic SSP + synthetic
+# filters (conftest fixtures), so it executes on CI instead of skipping on
+# missing data. (pytestmark = contract is declared above.)
 
 
 def _make_spec(z_interp: str | None = None) -> Parameters:
@@ -48,16 +44,20 @@ def _make_spec(z_interp: str | None = None) -> Parameters:
 
 
 class TestZInterpFlag:
-    def test_default_is_linear(self, ssp_data_wne, sdss_filters):
-        model = SEDModel(_make_spec(), ssp_data_wne, filters=sdss_filters)
+    def test_default_is_linear(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        model = SEDModel(_make_spec(), synthetic_ssp_wide, observation=synthetic_tophat_obs)
         assert model._z_interp == "linear"
 
-    def test_smooth_opt_in(self, ssp_data_wne, sdss_filters):
-        model = SEDModel(_make_spec(z_interp="smooth"), ssp_data_wne, filters=sdss_filters)
+    def test_smooth_opt_in(self, synthetic_ssp_wide, synthetic_tophat_obs):
+        model = SEDModel(
+            _make_spec(z_interp="smooth"), synthetic_ssp_wide, observation=synthetic_tophat_obs
+        )
         assert model._z_interp == "smooth"
 
-    def test_unknown_value_preserved(self, ssp_data_wne, sdss_filters):
+    def test_unknown_value_preserved(self, synthetic_ssp_wide, synthetic_tophat_obs):
         """Unknown strings pass through untouched — validation happens at the
         kernel-compile branch, not here, so callers still get a loud error."""
-        model = SEDModel(_make_spec(z_interp="nonsense"), ssp_data_wne, filters=sdss_filters)
+        model = SEDModel(
+            _make_spec(z_interp="nonsense"), synthetic_ssp_wide, observation=synthetic_tophat_obs
+        )
         assert model._z_interp == "nonsense"
