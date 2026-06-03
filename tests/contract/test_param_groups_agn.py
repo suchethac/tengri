@@ -554,21 +554,13 @@ class TestComposableAGNRuntimeWiring:
     Needs SSP data; skips when unavailable.
     """
 
-    def _build_composable_model(self):
-        import pathlib
-
-        ssp_path = (
-            pathlib.Path(__file__).parents[2]
-            / "data"
-            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        )
-        if not ssp_path.exists():
-            pytest.skip(f"SSP file not available at {ssp_path}")
-
+    def _build_composable_model(self, ssp):
         import tengri
 
+        # #613: synthetic SSP — the composable-AGN nonzero-SED check is driven by
+        # the AGN bolometric luminosity (log_lbol), independent of the SSP.
         return tengri.SEDModel.build(
-            tengri.load_ssp(),
+            ssp,
             sfh={
                 "type": "delayed",
                 "tau_gyr": Fixed(1.0),
@@ -594,13 +586,13 @@ class TestComposableAGNRuntimeWiring:
             redshift=Fixed(0.05),
         )
 
-    def test_composable_agn_emits_nonzero_sed(self):
+    def test_composable_agn_emits_nonzero_sed(self, synthetic_ssp_wide):
         """``predict_rest_sed`` on a composable-AGN model must produce a
         non-zero SED dominated by the AGN (BBB peak in the UV)."""
         import jax
         import numpy as np
 
-        model = self._build_composable_model()
+        model = self._build_composable_model(synthetic_ssp_wide)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         result = model.predict_rest_sed(p)
         sed = np.asarray(result.sed)
@@ -614,7 +606,7 @@ class TestComposableAGNRuntimeWiring:
             "block selectors may not be reaching the runtime."
         )
 
-    def test_composable_agn_wildcard_fixed_emits_nonzero_sed(self):
+    def test_composable_agn_wildcard_fixed_emits_nonzero_sed(self, synthetic_ssp_wide):
         """Wildcard ``'*': FIXED`` with no explicit ``frac`` must still
         produce a non-zero AGN SED (regression for #417).
 
@@ -624,22 +616,13 @@ class TestComposableAGNRuntimeWiring:
         the AGN contribution was silently identically zero — even though
         ``L_agn_bol`` was published correctly.
         """
-        import pathlib
-
-        ssp_path = (
-            pathlib.Path(__file__).parents[2]
-            / "data"
-            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        )
-        if not ssp_path.exists():
-            pytest.skip(f"SSP file not available at {ssp_path}")
-
         import numpy as np
 
         import tengri
 
+        # #613: synthetic SSP (AGN-luminosity-driven check, SSP-independent).
         model = tengri.SEDModel.build(
-            tengri.load_ssp(),
+            synthetic_ssp_wide,
             sfh={
                 "type": "delayed",
                 "tau_gyr": Fixed(1.0),
