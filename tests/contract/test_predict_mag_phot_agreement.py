@@ -25,17 +25,13 @@ pytestmark = pytest.mark.contract
 
 
 @pytest.fixture(scope="module")
-def model():
-    try:
-        ssp = tengri.load_ssp()
-    except FileNotFoundError as exc:
-        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    )
+def model(synthetic_ssp_wide, synthetic_tophat_obs):
+    # #613: synthetic SSP + synthetic filters so this mag↔phot self-consistency
+    # check runs on CI (both APIs share the same filter convolution regardless
+    # of SSP, so the agreement is SSP-independent).
     return tengri.SEDModel.build(
-        ssp,
-        observation=obs,
+        synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust={
             "type": "two_component",
