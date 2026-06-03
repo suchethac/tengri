@@ -859,8 +859,31 @@ class Observation:
         if a_bc_lut is not None and per_age is not None:
             a_diff_lut = state.derived["dust_diff_attenuation_precomp"]
             y_age = state.derived["dust_young_indicator"]
-            atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]
-            stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * a_diff_lut
+            atten_bc_per_age = a_bc_lut[None, :] ** y_age[:, None]  # A_bc(λ_eff)^y(a)
+            t_per_age = a_diff_lut[None, :] * atten_bc_per_age  # T_a(λ_eff) = A_diff·A_bc^y
+            stellar_attenuated = jnp.sum(per_age * t_per_age, axis=0)
+            # First-order Taylor (Ψ) correction — only when the moment tensor was
+            # built (approx=WavePrecomp(taylor_correction=True), the default; #617).
+            # Expand T_a(λ) ≈ T_a(λ_eff) + T_a'(λ_eff)·(λ−λ_eff). Using the
+            # log-derivative identity T_a'/T_a = (ln A_diff)' + y·(ln A_bc)':
+            #   T_a' = T_a · (logslope_diff + y·logslope_bc)
+            # This avoids the A_bc^(y−1) pole — at X-ray/UV bands far off the dust
+            # curve A_bc → 0, but T_a → 0 too, so T_a' → 0 cleanly (no 0·inf NaN).
+            moment_per_age = state.derived.get("stellar_phot_moment_per_age_precomp")
+            logslope_diff = state.derived.get("dust_diff_log_attenuation_slope_precomp")
+            logslope_bc = state.derived.get("dust_bc_log_attenuation_slope_precomp")
+            _have_taylor = (
+                moment_per_age is not None
+                and logslope_diff is not None
+                and logslope_bc is not None
+            )
+            if _have_taylor:
+                t_slope_per_age = t_per_age * (
+                    logslope_diff[None, :] + y_age[:, None] * logslope_bc[None, :]
+                )
+                stellar_attenuated = stellar_attenuated + jnp.sum(
+                    moment_per_age * t_slope_per_age, axis=0
+                )
             # Nebular emission (Cue / CloudyGrid) is not age-resolved, so the
             # per-age expansion doesn't apply. Approximate the nebular dust
             # treatment as the diffuse-layer-only expansion ``A_diff·Φ_neb`` —
@@ -875,22 +898,18 @@ class Observation:
         # When dust precompute is present, the Taylor moment Ψ MUST also be
         # present (the dust expansion is only valid with the second term).
         elif a_lut is not None:
+            # Zeroth order: flat attenuation at the filter effective wavelength.
+            dust_attenuated = a_lut * dust_attenuable_phi
+            # First-order Taylor (Ψ) correction — applied only when the moment
+            # tensor and attenuation slope were built, i.e.
+            # approx=WavePrecomp(taylor_correction=True) (the default; #617).
+            # With taylor_correction=False neither is published, so the flat
+            # A(λ_eff)·Φ form stands. Only stellar publishes a moment; nebular is
+            # treated as Φ-only.
             a_slope_lut = state.derived.get("dust_attenuation_slope_precomp")
-            if a_slope_lut is None:
-                raise ValueError(
-                    "predict_via_precomp: dust_attenuation_precomp present but "
-                    "dust_attenuation_slope_precomp missing (Phase 3c-3c-ii bug)."
-                )
-            # Sum dust-attenuable Taylor moments. Only stellar publishes a
-            # moment today; nebular is treated as Φ-only (no Ψ correction).
             stellar_psi = state.derived.get("stellar_phot_moment_precomp")
-            if stellar_psi is None:
-                raise ValueError(
-                    "predict_via_precomp: dust precompute is present but no "
-                    "stellar_phot_moment_precomp Taylor moment was published. "
-                    "Stellar must publish it when wave_precomp=True (Phase 3c-3c-i)."
-                )
-            dust_attenuated = a_lut * dust_attenuable_phi + a_slope_lut * stellar_psi
+            if a_slope_lut is not None and stellar_psi is not None:
+                dust_attenuated = dust_attenuated + a_slope_lut * stellar_psi
             total_lnu = dust_attenuated + unattenuated_phi
         else:
             total_lnu = total_phi

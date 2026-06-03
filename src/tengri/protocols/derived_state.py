@@ -142,6 +142,12 @@ class DerivedState:
     dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
+    # Log-attenuation slopes d(ln A)/dλ = −τ·k'(λ_eff), per filter. Published so
+    # the two-component first-order Taylor projection (#617) can be written
+    # T_a' = T_a·(logslope_diff + y·logslope_bc) — NaN-safe where A → 0 (avoids
+    # the A_bc^(y−1) pole at X-ray/UV bands far off the dust curve).
+    dust_bc_log_attenuation_slope_precomp: jnp.ndarray | None = None
+    dust_diff_log_attenuation_slope_precomp: jnp.ndarray | None = None
     # Young-star indicator on the SSP age grid (Phase 3c-3c-iv-b),
     # shape ``(n_age,)``. Smooth sigmoid transition around
     # ``DustSEDComponent.config.t_birth_yr``. ``y(a)`` = 1 for fully
