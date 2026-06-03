@@ -147,6 +147,53 @@ def synthetic_ssp():
 
 
 @pytest.fixture(scope="session")
+def synthetic_ssp_wide():
+    """Realistic synthetic SSP on a UV→far-IR grid with a SMOOTH continuum.
+
+    Unlike :func:`synthetic_ssp` (narrow optical grid, noisy flux), this fixture
+    spans ~100 Å – 1 mm so it drives the dust energy balance (L_absorbed in the
+    UV/optical) and gives dust IR re-emission a grid to live on — and its
+    continuum is smooth, so the SSP × filter Φ-tensor LUT is near machine-exact.
+
+    Purpose (#613): let *structural* precompute/contract tests run on CI without
+    the gitignored ``data/ssp_*.h5`` grids, instead of silently skipping (which
+    is how #629/#617 regressions reached main). Use with :func:`synthetic_tophat_obs`.
+    Physics-value tests (crossval, regression_paper) still need real SSPs.
+    """
+    n_met, n_age = 3, 25
+    wave = jnp.logspace(2.0, 7.0, 1600)  # 100 Å – 1 mm (1e7 Å)
+    ages_gyr = jnp.linspace(-3.0, 1.14, n_age)  # log10(age/Gyr): ~1 Myr – 13.8 Gyr
+    lgmet = jnp.array([-2.5, -1.85, -1.2])  # absolute log10(Z)
+    base = (5000.0 / wave) ** 2  # bright in the UV/optical, ~0 in the far-IR
+    flux = (
+        base[None, None, :]
+        * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
+        * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
+    )
+    flux = jnp.abs(flux) + 1e-12
+    return SSPData(ssp_wave=wave, ssp_flux=flux, ssp_lg_age_gyr=ages_gyr, ssp_lgmet=lgmet)
+
+
+@pytest.fixture(scope="session")
+def synthetic_tophat_obs():
+    """5-band synthetic top-hat photometry Observation — no filter-data files.
+
+    Companion to :func:`synthetic_ssp_wide` for CI-runnable structural tests.
+    Edges taper to 0 (like real filters) so the padded filter integral behaves.
+    """
+    from tengri.observation import Observation, Photometry
+    from tengri.observation.photometry import FilterCurve
+
+    def _tophat(center, frac=0.16, n=40):
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+
+    curves = tuple(_tophat(c) for c in (3500.0, 4800.0, 6200.0, 7600.0, 9000.0))
+    return Observation(photometry=Photometry(filters=curves))
+
+
+@pytest.fixture(scope="session")
 def simple_observation():
     """Synthetic 3-band observation matching the synthetic SSP wavelength range."""
     from tengri.observation.photometry import FilterCurve

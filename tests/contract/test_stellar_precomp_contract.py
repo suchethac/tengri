@@ -6,31 +6,26 @@ publishes required outputs at the right times, and respects wave_precomp
 configuration flags.
 """
 
-import pathlib
 import warnings
 
 import chex
 import pytest
 
 from tengri import Parameters, SEDModel, WavePrecomp
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.contract
 
-_SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
+
+@pytest.fixture(scope="module")
+def ssp(synthetic_ssp_wide):
+    # #613: run on the shared synthetic SSP so these *structural* contract checks
+    # execute on CI instead of skipping when data/ssp_*.h5 is absent.
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    if not _SSP.exists():
-        pytest.skip(f"SSP not available at {_SSP}")
-    return load_ssp_data(str(_SSP))
-
-
-@pytest.fixture(scope="module")
-def stellar_only_model(ssp):
+def stellar_only_model(ssp, synthetic_tophat_obs):
     """Stellar-only SED model for contract tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -45,15 +40,14 @@ def stellar_only_model(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 @pytest.fixture(scope="module")
-def stellar_only_free_z_model(ssp):
+def stellar_only_free_z_model(ssp, synthetic_tophat_obs):
     """Free-redshift variant of stellar_only_model for contract tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -68,8 +62,7 @@ def stellar_only_free_z_model(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -87,7 +80,7 @@ _PARAMS = {
 # ── Contract: DerivedKey registration and publish/require ───────────────────
 
 
-def test_lut_only_published_when_wave_precomp_on(ssp):
+def test_lut_only_published_when_wave_precomp_on(ssp, synthetic_tophat_obs):
     """state.derived has no stellar_phot_lnu_precomp when wave_precomp=False (default)."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -102,8 +95,7 @@ def test_lut_only_published_when_wave_precomp_on(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs)  # wave_precomp default False
@@ -123,7 +115,7 @@ def test_free_z_state_carries_ztable_not_lut(stellar_only_free_z_model):
     assert stellar_comp._state.ssp_phot_lut is None, "Free-z model should have ssp_phot_lut=None"
 
 
-def test_dust_attenuation_precomps_published(ssp):
+def test_dust_attenuation_precomps_published(ssp, synthetic_tophat_obs):
     """DustAttenuationSEDComponent publishes A and A' per filter when filter_eff_waves
     is in state.derived (i.e. wave_precomp is on).
     """
@@ -141,8 +133,7 @@ def test_dust_attenuation_precomps_published(ssp):
         dust_law_bc="calzetti",
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -158,7 +149,7 @@ def test_dust_attenuation_precomps_published(ssp):
     )
 
 
-def test_two_component_dust_publishes_bc_diff_precomp(ssp):
+def test_two_component_dust_publishes_bc_diff_precomp(ssp, synthetic_tophat_obs):
     """Phase 3c-3c-iv-b: two-component dust publishes A_bc, A_diff and slopes
     when filter_eff_waves is available (i.e. wave_precomp is on).
 
@@ -178,8 +169,7 @@ def test_two_component_dust_publishes_bc_diff_precomp(ssp):
         dust_tau_diff=Fixed(0.3),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -206,7 +196,7 @@ def test_predict_via_precomp_handles_bakedin_only_no_neb_precomp(stellar_only_mo
     m.observation.predict_via_precomp(state, full, observables_type=m.Observables)
 
 
-def test_agn_phot_lnu_precomp_published(ssp):
+def test_agn_phot_lnu_precomp_published(ssp, synthetic_tophat_obs):
     """AGN component publishes agn_phot_lnu_precomp when wave_precomp is on."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -224,8 +214,7 @@ def test_agn_phot_lnu_precomp_published(ssp):
         agn_log_lbol=Fixed(45.0),
         agn_frac=Fixed(0.5),
     )
-    phot = Photometry.from_names(["sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -234,7 +223,7 @@ def test_agn_phot_lnu_precomp_published(ssp):
     chex.assert_tree_all_finite(state.derived["agn_phot_lnu_precomp"])
 
 
-def test_dust_luts_absent_without_wave_precomp(ssp):
+def test_dust_luts_absent_without_wave_precomp(ssp, synthetic_tophat_obs):
     """No filter_eff_waves publish when wave_precomp=False."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -249,8 +238,7 @@ def test_dust_luts_absent_without_wave_precomp(ssp):
         dust_model="single_component",
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs)  # no wave_precomp
