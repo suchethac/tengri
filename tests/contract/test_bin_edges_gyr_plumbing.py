@@ -18,8 +18,6 @@ popped into ``spec.bin_edges_gyr`` and threaded through
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -28,15 +26,12 @@ from tengri.parameters.groups import Fixed, parse_groups
 
 pytestmark = pytest.mark.contract
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-
 
 @pytest.fixture(scope="module")
-def ssp():
-    if not _SSP_FILE.is_file():
-        pytest.skip(f"SSP file not present: {_SSP_FILE}")
-    return tengri.load_ssp()
+def ssp(synthetic_ssp_wide):
+    # #613: the forward-pass plumbing checks only read spec attributes, so the
+    # shared synthetic SSP lets them run on CI instead of skipping on missing data.
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
