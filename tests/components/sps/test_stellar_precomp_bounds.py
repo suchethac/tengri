@@ -15,8 +15,6 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Parameters, SEDModel, WavePrecomp
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.bounds
@@ -25,14 +23,13 @@ _SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    if not _SSP.exists():
-        pytest.skip(f"SSP not available at {_SSP}")
-    return load_ssp_data(str(_SSP))
+def ssp(synthetic_ssp_wide):
+    # #613: synthetic SSP + synthetic filters so these bounds checks run on CI.
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
-def stellar_only_model(ssp):
+def stellar_only_model(ssp, synthetic_tophat_obs):
     """Stellar-only SED model for bounds tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -47,15 +44,14 @@ def stellar_only_model(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 @pytest.fixture(scope="module")
-def stellar_only_free_z_model(ssp):
+def stellar_only_free_z_model(ssp, synthetic_tophat_obs):
     """Free-redshift variant for bounds tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -70,8 +66,7 @@ def stellar_only_free_z_model(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -164,7 +159,9 @@ def test_free_z_ztable_interpolation_matches_grid_points(stellar_only_free_z_mod
         ),
     ],
 )
-def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
+def test_lut_publishes_for_metallicity_mode(
+    ssp, synthetic_tophat_obs, metallicity_model, met_params
+):
     """LUT publishes finite, positive values across non-delta metallicity modes.
 
     The joint_weights × ssp_phot einsum is metallicity-mode-agnostic; this
@@ -184,8 +181,7 @@ def test_lut_publishes_for_metallicity_mode(ssp, metallicity_model, met_params):
         met_mode=metallicity_model,
         **met_params,
     )
-    phot = Photometry.from_names(["sdss_g", "sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -260,7 +256,7 @@ def test_taylor_moment_published_in_fixed_z(stellar_only_model):
     )
 
 
-def test_taylor_moment_published_in_free_z(ssp):
+def test_taylor_moment_published_in_free_z(ssp, synthetic_tophat_obs):
     """Phase 3c-3c-v: free-z mode now publishes the Taylor moment via the
     extended ztable (was deferred in Phase 3c-3c-ii).
 
@@ -280,8 +276,7 @@ def test_taylor_moment_published_in_free_z(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -298,7 +293,7 @@ def test_taylor_moment_published_in_free_z(ssp):
         assert jnp.all(jnp.isfinite(state.derived[k])), f"{k} contains non-finite values"
 
 
-def test_dust_attenuation_precomp_consistent_with_pipeline(ssp):
+def test_dust_attenuation_precomp_consistent_with_pipeline(ssp, synthetic_tophat_obs):
     """LUT A matches exp(-tau_v * k(λ_eff)) computed independently to 1e-10."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -314,8 +309,7 @@ def test_dust_attenuation_precomp_consistent_with_pipeline(ssp):
         dust_law_bc="calzetti",
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -333,7 +327,7 @@ def test_dust_attenuation_precomp_consistent_with_pipeline(ssp):
     )
 
 
-def test_predict_via_precomp_with_dust_matches_predict(ssp):
+def test_predict_via_precomp_with_dust_matches_predict(ssp, synthetic_tophat_obs):
     """Phase 3c-3c-iii: under dust attenuation, predict_via_precomp matches
     predict within the documented hybrid-kernel accuracy (~0.5%).
 
@@ -356,8 +350,7 @@ def test_predict_via_precomp_with_dust_matches_predict(ssp):
         dust_law_bc="calzetti",
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -371,7 +364,7 @@ def test_predict_via_precomp_with_dust_matches_predict(ssp):
     )
 
 
-def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
+def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp, synthetic_tophat_obs):
     """The dust precompute path produces lower phot_fnu than the no-dust path
     (stellar-only) — confirms the Taylor expansion actually applies attenuation.
     """
@@ -388,8 +381,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m_no_dust = SEDModel(spec_no_dust, ssp, observation=obs, approx=WavePrecomp())
@@ -428,7 +420,7 @@ def test_predict_via_precomp_dust_attenuates_phot_fnu(ssp):
     )
 
 
-def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
+def test_predict_via_precomp_two_component_dust_matches_predict(ssp, synthetic_tophat_obs):
     """Phase 3c-3c-iv-c: two-component dust through the LUT path matches
     ``predict`` within the documented hybrid-kernel accuracy (~0.5%).
 
@@ -451,8 +443,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
         dust_tau_diff=Fixed(0.3),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -467,7 +458,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp):
 
 
 @pytest.mark.parametrize("z_test", [0.5, 1.0, 1.8])
-def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
+def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, synthetic_tophat_obs, z_test):
     """Phase 3c-3c-v: free-z + single-component dust through the LUT path
     matches ``predict`` within 0.5% across redshifts.
 
@@ -490,8 +481,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
         dust_law_bc="calzetti",
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -511,7 +501,7 @@ def test_predict_via_precomp_free_z_with_dust_matches_predict(ssp, z_test):
     )
 
 
-def test_predict_via_precomp_agn_matches_predict(ssp):
+def test_predict_via_precomp_agn_matches_predict(ssp, synthetic_tophat_obs):
     """Phase 3c-3d-agn: AGN-bearing model goes through the LUT path and matches
     the default ``predict`` within 0.5%.
 
@@ -535,8 +525,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp):
         agn_log_lbol=Fixed(45.0),
         agn_frac=Fixed(0.5),
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -550,7 +539,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp):
     )
 
 
-def test_predict_via_precomp_handles_bakedin_nebular(ssp):
+def test_predict_via_precomp_handles_bakedin_nebular(ssp, synthetic_tophat_obs):
     """Phase 3c-3b: BakedIn nebular flows through the LUT path transparently.
 
     The default ``_wNE`` MILES SSPs carry baked-in nebular emission. That
@@ -574,8 +563,7 @@ def test_predict_via_precomp_handles_bakedin_nebular(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -594,7 +582,7 @@ def test_predict_via_precomp_handles_bakedin_nebular(ssp):
     )
 
 
-def test_predict_via_precomp_matches_default_predict_observables(ssp):
+def test_predict_via_precomp_matches_default_predict_observables(ssp, synthetic_tophat_obs):
     """Phase 3c-3a opt-in path: predict_via_precomp output matches predict_observables
     within the documented hybrid-kernel accuracy (~0.5%) for a stellar-only model.
 
@@ -615,8 +603,7 @@ def test_predict_via_precomp_matches_default_predict_observables(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
@@ -635,7 +622,7 @@ def test_predict_via_precomp_matches_default_predict_observables(ssp):
     )
 
 
-def test_predict_via_precomp_raises_without_wave_precomp(ssp):
+def test_predict_via_precomp_raises_without_wave_precomp(ssp, synthetic_tophat_obs):
     """predict_via_precomp requires the LUT — raises clearly when missing."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -650,8 +637,7 @@ def test_predict_via_precomp_raises_without_wave_precomp(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m = SEDModel(spec, ssp, observation=obs)  # NO approx=WavePrecomp()
@@ -661,10 +647,12 @@ def test_predict_via_precomp_raises_without_wave_precomp(ssp):
         m.observation.predict_via_precomp(state, full)
         raise AssertionError("predict_via_precomp should have raised without LUT")
     except ValueError as e:
-        assert "wave_precomp" in str(e)
+        # The guard message points users at approx=WavePrecomp() (the message was
+        # updated from the old lowercase "wave_precomp"; the assertion was stale).
+        assert "WavePrecomp" in str(e)
 
 
-def test_lut_metallicity_changes_with_logzsol(ssp):
+def test_lut_metallicity_changes_with_logzsol(ssp, synthetic_tophat_obs):
     """Higher metallicity changes the LUT-projected stellar photometry."""
     spec_lo = Parameters(
         mean_sfh_type=["tsnorm"],
@@ -679,8 +667,7 @@ def test_lut_metallicity_changes_with_logzsol(ssp):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
     )
-    phot = Photometry.from_names(["sdss_g", "sdss_r"])
-    obs = Observation(photometry=phot)
+    obs = synthetic_tophat_obs
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m_lo = SEDModel(spec_lo, ssp, observation=obs, approx=WavePrecomp())
