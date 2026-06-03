@@ -19,8 +19,6 @@ mix in the same workflow and need to agree:
 
 from __future__ import annotations
 
-import os
-
 import jax
 import numpy as np
 import pytest
@@ -32,28 +30,22 @@ pytestmark = pytest.mark.contract
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    """Bare-stellar FSPS / MILES / Chabrier SSP for filter/grid tests."""
-    path = "data/fsps_prsc_miles_chabrier.h5"
-    if not os.path.exists(path):
-        pytest.skip(f"SSP data not found at {path}")
-    from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-
-    return load_ssp_data(path)
+def ssp(synthetic_ssp_wide):
+    # #613: synthetic SSP (lgmet range [-2.5,-1.2]) so the self-consistency +
+    # metallicity-grid-bounds checks run on CI. logzsol=0 → log10 Z ≈ -1.85 is
+    # inside that range (builds cleanly); ±5/-10 fall outside (warn) — assertions
+    # preserved.
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
-def photometric_model(ssp):
-    """SEDModel with SDSS ugriz photometry — minimal setup for both bugs."""
+def photometric_model(ssp, synthetic_tophat_obs):
+    """SEDModel with synthetic top-hat photometry — minimal setup for both bugs."""
     import tengri
-    from tengri.observation import Observation, Photometry
 
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    )
     return tengri.SEDModel.build(
         ssp_data=ssp,
-        observation=obs,
+        observation=synthetic_tophat_obs,
         sfh={"type": "dexp", "*": tengri.FIXED},
         dust={
             "type": "two_component",
