@@ -130,7 +130,7 @@ class MyModifiedBlackbody(SEDModelComponent):
 
 
 # %% [markdown]
-# That's the whole model. Let's verify the framework picked it up.
+# That's the whole model. Now check that it registered.
 
 # %%
 from tengri.components.sed_model_component import _REGISTRY

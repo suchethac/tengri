@@ -16,20 +16,17 @@
 # %% [markdown]
 # # Building models with nested-dict API
 #
-# The nested-dict **model builder** provides a structured, Bagpipes-style
-# interface for composing galaxy SED models. Instead of flat parameter lists,
-# you organize physics into semantic groups (`sfh`, `dust`, `neb`, `agn`, etc.)
-# and specify free/fixed status with sentinels.
+# A tengri model is a few blocks of physics — a star-formation history, a dust
+# law, a nebular backend, optionally an AGN — and a statement of which
+# parameters are free. The nested-dict grammar (after Bagpipes) lets you write
+# that down one block at a time: a dict per group, with `'type'` for the
+# structural choice and a `'*'` wildcard for free/fixed. It reads back the way
+# you wrote it.
 #
-# This notebook demonstrates:
-#
-# 1. **Three equivalent construction paths** — recipes, parse_groups direct,
-#    and round-trip edits — showing they all produce identical results.
-# 2. **Parameter provenance** — the `summary()` method displays how each
-#    parameter got its value: user-specified, wildcard-free, or registry default.
-# 3. **Structural variation** — swapping SFH/dust families by editing nested dicts.
-# 4. **Physical comparison** — sweeping SFH families, dust laws, and IR templates
-#    to visualize their impact on the SED.
+# This notebook builds the same model four ways and shows they agree, then uses
+# the grammar to swap one block at a time — SFH family, dust law, IR template —
+# and reads the change off the SED. Along the way, `model.spec.summary()` tells
+# you where every parameter value came from.
 
 # %% [markdown]
 # ## Setup
@@ -180,12 +177,12 @@ print(f"  Model: {model3.spec.n_free} free params from round-trip + edit")
 print(f"  Added metallicity freedom: {'met_logzsol' in model3.spec.free_params}")
 
 # %% [markdown]
-# ## Builder factories: a tour of the full surface
+# ## Builder factories
 #
-# The `tengri.builders` namespace provides callable factories for every variant
-# and backend in the system. Each factory returns a dict suitable for nesting
-# into the groups structure. IDE autocomplete on parameter names removes typos;
-# one-line swaps handle structural changes (SFH family, dust law, etc.).
+# `tengri.builders` has a callable for every variant and backend — `builders.
+# sfh.dpl(...)`, `builders.dust.two_component(...)`, and so on. Each returns the
+# same dict you would write by hand, but the editor can autocomplete the
+# parameter names and catch a typo before you run. Below is one of each block.
 
 # %% [markdown]
 # ### SFH variants — 26+ parametrizations
@@ -439,9 +436,8 @@ print("Example: tengri.describe('dpl') shows the parametrization and physics.")
 # %% [markdown]
 # ## SED under different SFH families
 #
-# Build a truth dict for each SFH family and compute the resulting SEDs.
-# Notice how the spectral shape — especially the recent star formation
-# signature — changes with the SFH family.
+# One truth dict per SFH family, the resulting SED beside it. The recent
+# star-formation signature in the UV is what moves most as the family changes.
 
 # %%
 n_sfh = len(sfh_families)
@@ -538,12 +534,10 @@ fig.savefig(FIG_DIR / "04_sfh_family_grid.pdf", bbox_inches="tight")
 # %% [markdown]
 # ## Vary the dust attenuation law
 #
-# Keep the SFH fixed (tsnorm) and sweep dust attenuation law. The amount
-# of attenuation and the detailed shape of the extinction curve affect
-# the UV-to-optical ratio and the overall SED tilt.
-#
-# This is where the nested-dict approach shines: swap the `law_bc` value,
-# and the parser automatically re-declares the relevant dust parameters.
+# SFH fixed at tsnorm, sweep the attenuation law. Both the amount of
+# attenuation and the shape of the curve move the UV-to-optical ratio and the
+# overall tilt. Only the `law_bc` value changes between models here — swapping
+# it re-declares the relevant dust parameters automatically.
 
 # %%
 dust_laws = [
@@ -948,8 +942,8 @@ plt.show()
 # %% [markdown]
 # ## Free vs fixed parameters
 #
-# Same physical model, different parameter freedom. We demonstrate how the
-# nested-dict API tracks free/fixed status via wildcard directives.
+# The same physical model with different parameters freed. The wildcard
+# directives set the free/fixed status; `summary()` shows the result.
 
 # %%
 print("\nFree vs Fixed Parameter Tracking")
@@ -1013,11 +1007,11 @@ print(f"  Free z   has 'redshift': {'redshift' in spec_free_z.free_params}")
 print(f"  Fixed z has 'redshift': {'redshift' in spec_fixed_z.free_params}")
 
 # %% [markdown]
-# ## Forward-model timing and sensitivity
+# ## Forward-model timing
 #
-# JAX's JIT compilation makes subsequent runs fast, and vmap
-# enables vectorized predictions over many parameters. Here we time a
-# single prediction vs N=50 sequential predictions to show scaling.
+# A single prediction against 50 sequential ones. The first call pays the JIT
+# compile; after that each prediction is cheap, and a `vmap` over parameters
+# would collapse the 50 into one batched call.
 
 # %%
 # Build a representative model
@@ -1078,22 +1072,22 @@ print(f"Single prediction:            {t_single * 1000:.2f} ms")
 print(f"50 sequential predictions:    {t_loop:.3f} s ({t_loop / n_iter * 1000:.2f} ms per call)")
 print(f"Per-call overhead (amortized):{(t_loop / n_iter - t_single) * 1000:.2f} ms")
 print()
-print("Key lesson: Once compiled, calls are fast (~10-30 ms). Use sequential")
-print("loops for sensitivity studies, or vmap() for full batch vectorization.")
+print("Once compiled, each call is ~10-30 ms: a Python loop is fine for a")
+print("sensitivity study, vmap() when you want the whole batch at once.")
 
 # %% [markdown]
 # ## Where to go next
 #
-# The nested-dict model builder is the recommended entry point for new models.
-# The old flat Parameters(...) constructor remains available as an escape hatch.
+# The nested-dict builder is the entry point for new models; the flat
+# `Parameters(...)` constructor is still there as an escape hatch. The handful
+# of calls worth remembering:
 #
-# Key affordances:
-# - `recipes.*()` curated templates for common scenarios
-# - `SEDModel.build(..., filters=...)` one-liner to build and evaluate
-# - `model.spec.to_groups()` extract structure for inspection/round-trip edits
-# - `model.spec.summary_str()` provenance-tagged parameter listing
+# - `recipes.*()` — curated starting points
+# - `SEDModel.build(..., filters=...)` — build and evaluate in one line
+# - `model.spec.to_groups()` — pull the structure back out to edit
+# - `model.spec.summary_str()` — where each parameter value came from
 #
-# Natural next steps: [`05_fitting_photometry`](05_fitting_photometry.py)
+# From here, [`05_fitting_photometry`](05_fitting_photometry.py)
 # runs a real fit and reads its posterior;
 # [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py) breaks age, dust,
 # and metallicity degeneracies with a spectrum. Stochastic SFHs live

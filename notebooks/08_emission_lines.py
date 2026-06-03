@@ -125,7 +125,7 @@ print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 # %% [markdown]
 # ## Three galaxies along the BPT plane
 #
-# We create three SED models with different ionization regimes:
+# Three SED models spanning the ionization sequence:
 # 1. **Star-forming:** high recent SFR, young stellar population → below Kauffmann line
 # 2. **Older composite:** mixed-age SFH, intermediate metallicity → between Kauffmann & Kewley
 # 3. **AGN-like:** older stellar population, high dust, lower ionizing flux → varies with metallicity
