@@ -13,8 +13,6 @@ import pytest
 pytestmark = pytest.mark.bounds
 
 
-
-
 class TestSFHForms:
     """Every parametric SFH form must produce a non-negative SFR array of the
     right shape, with cumulative stellar mass ~ 10^7–10^11 M⊙ for SFR ~ 1."""
