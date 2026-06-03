@@ -23,7 +23,7 @@
 # the quickstart (`SEDModel.build`, validated HMC) and shows what it does and
 # does not constrain: metallicity and age tighten sharply, but the **absolute
 # dust optical depth stays loose** — a spectrum sets the continuum *shape*, not
-# its normalisation. That gap is exactly what adding photometry closes in
+# its normalisation. Adding photometry closes that gap in
 # [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
@@ -47,6 +47,7 @@ from tengri import (
     Observation,
     SEDModel,
     Spectroscopy,
+    SpectrumPrecomp,
     Uniform,
     builders,
     load_ssp_data,
@@ -63,8 +64,10 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Model and spectrum
 #
-# An R≈2000 spectrum over the rest-frame 4000–7000 Å window (Hβ, Mgb, Fe, Hα)
-# at z = 0.05, 260 pixels. Same FSPS bare-stellar model as notebooks 05 and 07:
+# An SDSS-like R≈2000 optical spectrum, 3800–9200 Å observed (rest-frame
+# 3620–8760 Å at z = 0.05: the 4000 Å break, Hβ, Mgb, the Fe blends, Hα, and
+# the Ca II triplet), sampled at 260 pixels to keep the demo fast. Same FSPS
+# bare-stellar model as notebooks 05 and 07:
 # truncated-skew-normal SFH (normalisation + two timescales free; skew/trunc
 # fixed), free metallicity and two dust optical depths.
 
@@ -76,12 +79,19 @@ if not ssp_path.exists():
 ssp = load_ssp_data(str(ssp_path))
 
 Z_GAL = 0.05
-WAVE_OBS = jnp.linspace(4000.0 * (1 + Z_GAL), 7000.0 * (1 + Z_GAL), 260)
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage
 obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 
+# approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centres and
+# projects every forward pass through that lookup table — within ~0.03% of the
+# exact wave-grid spectrum but ~30x faster per evaluation, so a converged HMC
+# fit takes seconds rather than minutes. It is the spectroscopic analogue of
+# WavePrecomp; valid for low-to-medium resolution (R ≲ a few thousand), where
+# the continuum is smooth across a pixel.
 sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
+    approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE),
     dust=builders.dust.two_component(
         defaults=FIXED, law_bc="calzetti",
@@ -120,10 +130,10 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %% [markdown]
 # ## Fit
 #
-# A pure-spectrum likelihood runs the exact wave-grid path (no spectrum lookup
-# table yet), so we use the convergence-validated fixed-length HMC recipe
-# (dense mass, n_warmup=1000, n_leapfrog=20), which mixes this six-parameter
-# posterior cleanly.
+# The convergence-validated fixed-length HMC recipe (dense mass, n_warmup=1000,
+# n_leapfrog=20) mixes this six-parameter posterior cleanly. With
+# `SpectrumPrecomp` the forward pass is the lookup-table path, so the whole fit
+# runs in seconds rather than minutes.
 
 # %%
 t0 = time.perf_counter()
@@ -193,7 +203,20 @@ plt.show()
 # ## Corner
 
 # %%
+labels = {
+    "met_logzsol": r"$\log Z/Z_\odot$",
+    "dust_tau_bc": r"$\tau_{\rm bc}$",
+    "dust_tau_diff": r"$\tau_{\rm diff}$",
+    "sfh_tsnorm_log_total_mass": r"$\log M_\star$",
+    "sfh_tsnorm_peak_lbt_gyr": r"$t_{\rm peak}$",
+    "sfh_tsnorm_width_gyr": r"$\sigma_t$",
+}
 fig_corner = posterior.plot_corner(truths=truth_full, color=C_POST)
+for ax_c in fig_corner.axes:  # readable axis labels in place of parameter keys
+    if ax_c.get_xlabel() in labels:
+        ax_c.set_xlabel(labels[ax_c.get_xlabel()], fontsize=11)
+    if ax_c.get_ylabel() in labels:
+        ax_c.set_ylabel(labels[ax_c.get_ylabel()], fontsize=11)
 fig_corner.savefig(FIG_DIR / "06_corner.png", dpi=200, bbox_inches="tight")
 plt.show()
 
@@ -202,6 +225,5 @@ plt.show()
 #
 # A converged spectroscopy-only fit (R̂ < 1.05) pins stellar age, metallicity,
 # and mass from the absorption features, but leaves the dust normalisation
-# loose. Adding broadband photometry —
-# [`07_joint_photo_spec`](07_joint_photo_spec.py) — fixes the dust and tightens
-# everything: that is the case for joint fitting.
+# loose. [`07_joint_photo_spec`](07_joint_photo_spec.py) adds broadband
+# photometry, which fixes the dust normalisation and tightens the rest.

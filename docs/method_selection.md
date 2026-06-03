@@ -50,12 +50,14 @@ fitting tutorials ([05](spine/05_fitting_photometry),
 [07](spine/07_joint_photo_spec)) follow these rules; see also
 [Known limitations](known_limitations).
 
-## Speed: precompute the photometry table
+## Speed: build with a precompute table
 
 For photometry-only models, build with `approx=WavePrecomp()`. It precomputes
 the SSP × filter integrals and projects each forward pass through a lookup
 table — roughly a 5× speedup on the warm call, which is what makes a full NUTS
 run finish in seconds rather than minutes. Free redshift is handled
 transparently via an interpolation table. Every entry in `tengri.recipes` uses
-it. (Spectroscopy and joint fits run the exact wave-grid path; see
-[Known limitations](known_limitations).)
+it. For spectroscopy, `approx=SpectrumPrecomp()` pre-rebins the SSP to the
+spectrum pixels; on a joint observation either opt-in builds both the
+photometry and spectrum tables. See
+[Joint fitting](joint_fitting) and [Known limitations](known_limitations).

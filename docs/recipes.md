@@ -40,10 +40,10 @@ is the opposite — it expects a `wNE` grid. `tengri.describe("<recipe>")` print
 the exact requirement and an example filename. Pre-formatted grids are mirrored
 at <https://halos.as.arizona.edu/suchethacooray/ssp-spectra/>.
 
-## They are starting points, not black boxes
+## Editing a recipe
 
-A recipe returns a plain nested dict. Inspect it, edit it, or override blocks
-before building:
+A recipe is a starting point, not a finished model. It returns a plain nested
+dict — inspect it, edit it, or override blocks before building:
 
 ```python
 spec = tengri.recipes.star_forming_photometry()
