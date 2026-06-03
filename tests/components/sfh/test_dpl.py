@@ -30,7 +30,14 @@ class TestSFHForms:
             (
                 "dpl",
                 {
-                    "sfh_dpl_log_total_mass": 0.0,
+                    # log_total_mass is log10(M⊙) under the total_mass contract
+                    # (trapezoid(sfr,t)=10^log_total_mass), so 9.0 → ~1e9 M⊙,
+                    # inside the [1e7,1e12] sanity band (0.0 → 1 M⊙ was stale).
+                    "sfh_dpl_log_total_mass": 9.0,
+                    # Formation anchor (cosmic time for SF) — a free param since
+                    # #549; fix it for this all-Fixed predict_sfh({}) check.
+                    # z=0 source ⇒ age_of_universe(0); ≤ _AGE_UNIV_GYR ≈ 13.81.
+                    "sfh_dpl_age_gyr": 13.0,
                     "sfh_dpl_alpha": 2.0,
                     "sfh_dpl_beta": 1.0,
                     "sfh_dpl_tau_gyr": 3.0,
@@ -39,7 +46,8 @@ class TestSFHForms:
             (
                 "lnorm",
                 {
-                    "sfh_lnorm_log_total_mass": 0.0,
+                    "sfh_lnorm_log_total_mass": 9.0,
+                    "sfh_lnorm_age_gyr": 13.0,  # formation anchor (free since #549)
                     "sfh_lnorm_peak_gyr": 3.0,
                     "sfh_lnorm_width_gyr": 1.0,
                 },
@@ -47,7 +55,7 @@ class TestSFHForms:
             (
                 "tsnorm",
                 {
-                    "sfh_tsnorm_log_total_mass": 0.0,
+                    "sfh_tsnorm_log_total_mass": 9.0,
                     "sfh_tsnorm_peak_lbt_gyr": 3.0,
                     "sfh_tsnorm_width_gyr": 2.0,
                     "sfh_tsnorm_skew": 0.0,
@@ -56,22 +64,12 @@ class TestSFHForms:
             ),
         ],
     )
-    def test_sfh_produces_valid_array(self, sfh_type, kwargs):
+    def test_sfh_produces_valid_array(self, sfh_type, kwargs, synthetic_ssp_wide):
         from tengri import Fixed, Parameters, SEDModel
 
-        def _make_ssp_if_available():
-            from pathlib import Path
-
-            from tengri import load_ssp_data
-
-            p = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-            if not p.exists():
-                return None
-            return load_ssp_data(str(p))
-
-        ssp = _make_ssp_if_available()
-        if ssp is None:
-            pytest.skip("SSP data not available")
+        # #613: predict_sfh is SSP-agnostic (uses only the age grid), so the
+        # shared synthetic SSP lets this SFH-shape check run on CI.
+        ssp = synthetic_ssp_wide
         param_dict = {k: Fixed(v) for k, v in kwargs.items()}
         param_dict.update(
             {
