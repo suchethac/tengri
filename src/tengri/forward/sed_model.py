@@ -4729,6 +4729,16 @@ class SEDModel:
             if _key in model_kwargs:
                 groups[_key] = model_kwargs.pop(_key)
 
+        # Auto-propagate the emission-line velocity mode from a Spectroscopy
+        # observation so the line-velocity params (eline_sigma_kms,
+        # eline_delta_v_kms) register without the user setting eline_mode twice
+        # (#653). An explicit eline_mode in the build kwargs wins.
+        if "eline_mode" not in groups and observation is not None:
+            _spec_obs = getattr(observation, "spectroscopy", None)
+            _obs_eline = getattr(_spec_obs, "eline_mode", None)
+            if _obs_eline is not None and _obs_eline != "off":
+                groups["eline_mode"] = _obs_eline
+
         spec = parse_groups(**groups)
         return cls(
             spec,
