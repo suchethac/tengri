@@ -141,6 +141,32 @@ class DustAttenuationSEDComponent:
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
         )
 
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Nebular continuum read opportunistically, for ordering only.
+
+        Declaring ``sed_nebular`` an optional input makes the pipeline
+        topological sort (ADR-0006) place the nebular component *before*
+        this single screen. The nebular component folds its continuum into
+        ``sed_intrinsic``; running first means the screen reddens the
+        nebular continuum together with the stellar light — the single law
+        attenuates HII-region emission by the same curve as the stars,
+        matching bagpipes/FSPS/CIGALE. Without this declaration the stable
+        sort kept dust *before* nebular, leaving the continuum unattenuated
+        (the single-screen analogue of the two-component bug fixed in #668).
+
+        BakedIn backends publish ``sed_nebular`` as zeros (emission is
+        already in the SSP grid), so this is a no-op there. The screen does
+        not read the key directly — it acts on the already-summed
+        ``sed_intrinsic`` — so this is purely an ordering edge.
+        """
+        return (
+            DerivedKey(
+                "sed_nebular",
+                "erg/s/Hz",
+                "Nebular continuum folded into sed_intrinsic before the screen",
+            ),
+        )
+
     def precompute(
         self,
         ssp_data: Any | None = None,

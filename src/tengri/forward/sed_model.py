@@ -1140,8 +1140,14 @@ class SEDModel:
 
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
-        # Per-component law-parameter overrides ({'bc': {...}, 'diff': {...}}),
-        # set by the builder when the user supplies slope_bc / delta_diff / etc.
+        # Nebular birth-cloud law (None -> inherit the stellar birth cloud).
+        # Decouples HII-region reddening from the stars while sharing the
+        # diffuse ISM screen; consumed by ``DustSEDComponent`` via
+        # ``build_components``.
+        self._dust_law_neb = getattr(spec, "dust_law_neb", None)
+        # Per-component law-parameter overrides ({'bc': {...}, 'diff': {...},
+        # 'neb': {...}}), set by the builder when the user supplies
+        # slope_bc / delta_diff / slope_neb / etc.
         self._dust_law_overrides = getattr(spec, "dust_law_overrides", None) or {}
         from tengri.components.dust.attenuation import resolve_dust_law
 
@@ -1152,7 +1158,7 @@ class SEDModel:
             self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
 
         self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
-        _neb_bc_law_name = getattr(spec, "neb_dust_law_bc", None)
+        _neb_bc_law_name = self._dust_law_neb or getattr(spec, "neb_dust_law_bc", None)
         if _neb_bc_law_name is not None:
             from tengri.components.dust.attenuation import resolve_dust_law as _rdl
 
@@ -2366,6 +2372,11 @@ class SEDModel:
         dust_law_diff_fn_name = (
             self._dust_law_diff_fn.__name__ if self._dust_law_diff_fn else "none"
         )
+        # Nebular birth-cloud law (None -> inherits bc). It reddens only the
+        # nebular continuum, so a change is invisible to the stellar graph
+        # shape; it MUST enter the signature or the kernel cache leaks one
+        # model's nebular reddening into another (color-leak).
+        dust_law_neb_name = str(getattr(self, "_dust_law_neb", None) or "inherit_bc")
         # Per-component law-parameter overrides change the baked-in chain
         # constants (e.g. birth-cloud n_slope) but not its graph shape, so two
         # models that differ only here MUST get distinct signatures or the
@@ -2373,7 +2384,7 @@ class SEDModel:
         _ovr = getattr(self, "_dust_law_overrides", None) or {}
         dust_law_overrides_sig = tuple(
             (comp, tuple(sorted((k, float(v)) for k, v in (_ovr.get(comp) or {}).items())))
-            for comp in ("bc", "diff")
+            for comp in ("bc", "diff", "neb")
         )
 
         # Nebular backend (by class name)
@@ -2525,6 +2536,7 @@ class SEDModel:
             dust_emission_model,
             dust_law_bc_fn_name,
             dust_law_diff_fn_name,
+            dust_law_neb_name,
             wg00_selectors,
             dust_law_overrides_sig,
             nebular_backend_name,
@@ -4334,6 +4346,7 @@ class SEDModel:
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
+            dust_law_neb=getattr(self, "_dust_law_neb", None),
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),

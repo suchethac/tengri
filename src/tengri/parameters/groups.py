@@ -888,6 +888,7 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     # it; set neither -> power_law for both).
     dust_law_bc = dust_dict.get("law_bc")
     dust_law_diff = dust_dict.get("law_diff")
+    dust_law_neb = dust_dict.get("law_neb")
 
     valid_laws = _valid_dust_laws()
     if dust_law_bc is not None:
@@ -904,14 +905,23 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
         result["dust_law_diff"] = dust_law_diff
 
-    # Per-component law-parameter overrides: slope_bc / slope_diff /
-    # bump_strength_bc / delta_diff / Rv_bc / … route onto a nested dict
-    # {'bc': {law_kwarg: value}, 'diff': {...}} consumed by DustSEDComponent.
+    if dust_law_neb is not None:
+        if dust_law_neb not in valid_laws:
+            suggestions = difflib.get_close_matches(dust_law_neb, valid_laws, n=2, cutoff=0.6)
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown dust law '{dust_law_neb}'.{suggest_str}")
+        result["dust_law_neb"] = dust_law_neb
+
+    # Per-component law-parameter overrides: slope_bc / slope_diff / slope_neb /
+    # bump_strength_bc / delta_diff / delta_neb / Rv_bc / … route onto a nested
+    # dict {'bc': {law_kwarg: value}, 'diff': {...}, 'neb': {...}} consumed by
+    # DustSEDComponent. The 'neb' channel reddens only the nebular birth cloud
+    # (shares the diffuse ISM screen with the stars).
     from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
 
     overrides: dict[str, dict[str, float]] = {}
     for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items():
-        for comp in ("bc", "diff"):
+        for comp in ("bc", "diff", "neb"):
             key = f"{short}_{comp}"
             if key in dust_dict:
                 overrides.setdefault(comp, {})[law_kw] = float(dust_dict[key])
@@ -1087,21 +1097,27 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "*",
             "law_bc",
             "law_diff",
+            "law_neb",
             "emission",
             # WG00 screen structural selectors (FSPS dust_type=3).
             "dust_curve",
             "geometry",
             "structure",
             # Per-component law-parameter overrides (TWO_COMPONENT_OVERRIDE_KEYS
-            # × {bc, diff}); routed to dust_law_overrides, not declared params.
+            # × {bc, diff, neb}); routed to dust_law_overrides, not declared
+            # params. The 'neb' channel reddens only the nebular birth cloud.
             "slope_bc",
             "slope_diff",
+            "slope_neb",
             "bump_strength_bc",
             "bump_strength_diff",
+            "bump_strength_neb",
             "delta_bc",
             "delta_diff",
+            "delta_neb",
             "Rv_bc",
             "Rv_diff",
+            "Rv_neb",
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
@@ -1650,17 +1666,22 @@ def _resolve_value(
             "*",
             "law_bc",
             "law_diff",
+            "law_neb",
             "emission",
             "patchy",
             "dla",
             "slope_bc",
             "slope_diff",
+            "slope_neb",
             "bump_strength_bc",
             "bump_strength_diff",
+            "bump_strength_neb",
             "delta_bc",
             "delta_diff",
+            "delta_neb",
             "Rv_bc",
             "Rv_diff",
+            "Rv_neb",
         }
         if override_key in structural_keys:
             # These are structural keys, not parameters
@@ -2014,11 +2035,15 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
             group_output["law_bc"] = spec.dust_law_bc
         if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
             group_output["law_diff"] = spec.dust_law_diff
-        # Round-trip per-component law-parameter overrides (slope_bc, delta_diff…).
+        # Nebular birth-cloud law (None -> inherits bc; only emit when set).
+        if getattr(spec, "dust_law_neb", None) is not None:
+            group_output["law_neb"] = spec.dust_law_neb
+        # Round-trip per-component law-parameter overrides (slope_bc, delta_diff,
+        # slope_neb…).
         from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
 
         _law_kw_to_short = {v: k for k, v in TWO_COMPONENT_OVERRIDE_KEYS.items()}
-        for comp in ("bc", "diff"):
+        for comp in ("bc", "diff", "neb"):
             for law_kw, value in (getattr(spec, "dust_law_overrides", {}).get(comp) or {}).items():
                 short = _law_kw_to_short.get(law_kw)
                 if short is not None:

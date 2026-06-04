@@ -139,6 +139,28 @@ class WG00AttenuationSEDComponent:
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
         )
 
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Nebular continuum read opportunistically, for ordering only.
+
+        Declaring ``sed_nebular`` an optional input makes the pipeline
+        topological sort (ADR-0006) place the nebular component *before*
+        this single screen, so the WG00 attenuation reddens the nebular
+        continuum (folded into ``sed_intrinsic`` by the nebular component)
+        together with the stellar light — matching bagpipes/FSPS/CIGALE.
+        Without it the stable sort left dust *before* nebular, leaving the
+        continuum unattenuated (the single-screen analogue of the
+        two-component bug fixed in #668). BakedIn backends publish zeros, so
+        this is a no-op there; the screen acts on the summed
+        ``sed_intrinsic`` and does not read the key directly.
+        """
+        return (
+            DerivedKey(
+                "sed_nebular",
+                "erg/s/Hz",
+                "Nebular continuum folded into sed_intrinsic before the screen",
+            ),
+        )
+
     def _build_curve_fn(self) -> Any | None:
         """Build (or reuse) the WG00 ``A(λ; τ_V)`` interpolation closure."""
         if self._state is not None and self._state.wg00_fn is not None:
