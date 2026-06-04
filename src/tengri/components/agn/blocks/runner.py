@@ -56,6 +56,10 @@ from tengri.components.agn.blocks._protocol import (
     resolve_agn_block,
 )
 from tengri.components.agn.blocks.atten_blocks import polar_dust_reemission_lnu
+from tengri.components.agn.blocks.torus_screen import (
+    TORUS_SCREEN_PARAMS,
+    torus_screen_transmission,
+)
 
 __all__ = [
     "BLOCK_SELECTOR_KEYS",
@@ -383,11 +387,29 @@ agn_attenuation_block : str
         **params,
     )
 
-    # Stage 5: attenuation factor (multiplicative).
+    # Stage 4.5: torus screen on the central engine (#294). A dusty torus
+    # obscures the disc + lines + FeII along edge-on (Type-2) sightlines, while
+    # its own IR emission is NOT re-extinguished by that screen — so the screen
+    # multiplies only the central-engine components, not the torus. The
+    # transition is smooth in cos(i) and identically ~1 for face-on (Type-1)
+    # sightlines, so a default-inclination model is unchanged. Static dispatch
+    # on the (Python-string) torus block name is JIT-safe.
+    L_lambda_central = L_lambda_disc + L_lambda_lines + L_lambda_feii
+    if agn_torus_block in TORUS_SCREEN_PARAMS:
+        _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
+        screen = torus_screen_transmission(
+            wave,
+            cos_inc=params.get("agn_cos_inc", 0.86602540378443864),
+            oa_deg=params.get(_oa_key, 40.0),
+            tau_v=params.get(_tau_key, 7.0),
+        )
+        L_lambda_central = L_lambda_central * screen
+
+    # Stage 5: attenuation factor (multiplicative; host/foreground screen).
     atten_fn = resolve_agn_block("attenuation", agn_attenuation_block)
     factor = atten_fn(wave, **params)
 
-    L_lambda_total = (L_lambda_disc + L_lambda_lines + L_lambda_feii + L_lambda_torus) * factor
+    L_lambda_total = (L_lambda_central + L_lambda_torus) * factor
 
     # Convert to L_nu [erg/s/Hz] using L_nu = L_lambda * lambda^2 / c.
     L_nu_atten = L_lambda_total * wave**2 / C_AA_PER_S
@@ -397,8 +419,9 @@ agn_attenuation_block : str
     # as a geometry-independent FIR greybody. Compute and add this to the SED.
     # Static dispatch on agn_attenuation_block (a Python string) is JIT-safe.
     if agn_attenuation_block == "polar_dust":
-        # Compute reemission in L_nu from the pre-attenuation SED.
-        L_lambda_pre_atten = L_lambda_disc + L_lambda_lines + L_lambda_feii + L_lambda_torus
+        # Compute reemission in L_nu from the pre-attenuation SED (torus-screened
+        # central engine + torus IR).
+        L_lambda_pre_atten = L_lambda_central + L_lambda_torus
         L_nu_reemit = polar_dust_reemission_lnu(wave, L_lambda_pre_atten, **params)
         return L_nu_atten + L_nu_reemit
     else:

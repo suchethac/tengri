@@ -1827,6 +1827,14 @@ class SEDModel:
             kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
             kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
             kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
+            # Fritz+2006 torus (CIGALE fritz2006) — forwarded so the 6D grid
+            # block sees its parameters under the composable AGN path (#347).
+            kw["agn_fritz_r_ratio"] = p.get("agn_fritz_r_ratio", 60.0)
+            kw["agn_fritz_tau"] = p.get("agn_fritz_tau", 1.0)
+            kw["agn_fritz_beta"] = p.get("agn_fritz_beta", -0.5)
+            kw["agn_fritz_gamma"] = p.get("agn_fritz_gamma", 4.0)
+            kw["agn_fritz_oa"] = p.get("agn_fritz_oa", 60.0)
+            kw["agn_fritz_psy"] = p.get("agn_fritz_psy", 0.001)
             # Nenkova+2008 CLUMPY torus (FSPS/Prospector)
             kw["agn_tau"] = p.get("agn_tau", 30.0)
         # Radio

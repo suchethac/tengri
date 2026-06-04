@@ -404,6 +404,13 @@ _AGN_PARTITION = {
     "agn_q_skirtor": "agn.torus",
     "agn_oa_skirtor": "agn.torus",
     "agn_torus_frac": "agn.torus",
+    # Fritz et al. (2006) smooth-dust torus
+    "agn_fritz_r_ratio": "agn.torus",
+    "agn_fritz_tau": "agn.torus",
+    "agn_fritz_beta": "agn.torus",
+    "agn_fritz_gamma": "agn.torus",
+    "agn_fritz_oa": "agn.torus",
+    "agn_fritz_psy": "agn.torus",
     # Lines
     "agn_blr_cf": "agn.lines",
     "agn_nlr_cf": "agn.lines",
