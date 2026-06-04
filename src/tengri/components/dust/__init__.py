@@ -130,6 +130,10 @@ from tengri.components.dust.priors import (
     narayanan_tau_prior,
 )
 from tengri.components.dust.salim18_model import Salim18 as Salim18
+from tengri.components.dust.schreiber2016_ir import (
+    Schreiber2016IRConfig as Schreiber2016IRConfig,
+    Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
+)
 from tengri.components.dust.smc_model import SMC as SMC
 
 # ──────────────────────────────────────────────────────────────────
@@ -181,6 +185,8 @@ _CURATED_DIR = (
     "DL14IRConfig",
     "Dale2014IRSEDComponent",
     "Dale2014IRConfig",
+    "Schreiber2016IRSEDComponent",
+    "Schreiber2016IRConfig",
     "AstrodustIRSEDComponent",
     "AstrodustIRConfig",
     "Draine2021PAHIRSEDComponent",

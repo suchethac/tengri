@@ -158,6 +158,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import compute_qh, place_line_profiles
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -746,59 +747,84 @@ class CB19Backend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Compute emission line luminosities via 6D interpolation over the CB_19 grid.
+        r"""Compute emission line luminosities via 6D interpolation over the CB_19 grid.
 
-        **Hβ conversion**: CB_19 stores L_line/L_Hβ (dimensionless). This method
-        converts to absolute L_line (Lsun) using::
+        **Hβ conversion and k-factor**: CB_19 stores L_line/L_Hβ (dimensionless).
+        This method converts to absolute L_line (Lsun) using::
 
             L_line = Σ_i  w_i · Q_H(Z, age_i) · ratio(Z_gas, age_i, logU, nH, CO, dNO)
-                         · (L_Hβ/Q_H) · (1 − f_esc)
+                         · (L_Hβ/Q_H) · k(f_esc, f_dust)
 
         where L_Hβ/Q_H = 4.78×10⁻¹³ / 3.828×10³³ Lsun s/photon (Case B,
-        Osterbrock & Ferland 2006 Table 4.4).
+        Osterbrock & Ferland 2006 Table 4.4) and the k-factor is:
+
+        .. math::
+
+            k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
+                     {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
         Parameters
         ----------
         ssp_weights : array, shape (n_age,)
             CSP stellar mass weights (Msun per SSP age bin).
         ssp_log_ages_yr : array, shape (n_age,)
-            log10(age/yr) of SSP bins.
+            log10(age/yr) of SSP bins [log10(yr)].
         log_z : float
-            Stellar metallicity log10(Z) (absolute). Used for Q_H interpolation.
+            Stellar metallicity log10(Z) (absolute). Used for Q_H interpolation
+            [log10(Z)].
         neb_logU : float
-            Log ionization parameter log10(U). Grid range: [−4, −1.5].
+            Log ionization parameter log10(U) [log10(U)]. Grid range: [−4, −1.5].
+            Default -3.0.
         neb_logZ_gas : float or None
-            Gas metallicity log10(Z) absolute. None → tied to stellar ``log_z``.
-            Converted internally to log10(O/H) using CLOUDY c17.01 solar scale
-            (log(O/H)_sun = −3.07, i.e. 12+log(O/H)_sun = 8.93).
+            Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar
+            ``log_z``. Converted internally to log10(O/H) using CLOUDY c17.01
+            solar scale (log(O/H)_sun = −3.07, i.e. 12+log(O/H)_sun = 8.93).
         neb_fesc : float
-            Ionizing photon escape fraction [0, 1].
+            Ionizing photon escape fraction [dimensionless, in [0, 1]].
+            Default 0.0.
         neb_fesc_lya : float
-            Ly-alpha-specific escape fraction [0, 1]. Applied on top of neb_fesc.
+            Ly-alpha-specific escape fraction [dimensionless, in [0, 1]].
+            Default 0.0. Applied on top of the k-factor.
+        neb_fdust : float
+            Lyman-continuum dust-absorption fraction in HII regions
+            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
+            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+            k-factor.
         neb_log_nH : float
-            Log hydrogen density log10(n_H/cm⁻³). Grid range: [1, 4].
+            Log hydrogen density log10(n_H/cm⁻³) [log10(cm^-3)]. Grid range: [1, 4].
+            Default 2.0.
         neb_co : float
-            Log C/O ratio log10(C/O). Grid range: [−1, 0.15].
+            Log C/O ratio log10(C/O) [log10]. Grid range: [−1, 0.15]. Default -0.36.
         neb_dno : float
-            ΔN/O offset (log10) from default N/O scaling. Grid range: [−0.25, 0.25].
+            ΔN/O offset (log10) from default N/O scaling [log10]. Grid range:
+            [−0.25, 0.25]. Default 0.0.
 
         Returns
         -------
         wavelengths : array, shape (n_lines,)
-            Rest-frame vacuum wavelengths in Angstrom.
+            Rest-frame vacuum wavelengths [Angstrom].
         luminosities : array, shape (n_lines,)
-            Emission line luminosities in Lsun.
+            Emission line luminosities [Lsun].
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
         **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
-        neb_log_nH, neb_co, neb_dno parameters.
+        neb_fdust, neb_log_nH, neb_co, neb_dno parameters.
+
+        References
+        ----------
+        .. [1] Ferland, G. J. 1980, PASP, 92, 596.
+        .. [2] Inoue, A. K. 2011, MNRAS, 415, 2920.
+        .. [3] CIGALE nebular module: pcigale/sed_modules/nebular.py, lines
+            156-162.
 
         """
         if neb_logZ_gas is None:
@@ -824,6 +850,9 @@ class CB19Backend:
         young_ages = ssp_log_ages_yr[young_idx]
         young_weights = ssp_weights[young_idx]
 
+        # Compute k-factor once (shared by all age bins)
+        k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+
         def _line_contrib_one_age(
             log_age_i: float,
             weight_i: float,
@@ -841,7 +870,7 @@ class CB19Backend:
             # log_ratios_i is stored as float32 in the grid, so the sum ≈ -45.9
             # underflows to 0.0 in float32 (subnormal min ≈ 1.4e-45 > 10^-45.9).
             lum_per_qh = 10.0 ** (log_ratios_i.astype(jnp.float64) + self._log_hb_per_qh)
-            return weight_i * qh_i * lum_per_qh * (1.0 - neb_fesc)
+            return weight_i * qh_i * lum_per_qh * k_factor
 
         # vmap over young age bins, then sum
         all_contribs = jax.vmap(_line_contrib_one_age)(
@@ -849,9 +878,11 @@ class CB19Backend:
         )  # (n_young, n_lines)
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Apply differential Ly-alpha escape (resonant scattering)
+        # Apply differential Ly-alpha escape (resonant scattering).
+        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/k_factor to apply the
+        # Ly-alpha-specific escape on top of the k-factor already applied.
         lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
+        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(k_factor, 1e-10)
         total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
 
         return grid.line_wavelengths, total_line_lum
@@ -910,21 +941,30 @@ class CB19Backend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
         line_sigma_aa: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
-        """Compute CB_19 nebular emission lines on the SSP wavelength grid.
+        r"""Compute CB_19 nebular emission lines on the SSP wavelength grid.
 
         Emission lines from CB_19 are placed onto the SSP wavelength grid as
         Gaussian profiles (if ``line_sigma_aa > 0``) or delta functions added
         to the nearest pixel. There is no nebular continuum component.
 
-        **Hβ conversion**: CB_19 stores L_line/L_Hβ (ratios). This method converts
-        to absolute L_line via the Case B factor L_Hβ/Q_H = 4.78×10⁻¹³ erg/photon
-        (Osterbrock & Ferland 2006, Table 4.4) and sums over ionizing SSP age bins.
+        **Hβ conversion and k-factor**: CB_19 stores L_line/L_Hβ (ratios). This
+        method converts to absolute L_line via the Case B factor L_Hβ/Q_H =
+        4.78×10⁻¹³ erg/photon (Osterbrock & Ferland 2006, Table 4.4), scales by
+        the CIGALE k-factor:
+
+        .. math::
+
+            k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
+                     {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
+
+        and sums over ionizing SSP age bins.
 
         Parameters
         ----------
@@ -937,21 +977,28 @@ class CB19Backend:
         log_z : float
             Stellar metallicity log10(Z) absolute [log10(Z)].
         neb_logU : float
-            Log ionization parameter log10(U). Grid range: [−4, −1.5].
-            Default -3.0 [log10(U)].
+            Log ionization parameter log10(U) [log10(U)]. Grid range: [−4, −1.5].
+            Default -3.0.
         neb_logZ_gas : float or None
-            Gas metallicity log10(Z) absolute. None → tied to stellar ``log_z``
-            [log10(Z)].
+            Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar
+            ``log_z``.
         neb_fesc : float
-            Ionizing photon escape fraction [0, 1]. Default 0.0.
+            Ionizing photon escape fraction [dimensionless, in [0, 1]].
+            Default 0.0.
         neb_fesc_lya : float
-            Ly-alpha-specific escape fraction [0, 1]. Default 0.0.
+            Ly-alpha-specific escape fraction [dimensionless, in [0, 1]].
+            Default 0.0.
+        neb_fdust : float
+            Lyman-continuum dust-absorption fraction in HII regions
+            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
+            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+            k-factor.
         neb_log_nH : float
-            log10(n_H / cm⁻³). Grid range [1, 4]. Default 2.0 [log10(cm^-3)].
+            log10(n_H / cm⁻³) [log10(cm^-3)]. Grid range [1, 4]. Default 2.0.
         neb_co : float
-            log10(C/O). Grid range [−1, 0.15]. Default −0.36 (near-solar).
+            log10(C/O) [log10]. Grid range [−1, 0.15]. Default −0.36 (near-solar).
         neb_dno : float
-            ΔN/O offset from default N/O scaling. Grid range [−0.25, 0.25].
+            ΔN/O offset from default N/O scaling [log10]. Grid range [−0.25, 0.25].
             Default 0.0.
         line_sigma_aa : float
             Gaussian line width (σ) for line profiles [Å]. 0 = nearest-pixel
@@ -970,13 +1017,17 @@ class CB19Backend:
         .. [2] D. E. Osterbrock and G. J. Ferland, "Astrophysics of Gaseous Nebulae
            and Active Galactic Nuclei," 2nd edn. (University Science Books, 2006).
            Table 4.4: Case B recombination coefficients.
+        .. [3] Ferland, G. J. 1980, PASP, 92, 596.
+        .. [4] Inoue, A. K. 2011, MNRAS, 415, 2920.
+        .. [5] CIGALE nebular module: pcigale/sed_modules/nebular.py, lines
+            156-162.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
         **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc,
-        neb_log_nH, neb_co, neb_dno parameters.
+        neb_fdust, neb_log_nH, neb_co, neb_dno parameters.
 
         """
         line_wave, line_lum = self.predict_nebular_line_luminosities(
@@ -987,6 +1038,7 @@ class CB19Backend:
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            neb_fdust=neb_fdust,
             neb_log_nH=neb_log_nH,
             neb_co=neb_co,
             neb_dno=neb_dno,

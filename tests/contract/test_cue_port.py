@@ -39,8 +39,9 @@ def test_cue_nebular_declared_parameters():
     comp = CueNebularSEDComponent()
     decls = comp.declared_parameters()
 
-    # Should have 14 parameters: 4 standard + 7 ionizing spectrum + 3 gas extras
-    assert len(decls) == 14, f"Expected 14 params, got {len(decls)}"
+    # Should have 15 parameters: 4 standard + 7 ionizing spectrum + 3 gas extras
+    # + neb_fdust (CIGALE LyC dust-absorption fraction, added 2026-06).
+    assert len(decls) == 15, f"Expected 15 params, got {len(decls)}"
 
     # Check names and units
     param_names = {d.name for d in decls}
@@ -49,6 +50,7 @@ def test_cue_nebular_declared_parameters():
         "neb_logZ_gas",
         "neb_fesc",
         "neb_fesc_lya",
+        "neb_fdust",
         "neb_ionspec_index1",
         "neb_ionspec_index2",
         "neb_ionspec_index3",

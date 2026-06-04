@@ -613,18 +613,19 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 def create_dale2014_from_grid(grid_path: str) -> Callable:
     r"""Create a Dale+2014 emission model backed by tabulated templates.
 
-    Loads the NPZ grid once and returns a function matching the emission
-    model registry interface.  The NPZ file must contain:
+    Loads the HDF5 grid once and returns a function matching the emission
+    model registry interface. The file must contain:
 
     - ``wavelength_aa``: rest-frame wavelength grid in Angstrom (n_wave,)
     - ``alpha_grid``: array of alpha values (n_alpha,)
     - ``templates_sf``: star-forming templates (n_alpha, n_wave) in
-      L_lambda units (will be normalized internally so that each
-      template integrates to 1 over frequency).
+      L_nu convention (normalized so integral over nu = 1).
+    - ``templates_qso`` (optional): pure-AGN template (n_wave,) for AGN-heated dust.
 
-    The returned function performs 1-D linear interpolation in alpha
-    and normalizes the result so that the frequency integral equals
-    ``L_absorbed``.
+    The returned function performs 1-D linear interpolation in alpha for the SF
+    component. If templates_qso is present, fracAGN mixing is supported via
+    additive composition: L_dust_sf = L_absorbed, L_dust_agn = L_absorbed * f_agn/(1-f_agn),
+    with total IR = f_agn_template * L_dust_agn / (1 - f_agn).
 
     Parameters
     ----------
@@ -635,7 +636,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     -------
     Callable
         Model function with signature
-        ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, **kw) -> L_nu``.
+        ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, dust_frac_agn=0.0, **kw) -> L_nu``.
 
     Notes
     -----
@@ -645,7 +646,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     -------
     >>> dale = create_dale2014_from_grid("data/dale2014_templates_v2.h5")
     >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
-    >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5)
+    >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5, dust_frac_agn=0.1)
     """
     import numpy as np
 
@@ -654,6 +655,9 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
         tmpl_wave_raw = np.array(data["wavelength_aa"])
         alpha_grid_raw = np.array(data["alpha_grid"])
         templates_raw = np.array(data["templates_sf"])
+        templates_qso_raw = data.get("templates_qso", None)
+        if templates_qso_raw is not None:
+            templates_qso_raw = np.array(templates_qso_raw)
         already_lnu = False
     else:
         import h5py as _h5py
@@ -664,14 +668,19 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
                 tmpl_wave_raw = np.array(f["wavelength"][:])
                 alpha_grid_raw = np.array(f["grid/alpha"][:])
                 templates_raw = np.array(f["spectra/templates"][:])
+                templates_qso_raw = None
             else:
                 tmpl_wave_raw = np.array(f["wavelength_aa"][:])
                 alpha_grid_raw = np.array(f["alpha_grid"][:])
                 templates_raw = np.array(f["templates_sf"][:])
+                templates_qso_raw = None
             # Check if already in L_nu normalized form
             already_lnu = (
                 f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
             )
+            # Optional: load pure-AGN QSO template
+            if "templates_qso" in f:
+                templates_qso_raw = np.array(f["templates_qso"][:])
 
     tmpl_wave_np = np.asarray(tmpl_wave_raw, dtype=np.float64)
     alpha_grid_np = np.asarray(alpha_grid_raw, dtype=np.float64)
@@ -684,6 +693,10 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     if already_lnu:
         # Templates are pre-normalized in L_nu convention — use directly
         templates_np = np.asarray(templates_raw, dtype=np.float64)
+        if templates_qso_raw is not None:
+            templates_qso_np = np.asarray(templates_qso_raw, dtype=np.float64)
+        else:
+            templates_qso_np = None
     else:
         # Convert from L_lambda to L_nu: L_nu = L_lambda * lambda^2 / c
         wave_cm = tmpl_wave_np * _AA_TO_CM
@@ -700,42 +713,67 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
         templates_np = np.asarray(templates_lnu, dtype=np.float64)  # (n_alpha, n_wave)
 
+        # Normalize QSO template if present
+        templates_qso_np = None
+        if templates_qso_raw is not None:
+            templates_qso_lnu = templates_qso_raw * (wave_cm**2) / _C_CGS
+            integral = -np.trapezoid(templates_qso_lnu, nu)
+            if integral > 0:
+                templates_qso_lnu /= integral
+            templates_qso_np = np.asarray(templates_qso_lnu, dtype=np.float64)
+
     # Use jnp.array so that dynamic JAX indexing works inside JIT.
     # preload_emission_model() must be called at factory time (outside JIT) to
     # avoid DynamicJaxprTracer leaks.
     tmpl_wave = jnp.array(tmpl_wave_np, dtype=jnp.float64)
     alpha_grid = jnp.array(alpha_grid_np, dtype=jnp.float64)
     templates = jnp.array(templates_np, dtype=jnp.float64)
+    has_qso = templates_qso_np is not None
+    templates_qso = jnp.array(templates_qso_np, dtype=jnp.float64) if has_qso else None
 
     def dale2014_tabulated(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
         dust_alpha_dale: float = 2.0,
+        dust_frac_agn: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
         """Dale+2014 emission from tabulated templates.
+
+        Mixes star-forming and AGN-heated dust via the formula:
+
+            L_dust_sf = L_absorbed
+            L_dust_agn = L_absorbed * fracAGN / (1 - fracAGN)    [if fracAGN > 0]
+            SED = (1 - fracAGN) * SF_template + fracAGN * QSO_template
+
+        Total IR luminosity = L_absorbed / (1 - fracAGN), accounting for
+        the AGN as an independent heating source (not reducing stellar heating).
 
         Parameters
         ----------
         wavelength_aa : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Å].
         L_absorbed : float
-            Total absorbed luminosity [Lsun].
+            Total absorbed luminosity [Lsun] (stellar-heated dust).
         dust_alpha_dale : float
             Radiation field power-law slope [dimensionless]. Default: 2.0.
+        dust_frac_agn : float
+            AGN contribution fraction [dimensionless, range [0, 0.99)].
+            fracAGN = 1 is undefined (divide by zero); clamped to 0.99.
+            Default: 0.0 (SF-only).
         **_kwargs
             Extra keyword arguments (ignored).
 
         Returns
         -------
         ndarray, shape (n_wave,)
-            Dust emission L_ν [Lsun/Hz].
+            Dust emission L_ν [Lsun/Hz]. Total IR = integral over nu.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable everywhere.
+        **Gradient-safe**: yes — differentiable everywhere (guarded division).
         """
         dust_alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
         i_a = jnp.clip(
@@ -744,9 +782,22 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
             len(alpha_grid) - 2,
         )
         fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-        template = (1.0 - fa) * templates[i_a] + fa * templates[i_a + 1]
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
-        return L_absorbed * sed
+        template_sf = (1.0 - fa) * templates[i_a] + fa * templates[i_a + 1]
+
+        # AGN mixing (only if QSO template is available and fracAGN > 0)
+        if has_qso:
+            f_agn = jnp.clip(dust_frac_agn, 0.0, 0.99)
+            # Additive mixing: (1 - f) * SF + f * QSO
+            template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
+            # Scale by L_absorbed / (1 - f_agn) to account for the AGN power source
+            scale_factor = L_absorbed / jnp.maximum(1.0 - f_agn, 1e-10)
+        else:
+            # Back-compat: SF-only if QSO template absent
+            template_mixed = template_sf
+            scale_factor = L_absorbed
+
+        sed = jnp.interp(wavelength_aa, tmpl_wave, template_mixed, left=0.0, right=0.0)
+        return scale_factor * sed
 
     return dale2014_tabulated
 
@@ -763,6 +814,8 @@ def load_dale2014_templates(filepath: str) -> dict:
     -------
     dict
         Loaded and JAX-wrapped template arrays.
+        Keys: wavelength_aa, alpha_grid, templates_sf.
+        Optional: templates_qso (pure AGN template for fracAGN mixing).
 
     Notes
     -----
@@ -776,17 +829,32 @@ def load_dale2014_templates(filepath: str) -> dict:
             wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
             spectra = np.array(f["spectra"]["templates"][:])
             alpha_grid = np.array(f["grid"]["alpha"][:])
+            templates_qso = None
         else:
             wavs_aa = np.array(f["wavelength_aa"][:])
             # Schema variant: ``templates_sf`` (current) vs ``spectra`` (legacy).
             spectra_key = "templates_sf" if "templates_sf" in f else "spectra"
             spectra = np.array(f[spectra_key][:])
             alpha_grid = np.array(f["alpha_grid"][:])
-    return {
+            # Optional: pure-AGN QSO template for fracAGN mixing
+            templates_qso = None
+            if "templates_qso" in f:
+                templates_qso = np.array(f["templates_qso"][:])
+
+    _sf = jnp.array(spectra, dtype=jnp.float64)
+    result = {
         "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
         "alpha_grid": jnp.array(alpha_grid, dtype=jnp.float64),
-        "spectra": jnp.array(spectra, dtype=jnp.float64),
+        "templates_sf": _sf,
+        # Back-compat alias: ``precompute_dale2014_photometry`` (and other
+        # legacy consumers) read the SF templates under the original "spectra"
+        # key. ``templates_sf`` is the newer name introduced alongside
+        # ``templates_qso`` for the fracAGN mixing.
+        "spectra": _sf,
     }
+    if templates_qso is not None:
+        result["templates_qso"] = jnp.array(templates_qso, dtype=jnp.float64)
+    return result
 
 
 def create_schreiber2018_from_grid(grid_path: str) -> Callable:
@@ -935,6 +1003,77 @@ def load_schreiber2018_templates(filepath: str) -> dict:
             "dust": jnp.array(np.array(g["dust"][:]), dtype=jnp.float64),
             "pah": jnp.array(np.array(g["pah"][:]), dtype=jnp.float64),
         }
+
+
+def load_schreiber2016_templates(filepath: str) -> dict:
+    r"""Load Schreiber+2016 template grid from HDF5.
+
+    The template file must contain:
+
+    - ``wavelength_aa``: wavelength grid in Angstrom (n_wave,)
+    - ``tdust_grid``: dust temperature grid (n_tdust,) in Kelvin
+    - ``continuum``: continuum templates (n_tdust, n_wave) in W/nm/kg
+    - ``pah``: PAH templates (n_tdust, n_wave) in W/nm/kg
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``schreiber2016_templates.h5``.
+
+    Returns
+    -------
+    dict
+        Keys: wavelength_aa, tdust_grid, continuum, pah.
+        All arrays are JAX arrays. wavelength_aa is in Angstrom.
+        continuum and pah have shape (n_tdust, n_wave) and are
+        normalized in L_nu convention (integral over nu = 1).
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O operations not supported in JIT.
+    Call at factory/init time before JIT compilation.
+    """
+    import h5py as _h5py
+    import numpy as np
+
+    already_lnu = False
+
+    with _h5py.File(filepath, "r") as f:
+        already_lnu = f.attrs.get("spectra_unit", "") == "L_nu normalized (integral over nu = 1)"
+        wavs_aa = np.array(f["wavelength_aa"][:])
+        tdust_grid = np.array(f["tdust_grid"][:])
+        continuum = np.array(f["continuum"][:])
+        pah = np.array(f["pah"][:])
+
+    if not already_lnu:
+        # Convert to L_nu and normalize
+        wave_cm = wavs_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm
+
+        for i in range(continuum.shape[0]):
+            lnu = continuum[i] * (wave_cm**2) / _C_CGS
+            integral = -np.trapezoid(lnu, nu)
+            if integral > 0:
+                continuum[i] = lnu / integral
+            else:
+                continuum[i] = lnu
+
+        for i in range(pah.shape[0]):
+            lnu = pah[i] * (wave_cm**2) / _C_CGS
+            integral = -np.trapezoid(lnu, nu)
+            if integral > 0:
+                pah[i] = lnu / integral
+            else:
+                pah[i] = lnu
+
+    # Use jnp.array so dynamic JAX indexing works inside JIT.
+    # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
+    return {
+        "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
+        "tdust_grid": jnp.array(tdust_grid, dtype=jnp.float64),
+        "continuum": jnp.array(continuum, dtype=jnp.float64),
+        "pah": jnp.array(pah, dtype=jnp.float64),
+    }
 
 
 def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:
@@ -1673,11 +1812,13 @@ def load_themis_templates(filepath: str) -> dict:
 
     The template file must contain:
 
-    - ``wavelength_um``: wavelength grid in microns (n_wave,)
+    - ``wavelength_aa``: wavelength grid in Angstrom (n_wave,)
     - ``qhac_grid``: a-C(:H) aromatic fraction (n_qhac,)
     - ``umin_grid``: minimum radiation field intensities (n_umin,)
-    - ``spectra_single``: single-U templates (n_qhac, n_umin, n_wave)
-    - ``spectra_pdr``: power-law U (PDR) templates (n_qhac, n_umin, n_wave)
+    - ``single_u``: single-U templates (n_qhac, n_umin, n_wave)
+    - ``powerlaw``: 2D PDR templates for back-compat (n_qhac, n_umin, n_wave)
+    - ``alpha_grid``: (optional) power-law slope values (n_alpha,)
+    - ``powerlaw_alpha``: (optional) 3D PDR templates (n_qhac, n_umin, n_alpha, n_wave)
 
     Parameters
     ----------
@@ -1688,9 +1829,11 @@ def load_themis_templates(filepath: str) -> dict:
     -------
     dict
         Keys: wavelength_aa, umin_grid, qhac_grid, single_u, powerlaw.
+        For extended grids: also alpha_grid, powerlaw_alpha.
         All arrays are JAX arrays.  wavelength_aa is in Angstrom.
         single_u and powerlaw have shape (n_qhac, n_umin, n_wave) and are
-        normalized in L_nu convention.
+        normalized in L_nu convention. If present, powerlaw_alpha has shape
+        (n_qhac, n_umin, n_alpha, n_wave).
 
     Notes
     -----
@@ -1700,6 +1843,8 @@ def load_themis_templates(filepath: str) -> dict:
     import numpy as np
 
     already_lnu = False
+    alpha_grid = None
+    powerlaw_alpha = None
 
     if filepath.endswith(".npz"):
         data = np.load(filepath)
@@ -1723,18 +1868,38 @@ def load_themis_templates(filepath: str) -> dict:
                 powerlaw = np.array(f["powerlaw"][:])
                 umin_grid = np.array(f["umin_grid"][:])
                 qhac_grid = np.array(f["qhac_grid"][:])
+                # Try to load alpha-dependent PDR component if present
+                if "alpha_grid" in f:
+                    alpha_grid = np.array(f["alpha_grid"][:])
+                if "powerlaw_alpha" in f:
+                    powerlaw_alpha = np.array(f["powerlaw_alpha"][:])
+                elif "powerlaw_alpha_ratio" in f:
+                    # Compact storage: reconstruct the 4-D PDR grid from the
+                    # FSPS power-law and a (n_umin, n_alpha, n_wave) reshaping
+                    # ratio (scripts/build_themis_alpha_axis.py). Uses the RAW
+                    # power-law (before the L_nu normalisation below).
+                    _ratio = np.array(f["powerlaw_alpha_ratio"][:], dtype=np.float64)
+                    powerlaw_alpha = powerlaw[:, :, None, :] * _ratio[None, :, :, :]
             elif "grid" in f:
                 wavs_aa = np.array(f["wavelength"][:]) * 1.0e4
                 single_u = np.array(f["spectra/single_u"][:])
                 powerlaw = np.array(f["spectra/pdr"][:])
                 umin_grid = np.array(f["grid/umin"][:])
                 qhac_grid = np.array(f["grid/qhac"][:])
+                if "grid/alpha" in f:
+                    alpha_grid = np.array(f["grid/alpha"][:])
+                if "spectra/pdr_alpha" in f:
+                    powerlaw_alpha = np.array(f["spectra/pdr_alpha"][:])
             else:
                 wavs_aa = np.array(f["wavelength_um"][:]) * 1.0e4
                 single_u = np.array(f["spectra_single"][:])
                 powerlaw = np.array(f["spectra_pdr"][:])
                 umin_grid = np.array(f["umin_grid"][:])
                 qhac_grid = np.array(f["qhac_grid"][:])
+                if "alpha_grid" in f:
+                    alpha_grid = np.array(f["alpha_grid"][:])
+                if "powerlaw_alpha" in f:
+                    powerlaw_alpha = np.array(f["powerlaw_alpha"][:])
 
     if not already_lnu:
         # Convert to L_nu and normalize
@@ -1751,15 +1916,32 @@ def load_themis_templates(filepath: str) -> dict:
                     else:
                         arr[i, j] = lnu
 
+        # Normalize powerlaw_alpha if present (4D array)
+        if powerlaw_alpha is not None:
+            for i in range(powerlaw_alpha.shape[0]):
+                for j in range(powerlaw_alpha.shape[1]):
+                    for k in range(powerlaw_alpha.shape[2]):
+                        lnu = powerlaw_alpha[i, j, k] * (wave_cm**2) / _C_CGS
+                        integral = -np.trapezoid(lnu, nu)
+                        if integral > 0:
+                            powerlaw_alpha[i, j, k] = lnu / integral
+                        else:
+                            powerlaw_alpha[i, j, k] = lnu
+
     # Use jnp.array so dynamic JAX indexing works inside JIT.
     # Call preload_emission_model() at factory time (outside JIT) to avoid tracer leaks.
-    return {
+    result = {
         "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
         "umin_grid": jnp.array(umin_grid, dtype=jnp.float64),
         "qhac_grid": jnp.array(qhac_grid, dtype=jnp.float64),
         "single_u": jnp.array(single_u, dtype=jnp.float64),
         "powerlaw": jnp.array(powerlaw, dtype=jnp.float64),
     }
+    if alpha_grid is not None:
+        result["alpha_grid"] = jnp.array(alpha_grid, dtype=jnp.float64)
+    if powerlaw_alpha is not None:
+        result["powerlaw_alpha"] = jnp.array(powerlaw_alpha, dtype=jnp.float64)
+    return result
 
 
 def create_themis_from_grid(template_data: dict | str) -> Callable:
@@ -1770,6 +1952,12 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     parameter ``qhac`` (a-C(:H) aromatic carbon mass fraction) replaces
     ``qpah`` from DL07.
 
+    If the template data includes alpha-dependent PDR grids (``alpha_grid``
+    and ``powerlaw_alpha``), the PDR component supports trilinear interpolation
+    in (qhac, umin, alpha) space. The single-U component remains bilinear
+    (alpha-independent). Back-compat: if alpha grids are absent, the 2D
+    ``powerlaw`` slice (fixed alpha=2.0) is used.
+
     Parameters
     ----------
     template_data : dict or str
@@ -1779,7 +1967,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     -------
     Callable
         Model function with signature
-        ``(wavelength_aa, L_absorbed, **params) -> L_nu``.
+        ``(wavelength_aa, L_absorbed, dust_alpha=2.0, **params) -> L_nu``.
 
     Notes
     -----
@@ -1803,18 +1991,28 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     umin_grid = template_data["umin_grid"]
     qhac_grid = template_data["qhac_grid"]
 
+    # Optional: alpha-dependent PDR component
+    alpha_grid = template_data.get("alpha_grid", None)
+    powerlaw_alpha = template_data.get("powerlaw_alpha", None)
+    has_alpha = alpha_grid is not None and powerlaw_alpha is not None
+
     def themis_emission(
         wavelength_aa: jnp.ndarray,
         L_absorbed: float,
         dust_umin: float = 1.0,
         dust_gamma_dl: float = 0.01,
         dust_qhac: float = 0.17,
+        dust_alpha: float = 2.0,
         redshift: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
         """THEMIS emission from tabulated DustEM templates (Jones+2017).
 
-        j_nu = (1-gamma) * single_U(qhac, Umin) + gamma * PDR(qhac, Umin)
+        j_nu = (1-gamma) * single_U(qhac, Umin) + gamma * PDR(qhac, Umin, alpha)
+
+        The single-U component is bilinear in (qhac, Umin). The PDR component
+        is bilinear in (qhac, Umin) if alpha grids are absent (back-compat),
+        or trilinear in (qhac, Umin, alpha) if present.
 
         Parameters
         ----------
@@ -1829,6 +2027,9 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         dust_qhac : float
             a-C(:H) aromatic carbon mass fraction.
             Typical range: 0.02--0.30.
+        dust_alpha : float
+            Radiation field power-law slope [dimensionless].
+            Default: 2.0 (back-compat with 2D powerlaw slice).
         redshift : float
             Source redshift (for CMB contrast correction).
 
@@ -1846,7 +2047,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
         dust_qhac_c = jnp.clip(dust_qhac, qhac_grid[0], qhac_grid[-1])
 
-        # Bilinear interpolation indices
+        # Bilinear interpolation indices for (qhac, umin)
         i_u = jnp.clip(
             jnp.searchsorted(umin_grid, dust_umin_c) - 1,
             0,
@@ -1870,13 +2071,44 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
+        # Compute PDR component: bilinear if no alpha axis, else trilinear
+        if has_alpha:
+            dust_alpha_c = jnp.clip(dust_alpha, alpha_grid[0], alpha_grid[-1])
+            n_a = len(alpha_grid)
+            i_a = jnp.clip(
+                jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
+                0,
+                n_a - 2,
+            )
+            fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+
+            def _trilinear_pdr(grid: jnp.ndarray) -> jnp.ndarray:
+                """Perform 3D linear interpolation over qhac, Umin, and alpha axes."""
+
+                # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
+                def _bilinear_at_alpha(ia_idx):
+                    """Interpolate bilinearly at fixed alpha index."""
+                    return (
+                        (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia_idx]
+                        + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia_idx]
+                        + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia_idx]
+                        + fq * fu * grid[i_q + 1, i_u + 1, ia_idx]
+                    )
+
+                lo = _bilinear_at_alpha(i_a)
+                hi = _bilinear_at_alpha(i_a + 1)
+                return (1.0 - fa) * lo + fa * hi
+
+            pdr_template = _trilinear_pdr(powerlaw_alpha)
+        else:
+            # Back-compat: use 2D powerlaw at fixed alpha=2.0
+            pdr_template = _bilinear(powerlaw)
+
         # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
         # dust-mass fraction; the FSPS/DustEM ``powerlaw`` template carries its
         # real relative luminosity (∫powerlaw/∫single_u ≈ 14-19), so gamma acts
         # as a luminosity fraction directly — no analytic R needed (cf. DL07).
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * pdr_template
 
         # Energy balance: the mix integrates to (1-gamma) + gamma*ratio, so
         # renormalise to unit frequency integral on the (full) template grid

@@ -172,6 +172,12 @@ class NebularSEDComponent:
                 Fixed(0.0),
                 "Ly-alpha escape fraction [dimensionless, in [0, 1]]",
             ),
+            ParamDeclaration(
+                "neb_fdust",
+                Fixed(0.0),
+                "Dust-absorption fraction of ionizing photons in HII regions "
+                "[dimensionless, in [0, 1]]",
+            ),
         ]
 
         if self.config.backend in ("cloudy_grid", "cb19", "mappings"):
@@ -470,6 +476,7 @@ class NebularSEDComponent:
             "neb_logZ_gas": _neb_logZ_gas,
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
+            "neb_fdust": jnp.asarray(params.get("neb_fdust", 0.0)),
         }
         # ── Diffuse-ionised-gas (DIG) mixing (issue #259) ─────────────
         # The DIG component is a second photoionisation regime with a
