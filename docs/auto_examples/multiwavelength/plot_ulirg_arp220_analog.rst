@@ -39,17 +39,6 @@ similar to Arp 220's bolometric output.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-97
 
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_ulirg_arp220_analog_001.png
-   :alt: plot ulirg arp220 analog
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_ulirg_arp220_analog_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

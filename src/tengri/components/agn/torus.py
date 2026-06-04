@@ -23,15 +23,22 @@ References
 - Draine 2003, ARA&A, 41, 241 (silicate opacity)
 """
 
+import functools
 import warnings
+from collections.abc import Callable
+from pathlib import Path
 
+import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
+from tengri.utils.grid_interp import interp_nd_triweight
+from tengri.utils.interpolation import edges_for_grid
 
 # ── Physical constants (CGS) ──────────────────────────────────────
 
@@ -226,61 +233,187 @@ def two_temperature_torus(
 
 
 # ── Nenkova+2008 CLUMPY torus ─────────────────────────────────────
+#
+# Prospector's only AGN SED component. tengri vendors the FSPS CLUMPY grid
+# (``data/nenkova08_torus_grid.h5``, built by ``scripts/build_nenkova_grid.py``)
+# and interpolates it with a pure-JAX triweight kernel in optical depth so
+# that ``agn_tau`` is a fully differentiable, JIT/vmap-safe *fitted* parameter
+# — matching how SKIRTOR / Silva+04 / CAT3D are handled.
+
+_NENKOVA_GRID_SEARCH_PATHS: tuple[str, ...] = (
+    "data/nenkova08_torus_grid.h5",
+    "nenkova08_torus_grid.h5",
+)
+
+_NENKOVA_NOT_FOUND_MSG = (
+    "Nenkova+2008 CLUMPY torus grid not found. "
+    "Build it with: python scripts/build_nenkova_grid.py "
+    '--input "$SPS_HOME/dust/Nenkova08_y010_torusg_n10_q2.0.dat"'
+)
 
 
-def _load_nenkova_data():
-    """Load Nenkova+2008 CLUMPY torus templates from FSPS data files.
+def _load_nenkova_arrays(grid_path: str) -> dict:
+    """Load raw numpy arrays from a vendored Nenkova+2008 CLUMPY grid HDF5.
 
-    Returns ``(wave_aa, fnu_grid, tau_vals)`` where ``fnu_grid`` has shape
-    ``(n_wave, n_tau)`` and ``tau_vals`` has shape ``(n_tau,)``.
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``nenkova08_torus_grid.h5`` produced by
+        ``scripts/build_nenkova_grid.py``.
+
+    Returns
+    -------
+    dict
+        Keys ``tau_axis`` (n_tau,), ``wavelength`` (n_wave,), and ``template``
+        (n_tau, n_wave).
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
+    """
+    import h5py
+
+    with h5py.File(grid_path, "r") as f:
+        g = f["nenkova"]
+        return {
+            "tau_axis": np.asarray(g["tau_axis"][:], dtype=np.float64),
+            "wavelength": np.asarray(g["wavelength"][:], dtype=np.float64),
+            "template": np.asarray(g["template"][:], dtype=np.float64),
+        }
+
+
+def create_nenkova_from_grid(grid_path: str) -> Callable:
+    """Load the Nenkova+2008 CLUMPY grid and return a JAX-native interpolator.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``nenkova08_torus_grid.h5``.
+
+    Returns
+    -------
+    callable
+        Function ``fn(wavelength, agn_log_lbol, agn_tau, agn_torus_frac, **_)
+        -> L_nu [erg/s/Hz]``, a drop-in replacement for :func:`nenkova_torus`.
 
     Raises
     ------
     FileNotFoundError
-        If the data file is not found via SPS_HOME or the default fsps path.
+        If ``grid_path`` does not exist.
+    KeyError
+        If the grid file is missing the expected ``/nenkova`` datasets.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the returned closure uses only ``jnp`` and a
+    triweight interpolation kernel.
+
+    **Gradient-safe**: yes — the triweight kernel is C²-continuous in
+    ``agn_tau``, so it survives ``jax.grad`` / ``jax.vmap``.
+
+    References
+    ----------
+    .. [1] M. Nenkova et al., "AGN Dusty Tori. I. Handling of Clumpy Media,"
+       ApJ, 685, 147 (2008). https://doi.org/10.1086/590482
+    .. [2] B. D. Johnson et al., "Stellar Population Inference," ApJS, 254,
+       22 (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
     """
-    import os
+    raw = _load_nenkova_arrays(grid_path)
 
-    import numpy as np
+    # ensure_compile_time_eval so the cached closure captures concrete arrays
+    # even if the first call happens inside jax.jit (mirrors the SKIRTOR path).
+    with jax.ensure_compile_time_eval():
+        grid_jax = jnp.asarray(raw["template"])
+        wave_grid = jnp.asarray(raw["wavelength"])
+        tau_axis = jnp.asarray(raw["tau_axis"])
+        edges = (edges_for_grid(tau_axis),)
 
-    sps_home = os.environ.get("SPS_HOME", "")
-    if not sps_home:
-        sps_home = os.path.expanduser("~/Projects/fsps")
-    dat_path = os.path.join(sps_home, "dust", "Nenkova08_y010_torusg_n10_q2.0.dat")
-    if not os.path.isfile(dat_path):
-        raise FileNotFoundError(
-            f"Nenkova+2008 data not found at {dat_path}. "
-            "Set $SPS_HOME to your FSPS installation directory."
-        )
+    def nenkova_grid(
+        wavelength: jnp.ndarray,
+        agn_log_lbol: float = 44.0,
+        agn_tau: float = 30.0,
+        agn_torus_frac: float = 0.5,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        r"""Nenkova+2008 CLUMPY torus SED at a single equatorial optical depth.
 
-    tau_vals = np.array([5.0, 10.0, 20.0, 30.0, 40.0, 60.0, 80.0, 100.0, 150.0])
-    data = np.genfromtxt(dat_path, skip_header=4)
-    return data[:, 0], data[:, 1:], tau_vals
+        Parameters
+        ----------
+        wavelength : array_like, shape (n_wave,)
+            Rest-frame wavelength grid. [Å]
+        agn_log_lbol : float, optional
+            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 44.0.
+        agn_tau : float, optional
+            Equatorial optical depth of the clumpy torus. Valid over the grid
+            extent (5–150). Default 30.0. [dimensionless]
+        agn_torus_frac : float, optional
+            Fraction of L_bol re-emitted by the torus (covering factor).
+            Default 0.5. [dimensionless]
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Spectral luminosity density. [erg/s/Hz]
+
+        Notes
+        -----
+        .. math::
+
+            L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
+                             \frac{T(\lambda,\,\tau)}
+                                  {\int T(\nu,\,\tau)\,\mathrm{d}\nu}
+
+        where :math:`T` is the tabulated CLUMPY template and the integral is
+        evaluated on the (sorted) frequency grid of ``wavelength``.
+
+        **JIT-compatible**: yes. **Gradient-safe**: yes — ``agn_tau`` is a
+        differentiable, traceable parameter.
+        """
+        template = interp_nd_triweight(grid_jax, (tau_axis,), edges, (agn_tau,))
+        sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
+        nu = _wavelength_to_nu(wavelength)
+        idx_sort = jnp.argsort(nu)
+        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
+        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
+        return l_scale * sed / integral_safe
+
+    return nenkova_grid
 
 
-def nenkova_torus(
-    wavelength: jnp.ndarray,
-    agn_log_lbol: float,
-    agn_tau: float = 30.0,
-    agn_torus_frac: float = 0.5,
-) -> jnp.ndarray:
+def _find_nenkova_grid() -> str:
+    base = Path(__file__).resolve().parents[4]
+    for rel in _NENKOVA_GRID_SEARCH_PATHS:
+        for candidate in (base / rel, Path(rel)):
+            if candidate.is_file():
+                return str(candidate)
+    raise FileNotFoundError(_NENKOVA_NOT_FOUND_MSG)
+
+
+@functools.cache
+def _load_nenkova_default() -> Callable:
+    return create_nenkova_from_grid(_find_nenkova_grid())
+
+
+def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
     """AGN torus emission from Nenkova et al. (2008) CLUMPY templates.
 
-    Interpolates the CLUMPY radiative-transfer torus library in optical depth
-    ``agn_tau``, then normalizes to ``agn_torus_frac * L_bol``. This is the
-    production-quality alternative to the deprecated toy torus models in this
-    module; for science use prefer the SKIRTOR templates in
-    ``tengri.components.agn.skirtor``.
+    Interpolates the CLUMPY radiative-transfer torus library in equatorial
+    optical depth ``agn_tau`` with a pure-JAX triweight kernel, then normalises
+    to ``agn_torus_frac * L_bol``. This is the production-quality torus
+    matching FSPS / Prospector (Johnson et al. 2021 [2]_); for silicate-feature
+    accuracy the SKIRTOR templates in ``tengri.components.agn.skirtor`` may be
+    preferred.
 
     Parameters
     ----------
-    wavelength : array, shape (n_wave,)
+    wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Angstrom].
-    agn_log_lbol : float
-        log10(L_bol / Lsun). AGN bolometric luminosity.
+    agn_log_lbol : float, optional
+        ``log10(L_bol / L_sun)``. AGN bolometric luminosity. Default 44.0.
     agn_tau : float, optional
-        Equatorial optical depth of the clumpy torus [dimensionless].
-        Valid range: 5 to 150. Default 30.
+        Equatorial optical depth of the clumpy torus. Valid range 5–150.
+        Default 30.0. [dimensionless]
     agn_torus_frac : float, optional
         Fraction of L_bol re-emitted by the torus (covering factor).
         Default 0.5.
@@ -290,15 +423,24 @@ def nenkova_torus(
     L_nu : jnp.ndarray, shape (n_wave,)
         Specific luminosity [erg s^-1 Hz^-1].
 
+    Raises
+    ------
+    FileNotFoundError
+        If no vendored Nenkova grid HDF5 is present on disk. Build it with
+        ``scripts/build_nenkova_grid.py``.
+
     Notes
     -----
-    **Not JIT-compatible** — loads data from disk. For JIT-compatible
-    inference, precompute the template on a fixed wavelength grid and
-    pass as a static array.
+    **JIT-compatible**: yes — loads the vendored grid
+    (``data/nenkova08_torus_grid.h5``) once via a cached closure, then
+    interpolates with pure JAX. **Gradient-safe**: yes — ``agn_tau`` is a
+    differentiable, traceable parameter (it can be freely sampled/optimised by
+    MAP, NUTS, and VI).
 
-    Data source: ``$SPS_HOME/dust/Nenkova08_y010_torusg_n10_q2.0.dat``,
-    the same file used by FSPS (Conroy & Gunn 2010) and Prospector
-    (Johnson et al. 2021 [2]_).
+    Data source: the same CLUMPY templates shipped with FSPS
+    (``$SPS_HOME/dust/Nenkova08_y010_torusg_n10_q2.0.dat``; Conroy & Gunn 2010)
+    and used by Prospector (Johnson et al. 2021 [2]_), vendored into
+    ``data/nenkova08_torus_grid.h5`` by ``scripts/build_nenkova_grid.py``.
 
     References
     ----------
@@ -309,46 +451,12 @@ def nenkova_torus(
 
     Examples
     --------
-    >>> import jax.numpy as jnp
-    >>> wave = jnp.logspace(3, 5, 100)
-    >>> sed = nenkova_torus(wave, agn_log_lbol=12.0, agn_tau=30)
+    >>> import jax, jax.numpy as jnp
+    >>> wave = jnp.logspace(3, 6, 100)
+    >>> sed = nenkova_torus(wave, agn_log_lbol=12.0, agn_tau=30.0)
     >>> sed.shape
     (100,)
+    >>> # agn_tau is differentiable and JIT-safe:
+    >>> _ = jax.jit(lambda t: nenkova_torus(wave, agn_log_lbol=12.0, agn_tau=t))(30.0)
     """
-    import numpy as np
-    from scipy.interpolate import interp1d
-
-    wave_aa, fnu_grid, tau_vals = _load_nenkova_data()
-
-    wave_np = np.asarray(wavelength)
-    n_wave = wave_np.shape[0]
-    n_tau = len(tau_vals)
-
-    log_wave_data = np.log10(np.maximum(wave_aa, 1e-30))
-    log_wave_model = np.log10(np.maximum(wave_np, 1e-30))
-    i1 = int(np.argmin(np.abs(wave_np - wave_aa[0])))
-    i2 = int(np.argmin(np.abs(wave_np - wave_aa[-1])))
-
-    fnu_interp = np.zeros((n_wave, n_tau))
-    for k in range(n_tau):
-        log_fnu = np.log10(np.maximum(fnu_grid[:, k], 1e-70))
-        log_fnu_model = np.interp(log_wave_model[i1 : i2 + 1], log_wave_data, log_fnu)
-        fnu_interp[i1 : i2 + 1, k] = 10.0**log_fnu_model
-
-    tau_interp = interp1d(
-        tau_vals,
-        fnu_interp,
-        axis=1,
-        bounds_error=False,
-        fill_value=(fnu_interp[:, 0], fnu_interp[:, -1]),
-    )
-    fnu_at_tau = tau_interp(float(agn_tau))
-
-    fnu_jax = jnp.array(fnu_at_tau)
-    nu = _wavelength_to_nu(wavelength)
-    idx_sort = jnp.argsort(nu)
-    integral = jnp.trapezoid(fnu_jax[idx_sort], nu[idx_sort])
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
-
-    l_bol_erg = 10.0**agn_log_lbol * _L_SUN
-    return l_bol_erg * agn_torus_frac * fnu_jax / integral_safe
+    return _load_nenkova_default()(*args, **kwargs)

@@ -49,6 +49,7 @@ data/dl14_raw/
 data/*.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
+!data/nenkova08_torus_grid.h5
 # Regenerate with: python scripts/convert_fsps_cloudy_grid.py && python scripts/convert_dl07_templates.py
 # nthcomp_templates.h5 (~14 MB): regenerate with python scripts/build_nthcomp_templates.py
 
@@ -86,3 +87,4 @@ docs/build.log
 notebooks/data/
 examples/*/data/filters/
 examples/*/data/
+_galrun/

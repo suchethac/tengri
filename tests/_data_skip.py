@@ -24,16 +24,27 @@ requires_grahsp = pytest.mark.skipif(
 )
 
 
-def _sps_home_nenkova() -> Path | None:
+def _nenkova_grid() -> Path | None:
+    """Locate the Nenkova+2008 CLUMPY torus grid.
+
+    Prefers the vendored grid committed to ``data/`` (so CI exercises the
+    torus); falls back to the raw FSPS ``.dat`` via ``$SPS_HOME`` only if the
+    vendored grid is absent.
+    """
+    vendored = REPO_ROOT / "data" / "nenkova08_torus_grid.h5"
+    if vendored.is_file():
+        return vendored
     sps_home = os.environ.get("SPS_HOME")
-    if not sps_home:
-        return None
-    return Path(sps_home) / "dust" / "Nenkova08_y010_torusg_n10_q2.0.dat"
+    if sps_home:
+        dat = Path(sps_home) / "dust" / "Nenkova08_y010_torusg_n10_q2.0.dat"
+        if dat.is_file():
+            return dat
+    return None
 
 
-_nenkova_path = _sps_home_nenkova()
+_nenkova_path = _nenkova_grid()
 
 requires_nenkova = pytest.mark.skipif(
-    _nenkova_path is None or not _nenkova_path.is_file(),
-    reason="Nenkova+2008 torus templates not found ($SPS_HOME unset or missing data)",
+    _nenkova_path is None,
+    reason="Nenkova+2008 torus grid not found (run scripts/build_nenkova_grid.py)",
 )
