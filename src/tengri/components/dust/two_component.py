@@ -213,6 +213,12 @@ class DustSEDComponent:
                 "THEMIS small-hydrocarbon grain fraction (Jones+2017) [dimensionless]",
             ),
             ParamDeclaration(
+                "dust_alpha",
+                Fixed(2.0),
+                "THEMIS radiation-field slope dU/dM~U^-alpha "
+                "[dimensionless, in 1.0-3.0; 2.0 = FSPS anchor]",
+            ),
+            ParamDeclaration(
                 "dust_frac_agn",
                 Fixed(0.0),
                 "Dale 2014 AGN fraction (additive AGN-heated dust) [dimensionless, in [0, 1)]",
@@ -425,10 +431,11 @@ class DustSEDComponent:
                 dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
                 dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
                 dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
-                # CIGALE-parity knobs (2026-06): THEMIS qhac, Dale AGN
+                # CIGALE-parity knobs (2026-06): THEMIS qhac + alpha, Dale AGN
                 # fraction, Schreiber tabulated tdust/fpah, MBB epsilon. Each
                 # emission fn absorbs the irrelevant ones via **_kwargs.
                 dust_qhac=jnp.asarray(params.get("dust_qhac", 0.17)),
+                dust_alpha=jnp.asarray(params.get("dust_alpha", 2.0)),
                 dust_frac_agn=jnp.asarray(params.get("dust_frac_agn", 0.0)),
                 dust_tdust=jnp.asarray(params.get("dust_tdust", 25.0)),
                 dust_fpah=jnp.asarray(params.get("dust_fpah", 0.05)),

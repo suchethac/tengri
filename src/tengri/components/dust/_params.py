@@ -135,11 +135,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 7]",
     ),
     # ── CIGALE-parity emission knobs (2026-06) ────────────────────
-    # NOTE: THEMIS radiation-field slope ``dust_alpha`` is intentionally NOT
-    # exposed. tengri ships the FSPS/DustEM-sourced THEMIS templates (PR #574),
-    # which are alpha=2.0 only; an alpha axis exists solely in CIGALE-sourced
-    # data and would change every THEMIS SED + break the gamma-warming
-    # calibration. Tracked as a follow-up (data-source decision).
+    ParamDeclaration(
+        "dust_alpha",
+        Fixed(2.0),
+        "THEMIS radiation-field power-law slope dU/dM ~ U^-alpha (Jones+2017 / "
+        "CIGALE themis, 1.0-3.0). Default 2.0 reproduces the FSPS/DustEM "
+        "template bit-for-bit (alpha=2 anchor).",
+        lambda lo, hi: lo >= 1.0 and hi <= 3.0,
+        "must be in [1.0, 3.0]",
+    ),
     ParamDeclaration(
         "dust_frac_agn",
         Fixed(0.0),
