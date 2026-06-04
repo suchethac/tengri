@@ -111,7 +111,11 @@ import numpy as np
 
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
-from tengri.components.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
+from tengri.components.nebular._shared import (
+    _interp_index_weight,
+    compute_qh,
+    render_nebular_lines,
+)
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
 # ── Ionizing-spectrum warnings ────────────────────────────────────
@@ -909,6 +913,7 @@ class CloudyGridBackend:
         neb_fesc_lya: float = 0.0,
         neb_fdust: float = 0.0,
         line_sigma_aa: float = 0.0,
+        line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -1000,8 +1005,8 @@ class CloudyGridBackend:
         neb_sed = jnp.interp(ssp_wave, cont_wave, cont_lum, left=0.0, right=0.0)
 
         # Add emission lines
-        neb_sed = neb_sed + place_line_profiles(
-            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa
+        neb_sed = neb_sed + render_nebular_lines(
+            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa, line_sigma_kms
         )
 
         # Convert from internal Lsun/Hz to erg/s/Hz

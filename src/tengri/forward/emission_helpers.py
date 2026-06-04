@@ -44,6 +44,7 @@ def nebular_emission(
     neb_logZ_gas: float | None = None,
     neb_fesc: float = 0.0,
     neb_fesc_lya: float = 0.0,
+    line_sigma_kms: float = 0.0,
 ) -> jnp.ndarray:
     """Synthesize nebular emission (lines + continuum) with automatic Q_H mode selection.
 
@@ -108,6 +109,7 @@ def nebular_emission(
                 neb_fesc=neb_fesc,
                 neb_fesc_lya=neb_fesc_lya,
                 gas_logqion=gas_logqion_sfr,
+                line_sigma_kms=line_sigma_kms,
             )
 
         def _fallback_path(_):
@@ -120,6 +122,7 @@ def nebular_emission(
                 neb_fesc=neb_fesc,
                 neb_fesc_lya=neb_fesc_lya,
                 gas_logqion=gas_logqion_sfr,
+                line_sigma_kms=line_sigma_kms,
             )
 
         return jax.lax.cond(ssp_qh_ok, _ssp_path, _fallback_path, None)
@@ -135,6 +138,7 @@ def nebular_emission(
         neb_fesc=neb_fesc,
         neb_fesc_lya=neb_fesc_lya,
         gas_logqion=gas_logqion_sfr,
+        line_sigma_kms=line_sigma_kms,
     )
 
 

@@ -449,6 +449,7 @@ class NebularSEDComponent:
                 l_shock_halpha=l_shock_halpha,
                 shock_log_density=jnp.asarray(params.get("shock_log_density", 0.0)),
                 shock_b_over_sqrt_n=jnp.asarray(params.get("shock_b_over_sqrt_n", 1.0)),
+                line_sigma_kms=jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
             )
             # Shock backend: shock contribution is logically separate
             # from photoionised continuum. Publish under ``sed_shock``
@@ -477,6 +478,9 @@ class NebularSEDComponent:
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
             "neb_fdust": jnp.asarray(params.get("neb_fdust", 0.0)),
+            # Intrinsic nebular line velocity dispersion → triweight line
+            # profile width (Prospector-style). Default 100 km/s.
+            "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
         }
         # ── Diffuse-ionised-gas (DIG) mixing (issue #259) ─────────────
         # The DIG component is a second photoionisation regime with a

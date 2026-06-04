@@ -17,7 +17,7 @@ from tengri.components.nebular._constants import (
     _LSUN_ERG,
     _LYMAN_LIMIT,
 )
-from tengri.utils.physics_constants import K_BOLTZ as _K_BOLTZ
+from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
 
 # ── Line placement ────────────────────────────────────────────────
 
@@ -27,13 +27,21 @@ def place_line_profiles(
     line_luminosities: jnp.ndarray,
     obs_wavelengths: jnp.ndarray,
     line_sigma_aa: float,
+    line_sigma_kms: float = 0.0,
 ) -> jnp.ndarray:
-    r"""Place emission lines onto a wavelength grid as Gaussians or delta functions.
+    r"""Place emission lines onto a wavelength grid with an intrinsic line profile.
 
     Converts line luminosities (point-like) to spectral luminosity density on a
-    wavelength grid by either convolving with a Gaussian profile or placing them
-    as delta functions in the nearest pixel. Commonly used to overlay nebular and
-    AGN emission lines onto continuum SEDs.
+    wavelength grid using one of three modes, in priority order:
+
+    1. **Velocity triweight** (``line_sigma_kms > 0``) — the recommended path:
+       each line is a triweight kernel whose width scales with wavelength,
+       :math:`\sigma_\lambda = (\sigma_v / c)\,\lambda`, giving every line the
+       same velocity dispersion (as a real emission line has). Mirrors
+       Prospector's ``eline_sigma`` treatment (Johnson et al. 2021 [1]_).
+    2. **Fixed-Å Gaussian** (``line_sigma_aa > 0``) — legacy; one width in Å for
+       every line.
+    3. **Delta function** (both <= 0) — nearest-pixel scatter-add.
 
     Parameters
     ----------
@@ -44,8 +52,12 @@ def place_line_profiles(
     obs_wavelengths : array, shape (n_wave,)
         Output wavelength grid in Å (rest-frame, increasing). [Å]
     line_sigma_aa : float
-        Gaussian line width (FWHM equivalent) in Å. When <= 0, lines are placed as
-        delta functions in the nearest pixel. [Å]
+        Fixed Gaussian line width in Å (legacy). Used only when
+        ``line_sigma_kms <= 0``. [Å]
+    line_sigma_kms : float, optional
+        Velocity dispersion in km/s. When > 0, lines are rendered as triweight
+        profiles with per-line width :math:`\sigma_\lambda=(\sigma_v/c)\lambda`.
+        Default 0 (fall back to ``line_sigma_aa`` / delta). [km/s]
 
     Returns
     -------
@@ -63,28 +75,40 @@ def place_line_profiles(
     **JIT-compatible**: yes — all operations use ``jnp`` primitives and are
     vectorised over lines and wavelengths.
 
-    **Gaussian mode** (``line_sigma_aa > 0``):
-        Converts wavelength width σ_λ to frequency width via the Jacobian:
+    **Velocity triweight mode** (``line_sigma_kms > 0``):
+        Each line is the compact-support triweight kernel
+        :math:`K(u) = \tfrac{35}{32}(1-u^2)^3` for :math:`|u|<1`, with
+        :math:`u=(\lambda-\lambda_i)/h_i` and half-width :math:`h_i = 3\sigma_{\lambda,i}`
+        (the triweight kernel has variance :math:`h^2/9`, so :math:`h=3\sigma`).
+        The profile is normalised to unit area in frequency, so the integrated
+        line flux equals ``line_luminosity``. Preferred over a Gaussian: it is a
+        polynomial (no ``exp``), has finite support, and is C²-continuous —
+        gradient-safe for a fitted ``line_sigma_kms``.
 
-        .. math::
+    **Fixed-Å Gaussian mode** (``line_sigma_aa > 0``):
+        Converts σ_λ to σ_ν via :math:`\sigma_\nu = \sigma_\lambda\,c/\lambda^2`
+        and normalises each line to unit flux.
 
-            \sigma_\nu = \sigma_\lambda \, \frac{c}{\lambda^2}
-
-        where c is the speed of light and λ is line wavelength. Each line is
-        normalized such that the integrated flux equals the input ``line_luminosity``.
-
-    **Delta function mode** (``line_sigma_aa <= 0``):
+    **Delta function mode** (both widths <= 0):
         Places each line in the nearest wavelength pixel by scatter-add,
-        normalised by the local frequency spacing Δν at that pixel. This is fast
-        but introduces aliasing artifacts if the wavelength grid is coarse.
+        normalised by the local frequency spacing Δν. Fast but aliases on a
+        coarse grid.
 
-    **Upstream**: Implementation adapted from Prospector's line-placement routines
-    (Johnson et al. 2021 [1]_) for JAX differentiability.
+    **Upstream**: line-placement approach adapted from Prospector
+    (Johnson et al. 2021 [1]_); triweight kernel after Hearin et al. (2021).
 
     """
     n_wave = obs_wavelengths.shape[0]
 
-    if line_sigma_aa > 0:
+    # NOTE: ``line_sigma_kms`` here is only honoured for *concrete* values — the
+    # ``if`` below is a Python branch. The forward model, where the velocity
+    # width is a fittable (traced) parameter, must call
+    # :func:`place_line_profiles_velocity` directly to stay JIT-safe.
+    if line_sigma_kms > 0:
+        sed = place_line_profiles_velocity(
+            line_wavelengths, line_luminosities, obs_wavelengths, line_sigma_kms
+        )
+    elif line_sigma_aa > 0:
         # Vectorised Gaussian profiles: broadcast (n_wave, 1) × (n_lines,)
         # σ_ν = σ_λ[cm] × c / λ[cm]²
         sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (line_wavelengths * 1e-8) ** 2  # (n_lines,)
@@ -106,6 +130,103 @@ def place_line_profiles(
         )
 
     return sed
+
+
+def place_line_profiles_velocity(
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+    obs_wavelengths: jnp.ndarray,
+    line_sigma_kms: float,
+) -> jnp.ndarray:
+    r"""Render emission lines as velocity-width triweight profiles (JIT/trace-safe).
+
+    Each line is a compact-support triweight kernel
+    :math:`K(u)=\tfrac{35}{32}(1-u^2)^3` (``|u|<1``) with a width that scales
+    with wavelength, :math:`\sigma_\lambda=(\sigma_v/c)\,\lambda`, so every line
+    shares the same velocity dispersion — the intrinsic nebular line width, as in
+    Prospector's ``eline_sigma`` treatment (Johnson et al. 2021 [1]_). Each
+    profile is normalised to unit area in frequency, conserving the integrated
+    line flux.
+
+    Unlike :func:`place_line_profiles`, this function has **no Python branch on
+    the width**, so ``line_sigma_kms`` may be a *traced* (fittable) value under
+    ``jax.jit`` / ``jax.grad`` / ``jax.vmap``. The support half-width is floored
+    at half the local grid spacing so a vanishing ``line_sigma_kms`` degrades to
+    a ~1-pixel profile (rather than dividing by zero) instead of a true delta.
+
+    Parameters
+    ----------
+    line_wavelengths : array, shape (n_lines,)
+        Rest-frame line centres in Å (vacuum). [Å]
+    line_luminosities : array, shape (n_lines,)
+        Integrated line luminosities [erg/s] or [erg/s/Msun].
+    obs_wavelengths : array, shape (n_wave,)
+        Output wavelength grid in Å (increasing). [Å]
+    line_sigma_kms : float
+        Velocity dispersion. May be traced. [km/s]
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz] or [erg/s/Hz/Msun].
+
+    References
+    ----------
+    .. [1] B. D. Johnson et al., ApJS, 254, 22 (2021).
+       https://doi.org/10.3847/1538-4365/abef67
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes — the triweight kernel is
+    C²-continuous, so ``line_sigma_kms`` survives ``jax.grad``.
+    """
+    # Triweight variance is h²/9, so the support half-width h = 3σ.
+    sigma_aa = (line_sigma_kms / _C_KM_S) * line_wavelengths  # (n_lines,) [Å]
+    h_raw = 3.0 * sigma_aa
+    # Floor h at ~half the local grid spacing so σ→0 stays finite (≈1-pixel line).
+    # ``obs_wavelengths.shape`` is static, so the size guard is JIT-safe.
+    if obs_wavelengths.shape[0] > 1:
+        dwave_grid = jnp.median(jnp.abs(jnp.diff(obs_wavelengths)))
+        h = jnp.maximum(h_raw, 0.5 * dwave_grid)  # (n_lines,) [Å]
+    else:
+        h = jnp.maximum(h_raw, line_wavelengths * 1e-6)  # degenerate grid: tiny floor
+    u = (obs_wavelengths[:, None] - line_wavelengths[None, :]) / h[None, :]
+    kernel = jnp.where(jnp.abs(u) < 1.0, (35.0 / 32.0) * (1.0 - u**2) ** 3, 0.0)
+    # Unit area in λ is K(u)/h; the λ²/c Jacobian converts to unit area in ν so
+    # ∫ profile dν = 1 and the integrated line flux equals ``line_luminosity``.
+    lam2_over_c = (line_wavelengths * 1e-8) ** 2 / _C_CGS  # (n_lines,) [s·cm]
+    profiles = kernel / (h[None, :] * 1e-8) * lam2_over_c[None, :]  # [1/Hz]
+    return jnp.sum(line_luminosities[None, :] * profiles, axis=1)
+
+
+def render_nebular_lines(
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+    obs_wavelengths: jnp.ndarray,
+    line_sigma_aa: float = 0.0,
+    line_sigma_kms: float = 0.0,
+) -> jnp.ndarray:
+    """Render nebular emission lines, preferring the velocity-triweight profile.
+
+    The dispatcher used by every nebular backend's ``predict_nebular_sed``:
+
+    * ``line_sigma_aa > 0`` → legacy fixed-Å Gaussian via
+      :func:`place_line_profiles`. ``line_sigma_aa`` is a *static* keyword (never
+      a fittable parameter), so this Python branch is JIT-safe.
+    * otherwise → velocity triweight via :func:`place_line_profiles_velocity`,
+      which accepts a *traced* ``line_sigma_kms`` (the fittable
+      ``neb_eline_sigma_kms``). A vanishing width floors to a ~1-pixel line.
+
+    Replaces the previous nearest-pixel delta default so nebular lines carry an
+    intrinsic velocity width in the rest-frame SED (Prospector-style).
+    """
+    if line_sigma_aa > 0:
+        return place_line_profiles(
+            line_wavelengths, line_luminosities, obs_wavelengths, line_sigma_aa
+        )
+    return place_line_profiles_velocity(
+        line_wavelengths, line_luminosities, obs_wavelengths, line_sigma_kms
+    )
 
 
 # ── Ionizing photon rate ──────────────────────────────────────────
