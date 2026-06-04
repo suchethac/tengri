@@ -45,9 +45,10 @@ templates = load_grahsp_templates()
 A_BC = [0.0, 0.5, 1.0, 2.0]
 colors = plt.cm.viridis(np.linspace(0.15, 0.85, len(A_BC)))
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.6, 4.4), sharex=True)
-
-for a_bc, c in zip(A_BC, colors):
+# Precompute both panels so each can be normalised to O(1) (these are in
+# arbitrary units; only the relative strengths are physical).
+totals, balmers = [], []
+for a_bc in A_BC:
     # Continuum + Balmer only (lines / FeII / torus suppressed).
     total = np.asarray(
         compute_grahsp_sed(
@@ -59,22 +60,31 @@ for a_bc, c in zip(A_BC, colors):
             agn_grahsp_a_bc=a_bc,
         )
     )
-    ax1.plot(wave_um, wave_um * total, color=c, lw=1.8, label=rf"$A_{{\rm BC}}={a_bc}$")
-
+    totals.append(wave_um * total)
     # Balmer contribution in isolation (erg/s/nm -> lambda*L_lambda).
     sed = evaluate_grahsp_agn(
         wave_aa * 0.1,  # nm
         GRAHSPParams(l5100=1e44, a_lines=0.0, a_feii=0.0, fcov=0.0, a_bc=a_bc),
         templates,
     )
-    balmer_llam = np.asarray(sed.balmer)  # erg/s/nm
-    ax2.plot(wave_um, wave_um * balmer_llam * 1e1, color=c, lw=1.8)
+    balmers.append(wave_um * np.asarray(sed.balmer))
+
+# Panel 1 by the pure-continuum baseline (A_BC=0); panel 2 by the strongest
+# isolated Balmer curve so both axes read O(1).
+norm1 = totals[0].max()
+norm2 = max(b.max() for b in balmers)
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.6, 4.4), sharex=True)
+
+for a_bc, c, total, balmer in zip(A_BC, colors, totals, balmers):
+    ax1.plot(wave_um, total / norm1, color=c, lw=1.8, label=rf"$A_{{\rm BC}}={a_bc}$")
+    ax2.plot(wave_um, balmer / norm2, color=c, lw=1.8)
 
 for ax in (ax1, ax2):
     ax.axvline(3646.0 / 1e4, color="0.5", ls=":", lw=1.0)
     ax.set_xlabel(r"rest wavelength [$\mu$m]")
 ax1.text(3646.0 / 1e4, ax1.get_ylim()[1] * 0.9, " Balmer\n edge", fontsize=8, color="0.4")
-ax1.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$, arb. norm.]")
+ax1.set_ylabel(r"$\lambda L_\lambda$ [normalised]")
 ax1.set_title("Bending power-law + Balmer continuum")
 ax1.legend(frameon=False, fontsize=9)
 ax2.set_title("Balmer continuum contribution (isolated)")

@@ -881,8 +881,12 @@ ax_r.text(
 # Match x-range so the FIR peak is visible on both panels.
 _xmin = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
 _xmax = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
+# Peak-anchored y-limit: the SED cliffs to ~0 at the grid edges, so without
+# this the shared log axis autoscales across ~170 decades and flattens the SED.
+_ymax_d = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
 for ax in (ax_l, ax_r):
     ax.set_xlim(_xmin, _xmax)
+    ax.set_ylim(_ymax_d * 1e-6, _ymax_d * 2.0)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
@@ -902,7 +906,27 @@ plt.show()
 # total IR grows with `f_AGN`. **Right:** the THEMIS radiation-field slope
 # $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$) sets the FIR shape at
 # matched `qhac = 0.17`, `umin = 1.0`, `gamma = 0.1`; $\alpha=2$ is the
-# Jones+2017 / DustEM fiducial. tengri tracks pcigale across the swept range.
+# Jones+2017 / DustEM fiducial.
+#
+# **Where the two agree and where they don't.** The FIR peak (the
+# energy-balance-normalised stellar-heated bump) matches to <1 % in both
+# panels — that is the quantity that drives the IR luminosity. The visible
+# solid-vs-dashed gaps are in the mid-IR *shape*, and they are genuine model
+# differences, not normalisation:
+#
+# - **Dale, $f_{\rm AGN}>0$:** the dust template itself is at the $\alpha=2$
+#   grid node, so the stellar-heated part is identical to CIGALE by
+#   construction. The gap is the *AGN-heated* term — tengri adds it with the
+#   $L_{\rm AGN}=L_{\rm dust}\,f/(1-f)$ additive rule, which is close to but
+#   not bit-identical to CIGALE's internal `dale2014` quasar template, so the
+#   mid-IR lift differs by tens of percent at $f_{\rm AGN}=0.6$.
+# - **THEMIS, $\alpha=1$:** tengri's THEMIS is FSPS/DustEM-anchored and is
+#   bit-exact to CIGALE only at the $\alpha=2$ fiducial; at the steep
+#   $\alpha=1$ end the warm-dust mid-IR runs ~40 % high. $\alpha=2,3$ agree
+#   to ~1 %.
+#
+# Both are documented parity gaps in the AGN-heating / extreme-$\alpha$
+# regimes, not artefacts of this panel.
 
 # %%
 import jax
@@ -1772,6 +1796,10 @@ ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (CIGALE-mode)")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(1e2, 1e8)
+# Peak-anchored y-limit: both SEDs cliff to ~0 at the grid edges, so the log
+# axis would otherwise autoscale across ~170 decades and flatten the SED.
+_ymax_h = float(max(np.nanmax(L_ext), np.nanmax(L_t_on_ext)))
+ax.set_ylim(_ymax_h * 1e-6, _ymax_h * 2.0)
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 ax.set_title("tengri in CIGALE-mode vs CIGALE — full panchromatic SED")
 ax.legend(fontsize=10)

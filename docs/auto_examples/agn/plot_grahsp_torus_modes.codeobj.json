@@ -684,6 +684,24 @@
    "name": "Artist.tight_layout"
   }
  ],
+ "gaussian": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "gaussian.max": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
  "jnp.logspace": [
   {
    "is_class": false,
@@ -707,6 +725,15 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "str"
+  }
+ ],
+ "norm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
   }
  ],
  "np.asarray": [

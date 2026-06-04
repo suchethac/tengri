@@ -47,7 +47,6 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-
 CIGALE_REPO = "https://gitlab.lam.fr/cigale/cigale.git"
 QHAC_VALUES: tuple[float, ...] = (
     0.02, 0.06, 0.10, 0.14, 0.17, 0.20, 0.24, 0.28, 0.32, 0.36, 0.40,

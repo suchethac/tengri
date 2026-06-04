@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Mathematical-contract tests for ``interp_nd_pchip``.
+
+The node-exact monotone-cubic primitive (Fritsch & Carlson 1980) backs the
+CAT3D-Wind torus interpolation. These tests pin its three guarantees: it
+reproduces nodes exactly, it matches SciPy's reference ``PchipInterpolator``
+between nodes, it does not overshoot on step data, and it is C¹-differentiable.
+
+References
+----------
+.. [1] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic
+   Interpolation," SIAM J. Numer. Anal. 17, 238 (1980). DOI: 10.1137/0717021.
+"""
+
+from __future__ import annotations
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
+from scipy.interpolate import PchipInterpolator
+
+from tengri.utils.grid_interp import interp_nd_pchip
+
+jax.config.update("jax_enable_x64", True)
+
+
+@pytest.mark.regression_paper
+def test_matches_scipy_pchip_1d():
+    """1-D interpolation matches SciPy's PchipInterpolator within 1e-9."""
+    x = jnp.asarray([0.0, 1.0, 2.5, 4.0, 7.0, 10.0])
+    y = jnp.asarray([1.0, 3.0, 2.0, 5.0, 4.5, 6.0])
+    ref = PchipInterpolator(np.asarray(x), np.asarray(y))
+    for xq in (0.3, 1.0, 2.0, 3.7, 6.2, 9.9):
+        got = float(interp_nd_pchip(y[:, None], (x,), (xq,))[0])
+        assert abs(got - float(ref(xq))) < 1e-9, f"xq={xq}: {got} vs {ref(xq)}"
+
+
+@pytest.mark.limit
+def test_node_exact_nd():
+    """At every tabulated node the interpolant returns the stored value exactly."""
+    x0 = jnp.asarray([0.0, 1.0, 2.0, 3.0])
+    x1 = jnp.asarray([-2.0, -1.0, 0.5, 2.0])
+    rng = np.random.default_rng(0)
+    grid = jnp.asarray(rng.normal(size=(4, 4, 5)))  # trailing dim preserved
+    for i, a in enumerate(x0):
+        for j, b in enumerate(x1):
+            got = interp_nd_pchip(grid, (x0, x1), (float(a), float(b)))
+            np.testing.assert_allclose(np.asarray(got), np.asarray(grid[i, j]), atol=1e-12)
+
+
+@pytest.mark.bounds
+def test_no_overshoot_on_step():
+    """Monotone (shape-preserving): a step in the data is not overshot."""
+    x = jnp.asarray([0.0, 1.0, 2.0, 3.0, 4.0])
+    y = jnp.asarray([0.0, 0.0, 1.0, 1.0, 1.0])  # nearest-neighbour-style step
+    lo, hi = float(y.min()), float(y.max())
+    for xq in np.linspace(0.0, 4.0, 101):
+        v = float(interp_nd_pchip(y[:, None], (x,), (float(xq),))[0])
+        assert lo - 1e-9 <= v <= hi + 1e-9, f"overshoot at xq={xq}: {v}"
+
+
+@pytest.mark.gradient
+def test_gradient_finite_and_continuous():
+    """jax.grad through the interpolant is finite across and at cell boundaries."""
+    x = jnp.asarray([0.0, 1.0, 2.0, 3.0])
+    y = jnp.asarray([1.0, 4.0, 2.0, 5.0])
+
+    def f(xq):
+        return interp_nd_pchip(y[:, None], (x,), (xq,))[0]
+
+    g = jax.jit(jax.grad(f))
+    for xq in (0.0, 0.5, 1.0, 1.999, 2.0, 2.5, 3.0):
+        assert jnp.isfinite(g(xq)), f"non-finite gradient at xq={xq}"

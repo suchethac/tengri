@@ -30,6 +30,7 @@ from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 __all__ = [
     "PreintegratedGrid",
     "PreintegratedLines",
+    "interp_nd_pchip",
     "interp_nd_triweight",
     "preintegrate_grid",
     "preintegrate_lines",
@@ -489,6 +490,151 @@ def interp_nd_triweight(
 
     # Contract grid with weights
     return _tensor_contract(grid, weights_per_axis)
+
+
+def _bcast_axis0(vec: jnp.ndarray, ndim: int) -> jnp.ndarray:
+    """Reshape a length-k vector to broadcast against an array's leading axis."""
+    return vec.reshape((vec.shape[0],) + (1,) * (ndim - 1))
+
+
+def _pchip_edge_slope(
+    h0: jnp.ndarray, h1: jnp.ndarray, m0: jnp.ndarray, m1: jnp.ndarray
+) -> jnp.ndarray:
+    """Shape-preserving one-sided endpoint slope (Fritsch & Carlson 1980).
+
+    Mirrors SciPy's ``PchipInterpolator`` ``_edge_case`` so the endpoints stay
+    monotone and never overshoot. ``h0, h1`` are the two boundary interval
+    widths (scalars); ``m0, m1`` are the corresponding secant slopes (arrays).
+    """
+    d = ((2.0 * h0 + h1) * m0 - h0 * m1) / (h0 + h1)
+    # Zero the slope at a local extremum; otherwise cap at 3x the boundary
+    # secant so the cubic cannot overshoot.
+    mask_extremum = jnp.sign(d) != jnp.sign(m0)
+    mask_cap = (jnp.sign(m0) != jnp.sign(m1)) & (jnp.abs(d) > 3.0 * jnp.abs(m0))
+    d = jnp.where(mask_extremum, 0.0, d)
+    d = jnp.where((~mask_extremum) & mask_cap, 3.0 * m0, d)
+    return d
+
+
+def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
+    """Monotone Hermite slopes at each node (Fritsch & Carlson 1980).
+
+    Parameters
+    ----------
+    x : jnp.ndarray, shape (n,)
+        Strictly ascending node coordinates.
+    y : jnp.ndarray, shape (n, *rest)
+        Node values; interpolation is over the leading axis.
+
+    Returns
+    -------
+    jnp.ndarray, shape (n, *rest)
+        Per-node tangents that make the piecewise cubic monotone (no overshoot)
+        on monotone data and C¹-continuous everywhere.
+    """
+    h = jnp.diff(x)  # (n-1,)
+    delta = jnp.diff(y, axis=0) / _bcast_axis0(h, y.ndim)  # (n-1, *rest)
+
+    h_prev = h[:-1]  # (n-2,)
+    h_next = h[1:]  # (n-2,)
+    d_left = delta[:-1]  # (n-2, *rest)
+    d_right = delta[1:]  # (n-2, *rest)
+
+    w1 = _bcast_axis0(2.0 * h_next + h_prev, y.ndim)
+    w2 = _bcast_axis0(h_next + 2.0 * h_prev, y.ndim)
+
+    # Weighted harmonic mean of the bracketing secants. Guard the divisions so
+    # the unused branch of the where() carries no NaN into the VJP.
+    d_left_safe = jnp.where(d_left == 0.0, 1.0, d_left)
+    d_right_safe = jnp.where(d_right == 0.0, 1.0, d_right)
+    harmonic = (w1 + w2) / (w1 / d_left_safe + w2 / d_right_safe)
+    interior = jnp.where(d_left * d_right > 0.0, harmonic, 0.0)  # (n-2, *rest)
+
+    first = _pchip_edge_slope(h[0], h[1], delta[0], delta[1])
+    last = _pchip_edge_slope(h[-1], h[-2], delta[-1], delta[-2])
+
+    return jnp.concatenate([first[None], interior, last[None]], axis=0)
+
+
+def _pchip_eval_axis0(x: jnp.ndarray, y: jnp.ndarray, xq) -> jnp.ndarray:
+    """Evaluate the monotone-cubic interpolant at scalar ``xq`` over axis 0."""
+    n = x.shape[0]
+    slopes = _pchip_slopes(x, y)
+
+    xq_c = jnp.clip(xq, x[0], x[-1])
+    i = jnp.clip(jnp.searchsorted(x, xq_c) - 1, 0, n - 2)
+    xi = x[i]
+    h = x[i + 1] - xi
+    t = (xq_c - xi) / h
+    t2 = t * t
+    t3 = t2 * t
+
+    # Cubic Hermite basis functions.
+    h00 = 2.0 * t3 - 3.0 * t2 + 1.0
+    h10 = t3 - 2.0 * t2 + t
+    h01 = -2.0 * t3 + 3.0 * t2
+    h11 = t3 - t2
+
+    return h00 * y[i] + h10 * h * slopes[i] + h01 * y[i + 1] + h11 * h * slopes[i + 1]
+
+
+def interp_nd_pchip(
+    grid: jnp.ndarray,
+    axes: tuple[jnp.ndarray, ...],
+    point: tuple,
+) -> jnp.ndarray:
+    """N-dimensional node-exact monotone-cubic (PCHIP) interpolation.
+
+    Unlike the triweight *smoother* (:func:`interp_nd_triweight`), this is an
+    *interpolant*: it passes exactly through the tabulated nodes while keeping
+    C¹-continuous gradients. The per-axis tangents use the Fritsch & Carlson
+    (1980) shape-preserving (monotone) rule, so the cubic never overshoots —
+    safe even on sparse, nearest-neighbour-filled grids where a natural cubic
+    spline would ring. Applied separably as a tensor product, one axis at a
+    time.
+
+    Use this for tabulated libraries whose feature position (e.g. an SED peak
+    wavelength) shifts sharply across the grid, where the triweight kernel's
+    neighbour-averaging would smear the feature. The cost relative to triweight
+    is that gradients are only C¹ (not C²).
+
+    Parameters
+    ----------
+    grid : jnp.ndarray, shape (*grid_dims, *trailing)
+        Values to interpolate. The leading ``len(axes)`` dimensions are the
+        interpolation axes; all trailing dimensions are preserved.
+    axes : tuple[jnp.ndarray, ...]
+        One strictly-ascending coordinate vector per interpolation dimension;
+        ``axes[i]`` has shape ``(grid_dims[i],)``.
+    point : tuple
+        Query coordinates, one scalar per axis.
+
+    Returns
+    -------
+    jnp.ndarray, shape (*trailing,)
+        Interpolated values. At an exact node the tabulated value is returned
+        to floating-point precision.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp`` ops with gathers on traced indices.
+
+    **Gradient-safe**: yes — C¹ in the query coordinates; guarded divisions in
+    the slope computation keep the VJP finite at flat segments.
+
+    Queries are clipped to the grid extent (no extrapolation beyond the
+    boundary nodes).
+
+    References
+    ----------
+    .. [1] F. N. Fritsch & R. E. Carlson, "Monotone Piecewise Cubic
+       Interpolation," SIAM J. Numer. Anal. 17, 238 (1980).
+       DOI: 10.1137/0717021.
+    """
+    reduced = grid
+    for ax, p in zip(axes, point, strict=True):
+        reduced = _pchip_eval_axis0(ax, reduced, p)
+    return reduced
 
 
 def slice_fixed_axes(

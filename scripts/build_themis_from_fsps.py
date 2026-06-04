@@ -19,8 +19,11 @@ the *same* per-(qhac,U_min) factor, so it integrates to the real ratio
 References: Jones, Köhler, Ysard et al. 2017 A&A 602 A46; Conroy+2009 (FSPS).
 """
 
-import os, sys, glob
-import numpy as np, h5py
+import os
+import sys
+
+import h5py
+import numpy as np
 
 SPS = os.environ.get("SPS_HOME", "/Users/suchethacooray/Projects/fsps")
 DUSTEM = os.path.join(SPS, "dust", "dustem")
