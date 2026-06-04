@@ -29,19 +29,21 @@ GRAHSP Fig. 3 reproduction: AGN model parameter map
 Faithful reproduction of Fig. 3 of Buchner et al. (2024, GRAHSP),
 showing how the 15 AGN parameters configure the spectrum in
 :math:`L_\lambda` (arbitrary units). The bending power-law BBB
-(``activatepl``, blue) is normalised at 5100 Å with optical slope
+(blue) is normalised at 5100 Å with optical slope
 :math:`\beta`, bending at :math:`\lambda_{\rm bend}` (width
 :math:`W_{\rm bend}`) to the UV slope :math:`\beta_{\rm UV}`. Emission
-lines (``activatelines``, light red) of width :math:`W_{\rm lines}` and an
-FeII forest (``activatelines:Fe``, dark red) are scaled by
+lines (light red) of width :math:`W_{\rm lines}` and an
+FeII forest (dark red) are scaled by
 :math:`A_{\rm lines}` / :math:`A_{\rm FeII}`. The log-Gaussian torus
-(``activategtorus``, dark yellow) has cool/hot components at
+(dark yellow) has cool/hot components at
 :math:`\lambda_{\rm cool}/\lambda_{\rm hot}` (widths
 :math:`W_{\rm cool}/W_{\rm hot}`), peak ratio :math:`f_{\rm hot}`, 12 µm
 normalisation :math:`f_{\rm cov}`, and silicate depth ``Si`` (here −1,
-absorption; ``activategtorus:Si`` dotted).
+absorption; dotted). Component colours map to the GRAHSP/pcigale modules
+``activatepl`` (BBB), ``activategtorus`` (torus), and ``activatelines``
+(lines + FeII).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-170
+.. GENERATED FROM PYTHON SOURCE LINES 22-172
 
 
 
@@ -115,8 +117,8 @@ absorption; ``activategtorus:Si`` dotted).
     feii = np.asarray(sed.feii) * W
 
     fig, ax = plt.subplots(figsize=(11.0, 5.0))
-    ax.plot(wave_um, bbb, color="#1f77d4", lw=2.4, label="activatepl", zorder=4)
-    ax.plot(wave_um, torus, color="#d6a319", lw=2.4, label="activategtorus", zorder=4)
+    ax.plot(wave_um, bbb, color="#1f77d4", lw=2.4, label="BBB (bending power-law)", zorder=4)
+    ax.plot(wave_um, torus, color="#d6a319", lw=2.4, label="Torus", zorder=4)
     # Si shown dotted where it perturbs the torus (continuum + Si).
     ax.plot(
         wave_um,
@@ -124,11 +126,11 @@ absorption; ``activategtorus:Si`` dotted).
         color="#d6a319",
         lw=1.6,
         ls=":",
-        label="activategtorus:Si",
+        label="Torus + silicate",
         zorder=5,
     )
-    ax.plot(wave_um, lines, color="#ff6b6b", lw=0.8, label="activatelines", zorder=3)
-    ax.plot(wave_um, feii, color="#8b1a1a", lw=0.8, label="activatelines:Fe", zorder=3)
+    ax.plot(wave_um, lines, color="#ff6b6b", lw=0.8, label="Emission lines", zorder=3)
+    ax.plot(wave_um, feii, color="#8b1a1a", lw=0.8, label="FeII forest", zorder=3)
 
     ax.set_xscale("log")
     ax.set_yscale("log")

@@ -530,6 +530,24 @@
    "name": "Artist.text"
   }
  ],
+ "bv08": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "bv08.max": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
  "evaluate_grahsp_agn": [
   {
    "is_class": false,
@@ -681,6 +699,15 @@
    "name": "load_grahsp_templates"
   }
  ],
+ "norm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -796,6 +823,24 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "GRAHSPTemplates"
+  }
+ ],
+ "vc04": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "vc04.max": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
   }
  ],
  "warnings.filterwarnings": [
