@@ -42,7 +42,7 @@ from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "create_slone_netzer_from_grid",
-    "slone_netzer_analytic",
+    "slone_netzer_sed",
 ]
 
 _C_AA_PER_S: float = 2.99792458e18  # speed of light [Å·Hz]
@@ -197,7 +197,7 @@ def _load_default() -> Callable:
     return create_slone_netzer_from_grid(_find_grid())
 
 
-def slone_netzer_analytic(*args, **kwargs) -> jnp.ndarray:
+def slone_netzer_sed(*args, **kwargs) -> jnp.ndarray:
     """Slone & Netzer (2012) disc (auto-loaded from the packaged HDF5 grid).
 
     Thin wrapper that loads the default grid once and delegates to the

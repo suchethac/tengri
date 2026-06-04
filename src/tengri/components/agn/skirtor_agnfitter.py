@@ -59,11 +59,13 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
 from tengri.utils.grid_interp import interp_nd_pchip
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "create_skirtor_agnfitter_from_grid",
-    "skirtor_agnfitter_analytic",
+    "skirtor_agnfitter_sed",
 ]
 
 
@@ -202,10 +204,15 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
             (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
         )
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
-        # Templates are pre-cosmetically-scaled by AGNfitter (multiplied by 1e40).
-        # No integral normalization needed; just scale by L_bol and torus_frac.
-        l_scale = 10.0**agn_log_lbol * agn_torus_frac
-        return l_scale * sed
+        # Template is shape-only: renormalise by the frequency integral and scale
+        # by L_bol * torus_frac, exactly as the cat3d_wind / silva04 torus blocks
+        # and the skirtor_agnfitter precompute path do (lnu = L_SUN * T / int T dnu).
+        nu = _wavelength_to_nu(wavelength)
+        idx_sort = jnp.argsort(nu)
+        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
+        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        return l_scale * sed / integral_safe
 
     return skirtor_agnfitter_grid
 
@@ -236,7 +243,7 @@ def _load_skirtor_agnfitter_default() -> Callable:
     return create_skirtor_agnfitter_from_grid(_find_skirtor_agnfitter_grid())
 
 
-def skirtor_agnfitter_analytic(*args, **kwargs) -> jnp.ndarray:
+def skirtor_agnfitter_sed(*args, **kwargs) -> jnp.ndarray:
     """SKIRTOR_mean_3p torus (auto-loaded from the packaged HDF5 grid).
 
     Parameters

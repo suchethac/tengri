@@ -409,6 +409,14 @@ _AGN_PARTITION = {
     "agn_p_skirtor": "agn.torus",
     "agn_q_skirtor": "agn.torus",
     "agn_oa_skirtor": "agn.torus",
+    # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus
+    "agn_incl_skirtor": "agn.torus",
+    "agn_tv_skirtor": "agn.torus",
+    # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
+    "agn_a_cat3d": "agn.torus",
+    "agn_fwd_cat3d": "agn.torus",
+    # Silva+04 obscured-torus column density
+    "agn_log_nh_silva": "agn.torus",
     "agn_torus_frac": "agn.torus",
     # Fritz et al. (2006) smooth-dust torus
     "agn_fritz_r_ratio": "agn.torus",

@@ -58,7 +58,11 @@ from tengri.components.agn.blr import compute_blr_sed
 
 # SEDModelComponent adapters (Phase II-4)
 from tengri.components.agn.cat3d_torus_model import CAT3DTorus
-from tengri.components.agn.cat3d_wind import cat3d_wind_analytic, create_cat3d_wind_from_grid
+from tengri.components.agn.cat3d_wind import (
+    cat3d_wind_analytic,
+    cat3d_wind_sed,
+    create_cat3d_wind_from_grid,
+)
 from tengri.components.agn.disc import (
     adaf_disc,
     beloborodov_gamma_hot,
@@ -68,7 +72,7 @@ from tengri.components.agn.disc import (
     multicolor_disc,
     powerlaw_disc,
 )
-from tengri.components.agn.fritz import create_fritz_from_grid, fritz_analytic
+from tengri.components.agn.fritz import create_fritz_from_grid, fritz_analytic, fritz_sed
 from tengri.components.agn.grahsp import (
     GRAHSPSED,
     GRAHSPParams,
@@ -97,9 +101,9 @@ from tengri.components.agn.richards2006_disc import (
     richards2006,
     richards2006_disc,
 )
-from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic
+from tengri.components.agn.silva04 import create_silva04_from_grid, silva04_analytic, silva04_sed
 from tengri.components.agn.silva04_model import Silva04Torus
-from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic
+from tengri.components.agn.skirtor import create_skirtor_from_grid, skirtor_analytic, skirtor_sed
 from tengri.components.agn.skirtor_model import SKIRTORTorus
 from tengri.components.agn.torus import nenkova_torus
 from tengri.components.agn.unified import (
@@ -134,6 +138,7 @@ __all__ = [
     "beloborodov_gamma_hot",
     "blocks",
     "cat3d_wind_analytic",
+    "cat3d_wind_sed",
     "composable_agn_l_nu",
     "compute_blr_sed",
     "compute_grahsp_sed",
@@ -150,6 +155,7 @@ __all__ = [
     "create_skirtor_from_grid",
     "evaluate_grahsp_agn",
     "fritz_analytic",
+    "fritz_sed",
     "get_feltre_backend",
     "get_synthesizer_nlr_backend",
     "grahsp",
@@ -167,6 +173,7 @@ __all__ = [
     "richards2006",
     "richards2006_disc",
     "silva04_analytic",
+    "silva04_sed",
     "unified_agn",
     "unified_nlr_blr",
     "validate_block_recipe",

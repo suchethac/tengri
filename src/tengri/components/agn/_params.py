@@ -165,6 +165,50 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    # Hönig & Kishimoto (2017) CAT3D-Wind clumpy-disc-plus-polar-wind torus.
+    # Defaults match the cat3d_wind_torus_block; grid extent a in [-3, -1.5],
+    # fwd in [0.15, 2.25] (see scripts/build_cat3d_wind_grid.py).
+    ParamDeclaration(
+        "agn_a_cat3d",
+        Uniform(-3.0, -1.5, default=-2.0),
+        "CAT3D-Wind radial cloud-distribution power-law index (grid -3 to -1.5)",
+        lambda lo, hi: lo >= -3.0 and hi <= -1.5,
+        "must be within the CAT3D-Wind grid extent [-3, -1.5]",
+    ),
+    ParamDeclaration(
+        "agn_fwd_cat3d",
+        Uniform(0.15, 2.25, default=0.2),
+        "CAT3D-Wind polar-wind mass fraction (grid 0.15 to 2.25)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    # Silva, Maiolino & Granato (2004) smooth obscured-torus templates,
+    # indexed by line-of-sight column density. Default matches silva04_torus_block.
+    ParamDeclaration(
+        "agn_log_nh_silva",
+        Uniform(22.0, 25.0, default=23.0),
+        "Silva+04 torus log10(N_H / cm^-2) (grid 22 to 25)",
+        lambda lo, hi: lo >= 22.0 and hi <= 25.0,
+        "must be within the Silva+04 grid extent [22, 25]",
+    ),
+    # Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX averaged) torus. Shares
+    # agn_oa_skirtor with the X-CIGALE skirtor block; inclination here is in
+    # degrees (not cos) and the optical depth axis is tau_V. Defaults match the
+    # skirtor_agnfitter_torus_block / grid extent (oa 10-80, incl 0-90, tv 3-11).
+    ParamDeclaration(
+        "agn_incl_skirtor",
+        Uniform(0.0, 90.0, default=30.0),
+        "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)",
+        lambda lo, hi: lo >= 0 and hi <= 90,
+        "must be in [0, 90]",
+    ),
+    ParamDeclaration(
+        "agn_tv_skirtor",
+        Uniform(3.0, 11.0, default=7.0),
+        "SKIRTOR_mean_3p equatorial optical depth tau_V (grid 3-11)",
+        lambda lo, hi: lo >= 3.0 and hi <= 11.0,
+        "must be within the SKIRTOR_mean_3p grid extent [3, 11]",
+    ),
     ParamDeclaration(
         "agn_theta_torus",
         # Torus half-opening angle. Sets the Type-1/2 critical inclination

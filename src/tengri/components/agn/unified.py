@@ -126,7 +126,7 @@ from collections.abc import Callable
 import jax.numpy as jnp
 
 from tengri.components.agn.blr import compute_blr_sed
-from tengri.components.agn.cat3d_wind import cat3d_wind_analytic
+from tengri.components.agn.cat3d_wind import cat3d_wind_sed
 from tengri.components.agn.disc import (
     adaf_disc,
     create_relagn_disc_from_grid,
@@ -135,7 +135,7 @@ from tengri.components.agn.disc import (
     powerlaw_disc,
 )
 from tengri.components.agn.nlr import compute_nlr_sed
-from tengri.components.agn.silva04 import silva04_analytic
+from tengri.components.agn.silva04 import silva04_sed
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
 from tengri.components.dust.attenuation import prevot_smc
 from tengri.components.radio.radio import radio_total
@@ -424,7 +424,7 @@ def unified_agn(
 
     **Gradient-safe**: yes when using analytic disc and torus models.
     """
-    from tengri.components.agn.skirtor import skirtor_analytic
+    from tengri.components.agn.skirtor import skirtor_sed
 
     disc_fns = {
         "powerlaw": powerlaw_disc,
@@ -433,8 +433,8 @@ def unified_agn(
         "adaf": adaf_disc,
     }
     torus_fns = {
-        "silva04": silva04_analytic,
-        "skirtor": skirtor_analytic,
+        "silva04": silva04_sed,
+        "skirtor": skirtor_sed,
     }
 
     disc_fn = disc_fns[disc_model]
@@ -515,7 +515,7 @@ def multicolor_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`multicolor_disc` and :func:`silva04_analytic`.
+    **JIT-compatible**: yes — uses :func:`multicolor_disc` and :func:`silva04_sed`.
 
     Also registered as "kubota_done" (deprecated alias).
 
@@ -620,7 +620,7 @@ def kubota_done_full_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`kubota_done_disc` and :func:`silva04_analytic`.
+    **JIT-compatible**: yes — uses :func:`kubota_done_disc` and :func:`silva04_sed`.
 
     References
     ----------
@@ -647,7 +647,7 @@ def kubota_done_full_agn(
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # Torus re-emits covering_factor of L_bol
-    l_torus = silva04_analytic(
+    l_torus = silva04_sed(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_log_nh_silva=agn_log_nh_silva,
@@ -785,7 +785,7 @@ def silva04_agn(
         agn_frac=1.0 - agn_torus_frac,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
-    l_torus = silva04_analytic(
+    l_torus = silva04_sed(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_log_nh_silva=agn_log_nh_silva,
@@ -853,7 +853,7 @@ def cat3d_wind_agn(
         agn_frac=1.0 - agn_torus_frac,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
-    l_torus = cat3d_wind_analytic(
+    l_torus = cat3d_wind_sed(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_cos_inc=agn_cos_inc,
@@ -933,7 +933,7 @@ def adaf_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`adaf_disc` and :func:`silva04_analytic`.
+    **JIT-compatible**: yes — uses :func:`adaf_disc` and :func:`silva04_sed`.
 
     References
     ----------
@@ -955,7 +955,7 @@ def adaf_agn(
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 
     # Silva+04 torus re-emits torus_frac of L_bol
-    l_torus = silva04_analytic(
+    l_torus = silva04_sed(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_log_nh_silva=agn_log_nh_silva,
@@ -1062,7 +1062,7 @@ def relagn_agn(
     log_lbol_lsun = jnp.log10(jnp.maximum(lbol_disc_erg, 1e30)) - jnp.log10(_LSUN_ERG)
 
     # Torus re-emits agn_torus_frac of disc L_bol
-    l_torus = silva04_analytic(
+    l_torus = silva04_sed(
         wavelength,
         agn_log_lbol=log_lbol_lsun,
         agn_log_nh_silva=agn_log_nh_silva,
@@ -1445,7 +1445,7 @@ def unified_nlr_blr(
     l_disc_masked = mask_disc * l_disc * polar_trans
 
     # --- Torus emission (always visible) ---
-    l_torus = silva04_analytic(
+    l_torus = silva04_sed(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_log_nh_silva=agn_log_nh_silva,

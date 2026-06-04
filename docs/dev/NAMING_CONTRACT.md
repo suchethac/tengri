@@ -180,6 +180,14 @@ Auto:
 | `nuts` | `mcmc_nuts` | |
 | `elliptical_slice` | `mcmc_ess` | |
 | `evidence` | `nss` | |
+| `cat3d_wind_analytic` | `cat3d_wind_sed` | "_analytic" was a misnomer — grid interpolation, not closed-form |
+| `silva04_analytic` | `silva04_sed` | as above |
+| `skirtor_analytic` | `skirtor_sed` | as above |
+| `fritz_analytic` | `fritz_sed` | as above |
+
+Internal-only (not public API; renamed without alias):
+`skirtor_agnfitter_analytic` → `skirtor_agnfitter_sed`,
+`slone_netzer_analytic` → `slone_netzer_sed`.
 
 ---
 

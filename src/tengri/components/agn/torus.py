@@ -108,7 +108,7 @@ def simple_torus(
     if "simple_torus" not in _WARNED:
         warnings.warn(
             "simple_torus is a toy AGN torus model not suitable for science fits; "
-            "use silva04_analytic (Silva+04 radiative-transfer torus) for production work. "
+            "use silva04_sed (Silva+04 radiative-transfer torus) for production work. "
             "Will be removed in tengri v1.0.",
             DeprecationWarning,
             stacklevel=2,
@@ -202,7 +202,7 @@ def two_temperature_torus(
     if "two_temperature_torus" not in _WARNED:
         warnings.warn(
             "two_temperature_torus is a toy AGN torus model not suitable for science fits; "
-            "use silva04_analytic (Silva+04 radiative-transfer torus) for production work. "
+            "use silva04_sed (Silva+04 radiative-transfer torus) for production work. "
             "Will be removed in tengri v1.0.",
             DeprecationWarning,
             stacklevel=2,

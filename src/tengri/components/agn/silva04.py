@@ -40,6 +40,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
 from tengri.utils.grid_interp import interp_nd_triweight
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
@@ -47,6 +48,7 @@ from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 __all__ = [
     "create_silva04_from_grid",
     "silva04_analytic",
+    "silva04_sed",
 ]
 
 
@@ -218,7 +220,7 @@ def _load_silva04_default() -> Callable:
     return create_silva04_from_grid(_find_silva04_grid())
 
 
-def silva04_analytic(*args, **kwargs) -> jnp.ndarray:
+def silva04_sed(*args, **kwargs) -> jnp.ndarray:
     """Silva+04 smooth AGN torus (auto-loaded from tabulated templates).
 
     Wraps :func:`create_silva04_from_grid` with on-disk grid discovery.
@@ -247,3 +249,10 @@ def silva04_analytic(*args, **kwargs) -> jnp.ndarray:
         If no Silva+04 grid HDF5 is present on disk.
     """
     return _load_silva04_default()(*args, **kwargs)
+
+
+# Deprecated: "_analytic" was a misnomer — this is grid interpolation, not a
+# closed-form model. Use silva04_sed. Alias removed in v1.0.
+silva04_analytic = deprecated_alias(
+    silva04_sed, old_name="silva04_analytic", new_name="silva04_sed"
+)

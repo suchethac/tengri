@@ -14,16 +14,17 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.cat3d_wind import cat3d_wind_analytic
+from tengri.components.agn.cat3d_wind import cat3d_wind_sed
 from tengri.components.agn.disc_cigale import schartmann2005_disk_spectrum
-from tengri.components.agn.fritz import fritz_analytic
+from tengri.components.agn.fritz import fritz_sed
 from tengri.components.agn.polar_dust import (
     anisotropic_polar_luminosity,
     polar_dust_emission,
     smc_extinction_curve,
 )
-from tengri.components.agn.silva04 import silva04_analytic
-from tengri.components.agn.skirtor import skirtor_analytic
+from tengri.components.agn.silva04 import silva04_sed
+from tengri.components.agn.skirtor import skirtor_sed
+from tengri.components.agn.skirtor_agnfitter import skirtor_agnfitter_sed
 from tengri.components.agn.torus import nenkova_torus
 from tengri.utils.physics_constants import L_SUN
 
@@ -165,10 +166,10 @@ def skirtor_torus_block(
     # contributions, double-counting energy by ~l_ext/agn_power.
 
     # 1) SKIRTOR thermal-dust template (unit-normalised in download
-    # script). ``skirtor_analytic`` returns L_ν scaled to
+    # script). ``skirtor_sed`` returns L_ν scaled to
     # ``L_bol × agn_torus_frac``; for the CIGALE structure we need the
     # SHAPE not the scale, so divide back out and re-apply at the end.
-    L_nu_skirtor_scaled = skirtor_analytic(
+    L_nu_skirtor_scaled = skirtor_sed(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_tau_skirtor=agn_tau_skirtor,
@@ -246,7 +247,7 @@ def silva04_torus_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    L_nu = silva04_analytic(
+    L_nu = silva04_sed(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_log_nh_silva=agn_log_nh_silva,
@@ -277,12 +278,50 @@ def cat3d_wind_torus_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    L_nu = cat3d_wind_analytic(
+    L_nu = cat3d_wind_sed(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_cos_inc=agn_cos_inc,
         agn_a_cat3d=agn_a_cat3d,
         agn_fwd_cat3d=agn_fwd_cat3d,
+        agn_torus_frac=agn_torus_frac,
+    )
+    return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block("torus", "skirtor_agnfitter")
+def skirtor_agnfitter_torus_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_oa_skirtor: float = 40.0,
+    agn_incl_skirtor: float = 30.0,
+    agn_tv_skirtor: float = 7.0,
+    agn_torus_frac: float = 0.5,
+    **_params,
+) -> Array:
+    r"""Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX) torus block.
+
+    Three-parameter averaged-clumpiness torus library (half-opening angle,
+    inclination, equatorial optical depth :math:`\tau_V`) as packaged by
+    AGNfitter-rX. Distinct from the full-grid X-CIGALE ``skirtor`` block:
+    the averaged library peaks at ~25 um (vs ~40 um) and is reproduced
+    node-exactly via monotone-cubic interpolation.
+
+    References
+    ----------
+    .. [1] Stalevski, M. et al. 2016, MNRAS, 458, 2288.
+    .. [2] Martínez-Ramírez, L. N. et al. 2024, A&A, 688, A46 (AGNfitter-rX).
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    L_nu = skirtor_agnfitter_sed(
+        wave_aa,
+        agn_log_lbol=agn_log_lbol,
+        agn_oa_skirtor=agn_oa_skirtor,
+        agn_incl_skirtor=agn_incl_skirtor,
+        agn_tv_skirtor=agn_tv_skirtor,
         agn_torus_frac=agn_torus_frac,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
@@ -347,7 +386,7 @@ def fritz_torus_block(
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    L_nu = fritz_analytic(
+    L_nu = fritz_sed(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_torus_frac=agn_torus_frac,

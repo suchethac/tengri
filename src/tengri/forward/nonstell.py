@@ -390,6 +390,14 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
                 agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
                 agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
+                # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus
+                agn_incl_skirtor=p.get("agn_incl_skirtor", 30.0),
+                agn_tv_skirtor=p.get("agn_tv_skirtor", 7.0),
+                # CAT3D-Wind clumpy torus (Hönig & Kishimoto 2017)
+                agn_a_cat3d=p.get("agn_a_cat3d", -2.0),
+                agn_fwd_cat3d=p.get("agn_fwd_cat3d", 0.2),
+                # Silva+04 obscured-torus column density
+                agn_log_nh_silva=p.get("agn_log_nh_silva", 23.0),
                 # Fritz+2006 torus (CIGALE fritz2006) — 6D grid block (#347)
                 agn_fritz_r_ratio=p.get("agn_fritz_r_ratio", 60.0),
                 agn_fritz_tau=p.get("agn_fritz_tau", 1.0),

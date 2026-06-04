@@ -34,6 +34,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     wavelength_to_nu as _wavelength_to_nu,
@@ -418,7 +419,7 @@ def _load_fritz_components():
     return create_fritz_components_from_grid(path)
 
 
-def fritz_analytic(*args, **kwargs):
+def fritz_sed(*args, **kwargs):
     """Fritz2006 torus SED (auto-loaded from tabulated templates).
 
     This function uses the tabulated Fritz et al. (2006) template grid
@@ -524,3 +525,8 @@ def fritz_components(*args, **kwargs) -> FritzComponents:
     else:
         fn = _load_fritz_components()
     return fn(*args, **kwargs)
+
+
+# Deprecated: "_analytic" was a misnomer — Fritz+2006 is a 6D template-grid
+# interpolation, not a closed-form model. Use fritz_sed. Removed in v1.0.
+fritz_analytic = deprecated_alias(fritz_sed, old_name="fritz_analytic", new_name="fritz_sed")

@@ -1,27 +1,28 @@
 """
-CAT3D-Wind clumpy torus: Wind mass fraction and orientation
-===========================================================
+CAT3D-Wind clumpy torus: wind fraction and viewing angle
+========================================================
 
-The CAT3D-Wind clumpy torus model (Hönig & Kishimoto 2017) combines a
-mid-plane clumpy-disc structure with a polar outflow (wind). The torus
-morphology is parameterized by three observables: inclination angle
-``agn_cos_inc`` (1 = face-on, 0 = edge-on), clump distribution power-law
-index ``agn_a_cat3d``, and wind mass fraction ``agn_fwd_cat3d``.
+The CAT3D-Wind torus (Hönig & Kishimoto 2017) splits the circumnuclear dust
+into a mid-plane clumpy disc plus a polar outflow ("wind"). Its infrared
+reprocessing is controlled by three observables: the wind mass fraction
+``fwd``, the radial cloud-distribution index ``a``, and the viewing angle
+``cos i``.
 
-This example demonstrates how the wind fraction modulates the torus infrared
-reprocessing. Higher wind fractions (fwd → 1) produce more polar-directed
-obscuration, which affects the observed UV-to-IR SED depending on viewing
-angle. The clumpy structure also produces flatter SEDs in the mid-infrared
-(5–30 µm) compared to smooth toruses like SKIRTOR.
+This example sweeps the **wind fraction** (``fwd``, 0.15 -> 2.25) at two viewing
+angles. A larger polar-wind component fills in the near/mid-IR and shifts the
+balance of warm vs cool dust emission; the effect depends on whether the system
+is viewed close to face-on (left) or edge-on (right), since the wind is
+polar-directed. The torus contribution is isolated by subtracting the disc-only
+SED (the torus normalises to the disc luminosity).
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-   galaxies. II. From clumpy torus models to a unified model," ApJL 838,
-   L20 (2017). arXiv:1702.08691.
-.. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the
-   radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
-   (2024). arXiv:2405.12111.
+.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active galaxies.
+   II. From clumpy torus models to a unified model," ApJL 838, L20 (2017).
+   arXiv:1702.08691.
+.. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
+   spectral energy distributions of AGNs," A&A 688, A46 (2024).
+   arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
 """
 
 import os
@@ -37,6 +38,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
+from tengri.utils.physics_constants import C_AA  # speed of light [Angstrom/s]
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -44,75 +46,64 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 
 ssp = tengri.load_ssp()
 
-# Minimal host
 SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
-# Wind fraction sweep: 0 (pure disc) → 1 (pure wind)
-fwd_values = np.linspace(0.0, 1.0, 6)
+# CAT3D-Wind grid: fwd in [0.15, 2.25]. Two viewing angles (near face-on / edge-on).
+FWD_VALUES = np.linspace(0.15, 2.25, 7)
+COS_INC = {"face-on (cos i = 0.85)": 0.85, "edge-on (cos i = 0.2)": 0.2}
 
-# Inclination angles (face-on, edge-on)
-cos_inc_values = [0.8, 0.2]
+BASE_AGN = {
+    "disc": {"type": "multicolor", "*": tengri.FIXED},
+    "*": tengri.FIXED,
+    "log_lbol": 12.0,
+    "frac": 1.0,
+}
 
-fig, axes = plt.subplots(1, 2, figsize=(10.0, 4.5), sharey=True)
 
-c_aa_s = 2.998e18
+def _build_sed(torus: dict | None) -> tuple[np.ndarray, np.ndarray]:
+    agn = dict(BASE_AGN)
+    if torus is not None:
+        agn["torus"] = torus
+    model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.05))
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    out = model.predict_rest_sed(p)
+    return np.asarray(out.wavelength), np.asarray(out.sed)
 
-for ax_idx, cos_inc in enumerate(cos_inc_values):
-    ax = axes[ax_idx]
 
-    # Colormap for wind fraction
-    norm = mpl.colors.Normalize(vmin=fwd_values.min(), vmax=fwd_values.max())
-    cmap = plt.get_cmap("cool")
+WAVE, DISC_ONLY = _build_sed(None)
 
-    for fwd in fwd_values:
-        model = tengri.SEDModel.build(
-            ssp,
-            sfh=SFH,
-            dust=DUST,
-            agn={
-                "type": "composable",
-                "disc": {"type": "powerlaw", "*": tengri.FIXED},
-                # The CAT3D-Wind grid parameters (radial cloud index a_cat3d and
-                # wind mass fraction fwd_cat3d) live in the torus sub-block;
-                # cos_inc is the shared AGN viewing angle at the agn top level.
-                "torus": {
-                    "type": "cat3d_wind",
-                    "*": tengri.FIXED,
-                    "a_cat3d": -1.5,
-                    "fwd_cat3d": fwd,
-                },
-                "*": tengri.FIXED,
-                "log_lbol": 11.5,
-                "frac": 0.5,
-                "cos_inc": cos_inc,
-            },
-            redshift=tengri.Fixed(0.05),
-        )
-        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-        out = model.predict_rest_sed(p)
+def torus_sed(cos_inc: float, fwd: float) -> tuple[np.ndarray, np.ndarray]:
+    """Return (wavelength [AA], nu*L_nu [erg/s]) for the CAT3D-Wind torus alone."""
+    wave, total = _build_sed(
+        {"type": "cat3d_wind", "*": tengri.FIXED, "cos_inc": cos_inc, "fwd_cat3d": fwd}
+    )
+    disc = np.interp(wave, WAVE, DISC_ONLY)
+    return wave, C_AA / wave * np.clip(total - disc, 0.0, None)
 
-        wave = np.asarray(out.wavelength)
-        nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
 
-        color = cmap(norm(fwd))
-        label = f"fwd = {fwd:.2f}" if ax_idx == 1 else None
-        ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+fig, axes = plt.subplots(1, 2, figsize=(11.0, 4.6), sharey=True)
+norm = mpl.colors.Normalize(vmin=FWD_VALUES.min(), vmax=FWD_VALUES.max())
+cmap = plt.get_cmap("viridis")
 
-    ax.set_xlim(100, 1e5)
-    ax.set_ylim(1e40, 1e47)
-    ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
-    if ax_idx == 0:
-        ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-
-    # Title with inclination angle
-    inc_deg = np.degrees(np.arccos(cos_inc))
-    ax.set_title(f"Inclination = {inc_deg:.1f}° (cos i = {cos_inc:.2f})", fontsize=10)
+for ax, (label, cos_inc) in zip(axes, COS_INC.items()):
+    for fwd in FWD_VALUES:
+        wave, nu_l_nu = torus_sed(cos_inc, fwd)
+        ax.loglog(wave, nu_l_nu, color=cmap(norm(fwd)), lw=1.6)
+    ax.set_xlim(3e3, 3e6)
+    ax.set_ylim(3e43, 3e45)
+    ax.set_xlabel(r"Rest-frame wavelength $\lambda$  [$\mathrm{\AA}$]")
+    ax.set_title(label, fontsize=10)
     ax.grid(True, which="major", alpha=0.2)
 
-# Legend
-axes[1].legend(frameon=False, fontsize=8, loc="lower left")
+axes[0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+sm = mpl.cm.ScalarMappable(norm=norm, cmap=cmap)
+cb = fig.colorbar(sm, ax=axes, pad=0.01, fraction=0.046)
+cb.set_label(r"wind mass fraction  $f_\mathrm{wd}$", fontsize=9)
 
-fig.suptitle("CAT3D-Wind: Wind fraction and viewing angle effects", fontsize=11, weight="bold")
-fig.tight_layout()
-plt.show()
+fig.suptitle(
+    "CAT3D-Wind torus: wind fraction and viewing angle",
+    fontsize=11.5,
+    weight="bold",
+)
+plt.savefig("plot_cat3d_wind_sweep.png", dpi=150, bbox_inches="tight")

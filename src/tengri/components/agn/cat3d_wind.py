@@ -65,12 +65,14 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
     "cat3d_wind_analytic",
+    "cat3d_wind_sed",
     "create_cat3d_wind_from_grid",
 ]
 
@@ -236,7 +238,7 @@ def _load_cat3d_default() -> Callable:
     return create_cat3d_wind_from_grid(_find_cat3d_grid())
 
 
-def cat3d_wind_analytic(*args, **kwargs) -> jnp.ndarray:
+def cat3d_wind_sed(*args, **kwargs) -> jnp.ndarray:
     """CAT3D-Wind torus (auto-loaded from the packaged HDF5 grid).
 
     Parameters
@@ -267,3 +269,10 @@ def cat3d_wind_analytic(*args, **kwargs) -> jnp.ndarray:
         If no CAT3D-Wind grid HDF5 is present on disk.
     """
     return _load_cat3d_default()(*args, **kwargs)
+
+
+# Deprecated: "_analytic" was a misnomer — this is grid interpolation, not a
+# closed-form model. Use cat3d_wind_sed. Alias removed in v1.0.
+cat3d_wind_analytic = deprecated_alias(
+    cat3d_wind_sed, old_name="cat3d_wind_analytic", new_name="cat3d_wind_sed"
+)

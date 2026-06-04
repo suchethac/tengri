@@ -576,10 +576,10 @@ def slone_netzer_disc_block(
     .. [1] O. Slone and H. Netzer, MNRAS, 426, 656 (2012).
     .. [2] L. N. Martinez-Ramirez et al., A&A, 688, A46 (2024). arXiv:2405.12111.
     """
-    from tengri.components.agn.slone_netzer import slone_netzer_analytic
+    from tengri.components.agn.slone_netzer import slone_netzer_sed
 
     wave_aa = jnp.asarray(wavelength)
-    L_nu = slone_netzer_analytic(
+    L_nu = slone_netzer_sed(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_log_mbh=agn_log_mbh,
