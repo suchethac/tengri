@@ -841,10 +841,16 @@ def load_dale2014_templates(filepath: str) -> dict:
             if "templates_qso" in f:
                 templates_qso = np.array(f["templates_qso"][:])
 
+    _sf = jnp.array(spectra, dtype=jnp.float64)
     result = {
         "wavelength_aa": jnp.array(wavs_aa, dtype=jnp.float64),
         "alpha_grid": jnp.array(alpha_grid, dtype=jnp.float64),
-        "templates_sf": jnp.array(spectra, dtype=jnp.float64),
+        "templates_sf": _sf,
+        # Back-compat alias: ``precompute_dale2014_photometry`` (and other
+        # legacy consumers) read the SF templates under the original "spectra"
+        # key. ``templates_sf`` is the newer name introduced alongside
+        # ``templates_qso`` for the fracAGN mixing.
+        "spectra": _sf,
     }
     if templates_qso is not None:
         result["templates_qso"] = jnp.array(templates_qso, dtype=jnp.float64)

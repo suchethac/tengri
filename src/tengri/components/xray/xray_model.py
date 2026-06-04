@@ -253,8 +253,10 @@ class XRayAirdSEDComponent(SEDModelComponent):
             a1=0.5,
             a2=0.0,
             log_nh=jnp.asarray(p["log_nh"]),
-            log_L_hmxb_offset=jnp.asarray(p["det_hmxb"]),
-            log_L_lmxb_offset=jnp.asarray(p["det_lmxb"]),
+            # Default 0.0 keeps predict robust to partial param dicts that
+            # predate the det_hmxb/det_lmxb XRB offsets (CIGALE parity 2026-06).
+            log_L_hmxb_offset=jnp.asarray(p.get("det_hmxb", 0.0)),
+            log_L_lmxb_offset=jnp.asarray(p.get("det_lmxb", 0.0)),
         )
 
         return sed_in + L_xray, {
