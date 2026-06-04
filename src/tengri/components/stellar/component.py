@@ -946,20 +946,28 @@ class StellarSEDComponent:
         # Eager physicality guard: the masking above truncates any SFH mass at
         # lookback ages older than the universe at this redshift. When that
         # truncated fraction is non-negligible the prediction no longer matches
-        # the requested SFH, so warn on the eager forward path. Skipped under
-        # jit/grad/vmap (``t_obs_gyr`` is a tracer there) — exploring such draws
-        # during inference is expected and a Python branch on a tracer is illegal.
-        if not isinstance(t_obs_gyr, jax.core.Tracer):
-            mass_total_sfh = jnp.trapezoid(sfr_on_ssp, ssp_ages_yr)
-            mass_pre_bb = jnp.trapezoid(
-                jnp.where(ssp_age_gyr > t_obs_gyr, sfr_on_ssp, 0.0), ssp_ages_yr
+        # the requested SFH, so warn on the eager forward path. The ``float()``
+        # conversions raise ConcretizationTypeError under *any* jax transform
+        # (jit / grad / vmap, including the partial tracing of a population vmap
+        # where ``redshift`` is concrete but the SFH params are batched), so we
+        # catch that and skip silently — exploring such draws during inference is
+        # expected and there is no concrete value to warn about while tracing.
+        try:
+            mass_total_sfh = float(jnp.trapezoid(sfr_on_ssp, ssp_ages_yr))
+            mass_pre_bb = float(
+                jnp.trapezoid(jnp.where(ssp_age_gyr > t_obs_gyr, sfr_on_ssp, 0.0), ssp_ages_yr)
             )
-            frac_pre_bb = float(mass_pre_bb / jnp.maximum(mass_total_sfh, 1e-30))
+            z_val = float(z)
+            t_obs_val = float(t_obs_gyr)
+        except jax.errors.ConcretizationTypeError:
+            mass_total_sfh = None  # tracing — no concrete values to inspect
+        if mass_total_sfh is not None:
+            frac_pre_bb = mass_pre_bb / max(mass_total_sfh, 1e-30)
             if frac_pre_bb > 0.01:
                 warnings.warn(
                     f"Star formation history forms {frac_pre_bb:.0%} of its stellar "
-                    f"mass before the Big Bang at z={float(z):.2f} (cosmic age "
-                    f"{float(t_obs_gyr):.2f} Gyr). That mass is truncated, so the "
+                    f"mass before the Big Bang at z={z_val:.2f} (cosmic age "
+                    f"{t_obs_val:.2f} Gyr). That mass is truncated, so the "
                     f"prediction does not reflect the requested SFH — bound the SFH "
                     f"age parameter or the redshift to keep star formation within "
                     f"cosmic time.",
