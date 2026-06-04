@@ -35,9 +35,11 @@
 # *same* templates — Synthesizer's stellar grid is re-shaped into the form tengri
 # reads (a one-off step described in the README) — so the §1 residual is
 # interpolation alone, not a different spectral library. For the AGN line regions
-# (§9c, §9d) tengri reads the *same* Synthesizer photoionisation grids, so the
-# line lists and line luminosities have a common origin; the spectra still differ
-# in how each code spreads a line over wavelength (see §9c).
+# (§9c, §9d) tengri reads the *same* Synthesizer photoionisation grids; tengri
+# re-broadens the grid's discrete `/lines` table while Synthesizer's `UnifiedAGN`
+# builds from the `/spectra/nebular` reprocessed array — two products that agree
+# on a production grid but diverge on the placeholder *test* grid used here (see
+# the §9c caveat and issue #694).
 #
 # **Grids.** This notebook runs on Synthesizer's *test* grids
 # (`synthesizer-download --stellar-test-grids --agn-test-grids --dust-grid`).
@@ -725,6 +727,13 @@ def _agn_grammar(disc="kubota_done", torus="simple", lines="none", cos_inc=BH_CO
             "torus": {"type": torus},
             "lines": {"type": lines},
             "agn_log_lbol": Fixed(agn_log_lbol),
+            # Match Synthesizer's black hole, not just its bolometric luminosity:
+            # the kubota_done (qsosed) disc temperature profile — and therefore the
+            # UV bump shape and height — is set by M_BH and the Eddington ratio.
+            # Leaving these at tengri's defaults (1e7 M⊙) ran a hotter, fainter
+            # disc (0.75x); pinning them to the §9 BH gives a ~0.98x match.
+            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             "agn_cos_inc": Fixed(cos_inc),
             "agn_theta_torus": Fixed(THETA_TORUS),
             "agn_torus_frac": Fixed(_TORUS_FRAC),
@@ -771,6 +780,11 @@ for disc_type, _ in _disc_models:
             "torus": {"type": "none"},
             "lines": {"type": "none"},
             "agn_log_lbol": Fixed(agn_log_lbol),
+            # Match the §9 BH so the kubota_done disc temperature profile matches
+            # Synthesizer's qsosed (ignored by the power-law disc). Without this the
+            # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
+            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
             "*": FIXED,
         },
         redshift=Fixed(0.0),
@@ -847,21 +861,26 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 # %% [markdown]
 # ### §9c Narrow-line region
 #
-# Here tengri reads the *same* narrow-line-region grid as Synthesizer — the same
-# 215 Cloudy lines, and the disc's own ionising luminosity straight from the grid
-# (rather than an assumed ionising-spectrum slope), so the normalisation is
-# Synthesizer's own. Two things keep the curves from being identical, both by
-# design. First, Synthesizer plots the full reprocessed emission (nebular
-# continuum plus lines spread over the grid's native bins), while tengri returns
-# the lines alone, each narrowed to the ~500 km/s width of the narrow-line region
-# — concentrating a line into that profile lifts its peak above the grid-binned
-# version (so each panel has its own y-axis). Second, tengri interpolates the
-# coarse test grid with a smooth, differentiable kernel rather than a step
-# lookup, the same gradient-friendly choice as the inclination mask in §9f; on a
-# 2-node-per-axis test grid that smooths the line ratios by tens of percent, an
-# offset that shrinks on a finer grid. The strong forbidden lines — [O III] 5007,
-# the Balmer series, [O II] 3727 — still line up. (On the downloadable test grid
-# the NLR and BLR files are identical placeholders — see the §9d caveat.)
+# The two panels below plot **two different grid products**, and on the
+# downloadable *test* grid they disagree — by construction, not because of a
+# physics error. Synthesizer's `UnifiedAGN` builds its NLR panel (left) from the
+# grid's `/spectra/nebular` reprocessed array (nebular continuum + lines on the
+# native bins); tengri's grid-backed block re-broadens the grid's discrete
+# `/lines/luminosity` table (right). On a *production* grid these two products
+# agree. The `test_grid_agn-nlr` file used here is a **2-node-per-axis
+# placeholder** whose `/lines/*` arrays are scrambled — the `/lines/wavelength`
+# dataset is not parallel to `/lines/id`/`/lines/luminosity` (they disagree by up
+# to 22660 Å) and neither is consistent with `/spectra/nebular`. So the left
+# panel is [O III] 5007-dominant (from `/spectra`) while the right is not (from
+# the broken `/lines`).
+#
+# What *is* faithful: tengri reads `/lines` exactly as Synthesizer's own
+# `LineCollection` does — line-for-line at a grid node (correlation 0.91; the one
+# outlier, [O III] 5007, is tengri's C²-grid interpolation blending the two
+# nodes, the same gradient-friendly kernel as the §9f mask). Reproducing
+# Synthesizer's reprocessed NLR/BLR *spectrum* on a production grid — by reading
+# `/spectra/nebular` rather than re-broadening `/lines` — is tracked as
+# **issue #694**.
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
@@ -881,8 +900,8 @@ fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12, 4.5))
 U.panel(
     ax_l,
     ax_r,
-    label_l="Synthesizer  NLR (full reprocessed: lines + continuum)",
-    label_r="tengri  NLR lines (same grid, 500 km/s)",
+    label_l="Synthesizer  UnifiedAGN NLR  (/spectra/nebular)",
+    label_r="tengri  NLR lines  (/lines, 500 km/s)",
 )
 ax_l.plot(w_nlr_s, L_nlr_s, "C0-", linewidth=1.0)
 ax_r.plot(_wave_nlr, L_nlr_t, "C1-", linewidth=1.0)
@@ -902,26 +921,27 @@ save_fig("synthesizer_09c_nlr.png")
 _optw = (_wave_nlr >= 1000) & (_wave_nlr <= 10000)
 _pk_line = _wave_nlr[_optw][np.argmax(L_nlr_t[_optw])]
 print(
-    f"§9c NLR: strongest tengri line at {_pk_line:.1f} Å (from the shared Synthesizer Cloudy grid)"
+    f"§9c NLR: strongest tengri /lines feature at {_pk_line:.1f} Å. "
+    "NB the test grid's /lines arrays are a scrambled placeholder (issue #694) — "
+    "the [O III]-dominant left panel is Synthesizer's /spectra/nebular product."
 )
 
 
 # %% [markdown]
 # ### §9d Broad-line region
 #
-# The same comparison for the broad-line region, with tengri reading the
-# Synthesizer broad-line grid. Broad-line widths are far larger (~5000 km/s), so
-# the permitted lines blend into the quasar-like pseudo-continuum seen in Type-1
-# AGN — Lyα, C IV, the Balmer lines — rather than the sharp forbidden lines of §9c.
+# The same two-product comparison for the broad-line region (tengri applies a
+# broad ~5000 km/s width). The §9c test-grid caveat applies in full, plus a
+# second one:
 #
-# **Caveat — the test grids don't yet distinguish NLR from BLR.** Synthesizer's
+# **The test grids don't yet distinguish NLR from BLR.** Synthesizer's
 # downloadable `test_grid_agn-nlr` and `test_grid_agn-blr` are *byte-identical*
-# placeholders: the BLR file is a copy of the NLR file. So on these grids the
-# Synthesizer NLR (§9c, left) and BLR (here, left) panels are the *same* spectrum,
-# and the only thing that distinguishes tengri's NLR from its BLR is the velocity
-# width applied (500 vs 5000 km/s) — which is why the right-hand panels differ in
-# line *width* but share line *positions*. A genuine NLR-vs-BLR physical contrast
-# (density, ionisation, line ratios) needs the production grids.
+# placeholders — the BLR file is a copy of the NLR file. So Synthesizer's NLR
+# (§9c, left) and BLR (here, left) `/spectra/nebular` panels are the *same*
+# spectrum, and the only thing separating tengri's NLR from its BLR is the
+# velocity width (500 vs 5000 km/s). A genuine NLR-vs-BLR physical contrast
+# (density, ionisation, line ratios) — and reprocessed-spectrum parity with
+# `UnifiedAGN` — needs production grids read via `/spectra/nebular` (issue #694).
 
 # %%
 w_blr_s, L_blr_s = agn["blr"]
@@ -935,8 +955,8 @@ fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12, 4.5))
 U.panel(
     ax_l,
     ax_r,
-    label_l="Synthesizer  BLR (full reprocessed)",
-    label_r="tengri  BLR lines (same grid, 5000 km/s)",
+    label_l="Synthesizer  UnifiedAGN BLR  (/spectra/nebular)",
+    label_r="tengri  BLR lines  (/lines, 5000 km/s)",
 )
 ax_l.plot(w_blr_s, L_blr_s, "C0-", linewidth=1.0)
 ax_r.plot(_wave_blr, L_blr_t, "C1-", linewidth=1.0)
