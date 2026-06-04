@@ -47,6 +47,7 @@ from tengri.components.dust.attenuation import two_component_dust
 from tengri.components.dust.emission import resolve_emission_model
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
+    DerivedKey,
     ForwardState,
     ParamDeclaration,
     SEDComponentConfig,
@@ -136,6 +137,24 @@ class DustSEDComponent:
         per-leaf attenuation laws are config-driven via
         :data:`tengri.citations.associations.DUST_LAW_CITATIONS`."""
         return ("charlot_fall2000",)
+
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        """Nebular continuum read, if a photoionised backend published one.
+
+        Declaring ``sed_nebular`` as an optional input makes the pipeline
+        topological sort (ADR-0006) place the nebular component *before* dust,
+        so dust can redden the nebular continuum with the same birth-cloud +
+        diffuse screen as the youngest stars (Charlot & Fall 2000; matches the
+        emission-line treatment). Backends that bake nebular into the SSP
+        (BakedIn) publish ``sed_nebular`` as zeros, so this is a no-op there.
+        """
+        return (
+            DerivedKey(
+                "sed_nebular",
+                "erg/s/Hz",
+                "Nebular continuum to attenuate (Cue/CloudyGrid); zeros for BakedIn",
+            ),
+        )
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.
@@ -389,6 +408,34 @@ class DustSEDComponent:
         sed_attenuated = jnp.sum(lnu_age_attenuated, axis=0)
         sed_intrinsic_stellar = jnp.sum(lnu_age, axis=0)
 
+        # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
+        # Nebular emission from HII regions is reddened by the same dust as the
+        # youngest stars (Charlot & Fall 2000). Photoionised backends (Cue,
+        # CloudyGrid) publish a separate ``sed_nebular`` and, via this
+        # component's ``optional_inputs``, run *before* dust; their continuum is
+        # reddened here with the young-limit transmission (sigmoid weight -> 1,
+        # i.e. both screens), matching the emission-LINE treatment
+        # (``attenuate_emission`` mode "bc"). BakedIn nebular is already inside
+        # ``lnu_age`` (attenuated above) and publishes zeros here -> no-op.
+        from tengri.components.dust.attenuation import resolve_dust_law as _resolve_law
+
+        _sed_neb = state.derived.get("sed_nebular")
+        sed_neb = jnp.zeros_like(wave) if _sed_neb is None else jnp.asarray(_sed_neb)
+        _neb_law_kw = dict(
+            n_slope=jnp.asarray(params.get("dust_slope", -0.7)),
+            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+            dust_delta=jnp.asarray(params.get("dust_delta", 0.0)),
+            dust_Rv=jnp.asarray(params.get("dust_Rv", 3.1)),
+        )
+        k_bc_neb = _resolve_law(self.config.law_bc)(wave, **_neb_law_kw)
+        k_diff_neb = _resolve_law(self.config.law_diff)(wave, **_neb_law_kw)
+        tau_neb = (
+            jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
+            + jnp.asarray(params["dust_tau_diff"]) * k_diff_neb
+        )
+        _f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
+        sed_neb_attenuated = sed_neb * (_f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_neb))
+
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
         # negative signed area; abs() recovers the positive erg/s.
@@ -404,7 +451,10 @@ class DustSEDComponent:
         # value, only the dust energy-balance integral excludes those
         # photons.
         nu = C_AA / wave
-        absorbed_lnu = sed_intrinsic_stellar - sed_attenuated
+        # Stellar + nebular absorbed light both feed the dust IR re-emission
+        # pool (energy balance): the nebular continuum reddened in step 2b is
+        # absorbed by the same grains.
+        absorbed_lnu = (sed_intrinsic_stellar - sed_attenuated) + (sed_neb - sed_neb_attenuated)
         # Mask LyC photons out of the L_absorbed integral.
         absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
         L_absorbed = jnp.abs(jnp.trapezoid(absorbed_lnu, nu))
@@ -455,7 +505,11 @@ class DustSEDComponent:
             non_stellar_pre_dust = jnp.zeros_like(wave)
         else:
             non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
-        sed_total = non_stellar_pre_dust + sed_attenuated + sed_ir
+        # The nebular continuum (sed_neb) is part of non_stellar_pre_dust but is
+        # reddened by HII-region dust (step 2b). AGN/radio/xray stay unattenuated
+        # by stellar dust. Swap the bare nebular for its attenuated form.
+        non_stellar_other = non_stellar_pre_dust - sed_neb
+        sed_total = non_stellar_other + sed_neb_attenuated + sed_attenuated + sed_ir
 
         # Phase 3c-3c-iv-b: per-filter LUTs for two-component attenuation.
         # T(a, λ) factorises as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
