@@ -84,57 +84,6 @@ def test_sed_model_state_is_frozen(minimal_model):
 
 
 @pytest.mark.unit
-def test_precomputed_data_is_frozen(minimal_model):
-    """PrecomputedData should be a frozen dataclass."""
-    assert dataclasses.is_dataclass(minimal_model._precomputed), (
-        "model._precomputed is not a dataclass"
-    )
-    assert minimal_model._precomputed.__dataclass_params__.frozen, (
-        "model._precomputed dataclass is not frozen"
-    )
-
-    # Attempt to mutate should raise FrozenInstanceError
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        minimal_model._precomputed.spectroscopy = None
-
-
-@pytest.mark.unit
-def test_state_precomputed_is_same_object(minimal_model):
-    """model._state.precomputed should reference model._precomputed by identity."""
-    assert minimal_model._state.precomputed is minimal_model._precomputed, (
-        "model._state.precomputed is not the same object as model._precomputed"
-    )
-
-
-@pytest.mark.unit
-@pytest.mark.skip(reason="precompute_spectroscopy deleted in Phase 6 (kernel removal)")
-def test_precompute_spectroscopy_updates_state(minimal_model):
-    """precompute_spectroscopy should rebuild _state after updating _precomputed."""
-    model = minimal_model
-
-    # Store original state reference
-    original_precomputed = model._precomputed
-    original_state = model._state
-
-    # Precompute spectroscopy
-    wave_obs = jnp.linspace(3500.0, 7000.0, 200)
-    model.precompute_spectroscopy(wave_obs)
-
-    # Assert precomputed was updated (may be a new object due to dataclasses.replace)
-    assert model._precomputed.spectroscopy is not None, "spectroscopy not precomputed"
-
-    # Assert state was rebuilt and references the new precomputed
-    assert model._state.precomputed is model._precomputed, (
-        "state was not rebuilt or does not reference current precomputed"
-    )
-
-    # Assert spectroscopy is accessible through state
-    assert model._state.precomputed.spectroscopy is not None, (
-        "spectroscopy not accessible through state.precomputed"
-    )
-
-
-@pytest.mark.unit
 def test_state_field_count(minimal_model):
     """SEDModelState should bundle approximately 35+ fields."""
     n_fields = len(dataclasses.fields(minimal_model._state))

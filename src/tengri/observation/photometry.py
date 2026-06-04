@@ -8,11 +8,34 @@ Computes observed flux densities by convolving the rest-frame SED
 from __future__ import annotations
 
 import dataclasses
+import functools
 
 import jax
 import jax.numpy as jnp
 
 from tengri.units import fnu_to_ab_mag, lnu_to_fnu
+
+# FilterConvention + the bandpass weight live in a leaf module so the exact
+# kernel here and the build-time preintegration (utils.grid_interp) share one
+# definition without a circular import. Re-exported here for back-compat.
+from tengri.utils.filter_convention import (
+    FilterConvention,
+    filter_weight as _filter_weight,
+    list_filter_conventions,
+)
+
+__all__ = [
+    "FilterConvention",
+    "FilterCurve",
+    "ab_mag_from_flux",
+    "compute_flux_density",
+    "compute_flux_density_batch",
+    "compute_photometry",
+    "list_filter_conventions",
+    "lnu_filter_integral",
+    "lnu_filter_integral_batch",
+    "pad_filters",
+]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -61,7 +84,134 @@ class FilterCurve:
     name: str = ""
 
 
-@jax.jit
+@functools.partial(jax.jit, static_argnames=("convention",))
+def lnu_filter_integral(
+    L_nu_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    filter_wave: jnp.ndarray,
+    filter_trans: jnp.ndarray,
+    redshift: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> jnp.ndarray:
+    r"""Filter-weighted rest-frame L_ν on the observed-frame filter grid.
+
+    Returns the filter-weighted rest-frame specific luminosity — no
+    cosmological dimming. The flux conversion is a separate step
+    (compose with :func:`lnu_to_fnu` or :func:`compute_flux_density`).
+
+    .. math::
+
+        L_\nu^{\rm filter}
+        = \frac{\int L_\nu(\lambda_{\rm rest}=\lambda_{\rm obs}/(1+z))
+                T(\lambda_{\rm obs}) \, w(\lambda_{\rm obs}) \, d\lambda_{\rm obs}}
+               {\int T(\lambda_{\rm obs}) \, w(\lambda_{\rm obs}) \, d\lambda_{\rm obs}}
+
+    where the bandpass weight is :math:`w=1/\lambda` for the photon-counting
+    ``BESSELL`` convention (default; matches DSPS/FSPS) and :math:`w=1/\lambda^2`
+    for ``ENERGY`` (CIGALE). See :class:`FilterConvention`.
+
+    Parameters
+    ----------
+    L_nu_rest : array, shape (n_wave,)
+        Rest-frame specific luminosity [erg/s/Hz].
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid [Ångstrom].
+    filter_wave : array, shape (n_filt,)
+        Filter wavelength grid [Ångstrom], in observed frame.
+    filter_trans : array, shape (n_filt,)
+        Filter transmission (dimensionless, 0–1).
+    redshift : float
+        Source redshift z.
+    convention : FilterConvention, optional
+        Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
+
+    Returns
+    -------
+    L_nu_filter : float
+        Filter-weighted rest-frame L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad-safe.** Pure ``jnp`` primitives; ``convention`` is static.
+
+    The :math:`1/\lambda` weight is the photon-counting AB convention of FSPS
+    (``getmags.f90``; Fukugita+1996 Eq. 7) and DSPS (Hearin+2023; Hogg+2002
+    Eq. 5). Introduced in #398.e (per ADR-0016) to give components publishing
+    ``_phot_lnu_precomp`` tensors a named function for "the L_ν step".
+
+    See Also
+    --------
+    compute_flux_density : The full L→F conversion (composes this with
+        :func:`lnu_to_fnu`).
+    FilterConvention : The supported bandpass weights.
+    """
+    wave_obs = wave_rest * (1.0 + redshift)
+    L_on_filter = jnp.interp(filter_wave, wave_obs, L_nu_rest, left=0.0, right=0.0)
+    weight = filter_trans * _filter_weight(filter_wave, convention)
+    num = jnp.trapezoid(L_on_filter * weight, filter_wave)
+    den = jnp.trapezoid(weight, filter_wave)
+    return num / jnp.maximum(den, 1e-30)
+
+
+def lnu_filter_integral_batch(
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    fw_padded: jnp.ndarray,
+    ft_padded: jnp.ndarray,
+    redshift,
+    convention: FilterConvention = FilterConvention.BESSELL,
+) -> jnp.ndarray:
+    r"""Exact rest-frame filter-weighted L_ν of one SED through many filters.
+
+    Vectorised, zero-padding-safe form of :func:`lnu_filter_integral` over a
+    stack of filters ``(n_filters, max_len)``. This is the *exact* per-band
+    projection — the identical interpolate-onto-filter-grid-and-integrate the
+    exact photometry path uses (:func:`compute_flux_density_batch`), minus the
+    cosmological ``lnu_to_fnu`` step (the caller, ``predict_via_precomp``,
+    applies cosmology after summing the L_ν families).
+
+    Used by additive, unattenuated emitters under WavePrecomp — dust IR
+    re-emission, radio, X-ray, AGN — so a band carrying both the stellar
+    continuum and one of these emitters matches the exact path bit-for-bit
+    (only the stellar × dust-attenuation term keeps the effective-wavelength
+    LUT, which is where the speedup lives). Sampling such a component at a
+    single filter pivot is *not* exact when the emitter has structure across
+    the bandpass (PAH features, steep IR rise).
+
+    Parameters
+    ----------
+    sed_rest : array, shape (n_wave,)
+        Rest-frame specific luminosity on ``wave_rest`` [erg/s/Hz].
+    wave_rest : array, shape (n_wave,)
+        Rest-frame wavelength grid [Ångström], ascending.
+    fw_padded : array, shape (n_filters, max_len)
+        Zero-padded observed-frame filter wavelengths [Ångström].
+    ft_padded : array, shape (n_filters, max_len)
+        Zero-padded filter transmission (dimensionless).
+    redshift : float
+        Source redshift.
+    convention : FilterConvention, optional
+        Bandpass weight (``BESSELL`` 1/λ default, matching the SSP Φ-tensor LUT).
+
+    Returns
+    -------
+    L_nu_filter : array, shape (n_filters,)
+        Filter-weighted rest-frame L_ν per band [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad-safe.** Pure ``jnp`` primitives; ``convention`` static. Zero-pad
+    entries contribute ~0 because ``trans=0`` there and real filters taper to 0
+    at their edges (same assumption as :func:`_compute_flux_density_padded`).
+    """
+
+    def _one(fw, ft):
+        return lnu_filter_integral(sed_rest, wave_rest, fw, ft, redshift, convention)
+
+    return jax.vmap(_one)(fw_padded, ft_padded)
+
+
+@functools.partial(jax.jit, static_argnames=("convention",))
 def compute_flux_density(
     sed_rest: jnp.ndarray,
     wave_rest: jnp.ndarray,
@@ -69,6 +219,7 @@ def compute_flux_density(
     filter_trans: jnp.ndarray,
     redshift: float,
     dl_cm: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> float:
     r"""Compute observed flux density through a single photometric filter.
 
@@ -95,6 +246,10 @@ def compute_flux_density(
         scale flux by (1+z) factor.
     dl_cm : float
         Luminosity distance [cm]. Typically from :func:`luminosity_distance`.
+    convention : FilterConvention, optional
+        Bandpass weight. ``BESSELL`` (default) is photon-counting
+        (:math:`w=1/\\lambda`, matching DSPS/FSPS/sedpy); ``ENERGY`` is the
+        flat-in-frequency mean (:math:`w=1/\\lambda^2`, matching CIGALE).
 
     Returns
     -------
@@ -103,26 +258,29 @@ def compute_flux_density(
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
-    Safe to call inside :func:`jax.jit`.
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives;
+    ``convention`` is static. Safe to call inside :func:`jax.jit`.
 
     **Gradient-safe**: yes — differentiable w.r.t. all inputs except
     filter curves (considered fixed).
 
-    **Filter convolution formula**:
+    **Filter convolution formula** (photon-counting, ``BESSELL`` default):
 
     .. math::
 
         f_\\nu^{\\rm obs} = \\frac{1+z}{4\\pi d_L^2} \\;
         \\frac{\\int L_\\nu(\\lambda_\\mathrm{rest}) T(\\lambda_\\mathrm{obs})
-               \\lambda_\\mathrm{obs} \\, d\\lambda_\\mathrm{obs}}
-             {\\int T(\\lambda_\\mathrm{obs}) \\lambda_\\mathrm{obs}
-              \\, d\\lambda_\\mathrm{obs}}
+               \\, d\\lambda_\\mathrm{obs} / \\lambda_\\mathrm{obs}}
+             {\\int T(\\lambda_\\mathrm{obs})
+              \\, d\\lambda_\\mathrm{obs} / \\lambda_\\mathrm{obs}}
 
     where :math:`L_\\nu` is the rest-frame SED [erg/s/Hz],
     :math:`T(\\lambda_\\mathrm{obs})` is the filter transmission,
-    :math:`z` is redshift, and :math:`d_L` is luminosity distance.
-    This convention matches DSPS and is standard in SED fitting.
+    :math:`z` is redshift, and :math:`d_L` is luminosity distance. The
+    :math:`1/\\lambda` weight is the photon-counting AB convention of FSPS
+    (``getmags.f90``; Fukugita+1996 Eq. 7) and DSPS (Hearin+2023; Hogg+2002
+    Eq. 5). ``ENERGY`` replaces :math:`1/\\lambda` with :math:`1/\\lambda^2`
+    (CIGALE; Boquien+2019). See :class:`FilterConvention`.
 
     **Interpolation**: The rest-frame SED is evaluated on the observed-frame
     filter grid via linear interpolation (``jnp.interp``). This assumes
@@ -135,23 +293,17 @@ def compute_flux_density(
     See Also
     --------
     FilterCurve : Photometric filter transmission curve.
+    FilterConvention : The supported bandpass weights.
     pad_filters : Stack variable-length filter arrays.
 
     """
-    # Redshift the SED: observed wavelength = rest * (1+z)
-    wave_obs = wave_rest * (1.0 + redshift)
-
-    # Interpolate SED onto filter wavelength grid
-    sed_on_filter = jnp.interp(filter_wave, wave_obs, sed_rest, left=0.0, right=0.0)
-
-    # Filter-weighted integral: int(SED * T * lam dlam) / int(T * lam dlam)
-    numerator = jnp.trapezoid(sed_on_filter * filter_trans * filter_wave, filter_wave)
-    denominator = jnp.trapezoid(filter_trans * filter_wave, filter_wave)
-
-    # Scale: (1+z) / (4 pi dL^2) for flux density using lnu_to_fnu conversion
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-
-    return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
+    # Composition of the two canonical operations (ADR-0016, 2026-05):
+    #   1. ``lnu_filter_integral`` — filter-weighted rest-frame L_ν
+    #   2. ``lnu_to_fnu`` — apply (1+z) / (4π d_L²) cosmological dimming
+    L_nu_filter = lnu_filter_integral(
+        sed_rest, wave_rest, filter_wave, filter_trans, redshift, convention=convention
+    )
+    return lnu_to_fnu(L_nu_filter, dl_cm, redshift)
 
 
 def pad_filters(filter_waves: list, filter_trans: list):
@@ -243,7 +395,13 @@ def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
 
 
 def _compute_flux_density_padded(
-    sed_rest, wave_rest, filter_wave_padded, filter_trans_padded, redshift, dl_cm
+    sed_rest,
+    wave_rest,
+    filter_wave_padded,
+    filter_trans_padded,
+    redshift,
+    dl_cm,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ):
     """Compute flux density for a single padded filter.
 
@@ -261,6 +419,8 @@ def _compute_flux_density_padded(
         Source redshift.
     dl_cm : float
         Luminosity distance [cm].
+    convention : FilterConvention, optional
+        Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
 
     Returns
     -------
@@ -269,21 +429,30 @@ def _compute_flux_density_padded(
 
     Notes
     -----
-    Zero-padded entries contribute zero to the integral (trans=0),
-    so no masking is needed. Private helper for compute_flux_density_batch.
+    Zero-padded entries contribute zero to the integral (``trans=0`` and
+    :func:`filter_weight` maps ``wave=0`` to weight 0), so no masking is
+    needed. Private helper for compute_flux_density_batch.
 
     """
     wave_obs = wave_rest * (1.0 + redshift)
     sed_on_filter = jnp.interp(filter_wave_padded, wave_obs, sed_rest, left=0.0, right=0.0)
-    numerator = jnp.trapezoid(
-        sed_on_filter * filter_trans_padded * filter_wave_padded, filter_wave_padded
-    )
-    denominator = jnp.trapezoid(filter_trans_padded * filter_wave_padded, filter_wave_padded)
+    weight = filter_trans_padded * _filter_weight(filter_wave_padded, convention)
+    numerator = jnp.trapezoid(sed_on_filter * weight, filter_wave_padded)
+    denominator = jnp.trapezoid(weight, filter_wave_padded)
     flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
     return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
 
 
-def compute_flux_density_batch(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm):
+@functools.partial(jax.jit, static_argnames=("convention",))
+def compute_flux_density_batch(
+    sed_rest,
+    wave_rest,
+    fw_padded,
+    ft_padded,
+    redshift,
+    dl_cm,
+    convention: FilterConvention = FilterConvention.BESSELL,
+):
     """Compute flux densities through all filters at once via vmap.
 
     Parameters
@@ -300,6 +469,8 @@ def compute_flux_density_batch(sed_rest, wave_rest, fw_padded, ft_padded, redshi
         Source redshift.
     dl_cm : float
         Luminosity distance [cm].
+    convention : FilterConvention, optional
+        Bandpass weight (``BESSELL`` 1/lambda default, ``ENERGY`` 1/lambda^2).
 
     Returns
     -------
@@ -308,16 +479,23 @@ def compute_flux_density_batch(sed_rest, wave_rest, fw_padded, ft_padded, redshi
 
     Notes
     -----
-    JIT-compatible: yes — vmapped over filters. Gradient-safe: yes.
+    JIT-compatible: yes — vmapped over filters; ``convention`` is static.
+    Gradient-safe: yes.
 
     """
-    return jax.vmap(_compute_flux_density_padded, in_axes=(None, None, 0, 0, None, None))(
-        sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm
-    )
+    return jax.vmap(
+        functools.partial(_compute_flux_density_padded, convention=convention),
+        in_axes=(None, None, 0, 0, None, None),
+    )(sed_rest, wave_rest, fw_padded, ft_padded, redshift, dl_cm)
 
 
 def compute_photometry(
-    sed_rest: jnp.ndarray, wave_rest: jnp.ndarray, filters: list, redshift: float, dl_cm: float
+    sed_rest: jnp.ndarray,
+    wave_rest: jnp.ndarray,
+    filters: list,
+    redshift: float,
+    dl_cm: float,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> jnp.ndarray:
     """Compute photometry through multiple filters.
 
@@ -358,7 +536,9 @@ def compute_photometry(
     """
     fluxes = []
     for filt in filters:
-        f = compute_flux_density(sed_rest, wave_rest, filt.wave, filt.trans, redshift, dl_cm)
+        f = compute_flux_density(
+            sed_rest, wave_rest, filt.wave, filt.trans, redshift, dl_cm, convention=convention
+        )
         fluxes.append(f)
     return jnp.array(fluxes)
 

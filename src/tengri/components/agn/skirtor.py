@@ -40,6 +40,11 @@ from tengri.components.agn._phys import (
 from tengri.utils.grid_interp import interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
 
+#: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
+#: Angstrom-grid templates. Matches the value used in
+#: ``tengri.components.agn.blocks.runner.C_AA_PER_S``.
+_C_AA_PER_S: float = 2.99792458e18
+
 
 class SKIRTORComponents(NamedTuple):
     """Separate SKIRTOR spectral components.
@@ -147,12 +152,23 @@ def _interpolate_and_normalize(
     point: tuple,
     l_scale: float,
 ) -> jnp.ndarray:
-    """Interpolate a template grid and normalize to physical luminosity.
+    r"""Interpolate a template grid and normalize to physical L_ν.
+
+    SKIRTOR v3 templates are stored as L_λ-like (the download script does
+    ``disk /= wl`` and normalises by ``trapezoid(dust, wl)`` — issue #459).
+    The original implementation integrated the L_λ array against the
+    frequency grid and treated the output as L_ν, leaving the returned
+    array with L_λ shape — so νL_ν (the visible torus IR bump) peaked at
+    ~5 µm instead of the SKIRTOR 30–50 µm thermal bump.
+
+    Fix: normalise the bolometric integral in the wavelength variable
+    (matching the convention used at template-build time) and convert
+    L_λ → L_ν at the end via L_ν = L_λ × λ²/c.
 
     Parameters
     ----------
     grid_jax : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
-        Template grid. [dimensionless, per unit luminosity]
+        L_λ-like template grid [erg/s/Å, normalised per unit bolometric].
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
@@ -164,7 +180,7 @@ def _interpolate_and_normalize(
     point : tuple
         (tau, p, q, oa, cos_inc) query point.
     l_scale : float
-        Luminosity scale factor [erg s^-1].
+        Bolometric luminosity scale factor [erg/s].
 
     Returns
     -------
@@ -174,14 +190,27 @@ def _interpolate_and_normalize(
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp.interp`` and ``jax.vmap``.
+
+    **Citation**: matches CIGALE skirtor2016 processing (see
+    ``scripts/download_skirtor_templates.py``).
     """
     template = interp_nd_triweight(grid_jax, axes, edges, point)
-    sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
-    nu = _wavelength_to_nu(wavelength)
-    idx_sort = jnp.argsort(nu)
-    integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
-    return l_scale * sed / integral_safe
+    # Bolometric integral on the *template* wavelength grid (full UV–FIR
+    # coverage). Using the user wave grid would clip the FIR tail and
+    # over-normalise on truncated grids; trapezoid in λ matches the
+    # download script's normalisation convention.
+    #
+    # ``wave_grid`` is monotonically ascending (set at load time in
+    # ``_load_grid_arrays``), so trapezoid integrates correctly without
+    # an explicit ``argsort`` — the prior ``trapezoid(sed[idx_sort],
+    # nu[idx_sort])`` pattern existed because ``nu = c/λ`` was
+    # *descending* and needed reordering. Don't re-add a sort here.
+    integral_lam = jnp.trapezoid(template, wave_grid)
+    integral_safe = jnp.maximum(jnp.abs(integral_lam), 1e-100)
+    template_lam = l_scale * template / integral_safe  # erg/s/Å
+    sed_lam = jnp.interp(wavelength, wave_grid, template_lam, left=0.0, right=0.0)
+    # L_λ → L_ν: L_ν = L_λ × λ²/c (c in Å/s).
+    return sed_lam * wavelength**2 / _C_AA_PER_S
 
 
 def _compute_intrinsic_30deg_luminosity(
@@ -237,8 +266,7 @@ def _compute_intrinsic_30deg_luminosity(
     # so interpolate at 2500.0 Å (= 250 nm).
     l_lam_2500 = jnp.interp(2500.0, wave_grid, disk_template)
     # L_ν = L_λ × (λ²/c) where c is in Å/s and λ in Å.
-    c_aa_per_s = 2.99792458e18  # Angstrom per second
-    l_nu_2500 = l_lam_2500 * (2500.0**2 / c_aa_per_s) * norm_fac
+    l_nu_2500 = l_lam_2500 * (2500.0**2 / _C_AA_PER_S) * norm_fac
 
     return lumin_intrin_disk, l_nu_2500
 
@@ -301,7 +329,18 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     # _load_skirtor_default would store DynamicJaxprTracer values that
     # leak out of the trace scope (jax.errors.UnexpectedTracerError).
     with jax.ensure_compile_time_eval():
-        grid_jax = jnp.array(raw["total"])
+        # Prefer the dust-only grid when the v3 HDF5 layout provides it.
+        # The legacy v2 layout only stores ``total = disk + dust``, which
+        # smears the disc UV-optical into the IR normalisation; v3
+        # separates ``disk_emission`` and ``dust_emission`` (see
+        # ``scripts/download_skirtor_templates.py``). For the torus block
+        # we want IR-only — pairing with a separate disc block (e.g.
+        # ``disc/schartmann2005``) avoids the double-counting that
+        # biased the §9 FIR-tail audit (Option D in the #487/#503 audit
+        # threads). For v2 grids we fall back to ``total`` and the user
+        # gets the legacy disc-mixed-in behaviour.
+        _grid_key = "dust" if "dust" in raw else "total"
+        grid_jax = jnp.array(raw[_grid_key])
         wave_grid = jnp.array(raw["wave"])
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
         edges = tuple(edges_for_grid(ax) for ax in axes)
@@ -313,7 +352,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
-        agn_cos_inc: float = 0.5,
+        agn_cos_inc: float = 0.86602540378443864,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -336,7 +375,10 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_cos_inc : float
             Cosine of inclination (1 = face-on, 0 = edge-on). [dimensionless]
         agn_torus_frac : float
-            Fraction of L_bol reprocessed by the torus. [dimensionless]
+            Fraction of L_bol reprocessed by the torus, integrated
+            over the dust-emission spectrum. With the v3 grid (dust-
+            only template), this is the true covering-factor × dust
+            absorption efficiency. [dimensionless]
 
         Returns
         -------
@@ -431,7 +473,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
-        agn_cos_inc: float = 0.5,
+        agn_cos_inc: float = 0.86602540378443864,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
         **_kwargs,
@@ -541,6 +583,122 @@ def _load_skirtor_components():
         return create_skirtor_components_from_grid(path)
     except KeyError:
         return None
+
+
+def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
+    r"""Build the SKIRTOR inclination-dependent disc-attenuation factor.
+
+    Returns a callable that produces the wavelength-dependent ratio
+    :math:`\rm SKIRTOR.disk(\lambda; i, \tau, p, q, oa) /
+    SKIRTOR.disk(\lambda; i=0, \tau, p, q, oa)` (face-on baseline).
+    Multiplied with the analytic Schartmann-2005 disc shape, this
+    reproduces CIGALE ``skirtor2016.py:336`` (Boquien+2019)::
+
+        SKIRTOR2016.disk = analytic × SKIRTOR.disk_at_i / AGN1.disk_at_face
+
+    For face-on type-1 (i ≲ 90°−oa, e.g. i=30° with oa=40°), the
+    ratio is near unity at most wavelengths; for type-2 sightlines it
+    captures the clumpy self-attenuation through the equatorial torus
+    that CIGALE's analytic-disc replacement is supposed to preserve.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to a v3 SKIRTOR HDF5 file with ``spectra/disk_emission``.
+
+    Returns
+    -------
+    callable
+        ``att_fn(wavelength, agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor,
+        agn_oa_skirtor, agn_cos_inc) -> ndarray`` of shape ``(n_wave,)``,
+        dimensionless attenuation factor. Returns 1.0 everywhere when
+        the disk grid is unavailable (v2 fallback).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — triweight interpolation in JAX.
+
+    **Gradient-safe**: yes.
+    """
+    raw = _load_grid_arrays(grid_path)
+
+    if "disk" not in raw:
+        # v2 grid: no separate disc column, return identity attenuation
+        def _identity_att(wavelength, *_, **__):
+            return jnp.ones_like(jnp.asarray(wavelength))
+
+        return _identity_att
+
+    with jax.ensure_compile_time_eval():
+        disk_grid = jnp.array(raw["disk"])
+        wave_grid = jnp.array(raw["wave"])
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        edges = tuple(edges_for_grid(ax) for ax in axes)
+
+    def disc_attenuation(
+        wavelength: jnp.ndarray,
+        agn_tau_skirtor: float = 7.0,
+        agn_p_skirtor: float = 1.0,
+        agn_q_skirtor: float = 1.0,
+        agn_oa_skirtor: float = 40.0,
+        agn_cos_inc: float = 0.86602540378443864,  # cos(30°)
+    ) -> jnp.ndarray:
+        r"""Wavelength-dependent disc attenuation factor at chosen i.
+
+        Returns ``SKIRTOR.disk(i) / SKIRTOR.disk(i=0)`` interpolated to
+        the requested wavelength grid.
+        """
+        point_i = (
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            agn_cos_inc,
+        )
+        point_face = (
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            1.0,  # cos_inc = 1 = face-on
+        )
+        disk_at_i = interp_nd_triweight(disk_grid, axes, edges, point_i)
+        disk_at_face = interp_nd_triweight(disk_grid, axes, edges, point_face)
+        # Safe ratio: where face-on is zero (shouldn't be, but be safe),
+        # return 0 attenuation (no contribution).
+        ratio_template = jnp.where(
+            disk_at_face > 1e-30,
+            disk_at_i / jnp.maximum(disk_at_face, 1e-30),
+            0.0,
+        )
+        # Interpolate to user wave grid; clip to [0, 1.5] so numerical
+        # noise can't introduce un-physically large amplifications
+        # (face-on baseline is the maximum disc visibility).
+        ratio = jnp.interp(wavelength, wave_grid, ratio_template, left=1.0, right=1.0)
+        return jnp.clip(ratio, 0.0, 1.5)
+
+    return disc_attenuation
+
+
+@functools.cache
+def _load_skirtor_disc_attenuation():
+    """Build SKIRTOR disc attenuation pattern, cached.
+
+    Returns an identity function when the v2 grid is used (no disc grid).
+    """
+    path = _find_skirtor_grid()
+    return create_skirtor_disc_attenuation_from_grid(path)
+
+
+def skirtor_disc_attenuation(*args, **kwargs):
+    r"""SKIRTOR inclination-dependent disc attenuation factor (auto-loaded).
+
+    Wraps :func:`_load_skirtor_disc_attenuation`. Identity-1.0 when the
+    v3 disc grid is unavailable (v2 fallback). See
+    :func:`create_skirtor_disc_attenuation_from_grid` for the signature
+    and physics.
+    """
+    return _load_skirtor_disc_attenuation()(*args, **kwargs)
 
 
 def skirtor_analytic(*args, **kwargs):

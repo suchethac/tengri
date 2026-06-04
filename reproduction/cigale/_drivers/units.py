@@ -1,0 +1,175 @@
+"""Unit conversion adapters: CIGALE W/nm ↔ tengri erg/s/Hz.
+
+Functions to convert between CIGALE's wavelength and luminosity conventions
+and those used in tengri and standard astrophysical codes.
+
+References
+----------
+.. [1] Boquien, M., et al. (2019). CIGALE: Code Investigating GALaxy
+       Emission. Astronomy & Astrophysics, 622, A103.
+"""
+
+from __future__ import annotations
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Physical constants. CIGALE works in W/nm; the converter below carries the
+# full unit chain explicitly, so only the speed of light is needed here.
+C_ANGSTROM_PER_S: float = 2.998e18
+
+
+def wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm):
+    """Convert CIGALE SED to tengri units.
+
+    CIGALE returns wavelength in nanometers and luminosity density as
+    L_λ in watts per nanometer. This function converts to the tengri
+    convention: wavelength in Angstroms and luminosity density as L_ν
+    in erg/s/Hz.
+
+    The conversion uses the Jacobian: L_ν = L_λ · λ² / c, with careful
+    unit handling. 1 W = 1e7 erg/s; 1 nm = 10 Å; c = 2.998e18 Å/s.
+
+    Parameters
+    ----------
+    wave_nm : array_like, shape (n_wave,)
+        Wavelength in nanometers.
+    L_wnm : array_like, shape (n_wave,)
+        Luminosity density in W/nm.
+
+    Returns
+    -------
+    wave_aa : ndarray, shape (n_wave,)
+        Wavelength in Angstroms.
+    L_nu_erg_per_hz : ndarray, shape (n_wave,)
+        Luminosity density in erg/s/Hz.
+    """
+    wave_aa = wave_nm * 10.0
+
+    # L_ν [erg/s/Hz] = L_λ [W/nm] * (1e7 erg/s / W) * (1 nm / 10 Å)
+    #                  * λ² [Å²] / c [Å/s]
+    #                = L_λ [W/nm] * 1e6 * λ² [Å²] / c [Å/s]
+    L_nu_erg_per_hz = L_wnm * 1e6 * (wave_aa**2) / C_ANGSTROM_PER_S
+
+    return wave_aa, L_nu_erg_per_hz
+
+
+def verify_unit_conversion(rtol: float = 1e-3) -> dict:
+    """Assert ``wnm_to_erg_per_hz_per_aa`` preserves bolometric luminosity.
+
+    Every reproduction-notebook claim of "agrees to a fraction of a percent"
+    rests on the W/nm → erg/s/Hz conversion in
+    :func:`wnm_to_erg_per_hz_per_aa`. A 10× or 1e7× factor-of-units bug
+    there would silently misshape every panel. This function constructs
+    an SED of known bolometric L_λ, runs it through the converter, and
+    independently computes the bolometric integral in the converted
+    units. The two must agree within ``rtol`` (default 1e-3) or this
+    raises.
+
+    Parameters
+    ----------
+    rtol : float
+        Relative tolerance on the bolometric round-trip.
+
+    Returns
+    -------
+    dict
+        ``{"L_bol_in_erg_s": …, "L_bol_out_erg_s": …, "rel_err": …}``.
+
+    Raises
+    ------
+    AssertionError
+        If the round-trip exceeds ``rtol``. Suggests a units bug in
+        :func:`wnm_to_erg_per_hz_per_aa`.
+    """
+    # Build a Gaussian L_λ profile (W/nm) on a UV–NIR grid (91–24000 Å).
+    # Magnitude doesn't matter — the test is a ratio.
+    wave_nm = np.linspace(9.1, 2400.0, 5000)  # 91 Å – 24000 Å
+    L_wnm = np.exp(-((wave_nm - 500.0) ** 2) / (2 * 200.0**2))  # peak at 5000 Å
+    # CIGALE-side bolometric in erg/s: ∫ L_λ dλ, with W → erg/s (×1e7) and
+    # nm units carried through dλ (so the result has W (=erg/s) units after ×1e7).
+    L_bol_in_erg_s = float(np.trapezoid(L_wnm, wave_nm)) * 1e7
+    # Convert and integrate ∫ L_ν dν on the increasing-ν grid.
+    wave_aa, L_nu = wnm_to_erg_per_hz_per_aa(wave_nm, L_wnm)
+    nu = C_ANGSTROM_PER_S / wave_aa[::-1]  # increasing
+    L_nu_rev = L_nu[::-1]
+    L_bol_out_erg_s = float(np.trapezoid(L_nu_rev, nu))
+    rel_err = abs(L_bol_out_erg_s - L_bol_in_erg_s) / L_bol_in_erg_s
+    if rel_err > rtol:
+        raise AssertionError(
+            f"wnm_to_erg_per_hz_per_aa fails bolometric round-trip: "
+            f"L_bol_in={L_bol_in_erg_s:.6e} erg/s, "
+            f"L_bol_out={L_bol_out_erg_s:.6e} erg/s, "
+            f"rel_err={rel_err:.3e} > rtol={rtol:.3e}. "
+            f"A factor-of-10 or 1e7 bug in the converter would silently "
+            f"misshape every CIGALE-vs-tengri panel."
+        )
+    return {
+        "L_bol_in_erg_s": L_bol_in_erg_s,
+        "L_bol_out_erg_s": L_bol_out_erg_s,
+        "rel_err": rel_err,
+    }
+
+
+def regrid(wave_src: np.ndarray, y_src: np.ndarray, wave_dst: np.ndarray) -> np.ndarray:
+    """Log-log interpolate ``y_src(wave_src)`` onto ``wave_dst``; zero outside.
+
+    Parameters
+    ----------
+    wave_src : array_like, shape (n_src,)
+        Source wavelength grid in Angstroms (must be positive).
+    y_src : array_like, shape (n_src,)
+        Source values (must be positive for the log-log interpolation to
+        be meaningful — non-positive entries are masked).
+    wave_dst : array_like, shape (n_dst,)
+        Destination wavelength grid.
+
+    Returns
+    -------
+    y_dst : ndarray, shape (n_dst,)
+        Interpolated values on the destination grid; zero outside the
+        source wavelength range.
+    """
+    wave_src = np.asarray(wave_src)
+    y_src = np.asarray(y_src)
+    wave_dst = np.asarray(wave_dst)
+
+    mask = (wave_src > 0) & (y_src > 0)
+    if not np.any(mask):
+        return np.zeros_like(wave_dst)
+
+    log_y = np.interp(
+        np.log10(wave_dst),
+        np.log10(wave_src[mask]),
+        np.log10(y_src[mask]),
+        left=np.nan,
+        right=np.nan,
+    )
+    y_dst = 10.0**log_y
+    in_range = (wave_dst >= wave_src[mask].min()) & (wave_dst <= wave_src[mask].max())
+    y_dst[~in_range] = 0.0
+    return y_dst
+
+
+def panel(
+    ax_left: plt.Axes,
+    ax_right: plt.Axes,
+    *,
+    label_l: str = "pcigale.sed_modules",
+    label_r: str = "tengri",
+) -> tuple[plt.Axes, plt.Axes]:
+    """Configure two SED comparison panels in matched log-log axes."""
+    for ax in (ax_left, ax_right):
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_xlabel(r"$\lambda$ [Å]")
+        ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax_left.set_title(label_l)
+    ax_right.set_title(label_r)
+    return ax_left, ax_right
+
+
+def two_panel_fig(figsize: tuple[float, float] = (12, 4.5)):
+    """Create a standard 2-panel figure for SED comparisons."""
+    fig, (ax_left, ax_right) = plt.subplots(1, 2, sharey=True, figsize=figsize)
+    return fig, ax_left, ax_right

@@ -15,42 +15,32 @@ Five test cases cover:
 
 from __future__ import annotations
 
-import pathlib
-
 import jax
 import jax.numpy as jnp
 import pytest
 
 from tengri import Parameters, SEDModel
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
-from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
 
 pytestmark = pytest.mark.contract
 
-_SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
+
+@pytest.fixture(scope="module")
+def ssp(synthetic_ssp_wide):
+    # #613: synthetic SSP so the SSP-threading contract runs on CI.
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    if not _SSP.exists():
-        pytest.skip(f"SSP not available at {_SSP}")
-    return load_ssp_data(str(_SSP))
+def ssp_alt(synthetic_ssp_wide):
+    """Alternative SSP for the ssp_data-override test. Intentionally the same
+    grid as ``ssp`` — the override test asserts same-SSP ⇒ same result."""
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
-def ssp_alt():
-    """Alternative SSP for testing ssp_data overrides."""
-    if not _SSP.exists():
-        pytest.skip(f"SSP not available at {_SSP}")
-    return load_ssp_data(str(_SSP))
-
-
-@pytest.fixture(scope="module")
-def obs():
-    return Observation(
-        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    )
+def obs(synthetic_tophat_obs):
+    return synthetic_tophat_obs
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +51,7 @@ def minimal_spec():
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(5.0),
-        sfh_dpl_log_peak_sfr=Fixed(1.0),
+        sfh_dpl_log_total_mass=Fixed(1.0),
         met_logzsol=Fixed(-0.5),
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),

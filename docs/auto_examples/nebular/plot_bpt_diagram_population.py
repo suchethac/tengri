@@ -1,21 +1,31 @@
 """
-BPT diagram population with star-forming galaxies and AGN-like models
-======================================================================
+BPT diagram: star-forming galaxies, AGN, and shocks
+====================================================
 
 The Baldwin-Phillips-Terlevich (BPT) diagram ([OIII]/Hβ vs [NII]/Hα)
-separates ionization mechanisms: star formation, AGN, and composites.
+separates ionization mechanisms by tracing distinct loci.
 
-This example populates the BPT diagram with 40 mock star-forming galaxies
-sampled across the star-forming main sequence (varying logU, logZ_gas),
-plus 5 high-ionization models that mimic AGN loci. Overlays Kewley+2001
-(SF/AGN demarcation) and Kauffmann+2003 (composite line) to show how
-different ionization sources populate the diagram.
+This example populates the diagram with:
+1. **Star-forming galaxies** (40 models sampled across logU and logZ_gas)
+2. **AGN-like models** (5 high-ionization configurations)
+3. **Shock ionization** (MAPPINGS V photoionization models at 100–1000 km/s)
+
+Overlays Kewley+2001 (SF/AGN demarcation) and Kauffmann+2003
+(SF/composite line) to show how different ionization sources
+occupy the diagnostic plane. The shock sequence traces a path
+from HII regions (low ionization) through composites to Seyfert
+regions (high ionization) as velocity increases.
 
 References:
-    Baldwin+1981, PASP, 93, 5 (BPT diagnostic definitions)
-    Kewley+2001, ApJ, 556, 121 (SF/AGN demarcation)
-    Kauffmann+2003, MNRAS, 346, 1055 (SF/composite line)
+    Baldwin et al. 1981, PASP, 93, 5 (BPT diagnostic definitions)
+    Kewley et al. 2001, ApJ, 556, 121 (SF/AGN demarcation)
+    Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line)
+    Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks)
 """
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
 
@@ -25,6 +35,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
+from tengri.nebular import shock_line_ratios
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -57,11 +68,17 @@ for logu in logu_array:
         # Build a minimal star-forming model
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.5,
-                 "tau_gyr": 0.1, "log_peak_sfr": 0.5},
+            sfh={
+                "type": "dpl",
+                "*": tengri.FIXED,
+                "alpha": 1.0,
+                "beta": 2.5,
+                "tau_gyr": 0.1,
+                "log_total_mass": 10.0,
+            },
             dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
             neb={"type": "cue", "*": tengri.FIXED,
-                 "neb_logU": tengri.Fixed(logu), "neb_logZ_gas": tengri.Fixed(logz)},
+                 "logU": tengri.Fixed(logu), "logZ_gas": tengri.Fixed(logz)},
             redshift=tengri.Fixed(0.05),
         )
 
@@ -102,12 +119,18 @@ for config in agn_configs:
     # Build high-ionization model
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED, "alpha": 1.0, "beta": 2.0,
-             "tau_gyr": 0.15, "log_peak_sfr": 0.3},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "alpha": 1.0,
+            "beta": 2.0,
+            "tau_gyr": 0.15,
+            "log_total_mass": 10.0,
+        },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
         neb={"type": "cue", "*": tengri.FIXED,
-             "neb_logU": tengri.Fixed(config["logu"]),
-             "neb_logZ_gas": tengri.Fixed(config["logz"])},
+             "logU": tengri.Fixed(config["logu"]),
+             "logZ_gas": tengri.Fixed(config["logz"])},
         redshift=tengri.Fixed(0.05),
     )
 
@@ -130,38 +153,102 @@ for config in agn_configs:
 agn_log_nii_ha = np.array(agn_log_nii_ha)
 agn_log_oiii_hb = np.array(agn_log_oiii_hb)
 
+# --- Generate shock sequence (MAPPINGS V, 100–1000 km/s) ---
+velocities = np.linspace(100.0, 1000.0, 30)
+shock_nii_ha = []
+shock_oiii_hb = []
+shock_velocities = []
+for v in velocities:
+    r = shock_line_ratios(float(v))
+    ha = float(r["HA_6563A"])
+    hb = float(r.get("Hb_4861A", ha / 2.86))
+    nii = float(r["NII_6583A"])
+    oiii = float(r["O3_5007A"])
+    if ha > 0 and hb > 0 and nii > 0 and oiii > 0:
+        shock_nii_ha.append(np.log10(nii / ha))
+        shock_oiii_hb.append(np.log10(oiii / hb))
+        shock_velocities.append(v)
+
+shock_nii_ha = np.array(shock_nii_ha)
+shock_oiii_hb = np.array(shock_oiii_hb)
+shock_velocities = np.array(shock_velocities)
+
 # --- Plot BPT diagram ---
 fig, ax = plt.subplots(figsize=(9, 8))
 
 # Demarcation lines
 mask_k = log_nii_ha_grid < 0.47
-ax.plot(log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=2.0,
-        label="Kewley+2001 (SF/AGN)")
+ax.plot(
+    log_nii_ha_grid[mask_k], log_oiii_hb_kewley[mask_k], "k-", lw=2.0, label="Kewley+2001 (SF/AGN)"
+)
 mask_kauff = log_nii_ha_grid < 0.05
-ax.plot(log_nii_ha_grid[mask_kauff], log_oiii_hb_kauff[mask_kauff], "k--", lw=1.8,
-        label="Kauffmann+2003 (SF/composite)")
+ax.plot(
+    log_nii_ha_grid[mask_kauff],
+    log_oiii_hb_kauff[mask_kauff],
+    "k--",
+    lw=1.8,
+    label="Kauffmann+2003 (SF/composite)",
+)
 
 # Region labels
-ax.text(-1.35, -0.65, "Star\nForming", fontsize=11, color="#1f77b4",
-        fontweight="bold", ha="center")
-ax.text(0.0, 0.6, "Composite", fontsize=11, color="#ff7f0e",
-        fontweight="bold", ha="center")
-ax.text(0.3, 1.2, "Seyfert/\nLINER", fontsize=11, color="#d62728",
-        fontweight="bold", ha="center")
+ax.text(
+    -1.35, -0.65, "Star\nForming", fontsize=11, color="#1f77b4", fontweight="bold", ha="center"
+)
+ax.text(0.0, 0.6, "Composite", fontsize=11, color="#ff7f0e", fontweight="bold", ha="center")
+ax.text(0.3, 1.2, "Seyfert/\nLINER", fontsize=11, color="#d62728", fontweight="bold", ha="center")
 
 # Plot star-forming galaxy population
-ax.scatter(sf_log_nii_ha, sf_log_oiii_hb, s=60, c="#1f77b4", alpha=0.5,
-          edgecolors="#1f77b4", lw=1.0, label="SF galaxies (40)")
+ax.scatter(
+    sf_log_nii_ha,
+    sf_log_oiii_hb,
+    s=60,
+    c="#1f77b4",
+    alpha=0.5,
+    edgecolors="#1f77b4",
+    lw=1.0,
+    label="SF galaxies (40)",
+)
 
 # Plot AGN models (larger markers)
-ax.scatter(agn_log_nii_ha, agn_log_oiii_hb, s=200, marker="^", c="#d62728",
-          edgecolors="black", lw=1.5, label="AGN models (5)", zorder=10)
+ax.scatter(
+    agn_log_nii_ha,
+    agn_log_oiii_hb,
+    s=200,
+    marker="^",
+    c="#d62728",
+    edgecolors="black",
+    lw=1.5,
+    label="AGN models (5)",
+    zorder=10,
+)
+
+# Plot shock sequence (MAPPINGS V)
+if len(shock_velocities) > 0:
+    sc = ax.scatter(
+        shock_nii_ha,
+        shock_oiii_hb,
+        c=shock_velocities,
+        cmap="plasma",
+        s=50,
+        zorder=5,
+        label="Shocks (100–1000 km/s)",
+        edgecolors="black",
+        lw=0.5,
+    )
+    cbar_shock = plt.colorbar(sc, ax=ax, pad=0.12, shrink=0.8)
+    cbar_shock.set_label("Shock velocity [km/s]", fontsize=10)
 
 # Label AGN points
 for x, y, label in zip(agn_log_nii_ha, agn_log_oiii_hb, agn_labels):
-    ax.annotate(label, (x, y), xytext=(8, 8), textcoords="offset points",
-               fontsize=8, alpha=0.7, bbox=dict(boxstyle="round,pad=0.3",
-               facecolor="yellow", alpha=0.3))
+    ax.annotate(
+        label,
+        (x, y),
+        xytext=(8, 8),
+        textcoords="offset points",
+        fontsize=8,
+        alpha=0.7,
+        bbox=dict(boxstyle="round,pad=0.3", facecolor="yellow", alpha=0.3),
+    )
 
 ax.set_xlabel(r"log [NII]$\lambda$6583 / H$\alpha$", fontsize=13, fontweight="bold")
 ax.set_ylabel(r"log [OIII]$\lambda$5007 / H$\beta$", fontsize=13, fontweight="bold")
@@ -171,5 +258,4 @@ ax.legend(fontsize=10, frameon=False, loc="lower right", ncol=1)
 ax.grid(True, alpha=0.2, linestyle=":")
 
 fig.tight_layout()
-plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
-plt.close()
+plt.show()

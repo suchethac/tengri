@@ -21,7 +21,6 @@ import pathlib
 
 import jax.numpy as jnp
 
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward import preintegrate_ssp_filter_grid
 
 pytestmark = pytest.mark.bounds
@@ -30,10 +29,10 @@ _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    if not _SSP_PATH.exists():
-        pytest.skip(f"SSP file not present at {_SSP_PATH}")
-    return load_ssp_data(str(_SSP_PATH))
+def ssp(synthetic_ssp_wide):
+    # #613: synthetic SSP; the _toy_box_filter curves below are already data-free,
+    # so these preintegration shape/finite/redshift checks now run on CI.
+    return synthetic_ssp_wide
 
 
 def _toy_box_filter(center: float, width: float, n: int = 41):
@@ -74,10 +73,13 @@ def test_preintegrate_redshift_shifts_filter_alignment(ssp):
 
 
 def test_preintegrate_compression_factor(ssp):
-    """Five-filter pre-integration must shrink the wave axis by ≥1000×
-    for the PRSC-MILES grid (n_wave=5994)."""
+    """Pre-integration collapses the wavelength axis to n_filters, shrinking the
+    grid by exactly n_wave / n_filters. The compression must be substantial
+    (≥100× here on the synthetic n_wave≈1600 grid → ~320×; the real PRSC-MILES
+    grid, n_wave=5994, gives ≥1000×)."""
     fws_fts = [_toy_box_filter(c, 500.0) for c in (3500, 4500, 5500, 6500, 7500)]
     fws, fts = zip(*fws_fts)
     out = preintegrate_ssp_filter_grid(ssp, list(fws), list(fts), redshift=0.0)
     compression = ssp.ssp_flux.size / out.size
-    assert compression > 1000.0, f"Got {compression:.0f}× — expected >1000×"
+    # = n_wave / n_filters exactly; assert it's large (grid-size-agnostic).
+    assert compression > 100.0, f"Got {compression:.0f}× — expected substantial (>100×)"

@@ -11,7 +11,7 @@ import warnings
 import jax.numpy as jnp
 import pytest
 
-from tengri import Parameters, SEDModel
+from tengri import Parameters, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
@@ -33,7 +33,7 @@ def stellar_only_model(ssp):
     """Stellar-only SED model for conservation tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_peak_sfr=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -48,11 +48,11 @@ def stellar_only_model(ssp):
     obs = Observation(photometry=phot)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel(spec, ssp, observation=obs, approx={"wave_precomp": True})
+        return SEDModel(spec, ssp, observation=obs, approx=WavePrecomp())
 
 
 _PARAMS = {
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 1.0,
     "sfh_tsnorm_peak_lbt_gyr": 2.0,
     "sfh_tsnorm_width_gyr": 1.0,
     "sfh_tsnorm_skew": 0.0,

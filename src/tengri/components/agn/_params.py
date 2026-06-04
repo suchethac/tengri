@@ -24,8 +24,14 @@ from tengri.protocols.component import ParamDeclaration
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_frac",
-        Fixed(0.0),
-        "AGN luminosity fraction (L_AGN / L_stellar_bol)",
+        Fixed(1.0),
+        "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
+        "multiplier on the composable runner output and as the AGN-to-stellar "
+        "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
+        "configured AGN at full strength'; a wildcard ``'*': FIXED`` on an "
+        "AGN-configured group therefore yields a working AGN (closes #417). "
+        "Set explicitly to 0.0 to disable the AGN while keeping the rest of "
+        "the agn config in place.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
@@ -118,8 +124,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_cos_inc",
-        Fixed(0.5),
-        "Cosine of inclination (0=edge-on, 1=face-on)",
+        # cos(30°) — matches CIGALE skirtor2016 ``i=30`` default
+        # (Boquien+2019 A&A 622, A103). Previous library default 0.5
+        # (= i=60°) silently disagreed with CIGALE's face-on type-1
+        # convention; the §9 reproduction audit revealed the
+        # inclination mismatch as the dominant source of residual at
+        # the SKIRTOR torus peak.
+        Fixed(0.86602540378443864),
+        "Cosine of inclination (0=edge-on, 1=face-on); default matches CIGALE i=30",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
@@ -195,13 +207,33 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
-    # Polar dust reddening of AGN disc (Type 1 SMC-law screen)
+    # Polar dust reddening of AGN disc (Type 1 SMC-law screen).
+    # Default 0.03 matches CIGALE skirtor2016 ``EBV`` default — polar dust
+    # is part of the CIGALE-faithful AGN; set Fixed(0.0) explicitly to
+    # disable.
     ParamDeclaration(
         "agn_polar_ebv",
-        Fixed(0.0),
-        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); 0 = disabled",
+        Fixed(0.03),
+        "Polar dust reddening E(B-V) applied to AGN disc (SMC law); "
+        "default 0.03 matches CIGALE skirtor2016. Set 0 to disable.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+    ),
+    # Polar dust greybody re-emission (CIGALE skirtor2016 convention,
+    # Casey 2012 modified blackbody added on top of SKIRTOR thermal dust)
+    ParamDeclaration(
+        "agn_polar_T",
+        Fixed(100.0),
+        "Polar dust temperature [K] (CIGALE skirtor2016 default 100 K).",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "agn_polar_beta",
+        Fixed(1.6),
+        "Polar dust emissivity index beta (CIGALE skirtor2016 default 1.6).",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
     ),
     ParamDeclaration(
         "agn_polar_oa",
@@ -396,6 +428,32 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+    ),
+    # CIGALE skirtor2016 disc-shape modulator (Boquien+2019)
+    ParamDeclaration(
+        "agn_cigale_disk_delta",
+        Fixed(0.0),
+        "CIGALE skirtor2016 disc slope modulator (paper delta). "
+        "For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm "
+        "power-law index alpha from its nominal value by -delta (positive "
+        "delta -> shallower optical slope). For 'adaf_lopez2024' block: "
+        "blend weight in [0, 1] interpolating from pure ADAF (0) to pure "
+        "thin disc (1).",
+    ),
+    # CIGALE skirtor2016 cross-component AGN power coupling
+    ParamDeclaration(
+        "agn_fracAGN",
+        Fixed(0.0),
+        "CIGALE-faithful coupling: AGN dust IR fraction of the total "
+        "(stellar + AGN) dust IR. When > 0, the AGN component derives "
+        "``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)`` from "
+        '``state.derived["L_absorbed"]`` (matches CIGALE '
+        "``skirtor2016.py:498`` with ``lambda_fracAGN=0/0``), and "
+        "overrides ``agn_torus_frac`` so the torus block's "
+        "``l_scale = L_bol × frac`` evaluates to that value. When 0 "
+        "(default), the legacy ``agn_torus_frac × L_bol`` flow is used.",
+        lambda lo, hi: lo >= 0 and hi < 1.0,
+        "must be in [0, 1)",
     ),
 )
 

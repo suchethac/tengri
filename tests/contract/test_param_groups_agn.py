@@ -554,23 +554,26 @@ class TestComposableAGNRuntimeWiring:
     Needs SSP data; skips when unavailable.
     """
 
-    def _build_composable_model(self):
-        import pathlib
-
-        ssp_path = (
-            pathlib.Path(__file__).parents[2]
-            / "data"
-            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-        )
-        if not ssp_path.exists():
-            pytest.skip(f"SSP file not available at {ssp_path}")
-
+    def _build_composable_model(self, ssp):
         import tengri
 
+        # #613: synthetic SSP — the composable-AGN nonzero-SED check is driven by
+        # the AGN bolometric luminosity (log_lbol), independent of the SSP.
         return tengri.SEDModel.build(
-            tengri.load_ssp(),
-            sfh={"type": "const", "*": FIXED, "log_sfr": -10.0},
-            dust={"type": "two_component", "*": FIXED, "tau_diff": 0, "tau_bc": 0},
+            ssp,
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+                "log_total_mass": Fixed(0.0),
+                "*": FIXED,
+            },
+            dust={
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "*": FIXED,
+            },
             agn={
                 "type": "composable",
                 "*": FIXED,
@@ -583,13 +586,13 @@ class TestComposableAGNRuntimeWiring:
             redshift=Fixed(0.05),
         )
 
-    def test_composable_agn_emits_nonzero_sed(self):
+    def test_composable_agn_emits_nonzero_sed(self, synthetic_ssp_wide):
         """``predict_rest_sed`` on a composable-AGN model must produce a
         non-zero SED dominated by the AGN (BBB peak in the UV)."""
         import jax
         import numpy as np
 
-        model = self._build_composable_model()
+        model = self._build_composable_model(synthetic_ssp_wide)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         result = model.predict_rest_sed(p)
         sed = np.asarray(result.sed)
@@ -602,3 +605,112 @@ class TestComposableAGNRuntimeWiring:
             f"composable AGN appears suppressed: peak ν·L = {peak_nu_L:.3e}; "
             "block selectors may not be reaching the runtime."
         )
+
+    def test_composable_agn_wildcard_fixed_emits_nonzero_sed(self, synthetic_ssp_wide):
+        """Wildcard ``'*': FIXED`` with no explicit ``frac`` must still
+        produce a non-zero AGN SED (regression for #417).
+
+        Before the fix, ``agn_frac`` defaulted to ``Fixed(0.0)`` in the
+        param registry, so a wildcard-FIXED AGN group collapsed
+        ``composable_agn_l_nu = agn_frac * compose_l_nu(...) = 0`` and
+        the AGN contribution was silently identically zero — even though
+        ``L_agn_bol`` was published correctly.
+        """
+        import numpy as np
+
+        import tengri
+
+        # #613: synthetic SSP (AGN-luminosity-driven check, SSP-independent).
+        model = tengri.SEDModel.build(
+            synthetic_ssp_wide,
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+                "log_total_mass": Fixed(0.0),
+                "*": FIXED,
+            },
+            dust={
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "*": FIXED,
+            },
+            agn={
+                "type": "composable",
+                "*": FIXED,  # NB: no explicit ``frac`` override
+                "log_lbol": 13.0,
+                "disc": {"type": "multicolor", "*": FIXED},
+                "torus": {"type": "skirtor", "*": FIXED},
+            },
+            redshift=Fixed(0.0),
+        )
+        state = model.predict_state({})
+        sed_agn_max = float(np.asarray(state.derived["sed_agn"]).max())
+        assert sed_agn_max > 0.0, (
+            f"composable AGN with '*: FIXED' produced zero SED "
+            f"(sed_agn max = {sed_agn_max}); the registry default for "
+            "agn_frac may have regressed back to 0."
+        )
+
+    def test_top_level_agn_type_selects_monolithic_model(self):
+        """``agn={'type':'richards2006', ...}`` must produce a non-zero
+        AGN SED (regression for #417).
+
+        Before the fix, the top-level ``'type'`` key was silently dropped
+        by ``_translate_agn`` and the model collapsed to
+        ``composable``-with-all-none-blocks, which emits identically zero.
+        """
+        import pathlib
+
+        ssp_path = (
+            pathlib.Path(__file__).parents[2]
+            / "data"
+            / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+        )
+        if not ssp_path.exists():
+            pytest.skip(f"SSP file not available at {ssp_path}")
+
+        import numpy as np
+
+        import tengri
+
+        model = tengri.SEDModel.build(
+            tengri.load_ssp(),
+            sfh={
+                "type": "delayed",
+                "tau_gyr": Fixed(1.0),
+                "age_gyr": Fixed(5.0),
+                "log_total_mass": Fixed(0.0),
+                "*": FIXED,
+            },
+            dust={
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "*": FIXED,
+            },
+            agn={"type": "richards2006", "agn_log_lbol": Fixed(13.0), "*": FIXED},
+            redshift=Fixed(0.0),
+        )
+        assert model._agn_model == "richards2006", (
+            f"top-level type='richards2006' did not propagate to model "
+            f"(_agn_model={model._agn_model!r}); _translate_agn may have "
+            "regressed."
+        )
+        state = model.predict_state({})
+        sed_agn_max = float(np.asarray(state.derived["sed_agn"]).max())
+        assert sed_agn_max > 0.0, (
+            f"richards2006 AGN produced zero SED (sed_agn max = {sed_agn_max})."
+        )
+
+    def test_mixing_top_type_with_sub_blocks_raises(self):
+        """``agn={'type': 'richards2006', 'disc': {...}}`` must raise."""
+        with pytest.raises(ValueError, match="monolithic"):
+            parse_groups(
+                sfh={"type": "const"},
+                agn={
+                    "type": "richards2006",
+                    "disc": {"type": "multicolor"},
+                },
+            )

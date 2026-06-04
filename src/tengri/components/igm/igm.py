@@ -19,20 +19,25 @@ Coefficient tables from eazy-py (Brammer et al.):
 import jax
 import jax.numpy as jnp
 
+from tengri.components.igm.dla import _A_LYA, _F_LYA, _NU_LYA, _WL_LYA
 from tengri.cosmology import PLANCK18
 from tengri.utils.physics_constants import C_CGS
 
 # ── Lyman series wavelengths (Angstrom) for lines j=2 (Ly-alpha) to j=40
 _N_LINES = 39
 
-# Rest-frame wavelengths of Lyman series lines (Angstrom)
+# Rest-frame wavelengths of Lyman series lines (Angstrom), vacuum.
+# Values match Inoue+2014 Table 2 / eazy-py LAFcoeff.txt exactly. The first
+# line is vacuum Lyman-alpha = 1215.67 Å (NOT 1216.0 — a rounded value put the
+# forest edge ~0.33 Å rest / ~2.6 Å observed at z=7 redward of every other
+# code; see tests/regression/paper/test_igm_inoue.py).
 _LAMBDA_LYMAN = jnp.array(
     [
-        1216.0,
+        1215.67,
         1025.720,
         972.537,
         949.743,
-        937.804,
+        937.803,
         930.748,
         926.226,
         923.150,
@@ -70,8 +75,8 @@ _LAMBDA_LYMAN = jnp.array(
     ]
 )
 
-# Lyman limit wavelength
-_LAMBDA_LIMIT = 912.0  # Angstrom
+# Lyman limit wavelength (Inoue et al. 2014 uses 911.8 Å; eazy-py port).
+_LAMBDA_LIMIT = 911.8  # Angstrom
 
 # ── LAF coefficients: A_j^LAF for 3 regimes (Inoue+2014 Eq. 21) ───
 # Shape: (39, 3) — [A_j1, A_j2, A_j3]
@@ -233,56 +238,60 @@ def _tau_lc_laf(
     wave_obs: jnp.ndarray,
     z_source: float,
 ) -> jnp.ndarray:
-    """Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25–27)."""
-    # Absorbers at redshift z_abs contribute for wave_obs = 911.8*(1+z_abs)
-    # So wave_obs must be > 911.8 (rest Lyman limit) and < 911.8*(1+z_source)
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
+    """Lyman-continuum Lyman-alpha forest optical depth (Inoue et al. 2014, Eqs. 25–27).
 
-    z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
-    # Clamp z_obs >= 0 so fractional exponents (1.2, 3.7, 5.5) never receive a
-    # negative base in the inactive region (wave_obs < lambda_limit). JAX evaluates
-    # all branches regardless of the active mask, so without this clamp the power
-    # expressions produce NaN for short-wavelength photons.
-    z_obs_safe = jnp.maximum(z_obs, 0.0)
+    Ported from eazy-py (Brammer et al.). The piecewise structure is on
+    observed wavelength regimes ``wave_obs ≷ lamL*(1+z1,2)`` and three source-redshift
+    regimes (z_S < 1.2, 1.2 ≤ z_S < 4.7, z_S ≥ 4.7). The active mask
+    ``wave_obs < lamL*(1+z_source)`` naturally extends opacity below the
+    rest-frame Lyman limit (912 Å), where the previous implementation
+    incorrectly returned τ = 0 (closes #494).
+    """
+    lam_L = _LAMBDA_LIMIT
+    z1 = 1.2
+    z2 = 4.7
+    one_plus_zs = 1.0 + z_source
 
-    # Three source-redshift regimes
-    # Regime z_S < 1.2
-    t_low = (
-        0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
-    )
+    # In-range: photon was absorbed at some absorber redshift between 0 and z_source.
+    in_range = wave_obs < lam_L * one_plus_zs
 
-    # Regime 1.2 <= z_S < 4.7
-    t_mid = (
-        2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
-    )
+    # Clamp the wavelength ratio to its physical maximum (1 + z_source) before
+    # raising to fractional powers. Outside ``in_range`` the result is masked to
+    # zero, but JAX evaluates all branches, so the clamp keeps gradients finite
+    # and prevents large-r overflow at long observed wavelengths.
+    r = jnp.minimum(wave_obs / lam_L, one_plus_zs)
 
-    # Regime z_S >= 4.7
-    t_high = (
-        5.22e-4 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        + 2.55e-2 * ((1.0 + z_obs_safe) ** 1.2 - (1.0 + z_source) ** 1.2)
-        - 0.325 * ((1.0 + z_obs_safe) ** 1.2 - jnp.clip(1.0 + z_source, max=2.2) ** 1.2)
-        - 1.328e-3 * ((1.0 + z_obs_safe) ** 3.7 - (1.0 + z_source) ** 3.7)
-        - 1.15e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=5.7) ** 3.7)
-        + 9.4e-2 * ((1.0 + z_obs_safe) ** 3.7 - jnp.clip(1.0 + z_source, max=2.2) ** 3.7)
-        - 5.15e-5 * ((1.0 + z_obs_safe) ** 5.5 - (1.0 + z_source) ** 5.5)
-        - 7.83e-4 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=5.7) ** 5.5)
-        + 0.01478 * ((1.0 + z_obs_safe) ** 5.5 - jnp.clip(1.0 + z_source, max=2.2) ** 5.5)
+    # ── z_S < 1.2: single observed-wavelength regime ──
+    t_low = 0.3248 * (r**1.2 - one_plus_zs ** (-0.9) * r**2.1)
+
+    # ── 1.2 ≤ z_S < 4.7: two sub-regimes split at wave_obs = lamL*(1+z1) ──
+    above_z1 = wave_obs >= lam_L * (1.0 + z1)
+    t_mid_above = 2.545e-2 * (one_plus_zs**1.6 * r**2.1 - r**3.7)
+    t_mid_below = 2.545e-2 * one_plus_zs**1.6 * r**2.1 + 0.3248 * r**1.2 - 0.2496 * r**2.1
+    t_mid = jnp.where(above_z1, t_mid_above, t_mid_below)
+
+    # ── z_S ≥ 4.7: three sub-regimes split at lamL*(1+z1) and lamL*(1+z2) ──
+    above_z2 = wave_obs > lam_L * (1.0 + z2)
+    between_z1z2 = above_z1 & ~above_z2  # lamL*(1+z1) ≤ wave_obs ≤ lamL*(1+z2)
+    t_hi_top = 5.221e-4 * (one_plus_zs**3.4 * r**2.1 - r**5.5)
+    t_hi_mid = 5.221e-4 * one_plus_zs**3.4 * r**2.1 + 0.2182 * r**2.1 - 2.545e-2 * r**3.7
+    t_hi_bot = 5.221e-4 * one_plus_zs**3.4 * r**2.1 + 0.3248 * r**1.2 - 3.140e-2 * r**2.1
+    t_high = jnp.where(
+        above_z2,
+        t_hi_top,
+        jnp.where(between_z1z2, t_hi_mid, t_hi_bot),
     )
 
     tau = jnp.where(
-        z_source < 1.2,
+        z_source < z1,
         t_low,
-        jnp.where(z_source < 4.7, t_mid, t_high),
+        jnp.where(z_source < z2, t_mid, t_high),
     )
-
-    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
+    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
+    # the path length vanishes at z=0, so transmission must be 1.
+    in_range = in_range & (z_source > 0.0)
+    return jnp.where(in_range, jnp.clip(tau, min=0.0), 0.0)
 
 
 # ── Lyman continuum optical depth (DLA) ───────────────────────────
@@ -292,48 +301,66 @@ def _tau_lc_dla(
     wave_obs: jnp.ndarray,
     z_source: float,
 ) -> jnp.ndarray:
-    """Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28–29)."""
-    active = (wave_obs > _LAMBDA_LIMIT) & (wave_obs <= _LAMBDA_LIMIT * (1.0 + z_source))
-    z_obs = wave_obs / _LAMBDA_LIMIT - 1.0
+    """Lyman-continuum damped Lyman-alpha optical depth (Inoue et al. 2014, Eqs. 28–29).
 
-    # Two source-redshift regimes
+    Ported from eazy-py (Brammer et al.). At z_S ≥ 2 the formula splits at the
+    observed wavelength ``lamL*(1+z1_DLA)``; below 912 Å rest the opacity is
+    non-zero (closes #494).
+    """
+    lam_L = _LAMBDA_LIMIT
+    z1 = 2.0
+    one_plus_zs = 1.0 + z_source
+
+    in_range = wave_obs < lam_L * one_plus_zs
+    r = jnp.minimum(wave_obs / lam_L, one_plus_zs)
+    # Floor r away from zero so r**-0.3 stays finite under jnp.where (gradient safety).
+    r_safe = jnp.maximum(r, 1e-3)
+
+    # ── z_S < 2 — single observed-wavelength regime ──
     t_low = (
-        0.2113 * (1.0 + z_source) ** 2.0
-        - 7.661e-2 * (1.0 + z_source) ** 2.5 * (1.0 + z_obs) ** (-0.5)
-        - 0.1347 * (1.0 + z_obs) ** 2.0
+        0.2113 * one_plus_zs**2.0 - 0.07661 * one_plus_zs**2.3 * r_safe ** (-0.3) - 0.1347 * r**2.0
     )
 
-    t_high = (
-        4.696e-2 * (1.0 + z_source) ** 3.0
-        - 1.779e-2 * (1.0 + z_source) ** 3.5 * (1.0 + z_obs) ** (-0.5)
-        - 2.916e-2 * (1.0 + z_obs) ** 3.0
+    # ── z_S ≥ 2 — two sub-regimes split at wave_obs = lamL*(1+z1) ──
+    above_z1 = wave_obs >= lam_L * (1.0 + z1)
+    t_hi_above = (
+        0.04696 * one_plus_zs**3.0
+        - 0.01779 * one_plus_zs**3.3 * r_safe ** (-0.3)
+        - 0.02916 * r**3.0
     )
+    t_hi_below = (
+        0.6340
+        + 0.04696 * one_plus_zs**3.0
+        - 0.01779 * one_plus_zs**3.3 * r_safe ** (-0.3)
+        - 0.1347 * r**2.0
+        - 0.2905 * r_safe ** (-0.3)
+    )
+    t_high = jnp.where(above_z1, t_hi_above, t_hi_below)
 
-    tau = jnp.where(z_source < 2.0, t_low, t_high)
-    return jnp.where(active, jnp.clip(tau, min=0.0), 0.0)
+    tau = jnp.where(z_source < z1, t_low, t_high)
+    # Gate on z_source > 0 — the analytic fit is defined as an integral
+    # over (0, z_S] and is only ≈ 0 (not exactly 0) at z_S = 0. Physically
+    # the path length vanishes at z=0, so transmission must be 1.
+    in_range = in_range & (z_source > 0.0)
+    return jnp.where(in_range, jnp.clip(tau, min=0.0), 0.0)
 
 
-# ── CGM damping wing absorption (Asada et al. 2025) ───────────────
-
-# Physical constants for damping wing calculation
-_LAMBDA_LYA = 1215.67  # Angstrom (Ly-alpha rest wavelength)
-_NU_LYA = C_CGS / (_LAMBDA_LYA * 1e-8)  # Hz
-_GAMMA_LYA = 6.265e8  # s^-1 (Ly-alpha natural line width)
-_SIGMA_0 = 5.9e-14  # cm^2 Hz (Ly-alpha cross-section constant: pi*e^2/(m_e*c)*f_12)
+# ── CGM damping wing absorption (Asada et al. 2025 / Totani et al. 2006) ──
 
 
 def _cgm_damping_wing_tau(
     wave_obs: jnp.ndarray,
     z_source: float,
-    z_mid: float = 7.0,
-    dz: float = 0.5,
-    log_nhi: float = 21.0,
+    z_mid: float | None = None,
+    dz: float | None = None,
+    log_nhi: float | None = None,
 ) -> jnp.ndarray:
     r"""CGM damping wing optical depth from neutral hydrogen (Asada et al. 2025).
 
-    At z > 5, neutral hydrogen in the circumgalactic medium produces Lyman-alpha
-    damping wing absorption not captured by the Inoue et al. (2014) model. The damping
-    wing profile is the Lorentzian far-wing of the Lyman-alpha cross-section.
+    At z > 5, neutral hydrogen in the circumgalactic medium produces a redward
+    Lyα damping wing on top of the Inoue+2014 mean IGM. The cross-section is the
+    Totani et al. (2006) Eq. 4 frequency-dependent form, and the column-density
+    evolution defaults to the Asada+2025 paper sigmoid (Eq. 2). Closes #502.
 
     Parameters
     ----------
@@ -341,13 +368,11 @@ def _cgm_damping_wing_tau(
         Observed-frame wavelength. [Å]
     z_source : float
         Redshift of the source. [dimensionless]
-    z_mid : float, optional
-        Redshift midpoint of the sigmoid column density evolution. [dimensionless] Default: 7.0.
-    dz : float, optional
-        Redshift width of the sigmoid. [dimensionless] Default: 0.5.
-    log_nhi : float, optional
-        log10(N_HI / cm^-2) at the plateau. Canonical Asada+2025 value: 21.0 (τ ≈ 0.15 at z=7).
-        log_nhi ≤ 19 is effectively invisible. [dimensionless] Default: 21.0.
+    z_mid, dz, log_nhi : float, optional
+        Legacy sigmoid knobs
+        :math:`N_{\rm HI}(z) = 10^{\rm log\_nhi} / (1 + e^{-(z-z_{\rm mid})/dz})`.
+        If any of the three is supplied the legacy form is used; otherwise the
+        Asada+2025 paper sigmoid is applied with the published coefficients.
 
     Returns
     -------
@@ -356,55 +381,62 @@ def _cgm_damping_wing_tau(
 
     Notes
     -----
-    The column density evolves as:
+    The Asada+2025 (Eq. 2) column-density evolution is
 
     .. math::
 
-        N_{\rm HI}(z) = \frac{N_{\rm HI,0}}{1 + \exp[-(z - z_{\rm mid})/\Delta z]}
+        \log_{10} N_{\rm HI}(z) = \frac{3.592}{1 + e^{-1.841(z - 6)}} + 18.001
 
-    and the damping wing cross-section is the Lorentzian far-wing:
+    and the Lyα cross-section (Totani et al. 2006, Eq. 4) is
 
     .. math::
 
-        \sigma_{\rm DW}(\Delta\nu) = \sigma_0 \frac{\Gamma_{\rm Ly\alpha}/(4\pi)}{(\Delta\nu)^2 + [\Gamma_{\rm Ly\alpha}/(4\pi)]^2}
+        \sigma_\alpha(\nu) = \frac{3 \lambda_\alpha^2 f_{12} \Lambda}{8\pi}
+            \frac{\Lambda (\nu/\nu_\alpha)^4}
+                 {4\pi^2 (\nu - \nu_\alpha)^2 + \Lambda^2 (\nu/\nu_\alpha)^6/4}
 
-    with :math:`\sigma_0 = 5.9 \times 10^{-14}` cm²·Hz and
-    :math:`\Gamma_{\rm Ly\alpha} = 6.265 \times 10^8` s⁻¹.
+    with :math:`\Lambda = A_{21,\,\rm Ly\alpha}` (the Einstein A coefficient) and
+    :math:`f_{12} = 0.4162` (Morton 2003). Constants come from
+    :mod:`tengri.components.igm.dla`. The previous implementation used a flat
+    Lorentzian with a numerical constant that was ~10⁹ too small.
 
-    **Upstream**: Asada et al. (2025) damping wing model for the epoch of reionization.
+    **Upstream**: Asada et al. (2025), ApJL 983, L2 — column-density evolution;
+    Totani et al. (2006), PASJ 58, 485 — Lyα cross-section.
     """
-    # Sigmoid column density evolution: N_HI rises steeply above z_mid
-    n_hi = (10.0**log_nhi) / (1.0 + jnp.exp(-(z_source - z_mid) / dz))
+    # Column-density evolution N_HI(z) — paper sigmoid by default; legacy form
+    # if the user supplies any of the (z_mid, dz, log_nhi) knobs.
+    if z_mid is not None or dz is not None or log_nhi is not None:
+        z_mid_eff = 7.0 if z_mid is None else z_mid
+        dz_eff = 0.5 if dz is None else dz
+        log_nhi_eff = 21.0 if log_nhi is None else log_nhi
+        n_hi = (10.0**log_nhi_eff) / (1.0 + jnp.exp(-(z_source - z_mid_eff) / dz_eff))
+    else:
+        # Asada+2025 Eq. 2 coefficients (paper sigmoid).
+        log_nhi_z = 3.592 / (1.0 + jnp.exp(-1.841 * (z_source - 6.0))) + 18.001
+        n_hi = 10.0**log_nhi_z
 
-    # Observed Ly-alpha wavelength at source redshift
-    lya_obs = _LAMBDA_LYA * (1.0 + z_source)
+    # The Totani+06 cross-section is in the CGM rest frame (≈ source rest frame).
+    # An observed-frame photon at wave_obs absorbs in the CGM at rest wavelength
+    # wave_obs / (1+z_source); convert to frequency and take Δν off Lyα.
+    lya_obs = _WL_LYA * (1.0 + z_source)
+    wave_rest = wave_obs / (1.0 + z_source)
+    nu_rest = C_CGS / (wave_rest * 1e-8)
+    delta_nu = nu_rest - _NU_LYA
+    nu_ratio = nu_rest / _NU_LYA  # = ν / ν_α
 
-    # Frequency offset from Ly-alpha at the source
-    # nu_obs = c / (wave_obs * 1e-8), nu_lya_obs = c / (lya_obs * 1e-8)
-    # Delta_nu = nu_obs - nu_lya_obs (positive = blueward of Ly-alpha)
-    nu_obs = C_CGS / (wave_obs * 1e-8)
-    nu_lya_obs = C_CGS / (lya_obs * 1e-8)
-    delta_nu = nu_obs - nu_lya_obs
+    # Totani+06 Eq. 4. The (ν/ν_α)^4 factor is what curves the cross-section
+    # away from a flat Lorentzian in the far wing.
+    lam_cm = _WL_LYA * 1e-8
+    prefactor = 3.0 * lam_cm**2 * _F_LYA * _A_LYA / (8.0 * jnp.pi)
+    numerator = _A_LYA * nu_ratio**4
+    denominator = 4.0 * jnp.pi**2 * delta_nu**2 + (_A_LYA**2) * nu_ratio**6 / 4.0
+    sigma_dw = prefactor * numerator / denominator
 
-    # Damping wing cross-section (Lorentzian far-wing approximation)
-    # sigma_DW = sigma_0 * (gamma / (4*pi)) / (delta_nu^2 + (gamma/(4*pi))^2)
-    # In the far wing (|delta_nu| >> gamma/4pi), this simplifies to
-    # sigma_DW ~ sigma_0 * gamma / (4*pi*delta_nu^2)
-    # We use the full Lorentzian for numerical stability near line center.
-    gamma_4pi = _GAMMA_LYA / (4.0 * jnp.pi)
-    sigma_dw = _SIGMA_0 * gamma_4pi / (delta_nu**2 + gamma_4pi**2)
-
-    # Optical depth: only apply redward of Ly-alpha at source (damping wing)
-    # and only for wavelengths near Ly-alpha (within ~200 A observed)
+    # Damping wing is redward of Lyα-at-source and only matters at z > 5
+    # (below this the CGM is essentially ionised).
     tau = n_hi * sigma_dw
-
-    # Only absorb redward of Ly-alpha at source redshift (wave_obs > lya_obs)
-    # The damping wing is the red wing absorption from the CGM
     tau = jnp.where(wave_obs > lya_obs, tau, 0.0)
-
-    # Only apply at z > 5 (below this, CGM is ionized and negligible)
     tau = jnp.where(z_source > 5.0, tau, 0.0)
-
     return jnp.clip(tau, min=0.0)
 
 
@@ -415,9 +447,9 @@ def igm_transmission(
     wave_obs: jnp.ndarray,
     z_source: float,
     add_cgm: bool = False,
-    cgm_z_mid: float = 7.0,
-    cgm_dz: float = 0.5,
-    cgm_log_nhi: float = 21.0,
+    cgm_z_mid: float | None = None,
+    cgm_dz: float | None = None,
+    cgm_log_nhi: float | None = None,
 ) -> jnp.ndarray:
     r"""Compute mean IGM transmission including Lyman-series and continuum absorption.
 
@@ -587,7 +619,7 @@ def _damping_wing_tau(
     tau_GP = 6.45e5 * ((1.0 + z) / 7.0) ** 1.5
 
     # Observed Ly-alpha at source redshift
-    lya_obs = _LAMBDA_LYA * (1.0 + z)
+    lya_obs = _WL_LYA * (1.0 + z)
 
     # Dimensionless wavelength offset: x = lambda_obs/lya_obs - 1
     # x > 0 is redward of Lya (damping wing side)
@@ -595,17 +627,17 @@ def _damping_wing_tau(
 
     # Damping constant: Lambda = Gamma_alpha / (4*pi*nu_alpha)
     # nu_alpha = c / (lambda_alpha * 1e-8)
-    lambda_alpha = _LAMBDA_LYA * 1e-8  # cm
+    lambda_alpha = _WL_LYA * 1e-8  # cm
     nu_alpha = C_CGS / lambda_alpha
-    lambda_damp = _GAMMA_LYA / (4.0 * jnp.pi * nu_alpha)
+    lambda_damp = _A_LYA / (4.0 * jnp.pi * nu_alpha)
 
     # Bubble edge in dimensionless frequency offset:
     # The bubble of radius R_bubble [pMpc] corresponds to a velocity
     # offset v_bubble = R_bubble * H(z), hence a wavelength offset
     # x_bubble = v_bubble / c.
     # H(z) = H_0 * sqrt(Omega_m * (1+z)^3) for matter-dominated era
-    # Use canonical PLANCK18 cosmology: h = 0.674, Om0 = 0.315
-    # (replaces hardcoded h = 0.7, Om0 = 0.3 which caused ~1-2% drift)
+    # Use canonical PLANCK18 cosmology — sourced from tengri.cosmology
+    # (Planck 2020, A&A 641, A6: h = 0.6766, Om0 = 0.30966).
     h_z_kms_per_mpc = 100.0 * PLANCK18.h * jnp.sqrt(PLANCK18.Om0 * (1.0 + z) ** 3)
     v_bubble = R_bubble * h_z_kms_per_mpc  # km/s
     x_bubble = v_bubble / 2.998e5  # dimensionless
@@ -865,3 +897,59 @@ def igm_transmission_madau(
 
     tau_total = (tau_line + tau_cont) * igm_factor
     return jnp.exp(-jnp.clip(tau_total, 0.0, None))
+
+
+# ── Registry ──────────────────────────────────────────────────────────
+#
+# IGM transmission backends. Canonical name keys (publication-correct);
+# legacy aliases are resolved by ``_IGM_ALIASES`` so both the dict-grammar
+# validator path and the SEDModel dispatch can read from one source of
+# truth (per ADR-0005 / ADR-0008). Each value is the pure-JAX transmission
+# function and shares the public signature ``(wave_obs, z, **kwargs)``.
+
+from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
+
+IGM_TRANSMISSION_MODELS: dict[str, object] = {
+    "inoue14": igm_transmission,
+    "madau": igm_transmission_madau,
+    # Added by #446 (CIGALE-matching IGM) but #343's refactor missed wiring
+    # this into the canonical registry; the dict-grammar validator and
+    # builder factory both accepted ``"meiksin06"`` while
+    # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not — exactly
+    # the kind of drift the parity contract test was added to catch.
+    "meiksin06": igm_transmission_meiksin06,
+}
+
+#: Back-compat aliases that route to canonical registry keys. The bare
+#: ``"inoue"`` was the internal default in tengri pre-2026-05 while the
+#: dict-grammar API consistently used ``"inoue14"``; both now resolve to
+#: the same Inoue+2014 function.
+_IGM_ALIASES: dict[str, str] = {
+    "inoue": "inoue14",
+}
+
+
+def resolve_igm_model(name: str) -> object:
+    """Return the IGM transmission function for ``name``, resolving aliases.
+
+    Parameters
+    ----------
+    name : str
+        Registry key (e.g. ``"inoue14"``, ``"madau"``) or a recognised
+        alias (e.g. ``"inoue"``).
+
+    Returns
+    -------
+    Callable
+        Pure-JAX transmission function ``(wave_obs, z, **kwargs) -> T_igm``.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` is neither a registry key nor a known alias.
+    """
+    resolved = _IGM_ALIASES.get(name, name)
+    if resolved not in IGM_TRANSMISSION_MODELS:
+        available = sorted(IGM_TRANSMISSION_MODELS.keys() | _IGM_ALIASES.keys())
+        raise ValueError(f"Unknown IGM model {name!r}. Available: {available}")
+    return IGM_TRANSMISSION_MODELS[resolved]

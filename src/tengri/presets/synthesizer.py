@@ -117,7 +117,6 @@ def synthesizer_default(
         law_bc="calzetti",  # Birth cloud
         law_diff="calzetti",  # Same law for diffuse ISM
         emission="draine_li2014",  # DL14 dust emission
-        approx=True,  # Use fused photometry kernel where available
     )
 
     nebular_config = NebularConfig(

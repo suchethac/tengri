@@ -36,6 +36,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import preintegrate_grid
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
@@ -328,6 +329,88 @@ def precompute_spectroscopy(
     )
 
 
+class SpectroscopicZTable(NamedTuple):
+    """Free-z spectroscopy marker carrying the observed pixel grid.
+
+    Unlike the photometric ztable, the SSP flux is **not** pre-tabulated
+    across redshift. A spectrum resolves absorption features that sweep
+    across a fixed observed pixel as ``z`` changes, so interpolating
+    ``ssp_on_pixels`` between z-grid nodes would be inaccurate near any
+    spectral feature (filter integration hides this in the photometric
+    case). Instead, the stellar component re-interpolates the SSP cube to
+    ``wave_obs / (1 + z)`` at runtime — exact and fully differentiable in z.
+
+    Attributes
+    ----------
+    wave_obs_pixels : array, shape (n_pix,)
+        Observed-frame pixel wavelengths [Angstrom] (z-independent).
+    z_min, z_max : float
+        Redshift bounds the table was built for (advisory; runtime z is
+        not clamped to them).
+
+    Notes
+    -----
+    **JIT-compatible**: no — startup marker; leaves are immutable and safe
+    inside JAX operations.
+
+    """
+
+    wave_obs_pixels: jnp.ndarray
+    z_min: float
+    z_max: float
+
+
+def precompute_spectroscopy_ztable(
+    ssp_data,
+    wave_obs_pixels,
+    z_grid=None,
+    z_min=0.001,
+    z_max=3.0,
+    n_z=100,
+) -> SpectroscopicZTable:
+    """Build the free-z spectroscopy marker (observed pixel grid only).
+
+    The free-z spectrum path interpolates the SSP cube to the rest-frame
+    pixel grid ``wave_obs / (1 + z)`` at runtime rather than pre-tabulating
+    across redshift (see :class:`SpectroscopicZTable` for why). This builder
+    therefore just records the observed pixel grid and the z bounds.
+
+    Parameters
+    ----------
+    ssp_data : SSPData
+        SSP templates (unused here; kept for signature symmetry with the
+        photometric ztable builder).
+    wave_obs_pixels : array, shape (n_pix,)
+        Observed-frame pixel wavelengths [Angstrom].
+    z_grid : array, optional
+        Custom redshift grid; only its min/max are recorded.
+    z_min, z_max : float
+        Redshift bounds [dimensionless].
+    n_z : int
+        Unused (kept for signature symmetry).
+
+    Returns
+    -------
+    SpectroscopicZTable
+        Free-z marker carrying the observed pixel grid.
+
+    Notes
+    -----
+    **JIT-compatible**: no — startup marker.
+    **Gradient-safe**: not applicable (CPU preprocessing).
+
+    """
+    del ssp_data, n_z
+    if z_grid is not None:
+        z_grid = jnp.asarray(z_grid)
+        z_min, z_max = float(z_grid[0]), float(z_grid[-1])
+    return SpectroscopicZTable(
+        wave_obs_pixels=jnp.asarray(wave_obs_pixels),
+        z_min=float(z_min),
+        z_max=float(z_max),
+    )
+
+
 class PhotometricZTable(NamedTuple):
     """Pre-computed SSP broadband fluxes on a redshift grid.
 
@@ -383,6 +466,7 @@ def precompute_photometry_ztable(
     n_z=100,
     apply_igm=False,
     taylor_correction: bool = False,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> PhotometricZTable:
     """Pre-compute SSP broadband fluxes on a redshift grid.
 
@@ -451,14 +535,17 @@ def precompute_photometry_ztable(
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
 
     # Precompute filter denominators and effective wavelengths (z-independent)
+    # under the bandpass weight w(λ) (ADR-0017): denom = ∫ T w dλ,
+    # λ_eff = ∫ λ T w dλ / ∫ T w dλ — must match preintegrate_grid /
+    # compute_flux_density so the LUT and exact paths agree.
     filter_denoms = []
     eff_waves_obs = []  # observed-frame effective wavelengths (z-independent)
     for fw, ft in zip(filter_waves, filter_trans):
         fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-        filter_denoms.append(_np_trapezoid(ft_np * fw_np, fw_np))
+        tw_np = ft_np * _filter_weight_np(fw_np, convention)
+        filter_denoms.append(_np_trapezoid(tw_np, fw_np))
         eff_waves_obs.append(
-            _np_trapezoid(ft_np * fw_np**2, fw_np)
-            / max(_np_trapezoid(ft_np * fw_np, fw_np), 1e-30)
+            _np_trapezoid(tw_np * fw_np, fw_np) / max(_np_trapezoid(tw_np, fw_np), 1e-30)
         )
     eff_waves_obs = np.array(eff_waves_obs)
 
@@ -479,23 +566,21 @@ def precompute_photometry_ztable(
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
             denom = filter_denoms[f_idx]
+            tw_np = ft_np * _filter_weight_np(fw_np, convention)
 
             ssp_on_filt = _vectorized_interp(fw_np, wave_obs, ssp_flux_np)
-            integrand = ssp_on_filt * ft_np[None, None, :] * fw_np[None, None, :]
+            integrand = ssp_on_filt * tw_np[None, None, :]
             num = _np_trapezoid(integrand, fw_np, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
             # Phase 3c-3c-v: Taylor moment Ψ at this z and filter.
-            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) λ_obs dλ_obs / ∫ T_b λ_obs dλ_obs
+            # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
             # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
             if taylor_correction:
                 lambda_rest_per_obs = fw_np / (1.0 + z_val)
                 lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
                 moment_integrand = (
-                    ssp_on_filt
-                    * ft_np[None, None, :]
-                    * fw_np[None, None, :]
-                    * lambda_minus_eff[None, None, :]
+                    ssp_on_filt * tw_np[None, None, :] * lambda_minus_eff[None, None, :]
                 )
                 moment_num = _np_trapezoid(moment_integrand, fw_np, axis=-1)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)

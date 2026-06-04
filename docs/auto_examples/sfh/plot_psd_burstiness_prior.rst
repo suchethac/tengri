@@ -21,6 +21,11 @@
 PSD-Governed Stochastic SFH Prior: Burstiness Corner Cases
 ===========================================================
 
+.. image:: images/sphx_glr_plot_psd_burstiness_prior_001.png
+   :alt: plot psd burstiness prior
+   :class: sphx-glr-single-img
+
+
 The field SFH employs a damped random walk (DRW) power spectral density (PSD)
 to govern stochastic star formation history realizations. Two parameters control
 the prior distribution of SFR time-variability:
@@ -48,8 +53,23 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 31-187
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_burstiness_prior_001.png
+   :alt: plot psd burstiness prior
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_burstiness_prior_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import os
     import warnings
@@ -75,7 +95,7 @@ References:
     # --- Smooth mean SFH (shared across all panels) ---
     # Use a truncated skewed normal SFH peaked at 2 Gyr lookback
     mean_sfr = tengri.tsnorm(
-        age_lookback_yr, log_peak_sfr=0.5, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
+        age_lookback_yr, log_total_mass=10.0, peak_lbt=2e9, width=1.5e9, skew=0.5, trunc=3.0
     )
     sfr_mean = np.array(mean_sfr)
 
@@ -200,12 +220,8 @@ References:
 
     fig.tight_layout(rect=[0, 0, 1, 0.96])
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    png_path = os.path.join(script_dir, "plot_psd_burstiness_prior.png")
-    plt.savefig(png_path, dpi=150, bbox_inches="tight")
-    plt.close()
+    plt.show()
 
-    print(f"Saved to {png_path}")
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_burstiness_prior.py:

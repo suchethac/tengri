@@ -330,12 +330,13 @@ def test_dl07_preint_vs_exact():
     params['dust_gamma_dl'] = 0.3
     params['dust_qpah'] = 0.04
     
-    # Preintegrated path
-    phot_preint = model.predict_photometry(params, mode="hybrid")
-    
-    # Full-wavelength path (by disabling preintegration)
-    model._precomputed.dust_ir_lookup = None
-    phot_exact = model.predict_photometry(params, mode="hybrid")
+    # Preintegrated (LUT) path — selected at build time
+    model_preint = SEDModel.build(..., approx=WavePrecomp())
+    phot_preint = model_preint.predict_photometry(params)
+
+    # Full-wavelength reference path
+    model_exact = SEDModel.build(..., approx=None)
+    phot_exact = model_exact.predict_photometry(params)
     
     # Should agree within <0.25% for optical bands
     assert jnp.allclose(phot_preint, phot_exact, rtol=0.0025)

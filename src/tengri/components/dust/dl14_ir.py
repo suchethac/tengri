@@ -92,11 +92,17 @@ class DL14IRSEDComponent(SEDModelComponent):
     config: DL14IRConfig = DL14IRConfig()
 
     # Free parameters — auto-discovered by base class
-    qpah = Uniform(0.5, 4.5, description="PAH mass fraction", units="%")
+    qpah = Uniform(0.5, 4.5, default=2.5, description="PAH mass fraction", units="%")
     umin = Uniform(
-        -1.0, 1.5, description="log U_min (minimum radiation field intensity)", units="dex"
+        -1.0,
+        1.5,
+        default=0.0,
+        description="log U_min (minimum radiation field intensity)",
+        units="dex",
     )
-    gamma = Uniform(0.0, 0.3, description="Power-law mixing fraction", units="dimensionless")
+    gamma = Uniform(
+        0.0, 0.3, default=0.05, description="Power-law mixing fraction", units="dimensionless"
+    )
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}

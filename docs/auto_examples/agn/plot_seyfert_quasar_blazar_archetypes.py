@@ -18,9 +18,20 @@ evolve with luminosity:
    narrow-line region visible; bridging the Seyfert–quasar continuum.
 
 This archetype figure is the diagnostic for understanding how AGN
+<<<<<<< HEAD
 classification depends on viewing angle, accretion rate, and dust geometry.
 """
 
+=======
+
+classification depends on viewing angle, accretion rate, and dust geometry.
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+>>>>>>> origin/main
 import warnings
 
 import jax
@@ -42,6 +53,10 @@ COMMON = dict(
     redshift=tengri.Fixed(0.0),  # Rest-frame only (predict_rest_sed)
 )
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> origin/main
 def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
     """Build an AGN archetype model.
 
@@ -71,9 +86,20 @@ def build_agn_archetype(log_lbol, agn_frac, agn_blocks, sfr_log, dust_config):
         "*": tengri.FIXED,
     }
     agn_dict.update(agn_blocks)
+<<<<<<< HEAD
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "*": tengri.FIXED, "log_sfr": sfr_log},
+=======
+    # ``sfh.type=const`` is parametrised by total stellar mass over the default
+    # 13.8 Gyr window; convert SFR → mass via M = SFR × Δt (+10.14 dex). The
+    # ``sfr_log=-10`` "negligible host" cases stay essentially zero; the
+    # ``sfr_log=2`` starburst case becomes a realistic ~10^12 M☉ ULIRG host.
+    log_total_mass = sfr_log + 10.14
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": log_total_mass},
+>>>>>>> origin/main
         dust=dust_config,
         agn=agn_dict,
         **COMMON,
@@ -102,8 +128,13 @@ wave_sy2, sed_sy2 = build_agn_archetype(
     sfr_log=-10.0,  # Pure AGN, negligible starburst
     dust_config={
         "type": "two_component",
+<<<<<<< HEAD
         "tau_diff": 0.1,       # Minimal diffuse dust
         "tau_bc": 3.0,         # Heavy birth-cloud attenuation in front of AGN
+=======
+        "tau_diff": 0.1,  # Minimal diffuse dust
+        "tau_bc": 3.0,  # Heavy birth-cloud attenuation in front of AGN
+>>>>>>> origin/main
         "*": tengri.FIXED,
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
@@ -127,8 +158,13 @@ wave_q, sed_q = build_agn_archetype(
     sfr_log=-10.0,  # Pure AGN
     dust_config={
         "type": "two_component",
+<<<<<<< HEAD
         "tau_diff": 0.0,       # No diffuse dust
         "tau_bc": 0.0,         # No birth-cloud attenuation
+=======
+        "tau_diff": 0.0,  # No diffuse dust
+        "tau_bc": 0.0,  # No birth-cloud attenuation
+>>>>>>> origin/main
         "*": tengri.FIXED,
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },
@@ -152,8 +188,13 @@ wave_lirg, sed_lirg = build_agn_archetype(
     sfr_log=2.0,  # ~100 M_sun / yr ongoing starburst
     dust_config={
         "type": "two_component",
+<<<<<<< HEAD
         "tau_diff": 1.5,       # Moderate diffuse dust from starburst
         "tau_bc": 1.0,         # Moderate birth-cloud attenuation
+=======
+        "tau_diff": 1.5,  # Moderate diffuse dust from starburst
+        "tau_bc": 1.0,  # Moderate birth-cloud attenuation
+>>>>>>> origin/main
         "*": tengri.FIXED,
         "emission": {"type": "dale2014", "*": tengri.FIXED},
     },

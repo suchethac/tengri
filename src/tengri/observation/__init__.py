@@ -39,6 +39,7 @@ from tengri.observation.instrument import Instrument, list_instruments
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.line_list import LineList
 from tengri.observation.line_mask import build_line_mask
+from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.noise import DETECTED, LOWER_LIMIT, UPPER_LIMIT, apply_zp_floor
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
@@ -59,6 +60,7 @@ from tengri.observation.spectrum import (
     blend_emission_lines,
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
+    velocity_broaden,
 )
 
 __all__ = [
@@ -74,6 +76,7 @@ __all__ = [
     "Instrument",
     "LineFluxData",
     "LineList",
+    "LineRatioData",
     "NoiseModel",
     "Observation",
     "Photometry",
@@ -96,4 +99,5 @@ __all__ = [
     "nirspec_g140m_resolution",
     "nirspec_prism_resolution",
     "physics",
+    "velocity_broaden",
 ]

@@ -1,0 +1,4 @@
+# FSPS SSP grids are downloaded from the public catalogue at notebook
+# runtime (tengri.download_ssp / load_ssp_data auto-fetch), never
+# committed — see reproduction/prospector/README.md.
+*.h5

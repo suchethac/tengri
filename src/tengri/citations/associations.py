@@ -51,10 +51,18 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
     # Canonical modified-blackbody (Hildebrand 1983); da Cunha 2013 supplies
     # the CMB-heating correction applied automatically at redshift > 0.
     "modified_blackbody": ["hildebrand1983", "dacunha2013"],
+    "mbb": ["casey2012"],
     "casey2012": ["casey2012"],
     "dale2014": ["dale2014"],
     "draine_li2007": ["draine_li2007"],
+    "dl07": ["draine_li2007"],
     "draine_li2014": ["draine2014"],
+    "dl14": ["draine2014"],
+    "themis": ["jones2013", "jones2017"],
+    "astrodust": ["hensley_draine2023"],
+    "schreiber2016": ["schreiber2016"],
+    "pah_drude": ["smith2007"],
+    "bosa": ["cigale"],
     None: [],
 }
 
@@ -69,9 +77,62 @@ DUST_MODEL_CITATIONS: dict[str, list[str]] = {
 NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     "cue": ["cue"],
     "cloudy": ["cloudy"],
-    "baked_in": [],
+    "mappings": ["mappings"],
+    # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
+    # Byler+2017 Cloudy photoionization grids.
+    "baked_in": ["byler2017", "cloudy"],
     "off": [],
     None: [],
+}
+
+
+# ── SSP provenance ────────────────────────────────────────────────────────
+# The SSP grid filename encodes its provenance as
+# ``<sps_code>_<isochrone>_<library>_<imf>`` (FSPS / ProGeny convention, e.g.
+# ``fsps_prsc_miles_chabrier`` = FSPS + PARSEC isochrones + MILES library +
+# Chabrier IMF). ``collect_citations`` splits the SSP ``source`` name on ``_``
+# and maps each token through these tables; the IMF is read from ``SSPData.imf``.
+# A token that matches none of these tables triggers a provenance warning.
+
+# Initial mass function (SSPData.imf, or a filename token).
+IMF_CITATIONS: dict[str, list[str]] = {
+    "chabrier": ["chabrier2003"],
+    "kroupa": ["kroupa2001"],
+    "salpeter": ["salpeter1955"],
+}
+
+# SPS code that generated the grid (first filename token).
+SSP_CODE_CITATIONS: dict[str, list[str]] = {
+    # FSPS (Conroy, Gunn & White 2009 + Conroy & Gunn 2010) generated via the
+    # python-fsps interface (Foreman-Mackey et al. 2014).
+    "fsps": ["fsps2009", "fsps", "pythonfsps"],
+    "bc03": ["bc03"],
+    "bpss": ["bpass"],
+    "bpass": ["bpass"],
+    "pgny": ["progeny"],
+    "progeny": ["progeny"],
+}
+
+# Stellar-evolution isochrone set (second filename token).
+SSP_ISOCHRONE_CITATIONS: dict[str, list[str]] = {
+    "prsc": ["parsec"],
+    "parsec": ["parsec"],
+    "mist": ["mist", "mist_dotter2016"],  # Choi+2016 (MIST I) + Dotter+2016 (MIST 0)
+    "pdva": ["padova"],
+    "padova": ["padova"],
+    "bsti": ["basti"],
+    "basti": ["basti"],
+    "stars": [],  # BPASS handles isochrones internally (see SSP_CODE bpass)
+}
+
+# Stellar spectral / atmosphere library (third filename token). ``c3k`` is the
+# FSPS theoretical (Kurucz ATLAS12/SYNTHE) library — the FSPS README directs
+# users to cite the FSPS papers for it, so it maps to the FSPS code citations.
+SSP_LIBRARY_CITATIONS: dict[str, list[str]] = {
+    "miles": ["miles"],
+    "c3k": ["fsps2009", "fsps"],
+    "basel": ["basel"],
+    "stelib": ["stelib"],
 }
 
 
@@ -109,6 +170,19 @@ IGM_CITATIONS: dict[str, list[str]] = {
     "madau1995": ["madau1995"],
     None: [],
 }
+
+# Photometric filter-convolution convention (FilterConvention; ADR-0017).
+# The AB-system foundations apply to any broadband flux; the per-convention
+# entries cite the code each convention reproduces. See docs/units.md.
+PHOTOMETRY_CONVENTION_CITATIONS: dict[str, list[str]] = {
+    # Always relevant when broadband photometry is computed.
+    "core": ["ab_system", "kcorrection", "fukugita1996", "bessell2012"],
+    # w = 1/lambda — photon-counting; matches FSPS / DSPS / sedpy.
+    "bessell": ["fsps", "dsps", "kcorrection", "fukugita1996"],
+    # w = 1/lambda^2 — energy / flat-in-frequency; matches CIGALE / bagpipes.
+    "energy": ["cigale", "bagpipes"],
+}
+
 
 # Inference backends (values passed to ``Fitter.run(backend=...)``).
 BACKEND_CITATIONS: dict[str, list[str]] = {
@@ -192,7 +266,12 @@ __all__ = [
     "DUST_MODEL_CITATIONS",
     "FUNCTION_CITATIONS",
     "IGM_CITATIONS",
+    "IMF_CITATIONS",
     "NEBULAR_BACKEND_CITATIONS",
+    "PHOTOMETRY_CONVENTION_CITATIONS",
+    "SSP_CODE_CITATIONS",
+    "SSP_ISOCHRONE_CITATIONS",
+    "SSP_LIBRARY_CITATIONS",
     "cites",
     "register_function_citations",
 ]

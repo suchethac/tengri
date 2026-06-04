@@ -41,6 +41,11 @@ from tengri.analysis.plotting.filters import (
 )
 
 # ═══════════════════════════════════════════════════════════════════
+# SFH plotting
+# ═══════════════════════════════════════════════════════════════════
+from tengri.analysis.plotting.posterior_1d import plot_1d_posterior, plot_calibration
+
+# ═══════════════════════════════════════════════════════════════════
 # SED and spectrum plotting
 # ═══════════════════════════════════════════════════════════════════
 from tengri.analysis.plotting.sed import (
@@ -52,10 +57,6 @@ from tengri.analysis.plotting.sed import (
     sfh_sed_comparison,
     sweep_parameter,
 )
-
-# ═══════════════════════════════════════════════════════════════════
-# SFH plotting
-# ═══════════════════════════════════════════════════════════════════
 from tengri.analysis.plotting.sfh import add_sfh_inset, plot_sfh, plot_sfh_comparison
 from tengri.analysis.plotting.styles import (
     COLORS,
@@ -102,7 +103,9 @@ __all__ = [
     "diagnostics_table",
     "mock_plot",
     "parameter_gallery",
+    "plot_1d_posterior",
     "plot_autocorrelation",
+    "plot_calibration",
     "plot_corner_comparison",
     "plot_filter_coverage",
     "plot_filter_curves",

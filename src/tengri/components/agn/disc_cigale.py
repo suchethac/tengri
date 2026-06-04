@@ -6,7 +6,9 @@ ported from CIGALE's ``skirtor2016.py`` module (Boquien et al. 2019).
 
 All functions return dimensionless normalized disc spectra (integrated to
 unit area under a linear wavelength grid), ready for luminosity scaling
-and convolution with dust extinction.
+and convolution with dust extinction. Wavelength inputs and breakpoints
+are in **nanometre** (CIGALE's native SED convention); convert from
+Angstrom at the call site if needed.
 
 References
 ----------
@@ -38,9 +40,10 @@ def piecewise_powerlaw_disk(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in Angstrom.
+        Wavelength grid in nanometre (CIGALE convention).
     limits : array_like, shape (n_segment + 1,)
-        Wavelength breakpoints [Angstrom]. Must be strictly increasing.
+        Wavelength breakpoints in the same unit as ``wavelength`` (nm).
+        Must be strictly increasing.
         Defines n_segment wavelength intervals.
     coefs : array_like, shape (n_segment,)
         Power-law indices for each segment. The spectrum in segment i
@@ -109,7 +112,7 @@ def skirtor_disk_spectrum(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in Angstrom.
+        Wavelength grid in nanometre (CIGALE convention).
     delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
         Higher delta → steeper mid-IR falloff. This parameter shifts the
@@ -153,7 +156,7 @@ def schartmann2005_disk_spectrum(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in Angstrom.
+        Wavelength grid in nanometre (CIGALE convention).
     delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
         Higher delta → steeper mid-IR falloff.
@@ -199,7 +202,7 @@ def adaf_disk_spectrum(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in Angstrom.
+        Wavelength grid in nanometre (CIGALE convention).
     delta : float
         Blend parameter. Range: [0.0, 1.0]. Default: 0.0.
         delta=0 → pure ADAF. delta=1 → pure thin disc.

@@ -200,7 +200,7 @@ def _forward_timing_section(ssp_path: Path) -> None:
     ssp = load_ssp_data(str(ssp_path))
     obs = Instrument.SDSS().observation()
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(1.0),
+        sfh_tsnorm_log_total_mass=Fixed(10.0),
         sfh_tsnorm_peak_lbt_gyr=Fixed(2.0),
         sfh_tsnorm_width_gyr=Fixed(1.5),
         sfh_tsnorm_skew=Fixed(0.2),

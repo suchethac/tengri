@@ -243,25 +243,28 @@ class RadioSEDComponent:
         log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         z = jnp.asarray(params.get("redshift", 0.0))
 
-        if model == "powerlaw":
-            L_radio = radio_total(
-                wave,
-                L_ir=L_ir,
-                L_agn_bol=L_agn_bol,
-                q_ir=jnp.asarray(params["radio_q_ir"]),
-                alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
-                radio_loudness=jnp.asarray(params["radio_loudness"]),
-                alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
-                sfr_mode=self.config.sfr_mode,
-                log_mstar=log_mstar,
-                redshift=z,
-                include_freefree=self.config.include_freefree,
-                T_e=jnp.asarray(params["radio_T_e"]),
-                alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
-            )
-        else:  # model == "dpl"
-            L_radio = radio_total_dpl(
-                wave,
+        # Rest-frame radio Lν on an arbitrary wavelength grid. Radio is a smooth
+        # (broken-)power-law, so evaluating it at the per-filter / per-pixel
+        # effective wavelength is an excellent LUT approximation (#624).
+        def _emit(w):
+            if model == "powerlaw":
+                return radio_total(
+                    w,
+                    L_ir=L_ir,
+                    L_agn_bol=L_agn_bol,
+                    q_ir=jnp.asarray(params["radio_q_ir"]),
+                    alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
+                    radio_loudness=jnp.asarray(params["radio_loudness"]),
+                    alpha_agn=jnp.asarray(params["radio_alpha_agn"]),
+                    sfr_mode=self.config.sfr_mode,
+                    log_mstar=log_mstar,
+                    redshift=z,
+                    include_freefree=self.config.include_freefree,
+                    T_e=jnp.asarray(params["radio_T_e"]),
+                    alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                )
+            return radio_total_dpl(
+                w,
                 L_ir=L_ir,
                 L_agn_bol=L_agn_bol,
                 q_ir=jnp.asarray(params["radio_q_ir"]),
@@ -279,6 +282,32 @@ class RadioSEDComponent:
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             )
 
+        L_radio = _emit(wave)
+        derived_overrides = {"sed_radio": L_radio}
+
+        # Precompute LUT families (#624): radio is additive and unattenuated,
+        # summed by predict_via_precomp / predict_spectrum_via_precomp.
+        # Photometry: integrate the dense radio SED through the true filter
+        # transmission (the same integral the exact path uses) so a wide radio
+        # bandpass — over which the (broken-)power-law has real curvature — is
+        # exact, not sampled at one effective wavelength. Spectroscopy: a pixel
+        # is a point-sample, so evaluating at the pixel wavelength is exact.
+        filter_eff = state.derived.get("filter_eff_waves")
+        if filter_eff is not None:
+            fw_pad = state.derived.get("phot_filter_waves_padded")
+            ft_pad = state.derived.get("phot_filter_trans_padded")
+            if fw_pad is not None:
+                from tengri.observation.photometry import lnu_filter_integral_batch
+
+                derived_overrides["radio_phot_lnu_precomp"] = lnu_filter_integral_batch(
+                    L_radio, wave, fw_pad, ft_pad, z
+                )
+            else:
+                derived_overrides["radio_phot_lnu_precomp"] = _emit(filter_eff)
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            derived_overrides["radio_spec_lnu_precomp"] = _emit(spec_eff)
+
         return state.add_intrinsic(L_radio).with_(
-            derived=state.derived.with_(sed_radio=L_radio),
+            derived=state.derived.with_(**derived_overrides),
         )

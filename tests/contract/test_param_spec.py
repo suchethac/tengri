@@ -23,11 +23,11 @@ class TestConstruction:
     def test_parametric_tsnorm(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             redshift=0.1,
         )
         assert not spec.stochastic
-        assert "sfh_tsnorm_log_peak_sfr" in spec.free_params
+        assert "sfh_tsnorm_log_total_mass" in spec.free_params
 
     def test_basic_stochastic(self):
         spec = Parameters(
@@ -36,7 +36,7 @@ class TestConstruction:
             sfh_field_psd_tau_myr=Uniform(10.0, 300.0),
         )
         assert spec.stochastic
-        assert spec.n_grid == 64
+        assert spec.n_grid == 256
 
     def test_shorthand_scalar(self):
         spec = Parameters(dust_slope=-0.7)
@@ -47,9 +47,9 @@ class TestConstruction:
     def test_shorthand_tuple(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=(0.01, 3.0),
+            sfh_tsnorm_log_total_mass=(0.01, 3.0),
         )
-        dist = spec.get_distribution("sfh_tsnorm_log_peak_sfr")
+        dist = spec.get_distribution("sfh_tsnorm_log_total_mass")
         assert isinstance(dist, Uniform)
         assert dist.lo == 0.01
         assert dist.hi == 3.0
@@ -74,7 +74,7 @@ class TestConstruction:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_peak_sfr=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(-1, 2),
             redshift=0.1,
         )
         assert "sfh_dpl_alpha" in spec.free_params
@@ -84,7 +84,7 @@ class TestConstruction:
         with pytest.raises(ValueError, match="Unknown parameter"):
             Parameters(
                 mean_sfh_type="dpl",
-                sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+                sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             )
 
     def test_tsnorm_rejects_dpl_params(self):
@@ -151,45 +151,45 @@ class TestValidation:
     def test_validate_good_params(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
-        spec.validate({"sfh_tsnorm_log_peak_sfr": jnp.array(0.5)})
+        spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(0.5)})
 
     def test_validate_out_of_bounds(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
         with pytest.raises(ValueError, match="outside bounds"):
-            spec.validate({"sfh_tsnorm_log_peak_sfr": jnp.array(5.0)})
+            spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(5.0)})
 
 
 class TestProperties:
     def test_free_params_list(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 3.0),
+            sfh_tsnorm_log_total_mass=Uniform(-1.0, 3.0),
             dust_slope=-0.7,
             redshift=0.1,
         )
         free = spec.free_params
-        assert "sfh_tsnorm_log_peak_sfr" in free
+        assert "sfh_tsnorm_log_total_mass" in free
         assert "dust_slope" not in free
 
     def test_fixed_params_list(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             dust_slope=-0.7,
         )
         fixed = spec.fixed_params
         assert "dust_slope" in fixed
-        assert "sfh_tsnorm_log_peak_sfr" not in fixed
+        assert "sfh_tsnorm_log_total_mass" not in fixed
 
     def test_n_free(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             dust_slope=-0.7,
             redshift=0.1,
         )
@@ -204,9 +204,9 @@ class TestProperties:
     def test_get_distribution(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
-        d = spec.get_distribution("sfh_tsnorm_log_peak_sfr")
+        d = spec.get_distribution("sfh_tsnorm_log_total_mass")
         assert isinstance(d, Uniform)
         assert d.lo == -1
 
@@ -217,7 +217,7 @@ class TestProperties:
 
     def test_valid_param_names_property(self):
         spec = Parameters(mean_sfh_type="tsnorm")
-        assert "sfh_tsnorm_log_peak_sfr" in spec.valid_param_names
+        assert "sfh_tsnorm_log_total_mass" in spec.valid_param_names
         assert "sfh_dpl_alpha" not in spec.valid_param_names
 
     def test_mean_sfh_type_property(self):
@@ -251,10 +251,10 @@ class TestSampling:
     def test_sample_free_in_bounds(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
         )
         params = spec.sample(jax.random.PRNGKey(0))
-        val = float(params["sfh_tsnorm_log_peak_sfr"])
+        val = float(params["sfh_tsnorm_log_total_mass"])
         assert -1 <= val <= 2
 
     def test_sample_batch_shapes(self):
@@ -273,10 +273,86 @@ class TestRepr:
     def test_repr_contains_params(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_peak_sfr=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
             redshift=0.1,
         )
         r = repr(spec)
-        assert "sfh_tsnorm_log_peak_sfr" in r
+        assert "sfh_tsnorm_log_total_mass" in r
         assert "Uniform" in r
         assert "redshift" in r
+
+
+class TestSampleSubstreamStability:
+    """Per-parameter substream sampling (#548/#549 footgun regression).
+
+    `Parameters.sample` derives each parameter's subkey from its name
+    (`fold_in(key, crc32(name))`), not from its position in a key split.
+    A shared free parameter must therefore sample to the same value for a
+    given key regardless of which *other* parameters are free in the spec.
+    """
+
+    def _dpl(self, **extra):
+        base = dict(
+            mean_sfh_type="dpl",
+            sfh_dpl_alpha=Uniform(0.1, 5.0),
+            sfh_dpl_beta=Uniform(0.1, 3.0),
+            sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
+            sfh_dpl_age_gyr=Uniform(0.5, 13.5),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
+            met_logzsol=Fixed(-0.3),
+            dust_tau_bc=Fixed(0.3),
+            dust_tau_diff=Fixed(0.2),
+            redshift=Fixed(0.1),
+        )
+        base.update(extra)
+        return Parameters(**base)
+
+    def test_shared_param_invariant_to_free_set(self):
+        """SFH params draw the same value whether or not extra params are free.
+
+        This is the #548/#563 regression: spec_b enables ``dust_emission``,
+        which adds free ``dust_T``/``dust_beta_ir``. Under positional key
+        splitting this shifted the shared ``sfh_dpl_*`` draws (notably
+        ``sfh_dpl_age_gyr``: 13.62 vs 13.08); per-name substreams keep them
+        identical.
+        """
+        key = jax.random.PRNGKey(0)
+        spec_a = self._dpl()
+        spec_b = self._dpl(
+            dust_emission="modified_blackbody",
+            dust_T=Uniform(20.0, 60.0),
+            dust_beta_ir=Uniform(1.0, 2.5),
+        )
+        a = spec_a.sample(key)
+        b = spec_b.sample(key)
+        # dust_emission adds free params to spec_b that spec_a lacks.
+        assert set(spec_b.free_params) - set(spec_a.free_params), (
+            "test setup: spec_b must add free params (dust_T/dust_beta_ir)"
+        )
+        # Every param free in BOTH must draw identically.
+        shared_free = set(spec_a.free_params) & set(spec_b.free_params)
+        assert "sfh_dpl_age_gyr" in shared_free, "age_gyr must be free in both"
+        for name in shared_free:
+            np.testing.assert_allclose(
+                np.asarray(a[name]),
+                np.asarray(b[name]),
+                rtol=0,
+                atol=0,
+                err_msg=f"shared free param {name!r} diverged across differing free-sets",
+            )
+
+    def test_sample_is_reproducible_across_calls(self):
+        """crc32 (not salted hash) → identical draws on repeated calls/processes."""
+        spec = self._dpl()
+        key = jax.random.PRNGKey(7)
+        a = spec.sample(key)
+        b = spec.sample(key)
+        for name in spec.free_params:
+            np.testing.assert_array_equal(np.asarray(a[name]), np.asarray(b[name]))
+
+    def test_distinct_params_get_distinct_draws(self):
+        """Different names map to different substreams (no accidental aliasing)."""
+        spec = self._dpl()
+        s = spec.sample(jax.random.PRNGKey(0))
+        vals = [float(s[n]) for n in ("sfh_dpl_alpha", "sfh_dpl_beta", "sfh_dpl_tau_gyr")]
+        assert len(set(vals)) == len(vals), f"suspicious identical draws: {vals}"

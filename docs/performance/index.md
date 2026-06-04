@@ -31,6 +31,13 @@ running on a single CPU core:
 | + radio + X-ray + AGN | 76.4 ms | 4.6 ms | 2.44 ms (31×) |
 | Kitchen sink (all emitters) | **76.1 ms** | **4.6 ms** | **2.45 ms** (31×) |
 
+The columns are the three internal forward strategies, selected at build time:
+**Exact** = `approx=None` (default; exact wave-grid integration), **Hybrid
+(precomputed)** = `approx=WavePrecomp()` (the SSP × filter lookup-table fast
+path), and **Compositional** = the default fused JIT kernel when no `approx=`
+LUT is requested. There is no `mode=` argument on `predict_photometry`; the
+strategy is fixed when the `SEDModel` is constructed.
+
 — *full table at [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md)*
 
 Inference backends on a 7-parameter mock fit (compile + sample wall):

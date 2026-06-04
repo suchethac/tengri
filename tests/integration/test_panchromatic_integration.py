@@ -99,7 +99,7 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -156,7 +156,7 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -202,7 +202,7 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
@@ -216,7 +216,7 @@ class TestFullPanchromaticSED:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
@@ -277,7 +277,7 @@ class TestRadioXrayIntegration:
         """Galaxy with radio + X-ray enabled."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),  # SFR = 10 Msun/yr
+            sfh_const_log_total_mass=Fixed(1.0),  # SFR = 10 Msun/yr
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -368,7 +368,7 @@ class TestRadioXrayIntegration:
         # SEDModel without radio/xray for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),
+            sfh_const_log_total_mass=Fixed(1.0),
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -509,7 +509,7 @@ class TestRadioXrayIntegration:
         # Build stellar-only model for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),
+            sfh_const_log_total_mass=Fixed(1.0),
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -549,7 +549,7 @@ class TestEnergyBalanceEndToEnd:
     def energy_model(self, ssp):
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.0),  # SFR = 1 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.0),  # SFR = 1 Msun/yr
             sfh_const_start_gyr=Fixed(13.0),
             sfh_const_end_gyr=Fixed(1.0),
             met_logzsol=Fixed(0.0),  # solar
@@ -616,7 +616,7 @@ class TestDerivedQuantityRanges:
         """
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(0.3),  # SFR ~ 2 Msun/yr
+            sfh_const_log_total_mass=Fixed(0.3),  # SFR ~ 2 Msun/yr
             sfh_const_start_gyr=Fixed(13.0),  # SF began 13 Gyr ago
             sfh_const_end_gyr=Fixed(0.0),  # SF ongoing (0 = now)
             met_logzsol=Fixed(0.0),
@@ -667,7 +667,7 @@ class TestDerivedQuantityRanges:
         """Quenched elliptical: red u-g > 1.5, no recent SF."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.0),  # SFR=10 back then
+            sfh_const_log_total_mass=Fixed(1.0),  # SFR=10 back then
             sfh_const_start_gyr=Fixed(5.0),
             sfh_const_end_gyr=Fixed(0.5),  # quenched 8.7 Gyr ago
             met_logzsol=Fixed(0.1),  # slightly super-solar
@@ -692,7 +692,7 @@ class TestDerivedQuantityRanges:
         """Young starburst: blue u-g < 1.2, high sSFR."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_sfr=Fixed(1.5),  # SFR=30 Msun/yr
+            sfh_const_log_total_mass=Fixed(1.5),  # SFR=30 Msun/yr
             sfh_const_start_gyr=Fixed(0.7),  # SF began 700 Myr ago
             sfh_const_end_gyr=Fixed(0.0),  # started 700 Myr ago
             met_logzsol=Fixed(-0.5),
@@ -729,7 +729,7 @@ class TestGradientFlowComplete:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(1.0),
             dust_tau_diff=Fixed(0.5),
@@ -800,7 +800,7 @@ class TestExactVsPrecomputed:
             sfh_dpl_alpha=Fixed(2.0),
             sfh_dpl_beta=Fixed(1.5),
             sfh_dpl_tau_gyr=Fixed(5.0),
-            sfh_dpl_log_peak_sfr=Fixed(1.0),
+            sfh_dpl_log_total_mass=Fixed(1.0),
             met_logzsol=Fixed(-0.3),
             dust_tau_bc=Fixed(0.5),
             dust_tau_diff=Fixed(0.3),

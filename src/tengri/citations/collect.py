@@ -17,7 +17,12 @@ from tengri.citations.associations import (
     DUST_MODEL_CITATIONS,
     FUNCTION_CITATIONS,
     IGM_CITATIONS,
+    IMF_CITATIONS,
     NEBULAR_BACKEND_CITATIONS,
+    PHOTOMETRY_CONVENTION_CITATIONS,
+    SSP_CODE_CITATIONS,
+    SSP_ISOCHRONE_CITATIONS,
+    SSP_LIBRARY_CITATIONS,
 )
 from tengri.citations.citation import Citation
 from tengri.citations.registry import cite
@@ -117,6 +122,72 @@ def _backend_from(obj: Any) -> str | None:
     return None
 
 
+def _ssp_provenance_keys(ssp: Any) -> list[str]:
+    """Citation keys inferred from an ``SSPData`` provenance (name tokens + IMF).
+
+    The grid filename follows ``<sps_code>_<isochrone>_<library>_<imf>`` (e.g.
+    ``fsps_prsc_miles_chabrier`` → FSPS + PARSEC + MILES + Chabrier). We scan
+    the underscore/dash/dot-delimited tokens of ``SSPData.source`` against the
+    SPS-code, isochrone, and spectral-library tables, and read the IMF from
+    ``SSPData.imf`` (falling back to a token).
+
+    If neither an isochrone (stellar-evolution library) nor a spectral library
+    (stellar atmospheres) can be inferred — i.e. the filename does not match the
+    convention — a provenance warning is emitted so the user supplies those
+    citations manually.
+    """
+    import re
+    import warnings
+
+    source = str(getattr(ssp, "source", "") or "")
+    tokens = [t.lower() for t in re.split(r"[_\-.]+", source) if t]
+
+    def _match(table: dict[str, list[str]]) -> tuple[list[str], bool]:
+        hits: list[str] = []
+        recognized = False
+        for t in tokens:
+            if t in table:
+                recognized = True
+                hits.extend(table[t])
+        return hits, recognized
+
+    out: list[str] = []
+    code_keys, _ = _match(SSP_CODE_CITATIONS)
+    iso_keys, iso_ok = _match(SSP_ISOCHRONE_CITATIONS)
+    lib_keys, lib_ok = _match(SSP_LIBRARY_CITATIONS)
+    out.extend(code_keys)
+    out.extend(iso_keys)
+    out.extend(lib_keys)
+
+    imf = str(getattr(ssp, "imf", "") or "").lower()
+    if imf in IMF_CITATIONS:
+        out.extend(IMF_CITATIONS[imf])
+    else:
+        imf_keys, _ = _match(IMF_CITATIONS)
+        out.extend(imf_keys)
+
+    # ``wNE`` grids carry baked-in nebular emission (Byler+2017 Cloudy grids).
+    if "wne" in tokens:
+        out.extend(["byler2017", "cloudy"])
+
+    # Warn when the stellar-evolution isochrone set and/or the spectral
+    # (atmosphere) library cannot be inferred from the filename.
+    if not iso_ok or not lib_ok:
+        missing = []
+        if not iso_ok:
+            missing.append("stellar-evolution isochrone set")
+        if not lib_ok:
+            missing.append("spectral/atmosphere library")
+        warnings.warn(
+            f"Could not infer the {' and '.join(missing)} from SSP source "
+            f"{source!r} — expected the <code>_<isochrone>_<library>_<imf> "
+            f"convention (e.g. 'fsps_prsc_miles_chabrier'). Provenance citations "
+            f"for these ingredients may be missing; add them manually.",
+            stacklevel=3,
+        )
+    return out
+
+
 def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
     """Return the flat, ordered, deduplicated list of registry keys for ``obj``."""
     keys: list[str] = list(CORE_CITATIONS)
@@ -148,6 +219,32 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
             model = getattr(igm, "model", None)
             if model in IGM_CITATIONS:
                 keys.extend(IGM_CITATIONS[model])
+
+    # Photometry: AB-system + filter-convolution convention (ADR-0017). Any
+    # run that produces broadband fluxes cites the AB foundations; the
+    # per-convention entry cites the code each convention reproduces.
+    obs = getattr(obj, "observation", None) or getattr(
+        getattr(obj, "model", None), "observation", None
+    )
+    phot = getattr(obs, "photometry", None)
+    if phot is not None:
+        keys.extend(PHOTOMETRY_CONVENTION_CITATIONS["core"])
+        conv = str(getattr(phot, "convention", "bessell"))
+        if conv in PHOTOMETRY_CONVENTION_CITATIONS:
+            keys.extend(PHOTOMETRY_CONVENTION_CITATIONS[conv])
+
+    # SSP provenance: SPS code + isochrone + spectral library + IMF, inferred
+    # from the grid filename tokens (warns if the library/atmosphere is
+    # unrecognisable).
+    ssp = getattr(obj, "ssp_data", None) or getattr(getattr(obj, "model", None), "ssp_data", None)
+    if ssp is not None:
+        keys.extend(_ssp_provenance_keys(ssp))
+
+    # Precomputation method: WavePrecomp filter pre-integration cites
+    # Zacharegkas+2025 (DSPS is already a core citation).
+    approx = getattr(obj, "_approx", None) or getattr(getattr(obj, "model", None), "_approx", None)
+    if isinstance(approx, dict) and approx.get("wave_precomp"):
+        keys.append("zacharegkas2025")
 
     # Inference backend.
     if include_backend:

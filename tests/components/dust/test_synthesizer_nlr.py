@@ -22,7 +22,7 @@ from tengri.components.nebular.agn_nebular import SynthesizerNLRBackend, _load_s
 
 # Test data path
 _TEST_GRID_PATH = (
-    Path(__file__).resolve().parents[2] / "data" / "synthesizer_grids" / "test_grid_agn-nlr.hdf5"
+    Path(__file__).resolve().parents[3] / "data" / "synthesizer_grids" / "test_grid_agn-nlr.hdf5"
 )
 
 
@@ -99,7 +99,7 @@ class TestPrediction:
     def test_predict_returns_expected_shapes(self, synthesizer_backend):
         """predict_agn_nlr_lines returns (215,) arrays for wavelengths and luminosities."""
         wave, lum = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.3,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -113,7 +113,7 @@ class TestPrediction:
     def test_predict_luminosities_finite(self, synthesizer_backend):
         """Predicted luminosities are all finite (no NaN/Inf)."""
         _, lum = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.3,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -126,7 +126,7 @@ class TestPrediction:
     def test_predict_luminosities_nonnegative(self, synthesizer_backend):
         """Predicted luminosities are non-negative."""
         _, lum = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.3,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -139,7 +139,7 @@ class TestPrediction:
     def test_predict_respects_escape_fraction(self, synthesizer_backend):
         """Escape fraction reduces luminosities."""
         wave1, lum1 = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.3,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -149,7 +149,7 @@ class TestPrediction:
             neb_fesc=0.0,
         )
         wave2, lum2 = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.3,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -164,7 +164,7 @@ class TestPrediction:
     def test_predict_varies_with_parameters(self, synthesizer_backend):
         """Changing grid parameters changes luminosities (except wavelengths)."""
         wave1, lum1 = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.0,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -173,7 +173,7 @@ class TestPrediction:
             log_qh=53.0,
         )
         wave2, lum2 = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=39.3,  # Change log_bh_mass (grid covers 38.3-39.3)
+            log_bh_mass=9.0,  # Change log_bh_mass [log10(M_sun)] (grid covers 8-9)
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -207,7 +207,7 @@ class TestJitCompatibility:
                 log_qh=log_qh,
             )
 
-        wave, lum = jitted_predict(38.3, -0.3, 0.2, 0.0, -1.5, 4.0, 53.0)
+        wave, lum = jitted_predict(8.3, -0.3, 0.2, 0.0, -1.5, 4.0, 53.0)
         chex.assert_shape(wave, (215,))
         chex.assert_shape(lum, (215,))
         chex.assert_tree_all_finite(lum)
@@ -231,7 +231,7 @@ class TestJitCompatibility:
 
         # Non-JIT
         wave_eager, lum_eager = synthesizer_backend.predict_agn_nlr_lines(
-            log_bh_mass=38.3,
+            log_bh_mass=8.3,
             log_eddington=-0.3,
             cosine_inclination=0.2,
             log_metallicity=0.0,
@@ -240,6 +240,6 @@ class TestJitCompatibility:
             log_qh=53.0,
         )
         # JIT
-        wave_jit, lum_jit = jitted_predict(38.3, -0.3, 0.2, 0.0, -1.5, 4.0, 53.0)
+        wave_jit, lum_jit = jitted_predict(8.3, -0.3, 0.2, 0.0, -1.5, 4.0, 53.0)
         assert jnp.allclose(wave_eager, wave_jit)
         assert jnp.allclose(lum_eager, lum_jit)

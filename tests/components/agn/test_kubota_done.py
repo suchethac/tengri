@@ -96,3 +96,97 @@ class TestKubotaDoneFullAgn:
             return kubota_done_full_agn(wave, agn_log_lbol=44.0)
 
         chex.assert_tree_all_finite(_run(wavelength))
+
+
+@pytest.mark.regression_bug
+class TestHotCoronaSeedRollover:
+    """Regression: the K&D hot corona must not leak into the infrared/radio.
+
+    The optically-thin hot corona is a thermal-Comptonisation spectrum,
+    L_nu ~ nu^(1-Gamma) * exp(-h*nu/kT_e) * exp(-nu_seed/nu), defined only
+    between its seed-photon energy and the electron temperature (Kubota & Done
+    2018, MNRAS 480, 1247, Section 2.2). Without the low-energy seed rollover
+    the bare nu^(1-Gamma) tail (Gamma ~ 1.8) rose monotonically toward low
+    frequency, so the disc climbed ~400x from the UV into the radio instead of
+    falling as Rayleigh-Jeans.
+    """
+
+    def test_disc_falls_from_optical_into_radio(self, wavelength):
+        """L_nu must decrease monotonically from the optical to the radio."""
+        from tengri.components.agn.disc import kubota_done_disc
+
+        wave = jnp.asarray([5000.0, 1e4, 1e5, 1e6, 1e7, 1e8])  # 5000 A -> 1 cm
+        l_nu = kubota_done_disc(wave, agn_log_lbol=12.22)
+        chex.assert_tree_all_finite(l_nu)
+        # Strictly decreasing from the optical peak down into the radio.
+        assert jnp.all(jnp.diff(l_nu) < 0.0), f"disc does not fall toward radio: {l_nu}"
+        # The radio must sit far below the optical (was ~450x ABOVE before the fix).
+        assert float(l_nu[-1] / l_nu[0]) < 1e-3
+
+    def test_far_tail_is_rayleigh_jeans(self):
+        """The far-IR/radio tail follows the multicolor-disc Rayleigh-Jeans law.
+
+        For L_nu ∝ nu^2 (∝ lambda^-2), d(log L_nu)/d(log lambda) = -2.
+        """
+        from tengri.components.agn.disc import kubota_done_disc
+
+        wave = jnp.asarray([1e7, 1e8])  # 1 mm -> 1 cm
+        l_nu = kubota_done_disc(wave, agn_log_lbol=12.22)
+        slope = float(jnp.log(l_nu[1] / l_nu[0]) / jnp.log(wave[1] / wave[0]))
+        assert -2.3 < slope < -1.7, f"far tail slope {slope:.2f} is not Rayleigh-Jeans (~-2)"
+
+    def test_xray_corona_preserved(self, wavelength):
+        """The seed rollover must not touch the validated X-ray spectrum.
+
+        The rollover exp(-nu_seed/nu) -> 1 for nu >> nu_seed, so hard X-rays are
+        unchanged: the corona must remain the brightest part of the disc SED in
+        the X-ray relative to the radio.
+        """
+        from tengri.components.agn.disc import kubota_done_disc
+
+        wave = jnp.asarray([1.0, 1e8])  # 1 A (hard X-ray) vs 1 cm (radio)
+        l_nu = kubota_done_disc(wave, agn_log_lbol=12.22)
+        chex.assert_tree_all_finite(l_nu)
+        assert float(l_nu[0]) > float(l_nu[1]), "X-ray corona flux lost relative to radio"
+
+    def test_preintegrated_matches_full_wavelength_uv(self):
+        """Preintegrated photometry must track the (now-corrected) full path.
+
+        The seed rollover is wavelength-dependent within a band, so it is baked
+        into the corona lookup table along a seed-temperature axis. A UV filter
+        straddling the rollover knee is the sensitive case.
+        """
+        import numpy as np
+
+        from tengri.components.agn.disc import kubota_done_disc
+        from tengri.components.agn.kd_precompute import (
+            kubota_done_disc_preintegrated,
+            preintegrate_kd_components,
+        )
+
+        # A narrow UV bandpass near the seed-rollover knee (~2500 A).
+        centre = 2500.0
+        fw = [np.linspace(centre - 200.0, centre + 200.0, 64)]
+        ft = [np.exp(-0.5 * ((fw[0] - centre) / 80.0) ** 2)]
+        z = 0.0
+        kd = preintegrate_kd_components(fw, ft, redshift=z)
+
+        kw = dict(
+            agn_log_lbol=12.22,
+            agn_log_mbh=8.0,
+            agn_log_ledd=-1.0,
+            agn_a_spin=0.0,
+            agn_cos_inc=0.5,
+        )
+        preint = kubota_done_disc_preintegrated(kd, **kw)[0]
+
+        # Full-wavelength band flux through the same filter.
+        wave = jnp.asarray(fw[0])
+        l_nu_full = kubota_done_disc(wave, **kw)
+        trans = jnp.asarray(ft[0])
+        full = float(
+            jnp.trapezoid(l_nu_full * trans / wave, wave) / jnp.trapezoid(trans / wave, wave)
+        )
+
+        rel_err = abs(float(preint) - full) / full
+        assert rel_err < 0.12, f"preint {float(preint):.3e} vs full {full:.3e}, err {rel_err:.1%}"

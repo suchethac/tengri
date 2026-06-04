@@ -20,20 +20,35 @@ When vmapping over hundreds of galaxies in batch inference, the
 `(n_galaxies, n_age, n_wave)` tensor hits memory limits much sooner than
 `(n_galaxies, n_age, n_filters)`.
 
-## Prediction Modes
+## Prediction paths (build-time `approx=`)
+
+The forward-projection path is chosen **at model build time** via the
+`approx=` argument — there is no per-call `mode=` kwarg on
+`predict_photometry` / `predict_spectrum`.
 
 ```python
-model.predict_photometry(params, mode="...")
-
-  "auto"           Compositional → Hybrid → Exact (default).
-  "compositional"  Full-resolution JIT kernel.     Bit-identical to exact.
-  "hybrid"         Precomputed SSP + exact non-stellar. Fast, ~0.02% error.
-  "exact"          Raw pipeline, no JIT.           Reference path.
+SEDModel.build(..., approx=None)              # exact wave-grid integration (default, reference)
+SEDModel.build(..., approx=WavePrecomp())     # photometry SSP×filter LUT  (the "hybrid" path)
+SEDModel.build(..., approx=SpectrumPrecomp()) # spectrum per-pixel LUT     (Phase 5)
 ```
 
-**Auto mode** routes to compositional (0% error). Use `mode="hybrid"` when
-the speed/accuracy trade-off is acceptable (batch inference, initial
-exploration, real-time visualization).
+| `approx=` | What it does | Error vs exact |
+|-----------|--------------|----------------|
+| `None` | Full-resolution exact pipeline. | reference |
+| `WavePrecomp()` | Preintegrated SSP×filter LUT for stellar photometry (the speedup). Additive emitters (dust IR, radio, X-ray, AGN) are integrated through the true filter transmission — exact. Only the stellar **dust attenuation** uses the effective-wavelength (+Taylor) approximation. | stellar continuum machine-exact; additive emitters exact; stellar dust attenuation ~0.3–0.5% on real filters (Zacharegkas+2025) |
+| `SpectrumPrecomp()` | Per-pixel effective-wavelength continuum LUT for spectroscopy. High-R auto-falls-back to exact. | same caveats as above |
+
+On a **joint** photometry+spectroscopy observation, either opt-in builds *both*
+LUT families and the forward pass projects both channels in one fused kernel
+(`predict_via_precomp` + `predict_spectrum_via_precomp`). Velocity dispersion /
+LSF are not applied on the per-pixel continuum LUT.
+
+Both run inside the same fused, structurally + persistently cached
+`@jax.jit` kernel (`predict_observables_jit`). `predict_observables` runs the
+identical logic eagerly (no compile) for one-off/interactive use; the two share
+one implementation and are bit-identical. Internally the kernel selects
+different strategies (historically named "compositional"/"hybrid"/"exact"); those
+names are an implementation detail of `forward/_kernels/`, not a user-facing API.
 
 ## Benchmarks (Apple M-series CPU, post-JIT warmup, SDSS ugriz, z=0.1, float64)
 
@@ -232,9 +247,12 @@ Used by: SSP metallicity, DL07 (qpah, umin), SKIRTOR (5D), CLOUDY
 ### Taylor correction scope
 
 The spectral moment Ψ corrects the dust factorization error for
-**multiplicative operators** only (dust attenuation).
-It does NOT apply to additive components (nebular, AGN, dust IR) —
-these are evaluated at full wavelength in all modes.
+**multiplicative operators** only (dust attenuation). It is not needed for
+additive components (dust IR, radio, X-ray, AGN): these are computed on the
+full wavelength grid and integrated through the true filter transmission
+(`lnu_filter_integral_batch`), so they are exact under `WavePrecomp` — no
+effective-wavelength approximation. (Nebular emission baked into the SSP grid
+rides along in the stellar Φ-tensor.)
 
 ### Preintegration status by component
 
@@ -266,21 +284,26 @@ redshift treatment, gradient analysis, and troubleshooting.
 
 ### Spectroscopic precomputation
 
-SSP templates pre-interpolated to observed wavelength grid at fixed z:
+SSP templates pre-interpolated to the observation's spectral pixel grid,
+selected at build time (there is no `model.precompute_spectroscopy(...)`
+method — that surface was never shipped):
 ```python
-model.precompute_spectroscopy(wave_obs)
+SEDModel.build(..., observation=Observation(spectroscopy=Spectroscopy(wave_obs=...)),
+               approx=SpectrumPrecomp())
 ```
-Replaces per-call wavelength interpolation with precomputed lookup.
-Also builds the hybrid spectrum kernel automatically.
+Replaces per-call wavelength interpolation with a per-pixel LUT.
 
 ### Free-redshift z-table
 
-SSP photometry precomputed on a redshift grid:
+For a free `redshift`, `WavePrecomp` automatically builds a redshift table and
+interpolates the SSP×filter LUT to the current z at inference time. Tune the
+grid via the `WavePrecomp` knobs (there is no `model.precompute_ztable(...)`
+method):
 ```python
-model.precompute_ztable(z_min=0.001, z_max=3.0, n_z=100)
+SEDModel.build(..., approx=WavePrecomp(n_z=100, z_min=0.001, z_max=3.0))
 ```
-Interpolated to current z at inference time (<0.01% error at 100 points).
-Also builds the hybrid z-table photometry kernel.
+Interpolated to current z at inference time (<0.01% error at 100 points,
+triweight kernel).
 
 ### Mixed precision
 

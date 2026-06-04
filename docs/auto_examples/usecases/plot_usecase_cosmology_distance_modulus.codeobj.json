@@ -994,6 +994,22 @@
    "name": "Observation"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "_Environ"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "params_fixed": [
   {
    "is_class": false,
@@ -1003,7 +1019,7 @@
    "name": "dict"
   }
  ],
- "plt.close": [
+ "plt.show": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1016,23 +1032,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "close"
-  }
- ],
- "plt.savefig": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "savefig"
+   "name": "show"
   }
  ],
  "plt.subplots": [

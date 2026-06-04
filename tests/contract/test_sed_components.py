@@ -82,6 +82,10 @@ def _make_model_for_dust(*, same_law=True):
         ssp_data=ssp_data,
         _forward_dtype=jnp.dtype("float64"),
         precomputed=precomputed,
+        # The legacy PrecomputedData.dust_age_weights container was retired
+        # (#620); build_dust_atten_component now computes the age weights inline
+        # from ssp_ages_yr, so the mock supplies a realistic SSP age grid.
+        ssp_ages_yr=jnp.logspace(5.0, 10.1, N_AGE),
         _dust_law_bc_fn=flat_law,
         _dust_law_diff_fn=flat_law,
         _dust_law_bc=law_name,

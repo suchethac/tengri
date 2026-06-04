@@ -29,8 +29,14 @@ from tengri.components.igm import igm_transmission
 from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
 from tengri.components.stellar.sfh.mean_sfh import double_powerlaw, dpl
 from tengri.components.stellar.sfh.psd_models import drw_variance
+
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
 from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 from tengri.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
 
 jax.config.update("jax_enable_x64", True)
 
@@ -123,9 +129,38 @@ class TestGradientCorrectness:
         t = jnp.logspace(7, 10, 100)
 
         def sfh_sum(alpha: float) -> float:
-            return jnp.sum(dpl(t, alpha, beta=1.0, tau=1e9, log_peak_sfr=10.0))
+            return jnp.sum(dpl(t, alpha, beta=1.0, tau=1e9, age=_AGE_UNIV_YR, log_total_mass=10.0))
 
         _check_grad_scalar(sfh_sum, 1.5, eps=1e-5, tol=0.005)
+
+    def test_1b_dpl_gradient_finite_across_formation_boundary(self) -> None:
+        """Regression (#514 follow-up): dpl alpha/beta gradients stay finite when
+        the lookback grid extends past the formation anchor (lookback >= age).
+
+        ``dpl`` masks the pre-formation region (T = age - lookback <= 0) with a
+        ``jnp.where``. Using ``jnp.inf`` as the masked dummy made ``inf**alpha``
+        and its derivative NaN, which leaked through the where VJP and poisoned
+        the gradient w.r.t. ``alpha`` for *any* grid point older than ``age``.
+        The finite-dummy double-where fix keeps both branches finite. This bit
+        the AGN fused photometry gradient test once the age default became the
+        cosmology-derived age of the universe.
+        """
+        # Grid deliberately extends to 14 Gyr, past every plausible age anchor,
+        # so a chunk of points fall in the masked T <= 0 region.
+        t = jnp.linspace(1e5, 14e9, 200)
+        for age in (5.0e9, 13.6e9, _AGE_UNIV_YR):
+            g_alpha = jax.grad(
+                lambda a, age=age: jnp.sum(
+                    dpl(t, alpha=a, beta=1.0, tau=3e9, age=age, log_total_mass=10.0)
+                )
+            )(1.5)
+            g_beta = jax.grad(
+                lambda b, age=age: jnp.sum(
+                    dpl(t, alpha=1.5, beta=b, tau=3e9, age=age, log_total_mass=10.0)
+                )
+            )(1.0)
+            assert jnp.isfinite(g_alpha), f"dpl ∂/∂alpha non-finite at age={age:.3e}"
+            assert jnp.isfinite(g_beta), f"dpl ∂/∂beta non-finite at age={age:.3e}"
 
     def test_2_dust_attenuation_gradient(self) -> None:
         """Test 2: Dust attenuation gradient wrt tau_bc (birth cloud optical depth).

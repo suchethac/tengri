@@ -25,6 +25,7 @@ Usage::
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -41,15 +42,19 @@ class SpectralIndexDef:
     name : str
         Human-readable name (e.g. ``"Dn4000"``).
     index_type : str
-        Either ``"EW"`` (equivalent width) or ``"break"`` (flux ratio).
+        ``"EW"`` (equivalent width), ``"break"`` (flux ratio), or
+        ``"slope"`` (power-law spectral slope β over a window — e.g. the
+        UV continuum slope, Calzetti+1994).
     continuum : tuple of tuple
         Continuum/sideband windows as ``((lo1, hi1), (lo2, hi2), ...)``.
         Rest-frame wavelengths in Angstrom.
         For EW indices: blue and red pseudo-continuum sidebands.
         For break indices: exactly two windows (numerator, denominator).
+        For slope indices: unused (pass ``()``); the fit range is ``feature``.
     feature : tuple of float or None
-        Feature window ``(lo, hi)`` in Angstrom. Required for EW indices,
-        None for break indices.
+        Feature window ``(lo, hi)`` in Angstrom. Required for EW indices
+        (the absorption feature) and slope indices (the fit range), None
+        for break indices.
     units : str
         ``"AA"`` for Angstrom (default) or ``"mag"`` for magnitude.
 
@@ -80,12 +85,16 @@ class SpectralIndexDef:
     units: str = "AA"
 
     def __post_init__(self):
-        if self.index_type not in ("EW", "break"):
-            raise ValueError(f"index_type must be 'EW' or 'break', got {self.index_type!r}")
+        if self.index_type not in ("EW", "break", "slope"):
+            raise ValueError(
+                f"index_type must be 'EW', 'break', or 'slope', got {self.index_type!r}"
+            )
         if self.index_type == "EW" and self.feature is None:
             raise ValueError("EW indices require a feature window.")
         if self.index_type == "break" and len(self.continuum) != 2:
             raise ValueError("Break indices require exactly 2 continuum windows.")
+        if self.index_type == "slope" and self.feature is None:
+            raise ValueError("Slope indices require a feature window (the fit range).")
 
     @property
     def wave_min(self) -> float:
@@ -203,6 +212,105 @@ STANDARD_INDICES: dict[str, SpectralIndexDef] = {
         continuum=((4211.00, 4219.75), (4241.00, 4251.00)),
         feature=(4222.25, 4234.75),
     ),
+    # UV continuum slope β (Calzetti+1994), f_λ ∝ λ^β over 1250–2600 Å.
+    "uv_slope_beta": SpectralIndexDef(
+        name="uv_slope_beta",
+        index_type="slope",
+        continuum=(),
+        feature=(1250.0, 2600.0),
+    ),
+}
+
+
+# ── Composite indices ─────────────────────────────────────────────
+
+
+@dataclasses.dataclass(frozen=True)
+class CompositeIndexDef:
+    """A spectral index that is a function of atomic indices.
+
+    Composite indices break the age-metallicity degeneracy by combining
+    multiple Lick measurements (Worthey & Ottaviani 1997; Thomas, Maraston
+    & Bender 2003). Standard examples include ``[MgFe]'`` (sensitive to
+    [Fe/H] but not [alpha/Fe]) and ``<Fe>`` (the mean of Fe5270 and Fe5335).
+
+    Parameters
+    ----------
+    name : str
+        Human-readable name, e.g. ``"[MgFe]'"`` or ``"<Fe>"``.
+    components : tuple of SpectralIndexDef
+        The atomic indices this composite is built from.
+    combiner : Callable
+        Function that takes one argument per atomic index (in the same
+        order as ``components``) and returns the composite value. Must be
+        JAX-compatible (operate on ``jnp`` arrays) so the composite stays
+        differentiable through ``measure_index_jax``.
+    units : str
+        Units of the composite value, for display only. Default ``"AA"``.
+
+    Examples
+    --------
+    The Thomas+2003 [MgFe]' index::
+
+        from tengri import STANDARD_INDICES, CompositeIndexDef
+
+        mgfe_prime = CompositeIndexDef(
+            name="[MgFe]'",
+            components=(
+                STANDARD_INDICES["Mgb"],
+                STANDARD_INDICES["Fe5270"],
+                STANDARD_INDICES["Fe5335"],
+            ),
+            combiner=lambda mgb, fe1, fe2: jnp.sqrt(
+                jnp.maximum(mgb * (0.72 * fe1 + 0.28 * fe2), 0.0)
+            ),
+        )
+    """
+
+    name: str
+    components: tuple[SpectralIndexDef, ...]
+    combiner: Callable[..., jnp.ndarray]
+    units: str = "AA"
+
+    @property
+    def wave_min(self) -> float:
+        return min(c.wave_min for c in self.components)
+
+    @property
+    def wave_max(self) -> float:
+        return max(c.wave_max for c in self.components)
+
+
+STANDARD_COMPOSITE_INDICES: dict[str, CompositeIndexDef] = {
+    # Thomas, Maraston & Bender 2003, MNRAS 339, 897 — [MgFe]' is the
+    # canonical [alpha/Fe]-insensitive [Fe/H] tracer.
+    "[MgFe]'": CompositeIndexDef(
+        name="[MgFe]'",
+        components=(
+            STANDARD_INDICES["Mgb"],
+            STANDARD_INDICES["Fe5270"],
+            STANDARD_INDICES["Fe5335"],
+        ),
+        combiner=lambda mgb, fe1, fe2: jnp.sqrt(jnp.maximum(mgb * (0.72 * fe1 + 0.28 * fe2), 0.0)),
+    ),
+    # Mean iron (Faber+1985 / Worthey 1994).
+    "<Fe>": CompositeIndexDef(
+        name="<Fe>",
+        components=(STANDARD_INDICES["Fe5270"], STANDARD_INDICES["Fe5335"]),
+        combiner=lambda fe1, fe2: 0.5 * (fe1 + fe2),
+    ),
+    # Higher-order Balmer sums used as age indicators that are insensitive
+    # to abundance ratios (Worthey & Ottaviani 1997).
+    "HdA+HgA": CompositeIndexDef(
+        name="HdA+HgA",
+        components=(STANDARD_INDICES["HdA"], STANDARD_INDICES["HgA"]),
+        combiner=lambda hda, hga: hda + hga,
+    ),
+    "HdF+HgF": CompositeIndexDef(
+        name="HdF+HgF",
+        components=(STANDARD_INDICES["HdF"], STANDARD_INDICES["HgF"]),
+        combiner=lambda hdf, hgf: hdf + hgf,
+    ),
 }
 
 
@@ -212,7 +320,7 @@ STANDARD_INDICES: dict[str, SpectralIndexDef] = {
 def measure_index_jax(
     wave_rest: jnp.ndarray,
     flux: jnp.ndarray,
-    index_def: SpectralIndexDef,
+    index_def: SpectralIndexDef | CompositeIndexDef,
 ) -> jnp.ndarray:
     """Measure a spectral index on a rest-frame spectrum.
 
@@ -223,8 +331,9 @@ def measure_index_jax(
         in ``index_def``.
     flux : ndarray, shape (n_pix,)
         Flux density (any consistent units — only ratios matter).
-    index_def : SpectralIndexDef
-        Index definition specifying windows and index type (EW or break).
+    index_def : SpectralIndexDef or CompositeIndexDef
+        Atomic index (EW or break) or a composite that combines several
+        atomic measurements via a user-provided function.
 
     Returns
     -------
@@ -240,8 +349,13 @@ def measure_index_jax(
     **Gradient-safe**: yes — fully differentiable w.r.t. flux.
 
     """
+    if isinstance(index_def, CompositeIndexDef):
+        atomic_values = tuple(measure_index_jax(wave_rest, flux, c) for c in index_def.components)
+        return index_def.combiner(*atomic_values)
     if index_def.index_type == "break":
         return _measure_break(wave_rest, flux, index_def)
+    elif index_def.index_type == "slope":
+        return _measure_slope(wave_rest, flux, index_def)
     else:
         return _measure_ew(wave_rest, flux, index_def)
 
@@ -282,6 +396,31 @@ def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> 
     if idx.units == "mag":
         return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
     return ew
+
+
+def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
+    """Power-law spectral slope β over the feature window (e.g. UV slope).
+
+    Fits ``f_λ ∝ λ^β``. With the SED in f_ν units, β = d ln(f_ν)/d ln(λ) − 2
+    (Calzetti+1994 convention — matches
+    :func:`tengri.utils.sed_quantities.compute_uv_slope_beta`). Uses a soft
+    sigmoid window (differentiable) for the weights, then analytic weighted
+    least squares in log-log space.
+    """
+    lo, hi = idx.feature
+    edge_width = 1.0
+    w = jax.nn.sigmoid((wave - lo) / edge_width) * jax.nn.sigmoid((hi - wave) / edge_width)
+    log_wave = jnp.log(jnp.maximum(wave, 1.0))
+    log_fnu = jnp.log(jnp.maximum(flux, 1e-50))
+
+    sw = jnp.sum(w)
+    sx = jnp.sum(w * log_wave)
+    sy = jnp.sum(w * log_fnu)
+    sxx = jnp.sum(w * log_wave**2)
+    sxy = jnp.sum(w * log_wave * log_fnu)
+    denom = sxx - sx**2 / jnp.maximum(sw, 1e-30)
+    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, 1e-30)) / jnp.maximum(denom, 1e-30)
+    return slope_fnu - 2.0
 
 
 # ── Observed data container ───────────────────────────────────────

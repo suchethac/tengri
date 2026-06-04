@@ -44,6 +44,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "SpectrumPrecomp",
         # ── Spatial profile components ──────────────────────────────
         "Exponential",
+        "FilterConvention",
         "FlatSlab",
         "Sersic",
         # ── SEDComponent extension surface — demoted; see DEMOTED_BUT_IMPORTABLE
@@ -83,7 +84,32 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "search",
         # ── SSP data setup ──────────────────────────────────────────
         "download_ssp",
+        "list_available_ssps",
         "list_known_ssps",
+        # ── SSP loaders (closes #496) ───────────────────────────────
+        "load_ssp",
+        "load_ssp_data",
+        "SSPData",
+        # ── Component helpers (closes #497 / #498) ──────────────────
+        # The BAGPIPES reproduction notebook (PR #493) needed direct
+        # callable access to these — tying them to a full SEDModel
+        # build for a curve-only check is unnecessary friction.
+        "igm_transmission",
+        "velocity_broaden",
+        "apply_lsf",
+        # ── GP-noise kernels + spectral indices (closes #511) ───────
+        "exp_squared_kernel",
+        "matern32_kernel",
+        "gp_noise_covariance",
+        "SpectralIndexDef",
+        "SpectralIndexData",
+        "STANDARD_INDICES",
+        "measure_index_jax",
+        # ── Composite spectral indices (closes #505) ────────────────
+        "CompositeIndexDef",
+        "STANDARD_COMPOSITE_INDICES",
+        # ── Per-age stellar mass-remaining curve (closes #447) ──────
+        "compute_mass_remaining_fraction",
         # ── Registry introspection ──────────────────────────────────
         "describe",
         "describe_agn_model",
@@ -102,13 +128,17 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_components",
         "list_dust_emission_models",
         "list_dust_laws",
+        "list_filter_conventions",
         "list_filters",
+        "list_igm_models",
         "list_inference_methods",
         "list_nebular_backends",
         "list_parameters",
         "list_plots",
+        "list_radio_models",
         "list_recipes",
         "list_sfh_models",
+        "list_xray_models",
         "ParameterRecord",
         "recipe_parameters",
         "summary",
@@ -165,14 +195,13 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         "print_bibtex",
         "print_citations",
         "print_paper_citation",
-        # Noise kernel helpers — use `tengri.observation.noise.*` instead
-        "exp_squared_kernel",
-        "gp_noise_covariance",
-        "matern32_kernel",
-        # Single-purpose loaders — use `tengri.observation.load_filter_set` /
-        # `tengri.sps.load_ssp_data` instead
+        # (exp_squared_kernel / matern32_kernel / gp_noise_covariance were
+        # re-promoted to top-level as of #511 — they're the standard noise-model
+        # kernels and every spectroscopy fit needs them.)
+        # Single-purpose loaders — use `tengri.observation.load_filter_set` instead.
+        # (load_ssp_data is RE-PROMOTED to top-level as of #496 — every reproduction
+        # notebook needs it, so back into ALLOWED_TOP_LEVEL it goes.)
         "load_filter_set",
-        "load_ssp_data",
         # Cache machinery — use `tengri.utils.jax_cache.*` /
         # `tengri.inference.jit_engine.*` instead
         "cache_size_bytes",

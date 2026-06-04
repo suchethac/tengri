@@ -19,24 +19,32 @@ from pathlib import Path
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
-import jax  # noqa: E402
+import jax
 
 jax.config.update("jax_enable_x64", True)
 
-import jax.numpy as jnp  # noqa: E402
+import jax.numpy as jnp
 
-from tengri import Fitter, Observation, Parameters, Photometry, SEDModel  # noqa: E402
-from tengri.components.sps.dsps_wrapper import load_ssp_data  # noqa: E402
-from tengri.observation.filters import load_filter_set  # noqa: E402
-from tengri.parameters.priors import Fixed, Uniform  # noqa: E402
+from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
+from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.observation.filters import load_filter_set
+from tengri.parameters.priors import Fixed, Uniform
 
 REPO = Path(__file__).resolve().parent.parent
 SSP_PATH = REPO / "data" / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 FILTER_NAMES = [
-    "hst_f606w", "hst_f775w", "hst_f814w", "hst_f850lp",
-    "hst_f125w", "hst_f140w", "hst_f160w",
-    "vista_ks", "irac_36", "irac_45",
-    "herschel_160", "herschel_250",
+    "hst_f606w",
+    "hst_f775w",
+    "hst_f814w",
+    "hst_f850lp",
+    "hst_f125w",
+    "hst_f140w",
+    "hst_f160w",
+    "vista_ks",
+    "irac_36",
+    "irac_45",
+    "herschel_160",
+    "herschel_250",
 ]
 
 CONST_RE = re.compile(
@@ -79,7 +87,7 @@ def _make_model(z_kind: str, dust_emission: str | None, ssp_data, ztable: bool):
 
     spec = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_peak_sfr=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(8.0, 12.0),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -131,16 +139,18 @@ def probe(z_kind: str, dust_emission: str | None, ssp_data, ztable: bool):
 
     consts = _scan(hlo)
     print(
-        f"  build: {build_s*1000:6.0f} ms | lower: {lower_s*1000:6.0f} ms | "
-        f"first-call: {first_s*1000:6.0f} ms"
+        f"  build: {build_s * 1000:6.0f} ms | lower: {lower_s * 1000:6.0f} ms | "
+        f"first-call: {first_s * 1000:6.0f} ms"
     )
     print(
-        f"  HLO: {len(hlo)/1e6:7.1f} MB | >1MB consts: {len(consts):3d} | "
-        f"largest: {consts[0][0]/1e6:.1f} MB ({consts[0][1]})"
+        f"  HLO: {len(hlo) / 1e6:7.1f} MB | >1MB consts: {len(consts):3d} | "
+        f"largest: {consts[0][0] / 1e6:.1f} MB ({consts[0][1]})"
         if consts
-        else f"  HLO: {len(hlo)/1e6:7.1f} MB | >1MB consts: 0"
+        else f"  HLO: {len(hlo) / 1e6:7.1f} MB | >1MB consts: 0"
     )
-    print(f"  peak RSS: build->{rss_after_lower-rss0:6.0f} MB | compile->{rss_after_compile-rss0:6.0f} MB")
+    print(
+        f"  peak RSS: build->{rss_after_lower - rss0:6.0f} MB | compile->{rss_after_compile - rss0:6.0f} MB"
+    )
     return {
         "label": label,
         "hlo_mb": len(hlo) / 1e6,

@@ -30,12 +30,15 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 # sphinx_gallery_thumbnail_number = 1
 
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib
 
 matplotlib.use("Agg")
@@ -85,7 +88,7 @@ model = tengri.SEDModel.build(
     sfh={
         "type": "tsnorm",  # Truncated normal SFH (analytic burst)
         "*": tengri.FIXED,
-        "log_peak_sfr": 1.0,  # peak SFR = 10 Msun/yr
+        "log_total_mass": 10.0,  # peak SFR = 10 Msun/yr
         "peak_lbt_gyr": 0.5,  # peak at age = 0.5 Gyr lookback time
         "width_gyr": 0.2,  # narrow gaussian → bursty
         "skew": 0.0,
@@ -121,7 +124,7 @@ for i, z in enumerate(z_grid):
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.5,
             "width_gyr": 0.2,
             "skew": 0.0,
@@ -178,8 +181,4 @@ ax_norm.axhline(y=1.0, color="gray", linestyle="--", alpha=0.5)
 fig.tight_layout()
 
 # Save to script directory
-script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(
-    str(script_dir / "plot_cosmic_dimming_observed_flux.png"), dpi=150, bbox_inches="tight"
-)
-plt.close()
+plt.show()

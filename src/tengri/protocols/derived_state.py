@@ -142,6 +142,12 @@ class DerivedState:
     dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_slope_precomp: jnp.ndarray | None = None
+    # Log-attenuation slopes d(ln A)/dλ = −τ·k'(λ_eff), per filter. Published so
+    # the two-component first-order Taylor projection (#617) can be written
+    # T_a' = T_a·(logslope_diff + y·logslope_bc) — NaN-safe where A → 0 (avoids
+    # the A_bc^(y−1) pole at X-ray/UV bands far off the dust curve).
+    dust_bc_log_attenuation_slope_precomp: jnp.ndarray | None = None
+    dust_diff_log_attenuation_slope_precomp: jnp.ndarray | None = None
     # Young-star indicator on the SSP age grid (Phase 3c-3c-iv-b),
     # shape ``(n_age,)``. Smooth sigmoid transition around
     # ``DustSEDComponent.config.t_birth_yr``. ``y(a)`` = 1 for fully
@@ -153,6 +159,14 @@ class DerivedState:
     # consumers like the dust attenuation LUT). Shape ``(n_filters,)``,
     # units Å.
     filter_eff_waves: jnp.ndarray | None = None
+    # Zero-padded observed-frame filter curves, published alongside
+    # ``filter_eff_waves`` so additive, unattenuated emitters (dust IR, radio,
+    # X-ray, AGN) can project their dense rest-frame SED through the *true*
+    # filter transmission via ``lnu_filter_integral_batch`` — bit-exact vs the
+    # exact path, instead of sampling at the effective wavelength. Shapes
+    # ``(n_filters, max_len)``; ``phot_filter_waves_padded`` units Å.
+    phot_filter_waves_padded: jnp.ndarray | None = None
+    phot_filter_trans_padded: jnp.ndarray | None = None
     # Spectrum pixel effective wavelengths in the rest frame (Phase 5,
     # published when approx=SpectrumPrecomp() is set). Per-pixel effective
     # wavelengths in the galaxy rest frame, computed as observed wavelengths
@@ -183,6 +197,15 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+    # Dust IR re-emission per filter (rest-frame Lν, erg/s/Hz). Additive and
+    # unattenuated — summed by predict_via_precomp like the other families.
+    # Published by the two-component dust component under WavePrecomp (#622).
+    dust_emission_phot_lnu_precomp: jnp.ndarray | None = None
+    # Radio (synchrotron + free-free) and X-ray per filter (rest-frame Lν,
+    # erg/s/Hz). Additive, unattenuated power-law emitters summed by
+    # predict_via_precomp under WavePrecomp (#624).
+    radio_phot_lnu_precomp: jnp.ndarray | None = None
+    xray_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (Phase 5, published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component
@@ -191,8 +214,29 @@ class DerivedState:
     stellar_spec_lnu_precomp: jnp.ndarray | None = None
     nebular_spec_lnu_precomp: jnp.ndarray | None = None
     dust_spec_lnu_precomp: jnp.ndarray | None = None
+    # Dust IR re-emission per spectrum pixel (rest-frame Lν, erg/s/Hz);
+    # additive/unattenuated, summed by predict_spectrum_via_precomp (#622).
+    dust_emission_spec_lnu_precomp: jnp.ndarray | None = None
+    # Radio / X-ray per spectrum pixel (rest-frame Lν, erg/s/Hz); additive,
+    # unattenuated, summed by predict_spectrum_via_precomp (#624).
+    radio_spec_lnu_precomp: jnp.ndarray | None = None
+    xray_spec_lnu_precomp: jnp.ndarray | None = None
     agn_spec_lnu_precomp: jnp.ndarray | None = None
     igm_spec_transmission_precomp: jnp.ndarray | None = None
+    # Age-resolved per-pixel stellar LUT, shape ``(n_age, n_spec_pixel)``,
+    # erg/s/Hz — needed for two-component (Charlot & Fall) dust on the
+    # spectrum LUT path (sum over age == stellar_spec_lnu_precomp).
+    stellar_spec_lnu_per_age_precomp: jnp.ndarray | None = None
+    # Dust transmission at spectrum pixel centres (dimensionless, in [0, 1]).
+    # Unlike photometry, no Taylor moment is needed — a pixel is a single
+    # wavelength, so A(λ_pix) is exact. ``dust_spec_transmission_precomp`` is
+    # the single-component / diffuse transmission; the two-component split
+    # publishes ``dust_spec_bc_transmission_precomp`` (birth cloud) and
+    # ``dust_spec_diff_transmission_precomp`` (diffuse) applied with the
+    # shared ``dust_young_indicator`` age weighting.
+    dust_spec_transmission_precomp: jnp.ndarray | None = None
+    dust_spec_bc_transmission_precomp: jnp.ndarray | None = None
+    dust_spec_diff_transmission_precomp: jnp.ndarray | None = None
 
     # Radio / X-ray / IGM / shock
     sed_radio: jnp.ndarray | None = None

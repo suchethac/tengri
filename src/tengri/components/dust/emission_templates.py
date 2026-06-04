@@ -34,6 +34,59 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
 )
 
+# Upper bound of the U^-2 power-law radiation-field distribution used to
+# generate the DL07 power-law (PDR) templates (``scripts/convert_dl07_templates.py``
+# writes ``umax_powerlaw = 1e6``). Used to restore the PDR component's
+# relative luminosity via the DL07 Eq. 33 factor (see ``dl07_tabulated``).
+_DL07_UMAX_POWERLAW = 1.0e6
+# DL14 (Draine et al. 2014) extends the power-law upper bound to U_max = 1e7.
+_DL14_UMAX_POWERLAW = 1.0e7
+
+
+def _pdr_luminosity_weight(umin, umax, alpha):
+    r"""Relative luminosity of the power-law (PDR) vs single-U dust component.
+
+    For a dust-mass distribution ``dM/dU \propto U^{-alpha}`` over
+    ``[U_min, U_max]``, equilibrium dust emits a luminosity ``\propto U``, so
+    the power-law (PDR) component radiates ``R = <U>_pl / U_min`` times more
+    per unit dust mass than the diffuse (``U = U_min``) component
+    (Draine & Li 2007, Eq. 33; Draine et al. 2014). Multiplying the power-law
+    template by ``R`` converts the dust-*mass* fraction ``gamma`` into the
+    correct *luminosity* weighting; without it the warm PDR emission is
+    under-represented (~14x at U_min=1) and the IR SED comes out spuriously
+    cold.
+
+    Closed form (``alpha != 1, 2``), with ``x = U_max/U_min``::
+
+        R = (1 - alpha) / (2 - alpha) * (x ^ {2 - alpha} - 1) / (x ^ {1 - alpha} - 1)
+
+    and the integrable-pole limits ``R = (x-1)/ln x`` at ``alpha=1`` and
+    ``R = x ln x / (x-1)`` at ``alpha=2``.
+
+    Notes
+    -----
+    **JIT/grad-safe**: the general branch evaluates a pole-shifted ``alpha`` so
+    it stays finite, and ``jnp.where`` selects the exact limit forms at
+    ``alpha = 1, 2`` — no NaN leaks through the ``where`` VJP.
+    """
+    x = umax / umin
+    lnx = jnp.log(x)
+    eps = 1e-3
+    near1 = jnp.abs(alpha - 1.0) < eps
+    near2 = jnp.abs(alpha - 2.0) < eps
+    # Shift alpha off the integrable poles in the general branch so it never
+    # evaluates 0/0 (which would poison the gradient even when unselected).
+    a_gen = jnp.where(near1, 1.0 + eps, jnp.where(near2, 2.0 + eps, alpha))
+    a1 = 1.0 - a_gen
+    a2 = 2.0 - a_gen
+    general = (a1 / a2) * (x**a2 - 1.0) / (x**a1 - 1.0)
+    return jnp.where(
+        near1,
+        (x - 1.0) / lnx,
+        jnp.where(near2, x * lnx / (x - 1.0), general),
+    )
+
+
 # ── Template search paths (resolved once, reused for all models) ──
 
 _DATA_CANDIDATES = [
@@ -110,7 +163,14 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         """DL07 emission from tabulated templates (Draine & Li 2007).
 
         j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * powerlaw(q_PAH, U_min)
+             + gamma * R * powerlaw(q_PAH, U_min)
+
+        where ``R = U_max ln(U_max/U_min) / (U_max - U_min)`` is the DL07
+        Eq. 33 relative luminosity of the power-law (PDR) component (alpha=2,
+        U_max=1e6). The single-U and power-law templates are each
+        shape-normalised to unit wavelength integral; ``R`` restores the PDR
+        component's higher luminosity per unit dust mass, converting the
+        mass-fraction ``gamma`` into the correct luminosity weighting.
 
         Templates are in L_lambda convention (normalized to integrate to
         1 over wavelength).  This function converts to L_nu (Lsun/Hz)
@@ -161,10 +221,21 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
-        # Mix single-U and power-law components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
+        # Mix single-U (diffuse) and power-law (PDR) components.
+        #
+        # ``dust_gamma_dl`` is the *dust-mass* fraction in the power-law-heated
+        # PDR, but the templates are each shape-normalised (unit integral), which
+        # discards the PDR component's higher luminosity per unit mass. PDR dust
+        # is heated by U from U_min to U_max, so it emits a factor
+        #   R = <U>_pl / U_min = U_max * ln(U_max/U_min) / (U_max - U_min)
+        # more than the diffuse component (Draine & Li 2007, Eq. 33, alpha=2).
+        # Restoring R converts the mass fraction into the correct luminosity
+        # weighting; without it the PDR (warm) emission is under-represented by
+        # ~14x at U_min=1 and the IR SED comes out spuriously cold.
+        r_power = _pdr_luminosity_weight(dust_umin_c, _DL07_UMAX_POWERLAW, 2.0)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+            dust_gamma_dl * r_power
+        ) * _bilinear(powerlaw)
 
         # Interpolate template onto target wavelength grid
         # Template is in L_lambda space (integral over wavelength = 1)
@@ -333,7 +404,12 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
         """DL14 emission from tabulated templates.
 
         j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * powerlaw(q_PAH, U_min, alpha)
+             + gamma * R * powerlaw(q_PAH, U_min, alpha)
+
+        where ``R = R(U_min, U_max, alpha)`` is the DL14/DL07 Eq. 33 relative
+        luminosity of the power-law (PDR) component (U_max=1e7). It converts the
+        dust-mass fraction ``gamma`` into the correct luminosity weighting; see
+        ``_pdr_luminosity_weight``.
 
         Normalized to L_absorbed via energy balance.
 
@@ -411,10 +487,14 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
             hi = _bilinear_at_alpha(i_a + 1)
             return (1.0 - fa) * lo + fa * hi
 
-        # Mix single-U and power-law components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _trilinear(
-            powerlaw
-        )
+        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+        # dust-mass fraction; weight the PDR template by its DL14 relative
+        # luminosity R(U_min, U_max, alpha) so it is applied as a luminosity
+        # fraction (see ``_pdr_luminosity_weight``; same fix as DL07).
+        r_power = _pdr_luminosity_weight(dust_umin_c, _DL14_UMAX_POWERLAW, dust_alpha_c)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+            dust_gamma_dl * r_power
+        ) * _trilinear(powerlaw)
 
         # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
         # Templates may be stored in arbitrary units; normalization makes scaling exact.
@@ -709,6 +789,154 @@ def load_dale2014_templates(filepath: str) -> dict:
     }
 
 
+def create_schreiber2018_from_grid(grid_path: str) -> Callable:
+    r"""Create a Schreiber+2018 (S17) cold-dust model backed by tabulated templates.
+
+    This is the tabulated counterpart of the analytic ``schreiber2016`` model:
+    it shares the two-parameter ``(dust_T, dust_f_pah)`` interface but draws the
+    dust-continuum and PAH shapes from the published Schreiber et al. (2018)
+    library (the ``S17`` cold-dust templates packaged with AGNfitter-rX) rather
+    than a modified-blackbody + Drude-profile approximation. The faithful PAH
+    forest at 6--13 μm is the reason to prefer it over ``schreiber2016`` when
+    reproducing AGNfitter-rX's cold-dust component.
+
+    The grid (``data/schreiber2018_templates.h5``, built by
+    ``scripts/build_schreiber2018_grid.py``) stores dust and PAH templates as
+    *native* relative ``L_nu`` over a shared dust-temperature axis. At runtime
+    the model linearly interpolates both in ``dust_T``, forms AGNfitter-rX's
+    native mixture ``(1 - f_PAH)·dust + f_PAH·PAH``, and renormalises the
+    frequency integral to ``L_absorbed``.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``schreiber2018_templates.h5``.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, dust_T=30.0, dust_f_pah=0.05, **kw) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations inside the returned function are
+    ``jnp`` primitives.
+
+    The temperature interpolation is node-exact piecewise-linear (matching
+    AGNfitter-rX's nearest/linear template selection), not the smooth-kernel
+    interpolation that smears tabulated peaks.
+
+    References
+    ----------
+    .. [1] Schreiber, C., et al., 2018, A&A, 609, A30
+           (https://doi.org/10.1051/0004-6361/201731506).
+    .. [2] Martinez-Ramirez et al. 2024, A&A, 688, A46 (AGNfitter-rX packaging).
+    """
+    import h5py as _h5py
+    import numpy as np
+
+    with _h5py.File(grid_path, "r") as f:
+        g = f["schreiber2018"]
+        tdust_np = np.asarray(g["tdust"][:], dtype=np.float64)
+        wave_np = np.asarray(g["wavelength"][:], dtype=np.float64)
+        dust_np = np.asarray(g["dust"][:], dtype=np.float64)
+        pah_np = np.asarray(g["pah"][:], dtype=np.float64)
+
+    tdust = jnp.array(tdust_np, dtype=jnp.float64)
+    tmpl_wave = jnp.array(wave_np, dtype=jnp.float64)
+    dust_templates = jnp.array(dust_np, dtype=jnp.float64)
+    pah_templates = jnp.array(pah_np, dtype=jnp.float64)
+
+    def schreiber2018_tabulated(
+        wavelength_aa: jnp.ndarray,
+        L_absorbed: float,
+        dust_T: float = 30.0,
+        dust_f_pah: float = 0.05,
+        **_kwargs,
+    ) -> jnp.ndarray:
+        """Schreiber+2018 (S17) cold-dust emission from tabulated templates.
+
+        Parameters
+        ----------
+        wavelength_aa : array_like, shape (n_wave,)
+            Rest-frame wavelength grid [Å].
+        L_absorbed : float
+            Total absorbed luminosity. The output L_nu is in the same units
+            per Hz.
+        dust_T : float
+            Dust temperature [K]. Clipped to the grid range. Default: 30.0.
+        dust_f_pah : float
+            Fractional PAH contribution in [0, 1]. Default: 0.05.
+        **_kwargs
+            Extra keyword arguments (ignored, e.g. ``redshift``).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Cold-dust emission L_ν in ``[L_absorbed units] / Hz``.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+        """
+        # Node-exact linear interpolation in dust temperature.
+        t = jnp.clip(dust_T, tdust[0], tdust[-1])
+        i = jnp.clip(jnp.searchsorted(tdust, t) - 1, 0, tdust.shape[0] - 2)
+        ft = (t - tdust[i]) / (tdust[i + 1] - tdust[i])
+        dust_T_template = (1.0 - ft) * dust_templates[i] + ft * dust_templates[i + 1]
+        pah_T_template = (1.0 - ft) * pah_templates[i] + ft * pah_templates[i + 1]
+
+        # Resample both onto the requested grid, then mix natively (AGNfitter-rX
+        # mixes the unnormalised dust/PAH L_nu, so the relative amplitude — and
+        # hence the physical meaning of f_PAH — is preserved).
+        dust_on_grid = jnp.interp(wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0)
+        pah_on_grid = jnp.interp(wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0)
+        f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
+        mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
+
+        # Renormalise the frequency integral to L_absorbed (nu descending for
+        # ascending wavelength, so negate for a positive integral).
+        wave_cm = wavelength_aa * _AA_TO_CM
+        nu = _C_CGS / wave_cm
+        integral = -jnp.trapezoid(mixed, nu)
+        norm = jnp.where(integral > 0.0, L_absorbed / integral, 0.0)
+        return norm * mixed
+
+    return schreiber2018_tabulated
+
+
+def load_schreiber2018_templates(filepath: str) -> dict:
+    r"""Load the Schreiber+2018 (S17) cold-dust template grid from HDF5.
+
+    Parameters
+    ----------
+    filepath : str
+        Path to ``schreiber2018_templates.h5``.
+
+    Returns
+    -------
+    dict
+        JAX-wrapped ``tdust`` [K], ``wavelength`` [Å], ``dust`` and ``pah``
+        ``(n_T, n_wave)`` template arrays (native relative L_nu).
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O is not supported in JIT.
+    """
+    import h5py as _h5py
+    import numpy as np
+
+    with _h5py.File(filepath, "r") as f:
+        g = f["schreiber2018"]
+        return {
+            "tdust": jnp.array(np.array(g["tdust"][:]), dtype=jnp.float64),
+            "wavelength": jnp.array(np.array(g["wavelength"][:]), dtype=jnp.float64),
+            "dust": jnp.array(np.array(g["dust"][:]), dtype=jnp.float64),
+            "pah": jnp.array(np.array(g["pah"][:]), dtype=jnp.float64),
+        }
+
+
 def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated") -> None:
     r"""Load and register the tabulated Dale+2014 model in the emission registry.
 
@@ -850,9 +1078,26 @@ def load_astrodust_templates(filepath: str) -> dict:
                     integral = -np.trapezoid(L_nu_total[i], nu_aa)
                     norms[i] = integral if integral > 0 else 1.0
                 L_nu_normed = L_nu_total / norms[:, None]
-                spectra = np.broadcast_to(L_nu_normed[None, :, :], (2, *L_nu_normed.shape)).copy()
-                single_u = spectra
-                powerlaw = spectra
+                # Single-U component: the per-U spectrum at U = U_min, shape-
+                # normalised. Power-law (PDR) component: dust mass distributed
+                # as dM/dU ∝ U^-alpha from U_min to U_max (= max grid U). Each
+                # mass element at field U' emits the per-U spectrum
+                # L_nu_total[U'] (per H ∝ per mass), so integrate the *raw*
+                # per-U spectra over the lgU grid weighted by U'^(1-alpha)
+                # (dU' = U' ln10 dlgU on a uniform-lgU grid), then shape-
+                # normalise. The forward applies the DL07 Eq. 33 relative-power
+                # weight R. Without this the PDR was a copy of single_u and
+                # ``gamma`` was a no-op (see #571).
+                alpha_pdr = 2.0  # DL07-standard slope for the H&D 2023 grid
+                w_pdr = umin_grid ** (1.0 - alpha_pdr)  # mass weight per lgU bin
+                powerlaw_1d = np.zeros_like(L_nu_normed)
+                n_u = umin_grid.shape[0]
+                for iu in range(n_u):
+                    pdr = (L_nu_total[iu:] * w_pdr[iu:, None]).sum(axis=0)
+                    integ = -np.trapezoid(pdr, nu_aa)
+                    powerlaw_1d[iu] = pdr / integ if integ > 0 else pdr
+                single_u = np.broadcast_to(L_nu_normed[None, :, :], (2, *L_nu_normed.shape)).copy()
+                powerlaw = np.broadcast_to(powerlaw_1d[None, :, :], (2, *powerlaw_1d.shape)).copy()
                 already_lnu = True  # we normalised explicitly above
             elif "wavelength_aa" in f:
                 # Standardized HDF5 (already Angstrom + L_nu normalized)
@@ -1124,10 +1369,22 @@ def create_astrodust_from_grid(
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
-        # Mix single-U and PDR components via gamma
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
-            powerlaw
-        )
+        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+        # dust-mass fraction; weight the PDR template (built in the loader by
+        # integrating the H&D per-U spectra over dM/dU ∝ U^-2) by its DL07
+        # Eq. 33 relative luminosity R so gamma acts as a luminosity fraction
+        # (U_max = max grid U; same fix as DL07/DL14 — see #571).
+        r_power = _pdr_luminosity_weight(dust_umin_c, umin_grid[-1], 2.0)
+        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+            dust_gamma_dl * r_power
+        ) * _bilinear(powerlaw)
+
+        # Energy balance: the R weighting makes the mixed template integrate to
+        # 1 + gamma*(R-1), so renormalise to unit frequency integral on the
+        # (full) template grid before scaling by L_absorbed below.
+        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
+        t_integral = -jnp.trapezoid(template, nu_tmpl)
+        template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)
@@ -1613,10 +1870,20 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
                 + fq * fu * grid[i_q + 1, i_u + 1]
             )
 
-        # Mix single-U and PDR components via gamma
+        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+        # dust-mass fraction; the FSPS/DustEM ``powerlaw`` template carries its
+        # real relative luminosity (∫powerlaw/∫single_u ≈ 14-19), so gamma acts
+        # as a luminosity fraction directly — no analytic R needed (cf. DL07).
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * _bilinear(
             powerlaw
         )
+
+        # Energy balance: the mix integrates to (1-gamma) + gamma*ratio, so
+        # renormalise to unit frequency integral on the (full) template grid
+        # before scaling by L_absorbed.
+        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
+        t_integral = -jnp.trapezoid(template, nu_tmpl)
+        template = jnp.where(t_integral > 0.0, template / t_integral, template)
 
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wavelength_aa, tmpl_wave, template, left=0.0, right=0.0)

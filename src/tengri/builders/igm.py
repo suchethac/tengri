@@ -13,10 +13,11 @@ that activate additional free parameters:
   ``dla_log_n_hi``, ``dla_z``, ``dla_b_turb``, ``dla_temp`` params.
 
 Variants are introspected from
-:data:`tengri.parameters.groups._VALID_IGM_TYPES`; the activated
-free-param set comes from a one-shot call to
-:func:`tengri.parameters.registry.recipe_parameters`, so adding a new
-DLA / patchy parameter in the registry surfaces here automatically.
+:data:`tengri.components.igm.IGM_TRANSMISSION_MODELS` (canonical names
+only — aliases like ``"inoue"`` are validator-side back-compat and get
+no separate factory); the activated free-param set comes from a one-shot
+call to :func:`tengri.parameters.registry.recipe_parameters`, so adding
+a new DLA / patchy parameter in the registry surfaces here automatically.
 
 Examples
 --------
@@ -34,7 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from tengri.builders._factory import make_factory, short_form
-from tengri.parameters.groups import _VALID_IGM_TYPES
+from tengri.parameters.groups import _valid_igm_types
 from tengri.parameters.registry import recipe_parameters
 
 _PREFIXES = ("igm_", "dla_")  # The igm group dict carries both prefixes.
@@ -76,8 +77,16 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
 
 def _populate_factories() -> dict[str, Callable[..., dict]]:
+    # Aliases (e.g. ``"inoue"`` → ``"inoue14"``) are validator-side back-compat
+    # and don't get a separate user-facing factory — the canonical entry serves
+    # both. Filter them out so ``builders.igm.available()`` only lists canonical
+    # names + ``"none"``. (Contract: ``test_igm_builder_factories_skip_aliases``.)
+    from tengri.components.igm.igm import _IGM_ALIASES
+
     factories: dict[str, Callable[..., dict]] = {}
-    for variant in sorted(_VALID_IGM_TYPES):
+    for variant in sorted(_valid_igm_types()):
+        if variant in _IGM_ALIASES:
+            continue
         short_params, flag_map = _discover_params(variant)
         factories[variant] = make_factory(
             variant=variant,

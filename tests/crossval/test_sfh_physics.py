@@ -19,6 +19,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+# Age of the universe today [yr], from the default cosmology — never a
+# literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
+from tengri.cosmology import age_at_z0 as _age_at_z0
+
+_AGE_UNIV_YR = float(_age_at_z0()) * 1e9
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
@@ -37,7 +43,7 @@ class TestConstantSFHPhysics:
         """SFR should be constant in the active window."""
         from tengri.components.stellar.sfh import constant_sfh
 
-        sfr = constant_sfh(T_LOOKBACK, log_sfr=1.0, start=1e9, end=10e9)
+        sfr = constant_sfh(T_LOOKBACK, log_total_mass=10.0, start=1e9, end=10e9)
         active = (T_LOOKBACK >= 1e9) & (T_LOOKBACK <= 10e9)
         sfr_active = sfr[active]
         if len(sfr_active) > 2:
@@ -45,15 +51,15 @@ class TestConstantSFHPhysics:
             assert cv < 0.01, f"Constant SFH should be flat, CV={cv:.4f}"
 
     def test_mass_integral_correct(self):
-        """Integral of SFR * dt = sfr * (end - start)."""
+        """Integral of SFR * dt = 10**log_total_mass."""
         from tengri.components.stellar.sfh import constant_sfh
 
-        sfr_val = 10.0  # log_sfr=1
+        log_total_mass = 10.0
         start, end = 1e9, 10e9
-        sfr = constant_sfh(T_LOOKBACK, log_sfr=1.0, start=start, end=end)
+        sfr = constant_sfh(T_LOOKBACK, log_total_mass=log_total_mass, start=start, end=end)
         mass = float(jnp.trapezoid(sfr, T_LOOKBACK))
-        expected = sfr_val * (end - start)
-        assert abs(mass / expected - 1.0) < 0.10, (
+        expected = 10.0**log_total_mass
+        assert abs(mass / expected - 1.0) < 0.01, (
             f"Mass integral: got {mass:.2e}, expected {expected:.2e}"
         )
 
@@ -72,7 +78,7 @@ class TestExponentialSFHPhysics:
         """
         from tengri.components.stellar.sfh import exponential_sfh
 
-        sfr = exponential_sfh(T_LOOKBACK, log_peak_sfr=1.0, tau=2e9, start=0.0)
+        sfr = exponential_sfh(T_LOOKBACK, log_total_mass=1.0, tau=2e9, start=0.0)
         # SFR should be highest at small lookback (near present) and decay
         young = T_LOOKBACK < 1e9
         old = T_LOOKBACK > 5e9
@@ -94,7 +100,7 @@ class TestDelayedExponentialPhysics:
 
         # start=0 means SF begins at lookback=0 (present day). Peak at ~tau.
         tau = 3e9
-        sfr = delayed_exponential_sfh(T_LOOKBACK, log_peak_sfr=1.0, start=0.0, tau=tau)
+        sfr = delayed_exponential_sfh(T_LOOKBACK, log_total_mass=1.0, start=0.0, tau=tau)
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])
         # Peak should be near tau in lookback time
         assert 0.5e9 < peak_lbt < 10e9, f"Delayed exp peak at {peak_lbt / 1e9:.1f} Gyr"
@@ -114,10 +120,16 @@ class TestDPLPhysics:
         from tengri.components.stellar.sfh import dpl
 
         tau = 5e9
-        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=1.0, tau=tau, log_peak_sfr=1.0)
+        age = _AGE_UNIV_YR
+        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])
-        assert abs(peak_lbt / tau - 1.0) < 0.30, (
-            f"DPL peak at {peak_lbt / 1e9:.1f} Gyr, expected near {tau / 1e9:.1f} Gyr"
+        # New convention (#514): the shape is in cosmic time since formation,
+        # T = age - t_lookback, so the turnover lands near T = tau, i.e. at
+        # lookback age - tau. Compare in cosmic time, matching BAGPIPES dblplaw.
+        t_peak_cosmic = age - peak_lbt
+        assert abs(t_peak_cosmic / tau - 1.0) < 0.30, (
+            f"DPL peak at cosmic time {t_peak_cosmic / 1e9:.1f} Gyr, "
+            f"expected near tau = {tau / 1e9:.1f} Gyr"
         )
 
     def test_alpha_controls_decline(self):
@@ -125,8 +137,9 @@ class TestDPLPhysics:
         from tengri.components.stellar.sfh import dpl
 
         tau = 5e9
-        sfr_steep = dpl(T_LOOKBACK, alpha=4.0, beta=1.0, tau=tau, log_peak_sfr=1.0)
-        sfr_shallow = dpl(T_LOOKBACK, alpha=1.0, beta=1.0, tau=tau, log_peak_sfr=1.0)
+        age = _AGE_UNIV_YR
+        sfr_steep = dpl(T_LOOKBACK, alpha=4.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
+        sfr_shallow = dpl(T_LOOKBACK, alpha=1.0, beta=1.0, tau=tau, age=age, log_total_mass=1.0)
 
         # At recent times (small lookback), steep alpha → lower SFR
         recent = T_LOOKBACK < 1e9
@@ -139,7 +152,7 @@ class TestDPLPhysics:
         from tengri.components.stellar.sfh import dpl
 
         tau = 3e9
-        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=2.0, tau=tau, log_peak_sfr=1.0)
+        sfr = dpl(T_LOOKBACK, alpha=2.0, beta=2.0, tau=tau, age=_AGE_UNIV_YR, log_total_mass=1.0)
         peak_idx = int(jnp.argmax(sfr))
         # Check that SFR is roughly symmetric in log-time around peak
         chex.assert_tree_all_finite(sfr)
@@ -158,7 +171,7 @@ class TestSkewNormalPhysics:
 
         peak = 5e9
         width = 2e9
-        sfr = norm(T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=peak, width=width)
+        sfr = norm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width)
         peak_idx = int(jnp.argmax(sfr))
         peak_lbt_actual = float(T_LOOKBACK[peak_idx])
         assert abs(peak_lbt_actual / peak - 1.0) < 0.15, (
@@ -171,8 +184,8 @@ class TestSkewNormalPhysics:
 
         peak = 5e9
         width = 2e9
-        sfr_sym = snorm(T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=peak, width=width, skew=0.0)
-        sfr_skew = snorm(T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=peak, width=width, skew=2.0)
+        sfr_sym = snorm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width, skew=0.0)
+        sfr_skew = snorm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width, skew=2.0)
 
         # Shapes should differ
         diff = float(jnp.sum(jnp.abs(sfr_sym - sfr_skew)))
@@ -184,9 +197,9 @@ class TestSkewNormalPhysics:
 
         peak = 5e9
         width = 2e9
-        sfr_no_trunc = snorm(T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=peak, width=width, skew=0.0)
+        sfr_no_trunc = snorm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width, skew=0.0)
         sfr_trunc = tsnorm(
-            T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=peak, width=width, skew=0.0, trunc=2.0
+            T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width, skew=0.0, trunc=2.0
         )
 
         # At recent times (small lookback), truncated should be lower
@@ -197,13 +210,17 @@ class TestSkewNormalPhysics:
         """Log-normal: Gaussian in log-time → asymmetric in linear time."""
         from tengri.components.stellar.sfh import lnorm
 
-        sfr = lnorm(T_LOOKBACK, log_peak_sfr=1.0, peak_lbt=3e9, width=0.5)
+        # New convention (#514): log-normal in cosmic time T = age - t_lookback,
+        # peaked at T = peak. The log-normal's long tail extends toward larger T
+        # (= smaller lookback = younger), the same direction as Carnall+2018 /
+        # BAGPIPES lognormal.
+        sfr = lnorm(T_LOOKBACK, log_total_mass=1.0, peak=3e9, width=0.5, age=_AGE_UNIV_YR)
         peak_idx = int(jnp.argmax(sfr))
 
-        # Should have a longer tail toward older ages (larger lookback)
+        # Long tail now points toward smaller lookback (larger cosmic time T).
         mass_old = float(jnp.trapezoid(sfr[peak_idx:], T_LOOKBACK[peak_idx:]))
         mass_young = float(jnp.trapezoid(sfr[:peak_idx], T_LOOKBACK[:peak_idx]))
-        assert mass_old > mass_young, "Log-normal should have longer old-age tail"
+        assert mass_young > mass_old, "Log-normal long tail should point toward younger ages"
 
 
 # ── 6. TRIWEIGHT BURST — compact burst component ──────────────────
@@ -374,11 +391,17 @@ class TestAllSFHUniversalPhysics:
     """Every SFH model must satisfy universal constraints: non-negative, finite."""
 
     _SFH_CONFIGS: dict = {  # noqa: RUF012
-        "tsnorm": {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5, "trunc": 2.0},
-        "snorm": {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5},
-        "norm": {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 2e9},
-        "lnorm": {"log_peak_sfr": 1.0, "peak_lbt": 5e9, "width": 0.5},
-        "dpl": {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "log_peak_sfr": 1.0},
+        "tsnorm": {
+            "log_total_mass": 1.0,
+            "peak_lbt": 5e9,
+            "width": 2e9,
+            "skew": 0.5,
+            "trunc": 2.0,
+        },
+        "snorm": {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9, "skew": 0.5},
+        "norm": {"log_total_mass": 1.0, "peak_lbt": 5e9, "width": 2e9},
+        "lnorm": {"log_total_mass": 1.0, "peak": 5e9, "width": 0.5, "age": _AGE_UNIV_YR},
+        "dpl": {"alpha": 2.0, "beta": 1.0, "tau": 5e9, "age": _AGE_UNIV_YR, "log_total_mass": 1.0},
     }
 
     @pytest.fixture(params=list(_SFH_CONFIGS.keys()))
@@ -402,11 +425,16 @@ class TestAllSFHUniversalPhysics:
         sfr = fn(T_LOOKBACK, **self._SFH_CONFIGS[sfh_model])
         assert jnp.all(jnp.isfinite(sfr)), f"{sfh_model}: SFR has non-finite values"
 
-    def test_peak_sfr_at_log_peak_sfr(self, sfh_model):
-        """Peak SFR should be approximately 10^log_peak_sfr."""
+    def test_integral_matches_log_total_mass(self, sfh_model):
+        """Integral of SFR should equal 10^log_total_mass (NEW normalization)."""
         fn = self._get_fn(sfh_model)
         sfr = fn(T_LOOKBACK, **self._SFH_CONFIGS[sfh_model])
-        peak_sfr = float(jnp.max(sfr))
-        assert 1.0 < peak_sfr < 100.0, (
-            f"{sfh_model}: peak SFR={peak_sfr:.1f}, expected ~10 Msun/yr"
+        dt_yr = jnp.abs(jnp.diff(T_LOOKBACK))
+        integral_mass = float(jnp.trapezoid(sfr, T_LOOKBACK))
+        # log_total_mass = 1.0 means 10^1 = 10 Msun
+        expected_mass = 10.0
+        relative_error = abs(integral_mass - expected_mass) / expected_mass
+        assert relative_error < 0.01, (
+            f"{sfh_model}: integral mass={integral_mass:.1f} Msun, "
+            f"expected {expected_mass:.1f} (error={relative_error:.1%})"
         )

@@ -21,6 +21,10 @@ References
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -47,10 +51,15 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 # z=5 star-forming model: moderate ongoing star formation, modest dust.
 model = tengri.SEDModel.build(
     ssp,
-    sfh={"type": "dpl", "*": tengri.FIXED,
-         "tau_gyr": 0.3, "log_peak_sfr": 0.8, "alpha": 2.5, "beta": 1.8},
-    dust={"type": "two_component", "*": tengri.FIXED,
-          "tau_diff": 0.06, "tau_bc": 0.10},
+    sfh={
+        "type": "dpl",
+        "*": tengri.FIXED,
+        "tau_gyr": 0.3,
+        "log_total_mass": 10.0,
+        "alpha": 2.5,
+        "beta": 1.8,
+    },
+    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.06, "tau_bc": 0.10},
     neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5, "logU": -1.5},
     redshift=tengri.Fixed(5.0),
 )
@@ -81,6 +90,7 @@ sed_rest_ha_norm = sed_rest_ha / np.median(sed_rest_ha)
 # ============================================================================
 # Resolution convolution: PRISM (R~100) and grating (R~1000)
 # ============================================================================
+
 
 def convolve_with_resolution(wave, sed, R):
     """Convolve SED with Gaussian LSF for constant resolution R.
@@ -117,7 +127,8 @@ sed_grating = convolve_with_resolution(wave_obs_ha, sed_rest_ha_norm, R=1000.0)
 # ============================================================================
 
 fig, (ax_prism, ax_grating) = plt.subplots(
-    2, 1,
+    2,
+    1,
     figsize=(10, 7),
     sharex=True,
 )

@@ -27,7 +27,7 @@ pytestmark = pytest.mark.bounds
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri.forward.sed_model import SEDModel
+from tengri.forward.sed_model import SEDModel, WavePrecomp
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -71,7 +71,7 @@ def cue_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
         met_logzsol=Fixed(-1.5),
         dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.1),
@@ -83,9 +83,23 @@ def cue_spec():
 
 @pytest.fixture(scope="module")
 def cue_model(ssp_data, filters, cue_spec):
-    """SEDModel with Cue nebular emulator, no dust IR emission."""
+    """Cue model on the WavePrecomp LUT path (the former ``mode="hybrid"``).
+
+    The fast path is selected at build time via ``approx=WavePrecomp()``; the
+    removed call-time ``predict_photometry(..., mode="hybrid")`` kwarg no longer
+    exists.
+    """
     try:
-        return SEDModel(cue_spec, ssp_data, filters=filters)
+        return SEDModel(cue_spec, ssp_data, filters=filters, approx=WavePrecomp())
+    except (ImportError, FileNotFoundError) as exc:
+        pytest.skip(f"Cue emulator not available: {exc}")
+
+
+@pytest.fixture(scope="module")
+def cue_model_exact(ssp_data, filters, cue_spec):
+    """Cue model on the exact wave-grid path (the former ``mode="exact"``)."""
+    try:
+        return SEDModel(cue_spec, ssp_data, filters=filters, approx=None)
     except (ImportError, FileNotFoundError) as exc:
         pytest.skip(f"Cue emulator not available: {exc}")
 
@@ -104,7 +118,7 @@ def cue_params(cue_spec):
 class TestCueHybridDiagnostic:
     """Cue hybrid photometry error-bound and sanity checks."""
 
-    def test_cue_hybrid_error_below_5pct(self, cue_model, cue_params):
+    def test_cue_hybrid_error_below_5pct(self, cue_model, cue_model_exact, cue_params):
         """Cue hybrid photometry agrees with exact within 5% per band.
 
         Previously failed with ~23% error (root cause: L_absorbed_stellar computed
@@ -112,8 +126,8 @@ class TestCueHybridDiagnostic:
         Fixed alongside DL07 hybrid: replaced Voronoi sum with 200-point coarse-wavelength
         trapz, matching the exact/compositional path.
         """
-        flux_hybrid = cue_model.predict_photometry(cue_params, mode="hybrid")
-        flux_exact = cue_model.predict_photometry(cue_params, mode="exact")
+        flux_hybrid = cue_model.predict_photometry(cue_params)
+        flux_exact = cue_model_exact.predict_photometry(cue_params)
 
         err = jnp.abs(flux_hybrid - flux_exact) / (jnp.abs(flux_exact) + 1e-50)
         max_err_pct = float(jnp.max(err)) * 100.0
@@ -128,15 +142,15 @@ class TestCueHybridDiagnostic:
 
     def test_cue_hybrid_photometry_is_finite(self, cue_model, cue_params):
         """Cue hybrid photometry must be finite regardless of the magnitude error."""
-        flux = cue_model.predict_photometry(cue_params, mode="hybrid")
+        flux = cue_model.predict_photometry(cue_params)
         chex.assert_tree_all_finite(flux)
 
     def test_cue_hybrid_photometry_is_positive(self, cue_model, cue_params):
         """Cue hybrid photometry must be positive regardless of the magnitude error."""
-        flux = cue_model.predict_photometry(cue_params, mode="hybrid")
+        flux = cue_model.predict_photometry(cue_params)
         assert jnp.all(flux > 0.0), "Cue hybrid photometry has non-positive values"
 
-    def test_cue_exact_photometry_is_finite(self, cue_model, cue_params):
+    def test_cue_exact_photometry_is_finite(self, cue_model_exact, cue_params):
         """Cue exact photometry must be finite (sanity check)."""
-        flux = cue_model.predict_photometry(cue_params, mode="exact")
+        flux = cue_model_exact.predict_photometry(cue_params)
         chex.assert_tree_all_finite(flux)

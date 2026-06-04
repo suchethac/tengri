@@ -1273,6 +1273,22 @@
    "name": "ndarray"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "_Environ"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "out": [
   {
    "is_class": false,
@@ -1346,22 +1362,6 @@
    "name": "dict"
   }
  ],
- "plt.close": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "close"
-  }
- ],
  "plt.cm.viridis": [
   {
    "is_class": false,
@@ -1385,7 +1385,7 @@
    "name": "viridis"
   }
  ],
- "plt.savefig": [
+ "plt.show": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1398,7 +1398,7 @@
    "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
-   "name": "savefig"
+   "name": "show"
   }
  ],
  "plt.subplots": [

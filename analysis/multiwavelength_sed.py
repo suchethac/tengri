@@ -48,14 +48,14 @@ warnings.filterwarnings("ignore")
 
 # ── imports from tengri ─────────────────────────────────────────────
 from tengri import load_ssp_data
+from tengri.agn.polar_dust import polar_dust_total
+from tengri.agn.unified import kubota_done_full_agn
 from tengri.analysis.simulate import sed_from_sfh
 from tengri.dust.emission import draine_li2007
-from tengri.agn.unified import kubota_done_full_agn
-from tengri.agn.polar_dust import polar_dust_total
-from tengri.xray import xray_xrb
-from tengri.radio import radio_sfr_bell2003, radio_agn
 from tengri.nebular.cue import CueBackend
 from tengri.nebular.shock import compute_shock_sed
+from tengri.radio import radio_agn, radio_sfr_bell2003
+from tengri.xray import xray_xrb
 
 # ════════════════════════════════════════════════════════════════════
 # 0.  Style — presentation mode
@@ -92,17 +92,17 @@ mpl.rcParams.update(
 
 # Component colour palette — perceptually ordered, colorblind-safe
 C = {
-    "stellar_intrinsic": "#aaaaaa",   # light grey — ghost of unattenuated stars
-    "stellar": "#4c78a8",              # steel blue — attenuated starlight
-    "nebular": "#17becf",              # cyan — nebular lines + continuum (Cue)
-    "shock": "#bcbd22",                # yellow-green — shock-induced emission
-    "dust_ir": "#f58518",              # amber/orange — warm dust emission
-    "agn": "#e45756",                  # red — AGN (disc + warm Compton + corona + torus)
-    "polar_dust": "#b5507a",           # wine/rose — AGN polar dust reemission
-    "xrb": "#9467bd",                  # muted purple — X-ray binaries
-    "radio_sf": "#54a24b",             # green — star-forming radio
-    "radio_agn": "#ff9da7",            # pink — AGN radio jets
-    "total": "#1a1a1a",                # near-black — total model
+    "stellar_intrinsic": "#aaaaaa",  # light grey — ghost of unattenuated stars
+    "stellar": "#4c78a8",  # steel blue — attenuated starlight
+    "nebular": "#17becf",  # cyan — nebular lines + continuum (Cue)
+    "shock": "#bcbd22",  # yellow-green — shock-induced emission
+    "dust_ir": "#f58518",  # amber/orange — warm dust emission
+    "agn": "#e45756",  # red — AGN (disc + warm Compton + corona + torus)
+    "polar_dust": "#b5507a",  # wine/rose — AGN polar dust reemission
+    "xrb": "#9467bd",  # muted purple — X-ray binaries
+    "radio_sf": "#54a24b",  # green — star-forming radio
+    "radio_agn": "#ff9da7",  # pink — AGN radio jets
+    "total": "#1a1a1a",  # near-black — total model
 }
 
 # ════════════════════════════════════════════════════════════════════
@@ -113,8 +113,8 @@ C = {
 
 WAVE_AA = np.logspace(np.log10(0.12), np.log10(3e11), 3000)  # Angstrom
 _C_AA = 2.99792458e18  # Angstrom / s
-NU_HZ = _C_AA / WAVE_AA                                        # Hz
-LSUN = 3.828e33                                                 # erg / s
+NU_HZ = _C_AA / WAVE_AA  # Hz
+LSUN = 3.828e33  # erg / s
 
 # ════════════════════════════════════════════════════════════════════
 # 2.  Stellar SED — load SSP, build exponentially-declining SFH
@@ -134,21 +134,25 @@ SFR_PEAK = 12.0  # Msun/yr
 sfr = SFR_PEAK * np.exp(-t_gyr / tau_sfh)
 
 # Galaxy physical parameters
-LOG_Z = -0.2      # log10(Z/Zsun) — slightly sub-solar
-TAU_BC = 0.8      # birth-cloud V-band optical depth
-TAU_ISM = 0.3     # diffuse ISM V-band optical depth
+LOG_Z = -0.2  # log10(Z/Zsun) — slightly sub-solar
+TAU_BC = 0.8  # birth-cloud V-band optical depth
+TAU_ISM = 0.3  # diffuse ISM V-band optical depth
 
 print("Computing stellar SED (attenuated + intrinsic) …", flush=True)
 
 result_atten = sed_from_sfh(
-    t_gyr, sfr, ssp,
+    t_gyr,
+    sfr,
+    ssp,
     log_z=LOG_Z,
     dust_tau_bc=TAU_BC,
     dust_tau_diff=TAU_ISM,
     t_obs_gyr=T_OBS_GYR,
 )
 result_intrinsic = sed_from_sfh(
-    t_gyr, sfr, ssp,
+    t_gyr,
+    sfr,
+    ssp,
     log_z=LOG_Z,
     dust_tau_bc=0.0,
     dust_tau_diff=0.0,
@@ -159,19 +163,21 @@ result_intrinsic = sed_from_sfh(
 ssp_wave = np.array(result_atten["wavelength"])
 # sed_from_sfh returns erg/s/Hz — convert to Lsun/Hz for consistency
 # with all other modules (disc, xray, radio, dust_emission → Lsun/Hz)
-ssp_lnu_atten     = np.array(result_atten["sed"])     / LSUN  # Lsun/Hz
+ssp_lnu_atten = np.array(result_atten["sed"]) / LSUN  # Lsun/Hz
 ssp_lnu_intrinsic = np.array(result_intrinsic["sed"]) / LSUN  # Lsun/Hz
+
 
 # Interpolate stellar SED onto master grid (zero outside SSP range)
 def interp_to_master(wave_src, lnu_src):
     lnu = np.interp(WAVE_AA, wave_src, lnu_src, left=0.0, right=0.0)
     return lnu
 
+
 stellar_lnu = interp_to_master(ssp_wave, ssp_lnu_atten)
 stellar_intrinsic_lnu = interp_to_master(ssp_wave, ssp_lnu_intrinsic)
 
 # Current SFR at observation epoch (used by nebular + XRBs below)
-SFR_NOW = float(np.interp(T_OBS_GYR, t_gyr, sfr))   # Msun/yr
+SFR_NOW = float(np.interp(T_OBS_GYR, t_gyr, sfr))  # Msun/yr
 
 # ── Nebular emission (Cue neural-net emulator — continuum + 138 lines) ──────
 # Q_H from Murphy+2011 SFR calibration (wNE SSPs have no Lyman-continuum flux
@@ -194,10 +200,10 @@ nebular_lnu = np.array(
     _cue.predict_nebular_sed(
         ssp_wave=jnp.array(WAVE_AA),
         gas_logqion=_LOG_Q_H,
-        gas_logu=-3.0,          # log ionization parameter — typical HII region
-        gas_logn=2.0,           # log density / cm^-3
-        gas_logz=LOG_Z,         # log(Z/Zsun) — match stellar metallicity
-        line_sigma_aa=0.0,      # delta-function → nearest bin (correct for broadband grid)
+        gas_logu=-3.0,  # log ionization parameter — typical HII region
+        gas_logn=2.0,  # log density / cm^-3
+        gas_logz=LOG_Z,  # log(Z/Zsun) — match stellar metallicity
+        line_sigma_aa=0.0,  # delta-function → nearest bin (correct for broadband grid)
     )
 )
 
@@ -208,26 +214,26 @@ nebular_lnu = np.array(
 print("Computing shock emission …", flush=True)
 
 _LSUN_ERG = 3.828e33
-_L_HA_LSUN = 1.37e-12 * _Q_H / _LSUN_ERG           # Case B Hα [Lsun]
-SHOCK_L_HA = 0.10 * _L_HA_LSUN                      # 10% shock fraction
+_L_HA_LSUN = 1.37e-12 * _Q_H / _LSUN_ERG  # Case B Hα [Lsun]
+SHOCK_L_HA = 0.10 * _L_HA_LSUN  # 10% shock fraction
 
 shock_lnu = np.array(
     compute_shock_sed(
         jnp.array(WAVE_AA),
-        shock_velocity=200.0,       # km/s — moderate ISM shock
+        shock_velocity=200.0,  # km/s — moderate ISM shock
         l_shock_halpha=SHOCK_L_HA,
-        shock_log_density=0.0,      # log n_e = 1 cm^-3
-        shock_b_over_sqrt_n=1.0,    # B/sqrt(n) [μG cm^3/2]
+        shock_log_density=0.0,  # log n_e = 1 cm^-3
+        shock_b_over_sqrt_n=1.0,  # B/sqrt(n) [μG cm^3/2]
         shock_abundance="solar",
-        shock_component="combined", # shock + precursor
-        line_sigma_aa=0.0,          # delta function (same broadband grid)
+        shock_component="combined",  # shock + precursor
+        line_sigma_aa=0.0,  # delta function (same broadband grid)
     )
 )
 
 # ── Absorbed luminosity (energy balance for dust re-emission) ───────
 # L_absorbed [Lsun] = -∫ (L_nu_intrinsic - L_nu_attenuated) dν
 # nu is descending, so -trapz gives a positive integral
-nu_ssp = _C_AA / ssp_wave                                       # Hz, descending
+nu_ssp = _C_AA / ssp_wave  # Hz, descending
 L_absorbed_lsun = float(-np.trapz(ssp_lnu_intrinsic - ssp_lnu_atten, nu_ssp))  # Lsun
 print(f"  Absorbed luminosity:  {L_absorbed_lsun:.2e} Lsun", flush=True)
 
@@ -240,9 +246,9 @@ print("Computing dust IR emission (DL07 templates) …", flush=True)
 #   dust_umin     — minimum radiation field (Mathis ISRF units); U~1 = MW diffuse ISM
 #   dust_gamma_dl — fraction of dust mass heated by PDR power-law component (0–1)
 #   dust_qpah     — PAH mass fraction (%). MW~3.2%; starbursts ~0.5–1.5% (PAH destroyed)
-DUST_UMIN      = 5.0   # slightly elevated ISRF (starburst + AGN environment)
-DUST_GAMMA_DL  = 0.10  # 10 % of dust mass in PDRs — warm mid-IR excess
-DUST_QPAH      = 1.0   # low PAH fraction — starburst UV destroys small grains
+DUST_UMIN = 5.0  # slightly elevated ISRF (starburst + AGN environment)
+DUST_GAMMA_DL = 0.10  # 10 % of dust mass in PDRs — warm mid-IR excess
+DUST_QPAH = 1.0  # low PAH fraction — starburst UV destroys small grains
 
 dust_lnu = np.array(
     draine_li2007(
@@ -262,11 +268,11 @@ dust_lnu = np.array(
 # ════════════════════════════════════════════════════════════════════
 
 print("Computing AGN (K&D 2018 full physics) …", flush=True)
-AGN_LOG_LBOL  = 10.5   # log10(L_bol/Lsun) — moderate Seyfert 1 (~1e43.5 erg/s)
-AGN_LOG_MBH   = 8.5    # log10(M_BH/Msun)
-AGN_LOG_LEDD  = -0.5   # log10(L/L_Edd) — moderate accretion rate
-AGN_A_SPIN    = 0.7    # BH spin (0=Schwarzschild, 0.998=maximal Kerr)
-AGN_COS_INC   = 0.7    # cos(i) — Type 1 (face-on) view
+AGN_LOG_LBOL = 10.5  # log10(L_bol/Lsun) — moderate Seyfert 1 (~1e43.5 erg/s)
+AGN_LOG_MBH = 8.5  # log10(M_BH/Msun)
+AGN_LOG_LEDD = -0.5  # log10(L/L_Edd) — moderate accretion rate
+AGN_A_SPIN = 0.7  # BH spin (0=Schwarzschild, 0.998=maximal Kerr)
+AGN_COS_INC = 0.7  # cos(i) — Type 1 (face-on) view
 AGN_LBOL_LSUN = 10.0**AGN_LOG_LBOL  # Lsun
 
 agn_lnu = np.array(
@@ -278,17 +284,17 @@ agn_lnu = np.array(
         agn_log_ledd=AGN_LOG_LEDD,
         agn_a_spin=AGN_A_SPIN,
         agn_cos_inc=AGN_COS_INC,
-        agn_f_hard=0.02,        # 2% of L_Edd in corona
-        agn_gamma_warm=2.5,     # warm Comptonization photon index (soft excess)
-        agn_kt_warm=0.2,        # warm electron temperature [keV]
-        agn_gamma_hard=1.8,     # hard X-ray photon index (typical Seyfert)
-        agn_kt_hot=100.0,       # hot corona temperature [keV]
-        agn_r_warm_ratio=2.0,   # R_warm / R_ISCO
-        agn_T_hot=1200.0,       # hot torus dust temperature [K]
-        agn_T_warm=300.0,       # warm torus dust temperature [K]
-        agn_frac_hot=0.3,       # hot/warm dust fraction in torus
-        agn_tau_torus=5.0,      # torus optical depth at 9.7 μm
-        agn_torus_frac=0.5,     # torus covering factor
+        agn_f_hard=0.02,  # 2% of L_Edd in corona
+        agn_gamma_warm=2.5,  # warm Comptonization photon index (soft excess)
+        agn_kt_warm=0.2,  # warm electron temperature [keV]
+        agn_gamma_hard=1.8,  # hard X-ray photon index (typical Seyfert)
+        agn_kt_hot=100.0,  # hot corona temperature [keV]
+        agn_r_warm_ratio=2.0,  # R_warm / R_ISCO
+        agn_T_hot=1200.0,  # hot torus dust temperature [K]
+        agn_T_warm=300.0,  # warm torus dust temperature [K]
+        agn_frac_hot=0.3,  # hot/warm dust fraction in torus
+        agn_tau_torus=5.0,  # torus optical depth at 9.7 μm
+        agn_torus_frac=0.5,  # torus covering factor
     )
 )
 
@@ -301,18 +307,18 @@ agn_lnu = np.array(
 # ════════════════════════════════════════════════════════════════════
 
 print("Computing AGN polar dust (Yang+2020) …", flush=True)
-AGN_POLAR_EBV = 0.20   # E(B-V) along polar dust lane — moderate Seyfert 1.5
+AGN_POLAR_EBV = 0.20  # E(B-V) along polar dust lane — moderate Seyfert 1.5
 
 agn_lnu_reddened, polar_dust_lnu = polar_dust_total(
-    jnp.array(agn_lnu),            # input: K&D disc + corona + torus
+    jnp.array(agn_lnu),  # input: K&D disc + corona + torus
     jnp.array(WAVE_AA),
     cos_inc=AGN_COS_INC,
-    opening_angle_deg=45.0,        # standard torus opening angle
+    opening_angle_deg=45.0,  # standard torus opening angle
     ebv=AGN_POLAR_EBV,
-    temperature=100.0,             # warm polar dust greybody temperature [K]
-    beta=1.6,                      # emissivity spectral index
-    lambda_0=2e6,                  # critical wavelength for opacity [Å] → 200 μm
-    law="smc",                     # SMC extinction — standard for polar AGN dust
+    temperature=100.0,  # warm polar dust greybody temperature [K]
+    beta=1.6,  # emissivity spectral index
+    lambda_0=2e6,  # critical wavelength for opacity [Å] → 200 μm
+    law="smc",  # SMC extinction — standard for polar AGN dust
 )
 agn_lnu = np.array(agn_lnu_reddened)
 polar_dust_lnu = np.array(polar_dust_lnu)
@@ -322,16 +328,18 @@ polar_dust_lnu = np.array(polar_dust_lnu)
 # ════════════════════════════════════════════════════════════════════
 
 print("Computing X-ray binaries …", flush=True)
-M_STAR = float(result_atten["stellar_mass"])           # Msun formed
+M_STAR = float(result_atten["stellar_mass"])  # Msun formed
 
 xrb_lnu = np.array(
-    xray_xrb(jnp.array(WAVE_AA),
-              sfr=SFR_NOW,
-              stellar_mass=M_STAR,
-              gamma_hmxb=2.0,
-              gamma_lmxb=1.6,
-              log_L_hmxb_offset=1.0,  # +1 dex: upper end of Grimm+2003 scatter
-              log_L_lmxb_offset=0.5)  # +0.5 dex: elevated LMXB (old stellar pop)
+    xray_xrb(
+        jnp.array(WAVE_AA),
+        sfr=SFR_NOW,
+        stellar_mass=M_STAR,
+        gamma_hmxb=2.0,
+        gamma_lmxb=1.6,
+        log_L_hmxb_offset=1.0,  # +1 dex: upper end of Grimm+2003 scatter
+        log_L_lmxb_offset=0.5,
+    )  # +0.5 dex: elevated LMXB (old stellar pop)
 )
 
 # ════════════════════════════════════════════════════════════════════
@@ -343,17 +351,21 @@ print("Computing radio emission …", flush=True)
 L_IR_LSUN = L_absorbed_lsun
 
 radio_sf_lnu = np.array(
-    radio_sfr_bell2003(jnp.array(WAVE_AA),
-                       L_ir=L_IR_LSUN,
-                       q_ir=2.64,       # Bell+2003 z=0 calibration
-                       alpha_sf=0.8)    # synchrotron spectral index
+    radio_sfr_bell2003(
+        jnp.array(WAVE_AA),
+        L_ir=L_IR_LSUN,
+        q_ir=2.64,  # Bell+2003 z=0 calibration
+        alpha_sf=0.8,
+    )  # synchrotron spectral index
 )
 
 radio_agn_lnu = np.array(
-    radio_agn(jnp.array(WAVE_AA),
-              L_agn_bol=AGN_LBOL_LSUN,
-              radio_loudness=1.5,        # log10(L_5GHz / L_B) — mild radio AGN
-              alpha_agn=0.7)
+    radio_agn(
+        jnp.array(WAVE_AA),
+        L_agn_bol=AGN_LBOL_LSUN,
+        radio_loudness=1.5,  # log10(L_5GHz / L_B) — mild radio AGN
+        alpha_agn=0.7,
+    )
 )
 
 # ════════════════════════════════════════════════════════════════════
@@ -377,24 +389,26 @@ total_lnu = (
 # ════════════════════════════════════════════════════════════════════
 
 # Primary x-axis: wavelength in μm  (X-ray on LEFT, radio on RIGHT)
-WAVE_UM = WAVE_AA * 1e-4   # Angstrom → μm
+WAVE_UM = WAVE_AA * 1e-4  # Angstrom → μm
+
 
 def nulnu(lnu, nu=NU_HZ):
     """Convert L_nu [Lsun/Hz] to νL_ν [Lsun]."""
     return np.maximum(lnu * nu, 0.0)
 
+
 nl = {
-    "total":              nulnu(total_lnu),
-    "stellar":            nulnu(stellar_lnu),
-    "stellar_intrinsic":  nulnu(stellar_intrinsic_lnu),
-    "nebular":            nulnu(nebular_lnu),
-    "shock":              nulnu(shock_lnu),
-    "dust_ir":            nulnu(dust_lnu),
-    "agn":                nulnu(agn_lnu),
-    "polar_dust":         nulnu(polar_dust_lnu),
-    "xrb":                nulnu(xrb_lnu),
-    "radio_sf":           nulnu(radio_sf_lnu),
-    "radio_agn":          nulnu(radio_agn_lnu),
+    "total": nulnu(total_lnu),
+    "stellar": nulnu(stellar_lnu),
+    "stellar_intrinsic": nulnu(stellar_intrinsic_lnu),
+    "nebular": nulnu(nebular_lnu),
+    "shock": nulnu(shock_lnu),
+    "dust_ir": nulnu(dust_lnu),
+    "agn": nulnu(agn_lnu),
+    "polar_dust": nulnu(polar_dust_lnu),
+    "xrb": nulnu(xrb_lnu),
+    "radio_sf": nulnu(radio_sf_lnu),
+    "radio_agn": nulnu(radio_agn_lnu),
 }
 
 # ════════════════════════════════════════════════════════════════════
@@ -420,16 +434,16 @@ XLIM_UM = (1e-4, 1e6)
 #   Alternate between 0.97 and 0.88 for adjacent bands.
 BANDS = [
     # X-ray / UV regimes
-    (1e-4,   0.010,  "Hard\nX-ray",  "#e8d0f5", 0.97),
-    (0.010,  0.020,  "Soft\nX-ray",  "#d9edf7", 0.97),
-    (0.020,  0.091,  "EUV",          "#f5e6d3", 0.88),  # Lyman break at 0.0912 μm
-    (0.091,  0.20,   "FUV",          "#fff0a0", 0.97),
-    (0.20,   0.40,   "UV",           "#faf3c0", 0.88),
-    (0.40,   0.70,   "Optical",      "#e0f5e0", 0.97),
-    (0.70,   2.5,    "NIR",          "#fde8d0", 0.88),
-    (2.5,    30.0,   "MIR",          "#fdd9b0", 0.97),
-    (30.0,   1e3,    "FIR",          "#fcc890", 0.88),
-    (1e3,    1e6,    "Radio",        "#dce8f5", 0.97),
+    (1e-4, 0.010, "Hard\nX-ray", "#e8d0f5", 0.97),
+    (0.010, 0.020, "Soft\nX-ray", "#d9edf7", 0.97),
+    (0.020, 0.091, "EUV", "#f5e6d3", 0.88),  # Lyman break at 0.0912 μm
+    (0.091, 0.20, "FUV", "#fff0a0", 0.97),
+    (0.20, 0.40, "UV", "#faf3c0", 0.88),
+    (0.40, 0.70, "Optical", "#e0f5e0", 0.97),
+    (0.70, 2.5, "NIR", "#fde8d0", 0.88),
+    (2.5, 30.0, "MIR", "#fdd9b0", 0.97),
+    (30.0, 1e3, "FIR", "#fcc890", 0.88),
+    (1e3, 1e6, "Radio", "#dce8f5", 0.97),
 ]
 
 for lam_lo, lam_hi, label, color, yfrac in BANDS:
@@ -437,10 +451,17 @@ for lam_lo, lam_hi, label, color, yfrac in BANDS:
     lam_center = np.sqrt(lam_lo * lam_hi)
     y_pos = 10 ** (Y_LOG_MIN + yfrac * (Y_LOG_MAX - Y_LOG_MIN))
     ax.text(
-        lam_center, y_pos, label,
-        ha="center", va="top", fontsize=9, color="#444444",
-        style="italic", zorder=5,
+        lam_center,
+        y_pos,
+        label,
+        ha="center",
+        va="top",
+        fontsize=9,
+        color="#444444",
+        style="italic",
+        zorder=5,
     )
+
 
 # ── helper: safe log-masked plot ─────────────────────────────────────
 def _safe_plot(x, y, **kw):
@@ -450,84 +471,133 @@ def _safe_plot(x, y, **kw):
     if mask.any():
         ax.plot(x[mask], y[mask], **kw)
 
+
 def _safe_fill(x, y, **kw):
     """Fill-between y and floor only where y > threshold."""
     thresh = 10 ** (Y_LOG_MIN - 0.5)
-    floor = np.full_like(y, 10 ** Y_LOG_MIN)
+    floor = np.full_like(y, 10**Y_LOG_MIN)
     ym = np.where(y > thresh, y, np.nan)
     ax.fill_between(x, floor, ym, **kw)
 
+
 # ── intrinsic stellar (ghost) ─────────────────────────────────────────
-_safe_plot(WAVE_UM, nl["stellar_intrinsic"],
-           color=C["stellar_intrinsic"], lw=1.5, ls="--",
-           label="Stars (intrinsic, no dust)", alpha=0.7, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["stellar_intrinsic"],
+    color=C["stellar_intrinsic"],
+    lw=1.5,
+    ls="--",
+    label="Stars (intrinsic, no dust)",
+    alpha=0.7,
+    zorder=2,
+)
 
 # ── nebular emission (Cue: continuum + 138 lines) ────────────────────
-_safe_plot(WAVE_UM, nl["nebular"],
-           color=C["nebular"], lw=1.5,
-           label="Nebular emission (Cue: continuum + lines)", zorder=4)
+_safe_plot(
+    WAVE_UM,
+    nl["nebular"],
+    color=C["nebular"],
+    lw=1.5,
+    label="Nebular emission (Cue: continuum + lines)",
+    zorder=4,
+)
 
 # ── shock-induced emission ────────────────────────────────────────────
-_safe_plot(WAVE_UM, nl["shock"],
-           color=C["shock"], lw=1.5, ls=":",
-           label=r"Shock emission (MAPPINGS V, $v=200$ km/s)", zorder=4)
+_safe_plot(
+    WAVE_UM,
+    nl["shock"],
+    color=C["shock"],
+    lw=1.5,
+    ls=":",
+    label=r"Shock emission (MAPPINGS V, $v=200$ km/s)",
+    zorder=4,
+)
 
 # ── attenuated stellar ────────────────────────────────────────────────
-_safe_fill(WAVE_UM, nl["stellar"],
-           color=C["stellar"], alpha=0.25, zorder=2)
-_safe_plot(WAVE_UM, nl["stellar"],
-           color=C["stellar"], lw=2.0,
-           label="Stellar continuum (attenuated)", zorder=3)
+_safe_fill(WAVE_UM, nl["stellar"], color=C["stellar"], alpha=0.25, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["stellar"],
+    color=C["stellar"],
+    lw=2.0,
+    label="Stellar continuum (attenuated)",
+    zorder=3,
+)
 
 # ── dust IR emission ──────────────────────────────────────────────────
-_safe_fill(WAVE_UM, nl["dust_ir"],
-           color=C["dust_ir"], alpha=0.25, zorder=2)
-_safe_plot(WAVE_UM, nl["dust_ir"],
-           color=C["dust_ir"], lw=2.0,
-           label=rf"Dust emission (DL07, $U_{{\min}}={DUST_UMIN}$, $\gamma={DUST_GAMMA_DL}$, $q_{{\rm PAH}}={DUST_QPAH}\%$)", zorder=3)
+_safe_fill(WAVE_UM, nl["dust_ir"], color=C["dust_ir"], alpha=0.25, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["dust_ir"],
+    color=C["dust_ir"],
+    lw=2.0,
+    label=rf"Dust emission (DL07, $U_{{\min}}={DUST_UMIN}$, $\gamma={DUST_GAMMA_DL}$, $q_{{\rm PAH}}={DUST_QPAH}\%$)",
+    zorder=3,
+)
 
 # ── AGN full physics (K&D 2018) ──────────────────────────────────────
-_safe_fill(WAVE_UM, nl["agn"],
-           color=C["agn"], alpha=0.20, zorder=2)
-_safe_plot(WAVE_UM, nl["agn"],
-           color=C["agn"], lw=2.0,
-           label=(rf"AGN — K\&D 2018 ($\log L_{{\rm bol}}={AGN_LOG_LBOL:.0f}$, "
-                  rf"$a_*={AGN_A_SPIN}$, disc+warm Compton+corona+torus)"),
-           zorder=3)
+_safe_fill(WAVE_UM, nl["agn"], color=C["agn"], alpha=0.20, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["agn"],
+    color=C["agn"],
+    lw=2.0,
+    label=(
+        rf"AGN — K\&D 2018 ($\log L_{{\rm bol}}={AGN_LOG_LBOL:.0f}$, "
+        rf"$a_*={AGN_A_SPIN}$, disc+warm Compton+corona+torus)"
+    ),
+    zorder=3,
+)
 
 # ── AGN polar dust reemission ─────────────────────────────────────────
-_safe_fill(WAVE_UM, nl["polar_dust"],
-           color=C["polar_dust"], alpha=0.20, zorder=2)
-_safe_plot(WAVE_UM, nl["polar_dust"],
-           color=C["polar_dust"], lw=1.5, ls="-.",
-           label=rf"AGN polar dust (SMC, $E(B-V)={AGN_POLAR_EBV}$, $T=100\,\rm K$)",
-           zorder=3)
+_safe_fill(WAVE_UM, nl["polar_dust"], color=C["polar_dust"], alpha=0.20, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["polar_dust"],
+    color=C["polar_dust"],
+    lw=1.5,
+    ls="-.",
+    label=rf"AGN polar dust (SMC, $E(B-V)={AGN_POLAR_EBV}$, $T=100\,\rm K$)",
+    zorder=3,
+)
 
 # ── X-ray binaries ────────────────────────────────────────────────────
-_safe_fill(WAVE_UM, nl["xrb"],
-           color=C["xrb"], alpha=0.25, zorder=2)
-_safe_plot(WAVE_UM, nl["xrb"],
-           color=C["xrb"], lw=2.0, ls="-.",
-           label="X-ray binaries (HMXB + LMXB)", zorder=3)
+_safe_fill(WAVE_UM, nl["xrb"], color=C["xrb"], alpha=0.25, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["xrb"],
+    color=C["xrb"],
+    lw=2.0,
+    ls="-.",
+    label="X-ray binaries (HMXB + LMXB)",
+    zorder=3,
+)
 
 # ── radio (SF synchrotron) ────────────────────────────────────────────
-_safe_fill(WAVE_UM, nl["radio_sf"],
-           color=C["radio_sf"], alpha=0.25, zorder=2)
-_safe_plot(WAVE_UM, nl["radio_sf"],
-           color=C["radio_sf"], lw=2.0,
-           label=r"SF synchrotron + free-free ($\alpha=0.8$)", zorder=3)
+_safe_fill(WAVE_UM, nl["radio_sf"], color=C["radio_sf"], alpha=0.25, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["radio_sf"],
+    color=C["radio_sf"],
+    lw=2.0,
+    label=r"SF synchrotron + free-free ($\alpha=0.8$)",
+    zorder=3,
+)
 
 # ── radio (AGN jets) ─────────────────────────────────────────────────
-_safe_fill(WAVE_UM, nl["radio_agn"],
-           color=C["radio_agn"], alpha=0.30, zorder=2)
-_safe_plot(WAVE_UM, nl["radio_agn"],
-           color=C["radio_agn"], lw=2.0, ls="--",
-           label="AGN radio jets", zorder=3)
+_safe_fill(WAVE_UM, nl["radio_agn"], color=C["radio_agn"], alpha=0.30, zorder=2)
+_safe_plot(
+    WAVE_UM,
+    nl["radio_agn"],
+    color=C["radio_agn"],
+    lw=2.0,
+    ls="--",
+    label="AGN radio jets",
+    zorder=3,
+)
 
 # ── total SED ─────────────────────────────────────────────────────────
-_safe_plot(WAVE_UM, nl["total"],
-           color=C["total"], lw=3.0,
-           label="Total model", zorder=6)
+_safe_plot(WAVE_UM, nl["total"], color=C["total"], lw=3.0, label="Total model", zorder=6)
 
 # ════════════════════════════════════════════════════════════════════
 # Axis formatting
@@ -545,7 +615,8 @@ ax.set_title(
     r"$M_\star \approx 3 \times 10^{10}\,M_\odot$, "
     r"$\mathrm{SFR} \approx 10\,M_\odot\,\mathrm{yr}^{-1}$, "
     rf"$\log L_\mathrm{{bol}}^\mathrm{{AGN}} = {AGN_LOG_LBOL:.1f}$",
-    fontsize=FONT_SIZE - 1, pad=10,
+    fontsize=FONT_SIZE - 1,
+    pad=10,
 )
 
 # ── top x-axis: frequency in Hz ───────────────────────────────────────
@@ -555,7 +626,7 @@ ax_top.set_xlim(*XLIM_UM)
 
 # Frequency tick positions → convert to μm for placement on λ axis
 nu_ticks_hz = np.array([1e9, 1e10, 1e11, 1e12, 1e13, 1e14, 1e15, 1e16, 1e17, 1e18, 1e19, 1e20])
-lam_ticks_um = (_C_AA / nu_ticks_hz) * 1e-4   # Hz → Å → μm
+lam_ticks_um = (_C_AA / nu_ticks_hz) * 1e-4  # Hz → Å → μm
 
 in_range = (lam_ticks_um >= XLIM_UM[0]) & (lam_ticks_um <= XLIM_UM[1])
 ax_top.set_xticks(lam_ticks_um[in_range])
@@ -585,18 +656,32 @@ ax.legend(
 # and staggered vertically so they don't overlap each other.
 
 # Lyman limit at 912 Å = 0.0912 μm
-_LY_UM = 912e-4   # μm
+_LY_UM = 912e-4  # μm
 ax.axvline(_LY_UM, color="#555555", lw=1.0, ls=":", alpha=0.6, zorder=1)
-ax.text(_LY_UM * 1.12, 10**5.5, "Lyman\nlimit\n(912 Å)",
-        fontsize=8, color="#555555", va="bottom", ha="left",
-        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7))
+ax.text(
+    _LY_UM * 1.12,
+    10**5.5,
+    "Lyman\nlimit\n(912 Å)",
+    fontsize=8,
+    color="#555555",
+    va="bottom",
+    ha="left",
+    bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7),
+)
 
 # Balmer break at 3646 Å = 0.3646 μm
-_BA_UM = 3646e-4   # μm
+_BA_UM = 3646e-4  # μm
 ax.axvline(_BA_UM, color="#555555", lw=1.0, ls=":", alpha=0.6, zorder=1)
-ax.text(_BA_UM * 0.88, 10**6.8, "Balmer\nbreak\n(3646 Å)",
-        fontsize=8, color="#555555", va="bottom", ha="right",
-        bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7))
+ax.text(
+    _BA_UM * 0.88,
+    10**6.8,
+    "Balmer\nbreak\n(3646 Å)",
+    fontsize=8,
+    color="#555555",
+    va="bottom",
+    ha="right",
+    bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7),
+)
 
 fig.tight_layout()
 fig.subplots_adjust(bottom=0.35)

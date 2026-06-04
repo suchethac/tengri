@@ -71,12 +71,16 @@ class KDPreintegratedData:
     nthcomp_kTbb_grid : jnp.ndarray or None
         Shape (n_kTbb,). Seed blackbody temperature grid [keV].
     corona_table : jnp.ndarray
-        Shape (n_Gamma, n_kT, n_filters). Filter-integrated cutoff
-        power-law shape [erg/s/cm^3] for the hot corona.
+        Shape (n_Gamma, n_kT, n_kTbb, n_filters). Filter-integrated
+        thermal-Comptonisation shape [erg/s/cm^3] for the hot corona, with
+        both the electron-temperature cutoff and the seed-photon rollover.
     corona_Gamma_grid : jnp.ndarray
         Shape (n_Gamma,). Hard X-ray photon index grid [dimensionless].
     corona_kT_grid : jnp.ndarray
-        Shape (n_kT,). Hot corona temperature grid [keV].
+        Shape (n_kT,). Hot corona electron-temperature grid [keV].
+    corona_kTbb_grid : jnp.ndarray
+        Shape (n_kTbb,). Seed-photon temperature grid [keV] for the
+        low-energy rollover (K&D 2018, Section 2.2).
     effective_bandwidths_hz : jnp.ndarray
         Shape (n_filters,). Effective frequency bandwidths [Hz] for L_bol
         estimation via sum(f_nu * bw).
@@ -108,6 +112,7 @@ class KDPreintegratedData:
     corona_table: jnp.ndarray
     corona_Gamma_grid: jnp.ndarray
     corona_kT_grid: jnp.ndarray
+    corona_kTbb_grid: jnp.ndarray
     effective_bandwidths_hz: jnp.ndarray
     n_filters: int
 
@@ -298,25 +303,39 @@ def _build_nthcomp_filter_table(
 def _build_corona_filter_table(
     Gamma_grid: np.ndarray,
     kT_grid_keV: np.ndarray,
+    kTbb_seed_grid_keV: np.ndarray,
     filter_waves: list[np.ndarray],
     filter_trans: list[np.ndarray],
     redshift: float,
 ) -> np.ndarray:
-    """Precompute cutoff power-law corona shape integrated through filters.
+    r"""Precompute the thermal-Comptonisation corona shape integrated through filters.
 
-    The corona spectrum is: shape(nu) = nu^(1 - Gamma) * exp(-h*nu / kT)
-    normalized so int[shape dnu] = 1 on the fixed RELAGN grid.
+    The corona spectrum is bounded by a high-energy cutoff at the electron
+    temperature and a low-energy rollover at the seed-photon energy:
 
-    The normalization uses the same fixed [1e-4, 1e4] keV grid as
-    ``_hot_corona_lnu`` in ``disc.py``, matching the RELAGN reference
-    implementation. This makes the result grid-independent.
+    .. math::
+
+        {\rm shape}(\nu) = \nu^{\,1-\Gamma}
+                           \, \exp(-h\nu / kT_e)
+                           \, \exp(-\nu_{\rm seed} / \nu)
+
+    normalised so :math:`\int {\rm shape}\, d\nu = 1` on the fixed RELAGN grid.
+    This matches ``_hot_corona_lnu`` in ``disc.py`` term for term (including the
+    seed-photon rollover, Kubota & Done 2018 Section 2.2), keeping the
+    preintegrated photometry consistent with the full-wavelength path.
+
+    The normalisation uses the same fixed [1e-4, 1e4] keV grid as
+    ``_hot_corona_lnu``, making the result independent of the caller's grid.
 
     Parameters
     ----------
     Gamma_grid : ndarray, shape (n_Gamma,)
         Hard X-ray photon index grid.
     kT_grid_keV : ndarray, shape (n_kT,)
-        Hot corona temperature grid [keV].
+        Hot corona electron-temperature grid [keV].
+    kTbb_seed_grid_keV : ndarray, shape (n_kTbb,)
+        Seed-photon temperature grid [keV] setting the low-energy rollover
+        frequency :math:`\nu_{\rm seed} = kT_{\rm seed} / h`.
     filter_waves : list[ndarray]
         Wavelength grid per filter [Angstrom], observed frame.
     filter_trans : list[ndarray]
@@ -326,55 +345,55 @@ def _build_corona_filter_table(
 
     Returns
     -------
-    ndarray, shape (n_Gamma, n_kT, n_filters)
+    ndarray, shape (n_Gamma, n_kT, n_kTbb, n_filters)
         Filter-integrated normalized corona shape.
     """
     n_Gamma = len(Gamma_grid)
     n_kT = len(kT_grid_keV)
+    n_kTbb = len(kTbb_seed_grid_keV)
     n_filters = len(filter_waves)
-    table = np.zeros((n_Gamma, n_kT, n_filters), dtype=np.float64)
+    table = np.zeros((n_Gamma, n_kT, n_kTbb, n_filters), dtype=np.float64)
 
     # Fixed normalization grid matching _hot_corona_lnu and RELAGN:
     # [1e-4, 1e4] keV = [2.418e13, 2.418e21] Hz, 2000 log-spaced points.
     nu_wide = np.geomspace(2.418e13, 2.418e21, 2000)
 
+    # Precompute per-filter rest-frame frequencies and bandpass denominators.
+    filt_cache = []
+    for fw, ft in zip(filter_waves, filter_trans):
+        fw_np = np.asarray(fw, dtype=np.float64)
+        ft_np = np.asarray(ft, dtype=np.float64)
+        wave_rest = fw_np / (1.0 + redshift)
+        nu_filter = _C_LIGHT / (wave_rest * 1e-8)
+        denom = _np_trapezoid(ft_np * fw_np, fw_np)
+        sort_idx = np.argsort(nu_filter)
+        unsort_idx = np.argsort(sort_idx)
+        filt_cache.append((fw_np, ft_np, nu_filter[sort_idx], unsort_idx, denom))
+
     for i_G, Gamma in enumerate(Gamma_grid):
         for i_T, kT_keV in enumerate(kT_grid_keV):
             kT_erg = kT_keV * _KEV_TO_ERG
-            # Cutoff power-law shape
             x = np.clip(_H_PLANCK * nu_wide / kT_erg, 0.0, 500.0)
-            shape = nu_wide ** (1.0 - Gamma) * np.exp(-x)
+            base = nu_wide ** (1.0 - Gamma) * np.exp(-x)
+            for i_S, kTbb_keV in enumerate(kTbb_seed_grid_keV):
+                # Low-energy seed-photon rollover at nu_seed = kT_seed / h.
+                nu_seed = kTbb_keV * _KEV_TO_ERG / _H_PLANCK
+                seed_roll = np.exp(-np.clip(nu_seed / nu_wide, 0.0, 700.0))
+                shape = base * seed_roll
 
-            # Normalize to unit bolometric: int[shape dnu] = 1
-            integral = _np_trapezoid(shape, nu_wide)
-            if integral <= 0:
-                continue
-            shape_normed = shape / integral
-
-            # Integrate through each filter
-            for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-                fw_np = np.asarray(fw, dtype=np.float64)
-                ft_np = np.asarray(ft, dtype=np.float64)
-
-                wave_rest = fw_np / (1.0 + redshift)
-                nu_filter = _C_LIGHT / (wave_rest * 1e-8)
-
-                denom = _np_trapezoid(ft_np * fw_np, fw_np)
-                if denom <= 0:
+                integral = _np_trapezoid(shape, nu_wide)
+                if integral <= 0:
                     continue
+                shape_normed = shape / integral
 
-                # Interpolate normalized shape onto filter frequencies
-                sort_idx = np.argsort(nu_filter)
-                nu_filt_sorted = nu_filter[sort_idx]
-                shape_on_filt = np.interp(
-                    nu_filt_sorted, nu_wide, shape_normed, left=0.0, right=0.0
-                )
-                # Unsort back to filter wavelength order
-                unsort_idx = np.argsort(sort_idx)
-                shape_on_filt = shape_on_filt[unsort_idx]
-
-                num = _np_trapezoid(shape_on_filt * ft_np * fw_np, fw_np)
-                table[i_G, i_T, f_idx] = num / denom
+                for f_idx, (fw_np, ft_np, nu_sorted, unsort_idx, denom) in enumerate(filt_cache):
+                    if denom <= 0:
+                        continue
+                    shape_on_filt = np.interp(
+                        nu_sorted, nu_wide, shape_normed, left=0.0, right=0.0
+                    )[unsort_idx]
+                    num = _np_trapezoid(shape_on_filt * ft_np * fw_np, fw_np)
+                    table[i_G, i_T, i_S, f_idx] = num / denom
 
     return table
 
@@ -454,6 +473,7 @@ def preintegrate_kd_components(
     T_max: float = 3e7,
     n_Gamma: int = 20,
     n_kT_corona: int = 15,
+    n_kTbb_corona: int = 16,
 ) -> KDPreintegratedData:
     """Precompute all K&D disc filter tables at model init time.
 
@@ -523,9 +543,13 @@ def preintegrate_kd_components(
     # --- Corona table ---
     Gamma_grid = np.linspace(1.4, 3.0, n_Gamma)
     kT_grid_keV = np.geomspace(10.0, 500.0, n_kT_corona)  # 10-500 keV
+    # Seed-photon temperature axis: kT_NT(R_hot)*exp(y_warm) spans roughly
+    # 5e-4 to 0.1 keV (NIR to EUV) across the M_BH / Eddington / Gamma_warm space.
+    kTbb_seed_grid_keV = np.geomspace(5.0e-4, 0.12, n_kTbb_corona)
     corona_table = _build_corona_filter_table(
         Gamma_grid,
         kT_grid_keV,
+        kTbb_seed_grid_keV,
         filter_waves,
         filter_trans,
         redshift,
@@ -544,6 +568,7 @@ def preintegrate_kd_components(
         corona_table=jnp.asarray(corona_table),
         corona_Gamma_grid=jnp.asarray(Gamma_grid),
         corona_kT_grid=jnp.asarray(kT_grid_keV),
+        corona_kTbb_grid=jnp.asarray(kTbb_seed_grid_keV),
         effective_bandwidths_hz=jnp.asarray(bw_hz),
         n_filters=n_filters,
     )
@@ -647,21 +672,25 @@ def _lookup_nthcomp_filter(
 def _lookup_corona_filter(
     Gamma: jnp.ndarray,
     kT_keV: jnp.ndarray,
+    kTbb_seed_keV: jnp.ndarray,
     Gamma_grid: jnp.ndarray,
     kT_grid: jnp.ndarray,
+    kTbb_grid: jnp.ndarray,
     corona_table: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Look up filter-integrated corona shape via bilinear interpolation.
+    """Look up filter-integrated corona shape via trilinear interpolation.
 
     Parameters
     ----------
     Gamma : scalar
         Hard X-ray photon index.
     kT_keV : scalar
-        Hot corona temperature [keV].
-    Gamma_grid, kT_grid : 1D arrays
+        Hot corona electron temperature [keV].
+    kTbb_seed_keV : scalar
+        Seed-photon temperature [keV] (sets the low-energy rollover).
+    Gamma_grid, kT_grid, kTbb_grid : 1D arrays
         Grid axes.
-    corona_table : (n_Gamma, n_kT, n_filters)
+    corona_table : (n_Gamma, n_kT, n_kTbb, n_filters)
         Precomputed table.
 
     Returns
@@ -681,16 +710,19 @@ def _lookup_corona_filter(
 
     iG, fG = _interp_axis(Gamma, Gamma_grid)
     iT, fT = _interp_axis(kT_keV, kT_grid)
+    iS, fS = _interp_axis(kTbb_seed_keV, kTbb_grid)
 
-    # Bilinear interpolation
-    c00 = corona_table[iG, iT]
-    c10 = corona_table[iG + 1, iT]
-    c01 = corona_table[iG, iT + 1]
-    c11 = corona_table[iG + 1, iT + 1]
+    def _at(dS):
+        """Bilinear (Gamma, kT) interpolation at seed-axis offset dS."""
+        c00 = corona_table[iG, iT, iS + dS]
+        c10 = corona_table[iG + 1, iT, iS + dS]
+        c01 = corona_table[iG, iT + 1, iS + dS]
+        c11 = corona_table[iG + 1, iT + 1, iS + dS]
+        s0 = c00 * (1 - fG) + c10 * fG
+        s1 = c01 * (1 - fG) + c11 * fG
+        return s0 * (1 - fT) + s1 * fT
 
-    s0 = c00 * (1 - fG) + c10 * fG
-    s1 = c01 * (1 - fG) + c11 * fG
-    return s0 * (1 - fT) + s1 * fT
+    return _at(0) * (1 - fS) + _at(1) * fS
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -1094,11 +1126,23 @@ def kubota_done_disc_preintegrated(
     gamma_hard_sc = beloborodov_gamma_hot(l_hot_erg, l_seed_geom)
     gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
 
+    # Hot-flow seed-photon temperature (K&D 2018, Section 2.2), identical to the
+    # full-wavelength path: kT_seed = k T_NT(R_hot) * exp(y_warm), with y_warm
+    # recovered from Gamma_warm via Gamma = sqrt(9/4 + 4/y) - 1/2.
+    r_ratio_hot = r_hot_cm / r_isco_cm
+    torque_hot = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio_hot), 1e-30) ** 0.25
+    t_nt_rhot = t_in * r_ratio_hot ** (-0.75) * torque_hot
+    y_warm_denom = jnp.maximum((agn_gamma_warm + 0.5) ** 2 - 2.25, 1e-3)
+    y_warm = jnp.clip(4.0 / y_warm_denom, 0.0, 10.0)
+    kT_seed_keV = _K_BOLTZ_KEV * t_nt_rhot * jnp.exp(y_warm)
+
     corona_filt = _lookup_corona_filter(
         gamma_hard_eff,
         agn_kt_hot,
+        kT_seed_keV,
         kd_data.corona_Gamma_grid,
         kd_data.corona_kT_grid,
+        kd_data.corona_kTbb_grid,
         kd_data.corona_table,
     )
     hot_phot = l_hot_erg * corona_filt  # (n_filters,)

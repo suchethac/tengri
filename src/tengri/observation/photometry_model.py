@@ -41,6 +41,7 @@ from tengri.observation.photometry import (
     compute_flux_density_batch,
 )
 from tengri.protocols.component import ForwardState, ParamDeclaration
+from tengri.utils.filter_convention import FilterConvention
 
 __all__ = ["PhotometryObservationModel"]
 
@@ -78,6 +79,7 @@ class PhotometryObservationModel:
     cosmo: CosmoParams | None = None
     name: str = "photometry"
     parameter_prefix: str = "phot_"
+    convention: FilterConvention = FilterConvention.BESSELL
 
     # Padded filter arrays cached at construction so :meth:`predict`
     # is JIT-friendly (no Python loops). ``_fw_padded``/``_ft_padded``
@@ -154,5 +156,6 @@ class PhotometryObservationModel:
             self._ft_padded,
             z,
             dl_cm,
+            convention=self.convention,
         )[: self._n_filters_real]
         return {"phot_fnu": flux}

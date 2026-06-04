@@ -30,8 +30,13 @@ redshift = 0.1
 
 
 [sfh]
-# GP latent grid size (only relevant when "field" is in sfh type)
-n_grid = 64
+# Lookback-time grid resolution for the orchestrator-published
+# ``derived["sfr_history"]`` and ``derived["sfh_grid_lbt_yr"]``, and
+# the GP latent grid when ``sfh`` includes ``"field"``. 256 gives
+# visually smooth parametric SFHs and adequate GP resolution; bumped
+# 2026-05-28 from 64 to remove the angular look near galaxy formation
+# seen in reproduction/cigale §2.
+n_grid = 256
 
 # Replace met_logzsol with a two-endpoint metallicity ramp
 evolving_metallicity = false

@@ -30,10 +30,25 @@ Diffuse ionized gas (DIG) has lower ionization parameter than HII regions,
 shifting galaxies toward the LINER region on the BPT diagram. We vary the
 DIG fraction from pure HII (0) to mixed gas (0.8).
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-64
+.. GENERATED FROM PYTHON SOURCE LINES 9-68
+
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_dig_frac_sweep_001.png
+   :alt: plot dig frac sweep
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_dig_frac_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,10 +74,10 @@ DIG fraction from pure HII (0) to mixed gas (0.8).
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_dig_frac": tengri.Uniform(0.0, 0.8)},
+        neb={"type": "cue", "*": tengri.FIXED, "dig_frac": tengri.Uniform(0.0, 0.8)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

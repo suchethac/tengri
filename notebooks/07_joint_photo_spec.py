@@ -16,474 +16,353 @@
 # %% [markdown]
 # # Joint photometry + spectroscopy
 #
-# Surveys like SDSS deliver both broadband photometry and fiber
-# spectroscopy. Using only one leaves information on the table. This
-# notebook quantifies how much: fit photometry alone (MAP + Laplace), then
-# spectroscopy alone, then both jointly with NUTS, and compare posterior
-# widths.
+# [`05_fitting_photometry`](05_fitting_photometry.py) showed that broadband
+# photometry leaves the SFH shape and the metallicity–dust split prior-
+# dominated. Here we add an optical spectrum covering the metallicity-
+# sensitive absorption features (Hβ, Mgb, the Fe blends) and fit both datasets
+# together. The joint posterior is narrower than either single-dataset fit and
+# pins down parameters photometry alone cannot: the line depths break the
+# age–metallicity–dust ridge.
 #
-# Physics: power-law + exponential SFH, Calzetti two-component dust,
-# nebular on, Dale (2014) IR template. Twelve UV–MIR bands plus a
-# low-resolution optical spectrum. ~3 min total on CPU.
+# Same machinery as the quickstart and notebook 05 (`SEDModel.build`, validated
+# HMC), with one `Observation` carrying both channels.
 
 # %%
 import os
-import sys
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
 import time
-import warnings
-
-os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
-
-try:
-    _nb_dir = os.path.dirname(os.path.abspath(__file__))
-    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
-except NameError:
-    _nb_dir = os.getcwd()
-    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
-
-_src = os.path.join(_repo_root, "src")
-if os.path.isdir(os.path.join(_src, "tengri")):
-    sys.path.insert(0, _src)
-sys.path.insert(0, _repo_root)
-sys.path.insert(0, _nb_dir)
-
-import importlib.util
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
-import matplotlib
-
-if "ipykernel" not in sys.modules:
-    matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-warnings.filterwarnings("ignore", category=FutureWarning)
-
-os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.45")
-
+import tengri
 from tengri import (
-    Fitter,
+    FIXED,
+    FREE,
     Fixed,
-    SEDModel,
     Observation,
-    Parameters,
     Photometry,
+    SEDModel,
     Spectroscopy,
     Uniform,
+    SpectrumPrecomp,
+    WavePrecomp,
+    builders,
+    cosmology,
     load_ssp_data,
+    plot,
 )
+from tengri.inference.fitter import Fitter
+from tengri.utils.conversions import lnu_to_fnu
 
-# Locate data/ and _plot_style.py
-_repo_data_root = None
-_spec_tengri = importlib.util.find_spec("tengri")
-if _spec_tengri is not None and _spec_tengri.origin:
-    _walk = os.path.dirname(os.path.abspath(_spec_tengri.origin))
-    for _step in range(12):
-        _candidate = os.path.join(_walk, "notebooks", "_plot_style.py")
-        if os.path.isfile(_candidate):
-            sys.path.insert(0, os.path.dirname(_candidate))
-            _repo_data_root = os.path.dirname(os.path.dirname(os.path.abspath(_candidate)))
-            break
-        _parent_walk = os.path.dirname(_walk)
-        if _parent_walk == _walk:
-            break
-        _walk = _parent_walk
+plot.setup_style()
+FIG_DIR = Path("_figs")
+FIG_DIR.mkdir(exist_ok=True)
 
-if _repo_data_root is None:
-    _np_here = os.path.abspath(os.getcwd())
-    while True:
-        if os.path.isfile(os.path.join(_np_here, "_plot_style.py")):
-            sys.path.insert(0, _np_here)
-            _repo_data_root = os.path.dirname(_np_here)
-            break
-        _ppt = os.path.join(_np_here, "notebooks", "_plot_style.py")
-        if os.path.isfile(_ppt):
-            _nbsd = os.path.dirname(_ppt)
-            sys.path.insert(0, _nbsd)
-            _repo_data_root = os.path.dirname(_nbsd)
-            break
-        _parent_here = os.path.dirname(_np_here)
-        if _parent_here == _np_here:
-            break
-        _np_here = _parent_here
-
-if _repo_data_root is not None and os.path.isdir(os.path.join(_repo_data_root, "data")):
-    os.chdir(_repo_data_root)
-elif os.path.isdir(os.path.join(_repo_root, "data")):
-    os.chdir(_repo_root)
-elif os.path.isdir("data"):
-    pass
-elif os.path.isdir(os.path.join("..", "data")):
-    os.chdir("..")
-
-FIGDIR = os.path.join("notebooks", "figures")
-os.makedirs(FIGDIR, exist_ok=True)
-
-from _plot_style import (
-    COLORS,
-    convergence_table,
-    plot_corner_comparison,
-    setup_style,
-)
-
-setup_style()
-
-import tengri as tg
-tg.print_logo()
-print(f"tengri {tg.__version__}\n")
-
-# %%
-# Load SSP templates
-ssp_data = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
-
-# Define multi-wavelength photometric bandset: GALEX + SDSS + 2MASS + WISE
-phot_bands = [
-    "galex_fuv",
-    "galex_nuv",
-    "sdss_u",
-    "sdss_g",
-    "sdss_r",
-    "sdss_i",
-    "sdss_z",
-    "2mass_j",
-    "2mass_h",
-    "2mass_ks",
-    "wise_w1",
-    "wise_w2",
-]
-phot_obs = Photometry.from_names(phot_bands, cache_dir="data/filters")
-print(f"Photometric bandset ({phot_obs.n_filters} bands):")
-print(f"  {', '.join(phot_obs.names)}\n")
-
-# Spectroscopy: 4000–8000 Å observed at z=0.1, 100 pixels, R~2000
-WAVE_MIN_OBS = 4000.0
-WAVE_MAX_OBS = 8000.0
-N_PIX_SPEC = 100
-WAVE_OBS = jnp.linspace(WAVE_MIN_OBS, WAVE_MAX_OBS, N_PIX_SPEC)
-spec_obs = Spectroscopy(wave_obs=WAVE_OBS, resolution=2000)
-print(f"Spectroscopy: {WAVE_MIN_OBS:.0f}–{WAVE_MAX_OBS:.0f} Å, {N_PIX_SPEC} pixels, R={2000}")
-
-# Create joint observation
-obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
-print("\nJoint Observation:")
-print(f"  n_data = {obs_joint.n_data} ({phot_obs.n_filters} phot + {N_PIX_SPEC} spec)")
-
-# %%
-# Define model and truth parameters
-spec = Parameters(
-    sfh_dpl_log_peak_sfr=Uniform(-1.0, 2.5),
-    sfh_dpl_alpha=Uniform(0.1, 2.5),
-    met_logzsol=Uniform(-2.0, 0.2),
-    dust_tau_bc=Uniform(0.0, 2.0),
-    dust_tau_diff=Uniform(0.0, 1.5),
-    dust_slope=Fixed(-0.7),
-    dust_emission="dale2014",
-    dust_T=Fixed(35.0),
-    dust_qpah=Fixed(2.5),
-    nebular_ssp=True,
-    redshift=Fixed(0.1),
-    mean_sfh_type="dpl",
-)
-print(f"Free parameters ({spec.n_free}): {', '.join(spec.free_params)}\n")
-
-# %%
-# Build separate models for each modality
-obs_phot = Observation(photometry=phot_obs)
-model_phot = SEDModel(spec, ssp_data, observation=obs_phot)
-
-model_spec = SEDModel(spec, ssp_data, observation=Observation(spectroscopy=spec_obs))
-
-model_joint = SEDModel(spec, ssp_data, observation=obs_joint)
-
-# Define truth: moderately star-forming, modest dust, solar-ish metallicity
-key = jax.random.PRNGKey(42)
-truth = spec.sample(key)
-truth = {
-    **truth,
-    "sfh_dpl_log_peak_sfr": jnp.array(1.0),
-    "sfh_dpl_alpha": jnp.array(1.2),
-    "met_logzsol": jnp.array(0.0),
-    "dust_tau_bc": jnp.array(0.6),
-    "dust_tau_diff": jnp.array(0.3),
-}
-print("Truth parameters:")
-for name in spec.free_params:
-    print(f"  {name:25s} = {float(truth[name]):.4f}")
-
-# %%
-# Generate mock photometry and spectroscopy separately with matched truth
-k1, k2 = jax.random.split(key, 2)
-mock_phot = model_phot.mock(truth, snr=20.0, key=k1)
-mock_spec = model_spec.mock_spectrum(truth, WAVE_OBS, snr=15.0, key=k2)
-
-print("\nMock data:")
-print(f"  Photometry: SNR=20 across {phot_obs.n_filters} bands")
-print(f"  Spectrum: SNR=15 per pixel, {N_PIX_SPEC} pixels")
-
-# %%
-# Plot: data overview
-fig, (ax_phot, ax_spec) = plt.subplots(2, 1, figsize=(11, 6))
-
-# Photometry on log-log with masked autoscale
-flux_phot = np.array(mock_phot.flux_obs)
-noise_phot = np.array(mock_phot.noise)
-wave_eff_phot = np.array([3551, 3991, 4686, 6166, 7480, 8932, 12350, 16620, 21590, 33526, 45110, 57591])
-ax_phot.errorbar(
-    wave_eff_phot,
-    flux_phot,
-    yerr=noise_phot,
-    fmt="o",
-    ms=7,
-    color=COLORS.get("data", "C0"),
-    ecolor=COLORS.get("error", "gray"),
-    alpha=0.7,
-    label="Observed (SNR=20)",
-)
-ax_phot.scatter(
-    wave_eff_phot,
-    np.array(mock_phot.flux_true),
-    marker="s",
-    s=60,
-    color=COLORS.get("truth", "C1"),
-    zorder=5,
-    alpha=0.8,
-    label="Truth",
-)
-mask_phot = (wave_eff_phot >= 1000) & (wave_eff_phot <= 100000)
-ymed_phot = np.median(flux_phot[mask_phot & (flux_phot > 0)])
-ax_phot.set_xlim(1000, 100000)
-ax_phot.set_ylim(ymed_phot / 1e2, ymed_phot * 100)
-ax_phot.set_xscale("log")
-ax_phot.set_yscale("log")
-ax_phot.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax_phot.set_title("Photometry: 12 bands, GALEX–WISE")
-ax_phot.legend(fontsize=10, loc="upper left")
-ax_phot.grid(True, alpha=0.3)
-
-# Spectrum on linear axes with feature annotations
-w_spec = np.array(WAVE_OBS)
-f_spec = np.array(mock_spec.flux_obs)
-f_spec_true = np.array(mock_spec.flux_true)
-ax_spec.errorbar(
-    w_spec,
-    f_spec,
-    yerr=np.array(mock_spec.noise),
-    fmt=".",
-    ms=1.5,
-    color=COLORS.get("data", "C0"),
-    alpha=0.4,
-    label="Observed (SNR=15/pix)",
-)
-ax_spec.plot(w_spec, f_spec_true, color=COLORS.get("truth", "C1"), lw=1.5, label="Truth")
-
-# Annotate key spectral features (vacuum wavelengths at z=0.1, observed frame)
-features = [
-    (4861.3 * 1.1, "H-beta"),
-    (5007.0 * 1.1, "[OIII]"),
-    (6563.0 * 1.1, "H-alpha"),
-]
-for wl_obs, label in features:
-    if WAVE_MIN_OBS <= wl_obs <= WAVE_MAX_OBS:
-        ax_spec.axvline(wl_obs, color="gray", linestyle="--", alpha=0.4, lw=0.8)
-        ax_spec.text(wl_obs, ax_spec.get_ylim()[1] * 0.9, label, fontsize=8, rotation=90, va="top")
-
-mask_spec = (w_spec >= WAVE_MIN_OBS) & (w_spec <= WAVE_MAX_OBS)
-ymed_spec = np.median(f_spec[mask_spec & (f_spec > 0)])
-ax_spec.set_xlim(WAVE_MIN_OBS, WAVE_MAX_OBS)
-ax_spec.set_ylim(ymed_spec / 30, ymed_spec * 3)
-ax_spec.set_xlabel(r"Observed wavelength [$\mathrm{\AA}$]")
-ax_spec.set_ylabel(r"$f_\nu$ [erg/s/cm$^2$/Hz]")
-ax_spec.set_title("Spectroscopy: 4000–8000 Å, R=2000")
-ax_spec.legend(fontsize=10, loc="upper right")
-ax_spec.grid(True, alpha=0.3)
-
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "07_data.png"), dpi=200, bbox_inches="tight")
-plt.show()
-print("Saved: notebooks/figures/07_data.png")
-
-# %%
-# Run three fits: MAP (phot only), MAP (spec only), NUTS (joint)
-print("FITTING STAGE: MAP (photometry) → MAP (spectroscopy) → NUTS (joint)")
-
-# 1. MAP fit on photometry only
-print("\n[1/3] MAP fit on photometry only...")
-t0 = time.perf_counter()
-fitter_phot = Fitter(model_phot, mock_phot.flux_obs, mock_phot.noise)
-result_map_phot = fitter_phot.run("map", n_steps=300, verbose=False)
-t_map_phot = time.perf_counter() - t0
-print(f"  Completed in {t_map_phot:.1f}s")
-
-# 2. MAP fit on spectroscopy only
-print("\n[2/3] MAP fit on spectroscopy only...")
-t0 = time.perf_counter()
-fitter_spec = Fitter(model_spec, mock_spec.flux_obs, mock_spec.noise)
-result_map_spec = fitter_spec.run("map", n_steps=300, verbose=False)
-t_map_spec = time.perf_counter() - t0
-print(f"  Completed in {t_map_spec:.1f}s")
-
-# 3. NUTS fit on joint data (THE HEADLINE FIT). Photometry + spectroscopy
-# together breaks the age–dust–metallicity ridge that photometry alone
-# cannot. NUTS — not MAP — is what makes the constraint-width comparison
-# meaningful: only NUTS gives a posterior we can integrate to credible
-# intervals. Per the OOM-orchestration rule we run *one* NUTS per process.
-print("\n[3/3] NUTS fit on joint photometry + spectroscopy...")
-data_joint = np.concatenate([np.array(mock_phot.flux_obs), np.array(mock_spec.flux_obs)])
-noise_joint = np.concatenate([np.array(mock_phot.noise), np.array(mock_spec.noise)])
-t0 = time.perf_counter()
-fitter_joint = Fitter(model_joint, data_joint, noise_joint)
-result_nuts_joint = fitter_joint.run(
-    "mcmc_hmc",
-    n_warmup=300,
-    n_samples=600,
-    n_leapfrog_steps=10,
-    dense_mass_matrix=False,  # diagonal mass — small-graph, lower compile RSS
-    target_accept_rate=0.85,
-    key=jax.random.PRNGKey(789),
-)
-t_nuts_joint = time.perf_counter() - t0
-print(f"  Completed in {t_nuts_joint:.1f}s")
-print(f"  Divergences: {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
-
-print(f"\n{'Total wall time:':<40s} {t_map_phot + t_map_spec + t_nuts_joint:.1f}s")
-
-# %%
-# Extract posterior statistics: for MAP, use Laplace covariance (Hessian-based)
-print("POSTERIOR STATISTICS")
-
-# For MAP fits, compute Laplace covariance from Hessian diagonal (1-sigma)
-
-def estimate_laplace_sigma(result_map, param_names):
-    """
-    Estimate 1-sigma credible interval from MAP fit using Hessian diagonal.
-    Returns {param: (median, lower_16, upper_84)} approximation.
-    """
-    return {name: (float(result_map.params[name]), np.nan, np.nan) for name in param_names}
-
-
-map_phot_stats = estimate_laplace_sigma(result_map_phot, spec.free_params)
-map_spec_stats = estimate_laplace_sigma(result_map_spec, spec.free_params)
-
-# NUTS joint posterior — proper percentiles
-nuts_joint_stats = {}
-for name in spec.free_params:
-    samples = np.asarray(result_nuts_joint.samples[name])
-    p16, p50, p84 = np.percentile(samples, [16, 50, 84])
-    nuts_joint_stats[name] = (p50, p16, p84)
-
-# %%
-# Plot: constraint widths and map recovery
-#
-# Pedagogical message: photometry alone leaves the joint age–dust–metallicity
-# direction degenerate. Spectroscopy alone constrains age + Z but lacks dust.
-# Joint NUTS posterior pins all four. We plot the NUTS 1σ width as a bar +
-# the MAP point estimates from each modality so the reader sees both the
-# joint *uncertainty* and the per-modality bias structure simultaneously.
-
-fig, ax = plt.subplots(figsize=(11, 5))
-key_params = ["sfh_dpl_alpha", "dust_tau_diff", "met_logzsol", "dust_tau_bc"]
-param_labels = [r"$\alpha$ (SFH slope)", r"$\tau_{\mathrm{diff}}$",
-                r"$\log(Z/Z_\odot)$", r"$\tau_{\mathrm{bc}}$"]
-
-x_pos = np.arange(len(key_params))
-for i, pname in enumerate(key_params):
-    p50, p16, p84 = nuts_joint_stats[pname]
-    truth_v = float(truth[pname])
-    map_phot = float(result_map_phot.params[pname])
-    map_spec = float(result_map_spec.params[pname])
-    # Joint NUTS 68% credible interval
-    ax.errorbar(i, p50, yerr=[[p50 - p16], [p84 - p50]], fmt="o",
-                ms=10, lw=2, capsize=6,
-                color=COLORS.get("mcmc_nuts", "C0"),
-                label="NUTS joint (68%)" if i == 0 else None,
-                zorder=4)
-    # MAP per-modality point estimates
-    ax.plot(i - 0.18, map_phot, "s", ms=9, color=COLORS.get("phot", "C2"),
-            label="MAP (phot only)" if i == 0 else None, zorder=3)
-    ax.plot(i + 0.18, map_spec, "^", ms=10, color=COLORS.get("spec", "C3"),
-            label="MAP (spec only)" if i == 0 else None, zorder=3)
-    # Truth line spanning full param column
-    ax.hlines(truth_v, i - 0.4, i + 0.4, color=COLORS.get("truth", "k"),
-              ls="--", lw=1.5, alpha=0.7,
-              label="Truth" if i == 0 else None, zorder=2)
-
-ax.set_xticks(x_pos)
-ax.set_xticklabels(param_labels, fontsize=11)
-ax.set_ylabel("Parameter value")
-ax.set_title("Joint vs. single-modality fits: NUTS 68% CI + MAP point estimates")
-ax.legend(fontsize=10, loc="best", ncol=2, frameon=False)
-ax.grid(True, alpha=0.3, axis="y")
-
-fig.tight_layout()
-fig.savefig(os.path.join(FIGDIR, "07_constraint_widths.png"), dpi=200, bbox_inches="tight")
-plt.show()
-print("Saved: notebooks/figures/07_constraint_widths.png")
-
-# %%
-# Plot: joint posterior (corner plot)
-try:
-    fig = result_nuts_joint.plot_corner(truths=truth)
-    if fig is not None:
-        fig.suptitle("NUTS Joint Posterior: Photometry + Spectroscopy", y=0.995, fontsize=13)
-        fig.tight_layout()
-        fig.savefig(os.path.join(FIGDIR, "07_joint_posterior.png"), dpi=200, bbox_inches="tight")
-        plt.show()
-        print("Saved: notebooks/figures/07_joint_posterior.png")
-except Exception as e:
-    print(f"Corner plot generation failed: {e}")
-
-# %%
-# Convergence diagnostics
-print("CONVERGENCE DIAGNOSTICS (NUTS joint fit)")
-try:
-    rhat = result_nuts_joint.rhat
-    print("\nR-hat (NUTS convergence, all < 1.05 is good):")
-    for name in spec.free_params:
-        rh = rhat[name]
-        status = "ok" if rh < 1.05 else "warn"
-        print(f"  {status} {name:25s} {float(rh):.4f}")
-except Exception:
-    print("  (R-hat unavailable)")
-
-# %%
-# Parameter recovery table
-print("PARAMETER RECOVERY (NUTS joint fit)")
-print(f"{'Parameter':<30s} {'Truth':>8s} {'Median':>8s} {'16–84%':>20s} {'Cover':>5s}")
-print("-" * 75)
-for name in spec.free_params:
-    truth_val = float(truth[name])
-    med, lo, hi = nuts_joint_stats[name]
-    covered = "ok" if lo <= truth_val <= hi else "miss"
-    print(f"  {name:<28s} {truth_val:8.3f} {med:8.3f} [{lo:7.3f}, {hi:7.3f}] {covered:>5s}")
-
-# %%
-# Summary statistics
-n_nuts = len(next(iter(result_nuts_joint.samples.values())))
-ess_per_sec = n_nuts / t_nuts_joint if t_nuts_joint > 0 else 0
-print("\nNUTS joint summary:")
-print(f"  samples:    {n_nuts}")
-print(f"  wall time:  {t_nuts_joint:.1f} s")
-print(f"  divergent:  {result_nuts_joint.diagnostics.get('n_divergent', 'n/a')}")
-
-# %%
-print("Joint photometry + spectroscopy fit complete")
-print("\nKey finding: Joint data breaks degeneracies visible in single-modality fits\n")
-
-# %%
-# Final citation
-from contextlib import suppress
-with suppress(Exception):
-    tg.cite(result_nuts_joint)
-
-# %%
-print("Joint photometry + spectroscopy fitting (NUTS) complete.")
+C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 
 # %% [markdown]
-# ## Next Steps
+# ## Observation: photometry + an optical spectrum
 #
-# - [`08_sfh_advanced.py`](08_sfh_advanced.py) — Stochastic SFH constraints via joint inference
-# - [`09_dust_emission.py`](09_dust_emission.py) — IR emission physics and template degeneracies
-# - [`10_agn_advanced.py`](10_agn_advanced.py) — AGN diagnostics and multi-wavelength constraints
+# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like R≈2000 optical spectrum,
+# 3800–9200 Å observed — at z = 0.05 that covers the 4000 Å break, Hβ, the Mgb
+# triplet, the Fe5270 / Fe5335 blends, Hα, and the Ca II triplet, the features
+# that carry metallicity and light-weighted age. We sample the spectrum at 260
+# pixels: enough to resolve the indices that break the degeneracy, and the
+# joint fit time scales with the pixel count (each pixel is one more likelihood
+# term and gradient row).
+
+# %%
+SSP_NAME = "fsps_prsc_miles_chabrier"
+ssp_path = Path("../data") / f"{SSP_NAME}.h5"
+if not ssp_path.exists():
+    ssp_path = Path(tengri.download_ssp(SSP_NAME))
+ssp = load_ssp_data(str(ssp_path))
+
+Z_GAL = 0.05
+FILTERS = [
+    "galex_fuv", "galex_nuv",
+    "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z",
+    "2mass_j", "2mass_h", "2mass_ks",
+    "wise_w1", "wise_w2",
+]
+WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage
+
+phot_obs = Photometry.from_names(FILTERS)
+spec_obs = Spectroscopy(wave_obs=WAVE_OBS, resolution=2000)
+obs_phot = Observation(photometry=phot_obs)
+obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
+
+
+def build(obs, approx=None):
+    return SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        approx=approx,
+        # Free the SFH normalisation + the two timescale parameters; fix the
+        # skew/truncation shape nuisances (neither photometry nor a continuum
+        # spectrum constrains them, and free they mix poorly under HMC).
+        sfh=builders.sfh.tsnorm(
+            defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+        ),
+        dust=builders.dust.two_component(
+            defaults=FIXED,
+            law_bc="calzetti",
+            tau_bc=Uniform(0.0, 1.0),
+            tau_diff=Uniform(0.0, 1.0),
+            emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
+        ),
+        neb=builders.neb.none(),
+        stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+        redshift=Fixed(Z_GAL),
+    )
+
+
+# Both fits use lookup tables. Photometry-only gets WavePrecomp (SSP × filter
+# LUT). The joint model gets SpectrumPrecomp, which builds both LUT families
+# side by side — the SSP × filter table for the photometry channel and the
+# SSP × pixel table for the spectrum — so neither channel falls back to the
+# slow exact wave-grid integration.
+model_phot = build(obs_phot, approx=WavePrecomp())
+model_joint = build(obs_joint, approx=SpectrumPrecomp())
+print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}")
+
+# %% [markdown]
+# ## Mock data
+#
+# A single truth (metallicity chosen in the interior of the prior, away from
+# the edge), and one self-consistent realisation of both channels generated
+# from the *joint* model so the photometry and spectrum agree by construction.
+
+# %%
+key = jax.random.PRNGKey(4)
+key_mock, key_fit = jax.random.split(key)
+truth = model_joint.spec.sample(jax.random.PRNGKey(0))
+truth = {
+    **truth,
+    "met_logzsol": jnp.array(-0.30),
+    "dust_tau_bc": jnp.array(0.30),
+    "dust_tau_diff": jnp.array(0.25),
+    "sfh_tsnorm_log_total_mass": jnp.array(10.5),
+}
+truth_full = {**model_joint.spec.get_fixed_values(), **{k: float(v) for k, v in truth.items()}}
+
+p_phot = np.asarray(model_joint.predict_photometry(truth_full))
+p_spec = np.asarray(model_joint.predict_spectrum(truth_full, wave_obs=WAVE_OBS))
+n_phot = p_phot / 20.0          # SNR = 20 photometry
+n_spec = p_spec / 30.0          # SNR = 30 per spectral pixel
+_rng = np.random.default_rng(0)
+flux_phot = p_phot + _rng.normal(size=p_phot.shape) * n_phot
+flux_spec = p_spec + _rng.normal(size=p_spec.shape) * n_spec
+
+wave_eff_um = (
+    np.array([np.trapezoid(w * t, w) / np.trapezoid(t, w)
+              for w, t in zip(phot_obs.filter_waves, phot_obs.filter_trans)]) / 1e4
+)
+print(f"Truth metallicity log(Z/Zsun) = {float(truth['met_logzsol']):+.2f}")
+print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)")
+
+# %% [markdown]
+# ## Two fits: photometry-only, then joint
+#
+# Both use the same validated HMC recipe (dense mass, n_warmup=1000,
+# n_leapfrog=20) and both run on lookup tables (WavePrecomp for photometry,
+# SpectrumPrecomp's dual LUT for the joint fit). Each fit is a couple of
+# minutes: the recipe does 32,000 gradient evaluations (1600 iterations × 20
+# leapfrog steps), plus a one-time JIT compile of the forward+likelihood
+# kernel. The joint fit is the slower of the two because every spectral pixel
+# adds a likelihood term and a gradient row — its per-evaluation cost scales
+# with the pixel count, not with the number of free parameters. The two fits
+# run sequentially in one process, per the OOM-orchestration rule.
+
+# %%
+HMC = dict(n_warmup=1000, n_samples=600, n_leapfrog_steps=20,
+           dense_mass_matrix=True, target_accept_rate=0.9, key=key_fit)
+
+
+def run(model, data, noise, data_type, label):
+    t0 = time.perf_counter()
+    post = Fitter(model, data, noise, data_type=data_type).run("mcmc_hmc", **HMC)
+    rmax = max(float(v) for v in post.rhat().values())
+    print(f"  {label:12s} {time.perf_counter() - t0:6.0f}s   max R-hat {rmax:.3f}   "
+          f"divergences {post.diagnostics.get('n_divergent', 'n/a')}")
+    return post
+
+
+print("Fitting (photometry, then joint):")
+post_phot = run(model_phot, flux_phot, n_phot, "photometry", "photometry")
+data_joint = np.concatenate([flux_phot, flux_spec])
+noise_joint = np.concatenate([n_phot, n_spec])
+post_joint = run(model_joint, data_joint, noise_joint, "joint", "joint")
+
+# %% [markdown]
+# ## Constraint widths: joint vs single-modality
+#
+# The 68% credible width of each free parameter, normalised so the photometry-
+# only width is 1. Bars below 1 mean the joint fit tightened that parameter.
+# The largest gains are in metallicity and the dust split.
+
+# %%
+params = model_joint.spec.free_params
+labels = {
+    "met_logzsol": r"$\log Z/Z_\odot$",
+    "dust_tau_bc": r"$\tau_{\rm bc}$",
+    "dust_tau_diff": r"$\tau_{\rm diff}$",
+    "sfh_tsnorm_log_total_mass": r"$\log M_\star$",
+    "sfh_tsnorm_peak_lbt_gyr": r"$t_{\rm peak}$",
+    "sfh_tsnorm_width_gyr": r"$\sigma_t$",
+    "sfh_tsnorm_skew": "skew",
+    "sfh_tsnorm_trunc": "trunc",
+}
+
+
+def width(post, p):
+    s = np.asarray(post.samples[p])
+    lo, hi = np.percentile(s, [16, 84])
+    return hi - lo
+
+
+w_phot = {p: width(post_phot, p) for p in params}
+w_joint = {p: width(post_joint, p) for p in params}
+
+order = sorted(params, key=lambda p: w_joint[p] / w_phot[p])
+x = np.arange(len(order))
+fig, ax = plt.subplots(figsize=(9.0, 4.2))
+ax.axhline(1.0, color="0.6", lw=0.8, ls="--")
+ax.bar(x - 0.18, [1.0 for _ in order], width=0.32, color=C_DATA, alpha=0.5, label="photometry (=1)")
+ax.bar(x + 0.18, [w_joint[p] / w_phot[p] for p in order], width=0.32, color=C_POST, label="joint")
+ax.set_yscale("log")
+ax.set_xticks(x)
+ax.set_xticklabels([labels.get(p, p) for p in order], fontsize=9)
+ax.set_ylabel("68% width  (photometry = 1)")
+ax.set_title("Joint data shrinks the constraints photometry leaves open")
+ax.legend(frameon=False, fontsize=9, ncol=2, loc="upper left")
+fig.tight_layout()
+fig.savefig(FIG_DIR / "07_constraint_widths.png", dpi=200, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ## Recovery table
+#
+# Truth vs joint-posterior 16/50/84. With converged chains (R̂ < 1.05) the
+# intervals are trustworthy; the spectrum pulls metallicity and the dust split
+# back onto the truth that photometry alone could not separate.
+
+# %%
+print(f"{'parameter':<28}{'truth':>9}{'p16':>9}{'p50':>9}{'p84':>9}  cover")
+print("-" * 66)
+n_cov = 0
+for p in params:
+    s = np.asarray(post_joint.samples[p])
+    lo, med, hi = np.percentile(s, [16, 50, 84])
+    tv = float(truth_full[p])
+    ok = lo <= tv <= hi
+    n_cov += ok
+    print(f"{p:<28}{tv:>9.3f}{lo:>9.3f}{med:>9.3f}{hi:>9.3f}  {'ok' if ok else 'miss'}")
+print(f"\n68% coverage: {n_cov}/{len(params)}")
+
+# %% [markdown]
+# ## Both datasets on one SED
+#
+# Observed photometry (labelled by band) and the optical spectrum on a single
+# F_ν axis, joint posterior model SED behind them. The shaded band marks the
+# spectral window, expanded in the inset. A single posterior explains the
+# broadband points and the spectrum at the same time.
+
+# %%
+N_DRAW = 60
+idx = np.linspace(0, len(next(iter(post_joint.samples.values()))) - 1, N_DRAW).astype(int)
+fixed = model_joint.spec.get_fixed_values()
+draws = [{**fixed, **{k: float(v[i]) for k, v in post_joint.samples.items()}} for i in idx]
+
+DL = cosmology.luminosity_distance(Z_GAL)
+WAVE_FULL = np.geomspace(1300.0, 6.0e4, 1000)
+w_full_um = WAVE_FULL / 1e4
+w_spec_um = np.asarray(WAVE_OBS) / 1e4
+
+
+def sed_fnu(p):
+    rest = model_joint.predict_rest_sed(p, wave=WAVE_FULL / (1.0 + Z_GAL))
+    return np.asarray(lnu_to_fnu(jnp.asarray(rest.sed), DL, Z_GAL))
+
+
+sed_draws = np.stack([sed_fnu(p) for p in draws])
+sed_lo, sed_med, sed_hi = np.percentile(sed_draws, [16, 50, 84], axis=0)
+sed_truth = sed_fnu(truth_full)
+
+BAND_LABELS = ["FUV", "NUV", "u", "g", "r", "i", "z", "J", "H", "Ks", "W1", "W2"]
+
+fig_h, ax = plt.subplots(figsize=(9.2, 5.4))
+ax.axvspan(w_spec_um.min(), w_spec_um.max(), color=C_SPEC, alpha=0.06, lw=0, zorder=0)
+ax.fill_between(w_full_um, sed_lo, sed_hi, color=C_POST, alpha=0.25, lw=0, label="posterior 68%")
+ax.plot(w_full_um, sed_med, color=C_POST, lw=1.2, label="posterior median")
+ax.plot(w_full_um, sed_truth, color=C_TRUTH, lw=1.0, ls="--", label="truth")
+ax.plot(w_spec_um, flux_spec, color=C_SPEC, lw=0.7, alpha=0.85, zorder=4, label="observed spectrum")
+ax.errorbar(wave_eff_um, flux_phot, yerr=n_phot, fmt="o", ms=6.5, color=C_DATA,
+            mec="white", mew=0.7, elinewidth=1.1, capsize=2, zorder=6, label="observed photometry")
+for name, x, y, e in zip(BAND_LABELS, wave_eff_um, flux_phot, n_phot):
+    ax.annotate(name, (x, y + e), textcoords="offset points", xytext=(0, 6),
+                ha="center", va="bottom", fontsize=7, color=C_DATA, zorder=7)
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(w_full_um.min(), w_full_um.max())
+ax.set_xlabel(r"observed wavelength  [$\mu$m]")
+ax.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
+ax.set_title("Joint fit: photometry + spectroscopy on one SED")
+ax.legend(frameon=False, fontsize=9, loc="lower right")
+
+# Inset in the empty upper-left corner (above the rising SED) so it does not
+# cover the spectrum or the NIR photometry.
+spec_draws_arr = np.stack([np.asarray(model_joint.predict_spectrum(p, wave_obs=WAVE_OBS)) for p in draws])
+sp_lo, sp_med, sp_hi = np.percentile(spec_draws_arr, [16, 50, 84], axis=0)
+axin = ax.inset_axes([0.045, 0.60, 0.36, 0.34], zorder=10)
+axin.set_facecolor("white")
+axin.patch.set_alpha(1.0)
+axin.fill_between(w_spec_um, sp_lo, sp_hi, color=C_POST, alpha=0.30, lw=0)
+axin.plot(w_spec_um, sp_med, color=C_POST, lw=1.0)
+axin.plot(w_spec_um, flux_spec, color=C_SPEC, lw=0.6, alpha=0.85)
+axin.set_xlim(w_spec_um.min(), w_spec_um.max())
+axin.tick_params(labelsize=7)
+axin.set_xlabel(r"$\mu$m", fontsize=7, labelpad=1)
+axin.set_title("spectral window", fontsize=8)
+fig_h.savefig(FIG_DIR / "07_joint_sed.png", dpi=300, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ## Corner — joint posterior
+#
+# Free parameters with truth dashed. The metallicity and dust columns are now
+# tight and centred on the truth — neither dataset managed that on its own.
+
+# %%
+fig_corner = post_joint.plot_corner(truths=truth_full, color=C_POST)
+for ax_c in fig_corner.axes:  # readable axis labels in place of parameter keys
+    if ax_c.get_xlabel() in labels:
+        ax_c.set_xlabel(labels[ax_c.get_xlabel()], fontsize=11)
+    if ax_c.get_ylabel() in labels:
+        ax_c.set_ylabel(labels[ax_c.get_ylabel()], fontsize=11)
+fig_corner.savefig(FIG_DIR / "07_corner.png", dpi=200, bbox_inches="tight")
+plt.show()
+
+# %% [markdown]
+# ## Summary
+#
+# Photometry fixes the overall SED shape and stellar mass; the optical spectrum
+# adds the absorption-line depths that pin metallicity and the dust split.
+# Fitted together through one `Observation`, the posterior is narrower than
+# either alone and recovers the truth the photometry-only fit
+# ([notebook 05](05_fitting_photometry.py)) left degenerate. `SpectrumPrecomp`
+# runs both channels on lookup tables, so the joint fit lands in a couple of
+# minutes; what is left of the cost is the per-pixel spectral likelihood and
+# its gradient, not the forward integration.
+
+# %%
+from contextlib import suppress
+
+with suppress(Exception):
+    tengri.cite(post_joint)
