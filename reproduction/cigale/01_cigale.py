@@ -1470,11 +1470,14 @@ save_fig("cigale_09_agn_skirtor.png")
 # fiducial.
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
-# both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Above ~100 keV the panels
-# diverge — CIGALE rolls off steeply while tengri stays power-law — but
-# E_cut = 300 keV only suppresses by exp(−100/300) ≈ 0.7 at 100 keV, so
-# the steep CIGALE drop near its 200–300 keV grid edge is mostly a
-# grid-extent effect rather than the physical cutoff.
+# both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Toward the hard end both now
+# roll over at the shared E_cut = 300 keV exponential cutoff — tengri's
+# panchromatic grid extends to 300 keV (it was previously clipped at the
+# ~120 keV master-grid edge, which made the cutoff look absent), so the
+# exp(−E/300) suppression is sampled on both sides. The XRB (HMXB/LMXB)
+# terms add a flatter component above ~30 keV, so the total is not a pure
+# corona power law — visible as the mild excess over the Γ = 1.8 line near
+# 50–100 keV before the cutoff takes over.
 
 # %%
 sed_x = C.run_chain(
@@ -1527,7 +1530,7 @@ sed_x = C.run_chain(
 )
 w_x, L_x = C.to_lnu(sed_x)
 e_kev_c = 12.398 / w_x
-m_c = (e_kev_c >= 0.3) & (e_kev_c <= 200) & (L_x > 0)
+m_c = (e_kev_c >= 0.3) & (e_kev_c <= 300) & (L_x > 0)
 
 m_x = SEDModel.build(
     ssp_data=ssp,
@@ -1568,7 +1571,7 @@ state_x = m_x.predict_state({})
 w_t = np.asarray(state_x.wave)
 sed_t = np.asarray(state_x.derived.get("sed_xray", state_x.sed_intrinsic))
 e_kev_t = 12.398 / w_t
-m_t = (e_kev_t >= 0.3) & (e_kev_t <= 200) & (sed_t > 0)
+m_t = (e_kev_t >= 0.3) & (e_kev_t <= 300) & (sed_t > 0)
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
@@ -1605,6 +1608,13 @@ save_fig("cigale_10_xray_nh_sweep.png")
 # to small differences in the L_IR integration window between
 # `dust.emission.dale2014` and CIGALE's `dale2014` module.
 # Star-forming only, 100 MHz to 100 GHz.
+#
+# Both sides include the Murphy+2011 thermal free-free term (on by
+# default), which flattens the steep synchrotron power law toward high
+# frequency. The two agree across the band — within ~5 % out to 10 GHz
+# and ~10–30 % by 100 GHz — with tengri's 10–100 GHz slope (−0.62)
+# marginally flatter than CIGALE's (−0.70), i.e. a touch more free-free.
+# The flattening is gentle, so neither curve shows a dramatic upturn.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()
