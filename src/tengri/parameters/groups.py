@@ -1013,13 +1013,21 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset(
         {
-            "type", "*", "law_bc", "law_diff", "emission",
+            "type",
+            "*",
+            "law_bc",
+            "law_diff",
+            "emission",
             # Per-component law-parameter overrides (TWO_COMPONENT_OVERRIDE_KEYS
             # × {bc, diff}); routed to dust_law_overrides, not declared params.
-            "slope_bc", "slope_diff",
-            "bump_strength_bc", "bump_strength_diff",
-            "delta_bc", "delta_diff",
-            "Rv_bc", "Rv_diff",
+            "slope_bc",
+            "slope_diff",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "delta_bc",
+            "delta_diff",
+            "Rv_bc",
+            "Rv_diff",
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
@@ -1538,9 +1546,21 @@ def _resolve_value(
 
         # Validate that this key is actually a parameter (not 'type', '*', etc.)
         structural_keys = {
-            "type", "*", "law_bc", "law_diff", "emission", "patchy", "dla",
-            "slope_bc", "slope_diff", "bump_strength_bc", "bump_strength_diff",
-            "delta_bc", "delta_diff", "Rv_bc", "Rv_diff",
+            "type",
+            "*",
+            "law_bc",
+            "law_diff",
+            "emission",
+            "patchy",
+            "dla",
+            "slope_bc",
+            "slope_diff",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "delta_bc",
+            "delta_diff",
+            "Rv_bc",
+            "Rv_diff",
         }
         if override_key in structural_keys:
             # These are structural keys, not parameters
@@ -1882,6 +1902,15 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
             group_output["law_bc"] = spec.dust_law_bc
         if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
             group_output["law_diff"] = spec.dust_law_diff
+        # Round-trip per-component law-parameter overrides (slope_bc, delta_diff…).
+        from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+
+        _law_kw_to_short = {v: k for k, v in TWO_COMPONENT_OVERRIDE_KEYS.items()}
+        for comp in ("bc", "diff"):
+            for law_kw, value in (getattr(spec, "dust_law_overrides", {}).get(comp) or {}).items():
+                short = _law_kw_to_short.get(law_kw)
+                if short is not None:
+                    group_output[f"{short}_{comp}"] = value
     elif group_name == "stellar":
         # Emit met_mode whenever it's non-default (default = 'delta').
         # Always-emit would force a stellar={} entry on every round-trip, which

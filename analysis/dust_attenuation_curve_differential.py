@@ -83,7 +83,10 @@ def tengri_two_component_curve(
         tau_v2=tau_diff,
         law_bc="power_law",
         law_diff="power_law",
-        n_slope=slope,
+        # Per-component birth-cloud slope via the new bc_params overlay (the
+        # diffuse ISM keeps the shared -0.7). For tau_diff=0 this isolates the
+        # birth cloud; for the default slope it reproduces the old behaviour.
+        bc_params={"n_slope": slope},
     )[0]
     return -2.5 * np.log10(np.asarray(trans))
 
@@ -108,8 +111,12 @@ def analytic_calzetti_k() -> np.ndarray:
 
 
 def fsps_cf00_curve(
-    tau_bc: float, tau_diff: float, *, young: bool,
-    dust1_index: float = -1.0, dust_index: float = -0.7,
+    tau_bc: float,
+    tau_diff: float,
+    *,
+    young: bool,
+    dust1_index: float = -1.0,
+    dust_index: float = -0.7,
 ) -> np.ndarray:
     """FSPS Charlot & Fall (dust_type=0) A(lambda) [mag].
 
@@ -258,19 +265,26 @@ def main() -> None:
     print("=" * 70)
     print("DUST ATTENUATION CURVE DIFFERENTIAL — tengri vs external codes")
     print("=" * 70)
-    print(f"\n[control] single-screen Calzetti, max |k_tengri - k_analytic| = "
-          f"{control_max_resid:.2e}  "
-          f"({'PASS' if control_max_resid < 1e-3 else 'FAIL'} < 1e-3)")
+    print(
+        f"\n[control] single-screen Calzetti, max |k_tengri - k_analytic| = "
+        f"{control_max_resid:.2e}  "
+        f"({'PASS' if control_max_resid < 1e-3 else 'FAIL'} < 1e-3)"
+    )
     print("  -> single-screen path is correct; bagpipes/Prospector Calzetti match.\n")
 
     print("[two-component] young population, birth-cloud only (tau_bc=A_V/1.0857):")
-    print(f"  A(NUV 2700A): tengri={a_nuv_teng:.3f}  FSPS={a_nuv_fsps:.3f} mag  "
-          f"(tengri {a_nuv_fsps - a_nuv_teng:.3f} mag low)")
-    print(f"  => NUV flux ratio tengri/FSPS = {flux_ratio_nuv:.3f} "
-          f"(cf. CROSSVAL-01 measured 1.291)")
-    print(f"  With BC slope set to -1.0 (the proposed fix knob):")
-    print(f"  A(NUV)={a_nuv_fixed:.3f} mag -> flux ratio = {flux_ratio_nuv_fixed:.3f} "
-          f"({'RECOVERED' if abs(flux_ratio_nuv_fixed - 1.0) < 0.01 else 'residual'})")
+    print(
+        f"  A(NUV 2700A): tengri={a_nuv_teng:.3f}  FSPS={a_nuv_fsps:.3f} mag  "
+        f"(tengri {a_nuv_fsps - a_nuv_teng:.3f} mag low)"
+    )
+    print(
+        f"  => NUV flux ratio tengri/FSPS = {flux_ratio_nuv:.3f} (cf. CROSSVAL-01 measured 1.291)"
+    )
+    print("  With BC slope set to -1.0 (the proposed fix knob):")
+    print(
+        f"  A(NUV)={a_nuv_fixed:.3f} mag -> flux ratio = {flux_ratio_nuv_fixed:.3f} "
+        f"({'RECOVERED' if abs(flux_ratio_nuv_fixed - 1.0) < 0.01 else 'residual'})"
+    )
 
     out = Path(__file__).resolve().parent / "figures" / "dust_attenuation_curve_differential.png"
     if os.environ.get("TENGRI_NO_FIG") != "1":

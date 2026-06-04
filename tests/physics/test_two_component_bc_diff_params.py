@@ -37,12 +37,15 @@ class TestDefaultsUnchanged:
     """No bc/diff overlay -> identical to the shared-``law_params`` behaviour."""
 
     def test_shared_n_slope_default(self) -> None:
-        ref = two_component_dust(
-            _WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.3, n_slope=-0.7
-        )
+        ref = two_component_dust(_WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.3, n_slope=-0.7)
         new = two_component_dust(
-            _WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.3, n_slope=-0.7,
-            bc_params=None, diff_params=None,
+            _WAVE,
+            _YOUNG,
+            tau_v1=1.0,
+            tau_v2=0.3,
+            n_slope=-0.7,
+            bc_params=None,
+            diff_params=None,
         )
         np.testing.assert_array_equal(np.asarray(ref), np.asarray(new))
 
@@ -54,9 +57,14 @@ class TestIndependentSlopes:
         """Young-limit birth cloud uses bc_params slope, not the shared one."""
         # Diffuse off (tau_v2=0); only the birth cloud contributes.
         trans = two_component_dust(
-            _WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.0,
-            law_bc="power_law", law_diff="power_law",
-            bc_params={"n_slope": -1.0}, diff_params={"n_slope": -0.7},
+            _WAVE,
+            _YOUNG,
+            tau_v1=1.0,
+            tau_v2=0.0,
+            law_bc="power_law",
+            law_diff="power_law",
+            bc_params={"n_slope": -1.0},
+            diff_params={"n_slope": -0.7},
         )
         tau = _tau_from_trans(trans)[0]  # single age row
         # Expected birth-cloud optical depth: tau_v1 * (lambda/5500)^-1.0,
@@ -67,9 +75,14 @@ class TestIndependentSlopes:
     def test_diffuse_keeps_its_own_slope(self) -> None:
         """Old-limit diffuse uses diff_params slope, independent of bc."""
         trans = two_component_dust(
-            _WAVE, _OLD, tau_v1=0.0, tau_v2=1.0,
-            law_bc="power_law", law_diff="power_law",
-            bc_params={"n_slope": -1.0}, diff_params={"n_slope": -0.7},
+            _WAVE,
+            _OLD,
+            tau_v1=0.0,
+            tau_v2=1.0,
+            law_bc="power_law",
+            law_diff="power_law",
+            bc_params={"n_slope": -1.0},
+            diff_params={"n_slope": -0.7},
         )
         tau = _tau_from_trans(trans)[0]
         k_expected = (np.asarray(_WAVE) / V_BAND_ANGSTROM) ** -0.7
@@ -87,7 +100,10 @@ class TestIndependentSlopes:
         a_fsps = (2.5 / np.log(10.0)) * tau_bc * (2700.0 / 5500.0) ** -1.0
 
         trans_fixed = two_component_dust(
-            wave, jnp.array([1.0e4]), tau_v1=tau_bc, tau_v2=0.0,
+            wave,
+            jnp.array([1.0e4]),
+            tau_v1=tau_bc,
+            tau_v2=0.0,
             bc_params={"n_slope": -1.0},
         )
         a_tengri = -2.5 * np.log10(np.asarray(trans_fixed)[0, 0])
@@ -101,8 +117,12 @@ class TestIndependentShapeParams:
         wave = jnp.linspace(2000.0, 2400.0, 41)  # across the 2175 A bump
         # Birth cloud carries a UV bump; diffuse does not.
         trans = two_component_dust(
-            wave, _YOUNG, tau_v1=1.0, tau_v2=0.0,
-            law_bc="kriek_conroy", law_diff="kriek_conroy",
+            wave,
+            _YOUNG,
+            tau_v1=1.0,
+            tau_v2=0.0,
+            law_bc="kriek_conroy",
+            law_diff="kriek_conroy",
             bc_params={"dust_bump_strength": 3.0, "dust_delta": 0.0},
             diff_params={"dust_bump_strength": 0.0, "dust_delta": 0.0},
         )
