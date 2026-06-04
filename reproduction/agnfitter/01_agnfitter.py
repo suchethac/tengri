@@ -634,22 +634,27 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # `skirtor` is the interesting one, and the difference is *by design on the
 # AGNFITTER-RX side*. Both panels use the same geometry (opening angle 40°,
 # inclination 30°, τ₉.₇ = 7), and the near-IR agrees closely (1–3 µm), but the
-# IR peak lands at ~40 µm for tengri vs ~25 µm for AGNFITTER-RX. The reason is
-# how each code samples the Stalevski (2016) models. AGNFITTER-RX deliberately
-# fits a *reduced* library: as its §3.2 states, the full SKIRTOR grid was
-# "simplified… by averaging all the models with respect to all but the 3 most
-# relevant parameters" (inclination, opening angle, optical depth) to avoid
-# overfitting sparse mid-IR data — so its `SKIRTOR_mean_3p` is an average over
-# the clumpiness and radial-distribution parameters. tengri instead keeps the
-# full Stalevski grid (τ, p, q, opening angle, inclination) and interpolates
-# it, following the X-CIGALE (Yang et al. 2020) SKIRTOR + polar-dust
-# implementation. So tengri reproduces the un-averaged SKIRTOR that CIGALE-
-# family codes use, while AGNFITTER-RX fits a parameter-collapsed average of
-# the same models; averaging over the clump/radial structure broadens and
-# warms the effective SED, which is what moves the peak. Neither is wrong —
-# they are two intentional reductions of one model. A future direct port of
-# `SKIRTOR_mean_3p` (as was done for `silva04` and `cat3d_wind`) would give a
-# bit-faithful AGNFITTER-RX-style SKIRTOR panel.
+# IR peak lands at a longer wavelength for tengri than for AGNFITTER-RX. The
+# reason is how each code samples the Stalevski (2016) models. AGNFITTER-RX
+# deliberately fits a *reduced* library: as its §3.2 states, the full SKIRTOR
+# grid was "simplified… by averaging all the models with respect to all but
+# the 3 most relevant parameters" (inclination, opening angle, optical depth)
+# to avoid overfitting sparse mid-IR data — so its `SKIRTOR_mean_3p` is an
+# average over the clumpiness and radial-distribution parameters. The `skirtor`
+# block instead keeps the full Stalevski grid (τ, p, q, opening angle,
+# inclination) and interpolates it, following the X-CIGALE (Yang et al. 2020)
+# SKIRTOR + polar-dust implementation. So `skirtor` reproduces the un-averaged
+# SKIRTOR that CIGALE-family codes use, while AGNFITTER-RX fits a parameter-
+# collapsed average of the same models; averaging over the clump/radial
+# structure broadens and warms the effective SED, which is what moves the peak.
+# Neither is wrong — they are two intentional reductions of one model.
+#
+# tengri ships **both**: `skirtor` (full X-CIGALE grid, shown here) and
+# `skirtor_agnfitter` (a direct node-exact port of the `SKIRTOR_mean_3p`
+# pickle, exactly as was done for `silva04` and `cat3d_wind`). The next panel
+# (§9c′) overlays the two reductions against the AGNFITTER-RX reference, so you
+# can see the bit-faithful port land on the averaged library while the
+# full-grid block sits at longer wavelengths.
 #
 # Two residual pathologies the paper emphasises also live in this plot: the
 # 10 µm silicate feature (NK08/CAT3D can over- or under-predict it depending
@@ -658,7 +663,16 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 
 # %%
 torus_pairs = [
-    ("S04", "S04", lambda: tengri_torus("silva04"), "silva04 (port)", dict(log_nh=23.0)),
+    # Pin both sides to the same column density (log N_H = 23). tengri's
+    # `log_nh_silva` is now a live builder parameter, so this is a genuine
+    # matched-parameter port check, not a default-vs-default coincidence.
+    (
+        "S04",
+        "S04",
+        lambda: tengri_torus("silva04", log_nh_silva=23.0),
+        "silva04 (port, log N_H = 23)",
+        dict(log_nh=23.0),
+    ),
     ("NK08", "NK08", lambda: tengri_torus("nenkova"), "nenkova", dict(incl=0.0)),
     (
         "SKIRTOR",
@@ -699,6 +713,64 @@ for ax in axes[:, 0]:
 fig.suptitle("Torus libraries — dotted line marks the 10 µm silicate feature", y=1.0)
 fig.tight_layout()
 save_fig("agnfitter_09c_torus_library.png")
+
+# %% [markdown]
+# ### §9c′ Both SKIRTOR reductions, side by side
+#
+# The panel above contrasts AGNFITTER-RX's averaged `SKIRTOR_mean_3p` with
+# tengri's *full-grid* `skirtor` (the X-CIGALE reduction) — different by
+# design. tengri now also ships `skirtor_agnfitter`, a direct node-exact
+# port of the very same `SKIRTOR_mean_3p` pickle, so we can show both
+# reductions of the Stalevski (2016) models against the AGNFITTER-RX
+# reference at one matched geometry (opening angle 40°, inclination 30°,
+# τ₉.₇ = 7):
+#
+# * **`skirtor_agnfitter`** overlays the AGNFITTER-RX curve to node-exact
+#   tolerance — the monotone-cubic (PCHIP) interpolant reproduces the
+#   tabulated library at its grid nodes rather than smoothing across them.
+# * **`skirtor`** (full X-CIGALE grid) carries the un-averaged clumpiness
+#   and radial-distribution structure, which broadens and warms the SED and
+#   pushes its IR peak to longer wavelengths.
+#
+# Neither is wrong — they are two intentional reductions of one model, and
+# tengri lets you pick either. Use `skirtor_agnfitter` to reproduce an
+# AGNFITTER-RX fit bit-for-bit, or `skirtor` to match a CIGALE-family run.
+
+# %%
+fig, ax = plt.subplots(figsize=(7.5, 5))
+w_ref, L_ref = A.torus_template("SKIRTOR", oa=40.0, incl=30.0, tau=7.0)
+msk_ref = (w_ref > 5e3) & (w_ref < 1e7)
+ax.loglog(
+    w_ref[msk_ref], norm_peak(L_ref)[msk_ref], "C0-", lw=2.0, label="AGNFITTER  SKIRTOR_mean_3p"
+)
+w_af, L_af = tengri_torus("skirtor_agnfitter", oa_skirtor=40.0, incl_skirtor=30.0, tv_skirtor=7.0)
+msk_af = (w_af > 5e3) & (w_af < 1e7)
+ax.loglog(
+    w_af[msk_af],
+    norm_peak(L_af)[msk_af],
+    "C1--",
+    lw=1.6,
+    label="tengri  skirtor_agnfitter (bit-faithful port)",
+)
+w_xc, L_xc = tengri_torus("skirtor", cos_inc=0.8660254, oa_skirtor=40.0, tau_skirtor=7.0)
+msk_xc = (w_xc > 5e3) & (w_xc < 1e7)
+ax.loglog(
+    w_xc[msk_xc],
+    norm_peak(L_xc)[msk_xc],
+    "C3-",
+    lw=1.6,
+    label="tengri  skirtor (full X-CIGALE grid, by design)",
+)
+ax.axvline(1e5, color="0.7", ls=":", lw=1)  # 10 µm silicate
+ax.set_xlim(5e3, 1e7)
+ax.set_ylim(1e-3, 3)
+ax.set_xlabel(r"$\lambda$ [Å]")
+ax.set_ylabel(r"$L_\nu$ (norm. at peak)")
+ax.set_title("SKIRTOR: averaged port vs full grid (oa 40°, incl 30°, τ 7)")
+ax.legend(fontsize=8, loc="lower center")
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("agnfitter_09c2_skirtor_port.png")
 
 # %% [markdown]
 # ## §9d Best combination — CAT3D-Wind + THB21
