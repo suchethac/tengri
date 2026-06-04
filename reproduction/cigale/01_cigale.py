@@ -427,6 +427,75 @@ save_fig("cigale_02_sfh_tau.png")
 
 
 # %% [markdown]
+# ### Double-exponential with a burst (sfh2exp)
+#
+# CIGALE's `sfh2exp` superposes an old declining-exponential population and a
+# recent exponential burst that carries a fixed fraction `f_burst` of the total
+# stellar mass. tengri registers the same form (`sfh.sfh2exp`). At matched
+# parameters (τ_main = 4 Gyr, τ_burst = 0.1 Gyr, f_burst = 0.1, burst 0.3 Gyr
+# ago, age 10 Gyr) the two SFR histories agree, and tengri's pipeline grid still
+# integrates to the requested mass.
+
+# %%
+t_c2, sfr_c2 = C.sfh_curve(
+    "sfh2exp",
+    tau_main=4000,
+    tau_burst=100,
+    f_burst=0.1,
+    age=10000,
+    burst_age=300,
+    sfr_0=1.0,
+    normalise=True,
+)
+
+_age_gyr_2exp = 10.0
+_m_2exp = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "sfh2exp",
+        "tau_main_gyr": Fixed(4.0),
+        "tau_burst_gyr": Fixed(0.1),
+        "f_burst": Fixed(0.1),
+        "age_gyr": Fixed(_age_gyr_2exp),
+        "burst_age_gyr": Fixed(0.3),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+_st_2exp = _m_2exp.predict_state({})
+_lbt_2exp = np.asarray(_st_2exp.derived["sfh_grid_lbt_yr"])
+_sfr_2exp = np.asarray(_st_2exp.derived["sfr_history"])
+_t_2exp = (_age_gyr_2exp - _lbt_2exp / 1e9) * 1e9  # cosmic age since SF onset [yr]
+_idx2 = np.argsort(_t_2exp)
+_mass_2exp = float(np.trapezoid(_sfr_2exp[_idx2], _t_2exp[_idx2]))
+print(f"tengri pipeline ∫SFR dt = {_mass_2exp:.4f} M☉ (target: 1.0000 from log_total_mass=0)")
+
+fig, ax_l, ax_r = U.two_panel_fig()
+for ax, title in (
+    (ax_l, "pcigale.sed_modules.sfh2exp (main + burst)"),
+    (ax_r, "tengri pipeline sfr_history (sfh2exp)"),
+):
+    ax.set_xlabel("Cosmic age since SF onset [Gyr]")
+    ax.set_ylabel(r"SFR [$M_\odot\ \mathrm{yr}^{-1}$]")
+    ax.set_xlim(0, 10)
+    ax.grid(True, alpha=0.3)
+    ax.set_title(title)
+ax_l.plot(t_c2 / 1e9, sfr_c2, "C0-", linewidth=2.0)
+ax_l.axvline(_age_gyr_2exp - 0.3, color="grey", linestyle=":", alpha=0.6, label="burst onset")
+ax_l.legend(fontsize=9)
+ax_r.plot(_t_2exp / 1e9, _sfr_2exp, "C1-", linewidth=2.0)
+ax_r.axvline(_age_gyr_2exp - 0.3, color="grey", linestyle=":", alpha=0.6, label="burst onset")
+ax_r.legend(fontsize=9)
+ax_l.set_ylim(bottom=0.0)
+ax_r.set_ylim(bottom=0.0)
+fig.tight_layout()
+save_fig("cigale_02_sfh2exp.png")
+
+
+# %% [markdown]
 # ## §3 Integrated stellar SED
 #
 # Convolve the τ-delayed SFH with the BC03 SSPs. No dust, no nebular.
@@ -817,6 +886,70 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
+plt.show()
+
+
+# %% [markdown]
+# ### Dust-IR model knobs: AGN heating and the radiation-field slope
+#
+# Two further CIGALE dust-IR parameters, both ported into tengri. **Left:**
+# Dale 2014's AGN fraction adds an *additive* AGN-heated dust source
+# ($L_{\rm AGN} = L_{\rm dust}\,f/(1-f)$), lifting the mid-IR while the
+# stellar-heated FIR peak stays put — so the total IR grows with `f_AGN`.
+# **Right:** the THEMIS radiation-field slope $\alpha$ ($dU/dM \propto U^{-\alpha}$)
+# sets the FIR shape; $\alpha=2$ is the Jones+2017 / DustEM fiducial that
+# reproduces tengri's shipped template bit-for-bit.
+
+# %%
+import jax
+import jax.numpy as jnp
+
+_c_aa_dust = 2.998e18
+
+
+def _dust_ir_model(emission_type, **emkw):
+    return SEDModel.build(
+        ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
+        sfh={"type": "const", "log_total_mass": Fixed(11.0), "*": FIXED},
+        dust={
+            "type": "two_component",
+            "tau_bc": Fixed(0.3),
+            "tau_diff": Fixed(1.0),
+            "*": FIXED,
+            "emission": {"type": emission_type, "*": FIXED, **emkw},
+        },
+        redshift=Fixed(0.05),
+    )
+
+
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
+
+m_frac = _dust_ir_model("dale2014")
+p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
+for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
+    o = m_frac.predict_rest_sed({**p_frac, "dust_frac_agn": jnp.float64(f)})
+    w = np.asarray(o.wavelength)
+    ax_l.loglog(w, _c_aa_dust / w * np.asarray(o.sed), color=c, lw=1.8,
+                label=rf"$f_{{\rm AGN}}={f}$")
+ax_l.set(xlim=(1e4, 1e7), ylim=(1e42, 1e45), xlabel=r"$\lambda$ [Å]",
+         ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Dale 2014 AGN fraction")
+ax_l.legend(fontsize=9, frameon=False)
+
+m_alpha = _dust_ir_model("themis", dust_gamma_dl=0.1)
+p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
+for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
+    o = m_alpha.predict_rest_sed({**p_alpha, "dust_alpha": jnp.float64(a)})
+    w = np.asarray(o.wavelength)
+    lw = 2.4 if a == 2.0 else 1.6
+    ax_r.loglog(w, _c_aa_dust / w * np.asarray(o.sed), color=c, lw=lw,
+                label=rf"$\alpha={a}$" + (" (FSPS)" if a == 2.0 else ""))
+ax_r.set(xlim=(3e4, 1e7), ylim=(1e42, 1e45), xlabel=r"$\lambda$ [Å]",
+         title=r"THEMIS radiation-field slope $\alpha$")
+ax_r.legend(fontsize=9, frameon=False)
+
+fig.tight_layout()
+save_fig("cigale_06_dust_ir_knobs.png")
 plt.show()
 
 
@@ -1623,91 +1756,6 @@ save_fig("cigale_full_sed_headtohead.png")
 plt.show()
 
 
-# %% [markdown]
-# ## New CIGALE-parity knobs
-#
-# The sections above compared physics blocks that already existed. The 2026-06
-# parity pass wired up several CIGALE parameters that were present in tengri but
-# not exposed (or missing), all reachable through `SEDModel.build`:
-#
-# * **Dale 2014 `dust_frac_agn`** — CIGALE's additive AGN-heated dust,
-#   `SED = L·SF + L·f/(1−f)·QSO` (uses the CIGALE-sourced templates registered
-#   at the top of this notebook).
-# * **THEMIS `dust_alpha`** — the radiation-field slope `dU/dM ∝ U^−α`, with
-#   `α = 2` anchored bit-for-bit to the shipped FSPS/DustEM template.
-# * **`sfh2exp`** — double declining-exponential SFH (old population + recent
-#   burst at fixed total mass).
-#
-# Each panel is a tengri sweep of the newly-exposed knob (not a CIGALE overlay —
-# these demonstrate the wired capability).
-
-# %%
-import jax
-import jax.numpy as jnp
-
-_c_aa = 2.998e18
-
-
-def _build_dust(emission_type, **emkw):
-    return SEDModel.build(
-        ssp,
-        sfh={"type": "const", "*": FIXED, "log_total_mass": 11.0},
-        dust={
-            "type": "two_component",
-            "*": FIXED,
-            "tau_diff": 1.0,
-            "tau_bc": 0.3,
-            "emission": {"type": emission_type, "*": FIXED, **emkw},
-        },
-        redshift=Fixed(0.05),
-    )
-
-
-fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
-
-# (a) Dale 2014 AGN fraction
-m_dale = _build_dust("dale2014")
-p_dale = dict(m_dale.spec.sample(jax.random.PRNGKey(0)))
-for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
-    out = m_dale.predict_rest_sed({**p_dale, "dust_frac_agn": jnp.float64(f)})
-    w = np.asarray(out.wavelength)
-    axes[0].loglog(w, _c_aa / w * np.asarray(out.sed), color=c, lw=1.8, label=rf"$f_{{\rm AGN}}={f}$")
-axes[0].set(xlim=(1e4, 1e7), xlabel=r"$\lambda$ [Å]", ylabel=r"$\nu L_\nu$ [erg/s]",
-            title="Dale 2014 AGN fraction")
-axes[0].legend(fontsize=8, frameon=False)
-
-# (b) THEMIS radiation-field slope alpha
-m_th = _build_dust("themis", dust_gamma_dl=0.1)
-p_th = dict(m_th.spec.sample(jax.random.PRNGKey(0)))
-for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
-    out = m_th.predict_rest_sed({**p_th, "dust_alpha": jnp.float64(a)})
-    w = np.asarray(out.wavelength)
-    lw = 2.4 if a == 2.0 else 1.6
-    axes[1].loglog(w, _c_aa / w * np.asarray(out.sed), color=c, lw=lw,
-                   label=rf"$\alpha={a}$" + (" (FSPS)" if a == 2.0 else ""))
-axes[1].set(xlim=(3e4, 1e7), xlabel=r"$\lambda$ [Å]", title=r"THEMIS slope $\alpha$")
-axes[1].legend(fontsize=8, frameon=False)
-
-# (c) sfh2exp burst fraction
-for fb, c in zip([0.0, 0.1, 0.3], ["C0", "C1", "C3"]):
-    m_sfh = SEDModel.build(
-        ssp,
-        sfh={"type": "sfh2exp", "*": FIXED, "log_total_mass": 10.5, "tau_main_gyr": 4.0,
-             "tau_burst_gyr": 0.1, "f_burst": fb, "age_gyr": 10.0, "burst_age_gyr": 0.3},
-        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
-        redshift=Fixed(0.05),
-    )
-    p_s = dict(m_sfh.spec.sample(jax.random.PRNGKey(0)))
-    out = m_sfh.predict_rest_sed(p_s)
-    w = np.asarray(out.wavelength)
-    axes[2].loglog(w, _c_aa / w * np.asarray(out.sed), color=c, lw=1.8, label=rf"$f_{{\rm burst}}={fb}$")
-axes[2].set(xlim=(1e3, 5e6), xlabel=r"$\lambda$ [Å]", title="sfh2exp burst")
-axes[2].legend(fontsize=8, frameon=False)
-
-fig.suptitle("Newly-wired CIGALE-parity knobs (tengri)", fontsize=12)
-fig.tight_layout()
-save_fig("cigale_new_parity_knobs.png")
-plt.show()
 
 
 # %% [markdown]
