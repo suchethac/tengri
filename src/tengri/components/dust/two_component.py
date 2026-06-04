@@ -205,6 +205,39 @@ class DustSEDComponent:
                 Fixed(2.0),
                 "Casey 2012 mid-IR power-law slope [dimensionless]",
             ),
+            # CIGALE-parity emission knobs (2026-06). Static superset; each
+            # emission template uses only the ones it needs.
+            ParamDeclaration(
+                "dust_qhac",
+                Fixed(0.17),
+                "THEMIS small-hydrocarbon grain fraction (Jones+2017) [dimensionless]",
+            ),
+            ParamDeclaration(
+                "dust_alpha",
+                Fixed(2.0),
+                "THEMIS radiation-field slope dU/dM~U^-alpha "
+                "[dimensionless, in 1.0-3.0; 2.0 = FSPS anchor]",
+            ),
+            ParamDeclaration(
+                "dust_frac_agn",
+                Fixed(0.0),
+                "Dale 2014 AGN fraction (additive AGN-heated dust) [dimensionless, in [0, 1)]",
+            ),
+            ParamDeclaration(
+                "dust_tdust",
+                Fixed(25.0),
+                "Schreiber 2016 tabulated dust temperature [K]",
+            ),
+            ParamDeclaration(
+                "dust_fpah",
+                Fixed(0.05),
+                "Schreiber 2016 PAH mass fraction [dimensionless, in [0, 1]]",
+            ),
+            ParamDeclaration(
+                "dust_epsilon_mbb",
+                Fixed(1.0),
+                "Fraction of L_dust carried by the modified blackbody [dimensionless]",
+            ),
             ParamDeclaration(
                 "dust_f_obscuration",
                 Fixed(0.0),
@@ -398,6 +431,15 @@ class DustSEDComponent:
                 dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
                 dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
                 dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
+                # CIGALE-parity knobs (2026-06): THEMIS qhac + alpha, Dale AGN
+                # fraction, Schreiber tabulated tdust/fpah, MBB epsilon. Each
+                # emission fn absorbs the irrelevant ones via **_kwargs.
+                dust_qhac=jnp.asarray(params.get("dust_qhac", 0.17)),
+                dust_alpha=jnp.asarray(params.get("dust_alpha", 2.0)),
+                dust_frac_agn=jnp.asarray(params.get("dust_frac_agn", 0.0)),
+                dust_tdust=jnp.asarray(params.get("dust_tdust", 25.0)),
+                dust_fpah=jnp.asarray(params.get("dust_fpah", 0.05)),
+                dust_epsilon_mbb=jnp.asarray(params.get("dust_epsilon_mbb", 1.0)),
                 redshift=z,
             )
 

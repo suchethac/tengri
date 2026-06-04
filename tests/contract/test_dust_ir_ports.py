@@ -110,14 +110,16 @@ class TestDale2014IRComponent:
         assert comp.parameter_prefix == "dust_"
 
     def test_declared_parameters_structure(self):
-        """Dale2014IR declares one parameter with units."""
+        """Dale2014IR declares the SF slope plus the CIGALE AGN fraction."""
         comp = Dale2014IRSEDComponent()
         decls = comp.declared_parameters()
         assert isinstance(decls, list)
-        assert len(decls) == 1
-        assert decls[0].name == "dust_alpha_dale"
-        assert decls[0].units == "dimensionless"
-        assert isinstance(decls[0], ParamDeclaration)
+        names = {d.name for d in decls}
+        # dust_alpha_dale (SF radiation-field slope) + dust_frac_agn (CIGALE
+        # additive AGN-heated dust, added 2026-06).
+        assert names == {"dust_alpha_dale", "dust_frac_agn"}
+        assert all(isinstance(d, ParamDeclaration) for d in decls)
+        assert all(d.units == "dimensionless" for d in decls)
 
     def test_predict_signature(self):
         """Dale2014IR.predict has correct signature."""

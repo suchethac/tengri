@@ -28,6 +28,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     buat08,
     delayed_bq,
     periodic,
+    sfh2exp,
 )
 
 
@@ -507,6 +508,89 @@ class TestBuat08:
         sfr_norm = sfr / jnp.max(sfr)
         expected_norm = expected / jnp.max(expected)
         assert_allclose(sfr_norm, expected_norm, rtol=1e-5)
+
+
+# ── Tests for sfh2exp ─────────────────────────────────────────────
+
+
+class TestSfh2Exp:
+    """Tests for the CIGALE double declining-exponential SFH (main + burst)."""
+
+    _t = jnp.linspace(0.0, 1e10, 500)
+
+    def _sfr(self, f_burst=0.1, tau_main=4e9, tau_burst=3e8, burst_age=5e8):
+        return sfh2exp(
+            self._t,
+            log_total_mass=10.0,
+            tau_main_yr=tau_main,
+            tau_burst_yr=tau_burst,
+            f_burst=f_burst,
+            age_yr=1e10,
+            burst_age_yr=burst_age,
+        )
+
+    def test_output_shape(self):
+        assert self._sfr().shape == self._t.shape
+
+    def test_nonnegative(self):
+        assert jnp.all(self._sfr() >= 0.0)
+
+    def test_mass_conservation(self):
+        """trapezoid(SFR, t) == 10**log_total_mass exactly."""
+        m = float(jnp.trapezoid(self._sfr(), self._t))
+        assert_allclose(m, 1e10, rtol=1e-4)
+
+    def test_burst_increases_recent_sfr(self):
+        """A larger burst fraction raises the SFR in the recent burst window."""
+        recent = self._t <= 5e8
+        m0 = float(jnp.trapezoid(self._sfr(f_burst=0.0) * recent, self._t))
+        m3 = float(jnp.trapezoid(self._sfr(f_burst=0.3) * recent, self._t))
+        assert m3 > m0
+
+    def test_burst_mass_fraction(self):
+        """The burst carries ~f_burst of the total mass (CIGALE convention)."""
+        # Burst-only minus no-burst, integrated, should be ~f_burst * total.
+        t = self._t
+        total = 1e10
+        # Reconstruct the burst mass fraction by differencing against f_burst=0.
+        sfr_f = self._sfr(f_burst=0.25)
+        sfr_0 = self._sfr(f_burst=0.0)
+        # The excess mass over the no-burst case, normalised, approximates the
+        # burst fraction to within grid resolution.
+        excess = float(jnp.trapezoid(jnp.maximum(sfr_f - sfr_0, 0.0), t)) / total
+        assert 0.1 < excess < 0.4  # ~0.25, broadened for grid + overlap
+
+    def test_is_jittable(self):
+        fn = jax.jit(lambda t, fb: sfh2exp(t, 10.0, 4e9, 3e8, fb, 1e10, 5e8))
+        out = fn(self._t, 0.1)
+        assert jnp.all(jnp.isfinite(out))
+
+    def test_has_gradients(self):
+        """Finite gradients w.r.t. f_burst and tau_main (inf-dummy guard)."""
+        g_fb = jax.grad(lambda fb: jnp.sum(sfh2exp(self._t, 10.0, 4e9, 3e8, fb, 1e10, 5e8)))(0.1)
+        g_tm = jax.grad(lambda tm: jnp.sum(sfh2exp(self._t, 10.0, tm, 3e8, 0.1, 1e10, 5e8)))(4e9)
+        assert jnp.isfinite(g_fb)
+        assert jnp.isfinite(g_tm)
+
+    def test_zero_beyond_age(self):
+        """No star formation before the galaxy formed (t_lookback > age)."""
+        t = jnp.linspace(0.0, 1.4e10, 300)
+        sfr = sfh2exp(t, 10.0, 4e9, 3e8, 0.1, 1e10, 5e8)
+        assert jnp.all(sfr[t > 1e10] == 0.0)
+
+    def test_registry_resolution(self):
+        """sfh2exp resolves via the registry with the documented param names."""
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+        assert "sfh2exp" in SFH_REGISTRY
+        names = set(SFH_REGISTRY["sfh2exp"].params)
+        assert {
+            "sfh_sfh2exp_tau_main_gyr",
+            "sfh_sfh2exp_tau_burst_gyr",
+            "sfh_sfh2exp_f_burst",
+            "sfh_sfh2exp_age_gyr",
+            "sfh_sfh2exp_burst_age_gyr",
+        } <= names
 
 
 if __name__ == "__main__":

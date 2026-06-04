@@ -1152,6 +1152,8 @@ def xray_total(
     log_nh: float = 20.0,
     alpha_ox_relation: str = "just2007",
     pexrav_R: float = 0.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total X-ray emission (HMXB + LMXB + hot gas + AGN corona).
@@ -1194,6 +1196,19 @@ def xray_total(
         Linear anisotropy coefficient. Default: 0.5. []
     a2 : float
         Quadratic anisotropy coefficient. Default: 0.0. []
+    log_nh : float
+        Line-of-sight equivalent hydrogen column density [log10(cm⁻²)].
+        Default: 20.0. Range: 20.0–26.0.
+    alpha_ox_relation : str
+        Empirical α_OX relation. Default: "just2007". Options: "just2007",
+        "lusso_risaliti_2016", "lusso_risaliti_2017".
+    pexrav_R : float
+        Cold-disc Compton reflection covering fraction. Default: 0.0 (disabled).
+        [dimensionless]
+    log_L_hmxb_offset : float
+        Departure from expected HMXB log L_X [dex]. Default: 0.0. [dex]
+    log_L_lmxb_offset : float
+        Departure from expected LMXB log L_X [dex]. Default: 0.0. [dex]
 
     Returns
     -------
@@ -1209,6 +1224,11 @@ def xray_total(
     - LMXB: Lehmer+2016 age quartic, scaling with M_star
     - Hot gas: Yang+2020, scaling with SFR
     - AGN corona: Just+2007 / Yang+2020, scaling with L_2500 and α_OX
+
+    **XRB offsets** (``log_L_hmxb_offset``, ``log_L_lmxb_offset``):
+    Multiplicative offsets in log space allowing intrinsic scatter or
+    redshift-dependent evolution around the Lehmer+2016 empirical relations.
+    Implemented as additive terms in the log luminosity (Yang+2020 [1]_).
     """
     xrb = xray_xrb(
         wavelength,
@@ -1219,6 +1239,8 @@ def xray_total(
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
         E_cut=E_cut,
+        log_L_hmxb_offset=log_L_hmxb_offset,
+        log_L_lmxb_offset=log_L_lmxb_offset,
     )
     hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
     # AGN corona path uses the X-CIGALE driver (L_2500_30deg) with the

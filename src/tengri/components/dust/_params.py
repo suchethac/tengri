@@ -134,6 +134,46 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0.0 and hi <= 7.0,
         "must be in [0, 7]",
     ),
+    # ── CIGALE-parity emission knobs (2026-06) ────────────────────
+    ParamDeclaration(
+        "dust_alpha",
+        Fixed(2.0),
+        "THEMIS radiation-field power-law slope dU/dM ~ U^-alpha (Jones+2017 / "
+        "CIGALE themis, 1.0-3.0). Default 2.0 reproduces the FSPS/DustEM "
+        "template bit-for-bit (alpha=2 anchor).",
+        lambda lo, hi: lo >= 1.0 and hi <= 3.0,
+        "must be in [1.0, 3.0]",
+    ),
+    ParamDeclaration(
+        "dust_frac_agn",
+        Fixed(0.0),
+        "Dale 2014 AGN fraction: additive AGN-heated dust, "
+        "L_AGN = L_dust*f/(1-f) (CIGALE dale2014, 0<=f<1)",
+        lambda lo, hi: lo >= 0.0 and hi < 1.0,
+        "must be in [0, 1)",
+    ),
+    ParamDeclaration(
+        "dust_tdust",
+        Fixed(25.0),
+        "Schreiber 2016 dust temperature (K) for tabulated continuum (15-99)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "dust_fpah",
+        Fixed(0.05),
+        "Schreiber 2016 PAH mass fraction (CIGALE schreiber2016, 0-1)",
+        lambda lo, hi: lo >= 0.0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "dust_epsilon_mbb",
+        Fixed(1.0),
+        "Fraction of L_dust carried by the modified blackbody "
+        "(CIGALE mbb epsilon_mbb; 1.0 = full energy balance)",
+        lambda lo, hi: lo >= 0.0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
 )
 
 ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (

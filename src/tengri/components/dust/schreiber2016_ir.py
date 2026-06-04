@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Dale et al. (2014) dust emission as an SEDModelComponent.
+"""Schreiber et al. (2016) dust emission as an SEDModelComponent.
 
-Implements tabulated-template IR re-emission based on the Dale+2014 dust model,
-parameterized by a single radiation field power-law index (alpha).
+Implements tabulated-template IR re-emission based on the Schreiber+2016 dust model,
+parameterized by dust temperature (T_dust) and PAH fraction (f_pah).
 
 The templates are loaded from an HDF5 file during :meth:`load` (precomputation)
 and cached for rapid access during forward passes.
 
 References
 ----------
-.. [1] Dale, D.A. et al. 2014, "The Infrared Emission of Star-forming
-   Galaxies in the Herschel Reference Survey", ApJ 784, 83.
-   https://doi.org/10.1088/0004-637X/784/1/83
+.. [1] Schreiber, C. et al. 2016, "Cold dust properties from dust SED fitting
+   and its correlation with the far-infrared properties of nearby galaxies",
+   A&A, 602, A96. https://doi.org/10.1051/0004-6361/201629925
 """
 
 from __future__ import annotations
@@ -22,46 +22,45 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission_templates import load_dale2014_templates
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
 
-__all__ = ["Dale2014IRConfig", "Dale2014IRSEDComponent"]
+__all__ = ["Schreiber2016IRConfig", "Schreiber2016IRSEDComponent"]
 
 
 @dataclass(frozen=True)
-class Dale2014IRConfig(SEDComponentConfig):
-    """Configuration for Dale2014IR dust emission component.
+class Schreiber2016IRConfig(SEDComponentConfig):
+    """Configuration for Schreiber2016IR dust emission component.
 
     Attributes
     ----------
     name : str
-        Diagnostic identifier. Default ``"dale2014_ir"``.
+        Diagnostic identifier. Default ``"schreiber2016_ir"``.
     template_path : str, optional
-        Path to Dale2014 template HDF5 file. If None, attempts to auto-locate
+        Path to Schreiber2016 template HDF5 file. If None, attempts to auto-locate
         via standard search paths. If templates are unavailable, the component
         will skip gracefully with a warning.
     """
 
-    name: str = "dale2014_ir"
+    name: str = "schreiber2016_ir"
     template_path: str | None = None
 
 
-class Dale2014IRSEDComponent(SEDModelComponent):
-    """Dust IR emission via tabulated Dale+2014 templates.
+class Schreiber2016IRSEDComponent(SEDModelComponent):
+    """Dust IR emission via tabulated Schreiber+2016 templates.
 
     Closes the dust energy balance by re-emitting absorbed UV/optical
-    luminosity according to a 1-parameter model (alpha) interpolated over
-    a precomputed template grid.
+    luminosity according to a 2-parameter model (T_dust, f_pah)
+    interpolated over a precomputed template grid.
 
     Attributes
     ----------
     name : str
-        Stable identifier: ``"dale2014_ir"``.
+        Stable identifier: ``"schreiber2016_ir"``.
     parameter_prefix : str
         Domain prefix for parameters: ``"dust_"``.
-    config : Dale2014IRConfig
+    config : Schreiber2016IRConfig
         Frozen configuration with optional template path override.
 
     Notes
@@ -77,57 +76,44 @@ class Dale2014IRSEDComponent(SEDModelComponent):
     **JIT-compatible**: yes — all operations in :meth:`predict` are ``jnp``
     primitives.
 
-    **Parameter discovery**: Free parameters (``alpha_dale``)
+    **Parameter discovery**: Free parameters (``tdust``, ``fpah``)
     are auto-discovered; :meth:`declared_parameters` constructs tuples with
     units and descriptions.
 
     **Pipeline ordering**: This component MUST run after dust attenuation.
-    Typical order: ``[Stellar, Nebular, DustAttenuation, Dale2014, IGM, Radio]``.
+    Typical order: ``[Stellar, Nebular, DustAttenuation, Schreiber2016, IGM, Radio]``.
     """
 
-    name = "dale2014_ir"
+    name = "schreiber2016_ir"
     parameter_prefix = "dust_"
-    config: Dale2014IRConfig = Dale2014IRConfig()
+    config: Schreiber2016IRConfig = Schreiber2016IRConfig()
 
     # Free parameters — auto-discovered by base class
-    alpha_dale = Uniform(
-        0.5,
-        3.0,
-        default=2.0,
-        description="Radiation field power-law index",
-        units="dimensionless",
-    )
-    frac_agn = Uniform(
-        0.0,
-        0.99,
-        default=0.0,
-        description="AGN heating fraction (additive)",
-        units="dimensionless",
-    )
+    tdust = Uniform(15.0, 99.0, default=25.0, description="Dust temperature", units="K")
+    fpah = Uniform(0.0, 1.0, default=0.05, description="PAH fraction", units="dimensionless")
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}
     outputs: ClassVar = {"L_ir_emission": "erg/s"}
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
-        """Preload Dale2014 template grid.
+        """Preload Schreiber2016 template grid.
 
         Called at model init time (not JIT-ed). Attempts to locate and load
-        the Dale2014 template HDF5 file. If unavailable, returns None and the
+        the Schreiber2016 template HDF5 file. If unavailable, returns None and the
         component will skip gracefully.
 
         Parameters
         ----------
         wave : ndarray, optional
-            Rest-frame wavelength grid in Angstrom (not used for Dale2014
+            Rest-frame wavelength grid in Angstrom (not used for Schreiber2016
             template loading, but kept for protocol compatibility).
 
         Returns
         -------
         dict or None
-            Dictionary with keys {wavelength_aa, alpha_grid, spectra}
-            if templates loaded successfully. Returns None if
-            templates unavailable.
+            Dictionary with keys {wavelength_aa, tdust_grid, continuum, pah}
+            if templates loaded successfully. Returns None if templates unavailable.
         """
         import warnings
 
@@ -136,28 +122,30 @@ class Dale2014IRSEDComponent(SEDModelComponent):
         if template_path is None:
             from tengri.components.dust.emission_templates import _find_data_file
 
-            # Try v2 first, then legacy
-            for fname in ("dale2014_templates_v2.h5", "dale2014_templates.h5"):
+            # Try standard names
+            for fname in ("schreiber2016_templates.h5",):
                 template_path = _find_data_file(fname)
                 if template_path is not None:
                     break
 
         if template_path is None:
             warnings.warn(
-                f"Dale2014IR component {self.name!r}: template file not found. "
+                f"Schreiber2016IR component {self.name!r}: template file not found. "
                 "Component will skip. For science use, provide template_path "
-                "via Dale2014IRConfig.",
+                "via Schreiber2016IRConfig.",
                 UserWarning,
                 stacklevel=2,
             )
             return None
 
         try:
-            templates = load_dale2014_templates(template_path)
+            from tengri.components.dust.emission_templates import load_schreiber2016_templates
+
+            templates = load_schreiber2016_templates(template_path)
             return templates
         except Exception as e:
             warnings.warn(
-                f"Dale2014IR component {self.name!r}: failed to load templates: {e}. "
+                f"Schreiber2016IR component {self.name!r}: failed to load templates: {e}. "
                 "Component will skip.",
                 UserWarning,
                 stacklevel=2,
@@ -167,22 +155,19 @@ class Dale2014IRSEDComponent(SEDModelComponent):
     def predict(
         self, p: Mapping[str, jnp.ndarray], sed_in: jnp.ndarray, wave: jnp.ndarray, **inputs: Any
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
-        r"""Compute dust emission via Dale+2014 tabulated templates.
+        r"""Compute dust emission via Schreiber2016 tabulated templates.
 
-        Interpolates the Dale2014 template grid over alpha. If an AGN template
-        is available, mixes SF and AGN components via additive composition:
-        SED = (1 - fracAGN) * SF + fracAGN * QSO, with total IR scaled by
-        L_absorbed / (1 - fracAGN) to account for the AGN as an independent
-        heating source.
+        Interpolates the Schreiber2016 template grid over (tdust, fpah) via
+        1D linear interpolation in tdust and linear mixing in fpah.
 
         Parameters
         ----------
         p : mapping[str, ndarray]
             Sliced parameters (prefix stripped):
-            - ``p["alpha_dale"]``: radiation field power-law index [dimensionless]
-            - ``p["frac_agn"]``: AGN heating fraction [dimensionless, default 0.0]
+            - ``p["tdust"]``: dust temperature [K]
+            - ``p["fpah"]``: PAH fraction [dimensionless]
         sed_in : ndarray, shape (n_wave,)
-            Input SED in erg/s/Hz (ignored; Dale2014 emission is computed
+            Input SED in erg/s/Hz (ignored; Schreiber2016 emission is computed
             from L_ir independently).
         wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid in Angstrom.
@@ -200,7 +185,7 @@ class Dale2014IRSEDComponent(SEDModelComponent):
         -----
         **JIT-compatible**: yes.
 
-        **Gradient-safe**: yes — linear interpolation is differentiable
+        **Gradient-safe**: yes — 1D linear interpolation is differentiable
         everywhere except at grid boundaries (where clipping occurs).
         """
         L_ir = inputs["L_ir"]
@@ -212,44 +197,35 @@ class Dale2014IRSEDComponent(SEDModelComponent):
 
         # Load template grid from precomputed state
         templates = self.data
+        continuum = templates["continuum"]  # (n_tdust, n_wave)
+        pah = templates["pah"]  # (n_tdust, n_wave)
         tmpl_wave = templates["wavelength_aa"]
-        alpha_grid = templates["alpha_grid"]
-        templates_sf = templates["templates_sf"]  # (n_alpha, n_wave)
-        has_qso = "templates_qso" in templates
-        if has_qso:
-            templates_qso = templates["templates_qso"]  # (n_wave,)
+        tdust_grid = templates["tdust_grid"]
 
         # Clip parameters to grid bounds
-        dust_alpha_c = jnp.clip(p["alpha_dale"], alpha_grid[0], alpha_grid[-1])
+        dust_tdust_c = jnp.clip(p["tdust"], tdust_grid[0], tdust_grid[-1])
+        dust_fpah_c = jnp.clip(p["fpah"], 0.0, 1.0)
 
-        # Linear interpolation index for SF component
-        i_a = jnp.clip(
-            jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
+        # Linear interpolation index in tdust
+        i_t = jnp.clip(
+            jnp.searchsorted(tdust_grid, dust_tdust_c) - 1,
             0,
-            len(alpha_grid) - 2,
+            len(tdust_grid) - 2,
         )
-        fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+        ft = (dust_tdust_c - tdust_grid[i_t]) / (tdust_grid[i_t + 1] - tdust_grid[i_t])
 
-        # Interpolate SF template spectrum
-        template_sf = (1.0 - fa) * templates_sf[i_a] + fa * templates_sf[i_a + 1]
+        # Interpolate both continuum and PAH at the requested temperature
+        continuum_interp = (1.0 - ft) * continuum[i_t] + ft * continuum[i_t + 1]
+        pah_interp = (1.0 - ft) * pah[i_t] + ft * pah[i_t + 1]
 
-        # AGN mixing (only if QSO template is available)
-        if has_qso:
-            f_agn = jnp.clip(p.get("frac_agn", 0.0), 0.0, 0.99)
-            # Additive mixing: (1 - f) * SF + f * QSO
-            template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
-            # Scale by L_absorbed / (1 - f_agn) to account for the AGN power source
-            scale_factor = L_ir / jnp.maximum(1.0 - f_agn, 1e-10)
-        else:
-            # Back-compat: SF-only if QSO template absent
-            template_mixed = template_sf
-            scale_factor = L_ir
+        # Mix continuum and PAH
+        template = (1.0 - dust_fpah_c) * continuum_interp + dust_fpah_c * pah_interp
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wave, tmpl_wave, template_mixed, left=0.0, right=0.0)
+        sed = jnp.interp(wave, tmpl_wave, template, left=0.0, right=0.0)
 
-        # Scale by absorbed luminosity (adjusted for AGN if present)
-        sed_emission = scale_factor * sed
+        # Scale by absorbed luminosity
+        sed_emission = L_ir * sed
 
         # Return updated SED and published luminosity
         sed_out = sed_in + sed_emission

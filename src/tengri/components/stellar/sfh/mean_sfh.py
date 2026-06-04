@@ -1289,6 +1289,119 @@ _BUAT08_VELOCITIES = jnp.array(
     [40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 150.0, 220.0, 290.0, 360.0]
 )
 _BUAT08_A = jnp.array([4.73, 5.28, 5.77, 6.21, 6.62, 6.99, 7.34, 8.74, 10.01, 10.82, 11.35])
+
+
+def sfh2exp(
+    t_lookback: jnp.ndarray,
+    log_total_mass: float,
+    tau_main_yr: float,
+    tau_burst_yr: float,
+    f_burst: float,
+    age_yr: float,
+    burst_age_yr: float,
+) -> jnp.ndarray:
+    r"""Double declining-exponential SFH: old main population + recent burst.
+
+    Faithful port of CIGALE's ``sfh2exp`` module. A main stellar population
+    forms at lookback ``age_yr`` and declines exponentially toward the present;
+    a second exponential burst occupies the most recent ``burst_age_yr`` and
+    contributes a fraction ``f_burst`` of the total stellar mass formed.
+
+    Parameters
+    ----------
+    t_lookback : array_like, shape (n_age,)
+        Lookback time [yr]; 0 = present, increasing into the past.
+    log_total_mass : float
+        log10 of total stellar mass formed [Msun].
+    tau_main_yr : float
+        e-folding timescale of the main population [yr].
+    tau_burst_yr : float
+        e-folding timescale of the burst [yr].
+    f_burst : float
+        Fraction of the total stellar mass formed in the burst
+        [dimensionless, in [0, 1)].
+    age_yr : float
+        Age of the main population / lookback to formation [yr].
+    burst_age_yr : float
+        Lookback time at which the burst began [yr] (``< age_yr``).
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative, with
+        ``trapezoid(out, t_lookback) = 10**log_total_mass``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — uses ``jnp`` primitives only.
+
+    **Gradient-safe**: yes — out-of-window regions use a finite (0.0) dummy
+    inside :func:`jnp.where` before the exponential, so no inf/NaN leaks through
+    the VJP.
+
+    Each component declines from its onset toward the present. In CIGALE's
+    forward-time convention the main SFR is :math:`\exp(-t/\tau_{\rm main})`
+    over :math:`t\in[0, {\rm age}]` and the burst is
+    :math:`\exp(-t'/\tau_{\rm burst})` over the most recent ``burst_age``. Here
+    :math:`t = {\rm age} - t_{\rm lookback}`. The burst is scaled so its mass
+    fraction is exactly ``f_burst`` (CIGALE scales by
+    :math:`\frac{f}{1-f}\frac{\sum {\rm SFR_{main}}}{\sum {\rm SFR_{burst}}}`,
+    which yields the same fraction):
+
+    .. math::
+
+        {\rm SFR}(t_{\rm lb}) \propto (1-f)\,\frac{m(t_{\rm lb})}{M_{\rm main}}
+            + f\,\frac{b(t_{\rm lb})}{M_{\rm burst}}
+
+    where :math:`m`, :math:`b` are the unit main/burst exponentials,
+    :math:`M_{\rm main}`, :math:`M_{\rm burst}` their integrals over
+    ``t_lookback`` [yr], and :math:`f` is ``f_burst`` [dimensionless].
+
+    **Upstream**: Ported from CIGALE ``sfh2exp.py`` (Boquien et al. 2019 [1]_).
+
+    References
+    ----------
+    .. [1] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
+       Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
+       https://doi.org/10.1051/0004-6361/201834156
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.components.stellar.sfh.mean_sfh import sfh2exp
+    >>> t = jnp.linspace(0.0, 1e10, 200)
+    >>> sfr = sfh2exp(
+    ...     t,
+    ...     log_total_mass=10.0,
+    ...     tau_main_yr=4e9,
+    ...     tau_burst_yr=3e8,
+    ...     f_burst=0.1,
+    ...     age_yr=1e10,
+    ...     burst_age_yr=5e8,
+    ... )
+    >>> sfr.shape
+    (200,)
+    """
+    # Main population: declines from formation (t_lookback = age) to present.
+    in_main = (t_lookback >= 0.0) & (t_lookback <= age_yr)
+    t_fwd_main = jnp.where(in_main, age_yr - t_lookback, 0.0)  # finite dummy 0
+    main = jnp.where(in_main, jnp.exp(-t_fwd_main / tau_main_yr), 0.0)
+
+    # Burst: occupies the most recent burst_age_yr, declines from its onset.
+    in_burst = (t_lookback >= 0.0) & (t_lookback <= burst_age_yr)
+    t_fwd_burst = jnp.where(in_burst, burst_age_yr - t_lookback, 0.0)
+    burst = jnp.where(in_burst, jnp.exp(-t_fwd_burst / tau_burst_yr), 0.0)
+
+    # Normalise each component to unit mass over the grid, then weight so the
+    # burst holds exactly f_burst of the total stellar mass (CIGALE convention).
+    m_main = jnp.trapezoid(main, t_lookback)
+    m_burst = jnp.trapezoid(burst, t_lookback)
+    main_unit = main / jnp.maximum(jnp.abs(m_main), 1e-300)
+    burst_unit = burst / jnp.maximum(jnp.abs(m_burst), 1e-300)
+    shape = (1.0 - f_burst) * main_unit + f_burst * burst_unit
+    return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
+
+
 _BUAT08_B = jnp.array([-0.11, 0.029, 0.16, 0.29, 0.41, 0.51, 0.61, 0.98, 1.25, 1.36, 1.37])
 _BUAT08_C = jnp.array([0.79, 0.68, 0.57, 0.46, 0.36, 0.27, 0.18, -0.20, -0.55, -0.74, -0.85])
 
