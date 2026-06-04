@@ -111,7 +111,15 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_fracAGN",
             "agn_oa_skirtor",
             "agn_p_skirtor",
+            # Polar-dust re-emission (active by default at agn_polar_ebv=0.03):
+            # all three polar knobs are read by skirtor_torus_block and move the
+            # SED (empirically Delta(polar_T)=52%, Delta(polar_beta)=2.4% across
+            # their priors). Earlier only agn_polar_ebv was credited, so a
+            # top-level agn={'*': FREE} silently froze the polar-dust temperature
+            # and slope.
             "agn_polar_ebv",
+            "agn_polar_T",
+            "agn_polar_beta",
             "agn_q_skirtor",
             "agn_tau_skirtor",
             "agn_torus_frac",

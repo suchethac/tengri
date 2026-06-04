@@ -51,6 +51,22 @@ def test_consumes_tables_reference_only_declared_params():
         assert params <= _DECLARED, f"{model} lists undeclared params: {params - _DECLARED}"
 
 
+def test_skirtor_torus_consumes_all_polar_dust_knobs():
+    """SKIRTOR torus must credit all three polar-dust knobs (regression).
+
+    ``skirtor_torus_block`` reads ``agn_polar_ebv``, ``agn_polar_T`` and
+    ``agn_polar_beta`` (polar-dust re-emission, active by default at
+    ``agn_polar_ebv = 0.03``). All three move the SED — empirically
+    ``Delta(polar_T) = 52%`` and ``Delta(polar_beta) = 2.4%`` across their
+    priors. Previously only ``agn_polar_ebv`` was credited, so a top-level
+    ``agn={'*': FREE}`` silently froze the polar-dust temperature and slope
+    (a silent-fixed gap). This guards against that regression without needing
+    the gitignored SKIRTOR grid (pure CONSUMES-table membership).
+    """
+    skirtor = AGN_BLOCK_CONSUMES[("torus", "skirtor")]
+    assert {"agn_polar_ebv", "agn_polar_T", "agn_polar_beta"} <= skirtor
+
+
 def test_active_set_scopes_to_active_blocks():
     """agn_active_param_set unions shared + active-block consumed params."""
     cfg = {
