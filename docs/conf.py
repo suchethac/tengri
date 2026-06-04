@@ -106,10 +106,10 @@ sphinx_gallery_conf = {
         #     build; they run standalone with enough RAM.
         #   * Examples blocked on an upstream library gap, hidden until fixed:
         #     cat3d_wind_sweep (the a_cat3d / fwd_cat3d grid axes are settable
-        #     but a no-op in the forward pass), skirtor_agnfitter_vs_cigale
-        #     (skirtor_agnfitter is not a registered composable torus selector),
-        #     recipes_gallery (the three Cue-based recipes return NaN SEDs under
-        #     the bare-stellar SSP).
+        #     but a no-op in the forward pass) and skirtor_agnfitter_vs_cigale
+        #     (skirtor_agnfitter is not a registered composable torus selector).
+        #     (recipes_gallery was un-deferred once #683 — SFH high-z NaN — was
+        #     fixed; it now renders all five recipes.)
         r"plot_("
         r"population_scaling|"
         r"hierarchical|hierarchical_convergence|"
@@ -126,8 +126,7 @@ sphinx_gallery_conf = {
         r"jit_cache_speedup|"
         r"waveprecomp_scaling|"
         r"cat3d_wind_sweep|"
-        r"skirtor_agnfitter_vs_cigale|"
-        r"recipes_gallery"
+        r"skirtor_agnfitter_vs_cigale"
         r")\.py$"
     ),
     "download_all_examples": False,

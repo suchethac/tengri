@@ -50,6 +50,23 @@ forward modelling, JAX gradient diagnostics, and end-to-end recipe tours.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Each recipe is a nested-dict configuration — drop-in templates for common galaxy fitting scenarios. This gallery overlays the rest-frame SED of all five shipped recipes, highlighting how model complexity scales from minimal mock-recovery to panchromatic AGN:">
+
+.. only:: html
+
+  .. image:: /auto_examples/showcase/images/thumb/sphx_glr_plot_recipes_gallery_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/showcase/plot_recipes_gallery`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">recipes for common science cases</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -62,4 +79,5 @@ forward modelling, JAX gradient diagnostics, and end-to-end recipe tours.
 
    /auto_examples/showcase/plot_gradient_degeneracy_direction
    /auto_examples/showcase/plot_jax_gradient_sensitivity
+   /auto_examples/showcase/plot_recipes_gallery
 
