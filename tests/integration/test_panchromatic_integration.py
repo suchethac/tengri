@@ -277,7 +277,12 @@ class TestRadioXrayIntegration:
         """Galaxy with radio + X-ray enabled."""
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(1.0),  # SFR = 10 Msun/yr
+            # SFR = 10 Msun/yr: constant SFH over ~13 Gyr → total mass
+            # 10 * 13e9 ≈ 1.3e11 Msun → log_total_mass ≈ 11.11. The old value
+            # 1.0 was a 10-Msun galaxy (SFR ~1e-9), which made every radio/X-ray
+            # luminosity assertion below fail by ~9 dex (the test skips in CI, so
+            # it stayed red unnoticed — see #673 / #613).
+            sfh_const_log_total_mass=Fixed(11.11),
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -368,7 +373,7 @@ class TestRadioXrayIntegration:
         # SEDModel without radio/xray for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(1.0),
+            sfh_const_log_total_mass=Fixed(11.11),  # match radio_xray_model fixture
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
@@ -509,7 +514,7 @@ class TestRadioXrayIntegration:
         # Build stellar-only model for comparison
         spec_stellar = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(1.0),
+            sfh_const_log_total_mass=Fixed(11.11),  # match radio_xray_model fixture
             sfh_const_start_gyr=Fixed(13.5),
             sfh_const_end_gyr=Fixed(0.5),
             met_logzsol=Fixed(-0.3),
