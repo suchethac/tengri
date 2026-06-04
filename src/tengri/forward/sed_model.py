@@ -1133,6 +1133,9 @@ class SEDModel:
 
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
+        # Per-component law-parameter overrides ({'bc': {...}, 'diff': {...}}),
+        # set by the builder when the user supplies slope_bc / delta_diff / etc.
+        self._dust_law_overrides = getattr(spec, "dust_law_overrides", None) or {}
         from tengri.components.dust.attenuation import resolve_dust_law
 
         self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
@@ -1305,6 +1308,34 @@ class SEDModel:
                     _load_skirtor_fn()
                 except Exception:
                     pass
+
+            # Pre-warm the Synthesizer CLOUDY line-region grid singletons for
+            # the composable ``nlr_synthesizer`` / ``blr_synthesizer`` line
+            # blocks, for the same reason as SKIRTOR above (#390 class of bug):
+            # ``SynthesizerNLRBackend.__init__`` reads the HDF5 grid and runs
+            # ``jnp.sort`` / ``bool(axis[0] > axis[-1])`` on the grid axes to
+            # pick interpolation direction. If that construction first happens
+            # lazily inside ``predict_photometry`` / ``WavePrecomp`` (the JIT
+            # path used for fitting), the eager ``bool(...)`` on what JAX has
+            # lifted into the trace raises ``TracerBoolConversionError``. The
+            # singleton must therefore be built once here, at factory time,
+            # with the same grid path the forward resolves so the cached
+            # instance is reused under trace. (The Gaussian ``nlr`` / ``blr``
+            # blocks are JIT-safe and need no warming.)
+            if self._agn_lines_block in ("nlr_synthesizer", "blr_synthesizer"):
+                with contextlib.suppress(Exception):
+                    from tengri.components.agn.blocks.lines_blocks import (
+                        _resolve_synthesizer_grid,
+                    )
+                    from tengri.components.agn.nlr_cloudy import (
+                        get_synthesizer_blr_backend,
+                        get_synthesizer_nlr_backend,
+                    )
+
+                    if self._agn_lines_block == "nlr_synthesizer":
+                        get_synthesizer_nlr_backend(_resolve_synthesizer_grid("nlr"))
+                    else:
+                        get_synthesizer_blr_backend(_resolve_synthesizer_grid("blr"))
 
         return delta
 
@@ -2328,6 +2359,15 @@ class SEDModel:
         dust_law_diff_fn_name = (
             self._dust_law_diff_fn.__name__ if self._dust_law_diff_fn else "none"
         )
+        # Per-component law-parameter overrides change the baked-in chain
+        # constants (e.g. birth-cloud n_slope) but not its graph shape, so two
+        # models that differ only here MUST get distinct signatures or the
+        # kernel cache leaks one's attenuation into the other (color-leak).
+        _ovr = getattr(self, "_dust_law_overrides", None) or {}
+        dust_law_overrides_sig = tuple(
+            (comp, tuple(sorted((k, float(v)) for k, v in (_ovr.get(comp) or {}).items())))
+            for comp in ("bc", "diff")
+        )
 
         # Nebular backend (by class name)
         nebular_backend_name = (
@@ -2479,6 +2519,7 @@ class SEDModel:
             dust_law_bc_fn_name,
             dust_law_diff_fn_name,
             wg00_selectors,
+            dust_law_overrides_sig,
             nebular_backend_name,
             uses_igm,
             igm_model,
@@ -4286,6 +4327,7 @@ class SEDModel:
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),
             dust_law_diff=getattr(self, "_dust_law_diff", "power_law"),
+            dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
             dust_model=getattr(self, "_dust_model", "two_component"),

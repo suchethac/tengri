@@ -896,37 +896,34 @@ plt.show()
 # %% [markdown]
 # ### Dust-IR model knobs: AGN heating and the radiation-field slope
 #
-# Two further CIGALE dust-IR parameters, both ported into tengri and shown
-# here as the same head-to-head as every other panel — **tengri solid,
-# pcigale dashed**, on a matched `sfhdelayed + bc03 + dustatt + <IR>` chain so
-# the absorbed energy (and hence the IR normalisation) is identical on both
-# sides. **Left:** Dale 2014's AGN fraction (`dale2014.fracAGN`) adds an
-# *additive* AGN-heated dust source ($L_{\rm AGN} = L_{\rm dust}\,f/(1-f)$),
-# lifting the mid-IR while the stellar-heated FIR peak stays put — so the
-# total IR grows with `f_AGN`. **Right:** the THEMIS radiation-field slope
-# $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$) sets the FIR shape at
-# matched `qhac = 0.17`, `umin = 1.0`, `gamma = 0.1`; $\alpha=2$ is the
-# Jones+2017 / DustEM fiducial.
+# Two further CIGALE dust-IR parameters, shown as the same head-to-head as
+# every other panel — **tengri solid, pcigale dashed**.
 #
-# **Where the two agree and where they don't.** The FIR peak (the
-# energy-balance-normalised stellar-heated bump) matches to <1 % in both
-# panels — that is the quantity that drives the IR luminosity. The visible
-# solid-vs-dashed gaps are in the mid-IR *shape*, and they are genuine model
-# differences, not normalisation:
+# **The attenuation must match for the IR to match.** The dust IR is
+# energy-balance-normalised to the *absorbed* starlight, so reproducing CIGALE
+# requires reproducing its `dustatt_modified_starburst`, which is a **single
+# Calzetti screen** on the stellar continuum (A_V = R_V x E(B-V)_cont =
+# 4.05 x 0.132 = 0.535 mag). It has no Charlot & Fall birth cloud. Using
+# tengri's two-component default (an extra `tau_bc` birth-cloud screen, as the
+# other panels do) over-absorbs by **~9 %** and inflates the whole IR by the
+# same factor. `_knob_model` therefore uses the single screen (`tau_bc = 0`),
+# at which the absorbed *fraction* matches CIGALE to **0.2 %**.
 #
-# - **Dale, $f_{\rm AGN}>0$:** the dust template itself is at the $\alpha=2$
-#   grid node, so the stellar-heated part is identical to CIGALE by
-#   construction. The gap is the *AGN-heated* term — tengri adds it with the
-#   $L_{\rm AGN}=L_{\rm dust}\,f/(1-f)$ additive rule, which is close to but
-#   not bit-identical to CIGALE's internal `dale2014` quasar template, so the
-#   mid-IR lift differs by tens of percent at $f_{\rm AGN}=0.6$.
-# - **THEMIS, $\alpha=1$:** tengri's THEMIS is FSPS/DustEM-anchored and is
-#   bit-exact to CIGALE only at the $\alpha=2$ fiducial; at the steep
-#   $\alpha=1$ end the warm-dust mid-IR runs ~40 % high. $\alpha=2,3$ agree
-#   to ~1 %.
+# **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** With the screen
+# corrected, the stellar-heated curve reproduces CIGALE to **~1.6 %** (the
+# residual is the BC03->DSPS conversion: tengri's intrinsic stellar $L_{\rm
+# bol}$ is 1.4 % low, *not* the dust or the attenuation). `fracAGN` adds an
+# *additive* AGN-heated source ($L_{\rm AGN}=L_{\rm dust}\,f/(1-f)$); at high
+# $f_{\rm AGN}$ the mid-IR lift differs by a few percent because tengri's
+# additive rule is not bit-identical to CIGALE's internal quasar template.
 #
-# Both are documented parity gaps in the AGN-heating / extreme-$\alpha$
-# regimes, not artefacts of this panel.
+# **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$,
+# matched `qhac=0.17, umin=1.0, gamma=0.1`).** The *total* IR matches to ~1.6 %
+# by energy balance, but the FIR/MIR *partition* differs by ~15 %: unlike Dale,
+# tengri's THEMIS is an **independent FSPS/DustEM implementation, not a port of
+# CIGALE's `themis` grid**, so the two distribute the same absorbed energy
+# across the FIR peak slightly differently. This is a genuine
+# different-implementation gap, not attenuation or normalisation.
 
 # %%
 import jax
@@ -950,7 +947,18 @@ _DUSTATT_CHAIN = ("dustatt_modified_starburst", dict(E_BV_lines=0.3))
 
 
 def _knob_model(emission_type, **emkw):
-    """tengri fiducial twin of the matched pcigale chain (1e11 M_sun)."""
+    """tengri fiducial twin of the matched pcigale chain (1e11 M_sun).
+
+    CIGALE's ``dustatt_modified_starburst`` is a **single** Calzetti screen on
+    the stellar continuum (A_V = R_V x E(B-V)_cont = 4.05 x 0.132 = 0.535 mag,
+    i.e. ``tau_diff = TAU_DIFF_FIDUCIAL``). It has no Charlot & Fall birth-cloud
+    component, so we set ``tau_bc = 0``: adding the extra birth-cloud screen
+    (the two-component default elsewhere in this notebook) over-absorbs the
+    starlight by ~9 %, and since the Dale/THEMIS IR is normalised to the
+    absorbed energy that inflates the whole IR. With the single screen the
+    absorbed *fraction* matches CIGALE to 0.2 %; the residual ~1.4 % is the
+    BC03-to-DSPS conversion (tengri's intrinsic stellar Lbol is 1.4 % lower).
+    """
     return SEDModel.build(
         ssp_data=ssp,
         stellar=STELLAR_FIDUCIAL,
@@ -958,9 +966,9 @@ def _knob_model(emission_type, **emkw):
              "log_total_mass": Fixed(11.0), "*": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "leitherer02",
-            "law_diff": "leitherer02",
-            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+            "law_bc": "calzetti",
+            "law_diff": "calzetti",
+            "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
             "*": FIXED,
             "emission": {"type": emission_type, "*": FIXED, **emkw},
@@ -1470,11 +1478,14 @@ save_fig("cigale_09_agn_skirtor.png")
 # fiducial.
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
-# both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Above ~100 keV the panels
-# diverge — CIGALE rolls off steeply while tengri stays power-law — but
-# E_cut = 300 keV only suppresses by exp(−100/300) ≈ 0.7 at 100 keV, so
-# the steep CIGALE drop near its 200–300 keV grid edge is mostly a
-# grid-extent effect rather than the physical cutoff.
+# both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Toward the hard end both now
+# roll over at the shared E_cut = 300 keV exponential cutoff — tengri's
+# panchromatic grid extends to 300 keV (it was previously clipped at the
+# ~120 keV master-grid edge, which made the cutoff look absent), so the
+# exp(−E/300) suppression is sampled on both sides. The XRB (HMXB/LMXB)
+# terms add a flatter component above ~30 keV, so the total is not a pure
+# corona power law — visible as the mild excess over the Γ = 1.8 line near
+# 50–100 keV before the cutoff takes over.
 
 # %%
 sed_x = C.run_chain(
@@ -1527,7 +1538,7 @@ sed_x = C.run_chain(
 )
 w_x, L_x = C.to_lnu(sed_x)
 e_kev_c = 12.398 / w_x
-m_c = (e_kev_c >= 0.3) & (e_kev_c <= 200) & (L_x > 0)
+m_c = (e_kev_c >= 0.3) & (e_kev_c <= 300) & (L_x > 0)
 
 m_x = SEDModel.build(
     ssp_data=ssp,
@@ -1568,7 +1579,7 @@ state_x = m_x.predict_state({})
 w_t = np.asarray(state_x.wave)
 sed_t = np.asarray(state_x.derived.get("sed_xray", state_x.sed_intrinsic))
 e_kev_t = 12.398 / w_t
-m_t = (e_kev_t >= 0.3) & (e_kev_t <= 200) & (sed_t > 0)
+m_t = (e_kev_t >= 0.3) & (e_kev_t <= 300) & (sed_t > 0)
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
@@ -1605,6 +1616,13 @@ save_fig("cigale_10_xray_nh_sweep.png")
 # to small differences in the L_IR integration window between
 # `dust.emission.dale2014` and CIGALE's `dale2014` module.
 # Star-forming only, 100 MHz to 100 GHz.
+#
+# Both sides include the Murphy+2011 thermal free-free term (on by
+# default), which flattens the steep synchrotron power law toward high
+# frequency. The two agree across the band — within ~5 % out to 10 GHz
+# and ~10–30 % by 100 GHz — with tengri's 10–100 GHz slope (−0.62)
+# marginally flatter than CIGALE's (−0.70), i.e. a touch more free-free.
+# The flattening is gentle, so neither curve shows a dramatic upturn.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()

@@ -263,6 +263,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 neb_logZ_gas=p.get("neb_logZ_gas", None),
                 neb_fesc=p.get("neb_fesc", 0.0),
                 neb_fesc_lya=p.get("neb_fesc_lya", 0.0),
+                line_sigma_kms=p.get("neb_eline_sigma_kms", 100.0),
             )
             _tau_bc = p.get("tau_bc", p.get("tau_v", 0.0))
             _tau_diff = p.get("tau_diff", 0.0)

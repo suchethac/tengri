@@ -123,7 +123,6 @@ import functools
 import warnings
 from collections.abc import Callable
 
-import jax
 import jax.numpy as jnp
 
 from tengri.components.agn.blr import compute_blr_sed
@@ -1124,12 +1123,11 @@ def _sigmoid_mask(
     .. [1] Synthesizer ``torus_edgeon_condition``:
            https://github.com/synthesizer-project/synthesizer/blob/main/src/synthesizer/emission_models/agn/unified_agn.py
     """
-    # Inclination in degrees: inc = arccos(cos_inc)
-    inc_deg = jnp.degrees(jnp.arccos(jnp.clip(cos_inc, 0.0, 1.0)))
-    # Critical angle: above this the torus blocks the view
-    inc_crit = 90.0 - jnp.clip(theta_torus, 0.0, 90.0)
-    # Sigmoid: 1 when inc << inc_crit, 0 when inc >> inc_crit
-    return jax.nn.sigmoid(-(inc_deg - inc_crit) / jnp.maximum(width, 0.1))
+    # Canonical implementation lives in the shared masking module so the
+    # composable runner and this monolithic model apply the identical mask.
+    from tengri.components.agn.blocks.masking import sigmoid_visibility_mask
+
+    return sigmoid_visibility_mask(cos_inc, theta_torus, width)
 
 
 # ── Unified AGN with NLR + BLR decomposition ──────────────────────

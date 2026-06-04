@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_workflows:
 
 Workflows
@@ -20,7 +18,24 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hbeta vs [NII]/Halpha) line-ratio diagnostics on a mock galaxy catalog with varying AGN fraction. Overlays Kewley+2001 and Kauffmann+2003 demarcation lines to show the clean separation of ionization mechanisms across the diagnostic plane.">
+    <div class="sphx-glr-thumbcontainer" tooltip="If the data is informative the MAP estimate sits at the likelihood maximum and the choice of prior barely matters. If the data is uninformative the MAP slides toward the prior mode.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_prior_systematic_dust_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_prior_systematic_dust`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">How priors push the dust posterior — flat vs narrow prior on τ_diff</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the model&#x27;s rest-frame SED via continuum-subtracted boxcar integration around each line centre, swept across a stellar metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation lines are overlaid for context.">
 
 .. only:: html
 
@@ -31,7 +46,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT diagram: emission lines separate star-forming from AGN ionization</div>
+      <div class="sphx-glr-thumbnail-title">BPT diagram: emission lines from the baked-in nebular SSP</div>
     </div>
 
 
@@ -147,6 +162,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 .. toctree::
    :hidden:
 
+   /auto_examples/workflows/plot_prior_systematic_dust
    /auto_examples/workflows/plot_workflow_bpt_classification
    /auto_examples/workflows/plot_workflow_dust_mc_resampling
    /auto_examples/workflows/plot_workflow_high_z_lbg

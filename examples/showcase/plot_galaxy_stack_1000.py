@@ -127,7 +127,7 @@ ax.legend(frameon=False, fontsize=9, loc="lower right")
 ax.grid(True, alpha=0.2, which="both")
 
 fig.tight_layout()
-plt.savefig("plot_galaxy_stack_1000.png", dpi=150, bbox_inches="tight")
+plt.show()
 
 # Summary statistics
 print(

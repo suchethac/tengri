@@ -38,6 +38,7 @@ __all__ = [
     "quiescent_z0",
     "star_forming_photometry",
     "stochastic_sfh_jwst",
+    "unified_agn",
 ]
 
 
@@ -363,4 +364,50 @@ def dust_demo() -> dict:
             slope=-0.7,
         ),
         redshift=Fixed(0.1),
+    )
+
+
+def unified_agn() -> dict:
+    """Fully composable unified AGN — disc + torus + NLR + BLR + Type-1/2 mask.
+
+    The grammar-native equivalent of the monolithic ``unified_nlr_blr`` model: a
+    multicolor accretion disc, a single-temperature greybody torus, and the
+    combined narrow + broad line region (``nlr_blr``). The runner applies the
+    grey Type-1/2 visibility mask to the anisotropic central engine (disc + BLR),
+    driven by ``agn_cos_inc`` / ``agn_theta_torus``, while the spatially-extended
+    NLR stays isotropic — so the AGN transitions smoothly from Type-1 (face-on)
+    to Type-2 (edge-on) as a differentiable function of inclination. ``frac`` is
+    fixed so the luminosity is set parametrically by the (free) ``agn_log_lbol``.
+
+    **SSP requirement:** any (analytic line templates; no Cloudy grids needed).
+    Swap ``lines`` to ``nlr_blr_synthesizer`` to read the Synthesizer Cloudy
+    grids instead.
+
+    Returns
+    -------
+    dict
+        Nested-dict ready for parse_groups() or SEDModel.build().
+
+    Examples
+    --------
+    >>> from tengri import recipes
+    >>> params = recipes.unified_agn()
+    >>> assert params["agn"]["lines"]["type"] == "nlr_blr"
+    """
+    return dict(
+        sfh={"type": "delayed", "*": FIXED},
+        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        agn={
+            "type": "composable",
+            "disc": {"type": "multicolor"},
+            "torus": {"type": "simple"},
+            "lines": {"type": "nlr_blr"},
+            # Parametric luminosity mode: the AGN strength is set by the free
+            # agn_log_lbol, so the two alternative scaling knobs are held fixed
+            # (freeing them would add no-op nuisance dimensions in this mode).
+            "frac": Fixed(1.0),
+            "fracAGN": Fixed(0.0),
+            "*": FREE,
+        },
+        redshift=Fixed(0.0),
     )

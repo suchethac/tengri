@@ -167,6 +167,7 @@ def build_components(
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
+    dust_law_overrides: dict | None = None,
     dust_emission_model: str = "modified_blackbody",
     use_dust: bool = True,
     # Single-component dust (Calzetti-style screen). Picks
@@ -275,11 +276,12 @@ def build_components(
     # read ``state.derived["L_absorbed"]`` for the CIGALE-style
     # ``agn_power = L_abs × fracAGN/(1-fracAGN)`` cross-component
     # coupling (see ``agn/component.py`` and ``agn/_params.py:
-    # agn_fracAGN``). The dust component already passes any non-stellar
-    # contribution through unchanged, so moving it earlier in the
-    # chain doesn't change attenuation semantics for downstream
-    # nebular / AGN / radio / xray (their SEDs aren't subject to
-    # stellar dust attenuation by design).
+    # agn_fracAGN``). Note: although appended here, the topological sort
+    # places dust AFTER the nebular component (DustSEDComponent declares
+    # ``sed_nebular`` an optional input) so the nebular continuum is
+    # reddened by the HII-region dust, matching bagpipes/FSPS/CIGALE.
+    # AGN/radio/xray SEDs are still passed through unattenuated by stellar
+    # dust (they are added after dust runs).
     if use_dust:
         if dust_model == "wg00":
             from tengri.components.dust.wg00_model import (
@@ -303,11 +305,14 @@ def build_components(
                 )
             )
         else:
+            _overrides = dust_law_overrides or {}
             components.append(
                 DustSEDComponent(
                     config=DustSEDComponentConfig(
                         law_bc=dust_law_bc,
                         law_diff=dust_law_diff,
+                        bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
+                        diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                         emission_model=dust_emission_model,
                     )
                 )

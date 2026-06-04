@@ -449,6 +449,7 @@ class NebularSEDComponent:
                 l_shock_halpha=l_shock_halpha,
                 shock_log_density=jnp.asarray(params.get("shock_log_density", 0.0)),
                 shock_b_over_sqrt_n=jnp.asarray(params.get("shock_b_over_sqrt_n", 1.0)),
+                line_sigma_kms=jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
             )
             # Shock backend: shock contribution is logically separate
             # from photoionised continuum. Publish under ``sed_shock``
@@ -477,6 +478,9 @@ class NebularSEDComponent:
             "neb_fesc": jnp.asarray(params.get("neb_fesc", 0.0)),
             "neb_fesc_lya": jnp.asarray(params.get("neb_fesc_lya", 0.0)),
             "neb_fdust": jnp.asarray(params.get("neb_fdust", 0.0)),
+            # Intrinsic nebular line velocity dispersion → triweight line
+            # profile width (Prospector-style). Default 100 km/s.
+            "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
         }
         # ── Diffuse-ionised-gas (DIG) mixing (issue #259) ─────────────
         # The DIG component is a second photoionisation regime with a
@@ -671,10 +675,11 @@ class NebularSEDComponent:
                 # Don't let it block the SED forward pass.
                 pass
 
-        # Add nebular contribution to sed_intrinsic (BC dust attenuation
-        # of the nebular emission is the dust component's responsibility
-        # — its ``two_component_dust`` transmission applies to the full
-        # sed_intrinsic when it runs after this component).
+        # Add nebular contribution to sed_intrinsic. Birth-cloud + diffuse
+        # dust attenuation of this continuum is the dust component's
+        # responsibility: ``DustSEDComponent`` declares ``sed_nebular`` an
+        # optional input, so the topological sort runs it AFTER this component
+        # and reddens the published ``sed_nebular`` with the young-limit screen.
 
         # Photoionised path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).

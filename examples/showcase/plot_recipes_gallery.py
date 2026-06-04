@@ -79,5 +79,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=8.5, loc="lower right")
 
 fig.tight_layout()
-output_path = os.path.join(os.path.dirname(__file__), "plot_recipes_gallery.png")
-plt.savefig(output_path, dpi=150, bbox_inches="tight")
+plt.show()

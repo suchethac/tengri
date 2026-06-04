@@ -89,6 +89,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= -4 and hi <= 0,
         "must be in [-4, 0]",
     ),
+    ParamDeclaration(
+        "neb_eline_sigma_kms",
+        Fixed(100.0),
+        "Intrinsic nebular emission-line velocity dispersion [km/s] — sets the "
+        "triweight line profile width in the forward SED. Distinct from "
+        "sigma_v_kms (stellar LOSVD) and eline_sigma_kms (line-fitting template).",
+        lambda lo, hi: lo >= 0 and hi <= 2000,
+        "must be in [0, 2000] km/s",
+    ),
 )
 
 # CB_19 extra continuous axes (nebular == "cb19").

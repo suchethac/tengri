@@ -91,8 +91,6 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     Guards the normalisation bug where the exact runtime emitted ~1e-18 erg/s/Hz
     (no L_SUN x integral normalisation) and was invisible in the composite.
     """
-    disc_only = _sed(ssp, {"type": "silva04", "*": tengri.FIXED, "log_nh_silva": 30.0})
-    # silva04 at absurd N_H ~ no torus; use disc baseline instead:
     base = tengri.SEDModel.build(
         ssp,
         sfh=_SFH,
@@ -108,7 +106,6 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     p = dict(base.spec.sample(jax.random.PRNGKey(0)))
     disc = np.asarray(base.predict_rest_sed(p).sed)
     total = _sed(ssp, {"type": "skirtor_agnfitter", "*": tengri.FIXED})
-    del disc_only
     # Interpolate disc onto total's grid if needed, then require the torus adds
     # a contribution of order the disc luminosity (not ~1e-18).
     disc_max = float(np.abs(disc).max())

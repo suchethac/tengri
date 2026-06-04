@@ -57,7 +57,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
-from tengri.components.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
+from tengri.components.nebular._shared import (
+    _interp_index_weight,
+    compute_qh,
+    render_nebular_lines,
+)
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -790,6 +794,7 @@ class MappingsPhotoStellarBackend:
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
         line_sigma_aa: float = 0.0,
+        line_sigma_kms: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
         """Compute nebular emission line SED on the SSP wavelength grid.
@@ -857,8 +862,8 @@ class MappingsPhotoStellarBackend:
             neb_fesc_lya=neb_fesc_lya,
         )
 
-        return place_line_profiles(
-            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa
+        return render_nebular_lines(
+            jnp.asarray(line_wave), jnp.asarray(line_lum), ssp_wave, line_sigma_aa, line_sigma_kms
         )
 
 

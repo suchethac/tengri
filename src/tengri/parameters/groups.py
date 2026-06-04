@@ -539,6 +539,13 @@ def parse_groups(**kwargs) -> Parameters:
     resolved_kwargs = dict(structural_kwargs)
     provenance: dict[str, str] = {}
 
+    # Which agn_* parameters the active AGN model / composable block selection
+    # actually consumes. A group-level ``agn={'*': FREE}`` frees only these,
+    # not the full declared superset — otherwise it would create dozens of
+    # unconstrained no-op nuisance dimensions for parameters belonging to
+    # inactive blocks (e.g. GRAHSP params under a SKIRTOR torus).
+    agn_active_params = _agn_active_param_set(structural_kwargs)
+
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
         if group is None:
@@ -607,12 +614,30 @@ def parse_groups(**kwargs) -> Parameters:
             # Group was not a dict (or is a sub-key); use structural default
             continue
 
+        # AGN group wildcards are scoped to the active blocks' consumed params
+        # (block-scoped wildcard). Non-AGN groups are always wildcard-active.
+        is_agn = group == "agn" or group.startswith("agn.")
+        wildcard_active = True
+        if is_agn:
+            wildcard_active = param_name in agn_active_params
         final_dist, tag = _resolve_value(
-            param_name, group_dict, structural_params.get_distribution(param_name)
+            param_name,
+            group_dict,
+            structural_params.get_distribution(param_name),
+            wildcard_active=wildcard_active,
         )
 
-        # Only override if there's an actual per-param or wildcard in the group dict
-        if group_dict or group == "_toplevel":
+        # Apply the resolved distribution when the user addressed this group
+        # (a per-param override or wildcard), or for any AGN param whenever the
+        # AGN group is configured. The AGN clause is essential: AGN parameters
+        # now carry *free* Uniform/LogUniform registry defaults (so FREE can
+        # expand them), which means an untouched AGN param would otherwise keep
+        # its free prior — violating the grammar's FIXED-by-default contract.
+        # ``_resolve_value`` collapses such untouched params to Fixed(default)
+        # via its registry-default branch, so applying it here pins them fixed
+        # unless explicitly/wildcard-freed. (Non-AGN params keep Fixed scalar
+        # registry defaults, so the original ``group_dict`` guard is correct.)
+        if group_dict or group == "_toplevel" or is_agn:
             resolved_kwargs[param_name] = final_dist
             provenance[param_name] = tag
 
@@ -662,6 +687,19 @@ def parse_groups(**kwargs) -> Parameters:
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────
+
+
+def _agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
+    """Params a group-level AGN wildcard should free, scoped to active blocks.
+
+    Thin wrapper over
+    :func:`tengri.components.agn.blocks._consumes.agn_active_param_set`,
+    lazy-imported to avoid an import cycle (the agn package imports the priors
+    layer that ultimately re-exports this module).
+    """
+    from tengri.components.agn.blocks._consumes import agn_active_param_set
+
+    return agn_active_param_set(structural_kwargs)
 
 
 def _translate_structural(groups: dict) -> dict:
@@ -845,17 +883,19 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                 result[result_key] = val
         return
 
-    # Extract dust law (can be in dust_dict or dust['law_bc'])
-    dust_law_bc = dust_dict.get("law_bc", "power_law")
+    # Extract dust laws. Leave each unset (None) when the user did not give it,
+    # so Parameters can apply symmetric inheritance (set one law -> both share
+    # it; set neither -> power_law for both).
+    dust_law_bc = dust_dict.get("law_bc")
     dust_law_diff = dust_dict.get("law_diff")
 
     valid_laws = _valid_dust_laws()
-    if dust_law_bc not in valid_laws:
-        suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
-
-    result["dust_law_bc"] = dust_law_bc
+    if dust_law_bc is not None:
+        if dust_law_bc not in valid_laws:
+            suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
+        result["dust_law_bc"] = dust_law_bc
 
     if dust_law_diff is not None:
         if dust_law_diff not in valid_laws:
@@ -863,6 +903,20 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
             raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
         result["dust_law_diff"] = dust_law_diff
+
+    # Per-component law-parameter overrides: slope_bc / slope_diff /
+    # bump_strength_bc / delta_diff / Rv_bc / … route onto a nested dict
+    # {'bc': {law_kwarg: value}, 'diff': {...}} consumed by DustSEDComponent.
+    from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+
+    overrides: dict[str, dict[str, float]] = {}
+    for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items():
+        for comp in ("bc", "diff"):
+            key = f"{short}_{comp}"
+            if key in dust_dict:
+                overrides.setdefault(comp, {})[law_kw] = float(dust_dict[key])
+    if overrides:
+        result["dust_law_overrides"] = overrides
 
     # Extract dust emission sub-block
     if "emission" in dust_dict:
@@ -1028,7 +1082,27 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
     "stellar": frozenset({"met_mode", "*"}),
     "dust": frozenset(
-        {"type", "*", "law_bc", "law_diff", "emission", "dust_curve", "geometry", "structure"}
+        {
+            "type",
+            "*",
+            "law_bc",
+            "law_diff",
+            "emission",
+            # WG00 screen structural selectors (FSPS dust_type=3).
+            "dust_curve",
+            "geometry",
+            "structure",
+            # Per-component law-parameter overrides (TWO_COMPONENT_OVERRIDE_KEYS
+            # × {bc, diff}); routed to dust_law_overrides, not declared params.
+            "slope_bc",
+            "slope_diff",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "delta_bc",
+            "delta_diff",
+            "Rv_bc",
+            "Rv_diff",
+        }
     ),
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*", "full_catalogue"}),
@@ -1320,17 +1394,30 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
         )
 
     if not hits:
-        # Nothing found anywhere; surface the canonical dict so the
-        # wildcard ('*') from the canonical location still applies.
+        # Nothing found anywhere; surface the canonical dict so its wildcard
+        # ('*') applies. For a sub-block param whose sub-block carries no '*',
+        # inherit the top-level agn '*' so a top-level ``agn={'*': FREE}``
+        # governs sub-block params too. This is scoped downstream by
+        # ``wildcard_active`` (block-scoped wildcard), so it frees only the
+        # parameters the active blocks actually consume — e.g. ``agn_polar_ebv``
+        # is partitioned to ``agn.atten`` but consumed by the SKIRTOR torus, so
+        # a top-level wildcard must be able to reach it.
+        if canonical_subkey is not None and "*" not in canonical_dict and "*" in agn_dict:
+            merged = dict(canonical_dict)
+            merged["*"] = agn_dict["*"]
+            return merged
         return canonical_dict
 
     # Single hit: return a synthetic dict carrying that one override
     # plus the wildcard from the canonical location (so '*': FREE inside
     # a sub-block still controls shared params landed via this view).
+    # A sub-block wildcard takes precedence over the top-level one.
     _, found_val = hits[0]
     view: dict = {short_name: found_val}
     if "*" in canonical_dict:
         view["*"] = canonical_dict["*"]
+    elif canonical_subkey is not None and "*" in agn_dict:
+        view["*"] = agn_dict["*"]
     return view
 
 
@@ -1494,7 +1581,11 @@ def _partition_by_group(
 
 
 def _resolve_value(
-    param_name: str, group_dict: dict, registry_default: Distribution
+    param_name: str,
+    group_dict: dict,
+    registry_default: Distribution,
+    *,
+    wildcard_active: bool = True,
 ) -> tuple[Distribution, str]:
     """Resolve the final distribution for a single parameter.
 
@@ -1502,6 +1593,15 @@ def _resolve_value(
     1. Per-parameter override in group_dict (including bare values)
     2. Wildcard '*' (FREE or FIXED)
     3. Registry default
+
+    ``wildcard_active`` (keyword-only, default ``True``) gates the
+    wildcard-``FREE`` branch only. When ``False`` a ``'*': FREE`` is treated
+    as ``'*': FIXED`` for *this* parameter — used by the AGN group so a group
+    wildcard frees only the parameters the active disc/torus/lines/feii/atten
+    blocks actually consume, not the full declared superset (which would
+    otherwise create unconstrained no-op nuisance dimensions). An *explicit*
+    per-parameter ``FREE`` is handled earlier and is never gated, so the user
+    can always force a specific parameter free.
 
     Parameters
     ----------
@@ -1545,7 +1645,23 @@ def _resolve_value(
         val = group_dict[override_key]
 
         # Validate that this key is actually a parameter (not 'type', '*', etc.)
-        structural_keys = {"type", "*", "law_bc", "law_diff", "emission", "patchy", "dla"}
+        structural_keys = {
+            "type",
+            "*",
+            "law_bc",
+            "law_diff",
+            "emission",
+            "patchy",
+            "dla",
+            "slope_bc",
+            "slope_diff",
+            "bump_strength_bc",
+            "bump_strength_diff",
+            "delta_bc",
+            "delta_diff",
+            "Rv_bc",
+            "Rv_diff",
+        }
         if override_key in structural_keys:
             # These are structural keys, not parameters
             return registry_default, "registry_default"
@@ -1574,7 +1690,19 @@ def _resolve_value(
     if "*" in group_dict:
         wildcard = group_dict["*"]
         if wildcard is FREE:
-            return registry_default, "wildcard_free"
+            if wildcard_active:
+                return registry_default, "wildcard_free"
+            # Param is not consumed by the active block selection. A wildcard
+            # FREE here would create an unconstrained no-op nuisance dimension,
+            # so collapse it to its fixed default instead (block-scoped
+            # wildcard). The param stays declared (no missing keys) — it is
+            # simply held fixed.
+            if registry_default.is_fixed:
+                return registry_default, "wildcard_fixed_inactive"
+            return (
+                Fixed(_default_fixed_value(param_name, registry_default)),
+                "wildcard_fixed_inactive",
+            )
         elif wildcard is FIXED:
             if registry_default.is_fixed:
                 return registry_default, "wildcard_fixed"
@@ -1886,6 +2014,15 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
             group_output["law_bc"] = spec.dust_law_bc
         if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
             group_output["law_diff"] = spec.dust_law_diff
+        # Round-trip per-component law-parameter overrides (slope_bc, delta_diff…).
+        from tengri.components.dust.attenuation import TWO_COMPONENT_OVERRIDE_KEYS
+
+        _law_kw_to_short = {v: k for k, v in TWO_COMPONENT_OVERRIDE_KEYS.items()}
+        for comp in ("bc", "diff"):
+            for law_kw, value in (getattr(spec, "dust_law_overrides", {}).get(comp) or {}).items():
+                short = _law_kw_to_short.get(law_kw)
+                if short is not None:
+                    group_output[f"{short}_{comp}"] = value
     elif group_name == "stellar":
         # Emit met_mode whenever it's non-default (default = 'delta').
         # Always-emit would force a stellar={} entry on every round-trip, which

@@ -14,7 +14,11 @@ import jax.numpy as jnp
 import numpy as np
 
 # Wavelength ranges (Angstrom)
-XRAY_WAVE_MIN: float = 0.1  # ~120 keV hard X-ray
+# 0.0413 Angstrom = hc / (300 keV) with hc = 12.398 keV.Angstrom: the hard edge
+# is set at 300 keV so the Yang+2020 / X-CIGALE corona exponential cutoff
+# (default E_cut = 300 keV) is sampled and visible, rather than clipped at the
+# old ~120 keV grid edge where the rollover has barely begun.
+XRAY_WAVE_MIN: float = 0.0413  # ~300 keV hard X-ray (matches corona E_cut)
 XRAY_WAVE_MAX: float = 100.0  # ~0.12 keV soft X-ray
 RADIO_WAVE_MIN: float = 1e5  # 10 μm — overlap with SSP IR tail
 RADIO_WAVE_MAX: float = 3e11  # ~1 MHz radio
@@ -119,7 +123,7 @@ def make_panchromatic_grid(
     parts = []
 
     if extend_xray:
-        wave_min = max(XRAY_WAVE_MIN, 0.1)
+        wave_min = XRAY_WAVE_MIN  # hard X-ray edge (~300 keV)
         wave_max = ssp_np[0]  # up to first SSP point (exclusive)
         if wave_min < wave_max:
             n_decades = np.log10(wave_max) - np.log10(wave_min)
