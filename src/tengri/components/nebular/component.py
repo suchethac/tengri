@@ -671,10 +671,11 @@ class NebularSEDComponent:
                 # Don't let it block the SED forward pass.
                 pass
 
-        # Add nebular contribution to sed_intrinsic (BC dust attenuation
-        # of the nebular emission is the dust component's responsibility
-        # — its ``two_component_dust`` transmission applies to the full
-        # sed_intrinsic when it runs after this component).
+        # Add nebular contribution to sed_intrinsic. Birth-cloud + diffuse
+        # dust attenuation of this continuum is the dust component's
+        # responsibility: ``DustSEDComponent`` declares ``sed_nebular`` an
+        # optional input, so the topological sort runs it AFTER this component
+        # and reddens the published ``sed_nebular`` with the young-limit screen.
 
         # Photoionised path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).

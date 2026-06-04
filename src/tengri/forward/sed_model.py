@@ -1124,6 +1124,13 @@ class SEDModel:
         self._dust_model = getattr(spec, "dust_model", "two_component")
         self._dust_scheme = getattr(spec, "dust_approx", "fast")
 
+        # WG00 (dust_type=3) structural selectors — static strings threaded into
+        # the WG00 screen component via ``build_components`` (and the
+        # ``compile_signature``). Defaults match the FSPS shell/MW/homogeneous case.
+        self._wg00_dust_curve = getattr(spec, "dust_wg00_curve", "mw")
+        self._wg00_geometry = getattr(spec, "dust_wg00_geometry", "shell")
+        self._wg00_structure = getattr(spec, "dust_wg00_structure", "homogeneous")
+
         self._dust_law_bc = spec.dust_law_bc
         self._dust_law_diff = spec.dust_law_diff
         # Per-component law-parameter overrides ({'bc': {...}, 'diff': {...}}),
@@ -1301,6 +1308,34 @@ class SEDModel:
                     _load_skirtor_fn()
                 except Exception:
                     pass
+
+            # Pre-warm the Synthesizer CLOUDY line-region grid singletons for
+            # the composable ``nlr_synthesizer`` / ``blr_synthesizer`` line
+            # blocks, for the same reason as SKIRTOR above (#390 class of bug):
+            # ``SynthesizerNLRBackend.__init__`` reads the HDF5 grid and runs
+            # ``jnp.sort`` / ``bool(axis[0] > axis[-1])`` on the grid axes to
+            # pick interpolation direction. If that construction first happens
+            # lazily inside ``predict_photometry`` / ``WavePrecomp`` (the JIT
+            # path used for fitting), the eager ``bool(...)`` on what JAX has
+            # lifted into the trace raises ``TracerBoolConversionError``. The
+            # singleton must therefore be built once here, at factory time,
+            # with the same grid path the forward resolves so the cached
+            # instance is reused under trace. (The Gaussian ``nlr`` / ``blr``
+            # blocks are JIT-safe and need no warming.)
+            if self._agn_lines_block in ("nlr_synthesizer", "blr_synthesizer"):
+                with contextlib.suppress(Exception):
+                    from tengri.components.agn.blocks.lines_blocks import (
+                        _resolve_synthesizer_grid,
+                    )
+                    from tengri.components.agn.nlr_cloudy import (
+                        get_synthesizer_blr_backend,
+                        get_synthesizer_nlr_backend,
+                    )
+
+                    if self._agn_lines_block == "nlr_synthesizer":
+                        get_synthesizer_nlr_backend(_resolve_synthesizer_grid("nlr"))
+                    else:
+                        get_synthesizer_blr_backend(_resolve_synthesizer_grid("blr"))
 
         return delta
 
@@ -2298,6 +2333,19 @@ class SEDModel:
         dust_scheme = str(self._dust_scheme)
         dust_emission_model = str(self._dust_emission_model or "none")
 
+        # WG00 (dust_type=3) structural selectors. Different geometry / dust
+        # curve / local structure tabulate distinct attenuation curves, so each
+        # combination must get its own compiled kernel. "none" when unused.
+        wg00_selectors = (
+            (
+                str(getattr(self, "_wg00_dust_curve", "mw")),
+                str(getattr(self, "_wg00_geometry", "shell")),
+                str(getattr(self, "_wg00_structure", "homogeneous")),
+            )
+            if dust_model == "wg00"
+            else ("none",)
+        )
+
         # Dust law functions (by name to avoid closure capture)
         dust_law_bc_fn_name = self._dust_law_bc_fn.__name__ if self._dust_law_bc_fn else "none"
         dust_law_diff_fn_name = (
@@ -2462,6 +2510,7 @@ class SEDModel:
             dust_emission_model,
             dust_law_bc_fn_name,
             dust_law_diff_fn_name,
+            wg00_selectors,
             dust_law_overrides_sig,
             nebular_backend_name,
             uses_igm,
@@ -4274,6 +4323,9 @@ class SEDModel:
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
             dust_model=getattr(self, "_dust_model", "two_component"),
+            wg00_dust_curve=getattr(self, "_wg00_dust_curve", "mw"),
+            wg00_geometry=getattr(self, "_wg00_geometry", "shell"),
+            wg00_structure=getattr(self, "_wg00_structure", "homogeneous"),
             use_radio=bool(getattr(self, "_uses_radio", False)),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             use_igm=bool(getattr(self, "_uses_igm", False)),

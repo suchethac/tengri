@@ -296,3 +296,94 @@ def blr_synthesizer_lines_block(
         neb_logZ_gas=neb_logZ_gas,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
+
+
+@register_agn_block("lines", "nlr_blr")
+def nlr_blr_lines_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    **params,
+) -> Array:
+    r"""Combined narrow + broad line region emission (analytic templates).
+
+    A *unified* AGN has both a narrow-line region (NLR) and a broad-line region
+    (BLR). The composable ``lines`` slot holds a single selector, so without a
+    combined block a disc + torus + NLR + BLR model (the Synthesizer
+    ``UnifiedAGN`` decomposition) could not be expressed through
+    ``SEDModel.build`` — it had to be hand-assembled from separate calls. This
+    block sums :func:`nlr_lines_block` and :func:`blr_lines_block` so one
+    composable recipe yields the full line spectrum.
+
+    Each sub-region keeps its own parameters (``agn_nlr_*`` / ``agn_blr_*``);
+    they are dispatched to the matching sub-block and the two
+    :math:`L_\lambda` are added.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_log_lbol : float
+        Ignored (normalisation comes from ``l5100_disc``).
+    l5100_disc : array, scalar
+        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
+    **params
+        ``agn_nlr_*`` and ``agn_blr_*`` knobs, routed to the respective
+        sub-blocks (each ignores the other's parameters).
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Summed NLR + BLR :math:`L_\lambda` [erg/s/Å].
+
+    Notes
+    -----
+    Geometric (Type-1/Type-2) masking of the BLR is **not** applied here, matching
+    the single-region blocks; the composable pipeline reproduces the *intrinsic*
+    (unmasked) unified line spectrum.
+    """
+    return nlr_lines_block(wavelength, agn_log_lbol, l5100_disc, **params) + blr_lines_block(
+        wavelength, agn_log_lbol, l5100_disc, **params
+    )
+
+
+@register_agn_block("lines", "nlr_blr_synthesizer")
+def nlr_blr_synthesizer_lines_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    **params,
+) -> Array:
+    r"""Combined NLR + BLR from the Synthesizer Cloudy grids (grid-backed).
+
+    Grid-backed sibling of :func:`nlr_blr_lines_block`: sums
+    :func:`nlr_synthesizer_lines_block` and :func:`blr_synthesizer_lines_block`,
+    so ``agn={'disc': ..., 'torus': ..., 'lines': {'type': 'nlr_blr_synthesizer'}}``
+    builds a unified AGN whose line regions read the *same* photoionisation grids
+    as the Synthesizer ``UnifiedAGN`` reproduction — the combination that
+    previously required hand-assembling raw adapter calls outside the model.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_log_lbol : float
+        Ignored (normalisation comes from ``l5100_disc``).
+    l5100_disc : array, scalar
+        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
+    **params
+        ``agn_nlr_*`` / ``agn_blr_*`` knobs routed to the respective sub-blocks.
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Summed NLR + BLR :math:`L_\lambda` [erg/s/Å].
+
+    Notes
+    -----
+    Inherits the grid-backed blocks' JIT caveat: backend init reads HDF5 (not
+    JIT-traceable), so build/predict once eagerly before any ``jax.jit``.
+    """
+    return nlr_synthesizer_lines_block(
+        wavelength, agn_log_lbol, l5100_disc, **params
+    ) + blr_synthesizer_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)

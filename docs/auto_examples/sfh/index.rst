@@ -153,6 +153,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of the star-formation-history overview figure of Buchner et al. (2024, GRAHSP): galaxy SEDs for a delayed-\tau SFH (\mathrm{SFR}\propto t\,e^{-t/\tau}, CIGALE sfh_delayed) whose cutoff timescale \tau is swept from 100 Myr (yellow; SFR truncates early, old-star-dominated) to 10 Gyr (dark blue; continuously rising, young, nebular- and dust-rich). Minimal attenuation E(B-V)=0.01 is applied. The inset shows the corresponding star-formation histories.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_grahsp_paper_sfh_tau_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_grahsp_paper_sfh_tau_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP SFH figure reproduction: delayed-tau galaxy SED sweep</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The peak lookback time of a log-normal SFH controls when most stars formed, shifting the age structure and dramatically affecting UV slope, 4000 Å break strength, and NIR luminosity. We vary the peak time across its prior range with every other parameter fixed.">
 
 .. only:: html
@@ -407,6 +424,7 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_dpl_alpha_beta_grid
    /auto_examples/sfh/plot_dpl_alpha_sweep
    /auto_examples/sfh/plot_dpl_beta_sweep
+   /auto_examples/sfh/plot_grahsp_paper_sfh_tau_sweep
    /auto_examples/sfh/plot_lnorm_peak_sweep
    /auto_examples/sfh/plot_parametric_sfh
    /auto_examples/sfh/plot_prospector_priors_compare

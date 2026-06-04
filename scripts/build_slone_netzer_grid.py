@@ -204,8 +204,17 @@ def _cli() -> None:
         help="Destination HDF5 path.",
     )
     p.add_argument("--n-wave", type=int, default=2048, help="Common wavelength grid size.")
+    p.add_argument(
+        "--download",
+        action="store_true",
+        help="Fetch SN12.pickle from the AGNfitter GitHub repo (pinned tag) "
+        "instead of reading --input. No AGNfitter install needed.",
+    )
     args = p.parse_args()
-    build(args.input, args.output, n_wave=args.n_wave)
+    from _agnfitter_download import resolve
+
+    input_pickle = resolve(args.input, "models/BBB/SN12.pickle", download=args.download)
+    build(input_pickle, args.output, n_wave=args.n_wave)
 
 
 if __name__ == "__main__":

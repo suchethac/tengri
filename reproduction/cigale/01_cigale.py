@@ -881,8 +881,12 @@ ax_r.text(
 # Match x-range so the FIR peak is visible on both panels.
 _xmin = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
 _xmax = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
+# Peak-anchored y-limit: the SED cliffs to ~0 at the grid edges, so without
+# this the shared log axis autoscales across ~170 decades and flattens the SED.
+_ymax_d = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
 for ax in (ax_l, ax_r):
     ax.set_xlim(_xmin, _xmax)
+    ax.set_ylim(_ymax_d * 1e-6, _ymax_d * 2.0)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
@@ -892,13 +896,37 @@ plt.show()
 # %% [markdown]
 # ### Dust-IR model knobs: AGN heating and the radiation-field slope
 #
-# Two further CIGALE dust-IR parameters, both ported into tengri. **Left:**
-# Dale 2014's AGN fraction adds an *additive* AGN-heated dust source
-# ($L_{\rm AGN} = L_{\rm dust}\,f/(1-f)$), lifting the mid-IR while the
-# stellar-heated FIR peak stays put — so the total IR grows with `f_AGN`.
-# **Right:** the THEMIS radiation-field slope $\alpha$ ($dU/dM \propto U^{-\alpha}$)
-# sets the FIR shape; $\alpha=2$ is the Jones+2017 / DustEM fiducial that
-# reproduces tengri's shipped template bit-for-bit.
+# Two further CIGALE dust-IR parameters, both ported into tengri and shown
+# here as the same head-to-head as every other panel — **tengri solid,
+# pcigale dashed**, on a matched `sfhdelayed + bc03 + dustatt + <IR>` chain so
+# the absorbed energy (and hence the IR normalisation) is identical on both
+# sides. **Left:** Dale 2014's AGN fraction (`dale2014.fracAGN`) adds an
+# *additive* AGN-heated dust source ($L_{\rm AGN} = L_{\rm dust}\,f/(1-f)$),
+# lifting the mid-IR while the stellar-heated FIR peak stays put — so the
+# total IR grows with `f_AGN`. **Right:** the THEMIS radiation-field slope
+# $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$) sets the FIR shape at
+# matched `qhac = 0.17`, `umin = 1.0`, `gamma = 0.1`; $\alpha=2$ is the
+# Jones+2017 / DustEM fiducial.
+#
+# **Where the two agree and where they don't.** The FIR peak (the
+# energy-balance-normalised stellar-heated bump) matches to <1 % in both
+# panels — that is the quantity that drives the IR luminosity. The visible
+# solid-vs-dashed gaps are in the mid-IR *shape*, and they are genuine model
+# differences, not normalisation:
+#
+# - **Dale, $f_{\rm AGN}>0$:** the dust template itself is at the $\alpha=2$
+#   grid node, so the stellar-heated part is identical to CIGALE by
+#   construction. The gap is the *AGN-heated* term — tengri adds it with the
+#   $L_{\rm AGN}=L_{\rm dust}\,f/(1-f)$ additive rule, which is close to but
+#   not bit-identical to CIGALE's internal `dale2014` quasar template, so the
+#   mid-IR lift differs by tens of percent at $f_{\rm AGN}=0.6$.
+# - **THEMIS, $\alpha=1$:** tengri's THEMIS is FSPS/DustEM-anchored and is
+#   bit-exact to CIGALE only at the $\alpha=2$ fiducial; at the steep
+#   $\alpha=1$ end the warm-dust mid-IR runs ~40 % high. $\alpha=2,3$ agree
+#   to ~1 %.
+#
+# Both are documented parity gaps in the AGN-heating / extreme-$\alpha$
+# regimes, not artefacts of this panel.
 
 # %%
 import jax
@@ -906,47 +934,82 @@ import jax.numpy as jnp
 
 _c_aa_dust = 2.998e18
 
+# Matched fiducial chain (mirrors the §6 dale2014 cell): same SFH + BC03 +
+# Calzetti attenuation on both sides, so the absorbed luminosity that feeds
+# the IR re-emission template is identical. pcigale's normalise=True forms
+# 1 M_sun; tengri's log_total_mass=11 forms 1e11 M_sun, so scale the pcigale
+# curve by 1e11 to overlay the two at the same stellar mass.
+_KNOB_MASS = 1e11
+_SFH_CHAIN = (
+    "sfhdelayed",
+    dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20, f_burst=0.0,
+         sfr_A=1.0, normalise=True),
+)
+_BC03_CHAIN = ("bc03", dict(imf=1, metallicity=0.02, separation_age=10))
+_DUSTATT_CHAIN = ("dustatt_modified_starburst", dict(E_BV_lines=0.3))
 
-def _dust_ir_model(emission_type, **emkw):
+
+def _knob_model(emission_type, **emkw):
+    """tengri fiducial twin of the matched pcigale chain (1e11 M_sun)."""
     return SEDModel.build(
         ssp_data=ssp,
         stellar=STELLAR_FIDUCIAL,
-        sfh={"type": "const", "log_total_mass": Fixed(11.0), "*": FIXED},
+        sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+             "log_total_mass": Fixed(11.0), "*": FIXED},
         dust={
             "type": "two_component",
-            "tau_bc": Fixed(0.3),
-            "tau_diff": Fixed(1.0),
+            "law_bc": "leitherer02",
+            "law_diff": "leitherer02",
+            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+            "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
             "*": FIXED,
             "emission": {"type": emission_type, "*": FIXED, **emkw},
         },
-        redshift=Fixed(0.05),
+        redshift=Fixed(0.0),
     )
+
+
+def _nu_lnu(wave_aa, l_nu):
+    w = np.asarray(wave_aa)
+    return w, _c_aa_dust / w * np.asarray(l_nu)
 
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.4))
 
-m_frac = _dust_ir_model("dale2014")
+# LEFT — Dale 2014 AGN fraction: tengri (solid) vs pcigale dale2014.fracAGN (dashed).
+m_frac = _knob_model("dale2014", alpha_mir=Fixed(2.0))
 p_frac = dict(m_frac.spec.sample(jax.random.PRNGKey(0)))
 for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     o = m_frac.predict_rest_sed({**p_frac, "dust_frac_agn": jnp.float64(f)})
-    w = np.asarray(o.wavelength)
-    ax_l.loglog(w, _c_aa_dust / w * np.asarray(o.sed), color=c, lw=1.8,
-                label=rf"$f_{{\rm AGN}}={f}$")
+    w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
+    ax_l.loglog(w_t, nl_t, color=c, lw=1.8, label=rf"$f_{{\rm AGN}}={f}$")
+    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
+                       ("dale2014", dict(alpha=2.0, fracAGN=f))])
+    w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
+    ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls="--")
+ax_l.plot([], [], "k-", lw=1.8, label="tengri")
+ax_l.plot([], [], "k--", lw=1.2, label="pcigale")
 ax_l.set(xlim=(1e4, 1e7), ylim=(1e42, 1e45), xlabel=r"$\lambda$ [Å]",
          ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Dale 2014 AGN fraction")
-ax_l.legend(fontsize=9, frameon=False)
+ax_l.legend(fontsize=8, frameon=False, ncol=2)
 
-m_alpha = _dust_ir_model("themis", dust_gamma_dl=0.1)
+# RIGHT — THEMIS slope alpha: tengri (solid) vs pcigale themis.alpha (dashed),
+# matched qhac=0.17, umin=1.0, gamma=0.1.
+m_alpha = _knob_model("themis", dust_gamma_dl=Fixed(0.1))
 p_alpha = dict(m_alpha.spec.sample(jax.random.PRNGKey(0)))
 for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     o = m_alpha.predict_rest_sed({**p_alpha, "dust_alpha": jnp.float64(a)})
-    w = np.asarray(o.wavelength)
-    lw = 2.4 if a == 2.0 else 1.6
-    ax_r.loglog(w, _c_aa_dust / w * np.asarray(o.sed), color=c, lw=lw,
-                label=rf"$\alpha={a}$" + (" (FSPS)" if a == 2.0 else ""))
+    w_t, nl_t = _nu_lnu(o.wavelength, o.sed)
+    ax_r.loglog(w_t, nl_t, color=c, lw=2.0, label=rf"$\alpha={a}$")
+    sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
+                       ("themis", dict(qhac=0.17, umin=1.0, gamma=0.1, alpha=a))])
+    w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
+    ax_r.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls="--")
+ax_r.plot([], [], "k-", lw=2.0, label="tengri")
+ax_r.plot([], [], "k--", lw=1.2, label="pcigale")
 ax_r.set(xlim=(3e4, 1e7), ylim=(1e42, 1e45), xlabel=r"$\lambda$ [Å]",
          title=r"THEMIS radiation-field slope $\alpha$")
-ax_r.legend(fontsize=9, frameon=False)
+ax_r.legend(fontsize=8, frameon=False, ncol=2)
 
 fig.tight_layout()
 save_fig("cigale_06_dust_ir_knobs.png")
@@ -985,8 +1048,14 @@ ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
 ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
 _xmin_p = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
 _xmax_p = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
+# Frame the y-axis on the SED peak. Without this the panchromatic SED cliffs
+# to ~0 at the grid edges and the shared log axis autoscales across ~170
+# decades, crushing the real SED into a flat line at the top (it spans only
+# ~6 decades). Match the peak-anchored framing used by the other §-panels.
+_ymax_p = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
 for ax in (ax_l, ax_r):
     ax.set_xlim(_xmin_p, _xmax_p)
+    ax.set_ylim(_ymax_p * 1e-6, _ymax_p * 2.0)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_07_panchromatic_full.png"), dpi=150, bbox_inches="tight")
@@ -1401,11 +1470,14 @@ save_fig("cigale_09_agn_skirtor.png")
 # fiducial.
 #
 # In the well-sampled 1–100 keV band the two corona power laws agree:
-# both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Above ~100 keV the panels
-# diverge — CIGALE rolls off steeply while tengri stays power-law — but
-# E_cut = 300 keV only suppresses by exp(−100/300) ≈ 0.7 at 100 keV, so
-# the steep CIGALE drop near its 200–300 keV grid edge is mostly a
-# grid-extent effect rather than the physical cutoff.
+# both follow L_ν ∝ E^(1−Γ) with Γ ≈ 1.8. Toward the hard end both now
+# roll over at the shared E_cut = 300 keV exponential cutoff — tengri's
+# panchromatic grid extends to 300 keV (it was previously clipped at the
+# ~120 keV master-grid edge, which made the cutoff look absent), so the
+# exp(−E/300) suppression is sampled on both sides. The XRB (HMXB/LMXB)
+# terms add a flatter component above ~30 keV, so the total is not a pure
+# corona power law — visible as the mild excess over the Γ = 1.8 line near
+# 50–100 keV before the cutoff takes over.
 
 # %%
 sed_x = C.run_chain(
@@ -1458,7 +1530,7 @@ sed_x = C.run_chain(
 )
 w_x, L_x = C.to_lnu(sed_x)
 e_kev_c = 12.398 / w_x
-m_c = (e_kev_c >= 0.3) & (e_kev_c <= 200) & (L_x > 0)
+m_c = (e_kev_c >= 0.3) & (e_kev_c <= 300) & (L_x > 0)
 
 m_x = SEDModel.build(
     ssp_data=ssp,
@@ -1499,7 +1571,7 @@ state_x = m_x.predict_state({})
 w_t = np.asarray(state_x.wave)
 sed_t = np.asarray(state_x.derived.get("sed_xray", state_x.sed_intrinsic))
 e_kev_t = 12.398 / w_t
-m_t = (e_kev_t >= 0.3) & (e_kev_t <= 200) & (sed_t > 0)
+m_t = (e_kev_t >= 0.3) & (e_kev_t <= 300) & (sed_t > 0)
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):
@@ -1536,6 +1608,13 @@ save_fig("cigale_10_xray_nh_sweep.png")
 # to small differences in the L_IR integration window between
 # `dust.emission.dale2014` and CIGALE's `dale2014` module.
 # Star-forming only, 100 MHz to 100 GHz.
+#
+# Both sides include the Murphy+2011 thermal free-free term (on by
+# default), which flattens the steep synchrotron power law toward high
+# frequency. The two agree across the band — within ~5 % out to 10 GHz
+# and ~10–30 % by 100 GHz — with tengri's 10–100 GHz slope (−0.62)
+# marginally flatter than CIGALE's (−0.70), i.e. a touch more free-free.
+# The flattening is gentle, so neither curve shows a dramatic upturn.
 
 # %%
 fig, ax_l, ax_r = U.two_panel_fig()
@@ -1727,6 +1806,10 @@ ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (CIGALE-mode)")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(1e2, 1e8)
+# Peak-anchored y-limit: both SEDs cliff to ~0 at the grid edges, so the log
+# axis would otherwise autoscale across ~170 decades and flatten the SED.
+_ymax_h = float(max(np.nanmax(L_ext), np.nanmax(L_t_on_ext)))
+ax.set_ylim(_ymax_h * 1e-6, _ymax_h * 2.0)
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 ax.set_title("tengri in CIGALE-mode vs CIGALE — full panchromatic SED")
 ax.legend(fontsize=10)

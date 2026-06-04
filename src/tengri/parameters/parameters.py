@@ -706,11 +706,18 @@ class Parameters:
     def _init_dust_config(self, kwargs):
         """Resolve dust model, attenuation law, and emission from kwargs."""
         self.dust_model = kwargs.pop("dust_model", "two_component")
-        if self.dust_model not in ("two_component", "single_component"):
+        if self.dust_model not in ("two_component", "single_component", "wg00"):
             raise ValueError(
-                f"dust_model must be 'two_component' or 'single_component', "
+                f"dust_model must be 'two_component', 'single_component', or 'wg00', "
                 f"got '{self.dust_model}'"
             )
+
+        # Witt & Gordon (2000) screen (dust_model='wg00', FSPS dust_type=3):
+        # static structural selectors. Always stored so the forward model and
+        # compile_signature can read them via getattr.
+        self.dust_wg00_curve = kwargs.pop("dust_wg00_curve", "mw")
+        self.dust_wg00_geometry = kwargs.pop("dust_wg00_geometry", "shell")
+        self.dust_wg00_structure = kwargs.pop("dust_wg00_structure", "homogeneous")
 
         self.dust_approx = kwargs.pop("dust_approx", "fast")
         if self.dust_approx not in ("fast", "exact"):

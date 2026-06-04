@@ -31,8 +31,19 @@ Grid completeness
 -----------------
 AGNfitter-rX's library is not a full Cartesian product of the three
 axes; ``scripts/build_cat3d_wind_grid.py`` fills the missing cells with
-their nearest-neighbour populated value at build time so the triweight
-kernel has a smooth support over the full grid box.
+their nearest-neighbour populated value at build time so the interpolant
+has support over the full grid box.
+
+Interpolation
+-------------
+Node-exact monotone cubic (PCHIP, :func:`tengri.utils.grid_interp.interp_nd_pchip`):
+it reproduces every tabulated AGNfitter template at the grid nodes while
+keeping C¹-continuous gradients. The C²-smooth triweight *smoother* used
+elsewhere averages neighbouring nodes, which smeared this torus's mid-IR
+peak by tens of percent (median ~30%) — the same peak-smear that moved
+:mod:`tengri.components.agn.slone_netzer` to node-exact interpolation.
+Monotone cubic is shape-preserving, so it does not overshoot on the
+nearest-neighbour-filled grid.
 
 References
 ----------
@@ -55,8 +66,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
-from tengri.utils.grid_interp import interp_nd_triweight
-from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -104,10 +114,10 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` and triweight interpolation.
+    **JIT-compatible**: yes — pure ``jnp`` and monotone-cubic interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is C² across the three
-    parameter axes.
+    **Gradient-safe**: yes — node-exact PCHIP gives C¹-continuous gradients
+    across the three parameter axes.
     """
     raw = _load_cat3d_arrays(grid_path)
 
@@ -128,7 +138,6 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
         jnp.asarray(raw["a_axis"]),
         jnp.asarray(raw["fwd_axis"]),
     )
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def cat3d_wind_grid(
         wavelength: jnp.ndarray,
@@ -185,10 +194,9 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
         filled with the nearest populated cell at build time (see
         ``scripts/build_cat3d_wind_grid.py``).
         """
-        template = interp_nd_triweight(
+        template = interp_nd_pchip(
             grid_jax,
             axes,
-            edges,
             (agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d),
         )
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)

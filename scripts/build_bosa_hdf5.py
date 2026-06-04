@@ -37,7 +37,6 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-
 BOSA_FITS_URL = "https://salims.pages.iu.edu/bosa/bosa_LTIR-sSFR.fits"
 BOSA_FITS_NAME = "bosa_LTIR-sSFR.fits"
 

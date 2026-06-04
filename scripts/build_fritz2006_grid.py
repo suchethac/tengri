@@ -94,18 +94,45 @@ OPENING_ANGLE_GRID = np.array([20.0, 40.0, 60.0])
 PSY_GRID = np.array([0.001, 10.1, 20.1, 30.1, 40.1, 50.1, 60.1, 70.1, 80.1, 89.99])
 
 
-def main() -> int:
-    """Load CIGALE fritz2006 database and emit HDF5 grid."""
+def build_fritz_grid(dest: Path | str | None = None, *, force: bool = False) -> Path:
+    """Build the Fritz2006 torus grid HDF5 from CIGALE's ``SimpleDatabase``.
+
+    Parameters
+    ----------
+    dest : path-like, optional
+        Target directory for ``fritz2006_torus_grid.h5``. Defaults to
+        ``$TENGRI_DATA_DIR`` if set, else ``data/`` relative to the cwd.
+    force : bool, optional
+        Rebuild even if the grid already exists. Default ``False``.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the written (or already-present) grid file.
+
+    Raises
+    ------
+    RuntimeError
+        If ``pcigale`` is not importable — the grid can only be built from a
+        local CIGALE install (it ships the Fritz templates as pcigale pickles).
+    """
+    import os
+
+    if dest is None:
+        dest = os.environ.get("TENGRI_DATA_DIR", "data")
+    out_path = Path(dest) / "fritz2006_torus_grid.h5"
+    if out_path.exists() and out_path.stat().st_size > 0 and not force:
+        print(f"Fritz2006 grid already present at {out_path}; skipping build.")
+        return out_path
+
     try:
         from pcigale.data import SimpleDatabase as Database
-    except ImportError:
-        print(
-            "Error: pcigale is not importable in this environment.\n"
-            "Install it (``pip install pcigale``) or use tengri's main venv.\n"
-            "The venv at /Users/suchethacooray/Projects/tengri/.venv already has it.",
-            file=sys.stderr,
-        )
-        return 1
+    except ImportError as e:
+        raise RuntimeError(
+            "pcigale is not importable, so the Fritz2006 grid cannot be built "
+            "from CIGALE. Install it (``pip install pcigale``) or run from "
+            "tengri's main venv, then retry."
+        ) from e
 
     n_total = int(
         np.prod(
@@ -202,7 +229,6 @@ def main() -> int:
                                     )
 
     # Write HDF5 file
-    out_path = Path("data/fritz2006_torus_grid.h5")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     with h5py.File(out_path, "w") as f:
@@ -247,7 +273,33 @@ def main() -> int:
         f"({n_r}, {n_tau}, {n_beta}, {n_gamma}, {n_oa}, {n_psy}, {n_wave})"
     )
     print(f"  Wavelength range: {wavelength_aa[0]:.2f} – {wavelength_aa[-1]:.2f} Å")
-    print("Done. Use in SEDModel.build(agn={{'torus': {{'type': 'fritz', ...}}}}).")
+    print("Done. Use in SEDModel.build(agn={'torus': {'type': 'fritz', ...}}).")
+    return out_path
+
+
+def main() -> int:
+    """CLI: build the Fritz2006 grid into ``--dest`` (or ``data/``)."""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Build data/fritz2006_torus_grid.h5 from CIGALE's fritz2006 database."
+    )
+    parser.add_argument(
+        "--dest",
+        default=None,
+        help="Target directory (default: $TENGRI_DATA_DIR or ./data).",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Rebuild even if the grid already exists.",
+    )
+    args = parser.parse_args()
+    try:
+        build_fritz_grid(args.dest, force=args.force)
+    except RuntimeError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
     return 0
 
 
