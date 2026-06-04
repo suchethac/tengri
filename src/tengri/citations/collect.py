@@ -308,6 +308,8 @@ _LIVE_NAME_TO_BIBKEY: dict[str, str] = {
     "multicolor_agn": "kubota_done2018",
     "adaf": "mahadevan1997",
     "qsogen": "temple2021_qsogen",
+    "grahsp": "buchner2024",
+    "agn_grahsp": "buchner2024",
     # Dust attenuation laws
     "calzetti": "calzetti2000",
     "cardelli": "cardelli1989",
