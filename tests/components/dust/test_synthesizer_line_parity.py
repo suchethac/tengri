@@ -186,3 +186,79 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     sed = np.asarray(model.predict_state({}).derived["sed_agn"])
     assert np.all(np.isfinite(sed))
     assert (sed > 0).any()
+
+
+@pytest.mark.parametrize("lines_type", ["nlr_synthesizer", "blr_synthesizer"])
+def test_synth_lines_photometry_under_jit_and_precompute(monkeypatch, lines_type):
+    """Grid-backed AGN lines must work through the JIT photometry / precompute path.
+
+    Regression for the build-time-artifact-in-JIT-trace bug: the Synthesizer
+    NLR/BLR backend ``__init__`` loads its HDF5 grid and runs ``jnp.sort`` /
+    ``bool(axis[0] > axis[-1])`` on the grid axes. When that construction first
+    happened lazily *inside* ``predict_photometry`` (the JIT path used for
+    fitting and ``WavePrecomp``) with an active disc, the eager ``bool(...)`` on
+    a value JAX had lifted into the trace raised ``TracerBoolConversionError``.
+    The notebook only ever exercised the eager ``predict_state`` path, so this
+    slipped through. The fix pre-warms the grid singleton at factory time
+    (``SEDModel._init_agn``), mirroring the SKIRTOR / dust-emission preload
+    (#390 class). Both the exact and WavePrecomp photometry paths must run and
+    agree band-for-band (additive emitters are exact filter-integrated).
+    """
+    if not (_NLR.exists() and _BLR.exists()):
+        pytest.skip(f"Synthesizer AGN test grids not found under {_DATA}")
+    monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(_DATA))
+
+    import jax.numpy as jnp
+
+    from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+    from tengri.forward.sed_model import WavePrecomp
+    from tengri.observation import Observation, Photometry
+    from tengri.observation.photometry import FilterCurve
+
+    ssp_path = (
+        Path(__file__).resolve().parents[3]
+        / "reproduction"
+        / "synthesizer"
+        / "_drivers"
+        / "data"
+        / "synthesizer_test_grid.h5"
+    )
+    if not ssp_path.exists():
+        pytest.skip("ported Synthesizer SSP grid not present")
+    ssp = load_ssp_data(str(ssp_path))
+
+    def _tophat(center, frac=0.16, n=40):
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{int(center)}")
+
+    # Bands spanning UV→optical, where the disc and the reprocessed lines live.
+    obs = Observation(
+        photometry=Photometry(
+            filters=tuple(_tophat(c) for c in (1300.0, 3500.0, 5000.0, 6600.0, 9000.0))
+        )
+    )
+
+    def _build(approx):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+                 "log_total_mass": Fixed(0.0), "*": FIXED},
+            dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0),
+                  "*": FIXED},
+            agn={"type": "composable", "disc": {"type": "kubota_done"},
+                 "torus": {"type": "none"}, "lines": {"type": lines_type},
+                 "agn_log_lbol": Fixed(12.0), "*": FIXED},
+            redshift=Fixed(0.01),
+            approx=approx,
+        )
+
+    # Exact (approx=None) photometry path — JIT-traced; used to raise.
+    f_exact = np.asarray(_build(None).predict_photometry({}))
+    assert np.all(np.isfinite(f_exact)) and (f_exact > 0).any()
+
+    # WavePrecomp path must agree band-for-band (additive emitters exact-integrated).
+    f_pre = np.asarray(_build(WavePrecomp()).predict_photometry({}))
+    assert np.all(np.isfinite(f_pre))
+    np.testing.assert_allclose(f_pre, f_exact, rtol=1e-3)

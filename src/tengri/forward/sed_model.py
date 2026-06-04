@@ -1299,6 +1299,34 @@ class SEDModel:
                 except Exception:
                     pass
 
+            # Pre-warm the Synthesizer CLOUDY line-region grid singletons for
+            # the composable ``nlr_synthesizer`` / ``blr_synthesizer`` line
+            # blocks, for the same reason as SKIRTOR above (#390 class of bug):
+            # ``SynthesizerNLRBackend.__init__`` reads the HDF5 grid and runs
+            # ``jnp.sort`` / ``bool(axis[0] > axis[-1])`` on the grid axes to
+            # pick interpolation direction. If that construction first happens
+            # lazily inside ``predict_photometry`` / ``WavePrecomp`` (the JIT
+            # path used for fitting), the eager ``bool(...)`` on what JAX has
+            # lifted into the trace raises ``TracerBoolConversionError``. The
+            # singleton must therefore be built once here, at factory time,
+            # with the same grid path the forward resolves so the cached
+            # instance is reused under trace. (The Gaussian ``nlr`` / ``blr``
+            # blocks are JIT-safe and need no warming.)
+            if self._agn_lines_block in ("nlr_synthesizer", "blr_synthesizer"):
+                with contextlib.suppress(Exception):
+                    from tengri.components.agn.blocks.lines_blocks import (
+                        _resolve_synthesizer_grid,
+                    )
+                    from tengri.components.agn.nlr_cloudy import (
+                        get_synthesizer_blr_backend,
+                        get_synthesizer_nlr_backend,
+                    )
+
+                    if self._agn_lines_block == "nlr_synthesizer":
+                        get_synthesizer_nlr_backend(_resolve_synthesizer_grid("nlr"))
+                    else:
+                        get_synthesizer_blr_backend(_resolve_synthesizer_grid("blr"))
+
         return delta
 
     def _init_multiwavelength(self, spec, ssp_data):
