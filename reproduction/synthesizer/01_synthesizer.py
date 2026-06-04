@@ -69,7 +69,7 @@ from reproduction.synthesizer._drivers import (
 )
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri import FIXED, Fixed, SEDModel, Uniform, load_ssp_data
 
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
@@ -611,6 +611,8 @@ U.panel(
 )
 ax_l.plot(w_neb_s, L_neb_s, "C0-", linewidth=1.0)
 ax_r.plot(s_neb.wave, L_neb_t, "C1-", linewidth=1.0)
+
+
 # Frame the y-axis on the lines inside the plotted window (900–7000 Å); a global
 # max would be set by a far-UV resonance line off-panel, leaving dead headroom.
 def _winpk(w, L, lo=900.0, hi=7000.0):
@@ -663,15 +665,13 @@ save_fig("synthesizer_08_nebular.png")
 # %%
 import jax.numpy as jnp
 
-from tengri.components.agn.nlr_cloudy import compute_nlr_sed_synthesizer
-
-# Synthesizer grid directory (where synthesizer-download placed the test grids),
-# so tengri's adapter reads the *same* AGN Cloudy grids.
+# Synthesizer grid directory (where synthesizer-download placed the test grids).
+# tengri's grid-backed line blocks read the *same* AGN Cloudy grids via this path,
+# exported as ``TENGRI_SYNTHESIZER_AGN_GRID_DIR`` in the §9 setup below.
 _SYN_GRID_DIR = os.environ.get(
     "SYNTHESIZER_GRID_DIR",
     os.path.expanduser("~/Library/Application Support/Synthesizer/grids"),
 )
-_NLR_GRID_PATH = str(Path(_SYN_GRID_DIR) / "test_grid_agn-nlr.hdf5")
 
 # Fiducial AGN.
 BH_MASS = 1e8  # Msun
@@ -694,6 +694,46 @@ agn_log_lbol = float(np.log10(agn["_bolometric_erg_s"] / U.L_SUN_ERG_PER_S))
 print(
     f"§9 Synthesizer BH: L_bol = {agn['_bolometric_erg_s']:.3e} erg/s = 10^{agn_log_lbol:.2f} L⊙"
 )
+
+# Every tengri AGN below is built through the *public* grammar (`SEDModel.build`),
+# never a raw internal adapter — the same path a fit uses. ``_agn_grammar`` builds
+# a composable AGN at the fiducial geometry and returns sed_agn (rest-frame L_nu).
+os.environ.setdefault("TENGRI_SYNTHESIZER_AGN_GRID_DIR", _SYN_GRID_DIR)
+BH_COS_INC = float(np.cos(np.radians(BH_INC)))
+# Match Synthesizer's geometric torus coupling: it reprocesses a fraction
+# ``torus_fraction = θ_torus / 90°`` of L_bol (0.33 at θ_torus = 30°). tengri keeps
+# ``agn_torus_frac`` free (default 0.5 over-weights the torus ~1.5x here); pinning
+# it to θ/90 puts the disc↔torus energy split on the same footing as Synthesizer.
+_TORUS_FRAC = THETA_TORUS / 90.0
+
+
+def _agn_grammar(disc="kubota_done", torus="simple", lines="none", cos_inc=BH_COS_INC):
+    """Build a composable AGN via the public API; return (wave, L_nu of sed_agn)."""
+    m = SEDModel.build(
+        ssp_data=ssp,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        agn={
+            "type": "composable",
+            "disc": {"type": disc},
+            "torus": {"type": torus},
+            "lines": {"type": lines},
+            "agn_log_lbol": Fixed(agn_log_lbol),
+            "agn_cos_inc": Fixed(cos_inc),
+            "agn_theta_torus": Fixed(THETA_TORUS),
+            "agn_torus_frac": Fixed(_TORUS_FRAC),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.0),
+    )
+    s = m.predict_state({})
+    return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
 
 
 # %% [markdown]
@@ -825,18 +865,15 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
-_wave_nlr = jnp.asarray(np.logspace(2.7, 6.0, 4000))
-L_nlr_t = np.asarray(
-    compute_nlr_sed_synthesizer(
-        _wave_nlr,
-        l_disc_bol_erg=agn["_bolometric_erg_s"],
-        covering_fraction=CF,
-        grid_path=_NLR_GRID_PATH,
-        neb_logU=-2.0,
-        neb_logZ_gas=float(np.log10(BH_Z)),
-    )
-)
-_wave_nlr = np.asarray(_wave_nlr)
+# tengri's NLR through the *public* grammar: the contribution the
+# ``nlr_synthesizer`` block adds on top of the disc continuum (no torus, so the
+# difference isolates the lines). NB the line widths are limited to the SSP wave
+# grid (~1000 km/s here), coarser than the 500 km/s NLR width — the public API
+# has no hook to evaluate AGN lines on a finer custom grid (tracked as issue
+# #687). A fit is unaffected: filters integrate over the lines.
+_wave_nlr, _L_with_nlr = _agn_grammar(torus="none", lines="nlr_synthesizer")
+_, _L_disc_only = _agn_grammar(torus="none", lines="none")
+L_nlr_t = _L_with_nlr - _L_disc_only
 
 # Independent y-axes: the Gaussian-convolved line peaks and the grid-binned
 # spectrum live on very different L_ν scales (see the markdown above).
@@ -887,62 +924,33 @@ print(
 # (density, ionisation, line ratios) needs the production grids.
 
 # %%
-try:
-    from tengri.components.agn.nlr_cloudy import compute_blr_sed_synthesizer
-
-    _BLR_GRID_PATH = str(Path(_SYN_GRID_DIR) / "test_grid_agn-blr.hdf5")
-    w_blr_s, L_blr_s = agn["blr"]
-    _wave_blr = jnp.asarray(np.logspace(2.7, 6.0, 4000))
-    L_blr_t = np.asarray(
-        compute_blr_sed_synthesizer(
-            _wave_blr,
-            l_disc_bol_erg=agn["_bolometric_erg_s"],
-            covering_fraction=CF,
-            grid_path=_BLR_GRID_PATH,
-            neb_logU=-1.0,
-            neb_logZ_gas=float(np.log10(BH_Z)),
-        )
-    )
-    _wave_blr = np.asarray(_wave_blr)
-    # Independent y-axes (as in §9c): the broad-Gaussian tengri spectrum and the
-    # grid-binned Synthesizer spectrum live on different L_ν scales.
-    fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12, 4.5))
-    U.panel(
-        ax_l,
-        ax_r,
-        label_l="Synthesizer  BLR (full reprocessed)",
-        label_r="tengri  BLR lines (same grid, 5000 km/s)",
-    )
-    ax_l.plot(w_blr_s, L_blr_s, "C0-", linewidth=1.0)
-    ax_r.plot(_wave_blr, L_blr_t, "C1-", linewidth=1.0)
-    _blr_pk_s = float(np.nanmax(L_blr_s[(w_blr_s >= 1000) & (w_blr_s <= 10000)]))
-    _blr_pk_t = float(np.nanmax(L_blr_t[(_wave_blr >= 1000) & (_wave_blr <= 10000)]))
-    ax_l.set_ylim(_blr_pk_s * 1e-3, _blr_pk_s * 3)
-    ax_r.set_ylim(_blr_pk_t * 1e-2, _blr_pk_t * 3)
-    for ax in (ax_l, ax_r):
-        ax.set_xlim(1000, 10000)
-        ax.set_xscale("linear")
-        ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    save_fig("synthesizer_09d_blr.png")
-    print("§9d BLR: tengri compute_blr_sed_synthesizer rendered (broad 5000 km/s lines).")
-except ImportError:
-    print(
-        "§9d BLR: tengri.compute_blr_sed_synthesizer not yet available — pending the "
-        "grid-backed BLR adapter (library follow-up). Showing Synthesizer BLR alone."
-    )
-    w_blr_s, L_blr_s = agn["blr"]
-    fig, ax = plt.subplots(1, 1, figsize=(8, 5))
-    ax.plot(w_blr_s, L_blr_s, "C0-", linewidth=1.0)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlim(1e3, 1e6)
-    ax.set_xlabel(r"$\lambda$ [Å]")
-    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
-    ax.set_title("Synthesizer BLR (tengri grid adapter pending)")
+w_blr_s, L_blr_s = agn["blr"]
+# tengri's BLR through the *public* grammar (broad 5000 km/s lines), isolated as
+# the contribution the ``blr_synthesizer`` block adds over the disc continuum.
+# Same SSP wave-grid resolution caveat as §9c.
+_wave_blr, _L_with_blr = _agn_grammar(torus="none", lines="blr_synthesizer")
+_, _L_disc_only2 = _agn_grammar(torus="none", lines="none")
+L_blr_t = _L_with_blr - _L_disc_only2
+fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(12, 4.5))
+U.panel(
+    ax_l,
+    ax_r,
+    label_l="Synthesizer  BLR (full reprocessed)",
+    label_r="tengri  BLR lines (same grid, 5000 km/s)",
+)
+ax_l.plot(w_blr_s, L_blr_s, "C0-", linewidth=1.0)
+ax_r.plot(_wave_blr, L_blr_t, "C1-", linewidth=1.0)
+_blr_pk_s = float(np.nanmax(L_blr_s[(w_blr_s >= 1000) & (w_blr_s <= 10000)]))
+_blr_pk_t = float(np.nanmax(L_blr_t[(_wave_blr >= 1000) & (_wave_blr <= 10000)]))
+ax_l.set_ylim(_blr_pk_s * 1e-3, _blr_pk_s * 3)
+ax_r.set_ylim(_blr_pk_t * 1e-2, _blr_pk_t * 3)
+for ax in (ax_l, ax_r):
+    ax.set_xlim(1000, 10000)
+    ax.set_xscale("linear")
     ax.grid(True, alpha=0.3)
-    fig.tight_layout()
-    save_fig("synthesizer_09d_blr.png")
+fig.tight_layout()
+save_fig("synthesizer_09d_blr.png")
+print("§9d BLR: tengri BLR via the public grammar (broad 5000 km/s lines).")
 
 
 # %% [markdown]
@@ -1016,86 +1024,47 @@ print(
 # %% [markdown]
 # ### §9f Unified spectrum and inclination anisotropy
 #
-# The full unified AGN spectrum, assembled. The **top row** puts Synthesizer's
-# `UnifiedAGN` (left) next to tengri's own unified AGN (right): the same model
-# pieces on both sides — the qsosed accretion disc, a 1000 K blackbody torus
-# (Synthesizer's `Blackbody`; tengri's single-temperature `simple` torus), and the
-# NLR and
-# BLR drawn from the *same* Synthesizer Cloudy grids as §9c/§9d (via the
-# grid-backed `nlr_synthesizer` lines block). Each panel shows the total and its
-# four components on a shared axis — the disc UV bump, the line forest, and the
-# torus IR bump stack into the same broad shape on both sides; the line spikes are
-# narrow-Gaussian on tengri's side and grid-binned on Synthesizer's, as in §9c.
+# The full unified AGN spectrum. The **top row** puts Synthesizer's `UnifiedAGN`
+# (left) next to tengri's unified AGN (right) — and the tengri side is now built
+# in a **single** `SEDModel.build` call: disc + torus + NLR + BLR through the
+# composable grammar via the combined `nlr_blr_synthesizer` lines block, reading
+# the *same* Synthesizer Cloudy grids as §9c/§9d. No hand-assembly of raw adapter
+# calls; the four components shown are decomposed back out of that one model.
+# (`recipes.unified_agn()` is the canned form of this configuration.) The disc UV
+# bump, the line forest, and the torus IR bump stack into the same broad shape on
+# both sides; the line spikes are narrow-Gaussian on tengri's side and grid-binned
+# on Synthesizer's, as in §9c.
 #
-# The **bottom panel** is the decisive geometry: Synthesizer applies a **hard**
-# cut — the disc and broad-line region vanish the moment the sightline grazes the
-# torus edge (inclination + θ_torus > 90°), the Type-1 → Type-2 transition — while
-# tengri uses a **smooth sigmoid** through the *same* critical angle, keeping disc
-# visibility a differentiable function of inclination so it stays a stable fit
-# parameter. The two agree everywhere except the few degrees around the
-# transition. That is the single deliberate difference between the two AGN models.
+# The **bottom panel** is the decisive geometry, and the tengri curve is now read
+# **straight from the composable model** (not drawn as an overlay): Synthesizer
+# applies a **hard** cut — the disc and broad-line region vanish the moment the
+# sightline grazes the torus edge (inclination + θ_torus > 90°), the
+# Type-1 → Type-2 transition — while tengri's runner applies a **smooth sigmoid**
+# through the *same* critical angle, so disc visibility stays a differentiable
+# function of inclination. Crucially, the spatially-extended NLR is **isotropic**
+# (illuminated by the intrinsic bolometric, not the foreshortened disc), so only
+# the disc + BLR fade with inclination — the physically-correct unified-AGN
+# behaviour, now reproduced through the grammar.
 
 # %%
-from tengri.components.agn.nlr_cloudy import compute_blr_sed_synthesizer as _blr_syn
+# tengri builds the *entire* unified AGN in ONE ``SEDModel.build`` call (via the
+# ``_agn_grammar`` helper defined in the §9 setup): disc + torus + NLR + BLR from
+# the same Synthesizer Cloudy grids, through the combined ``nlr_blr_synthesizer``
+# lines block. The runner applies the Type-1/2 visibility mask to the disc + BLR
+# while the spatially-extended NLR stays isotropic — the composable equivalent of
+# Synthesizer's ``UnifiedAGN``, with no hand-assembly of raw adapter calls.
+# (``recipes.unified_agn()`` is the pre-canned version of this configuration.)
 
-
-# Build tengri's own Unified AGN from the same pieces as the panels above:
-# the qsosed disc and Nenkova torus through the composable builder, the NLR via
-# the new grid-backed `nlr_synthesizer` lines block (#588) — i.e. the *same*
-# Cloudy grid as §9c — and the BLR added from the matching grid. Each component
-# is evaluated on the model's own wavelength grid so they sum cleanly.
-def _tengri_agn_component(disc, torus, lines):
-    m = SEDModel.build(
-        ssp_data=ssp,
-        sfh={
-            "type": "delayed",
-            "tau_gyr": Fixed(1.0),
-            "age_gyr": Fixed(5.0),
-            "log_total_mass": Fixed(0.0),
-            "*": FIXED,
-        },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-        agn={
-            "type": "composable",
-            "disc": {"type": disc},
-            "torus": {"type": torus},
-            "lines": {"type": lines},
-            "agn_log_lbol": Fixed(agn_log_lbol),
-            "*": FIXED,
-        },
-        redshift=Fixed(0.0),
-    )
-    s = m.predict_state({})
-    return np.asarray(s.wave), np.asarray(s.derived["sed_agn"])
-
-
-w_t, L_disc_t = _tengri_agn_component("kubota_done", "none", "none")
-# Match Synthesizer's torus model: a single-temperature blackbody at 1000 K.
-# tengri's "simple" torus is a single-T greybody with agn_T_torus = 1000 K by
-# default, so both panels reprocess the absorbed disc luminosity the same way.
-_, L_torus_t = _tengri_agn_component("none", "simple", "none")
-_blr_path = str(Path(_SYN_GRID_DIR) / "test_grid_agn-blr.hdf5")
-L_nlr_t = np.asarray(
-    compute_nlr_sed_synthesizer(
-        jnp.asarray(w_t),
-        l_disc_bol_erg=agn["_bolometric_erg_s"],
-        covering_fraction=CF,
-        grid_path=_NLR_GRID_PATH,
-        neb_logU=-2.0,
-        neb_logZ_gas=float(np.log10(BH_Z)),
-    )
-)
-L_blr_t = np.asarray(
-    _blr_syn(
-        jnp.asarray(w_t),
-        l_disc_bol_erg=agn["_bolometric_erg_s"],
-        covering_fraction=CF,
-        grid_path=_blr_path,
-        neb_logU=-1.0,
-        neb_logZ_gas=float(np.log10(BH_Z)),
-    )
-)
-L_tot_t = L_disc_t + L_torus_t + L_nlr_t + L_blr_t
+# The unified AGN — disc + torus + NLR + BLR — in a single build call.
+w_t, L_tot_t = _agn_grammar(lines="nlr_blr_synthesizer")
+# Decompose it for the component panel, every piece through the same grammar:
+# disc-only and torus-only as standalone builds; the line regions as the
+# difference each makes on top of the disc+torus continuum.
+_, L_disc_t = _agn_grammar(torus="none")
+_, L_torus_t = _agn_grammar(disc="none")
+_, _L_cont = _agn_grammar()  # disc + torus, no lines
+L_nlr_t = _agn_grammar(lines="nlr_synthesizer")[1] - _L_cont
+L_blr_t = _agn_grammar(lines="blr_synthesizer")[1] - _L_cont
 
 fig = plt.figure(figsize=(13, 9))
 gs = fig.add_gridspec(2, 2, height_ratios=[3, 2])
@@ -1103,15 +1072,14 @@ ax_s = fig.add_subplot(gs[0, 0])
 ax_t = fig.add_subplot(gs[0, 1], sharey=ax_s)
 ax_inc = fig.add_subplot(gs[1, :])
 
-# Shared y-range from the smooth disc+torus continuum, with headroom for the
-# narrow line spikes (so the continuum isn't squished into the floor).
-_cont = max(
-    _winmax(*agn["disc"], hi=1e7),
-    _winmax(*agn["torus"], hi=1e7),
-    _winmax(w_t, L_disc_t, hi=1e7),
-    _winmax(w_t, L_torus_t, hi=1e7),
-)
-_ylo, _yhi = _cont * 5e-3, _cont * 50.0
+# Shared y-range spanning the UV disc (faint in L_nu) through the IR torus / line
+# peak (bright in L_nu): a torus-only floor squashes the disc, so anchor the
+# bottom to the disc bump and the top to the total. The disc continuum is
+# genuinely ~50x below the torus in L_nu (it peaks in the UV, the torus in the
+# IR) — this keeps the disc visible rather than on the axis floor.
+_disc_pk = max(_winmax(*agn["disc"], hi=1e4), _winmax(w_t, L_disc_t, hi=1e4))
+_top = max(_winmax(*agn["intrinsic"], hi=1e7), _winmax(w_t, L_tot_t, hi=1e7))
+_ylo, _yhi = _disc_pk * 3e-2, _top * 3.0
 
 # Left: Synthesizer UnifiedAGN total + components.
 w_tot, L_tot = agn["intrinsic"]
@@ -1166,15 +1134,52 @@ ax_inc.plot(
     markersize=3,
     label="Synthesizer (hard mask)",
 )
-# tengri replaces the hard step with a smooth sigmoid centred on the same
-# critical angle, inc_crit = 90° − θ_torus, with a ~2° transition width. The
-# sigmoid keeps the disc visibility — and therefore the inclination itself —
-# a smoothly varying quantity, so it stays a well-behaved fit parameter rather
-# than a flat-then-cliff one. This is the model's one deliberate departure from
-# Synthesizer, and the curve below shows it side by side with the hard cut.
+# tengri's disc visibility, MEASURED from the composable model (not drawn): we
+# build the unified AGN once with the inclination free, then read the optical
+# disc continuum (5000 Å) as the sightline sweeps. The runner applies a smooth
+# sigmoid mask centred at inc_crit = 90° − θ_torus instead of Synthesizer's hard
+# step, so the disc visibility — and the inclination itself — stays a
+# differentiable fit parameter. This is the model's one deliberate departure
+# from Synthesizer; the curve below is the model's own output, not an overlay.
 _inc_crit = 90.0 - THETA_TORUS
-tengri_vis = 1.0 / (1.0 + np.exp((incs - _inc_crit) / 2.0))
-ax_inc.plot(incs, tengri_vis, "C1-", linewidth=2.0, label="tengri (smooth sigmoid)")
+_m_vis = SEDModel.build(
+    ssp_data=ssp,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    agn={
+        "type": "composable",
+        "disc": {"type": "kubota_done"},
+        "torus": {"type": "simple"},
+        "lines": {"type": "none"},
+        "agn_log_lbol": Fixed(agn_log_lbol),
+        "agn_cos_inc": Uniform(0.0, 1.0),
+        "agn_theta_torus": Fixed(THETA_TORUS),
+        "*": FIXED,
+    },
+    redshift=Fixed(0.0),
+)
+_w_vis = np.asarray(_m_vis.predict_state({"agn_cos_inc": 0.5}).wave)
+_i5000 = int(np.argmin(np.abs(_w_vis - 5000.0)))
+tengri_vis = np.array(
+    [
+        float(
+            np.asarray(
+                _m_vis.predict_state({"agn_cos_inc": float(np.cos(np.radians(i)))}).derived[
+                    "sed_agn"
+                ]
+            )[_i5000]
+        )
+        for i in incs
+    ]
+)
+tengri_vis = tengri_vis / max(tengri_vis.max(), 1e-30)
+ax_inc.plot(incs, tengri_vis, "C1-", linewidth=2.0, label="tengri (composable model, measured)")
 ax_inc.axvline(
     90.0 - THETA_TORUS,
     color="grey",
@@ -1203,12 +1208,15 @@ print(
 # difference between the two implementations.
 
 # %%
-from tengri.components.igm.igm import igm_transmission, igm_transmission_madau
+# Inoue14 IGM is public (``tengri.igm_transmission``). The Madau96 variant is not
+# yet re-exported — the one remaining internal import in this notebook, tracked as
+# a public-API gap in issue #687.
+from tengri.components.igm.igm import igm_transmission_madau
 
 Z_IGM = 4.0
 w_obs, T_s_inoue = S.igm_transmission(redshift=Z_IGM, model="inoue14")
 _, T_s_madau = S.igm_transmission(redshift=Z_IGM, model="madau96", wave_obs_aa=w_obs)
-T_t_inoue = np.asarray(igm_transmission(jnp.asarray(w_obs), np.asarray(Z_IGM)))
+T_t_inoue = np.asarray(tengri.igm_transmission(jnp.asarray(w_obs), float(Z_IGM)))
 T_t_madau = np.asarray(igm_transmission_madau(jnp.asarray(w_obs), np.asarray(Z_IGM)))
 
 fig, ax = plt.subplots(1, 1, figsize=(10, 5))
