@@ -17,6 +17,7 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+import itertools
 import warnings
 from pathlib import Path
 
@@ -52,29 +53,36 @@ def nu_Lnu(lnu):
 
 fig, ax = plt.subplots(figsize=(6.6, 7.6))
 
+# Build the SED model ONCE; the diffuse-screen optical depth ``dust_tau_diff``
+# is a parameter, so the E(B-V) sweep only varies that key in the fixed-value
+# dict and re-runs the (already-compiled) forward pass. Rebuilding the full
+# stellar+dust model inside the loop would recompile the SSP pipeline on every
+# iteration and accumulate XLA buffers — the gallery-OOM anti-pattern.
+model = SEDModel.build(
+    ssp_data=ssp,
+    sfh={
+        "type": "delayed",
+        "*": FIXED,
+        "tau_gyr": 5.0,
+        "age_gyr": 3.0,
+        "log_total_mass": 10.0,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+        "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilises the FIR peak)
+        "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
+    redshift=Fixed(0.01),
+)
+base_params = model.spec.get_fixed_values()
+
 norm_ref = None
 for ebv in ebv_grid:
-    tau_diff = R_V * ebv / 1.086
-    model = SEDModel.build(
-        ssp_data=ssp,
-        sfh={
-            "type": "delayed",
-            "*": FIXED,
-            "tau_gyr": 5.0,
-            "age_gyr": 3.0,
-            "log_total_mass": 10.0,
-        },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "*": FIXED,
-            "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilises the FIR peak)
-            "tau_diff": tau_diff,  # diffuse screen scales with E(B-V)
-            "emission": {"type": "dale2014", "*": FIXED},
-        },
-        redshift=Fixed(0.01),
-    )
-    params = model.spec.get_fixed_values()
+    tau_diff = R_V * ebv / 1.086  # diffuse screen scales with E(B-V)
+    params = {**base_params, "dust_tau_diff": tau_diff}
     rest = model.predict_rest_sed(params, wave_aa)
     lnu = np.asarray(rest[1] if np.ndim(rest) == 2 else rest)
     lflam = nu_Lnu(lnu)
@@ -94,7 +102,7 @@ if HARO11.exists():
     hw, hf = hw[good], hf[good]
     edges = np.logspace(np.log10(0.1), np.log10(500.0), 20)
     centers, meds = [], []
-    for lo, hi in zip(edges[:-1], edges[1:]):
+    for lo, hi in itertools.pairwise(edges):
         sel = (hw >= lo) & (hw < hi)
         if sel.sum() >= 2:  # require >=2 measurements to suppress single outliers
             centers.append(np.sqrt(lo * hi))

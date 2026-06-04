@@ -45,27 +45,34 @@ cmap = cm.get_cmap("cividis_r")
 fig, ax = plt.subplots(figsize=(7.4, 6.0))
 axin = ax.inset_axes([0.13, 0.13, 0.40, 0.30])
 
+# Build the model ONCE; the delayed-tau SFH timescale ``sfh_delayed_tau_gyr``
+# is a parameter, so the sweep just overrides that key per iteration and re-runs
+# the (already-compiled) forward pass — both predict_rest_sed and predict_sfh
+# read it from the params dict. Rebuilding inside the loop would recompile the
+# SSP pipeline every iteration and accumulate XLA buffers (gallery-OOM).
+model = SEDModel.build(
+    ssp_data=ssp,
+    sfh={
+        "type": "delayed",
+        "*": FIXED,
+        "tau_gyr": tau_grid_myr[0] / 1e3,  # baseline; overridden per tau below
+        "age_gyr": AGE_GYR,
+        "log_total_mass": 10.5,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "*": FIXED,
+        "tau_bc": 0.03,
+        "tau_diff": 0.01,
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
+    redshift=Fixed(0.01),
+)
+base_params = model.spec.get_fixed_values()
+
 for tau_myr in tau_grid_myr:
-    model = SEDModel.build(
-        ssp_data=ssp,
-        sfh={
-            "type": "delayed",
-            "*": FIXED,
-            "tau_gyr": tau_myr / 1e3,
-            "age_gyr": AGE_GYR,
-            "log_total_mass": 10.5,
-        },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "*": FIXED,
-            "tau_bc": 0.03,
-            "tau_diff": 0.01,
-            "emission": {"type": "dale2014", "*": FIXED},
-        },
-        redshift=Fixed(0.01),
-    )
-    params = model.spec.get_fixed_values()
+    params = {**base_params, "sfh_delayed_tau_gyr": tau_myr / 1e3}
     rest = model.predict_rest_sed(params, wave_aa)  # (wave, L_nu) erg/s/Hz
     lnu = np.asarray(rest[1] if isinstance(rest, tuple) or np.ndim(rest) == 2 else rest)
     lam_Llam_W = lnu * (C_NM_HZ / (np.asarray(wave_aa) * 0.1)) * ERG_TO_W
