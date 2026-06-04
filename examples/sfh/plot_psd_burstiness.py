@@ -95,18 +95,15 @@ ssp = tengri.load_ssp()
 # Panel σ sweep (fixed τ)
 model_sigma = tengri.SEDModel.build(
     ssp,
-    sfh={
-        "type": "field_psd",
-        "*": tengri.FIXED,
-        "mean": "tsnorm",
-        "tsnorm_log_total_mass": 1.0,
-        "tsnorm_peak_lbt_gyr": 3.0,
-        "tsnorm_width_gyr": 2.0,
-        "tsnorm_skew": 0.3,
-        "tsnorm_trunc": 2.0,
-        "psd_sigma": tengri.Uniform(0.1, 3.5),
-        "psd_tau_myr": 100.0,
-    },
+    sfh=[
+        {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+        {
+            "type": "field",
+            "*": tengri.FIXED,
+            "psd_sigma": tengri.Uniform(0.1, 3.5),
+            "psd_tau_myr": 100.0,
+        },
+    ],
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
@@ -125,7 +122,7 @@ for i, sigma in enumerate(sigma_values):
     for k in range(3):
         params = {**baseline_sigma, "sfh_field_psd_sigma": jnp.float64(sigma)}
         key = jax.random.fold_in(key_base_sigma, i * 10 + k)
-        out = model_sigma.predict_rest_sed(params, key=key)
+        out = model_sigma.predict_rest_sed(params)
         wave = np.asarray(out.wavelength)
         nu = C_AA_PER_S / wave
         nu_l_nu = nu * np.asarray(out.sed)
@@ -143,18 +140,15 @@ cbar_sigma.set_label(r"PSD amplitude $\sigma$")
 # Panel τ sweep (fixed σ)
 model_tau = tengri.SEDModel.build(
     ssp,
-    sfh={
-        "type": "field_psd",
-        "*": tengri.FIXED,
-        "mean": "tsnorm",
-        "tsnorm_log_total_mass": 1.0,
-        "tsnorm_peak_lbt_gyr": 3.0,
-        "tsnorm_width_gyr": 2.0,
-        "tsnorm_skew": 0.3,
-        "tsnorm_trunc": 2.0,
-        "psd_sigma": 1.0,
-        "psd_tau_myr": tengri.Uniform(30, 3000),
-    },
+    sfh=[
+        {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+        {
+            "type": "field",
+            "*": tengri.FIXED,
+            "psd_sigma": 1.0,
+            "psd_tau_myr": tengri.Uniform(30, 3000),
+        },
+    ],
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
@@ -168,7 +162,7 @@ for i, tau in enumerate(tau_values):
     for k in range(3):
         params = {**baseline_tau, "sfh_field_psd_tau_myr": jnp.float64(tau)}
         key = jax.random.fold_in(key_base_tau, i * 10 + k)
-        out = model_tau.predict_rest_sed(params, key=key)
+        out = model_tau.predict_rest_sed(params)
         wave = np.asarray(out.wavelength)
         nu = C_AA_PER_S / wave
         nu_l_nu = nu * np.asarray(out.sed)

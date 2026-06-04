@@ -50,7 +50,7 @@ model = tengri.SEDModel.build(
 
 # Fiducial parameters
 params = {
-    "sfh_tsnorm_log_peak_sfr": 0.5,
+    "sfh_tsnorm_log_total_mass": 10.5,
     "sfh_tsnorm_peak_lbt_gyr": 3.5,
     "sfh_tsnorm_width_gyr": 1.5,
     "sfh_tsnorm_skew": 0.0,

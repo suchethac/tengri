@@ -161,8 +161,8 @@ for shape_i, (shape_name, sfh_dict) in enumerate(sfh_shapes):
 
             # Override metallicity (convert from absolute to relative log10(Z/Zsun))
             LOG10_ZSUN = -1.8477  # Asplund 2009
-            baseline["neb_logz_gas"] = z_sun - LOG10_ZSUN
-            baseline["dust_logz_solar"] = z_sun - LOG10_ZSUN
+            baseline["neb_logZ_gas"] = z_sun - LOG10_ZSUN
+            baseline["met_logzsol"] = z_sun - LOG10_ZSUN
 
             # Predict spectrum at R~2000 resolution (~150 km/s at 4000 Å)
             # Use a narrow rest-frame window covering D4000 and Hδ_A

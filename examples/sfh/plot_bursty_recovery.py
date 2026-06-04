@@ -30,18 +30,15 @@ ssp = tengri.load_ssp()
 # Quick minimal observation (just for SFH predictions)
 model = tengri.SEDModel.build(
     ssp,
-    sfh={
-        "type": "field_psd",
-        "*": tengri.FIXED,
-        "mean": "tsnorm",
-        "tsnorm_log_total_mass": 1.2,
-        "tsnorm_peak_lbt_gyr": 3.0,
-        "tsnorm_width_gyr": 3.0,
-        "tsnorm_skew": 0.3,
-        "tsnorm_trunc": 2.0,
-        "psd_sigma": tengri.Uniform(0.1, 4.0),
-        "psd_tau_myr": tengri.Uniform(1.0, 300.0),
-    },
+    sfh=[
+        {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+        {
+            "type": "field",
+            "*": tengri.FIXED,
+            "psd_sigma": tengri.Uniform(0.1, 4.0),
+            "psd_tau_myr": tengri.Uniform(1.0, 300.0),
+        },
+    ],
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.0),
 )

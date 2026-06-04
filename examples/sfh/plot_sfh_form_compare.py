@@ -41,7 +41,7 @@ FORMS = [
     ("const", "constant SFR"),
     ("exp", "exponential rise"),
     ("dexp", "delayed exponential"),
-    ("tau", "declining exponential (τ)"),
+    ("exp", "declining exponential (τ)"),
     ("lnorm", "log-normal"),
     ("snorm", "skew-normal"),
     ("tsnorm", "truncated skew-normal"),

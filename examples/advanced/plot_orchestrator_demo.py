@@ -36,7 +36,7 @@ try:
         sfh_model="tsnorm",
         metallicity_model="ramp",
         nebular_backend="baked_in",
-        agn_model="simple",
+        agn_model="multicolor_agn",
         dust_law_bc="calzetti",
         dust_emission_model="modified_blackbody",
         use_radio=True,

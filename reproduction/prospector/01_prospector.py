@@ -1173,13 +1173,14 @@ save_fig("prospector_08_nebular.png")
 # off) and feed the same bolometric luminosity into tengri so the two
 # torus SEDs are normalised consistently.
 #
-# tengri's `nenkova` block is a compact analytic torus rather than a
-# full interpolation of the Nenkova clumpy-model library. At matched
-# bolometric luminosity the mid-IR peak wavelength and the 10 µm
-# silicate feature line up with FSPS; the peak amplitude agrees to
-# roughly a factor of two, the spread expected between a parametric and
-# a tabulated torus. For science-grade torus modelling the library
-# recommends its SKIRTOR block (see the CIGALE reproduction notebook).
+# tengri's `nenkova` block interpolates the *same* FSPS CLUMPY template
+# library (`Nenkova08_y010_torusg_n10_q2.0`) that Prospector uses, with a
+# differentiable triweight kernel in the equatorial optical depth `agn_tau`
+# — so the optical depth is a fitted parameter here exactly as in Prospector,
+# not a frozen template. At matched bolometric luminosity the two torus SEDs
+# trace the same templates: the mid-IR peak wavelength and the 10 µm silicate
+# feature coincide, and the remaining amplitude difference comes only from how
+# each code normalises the torus to the AGN bolometric luminosity.
 
 # %%
 FAGN = 0.5
@@ -1216,7 +1217,7 @@ m_agn = SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "none"},
-        "torus": {"type": "nenkova", "agn_tau_torus": Fixed(AGN_TAU), "*": FIXED},
+        "torus": {"type": "nenkova", "agn_tau": Fixed(AGN_TAU), "*": FIXED},
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "*": FIXED,
     },
