@@ -50,7 +50,7 @@ def test_catalog_range_distinct_compile_signature_from_no_range():
     """
     from pathlib import Path
 
-    from tengri import Fixed, Observation, Photometry, SEDModel, load_ssp_data
+    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, load_ssp_data
 
     ssp_candidates = [
         "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
@@ -69,7 +69,7 @@ def test_catalog_range_distinct_compile_signature_from_no_range():
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": Fixed},
+                sfh={"type": "dpl", "*": FIXED},
                 dust={"type": "calzetti", "tau_v": Fixed(0.3), "delta": Fixed(0.0)},
                 redshift=Fixed(0.1),
                 approx=approx,
@@ -90,7 +90,7 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
     """
     from pathlib import Path
 
-    from tengri import Fixed, Observation, Photometry, SEDModel, load_ssp_data
+    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, load_ssp_data
 
     ssp_candidates = [
         "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
@@ -110,7 +110,7 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": Fixed},
+                sfh={"type": "dpl", "*": FIXED},
                 dust={"type": "calzetti", "tau_v": Fixed(0.3), "delta": Fixed(0.0)},
                 redshift=Fixed(z),
                 approx=cz,
