@@ -14,12 +14,12 @@ Key parity result (#614 / #592 B1): the AGNfitter-averaged torus peaks at ~25 µ
 intentionally different reductions of the same model, and this committed block
 gives the AGNfitter-faithful one.
 
-Tolerance note: the runtime uses the project-standard C²-smooth triweight kernel
-(``interp_nd_triweight``, shared with the silva04 / cat3d / slone_netzer ports) for
-gradient-safe HMC. At a grid node that kernel mixes in neighbours, giving ~10%
-peak-normalised shape residual — inherent to the kernel, not a port error — so the
-shape tolerance is 12%; the peak wavelength (the headline parity quantity) matches
-to ~1%.
+Interpolation note: the runtime uses node-exact monotone-cubic (PCHIP)
+interpolation (``interp_nd_pchip``, shared with the cat3d / slone_netzer ports),
+so at a grid node it reproduces the stored AGNfitter template to floating-point
+precision while keeping C¹-continuous gradients for HMC/geoVI. This replaced the
+C²-smooth triweight *smoother*, which mixed in neighbours (~10% peak-normalised
+shape residual).
 
 References
 ----------
@@ -98,7 +98,7 @@ def test_peak_is_agnfitter_averaged_not_full_grid(grid, component):
 
 @pytest.mark.parametrize("i_oa,j_incl,k_tv", [(0, 3, 2), (3, 3, 2), (5, 6, 0), (7, 9, 4)])
 def test_node_shape_matches_grid(grid, component, i_oa, j_incl, k_tv):
-    """Runtime component reproduces the stored node template shape (triweight ~12%)."""
+    """Node-exact PCHIP reproduces the stored AGNfitter template to the float level."""
     wave = grid["wavelength"]
     ref = grid["template"][i_oa, j_incl, k_tv]
     out = np.asarray(
@@ -115,13 +115,13 @@ def test_node_shape_matches_grid(grid, component, i_oa, j_incl, k_tv):
     ref_n = _peak_norm(ref, mask)
     out_n = _peak_norm(out, mask)
 
-    # Peak wavelength (the headline parity quantity) must track to ~1 grid step.
-    assert abs(np.nanargmax(ref) - np.nanargmax(out)) <= 2
+    # Node-exact: peak coincides and shape matches to ~1e-3.
+    assert int(np.nanargmax(ref)) == int(np.nanargmax(out))
 
     worst = float(np.nanmax(np.abs(out_n[mask] - ref_n[mask]) / ref_n[mask]))
-    assert worst < 0.12, (
+    assert worst < 1e-3, (
         f"Node (oa={grid['oa'][i_oa]}, incl={grid['incl'][j_incl]}, tv={grid['tv'][k_tv]}): "
-        f"shape residual {worst * 100:.1f}% > 12% (triweight-kernel smoothing budget)"
+        f"shape residual {worst:.2e} > 1e-3 (PCHIP should be node-exact)"
     )
 
 

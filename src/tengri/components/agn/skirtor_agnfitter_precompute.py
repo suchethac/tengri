@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -33,9 +34,11 @@ from tengri.forward.precompute.templates import (
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
-    interp_nd_triweight,
+    PreintegratedGrid,
+    interp_nd_pchip,
+    slice_fixed_axes,
 )
-from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
 # oa (half-opening angle), incl (inclination), tv (optical depth).
@@ -162,7 +165,7 @@ def precompute_skirtor_agnfitter_photometry(
 def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
     """Build a JIT-compiled SKIRTOR_mean_3p torus photometry function.
 
-    Uses triweight interpolation for C²-continuous gradients.
+    Uses node-exact monotone-cubic (PCHIP) interpolation for C¹ gradients.
 
     Parameters
     ----------
@@ -185,7 +188,6 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
 
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     grid_jax = jnp.asarray(grid_phot)
 
@@ -221,22 +223,126 @@ def build_skirtor_agnfitter_photometry_lookup(precomp: dict):
         -----
         **JIT-compatible**: yes.
 
-        **Gradient-safe**: yes — triweight interpolation is C² differentiable.
+        **Gradient-safe**: yes — node-exact PCHIP is C¹ differentiable.
 
         See Also
         --------
         precompute_skirtor_agnfitter_photometry
         """
-        phot = interp_nd_triweight(
+        phot = interp_nd_pchip(
             grid_jax,
             axes,
-            edges,
             (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
         )
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
         return l_scale * phot
 
     return skirtor_agnfitter_photometry
+
+
+# ── Protocol-shaped entry points ──────────────────────────────────
+
+
+def precompute(
+    filter_waves: list,
+    filter_trans: list,
+    redshift: float,
+    parameters: Any,
+    *,
+    grid_path: str,
+) -> dict:
+    """Build the preintegrated SKIRTOR_mean_3p grid, auto-collapsing Fixed axes.
+
+    Parameters
+    ----------
+    filter_waves : list[ndarray]
+        Wavelength grid per filter [Angstrom], observed frame.
+    filter_trans : list[ndarray]
+        Transmission per filter (0–1).
+    redshift : float
+        Source redshift. [dimensionless]
+    parameters : Parameters | None
+        Parameters spec, used to detect Fixed-axis parameters.
+    grid_path : str, keyword-only
+        Path to ``skirtor_mean3p_torus_grid.h5``.
+
+    Returns
+    -------
+    dict
+        Same shape as :func:`precompute_skirtor_agnfitter_photometry`, with grid
+        axes collapsed for any Fixed :data:`AXIS_PARAMS` entry.
+
+    Notes
+    -----
+    **JIT-compatible**: no — this is a build-time function using NumPy.
+    """
+    result = precompute_skirtor_agnfitter_photometry(
+        grid_path, filter_waves, filter_trans, redshift=redshift
+    )
+    if parameters is None:
+        return result
+
+    preint: PreintegratedGrid = result["_preint"]
+    fixed_values = parameters.get_fixed_values()
+    fixed: dict[int, float] = {}
+    for i, pname in enumerate(AXIS_PARAMS):
+        if pname in fixed_values:
+            fixed[i] = float(fixed_values[pname])
+    if not fixed:
+        return result
+
+    collapsed = slice_fixed_axes(preint, fixed)
+    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
+    return {
+        "grid_phot": collapsed.phot,
+        "axes": remaining_axes,
+        "_preint": collapsed,
+        "_collapsed_axes": fixed,
+    }
+
+
+def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = None):
+    """Build the runtime SKIRTOR_mean_3p photometry lookup from a preintegrated dict.
+
+    When no axes are collapsed, delegates to
+    :func:`build_skirtor_agnfitter_photometry_lookup`. When some axes are
+    collapsed (fixed at preintegration time), the returned function expects only
+    the remaining free parameter values.
+
+    Parameters
+    ----------
+    preint : dict
+        Preintegrated data dict with keys ``"grid_phot"``, ``"axes"``, and
+        optionally ``"_collapsed_axes"``.
+    free_param_names : tuple of str or None, optional
+        Names of the remaining free axes in the collapsed case (unused in the
+        default no-collapse case).
+
+    Returns
+    -------
+    callable
+        JIT-compiled photometry lookup returning torus L_ν [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the returned function is fully JAX-native.
+
+    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
+    """
+    if not preint.get("_collapsed_axes"):
+        return build_skirtor_agnfitter_photometry_lookup(preint)
+
+    grid_phot = preint["grid_phot"]
+    axes = preint["axes"]
+
+    @jax.jit
+    def skirtor_agnfitter_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
+        """SKIRTOR_mean_3p torus photometry with collapsed (fixed) axes via PCHIP."""
+        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+        phot = interp_nd_pchip(grid_phot, axes, tuple(free_axis_values))
+        return l_scale * phot
+
+    return skirtor_agnfitter_phot_collapsed
 
 
 def get_skirtor_agnfitter_precompute_config(

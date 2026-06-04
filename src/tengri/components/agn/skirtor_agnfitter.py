@@ -59,8 +59,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.utils.grid_interp import interp_nd_triweight
-from tengri.utils.interpolation import edges_for_grid
+from tengri.utils.grid_interp import interp_nd_pchip
 
 __all__ = [
     "create_skirtor_agnfitter_from_grid",
@@ -87,7 +86,7 @@ def _load_skirtor_agnfitter_arrays(grid_path: str) -> dict:
     **JIT-compatible**: no — performs HDF5 I/O at grid-load time.
 
     Templates may be stored as float32 or float64; they are cast to
-    float64 for triweight interpolation.
+    float64 for monotone-cubic interpolation.
     """
     import h5py
 
@@ -128,9 +127,9 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` and triweight interpolation.
+    **JIT-compatible**: yes — pure ``jnp`` and monotone-cubic interpolation.
 
-    **Gradient-safe**: yes — triweight kernel is C² across the three
+    **Gradient-safe**: yes — node-exact PCHIP gives C¹-continuous gradients across the three
     parameter axes.
     """
     raw = _load_skirtor_agnfitter_arrays(grid_path)
@@ -142,7 +141,6 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
         jnp.asarray(raw["incl_axis"]),
         jnp.asarray(raw["tv_axis"]),
     )
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     def skirtor_agnfitter_grid(
         wavelength: jnp.ndarray,
@@ -198,10 +196,9 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
         AGNfitter-faithful torus modeling, use this component; for X-CIGALE
         faithful modeling, use the default SKIRTOR.
         """
-        template = interp_nd_triweight(
+        template = interp_nd_pchip(
             grid_jax,
             axes,
-            edges,
             (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
         )
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
