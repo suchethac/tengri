@@ -269,8 +269,11 @@ try:
                             f_burst=0.0, sfr_A=1.0, normalise=True)),
         ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
         ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        # #556: disk_type=0 = analytic Schartmann disc (matches tengri
+        # disc.schartmann2005); disk_type=1 RT-template disc caused the
+        # §9 MIR/FIR overshoot.
         ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
-                             disk_type=1, delta=0, fracAGN=0.3,
+                             disk_type=0, delta=0, fracAGN=0.3,
                              lambda_fracAGN="0/0", law=0, EBV=0.03,
                              temperature=100.0, emissivity=1.6)),
     ])
@@ -366,8 +369,11 @@ try:
         ("sfhdelayed", dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20,
                             f_burst=0.0, sfr_A=1.0, normalise=True)),
         ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        # #556: disk_type=0 = analytic Schartmann disc (matches tengri
+        # disc.schartmann2005); disk_type=1 RT-template disc caused the
+        # §9 MIR/FIR overshoot.
         ("skirtor2016", dict(t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
-                             disk_type=1, delta=0, fracAGN=0.3,
+                             disk_type=0, delta=0, fracAGN=0.3,
                              lambda_fracAGN="0/0", law=0, EBV=0.03,
                              temperature=100.0, emissivity=1.6)),
         ("yang20", dict(gam=1.8, E_cut=300, alpha_ox=-1.5,

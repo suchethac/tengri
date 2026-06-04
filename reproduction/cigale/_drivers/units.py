@@ -112,7 +112,16 @@ def verify_unit_conversion(rtol: float = 1e-3) -> dict:
 
 
 def regrid(wave_src: np.ndarray, y_src: np.ndarray, wave_dst: np.ndarray) -> np.ndarray:
-    """Log-log interpolate ``y_src(wave_src)`` onto ``wave_dst``; zero outside.
+    """Log-log PCHIP-interpolate ``y_src(wave_src)`` onto ``wave_dst``; zero outside.
+
+    Uses a shape-preserving monotone cubic (PCHIP) interpolant in
+    ``log10(wave)`` vs ``log10(y)`` space. PCHIP is preferred over linear
+    ``np.interp`` for the SED comparison because linear interpolation chords
+    *under* convex features (the torus IR bump, the stellar Wien tail), biasing
+    the regridded reference below the true curve in a wavelength-dependent way
+    that mimics a physics residual. PCHIP tracks curvature without the
+    overshoot/ringing of a natural cubic spline, so it neither under-shoots
+    peaks nor invents oscillations.
 
     Parameters
     ----------
@@ -129,7 +138,14 @@ def regrid(wave_src: np.ndarray, y_src: np.ndarray, wave_dst: np.ndarray) -> np.
     y_dst : ndarray, shape (n_dst,)
         Interpolated values on the destination grid; zero outside the
         source wavelength range.
+
+    Notes
+    -----
+    PCHIP requires a strictly increasing abscissa, so the positive-value mask
+    is followed by a sort + duplicate-``wave`` collapse before fitting.
     """
+    from scipy.interpolate import PchipInterpolator
+
     wave_src = np.asarray(wave_src)
     y_src = np.asarray(y_src)
     wave_dst = np.asarray(wave_dst)
@@ -138,16 +154,20 @@ def regrid(wave_src: np.ndarray, y_src: np.ndarray, wave_dst: np.ndarray) -> np.
     if not np.any(mask):
         return np.zeros_like(wave_dst)
 
-    log_y = np.interp(
-        np.log10(wave_dst),
-        np.log10(wave_src[mask]),
-        np.log10(y_src[mask]),
-        left=np.nan,
-        right=np.nan,
-    )
-    y_dst = 10.0**log_y
-    in_range = (wave_dst >= wave_src[mask].min()) & (wave_dst <= wave_src[mask].max())
-    y_dst[~in_range] = 0.0
+    log_x = np.log10(wave_src[mask])
+    log_y = np.log10(y_src[mask])
+    # PCHIP needs strictly increasing, unique abscissa.
+    order = np.argsort(log_x)
+    log_x, log_y = log_x[order], log_y[order]
+    uniq = np.concatenate(([True], np.diff(log_x) > 0))
+    log_x, log_y = log_x[uniq], log_y[uniq]
+    if log_x.size < 2:
+        return np.zeros_like(wave_dst)
+
+    interp = PchipInterpolator(log_x, log_y, extrapolate=False)
+    y_dst = 10.0 ** interp(np.log10(wave_dst))
+    # ``extrapolate=False`` yields NaN outside the source span → zero them.
+    y_dst = np.where(np.isfinite(y_dst), y_dst, 0.0)
     return y_dst
 
 

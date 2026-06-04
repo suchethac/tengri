@@ -1249,17 +1249,25 @@ save_fig("cigale_08_nebular_cue_vs_cloudy.png")
 # (dashed), the full SED with AGN (solid), and the AGN-only component
 # (dotted).
 #
-# **`disc.schartmann2005` matches CIGALE's `skirtor2016 disk_type=1`**
-# default: the Schartmann (2005) piecewise power law with the 1200 Å
-# bend that CIGALE's module substitutes for the FITS-bundled disc when
-# `disk_type=1` is selected. tengri also ships `disc.skirtor` (the
-# SKIRTOR analytic disc, CIGALE `disk_type=0`) and `disc.adaf_lopez2024`
-# (CIGALE `disk_type=2`). tengri's library defaults match CIGALE's
-# `skirtor2016` defaults — `agn_torus_frac=0.5` (covering factor),
-# `agn_polar_ebv=0.03` (Casey-2012 polar dust on, T=100 K, β=1.6) — so
-# the disc + torus + polar-dust greybody is engaged automatically with
-# no per-fit overrides. Net agreement vs CIGALE: UV–NIR within ~20 %,
-# FIR tail within ~30 %.
+# **`disc.schartmann2005` matches CIGALE's `skirtor2016 disk_type=0`** —
+# the analytic Schartmann (2005) piecewise power law (`skirtor_disk()` in
+# CIGALE's `skirtor2016.py`), so this panel pins the CIGALE chain to
+# `disk_type=0`. CIGALE's `disk_type=1` is the *radiative-transfer*
+# SKIRTOR template disc (a different model): pairing tengri's analytic
+# Schartmann disc against it was the cause of the §9 MIR/FIR 12–15 %
+# overshoot (#556) — a wavelength-dependent shape mismatch, not a tengri
+# error. With the matched analytic disc the §9 band ratios flatten to a
+# near-uniform ~5 % (MIR 1.05, FIR 1.05; `consistency_audit.py`): the old
+# 30 µm-peak-high / 100 µm-tail-low asymmetry disappears, leaving only a
+# flat normalisation offset (the `agn_log_lbol` tuning). tengri also ships
+# `disc.skirtor` (a second CIGALE-equivalent analytic disc) and
+# `disc.adaf_lopez2024` (CIGALE `disk_type=2`). tengri's library defaults
+# match CIGALE's `skirtor2016` defaults — `agn_torus_frac=0.5` (covering
+# factor), `agn_polar_ebv=0.03` (Casey-2012 polar dust on, T=100 K,
+# β=1.6) — so the disc + torus + polar-dust greybody is engaged
+# automatically with no per-fit overrides. Net agreement vs CIGALE: ~5 %
+# across UV–FIR (median full-SED ratio 1.05), set by the residual
+# normalisation offset rather than any wavelength-dependent shape error.
 #
 # **Alternative.** For users who want a differentiable disc (M_BH, ṁ,
 # spin), the composable AGN still accepts `disc={"type": "multicolor",
@@ -1279,13 +1287,13 @@ save_fig("cigale_08_nebular_cue_vs_cloudy.png")
 # composable; set `Fixed(0.0)` to disable) — lifts the FIR tail
 # (~100 µm) by a factor of a few.
 #
-# **Remaining torus-peak residual.** tengri's `torus.skirtor` block
-# interpolates the SKIRTOR `total = disk + dust` template grid rather
-# than the `dust` grid alone, so the integrated IR flux carries a
-# wavelength-dependent disc-tail bias. At the §9 fiducial this leaves
-# the 30 µm peak ~30 % high and the 100 µm tail ~30 % low — symmetric
-# residuals that further refinement (loading the dust grid directly,
-# tracked separately) should close. The previous over-correction at
+# **Remaining residual.** With the matched `disk_type=0` disc the §9
+# offset is a near-uniform ~5 % across the IR (MIR 1.05, FIR 1.05;
+# `consistency_audit.py`, log-log PCHIP regrid). The old
+# wavelength-dependent 30 µm-peak-high / 100 µm-tail-low asymmetry — which
+# #556 traced to the `disk_type=1` radiative-transfer template disc, not
+# the torus — is resolved; the flat residual is the `agn_log_lbol`
+# normalisation, not a torus-shape error. The previous over-correction at
 # `agn_torus_frac = 1.0` has been reverted to the default 0.5.
 
 # %%
@@ -1349,7 +1357,12 @@ sed_skirtor = C.run_chain(
                 R=20,
                 Mcl=0.97,
                 i=30,
-                disk_type=1,
+                # #556: disk_type=0 = analytic Schartmann disc (what tengri's
+                # `disc.schartmann2005` reproduces). disk_type=1 is the
+                # radiative-transfer SKIRTOR template disc — a different model;
+                # pairing it against the analytic disc caused the §9 MIR/FIR
+                # overshoot.
+                disk_type=0,
                 delta=0,
                 fracAGN=0.3,
                 lambda_fracAGN="0/0",
@@ -1392,7 +1405,7 @@ m_agn = SEDModel.build(
     #
     # All other tengri AGN defaults already match CIGALE skirtor2016
     # defaults (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6,
-    # disk_type=1 → ``disc.schartmann2005``). The polar-dust greybody
+    # disk_type=0 → ``disc.schartmann2005``; see #556). The polar-dust greybody
     # is integrated into the SKIRTOR thermal-dust normalisation
     # (CIGALE skirtor2016.py:389 adds polar BB before the ``norm =
     # 1/∫dust`` step). The differentiable multicolor disc remains
