@@ -1,16 +1,22 @@
 #!/usr/bin/env python3
-"""Download the pre-converted Fritz et al. (2006) torus grid (no CIGALE needed).
+"""Obtain the Fritz et al. (2006) torus grid for the ``fritz`` AGN torus.
 
 The Fritz 2006 smooth-dust AGN torus library is distributed upstream only as
 ~24,000 pcigale-pickled objects bundled inside the ``pcigale`` package — those
-pickles cannot even be deserialized without ``pcigale`` importable. To let
-end-users use the Fritz torus with zero CIGALE dependency, tengri hosts the
-*converted* grid (``fritz2006_torus_grid.h5``, ~28 MB, triweight-ready) on the
-same public host as the SSP catalogue.
+pickles cannot even be deserialized without ``pcigale`` importable. tengri uses
+a *converted* grid (``fritz2006_torus_grid.h5``, ~28 MB, triweight-ready).
 
-This script fetches that converted grid into ``data/``. It is the user-facing
-counterpart to ``scripts/build_fritz2006_grid.py`` (the developer tool that
-*regenerates* the grid from a local CIGALE install).
+This script obtains that grid into ``data/`` via two routes, in order:
+
+1. **Hosted download** — fetch the pre-converted grid from the public host
+   (the SSP catalogue's host), needing no CIGALE install.
+2. **CIGALE fallback** — if the hosted file is unavailable, build the grid
+   locally from a ``pcigale`` install (the build is bit-identical to the
+   hosted file). This is the interim path until the converted grid is
+   consolidated onto the public host.
+
+It is the user-facing counterpart to ``scripts/build_fritz2006_grid.py`` (the
+developer tool that regenerates the grid from a local CIGALE install).
 
 Usage
 -----
@@ -64,8 +70,27 @@ def main() -> int:
     try:
         path = download_template(_GRID_FILENAME, dest=args.dest, force=args.force)
     except RuntimeError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+        # The converted grid is not (yet) on the public host. Fall back to
+        # building it locally from CIGALE — same bytes, just slower. Requires
+        # pcigale installed (tengri's main venv has it).
+        print(
+            f"Hosted download unavailable ({e}).\n"
+            "Falling back to building the grid locally from CIGALE (pcigale)...",
+            file=sys.stderr,
+        )
+        import os
+
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        try:
+            from build_fritz2006_grid import build_fritz_grid
+        except ImportError as e2:
+            print(f"Error: cannot import the CIGALE build fallback: {e2}", file=sys.stderr)
+            return 1
+        try:
+            path = build_fritz_grid(args.dest, force=args.force)
+        except RuntimeError as e2:
+            print(f"Error: {e2}", file=sys.stderr)
+            return 1
 
     print(f"Fritz2006 torus grid ready at: {path}")
     print("Use via SEDModel.build(agn={'torus': {'type': 'fritz'}}).")
