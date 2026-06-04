@@ -716,16 +716,15 @@ class Parameters:
         if self.dust_approx not in ("fast", "exact"):
             raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
 
-        # For single-component, accept `dust_law` as cleaner alias for `dust_law_bc`
+        # For single-component, accept `dust_law` as cleaner alias for `dust_law_bc`.
+        # Pop both laws WITHOUT defaults first so inheritance can tell which the
+        # user actually set.
         dust_law_alias = kwargs.pop("dust_law", None)
-        if dust_law_alias is not None:
-            self.dust_law_bc = kwargs.pop("dust_law_bc", dust_law_alias)
-        else:
-            self.dust_law_bc = kwargs.pop("dust_law_bc", "power_law")
+        law_bc_explicit = kwargs.pop("dust_law_bc", dust_law_alias)
+        law_diff_explicit = kwargs.pop("dust_law_diff", None)
 
         if self.dust_model == "single_component":
-            dust_law_diff_explicit = kwargs.pop("dust_law_diff", None)
-            if dust_law_diff_explicit is not None:
+            if law_diff_explicit is not None:
                 import warnings
 
                 warnings.warn(
@@ -734,9 +733,31 @@ class Parameters:
                     UserWarning,
                     stacklevel=2,
                 )
+            self.dust_law_bc = law_bc_explicit or "power_law"
             self.dust_law_diff = self.dust_law_bc
         else:
-            self.dust_law_diff = kwargs.pop("dust_law_diff", self.dust_law_bc)
+            # Symmetric inheritance: setting either law alone applies it to BOTH
+            # components (a single shared attenuation curve); setting neither
+            # defaults both to "power_law". This makes the birth cloud follow
+            # the diffuse ISM law when only ``dust_law_diff`` is given, instead
+            # of silently mixing power_law (BC) with the user's diffuse curve.
+            if law_bc_explicit is None and law_diff_explicit is None:
+                self.dust_law_bc = "power_law"
+                self.dust_law_diff = "power_law"
+            elif law_bc_explicit is None:
+                self.dust_law_bc = law_diff_explicit
+                self.dust_law_diff = law_diff_explicit
+            elif law_diff_explicit is None:
+                self.dust_law_bc = law_bc_explicit
+                self.dust_law_diff = law_bc_explicit
+            else:
+                self.dust_law_bc = law_bc_explicit
+                self.dust_law_diff = law_diff_explicit
+
+        # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...}.
+        # Empty -> both components share the global dust_slope / dust_bump_strength
+        # / dust_delta / dust_Rv. Set by the builder from slope_bc / delta_diff /…
+        self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
 
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
