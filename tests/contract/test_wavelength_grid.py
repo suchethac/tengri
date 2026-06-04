@@ -37,6 +37,19 @@ class TestMakePanchromaticGrid:
         assert float(grid[0]) >= XRAY_WAVE_MIN
         assert len(grid) > len(ssp_wave)
 
+    def test_xray_extension_reaches_corona_cutoff(self, ssp_wave):
+        """Hard X-ray edge must sample the ~300 keV corona cutoff.
+
+        The Yang+2020 / X-CIGALE corona has an exponential cutoff at
+        E_cut = 300 keV; the grid hard edge must reach that energy so the
+        rollover is sampled rather than clipped at the old ~120 keV edge
+        (where exp(-120/300) = 0.67, i.e. the cutoff has barely begun).
+        """
+        grid = make_panchromatic_grid(ssp_wave, extend_xray=True, extend_radio=False)
+        hc_kev_aa = 12.398  # h*c in keV.Angstrom
+        e_max_kev = hc_kev_aa / float(grid[0])
+        assert e_max_kev >= 290.0, f"hard X-ray edge only reaches {e_max_kev:.0f} keV (<290)"
+
     def test_radio_extension(self, ssp_wave):
         """Radio extension appends points above SSP maximum."""
         grid = make_panchromatic_grid(ssp_wave, extend_xray=False, extend_radio=True)
