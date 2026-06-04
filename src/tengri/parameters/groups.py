@@ -191,6 +191,21 @@ _ensure_registry_loaded()
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
+#: Optional Cue nebular knobs beyond logU/logZ_gas — gas density / abundance
+#: ratios (``gas_logn``, ``gas_logno``, ``gas_logco``) and the broken-power-law
+#: ionizing-spectrum shape (``ionspec_index1..4``, ``ionspec_logLratio1..3``).
+#: They carry ``None`` priors in the registry (registered only when the user
+#: supplies them), so they are absent from a structural ``Parameters`` and the
+#: partition. The nested-dict builder recognises them as ``neb`` keys (when
+#: ``type='cue'``) and forwards user-provided values to the flat constructor,
+#: which registers them on demand (#653).
+_OPTIONAL_NEB_PARAM_NAMES = frozenset(
+    {
+        *_resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS").keys(),
+        *_resolve_lazy_bucket("_CUE_IONSPEC_PARAMS").keys(),
+    }
+)
+
 
 def _valid_sfh_types() -> frozenset[str]:
     """Return the set of accepted ``sfh.type`` values, derived from the registry.
@@ -211,7 +226,13 @@ def _valid_sfh_types() -> frozenset[str]:
 _VALID_DUST_TYPES = {
     "two_component",
     "single_component",
+    "wg00",
 }
+
+#: Witt & Gordon (2000) structural selectors (dust_model="wg00", FSPS dust_type=3).
+_WG00_DUST_CURVES = ("mw", "smc")
+_WG00_GEOMETRIES = ("shell", "cloudy", "dusty")
+_WG00_STRUCTURES = ("homogeneous", "clumpy")
 
 #: Dust emission types that register lazily via ``register_*_tabulated``
 #: helpers (template data loaded from HDF5 only on first call). These names
@@ -389,6 +410,13 @@ _AGN_PARTITION = {
     "agn_q_skirtor": "agn.torus",
     "agn_oa_skirtor": "agn.torus",
     "agn_torus_frac": "agn.torus",
+    # Fritz et al. (2006) smooth-dust torus
+    "agn_fritz_r_ratio": "agn.torus",
+    "agn_fritz_tau": "agn.torus",
+    "agn_fritz_beta": "agn.torus",
+    "agn_fritz_gamma": "agn.torus",
+    "agn_fritz_oa": "agn.torus",
+    "agn_fritz_psy": "agn.torus",
     # Lines
     "agn_blr_cf": "agn.lines",
     "agn_nlr_cf": "agn.lines",
@@ -414,6 +442,11 @@ _TOP_LEVEL_SETTINGS = {
     "redshift",
     "apply_igm",
     "n_grid",
+    # Emission-line velocity mode. Activating it (``"fixed"``/``"marginalized"``/
+    # ``"fitted"``) registers the line-velocity params (``eline_sigma_kms``,
+    # ``eline_delta_v_kms``). ``SEDModel.build`` auto-propagates this from a
+    # ``Spectroscopy`` observation so it need not be set twice (#653).
+    "eline_mode",
 }
 
 #: Top-level kwargs that are SEDModel-only settings (silently ignored here).
@@ -574,6 +607,33 @@ def parse_groups(**kwargs) -> Parameters:
         if group_dict or group == "_toplevel":
             resolved_kwargs[param_name] = final_dist
             provenance[param_name] = tag
+
+    # ── Optional Cue knobs (density / abundances / ionizing spectrum) ──
+    # These carry None priors so they never appear on ``structural_params``
+    # or in ``param_partition`` above — the resolution loop skips them.
+    # Forward any the user set in a ``type='cue'`` neb group straight to the
+    # flat constructor, which registers them on demand (#653). Only explicit
+    # priors / values are accepted (no '*' wildcard or bare sentinel, since
+    # these params have no registry default to expand a FREE/FIXED against).
+    neb_group = kwargs.get("neb")
+    if isinstance(neb_group, dict) and neb_group.get("type") == "cue":
+        for pname in _OPTIONAL_NEB_PARAM_NAMES:
+            if pname not in neb_group:
+                continue
+            val = neb_group[pname]
+            if isinstance(val, Distribution):
+                resolved_kwargs[pname] = val
+                provenance[pname] = "user_prior"
+            elif val is FREE or val is FIXED:
+                raise ValueError(
+                    f"neb[{pname!r}] needs an explicit prior or value "
+                    f"(e.g. Uniform(lo, hi) or a number); the '*' wildcard and "
+                    f"bare FREE/FIXED are unsupported for optional Cue knobs "
+                    f"because they carry no registry default."
+                )
+            else:
+                resolved_kwargs[pname] = Fixed(val)
+                provenance[pname] = "user_fixed"
 
     # ── Validate every key the user supplied was recognised ───────────
     # The resolution loop above silently uses the registry default when
@@ -759,6 +819,24 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
 
     result["dust_model"] = dust_type
 
+    # Witt & Gordon (2000) screen (FSPS dust_type=3): capture and validate the
+    # three structural selectors. They are static structural choices (not free
+    # params); the fitted depth is ``tau_v`` (→ dust_tau_v), shared with the
+    # single-component screen.
+    if dust_type == "wg00":
+        _wg00_axes = {
+            "dust_curve": ("dust_wg00_curve", _WG00_DUST_CURVES),
+            "geometry": ("dust_wg00_geometry", _WG00_GEOMETRIES),
+            "structure": ("dust_wg00_structure", _WG00_STRUCTURES),
+        }
+        for key, (result_key, allowed) in _wg00_axes.items():
+            if key in dust_dict:
+                val = dust_dict[key]
+                if val not in allowed:
+                    raise ValueError(f"Invalid WG00 {key} {val!r}; choose one of {allowed}.")
+                result[result_key] = val
+        return
+
     # Extract dust law (can be in dust_dict or dust['law_bc'])
     dust_law_bc = dust_dict.get("law_bc", "power_law")
     dust_law_diff = dust_dict.get("law_diff")
@@ -941,7 +1019,9 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
     "stellar": frozenset({"met_mode", "*"}),
-    "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
+    "dust": frozenset(
+        {"type", "*", "law_bc", "law_diff", "emission", "dust_curve", "geometry", "structure"}
+    ),
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
@@ -1078,6 +1158,12 @@ def _validate_user_keys(
         # declared short/full param names to the accepted set.
         if isinstance(top_val.get("type"), str):
             param_names = param_names | _short_names_for_registered_type(top_val["type"])
+
+        # Optional Cue knobs (#653): a ``type='cue'`` neb group also accepts
+        # the density / abundance / ionizing-spectrum params, which are
+        # registered on demand and so absent from ``param_partition``.
+        if top_key == "neb" and top_val.get("type") == "cue":
+            param_names = param_names | _OPTIONAL_NEB_PARAM_NAMES
 
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 

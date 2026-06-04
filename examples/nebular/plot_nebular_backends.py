@@ -72,8 +72,11 @@ params_baked = dict(model_baked.spec.sample(jax.random.PRNGKey(0)))
 out_cue = model_cue.predict_rest_sed(params_cue)
 out_baked = model_baked.predict_rest_sed(params_baked)
 
+# The two backends use different SSP grids (bare-stellar vs wNE), so each
+# SED carries its own wavelength array — never share a single mask between them.
 wave = np.asarray(out_cue.wavelength)
 sed_cue = np.asarray(out_cue.sed)
+wave_baked = np.asarray(out_baked.wavelength)
 sed_baked = np.asarray(out_baked.sed)
 
 fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.2))
@@ -85,6 +88,7 @@ regions = [
 
 for ax, wmin, wmax, _title, lam_hbeta, lam_main in regions:
     mask = (wave > wmin) & (wave < wmax)
+    mask_baked = (wave_baked > wmin) & (wave_baked < wmax)
 
     # Cue (bare-stellar, neural emulator)
     ax.plot(
@@ -95,14 +99,14 @@ for ax, wmin, wmax, _title, lam_hbeta, lam_main in regions:
         label="Cue (logU-flexible)",
     )
 
-    # BakedIn (wNE SSP, embedded lines)
-    # Peak-normalize BakedIn to Cue for shape comparison
+    # BakedIn (wNE SSP, embedded lines) — on its own grid.
+    # Peak-normalize BakedIn to Cue for shape comparison.
     cue_peak = np.nanmax(sed_cue[mask])
-    baked_peak = np.nanmax(sed_baked[mask])
+    baked_peak = np.nanmax(sed_baked[mask_baked])
     if baked_peak > 0:
-        sed_baked_norm = sed_baked[mask] * (cue_peak / baked_peak)
+        sed_baked_norm = sed_baked[mask_baked] * (cue_peak / baked_peak)
         ax.plot(
-            np.array(wave[mask]),
+            np.array(wave_baked[mask_baked]),
             sed_baked_norm,
             "C3--",
             lw=1.5,

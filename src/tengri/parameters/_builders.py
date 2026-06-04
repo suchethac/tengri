@@ -283,10 +283,11 @@ def _build_param_registry(
         defaults[pname] = default
 
     # Dust attenuation params (PR4: moved to components/dust/_params.py).
-    # The two Charlot-Fall optical depths are skipped under
-    # ``dust_model="single_component"``; ``dust_tau_v`` from
-    # ``_SINGLE_COMPONENT_DUST_PARAMS`` takes their place there.
-    _is_single = dust_model == "single_component"
+    # The two Charlot-Fall optical depths are skipped under the single-screen
+    # models (``dust_model="single_component"`` and WG00 ``dust_model="wg00"``,
+    # FSPS dust_type=3); ``dust_tau_v`` from ``_SINGLE_COMPONENT_DUST_PARAMS``
+    # takes their place there.
+    _is_single = dust_model in ("single_component", "wg00")
     from tengri.components.dust._params import ATTENUATION_PARAMS
 
     for decl in ATTENUATION_PARAMS:

@@ -485,6 +485,106 @@ def make_lines_fixture():
     return len(rows)
 
 
+def balmer_upstream(wave_nm, lum5100A, ABC, linewidth_kms):
+    """Reproduce activatelines.ActivateLines BC shape for a single param set.
+
+    Implements Balmer continuum from Grandi (1982) with Gaussian convolution
+    as per upstream ``activatelines.py`` lines 137-175.
+    """
+    from scipy.special import erf
+
+    # Balmer edge and physical constants
+    BE_wave = 364.6
+    BC_tau = 1.0
+    BC_T = 15000.0
+    h_c_per_k_B = 1.439e7  # nm * K
+
+    # Only evaluate on wavelengths <= Balmer edge
+    wave_edge = wave_nm[wave_nm <= BE_wave]
+
+    # Black body at each wavelength
+    black_body = wave_edge ** (-5) / np.expm1(h_c_per_k_B / (BC_T * wave_edge))
+    black_body0 = BE_wave ** (-5) / np.expm1(h_c_per_k_B / (BC_T * BE_wave))
+
+    # Optical depth truncation
+    x = wave_edge / BE_wave
+    truncation = -np.expm1(-BC_tau * x**3)
+    truncation0 = -np.expm1(-BC_tau)
+
+    # Gaussian convolution (upstream eqs. lines 159-170)
+    alpha = 1.8
+    beta = -0.8
+    sigma = (linewidth_kms * 1000.0) / cst.c  # km/s / (m/s) = dimensionless
+    z = (x - 1.0) * 2.0 ** (-0.5) / sigma  # Correct upstream formula
+
+    term_b = 0.5 * (1.0 - erf(z))
+    term_a1 = 0.5 * x
+    term_a2 = -0.5 * x * erf(z)
+    term_a3 = -sigma * (2.0 * np.pi) ** (-0.5) * np.exp(-(z**2))
+
+    convolved = (beta * term_b + alpha * (term_a1 + term_a2 + term_a3)) * (1.0 - np.exp(-1.0))
+
+    # Use convolved above 250 nm, raw truncation below
+    truncation_convolved = np.where(wave_edge > 250.0, convolved, truncation)
+
+    # Normalised BC shape
+    BC_shape = (black_body / black_body0) * (truncation_convolved / truncation0)
+
+    # Scale by luminosity
+    l_agn = lum5100A / 510.0
+    l_bc = l_agn * ABC
+    return l_bc * BC_shape, wave_edge
+
+
+def make_balmer_fixture():
+    """Generate Balmer continuum reference fixture from upstream formula."""
+    # Wavelength grid covering the Balmer edge region
+    wave_nm = np.linspace(200.0, 400.0, 400)  # 200 nm to 400 nm
+
+    cases = [
+        # Weak BC, moderate linewidth
+        dict(lum5100A=1.0e36, ABC=0.1, linewidth_kms=5000.0),
+        # Strong BC, wide lines
+        dict(lum5100A=1.0e37, ABC=0.5, linewidth_kms=10000.0),
+        # Very strong BC, narrow lines
+        dict(lum5100A=1.0e36, ABC=1.0, linewidth_kms=1000.0),
+        # Moderate case
+        dict(lum5100A=5.0e36, ABC=0.3, linewidth_kms=3000.0),
+    ]
+
+    # Collect results for all cases
+    bc_spectra = []
+    params_list = []
+
+    for p in cases:
+        bc_shape, _wave_edge = balmer_upstream(
+            wave_nm, p["lum5100A"], p["ABC"], p["linewidth_kms"]
+        )
+        bc_spectra.append(bc_shape)
+        params_list.append((p["lum5100A"], p["ABC"], p["linewidth_kms"]))
+
+    # Pad spectra to full wave grid (upstream only evaluates up to 364.6 nm)
+    # Fill beyond Balmer edge with zeros
+    bc_spectra_padded = np.zeros((len(cases), len(wave_nm)))
+    for i, spec in enumerate(bc_spectra):
+        bc_spectra_padded[i, : len(spec)] = spec
+
+    np.savez(
+        FIXTURE_DIR / "balmer.npz",
+        wave_nm=wave_nm,
+        balmer_spectra=bc_spectra_padded,
+        params=np.array(
+            params_list,
+            dtype=[
+                ("lum5100A", "f8"),
+                ("ABC", "f8"),
+                ("linewidth_kms", "f8"),
+            ],
+        ),
+    )
+    return len(wave_nm), len(cases)
+
+
 def main():
     n_wave_sbpl, n_cases = make_sbpl_fixture()
     print(f"  sbpl_bbb.npz: {n_cases} cases x {n_wave_sbpl} wavelengths")
@@ -494,6 +594,8 @@ def main():
     print(f"  torus.npz: 4 cases x {n_wave_torus} wavelengths")
     n_lines = make_lines_fixture()
     print(f"  lines.npz: 3 cases x {n_lines} lines")
+    n_wave_balmer, n_cases_balmer = make_balmer_fixture()
+    print(f"  balmer.npz: {n_cases_balmer} cases x {n_wave_balmer} wavelengths")
 
 
 if __name__ == "__main__":

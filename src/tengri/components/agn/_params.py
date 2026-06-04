@@ -135,6 +135,50 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    # Fritz et al. (2006) smooth-dust torus (CIGALE ``fritz2006``). Defaults
+    # match the fritz_torus_block; allowed values are the SimpleDatabase grid
+    # nodes (triweight-interpolated). See scripts/build_fritz2006_grid.py.
+    ParamDeclaration(
+        "agn_fritz_r_ratio",
+        Fixed(60.0),
+        "Fritz2006 torus outer/inner radius ratio (grid: 10, 30, 60, 100, 150)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "agn_fritz_tau",
+        Fixed(1.0),
+        "Fritz2006 equatorial optical depth at 9.7 um (grid: 0.1, 0.3, 0.6, 1, 2, 3, 6, 10)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_fritz_beta",
+        Fixed(-0.5),
+        "Fritz2006 radial dust density power-law index (grid: -1, -0.75, -0.5, -0.25, 0)",
+    ),
+    ParamDeclaration(
+        "agn_fritz_gamma",
+        Fixed(4.0),
+        "Fritz2006 polar dust density gradient (grid: 0, 2, 4, 6)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_fritz_oa",
+        Fixed(60.0),
+        "Fritz2006 torus half-opening angle [degrees], CIGALE database key (grid: 20, 40, 60)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "agn_fritz_psy",
+        Fixed(0.001),
+        "Fritz2006 viewing angle from torus axis [degrees]; 0=edge-on (type 2), "
+        "90=face-on (type 1) (grid: 0.001 ... 89.99)",
+        lambda lo, hi: lo >= 0 and hi <= 90,
+        "must be in [0, 90]",
+    ),
     # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
     ParamDeclaration(
         "agn_a_spin",
@@ -428,6 +472,29 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_a_bc",
+        Fixed(0.0),
+        "GRAHSP Balmer continuum strength relative to the powerlaw at 3000 nm "
+        "(Grandi 1982; paper ABC). 0 disables; only added for agn_type=1.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_tor_temp",
+        Fixed(0.0),
+        "GRAHSP MN12 template-torus temperature blend (paper TORtemp), in "
+        "[-1, +1]; >0 warms towards the 75th-percentile template, <0 cools "
+        "towards the 25th. Used only when the torus model is 'mn12'.",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_tor_cutoff_um",
+        Fixed(1.2),
+        "GRAHSP MN12 template-torus short-wavelength Gaussian cutoff [um] "
+        "(paper TORcutoff; 1.2 Mor&Netzer, 1.7 Lyu&Rieke). Torus model 'mn12'.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
     ),
     # CIGALE skirtor2016 disc-shape modulator (Boquien+2019)
     ParamDeclaration(

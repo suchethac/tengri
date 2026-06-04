@@ -135,6 +135,10 @@ from tengri.components.dust.schreiber2016_ir import (
     Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
 )
 from tengri.components.dust.smc_model import SMC as SMC
+from tengri.components.dust.wg00_model import (
+    WG00AttenuationSEDComponent as WG00AttenuationSEDComponent,
+    WG00AttenuationSEDComponentConfig as WG00AttenuationSEDComponentConfig,
+)
 
 # ──────────────────────────────────────────────────────────────────
 # Curated tab-completion surface for `tengri.dust.<TAB>`.
@@ -173,6 +177,8 @@ _CURATED_DIR = (
     "themis",
     # SEDModelComponent-style attenuation ports
     "Calzetti",
+    "WG00AttenuationSEDComponent",
+    "WG00AttenuationSEDComponentConfig",
     "MilkyWay",
     "Salim18",
     "SMC",

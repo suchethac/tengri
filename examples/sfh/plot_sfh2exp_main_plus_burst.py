@@ -66,12 +66,11 @@ for f, c in zip(f_burst_values, colors):
 
 # Rest-frame UV window where the young burst dominates.
 ax.axvspan(1.2e3, 3e3, color="0.92", zorder=0)
-ax.text(
-    1.9e3, ax.get_ylim()[0], "rest-UV (burst)", fontsize=7.5, color="0.5", ha="center", va="bottom"
-)
+ax.text(1.9e3, 1.4e42, "rest-UV (burst)", fontsize=7.5, color="0.5", ha="center", va="bottom")
 
 ax.set(
     xlim=(1e3, 5e6),
+    ylim=(1e42, 5e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
     title="sfh2exp: a recent burst (fixed total mass) blues the rest-UV",

@@ -66,6 +66,7 @@ for a, c in zip(alpha_values, colors):
 
 ax.set(
     xlim=(3e4, 1e7),
+    ylim=(1e42, 1e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
     title=r"THEMIS: radiation-field slope $\alpha$ ($\alpha=2$ = FSPS anchor)",

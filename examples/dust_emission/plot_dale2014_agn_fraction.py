@@ -75,6 +75,7 @@ ax.text(60e4, 3e44, "60 μm", fontsize=7.5, color="0.6", ha="center", va="bottom
 
 ax.set(
     xlim=(1e4, 1e7),
+    ylim=(1e42, 1e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
     title="Dale 2014: AGN-heated dust adds MIR power (CIGALE additive mixing)",

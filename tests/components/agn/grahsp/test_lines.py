@@ -12,7 +12,7 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 FIXTURE = REPO_ROOT / "tests" / "fixtures" / "grahsp" / "lines.npz"
 TEMPLATE = REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5"
 
