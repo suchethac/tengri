@@ -1692,6 +1692,8 @@ def two_component_dust(
     f_obscuration: float = 0.0,
     t_birth: float = 1e7,
     transition_width: float = 0.3,
+    bc_params: dict | None = None,
+    diff_params: dict | None = None,
     **law_params,
 ) -> jnp.ndarray:
     r"""Two-component dust attenuation following Charlot & Fall (2000) with smooth age transition.
@@ -1723,9 +1725,20 @@ def two_component_dust(
         Birth-cloud dispersal age (sigmoid center). [yr] Default: 1e7 (10 Myr).
     transition_width : float, optional
         Sigmoid transition width in dex. [dimensionless] Default: 0.3 (~5-20 Myr range).
+    bc_params : dict, optional
+        Per-component overrides for the **birth-cloud** law (e.g.
+        ``{"n_slope": -1.0}``). Merged on top of ``**law_params``, so any key
+        absent here falls back to the shared value. Enables FSPS-style
+        independent indices (birth cloud ``dust1_index`` ≠ diffuse
+        ``dust_index``). Default ``None`` → shared parameters.
+    diff_params : dict, optional
+        Per-component overrides for the **diffuse ISM** law. Same merge
+        semantics as ``bc_params``. Default ``None`` → shared parameters.
     **law_params
-        Keyword arguments passed to attenuation curve functions (e.g., ``n_slope``, ``dust_bump_strength``,
-        ``dust_delta``, ``dust_Rv``).
+        Shared keyword arguments passed to both attenuation curve functions
+        (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``,
+        ``dust_Rv``). ``bc_params`` / ``diff_params`` override these
+        per-component.
 
     Returns
     -------
@@ -1785,8 +1798,14 @@ def two_component_dust(
     >>> T.shape
     (64, 300)
     """
-    k_bc = resolve_dust_law(law_bc)(wavelength, **law_params)
-    k_diff = resolve_dust_law(law_diff)(wavelength, **law_params)
+    # Per-component law parameters: shared ``law_params`` with optional
+    # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
+    # keys it names, so callers can steepen the birth cloud (FSPS
+    # ``dust1_index=-1.0``) without touching the diffuse ISM.
+    bc_kw = {**law_params, **(bc_params or {})}
+    diff_kw = {**law_params, **(diff_params or {})}
+    k_bc = resolve_dust_law(law_bc)(wavelength, **bc_kw)
+    k_diff = resolve_dust_law(law_diff)(wavelength, **diff_kw)
 
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
