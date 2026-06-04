@@ -129,7 +129,11 @@ def test_xray_pipeline_preserves_input_state_immutability():
     )
 
     assert jnp.array_equal(initial.sed_intrinsic, snapshot_intrinsic)
-    assert initial.derived == snapshot_derived
+    # ``initial.derived`` is a DerivedState (not a plain dict) since the
+    # state-bundle refactor; compare via dict() so the immutability check
+    # actually exercises content equality rather than DerivedState-vs-dict
+    # type inequality (#673).
+    assert dict(initial.derived) == snapshot_derived
 
 
 def test_three_adapter_chain_runs_end_to_end():
