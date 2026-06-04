@@ -139,6 +139,76 @@ def test_grahsp_composable_blocks_scope_not_superset():
     assert all(p.startswith("agn_grahsp_") or p in AGN_SHARED_PARAMS for p in active)
 
 
+def test_combined_nlr_blr_lines_blocks_registered_and_mapped():
+    """Combined NLR+BLR lines blocks exist; their CONSUMES = union of the parts.
+
+    Without a combined ``lines`` selector a single ``SEDModel.build`` could not
+    express a unified AGN (disc + torus + NLR + BLR) because the composable
+    ``lines`` slot holds a single region — so the Synthesizer ``UnifiedAGN``
+    reproduction had to hand-assemble the line spectrum outside the model.
+    ``nlr_blr`` (analytic) and ``nlr_blr_synthesizer`` (grid-backed) sum both
+    regions in one block; their consumed sets are the union of the matching
+    single-region blocks, and a config using them scopes (no superset fallback).
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCKS
+
+    assert "nlr_blr" in AGN_BLOCKS["lines"]
+    assert "nlr_blr_synthesizer" in AGN_BLOCKS["lines"]
+    assert (
+        AGN_BLOCK_CONSUMES[("lines", "nlr_blr")]
+        == AGN_BLOCK_CONSUMES[("lines", "nlr")] | AGN_BLOCK_CONSUMES[("lines", "blr")]
+    )
+    assert (
+        AGN_BLOCK_CONSUMES[("lines", "nlr_blr_synthesizer")]
+        == AGN_BLOCK_CONSUMES[("lines", "nlr_synthesizer")]
+        | AGN_BLOCK_CONSUMES[("lines", "blr_synthesizer")]
+    )
+    cfg = {
+        "agn_model": "composable",
+        "agn_disc_block": "kubota_done",
+        "agn_torus_block": "simple",
+        "agn_lines_block": "nlr_blr",
+        "agn_feii_block": "none",
+        "agn_attenuation_block": "none",
+    }
+    active = agn_active_param_set(cfg)
+    assert active != ALL_AGN_PARAMS
+    assert {"agn_nlr_cf", "agn_blr_cf"} <= active
+
+
+def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
+    """A unified disc+torus+NLR+BLR builds in one call and the lines add linearly.
+
+    Reproduces the Synthesizer UnifiedAGN decomposition through the grammar
+    (analytic line path, no grids needed): the combined ``nlr_blr`` block equals
+    the separate NLR and BLR contributions summed onto the disc+torus continuum.
+    """
+
+    def sed(lines):
+        m = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            sfh={"type": "delayed", "*": FIXED},
+            dust={"type": "two_component", "*": FIXED},
+            agn={
+                "type": "composable",
+                "disc": {"type": "kubota_done"},
+                "torus": {"type": "simple"},
+                "lines": {"type": lines},
+                "agn_log_lbol": Fixed(12.0),
+                "*": FIXED,
+            },
+            redshift=Fixed(0.05),
+        )
+        return np.asarray(m.predict_state({}).derived["sed_agn"])
+
+    base = sed("none")
+    nlr = sed("nlr") - base
+    blr = sed("blr") - base
+    combined = sed("nlr_blr") - base
+    denom = np.max(np.abs(combined)) + 1e-300
+    assert np.max(np.abs(combined - (nlr + blr))) / denom < 1e-6
+
+
 def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
     """Spec-level: ``agn={'*': FREE}`` frees exactly the active set (no grids)."""
     cfg = {

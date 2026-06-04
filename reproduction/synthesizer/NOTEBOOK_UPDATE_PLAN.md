@@ -31,6 +31,32 @@ SEDModel.build(agn={...})                 ← grammar path (NEW: surface this)
 | Synthesizer NLR/BLR Cloudy line backends pre-warmed at factory time (commit `72df4dd7`) | `nlr_synthesizer`/`blr_synthesizer` now run under `predict_photometry`/`WavePrecomp`, not only eager `predict_state`. A precompute-vs-exact panel is now possible. |
 | AGN params carry free `Uniform`/`LogUniform` priors + block-scoped `'*': FREE` (commit `757fc330`) | `recipes.agn_panchromatic()` and `agn={'*': FREE}` now actually free AGN params (was a silent no-op). The notebook can show a "what's free" provenance table that is no longer empty. |
 
+## §9f can now use the grammar (no more hand-assembly)
+
+The combined `lines` selectors `nlr_blr` (analytic) and `nlr_blr_synthesizer`
+(grid-backed) now express a unified AGN — disc + torus + **both** line regions —
+in one `SEDModel.build`. So §9f's hand-assembly (separately-built disc + torus +
+raw `compute_nlr_sed_synthesizer` + raw `compute_blr_sed_synthesizer`) can be
+replaced by:
+
+```python
+m = SEDModel.build(
+    ssp_data=ssp,
+    agn={'type': 'composable',
+         'disc':  {'type': 'kubota_done'},
+         'torus': {'type': 'simple'},          # 1000 K greybody, matches Synthesizer
+         'lines': {'type': 'nlr_blr_synthesizer'},  # NLR + BLR from the same Cloudy grids
+         'agn_log_lbol': Fixed(agn_log_lbol), '*': FIXED},
+    redshift=Fixed(0.0),
+)
+L_tot_t = np.asarray(m.predict_state({}).derived['sed_agn'])
+```
+
+Note: the composable total will **not** bit-match the old hand-sum — the runner
+energy-couples the disc into the torus (`compose_l_nu`), whereas the hand-sum
+used an independent `torus_frac` split (a ~12% continuum difference). The
+composable behaviour is the more physical one; flag this in the panel caption.
+
 ## Changes (each maps to a numbered cell)
 
 1. **§9c/§9d — surface the builder-grammar path beside the raw call.**

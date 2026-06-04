@@ -144,6 +144,19 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("lines", "blr_synthesizer"): frozenset({"agn_blr_cf"}),
     ("lines", "nlr"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
     ("lines", "nlr_synthesizer"): frozenset({"agn_nlr_cf"}),
+    # Combined narrow + broad line region (unified-AGN line spectrum in one
+    # block) = the union of the matching single-region consumed sets, verified
+    # by perturb-and-diff on a kubota_done+simple+<block> config.
+    ("lines", "nlr_blr"): frozenset(
+        {
+            "agn_nlr_cf",
+            "agn_nlr_line_efficiency",
+            "agn_blr_cf",
+            "agn_blr_line_efficiency",
+            "agn_fe2_strength",
+        }
+    ),
+    ("lines", "nlr_blr_synthesizer"): frozenset({"agn_nlr_cf", "agn_blr_cf"}),
     ("lines", "qsogen"): frozenset(),
     # GRAHSP broad/narrow line forest (Buchner+2024). Empirically (perturb-and-
     # diff on a grahsp_sbpl+grahsp config) the line block moves the SED via its
