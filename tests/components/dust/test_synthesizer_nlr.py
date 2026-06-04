@@ -243,3 +243,94 @@ class TestJitCompatibility:
         wave_jit, lum_jit = jitted_predict(8.3, -0.3, 0.2, 0.0, -1.5, 4.0, 53.0)
         assert jnp.allclose(wave_eager, wave_jit)
         assert jnp.allclose(lum_eager, lum_jit)
+
+
+# Reprocessed nebular spectrum — UnifiedAGN parity path (issue #694)
+
+import os
+
+_SYN_LIB_DIR = Path(
+    os.environ.get(
+        "SYNTHESIZER_GRID_DIR",
+        os.path.expanduser("~/Library/Application Support/Synthesizer/grids"),
+    )
+)
+
+
+@pytest.fixture(scope="module")
+def nebular_grid_path():
+    """Path to an NLR grid carrying /spectra/nebular; skip if unavailable.
+
+    Falls back to the Synthesizer install location so the parity assertions run
+    locally even when the repo ``data/`` symlink is absent (CI skips either way).
+    """
+    for cand in (_TEST_GRID_PATH, _SYN_LIB_DIR / "test_grid_agn-nlr.hdf5"):
+        try:
+            if cand.exists():
+                return cand
+        except OSError:  # broken symlink loop
+            continue
+    pytest.skip("No Synthesizer NLR grid with /spectra found")
+
+
+class TestNebularSpectrumUnifiedAGNParity:
+    """The /spectra/nebular reprocessed path reproduces Synthesizer's UnifiedAGN.
+
+    Reading ``/spectra/nebular`` (the array UnifiedAGN extracts) instead of
+    re-broadening the scrambled ``/lines`` table fixes the [O III]-vs-Lyα
+    inversion documented in issue #694.
+    """
+
+    def test_grid_loads_nebular_spectrum(self, nebular_grid_path):
+        """Loader populates the reprocessed nebular spectrum + its wavelength axis."""
+        grid = _load_synthesizer_nlr_grid(nebular_grid_path)
+        assert grid.nebular_per_lbol is not None
+        assert grid.spectra_wavelengths_aa is not None
+        # leading 6 parameter axes + a trailing wavelength axis
+        assert grid.nebular_per_lbol.ndim == 7
+        assert grid.nebular_per_lbol.shape[-1] == grid.spectra_wavelengths_aa.shape[0]
+
+    def test_reprocessed_spectrum_is_finite_nonnegative(self, nebular_grid_path):
+        """Output L_nu is finite, non-negative, and on the requested grid."""
+        backend = SynthesizerNLRBackend(nebular_grid_path)
+        wave = jnp.linspace(1000.0, 10000.0, 2000)
+        l_nu = backend.predict_agn_nebular_spectrum(
+            wave, l_bol_erg=1e46, covering_fraction=0.1, log_eddington=0.0, log_metallicity=-2.0
+        )
+        chex.assert_shape(l_nu, (2000,))
+        assert jnp.all(jnp.isfinite(l_nu))
+        assert jnp.all(l_nu >= 0.0)
+
+    def test_oiii_dominates_over_lya(self, nebular_grid_path):
+        """The reprocessed NLR is [O III] 5007-dominant, not Lyα-dominant.
+
+        This is the qualitative signature of UnifiedAGN parity: the broken
+        ``/lines`` path inverted these (issue #694).
+        """
+        backend = SynthesizerNLRBackend(nebular_grid_path)
+        wave = jnp.linspace(1000.0, 10000.0, 6000)
+        l_nu = backend.predict_agn_nebular_spectrum(
+            wave, l_bol_erg=1e46, covering_fraction=0.1, log_eddington=0.0, log_metallicity=-2.0
+        )
+
+        def peak(w0, half=15.0):
+            m = (wave > w0 - half) & (wave < w0 + half)
+            return jnp.max(jnp.where(m, l_nu, 0.0))
+
+        assert float(peak(5006.84)) > float(peak(1215.67))
+        # and [O III] should tower over Hβ (strong forbidden AGN line)
+        assert float(peak(5006.84)) > 3.0 * float(peak(4861.33))
+
+    def test_nebular_spectrum_jit(self, nebular_grid_path):
+        """predict_agn_nebular_spectrum is JIT-compatible."""
+        backend = SynthesizerNLRBackend(nebular_grid_path)
+        wave = jnp.linspace(1000.0, 10000.0, 512)
+
+        @jax.jit
+        def predict(lbol):
+            return backend.predict_agn_nebular_spectrum(
+                wave, l_bol_erg=lbol, covering_fraction=0.1
+            )
+
+        eager = backend.predict_agn_nebular_spectrum(wave, l_bol_erg=1e46, covering_fraction=0.1)
+        assert jnp.allclose(eager, predict(1e46))

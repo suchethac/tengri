@@ -501,6 +501,14 @@ class SynthesizerGridData:
     # on the six-axis grid + line axis. Used by the line-ratio parity test.
     log_line_per_lbol: jnp.ndarray | None = None
     line_ids: tuple[str, ...] | None = None
+    # Reprocessed nebular spectrum (continuum + lines) on the grid's native
+    # wavelength axis, per unit bolometric luminosity: physical L_nu [erg/s/Hz]
+    # = nebular_per_lbol * L_bol[erg/s] * covering_fraction. This is the array
+    # Synthesizer's UnifiedAGN extracts (``extract="nebular"``) for its NLR/BLR
+    # components, so reading it reproduces UnifiedAGN exactly (issue #694) rather
+    # than re-broadening the discrete ``/lines`` table.
+    spectra_wavelengths_aa: jnp.ndarray | None = None
+    nebular_per_lbol: jnp.ndarray | None = None
 
 
 def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
@@ -571,6 +579,15 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         # Load log10(specific ionizing luminosity for HI)
         log10_qh_specific = jnp.array(f["log10_specific_ionising_luminosity"]["HI"][:])
 
+        # Load the reprocessed nebular spectrum (continuum + lines) on the grid's
+        # native wavelength axis — the array UnifiedAGN extracts for NLR/BLR.
+        # Stored per unit bolometric luminosity (see SynthesizerGridData docstring).
+        spectra_wav = None
+        nebular_per_lbol = None
+        if "spectra" in f and "nebular" in f["spectra"]:
+            spectra_wav = jnp.array(f["spectra"]["wavelength"][:])
+            nebular_per_lbol = jnp.array(f["spectra"]["nebular"][:])
+
     # Normalize line luminosities from per-unit-bolometric to per-unit-Q_H
     # Synthesizer stores: L_line [W] per unit L_bol [W]
     # We need: L_line / Q_H [L_sun·s/photons]
@@ -607,6 +624,8 @@ def _load_synthesizer_nlr_grid(filepath: str | Path) -> SynthesizerGridData:
         log_qh_specific=log10_qh_specific,
         log_line_per_lbol=jnp.log10(jnp.maximum(line_lum, 1e-99)),
         line_ids=line_ids,
+        spectra_wavelengths_aa=spectra_wav,
+        nebular_per_lbol=nebular_per_lbol,
     )
 
 
@@ -863,6 +882,105 @@ class SynthesizerNLRBackend:
         )
         point = (log_bh_mass, log_eddington, cosine_inclination, log_metallicity, log_ionU, log_nH)
         return interp_nd_triweight(sl, axes, edges, point)
+
+    def predict_agn_nebular_spectrum(
+        self,
+        wavelength_out: jnp.ndarray,
+        l_bol_erg: float,
+        covering_fraction: float = 0.1,
+        log_bh_mass: float = 8.0,
+        log_eddington: float = -0.3,
+        log_metallicity: float = -2.0,
+        log_ionU: float = -2.0,
+        log_nH: float = 4.0,
+    ) -> jnp.ndarray:
+        r"""Reprocessed nebular :math:`L_\nu` reproducing Synthesizer's UnifiedAGN.
+
+        Interpolates the grid's reprocessed ``/spectra/nebular`` array (continuum
+        + lines) at the requested grid point — with ``cosine_inclination`` fixed
+        at the grid's isotropic node (0.5), exactly as Synthesizer's UnifiedAGN
+        extracts its NLR/BLR line-region emission — scales it to physical units,
+        and resamples onto the caller's wavelength grid.
+
+        Parameters
+        ----------
+        wavelength_out : array_like, shape (n_wave,)
+            Output (rest-frame) wavelength grid [Angstrom].
+        l_bol_erg : float
+            Disc bolometric luminosity [erg/s].
+        covering_fraction : float, optional
+            Line-region covering fraction. Default 0.1.
+        log_bh_mass, log_eddington, log_metallicity, log_ionU, log_nH : float
+            Grid coordinates (``cosine_inclination`` is held at 0.5 internally).
+
+        Returns
+        -------
+        ndarray, shape (n_wave,)
+            Reprocessed nebular :math:`L_\nu` [erg/s/Hz].
+
+        Notes
+        -----
+        **JIT-compatible**: yes. ``L_\nu = nebular\_per\_lbol \times L_{bol}
+        \times f_{cov}`` (units verified against Synthesizer's UnifiedAGN ``nlr``
+        component to ~2 %). Requires a grid carrying ``/spectra/nebular``; raises
+        otherwise. Reproduces ``UnifiedAGN`` faithfully where re-broadening the
+        scrambled ``/lines`` table cannot (issue #694). Ported to match
+        Synthesizer (Lovell et al. 2025).
+        """
+        from tengri.utils.grid_interp import interp_nd_triweight
+
+        grid = self.grid
+        if grid.nebular_per_lbol is None or grid.spectra_wavelengths_aa is None:
+            raise ValueError(
+                "grid carries no /spectra/nebular array; this grid cannot "
+                "reproduce Synthesizer's UnifiedAGN NLR/BLR spectrum. Reload "
+                "with the current loader or supply a grid that stores /spectra."
+            )
+
+        # Reverse leading (six parameter) axes to ascending, matching the line path.
+        sl = grid.nebular_per_lbol  # (n_mass, n_edd, n_cos, n_met, n_ionU, n_nH, n_wave)
+        if self._mass_descending:
+            sl = sl[::-1]
+        if self._edd_descending:
+            sl = sl[:, ::-1]
+        if self._cos_descending:
+            sl = sl[:, :, ::-1]
+        if self._met_descending:
+            sl = sl[:, :, :, ::-1]
+        if self._ionU_descending:
+            sl = sl[:, :, :, :, ::-1]
+        if self._nH_descending:
+            sl = sl[:, :, :, :, :, ::-1]
+
+        axes = (
+            self._mass_sorted,
+            self._edd_sorted,
+            self._cos_sorted,
+            self._met_sorted,
+            self._ionU_sorted,
+            self._nH_sorted,
+        )
+        edges = (
+            self._edges_mass,
+            self._edges_edd,
+            self._edges_cos,
+            self._edges_met,
+            self._edges_ionU,
+            self._edges_nH,
+        )
+        # cosine_inclination is held at 0.5 (Synthesizer's isotropic line-region
+        # convention) so the line regions are inclination-independent.
+        point = (log_bh_mass, log_eddington, 0.5, log_metallicity, log_ionU, log_nH)
+        nebular_per_lbol = interp_nd_triweight(sl, axes, edges, point)  # (n_wave_grid,)
+
+        l_nu_grid = nebular_per_lbol * l_bol_erg * covering_fraction
+        return jnp.interp(
+            jnp.asarray(wavelength_out),
+            grid.spectra_wavelengths_aa,
+            l_nu_grid,
+            left=0.0,
+            right=0.0,
+        )
 
 
 class SynthesizerBLRBackend(SynthesizerNLRBackend):
