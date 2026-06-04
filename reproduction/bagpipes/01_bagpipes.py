@@ -658,8 +658,13 @@ ax_r.text(
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
+# Frame y to the visible SED. Without this, matplotlib autoscales over the
+# full SSP grid (down to ~5 Å, L_nu ~ 1e8) and the panel spans ~21 dead
+# decades; the stellar continuum only occupies the top ~6.
+_ypk = float(max(np.max(L_b), np.max(np.asarray(s_stellar.sed_intrinsic))))
 for ax in (ax_l, ax_r):
     ax.set_xlim(1e2, 1e6)
+    ax.set_ylim(_ypk / 1e6, _ypk * 2.0)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("bagpipes_03_stellar_sed.png")
@@ -996,9 +1001,12 @@ ax_r.text(
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
+# Frame to the visible SED (stellar + dust IR); the fixed 1e24-1e32 window
+# left ~3 empty decades below the continuum.
+_ypk = float(max(np.max(L_b_ir), np.max(np.asarray(sed_full_t))))
 for ax in (ax_l, ax_r):
     ax.set_xlim(1e3, 1e7)
-    ax.set_ylim(1e24, 1e32)
+    ax.set_ylim(_ypk / 1e5, _ypk * 2.0)
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("bagpipes_06_dust_ir.png")
@@ -1192,6 +1200,14 @@ ax_l.legend(fontsize=9)
 ax_r.plot(_w_t_uni, _L_t_uni, "lightgrey", linewidth=1.0, label="no broadening")
 ax_r.plot(_w_t_uni, L_t_lsf, "C1-", linewidth=1.8, label="velocity_broaden 150 km/s")
 ax_r.legend(fontsize=9)
+# Shared y-scale framed on the BROADENED lines so the two panels are directly
+# comparable. The grey unbroadened references are delta-function spikes whose
+# height is purely sampling-dependent; letting them drive independent autoscale
+# made BAGPIPES (1.2e32) and tengri (4.4e32) look mismatched even though the
+# broadened Hα profiles are the physical quantity of interest.
+_ymax_vb = 1.15 * float(max(np.max(L_b_lsf), np.max(L_t_lsf)))
+for ax in (ax_l, ax_r):
+    ax.set_ylim(0, _ymax_vb)
 fig.tight_layout()
 save_fig("bagpipes_09_lsf_velbroaden.png")
 
