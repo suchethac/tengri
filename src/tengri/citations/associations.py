@@ -71,6 +71,8 @@ DUST_EMISSION_CITATIONS: dict[str, list[str]] = {
 DUST_MODEL_CITATIONS: dict[str, list[str]] = {
     "two_component": ["charlot_fall2000"],
     "single_screen": [],
+    # Witt & Gordon (2000) radiative-transfer screen (FSPS dust_type=3).
+    "wg00": ["witt_gordon2000"],
 }
 
 # Nebular-emission backends. Keys match tengri.config.settings.NebularConfig.backend.
