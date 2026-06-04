@@ -50,6 +50,8 @@ data/*.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
 !data/nenkova08_torus_grid.h5
+!data/wg00_attenuation_grid.h5
+# wg00_attenuation_grid.h5 (~95 KB): regenerate with python scripts/build_wg00_grid.py --download
 # Regenerate with: python scripts/convert_fsps_cloudy_grid.py && python scripts/convert_dl07_templates.py
 # nthcomp_templates.h5 (~14 MB): regenerate with python scripts/build_nthcomp_templates.py
 

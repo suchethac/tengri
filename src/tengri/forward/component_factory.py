@@ -173,6 +173,11 @@ def build_components(
     # ``DustAttenuationSEDComponent`` instead of the two-component
     # ``DustSEDComponent``. ``dust_law_diff`` is reused as the screen law.
     dust_model: str = "two_component",
+    # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
+    # Static structural selectors threaded into the WG00 screen component.
+    wg00_dust_curve: str = "mw",
+    wg00_geometry: str = "shell",
+    wg00_structure: str = "homogeneous",
     # Multiwavelength
     use_radio: bool = False,
     use_xray: bool = False,
@@ -276,7 +281,22 @@ def build_components(
     # nebular / AGN / radio / xray (their SEDs aren't subject to
     # stellar dust attenuation by design).
     if use_dust:
-        if dust_model == "single_component":
+        if dust_model == "wg00":
+            from tengri.components.dust.wg00_model import (
+                WG00AttenuationSEDComponent,
+                WG00AttenuationSEDComponentConfig,
+            )
+
+            components.append(
+                WG00AttenuationSEDComponent(
+                    config=WG00AttenuationSEDComponentConfig(
+                        dust_curve=wg00_dust_curve,
+                        geometry=wg00_geometry,
+                        structure=wg00_structure,
+                    )
+                )
+            )
+        elif dust_model == "single_component":
             components.append(
                 DustAttenuationSEDComponent(
                     config=DustAttenuationSEDComponentConfig(law=dust_law_diff)

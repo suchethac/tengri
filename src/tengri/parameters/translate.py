@@ -308,8 +308,8 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
 
     _, _, sfh_param_map, _ = resolve_sfh(mean_sfh_type)
     result = dict(sfh_param_map)
-    if dust_model == "single_component":
-        # Skip tau_bc/tau_diff, add tau_v
+    if dust_model in ("single_component", "wg00"):
+        # Single screen (Calzetti-style or WG00): skip tau_bc/tau_diff, add tau_v.
         for k, v in _NON_SFH_PARAM_MAP.items():
             if k not in ("dust_tau_bc", "dust_tau_diff"):
                 result[k] = v
