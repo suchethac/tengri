@@ -111,6 +111,7 @@ import numpy as np
 
 from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
+from tengri.components.nebular._shared import render_nebular_lines
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -1614,6 +1615,7 @@ class CueBackend:
         neb_fesc_lya: float = 0.0,
         neb_fdust: float = 0.0,
         line_sigma_aa: float = 0.0,
+        line_sigma_kms: float = 0.0,
         template_data: Any | None = None,
         **neb_params,
     ) -> jnp.ndarray:
@@ -1711,22 +1713,12 @@ class CueBackend:
         # Interpolate continuum onto SSP grid
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)
 
-        # Add emission lines (vectorised — no Python for-loop in JIT trace)
-        if line_sigma_aa > 0:
-            # Gaussian profiles: broadcast (n_wave, 1) × (n_lines,)
-            sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (line_wav * 1e-8) ** 2
-            dw = ssp_wave[:, None] - line_wav[None, :]
-            profiles = jnp.exp(-0.5 * (dw / line_sigma_aa) ** 2)
-            profiles = profiles / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu[None, :])
-            neb_sed = neb_sed + jnp.sum(line_lum[None, :] * profiles, axis=1)
-        else:
-            # Delta function: vectorised nearest-pixel scatter-add
-            n_wave = ssp_wave.shape[0]
-            indices = jnp.argmin(jnp.abs(ssp_wave[:, None] - line_wav[None, :]), axis=0)
-            indices = jnp.clip(indices, 1, n_wave - 2)
-            dwave = jnp.abs(ssp_wave[indices + 1] - ssp_wave[indices - 1]) / 2.0
-            dnu = _C_CGS / (ssp_wave[indices] * 1e-8) ** 2 * dwave * 1e-8
-            neb_sed = neb_sed.at[indices].add(line_lum / dnu)
+        # Add emission lines via the shared renderer: velocity triweight when
+        # ``line_sigma_kms > 0`` (Prospector-style intrinsic width), else the
+        # fixed-Å Gaussian / nearest-pixel delta fallbacks.
+        neb_sed = neb_sed + render_nebular_lines(
+            line_wav, line_lum, ssp_wave, line_sigma_aa, line_sigma_kms
+        )
 
         # Convert from internal Lsun/Hz to erg/s/Hz
         return neb_sed * _LSUN_ERG
