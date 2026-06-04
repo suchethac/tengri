@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression: SFH must not NaN at high redshift (cosmic-time table monotonicity).
 
 When the star formation history places star formation before the Big Bang
