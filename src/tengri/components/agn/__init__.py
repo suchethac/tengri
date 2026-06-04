@@ -68,6 +68,7 @@ from tengri.components.agn.disc import (
     multicolor_disc,
     powerlaw_disc,
 )
+from tengri.components.agn.fritz import create_fritz_from_grid, fritz_analytic
 from tengri.components.agn.grahsp import (
     GRAHSPSED,
     GRAHSPParams,
@@ -143,10 +144,12 @@ __all__ = [
     "compute_nlr_sed_synthesizer",
     "compute_qsogen_sed",
     "create_cat3d_wind_from_grid",
+    "create_fritz_from_grid",
     "create_relagn_disc_from_grid",
     "create_silva04_from_grid",
     "create_skirtor_from_grid",
     "evaluate_grahsp_agn",
+    "fritz_analytic",
     "get_feltre_backend",
     "get_synthesizer_nlr_backend",
     "grahsp",
