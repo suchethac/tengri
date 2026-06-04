@@ -43,7 +43,10 @@ from typing import Any
 
 import jax.numpy as jnp
 
-from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.dust.attenuation import (
+    resolve_bc_diff_law_params,
+    two_component_dust,
+)
 from tengri.components.dust.emission import resolve_emission_model
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
@@ -97,6 +100,13 @@ class DustSEDComponentConfig(SEDComponentConfig):
     emission_model: str | None = "modified_blackbody"
     t_birth_yr: float = 1e7
     transition_width_dex: float = 0.3
+    #: Per-component law-parameter overrides (birth cloud / diffuse ISM), as a
+    #: hashable tuple of ``(law_kwarg, value)`` pairs so the frozen config stays
+    #: usable as a static JIT key. Empty -> both components share the global
+    #: ``dust_slope`` / ``dust_bump_strength`` / ``dust_delta`` / ``dust_Rv``.
+    #: e.g. ``bc_law_overrides=(("n_slope", -1.0),)`` for the FSPS birth cloud.
+    bc_law_overrides: tuple[tuple[str, float], ...] = ()
+    diff_law_overrides: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -387,6 +397,15 @@ class DustSEDComponent:
         ssp_ages_yr = jnp.asarray(state.derived["ssp_ages_yr"])
 
         # ── 1. Two-component transmission T(λ, age) ─────────────────────
+        # Resolve per-component (birth-cloud vs diffuse) law parameters: the
+        # shared ``dust_<x>`` params, with any per-component overrides from the
+        # config layered on top. Empty overrides reproduce the original
+        # single-slope Charlot & Fall (2000) behaviour exactly.
+        bc_law_params, diff_law_params = resolve_bc_diff_law_params(
+            params,
+            dict(self.config.bc_law_overrides),
+            dict(self.config.diff_law_overrides),
+        )
         transmission = two_component_dust(
             wavelength=wave,
             age_grid=ssp_ages_yr,
@@ -397,10 +416,8 @@ class DustSEDComponent:
             f_obscuration=jnp.asarray(params.get("dust_f_obscuration", 0.0)),
             t_birth=self.config.t_birth_yr,
             transition_width=self.config.transition_width_dex,
-            n_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
-            dust_delta=jnp.asarray(params.get("dust_delta", 0.0)),
-            dust_Rv=jnp.asarray(params.get("dust_Rv", 3.1)),
+            bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
+            diff_params={k: jnp.asarray(v) for k, v in diff_law_params.items()},
         )  # (n_age, n_wave), in [0, 1]
 
         # ── 2. Apply transmission per age and aggregate ────────────────
@@ -529,18 +546,21 @@ class DustSEDComponent:
 
             tau_bc = jnp.asarray(params["dust_tau_bc"])
             tau_diff = jnp.asarray(params["dust_tau_diff"])
-            n_slope = jnp.asarray(params.get("dust_slope", -0.7))
+            # Per-component slope (birth cloud may differ from diffuse). The
+            # LUT path threads only the slope, matching its existing surface.
+            n_slope_bc = jnp.asarray(bc_law_params["n_slope"])
+            n_slope_diff = jnp.asarray(diff_law_params["n_slope"])
             law_bc_fn = resolve_dust_law(self.config.law_bc)
             law_diff_fn = resolve_dust_law(self.config.law_diff)
             d_lambda = jnp.asarray(1.0)
             # Evaluate k_bc and k_diff at the filter pivots and ±δλ for
             # the finite-difference slope.
-            k_bc_at = law_bc_fn(filter_eff, n_slope=n_slope)
-            k_diff_at = law_diff_fn(filter_eff, n_slope=n_slope)
-            k_bc_plus = law_bc_fn(filter_eff + d_lambda, n_slope=n_slope)
-            k_bc_minus = law_bc_fn(filter_eff - d_lambda, n_slope=n_slope)
-            k_diff_plus = law_diff_fn(filter_eff + d_lambda, n_slope=n_slope)
-            k_diff_minus = law_diff_fn(filter_eff - d_lambda, n_slope=n_slope)
+            k_bc_at = law_bc_fn(filter_eff, n_slope=n_slope_bc)
+            k_diff_at = law_diff_fn(filter_eff, n_slope=n_slope_diff)
+            k_bc_plus = law_bc_fn(filter_eff + d_lambda, n_slope=n_slope_bc)
+            k_bc_minus = law_bc_fn(filter_eff - d_lambda, n_slope=n_slope_bc)
+            k_diff_plus = law_diff_fn(filter_eff + d_lambda, n_slope=n_slope_diff)
+            k_diff_minus = law_diff_fn(filter_eff - d_lambda, n_slope=n_slope_diff)
             k_bc_slope = (k_bc_plus - k_bc_minus) / (2.0 * d_lambda)
             k_diff_slope = (k_diff_plus - k_diff_minus) / (2.0 * d_lambda)
             a_bc = jnp.exp(-tau_bc * k_bc_at)

@@ -167,6 +167,7 @@ def build_components(
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
+    dust_law_overrides: dict | None = None,
     dust_emission_model: str = "modified_blackbody",
     use_dust: bool = True,
     # Single-component dust (Calzetti-style screen). Picks
@@ -304,11 +305,14 @@ def build_components(
                 )
             )
         else:
+            _overrides = dust_law_overrides or {}
             components.append(
                 DustSEDComponent(
                     config=DustSEDComponentConfig(
                         law_bc=dust_law_bc,
                         law_diff=dust_law_diff,
+                        bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
+                        diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                         emission_model=dust_emission_model,
                     )
                 )

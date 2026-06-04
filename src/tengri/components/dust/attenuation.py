@@ -64,7 +64,7 @@ References
 - Zacharegkas et al. 2025, arXiv:2506.19919
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 import jax
@@ -1682,6 +1682,72 @@ def precompute_dust_age_mask(
     return young, 1.0 - young
 
 
+#: Two-component attenuation-law parameters that may be set per-component.
+#: Maps the law-function keyword to ``(flat_param_name, default)``. The
+#: per-component flat names are ``<flat_param_name>_bc`` / ``_diff``.
+_TWO_COMPONENT_LAW_PARAMS: tuple[tuple[str, str, float], ...] = (
+    ("n_slope", "dust_slope", -0.7),
+    ("dust_bump_strength", "dust_bump_strength", 0.0),
+    ("dust_delta", "dust_delta", 0.0),
+    ("dust_Rv", "dust_Rv", 3.1),
+)
+
+#: User-facing per-component short name -> attenuation-law kwarg. Used by the
+#: builder grammar to accept ``slope_bc`` / ``slope_diff`` / ``delta_bc`` etc.
+#: in the ``dust`` group and route them onto the per-component overrides.
+TWO_COMPONENT_OVERRIDE_KEYS: dict[str, str] = {
+    "slope": "n_slope",
+    "bump_strength": "dust_bump_strength",
+    "delta": "dust_delta",
+    "Rv": "dust_Rv",
+}
+
+
+def resolve_bc_diff_law_params(
+    params: Mapping,
+    bc_overrides: Mapping | None = None,
+    diff_overrides: Mapping | None = None,
+) -> tuple[dict, dict]:
+    """Split shared dust law parameters into birth-cloud and diffuse law dicts.
+
+    For each two-component law parameter (slope, bump, delta, Rv), the value is
+    the shared ``dust_<x>`` from ``params`` (falling back to the law default),
+    unless a per-component override is supplied in ``bc_overrides`` /
+    ``diff_overrides`` (keyed by law-function kwarg, e.g. ``n_slope``). The
+    overrides are the static per-component settings carried on
+    :class:`DustSEDComponentConfig`. This is the single source of truth shared
+    by every stellar two-component attenuation path, so they cannot diverge.
+
+    Parameters
+    ----------
+    params : Mapping
+        Flat ``dust_*`` parameter mapping (JAX scalars or floats).
+    bc_overrides, diff_overrides : Mapping, optional
+        Per-component law-kwarg overrides (e.g. ``{"n_slope": -1.0}`` for the
+        FSPS birth-cloud convention). Absent keys inherit the shared value.
+
+    Returns
+    -------
+    bc_params, diff_params : dict
+        Keyword dicts ready to splat into an attenuation-law function (keys are
+        law-function kwargs, e.g. ``n_slope``).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — only dict construction and ``Mapping.get``; the
+    values pass through untouched (traced arrays stay traced).
+    """
+    bc_overrides = bc_overrides or {}
+    diff_overrides = diff_overrides or {}
+    bc: dict = {}
+    diff: dict = {}
+    for law_kw, flat_name, default in _TWO_COMPONENT_LAW_PARAMS:
+        shared = params.get(flat_name, default)
+        bc[law_kw] = bc_overrides.get(law_kw, shared)
+        diff[law_kw] = diff_overrides.get(law_kw, shared)
+    return bc, diff
+
+
 def two_component_dust(
     wavelength: jnp.ndarray,
     age_grid: jnp.ndarray,
@@ -1692,6 +1758,8 @@ def two_component_dust(
     f_obscuration: float = 0.0,
     t_birth: float = 1e7,
     transition_width: float = 0.3,
+    bc_params: dict | None = None,
+    diff_params: dict | None = None,
     **law_params,
 ) -> jnp.ndarray:
     r"""Two-component dust attenuation following Charlot & Fall (2000) with smooth age transition.
@@ -1723,9 +1791,20 @@ def two_component_dust(
         Birth-cloud dispersal age (sigmoid center). [yr] Default: 1e7 (10 Myr).
     transition_width : float, optional
         Sigmoid transition width in dex. [dimensionless] Default: 0.3 (~5-20 Myr range).
+    bc_params : dict, optional
+        Per-component overrides for the **birth-cloud** law (e.g.
+        ``{"n_slope": -1.0}``). Merged on top of ``**law_params``, so any key
+        absent here falls back to the shared value. Enables FSPS-style
+        independent indices (birth cloud ``dust1_index`` ≠ diffuse
+        ``dust_index``). Default ``None`` → shared parameters.
+    diff_params : dict, optional
+        Per-component overrides for the **diffuse ISM** law. Same merge
+        semantics as ``bc_params``. Default ``None`` → shared parameters.
     **law_params
-        Keyword arguments passed to attenuation curve functions (e.g., ``n_slope``, ``dust_bump_strength``,
-        ``dust_delta``, ``dust_Rv``).
+        Shared keyword arguments passed to both attenuation curve functions
+        (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``,
+        ``dust_Rv``). ``bc_params`` / ``diff_params`` override these
+        per-component.
 
     Returns
     -------
@@ -1785,8 +1864,14 @@ def two_component_dust(
     >>> T.shape
     (64, 300)
     """
-    k_bc = resolve_dust_law(law_bc)(wavelength, **law_params)
-    k_diff = resolve_dust_law(law_diff)(wavelength, **law_params)
+    # Per-component law parameters: shared ``law_params`` with optional
+    # ``bc_params`` / ``diff_params`` overlays. Each overlay only replaces the
+    # keys it names, so callers can steepen the birth cloud (FSPS
+    # ``dust1_index=-1.0``) without touching the diffuse ISM.
+    bc_kw = {**law_params, **(bc_params or {})}
+    diff_kw = {**law_params, **(diff_params or {})}
+    k_bc = resolve_dust_law(law_bc)(wavelength, **bc_kw)
+    k_diff = resolve_dust_law(law_diff)(wavelength, **diff_kw)
 
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
