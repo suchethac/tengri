@@ -6,6 +6,31 @@ Single source of truth for the ``agn_*`` priors.
 bucket from this tuple, and :meth:`AGNSEDComponent.declared_parameters`
 returns it directly.
 
+Prior provenance
+----------------
+Every declaration carries a *prior* (``Uniform`` / ``LogUniform``) whose
+range is the documented physical or library-grid extent, and a
+``default=`` equal to the historical fixed value. The two work together:
+
+* ``'*': FIXED`` (and the grammar's implicit default) collapses each param
+  to ``Fixed(default)`` — i.e. the exact pre-existing value, so behaviour
+  is unchanged for any model that did not opt a parameter free.
+* ``'*': FREE`` / ``defaults=FREE`` / a bare per-param ``FREE`` now expands
+  to the prior instead of silently resolving to a fixed scalar. Before this
+  change every AGN parameter declared a ``Fixed(...)`` default, so the FREE
+  grammar (and therefore ``recipes.agn_panchromatic()``) produced **zero**
+  free AGN parameters with no error — a silent no-op.
+
+Range sources (already cited at the per-parameter / section level below):
+Nenkova et al. 2008 (CLUMPY grid extent), Stalevski et al. 2012/2016
+(SKIRTOR axes), Kubota & Done 2018 (3-zone disc / corona), Boquien et al.
+2019 + Yang et al. 2020 (X-CIGALE skirtor2016 / polar dust), Feltre et al.
+2016 (NLR EUV-slope grid), Buchner et al. 2024 (GRAHSP "typical" ranges,
+reproduced from the per-parameter docstrings). Covering fractions,
+efficiencies and other bounded ratios use their physical ``[0, 1]`` (or
+``[0, 2]``) extent. Widths/temperatures with only a positivity constraint
+use the "typical" interval stated in the original docstring.
+
 Scope note
 ----------
 The legacy ``_AGN_PARAMS`` bucket also contained ``neb_xid`` — a
@@ -18,13 +43,13 @@ enforced by ``tools/check_param_prefixes.py``.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed
+from tengri.parameters.priors import LogUniform, Uniform
 from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_frac",
-        Fixed(1.0),
+        Uniform(0.0, 5.0, default=1.0),
         "AGN luminosity fraction (L_AGN / L_stellar_bol) — used as a scalar "
         "multiplier on the composable runner output and as the AGN-to-stellar "
         "ratio in the non-parametric AGN path. Default 1.0 means 'use the "
@@ -37,24 +62,26 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_log_lbol",
-        Fixed(10.0),
+        # log10(L_bol / Lsun): ~1e8 Lsun (low-luminosity Seyfert) to ~1e14
+        # Lsun (luminous QSO) brackets the AGN population.
+        Uniform(8.0, 14.0, default=10.0),
         "AGN bolometric luminosity log10(L_bol / Lsun) — direct parametric mode",
     ),
     ParamDeclaration(
         "agn_alpha",
-        Fixed(-1.0),
+        Uniform(-2.0, 0.0, default=-1.0),
         "AGN disc power-law slope",
     ),
     ParamDeclaration(
         "agn_T_torus",
-        Fixed(1000.0),
+        Uniform(100.0, 1500.0, default=1000.0),
         "AGN torus temperature (K)",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_tau_torus",
-        Fixed(5.0),
+        Uniform(0.0, 15.0, default=5.0),
         "AGN torus optical depth at 9.7 um",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
@@ -63,21 +90,21 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # the single library axis; the grid is tabulated at tau = 5..150.
     ParamDeclaration(
         "agn_tau",
-        Fixed(30.0),
+        Uniform(5.0, 150.0, default=30.0),
         "Nenkova+2008 CLUMPY torus equatorial optical depth (5-150)",
         lambda lo, hi: lo >= 5.0 and hi <= 150.0,
         "must be within the CLUMPY grid extent [5, 150]",
     ),
     ParamDeclaration(
         "agn_torus_frac",
-        Fixed(0.5),
+        Uniform(0.0, 1.0, default=0.5),
         "AGN torus covering factor — DEPRECATED; use agn_frac_agn",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
     ParamDeclaration(
         "agn_frac_agn",
-        Fixed(0.5),
+        Uniform(0.0, 1.0, default=0.5),
         "AGN fraction (L_AGN / L_total in a configurable band, CIGALE convention)",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
@@ -85,39 +112,42 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # (5-line gap reserved for PR 2 xray parameter block)
     ParamDeclaration(
         "agn_log_mbh",
-        Fixed(7.0),
+        # log10(M_BH / Msun): ~1e6 (low-mass Seyfert) to ~1e10 (most massive QSO).
+        Uniform(6.0, 10.0, default=7.0),
         "AGN black hole mass log10(M_BH/Msun)",
     ),
     ParamDeclaration(
         "agn_log_ledd",
-        Fixed(-1.0),
+        # log10(L/L_Edd): sub-Eddington to mildly super-Eddington.
+        Uniform(-2.0, 0.5, default=-1.0),
         "AGN Eddington ratio log10(L/L_Edd)",
     ),
-    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016)
+    # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016) — ranges
+    # are the SKIRTOR library axes.
     ParamDeclaration(
         "agn_tau_skirtor",
-        Fixed(7.0),
+        Uniform(3.0, 11.0, default=7.0),
         "SKIRTOR 9.7 um optical depth (3-11)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
     ParamDeclaration(
         "agn_p_skirtor",
-        Fixed(1.0),
+        Uniform(0.0, 1.5, default=1.0),
         "SKIRTOR radial density power-law gradient (0-1.5)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
     ParamDeclaration(
         "agn_q_skirtor",
-        Fixed(1.0),
+        Uniform(0.0, 1.5, default=1.0),
         "SKIRTOR polar density power-law gradient (0-1.5)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
     ParamDeclaration(
         "agn_oa_skirtor",
-        Fixed(40.0),
+        Uniform(20.0, 60.0, default=40.0),
         "SKIRTOR torus half-opening angle [degrees] (20-60)",
         lambda lo, hi: lo > 0,
         "must be > 0",
@@ -130,7 +160,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         # convention; the §9 reproduction audit revealed the
         # inclination mismatch as the dominant source of residual at
         # the SKIRTOR torus peak.
-        Fixed(0.86602540378443864),
+        Uniform(0.0, 1.0, default=0.86602540378443864),
         "Cosine of inclination (0=edge-on, 1=face-on); default matches CIGALE i=30",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
@@ -138,71 +168,72 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # BH spin + two-temperature torus (kubota_done_full, multicolor_agn)
     ParamDeclaration(
         "agn_a_spin",
-        Fixed(0.0),
+        Uniform(0.0, 0.998, default=0.0),
         "BH spin parameter a* in [0, 0.998) — controls ISCO and radiative efficiency",
         lambda lo, hi: lo >= 0 and hi < 1,
         "must be in [0, 1)",
     ),
     ParamDeclaration(
         "agn_T_hot",
-        Fixed(1200.0),
+        Uniform(800.0, 1500.0, default=1200.0),
         "Two-temperature torus: hot dust component temperature [K]",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_T_warm",
-        Fixed(300.0),
+        Uniform(150.0, 500.0, default=300.0),
         "Two-temperature torus: warm dust component temperature [K]",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_frac_hot",
-        Fixed(0.3),
+        Uniform(0.0, 1.0, default=0.3),
         "Two-temperature torus: hot-to-warm dust luminosity fraction [0, 1]",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
-    # Full Kubota & Done (2018) 3-zone disc parameters (kubota_done_full only)
+    # Full Kubota & Done (2018) 3-zone disc parameters (kubota_done_full only).
+    # Corona/Comptonisation ranges follow the K&D18 fiducial intervals.
     ParamDeclaration(
         "agn_f_hard",
-        Fixed(0.02),
+        Uniform(0.0, 0.1, default=0.02),
         "Coronal luminosity fraction (fraction of disc power to hot corona)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
     ParamDeclaration(
         "agn_gamma_warm",
-        Fixed(2.5),
+        Uniform(2.0, 3.0, default=2.5),
         "Warm Comptonization photon index (soft X-ray excess)",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_kt_warm",
-        Fixed(0.2),
+        Uniform(0.1, 1.0, default=0.2),
         "Warm Comptonization electron temperature [keV]",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_gamma_hard",
-        Fixed(1.8),
+        Uniform(1.5, 2.5, default=1.8),
         "Hard X-ray photon index (hot corona power law)",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_kt_hot",
-        Fixed(100.0),
+        Uniform(50.0, 300.0, default=100.0),
         "Hot corona electron temperature [keV]",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_r_warm_ratio",
-        Fixed(2.0),
+        Uniform(1.0, 5.0, default=2.0),
         "Ratio R_warm / R_hot (warm Comptonization region size)",
         lambda lo, hi: lo > 0,
         "must be > 0",
@@ -213,7 +244,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # disable.
     ParamDeclaration(
         "agn_polar_ebv",
-        Fixed(0.03),
+        Uniform(0.0, 0.5, default=0.03),
         "Polar dust reddening E(B-V) applied to AGN disc (SMC law); "
         "default 0.03 matches CIGALE skirtor2016. Set 0 to disable.",
         lambda lo, hi: lo >= 0,
@@ -223,29 +254,31 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # Casey 2012 modified blackbody added on top of SKIRTOR thermal dust)
     ParamDeclaration(
         "agn_polar_T",
-        Fixed(100.0),
+        Uniform(50.0, 150.0, default=100.0),
         "Polar dust temperature [K] (CIGALE skirtor2016 default 100 K).",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_polar_beta",
-        Fixed(1.6),
+        Uniform(1.0, 2.0, default=1.6),
         "Polar dust emissivity index beta (CIGALE skirtor2016 default 1.6).",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_polar_oa",
-        Fixed(45.0),
+        Uniform(10.0, 80.0, default=45.0),
         "Polar dust half-opening angle [degrees] — sets covering fraction",
         lambda lo, hi: lo > 0 and hi <= 90,
         "must be in (0, 90]",
     ),
-    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre).
+    # AGN-nebular emitters (BLR, NLR-Gaussian, Feltre). Covering fractions and
+    # efficiencies use their physical [0, 1] extent (defaults sit in the
+    # "typical" sub-interval noted in each description).
     ParamDeclaration(
         "agn_blr_cf",
-        Fixed(0.1),
+        Uniform(0.0, 1.0, default=0.1),
         "BLR covering fraction — fraction of disc luminosity intercepted by BLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
@@ -253,7 +286,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_nlr_cf",
-        Fixed(0.1),
+        Uniform(0.0, 1.0, default=0.1),
         "NLR Gaussian covering fraction — fraction of disc luminosity intercepted by NLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
@@ -261,7 +294,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_nlr_line_efficiency",
-        Fixed(0.10),
+        Uniform(0.0, 1.0, default=0.10),
         "NLR line radiative efficiency — fraction of intercepted disc luminosity "
         "re-emitted as emission-line luminosity. Physical bound [0, 1]; "
         "typical values 0.01-0.30.",
@@ -270,7 +303,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_blr_line_efficiency",
-        Fixed(0.08),
+        Uniform(0.0, 1.0, default=0.08),
         "BLR line radiative efficiency — fraction of intercepted disc luminosity "
         "re-emitted as broad-line luminosity. Physical bound [0, 1]; "
         "typical values 0.05-0.15.",
@@ -279,14 +312,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_fe2_strength",
-        Fixed(0.0),
+        Uniform(0.0, 2.0, default=0.0),
         "Fe II to H-beta flux ratio R_Fe = F(Fe II 4434-4684)/F(H-beta)",
         lambda lo, hi: lo >= 0 and hi <= 2.0,
         "must be in [0, 2.0]",
     ),
     ParamDeclaration(
         "agn_feltre_cf",
-        Fixed(0.1),
+        Uniform(0.0, 1.0, default=0.1),
         "Feltre NLR covering fraction — fraction of disc luminosity intercepted by NLR. "
         "Physical bound [0, 1]; typical values 0.05-0.2.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
@@ -294,16 +327,17 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_alpha_ion",
-        Fixed(-1.7),
+        Uniform(-2.0, -1.2, default=-1.7),
         "AGN EUV power-law slope (f_nu ~ nu^alpha) for Feltre NLR backend. "
         "Range matches the Feltre+2016 CLOUDY grid (4 grid points: -2.0, -1.7, -1.4, -1.2).",
         lambda lo, hi: lo >= -2.0 and hi <= -1.2,
         "must be in [-2.0, -1.2] (grid values: -2.0, -1.7, -1.4, -1.2)",
     ),
-    # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297).
+    # GRAHSP AGN model (Buchner+ 2024, arXiv:2405.19297). Prior ranges are the
+    # "typical" intervals stated in each docstring (from the GRAHSP paper).
     ParamDeclaration(
         "agn_grahsp_l5100",
-        Fixed(1.0e44),
+        LogUniform(1.0e42, 1.0e47, default=1.0e44),
         "GRAHSP lambda*L_lambda(5100Å) [erg/s] (paper L_AGN). "
         "Sets the AGN normalisation; typical 1e42-1e47 for Sy1 to QSO.",
         lambda lo, hi: lo > 0,
@@ -311,59 +345,59 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_grahsp_uvslope",
-        Fixed(0.0),
+        Uniform(-1.0, 1.0, default=0.0),
         "GRAHSP BBB UV power-law index alpha_1 (paper uvslope). "
         "Typical 0; must satisfy uvslope > plslope.",
     ),
     ParamDeclaration(
         "agn_grahsp_plslope",
-        Fixed(-1.7),
+        Uniform(-2.7, -1.0, default=-1.7),
         "GRAHSP BBB optical power-law index alpha_2 (paper plslope). "
         "Typical -2.7 to -1; must satisfy uvslope > plslope.",
     ),
     ParamDeclaration(
         "agn_grahsp_plbendloc_nm",
-        Fixed(100.0),
+        Uniform(50.0, 200.0, default=100.0),
         "GRAHSP BBB bend wavelength lambda_break [nm] (paper plbendloc). Typical 50-200 nm.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_plbendwidth",
-        Fixed(1.0),
+        Uniform(0.1, 10.0, default=1.0),
         "GRAHSP BBB bend width Lambda [dex] (paper plbendwidth). Typical 0.1-10.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_cutoff_nm",
-        Fixed(10000.0),
+        Uniform(5000.0, 20000.0, default=10000.0),
         "GRAHSP BBB IR cutoff [nm]; -1 disables (paper cutoff). Default 1e4.",
     ),
     ParamDeclaration(
         "agn_grahsp_a_lines",
-        Fixed(1.0),
+        Uniform(0.3, 20.0, default=1.0),
         "GRAHSP line strength scale (paper Alines). Typical 0.3-20.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_a_feii",
-        Fixed(5.0),
+        Uniform(0.0, 10.0, default=5.0),
         "GRAHSP FeII forest strength relative to broad H-beta (paper AFeII). Typical 2-10.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
     ParamDeclaration(
         "agn_grahsp_linewidth_kms",
-        Fixed(5000.0),
+        Uniform(100.0, 30000.0, default=5000.0),
         "GRAHSP emission-line FWHM [km/s] (paper Wline). Typical 100-30000.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_fcov",
-        Fixed(0.4),
+        Uniform(0.0, 1.0, default=0.4),
         "GRAHSP torus covering factor at 12 um (paper fcov). "
         "Typical 0.05-0.95; relates to Stalevski+2016 geometric f_cov.",
         lambda lo, hi: lo >= 0 and hi <= 1.0,
@@ -371,48 +405,48 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_grahsp_si",
-        Fixed(0.0),
+        Uniform(-4.0, 4.0, default=0.0),
         "GRAHSP Si feature strength (paper Si). Negative=absorption, "
         "positive=emission. Typical -4 to +4.",
     ),
     ParamDeclaration(
         "agn_grahsp_cool_lam_um",
-        Fixed(17.0),
+        Uniform(10.0, 30.0, default=17.0),
         "GRAHSP cool dust peak wavelength [um] (paper COOLlam). Typical 10-30 um.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_cool_width",
-        Fixed(0.45),
+        Uniform(0.2, 0.65, default=0.45),
         "GRAHSP cool dust log-width [dex] (paper COOLwidth). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_hot_lam_um",
-        Fixed(2.0),
+        Uniform(1.0, 5.5, default=2.0),
         "GRAHSP hot dust peak wavelength [um] (paper HOTlam). Typical 1-5.5 um.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_hot_width",
-        Fixed(0.5),
+        Uniform(0.2, 0.65, default=0.5),
         "GRAHSP hot dust log-width [dex] (paper HOTwidth). Typical 0.2-0.65.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "agn_grahsp_hot_fcov",
-        Fixed(1.0),
+        Uniform(0.04, 10.0, default=1.0),
         "GRAHSP hot/cool peak ratio in lambda*L_lambda (paper f_hot). Typical 0.04-10.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
     ParamDeclaration(
         "agn_grahsp_ebv",
-        Fixed(0.0),
+        Uniform(0.0, 1.0, default=0.0),
         "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation "
         "(paper E(B-V)). In the upstream CIGALE pipeline this is also the "
         "galaxy E(B-V); in tengri it parameterises only the AGN-side "
@@ -423,16 +457,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_grahsp_ebv_agn",
-        Fixed(0.0),
+        Uniform(0.0, 1.0, default=0.0),
         "GRAHSP additional AGN-only E(B-V) [mag] (paper E(B-V)-AGN). "
         "Stacks with agn_grahsp_ebv to attenuate the AGN spectrum.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
-    # CIGALE skirtor2016 disc-shape modulator (Boquien+2019)
+    # CIGALE skirtor2016 disc-shape modulator (Boquien+2019). The skirtor2016
+    # grid samples delta in [-0.5, 0.5]; for the adaf_lopez2024 block it is a
+    # blend weight that the block itself clamps to [0, 1].
     ParamDeclaration(
         "agn_cigale_disk_delta",
-        Fixed(0.0),
+        Uniform(-0.5, 0.5, default=0.0),
         "CIGALE skirtor2016 disc slope modulator (paper delta). "
         "For 'skirtor'/'schartmann2005' disc blocks: shifts the 100-5000 nm "
         "power-law index alpha from its nominal value by -delta (positive "
@@ -443,7 +479,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     # CIGALE skirtor2016 cross-component AGN power coupling
     ParamDeclaration(
         "agn_fracAGN",
-        Fixed(0.0),
+        Uniform(0.0, 0.99, default=0.0),
         "CIGALE-faithful coupling: AGN dust IR fraction of the total "
         "(stellar + AGN) dust IR. When > 0, the AGN component derives "
         "``agn_power = L_absorbed_stellar × fracAGN/(1-fracAGN)`` from "

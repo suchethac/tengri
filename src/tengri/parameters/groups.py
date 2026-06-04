@@ -498,6 +498,13 @@ def parse_groups(**kwargs) -> Parameters:
     resolved_kwargs = dict(structural_kwargs)
     provenance: dict[str, str] = {}
 
+    # Which agn_* parameters the active AGN model / composable block selection
+    # actually consumes. A group-level ``agn={'*': FREE}`` frees only these,
+    # not the full declared superset — otherwise it would create dozens of
+    # unconstrained no-op nuisance dimensions for parameters belonging to
+    # inactive blocks (e.g. GRAHSP params under a SKIRTOR torus).
+    agn_active_params = _agn_active_param_set(structural_kwargs)
+
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
         if group is None:
@@ -566,12 +573,30 @@ def parse_groups(**kwargs) -> Parameters:
             # Group was not a dict (or is a sub-key); use structural default
             continue
 
+        # AGN group wildcards are scoped to the active blocks' consumed params
+        # (block-scoped wildcard). Non-AGN groups are always wildcard-active.
+        is_agn = group == "agn" or group.startswith("agn.")
+        wildcard_active = True
+        if is_agn:
+            wildcard_active = param_name in agn_active_params
         final_dist, tag = _resolve_value(
-            param_name, group_dict, structural_params.get_distribution(param_name)
+            param_name,
+            group_dict,
+            structural_params.get_distribution(param_name),
+            wildcard_active=wildcard_active,
         )
 
-        # Only override if there's an actual per-param or wildcard in the group dict
-        if group_dict or group == "_toplevel":
+        # Apply the resolved distribution when the user addressed this group
+        # (a per-param override or wildcard), or for any AGN param whenever the
+        # AGN group is configured. The AGN clause is essential: AGN parameters
+        # now carry *free* Uniform/LogUniform registry defaults (so FREE can
+        # expand them), which means an untouched AGN param would otherwise keep
+        # its free prior — violating the grammar's FIXED-by-default contract.
+        # ``_resolve_value`` collapses such untouched params to Fixed(default)
+        # via its registry-default branch, so applying it here pins them fixed
+        # unless explicitly/wildcard-freed. (Non-AGN params keep Fixed scalar
+        # registry defaults, so the original ``group_dict`` guard is correct.)
+        if group_dict or group == "_toplevel" or is_agn:
             resolved_kwargs[param_name] = final_dist
             provenance[param_name] = tag
 
@@ -594,6 +619,19 @@ def parse_groups(**kwargs) -> Parameters:
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────
+
+
+def _agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
+    """Params a group-level AGN wildcard should free, scoped to active blocks.
+
+    Thin wrapper over
+    :func:`tengri.components.agn.blocks._consumes.agn_active_param_set`,
+    lazy-imported to avoid an import cycle (the agn package imports the priors
+    layer that ultimately re-exports this module).
+    """
+    from tengri.components.agn.blocks._consumes import agn_active_param_set
+
+    return agn_active_param_set(structural_kwargs)
 
 
 def _translate_structural(groups: dict) -> dict:
@@ -1226,17 +1264,30 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
         )
 
     if not hits:
-        # Nothing found anywhere; surface the canonical dict so the
-        # wildcard ('*') from the canonical location still applies.
+        # Nothing found anywhere; surface the canonical dict so its wildcard
+        # ('*') applies. For a sub-block param whose sub-block carries no '*',
+        # inherit the top-level agn '*' so a top-level ``agn={'*': FREE}``
+        # governs sub-block params too. This is scoped downstream by
+        # ``wildcard_active`` (block-scoped wildcard), so it frees only the
+        # parameters the active blocks actually consume — e.g. ``agn_polar_ebv``
+        # is partitioned to ``agn.atten`` but consumed by the SKIRTOR torus, so
+        # a top-level wildcard must be able to reach it.
+        if canonical_subkey is not None and "*" not in canonical_dict and "*" in agn_dict:
+            merged = dict(canonical_dict)
+            merged["*"] = agn_dict["*"]
+            return merged
         return canonical_dict
 
     # Single hit: return a synthetic dict carrying that one override
     # plus the wildcard from the canonical location (so '*': FREE inside
     # a sub-block still controls shared params landed via this view).
+    # A sub-block wildcard takes precedence over the top-level one.
     _, found_val = hits[0]
     view: dict = {short_name: found_val}
     if "*" in canonical_dict:
         view["*"] = canonical_dict["*"]
+    elif canonical_subkey is not None and "*" in agn_dict:
+        view["*"] = agn_dict["*"]
     return view
 
 
@@ -1400,7 +1451,11 @@ def _partition_by_group(
 
 
 def _resolve_value(
-    param_name: str, group_dict: dict, registry_default: Distribution
+    param_name: str,
+    group_dict: dict,
+    registry_default: Distribution,
+    *,
+    wildcard_active: bool = True,
 ) -> tuple[Distribution, str]:
     """Resolve the final distribution for a single parameter.
 
@@ -1408,6 +1463,15 @@ def _resolve_value(
     1. Per-parameter override in group_dict (including bare values)
     2. Wildcard '*' (FREE or FIXED)
     3. Registry default
+
+    ``wildcard_active`` (keyword-only, default ``True``) gates the
+    wildcard-``FREE`` branch only. When ``False`` a ``'*': FREE`` is treated
+    as ``'*': FIXED`` for *this* parameter — used by the AGN group so a group
+    wildcard frees only the parameters the active disc/torus/lines/feii/atten
+    blocks actually consume, not the full declared superset (which would
+    otherwise create unconstrained no-op nuisance dimensions). An *explicit*
+    per-parameter ``FREE`` is handled earlier and is never gated, so the user
+    can always force a specific parameter free.
 
     Parameters
     ----------
@@ -1480,7 +1544,19 @@ def _resolve_value(
     if "*" in group_dict:
         wildcard = group_dict["*"]
         if wildcard is FREE:
-            return registry_default, "wildcard_free"
+            if wildcard_active:
+                return registry_default, "wildcard_free"
+            # Param is not consumed by the active block selection. A wildcard
+            # FREE here would create an unconstrained no-op nuisance dimension,
+            # so collapse it to its fixed default instead (block-scoped
+            # wildcard). The param stays declared (no missing keys) — it is
+            # simply held fixed.
+            if registry_default.is_fixed:
+                return registry_default, "wildcard_fixed_inactive"
+            return (
+                Fixed(_default_fixed_value(param_name, registry_default)),
+                "wildcard_fixed_inactive",
+            )
         elif wildcard is FIXED:
             if registry_default.is_fixed:
                 return registry_default, "wildcard_fixed"

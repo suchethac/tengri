@@ -65,6 +65,11 @@ def parametric_agn_spec():
         redshift=Fixed(0.1),
         agn_model="multicolor_agn",
         agn_log_lbol=Uniform(8.0, 12.0),
+        # agn_frac must be explicitly fixed: AGN params now carry free
+        # Uniform registry defaults (consistent with sfh/dust), so an
+        # unspecified agn_frac would default free and flip mode detection
+        # (``_agn_luminosity_mode = lbol_free and not frac_free``) to legacy.
+        agn_frac=Fixed(1.0),
         agn_alpha=Fixed(-1.0),
         agn_T_torus=Fixed(1000.0),
         agn_torus_frac=Fixed(0.5),
@@ -266,6 +271,7 @@ class TestAGNFusedVsExact:
             redshift=Fixed(0.1),
             agn_model="multicolor_agn",
             agn_log_lbol=Uniform(8.0, 12.0),  # FREE → _agn_luminosity_mode=True
+            agn_frac=Fixed(1.0),  # fixed so mode stays parametric (see fixture note)
             agn_alpha=Fixed(-1.0),
             agn_T_torus=Fixed(1000.0),
             agn_torus_frac=Fixed(0.5),
