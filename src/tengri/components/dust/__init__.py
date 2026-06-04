@@ -130,17 +130,17 @@ from tengri.components.dust.priors import (
     narayanan_tau_prior,
 )
 from tengri.components.dust.salim18_model import Salim18 as Salim18
+from tengri.components.dust.schreiber2016_ir import (
+    Schreiber2016IRConfig as Schreiber2016IRConfig,
+    Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
+)
+from tengri.components.dust.smc_model import SMC as SMC
 from tengri.components.dust.wg00 import (
     WG00_DUST_CURVES as WG00_DUST_CURVES,
     WG00_GEOMETRIES as WG00_GEOMETRIES,
     WG00_STRUCTURES as WG00_STRUCTURES,
     wg00_attenuation as wg00_attenuation,
 )
-from tengri.components.dust.schreiber2016_ir import (
-    Schreiber2016IRConfig as Schreiber2016IRConfig,
-    Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
-)
-from tengri.components.dust.smc_model import SMC as SMC
 from tengri.components.dust.wg00_model import (
     WG00AttenuationSEDComponent as WG00AttenuationSEDComponent,
     WG00AttenuationSEDComponentConfig as WG00AttenuationSEDComponentConfig,
