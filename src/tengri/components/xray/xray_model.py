@@ -78,7 +78,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
     and age-dependent XRB scaling), Yang et al. 2020 (hot gas and AGN
     anisotropy), and Just et al. 2007 (α_OX–L_2500 relation).
 
-    Free parameters (4):
+    Free parameters (6):
     - xray_gamma_hmxb: HMXB spectral index
     - xray_gamma_lmxb: LMXB spectral index
     - xray_gamma_agn: AGN X-ray spectral index
@@ -89,6 +89,10 @@ class XRayAirdSEDComponent(SEDModelComponent):
       Morrison & McCammon (1983) wabs cross-sections; T_cabs is
       Thomson down-scattering. Galactic absorption is not modelled
       (assume user provides intrinsic-frame fluxes).
+    - xray_det_hmxb: HMXB luminosity offset (deviation from expected
+      SFR relation in log-space; positive = brighter X-ray)
+    - xray_det_lmxb: LMXB luminosity offset (deviation from expected
+      mass relation in log-space; positive = brighter X-ray)
 
     The α_OX parameter is not a free parameter here; it is a PRIOR
     that couples AGN UV (L_2500) and X-ray emission self-consistently
@@ -150,6 +154,28 @@ class XRayAirdSEDComponent(SEDModelComponent):
         units="log10(cm^-2)",
         default=21.0,
     )
+    det_hmxb = Uniform(
+        -2.0,
+        2.0,
+        description=(
+            "Deviation from expected HMXB log L_X (Yang+2020 [1]_). "
+            "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
+            "around the Lehmer+2016 SFR relation."
+        ),
+        units="dex",
+        default=0.0,
+    )
+    det_lmxb = Uniform(
+        -2.0,
+        2.0,
+        description=(
+            "Deviation from expected LMXB log L_X (Yang+2020 [1]_). "
+            "Positive = brighter X-ray. Allows intrinsic scatter or evolution "
+            "around the Lehmer+2016 age/mass relation."
+        ),
+        units="dex",
+        default=0.0,
+    )
     # alpha_ox is deliberately NOT a free parameter here — PR #329 promotes it to
     # an empirical prior derived from L_2500 via alpha_ox_from_l2500()
     # (Just+2007 / Lusso–Risaliti). Offsets from the empirical value are exposed
@@ -181,7 +207,8 @@ class XRayAirdSEDComponent(SEDModelComponent):
         Parameters
         ----------
         p : mapping[str, ndarray]
-            Parameters with prefix stripped: gamma_hmxb, gamma_lmxb, gamma_agn.
+            Parameters with prefix stripped: gamma_hmxb, gamma_lmxb, gamma_agn,
+            log_nh, det_hmxb, det_lmxb.
         sed_in : ndarray
             Input SED (stellar + nebular + AGN + radio).
         wave : ndarray
@@ -226,6 +253,8 @@ class XRayAirdSEDComponent(SEDModelComponent):
             a1=0.5,
             a2=0.0,
             log_nh=jnp.asarray(p["log_nh"]),
+            log_L_hmxb_offset=jnp.asarray(p["det_hmxb"]),
+            log_L_lmxb_offset=jnp.asarray(p["det_lmxb"]),
         )
 
         return sed_in + L_xray, {

@@ -48,6 +48,7 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular.cue import (
     CueBackend,
     _logq_from_logu,
@@ -178,6 +179,11 @@ class CueNebularSEDComponent(SEDModelComponent):
     fesc_lya = Fixed(
         0.0,
         description="Lyman-alpha escape fraction",
+        units="dimensionless",
+    )
+    fdust = Fixed(
+        0.0,
+        description="Dust-absorption fraction of ionizing photons in HII regions",
         units="dimensionless",
     )
 
@@ -334,14 +340,15 @@ class CueNebularSEDComponent(SEDModelComponent):
         luminosities, and continuum SED. The ionizing spectrum shape
         is parameterized by 7 free parameters (slopes + ratios), and
         gas properties by 5 additional parameters (logU, logZ, density,
-        C/O, N/O).
+        C/O, N/O). Ionizing photon escape and dust absorption are accounted
+        for via the CIGALE k-factor.
 
         Parameters
         ----------
         p : mapping[str, ndarray]
             Parameters with prefix stripped (neb_ removed).
-            Keys: logU, logZ_gas, ionspec_index1..4, ionspec_logLratio1..3,
-            gas_logn, gas_logno, gas_logco.
+            Keys: logU, logZ_gas, fesc, fdust, ionspec_index1..4,
+            ionspec_logLratio1..3, gas_logn, gas_logno, gas_logco.
         sed_in : ndarray
             Input SED (typically empty or stellar continuum).
         wave : ndarray
@@ -379,6 +386,8 @@ class CueNebularSEDComponent(SEDModelComponent):
         # Extract parameters
         logU = p["logU"]
         logZ_gas = p["logZ_gas"]
+        fesc = p.get("fesc", 0.0)
+        fdust = p.get("fdust", 0.0)
         ionspec_index1 = p["ionspec_index1"]
         ionspec_index2 = p["ionspec_index2"]
         ionspec_index3 = p["ionspec_index3"]
@@ -448,6 +457,14 @@ class CueNebularSEDComponent(SEDModelComponent):
             gas_logqion=gas_logqion,
         )
 
+        # Apply nebular emission scaling from ionizing photon escape and dust absorption
+        # Following CIGALE nebular.py: both f_esc and f_dust reduce the nebular
+        # emission via the k-factor (Inoue 2011), which accounts for both the
+        # reduced ionizing photon budget and the recombination coefficient ratio
+        # (alpha_1 / alpha_B). The k-factor is applied to all emission lines.
+        k = lyc_dust_escape_factor(fesc, fdust)
+        line_lums = line_lums * k
+
         # Predict continuum (optional; not yet returned to sed_intrinsic)
         _cont_waves, _cont_lums = predict_continuum(
             nn_params=nn_params,
@@ -455,6 +472,8 @@ class CueNebularSEDComponent(SEDModelComponent):
             gas_logq=gas_logq,
             gas_logqion=gas_logqion,
         )
+        # Apply the same k-factor to continuum for consistency
+        _cont_lums = _cont_lums * k
 
         # For now, continuum is not added to sed_in; only lines are published.
         # Phase II-4: integrate continuum over output wavelength grid and add to sed.

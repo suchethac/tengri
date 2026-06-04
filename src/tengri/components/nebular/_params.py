@@ -69,6 +69,13 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 1]",
     ),
     ParamDeclaration(
+        "neb_fdust",
+        Fixed(0.0),
+        "Dust-absorption fraction of ionizing photons in HII regions",
+        lambda lo, hi: lo >= 0 and hi <= 1,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
         "neb_dig_frac",
         Fixed(0.0),
         "DIG fraction of nebular emission (Tacchella+2022)",

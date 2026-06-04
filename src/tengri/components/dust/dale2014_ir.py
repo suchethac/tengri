@@ -97,6 +97,13 @@ class Dale2014IRSEDComponent(SEDModelComponent):
         description="Radiation field power-law index",
         units="dimensionless",
     )
+    frac_agn = Uniform(
+        0.0,
+        0.99,
+        default=0.0,
+        description="AGN heating fraction (additive)",
+        units="dimensionless",
+    )
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}
@@ -162,14 +169,18 @@ class Dale2014IRSEDComponent(SEDModelComponent):
     ) -> tuple[jnp.ndarray, Mapping[str, jnp.ndarray]]:
         r"""Compute dust emission via Dale+2014 tabulated templates.
 
-        Interpolates the Dale2014 template grid over alpha and
-        applies energy-balance normalization.
+        Interpolates the Dale2014 template grid over alpha. If an AGN template
+        is available, mixes SF and AGN components via additive composition:
+        SED = (1 - fracAGN) * SF + fracAGN * QSO, with total IR scaled by
+        L_absorbed / (1 - fracAGN) to account for the AGN as an independent
+        heating source.
 
         Parameters
         ----------
         p : mapping[str, ndarray]
             Sliced parameters (prefix stripped):
             - ``p["alpha_dale"]``: radiation field power-law index [dimensionless]
+            - ``p["frac_agn"]``: AGN heating fraction [dimensionless, default 0.0]
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (ignored; Dale2014 emission is computed
             from L_ir independently).
@@ -203,12 +214,15 @@ class Dale2014IRSEDComponent(SEDModelComponent):
         templates = self.data
         tmpl_wave = templates["wavelength_aa"]
         alpha_grid = templates["alpha_grid"]
-        spectra = templates["spectra"]  # (n_alpha, n_wave)
+        templates_sf = templates["templates_sf"]  # (n_alpha, n_wave)
+        has_qso = "templates_qso" in templates
+        if has_qso:
+            templates_qso = templates["templates_qso"]  # (n_wave,)
 
         # Clip parameters to grid bounds
         dust_alpha_c = jnp.clip(p["alpha_dale"], alpha_grid[0], alpha_grid[-1])
 
-        # Linear interpolation index
+        # Linear interpolation index for SF component
         i_a = jnp.clip(
             jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
             0,
@@ -216,14 +230,26 @@ class Dale2014IRSEDComponent(SEDModelComponent):
         )
         fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
 
-        # Interpolate template spectrum
-        template = (1.0 - fa) * spectra[i_a] + fa * spectra[i_a + 1]
+        # Interpolate SF template spectrum
+        template_sf = (1.0 - fa) * templates_sf[i_a] + fa * templates_sf[i_a + 1]
+
+        # AGN mixing (only if QSO template is available)
+        if has_qso:
+            f_agn = jnp.clip(p.get("frac_agn", 0.0), 0.0, 0.99)
+            # Additive mixing: (1 - f) * SF + f * QSO
+            template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
+            # Scale by L_absorbed / (1 - f_agn) to account for the AGN power source
+            scale_factor = L_ir / jnp.maximum(1.0 - f_agn, 1e-10)
+        else:
+            # Back-compat: SF-only if QSO template absent
+            template_mixed = template_sf
+            scale_factor = L_ir
 
         # Interpolate onto target wavelength grid
-        sed = jnp.interp(wave, tmpl_wave, template, left=0.0, right=0.0)
+        sed = jnp.interp(wave, tmpl_wave, template_mixed, left=0.0, right=0.0)
 
-        # Scale by absorbed luminosity
-        sed_emission = L_ir * sed
+        # Scale by absorbed luminosity (adjusted for AGN if present)
+        sed_emission = scale_factor * sed
 
         # Return updated SED and published luminosity
         sed_out = sed_in + sed_emission

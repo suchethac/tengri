@@ -110,6 +110,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import _interp_index_weight, compute_qh, place_line_profiles
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
@@ -679,33 +680,46 @@ class CloudyGridBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Compute emission line luminosities (vectorized over age bins).
+        r"""Compute emission line luminosities (vectorized over age bins).
 
-        L_line = sum_i [w_i * Q_H(Z, age_i) * grid(Z_gas, age_i, logU) * (1-f_esc)]
+        L_line = sum_i [w_i * Q_H(Z, age_i) * grid(Z_gas, age_i, logU) * k(f_esc, f_dust)]
+
+        where the k-factor accounts for ionizing photon escape and dust absorption:
+
+        .. math::
+
+            k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
+                     {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
         Ly-alpha (1215.67 A) is treated separately: its luminosity is scaled
-        by (1-neb_fesc_lya)/(1-neb_fesc) relative to other lines, reflecting
+        by (1-neb_fesc_lya)/(1-k*fesc) relative to other lines, reflecting
         resonant scattering that suppresses Ly-alpha escape independently.
 
         Parameters
         ----------
         ssp_weights : array, shape (n_age,)
-            CSP mass weights (Msun per age bin).
+            CSP mass weights [Msun per age bin].
         ssp_log_ages_yr : array, shape (n_age,)
-            log10(age/yr) of SSP age bins.
+            log10(age/yr) of SSP age bins [log10(yr)].
         log_z : float
-            Stellar metallicity log10(Z) (absolute).
+            Stellar metallicity log10(Z) (absolute) [log10(Z)].
         neb_logU : float
-            Ionization parameter log10(U). Default -3.0.
+            Ionization parameter log10(U) [log10(U)]. Default -3.0.
         neb_logZ_gas : float or None
-            Gas metallicity log10(Z). None = tie to stellar Z.
+            Gas metallicity log10(Z) absolute [log10(Z)]. None = tie to stellar Z.
         neb_fesc : float
-            Escape fraction [0, 1].
+            Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
         neb_fesc_lya : float
-            Ly-alpha escape fraction [0, 1]. Default 0.0.
+            Ly-alpha-specific escape fraction [dimensionless, in [0, 1]]. Default 0.0.
+        neb_fdust : float
+            Lyman-continuum dust-absorption fraction in HII regions
+            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
+            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+            k-factor.
 
         Returns
         -------
@@ -717,7 +731,19 @@ class CloudyGridBackend:
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-        **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
+
+        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc, and
+        neb_fdust.
+
+        **k-factor**: follows CIGALE nebular.py (Ferland 1980) with ionizing
+        photon loss due to both escape and dust absorption treated symmetrically.
+
+        References
+        ----------
+        .. [1] Ferland, G. J. 1980, PASP, 92, 596.
+        .. [2] Inoue, A. K. 2011, MNRAS, 415, 2920.
+        .. [3] CIGALE nebular module: pcigale/sed_modules/nebular.py, lines
+            156-162.
 
         """
         if neb_logZ_gas is None:
@@ -741,11 +767,14 @@ class CloudyGridBackend:
             edges_u=getattr(self, "_edges_u_line", None),
         )
 
+        # Compute k-factor once (shared by all age bins)
+        k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+
         def _line_contrib_one_age(log_age_i, weight_i):
             """Compute weighted line luminosity contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_lum_per_qh = _interp_lines(neb_logZ_gas, log_age_i, neb_logU)
-            return weight_i * qh_i * (10.0**log_lum_per_qh) * (1.0 - neb_fesc)
+            return weight_i * qh_i * (10.0**log_lum_per_qh) * k_factor
 
         # vmap over young age bins only, then sum
         all_contribs = jax.vmap(_line_contrib_one_age)(
@@ -754,11 +783,11 @@ class CloudyGridBackend:
 
         total_line_lum = jnp.sum(all_contribs, axis=0)  # (n_lines,)
 
-        # Apply differential Ly-alpha escape fraction
-        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/(1-fesc) to replace
-        # the generic fesc with the Ly-alpha-specific one
+        # Apply differential Ly-alpha escape fraction.
+        # Ly-alpha at 1215.67 A: scale by (1-fesc_lya)/k_factor to apply the
+        # Ly-alpha-specific escape on top of the k-factor already applied.
         lya_idx = jnp.argmin(jnp.abs(grid.line_wavelengths - 1215.67))
-        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
+        lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(k_factor, 1e-10)
         total_line_lum = total_line_lum.at[lya_idx].multiply(lya_scale)
 
         return grid.line_wavelengths, total_line_lum
@@ -771,10 +800,19 @@ class CloudyGridBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
+        neb_fdust: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Compute nebular continuum SED (vectorized over age bins).
+        r"""Compute nebular continuum SED (vectorized over age bins).
+
+        Scales the nebular continuum by the CIGALE k-factor to account for
+        ionizing photon escape and dust absorption:
+
+        .. math::
+
+            k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
+                     {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
         Parameters
         ----------
@@ -789,7 +827,12 @@ class CloudyGridBackend:
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None → tied to stellar.
         neb_fesc : float
-            Ionizing photon escape fraction [dimensionless]. Default 0.0.
+            Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
+        neb_fdust : float
+            Lyman-continuum dust-absorption fraction in HII regions
+            [dimensionless, in [0, 1]]. Default 0.0. Both ``neb_fesc`` and
+            ``neb_fdust`` reduce the ionizing photon budget via the CIGALE
+            k-factor.
         **_kwargs
             Additional keyword arguments (unused).
 
@@ -805,12 +848,17 @@ class CloudyGridBackend:
         .. [1] N. Byler et al., "Nebular Continuum and Line Emission in Stellar
            Population Synthesis Models," ApJ, 840, 44 (2017).
            https://doi.org/10.3847/1538-4357/aa6c66
+        .. [2] Ferland, G. J. 1980, PASP, 92, 596.
+        .. [3] Inoue, A. K. 2011, MNRAS, 415, 2920.
+        .. [4] CIGALE nebular module: pcigale/sed_modules/nebular.py, lines
+            156-162.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
+        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc, and
+        neb_fdust.
 
         """
         if neb_logZ_gas is None:
@@ -833,11 +881,14 @@ class CloudyGridBackend:
             edges_u=getattr(self, "_edges_u_cont", None),
         )
 
+        # Compute k-factor once (shared by all age bins)
+        k_factor = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+
         def _cont_contrib_one_age(log_age_i, weight_i):
             """Compute weighted nebular continuum contribution for one SSP age bin."""
             qh_i = self._get_qh_at(log_z, log_age_i)
             log_cont_per_qh = _interp_cont(neb_logZ_gas, log_age_i, neb_logU)
-            return weight_i * qh_i * (10.0**log_cont_per_qh) * (1.0 - neb_fesc)
+            return weight_i * qh_i * (10.0**log_cont_per_qh) * k_factor
 
         all_contribs = jax.vmap(_cont_contrib_one_age)(
             young_ages, young_weights
@@ -856,14 +907,21 @@ class CloudyGridBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
         line_sigma_aa: float = 0.0,
         template_data: Any | None = None,
         **_kwargs,
     ) -> jnp.ndarray:
-        """Compute total nebular emission on the SSP wavelength grid.
+        r"""Compute total nebular emission on the SSP wavelength grid.
 
         Combines emission lines (as delta functions or Gaussians) with
-        nebular continuum, interpolated onto the SSP wavelength grid.
+        nebular continuum, interpolated onto the SSP wavelength grid. Both
+        components are scaled by the CIGALE k-factor:
+
+        .. math::
+
+            k = \frac{1 - f_\mathrm{esc} - f_\mathrm{dust}}
+                     {1 + \dfrac{\alpha_1}{\alpha_B}\,(f_\mathrm{esc} + f_\mathrm{dust})}
 
         Parameters
         ----------
@@ -880,9 +938,12 @@ class CloudyGridBackend:
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) absolute [log10(Z)]. None = tie to stellar.
         neb_fesc : float
-            Ionizing photon escape fraction [dimensionless]. Default 0.0.
+            Ionizing photon escape fraction [dimensionless, in [0, 1]]. Default 0.0.
         neb_fesc_lya : float
-            Ly-alpha-specific escape fraction [0, 1]. Default 0.0.
+            Ly-alpha-specific escape fraction [dimensionless, in [0, 1]]. Default 0.0.
+        neb_fdust : float
+            Lyman-continuum dust-absorption fraction in HII regions
+            [dimensionless, in [0, 1]]. Default 0.0.
         line_sigma_aa : float
             Gaussian line width (σ) [Angstrom]. 0 = delta function
             (add to nearest pixel).
@@ -897,12 +958,17 @@ class CloudyGridBackend:
         .. [1] N. Byler et al., "Nebular Continuum and Line Emission in Stellar
            Population Synthesis Models," ApJ, 840, 44 (2017).
            https://doi.org/10.3847/1538-4357/aa6c66
+        .. [2] Ferland, G. J. 1980, PASP, 92, 596.
+        .. [3] Inoue, A. K. 2011, MNRAS, 415, 2920.
+        .. [4] CIGALE nebular module: pcigale/sed_modules/nebular.py, lines
+            156-162.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-        **Gradient-safe**: yes — differentiable through neb_logU and neb_fesc.
+        **Gradient-safe**: yes — differentiable through neb_logU, neb_fesc, and
+        neb_fdust.
 
         """
         # Get line luminosities
@@ -914,6 +980,7 @@ class CloudyGridBackend:
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            neb_fdust=neb_fdust,
             template_data=template_data,
         )
 
@@ -925,6 +992,7 @@ class CloudyGridBackend:
             neb_logU=neb_logU,
             neb_logZ_gas=neb_logZ_gas,
             neb_fesc=neb_fesc,
+            neb_fdust=neb_fdust,
             template_data=template_data,
         )
 

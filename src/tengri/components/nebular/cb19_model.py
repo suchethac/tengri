@@ -98,6 +98,11 @@ class CB19SEDComponent(SEDModelComponent):
     )
     fesc = Fixed(0.0, description="Ionizing photon escape fraction", units="dimensionless")
     fesc_lya = Fixed(0.0, description="Lyman-alpha escape fraction", units="dimensionless")
+    fdust = Fixed(
+        0.0,
+        description="Lyman-continuum dust-absorption fraction in HII regions",
+        units="dimensionless",
+    )
 
     # Cross-component contract
     inputs: ClassVar[dict[str, str]] = {
@@ -182,6 +187,7 @@ class CB19SEDComponent(SEDModelComponent):
                 neb_logZ_gas=jnp.asarray(p["logZ_gas"]),
                 neb_fesc=jnp.asarray(p["fesc"]),
                 neb_fesc_lya=jnp.asarray(p["fesc_lya"]),
+                neb_fdust=jnp.asarray(p.get("fdust", 0.0)),
             )
             return sed_in, {
                 "line_waves": line_waves,

@@ -42,9 +42,23 @@ class SKIRTORTorusConfig(SEDComponentConfig):
     grid_path : str or None
         Path to SKIRTOR template grid (.npz or .h5). If None, templates
         are not pre-loaded (deferred to first use in predict).
+    disk_type : int
+        Disc spectrum model selector (CIGALE ``skirtor2016.py`` ``disk_type``).
+        Options:
+
+        - 0: SKIRTOR intrinsic disc (Stalevski et al. 2012)
+        - 1: Schartmann et al. (2005) disc
+        - 2: ADAF -> thin-disc blend (Lopez et al. 2024)
+
+        Default: 0. tengri's SKIRTOR template grid bundles the SKIRTOR
+        *intrinsic* disc, so ``disk_type=0`` with ``delta=0`` reproduces the
+        tabulated disc bit-for-bit. ``disk_type`` re-tilts the disc spectral
+        shape relative to that intrinsic disc (CIGALE's module default is 1
+        (Schartmann); set ``disk_type=1`` to match it).
     """
 
     grid_path: str | None = None
+    disk_type: int = 0  # 0 reproduces the SKIRTOR-intrinsic template disc bit-exactly
 
 
 @dataclass(frozen=True)
@@ -106,6 +120,12 @@ class SKIRTORTorus(SEDModelComponent):
     polar_beta : Uniform
         Polar dust emissivity index (Casey 2012 modified blackbody).
         [dimensionless, 1–2.5]
+    delta : Uniform
+        Disc spectral slope modulation (CIGALE ``skirtor2016`` delta).
+        [dimensionless, -1.0–1.0]. For ``disk_type`` 0/1 it tilts the disc
+        power-law index at 100–5000 Å via α_mid = -1.5 + delta; for
+        ``disk_type=2`` it is the ADAF->thin-disc blend weight (clipped to
+        [0, 1]). Default 0.0 (no modulation).
 
     Cross-component outputs
     -----------------------
@@ -235,6 +255,20 @@ class SKIRTORTorus(SEDModelComponent):
         units="dimensionless",
         default=1.6,
     )
+    delta = Uniform(
+        -1.0,
+        1.0,
+        description="Disc spectral slope modulation delta (CIGALE skirtor2016). "
+        "For disk_type 0/1 it tilts the optical-MIR disc slope; for disk_type 2 "
+        "it is the ADAF->thin-disc blend weight (clipped to [0, 1]).",
+        units="dimensionless",
+        default=0.0,
+    )
+    # NOTE: CIGALE's ``lambda_fracAGN`` (band over which the AGN fraction is
+    # normalised) is intentionally NOT exposed here. tengri normalises frac_agn
+    # bolometrically, which is exactly CIGALE's default ("0/0"). A band-restricted
+    # normalisation is a documented follow-up (umbrella audit issue) rather than a
+    # dead Fixed knob.
 
     # Cross-component outputs
     outputs: ClassVar[dict[str, str]] = {
@@ -283,7 +317,8 @@ class SKIRTORTorus(SEDModelComponent):
         """Pure JAX SKIRTOR prediction with separate components and polar dust.
 
         Interpolates the SKIRTOR template grid, applies polar dust extinction
-        to Type 1 sightlines, and publishes all derived luminosities.
+        to Type 1 sightlines, and publishes all derived luminosities. Supports
+        multiple disc spectrum models via the config.disk_type parameter.
 
         Parameters
         ----------
@@ -296,6 +331,7 @@ class SKIRTORTorus(SEDModelComponent):
             - oa_skirtor: opening angle (degrees)
             - cos_inc: cosine of inclination
             - frac_agn: AGN luminosity fraction
+            - delta: disc spectral slope modulation (-1.0 to 1.0)
             - polar_ebv: polar dust E(B-V)
             - polar_temperature: polar dust greybody temperature (K)
             - polar_beta: polar dust emissivity index
@@ -316,6 +352,13 @@ class SKIRTORTorus(SEDModelComponent):
 
         Notes
         -----
+        **JIT-compatible**: yes — uses static disk_type (not traced).
+
+        **Disc selection**: config.disk_type selects the disc spectrum model:
+        - 0: SKIRTOR intrinsic disc (Stalevski et al. 2012)
+        - 1: Schartmann et al. (2005) torus model (CIGALE default)
+        - 2: ADAF + thin disc blend (Lopez et al. 2024)
+
         **Polar dust model**: The X-CIGALE polar dust model (Yang et al. 2020,
         §2.2.2) applies a Type-1/Type-2 mask to the observer-frame disc attenuation.
         However, the absorbed luminosity driving the greybody FIR reemission is
@@ -323,6 +366,11 @@ class SKIRTORTorus(SEDModelComponent):
         (face-on) and Type 2 (edge-on) sightlines see the FIR bump in the combined SED.
         """
         from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn.disc_cigale import (
+            adaf_disk_spectrum,
+            schartmann2005_disk_spectrum,
+            skirtor_disk_spectrum,
+        )
         from tengri.components.agn.polar_dust import (
             polar_dust_emission,
             polar_dust_extinction,
@@ -355,15 +403,51 @@ class SKIRTORTorus(SEDModelComponent):
         )
 
         # Unpack components
-        sed_disc = components.disk
+        sed_disc_template = components.disk
         sed_torus_dust = components.dust
 
         # Compute derived quantities from disc
         nu = wavelength_to_nu(wave)
         idx_sort = jnp.argsort(nu)
 
-        # L_agn_disc: bolometric luminosity of intrinsic disc
-        L_agn_disc = jnp.trapezoid(sed_disc[idx_sort], nu[idx_sort])
+        # L_agn_disc: bolometric luminosity of the intrinsic disc. Preserved
+        # across the disc-shape selection below so frac_agn / energy balance is
+        # unaffected by disk_type / delta (only the SED *shape* changes).
+        L_agn_disc = jnp.trapezoid(sed_disc_template[idx_sort], nu[idx_sort])
+
+        # --- CIGALE disc-shape selection (skirtor2016.py:324-339) -----------
+        # CIGALE builds the disc analytically and selects its shape via
+        # ``disk_type`` and re-tilts it via ``delta``. tengri's grid carries the
+        # SKIRTOR *intrinsic* disc, so we re-tilt the tabulated disc by the
+        # ratio  (selected analytic disc) / (SKIRTOR analytic disc, delta=0).
+        # At disk_type=0, delta=0 this ratio is identically 1 -> the tabulated
+        # disc is reproduced bit-for-bit. The disc bolometric luminosity is then
+        # restored to L_agn_disc so only the spectral shape is modified.
+        #
+        # ``disk_type`` is a STATIC structural choice (resolved at trace time, no
+        # branch on a traced value); ``delta`` is a differentiable free param.
+        disk_type = int(self.config.disk_type)  # static
+        delta = p["delta"]
+        wave_nm = wave / 10.0  # disc_cigale functions take nm
+        if disk_type == 0:
+            shape_sel = skirtor_disk_spectrum(wave_nm, delta=delta)
+        elif disk_type == 1:
+            shape_sel = schartmann2005_disk_spectrum(wave_nm, delta=delta)
+        elif disk_type == 2:
+            shape_sel = adaf_disk_spectrum(wave_nm, delta=delta)
+        else:
+            raise ValueError(
+                f"disk_type must be 0 (SKIRTOR), 1 (Schartmann2005), or 2 "
+                f"(ADAF/Lopez24); got {disk_type!r}."
+            )
+        shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
+        # Re-tilt factor (unit-area / lambda-vs-nu normalisations cancel in the
+        # ratio). Floor the denominator to stay finite where the disc is ~0.
+        retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
+        sed_disc = sed_disc_template * retilt
+        # Restore the disc bolometric luminosity (shape-only change).
+        L_retilt = jnp.trapezoid(sed_disc[idx_sort], nu[idx_sort])
+        sed_disc = sed_disc * (L_agn_disc / jnp.maximum(jnp.abs(L_retilt), 1e-100))
 
         # L_2500_30deg: specific luminosity at 2500 Å (for α_OX)
         L_2500 = jnp.interp(2500.0, wave, sed_disc)

@@ -81,10 +81,15 @@ class TestSKIRTORParameterDiscovery:
     """Test auto-discovery of free parameters."""
 
     def test_declared_parameters_count(self):
-        """SKIRTORTorus declares ten free parameters (seven core + polar dust trio)."""
+        """SKIRTORTorus declares eleven free parameters.
+
+        Seven core + polar-dust trio (10) plus the CIGALE disc-shape
+        modulation ``agn_delta`` (disk_type is a static config choice, not a
+        free parameter).
+        """
         comp = SKIRTORTorus()
         decls = comp.declared_parameters()
-        assert len(decls) == 10
+        assert len(decls) == 11
 
     def test_declared_parameter_names(self):
         """Parameter names have agn_ prefix as per naming contract.
@@ -109,6 +114,8 @@ class TestSKIRTORParameterDiscovery:
             "agn_polar_ebv",
             "agn_polar_temperature",
             "agn_polar_beta",
+            # CIGALE disc-shape modulation (skirtor2016 ``delta``).
+            "agn_delta",
         }
         assert names == expected
 
