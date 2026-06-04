@@ -178,4 +178,4 @@ cbar = fig.colorbar(im, ax=ax, label=r"$\partial \log F / \partial \log \theta$ 
 ax.set_ylabel("Photometric Band", fontsize=10)
 
 fig.tight_layout()
-plt.savefig("plot_jax_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
+plt.show()

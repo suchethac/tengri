@@ -6,8 +6,6 @@ Verify tengri's Calzetti implementation against Eq. 1 in Calzetti et al. 2000
 (ApJ 533, 682). The canonical k(V=5500 Å) = 4.05 must be reproduced exactly.
 """
 
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -77,8 +75,7 @@ ax_res.axhline(-1, color="gray", linestyle=":", alpha=0.3)
 ax_res.set(xlabel=r"$\lambda$ [$\mu$m]", ylabel=r"Residual [\%]")
 ax_res.grid(True, which="both", alpha=0.2)
 
-output_path = os.path.join(os.path.dirname(__file__), "plot_diag_calzetti_kv_norm.png")
-plt.savefig(output_path, dpi=150, bbox_inches="tight")
+plt.show()
 
 # Report
 max_residual = np.max(np.abs(residual_pct))

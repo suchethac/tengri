@@ -19,7 +19,6 @@ Reference: SDSS photometric calibration (Fukugita et al. 1996, Paddock et al. 20
 """
 
 import warnings
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -105,6 +104,4 @@ ax.grid(True, alpha=0.3)
 ax.legend(loc="upper left", frameon=False, fontsize=8)
 
 plt.tight_layout()
-script_dir = Path(__file__).parent
-output_path = script_dir / "plot_diag_filter_integral_manual.png"
-plt.savefig(output_path, dpi=150, bbox_inches="tight")
+plt.show()

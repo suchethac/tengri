@@ -203,7 +203,4 @@ ax.text(
 )
 
 fig.tight_layout()
-output_path = os.path.join(os.path.dirname(__file__), "plot_gradient_degeneracy_direction.png")
-print(f"\nSaving figure to {output_path}...")
-plt.savefig(output_path, dpi=150, bbox_inches="tight")
-print("Done.")
+plt.show()

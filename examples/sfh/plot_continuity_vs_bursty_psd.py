@@ -10,7 +10,6 @@ Twenty samples from each prior, overlaid translucently with median shown in bold
 Visual width difference reveals each prior's implicit stochastic assumptions.
 """
 
-import os
 import warnings
 
 import jax.random as jr
@@ -86,9 +85,4 @@ for ax, sfr_samples, color, label in [
 
 fig.legend(["Mean SFH"], loc="upper center", bbox_to_anchor=(0.5, 1.02), fontsize=10)
 fig.tight_layout()
-plt.savefig(
-    os.path.join(os.path.dirname(__file__), "plot_continuity_vs_bursty_psd.png"),
-    dpi=150,
-    bbox_inches="tight",
-)
-plt.close()
+plt.show()

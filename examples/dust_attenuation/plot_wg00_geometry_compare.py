@@ -69,5 +69,4 @@ ax.set(
 ax.legend(frameon=False, fontsize=8, ncol=1, loc="lower right")
 
 plt.tight_layout()
-plt.savefig("plot_wg00_geometry_compare.png", dpi=150, bbox_inches="tight")
-plt.close(fig)
+plt.show()

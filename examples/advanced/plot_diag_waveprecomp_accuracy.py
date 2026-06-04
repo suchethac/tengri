@@ -11,7 +11,6 @@ fractional errors decrease with finer redshift grids.
 Reference: ADR-0007 (precomputation architecture).
 """
 
-import os
 import warnings
 
 import jax
@@ -100,7 +99,4 @@ ax_right.grid(True, alpha=0.3, which="both", axis="y")
 ax_right.axhline(1e-4, color="C3", linestyle="--", lw=1.5, alpha=0.7)
 
 fig.tight_layout()
-script_dir = os.path.dirname(os.path.abspath(__file__))
-plt.savefig(
-    os.path.join(script_dir, "plot_diag_waveprecomp_accuracy.png"), dpi=150, bbox_inches="tight"
-)
+plt.show()

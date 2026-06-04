@@ -12,7 +12,6 @@ Reference: Calzetti et al. 2000, ApJ 533 682; Cardelli et al. 1989, ApJ 345 245.
 """
 
 import warnings
-from pathlib import Path
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -106,5 +105,4 @@ else:
 ax_res.set_xlabel(r"Wavelength [$\mathrm{\AA}$]")
 fig.tight_layout()
 
-outfile = Path(__file__).with_suffix(".png")
-plt.savefig(outfile, dpi=150, bbox_inches="tight")
+plt.show()

@@ -90,5 +90,4 @@ ax2.set(
 ax2.legend(frameon=False, fontsize=9)
 
 plt.tight_layout()
-plt.savefig("plot_wg00_tau_v_sweep.png", dpi=150, bbox_inches="tight")
-plt.close(fig)
+plt.show()

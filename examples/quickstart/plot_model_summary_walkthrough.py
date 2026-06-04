@@ -10,7 +10,6 @@ annotated summary as a figure caption, and show the predicted SED.
 """
 
 import warnings
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -23,9 +22,8 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Load bare-stellar SSP from canonical data directory (Cue requires bare SSP)
-ssp_path = Path("/Users/suchethacooray/Projects/tengri/data/fsps_prsc_miles_chabrier.h5")
-ssp = tengri.load_ssp_data(str(ssp_path))
+# Load bare-stellar SSP via the public loader (Cue requires a bare SSP).
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # Build a model with deliberately mixed provenance sources.
 # - sfh: tsnorm with FREE wildcards except one fixed param
@@ -102,6 +100,4 @@ ax_sed.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 ax_sed.grid(True, alpha=0.2, which="both")
 
 fig.tight_layout()
-output_path = Path(__file__).parent / "plot_model_summary_walkthrough.png"
-plt.savefig(str(output_path), dpi=150, bbox_inches="tight")
-plt.close(fig)
+plt.show()

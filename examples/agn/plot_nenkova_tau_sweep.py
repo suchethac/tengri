@@ -91,5 +91,4 @@ ax.set(
 )
 
 plt.tight_layout()
-plt.savefig("plot_nenkova_tau_sweep.png", dpi=150, bbox_inches="tight")
-plt.close(fig)
+plt.show()

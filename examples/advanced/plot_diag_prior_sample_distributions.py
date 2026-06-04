@@ -12,7 +12,6 @@ For each parameter, we compute the Kolmogorov-Smirnov (KS) statistic to flag
 any significant deviation (KS > 0.05 suggests a bug in the sampler).
 """
 
-import os
 import warnings
 from functools import partial
 
@@ -104,9 +103,7 @@ for idx in range(len(free_params), len(axes)):
     axes[idx].set_visible(False)
 
 fig.tight_layout()
-script_dir = os.path.dirname(os.path.abspath(__file__))
-save_path = os.path.join(script_dir, "plot_diag_prior_sample_distributions.png")
-plt.savefig(save_path, dpi=150, bbox_inches="tight")
+plt.show()
 
 if ks_stats:
     worst_param = max(ks_stats, key=ks_stats.get)

@@ -119,7 +119,7 @@ ax_throughput.set_yscale("log")
 ax_throughput.grid(True, alpha=0.3, which="both")
 
 fig.tight_layout()
-plt.savefig("plot_vmap_population_throughput.png", dpi=150, bbox_inches="tight")
+plt.show()
 
 # Print summary
 print(

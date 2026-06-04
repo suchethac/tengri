@@ -77,30 +77,61 @@ baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 norm = mpl.colors.Normalize(vmin=fe2_strength_values.min(), vmax=fe2_strength_values.max())
 cmap = plt.get_cmap("plasma")
 
-fig, ax = plt.subplots(figsize=(7.0, 4.5))
+# The Fe II pseudo-continuum is a few-percent additive feature riding on the
+# bright accretion-disc continuum, so the sweep is invisible on a full-SED log
+# axis. We therefore show two panels: the full AGN SED for context (left) and
+# the Fe II *excess* over the strength = 0 baseline (right), which isolates the
+# two iron humps and makes the sweep legible.
+fig, (ax, ax_excess) = plt.subplots(1, 2, figsize=(11.0, 4.5))
 c_aa_s = 2.998e18
 
+seds = []
 for fe2_strength in fe2_strength_values:
     params = {**baseline, "agn_fe2_strength": jnp.float64(fe2_strength)}
     out = model.predict_rest_sed(params)
 
     wave = np.asarray(out.wavelength)
     nu_l_nu = c_aa_s / wave * np.asarray(out.sed)
+    seds.append(nu_l_nu)
 
     color = cmap(norm(fe2_strength))
     ax.loglog(wave, nu_l_nu, color=color, lw=1.5, label=f"Fe II strength = {fe2_strength:.2f}")
 
+base_sed = seds[0]  # strength = 0 reference
+
+# Left: full AGN SED (multicolor disc + BLR), zoomed to where the data lives.
 ax.set_xlim(500, 1e5)
-ax.set_ylim(1e42, 1e48)
+ax.set_ylim(1e43, 3e45)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
-
-# Annotate Fe II humps
 ax.axvspan(2200, 3000, color="red", alpha=0.1, lw=0)
 ax.axvspan(4400, 4700, color="red", alpha=0.1, lw=0)
-ax.text(2600, 1e47, "Fe II hump 1", color="red", fontsize=8, ha="center", weight="bold")
-ax.text(4550, 1e47, "Fe II hump 2", color="red", fontsize=8, ha="center", weight="bold")
-
+ax.set_title("Full AGN SED", fontsize=10)
 ax.legend(frameon=False, fontsize=8, loc="lower left")
+
+# Right: Fe II excess over the strength = 0 baseline — the two iron humps.
+for nu_l_nu, fe2_strength in zip(seds, fe2_strength_values):
+    if fe2_strength == 0.0:
+        continue
+    ax_excess.plot(
+        wave,
+        nu_l_nu - base_sed,
+        color=cmap(norm(fe2_strength)),
+        lw=1.5,
+        label=f"{fe2_strength:.2f}",
+    )
+ax_excess.set_xscale("log")
+ax_excess.set_xlim(1500, 8000)
+ax_excess.axvspan(2200, 3000, color="red", alpha=0.1, lw=0)
+ax_excess.axvspan(4400, 4700, color="red", alpha=0.1, lw=0)
+ax_excess.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+ax_excess.set_ylabel(r"$\nu\,\Delta L_\nu$ over Fe II $=0$  [erg s$^{-1}$]")
+ax_excess.set_title("Fe II excess", fontsize=10)
+ax_excess.annotate("UV\nFe II", (2600, 0), color="red", fontsize=8, ha="center", weight="bold")
+ax_excess.annotate(
+    "optical\nFe II", (4550, 0), color="red", fontsize=8, ha="center", weight="bold"
+)
+ax_excess.legend(title="Fe II strength", frameon=False, fontsize=8, loc="upper right")
+
 fig.tight_layout()
-plt.savefig("plot_agn_feii_sweep.png", dpi=150, bbox_inches="tight")
+plt.show()
