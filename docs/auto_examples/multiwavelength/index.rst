@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_multiwavelength:
 
@@ -32,6 +32,23 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Each tengri SED component shown in isolation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A low-mass, low-metallicity dwarf irregular (M*~10^8 Msun, Z~0.1 Zsun) with high specific star formation rate. The SED highlights: strong UV continuum from young stars, dominant optical emission lines (Hα 6563 Å, [OIII] 5007 Å, Hβ) on a faint continuum, minimal dust attenuation, and negligible far-infrared. Equivalent width of Hα is extreme (~100s Å). Metal-poor stellar populations and active star formation drive the starburst signature visible from UV through optical.">
+
+.. only:: html
+
+  .. image:: /auto_examples/multiwavelength/images/thumb/sphx_glr_plot_dwarf_irregular_sed_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/multiwavelength/plot_dwarf_irregular_sed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Panchromatic SED of a low-metallicity dwarf irregular galaxy</div>
     </div>
 
 
@@ -88,7 +105,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Spiral galaxies exhibit radial metallicity gradients: metal-rich centres and metal-poor discs (e.g. NGC 891, Searle 1971). This example illustrates how three common gradient scenarios—steep positive, flat, and inverted depletion—reshape the integrated SED when weighted by disc area.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Spiral galaxies exhibit radial metallicity gradients: metal-rich centres and metal-poor discs (e.g. NGC 891, Searle 1971). three common gradient scenarios—steep positive, flat, and inverted depletion—reshape the integrated SED when weighted by disc area.">
 
 .. only:: html
 
@@ -105,7 +122,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The 5–30 μm rest-frame spectrum showcases distinct infrared tracers: dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6, 11.3, and 12.7 μm in star-forming galaxies, while silicate absorption (9.7 μm Si–O stretch) and AGN heating suppress PAH and introduce continuum growth in AGN-dominated systems. We model three templates: (a) pure starburst (no AGN), (b) pure AGN (no star formation), and (c) composite with AGN fraction = 0.5. This illustrates the diagnostic power of mid-IR spectroscopy: PAH strength probes star formation rate, while continuum slope and silicate depth reveal AGN heating and dust temperature.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The 5–30 μm rest-frame spectrum showcases distinct infrared tracers: dust polycyclic aromatic hydrocarbon (PAH) emission peaks at 6.2, 7.7, 8.6, 11.3, and 12.7 μm in star-forming galaxies, while silicate absorption (9.7 μm Si–O stretch) and AGN heating suppress PAH and introduce continuum growth in AGN-dominated systems. We model three templates: (a) pure starburst (no AGN), (b) pure AGN (no star formation), and (c) composite with AGN fraction = 0.5. the diagnostic power of mid-IR spectroscopy: PAH strength probes star formation rate, while continuum slope and silicate depth reveal AGN heating and dust temperature.">
 
 .. only:: html
 
@@ -284,6 +301,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
    :hidden:
 
    /auto_examples/multiwavelength/plot_components_isolated
+   /auto_examples/multiwavelength/plot_dwarf_irregular_sed
    /auto_examples/multiwavelength/plot_fir_radio_correlation
    /auto_examples/multiwavelength/plot_lbg_observed_evolution
    /auto_examples/multiwavelength/plot_m82_starburst_panchromatic

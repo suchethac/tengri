@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_sps:
 
@@ -36,7 +36,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The stellar populations in massive elliptical galaxies are typically α-enhanced ([α/Fe] &gt; 0) due to rapid star formation timescales that terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005). This example demonstrates how increasing [α/Fe] shifts absorption features — particularly the Mg b and Fe5270 indices — which serve as diagnostics of star-formation history timescale.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The stellar populations in massive elliptical galaxies are typically α-enhanced ([α/Fe] &gt; 0) due to rapid star formation timescales that terminate before iron-peak elements fully enrich the gas (Thomas et al. 2005). increasing [α/Fe] shifts absorption features — particularly the Mg b and Fe5270 indices — which serve as diagnostics of star-formation history timescale.">
 
 .. only:: html
 
@@ -53,7 +53,41 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The same stellar population SED looks different depending on the units chosen for visualization. This example shows a single galaxy SED in three complementary representations on a 3-panel grid:">
+    <div class="sphx-glr-thumbcontainer" tooltip="The bolometric correction in band X is BC_X = M_bol − M_X (equivalently 2.5 log10(L_X / L_bol) up to a sign). For a single-burst SSP it traces which part of the spectrum carries the bolometric luminosity at each age: at young ages the UV dominates so BC_UV is small and BC_K is large (positive); as the population ages the SED reddens and the correction inverts — BC_K shrinks while BC_UV blows up.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_bolometric_correction_vs_age_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_bolometric_correction_vs_age`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Bolometric correction per band as a single burst ages</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Tengri assembles a galaxy SED out of named blocks that can each be toggled on or off at build time. We construct six models that successively add one more block, then overlay the rest-frame \nu L_\nu after each addition. Every block has a visible signature somewhere in the SED:">
+
+.. only:: html
+
+  .. image:: /auto_examples/sps/images/thumb/sphx_glr_plot_component_buildup_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sps/plot_component_buildup`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Building the panchromatic SED component by component</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The same stellar population SED looks different depending on the units chosen for visualization. a single galaxy SED in three complementary representations on a 3-panel grid:">
 
 .. only:: html
 
@@ -267,6 +301,8 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
    /auto_examples/sps/plot_age_metallicity_color_grid
    /auto_examples/sps/plot_alpha_enhanced_population
+   /auto_examples/sps/plot_bolometric_correction_vs_age
+   /auto_examples/sps/plot_component_buildup
    /auto_examples/sps/plot_fnu_vs_flambda_units
    /auto_examples/sps/plot_ionising_lum
    /auto_examples/sps/plot_mass_to_light_band_comparison

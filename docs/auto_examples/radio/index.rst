@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_radio:
 
 Radio
@@ -48,6 +46,23 @@ Star-formation radio emission and the FIR–radio correlation.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">FIR-radio correlation: q_IR sets radio loudness</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A star-forming galaxy&#x27;s GHz continuum is set by two components: non-thermal synchrotron from supernova remnants (steep, L_ν ∝ ν^{-α_sf}) and thermal free-free from H II regions (flat, L_ν ∝ ν^{-0.1}). Their ratio at fixed frequency depends sensitively on the synchrotron spectral index α_sf — flatter spectra leave more of the GHz luminosity to free-free, steeper spectra are synchrotron-dominated until the (sub-mm) crossover.">
+
+.. only:: html
+
+  .. image:: /auto_examples/radio/images/thumb/sphx_glr_plot_radio_crossover_frequency_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/radio/plot_radio_crossover_frequency`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Synchrotron / free-free balance vs synchrotron slope α_sf</div>
     </div>
 
 
@@ -131,6 +146,7 @@ Star-formation radio emission and the FIR–radio correlation.
 
    /auto_examples/radio/plot_alpha_sf_sweep
    /auto_examples/radio/plot_q_ir_sweep
+   /auto_examples/radio/plot_radio_crossover_frequency
    /auto_examples/radio/plot_radio_lir_relation
    /auto_examples/radio/plot_radio_loudness_sweep
    /auto_examples/radio/plot_radio_vs_agn_lbol

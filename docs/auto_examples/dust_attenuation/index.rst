@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_dust_attenuation:
 
@@ -19,7 +19,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The tengri library offers six attenuation laws covering the morphology-geometry spectrum: Milky Way (Cardelli), SMC (Pei), starburst (Calzetti, Conroy), and theoretical models (Kriek &amp; Conroy, power law). At fixed τ_V = 1, their curves expose the 2175 Å bump (MW/Cardelli), slope differences (SMC is greyer, Calzetti is redder), and parametric extensions (Kriek &amp; Conroy).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust attenuation laws encode how interstellar dust preferentially absorbs short-wavelength (UV) starlight relative to optical/IR. The wavelength dependence is empirically calibrated to extinction measurements in the Milky Way (Cardelli+1989), Large/Small Magellanic Clouds (Pei 1992), and starburst galaxies (Calzetti+2000, Kriek+Conroy 2013).">
 
 .. only:: html
 
@@ -30,30 +30,13 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">The six headline dust attenuation laws span MW, SMC, and starburst geometries</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust attenuation laws encode how interstellar dust preferentially absorbs short-wavelength (UV) starlight relative to optical/IR. The wavelength dependence is empirically calibrated to extinction measurements in the Milky Way (Cardelli+1989), Large/Small Magellanic Clouds (Pei 1992), and starburst galaxies (Calzetti+2000, Kriek+Conroy 2013).">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_attenuation_law_family_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_attenuation_law_family`
-
-.. raw:: html
-
       <div class="sphx-glr-thumbnail-title">Dust attenuation laws: family comparison across UV to near-IR</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into a birth-cloud component (``τ_bc``) that only the youngest stellar ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two are degenerate for an old population (every star is &quot;old&quot; by the BC clock, so τ_bc has no effect) but separate cleanly for a young one.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model splits attenuation into a birth-cloud component (``τ_bc``) that only the youngest stellar ages see, and a diffuse-ISM component (``τ_diff``) that attenuates all stellar light. The two are degenerate for an old population but separate cleanly for a young one.">
 
 .. only:: html
 
@@ -64,7 +47,7 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: which knob does what?</div>
+      <div class="sphx-glr-thumbnail-title">Birth-cloud vs diffuse-ISM dust: age dependence and parameter degeneracies</div>
     </div>
 
 
@@ -223,6 +206,40 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Reddy et al. (2015) derived a dust attenuation curve from Balmer decrements of z ~ 1.4–2.6 star-forming galaxies in the MOSDEF survey. It is shallower in the UV than the SMC curve but has a lower total-to-selective ratio (``R_V = 2.505``) than Calzetti&#x27;s local starburst law (``R_V = 4.05``) — a combination relevant when fitting rest-UV/optical SEDs of high-z galaxies. FSPS exposes this curve; tengri provides it as the reddy15 dust law.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_reddy15_highz_curve_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_reddy15_highz_curve`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Reddy+2015 high-redshift attenuation curve</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed UV slope β_UV (the observable astronomers measure), many (R_V, A_V) pairs produce identical colours — this is a classical dust modelling pitfall. Shows β_UV as contours on the (R_V, A_V) grid for Cardelli MW attenuation. Standard reference points (SMC, LMC, Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours, illustrating why dust-law assumptions strongly bias inferred properties.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_rv_av_uv_slope_degeneracy_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Rv and Av degeneracy in UV slope: the Calzetti trap</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_bc attenuates only the youngest stellar light (age &lt; ~10 Myr), controlling nebular emission from embedded HII regions. τ_bc effects are clearest on young star-forming populations; we use a 500 Myr starburst and vary τ_bc across the prior range.">
 
 .. only:: html
@@ -291,6 +308,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump sits atop a power-law continuum. Varying the slope parameter δ (delta) in the Kriek &amp; Conroy attenuation law steepens or flattens the UV continuum, which changes the bump&#x27;s prominence relative to the surrounding curve. We zoom on rest-frame 1500–3500 Å to isolate the bump region and show how δ ∈ [−1, +0.5] reshapes the attenuation curve.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_uv_bump_strength_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_uv_bump_strength_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">UV bump shape controlled by attenuation curve slope</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump from PAHs and small graphite grains sweeps from absent to Milky-Way strength via the dust_bump_strength knob. At zero, the attenuation curve is a smooth power law; at MW-like values, the bump dominates the UV. We show the attenuation law (not a galaxy SED) to isolate the curve shape.">
 
 .. only:: html
@@ -323,6 +357,40 @@ depths, two-component geometry, and law comparisons.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The WG00 radiative-transfer grid (FSPS dust_type=3) spans three large-scale star-dust geometries — shell (a foreground screen), cloudy (a homogeneous star-dust mix), and dusty (a clumpy two-phase medium) — crossed with two grain populations (Milky-Way and SMC). At a fixed tau_V these choices set the shape of the transmission exp(-A(lambda)): the foreground screen is the reddest (steepest UV), while the mixed and clumpy geometries are progressively greyer because short-wavelength photons escape through low-opacity sightlines.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_wg00_geometry_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_wg00_geometry_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Witt & Gordon 2000: geometry and grain type at fixed optical depth</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="For a foreground dust screen the attenuation curve has a fixed shape — its amplitude scales with tau_V but the UV-to-optical ratio is constant, so a single k(lambda) law captures it. Witt &amp; Gordon (2000) showed this breaks down once dust and stars are mixed: high-``tau_V`` sightlines self-shield, the short-wavelength photons preferentially escape through low-opacity channels, and the effective curve greys (flattens) as tau_V rises. The curve shape is therefore a function of tau_V — which is exactly why tengri ships WG00 as a radiative-transfer table (FSPS dust_type=3), interpolated in tau_V, rather than a fixed-shape law.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_wg00_tau_v_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_wg00_tau_v_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Witt & Gordon 2000: the attenuation shape greys with optical depth</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -334,7 +402,6 @@ depths, two-component geometry, and law comparisons.
    :hidden:
 
    /auto_examples/dust_attenuation/plot_attenuation_law_compare
-   /auto_examples/dust_attenuation/plot_attenuation_law_family
    /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
    /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
    /auto_examples/dust_attenuation/plot_dust_curves
@@ -345,10 +412,15 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_dust_slope_sweep
    /auto_examples/dust_attenuation/plot_galactic_zoo_dust_laws
    /auto_examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation
+   /auto_examples/dust_attenuation/plot_reddy15_highz_curve
+   /auto_examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy
    /auto_examples/dust_attenuation/plot_tau_bc_sweep
    /auto_examples/dust_attenuation/plot_tau_diff_sweep
    /auto_examples/dust_attenuation/plot_two_component
    /auto_examples/dust_attenuation/plot_usecase_irx_beta_meurer
+   /auto_examples/dust_attenuation/plot_uv_bump_strength_sweep
    /auto_examples/dust_attenuation/plot_uv_bump_sweep
    /auto_examples/dust_attenuation/plot_uv_ir_energy_balance
+   /auto_examples/dust_attenuation/plot_wg00_geometry_compare
+   /auto_examples/dust_attenuation/plot_wg00_tau_v_sweep
 

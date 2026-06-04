@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_dust_emission:
 
@@ -156,24 +156,24 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the published [-3, +6] range of the Hensley &amp; Draine 2023 grid. Shows FIR peak shift toward shorter wavelengths and rising MIR PAH features as radiation field intensifies.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The BOSA infrared template library is parametrised jointly by total infrared luminosity log L_TIR and specific star formation rate log sSFR. Neither axis alone tells the full story: at fixed sSFR the FIR peak migrates with L_TIR (dust temperature), while at fixed L_TIR the PAH mid-IR forest brightens with sSFR. Three side-by-side panels at fixed sSFR overlay three L_TIR values each, making the 2-D dependence legible in a single figure rather than two skinny 1-D loops.">
 
 .. only:: html
 
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_astrodust_hd23_lgU_sweep_thumb.png
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_bosa_grid_thumb.png
     :alt:
 
-  :doc:`/auto_examples/dust_emission/plot_astrodust_hd23_lgU_sweep`
+  :doc:`/auto_examples/dust_emission/plot_bosa_grid`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Hensley & Draine 2023 Astrodust+PAH: log U sweep</div>
+      <div class="sphx-glr-thumbnail-title">BOSA library: PAH features and FIR peak depend on both sSFR and L_TIR</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep infrared luminosity across the BOSA grid at fixed specific star formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward and enhancing PAH relative to continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep infrared luminosity across the BOSA grid at fixed specific star formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward and enhancing PAH relative to continuum. Library is normalised by ∫Lν dν=1; shape variation with L_TIR is intentionally small.">
 
 .. only:: html
 
@@ -190,18 +190,18 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep specific star formation rate across the BOSA grid at fixed infrared luminosity. Higher sSFR produces harder mid-IR colors and stronger PAH features; quiescent galaxies exhibit colder FIR peaks.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Dale et al. (2014) IR template family can be combined with a pure-AGN (&quot;quasar&quot;) template to represent dust heated by an obscured AGN in addition to the star-forming ISM. tengri reproduces CIGALE&#x27;s convention, where the AGN is a separate power source added on top of the stellar-heated dust:">
 
 .. only:: html
 
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_bosa_ssfr_sweep_thumb.png
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_dale2014_agn_fraction_thumb.png
     :alt:
 
-  :doc:`/auto_examples/dust_emission/plot_bosa_ssfr_sweep`
+  :doc:`/auto_examples/dust_emission/plot_dale2014_agn_fraction`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BOSA: log sSFR sweep at fixed log L_TIR</div>
+      <div class="sphx-glr-thumbnail-title">Dale 2014 dust IR: AGN fraction (CIGALE-faithful additive mixing)</div>
     </div>
 
 
@@ -224,24 +224,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="All six dust-emission ingredients shipped with tengri, called with the same absorbed bolometric luminosity (1e10 L_sun) and the same warm-dust temperature (35 K). Analytic models (modified BB, Casey 2012, energy-balance split) drop sharply blue-ward of the warm-dust peak; template-based libraries (DL07, DL14, Dale+2014) carry PAH features in the 3-20 μm window. Template models silently skip if the data files aren&#x27;t available.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_dust_emission_models_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_dust_emission_models`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust-emission model family at fixed L_abs</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="2D grid of dust IR emission showing how PAH mass fraction and radiation-field hardness independently shape the mid- and far-infrared SED. Uses Draine &amp; Li 2007 templates across parameter space.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 2-D grid on the Draine &amp; Li 2007 template library: rows step through PAH mass fraction q_PAH (controls mid-IR PAH-feature strength), columns through the minimum radiation field U_min (sets the diffuse dust temperature, i.e. the FIR peak position). The two axes act nearly orthogonally — a surprise for anyone who would lump them together as &quot;PAH knobs.&quot;">
 
 .. only:: html
 
@@ -252,13 +235,13 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust IR SED: q_PAH × U_min Grid</div>
+      <div class="sphx-glr-thumbnail-title">The q_PAH and U_min knobs move PAH amplitude and FIR peak independently</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="All seven shipped dust IR-emission libraries reprocessing the same absorbed UV power into the IR, normalised so the integrated L_IR(8–1000 μm) is identical across curves. The differences then sit entirely in the SED shape — peak wavelength (T_dust proxy), PAH-feature amplitude in the 3–20 μm window, and how steeply the sub-mm tail falls.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All dust IR-emission libraries shipped in tengri, shown on two scales:">
 
 .. only:: html
 
@@ -269,7 +252,24 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Dust IR-emission library comparison at fixed L_dust</div>
+      <div class="sphx-glr-thumbnail-title">Dust IR-emission library comparison: models and templates</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The mid-infrared ionisation-parameter sensitivity is library-specific, but the FIR-peak migration with rising log U is a universal prediction. We overlay the Hensley &amp; Draine 2023 (Astrodust+PAH) and the Draine+2021 PAHspec libraries at the same three log U values to surface where the two agree (FIR peak position) and where they differ (MIR PAH-feature strength and the Astrodust silicate plateau near 18 microns).">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_logu_cross_library_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_logu_cross_library`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Two PAH libraries respond to log U with the same FIR-peak migration</div>
     </div>
 
 
@@ -309,23 +309,6 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep ionization parameter across the Draine+2021 PAHspec library at fixed starlight spectrum and size distribution. Low U: FIR-cooling regime; high U: mid-IR peak shift and PAH-feature strengthening.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_pahspec_lgU_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_pahspec_lgU_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Draine+2021 PAHspec: log U sweep at fixed (starlight, ion, size)</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Sweep across the 13 published PAHspec starlight spectra (mMMP, m31bulge, BC03/BPASS SSPs) at fixed ionization parameter. Demonstrates strong dependence of PAH features on starlight hardness.">
 
 .. only:: html
@@ -360,7 +343,24 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep radiation-field distribution slope across the THEMIS grid at fixed grain content and minimum intensity. Lower alpha shifts weight toward high U, warming dust and shifting FIR peak blueward; higher alpha approaches single-U.">
+    <div class="sphx-glr-thumbcontainer" tooltip="For Draine &amp; Li (2007) dust at fixed mass, raising the diffuse radiation field intensity U_min does two things at once: it shifts the SED peak blueward (warmer dust) and proportionally boosts the total far-IR luminosity (``L_IR`` ∝ U_min). The standard T_peak–``L_IR`` correlation seen in observations is the joint footprint of these two effects.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_tdust_vs_lir_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_emission/plot_tdust_vs_lir`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radiation field strength sets both dust peak temperature and L_IR</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Jones et al. (2017) THEMIS dust model distributes grains over a range of starlight intensities U with a power law dU/dM \propto U^{-\alpha}. The slope alpha controls how much warm, intensely-illuminated dust contributes relative to the cold diffuse component: a smaller alpha puts more mass at high U, shifting the FIR peak blueward and filling in the mid-IR.">
 
 .. only:: html
 
@@ -371,7 +371,7 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">THEMIS: power-law slope alpha sweep</div>
+      <div class="sphx-glr-thumbnail-title">THEMIS dust IR: radiation-field slope (alpha)</div>
     </div>
 
 
@@ -394,35 +394,18 @@ Astrodust (HD23) template grids.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep minimum radiation field strength across the THEMIS grid at fixed hydrocarbon grain content. Higher U warms dust, shifting FIR peak blueward and strengthening mid-IR grain emission relative to far-IR.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The starlight intensity floor U_min sets the temperature of the diffuse-ISM component in template-based dust libraries. Two perspectives:">
 
 .. only:: html
 
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_themis_umin_sweep_thumb.png
+  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_umin_cross_library_thumb.png
     :alt:
 
-  :doc:`/auto_examples/dust_emission/plot_themis_umin_sweep`
+  :doc:`/auto_examples/dust_emission/plot_umin_cross_library`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">THEMIS: U_min sweep at fixed q_HAC</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Minimum radiation field intensity U_min controls diffuse dust heating. Higher U_min implies hotter dust and FIR peak shifted blueward toward shorter wavelengths.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_emission/images/thumb/sphx_glr_plot_umin_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_emission/plot_umin_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Draine & Li Minimum Radiation Field (U_min)</div>
+      <div class="sphx-glr-thumbnail-title">Minimum radiation field U_min: DL07 vs THEMIS FIR peak and sweep</div>
     </div>
 
 
@@ -461,21 +444,20 @@ Astrodust (HD23) template grids.
    /auto_examples/dust_emission/plot_astrodust_hd23_06_extinction_and_scattering
    /auto_examples/dust_emission/plot_astrodust_hd23_07_spinning_dust
    /auto_examples/dust_emission/plot_astrodust_hd23_08_polarized_emission
-   /auto_examples/dust_emission/plot_astrodust_hd23_lgU_sweep
+   /auto_examples/dust_emission/plot_bosa_grid
    /auto_examples/dust_emission/plot_bosa_ltir_sweep
-   /auto_examples/dust_emission/plot_bosa_ssfr_sweep
+   /auto_examples/dust_emission/plot_dale2014_agn_fraction
    /auto_examples/dust_emission/plot_dust_T_sweep
-   /auto_examples/dust_emission/plot_dust_emission_models
    /auto_examples/dust_emission/plot_dust_qpah_umin_grid
    /auto_examples/dust_emission/plot_ir_library_compare
+   /auto_examples/dust_emission/plot_logu_cross_library
    /auto_examples/dust_emission/plot_mbb_temperature_beta_grid
    /auto_examples/dust_emission/plot_pah_warm_cold_split
-   /auto_examples/dust_emission/plot_pahspec_lgU_sweep
    /auto_examples/dust_emission/plot_pahspec_starlight_sweep
    /auto_examples/dust_emission/plot_qpah_sweep
+   /auto_examples/dust_emission/plot_tdust_vs_lir
    /auto_examples/dust_emission/plot_themis_alpha_sweep
    /auto_examples/dust_emission/plot_themis_qhac_sweep
-   /auto_examples/dust_emission/plot_themis_umin_sweep
-   /auto_examples/dust_emission/plot_umin_sweep
+   /auto_examples/dust_emission/plot_umin_cross_library
    /auto_examples/dust_emission/plot_warm_cold_dust_decomposition
 
