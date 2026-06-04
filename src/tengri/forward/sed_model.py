@@ -944,7 +944,14 @@ class SEDModel:
             self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
             self._csp_matrix = None
 
-        n_grid = spec.n_grid if spec.stochastic else 256
+        # Honour the user-set ``n_grid`` for every SFH type, not just
+        # stochastic. ``spec.n_grid`` defaults to 256, so the parametric default
+        # is unchanged; setting it (``SEDModel.build(..., n_grid=N)``) now takes
+        # effect for parametric SFHs too. The parametric stellar SED is in fact
+        # n_grid-invariant (the SFH×SSP integral converges by ~64 points — see
+        # the #499 quadrature check), so this is a control/perf knob, not a
+        # correctness change.
+        n_grid = spec.n_grid
         self.log_age_grid = make_log_age_grid(n_grid)
         self.d_log_age = grid_spacing(self.log_age_grid)
         self.age_yr = log_age_to_age_yr(self.log_age_grid)
