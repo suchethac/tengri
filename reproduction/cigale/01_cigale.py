@@ -897,7 +897,7 @@ plt.show()
 # ### Dust-IR model knobs: AGN heating and the radiation-field slope
 #
 # Two further CIGALE dust-IR parameters, shown as the same head-to-head as
-# every other panel — **tengri solid, pcigale dashed**.
+# every other panel — **tengri solid, pcigale dotted**.
 #
 # **The attenuation must match for the IR to match.** The dust IR is
 # energy-balance-normalised to the *absorbed* starlight, so reproducing CIGALE
@@ -919,11 +919,16 @@ plt.show()
 #
 # **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$,
 # matched `qhac=0.17, umin=1.0, gamma=0.1`).** The *total* IR matches to ~1.6 %
-# by energy balance, but the FIR/MIR *partition* differs by ~15 %: unlike Dale,
-# tengri's THEMIS is an **independent FSPS/DustEM implementation, not a port of
-# CIGALE's `themis` grid**, so the two distribute the same absorbed energy
-# across the FIR peak slightly differently. This is a genuine
-# different-implementation gap, not attenuation or normalisation.
+# by energy balance, but the FIR/MIR *partition* differs by ~15 %. Here the
+# panels disagree because **CIGALE deviates from the original source, not
+# tengri**: tengri's THEMIS templates are built **directly from the published
+# DustEM grids** (`$SPS_HOME/dust/dustem/THEMIS_MW3.1_*.dat`, Jones+2017,
+# `ias.u-psud.fr/DUSTEM`) and reproduce them **bit-for-bit** (verified: the
+# single-U and power-law spectra match the raw `.dat` files to machine
+# precision). CIGALE runs its own DustEM with a different power-law `umax`
+# (1e7), giving a hotter PDR component — so its `themis` SED differs from the
+# published THEMIS templates by the ~15 % seen here. tengri is the faithful
+# reproduction of the *original* model; the gap is CIGALE's processing choice.
 
 # %%
 import jax
@@ -994,9 +999,9 @@ for f, c in zip([0.0, 0.3, 0.6], ["C0", "C1", "C3"]):
     sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
                        ("dale2014", dict(alpha=2.0, fracAGN=f))])
     w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
-    ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls="--")
+    ax_l.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls=":")
 ax_l.plot([], [], "k-", lw=1.8, label="tengri")
-ax_l.plot([], [], "k--", lw=1.2, label="pcigale")
+ax_l.plot([], [], "k:", lw=1.2, label="pcigale")
 ax_l.set(xlim=(1e4, 1e7), ylim=(1e42, 1e45), xlabel=r"$\lambda$ [Å]",
          ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]", title="Dale 2014 AGN fraction")
 ax_l.legend(fontsize=8, frameon=False, ncol=2)
@@ -1012,9 +1017,9 @@ for a, c in zip([1.0, 2.0, 3.0], ["C0", "C1", "C3"]):
     sed = C.run_chain([_SFH_CHAIN, _BC03_CHAIN, _DUSTATT_CHAIN,
                        ("themis", dict(qhac=0.17, umin=1.0, gamma=0.1, alpha=a))])
     w_c, nl_c = _nu_lnu(*C.to_lnu(sed))
-    ax_r.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls="--")
+    ax_r.loglog(w_c, nl_c * _KNOB_MASS, color=c, lw=1.2, ls=":")
 ax_r.plot([], [], "k-", lw=2.0, label="tengri")
-ax_r.plot([], [], "k--", lw=1.2, label="pcigale")
+ax_r.plot([], [], "k:", lw=1.2, label="pcigale")
 ax_r.set(xlim=(3e4, 1e7), ylim=(1e42, 1e45), xlabel=r"$\lambda$ [Å]",
          title=r"THEMIS radiation-field slope $\alpha$")
 ax_r.legend(fontsize=8, frameon=False, ncol=2)
