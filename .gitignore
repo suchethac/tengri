@@ -86,3 +86,4 @@ docs/build.log
 notebooks/data/
 examples/*/data/filters/
 examples/*/data/
+arxiv_library/

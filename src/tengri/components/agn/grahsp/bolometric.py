@@ -31,6 +31,8 @@ __all__ = [
     "agn_fraction_dale",
     "bolometric_luminosity_bbb",
     "bolometric_luminosity_torus",
+    "frac_agn_tor",
+    "ratio_tor_bbb",
 ]
 
 LYMAN_LIMIT_NM: float = 91.2
@@ -138,3 +140,59 @@ def agn_fraction_dale(
         jnp.asarray(wave_nm), jnp.asarray(L_lambda_gal_total), lower_nm, upper_nm
     )
     return jnp.where(L_total > 0, L_agn / L_total, 0.0)
+
+
+def ratio_tor_bbb(l_bol_torus: Array, l_bol_bbb: Array) -> Array:
+    r"""Torus-to-BBB bolometric luminosity ratio (upstream ``ratioTORBBB``).
+
+    .. math::
+
+       R_{\rm TOR/BBB} = L_{\rm bol}^{\rm TOR} / L_{\rm bol}^{\rm BBB}.
+
+    Parameters
+    ----------
+    l_bol_torus, l_bol_bbb : float
+        Torus and BBB bolometric luminosities [erg/s] (see
+        :func:`bolometric_luminosity_torus`, :func:`bolometric_luminosity_bbb`).
+
+    Returns
+    -------
+    ratio : float
+        Dimensionless; 0 when ``l_bol_bbb`` is non-positive.
+
+    Notes
+    -----
+    JIT-compatible. Mirrors ``agn.ratioTORBBB`` published by upstream
+    ``activatebol`` (Buchner+ 2024 §2.1.4).
+    """
+    l_bol_bbb = jnp.asarray(l_bol_bbb)
+    return jnp.where(l_bol_bbb > 0, jnp.asarray(l_bol_torus) / l_bol_bbb, 0.0)
+
+
+def frac_agn_tor(l_bol_torus: Array, l_gal_bol: Array) -> Array:
+    r"""Torus AGN fraction relative to the galaxy bolometric luminosity.
+
+    .. math::
+
+       f_{\rm AGN, TOR} = \frac{L_{\rm bol}^{\rm TOR}}
+                               {L_{\rm bol}^{\rm TOR} + L_{\rm gal}^{\rm bol}}.
+
+    Parameters
+    ----------
+    l_bol_torus : float
+        Torus bolometric luminosity [erg/s].
+    l_gal_bol : float
+        Galaxy bolometric luminosity [erg/s].
+
+    Returns
+    -------
+    fraction : float
+        Dimensionless in [0, 1]; 0 when the denominator is non-positive.
+
+    Notes
+    -----
+    JIT-compatible. Mirrors ``agn.fracAGNTOR`` published by upstream
+    ``activatebol`` (Buchner+ 2024 §2.1.4).
+    """
+    denom = jnp.asarray(l_bol_torus) + jnp.asarray(l_gal_bol)
+    return jnp.where(denom > 0, jnp.asarray(l_bol_torus) / denom, 0.0)

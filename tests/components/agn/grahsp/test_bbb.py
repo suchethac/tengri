@@ -20,7 +20,7 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-FIXTURE = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "grahsp" / "sbpl_bbb.npz"
+FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "grahsp" / "sbpl_bbb.npz"
 
 
 @pytest.fixture(scope="module")

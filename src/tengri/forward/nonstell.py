@@ -417,6 +417,9 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_grahsp_hot_fcov=p.get("agn_grahsp_hot_fcov", 1.0),
                 agn_grahsp_ebv=p.get("agn_grahsp_ebv", 0.0),
                 agn_grahsp_ebv_agn=p.get("agn_grahsp_ebv_agn", 0.0),
+                agn_grahsp_a_bc=p.get("agn_grahsp_a_bc", 0.0),
+                agn_grahsp_tor_temp=p.get("agn_grahsp_tor_temp", 0.0),
+                agn_grahsp_tor_cutoff_um=p.get("agn_grahsp_tor_cutoff_um", 1.2),
                 # Composable AGN block selectors. These are static Python
                 # strings captured from ``model`` at trace-build time —
                 # they are NOT traced JAX values, so they cannot live in

@@ -33,6 +33,8 @@ __all__ = [
     "SI_DEFAULTS",
     "si_feature",
     "torus_dust_continuum",
+    "torus_mn12_continuum",
+    "torus_mn12_si",
 ]
 
 SI_DEFAULTS = dict(
@@ -193,3 +195,199 @@ si_abs_width_nm
     em = si_em_ampl * jnp.exp(-0.5 * ((wave - si_em_lam_nm) / si_em_width_nm) ** 2)
     ab = abs_ampl * jnp.exp(-0.5 * ((wave - si_abs_lam_nm) / si_abs_width_nm) ** 2)
     return l_torus / 12000.0 * si * (em - ab)
+
+
+def torus_mn12_continuum(
+    wave_nm: Array,
+    l5100: float,
+    fcov: float,
+    tor_temp: float,
+    tor_cutoff_um: float,
+    mn12_wave_nm: Array,
+    mn12_avg: Array,
+    mn12_lo: Array,
+    mn12_hi: Array,
+) -> Array:
+    r"""Mor & Netzer 2012 template-based torus continuum.
+
+    A template morphology approach to the AGN torus: uses mean and percentile
+    templates to bracket torus SED shapes. The mean template is perturbed
+    towards the 75th percentile (warm) or 25th percentile (cool) depending on
+    the temperature parameter :math:`T_{\rm tor}`. A Gaussian-like cutoff
+    suppresses emission at short wavelengths.
+
+    .. math::
+
+       L_\lambda(\lambda) = l_{\rm torus} \left[
+           \langle L_\lambda \rangle + \Delta(\lambda, T_{\rm tor})
+       \right] \left[1 - \exp\left(-\left(\frac{\lambda}{1000\,\mathrm{nm} \cdot
+           \lambda_{\rm cut}}\right)^2\right)\right]
+
+    where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12.0 \times
+    0.510` (Mor & Netzer 2012 Eq. A1 at 12 µm), :math:`\Delta(\lambda, T_{\rm tor}) =
+    (L_{\rm hi} - \langle L_\lambda \rangle) T_{\rm tor}` for :math:`T_{\rm tor} > 0`,
+    and :math:`\Delta = (L_{\rm lo} - \langle L_\lambda \rangle) |T_{\rm tor}|`
+    for :math:`T_{\rm tor} < 0`.
+
+    The templates (:math:`\langle L_\lambda \rangle`, :math:`L_{\rm lo}`,
+    :math:`L_{\rm hi}`) are provided on a native grid (typically 239 points)
+    and normalised to 1 at 12 µm. This function interpolates the result onto
+    an arbitrary output grid using linear interpolation with zero padding.
+
+    Parameters
+    ----------
+    wave_nm : array_like, shape (n_wave,)
+        Output wavelength grid [nm].
+    l5100 : float
+        :math:`\lambda L_\lambda` at 5100 Å [erg/s].
+    fcov : float
+        Torus covering factor :math:`f_{\rm cov}`.
+    tor_temp : float
+        Temperature parameter :math:`T_{\rm tor}` [-1, +1]. Positive values
+        interpolate towards the warm (hi) template; negative towards cool (lo).
+    tor_cutoff_um : float
+        Cutoff wavelength :math:`\lambda_{\rm cut}` [µm]. Typical: 1.2–1.7 µm.
+    mn12_wave_nm : array_like, shape (n_mn12,)
+        Native template grid wavelengths [nm].
+    mn12_avg : array_like, shape (n_mn12,)
+        Mean :math:`L_\lambda` template, normalised to 1 at 12 µm.
+    mn12_lo : array_like, shape (n_mn12,)
+        25th-percentile :math:`L_\lambda` template (cool), normalised to 1 at 12 µm.
+    mn12_hi : array_like, shape (n_mn12,)
+        75th-percentile :math:`L_\lambda` template (warm), normalised to 1 at 12 µm.
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        Torus continuum specific luminosity [erg/s/nm], interpolated onto
+        ``wave_nm`` grid.
+
+    Notes
+    -----
+    JIT/grad/vmap-compatible. Uses :func:`jnp.where` for the temperature branch
+    to maintain differentiability.
+
+    **Normalisation convention (GRAHSP-faithful):** reproduced verbatim from
+    upstream ``activatetorus``: ``l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510``
+    and ``torus_spectrum = l_torus * (avg + dev) * cutoff`` — there is **no**
+    division by 12000 nm. This differs from the empirical log-Gaussian path
+    (:func:`torus_dust_continuum`, from ``activategtorus``), which uses
+    ``l_torus = 2.5 * l5100 * fcov`` then ``/ 12000``. The two GRAHSP modules
+    therefore carry different absolute 12 µm normalisations for the same
+    ``(l5100, fcov)``; this is GRAHSP's own convention and is preserved here.
+    Since ``fcov`` is a free fit parameter, each module remains internally
+    self-consistent when fitted.
+
+    References
+    ----------
+    .. [1] Mor, R. & Netzer, H. 2012, MNRAS, 420, 526. Template torus SEDs.
+    .. [2] Mullaney, J. R. et al. 2011, MNRAS, 414, 1082. Silicate features.
+    .. [3] Buchner, J. et al. 2024, arXiv:2405.19297, §2.1.3. Template implementation.
+    """
+    wave = jnp.asarray(wave_nm)
+    mn12_wave = jnp.asarray(mn12_wave_nm)
+    mn12_avg_arr = jnp.asarray(mn12_avg)
+    mn12_lo_arr = jnp.asarray(mn12_lo)
+    mn12_hi_arr = jnp.asarray(mn12_hi)
+
+    # Build spectrum on native template grid
+    # Use jnp.where for differentiability across the tor_temp branch
+    torus_deviation = jnp.where(
+        tor_temp > 0,
+        (mn12_hi_arr - mn12_avg_arr) * tor_temp,
+        (mn12_lo_arr - mn12_avg_arr) * (-tor_temp),
+    )
+
+    # Gaussian-like cutoff at short wavelengths (approximates both MN12 and LyuRieke)
+    cutoff = 1.0 - jnp.exp(-((mn12_wave / 1000.0 / tor_cutoff_um) ** 2))
+
+    # Apply the templates and short-wavelength cutoff on the native grid.
+    spectrum_native = (mn12_avg_arr + torus_deviation) * cutoff
+
+    # Normalisation, verbatim from upstream ``activatetorus.process`` (line 83):
+    #   l_torus = 2.5 * l_agn * fcov / 12.0 * 0.510
+    # Upstream then forms ``torus_spectrum = l_torus * (avg + dev) * cutoff``
+    # directly — note there is NO division by 12000 nm here (unlike the
+    # log-Gaussian ``activategtorus`` path), because the MN12 ``avg/lo/hi``
+    # templates are already L_lambda-shaped and the /12.0*0.510 factor is
+    # folded into l_torus. We reproduce GRAHSP's convention exactly so the
+    # template torus matches its published SED; physical-unit reconciliation
+    # against the Gaussian path is handled at the component boundary.
+    l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510
+    spectrum_native_scaled = l_torus * spectrum_native
+
+    # Interpolate onto output grid (left=0, right=0 so out-of-bounds gives 0)
+    spectrum_out = jnp.interp(wave, mn12_wave, spectrum_native_scaled, left=0.0, right=0.0)
+
+    return spectrum_out
+
+
+def torus_mn12_si(
+    wave_nm: Array,
+    l5100: float,
+    fcov: float,
+    si: float,
+    si_wave_nm: Array,
+    si_lumin: Array,
+) -> Array:
+    r"""Mor & Netzer 2012 silicate feature (Mullaney+ 2011 template).
+
+    Difference-of-Gaussians silicate feature template. The template is
+    normalised by the 12 µm continuum luminosity.
+
+    .. math::
+
+       L_{\rm Si}(\lambda) = l_{\rm torus} \, \mathrm{si} \, L_{\rm Si}^{\rm template}(\lambda)
+
+    where :math:`l_{\rm torus} = 2.5 \, \mathrm{l5100} \, f_{\rm cov} / 12.0 \times 0.510`.
+
+    Parameters
+    ----------
+    wave_nm : array_like, shape (n_wave,)
+        Output wavelength grid [nm].
+    l5100 : float
+        :math:`\lambda L_\lambda` at 5100 Å [erg/s].
+    fcov : float
+        Torus covering factor :math:`f_{\rm cov}`.
+    si : float
+        Silicate feature strength (Mor & Netzer 2012 parameter ``Si``);
+        positive = emission, negative = absorption.
+    si_wave_nm : array_like, shape (n_si,)
+        Native silicate template wavelengths [nm].
+    si_lumin : array_like, shape (n_si,)
+        Silicate template, normalised by the 12 µm continuum.
+
+    Returns
+    -------
+    L_Si : ndarray, shape (n_wave,)
+        Silicate feature contribution :math:`L_\lambda` [erg/s/nm], interpolated
+        onto ``wave_nm`` grid. May be negative (absorption) — caller should
+        ensure the total torus :math:`L_\lambda` (continuum + feature) is
+        non-negative, mirroring upstream's ``mask_negative`` behaviour.
+
+    Notes
+    -----
+    JIT-compatible. Numerical agreement < 1e-10 with upstream
+    ``ActivateTorus.process``.
+
+    References
+    ----------
+    .. [1] Mor, R. & Netzer, H. 2012, MNRAS, 420, 526.
+    .. [2] Mullaney, J. R. et al. 2011, MNRAS, 414, 1082. Silicate difference template.
+    .. [3] Buchner, J. et al. 2024, arXiv:2405.19297, §2.1.3.
+    """
+    wave = jnp.asarray(wave_nm)
+    si_wave = jnp.asarray(si_wave_nm)
+    si_lumin_arr = jnp.asarray(si_lumin)
+
+    # Verbatim from upstream ``activatetorus.process`` (line 96):
+    #   si_spectrum = l_torus * self.si.lumin * Si
+    # Same l_torus as the continuum, and again NO /12000 — the silicate must
+    # follow the same normalisation convention as its own continuum.
+    l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510
+    spectrum_native = l_torus * si_lumin_arr * si
+
+    # Interpolate onto output grid
+    spectrum_out = jnp.interp(wave, si_wave, spectrum_native, left=0.0, right=0.0)
+
+    return spectrum_out

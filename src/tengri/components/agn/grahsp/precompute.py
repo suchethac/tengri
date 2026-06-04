@@ -75,8 +75,25 @@ def _build_grid_grahsp(
     hot_fcov: float = 1.0,
     ebv_agn: float = 0.05,
     agn_type: int = 1,
+    a_bc: float = 0.0,
+    tor_temp: float = 0.0,
+    tor_cutoff_um: float = 1.2,
+    torus_model: str = "gaussian",
+    feii_template: str = "bruhweiler2008",
+    disc_model: str | None = None,
+    disc_m: str = "8.0",
+    disc_a: str = "0",
+    disc_mdot: str = "0.3",
 ) -> PreintegratedGrid:
-    """Pre-integrate GRAHSP over a 2-D grid of (plslope, E(B-V))."""
+    """Pre-integrate GRAHSP over a 2-D grid of (plslope, E(B-V)).
+
+    Structural selectors (``torus_model``, ``feii_template``, ``disc_model``,
+    ``disc_*``) and the non-axis continuous parameters (``a_bc``, ``tor_temp``,
+    ``tor_cutoff_um``, ...) are held fixed at the supplied values for the whole
+    grid — exactly as the other non-axis GRAHSP parameters are. Pass them so a
+    ``WavePrecomp`` build of a non-default variant (e.g. ``torus_model="mn12"``)
+    pre-integrates the *correct* SED rather than silently defaulting.
+    """
     plslope_grid = np.asarray(plslope_grid, dtype=np.float64)
     ebv_grid = np.asarray(ebv_grid, dtype=np.float64)
 
@@ -106,6 +123,15 @@ def _build_grid_grahsp(
                 hot_fcov=float(hot_fcov),
                 ebv=float(ebv),
                 ebv_agn=float(ebv_agn),
+                a_bc=float(a_bc),
+                tor_temp=float(tor_temp),
+                tor_cutoff_um=float(tor_cutoff_um),
+                torus_model=torus_model,
+                feii_template=feii_template,
+                disc_model=disc_model,
+                disc_m=disc_m,
+                disc_a=disc_a,
+                disc_mdot=disc_mdot,
             )
             sed = evaluate_grahsp_agn(
                 jnp.asarray(wave_rest_angstrom * 0.1),  # nm
@@ -143,6 +169,12 @@ def precompute(
     *,
     plslope_grid: np.ndarray | None = None,
     ebv_grid: np.ndarray | None = None,
+    torus_model: str = "gaussian",
+    feii_template: str = "bruhweiler2008",
+    disc_model: str | None = None,
+    disc_m: str = "8.0",
+    disc_a: str = "0",
+    disc_mdot: str = "0.3",
 ) -> dict:
     """Build the GRAHSP preintegrated grid, auto-collapsing Fixed-parameter axes.
 
@@ -163,6 +195,11 @@ def precompute(
     ebv_grid : ndarray, optional
         Defaults to ``[0.0, 0.05, 0.1, 0.3, 1.0]`` covering Sy1 to ULIRG
         attenuations.
+    torus_model, feii_template, disc_model, disc_m, disc_a, disc_mdot
+        Structural variant selectors, forwarded to :func:`_build_grid_grahsp`
+        so a non-default ``WavePrecomp`` build pre-integrates the matching SED.
+        These must mirror the :class:`GRAHSPSEDComponentConfig` chosen for the
+        fit.
 
     Returns
     -------
@@ -175,7 +212,19 @@ def precompute(
     if ebv_grid is None:
         ebv_grid = np.array([0.0, 0.05, 0.1, 0.3, 1.0], dtype=np.float64)
 
-    preint = _build_grid_grahsp(filter_waves, filter_trans, redshift, plslope_grid, ebv_grid)
+    preint = _build_grid_grahsp(
+        filter_waves,
+        filter_trans,
+        redshift,
+        plslope_grid,
+        ebv_grid,
+        torus_model=torus_model,
+        feii_template=feii_template,
+        disc_model=disc_model,
+        disc_m=disc_m,
+        disc_a=disc_a,
+        disc_mdot=disc_mdot,
+    )
     result = {
         "grid_phot": preint.phot,
         "axes": (jnp.asarray(plslope_grid), jnp.asarray(ebv_grid)),
