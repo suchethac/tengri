@@ -191,6 +191,21 @@ _ensure_registry_loaded()
 #: Dust emission parameter names that belong to the 'dust.emission' subgroup.
 _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARAMS").keys())
 
+#: Optional Cue nebular knobs beyond logU/logZ_gas — gas density / abundance
+#: ratios (``gas_logn``, ``gas_logno``, ``gas_logco``) and the broken-power-law
+#: ionizing-spectrum shape (``ionspec_index1..4``, ``ionspec_logLratio1..3``).
+#: They carry ``None`` priors in the registry (registered only when the user
+#: supplies them), so they are absent from a structural ``Parameters`` and the
+#: partition. The nested-dict builder recognises them as ``neb`` keys (when
+#: ``type='cue'``) and forwards user-provided values to the flat constructor,
+#: which registers them on demand (#653).
+_OPTIONAL_NEB_PARAM_NAMES = frozenset(
+    {
+        *_resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS").keys(),
+        *_resolve_lazy_bucket("_CUE_IONSPEC_PARAMS").keys(),
+    }
+)
+
 
 def _valid_sfh_types() -> frozenset[str]:
     """Return the set of accepted ``sfh.type`` values, derived from the registry.
@@ -574,6 +589,33 @@ def parse_groups(**kwargs) -> Parameters:
         if group_dict or group == "_toplevel":
             resolved_kwargs[param_name] = final_dist
             provenance[param_name] = tag
+
+    # ── Optional Cue knobs (density / abundances / ionizing spectrum) ──
+    # These carry None priors so they never appear on ``structural_params``
+    # or in ``param_partition`` above — the resolution loop skips them.
+    # Forward any the user set in a ``type='cue'`` neb group straight to the
+    # flat constructor, which registers them on demand (#653). Only explicit
+    # priors / values are accepted (no '*' wildcard or bare sentinel, since
+    # these params have no registry default to expand a FREE/FIXED against).
+    neb_group = kwargs.get("neb")
+    if isinstance(neb_group, dict) and neb_group.get("type") == "cue":
+        for pname in _OPTIONAL_NEB_PARAM_NAMES:
+            if pname not in neb_group:
+                continue
+            val = neb_group[pname]
+            if isinstance(val, Distribution):
+                resolved_kwargs[pname] = val
+                provenance[pname] = "user_prior"
+            elif val is FREE or val is FIXED:
+                raise ValueError(
+                    f"neb[{pname!r}] needs an explicit prior or value "
+                    f"(e.g. Uniform(lo, hi) or a number); the '*' wildcard and "
+                    f"bare FREE/FIXED are unsupported for optional Cue knobs "
+                    f"because they carry no registry default."
+                )
+            else:
+                resolved_kwargs[pname] = Fixed(val)
+                provenance[pname] = "user_fixed"
 
     # ── Validate every key the user supplied was recognised ───────────
     # The resolution loop above silently uses the registry default when
@@ -1078,6 +1120,12 @@ def _validate_user_keys(
         # declared short/full param names to the accepted set.
         if isinstance(top_val.get("type"), str):
             param_names = param_names | _short_names_for_registered_type(top_val["type"])
+
+        # Optional Cue knobs (#653): a ``type='cue'`` neb group also accepts
+        # the density / abundance / ionizing-spectrum params, which are
+        # registered on demand and so absent from ``param_partition``.
+        if top_key == "neb" and top_val.get("type") == "cue":
+            param_names = param_names | _OPTIONAL_NEB_PARAM_NAMES
 
         _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
 

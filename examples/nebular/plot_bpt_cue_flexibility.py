@@ -31,6 +31,7 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 sweeps = {
     r"$\log U$": ("neb_logU", np.linspace(-4.0, -1.8, 7)),
     r"$\log Z_{\rm gas}$": ("neb_logZ_gas", np.linspace(-1.5, 0.4, 7)),
+    r"$\log n_{\rm H}$": ("gas_logn", np.linspace(0.0, 3.0, 7)),
 }
 
 nh_grid = np.linspace(-2.0, 0.45, 200)

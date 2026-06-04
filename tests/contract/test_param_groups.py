@@ -599,3 +599,83 @@ class TestEdgeCases:
         )
         assert params.dust_law_bc == "calzetti"
         assert params.dust_law_diff == "smc"
+
+
+class TestCueOptionalKnobExposure:
+    """#653: the nested-dict builder must expose Cue's optional knobs
+    (gas density / abundances, ionizing-spectrum shape) for a ``type='cue'``
+    neb group, not just logU / logZ_gas."""
+
+    def test_gas_logn_settable_and_free(self):
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            neb={"type": "cue", "*": FIXED, "gas_logn": Uniform(1.0, 4.0)},
+            redshift=Fixed(0.05),
+        )
+        assert "gas_logn" in params.free_params
+
+    def test_ionspec_slopes_settable_and_free(self):
+        """The ionizing-spectrum shape can be inferred (free ionspec_*)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            neb={
+                "type": "cue",
+                "*": FIXED,
+                "ionspec_index1": Uniform(1.0, 20.0),
+                "ionspec_logLratio1": Uniform(0.0, 5.0),
+            },
+            redshift=Fixed(0.05),
+        )
+        assert "ionspec_index1" in params.free_params
+        assert "ionspec_logLratio1" in params.free_params
+
+    def test_gas_abundances_settable(self):
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            neb={
+                "type": "cue",
+                "*": FIXED,
+                "gas_logno": Uniform(-1.0, 1.0),
+                "gas_logco": Fixed(0.1),
+            },
+            redshift=Fixed(0.05),
+        )
+        assert "gas_logno" in params.free_params
+        assert "gas_logco" in params._distributions
+
+    def test_bare_value_is_fixed(self):
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            neb={"type": "cue", "*": FIXED, "gas_logn": 2.0},
+            redshift=Fixed(0.05),
+        )
+        assert "gas_logn" not in params.free_params
+        assert "gas_logn" in params._distributions
+
+    def test_optional_knob_rejected_for_non_cue(self):
+        """gas_logn is a Cue-only knob; an ssp/cloudy neb group must reject it."""
+        with pytest.raises(ValueError, match="gas_logn"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                neb={"type": "ssp", "gas_logn": Uniform(1.0, 4.0)},
+                redshift=Fixed(0.05),
+            )
+
+    def test_stale_name_still_rejected(self):
+        """The pre-fix gallery name ``neb_n_h`` is not a real param; reject it."""
+        with pytest.raises(ValueError, match="neb_n_h"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                neb={"type": "cue", "neb_n_h": Fixed(2.0)},
+                redshift=Fixed(0.05),
+            )
+
+    def test_free_sentinel_without_prior_raises(self):
+        """Optional Cue knobs have no registry default, so a bare FREE/'*'
+        cannot expand them — require an explicit prior."""
+        with pytest.raises(ValueError, match="explicit prior"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                neb={"type": "cue", "*": FIXED, "gas_logn": FREE},
+                redshift=Fixed(0.05),
+            )
