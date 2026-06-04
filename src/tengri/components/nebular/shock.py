@@ -39,7 +39,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.nebular._shared import place_line_profiles as _place_line_profiles
+from tengri.components.nebular._shared import render_nebular_lines as _place_line_profiles
 
 # Physical constants
 from tengri.utils.grid_interp import interp_nd_triweight as _interp_nd_triweight
@@ -481,6 +481,7 @@ def compute_shock_sed(
     shock_abundance: str = "solar",
     shock_component: str = "combined",
     line_sigma_aa: float = 0.0,
+    line_sigma_kms: float = 0.0,
 ) -> jnp.ndarray:
     """Compute shock emission line SED.
 
@@ -531,7 +532,7 @@ def compute_shock_sed(
         shock_component=shock_component,
     )
 
-    return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa)
+    return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa, line_sigma_kms)
 
 
 # ── Protocol-conformant backend class ─────────────────────────────
@@ -588,6 +589,7 @@ class ShockBackend:
         shock_log_density: float = 0.0,
         shock_b_over_sqrt_n: float = 1.0,
         line_sigma_aa: float = 0.0,
+        line_sigma_kms: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
         """Compute shock emission line SED on a wavelength grid.
@@ -633,4 +635,5 @@ class ShockBackend:
             shock_abundance=self.shock_abundance,
             shock_component=self.shock_component,
             line_sigma_aa=line_sigma_aa,
+            line_sigma_kms=line_sigma_kms,
         )
