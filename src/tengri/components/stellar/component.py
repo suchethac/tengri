@@ -529,6 +529,7 @@ class StellarSEDComponent:
             "tau",
             "delayed",
             "periodic",
+            "sfh2exp",
             "buat08",
         )
         if self.config.sfh_model not in _SUPPORTED_SFH:
