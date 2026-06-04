@@ -89,6 +89,11 @@ def test_nebular_continuum_is_attenuated():
     assert np.all(neb_in_total < np.asarray(sed_neb))
     del stellar  # (documented intrinsic-stellar handle; not asserted on)
 
+    # The published ``sed_nebular`` is re-emitted as the OBSERVED (attenuated)
+    # continuum, so consumers summing per-component published SEDs
+    # (sed_dust_attenuated + sed_dust_ir + sed_nebular) recover the true total.
+    np.testing.assert_allclose(np.asarray(out.derived["sed_nebular"]), expected, rtol=1e-5)
+
 
 def test_zero_nebular_is_noop():
     """No published nebular (BakedIn zeros) leaves the stellar result unchanged."""

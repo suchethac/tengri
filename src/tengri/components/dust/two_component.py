@@ -539,6 +539,13 @@ class DustSEDComponent:
             L_absorbed=L_absorbed,
             sed_dust_attenuated=sed_attenuated,
             sed_dust_ir=sed_ir,
+            # Re-publish the nebular continuum as its dust-reddened (observed)
+            # form, consistent with ``sed_dust_attenuated`` being the observed
+            # stellar SED. Consumers that sum the published per-component SEDs
+            # (e.g. the reproduction notebooks:
+            # ``sed_dust_attenuated + sed_dust_ir + sed_nebular``) then recover
+            # the true observed total. Unattenuated when dust is off / zero-τ.
+            sed_nebular=sed_neb_attenuated,
         )
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
