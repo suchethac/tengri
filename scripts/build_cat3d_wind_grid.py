@@ -276,8 +276,17 @@ def _cli() -> None:
         default=4096,
         help="Size of the common wavelength grid after regridding.",
     )
+    p.add_argument(
+        "--download",
+        action="store_true",
+        help="Fetch CAT3D_mean_3p.pickle from the AGNfitter GitHub repo "
+        "(pinned tag) instead of reading --input. No AGNfitter install needed.",
+    )
     args = p.parse_args()
-    build(args.input, args.output, n_wave=args.n_wave)
+    from _agnfitter_download import resolve
+
+    input_pickle = resolve(args.input, "models/TORUS/CAT3D_mean_3p.pickle", download=args.download)
+    build(input_pickle, args.output, n_wave=args.n_wave)
 
 
 if __name__ == "__main__":

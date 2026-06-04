@@ -50,6 +50,13 @@ data/*.h5
 !data/skirtor_templates_v3.h5
 !data/nthcomp_templates.h5
 !data/nenkova08_torus_grid.h5
+# Vendored AGNfitter-rX reference grids — keep crossvals CI-runnable (#613).
+# Regenerate with: python scripts/build_<name>.py --download  (no AGNfitter install needed)
+!data/agnfitter_bbb_reference.h5
+!data/skirtor_mean3p_torus_grid.h5
+!data/cat3d_wind_torus_grid.h5
+!data/silva04_torus_grid.h5
+!data/slone_netzer_disc_grid.h5
 # Regenerate with: python scripts/convert_fsps_cloudy_grid.py && python scripts/convert_dl07_templates.py
 # nthcomp_templates.h5 (~14 MB): regenerate with python scripts/build_nthcomp_templates.py
 

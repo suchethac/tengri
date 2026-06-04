@@ -375,8 +375,19 @@ def _cli() -> None:
         action="store_true",
         help="Store templates as float64 (default: float32 for size reduction).",
     )
+    p.add_argument(
+        "--download",
+        action="store_true",
+        help="Fetch SKIRTOR_mean_3p.pickle from the AGNfitter GitHub repo "
+        "(pinned tag) instead of reading --input. No AGNfitter install needed.",
+    )
     args = p.parse_args()
-    build(args.input, args.output, n_wave=args.n_wave, use_float32=not args.float64)
+    from _agnfitter_download import resolve
+
+    input_pickle = resolve(
+        args.input, "models/TORUS/SKIRTOR_mean_3p.pickle", download=args.download
+    )
+    build(input_pickle, args.output, n_wave=args.n_wave, use_float32=not args.float64)
 
 
 if __name__ == "__main__":

@@ -155,7 +155,19 @@ def main() -> None:
         type=Path,
     )
     ap.add_argument("--n-wave", default=1024, type=int)
+    ap.add_argument(
+        "--download",
+        action="store_true",
+        help="Fetch R06/THB21/KD18 pickles from the AGNfitter GitHub repo "
+        "(pinned tag) instead of reading --src. No AGNfitter install needed.",
+    )
     args = ap.parse_args()
+
+    if args.download:
+        from _agnfitter_download import fetch
+
+        for name in ("R06.pickle", "THB21.pickle", "KD18.pickle"):
+            args.src = fetch(f"models/BBB/{name}").parent
 
     with h5py.File(args.out, "w") as f:
         f.attrs["source"] = "AGNfitter-rX models/BBB"

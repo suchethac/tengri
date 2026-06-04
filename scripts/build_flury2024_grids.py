@@ -136,7 +136,7 @@ def _download_csv(url: str, cache_path: Path) -> list[dict]:
         print(f"    Downloading: {url}")
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            req = urllib.request.urlopen(url, timeout=120)  # noqa: S310
+            req = urllib.request.urlopen(url, timeout=120)
             data = req.read()
         except Exception as exc:
             print(f"\nERROR downloading {url}: {exc}")
@@ -434,7 +434,7 @@ def main() -> None:
     cache_dir = Path(args.cache_dir)
 
     print("\n=== Flury+2024 MAPPINGS V photoionization grids ===")
-    print(f"  Zenodo : https://zenodo.org/records/14140949")
+    print("  Zenodo : https://zenodo.org/records/14140949")
     print(f"  Output : {out_path}")
     print(f"  Cache  : {cache_dir}\n")
 
