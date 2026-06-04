@@ -86,10 +86,17 @@ def test_dust_energy_balance(intrinsic_sed, emission_type, tau):
         redshift=tengri.Fixed(0.05),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    sed_d = np.asarray(m.predict_rest_sed(p).sed)
+    out_d = m.predict_rest_sed(p)
+    sed_d = np.asarray(out_d.sed)
+    # Dust emission extends the prediction onto the union-of-component-grids
+    # (panchromatic FIR/mm; #463/#476), which is longer than the intrinsic
+    # dust-off SED's ssp_wave grid. Compare on the dusted grid by interpolating
+    # the intrinsic SED onto it.
+    wave_d = np.asarray(out_d.wavelength)
+    sed_intr_on_d = np.interp(wave_d, wave, sed_intr)
 
-    L_abs = _lnu_integrate(sed_intr - sed_d, wave, 912.0, 3.0e4)
-    L_emit = _lnu_integrate(sed_d, wave, 8.0e4, 1.0e7)
+    L_abs = _lnu_integrate(sed_intr_on_d - sed_d, wave_d, 912.0, 3.0e4)
+    L_emit = _lnu_integrate(sed_d, wave_d, 8.0e4, 1.0e7)
     ratio = L_emit / L_abs
     assert 0.90 < ratio < 1.10, (
         f"Energy balance violated for {emission_type}, tau={tau}: "

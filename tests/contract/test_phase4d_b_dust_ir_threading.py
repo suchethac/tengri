@@ -44,8 +44,12 @@ def obs():
     )
 
 
-def _base_spec():
-    """Base spec without dust emission."""
+def _base_spec(dust_emission=None):
+    """Base spec; ``dust_emission`` (a string) bakes the IR emission into the spec.
+
+    Dust emission is configured on the Parameters spec (``spec.dust_emission``),
+    not via a separate kwarg to ``SEDModel`` — the latter signature was removed.
+    """
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Fixed(2.0),
@@ -57,14 +61,13 @@ def _base_spec():
         dust_tau_bc=Fixed(0.5),
         dust_tau_diff=Fixed(0.5),
         apply_igm=False,
+        dust_emission=dust_emission,
     )
 
 
-def _silent_build(spec, ssp, obs, dust_config=None, **kwargs):
+def _silent_build(spec, ssp, obs, **kwargs):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        if dust_config is not None:
-            kwargs["dust"] = dust_config
         return SEDModel(spec, ssp, observation=obs, **kwargs)
 
 
@@ -85,10 +88,9 @@ def test_no_dust_emission_returns_no_dust_ir_template_data(ssp_wneref, obs):
 
 def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
     """Analytic dust (MBB) has no templates to thread."""
-    from tengri.config import DustConfig
 
-    dust_cfg = DustConfig(emission="modified_blackbody")
-    model = _silent_build(_base_spec(), ssp_wneref, obs, dust_config=dust_cfg)
+    dust_cfg = "modified_blackbody"
+    model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
     td = model._template_data_for_jit()
     # MBB has no templates to thread.
     if td is not None:
@@ -99,11 +101,10 @@ def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
 
 def test_pahspec_dust_publishes_template_data_for_jit(ssp_wneref, obs):
     """PAHspec dust backend publishes template_data with dust_ir arrays."""
-    from tengri.config import DustConfig
 
     try:
-        dust_cfg = DustConfig(emission="draine2021_pah")
-        model = _silent_build(_base_spec(), ssp_wneref, obs, dust_config=dust_cfg)
+        dust_cfg = "draine2021_pah"
+        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
     except (ImportError, FileNotFoundError, KeyError):
         pytest.skip("PAHspec template files not available")
 
@@ -127,11 +128,10 @@ def test_pahspec_dust_publishes_template_data_for_jit(ssp_wneref, obs):
 
 def test_astrodust_dust_publishes_template_data_for_jit(ssp_wneref, obs):
     """Astrodust backend publishes template_data with dust_ir arrays."""
-    from tengri.config import DustConfig
 
     try:
-        dust_cfg = DustConfig(emission="astrodust")
-        model = _silent_build(_base_spec(), ssp_wneref, obs, dust_config=dust_cfg)
+        dust_cfg = "astrodust"
+        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
     except (ImportError, FileNotFoundError, KeyError):
         pytest.skip("Astrodust template files not available")
 
@@ -159,10 +159,9 @@ def test_astrodust_dust_publishes_template_data_for_jit(ssp_wneref, obs):
 
 def test_jit_and_non_jit_paths_agree_with_mbb_dust(ssp_wneref, obs):
     """Sanity: MBB dust has no templates; JIT and non-JIT paths must agree."""
-    from tengri.config import DustConfig
 
-    dust_cfg = DustConfig(emission="modified_blackbody")
-    model = _silent_build(_base_spec(), ssp_wneref, obs, dust_config=dust_cfg)
+    dust_cfg = "modified_blackbody"
+    model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
     params = {}
 
     via_jit = model.predict_observables_jit(params).phot_fnu
@@ -175,11 +174,10 @@ def test_jit_and_non_jit_paths_agree_with_mbb_dust(ssp_wneref, obs):
 
 def test_jit_and_non_jit_paths_agree_with_pahspec(ssp_wneref, obs):
     """PAHspec dust: JIT and non-JIT paths agree after threading."""
-    from tengri.config import DustConfig
 
     try:
-        dust_cfg = DustConfig(emission="draine2021_pah")
-        model = _silent_build(_base_spec(), ssp_wneref, obs, dust_config=dust_cfg)
+        dust_cfg = "draine2021_pah"
+        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
     except (ImportError, FileNotFoundError, KeyError):
         pytest.skip("PAHspec template files not available")
 
@@ -194,11 +192,10 @@ def test_jit_and_non_jit_paths_agree_with_pahspec(ssp_wneref, obs):
 
 def test_jit_and_non_jit_paths_agree_with_astrodust(ssp_wneref, obs):
     """Astrodust dust: JIT and non-JIT paths agree after threading."""
-    from tengri.config import DustConfig
 
     try:
-        dust_cfg = DustConfig(emission="astrodust")
-        model = _silent_build(_base_spec(), ssp_wneref, obs, dust_config=dust_cfg)
+        dust_cfg = "astrodust"
+        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
     except (ImportError, FileNotFoundError, KeyError):
         pytest.skip("Astrodust template files not available")
 
