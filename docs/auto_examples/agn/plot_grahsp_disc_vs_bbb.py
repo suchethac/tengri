@@ -49,11 +49,22 @@ def bbb_only(**kw):
     )
 
 
+# Normalise each continuum to its own value at 5100 Å (where the BBB's L5100
+# pins the flux), so the curves cross at 1 there and the comparison shows the
+# difference in disc *shape* rather than absolute scale (~1e63 otherwise).
+i5100 = int(np.argmin(np.abs(wave_um - 0.510)))
+
+
+def lam_Llam_norm(**kw):
+    curve = wave_um * bbb_only(**kw)
+    return curve / curve[i5100]
+
+
 fig, ax = plt.subplots(figsize=(7.4, 4.6))
 
 ax.plot(
     wave_um,
-    wave_um * bbb_only(agn_grahsp_plslope=-1.7),
+    lam_Llam_norm(agn_grahsp_plslope=-1.7),
     color="k",
     lw=2.0,
     label="bending power-law (default)",
@@ -68,7 +79,7 @@ colors = plt.cm.cividis(np.linspace(0.15, 0.85, len(discs)))
 for (m, a, mdot, lab), c in zip(discs, colors):
     ax.plot(
         wave_um,
-        wave_um * bbb_only(disc_model="netzer", disc_m=m, disc_a=a, disc_mdot=mdot),
+        lam_Llam_norm(disc_model="netzer", disc_m=m, disc_a=a, disc_mdot=mdot),
         color=c,
         lw=1.7,
         label=f"Netzer disc: {lab}",
@@ -78,7 +89,7 @@ ax.axvline(0.0912, color="0.5", ls=":", lw=1.0)
 ax.text(0.0912, ax.get_ylim()[1] * 0.05, " Lyman limit", fontsize=8, color="0.4")
 ax.set_xscale("log")
 ax.set_xlabel(r"rest wavelength [$\mu$m]")
-ax.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$, norm. at 5100 Å]")
+ax.set_ylabel(r"$\lambda L_\lambda$ [normalised at 5100 Å]")
 ax.set_title("GRAHSP big blue bump: Netzer disc grid vs bending power-law")
 ax.legend(frameon=False, fontsize=8)
 fig.tight_layout()

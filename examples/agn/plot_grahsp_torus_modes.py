@@ -53,22 +53,23 @@ def torus_only(**kw):
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.5, 4.4), sharex=True)
 
+# These torus templates carry an arbitrary "native" normalisation; only the
+# relative shapes are physical. Normalise both panels by the same reference
+# (the default log-Gaussian peak) so the y-axis reads O(1) instead of ~1e66.
+gaussian = wave_um * torus_only(torus_model="gaussian")
+norm = gaussian.max()
+
 # Panel 1: the two torus prescriptions.
+ax1.plot(wave_um, gaussian / norm, lw=1.9, label="log-Gaussian (default)")
 ax1.plot(
     wave_um,
-    wave_um * torus_only(torus_model="gaussian"),
-    lw=1.9,
-    label="log-Gaussian (default)",
-)
-ax1.plot(
-    wave_um,
-    wave_um * torus_only(torus_model="mn12", agn_grahsp_tor_temp=0.0),
+    wave_um * torus_only(torus_model="mn12", agn_grahsp_tor_temp=0.0) / norm,
     lw=1.9,
     label="Mor & Netzer 2012",
 )
 ax1.set_title("Torus prescription")
 ax1.legend(frameon=False, fontsize=9)
-ax1.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$, native norm.]")
+ax1.set_ylabel(r"$\lambda L_\lambda$ [normalised]")
 
 # Panel 2: MN12 temperature blend.
 temps = [(-1.0, "lo (25th pct)"), (0.0, "avg (mean)"), (1.0, "hi (75th pct)")]
@@ -76,7 +77,7 @@ colors = plt.cm.plasma(np.linspace(0.15, 0.8, len(temps)))
 for (t, lab), c in zip(temps, colors):
     ax2.plot(
         wave_um,
-        wave_um * torus_only(torus_model="mn12", agn_grahsp_tor_temp=t),
+        wave_um * torus_only(torus_model="mn12", agn_grahsp_tor_temp=t) / norm,
         color=c,
         lw=1.8,
         label=rf"$T_{{\rm tor}}={t:+.0f}$ — {lab}",
