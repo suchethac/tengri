@@ -110,6 +110,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._constants import _LOG10_ZSUN
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
@@ -1197,7 +1198,13 @@ class CueBackend:
         )
 
     def _forward_lines(
-        self, p: dict, cloudyfsps_only=True, neb_fesc=0.0, neb_fesc_lya=0.0, template_data=None
+        self,
+        p: dict,
+        cloudyfsps_only=True,
+        neb_fesc=0.0,
+        neb_fesc_lya=0.0,
+        neb_fdust=0.0,
+        template_data=None,
     ):
         """Low-level line prediction from resolved param dict."""
         weights = template_data if template_data is not None else self.weights
@@ -1225,7 +1232,18 @@ class CueBackend:
             gas_logq,
             jnp.asarray(p["gas_logqion"], dtype=jnp.float32),
         )
-        lum = lum * (1.0 - neb_fesc)
+        # Apply nebular emission scaling from ionizing photon loss.
+        # Following CIGALE nebular.py, use the k-factor (Inoue 2011) which
+        # accounts for both escape fraction and dust absorption via the
+        # recombination coefficient ratio alpha_1 / alpha_B.
+        k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        lum = lum * k
+        # Ly-alpha special handling: scale relative to the general k-factor
+        # The original code applied (1 - neb_fesc_lya) / (1 - neb_fesc) to get
+        # the Ly-alpha specific suppression relative to other lines.
+        # With the new k-factor, we scale relative to the general k:
+        # lya_scale = (1 - neb_fesc_lya) / (1 - neb_fesc) [old code assumption]
+        # But now we use the full k, so we still apply the relative modifier:
         lya_idx = jnp.argmin(jnp.abs(wav - 1215.67))
         lya_scale = (1.0 - neb_fesc_lya) / jnp.maximum(1.0 - neb_fesc, 1e-10)
         lum = lum.at[lya_idx].multiply(lya_scale)
@@ -1372,6 +1390,7 @@ class CueBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
         cloudyfsps_only: bool = True,
         # Cue-specific overrides (bypass SSP-derived params)
         gas_logu: float | None = None,
@@ -1416,6 +1435,8 @@ class CueBackend:
             Escape fraction [0, 1].
         neb_fesc_lya : float
             Ly-alpha escape fraction [0, 1].
+        neb_fdust : float
+            Dust-absorption fraction of ionizing photons in HII regions [0, 1].
         cloudyfsps_only : bool
             If True, return 128 CLOUDY/FSPS-matched lines.
         gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
@@ -1476,6 +1497,7 @@ class CueBackend:
             cloudyfsps_only=cloudyfsps_only,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            neb_fdust=neb_fdust,
             template_data=template_data,
         )
         return wav, lum * _LSUN_ERG
@@ -1488,6 +1510,7 @@ class CueBackend:
         neb_logU: float = -3.0,
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
+        neb_fdust: float = 0.0,
         gas_logu: float | None = None,
         gas_logn: float = 2.0,
         gas_logz: float | None = None,
@@ -1523,6 +1546,8 @@ class CueBackend:
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         neb_fesc : float
             Escape fraction [0, 1]. Suppresses continuum luminosity.
+        neb_fdust : float
+            Dust-absorption fraction of ionizing photons in HII regions [0, 1].
         gas_logu, gas_logn, gas_logz, gas_logno, gas_logco : float
             Cue gas params (low-level). Override high-level derivation.
         gas_logqion : float or None
@@ -1571,9 +1596,11 @@ class CueBackend:
             ionspec_logLratio3=ionspec_logLratio3,
         )
         cont_wav, cont_lum = self._forward_continuum(p)
-        # Apply escape fraction — if photons escape, nebular continuum is
-        # suppressed proportionally (consistent with line treatment).
-        return cont_wav, cont_lum * (1.0 - neb_fesc)
+        # Apply CIGALE nebular emission scaling factor (k) accounting for both
+        # ionizing photon escape (neb_fesc) and dust absorption (neb_fdust).
+        # The k-factor applies the recombination coefficient ratio (alpha_1/alpha_B).
+        k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        return cont_wav, cont_lum * k
 
     def predict_nebular_sed(
         self,
@@ -1585,6 +1612,7 @@ class CueBackend:
         neb_logZ_gas: float | None = None,
         neb_fesc: float = 0.0,
         neb_fesc_lya: float = 0.0,
+        neb_fdust: float = 0.0,
         line_sigma_aa: float = 0.0,
         template_data: Any | None = None,
         **neb_params,
@@ -1610,7 +1638,11 @@ class CueBackend:
         neb_logZ_gas : float or None
             Gas metallicity log10(Z) (absolute). None = tie to stellar.
         neb_fesc, neb_fesc_lya : float
-            Escape fractions.
+            Escape fractions [dimensionless, in [0, 1]].
+        neb_fdust : float
+            Dust-absorption fraction of ionizing photons in HII regions
+            [dimensionless, in [0, 1]]. Reduces nebular emission via the
+            CIGALE k-factor (Inoue 2011).
         line_sigma_aa : float
             Gaussian width for emission lines (Angstrom). 0 = delta function.
         template_data : Any | None, optional
@@ -1641,9 +1673,11 @@ class CueBackend:
         Delta functions use nearest-pixel scatter-add with bin-width
         averaging to produce proper flux units.
 
-        **Escape fraction**: Controlled via ``neb_fesc`` (continuum and
-        line suppression) and ``neb_fesc_lya`` (Ly-alpha-specific suppression,
-        applied to H-alpha equivalent). Both assume optically thin escape.
+        **Ionizing photon loss**: Controlled via ``neb_fesc`` (escape fraction)
+        and ``neb_fdust`` (dust-absorption fraction). Both reduce nebular
+        emission (lines + continuum) via the CIGALE k-factor (Inoue 2011),
+        accounting for the recombination coefficient ratio (alpha_1 / alpha_B).
+        ``neb_fesc_lya`` applies additional Ly-alpha-specific suppression.
 
         """
         # Resolve params once (avoids double computation for lines + continuum)
@@ -1662,12 +1696,17 @@ class CueBackend:
             cloudyfsps_only=False,
             neb_fesc=neb_fesc,
             neb_fesc_lya=neb_fesc_lya,
+            neb_fdust=neb_fdust,
             template_data=template_data,
         )
 
         # Continuum (same resolved params — no double computation)
         cont_wav, cont_lum = self._forward_continuum(p, template_data=template_data)
-        cont_lum = cont_lum * (1.0 - neb_fesc)  # escape fraction suppression
+        # Apply CIGALE nebular emission scaling factor (k) accounting for both
+        # ionizing photon escape (neb_fesc) and dust absorption (neb_fdust).
+        # The k-factor applies to both continuum and lines per CIGALE nebular.py.
+        k = lyc_dust_escape_factor(neb_fesc, neb_fdust)
+        cont_lum = cont_lum * k
 
         # Interpolate continuum onto SSP grid
         neb_sed = jnp.interp(ssp_wave, cont_wav, cont_lum, left=0.0, right=0.0)

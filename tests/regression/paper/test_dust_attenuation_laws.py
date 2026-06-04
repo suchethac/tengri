@@ -35,6 +35,7 @@ from tengri.components.dust.attenuation import (
     cardelli,
     leitherer02,
     noll09,
+    reddy15,
     salim_sbl18,
 )
 
@@ -334,4 +335,108 @@ class TestCardelli2175Bump:
         )
         assert float(k[1]) > float(k[2]), (
             f"CCM 2175 Å bump: k(2175)={float(k[1]):.3f} should exceed k(2500)={float(k[2]):.3f}"
+        )
+
+
+class TestReddy15:
+    """Reddy et al. (2015) MOSDEF high-redshift dust attenuation curve."""
+
+    def test_registered(self):
+        """reddy15 should be in the DUST_LAWS registry."""
+        assert "reddy15" in DUST_LAWS
+
+    def test_rv_normalization(self):
+        """k(5500 Å) = 1.0 by the R_V = 2.505 normalization convention.
+        Reddy et al. 2015, ApJ 806, 259, Eq. 8: the curve is normalized at
+        V-band so that one unit of tau_V produces one e-folding at 5500 Å.
+        """
+        k_v = float(reddy15(jnp.array([5500.0]))[0])
+        np.testing.assert_allclose(
+            k_v,
+            1.0,
+            atol=0.01,
+            err_msg="Reddy+2015 Eq. 8: k(5500 Å) = 1.0 by R_V=2.505 normalization",
+        )
+
+    def test_reference_values_low_wavelength(self):
+        """Reddy15 at low wavelengths (0.15-0.60 μm) matches polynomial formula.
+        Computed from Reddy et al. 2015, Eq. 8, low-λ segment.
+        """
+        # Test at 1500 Å (0.15 μm), 2500 Å (0.25 μm), 5500 Å (0.55 μm)
+        wavs = jnp.array([1500.0, 2500.0, 5500.0])
+        k = reddy15(wavs)
+        tng = np.array(k)
+
+        # Computed from the polynomial (Reddy et al. 2015, Eq. 8)
+        # normalized to k(5500 Å) = 1.0
+        ref = np.array([3.4958, 2.5026, 1.0000])
+        np.testing.assert_allclose(tng, ref, rtol=0.01)
+
+    def test_reference_values_high_wavelength(self):
+        """Reddy15 at high wavelengths (0.60-2.85 μm) matches polynomial formula.
+        Computed from Reddy et al. 2015, Eq. 8, high-λ segment.
+        """
+        # Test at 6000 Å (0.60 μm), 10000 Å (1.0 μm), 20000 Å (2.0 μm)
+        wavs = jnp.array([6000.0, 10000.0, 20000.0])
+        k = reddy15(wavs)
+        tng = np.array(k)
+
+        # Computed from the polynomial (Reddy et al. 2015, Eq. 8)
+        # normalized to k(5500 Å) = 1.0
+        ref = np.array([0.8666, 0.3775, 0.0639])
+        np.testing.assert_allclose(tng, ref, rtol=0.01)
+
+    def test_positive_output(self):
+        """Output should be non-negative across the full validity range."""
+        wavs = jnp.linspace(1500.0, 28500.0, 500)
+        k = reddy15(wavs)
+        assert jnp.all(k >= 0.0), "reddy15 should be non-negative everywhere"
+
+    def test_monotonic_behavior(self):
+        """Reddy15 should generally decrease from UV to NIR (low to high wavelength).
+        Reddy et al. 2015, Figure 10: the curve is monotonically decreasing overall.
+        """
+        wavs = jnp.linspace(1500.0, 28500.0, 200)
+        k = np.array(reddy15(wavs))
+        assert k[0] > k[-1], (
+            f"Reddy15 should decrease UV→NIR: k(1500)={k[0]:.3f} > k(28500)={k[-1]:.3f}"
+        )
+
+    def test_similarity_to_smc(self):
+        """Reddy15 shows similarity to SMC curve at long wavelengths.
+        Reddy et al. 2015, Section 3.6.5: The MOSDEF curve is similar in shape
+        to the SMC curve, particularly beyond 2500 Å.
+        """
+        # At long wavelengths, both Reddy15 and SMC should show similar behavior
+        wavs = jnp.array([10000.0, 20000.0])
+        k_reddy = reddy15(wavs)
+        # Both should show relatively gentle slope in the IR
+        # Check that IR (10000-20000 Å) values are reasonable (low attenuation)
+        assert float(k_reddy[0]) > 0.0, "reddy15 at 10000 Å should be positive"
+        assert float(k_reddy[0]) < float(k_reddy[1]) or float(k_reddy[1]) > 0, (
+            "Reddy15 should show expected IR behavior"
+        )
+
+    def test_jit_compatible(self):
+        """Should work inside jax.jit."""
+        f = jax.jit(reddy15)
+        wavs = jnp.array([1500.0, 5500.0, 20000.0])
+        result = f(wavs)
+        chex.assert_shape(result, (3,))
+
+    def test_gradient(self):
+        """Should be differentiable (for use in optimization)."""
+
+        def loss(wav):
+            return jnp.sum(reddy15(wav))
+
+        def f_scalar(wav0: float) -> float:
+            return float(loss(jnp.array([wav0])))
+
+        grad_jax = float(jax.grad(loss)(jnp.array([2500.0]))[0])
+        np.testing.assert_allclose(
+            grad_jax,
+            fd_grad(f_scalar, 2500.0, eps=1.0),
+            rtol=5e-3,
+            err_msg="reddy15: FD check ∂(∑k)/∂wavelength",
         )

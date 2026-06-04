@@ -233,16 +233,28 @@ def adaf_disk_spectrum(
        Emission," A&A, 622, A103 (2019). arXiv:1811.03094.
        https://doi.org/10.1051/0004-6361/201834156
     """
+    # ADAF delta is the ADAF->thin-disc blend weight, defined on [0, 1] (CIGALE
+    # skirtor2016 disk_type=2). Clip it before it enters the disc breakpoints so
+    # an out-of-range value (the shared ``agn_delta`` prior spans [-1, 1]) cannot
+    # produce a negative/non-monotonic limit and a non-finite spectrum.
+    delta_c = jnp.clip(delta, 0.0, 1.0)
+
     # ADAF spectrum
     limits_adaf = jnp.array([8.0, 75.0, 300.0, 1100.0, 2700.0, 20000.0, 100000.0, 1e6])
     coefs_adaf = jnp.array([0.5, 0.15, 0.45, -0.05, -0.55, -1.5, -4.0])
 
     # Thin disc spectrum (delta-modulated)
     limits_disc = jnp.array(
-        [8.0, 50.0, 2000.0 - (delta * 1875.0), 5000.0 - (delta * 2000.0), 10000.0, 1e6]
+        [8.0, 50.0, 2000.0 - (delta_c * 1875.0), 5000.0 - (delta_c * 2000.0), 10000.0, 1e6]
     )
     coefs_disc = jnp.array(
-        [9.0 - (8.0 * delta), 4.2 - (4.4 * delta), 0.7 - (2.2 * delta), -6.5 + (5.0 * delta), -4.0]
+        [
+            9.0 - (8.0 * delta_c),
+            4.2 - (4.4 * delta_c),
+            0.7 - (2.2 * delta_c),
+            -6.5 + (5.0 * delta_c),
+            -4.0,
+        ]
     )
 
     # Compute both spectra

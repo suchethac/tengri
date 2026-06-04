@@ -54,6 +54,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     norm,
     periodic,
     psb_wild2020,
+    sfh2exp,
     sfhdelayed,
     snorm,
     snorm_burst,
@@ -679,6 +680,64 @@ _register(
     short_doc="Constant SFR then exponential quenching",
 )
 SFH_REGISTRY["constant_then_exponential"] = SFH_REGISTRY["const_exp"]
+
+
+# --- sfh2exp (double declining exponential: main + recent burst, CIGALE) ---
+_register(
+    SFHModelSpec(
+        name="sfh2exp",
+        fn=sfh2exp,
+        params={
+            "sfh_sfh2exp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5),
+            ),
+            "sfh_sfh2exp_tau_main_gyr": ParamDef(
+                "e-folding timescale of main population (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0),
+            ),
+            "sfh_sfh2exp_tau_burst_gyr": ParamDef(
+                "e-folding timescale of the burst (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 1.0),
+            ),
+            "sfh_sfh2exp_f_burst": ParamDef(
+                "Fraction of stellar mass formed in the burst",
+                lambda lo, hi: lo >= 0.0 and hi < 1.0,
+                "must have 0 <= f_burst < 1",
+                Uniform(0.0, 0.5),
+            ),
+            "sfh_sfh2exp_age_gyr": ParamDef(
+                "Age of main population / lookback to formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0),
+            ),
+            "sfh_sfh2exp_burst_age_gyr": ParamDef(
+                "Lookback time of burst onset (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.01, 2.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_sfh2exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_sfh2exp_tau_main_gyr": ("tau_main_yr", 1e9, 0.0),
+            "sfh_sfh2exp_tau_burst_gyr": ("tau_burst_yr", 1e9, 0.0),
+            "sfh_sfh2exp_f_burst": ("f_burst", 1.0, 0.0),
+            "sfh_sfh2exp_age_gyr": ("age_yr", 1e9, 0.0),
+            "sfh_sfh2exp_burst_age_gyr": ("burst_age_yr", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="Double declining exponential: main + recent burst (CIGALE sfh2exp)",
+)
 
 
 # --- delayed_bq (delayed-tau with burst/quench, Ciesla+2017) ---

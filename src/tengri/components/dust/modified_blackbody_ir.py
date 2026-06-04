@@ -76,6 +76,9 @@ class ModifiedBlackbodySED(SEDModelComponent):
     beta_ir = Uniform(
         1.0, 3.0, default=1.8, description="Dust emissivity index", units="dimensionless"
     )
+    epsilon_mbb = Uniform(
+        0.0, 1.0, default=1.0, description="MBB luminosity fraction", units="dimensionless"
+    )
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}
@@ -88,9 +91,9 @@ class ModifiedBlackbodySED(SEDModelComponent):
 
         Generates L_nu via::
 
-            L_nu ~ (nu/nu_ref)^beta * B_nu(T_dust)
+            L_nu ~ epsilon * (nu/nu_ref)^beta * B_nu(T_dust)
 
-        normalized so that the integral over frequency equals ``L_ir``.
+        normalized so that the integral over frequency equals ``epsilon * L_ir``.
 
         Parameters
         ----------
@@ -98,6 +101,7 @@ class ModifiedBlackbodySED(SEDModelComponent):
             Sliced parameters (prefix stripped):
             - ``p["T"]``: dust temperature [K]
             - ``p["beta_ir"]``: emissivity index [dimensionless]
+            - ``p["epsilon_mbb"]``: MBB luminosity fraction [dimensionless, default 1.0]
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (ignored; dust emission is computed
             independently from absorbed luminosity).
@@ -119,14 +123,24 @@ class ModifiedBlackbodySED(SEDModelComponent):
         **JIT-compatible**: yes.
 
         **Gradient-safe**: yes — differentiable everywhere in (T, beta_ir,
-        L_ir).
+        epsilon_mbb, L_ir).
+
+        The epsilon_mbb parameter scales the absorbed luminosity fed to the MBB
+        integral. When epsilon_mbb < 1.0, the MBB carries only a fraction of
+        the absorbed energy (the remainder may be carried by other dust components).
+        Default epsilon_mbb = 1.0 reproduces the original behaviour (MBB carries
+        all absorbed luminosity).
         """
         L_ir = inputs["L_ir"]
+
+        # Scale absorbed luminosity by epsilon_mbb (default 1.0 = all luminosity)
+        epsilon = jnp.clip(p.get("epsilon_mbb", 1.0), 0.0, 1.0)
+        L_mbb = L_ir * epsilon
 
         # Compute dust emission SED
         sed_emission = modified_blackbody(
             wavelength_aa=wave,
-            L_absorbed=L_ir,
+            L_absorbed=L_mbb,
             dust_T=p["T"],
             dust_beta_ir=p["beta_ir"],
             redshift=0.0,  # Redshift handled upstream if needed
