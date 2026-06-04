@@ -589,6 +589,47 @@ def csp_log_interp_matrix(ssp_ages_yr, n_gl: int = 5):
     return A
 
 
+def enforce_increasing_cosmic_time(t_cosmic_asc: jnp.ndarray) -> jnp.ndarray:
+    r"""Project an ascending cosmic-time table to *strictly* increasing.
+
+    DSPS' SFH-table kernels interpolate on ``gal_t_table`` and return NaN
+    when the knots are non-monotone or duplicated. At high observation
+    redshift the youngest valid cosmic-time bins can fall below
+    ``T_TABLE_MIN`` and clamp to the same floor as the cosmically-invalid
+    ramp, so the table dips below the ramp and DSPS NaNs the whole weight
+    tensor (the invalid-bin ramp alone does not cover boundary-valid bins).
+
+    Uses a subtract-ramp / cumulative-maximum / add-ramp projection: it
+    removes any inversion or tie while staying an *exact* no-op for tables
+    that already increase by more than ``eps`` per step (the normal low-z
+    case) — then ``t - ramp`` is still increasing, ``cummax`` is the
+    identity, and adding ``ramp`` back recovers the input bit-for-bit.
+
+    Parameters
+    ----------
+    t_cosmic_asc : array_like, shape (n_age,)
+        Cosmic-time knots [Gyr], ascending.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Strictly-increasing cosmic-time knots [Gyr].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Differentiable**: yes. The ``eps`` step
+    (1e-6 Gyr = 1000 yr) is far below the smallest SSP age-grid spacing,
+    so the perturbation to genuinely-clamped bins is negligible.
+
+    References
+    ----------
+    .. [1] suchethac/tengri#683 — SFH age weights NaN at high redshift.
+    """
+    eps = 0.01 * 1e-4  # 1e-6 Gyr (1000 yr); far below any SSP age step
+    ramp = jnp.arange(t_cosmic_asc.shape[0]) * eps
+    return jnp.maximum.accumulate(t_cosmic_asc - ramp) + ramp
+
+
 def compute_dsps_native_weights(
     sfr_on_ssp_ages: jnp.ndarray,
     ssp_ages_yr: jnp.ndarray,
@@ -718,6 +759,9 @@ def compute_dsps_native_weights(
     # Ramp from T_TABLE_MIN to T_TABLE_MIN * 1.5, strictly increasing.
     ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx + 1) / jnp.maximum(n_invalid, 1)
     t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+    # Guarantee strictly-increasing knots: at high z boundary-valid bins can
+    # clamp to T_TABLE_MIN below the invalid-bin ramp, which DSPS NaNs on. #683
+    t_cosmic_asc = enforce_increasing_cosmic_time(t_cosmic_asc)
     sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
 
     result = calc_rest_sed_sfh_table_lognormal_mdf(
@@ -826,6 +870,9 @@ def compute_dsps_age_weights(
     is_invalid_pos = idx < n_invalid
     ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx + 1) / jnp.maximum(n_invalid, 1)
     t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+    # Guarantee strictly-increasing knots: at high z boundary-valid bins can
+    # clamp to T_TABLE_MIN below the invalid-bin ramp, which DSPS NaNs on. #683
+    t_cosmic_asc = enforce_increasing_cosmic_time(t_cosmic_asc)
     sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
 
     # DSPS canonical trapezoidal-in-cosmic-time SFH integration.
