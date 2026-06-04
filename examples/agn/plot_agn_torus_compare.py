@@ -2,21 +2,27 @@
 AGN dusty torus: library comparison at fixed L_bol
 =====================================================
 
-Six dusty-torus libraries reprocessing the same accretion-disc
+Seven dusty-torus libraries reprocessing the same accretion-disc
 continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
 inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)
 so the differences in the curves are entirely how each torus library
 geometrically distributes hot grains and re-emits the absorbed UV in
 the MIR.
 
-Torus libraries (the six production selectors under
+Torus libraries (the seven production selectors under
 ``agn.torus.type``):
 - ``skirtor``          — Stalevski+2016 clumpy radiative-transfer grid
 - ``cat3d_wind``       — Hönig & Kishimoto 2017 disc + wind grid
 - ``nenkova``          — Nenkova+2008 clumpy CLUMPY grid
+- ``fritz``            — Fritz+2006 smooth-dust grid (CIGALE/X-CIGALE)
 - ``silva04``          — Silva+2004 smooth two-temperature
 - ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
 - ``two_temperature``  — simple two-blackbody phenomenological torus
+
+``fritz`` and ``skirtor`` are the two CIGALE production tori — smooth
+(Fritz+2006) versus clumpy (Stalevski+2016) — so contrasting them on
+this panel isolates the smooth-vs-clumpy silicate-feature behaviour
+near 9.7 and 18 micron.
 """
 
 import os
@@ -39,6 +45,7 @@ TORI = [
     ("skirtor", "SKIRTOR (Stalevski+2016)"),
     ("cat3d_wind", "CAT3D-WIND (Hönig & Kishimoto 2017)"),
     ("nenkova", "CLUMPY (Nenkova+2008)"),
+    ("fritz", "Fritz+2006 smooth"),
     ("silva04", "Silva+2004"),
     ("qsogen", "QSOGEN MIR"),
     ("two_temperature", "two-T blackbody"),
