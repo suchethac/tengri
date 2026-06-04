@@ -561,6 +561,73 @@ def calzetti(
 
 
 @register_dust_law(
+    "reddy15",
+    citation="Reddy et al. 2015 (ApJ 806, 259)",
+    short_doc="Reddy et al. MOSDEF attenuation (R_V=2.505)",
+)
+def reddy15(
+    wavelength: jnp.ndarray,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Reddy et al. (2015) MOSDEF dust attenuation curve.
+
+    High-redshift (z~1.4-2.6) attenuation curve derived from MOSDEF galaxies
+    using Balmer decrements. R_V = 2.505 (lower than Calzetti). Valid:
+    0.15 - 2.85 μm. Similar to SMC at long wavelengths.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Normalized attenuation curve k(λ), where k(5500 Å) = 1. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    Uses piecewise polynomials in :math:`x = 1/\lambda` [μm⁻¹]:
+
+    .. math::
+
+        k(\lambda) = \begin{cases}
+        -5.726 + 4.004 x - 0.525 x^2 + 0.029 x^3 + R_V & 0.15 \leq \lambda < 0.60 \, \mu{\rm m} \\
+        -2.672 - 0.010 x + 1.532 x^2 - 0.412 x^3 + R_V & 0.60 \leq \lambda \leq 2.85 \, \mu{\rm m}
+        \end{cases}
+
+    then normalized: :math:`k(\lambda) = k(\lambda) / R_V` with :math:`R_V = 2.505`.
+    The normalization ensures :math:`k(5500 \, \text{\AA}) = 1`.
+
+    **Approximation**: The polynomial form is valid over 0.15–2.85 μm. Extrapolation
+    beyond this range follows the functional form but is not empirically constrained
+    (Reddy et al. 2015, Section 3.6.1).
+
+    References
+    ----------
+    .. [1] N. A. Reddy, M. Kriek, A. E. Shapley, W. R. Freeman, B. Siana,
+       A. L. Coil, B. Mobasher, S. H. Price, R. L. Sanders, and I. Shivaei,
+       "The MOSDEF Survey: Measurements of Balmer Decrements and the Dust
+       Attenuation Curve at Redshifts z ~ 1.4–2.6," ApJ, 806, 259 (2015).
+       arXiv:1504.02782. https://doi.org/10.1088/0004-637X/806/2/259
+    """
+    wave_um = wavelength / 1e4
+    x = 1.0 / wave_um
+
+    # Low-wavelength segment (0.15 <= lambda < 0.60 um)
+    k_low = -5.726 + 4.004 * x - 0.525 * x**2 + 0.029 * x**3
+
+    # High-wavelength segment (0.60 <= lambda <= 2.85 um)
+    k_high = -2.672 - 0.010 * x + 1.532 * x**2 - 0.412 * x**3
+
+    rv = 2.505
+    k_prime = jnp.where(wave_um < 0.60, k_low, k_high) + rv
+    return jnp.clip(k_prime / rv, 0.0)
+
+
+@register_dust_law(
     "kriek_conroy",
     citation="Kriek & Conroy 2013 (ApJL 775, L16)",
     short_doc="Kriek & Conroy modified Calzetti + bump + slope",

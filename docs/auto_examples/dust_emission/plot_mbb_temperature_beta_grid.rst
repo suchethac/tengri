@@ -38,17 +38,6 @@ projected onto a single sub-mm photometric point.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-106
 
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_mbb_temperature_beta_grid_001.png
-   :alt: plot mbb temperature beta grid
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_mbb_temperature_beta_grid_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

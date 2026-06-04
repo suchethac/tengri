@@ -87,6 +87,7 @@ def test_all_association_keys_registered(name: str, table: dict | list):
         ("smc", "gordon2003_smc"),
         ("cardelli", "cardelli1989"),
         ("salim", "salim2018"),
+        ("reddy15", "reddy2015"),
         ("li08", "li2008_ext"),
     ],
 )

@@ -389,6 +389,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
                 agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
                 agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
+                agn_tau=p.get("agn_tau", 30.0),  # Nenkova+2008 CLUMPY torus
                 agn_T_hot=p.get("agn_T_hot", 1200.0),
                 agn_T_warm=p.get("agn_T_warm", 300.0),
                 agn_frac_hot=p.get("agn_frac_hot", 0.3),
