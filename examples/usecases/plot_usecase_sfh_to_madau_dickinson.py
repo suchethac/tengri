@@ -114,7 +114,7 @@ for z in z_grid:
         log_sfr = 0.7 * log_mstar - 6.0
 
         params = dict(params_template)
-        params["sfh_dpl_log_peak_sfr"] = float(log_sfr)
+        params["sfh_dpl_log_total_mass"] = float(log_sfr) + 10.0
         params["redshift"] = float(z)
 
         # Compute SFH and extract instantaneous SFR

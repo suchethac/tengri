@@ -56,7 +56,7 @@ summary_out = model.spec.summary_str()
 key = jax.random.PRNGKey(0)
 params = dict(model.spec.sample(key))
 # Override a few to show variability
-params["sfh_tsnorm_log_peak_sfr"] = jnp.float64(1.5)
+params["sfh_tsnorm_log_total_mass"] = jnp.float64(11.5)
 params["sfh_tsnorm_skew"] = jnp.float64(-0.2)
 
 # Predict rest-frame SED

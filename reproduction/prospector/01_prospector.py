@@ -1216,7 +1216,7 @@ m_agn = SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "none"},
-        "torus": {"type": "nenkova", "agn_tau_torus": Fixed(AGN_TAU), "*": FIXED},
+        "torus": {"type": "nenkova", "agn_tau": Fixed(AGN_TAU), "*": FIXED},
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "*": FIXED,
     },

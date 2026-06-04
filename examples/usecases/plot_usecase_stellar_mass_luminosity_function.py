@@ -185,7 +185,7 @@ for i, log_m_star in enumerate(log_mstar_samples):
     log_sfr = 0.7 * log_m_star - 6.0
 
     params = dict(params_template)
-    params["sfh_dpl_log_peak_sfr"] = float(log_sfr)
+    params["sfh_dpl_log_total_mass"] = float(log_sfr) + 10.0
     params["redshift"] = 0.0  # z=0 for rest-frame
 
     # Predict photometry (returns flux in erg/s/cm²/Hz for each band)

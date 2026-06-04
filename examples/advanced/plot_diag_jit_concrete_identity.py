@@ -42,7 +42,7 @@ model = tengri.SEDModel.build(
 
 # Get baseline parameters (all fixed except SFH)
 baseline = {
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 11.0,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
     "sfh_tsnorm_width_gyr": 2.0,
     "sfh_tsnorm_skew": 0.0,
@@ -74,7 +74,7 @@ for _ in range(n_samples):
     # Sample random SFH parameters
     param_vals = jax.random.uniform(subkey, shape=(len(free_names),))
     params = dict(baseline)
-    params["sfh_tsnorm_log_peak_sfr"] = -2.0 + 4.0 * float(param_vals[0])
+    params["sfh_tsnorm_log_total_mass"] = 9.0 + 4.0 * float(param_vals[0])
     params["sfh_tsnorm_peak_lbt_gyr"] = 0.1 + 11.9 * float(param_vals[1])
     params["sfh_tsnorm_width_gyr"] = 0.01 + 4.99 * float(param_vals[2])
     params["sfh_tsnorm_skew"] = -2.0 + 4.0 * float(param_vals[3])
@@ -101,7 +101,7 @@ if has_cue:
         key, subkey = jax.random.split(key)
         param_vals = jax.random.uniform(subkey, shape=(len(free_names),))
         params = dict(baseline)
-        params["sfh_tsnorm_log_peak_sfr"] = -2.0 + 4.0 * float(param_vals[0])
+        params["sfh_tsnorm_log_total_mass"] = 9.0 + 4.0 * float(param_vals[0])
         params["sfh_tsnorm_peak_lbt_gyr"] = 0.1 + 11.9 * float(param_vals[1])
         params["sfh_tsnorm_width_gyr"] = 0.01 + 4.99 * float(param_vals[2])
         params["sfh_tsnorm_skew"] = -2.0 + 4.0 * float(param_vals[3])

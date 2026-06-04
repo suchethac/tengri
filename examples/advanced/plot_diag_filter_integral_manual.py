@@ -43,7 +43,7 @@ model = tengri.SEDModel.build(
 )
 
 params = {
-    "sfh_tsnorm_log_peak_sfr": 0.3,
+    "sfh_tsnorm_log_total_mass": 10.3,
     "sfh_tsnorm_peak_lbt_gyr": 3.0,
     "sfh_tsnorm_width_gyr": 1.2,
     "sfh_tsnorm_skew": 0.0,
