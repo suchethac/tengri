@@ -76,11 +76,10 @@ def test_meiksin06_jit_and_grad_safe():
 
 
 @pytest.fixture(scope="module")
-def ssp():
-    try:
-        return tengri.load_ssp()
-    except FileNotFoundError as exc:
-        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
+def ssp(synthetic_ssp_wide):
+    # #613: synthetic SSP — IGM transmission (observer-frame) and the X-ray flag
+    # are SSP-independent, so these grammar/forward checks run on CI.
+    return synthetic_ssp_wide
 
 
 def test_meiksin06_builds_through_grammar(ssp):
