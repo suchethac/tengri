@@ -206,6 +206,23 @@ depths, two-component geometry, and law comparisons.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 7 of Buchner et al. (2024, GRAHSP): a star-forming galaxy SED from intrinsic (dark blue) to strongly attenuated (dark red) as the diffuse colour excess E(B-V) is swept from 0.01 to 10. Energy balance routes the attenuated UV/optical light into the far-IR dust bump (Dale 2014), so the curves pivot about the FIR peak while the UV is progressively suppressed.">
+
+.. only:: html
+
+  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_grahsp_paper_fig7_galaxy_attenuation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP Fig. 7 reproduction: attenuation of the galaxy model</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Birth-cloud dust optical depth τ_bc attenuates only the youngest stellar light (age &lt; ~10 Myr), controlling nebular emission from embedded HII regions. τ_bc effects are clearest on young star-forming populations; we use a 500 Myr starburst and vary τ_bc across the prior range.">
 
 .. only:: html
@@ -327,6 +344,7 @@ depths, two-component geometry, and law comparisons.
    /auto_examples/dust_attenuation/plot_dust_law_uv_slope_response
    /auto_examples/dust_attenuation/plot_dust_slope_sweep
    /auto_examples/dust_attenuation/plot_galactic_zoo_dust_laws
+   /auto_examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation
    /auto_examples/dust_attenuation/plot_tau_bc_sweep
    /auto_examples/dust_attenuation/plot_tau_diff_sweep
    /auto_examples/dust_attenuation/plot_two_component
