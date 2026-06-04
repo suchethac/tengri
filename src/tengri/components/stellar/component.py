@@ -23,11 +23,27 @@ See ``docs/dev/20260404-refactor.md`` for the migration plan.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+import jax
 import jax.numpy as jnp
+
+
+class SFHBeforeBigBangWarning(UserWarning):
+    """Part of the SFH forms stars before the Big Bang at the given redshift.
+
+    Emitted from the eager forward path when the star formation history places
+    a non-negligible fraction of its formed stellar mass at lookback times
+    older than the age of the universe at ``redshift``. That mass is truncated
+    (clamped to cosmic time) so the prediction does not reflect the requested
+    SFH. Bound the SFH age parameter or the redshift to silence it. The check
+    is skipped under ``jax.jit`` / inference, where exploring such draws is
+    expected. See suchethac/tengri#683.
+    """
+
 
 from tengri.components.stellar.sfh.gp_sfh import log_age_grid_step, make_log_age_grid
 from tengri.components.stellar.sfh.metallicity_history import (
@@ -45,6 +61,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     compute_log_z_evolving,
     compute_surviving_mass,
     effective_metallicity,
+    enforce_increasing_cosmic_time,
     has_alpha_grid,
     interpolate_alpha_only,
     interpolate_mass_remaining,
@@ -920,8 +937,35 @@ class StellarSEDComponent:
         is_invalid_pos = idx_pos < n_invalid
         ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx_pos + 1) / jnp.maximum(n_invalid, 1)
         t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+        # Guarantee strictly-increasing knots: at high z boundary-valid bins can
+        # clamp to T_TABLE_MIN below the invalid-bin ramp, which DSPS NaNs on. #683
+        t_cosmic_asc = enforce_increasing_cosmic_time(t_cosmic_asc)
         sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
         total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
+
+        # Eager physicality guard: the masking above truncates any SFH mass at
+        # lookback ages older than the universe at this redshift. When that
+        # truncated fraction is non-negligible the prediction no longer matches
+        # the requested SFH, so warn on the eager forward path. Skipped under
+        # jit/grad/vmap (``t_obs_gyr`` is a tracer there) — exploring such draws
+        # during inference is expected and a Python branch on a tracer is illegal.
+        if not isinstance(t_obs_gyr, jax.core.Tracer):
+            mass_total_sfh = jnp.trapezoid(sfr_on_ssp, ssp_ages_yr)
+            mass_pre_bb = jnp.trapezoid(
+                jnp.where(ssp_age_gyr > t_obs_gyr, sfr_on_ssp, 0.0), ssp_ages_yr
+            )
+            frac_pre_bb = float(mass_pre_bb / jnp.maximum(mass_total_sfh, 1e-30))
+            if frac_pre_bb > 0.01:
+                warnings.warn(
+                    f"Star formation history forms {frac_pre_bb:.0%} of its stellar "
+                    f"mass before the Big Bang at z={float(z):.2f} (cosmic age "
+                    f"{float(t_obs_gyr):.2f} Gyr). That mass is truncated, so the "
+                    f"prediction does not reflect the requested SFH — bound the SFH "
+                    f"age parameter or the redshift to keep star formation within "
+                    f"cosmic time.",
+                    SFHBeforeBigBangWarning,
+                    stacklevel=2,
+                )
 
         if self.config.metallicity_model == "delta":
             dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
