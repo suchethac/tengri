@@ -8,10 +8,12 @@ following Grandi (1982): a 15,000 K blackbody truncated at the Balmer edge
 forest it builds the "small blue bump" seen blueward of ~4000 Å in type-1
 quasars.
 
-Here we sweep the strength parameter ``agn_grahsp_a_bc`` (upstream ``ABC``,
-the Balmer-continuum strength relative to the power-law at 3000 nm) from off
-to strong, holding everything else fixed. Watch the step at the Balmer edge
-and the way the Gaussian convolution smears it into the continuum.
+To isolate the effect we switch the emission lines, FeII forest and torus
+**off** (``a_lines=0``, ``a_feii=0``, ``fcov=0``), leaving only the bending
+power-law continuum, and sweep the strength parameter ``agn_grahsp_a_bc``
+(upstream ``ABC``) from off to strong. The left panel shows the continuum +
+Balmer bump zoomed on the edge; the right shows the Balmer contribution in
+isolation (zero above the edge, rising blueward).
 """
 
 import os
@@ -25,37 +27,57 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri.analysis.plotting import setup_style
-from tengri.components.agn.grahsp.model import compute_grahsp_sed
+from tengri.components.agn.grahsp.model import (
+    GRAHSPParams,
+    compute_grahsp_sed,
+    evaluate_grahsp_agn,
+)
+from tengri.components.agn.grahsp.templates import load_grahsp_templates
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Rest-frame optical/UV window where the Balmer continuum lives.
-wave_aa = jnp.logspace(np.log10(1500.0), np.log10(8000.0), 1200)
+# Rest-frame near-UV/optical window bracketing the Balmer edge.
+wave_aa = jnp.linspace(1500.0, 5000.0, 1400)
 wave_um = np.asarray(wave_aa) / 1e4
+templates = load_grahsp_templates()
 
 A_BC = [0.0, 0.5, 1.0, 2.0]
 colors = plt.cm.viridis(np.linspace(0.15, 0.85, len(A_BC)))
 
-fig, ax = plt.subplots(figsize=(7.0, 4.6))
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.6, 4.4), sharex=True)
+
 for a_bc, c in zip(A_BC, colors):
-    # Disable FeII so the Balmer continuum is visible in isolation.
-    lnu = np.asarray(
+    # Continuum + Balmer only (lines / FeII / torus suppressed).
+    total = np.asarray(
         compute_grahsp_sed(
             wave_aa,
             agn_log_lbol=45.0,
+            agn_grahsp_a_lines=0.0,
             agn_grahsp_a_feii=0.0,
+            agn_grahsp_fcov=0.0,
             agn_grahsp_a_bc=a_bc,
-            agn_grahsp_linewidth_kms=5000.0,
         )
     )
-    ax.plot(wave_um, wave_um * lnu, color=c, lw=1.8, label=rf"$A_{{\rm BC}}={a_bc}$")
+    ax1.plot(wave_um, wave_um * total, color=c, lw=1.8, label=rf"$A_{{\rm BC}}={a_bc}$")
 
-ax.axvline(3646.0 / 1e4, color="0.5", ls=":", lw=1.0)
-ax.text(3646.0 / 1e4, ax.get_ylim()[1] * 0.92, " Balmer edge\n 3646 Å", fontsize=8, color="0.4")
-ax.set_xlabel(r"rest wavelength [$\mu$m]")
-ax.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$, arb. norm.]")
-ax.set_title("GRAHSP Balmer continuum (Grandi 1982) strength sweep")
-ax.legend(frameon=False, fontsize=9)
+    # Balmer contribution in isolation (erg/s/nm -> lambda*L_lambda).
+    sed = evaluate_grahsp_agn(
+        wave_aa * 0.1,  # nm
+        GRAHSPParams(l5100=1e44, a_lines=0.0, a_feii=0.0, fcov=0.0, a_bc=a_bc),
+        templates,
+    )
+    balmer_llam = np.asarray(sed.balmer)  # erg/s/nm
+    ax2.plot(wave_um, wave_um * balmer_llam * 1e1, color=c, lw=1.8)
+
+for ax in (ax1, ax2):
+    ax.axvline(3646.0 / 1e4, color="0.5", ls=":", lw=1.0)
+    ax.set_xlabel(r"rest wavelength [$\mu$m]")
+ax1.text(3646.0 / 1e4, ax1.get_ylim()[1] * 0.9, " Balmer\n edge", fontsize=8, color="0.4")
+ax1.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$, arb. norm.]")
+ax1.set_title("Bending power-law + Balmer continuum")
+ax1.legend(frameon=False, fontsize=9)
+ax2.set_title("Balmer continuum contribution (isolated)")
+fig.suptitle("GRAHSP Balmer continuum (Grandi 1982) strength sweep", y=1.02)
 fig.tight_layout()
 plt.show()

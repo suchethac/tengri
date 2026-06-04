@@ -71,7 +71,7 @@ ax1.legend(frameon=False, fontsize=9)
 ax1.set_ylabel(r"$\lambda L_\lambda$ [erg s$^{-1}$, native norm.]")
 
 # Panel 2: MN12 temperature blend.
-temps = [(-1.0, "lo (cool, 25th pct)"), (0.0, "avg (mean)"), (1.0, "hi (warm, 75th pct)")]
+temps = [(-1.0, "lo (25th pct)"), (0.0, "avg (mean)"), (1.0, "hi (75th pct)")]
 colors = plt.cm.plasma(np.linspace(0.15, 0.8, len(temps)))
 for (t, lab), c in zip(temps, colors):
     ax2.plot(
