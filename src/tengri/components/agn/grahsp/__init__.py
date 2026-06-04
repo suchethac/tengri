@@ -117,3 +117,4 @@ __all__ = [
     "smc_attenuation_curve",
     "torus_dust_continuum",
 ]
+# GRAHSP parity (Balmer continuum, MN12 torus, Veron-Cetty FeII, Netzer disc): see PR #649

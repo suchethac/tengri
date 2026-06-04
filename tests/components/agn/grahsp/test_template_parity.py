@@ -18,7 +18,7 @@ import pytest
 pytestmark = pytest.mark.bounds
 from scipy import constants as cst
 
-REPO_ROOT = Path(__file__).resolve().parents[5]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 TEMPLATE_BUNDLE = REPO_ROOT / "data" / "grahsp" / "grahsp_templates.h5"
 UPSTREAM = REPO_ROOT / "arxiv_library" / "code" / "grahsp"
 _UPSTREAM_AGN = UPSTREAM / "database_builder" / "activate" / "agn"

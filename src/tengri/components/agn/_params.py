@@ -429,6 +429,29 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    ParamDeclaration(
+        "agn_grahsp_a_bc",
+        Fixed(0.0),
+        "GRAHSP Balmer continuum strength relative to the powerlaw at 3000 nm "
+        "(Grandi 1982; paper ABC). 0 disables; only added for agn_type=1.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_tor_temp",
+        Fixed(0.0),
+        "GRAHSP MN12 template-torus temperature blend (paper TORtemp), in "
+        "[-1, +1]; >0 warms towards the 75th-percentile template, <0 cools "
+        "towards the 25th. Used only when the torus model is 'mn12'.",
+    ),
+    ParamDeclaration(
+        "agn_grahsp_tor_cutoff_um",
+        Fixed(1.2),
+        "GRAHSP MN12 template-torus short-wavelength Gaussian cutoff [um] "
+        "(paper TORcutoff; 1.2 Mor&Netzer, 1.7 Lyu&Rieke). Torus model 'mn12'.",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
     # CIGALE skirtor2016 disc-shape modulator (Boquien+2019)
     ParamDeclaration(
         "agn_cigale_disk_delta",
