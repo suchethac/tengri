@@ -679,3 +679,27 @@ class TestCueOptionalKnobExposure:
                 neb={"type": "cue", "*": FIXED, "gas_logn": FREE},
                 redshift=Fixed(0.05),
             )
+
+
+class TestElineModeExposure:
+    """#653: eline_mode is a recognised top-level builder setting, so the
+    line-velocity params register through the nested-dict path (previously
+    only the flat Parameters(eline_mode=...) constructor saw them)."""
+
+    def test_fitted_registers_eline_params(self):
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            neb={"type": "cue", "*": FIXED},
+            eline_mode="fitted",
+            redshift=Fixed(0.05),
+        )
+        assert "eline_sigma_kms" in params.all_params
+        assert "eline_delta_v_kms" in params.all_params
+
+    def test_off_registers_nothing(self):
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            neb={"type": "cue", "*": FIXED},
+            redshift=Fixed(0.05),
+        )
+        assert "eline_sigma_kms" not in params.all_params

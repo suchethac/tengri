@@ -429,6 +429,11 @@ _TOP_LEVEL_SETTINGS = {
     "redshift",
     "apply_igm",
     "n_grid",
+    # Emission-line velocity mode. Activating it (``"fixed"``/``"marginalized"``/
+    # ``"fitted"``) registers the line-velocity params (``eline_sigma_kms``,
+    # ``eline_delta_v_kms``). ``SEDModel.build`` auto-propagates this from a
+    # ``Spectroscopy`` observation so it need not be set twice (#653).
+    "eline_mode",
 }
 
 #: Top-level kwargs that are SEDModel-only settings (silently ignored here).
