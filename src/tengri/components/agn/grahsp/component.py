@@ -207,8 +207,44 @@ class GRAHSPSEDComponent:
     parameter_prefix: str = "agn_grahsp_"
 
     def citations(self) -> tuple[str, ...]:
-        """GRAHSP/QSOgen big-blue-bump template from Temple+2021."""
-        return ("temple2021_qsogen",)
+        """Registry keys for GRAHSP and the active empirical sub-models.
+
+        Returns the GRAHSP paper (Buchner+2024) plus one key per
+        *enabled* sub-model, so a run only advertises what it actually
+        uses (the "cite what you use" policy of
+        :func:`tengri.citations.collect_citations`).
+
+        Returns
+        -------
+        tuple of str
+            Registry keys present in ``references.bib``:
+
+            - ``buchner2024`` — always (the GRAHSP model itself).
+            - ``grandi1982`` — if ``include_balmer``.
+            - ``bruhweiler_verner2008`` / ``veron_cetty2004`` — if
+              ``include_feii``, selected by ``feii_template``.
+            - ``mor_netzer2012`` — if ``include_torus`` and
+              ``torus_model == "mn12"`` (template torus).
+            - ``netzer_trakhtenbrot2014`` — if ``disc_model == "netzer"``.
+
+        Notes
+        -----
+        **JIT-compatible**: no — reads ``self.config`` (static metadata).
+        """
+        cfg = self.config
+        keys: list[str] = ["buchner2024"]
+        if cfg.include_balmer:
+            keys.append("grandi1982")
+        if cfg.include_feii:
+            if cfg.feii_template == "veroncetty2004":
+                keys.append("veron_cetty2004")
+            else:
+                keys.append("bruhweiler_verner2008")
+        if cfg.include_torus and cfg.torus_model == "mn12":
+            keys.append("mor_netzer2012")
+        if cfg.disc_model == "netzer":
+            keys.append("netzer_trakhtenbrot2014")
+        return tuple(keys)
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Free parameters this component owns.

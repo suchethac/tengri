@@ -308,6 +308,8 @@ _LIVE_NAME_TO_BIBKEY: dict[str, str] = {
     "multicolor_agn": "kubota_done2018",
     "adaf": "mahadevan1997",
     "qsogen": "temple2021_qsogen",
+    "grahsp": "buchner2024",
+    "agn_grahsp": "buchner2024",
     # Dust attenuation laws
     "calzetti": "calzetti2000",
     "cardelli": "cardelli1989",
@@ -319,6 +321,8 @@ _LIVE_NAME_TO_BIBKEY: dict[str, str] = {
     "smc": "gordon2003_smc",
     "lmc": "gordon2003_smc",
     "power_law": "charlot_fall2000",
+    # Dust attenuation *model* selector (dust_model, not a per-component law)
+    "wg00": "witt_gordon2000",  # Witt & Gordon (2000) RT screen (FSPS dust_type=3)
     # Dust emission templates (registered alternatives strip suffixes)
     "dl07": "draine_li2007",
     "dl07_tabulated": "draine_li2007",
@@ -372,6 +376,7 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
             _push(s)
 
     _push(getattr(spec, "agn_model", None))
+    _push(getattr(spec, "dust_model", None))  # e.g. wg00 → witt_gordon2000
     _push(getattr(spec, "dust_emission", None))
     _push(getattr(spec, "dust_law", None))
     _push(getattr(spec, "dust_law_bc", None))

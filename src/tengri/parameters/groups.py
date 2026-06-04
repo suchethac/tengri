@@ -226,7 +226,13 @@ def _valid_sfh_types() -> frozenset[str]:
 _VALID_DUST_TYPES = {
     "two_component",
     "single_component",
+    "wg00",
 }
+
+#: Witt & Gordon (2000) structural selectors (dust_model="wg00", FSPS dust_type=3).
+_WG00_DUST_CURVES = ("mw", "smc")
+_WG00_GEOMETRIES = ("shell", "cloudy", "dusty")
+_WG00_STRUCTURES = ("homogeneous", "clumpy")
 
 #: Dust emission types that register lazily via ``register_*_tabulated``
 #: helpers (template data loaded from HDF5 only on first call). These names
@@ -851,6 +857,24 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
 
     result["dust_model"] = dust_type
 
+    # Witt & Gordon (2000) screen (FSPS dust_type=3): capture and validate the
+    # three structural selectors. They are static structural choices (not free
+    # params); the fitted depth is ``tau_v`` (→ dust_tau_v), shared with the
+    # single-component screen.
+    if dust_type == "wg00":
+        _wg00_axes = {
+            "dust_curve": ("dust_wg00_curve", _WG00_DUST_CURVES),
+            "geometry": ("dust_wg00_geometry", _WG00_GEOMETRIES),
+            "structure": ("dust_wg00_structure", _WG00_STRUCTURES),
+        }
+        for key, (result_key, allowed) in _wg00_axes.items():
+            if key in dust_dict:
+                val = dust_dict[key]
+                if val not in allowed:
+                    raise ValueError(f"Invalid WG00 {key} {val!r}; choose one of {allowed}.")
+                result[result_key] = val
+        return
+
     # Extract dust law (can be in dust_dict or dust['law_bc'])
     dust_law_bc = dust_dict.get("law_bc", "power_law")
     dust_law_diff = dust_dict.get("law_diff")
@@ -1033,7 +1057,9 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*", "bin_edges_gyr"}),
     "stellar": frozenset({"met_mode", "*"}),
-    "dust": frozenset({"type", "*", "law_bc", "law_diff", "emission"}),
+    "dust": frozenset(
+        {"type", "*", "law_bc", "law_diff", "emission", "dust_curve", "geometry", "structure"}
+    ),
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
