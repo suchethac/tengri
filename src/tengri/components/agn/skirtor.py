@@ -33,6 +33,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
+from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     wavelength_to_nu as _wavelength_to_nu,
@@ -701,7 +702,7 @@ def skirtor_disc_attenuation(*args, **kwargs):
     return _load_skirtor_disc_attenuation()(*args, **kwargs)
 
 
-def skirtor_analytic(*args, **kwargs):
+def skirtor_sed(*args, **kwargs):
     """SKIRTOR torus SED (auto-loaded from tabulated templates).
 
     This function uses the tabulated Stalevski+2016 template grid
@@ -823,3 +824,10 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
             "Run: python scripts/download_skirtor_templates.py --input-dir <raw-files>"
         )
     return fn(*args, **kwargs)
+
+
+# Deprecated: "_analytic" was a misnomer — SKIRTOR is a template-grid
+# interpolation, not a closed-form model. Use skirtor_sed. Removed in v1.0.
+skirtor_analytic = deprecated_alias(
+    skirtor_sed, old_name="skirtor_analytic", new_name="skirtor_sed"
+)

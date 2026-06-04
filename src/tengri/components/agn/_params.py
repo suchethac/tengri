@@ -135,6 +135,50 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    # Hönig & Kishimoto (2017) CAT3D-Wind clumpy-disc-plus-polar-wind torus.
+    # Defaults match the cat3d_wind_torus_block; grid extent a in [-3, -1.5],
+    # fwd in [0.15, 2.25] (see scripts/build_cat3d_wind_grid.py).
+    ParamDeclaration(
+        "agn_a_cat3d",
+        Fixed(-2.0),
+        "CAT3D-Wind radial cloud-distribution power-law index (grid -3 to -1.5)",
+        lambda lo, hi: True,
+        "no constraint",
+    ),
+    ParamDeclaration(
+        "agn_fwd_cat3d",
+        Fixed(0.2),
+        "CAT3D-Wind polar-wind mass fraction (grid 0.15 to 2.25)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    # Silva, Maiolino & Granato (2004) smooth obscured-torus templates,
+    # indexed by line-of-sight column density. Default matches silva04_torus_block.
+    ParamDeclaration(
+        "agn_log_nh_silva",
+        Fixed(23.0),
+        "Silva+04 torus log10(N_H / cm^-2) (grid 22 to 25)",
+        lambda lo, hi: lo >= 20,
+        "must be >= 20",
+    ),
+    # Stalevski+ 2016 SKIRTOR_mean_3p (AGNfitter-rX averaged) torus. Shares
+    # agn_oa_skirtor with the X-CIGALE skirtor block; inclination here is in
+    # degrees (not cos) and the optical depth axis is tau_V. Defaults match the
+    # skirtor_agnfitter_torus_block / grid extent (oa 10-80, incl 0-90, tv 3-11).
+    ParamDeclaration(
+        "agn_incl_skirtor",
+        Fixed(30.0),
+        "SKIRTOR_mean_3p inclination [degrees] (grid 0-90)",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_tv_skirtor",
+        Fixed(7.0),
+        "SKIRTOR_mean_3p equatorial optical depth tau_V (grid 3-11)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
     # Fritz et al. (2006) smooth-dust torus (CIGALE ``fritz2006``). Defaults
     # match the fritz_torus_block; allowed values are the SimpleDatabase grid
     # nodes (triweight-interpolated). See scripts/build_fritz2006_grid.py.
