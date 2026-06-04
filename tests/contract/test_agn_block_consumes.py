@@ -209,6 +209,70 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
     assert np.max(np.abs(combined - (nlr + blr))) / denom < 1e-6
 
 
+def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
+    """Composable unified AGN: disc+BLR obscured edge-on, NLR stays isotropic.
+
+    The grey Type-1/2 visibility mask (runner Stage 4.5) obscures the anisotropic
+    central engine (disc + BLR) as the sightline grazes the torus, while the
+    spatially-extended NLR — illuminated by the intrinsic bolometric — is
+    inclination-independent. This is the physics-correct behaviour the monolithic
+    ``unified_nlr_blr`` model encodes, reproduced through the composable grammar
+    (analytic line path, no grids).
+    """
+
+    def sed(lines, cos_inc):
+        m = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            sfh={"type": "delayed", "*": FIXED},
+            dust={
+                "type": "two_component",
+                "tau_bc": Fixed(0.0),
+                "tau_diff": Fixed(0.0),
+                "*": FIXED,
+            },
+            agn={
+                "type": "composable",
+                "disc": {"type": "multicolor"},
+                "torus": {"type": "simple"},
+                "lines": {"type": lines},
+                "agn_log_lbol": Fixed(12.0),
+                "agn_cos_inc": Fixed(cos_inc),
+                "agn_theta_torus": Fixed(45.0),
+                "*": FIXED,
+            },
+            redshift=Fixed(0.05),
+        )
+        return np.asarray(m.predict_state({}).derived["sed_agn"])
+
+    base_f, base_e = sed("none", 0.99), sed("none", 0.05)
+    nlr_f, nlr_e = sed("nlr", 0.99), sed("nlr", 0.05)
+    blr_f, blr_e = sed("blr", 0.99), sed("blr", 0.05)
+
+    # NLR contribution is isotropic (edge-on == face-on).
+    nlr_ratio = (nlr_e - base_e).sum() / (nlr_f - base_f).sum()
+    assert abs(nlr_ratio - 1.0) < 1e-3
+    # BLR contribution is obscured edge-on.
+    blr_ratio = (blr_e - base_e).sum() / (blr_f - base_f).sum()
+    assert blr_ratio < 0.05
+    # The disc continuum is likewise obscured edge-on (sum over the SED drops).
+    assert base_e.sum() < base_f.sum()
+
+
+def test_unified_agn_recipe_structure():
+    """``recipes.unified_agn()`` is the composable disc+torus+NLR+BLR unified model."""
+    import tengri
+
+    agn = tengri.recipes.unified_agn()["agn"]
+    assert agn["type"] == "composable"
+    assert agn["disc"]["type"] == "multicolor"
+    assert agn["torus"]["type"] == "simple"
+    assert agn["lines"]["type"] == "nlr_blr"  # both line regions in one block
+    # Parametric luminosity mode: the two scaling knobs are pinned fixed.
+    assert isinstance(agn["frac"], Fixed)
+    assert isinstance(agn["fracAGN"], Fixed)
+    assert agn["*"] is FREE
+
+
 def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
     """Spec-level: ``agn={'*': FREE}`` frees exactly the active set (no grids)."""
     cfg = {

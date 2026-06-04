@@ -2,19 +2,25 @@
 """Lines-stage blocks: BLR (broad-line region) and NLR (narrow-line region).
 
 Wraps :func:`compute_blr_sed` and :func:`compute_nlr_sed` so they fit into
-the composable AGN pipeline. Both upstream functions take a *bolometric*
-disc luminosity in erg/s, which is not directly available to the block
-runner — only :math:`\\lambda L_\\lambda(5100\\,\\mathrm{\\AA})`
-(``l5100_disc``) is. The adapters perform the bolometric-correction
-conversion at the boundary:
+the composable AGN pipeline. The two line regions are normalised differently,
+matching their geometry:
 
-.. math::
+* **NLR** — spatially extended and isotropically illuminated, so it is driven by
+  the **intrinsic** AGN bolometric luminosity
+  (:math:`L_{\\rm bol} = 10^{\\,\\mathrm{agn\\_log\\_lbol}} L_\\odot`). Its flux is
+  therefore inclination-independent (the runner's Type-1/2 mask leaves it
+  untouched).
+* **BLR** — compact and part of the anisotropic central engine. The runner only
+  has :math:`\\lambda L_\\lambda(5100\\,\\mathrm{\\AA})` (``l5100_disc``) on hand, so
+  the BLR adapter applies a bolometric correction at the boundary,
 
-   L_{\\rm disc, bol} = f_{\\rm bol} \\, \\lambda L_\\lambda(5100\\,\\mathrm{\\AA})
+  .. math::
 
-with default :math:`f_{\\rm bol} = 9` from Krawczyk+ 2013 (a typical Type-1
-quasar correction). The user can override via ``agn_blr_f_bol`` /
-``agn_nlr_f_bol`` if a different correction is appropriate.
+     L_{\\rm disc, bol} = f_{\\rm bol} \\, \\lambda L_\\lambda(5100\\,\\mathrm{\\AA}),
+
+  with default :math:`f_{\\rm bol} = 9` from Krawczyk+ 2013 (Type-1 quasar
+  median), overridable via ``agn_blr_f_bol``. The runner's geometric mask then
+  supplies the BLR's inclination dependence.
 
 References
 ----------
@@ -31,12 +37,14 @@ import jax.numpy as jnp
 from jax import Array
 
 from tengri.components.agn.blocks._protocol import register_agn_block
+from tengri.components.agn.blocks.masking import split_lines_result
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.nlr_cloudy import (
     compute_blr_sed_synthesizer,
     compute_nlr_sed_synthesizer,
 )
+from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG
 
 __all__: list[str] = []  # registrations only
 
@@ -146,7 +154,6 @@ def nlr_lines_block(
     agn_nlr_cf: float = 0.1,
     agn_nlr_fwhm_kms: float = 500.0,
     agn_nlr_line_efficiency: float = 0.10,
-    agn_nlr_f_bol: float = DEFAULT_F_BOL_5100,
     **_params,
 ) -> Array:
     r"""Narrow-line region emission as a lines-stage block.
@@ -156,26 +163,35 @@ def nlr_lines_block(
     wavelength : array_like, shape (n_wave,)
         Rest-frame wavelength [Å].
     agn_log_lbol : float
-        Ignored.
+        log10 of the AGN bolometric luminosity [Lsun] — the **isotropic**
+        illuminator of the NLR.
     l5100_disc : array, scalar
-        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
+        Ignored (the NLR is illuminated by the inclination-independent
+        bolometric, not the apparent — possibly foreshortened — l5100).
     agn_nlr_cf : float, optional
         NLR covering fraction. Default ``0.1``.
     agn_nlr_fwhm_kms : float, optional
         Narrow-line FWHM [km/s]. Default ``500``.
     agn_nlr_line_efficiency : float, optional
         Default ``0.10``.
-    agn_nlr_f_bol : float, optional
-        Bolometric correction; default :data:`DEFAULT_F_BOL_5100`.
 
     Returns
     -------
     L_lambda : ndarray, shape (n_wave,)
         NLR :math:`L_\lambda` [erg/s/Å].
+
+    Notes
+    -----
+    The NLR is spatially extended and illuminated by the **intrinsic** AGN
+    bolometric luminosity (:math:`L_{\rm bol} = 10^{\,\mathrm{agn\_log\_lbol}}
+    L_\odot`), so its flux is inclination-independent — matching
+    ``unified_nlr_blr``. Using the apparent ``l5100_disc`` would leak an
+    inclination-dependent disc's ``cos_inc`` foreshortening into the
+    (supposedly isotropic) narrow lines.
     """
-    del agn_log_lbol
+    del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_nlr_f_bol
+    l_disc_bol_erg = 10.0**agn_log_lbol * _L_SUN_ERG
     L_nu = compute_nlr_sed(
         wave_aa,
         l_disc_bol_erg=l_disc_bol_erg,
@@ -183,7 +199,10 @@ def nlr_lines_block(
         fwhm_kms=agn_nlr_fwhm_kms,
         line_efficiency=agn_nlr_line_efficiency,
     )
-    return L_nu * _C_AA_PER_S / wave_aa**2
+    L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
+    # NLR is spatially extended -> isotropic (visible at all inclinations); it is
+    # the *isotropic* channel so the runner's Type-1/2 mask leaves it untouched.
+    return jnp.zeros_like(L_lambda), L_lambda
 
 
 @register_agn_block("lines", "nlr_synthesizer")
@@ -194,7 +213,6 @@ def nlr_synthesizer_lines_block(
     *,
     agn_nlr_cf: float = 0.1,
     agn_nlr_fwhm_kms: float = 500.0,
-    agn_nlr_f_bol: float = DEFAULT_F_BOL_5100,
     neb_logU: float = -2.0,
     neb_logZ_gas: float = -1.8477,
     **_params,
@@ -215,8 +233,8 @@ def nlr_synthesizer_lines_block(
         Ignored (bolometric is taken from ``l5100_disc``).
     l5100_disc : array, scalar
         :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
-    agn_nlr_cf, agn_nlr_fwhm_kms, agn_nlr_f_bol : float
-        Covering fraction, narrow-line FWHM [km/s], and bolometric correction.
+    agn_nlr_cf, agn_nlr_fwhm_kms : float
+        Covering fraction and narrow-line FWHM [km/s].
     neb_logU, neb_logZ_gas : float
         Photoionisation knobs forwarded to the grid adapter.
 
@@ -227,13 +245,16 @@ def nlr_synthesizer_lines_block(
 
     Notes
     -----
-    Backend initialisation reads HDF5 (Python-level, not JIT-traceable); call
-    once eagerly before any ``jax.jit`` over the forward model so the cached
-    backend's interpolation stays JIT-safe.
+    Like the analytic :func:`nlr_lines_block`, the NLR is illuminated by the
+    **intrinsic** bolometric luminosity (``10**agn_log_lbol * L_sun``) and is
+    therefore inclination-independent (isotropic). Backend initialisation reads
+    HDF5 (Python-level, not JIT-traceable); call once eagerly before any
+    ``jax.jit`` over the forward model so the cached backend's interpolation
+    stays JIT-safe.
     """
-    del agn_log_lbol
+    del l5100_disc
     wave_aa = jnp.asarray(wavelength)
-    l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_nlr_f_bol
+    l_disc_bol_erg = 10.0**agn_log_lbol * _L_SUN_ERG
     L_nu = compute_nlr_sed_synthesizer(
         wave_aa,
         l_disc_bol_erg=l_disc_bol_erg,
@@ -243,7 +264,9 @@ def nlr_synthesizer_lines_block(
         neb_logU=neb_logU,
         neb_logZ_gas=neb_logZ_gas,
     )
-    return L_nu * _C_AA_PER_S / wave_aa**2
+    L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
+    # Isotropic channel (extended NLR) — bypasses the runner's Type-1/2 mask.
+    return jnp.zeros_like(L_lambda), L_lambda
 
 
 @register_agn_block("lines", "blr_synthesizer")
@@ -338,13 +361,17 @@ def nlr_blr_lines_block(
 
     Notes
     -----
-    Geometric (Type-1/Type-2) masking of the BLR is **not** applied here, matching
-    the single-region blocks; the composable pipeline reproduces the *intrinsic*
-    (unmasked) unified line spectrum.
+    Returns the ``(anisotropic, isotropic)`` split: the BLR is the maskable
+    (anisotropic) channel and the NLR the isotropic one, so the runner's
+    Type-1/2 mask obscures the BLR with the disc while the NLR stays visible.
     """
-    return nlr_lines_block(wavelength, agn_log_lbol, l5100_disc, **params) + blr_lines_block(
-        wavelength, agn_log_lbol, l5100_disc, **params
+    a_nlr, i_nlr = split_lines_result(
+        nlr_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
     )
+    a_blr, i_blr = split_lines_result(
+        blr_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
+    )
+    return a_nlr + a_blr, i_nlr + i_blr
 
 
 @register_agn_block("lines", "nlr_blr_synthesizer")
@@ -382,8 +409,13 @@ def nlr_blr_synthesizer_lines_block(
     Notes
     -----
     Inherits the grid-backed blocks' JIT caveat: backend init reads HDF5 (not
-    JIT-traceable), so build/predict once eagerly before any ``jax.jit``.
+    JIT-traceable), so build/predict once eagerly before any ``jax.jit``. Returns
+    the ``(anisotropic BLR, isotropic NLR)`` split (see :func:`nlr_blr_lines_block`).
     """
-    return nlr_synthesizer_lines_block(
-        wavelength, agn_log_lbol, l5100_disc, **params
-    ) + blr_synthesizer_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
+    a_nlr, i_nlr = split_lines_result(
+        nlr_synthesizer_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
+    )
+    a_blr, i_blr = split_lines_result(
+        blr_synthesizer_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
+    )
+    return a_nlr + a_blr, i_nlr + i_blr

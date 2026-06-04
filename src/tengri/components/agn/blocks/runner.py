@@ -56,10 +56,21 @@ from tengri.components.agn.blocks._protocol import (
     resolve_agn_block,
 )
 from tengri.components.agn.blocks.atten_blocks import polar_dust_reemission_lnu
+from tengri.components.agn.blocks.masking import (
+    sigmoid_visibility_mask,
+    split_lines_result,
+)
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_PARAMS,
     torus_screen_transmission,
 )
+
+#: Torus selectors that do NOT receive the grey Type-1/2 visibility mask:
+#: ``none`` (no torus) and the self-contained empirical quasar templates
+#: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED —
+#: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
+#: are handled by their own wavelength-dependent screen above.
+_SELF_CONTAINED_TORI: frozenset[str] = frozenset({"none", "qsogen", "grahsp"})
 
 __all__ = [
     "BLOCK_SELECTOR_KEYS",
@@ -357,14 +368,19 @@ agn_attenuation_block : str
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
 
-    # Stage 2: emission lines.
+    # Stage 2: emission lines. A block returns either an ``L_lambda`` array
+    # (fully anisotropic / maskable) or a ``(maskable, isotropic)`` split — the
+    # extended NLR is isotropic and bypasses the Type-1/2 mask, the compact BLR
+    # is maskable. ``split_lines_result`` normalises both forms.
     lines_fn = resolve_agn_block("lines", agn_lines_block)
-    L_lambda_lines = lines_fn(
-        wave,
-        agn_log_lbol=agn_log_lbol,
-        l5100_disc=l5100_disc,
-        templates=grahsp_templates,
-        **params,
+    L_lambda_lines_aniso, L_lambda_lines_iso = split_lines_result(
+        lines_fn(
+            wave,
+            agn_log_lbol=agn_log_lbol,
+            l5100_disc=l5100_disc,
+            templates=grahsp_templates,
+            **params,
+        )
     )
 
     # Stage 3: FeII forest.
@@ -387,14 +403,17 @@ agn_attenuation_block : str
         **params,
     )
 
-    # Stage 4.5: torus screen on the central engine (#294). A dusty torus
-    # obscures the disc + lines + FeII along edge-on (Type-2) sightlines, while
-    # its own IR emission is NOT re-extinguished by that screen — so the screen
-    # multiplies only the central-engine components, not the torus. The
-    # transition is smooth in cos(i) and identically ~1 for face-on (Type-1)
-    # sightlines, so a default-inclination model is unchanged. Static dispatch
-    # on the (Python-string) torus block name is JIT-safe.
-    L_lambda_central = L_lambda_disc + L_lambda_lines + L_lambda_feii
+    # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
+    # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays
+    # visible at all inclinations. Each torus carries ONE obscuration model (no
+    # double-counting): dusty-screen tori (fritz/skirtor, #294) apply a
+    # wavelength-dependent screen; every other non-"none" torus applies the grey
+    # geometric visibility mask — the same one the monolithic ``unified_nlr_blr``
+    # uses — so a composable disc+torus+NLR+BLR reproduces its Type-1/2 geometry.
+    # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
+    # default-inclination models are unchanged. Static dispatch on the torus name
+    # is JIT-safe.
+    L_lambda_central = L_lambda_disc + L_lambda_lines_aniso + L_lambda_feii
     if agn_torus_block in TORUS_SCREEN_PARAMS:
         _oa_key, _tau_key = TORUS_SCREEN_PARAMS[agn_torus_block]
         screen = torus_screen_transmission(
@@ -404,6 +423,14 @@ agn_attenuation_block : str
             tau_v=params.get(_tau_key, 7.0),
         )
         L_lambda_central = L_lambda_central * screen
+    elif agn_torus_block not in _SELF_CONTAINED_TORI:
+        vis = sigmoid_visibility_mask(
+            params.get("agn_cos_inc", 0.86602540378443864),
+            params.get("agn_theta_torus", 30.0),
+        )
+        L_lambda_central = L_lambda_central * vis
+    # Isotropic NLR: visible at every inclination, so added after the mask.
+    L_lambda_central = L_lambda_central + L_lambda_lines_iso
 
     # Stage 5: attenuation factor (multiplicative; host/foreground screen).
     atten_fn = resolve_agn_block("attenuation", agn_attenuation_block)

@@ -101,10 +101,18 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_si",
         }
     ),
-    ("torus", "nenkova"): frozenset({"agn_fracAGN", "agn_tau", "agn_torus_frac"}),
+    # The grey Type-1/2 visibility mask (runner Stage 4.5) applies to the
+    # physical-decomposition tori, so agn_cos_inc + agn_theta_torus move predict
+    # for them (empirically ~7e-3 and ~8e-3 on a multicolor+<torus>+nlr_blr
+    # config) and must be freeable under agn={'*': FREE}.
+    ("torus", "nenkova"): frozenset(
+        {"agn_fracAGN", "agn_tau", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
+    ),
     ("torus", "qsogen"): frozenset(),
-    ("torus", "silva04"): frozenset(),
-    ("torus", "simple"): frozenset({"agn_T_torus", "agn_fracAGN", "agn_torus_frac"}),
+    ("torus", "silva04"): frozenset({"agn_cos_inc", "agn_theta_torus"}),
+    ("torus", "simple"): frozenset(
+        {"agn_T_torus", "agn_fracAGN", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
+    ),
     ("torus", "skirtor"): frozenset(
         {
             "agn_cos_inc",
@@ -132,6 +140,8 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_fracAGN",
             "agn_frac_hot",
             "agn_torus_frac",
+            "agn_cos_inc",
+            "agn_theta_torus",
         }
     ),
     ("lines", "blr"): frozenset(
