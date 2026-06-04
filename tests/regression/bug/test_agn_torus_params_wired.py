@@ -45,7 +45,10 @@ _DISC = {
 
 @pytest.fixture(scope="module")
 def ssp():
-    return tengri.load_ssp()
+    try:
+        return tengri.load_ssp()
+    except FileNotFoundError as exc:
+        pytest.skip(f"SSP data not on disk (CI runner): {exc}")
 
 
 def _sed(ssp, torus: dict) -> np.ndarray:
@@ -116,8 +119,12 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     )
 
 
-def test_skirtor_agnfitter_runtime_normalised(ssp):
-    """The bundled-grid skirtor_agnfitter SED peaks at a physical L_nu, not ~1e-18."""
+def test_skirtor_agnfitter_runtime_normalised():
+    """The bundled-grid skirtor_agnfitter SED peaks at a physical L_nu, not ~1e-18.
+
+    Uses only the committed torus grid (no SSP data), so it runs in CI and guards
+    the normalisation regression even where SSP-gated tests skip.
+    """
     from tengri.components.agn.skirtor_agnfitter import skirtor_agnfitter_sed
 
     wave = jnp.geomspace(1e3, 1e7, 400)
