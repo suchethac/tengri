@@ -104,8 +104,11 @@ IMF_CITATIONS: dict[str, list[str]] = {
 # SPS code that generated the grid (first filename token).
 SSP_CODE_CITATIONS: dict[str, list[str]] = {
     # FSPS (Conroy, Gunn & White 2009 + Conroy & Gunn 2010) generated via the
-    # python-fsps interface (Foreman-Mackey et al. 2014).
-    "fsps": ["fsps2009", "fsps", "pythonfsps"],
+    # python-fsps interface (Foreman-Mackey et al. 2014). Aringer+2009 (carbon-star
+    # library extending TP-AGB stars redward of K) and Villaume+2015 (circumstellar
+    # AGB dust, ``add_agb_dust_model`` — on by default) are baked into every
+    # FSPS-generated grid, so they fire for any ``fsps_*`` source. See #560.
+    "fsps": ["fsps2009", "fsps", "pythonfsps", "aringer2009", "villaume2015"],
     "bc03": ["bc03"],
     "bpss": ["bpass"],
     "bpass": ["bpass"],
