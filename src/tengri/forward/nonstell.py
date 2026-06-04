@@ -389,6 +389,13 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_p_skirtor=p.get("agn_p_skirtor", 1.0),
                 agn_q_skirtor=p.get("agn_q_skirtor", 1.0),
                 agn_oa_skirtor=p.get("agn_oa_skirtor", 40.0),
+                # Fritz+2006 torus (CIGALE fritz2006) — 6D grid block (#347)
+                agn_fritz_r_ratio=p.get("agn_fritz_r_ratio", 60.0),
+                agn_fritz_tau=p.get("agn_fritz_tau", 1.0),
+                agn_fritz_beta=p.get("agn_fritz_beta", -0.5),
+                agn_fritz_gamma=p.get("agn_fritz_gamma", 4.0),
+                agn_fritz_oa=p.get("agn_fritz_oa", 60.0),
+                agn_fritz_psy=p.get("agn_fritz_psy", 0.001),
                 agn_tau=p.get("agn_tau", 30.0),  # Nenkova+2008 CLUMPY torus
                 agn_T_hot=p.get("agn_T_hot", 1200.0),
                 agn_T_warm=p.get("agn_T_warm", 300.0),
@@ -418,6 +425,9 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_grahsp_hot_fcov=p.get("agn_grahsp_hot_fcov", 1.0),
                 agn_grahsp_ebv=p.get("agn_grahsp_ebv", 0.0),
                 agn_grahsp_ebv_agn=p.get("agn_grahsp_ebv_agn", 0.0),
+                agn_grahsp_a_bc=p.get("agn_grahsp_a_bc", 0.0),
+                agn_grahsp_tor_temp=p.get("agn_grahsp_tor_temp", 0.0),
+                agn_grahsp_tor_cutoff_um=p.get("agn_grahsp_tor_cutoff_um", 1.2),
                 # Composable AGN block selectors. These are static Python
                 # strings captured from ``model`` at trace-build time —
                 # they are NOT traced JAX values, so they cannot live in

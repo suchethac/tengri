@@ -29,7 +29,10 @@ def _ssp(source: str, imf: str = "chabrier") -> SSPData:
 @pytest.mark.parametrize(
     "source,expected",
     [
-        ("fsps_prsc_miles_chabrier", {"fsps2009", "fsps", "parsec", "miles", "chabrier2003"}),
+        (
+            "fsps_prsc_miles_chabrier",
+            {"fsps2009", "fsps", "parsec", "miles", "chabrier2003", "aringer2009", "villaume2015"},
+        ),
         ("fsps_mist_c3k_kroupa", {"mist", "mist_dotter2016", "fsps2009", "kroupa2001"}),
         ("bc03_pdva_stelib_salpeter", {"bc03", "padova", "stelib", "salpeter1955"}),
         ("fsps_bsti_basel_chabrier", {"basti", "basel", "chabrier2003"}),
@@ -88,4 +91,30 @@ def test_imf_keys_present_in_registry():
     from tengri.citations.registry import REGISTRY
 
     for key in ("chabrier2003", "kroupa2001", "salpeter1955"):
+        assert key in REGISTRY, f"{key} missing from citation registry"
+
+
+def test_fsps_grids_cite_baked_in_agb_ingredients():
+    """FSPS grids inherit Aringer+2009 (C-star library) and Villaume+2015 (AGB dust).
+
+    Both are part of how FSPS generates every SSP grid (carbon-star spectra
+    redward of K; circumstellar AGB dust via ``add_agb_dust_model``, on by
+    default), so they must fire for any ``fsps_*`` source regardless of the
+    isochrone / library / IMF chosen. Closes the SSP-provenance checkboxes of #560.
+    """
+    keys = set(_ssp_provenance_keys(_ssp("fsps_mist_miles_chabrier")))
+    assert {"aringer2009", "villaume2015"} <= keys
+
+
+def test_non_fsps_grids_omit_fsps_agb_ingredients():
+    """The FSPS-baked AGB ingredients must NOT attach to non-FSPS SPS codes."""
+    keys = set(_ssp_provenance_keys(_ssp("bc03_pdva_stelib_salpeter", imf="salpeter")))
+    assert not ({"aringer2009", "villaume2015"} & keys)
+
+
+def test_fsps_agb_ingredient_keys_present_in_registry():
+    """Aringer+2009 and Villaume+2015 resolve to real references.bib entries."""
+    from tengri.citations.registry import REGISTRY
+
+    for key in ("aringer2009", "villaume2015"):
         assert key in REGISTRY, f"{key} missing from citation registry"

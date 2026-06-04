@@ -45,7 +45,8 @@ l_disc = np.array(
 )
 
 # X-ray: AGN corona + host XRBs
-l_xray_agn = np.array(tengri.xray.xray_agn_corona(wave, L_agn_bol=l_agn_bol_erg))
+_l_2500 = float(tengri.agn.compute_l2500(jnp.asarray(wave_uv), jnp.asarray(l_disc)))
+l_xray_agn = np.array(tengri.xray.xray_agn_corona(wave, l_2500_30deg_erg_hz=_l_2500))
 l_xrb = np.array(tengri.xray.xray_xrb(wave, sfr=sfr, stellar_mass=stellar_mass))
 
 # Radio: AGN jets + host star formation

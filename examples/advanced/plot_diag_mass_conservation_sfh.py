@@ -27,7 +27,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 alpha_vals = [1.0, 1.5, 2.5]
 beta_vals = [0.8, 1.5]
 tau_gyr_vals = [0.5, 2.0]
-log_total_mass_vals = [10.0, 11.0, 12.0]  # log_peak_sfr shifted by ~10 (representative Δt~10 Gyr)
+log_total_mass_vals = [10.0, 11.0, 12.0]  # three representative galaxy masses
 
 # Load SSP and build baseline model
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")

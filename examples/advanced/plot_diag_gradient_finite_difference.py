@@ -52,7 +52,7 @@ photometry_obs = photometry_true + jax.random.normal(key, photometry_true.shape)
 
 # Use off-target parameters to create non-vanishing gradients
 p_ref = dict(model.spec.sample(jax.random.PRNGKey(99)))
-p_ref["sfh_dpl_log_peak_sfr"] += 2.0
+p_ref["sfh_dpl_log_total_mass"] += 2.0
 p_ref["dust_tau_bc"] = jnp.clip(p_ref["dust_tau_bc"] + 1.5, 0, 2.0)
 p_ref["met_logzsol"] = jnp.clip(p_ref["met_logzsol"] - 1.0, -2.0, 0.2)
 

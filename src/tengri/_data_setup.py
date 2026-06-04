@@ -276,6 +276,78 @@ def download_ssp(
     return filepath
 
 
+# Pre-converted component templates (HDF5) live alongside the SSP catalogue on
+# the public host. These are tengri-native conversions of upstream libraries
+# whose raw form is awkward to redistribute — e.g. the Fritz 2006 torus grid,
+# which upstream ships only as ~24k pcigale-pickled objects (un-loadable
+# without pcigale). Hosting the converted grid lets end-users fetch it with
+# zero CIGALE dependency, exactly as SSPs are fetched.
+TEMPLATE_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/templates/"
+
+
+def download_template(
+    filename: str,
+    dest: str | os.PathLike | None = None,
+    force: bool = False,
+) -> Path:
+    """Download a pre-converted component-template HDF5 file.
+
+    Mirrors :func:`download_ssp` but for component templates (AGN torus grids,
+    dust IR libraries, …) hosted under :data:`TEMPLATE_BASE_URL`. The end-user
+    never needs CIGALE installed — the converted ``.h5`` is fetched directly.
+
+    Parameters
+    ----------
+    filename : str
+        Basename of the hosted file, e.g. ``"fritz2006_torus_grid.h5"``.
+    dest : path-like, optional
+        Target directory. Defaults to ``$TENGRI_DATA_DIR`` if set, else ``data/``
+        relative to the current working directory.
+    force : bool, optional
+        Re-download even if the file already exists. Default ``False``.
+
+    Returns
+    -------
+    pathlib.Path
+        Path to the downloaded file.
+
+    Raises
+    ------
+    RuntimeError
+        If the HTTP download fails (network error or non-200 status).
+    """
+    if dest is None:
+        dest = os.environ.get("TENGRI_DATA_DIR", "data")
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    filepath = dest / filename
+    if filepath.exists() and filepath.stat().st_size > 0 and not force:
+        from tengri._display import _display
+
+        _display(f"Template already exists at {filepath}; skipping download.")
+        return filepath
+
+    url = TEMPLATE_BASE_URL + filename
+    partial_filepath = filepath.with_suffix(filepath.suffix + ".partial")
+    try:
+        _download_file(url, partial_filepath)
+    except (urllib.error.HTTPError, urllib.error.URLError) as e:
+        if partial_filepath.exists():
+            partial_filepath.unlink()
+        raise RuntimeError(f"Failed to download {url}: {e}") from e
+    except KeyboardInterrupt:
+        if partial_filepath.exists():
+            partial_filepath.unlink()
+        raise
+
+    partial_filepath.replace(filepath)
+    from tengri._display import _display
+
+    _display(f"Downloaded template to {filepath}")
+    return filepath
+
+
 def _download_file(url: str, dest: Path, chunk_size: int = 8192) -> None:
     """Download a file from a URL to a destination path with simple progress.
 

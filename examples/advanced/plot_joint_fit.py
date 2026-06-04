@@ -59,7 +59,6 @@ model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "tsnorm", "*": tengri.FREE, "skew": 0.3, "trunc": 5.0},
-    met={"type": "fixed"},
     dust={"type": "two_component", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.1),
 )

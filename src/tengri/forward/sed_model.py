@@ -1855,6 +1855,14 @@ class SEDModel:
             kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
             kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
             kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
+            # Fritz+2006 torus (CIGALE fritz2006) — forwarded so the 6D grid
+            # block sees its parameters under the composable AGN path (#347).
+            kw["agn_fritz_r_ratio"] = p.get("agn_fritz_r_ratio", 60.0)
+            kw["agn_fritz_tau"] = p.get("agn_fritz_tau", 1.0)
+            kw["agn_fritz_beta"] = p.get("agn_fritz_beta", -0.5)
+            kw["agn_fritz_gamma"] = p.get("agn_fritz_gamma", 4.0)
+            kw["agn_fritz_oa"] = p.get("agn_fritz_oa", 60.0)
+            kw["agn_fritz_psy"] = p.get("agn_fritz_psy", 0.001)
             # Nenkova+2008 CLUMPY torus (FSPS/Prospector)
             kw["agn_tau"] = p.get("agn_tau", 30.0)
         # Radio
@@ -4756,6 +4764,16 @@ class SEDModel:
         for _key in _TOP_LEVEL_SETTINGS:
             if _key in model_kwargs:
                 groups[_key] = model_kwargs.pop(_key)
+
+        # Auto-propagate the emission-line velocity mode from a Spectroscopy
+        # observation so the line-velocity params (eline_sigma_kms,
+        # eline_delta_v_kms) register without the user setting eline_mode twice
+        # (#653). An explicit eline_mode in the build kwargs wins.
+        if "eline_mode" not in groups and observation is not None:
+            _spec_obs = getattr(observation, "spectroscopy", None)
+            _obs_eline = getattr(_spec_obs, "eline_mode", None)
+            if _obs_eline is not None and _obs_eline != "off":
+                groups["eline_mode"] = _obs_eline
 
         spec = parse_groups(**groups)
         return cls(
