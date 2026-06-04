@@ -107,6 +107,38 @@ def test_unknown_block_falls_back_to_full_superset():
     assert agn_active_param_set({"agn_model": "grahsp"}) == ALL_AGN_PARAMS
 
 
+def test_grahsp_composable_blocks_scope_not_superset():
+    """All four GRAHSP composable blocks are mapped, so a full grahsp config
+    scopes to its consumed params instead of falling back to the full superset.
+
+    ``('lines', 'grahsp')`` and ``('feii', 'grahsp')`` were missing from the
+    CONSUMES map; an unmapped block makes ``agn_active_param_set`` over-free to
+    ``ALL_AGN_PARAMS``, i.e. ~39 no-op nuisance dimensions under a top-level
+    ``agn={'*': FREE}`` (the disc/torus/attenuation grahsp blocks *were* mapped,
+    so the omission was an inconsistency, not a deliberate grid gate).
+    """
+    for key in (
+        ("disc", "grahsp_sbpl"),
+        ("torus", "grahsp"),
+        ("lines", "grahsp"),
+        ("feii", "grahsp"),
+        ("attenuation", "grahsp_biatten"),
+    ):
+        assert key in AGN_BLOCK_CONSUMES, f"{key} unmapped — would over-free to superset"
+    cfg = {
+        "agn_model": "composable",
+        "agn_disc_block": "grahsp_sbpl",
+        "agn_torus_block": "grahsp",
+        "agn_lines_block": "grahsp",
+        "agn_feii_block": "grahsp",
+        "agn_attenuation_block": "grahsp_biatten",
+    }
+    active = agn_active_param_set(cfg)
+    assert active != ALL_AGN_PARAMS, "grahsp config over-frees to the full superset"
+    # Every active param is a grahsp knob or a shared knob — no foreign no-ops.
+    assert all(p.startswith("agn_grahsp_") or p in AGN_SHARED_PARAMS for p in active)
+
+
 def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
     """Spec-level: ``agn={'*': FREE}`` frees exactly the active set (no grids)."""
     cfg = {

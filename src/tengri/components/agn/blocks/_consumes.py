@@ -145,6 +145,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("lines", "nlr"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
     ("lines", "nlr_synthesizer"): frozenset({"agn_nlr_cf"}),
     ("lines", "qsogen"): frozenset(),
+    # GRAHSP broad/narrow line forest (Buchner+2024). Empirically (perturb-and-
+    # diff on a grahsp_sbpl+grahsp config) the line block moves the SED via its
+    # amplitude and width; the FeII block shares the line amplitude. Missing
+    # entries here made any grahsp lines/feii selection an *unknown* block, so
+    # agn_active_param_set fell back to the full superset — over-freeing ~39
+    # no-op nuisance dimensions under a top-level agn={'*': FREE}.
+    ("lines", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
     ("feii", "qsogen_balmer"): frozenset(),
     ("attenuation", "grahsp_biatten"): frozenset({"agn_grahsp_ebv", "agn_grahsp_ebv_agn"}),
     ("attenuation", "polar_dust"): frozenset(
