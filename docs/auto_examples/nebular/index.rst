@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_nebular:
 
@@ -51,18 +51,18 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) separates ionizing sources. Shocks (MAPPINGS V, Allen+2008) trace a sequence from HII regions through composite regions into Seyfert regions as velocity increases. We plot shock models alongside the standard demarcation lines.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Baldwin-Phillips-Terlevich (BPT) diagram ([OIII]/Hβ vs [NII]/Hα) separates ionization mechanisms by tracing distinct loci.">
 
 .. only:: html
 
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_diagnostics_thumb.png
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_diagram_population_thumb.png
     :alt:
 
-  :doc:`/auto_examples/nebular/plot_bpt_diagnostics`
+  :doc:`/auto_examples/nebular/plot_bpt_diagram_population`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT diagram separates star formation from shocks and AGN</div>
+      <div class="sphx-glr-thumbnail-title">BPT diagram: star-forming galaxies, AGN, and shocks</div>
     </div>
 
 
@@ -113,7 +113,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Comprehensive sweep of the Cue nebular parameters</div>
+      <div class="sphx-glr-thumbnail-title">Comprehensive 2D sweep of ionization parameter and metallicity (Cue)</div>
     </div>
 
 
@@ -170,7 +170,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Escape fraction f_esc sets what fraction of ionizing photons reach the ISM. Higher f_esc suppresses all nebular emission lines since fewer photons remain to ionize gas.">
+    <div class="sphx-glr-thumbcontainer" tooltip="We sweep the ionising-photon escape fraction f_esc from 0 to 1.0 at fixed log U and metallicity, showing both the broadband SED response and a zoomed view of the critical Lyman-continuum (912 A) region. The Lyman edge deepens as ionising photons escape the ISM unabsorbed, suppressing optical line ratios simultaneously.">
 
 .. only:: html
 
@@ -181,13 +181,13 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Ionizing photon escape suppresses nebular emission</div>
+      <div class="sphx-glr-thumbnail-title">Escape fraction reshapes the SED from the Lyman continuum to optical lines</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Nebular free-free, free-bound, and two-photon emission respond to gas-phase metallicity (``logZ_gas``) through changes in metal cooling efficiency and ionization balance. This example demonstrates the metallicity sensitivity of the nebular continuum at fixed ionization parameter.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Nebular free-free, free-bound, and two-photon emission respond to gas-phase metallicity (``logZ_gas``) through changes in metal cooling efficiency and ionization balance. metallicity sensitivity of the nebular continuum at fixed ionization parameter.">
 
 .. only:: html
 
@@ -221,24 +221,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Three classical strong-line metallicity diagnostics computed as a function of gas-phase metallicity (``logZ_gas``). The plot spans 12 + log(O/H) from ~7 to ~9 and illustrates key observational features: the saturation of [O III]/H-beta at high metallicity (Kewley &amp; Dopita 2002), the monotonic but small dynamic range of [N II]/H-alpha (Marino et al. 2013), and the famous double-valued R23 ratio which peaks near 12 + log(O/H) ≈ 8.3 (Pagel et al. 1979).">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_line_ratios_metallicity_evolution_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_line_ratios_metallicity_evolution`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Optical line-ratio diagnostics along the metallicity gradient</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Emission line velocity dispersion broadens lines from a few km/s (narrow, kinematically resolved) to hundreds of km/s (unresolved at typical spectroscopic resolution). We show the [OIII] region broadened across the dynamical range.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A galaxy&#x27;s velocity dispersion sigma_v_kms broadens every spectral feature — including the nebular emission lines — from a few tens of km/s (dynamically cold disks) to several hundred km/s (dispersion-dominated spheroids and AGN narrow-line regions). The broadening is a forward-model convolution applied to the predicted spectrum, so it is only visible when the instrument line-spread function is finer than the velocity width: we therefore predict a spectrum on a high-resolution grid (R ~ 10000) around the [O III] λλ4959,5007 + Hβ region and sweep sigma_v_kms.">
 
 .. only:: html
 
@@ -255,24 +238,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Higher ionisation parameter log U drives stronger [OIII] and [NII] emission, steering the galaxy toward the Seyfert region on the BPT diagram. We vary log U across the typical range for star-forming galaxies.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_logu_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_logu_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Ionization parameter controls optical line strength</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Gas metallicity controls [NII]/Hα and [OIII]/Hβ ratios, the primary optical metallicity diagnostics. We vary nebular metallicity across the abundance range.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in plot_cue_parameter_atlas.py and the line-ratio projection in plot_strong_line_metallicity_diagnostics.py. Reader sees how every strong optical line moves together as Z_gas climbs, with [N II]/Halpha and [O III]/Hbeta the textbook diagnostics.">
 
 .. only:: html
 
@@ -283,7 +249,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Gas metallicity shifts optical emission line ratios</div>
+      <div class="sphx-glr-thumbnail-title">Gas metallicity reshapes the optical nebular continuum and line forest</div>
     </div>
 
 
@@ -306,23 +272,6 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Lyman continuum (λ &lt; 912 Å rest) is the primary source of ionizing photons for nebular emission. Escape fraction f_esc sets the fraction of ionizing photons that escape the ISM without being absorbed. Higher f_esc increases ionizing photon loss and suppresses nebular line emission.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_lyman_continuum_escape_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_lyman_continuum_escape`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Lyman continuum escape fraction effect on ionizing photons</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). We show how nebular line strength evolves from young (50 Myr) to old (5 Gyr) populations.">
 
 .. only:: html
@@ -340,24 +289,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Two nebular backends, same SFH, same dust, same metallicity. BakedIn pulls line ratios from the SSP grid (Conroy + Byler wNE templates); Cue (Li, Leja &amp; Speagle 2023) is a neural emulator over the CLOUDY parameter space, run here at log U = -3.0.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_backend_compare_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_backend_compare`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular backends side-by-side: BakedIn vs Cue</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The BPT diagram ([OIII]/Hβ vs [NII]/Hα) classifies ionizing sources. We show how stellar population age controls ionization parameter: younger (hotter) populations move the locus toward higher [OIII]/Hβ, steering from star-forming toward composite/Seyfert regions.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Young massive stars produce harder ionising continua and drive the nebular emission toward higher [O III]/Hbeta. We sweep the SFH timescale tau_gyr from 0.1 to 2 Gyr on a single dual power-law model and plot the resulting line ratios against the Kewley+2001 / Kauffmann+2003 demarcation curves. The locus migrates from the star-forming wing into the composite region as the population ages — SFH timescale is the upstream knob behind the BPT ionisation sequence.">
 
 .. only:: html
 
@@ -368,7 +300,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">BPT diagram ionization sequence from ages</div>
+      <div class="sphx-glr-thumbnail-title">Stellar-population age moves a galaxy on the BPT diagram</div>
     </div>
 
 
@@ -391,7 +323,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare Cue (neural emulator; current recommended path) against traditional photoionization grids (CloudyGrid) and SSP-embedded nebular. Shows [OIII] and H-alpha regions on a young starburst.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compare four nebular emission backends on identical star-forming spectra:">
 
 .. only:: html
 
@@ -402,7 +334,41 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Cue nebular emulator vs alternatives</div>
+      <div class="sphx-glr-thumbnail-title">Nebular backends: Cue, CloudyGrid, SSP-embedded, and BakedIn</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The optical [O III] 5007 / Hβ ratio is set primarily by the ionisation parameter log U: more energetic Lyman continuum photons per H atom ionise more O+ to O++, while Hβ recombination depends mostly on the ionising photon rate (``Q_H``) and is roughly insensitive to log U. The ratio therefore rises monotonically with log U at fixed gas metallicity.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_oiii_hbeta_logu_at_fixed_z_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_oiii_hbeta_logu_at_fixed_z`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">[O III]/Hβ vs ionisation parameter at fixed gas metallicity</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Hydrogen-ionizing photon production (Q_H, photons/s per solar mass) depends critically on stellar population age. Young starbursts (age ≈ 3–5 Myr) produce ionizing photons at peak rates; by 100 Myr, Q_H drops by ~3 orders of magnitude. We show how this evolution varies across metallicity Z = [-1.0, -0.5, 0.0, +0.3] using FSPS bare-stellar (non-nebular) SSP templates, as ionizing photons are consumed by CLOUDY during wNE SSP generation and would appear suppressed.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_qh_vs_age_metallicity_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_qh_vs_age_metallicity`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Ionizing photon production rate Q_H peaks sharply with stellar age</div>
     </div>
 
 
@@ -425,7 +391,7 @@ Nebular emission backends comparison.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four widely-used optical strong-line metallicity diagnostics evaluated across the Cue logZ_gas prior. Each one carries a different systematic — Pettini &amp; Pagel 2004 O3N2 saturates at high Z, the R23 ratio is double-valued, N2 (Marino+2013) is monotonic but small dynamic range, and the [Ne III]/[O II] diagnostic is weakly Z-dependent.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five widely-used optical strong-line metallicity diagnostics evaluated across the Cue logZ_gas prior. Each one carries a different systematic — Pettini &amp; Pagel 2004 O3N2 saturates at high Z, the R23 ratio is double-valued (Pagel+1979), N2 (Marino+2013) is monotonic but small dynamic range, the [O III]/[O II] diagnostic tracks ionization, and [S II]/[O II] is a low-ion proxy.">
 
 .. only:: html
 
@@ -452,7 +418,7 @@ Nebular emission backends comparison.
 
    /auto_examples/nebular/plot_bpt_cue_flexibility
    /auto_examples/nebular/plot_bpt_cue_grid
-   /auto_examples/nebular/plot_bpt_diagnostics
+   /auto_examples/nebular/plot_bpt_diagram_population
    /auto_examples/nebular/plot_cue_fesc_logu_atlas
    /auto_examples/nebular/plot_cue_flex_tour
    /auto_examples/nebular/plot_cue_parameter_atlas
@@ -462,17 +428,15 @@ Nebular emission backends comparison.
    /auto_examples/nebular/plot_fesc_sweep
    /auto_examples/nebular/plot_gas_z_continuum_effect
    /auto_examples/nebular/plot_halpha_sfr_calibration_age
-   /auto_examples/nebular/plot_line_ratios_metallicity_evolution
    /auto_examples/nebular/plot_line_sigma_sweep
-   /auto_examples/nebular/plot_logu_sweep
    /auto_examples/nebular/plot_logz_gas_sweep
    /auto_examples/nebular/plot_lyalpha_ew_vs_age
-   /auto_examples/nebular/plot_lyman_continuum_escape
    /auto_examples/nebular/plot_neb_age_dependence
-   /auto_examples/nebular/plot_neb_backend_compare
    /auto_examples/nebular/plot_neb_bpt_logu_grid
    /auto_examples/nebular/plot_neb_density_sweep
    /auto_examples/nebular/plot_nebular_backends
+   /auto_examples/nebular/plot_oiii_hbeta_logu_at_fixed_z
+   /auto_examples/nebular/plot_qh_vs_age_metallicity
    /auto_examples/nebular/plot_shock_emission
    /auto_examples/nebular/plot_strong_line_metallicity_diagnostics
 

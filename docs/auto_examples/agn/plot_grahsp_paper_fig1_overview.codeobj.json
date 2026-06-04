@@ -1,5 +1,5 @@
 {
- "C_NM_HZ": [
+ "C_AA_HZ": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -900,6 +900,15 @@
    "name": "asarray"
   }
  ],
+ "lam_Llam_W": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
  "load_grahsp_templates": [
   {
    "is_class": false,
@@ -1490,15 +1499,6 @@
    "name": "load_ssp"
   }
  ],
- "to_lnu": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
-  }
- ],
  "torus": [
   {
    "is_class": false,
@@ -1531,6 +1531,15 @@
    "module": "warnings",
    "module_short": "warnings",
    "name": "filterwarnings"
+  }
+ ],
+ "wave_aa": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
   }
  ],
  "wave_nm": [

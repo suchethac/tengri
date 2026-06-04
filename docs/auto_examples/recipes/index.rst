@@ -1,7 +1,5 @@
 :orphan:
 
-
-
 .. _sphx_glr_auto_examples_recipes:
 
 Recipes
@@ -38,7 +36,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Metallicity is often poorly constrained by optical photometry. This recipe compares two fits: one with a Uniform prior on met_logzsol (weak constraint) and one with a Gaussian prior (informative from external data). We show how the posterior distribution changes, and that the same mock data leads to different inferences depending on the prior.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Optical broadband photometry constrains metallicity weakly, so the prior carries real information. We mock a star-forming galaxy at log Z/Zsun = -0.5 in five SDSS bands at S/N=20, then fit it twice under the same model — once with a uniform Z prior, once with a Gaussian prior centred on 0 with sigma=0.3. The posteriors shift by ~0.3 dex toward each prior&#x27;s preferred region, illustrating how informative external priors propagate through a tengri inference.">
 
 .. only:: html
 
@@ -49,7 +47,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Prior sensitivity: uniform vs Gaussian on metallicity</div>
+      <div class="sphx-glr-thumbnail-title">Metallicity prior choice moves the photometric posterior by ~0.3 dex</div>
     </div>
 
 
@@ -67,6 +65,23 @@ saving/loading a posterior to disk.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Register and use a custom photometric filter</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The tengri public API ships recipes for common SED fitting scenarios (star-forming, quiescent, AGN). This example showcases the introspection API (``tengri.list_recipes()``, tengri.describe_recipe()) and visually differentiates the rest-frame SED morphology across three representative models: young star-former, quiescent, and AGN-dominated.">
+
+.. only:: html
+
+  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_introspection_tour_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/recipes/plot_recipe_introspection_tour`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Recipe introspection and SED morphology comparison</div>
     </div>
 
 
@@ -134,6 +149,7 @@ saving/loading a posterior to disk.
    /auto_examples/recipes/plot_recipe_compare
    /auto_examples/recipes/plot_recipe_compare_priors
    /auto_examples/recipes/plot_recipe_custom_filter
+   /auto_examples/recipes/plot_recipe_introspection_tour
    /auto_examples/recipes/plot_recipe_load_real_csv
    /auto_examples/recipes/plot_recipe_save_load_posterior
    /auto_examples/recipes/plot_recipe_specific_redshift

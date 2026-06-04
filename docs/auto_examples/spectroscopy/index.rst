@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_spectroscopy:
 
@@ -63,6 +63,23 @@ Spectroscopic fitting and spectral features.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Mock JWST NIRSpec G395M spectrum of a z=7 star-forming galaxy</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="High-redshift Lyα emitter at z=6 with young age (~10 Myr), low metallicity (Z~0.1 Zsun), and minimal dust. The observed-frame spectrum (7000–13000 Å) reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum. Demonstrates Lyα radiative transfer and reionization-era observability.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_lae_spectrum_z6_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_lae_spectrum_z6`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Lyman-alpha emitter spectrum at z=6: IGM absorption and Lyα escape</div>
     </div>
 
 
@@ -202,6 +219,23 @@ Spectroscopic fitting and spectral features.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Sweep emission-line velocity dispersion σ_v from 50 km/s (narrow-line region) to 5000 km/s (broad-line region) to show how Hα broadens while the [NII] doublet becomes buried in the Hα wing. Demonstrates the kinematic signature distinguishing AGN BLR from NLR.">
+
+.. only:: html
+
+  .. image:: /auto_examples/spectroscopy/images/thumb/sphx_glr_plot_velocity_offset_lines_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/spectroscopy/plot_velocity_offset_lines`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Emission-line velocity dispersion: narrow [NII] to broad Hα</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -215,6 +249,7 @@ Spectroscopic fitting and spectral features.
    /auto_examples/spectroscopy/plot_bandheads_age_metallicity
    /auto_examples/spectroscopy/plot_d4000_hdelta_diagram
    /auto_examples/spectroscopy/plot_jwst_nirspec_high_z_spectrum
+   /auto_examples/spectroscopy/plot_lae_spectrum_z6
    /auto_examples/spectroscopy/plot_nirspec_prism_vs_grating
    /auto_examples/spectroscopy/plot_post_starburst_diagnostic
    /auto_examples/spectroscopy/plot_resolution_sweep
@@ -223,4 +258,5 @@ Spectroscopic fitting and spectral features.
    /auto_examples/spectroscopy/plot_spectral_indices_vs_age
    /auto_examples/spectroscopy/plot_spectrum_fit
    /auto_examples/spectroscopy/plot_velocity_dispersion_sweep
+   /auto_examples/spectroscopy/plot_velocity_offset_lines
 

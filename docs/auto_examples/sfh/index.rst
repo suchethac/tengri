@@ -1,4 +1,4 @@
-
+:orphan:
 
 .. _sphx_glr_auto_examples_sfh:
 
@@ -51,7 +51,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four perspectives on chemical evolution: (1) closed-box model with varying SFR timescales; (2) cumulative metallicity from different exponential SFHs; (3) leaky-box model showing how outflow rates suppress Z; and (4) age-metallicity relation across galactic radii. Together they show how star formation and galactic winds control the Z(t) history.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Six perspectives on chemical evolution: (1) closed-box model with varying SFR timescales; (2) cumulative metallicity from different exponential SFHs; (3) leaky-box model showing how outflow rates suppress Z; (4) age-metallicity relation across galactic radii; (5) three metallicity evolution scenarios (constant solar, linear ramp, two-step); (6) resulting integrated SEDs showing how Z(t) pathways alter optical/UV colors and absorption features. Together they show how star formation, galactic winds, and chemical enrichment control the Z(t) history and observable photometry.">
 
 .. only:: html
 
@@ -85,6 +85,23 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed mean SFH and stellar mass, continuity (Leja+2019) and field (PSD-governed) priors yield strikingly different stochastic realizations: continuity produces smooth log-normal transitions; field produces controlled burstiness governed by σ_field.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_continuity_vs_bursty_psd_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_continuity_vs_bursty_psd`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Continuity Prior vs PSD-Governed Prior: Stochastic Structure at Fixed Mean</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The timescale τ of a delayed-exponential SFH sets how quickly star formation falls after its peak: short τ means rapid decline and old stars, long τ means a sustained tail and younger mean age. We vary τ across the prior range with every other parameter fixed.">
 
 .. only:: html
@@ -102,7 +119,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A 3×3 grid showing how the rising slope α (columns) and falling slope β (rows) together control the full SFH morphology. Early-time α determines assembly speed; late-time β sets the post-peak decay. The optical SED responds across each cell, revealing how parameter space maps to stellar age.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 3×3 grid showing how the rising slope α (columns) and falling slope β (rows) together control the full SFH morphology. Early-time α determines assembly speed; late-time β sets the post-peak decay. The optical SED responds across each cell. Bottom panels show representative 1D sweeps: α alone (left, at fixed β) and β alone (right, at fixed α), illustrating how each parameter independently shapes the full UV-to-IR SED.">
 
 .. only:: html
 
@@ -114,40 +131,6 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Double power-law SFH parameter space: early growth α vs late quenching β</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The rising slope α of a double-power-law star formation history controls how rapidly the galaxy assembled its mass before the peak. Larger α means a more abrupt onset of star formation, leaving a younger O/B-star population at the time of observation and a steeper rest-frame UV slope. We vary α across the prior range with every other parameter fixed.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_dpl_alpha_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_dpl_alpha_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Early-time SFH slope α shapes the UV continuum</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The falling slope β of a double-power-law SFH controls quenching after the peak. Large β means rapid quenching and an old stellar population; small β means a gentle tail and more mixed ages. We vary β across its prior range with every other parameter fixed.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_dpl_beta_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_dpl_beta_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Post-peak quenching slope β shapes stellar age distribution</div>
     </div>
 
 
@@ -170,7 +153,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The peak lookback time of a log-normal SFH controls when most stars formed, shifting the age structure and dramatically affecting UV slope, 4000 Å break strength, and NIR luminosity. We vary the peak time across its prior range with every other parameter fixed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The peak time of a log-normal SFH controls when most stars formed, shifting the age structure and dramatically affecting UV slope, 4000 Å break strength, and NIR luminosity. Following the Carnall+2018 / BAGPIPES convention (#514), the peak is measured in cosmic time since formation (T = age - lookback); larger peak times therefore correspond to more recent star formation. We vary the peak across its prior range with every other parameter fixed.">
 
 .. only:: html
 
@@ -181,7 +164,24 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Log-normal peak lookback time shifts stellar age and SED morphology</div>
+      <div class="sphx-glr-thumbnail-title">Log-normal peak time shifts stellar age and SED morphology</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Mass formed in the SFH (``∫SFR dt``) is not the mass observed today (``M_*``). Stellar winds and supernovae return a fraction R(t) of the formed mass to the ISM. For a Chabrier IMF the Conroy+2009 fit is">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_mass_formed_vs_mass_observed_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_mass_formed_vs_mass_observed`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Stellar mass formed vs surviving: the Chabrier return fraction with age</div>
     </div>
 
 
@@ -238,7 +238,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A 3×3 grid showing five stochastic-SFH realizations for each combination of amplitude σ (vertical axis) and damping timescale τ (horizontal axis). Larger σ produces more dramatic bursts; longer τ sustains those bursts. Each panel shows the mean smooth SFH (dashed) and colored realizations, revealing how the two PSD parameters together map to observable burstiness regimes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 3×3 grid showing five stochastic-SFH realizations for each combination of amplitude σ (vertical axis) and damping timescale τ (horizontal axis). Larger σ produces more dramatic bursts; longer τ sustains those bursts. Each panel shows the mean smooth SFH (dashed) and colored realizations. Bottom panels show representative SEDs for σ alone (left) and τ alone (right), illustrating how each parameter independently shapes the UV continuum and optical colors.">
 
 .. only:: html
 
@@ -249,41 +249,24 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">PSD parameter space: amplitude σ (rows) and timescale τ (columns) control burstiness</div>
+      <div class="sphx-glr-thumbnail-title">PSD parameter space: amplitude σ and timescale τ control burstiness</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The amplitude σ of the power spectral density sets how dramatically star formation fluctuates around the smooth trend: σ ≈ 0 means nearly constant SFR, large σ produces dramatic bursts that leave imprints in UV slope, optical colors, and stellar masses. We vary σ across its prior range with the timescale τ fixed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The field SFH employs a damped random walk (DRW) power spectral density (PSD) to govern stochastic star formation history realizations. Two parameters control the prior distribution of SFR time-variability:">
 
 .. only:: html
 
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_sigma_sweep_thumb.png
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_burstiness_prior_thumb.png
     :alt:
 
-  :doc:`/auto_examples/sfh/plot_psd_sigma_sweep`
+  :doc:`/auto_examples/sfh/plot_psd_burstiness_prior`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">PSD amplitude σ controls burst magnitude in stochastic SFHs</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The damping timescale τ (in Myr) of the power spectral density governs how long star-formation bursts persist. Short τ means rapid flickering; long τ means sustained episodes that leave their imprint on the SED. We vary τ across the prior range with the burst amplitude σ fixed.">
-
-.. only:: html
-
-  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_psd_tau_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/sfh/plot_psd_tau_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">PSD timescale τ controls burst duration in stochastic SFHs</div>
+      <div class="sphx-glr-thumbnail-title">PSD-Governed Stochastic SFH Prior: Burstiness Corner Cases</div>
     </div>
 
 
@@ -301,6 +284,23 @@ Parametric and stochastic star formation history models.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Quenching pathways: fast vs slow termination of star formation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="CIGALE&#x27;s sfh2exp star-formation history superposes an old, exponentially declining main population with a second, more recent exponential burst that contributes a fixed fraction f_burst of the total stellar mass formed. It is the classic parametrisation for post-starburst and rejuvenated systems.">
+
+.. only:: html
+
+  .. image:: /auto_examples/sfh/images/thumb/sphx_glr_plot_sfh2exp_main_plus_burst_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/sfh/plot_sfh2exp_main_plus_burst`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">sfh2exp: double declining exponential (old population + recent burst)</div>
     </div>
 
 
@@ -391,7 +391,7 @@ Parametric and stochastic star formation history models.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr) starburst? This example demonstrates the outshining problem in broadband photometry (Trager+ 2000, Renzini 2006): the young burst&#x27;s UV emission completely dominates over the ancient burst&#x27;s optical/IR, rendering the ancient population invisible to broadband SED fitting.">
+    <div class="sphx-glr-thumbcontainer" tooltip="How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr) starburst? outshining problem in broadband photometry (Trager+ 2000, Renzini 2006): the young burst&#x27;s UV emission completely dominates over the ancient burst&#x27;s optical/IR, rendering the ancient population invisible to broadband SED fitting.">
 
 .. only:: html
 
@@ -420,19 +420,19 @@ Parametric and stochastic star formation history models.
    /auto_examples/sfh/plot_bursty_recovery
    /auto_examples/sfh/plot_chemical_evolution
    /auto_examples/sfh/plot_continuity_prior_visualisation
+   /auto_examples/sfh/plot_continuity_vs_bursty_psd
    /auto_examples/sfh/plot_dexp_tau_sweep
    /auto_examples/sfh/plot_dpl_alpha_beta_grid
-   /auto_examples/sfh/plot_dpl_alpha_sweep
-   /auto_examples/sfh/plot_dpl_beta_sweep
    /auto_examples/sfh/plot_grahsp_paper_sfh_tau_sweep
    /auto_examples/sfh/plot_lnorm_peak_sweep
+   /auto_examples/sfh/plot_mass_formed_vs_mass_observed
    /auto_examples/sfh/plot_parametric_sfh
    /auto_examples/sfh/plot_prospector_priors_compare
    /auto_examples/sfh/plot_psd_alternatives
    /auto_examples/sfh/plot_psd_burstiness
-   /auto_examples/sfh/plot_psd_sigma_sweep
-   /auto_examples/sfh/plot_psd_tau_sweep
+   /auto_examples/sfh/plot_psd_burstiness_prior
    /auto_examples/sfh/plot_quenching_pathway_compare
+   /auto_examples/sfh/plot_sfh2exp_main_plus_burst
    /auto_examples/sfh/plot_sfh_double_burst
    /auto_examples/sfh/plot_sfh_form_compare
    /auto_examples/sfh/plot_sfh_nonparametric_compare

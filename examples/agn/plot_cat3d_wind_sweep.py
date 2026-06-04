@@ -73,13 +73,19 @@ for ax_idx, cos_inc in enumerate(cos_inc_values):
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": tengri.FIXED},
-                "torus": {"type": "cat3d_wind", "*": tengri.FIXED},
+                # The CAT3D-Wind grid parameters (radial cloud index a_cat3d and
+                # wind mass fraction fwd_cat3d) live in the torus sub-block;
+                # cos_inc is the shared AGN viewing angle at the agn top level.
+                "torus": {
+                    "type": "cat3d_wind",
+                    "*": tengri.FIXED,
+                    "a_cat3d": -1.5,
+                    "fwd_cat3d": fwd,
+                },
                 "*": tengri.FIXED,
                 "log_lbol": 11.5,
                 "frac": 0.5,
                 "cos_inc": cos_inc,
-                "a_cat3d": -1.5,
-                "fwd_cat3d": fwd,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -109,4 +115,4 @@ axes[1].legend(frameon=False, fontsize=8, loc="lower left")
 
 fig.suptitle("CAT3D-Wind: Wind fraction and viewing angle effects", fontsize=11, weight="bold")
 fig.tight_layout()
-plt.savefig("plot_cat3d_wind_sweep.png", dpi=150, bbox_inches="tight")
+plt.show()
