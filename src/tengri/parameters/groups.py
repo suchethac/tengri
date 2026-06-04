@@ -284,6 +284,7 @@ _AGN_PARTITION = {
     "agn_T_warm": "agn.torus",
     "agn_frac_hot": "agn.torus",
     "agn_tau_torus": "agn.torus",
+    "agn_tau": "agn.torus",  # Nenkova+2008 CLUMPY equatorial optical depth
     "agn_tau_skirtor": "agn.torus",
     "agn_p_skirtor": "agn.torus",
     "agn_q_skirtor": "agn.torus",

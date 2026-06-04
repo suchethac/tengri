@@ -39,6 +39,7 @@ DUST_LAW_CITATIONS: dict[str, list[str]] = {
     "cardelli": ["cardelli1989"],
     "mw": ["cardelli1989"],
     "salim": ["salim2018"],  # Salim+2018 modified-Calzetti (ADS-verified)
+    "reddy15": ["reddy2015"],  # Reddy+2015 MOSDEF high-z curve (R_V=2.505, ADS-verified)
     "li08": ["li2008_ext"],  # Li+2008 four-coefficient analytical curve (ADS-verified)
     "vw07_bc": ["witt_gordon2000"],  # tengri source notes Wild+2007; closest workspace match
     "vw07_diff": ["witt_gordon2000"],  # see above; update once Wild+2007 is in the workspace bib

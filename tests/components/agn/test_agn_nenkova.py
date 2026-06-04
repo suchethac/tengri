@@ -181,3 +181,84 @@ def test_public_nenkova_torus_is_jit_safe(wavelength) -> None:
         50.0
     )
     assert jnp.isfinite(g)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Builder + forward integration: agn_tau must be a fittable parameter that
+# threads end-to-end (param registry -> builder grammar -> forward allowlist
+# -> torus block). Prospector treats agn_tau as a standard free parameter.
+# ──────────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.contract
+def test_builder_exposes_agn_tau_as_free(synthetic_ssp) -> None:
+    """``SEDModel.build`` must accept ``torus={'type':'nenkova','tau':...}``
+    and expose ``agn_tau`` as a free parameter (registry + grammar wiring)."""
+    import tengri
+
+    model = tengri.SEDModel.build(
+        synthetic_ssp,
+        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        agn={
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "nenkova", "*": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
+            "*": tengri.FIXED,
+            "log_lbol": 12.0,
+            "frac": 1.0,
+        },
+        redshift=tengri.Fixed(0.05),
+    )
+    assert "agn_tau" in model.spec.free_params
+
+
+# A real (MIR-reaching) SSP is needed to see the torus bump; the synthetic
+# optical-only SSP cannot. Gate on the default SSP being present.
+def _has_real_ssp() -> bool:
+    try:
+        import tengri
+
+        tengri.load_ssp()
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.regression_bug
+@pytest.mark.skipif(not _has_real_ssp(), reason="default SSP grid not available")
+def test_agn_tau_threads_through_model_layer() -> None:
+    """End-to-end: varying ``agn_tau`` through ``predict_rest_sed`` changes the
+    mid-IR torus SED and yields a finite, non-zero gradient.
+
+    Regression for the forward-layer param allowlist (sed_model / nonstell):
+    ``agn_tau`` must be forwarded to the composable AGN model, not silently
+    dropped. Guards all four wiring layers of the Nenkova torus fix.
+    """
+    import tengri
+
+    ssp = tengri.load_ssp()
+    model = tengri.SEDModel.build(
+        ssp,
+        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        agn={
+            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "torus": {"type": "nenkova", "*": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
+            "*": tengri.FIXED,
+            "log_lbol": 12.5,
+            "frac": 1.0,
+        },
+        redshift=tengri.Fixed(0.05),
+    )
+    p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    wave = np.asarray(model.predict_rest_sed(p).wavelength)
+    mir = (wave > 5e4) & (wave < 4e5)  # 5-40 um torus bump
+    sed_lo = np.asarray(model.predict_rest_sed({**p, "agn_tau": jnp.float64(10.0)}).sed)
+    sed_hi = np.asarray(model.predict_rest_sed({**p, "agn_tau": jnp.float64(140.0)}).sed)
+    rel = np.linalg.norm(sed_hi[mir] - sed_lo[mir]) / (np.linalg.norm(sed_lo[mir]) + 1e-300)
+    assert rel > 1e-2, f"agn_tau does not affect the MIR SED (rel change {rel:.2e})"
+
+    grad = jax.grad(lambda t: jnp.sum(model.predict_rest_sed({**p, "agn_tau": t}).sed))(
+        jnp.float64(40.0)
+    )
+    assert jnp.isfinite(grad) and float(grad) != 0.0

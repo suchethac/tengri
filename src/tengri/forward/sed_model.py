@@ -2118,6 +2118,8 @@ class SEDModel:
             kw["agn_p_skirtor"] = p.get("agn_p_skirtor", 1.0)
             kw["agn_q_skirtor"] = p.get("agn_q_skirtor", 1.0)
             kw["agn_oa_skirtor"] = p.get("agn_oa_skirtor", 40.0)
+            # Nenkova+2008 CLUMPY torus (FSPS/Prospector)
+            kw["agn_tau"] = p.get("agn_tau", 30.0)
         # Radio
         if self._uses_radio:
             kw["radio_loudness"] = p.get("radio_loudness", 0.0)

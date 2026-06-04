@@ -53,6 +53,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
+    # Nenkova+2008 CLUMPY torus (FSPS/Prospector). Equatorial optical depth is
+    # the single library axis; the grid is tabulated at tau = 5..150.
+    ParamDeclaration(
+        "agn_tau",
+        Fixed(30.0),
+        "Nenkova+2008 CLUMPY torus equatorial optical depth (5-150)",
+        lambda lo, hi: lo >= 5.0 and hi <= 150.0,
+        "must be within the CLUMPY grid extent [5, 150]",
+    ),
     ParamDeclaration(
         "agn_torus_frac",
         Fixed(0.5),
