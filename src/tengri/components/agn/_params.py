@@ -165,6 +165,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
     ),
+    ParamDeclaration(
+        "agn_theta_torus",
+        # Torus half-opening angle. Sets the Type-1/2 critical inclination
+        # inc_crit = 90 - theta_torus for the composable grey visibility mask
+        # (matches the monolithic unified_nlr_blr geometry). Default 30 deg with
+        # the default cos_inc (i=30) gives inc_crit=60 > i -> mask ~ 1, so
+        # default-inclination models are unchanged.
+        Uniform(0.0, 90.0, default=30.0),
+        "AGN torus half-opening angle [deg]; sets the Type-1/2 critical inclination",
+        lambda lo, hi: lo >= 0 and hi <= 90,
+        "must be in [0, 90]",
+    ),
     # Fritz et al. (2006) smooth-dust torus (CIGALE ``fritz2006``). Defaults
     # match the fritz_torus_block; allowed values are the SimpleDatabase grid
     # nodes (triweight-interpolated). See scripts/build_fritz2006_grid.py.
