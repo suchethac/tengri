@@ -33,10 +33,9 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
+    interp_nd_pchip,
     slice_fixed_axes,
 )
-from tengri.utils.interpolation import edges_for_grid
 
 # CAT3D-Wind grid parametrized by three axes: inclination (as cos),
 # radial power-law index, and wind fraction.
@@ -173,7 +172,7 @@ def precompute_cat3d_photometry(
 def build_cat3d_photometry_lookup(precomp: dict):
     """Build a JIT-compiled CAT3D-Wind torus photometry function.
 
-    Uses triweight interpolation for C²-continuous gradients.
+    Uses node-exact monotone-cubic (PCHIP) interpolation for C¹ gradients.
 
     Parameters
     ----------
@@ -201,18 +200,19 @@ def build_cat3d_photometry_lookup(precomp: dict):
     Notes
     -----
     **JIT-compatible**: yes — the returned function uses ``jnp`` and
-    triweight interpolation, which are JAX-native.
+    monotone-cubic interpolation, which are JAX-native.
 
-    **Gradient-safe**: yes — triweight kernel is fully differentiable.
+    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
 
-    **Interpolation kernel**: Triweight kernel provides C²-continuous
-    gradients for autodiff, unlike nearest-neighbor or linear interpolation.
-    This is important for robust inference when CAT3D parameters are
-    fitted via gradient descent.
+    **Interpolation kernel**: node-exact monotone cubic (PCHIP), matching the
+    exact-wave-grid path (:mod:`tengri.components.agn.cat3d_wind`) so the
+    WavePrecomp photometry does not diverge from the exact SED. The C²-smooth
+    triweight smoother previously used here averaged neighbours, smearing the
+    torus mid-IR peak; PCHIP reproduces every AGNfitter node exactly while
+    keeping continuous gradients for inference.
     """
     grid_phot = precomp["grid_phot"]
     axes = precomp["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def cat3d_phot(
@@ -222,7 +222,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
         cat3d_fwd,
         agn_torus_frac,
     ):
-        """Compute CAT3D-Wind torus photometry via triweight interpolation on 3D grid.
+        """Compute CAT3D-Wind torus photometry via monotone-cubic interpolation.
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
@@ -230,7 +230,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
         point = (cat3d_cos_inc, cat3d_a, cat3d_fwd)
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
+        phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return cat3d_phot
@@ -339,7 +339,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     -----
     **JIT-compatible**: yes — the returned function is fully JAX-native.
 
-    **Gradient-safe**: yes — triweight interpolation is fully differentiable.
+    **Gradient-safe**: yes — node-exact PCHIP is C¹-differentiable.
     """
     if not preint.get("_collapsed_axes"):
         return build_cat3d_photometry_lookup(preint)
@@ -347,17 +347,16 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     # Collapsed case: lookup takes (scale, *remaining_axis_values, torus_frac)
     grid_phot = preint["grid_phot"]
     axes = preint["axes"]
-    edges = tuple(edges_for_grid(ax) for ax in axes)
 
     @jax.jit
     def cat3d_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
-        """Compute CAT3D-Wind torus photometry with collapsed (fixed) axes via triweight interp.
+        """Compute CAT3D-Wind torus photometry with collapsed (fixed) axes via PCHIP interp.
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
         # Same unit convention as build_cat3d_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        phot_per_lsun = interp_nd_pchip(grid_phot, axes, tuple(free_axis_values))
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return cat3d_phot_collapsed
