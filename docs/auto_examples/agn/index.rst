@@ -374,6 +374,125 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The GRAHSP AGN model (Buchner+ 2024) optionally adds a Balmer continuum following Grandi (1982): a 15,000 K blackbody truncated at the Balmer edge (3646 Å) and Gaussian-broadened by the line width. Together with the FeII forest it builds the &quot;small blue bump&quot; seen blueward of ~4000 Å in type-1 quasars.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_balmer_continuum_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_balmer_continuum`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP Balmer continuum: building the small blue bump</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The GRAHSP big blue bump can be modelled two ways. The default is a smooth bending power-law (Ryde 1998 form) with free UV/optical slopes and a bend wavelength. The physical alternative is the Netzer accretion-disc grid (Netzer &amp; Trakhtenbrot 2014), tabulated over black-hole mass, spin and Eddington ratio — selected with disc_model=&quot;netzer&quot; plus disc_m / disc_a / disc_mdot.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_disc_vs_bbb_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_disc_vs_bbb`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP accretion disc: Netzer templates vs the bending power-law</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The iron pseudo-continuum (the &quot;FeII forest&quot;) is a defining feature of type-1 AGN optical/UV spectra. GRAHSP offers two templates: the photoionisation model of Bruhweiler &amp; Verner (2008) (the upstream default) and the empirical Veron-Cetty, Joly &amp; Veron (2004) template. They differ most in the relative strength and shape of the UV (2200-3000 Å) and optical (4400-5400 Å) multiplet blends.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_feii_templates_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_feii_templates`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP FeII forest: Bruhweiler+Verner 2008 vs Veron-Cetty 2004</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 1 of Buchner et al. (2024, GRAHSP): how the individual model components sum to the total emission (black). The AGN side is the GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red), and the dusty torus (yellow dashed), normalised so the disk has L_{5100\,\mathrm{\AA}}^{\rm AGN}=10^{44}\,\mathrm{erg\,s^{-1}} =10^{37}\,\mathrm{W} (blue square); the torus is anchored at 12 µm (yellow diamond). The host is a stellar population (purple) and its reprocessed dust emission (green).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_paper_fig1_overview_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_paper_fig1_overview`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP Fig. 1 reproduction: panchromatic AGN + host overview</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 3 of Buchner et al. (2024, GRAHSP), showing how the 15 AGN parameters configure the spectrum in L_\lambda (arbitrary units). The bending power-law BBB (``activatepl``, blue) is normalised at 5100 Å with optical slope \beta, bending at \lambda_{\rm bend} (width W_{\rm bend}) to the UV slope \beta_{\rm UV}. Emission lines (``activatelines``, light red) of width W_{\rm lines} and an FeII forest (``activatelines:Fe``, dark red) are scaled by A_{\rm lines} / A_{\rm FeII}. The log-Gaussian torus (``activategtorus``, dark yellow) has cool/hot components at \lambda_{\rm cool}/\lambda_{\rm hot} (widths W_{\rm cool}/W_{\rm hot}), peak ratio f_{\rm hot}, 12 µm normalisation f_{\rm cov}, and silicate depth Si (here −1, absorption; activategtorus:Si dotted).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_paper_fig3_params_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_paper_fig3_params`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP Fig. 3 reproduction: AGN model parameter map</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Faithful reproduction of Fig. 9 of Buchner et al. (2024, GRAHSP): the AGN spectrum from intrinsic (blue, top) to strongly attenuated (red, bottom) as the AGN-only colour excess agn_grahsp_ebv_agn is swept from 0.01 to 1. GRAHSP attenuates the AGN side with an SMC/Prevot (1984) law (paper §2.1.5), which rises steeply into the UV — so the UV/optical continuum is suppressed far more than the near-IR, and the heaviest attenuation eventually bites into the torus too. The intrinsic torus component is overplotted dashed black.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_paper_fig9_agn_attenuation_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_paper_fig9_agn_attenuation`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP Fig. 9 reproduction: attenuation of the AGN model</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="GRAHSP ships two torus prescriptions. The default is an empirical log-Gaussian cool+hot dust continuum (``activategtorus``). The alternative is the Mor &amp; Netzer 2012 template torus (``activatetorus``), which interpolates between mean / 25th / 75th-percentile observed AGN mid-IR SEDs via agn_grahsp_tor_temp and applies a short-wavelength Gaussian cutoff at agn_grahsp_tor_cutoff_um.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_grahsp_torus_modes_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_grahsp_torus_modes`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">GRAHSP torus: empirical log-Gaussian vs Mor & Netzer 2012 templates</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The black hole mass (M_BH) and stellar bulge mass (M_) of galaxies follow a tight empirical scaling relation. This example builds 12 mock AGN-hosting galaxies sweeping log M_ from 9 to 12 M_☉, derives M_BH from the published Kormendy &amp; Ho (2013) and Reines &amp; Volonteri (2015) relations, and constrains the AGN bolometric luminosity via a random Eddington ratio (λ_Edd ∈ [0.001, 0.1]).">
 
 .. only:: html
@@ -641,6 +760,13 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_composable_recipes
    /auto_examples/agn/plot_composable_three_modes
    /auto_examples/agn/plot_eddington_ratio_sweep
+   /auto_examples/agn/plot_grahsp_balmer_continuum
+   /auto_examples/agn/plot_grahsp_disc_vs_bbb
+   /auto_examples/agn/plot_grahsp_feii_templates
+   /auto_examples/agn/plot_grahsp_paper_fig1_overview
+   /auto_examples/agn/plot_grahsp_paper_fig3_params
+   /auto_examples/agn/plot_grahsp_paper_fig9_agn_attenuation
+   /auto_examples/agn/plot_grahsp_torus_modes
    /auto_examples/agn/plot_mbh_mstar_relation
    /auto_examples/agn/plot_nlr_blr_lines
    /auto_examples/agn/plot_qsogen_spectrum
