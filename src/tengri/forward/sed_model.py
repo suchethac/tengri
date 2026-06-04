@@ -1793,6 +1793,14 @@ class SEDModel:
             kw["dust_gamma_dl"] = p.get("dust_gamma_dl", 0.01)
             kw["dust_qpah"] = p.get("dust_qpah", 2.5)
             kw["dust_lgU"] = p.get("dust_lgU", 0.0)
+            # THEMIS qhac, Dale AGN fraction, Schreiber tabulated (tdust, fpah)
+            # and MBB epsilon — forwarded so they reach the emission kernel
+            # (CIGALE parity, 2026-06).
+            kw["dust_qhac"] = p.get("dust_qhac", 0.17)
+            kw["dust_frac_agn"] = p.get("dust_frac_agn", 0.0)
+            kw["dust_tdust"] = p.get("dust_tdust", 25.0)
+            kw["dust_fpah"] = p.get("dust_fpah", 0.05)
+            kw["dust_epsilon_mbb"] = p.get("dust_epsilon_mbb", 1.0)
         # AGN (full params for exact evaluation)
         if self._agn_model is not None:
             kw["agn_polar_ebv"] = p.get("agn_polar_ebv", 0.0)

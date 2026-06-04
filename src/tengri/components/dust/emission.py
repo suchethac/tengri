@@ -484,6 +484,7 @@ def modified_blackbody(
     dust_T: float = 30.0,
     dust_beta_ir: float = 1.8,
     redshift: float = 0.0,
+    dust_epsilon_mbb: float = 1.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Optically-thin modified blackbody dust emission.
@@ -535,6 +536,10 @@ def modified_blackbody(
        https://ui.adsabs.harvard.edu/abs/2011piim.book.....D
 
     """
+    # epsilon_mbb (CIGALE mbb): fraction of L_dust carried by the MBB. 1.0 =
+    # full energy balance (default); < 1.0 scales the MBB luminosity down.
+    L_absorbed = L_absorbed * jnp.clip(dust_epsilon_mbb, 0.0, 1.0)
+
     # CMB correction: always applied. At z=0 this is a no-op since
     # T_cmb(z=0) terms cancel and B_nu(T_cmb)/B_nu(T_dust) ~ 0.
     T_eff = cmb_corrected_temperature(dust_T, redshift, dust_beta_ir)
@@ -1506,6 +1511,17 @@ DUST_EMISSION_MODELS["draine_li2007"] = _dl07_lazy_wrapper
 DUST_EMISSION_MODELS["dale2014"] = _make_lazy_loader(
     "dale2014",
     "dale2014_templates.h5",
+    "create_dale2014_from_grid",
+)
+
+# CIGALE-sourced Dale2014 variant: same SF templates regenerated from CIGALE's
+# database AND the pure-AGN quasar template, so the ``dust_frac_agn`` AGN-heated
+# mixing (L_AGN = L_dust*f/(1-f); CIGALE dale2014.py) actually has a quasar SED
+# to add. The default ``dale2014`` stays the Wyoming-source SF-only release that
+# the contract tests pin. See scripts/regenerate_dale2014_from_cigale.py.
+DUST_EMISSION_MODELS["dale2014_cigale"] = _make_lazy_loader(
+    "dale2014_cigale",
+    "dale2014_templates_cigale.h5",
     "create_dale2014_from_grid",
 )
 

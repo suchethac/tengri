@@ -48,40 +48,9 @@ def _require(path):
     return path
 
 
-# ── THEMIS: radiation-field slope alpha ───────────────────────────
-
-
-class TestTHEMISAlphaAxis:
-    """THEMIS now exposes the CIGALE alpha (dU/dM ~ U^-alpha) PDR slope."""
-
-    def _fn(self):
-        from tengri.components.dust.emission_templates import create_themis_from_grid
-
-        return create_themis_from_grid(_require("data/themis_templates.h5"))
-
-    def _sed(self, fn, alpha):
-        return fn(WAVE, 1.0, dust_qhac=0.17, dust_umin=2.0, dust_gamma_dl=0.1, dust_alpha=alpha)
-
-    def test_default_alpha_finite_positive(self):
-        sed = self._sed(self._fn(), 2.0)
-        assert jnp.all(jnp.isfinite(sed))
-        assert jnp.any(sed > 0)
-
-    def test_alpha_changes_fir_shape(self):
-        fn = self._fn()
-        s1, s3 = self._sed(fn, 1.0), self._sed(fn, 3.0)
-        rel = float(jnp.max(jnp.abs(s1 - s3)) / (jnp.max(jnp.abs(s1)) + 1e-300))
-        assert rel > 1e-2, f"dust_alpha is a no-op (max frac change {rel:.2e})"
-
-    def test_alpha_jit_and_grad(self):
-        fn = self._fn()
-
-        @jax.jit
-        def total(alpha):
-            return jnp.sum(self._sed(fn, alpha))
-
-        assert jnp.isfinite(total(2.0))
-        assert jnp.isfinite(jax.grad(total)(2.0))
+# NOTE: THEMIS radiation-field slope (dust_alpha) is intentionally not tested
+# / not exposed — tengri ships the FSPS/DustEM THEMIS templates (alpha=2.0
+# only, PR #574); an alpha axis needs CIGALE-sourced data (follow-up).
 
 
 # ── Dale2014: AGN fraction (additive AGN power source) ────────────
