@@ -49,6 +49,7 @@ _REGISTRY: dict[str, str] = {
     "pah_drude": "tengri.components.dust.dust_analytic_precompute",
     # AGN torus templates
     "skirtor": "tengri.components.agn.skirtor_precompute",
+    "skirtor_agnfitter": "tengri.components.agn.skirtor_agnfitter_precompute",
     "silva04": "tengri.components.agn.silva04_precompute",
     "cat3d_wind": "tengri.components.agn.cat3d_precompute",
     # AGN K&D 3-zone disc (custom dataclass, but still Protocol-shaped)
