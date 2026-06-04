@@ -154,9 +154,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
 
     name = "skirtor_agnfitter"
     parameter_prefix = "agn_"
-    config: SKIRTORAgnfitterTorusConfig = field(
-        default_factory=SKIRTORAgnfitterTorusConfig
-    )
+    config: SKIRTORAgnfitterTorusConfig = field(default_factory=SKIRTORAgnfitterTorusConfig)
 
     # Free parameters — auto-discovered
     log_lbol = Uniform(
