@@ -39,9 +39,9 @@ from tengri.components.agn.grahsp.templates import load_grahsp_templates
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-C_NM_HZ = 2.99792458e17  # c in nm/s
+C_AA_HZ = 2.99792458e18  # c in Angstrom/s (st.wave is in Angstrom)
 ERG_TO_W = 1e-7
-L5100_ERG = 1.0e44  # disk normalisation (paper: = 1e37 W)
+L5100_ERG = 1.0e44  # disk normalisation: lambda*L_lambda(5100 A) (paper: = 1e37 W)
 
 # No-arg load_ssp() auto-discovers the bundled PARSEC/MILES/Chabrier wNE grid
 # regardless of the working directory (sphinx-gallery executes from elsewhere).
@@ -64,13 +64,14 @@ model = SEDModel.build(
 )
 params = model.spec.get_fixed_values()
 st = model.predict_state(params)
-wave_nm = np.asarray(st.wave)
-wave_um = wave_nm / 1e4
+wave_aa = np.asarray(st.wave)  # rest-frame wavelength [Angstrom]
+wave_um = wave_aa / 1e4
+wave_nm = wave_aa * 0.1  # nm grid for the GRAHSP evaluation
 
 
 def nu_Lnu_W(lnu):
-    # L_nu [erg/s/Hz] -> nu*L_nu = lambda*L_lambda [W]
-    return np.asarray(lnu) * (C_NM_HZ / wave_nm) * ERG_TO_W
+    # L_nu [erg/s/Hz] -> nu*L_nu = lambda*L_lambda [W]; wavelength in Angstrom.
+    return np.asarray(lnu) * (C_AA_HZ / wave_aa) * ERG_TO_W
 
 
 # --- Galaxy components (rest frame, from the forward state) ---
@@ -80,14 +81,18 @@ dust_ir = nu_Lnu_W(st.derived["sed_dust_ir"])  # galaxy dust emission
 # --- AGN sub-components, split via a matched GRAHSP evaluation ---
 templates = load_grahsp_templates()
 agn_params = GRAHSPParams(l5100=L5100_ERG, a_feii=5.0, fcov=0.4, si=-1.0)
-sed_agn = evaluate_grahsp_agn(jnp.asarray(wave_nm * 0.1), agn_params, templates)  # nm grid
-# evaluate returns L_lambda [erg/s/nm]; convert to L_nu then to nu*L_nu.
-to_lnu = (wave_nm**2) / C_NM_HZ  # L_lambda[/nm] -> L_nu : * lambda^2 / c (lambda in nm)
-disk = nu_Lnu_W(np.asarray(sed_agn.bbb) * to_lnu)
-torus = nu_Lnu_W(np.asarray(sed_agn.torus + sed_agn.si) * to_lnu)
-agn_lines = nu_Lnu_W(
-    np.asarray(sed_agn.broad_lines + sed_agn.narrow_lines + sed_agn.feii) * to_lnu
-)
+sed_agn = evaluate_grahsp_agn(jnp.asarray(wave_nm), agn_params, templates)  # nm grid
+
+
+def lam_Llam_W(l_lambda_per_nm):
+    # GRAHSP returns L_lambda [erg/s/nm]; lambda*L_lambda = L_lambda[/nm] * lambda[nm].
+    # This is identical to nu*L_nu, so it overlays consistently on the host curves.
+    return np.asarray(l_lambda_per_nm) * wave_nm * ERG_TO_W
+
+
+disk = lam_Llam_W(sed_agn.bbb)
+torus = lam_Llam_W(sed_agn.torus + sed_agn.si)
+agn_lines = lam_Llam_W(sed_agn.broad_lines + sed_agn.narrow_lines + sed_agn.feii)
 
 total = stellar + dust_ir + disk + torus + agn_lines
 
@@ -108,13 +113,15 @@ ax.plot([12.0], [torus[i12]], "D", color="#e0a020", ms=9, zorder=6)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 100.0)
-ax.set_ylim(1e34, 3e38)
+ax.set_ylim(1e35, 2e39)
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"Luminosity $\lambda L_\lambda$ [W]")
 ax.legend(loc="upper right", frameon=True, fontsize=9, ncol=2, title="Components")
 
+# Secondary frequency axis: nu [Hz] = c[um/s] / lambda[um]; c/1e4 converts
+# c in Angstrom/s to um/s.
 secax = ax.secondary_xaxis(
-    "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
+    "top", functions=(lambda x: C_AA_HZ / 1e4 / x, lambda nu: C_AA_HZ / 1e4 / nu)
 )
 secax.set_xlabel("Frequency [Hz]")
 

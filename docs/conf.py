@@ -216,7 +216,7 @@ _GALLERY_SECTION_ORDER = (
 # Tell sphinx-gallery to emit gallery subsections in the same pedagogical
 # order on the gallery landing page body (otherwise it falls back to
 # alphabetical-by-directory and "Advanced Topics" lands first).
-from sphinx_gallery.sorting import ExplicitOrder  # noqa: E402
+from sphinx_gallery.sorting import ExplicitOrder
 
 sphinx_gallery_conf["subsection_order"] = ExplicitOrder(
     [f"../examples/{s}" for s in _GALLERY_SECTION_ORDER]
