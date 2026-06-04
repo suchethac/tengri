@@ -38,7 +38,7 @@ model = tengri.SEDModel.build(
         "log_total_mass": 10.0,
     },
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
-    neb={"type": "cue", "*": tengri.FIXED, "neb_n_h": tengri.Uniform(1.0, 1e3)},
+    neb={"type": "cue", "*": tengri.FIXED, "gas_logn": tengri.Uniform(0.0, 3.0)},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -49,7 +49,7 @@ cmap = plt.get_cmap("viridis")
 
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for nh in nh_values:
-    params = {**baseline, "neb_n_h": jnp.float64(nh)}
+    params = {**baseline, "gas_logn": jnp.float64(np.log10(nh))}
     out = model.predict_rest_sed(params)
     wave = np.asarray(out.wavelength)
     nu = 2.998e18 / wave
