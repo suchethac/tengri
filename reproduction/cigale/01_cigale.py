@@ -1279,14 +1279,22 @@ save_fig("cigale_08_nebular_cue_vs_cloudy.png")
 # composable; set `Fixed(0.0)` to disable) — lifts the FIR tail
 # (~100 µm) by a factor of a few.
 #
-# **Remaining torus-peak residual.** tengri's `torus.skirtor` block
-# interpolates the SKIRTOR `total = disk + dust` template grid rather
-# than the `dust` grid alone, so the integrated IR flux carries a
-# wavelength-dependent disc-tail bias. At the §9 fiducial this leaves
-# the 30 µm peak ~30 % high and the 100 µm tail ~30 % low — symmetric
-# residuals that further refinement (loading the dust grid directly,
-# tracked separately) should close. The previous over-correction at
-# `agn_torus_frac = 1.0` has been reverted to the default 0.5.
+# **Remaining torus residual (#556).** At the §9 fiducial the AGN-only
+# SED runs ~12–15 % high in the MIR/FIR (MIR 1.12, FIR 1.15;
+# `consistency_audit.py`). Decomposing `sed_agn` into the SKIRTOR
+# clumpy-torus dust vs the Casey-2012 polar-dust greybody (build with
+# `disc={'type':'none'}` and toggle `agn_polar_ebv`) locates the cause:
+# tengri's SKIRTOR `dust_emission` template **falls off steeply past
+# ~30 µm** and carries little cold-dust FIR (it supplies only ~6 % of the
+# flux at 100 µm, ~1.5 % at 300 µm), so the polar-dust greybody
+# *dominates* the FIR (94–98 %) and over-compensates by ~15 %. The disc
+# itself is bit-exact — `disc.schartmann2005` reproduces CIGALE
+# `skirtor2016 disk_type=1` to 1e-16 — so this is purely a torus-dust /
+# polar-dust normalisation issue, **not** a disc-type or disc-double-count
+# error: `torus.skirtor` already interpolates the v3 *dust-only* grid
+# (`_grid_key = 'dust'`). Closing the gap means reconciling the SKIRTOR
+# `dust_emission` FIR tail against CIGALE's SKIRTOR dust template at grid
+# level (tracked in #556); it is not a notebook tweak.
 
 # %%
 _sfh_args_d = (
@@ -1465,6 +1473,87 @@ for ax in (ax_l, ax_r):
 
 fig.tight_layout()
 save_fig("cigale_09_agn_skirtor.png")
+
+
+# %% [markdown]
+# ### §9b The other disc — `disc.skirtor` ↔ CIGALE `disk_type=0`
+#
+# CIGALE's `skirtor2016` offers two analytic discs (`skirtor2016.py`):
+# `disk_type=0` → `skirtor_disk()` and `disk_type=1` →
+# `schartmann2005_disk()`. tengri ships **both, bit-for-bit**:
+# `disc.skirtor` reproduces `skirtor_disk` and `disc.schartmann2005`
+# reproduces `schartmann2005_disk`, each to machine precision (the
+# unit-area disc shapes agree to ~1e-16). The panel above pins the
+# `disk_type=1` pairing; this one swaps to `disc.skirtor` and pairs it
+# against CIGALE `disk_type=0`. The UV–optical disc continuum (where the
+# disc, not the torus, dominates) overlies CIGALE exactly — the
+# shallower SKIRTOR disc with its 1200 Å bend, distinct from the
+# Schartmann disc's shape. The shared MIR/FIR torus residual (§9, #556)
+# is independent of the disc choice.
+
+# %%
+sed_skirtor0 = C.run_chain(
+    [
+        _sfh_args_d,
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        (
+            "skirtor2016",
+            dict(
+                t=7, pl=1.0, q=1.0, oa=40, R=20, Mcl=0.97, i=30,
+                disk_type=0,  # ← skirtor_disk ↔ tengri disc.skirtor
+                delta=0, fracAGN=0.3, lambda_fracAGN="0/0", law=0,
+                EBV=0.03, temperature=100.0, emissivity=1.6,
+            ),
+        ),
+    ]
+)
+w_sk0, L_sk0 = C.to_lnu(sed_skirtor0)
+
+m_agn_sk = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
+          "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED},
+    agn={"type": "composable",
+         "disc": {"type": "skirtor", "*": FIXED},  # ← the SKIRTOR analytic disc
+         "torus": {"type": "skirtor", "*": FIXED},
+         "agn_log_lbol": Fixed(-0.42), "agn_fracAGN": Fixed(0.3), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+s_agn_sk = m_agn_sk.predict_state({})
+
+fig, ax_l, ax_r = U.two_panel_fig()
+U.panel(
+    ax_l, ax_r,
+    label_l="pcigale  + SKIRTOR2016 (disk_type = 0)",
+    label_r="tengri  agn[skirtor disc + skirtor torus + polar BB]",
+)
+L_sk0_only = np.maximum(L_sk0 - U.regrid(w_base, L_base, w_sk0), 1e-50)
+ax_l.plot(w_base, L_base, "k--", linewidth=1.0, alpha=0.5, label="stellar + dust")
+ax_l.plot(w_sk0, L_sk0, "C0-", linewidth=1.5, alpha=0.7, label="stellar + dust + SKIRTOR (dt=0)")
+ax_l.plot(w_sk0, L_sk0_only, "C0:", linewidth=1.5, label="SKIRTOR component only")
+ax_l.legend(fontsize=9)
+ax_l.grid(True, alpha=0.3)
+L_sk_only = np.maximum(np.asarray(s_agn_sk.derived["sed_agn"]), 1e-50)
+ax_r.plot(s_agn_base.wave, s_agn_base.sed_intrinsic, "k--", linewidth=1.0, alpha=0.5,
+          label="stellar + dust")
+ax_r.plot(s_agn_sk.wave, s_agn_sk.sed_intrinsic, "C1-", linewidth=1.5, alpha=0.7,
+          label="stellar + dust + AGN")
+ax_r.plot(s_agn_sk.wave, L_sk_only, "C1:", linewidth=1.5,
+          label="skirtor disc + SKIRTOR torus only")
+ax_r.legend(fontsize=9)
+ax_r.grid(True, alpha=0.3)
+_xmin_b = float(min(w_sk0.min(), float(np.asarray(s_agn_sk.wave).min())))
+_xmax_b = float(max(w_sk0.max(), float(np.asarray(s_agn_sk.wave).max())))
+_ymax_b = max(float(np.asarray(L_sk0).max()), float(np.asarray(s_agn_sk.sed_intrinsic).max()))
+for ax in (ax_l, ax_r):
+    ax.set_xlim(_xmin_b, _xmax_b)
+    ax.set_ylim(_ymax_b * 1e-6, _ymax_b * 2)
+fig.tight_layout()
+save_fig("cigale_09b_disc_skirtor.png")
 
 
 # %% [markdown]
