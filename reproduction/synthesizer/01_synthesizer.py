@@ -1029,46 +1029,48 @@ print(
 # ### §9f Unified spectrum and inclination anisotropy
 #
 # The full unified AGN spectrum. The **top row** puts Synthesizer's `UnifiedAGN`
-# (left) next to tengri's unified AGN (right) — and the tengri side is now built
-# in a **single** `SEDModel.build` call: disc + torus + NLR + BLR through the
-# composable grammar via the combined `nlr_blr_synthesizer` lines block, reading
-# the *same* Synthesizer Cloudy grids as §9c/§9d. No hand-assembly of raw adapter
-# calls; the four components shown are decomposed back out of that one model.
-# (`recipes.unified_agn()` is the canned form of this configuration.) The disc UV
-# bump, the line forest, and the torus IR bump stack into the same broad shape on
-# both sides; the line spikes are narrow-Gaussian on tengri's side and grid-binned
-# on Synthesizer's, as in §9c.
+# (left) next to tengri's unified AGN (right) — built in a **single**
+# `SEDModel.build` call: disc + torus + NLR + BLR through the composable grammar
+# via the combined `nlr_blr_synthesizer_spectra` lines block, which reads the
+# *same* `/spectra/nebular` reprocessed array `UnifiedAGN` extracts (§9c/§9d,
+# issue #694). No hand-assembly of raw adapter calls; the four components shown
+# are decomposed back out of that one model. The disc UV bump, the [O III]/Balmer
+# line forest, and the torus IR bump now stack into the *same* panchromatic shape
+# on both sides.
 #
-# The **bottom panel** is the decisive geometry, and the tengri curve is now read
-# **straight from the composable model** (not drawn as an overlay): Synthesizer
-# applies a **hard** cut — the disc and broad-line region vanish the moment the
-# sightline grazes the torus edge (inclination + θ_torus > 90°), the
-# Type-1 → Type-2 transition — while tengri's runner applies a **smooth sigmoid**
-# through the *same* critical angle, so disc visibility stays a differentiable
-# function of inclination. Crucially, the spatially-extended NLR is **isotropic**
-# (illuminated by the intrinsic bolometric, not the foreshortened disc), so only
-# the disc + BLR fade with inclination — the physically-correct unified-AGN
-# behaviour, now reproduced through the grammar.
+# The **bottom panel** is the decisive geometry, read **straight from the
+# composable model** (not drawn as an overlay). Both codes carry the Type-1/2
+# anisotropy on the **disc**: Synthesizer applies a **hard** cut — the disc
+# vanishes the moment the sightline grazes the torus edge (inclination + θ_torus
+# > 90°) — while tengri's runner applies a **smooth sigmoid** through the *same*
+# critical angle, so disc visibility stays a differentiable function of
+# inclination. The line regions are **isotropic** in both codes (Synthesizer
+# extracts them at fixed `cosine_inclination = 0.5`; tengri illuminates the NLR
+# by the intrinsic bolometric), so they do not fade with inclination. (tengri
+# *also* offers a physically Type-2-obscured BLR — hidden edge-on — via the
+# `nlr_blr_synthesizer` line path that `recipes.unified_agn()` uses; here we
+# reproduce Synthesizer's isotropic convention instead.)
 
 # %%
 # tengri builds the *entire* unified AGN in ONE ``SEDModel.build`` call (via the
-# ``_agn_grammar`` helper defined in the §9 setup): disc + torus + NLR + BLR from
-# the same Synthesizer Cloudy grids, through the combined ``nlr_blr_synthesizer``
-# lines block. The runner applies the Type-1/2 visibility mask to the disc + BLR
-# while the spatially-extended NLR stays isotropic — the composable equivalent of
-# Synthesizer's ``UnifiedAGN``, with no hand-assembly of raw adapter calls.
-# (``recipes.unified_agn()`` is the pre-canned version of this configuration.)
+# ``_agn_grammar`` helper defined in the §9 setup): disc + torus + NLR + BLR
+# reading the same ``/spectra/nebular`` reprocessed array as Synthesizer's
+# ``UnifiedAGN``, through the combined ``nlr_blr_synthesizer_spectra`` lines block
+# (issue #694). The runner masks the disc with inclination while the line regions
+# stay isotropic (Synthesizer's convention) — no hand-assembly of raw adapter calls.
 
-# The unified AGN — disc + torus + NLR + BLR — in a single build call.
-w_t, L_tot_t = _agn_grammar(lines="nlr_blr_synthesizer")
+# The unified AGN — disc + torus + NLR + BLR — in a single build call, with the
+# line regions reading the same /spectra/nebular array as Synthesizer's UnifiedAGN
+# (the combined nlr_blr_synthesizer_spectra block, issue #694).
+w_t, L_tot_t = _agn_grammar(lines="nlr_blr_synthesizer_spectra")
 # Decompose it for the component panel, every piece through the same grammar:
 # disc-only and torus-only as standalone builds; the line regions as the
 # difference each makes on top of the disc+torus continuum.
 _, L_disc_t = _agn_grammar(torus="none")
 _, L_torus_t = _agn_grammar(disc="none")
 _, _L_cont = _agn_grammar()  # disc + torus, no lines
-L_nlr_t = _agn_grammar(lines="nlr_synthesizer")[1] - _L_cont
-L_blr_t = _agn_grammar(lines="blr_synthesizer")[1] - _L_cont
+L_nlr_t = _agn_grammar(lines="nlr_synthesizer_spectra")[1] - _L_cont
+L_blr_t = _agn_grammar(lines="blr_synthesizer_spectra")[1] - _L_cont
 
 fig = plt.figure(figsize=(13, 9))
 gs = fig.add_gridspec(2, 2, height_ratios=[3, 2])

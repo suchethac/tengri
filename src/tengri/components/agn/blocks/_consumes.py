@@ -167,6 +167,12 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
         }
     ),
     ("lines", "nlr_blr_synthesizer"): frozenset({"agn_nlr_cf", "agn_blr_cf"}),
+    # /spectra/nebular reproduction blocks (issue #694): read the reprocessed
+    # nebular spectrum instead of re-broadening /lines. Same covering-fraction
+    # knobs as the discrete-line siblings; the combined block = the union.
+    ("lines", "nlr_synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
+    ("lines", "blr_synthesizer_spectra"): frozenset({"agn_blr_cf"}),
+    ("lines", "nlr_blr_synthesizer_spectra"): frozenset({"agn_nlr_cf", "agn_blr_cf"}),
     ("lines", "qsogen"): frozenset(),
     # GRAHSP broad/narrow line forest (Buchner+2024). Empirically (perturb-and-
     # diff on a grahsp_sbpl+grahsp config) the line block moves the SED via its

@@ -530,3 +530,49 @@ def nlr_blr_synthesizer_lines_block(
         blr_synthesizer_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
     )
     return a_nlr + a_blr, i_nlr + i_blr
+
+
+@register_agn_block("lines", "nlr_blr_synthesizer_spectra")
+def nlr_blr_synthesizer_spectra_lines_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    **params,
+) -> Array:
+    r"""Combined NLR + BLR reprocessed spectra reproducing Synthesizer's UnifiedAGN.
+
+    Grid-backed combined sibling of :func:`nlr_blr_synthesizer_lines_block`, but
+    reading each region's reprocessed ``/spectra/nebular`` array (the product
+    ``UnifiedAGN`` extracts) instead of re-broadening the scrambled ``/lines``
+    table (issue #694). Sums :func:`nlr_synthesizer_spectra_lines_block` and
+    :func:`blr_synthesizer_spectra_lines_block`, so a single
+    ``agn={'lines': {'type': 'nlr_blr_synthesizer_spectra'}}`` build reproduces
+    the full ``UnifiedAGN`` line-region emission.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
+    agn_log_lbol : float
+        log10(L_bol / L_sun) of the AGN.
+    l5100_disc : array, scalar
+        Ignored (bolometric is taken from ``agn_log_lbol`` by each sub-block).
+    **params
+        ``agn_nlr_*`` / ``agn_blr_*`` knobs routed to the respective sub-blocks.
+
+    Returns
+    -------
+    tuple of ndarray, shape (n_wave,)
+        ``(maskable, isotropic)`` channels. Synthesizer extracts both line
+        regions isotropically (grid ``cosine_inclination = 0.5``), so the sum is
+        returned on the isotropic channel — reproducing ``UnifiedAGN``'s
+        line-region emission, which is inclination-independent (the disc/torus
+        geometry carries the Type-1/2 anisotropy).
+    """
+    _, i_nlr = split_lines_result(
+        nlr_synthesizer_spectra_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
+    )
+    _, i_blr = split_lines_result(
+        blr_synthesizer_spectra_lines_block(wavelength, agn_log_lbol, l5100_disc, **params)
+    )
+    return jnp.zeros_like(i_nlr), i_nlr + i_blr
