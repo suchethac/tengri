@@ -479,6 +479,19 @@ def bin_to_grid(wave, y, grid):
     return out
 
 
+def vmap_chunked(fn, batch, n, chunk=16):
+    """``jax.jit(jax.vmap(fn))`` over an ``n``-draw batch in memory-bounded chunks.
+
+    A bare ``vmap`` only batches eager ops (slower than the loop); ``jax.jit``
+    compiles the batched forward into one kernel (~7x). vmapping all draws at
+    once OOMs, so we chunk (peak memory ~ ``chunk``; the final partial chunk
+    triggers one extra cheap compile). Results concatenate along the draw axis.
+    """
+    vfn = jax.jit(jax.vmap(fn))
+    parts = [vfn({k: v[s : s + chunk] for k, v in batch.items()}) for s in range(0, n, chunk)]
+    return jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *parts)
+
+
 def collect_predictions(g):
     """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
 
@@ -488,12 +501,12 @@ def collect_predictions(g):
     4*pi*d_L^2 / (1+z)), then bin every config onto the common ``WAVE_SPEC``
     grid so the four can be pooled for the BMA predictive.
 
-    Draws are evaluated in a plain Python loop. ``jax.vmap`` would be the
-    natural speedup, but the ``predict_*`` forward path is not robustly
-    vmap/jit-safe across mixed calls on one model in a single process (tracer
-    leaks → ``UnexpectedTracerError``; ``predict_sfh`` is not jittable at all) —
-    tracked in the perf issue. The eager loop is reliable and, per benchmark,
-    faster than a bare (un-jitted) ``vmap`` here.
+    SED and derived (M*, SFR) draws use chunked ``jax.jit(jax.vmap)`` (~7x vs a
+    Python loop). The forward path lazily builds its precompute LUT *inside* the
+    traced call and would leak a tracer under JIT (perf issue #715), so we
+    **eager-warm** each model once (a plain call per method) to make the LUT
+    concrete before jitting. ``predict_sfh`` is not jittable
+    (``ConcretizationTypeError``), so the SFH curve stays an eager loop.
     """
     weff = np.array([WAVE_EFF[n] for n in g["names"]])
     spec, sfh, props = {}, {}, {}
@@ -502,38 +515,34 @@ def collect_predictions(g):
         samples = g["posteriors"][cfg].samples
         n_avail = next(iter(samples.values())).shape[0]
         n_use = min(N_DRAWS, n_avail)
+        batch = {k: v[:n_use] for k, v in samples.items()}
 
-        # L_nu -> observed f_nu scale factor (cosmology-only constant; from draw 0).
+        # Eager-warm the forward caches concretely (so the LUT is not built under
+        # the JIT trace -> no tracer leak), and get the L_nu->f_nu scale factor.
         s0 = {k: v[0] for k, v in samples.items()}
         wave_nat, lnu0 = (np.asarray(a) for a in model.predict_obs_sed(s0))
         phot0 = np.asarray(model.predict_photometry(s0))
+        model.predict_sfh_quantities(s0)  # warm
         flux_factor = np.median(phot0 / np.interp(weff, wave_nat, lnu0))
 
-        spec_arr = []
-        for i in range(n_use):
-            s = {k: v[i] for k, v in samples.items()}
-            lnu = np.asarray(model.predict_obs_sed(s)[1])
-            spec_arr.append(bin_to_grid(wave_nat, lnu * flux_factor, WAVE_SPEC))
-        spec[cfg] = np.array(spec_arr)
+        # SED + derived quantities: chunked jit(vmap) over the draw batch.
+        lnu_b = np.asarray(vmap_chunked(model.predict_obs_sed, batch, n_use)[1])
+        spec[cfg] = np.array(
+            [bin_to_grid(wave_nat, lnu_b[i] * flux_factor, WAVE_SPEC) for i in range(n_use)]
+        )
+        q = vmap_chunked(model.predict_sfh_quantities, batch, n_use)
+        props[cfg] = {
+            "log_mass": np.log10(np.maximum(np.asarray(q.stellar_mass) * RETURN_FRAC, 1e-30)),
+            "log_sfr": np.log10(np.maximum(np.asarray(q.sfr_100myr), 1e-30)),
+        }
 
+        # SFH curve: eager loop (predict_sfh is not jittable).
         sfr_arr, t_gyr = [], None
         for i in range(min(n_use, N_SFH)):
-            s = {k: v[i] for k, v in samples.items()}
-            out = model.predict_sfh(s)
+            out = model.predict_sfh({k: v[i] for k, v in samples.items()})
             t_gyr = np.asarray(out["t_gyr"]) if t_gyr is None else t_gyr
             sfr_arr.append(np.asarray(out["sfr_full"]))
         sfh[cfg] = {"t_gyr": t_gyr, "sfr": np.array(sfr_arr)}
-
-        logm, logsfr = [], []
-        for i in range(n_use):
-            s = {k: v[i] for k, v in samples.items()}
-            q = model.predict_sfh_quantities(s)
-            logm.append(float(q.stellar_mass) * RETURN_FRAC)
-            logsfr.append(float(q.sfr_100myr))
-        props[cfg] = {
-            "log_mass": np.log10(np.maximum(logm, 1e-30)),
-            "log_sfr": np.log10(np.maximum(logsfr, 1e-30)),
-        }
     return spec, sfh, props
 
 
@@ -739,17 +748,38 @@ def plot_galaxy(gal_id):
     print(f"CANDELS {gal_id}: BMA weights  {wstr}")
 
 
+def show_timings(gal_id):
+    """Per-galaxy timing + evidence breakdown (build, per-config fit, log Z)."""
+    g = galaxies[gal_id]
+    print(f"CANDELS {gal_id}  (z = {g['z']:.3f}, {len(g['names'])} bands)")
+    print(f"  build (4 models, incl. precompute publish + first compile): {g['build_s']:5.1f} s")
+    print(f"  {'configuration':<34s} {'D':>2s} {'fit [s]':>8s} {'log Z':>9s}")
+    for cfg in CONFIG_ORDER:
+        n_free = len(g["models"][cfg].spec.free_params)
+        print(
+            f"  {LABELS[cfg]:<34s} {n_free:>2d} "
+            f"{g['fit_timings'][cfg]:>8.1f} {g['posteriors'][cfg].log_evidence:>9.1f}"
+        )
+    print(f"  {'total fit time':<34s} {'':>2s} {sum(g['fit_timings'].values()):>8.1f}")
+
+
 # %% [markdown]
 # ### CANDELS 4171
 
 # %%
 plot_galaxy(4171)
 
+# %%
+show_timings(4171)
+
 # %% [markdown]
 # ### CANDELS 17418
 
 # %%
 plot_galaxy(17418)
+
+# %%
+show_timings(17418)
 
 # %% [markdown]
 # ## 9. Takeaways
