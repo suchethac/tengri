@@ -610,43 +610,120 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
 # Register Dale and DL07
 
 
-def create_dale2014_from_grid(grid_path: str) -> Callable:
-    r"""Create a Dale+2014 emission model backed by tabulated templates.
+def dale2014_emission_lnu(
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: jnp.ndarray | float,
+    *,
+    wavelength_grid: jnp.ndarray,
+    alpha_grid: jnp.ndarray,
+    templates_sf: jnp.ndarray,
+    templates_qso: jnp.ndarray | None,
+    has_qso: bool,
+    dust_alpha_dale: float = 2.0,
+    dust_frac_agn: float = 0.0,
+) -> jnp.ndarray:
+    r"""Dale+2014 star-forming + AGN dust emission, mixed and scaled to L_nu.
 
-    Loads the HDF5 grid once and returns a function matching the emission
-    model registry interface. The file must contain:
+    Single source of truth for the Dale2014 ``fracAGN`` mixing, shared by the
+    canonical :class:`~tengri.components.dust.dale2014_ir.Dale2014IRSEDComponent`
+    and the legacy :func:`create_dale2014_from_grid` registry closure so the two
+    paths cannot diverge again (#717 consolidation).
 
-    - ``wavelength_aa``: rest-frame wavelength grid in Angstrom (n_wave,)
-    - ``alpha_grid``: array of alpha values (n_alpha,)
-    - ``templates_sf``: star-forming templates (n_alpha, n_wave) in
-      L_nu convention (normalized so integral over nu = 1).
-    - ``templates_qso`` (optional): pure-AGN template (n_wave,) for AGN-heated dust.
+    .. math::
+        L_\nu(\lambda) = \frac{L_{\rm abs}}{1 - f_{\rm AGN}}
+            \left[(1 - f_{\rm AGN})\,T_{\rm SF}(\alpha)
+                  + f_{\rm AGN}\,T_{\rm QSO}\right]
 
-    The returned function performs 1-D linear interpolation in alpha for the SF
-    component. If templates_qso is present, fracAGN mixing is supported via
-    additive composition: L_dust_sf = L_absorbed, L_dust_agn = L_absorbed * f_agn/(1-f_agn),
-    with total IR = f_agn_template * L_dust_agn / (1 - f_agn).
+    :math:`L_{\rm abs}` is the dust-absorbed luminosity [erg/s], :math:`f_{\rm
+    AGN}` the AGN heating fraction, :math:`T_{\rm SF}(\alpha)` the SF template
+    linearly interpolated in :math:`\alpha` and unit-normalised
+    (:math:`\int T\,d\nu = 1`), and :math:`T_{\rm QSO}` the AGN template carrying
+    CIGALE's full-grid normalisation (its integral over the dust grid is ~0.54,
+    ~0.42 redward of 1 um).
+
+    Parameters
+    ----------
+    wavelength_aa : ndarray, shape (n_wave,)
+        Output rest-frame wavelength grid [Å].
+    L_absorbed : float
+        Dust-absorbed luminosity [erg/s].
+    wavelength_grid : ndarray, shape (n_tmpl,)
+        Template wavelength grid [Å].
+    alpha_grid : ndarray, shape (n_alpha,)
+        Radiation-field slope grid [dimensionless].
+    templates_sf : ndarray, shape (n_alpha, n_tmpl)
+        Unit-normalised SF templates [L_nu].
+    templates_qso : ndarray, shape (n_tmpl,) or None
+        AGN template [L_nu], CIGALE full-grid normalisation. ``None`` if absent.
+    has_qso : bool
+        Whether ``templates_qso`` is available (static branch selector).
+    dust_alpha_dale : float
+        Radiation-field power-law slope [dimensionless]. Default 2.0.
+    dust_frac_agn : float
+        AGN heating fraction [dimensionless, [0, 0.99)]. Default 0.0.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes — ``has_qso`` is a static Python bool and
+    all array ops are ``jnp`` primitives (guarded division).
+    """
+    dust_alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
+    i_a = jnp.clip(
+        jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
+        0,
+        alpha_grid.shape[0] - 2,
+    )
+    fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+    template_sf = (1.0 - fa) * templates_sf[i_a] + fa * templates_sf[i_a + 1]
+
+    if has_qso:
+        f_agn = jnp.clip(dust_frac_agn, 0.0, 0.99)
+        template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
+        # AGN is an independent power source: total IR = L_abs / (1 - f_agn).
+        scale_factor = L_absorbed / jnp.maximum(1.0 - f_agn, 1e-10)
+    else:
+        template_mixed = template_sf
+        scale_factor = L_absorbed
+
+    sed = jnp.interp(wavelength_aa, wavelength_grid, template_mixed, left=0.0, right=0.0)
+    return scale_factor * sed
+
+
+def load_dale2014_lnu_grid(grid_path: str) -> dict:
+    r"""Load + normalise a Dale+2014 template grid into L_nu jnp arrays.
+
+    Single source of truth for Dale2014 template loading + normalisation, shared
+    by :class:`~tengri.components.dust.dale2014_ir.Dale2014IRSEDComponent` and
+    :func:`create_dale2014_from_grid` (#717 consolidation).
+
+    SF templates are unit-normalised (:math:`\int L_\nu\,d\nu = 1`). The QSO
+    template is unit-normalised then rescaled by the fraction of a unit quasar
+    that lives on the (truncated) dust grid (~0.54), preserving CIGALE's energy
+    partition so the ``dust_frac_agn`` mixing matches CIGALE (#717).
 
     Parameters
     ----------
     grid_path : str
-        Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
+        Path to a ``.npz`` or ``.h5`` Dale2014 template file. Must contain
+        ``wavelength_aa`` (or ``wavelength``), ``alpha_grid`` (or ``grid/alpha``),
+        ``templates_sf`` (or ``spectra/templates``), and optionally
+        ``templates_qso``.
 
     Returns
     -------
-    Callable
-        Model function with signature
-        ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, dust_frac_agn=0.0, **kw) -> L_nu``.
+    dict
+        ``wavelength_aa`` (n_wave,), ``alpha_grid`` (n_alpha,), ``templates_sf``
+        (n_alpha, n_wave) [L_nu], ``templates_qso`` (n_wave,) [L_nu] or ``None``,
+        ``has_qso`` (bool) — arrays are jnp.
 
     Notes
     -----
-    **JIT-compatible**: yes — all operations inside the returned function are ``jnp`` primitives.
-
-    Example
-    -------
-    >>> dale = create_dale2014_from_grid("data/dale2014_templates_v2.h5")
-    >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
-    >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5, dust_frac_agn=0.1)
+    **JIT-compatible**: no — file I/O. Call at factory time (before JIT).
     """
     import numpy as np
 
@@ -704,8 +781,8 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
         templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
 
-        # Normalize each template so that integral(L_nu, dnu) = 1
-        # nu is descending, so negate for positive integral
+        # Unit-normalise each SF template so integral(L_nu, dnu) = 1.
+        # nu is descending, so negate for positive integral.
         for i in range(templates_lnu.shape[0]):
             integral = -np.trapezoid(templates_lnu[i], nu)
             if integral > 0:
@@ -713,23 +790,74 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
 
         templates_np = np.asarray(templates_lnu, dtype=np.float64)  # (n_alpha, n_wave)
 
-        # Normalize QSO template if present
+        # QSO template: unit-normalize in L_nu (matching the SF convention so
+        # the L_lambda->L_nu unit scale cancels), THEN rescale to the fraction
+        # of a unit quasar that lives on the dust grid.
+        #
+        # CIGALE normalizes ``model_quasar`` to unit total luminosity over its
+        # *full* native grid (~60 nm onward). ~46% of that energy is the
+        # UV/optical accretion-disc continuum below the dust-grid blue edge
+        # (~360 nm), so only ~0.54 lands on the dust grid and ~0.42 redward of
+        # 1 um. The h5 stores the QSO already carrying CIGALE's full-grid
+        # normalization, so ``int templates_qso_raw dlambda`` over the stored
+        # grid is ~0.54 (the SF templates integrate to 1). We preserve that
+        # fraction: dividing by the L_nu integral fixes the unit scale,
+        # multiplying by ``qso_frac`` restores the 1 : ~0.54 SF:QSO ratio that
+        # matches CIGALE's energy partition. Forcing the QSO to unit (the old
+        # behaviour) over-weighted its IR share to ~0.78 and made the
+        # ``dust_frac_agn`` mid-IR mixing grow too bright with fracAGN
+        # (#717: ran 1.43x at f=0.6 vs CIGALE).
         templates_qso_np = None
         if templates_qso_raw is not None:
             templates_qso_lnu = templates_qso_raw * (wave_cm**2) / _C_CGS
             integral = -np.trapezoid(templates_qso_lnu, nu)
+            qso_frac = float(np.trapezoid(templates_qso_raw, tmpl_wave_np))
             if integral > 0:
-                templates_qso_lnu /= integral
+                templates_qso_lnu = templates_qso_lnu / integral * qso_frac
             templates_qso_np = np.asarray(templates_qso_lnu, dtype=np.float64)
 
-    # Use jnp.array so that dynamic JAX indexing works inside JIT.
-    # preload_emission_model() must be called at factory time (outside JIT) to
-    # avoid DynamicJaxprTracer leaks.
-    tmpl_wave = jnp.array(tmpl_wave_np, dtype=jnp.float64)
-    alpha_grid = jnp.array(alpha_grid_np, dtype=jnp.float64)
-    templates = jnp.array(templates_np, dtype=jnp.float64)
     has_qso = templates_qso_np is not None
-    templates_qso = jnp.array(templates_qso_np, dtype=jnp.float64) if has_qso else None
+    return {
+        "wavelength_aa": jnp.array(tmpl_wave_np, dtype=jnp.float64),
+        "alpha_grid": jnp.array(alpha_grid_np, dtype=jnp.float64),
+        "templates_sf": jnp.array(templates_np, dtype=jnp.float64),
+        "templates_qso": (jnp.array(templates_qso_np, dtype=jnp.float64) if has_qso else None),
+        "has_qso": has_qso,
+    }
+
+
+def create_dale2014_from_grid(grid_path: str) -> Callable:
+    r"""Create a Dale+2014 emission model backed by tabulated templates.
+
+    Thin registry-closure wrapper: loads + normalises the grid via
+    :func:`load_dale2014_lnu_grid` and returns a function that delegates to the
+    shared :func:`dale2014_emission_lnu` mixing — identical physics and
+    normalisation to the canonical
+    :class:`~tengri.components.dust.dale2014_ir.Dale2014IRSEDComponent`
+    (#717 consolidation).
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``dale2014_templates_v2.h5`` or ``dale2014_templates.h5``.
+
+    Returns
+    -------
+    Callable
+        Model function with signature
+        ``(wavelength_aa, L_absorbed, dust_alpha_dale=2.0, dust_frac_agn=0.0, **kw) -> L_nu``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — the returned function is pure ``jnp``.
+
+    Example
+    -------
+    >>> dale = create_dale2014_from_grid("data/dale2014_templates_v2.h5")
+    >>> DUST_EMISSION_MODELS["dale2014_tabulated"] = dale
+    >>> sed = dale(wav, L_abs, dust_alpha_dale=1.5, dust_frac_agn=0.1)
+    """
+    t = load_dale2014_lnu_grid(grid_path)
 
     def dale2014_tabulated(
         wavelength_aa: jnp.ndarray,
@@ -738,66 +866,17 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
         dust_frac_agn: float = 0.0,
         **_kwargs,
     ) -> jnp.ndarray:
-        """Dale+2014 emission from tabulated templates.
-
-        Mixes star-forming and AGN-heated dust via the formula:
-
-            L_dust_sf = L_absorbed
-            L_dust_agn = L_absorbed * fracAGN / (1 - fracAGN)    [if fracAGN > 0]
-            SED = (1 - fracAGN) * SF_template + fracAGN * QSO_template
-
-        Total IR luminosity = L_absorbed / (1 - fracAGN), accounting for
-        the AGN as an independent heating source (not reducing stellar heating).
-
-        Parameters
-        ----------
-        wavelength_aa : array_like, shape (n_wave,)
-            Rest-frame wavelength grid [Å].
-        L_absorbed : float
-            Total absorbed luminosity [Lsun] (stellar-heated dust).
-        dust_alpha_dale : float
-            Radiation field power-law slope [dimensionless]. Default: 2.0.
-        dust_frac_agn : float
-            AGN contribution fraction [dimensionless, range [0, 0.99)].
-            fracAGN = 1 is undefined (divide by zero); clamped to 0.99.
-            Default: 0.0 (SF-only).
-        **_kwargs
-            Extra keyword arguments (ignored).
-
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Dust emission L_ν [Lsun/Hz]. Total IR = integral over nu.
-
-        Notes
-        -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
-
-        **Gradient-safe**: yes — differentiable everywhere (guarded division).
-        """
-        dust_alpha_c = jnp.clip(dust_alpha_dale, alpha_grid[0], alpha_grid[-1])
-        i_a = jnp.clip(
-            jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
-            0,
-            len(alpha_grid) - 2,
+        return dale2014_emission_lnu(
+            wavelength_aa,
+            L_absorbed,
+            wavelength_grid=t["wavelength_aa"],
+            alpha_grid=t["alpha_grid"],
+            templates_sf=t["templates_sf"],
+            templates_qso=t["templates_qso"],
+            has_qso=t["has_qso"],
+            dust_alpha_dale=dust_alpha_dale,
+            dust_frac_agn=dust_frac_agn,
         )
-        fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-        template_sf = (1.0 - fa) * templates[i_a] + fa * templates[i_a + 1]
-
-        # AGN mixing (only if QSO template is available and fracAGN > 0)
-        if has_qso:
-            f_agn = jnp.clip(dust_frac_agn, 0.0, 0.99)
-            # Additive mixing: (1 - f) * SF + f * QSO
-            template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
-            # Scale by L_absorbed / (1 - f_agn) to account for the AGN power source
-            scale_factor = L_absorbed / jnp.maximum(1.0 - f_agn, 1e-10)
-        else:
-            # Back-compat: SF-only if QSO template absent
-            template_mixed = template_sf
-            scale_factor = L_absorbed
-
-        sed = jnp.interp(wavelength_aa, tmpl_wave, template_mixed, left=0.0, right=0.0)
-        return scale_factor * sed
 
     return dale2014_tabulated
 

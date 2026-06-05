@@ -22,7 +22,10 @@ from typing import Any, ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.dust.emission_templates import load_dale2014_templates
+from tengri.components.dust.emission_templates import (
+    dale2014_emission_lnu,
+    load_dale2014_lnu_grid,
+)
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
@@ -153,7 +156,9 @@ class Dale2014IRSEDComponent(SEDModelComponent):
             return None
 
         try:
-            templates = load_dale2014_templates(template_path)
+            # Shared, correctly-normalised L_nu loader (#717 consolidation):
+            # SF unit-normalised, QSO carrying CIGALE's full-grid normalisation.
+            templates = load_dale2014_lnu_grid(template_path)
             return templates
         except Exception as e:
             warnings.warn(
@@ -210,48 +215,24 @@ class Dale2014IRSEDComponent(SEDModelComponent):
             # Return input SED unchanged
             return sed_in, {}
 
-        # Load template grid from precomputed state
+        # Delegate to the shared Dale2014 mixing (#717 consolidation): the
+        # registry-closure path (``dale2014``) and this SEDModelComponent
+        # (``dale2014_ir``) now share one correct loader + mixing, so they can
+        # never diverge in units or fracAGN normalisation again.
         templates = self.data
-        tmpl_wave = templates["wavelength_aa"]
-        alpha_grid = templates["alpha_grid"]
-        templates_sf = templates["templates_sf"]  # (n_alpha, n_wave)
-        has_qso = "templates_qso" in templates
-        if has_qso:
-            templates_qso = templates["templates_qso"]  # (n_wave,)
-
-        # Clip parameters to grid bounds
-        dust_alpha_c = jnp.clip(p["alpha_dale"], alpha_grid[0], alpha_grid[-1])
-
-        # Linear interpolation index for SF component
-        i_a = jnp.clip(
-            jnp.searchsorted(alpha_grid, dust_alpha_c) - 1,
-            0,
-            len(alpha_grid) - 2,
+        has_qso = "templates_qso" in templates and templates["templates_qso"] is not None
+        sed_emission = dale2014_emission_lnu(
+            wave,
+            L_ir,
+            wavelength_grid=templates["wavelength_aa"],
+            alpha_grid=templates["alpha_grid"],
+            templates_sf=templates["templates_sf"],
+            templates_qso=templates["templates_qso"] if has_qso else None,
+            has_qso=has_qso,
+            dust_alpha_dale=p["alpha_dale"],
+            dust_frac_agn=p.get("frac_agn", 0.0),
         )
-        fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
 
-        # Interpolate SF template spectrum
-        template_sf = (1.0 - fa) * templates_sf[i_a] + fa * templates_sf[i_a + 1]
-
-        # AGN mixing (only if QSO template is available)
-        if has_qso:
-            f_agn = jnp.clip(p.get("frac_agn", 0.0), 0.0, 0.99)
-            # Additive mixing: (1 - f) * SF + f * QSO
-            template_mixed = (1.0 - f_agn) * template_sf + f_agn * templates_qso
-            # Scale by L_absorbed / (1 - f_agn) to account for the AGN power source
-            scale_factor = L_ir / jnp.maximum(1.0 - f_agn, 1e-10)
-        else:
-            # Back-compat: SF-only if QSO template absent
-            template_mixed = template_sf
-            scale_factor = L_ir
-
-        # Interpolate onto target wavelength grid
-        sed = jnp.interp(wave, tmpl_wave, template_mixed, left=0.0, right=0.0)
-
-        # Scale by absorbed luminosity (adjusted for AGN if present)
-        sed_emission = scale_factor * sed
-
-        # Return updated SED and published luminosity
         sed_out = sed_in + sed_emission
 
         return sed_out, {}
