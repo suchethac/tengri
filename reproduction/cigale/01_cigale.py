@@ -921,12 +921,20 @@ plt.show()
 # at which the absorbed *fraction* matches CIGALE to **0.2 %**.
 #
 # **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** With the screen
-# corrected, the stellar-heated curve reproduces CIGALE to **~1.6 %** (the
+# corrected, the stellar-heated curve reproduces CIGALE to **~1.5 %** (the
 # residual is the BC03->DSPS conversion: tengri's intrinsic stellar $L_{\rm
 # bol}$ is 1.4 % low, *not* the dust or the attenuation). `fracAGN` adds an
-# *additive* AGN-heated source ($L_{\rm AGN}=L_{\rm dust}\,f/(1-f)$); at high
-# $f_{\rm AGN}$ the mid-IR lift differs by a few percent because tengri's
-# additive rule is not bit-identical to CIGALE's internal quasar template.
+# AGN-heated source as a separate power budget ($L_{\rm AGN}=L_{\rm
+# dust}\,f/(1-f)$) using CIGALE's own ``model_quasar`` template
+# (`SED = L\,T_{\rm SF}(\alpha) + L_{\rm AGN}\,T_{\rm QSO}`, `dale2014.py`).
+# tengri tracks CIGALE to **~1.5 % across the whole sweep** ($f_{\rm AGN}=0,
+# 0.3, 0.6$), the same BC03->DSPS floor — there is no fracAGN-dependent drift.
+# The subtlety that makes this work: CIGALE normalises ``model_quasar`` to unit
+# luminosity over its *full* native grid (~60 nm onward), where ~46 % of the
+# quasar energy is the UV/optical accretion-disc continuum below the dust
+# grid's blue edge. Only its ~0.42 IR share enters the dust mixing; tengri
+# carries that exact partition, so the mid-IR lift matches rather than running
+# ~40 % high at $f_{\rm AGN}=0.6$ (the pre-#717 truncate-then-renormalise bug).
 #
 # **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$,
 # matched `qhac=0.17, umin=1.0, gamma=0.1`).** The *total* IR matches to ~1.6 %

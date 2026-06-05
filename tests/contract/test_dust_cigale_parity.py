@@ -123,6 +123,70 @@ class TestDale2014FracAGN:
         assert jnp.isfinite(total(0.3))
         assert jnp.isfinite(jax.grad(total)(0.3))
 
+    def test_qso_template_keeps_cigale_full_grid_norm(self):
+        """Regression (#717): the QSO template carries CIGALE's *full-grid*
+        unit normalisation, so its L_nu integral over the (truncated) dust grid
+        is ~0.54 — NOT 1.0. ~46% of a unit quasar is the UV/optical disc
+        continuum below the dust grid's blue edge (~360 nm). Forcing it to unit
+        over the truncated grid (the old bug) inflated its IR share to ~0.78.
+        """
+        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
+
+        t = load_dale2014_lnu_grid(_require("data/dale2014_templates_cigale.h5"))
+        qso = np.asarray(t["templates_qso"])
+        wave = np.asarray(t["wavelength_aa"])
+        nu = 2.998e18 / wave
+        order = np.argsort(nu)
+        integ = abs(np.trapezoid(qso[order], nu[order]))
+        assert 0.4 < integ < 0.7, (
+            f"QSO L_nu integral = {integ:.3f}; expected ~0.54 (CIGALE full-grid "
+            "norm, truncated to the dust grid). A value near 1.0 means the "
+            "truncate-then-renormalise-to-unit bug returned (#717)."
+        )
+
+    def test_fracagn_energy_partition_matches_cigale(self):
+        """Regression (#717): with the QSO carrying ~0.42 of its energy in the
+        IR (per unit L_AGN), the total IR grows as ``1 + 0.42 f/(1-f)`` — the
+        f=0.6/f=0 IR ratio is ~1.63, matching CIGALE's ``L*model_sb +
+        L_AGN*model_quasar``. The old truncate-then-renormalise bug put ~0.78
+        in the IR, so the ratio jumped to ~2.2 (tengri ran 1.43x high vs
+        CIGALE at f=0.6 in the §6 reproduction knobs panel).
+        """
+        fn = self._fn()
+        l0 = _bolometric(fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0))
+        l6 = _bolometric(fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.6))
+        ratio = l6 / l0
+        assert 1.45 < ratio < 1.85, (
+            f"fracAGN energy partition off (f=0.6/f=0 IR = {ratio:.3f}; CIGALE "
+            "~1.63). A value near 2.2 means the QSO normalisation bug returned "
+            "(#717)."
+        )
+
+    def test_closure_and_component_are_identical(self):
+        """#717 consolidation: the ``dale2014`` registry closure and the
+        ``dale2014_ir`` SEDModelComponent now share one loader + one mixing, so
+        they must produce bit-identical SEDs for the same templates/params.
+        """
+        from tengri.components.dust.dale2014_ir import Dale2014IRSEDComponent
+        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
+
+        path = _require("data/dale2014_templates_cigale.h5")
+        fn = self._fn()
+        comp = Dale2014IRSEDComponent()
+        object.__setattr__(comp, "data", load_dale2014_lnu_grid(path))
+        for f in (0.0, 0.4, 0.6):
+            closure_sed = fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=f)
+            comp_sed, _ = comp.predict(
+                {"alpha_dale": jnp.float64(2.0), "frac_agn": jnp.float64(f)},
+                jnp.zeros_like(WAVE),
+                WAVE,
+                L_ir=1.0,
+            )
+            assert jnp.allclose(closure_sed, comp_sed, rtol=1e-10, atol=0.0), (
+                f"closure and component diverge at frac_agn={f} (#717 "
+                "consolidation must keep them identical)"
+            )
+
 
 # ── Schreiber2016: tabulated continuum + PAH ──────────────────────
 
