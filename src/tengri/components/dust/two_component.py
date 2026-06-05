@@ -124,6 +124,13 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: an override changes only the nebular screen. e.g.
     #: ``neb_law_overrides=(("dust_delta", 0.2),)``.
     neb_law_overrides: tuple[tuple[str, float], ...] = ()
+    #: Zero the attenuation curve (stellar BC + diffuse, and the nebular screen)
+    #: below this wavelength [Å]. ``0.0`` -> disabled: the ``calzetti`` /
+    #: ``leitherer02`` polynomials extrapolate through the FUV. Set to ``912.0``
+    #: (the H Lyman limit) to reproduce CIGALE's ``dustatt_modified_starburst``,
+    #: which clips its curve there on the assumption that LyC photons ionise H
+    #: rather than heat dust. Static, non-fittable; enters ``compile_signature``.
+    lyman_cutoff_aa: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -435,6 +442,7 @@ class DustSEDComponent:
             transition_width=self.config.transition_width_dex,
             bc_params={k: jnp.asarray(v) for k, v in bc_law_params.items()},
             diff_params={k: jnp.asarray(v) for k, v in diff_law_params.items()},
+            lyman_cutoff_aa=self.config.lyman_cutoff_aa,
         )  # (n_age, n_wave), in [0, 1]
 
         # ── 2. Apply transmission per age and aggregate ────────────────
@@ -451,7 +459,10 @@ class DustSEDComponent:
         # i.e. both screens), matching the emission-LINE treatment
         # (``attenuate_emission`` mode "bc"). BakedIn nebular is already inside
         # ``lnu_age`` (attenuated above) and publishes zeros here -> no-op.
-        from tengri.components.dust.attenuation import resolve_dust_law as _resolve_law
+        from tengri.components.dust.attenuation import (
+            apply_lyman_cutoff as _lyman_clip,
+            resolve_dust_law as _resolve_law,
+        )
 
         _sed_neb = state.derived.get("sed_nebular")
         sed_neb = jnp.zeros_like(wave) if _sed_neb is None else jnp.asarray(_sed_neb)
@@ -470,6 +481,10 @@ class DustSEDComponent:
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         k_bc_neb = _resolve_law(neb_law)(wave, **neb_bc_params)
         k_diff_neb = _resolve_law(self.config.law_diff)(wave, **diff_law_kw)
+        # Same Lyman-limit clip as the stellar screen, so the nebular continuum
+        # below 912 Å is treated consistently when the cutoff is enabled.
+        k_bc_neb = _lyman_clip(k_bc_neb, wave, self.config.lyman_cutoff_aa)
+        k_diff_neb = _lyman_clip(k_diff_neb, wave, self.config.lyman_cutoff_aa)
         tau_neb = (
             jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
             + jnp.asarray(params["dust_tau_diff"]) * k_diff_neb

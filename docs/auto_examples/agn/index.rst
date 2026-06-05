@@ -255,6 +255,23 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The CAT3D-Wind torus (Hönig &amp; Kishimoto 2017) splits the circumnuclear dust into a mid-plane clumpy disc plus a polar outflow (&quot;wind&quot;). Its infrared reprocessing is controlled by three observables: the wind mass fraction fwd, the radial cloud-distribution index a, and the viewing angle cos i.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_cat3d_wind_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_cat3d_wind_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">CAT3D-Wind clumpy torus: wind fraction and viewing angle</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The agn.disc, agn.lines, agn.feii, agn.torus, agn.atten sub-blocks of SEDModel.build are composable: turning one on at a time and overlaying the all-on reference (dashed grey) shows which features each sub-block contributes. Five panels at fixed log L_bol = 12.0, all built via the public nested-dict grammar:">
 
 .. only:: html
@@ -595,6 +612,57 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The Silva, Maiolino &amp; Granato (2004) AGN torus templates are empirical reprocessed-dust SEDs binned by line-of-sight hydrogen column density agn_log_nh_silva. As the column rises from unobscured (Type-1-like, N_\mathrm{H} \sim 10^{22}\,\mathrm{cm^{-2}}) to Compton-thick (N_\mathrm{H} \sim 10^{25}\,\mathrm{cm^{-2}}):">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_silva04_nh_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_silva04_nh_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Silva+04 torus: Obscuration and the 9.7 micron silicate feature</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR_mean_3p torus is the Stalevski+2016 clumpy two-phase torus library averaged over its clumpiness parameters, as packaged by AGNfitter-rX. Three observables remain: the half-opening angle oa, the equatorial optical depth tau_V, and the inclination incl.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_agnfitter_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_agnfitter_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR_mean_3p torus: optical depth and inclination</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="SKIRTOR (Stalevski et al. 2016) is a clumpy radiative transfer torus model with a three-dimensional parameter space (half-opening angle, inclination, optical depth). Two different implementations exist in tengri:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_agnfitter_vs_cigale_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_agnfitter_vs_cigale`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: AGNfitter-averaged vs. X-CIGALE full grid</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+ 2012, 2016) reprocesses the hot accretion disc and dust as a function of viewing angle.">
 
 .. only:: html
@@ -641,6 +709,40 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">SKIRTOR clumpy vs Silva+04 smooth-torus comparison (X-CIGALE Fig. 2)</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This is tengri&#x27;s full-grid SKIRTOR torus (Stalevski+2012, 2016), following the X-CIGALE skirtor2016 conventions: a 5-D clumpy two-phase library indexed by equatorial optical depth tau, radial and polar density gradients p / q, half-opening angle oa, and inclination cos i (plus an optional Casey-2012 polar-dust greybody). It is the science-grade counterpart to the parameter-averaged skirtor_agnfitter library — and, having the full grid, it responds strongly to its parameters.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_xcigale_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_xcigale_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus (full X-CIGALE grid): optical depth and inclination</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Slone &amp; Netzer (2012) accretion-disc library (SN12, as packaged by AGNfitter-rX) tabulates the big-blue-bump continuum over black-hole mass and Eddington ratio. The disc&#x27;s characteristic temperature scales as T_\mathrm{max} \propto (\dot m / M_\mathrm{BH})^{1/4}, so the spectral peak walks across the UV/optical as those two knobs change:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_slone_netzer_disc_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_slone_netzer_disc_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Slone & Netzer 2012 disc: Black-hole mass and Eddington ratio</div>
     </div>
 
 
@@ -753,6 +855,7 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_agn_torus_compare
    /auto_examples/agn/plot_alpha_ox_lusso_risaliti
    /auto_examples/agn/plot_alpha_ox_uv_xray_connection
+   /auto_examples/agn/plot_cat3d_wind_sweep
    /auto_examples/agn/plot_composable_block_toggles
    /auto_examples/agn/plot_composable_recipes
    /auto_examples/agn/plot_custom_torus_extension
@@ -773,9 +876,14 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_reverberation_size_luminosity
    /auto_examples/agn/plot_richards2006_template
    /auto_examples/agn/plot_seyfert_quasar_blazar_archetypes
+   /auto_examples/agn/plot_silva04_nh_sweep
+   /auto_examples/agn/plot_skirtor_agnfitter_sweep
+   /auto_examples/agn/plot_skirtor_agnfitter_vs_cigale
    /auto_examples/agn/plot_skirtor_inclination_sweep
    /auto_examples/agn/plot_skirtor_variants
    /auto_examples/agn/plot_skirtor_vs_smooth_torus
+   /auto_examples/agn/plot_skirtor_xcigale_sweep
+   /auto_examples/agn/plot_slone_netzer_disc_sweep
    /auto_examples/agn/plot_smbh_growth_track
    /auto_examples/agn/plot_torus_screen_disc
    /auto_examples/agn/plot_type1_type2_unified_model

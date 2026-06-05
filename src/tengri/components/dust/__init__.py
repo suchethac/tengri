@@ -27,6 +27,7 @@ from tengri.components.dust.astrodust_ir import (
 )
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
+    apply_lyman_cutoff as apply_lyman_cutoff,
     calzetti as calzetti,
     cardelli as cardelli,
     d03_mwrv31 as d03_mwrv31,
@@ -211,6 +212,7 @@ _CURATED_DIR = (
     "two_component_dust",
     "single_component_dust",
     "energy_balance_split",
+    "apply_lyman_cutoff",
     # Registration / resolver
     "list_laws",
     "register_dust_law",

@@ -737,6 +737,11 @@ m_d = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        # Match CIGALE's ``dustatt_modified_starburst``, which zeros its curve
+        # below the Lyman limit (LyC photons ionise H rather than heat dust).
+        # Without this tengri's leitherer02 polynomial extrapolates through the
+        # FUV and over-attenuates λ < 912 Å relative to CIGALE.
+        "lyman_cutoff": True,
         "*": FIXED,
     },
     redshift=Fixed(0.0),
@@ -794,21 +799,23 @@ plt.show()
 # the bolometric budget, visible on log axes, and closer to what
 # Dale et al. actually published than the CIGALE-bundled version.
 #
-# **Lyman-continuum handling.** tengri's `calzetti` and `leitherer02`
-# attenuation curves polynomial-extend through the FUV; the curves
-# return finite A(λ)/A_V values at any wavelength. CIGALE's
-# `dustatt_modified_starburst` zeros the attenuation curve below
-# 91.2 nm on the assumption that those photons are absorbed by H
-# ionization before reaching dust grains. tengri keeps the curve
-# defined everywhere (`calzetti(λ=500 Å)` returns the polynomial
-# value), and the `L_absorbed` integral that feeds the IR re-emission
-# template clips λ < 912 Å instead. The integral represents a
-# physical claim about which absorbed energy gets re-emitted as dust
-# IR, and Lyman-continuum photons in HII regions go into nebular
-# emission, not dust. The two codes reach the same effective
-# behaviour by different routes: CIGALE zeros the curve; tengri
-# separates the curve (as a data product) from the energy balance
-# (as a physical claim about ionizing photons).
+# **Lyman-continuum handling.** By default tengri's `calzetti` and
+# `leitherer02` attenuation curves polynomial-extend through the FUV —
+# they return finite A(λ)/A_V values at any wavelength, climbing to
+# A_λ/A_V ~ 150 below 300 Å. CIGALE's `dustatt_modified_starburst`
+# instead zeros the curve below 91.2 nm, on the assumption that those
+# photons are absorbed by H ionization before reaching dust grains. To
+# reproduce CIGALE here, the tengri models in this section set
+# **`dust={'lyman_cutoff': True}`** (#704), which zeros the attenuation
+# curve below 912 Å — so the emergent far-UV continuum is transmitted
+# rather than over-attenuated, matching CIGALE wavelength-by-wavelength
+# (see §7). The `L_absorbed` integral that feeds the IR re-emission
+# template already clipped λ < 912 Å regardless of the toggle: those
+# Lyman-continuum photons go into nebular emission, not dust, so the IR
+# budget is unchanged. tengri keeps the *curve* defined everywhere as a
+# data product (`calzetti(λ=500 Å)` still returns the polynomial value);
+# `lyman_cutoff` is the opt-in that applies CIGALE's clip in the forward
+# model.
 
 # %%
 sed_c_ir = C.run_chain(
@@ -848,6 +855,10 @@ m_ir = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        # Lyman-limit clip (CIGALE parity) — see §5. The dust IR is energy-balance
+        # normalised to L_absorbed, whose integral already excludes λ < 912 Å, so
+        # this only changes the emergent FUV continuum, not the IR budget.
+        "lyman_cutoff": True,
         "*": FIXED,
         "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "*": FIXED},
     },
@@ -1035,22 +1046,21 @@ plt.show()
 # Same model, viewed across 1 Å (X-ray) to 10 m (radio). What appears
 # in the X-ray and radio panels arrives in §10 and §11.
 #
-# **Two visible differences in the wings — both are §-cross-references,
-# not §7-physics issues:**
+# **Far-UV (λ < 1000 Å) — now matched.** Calzetti+2000 was fit on
+# 1200 Å – 22000 Å; tengri's polynomial *extrapolates* below that,
+# letting `A_λ/A_V` climb to ~150 at λ < 300 Å, while CIGALE's
+# `dustatt_modified_starburst` drops cleanly to zero at 912 Å. The
+# tengri model in this section sets `dust={'lyman_cutoff': True}`
+# (§6, #704), which applies the same 912 Å clip — so the far-UV
+# continuum is transmitted on both sides and the panels now agree
+# blueward of Lyα. (Drop the toggle to recover tengri's default
+# extrapolation, which over-attenuates the FUV relative to CIGALE.)
 #
-# *Far-UV (λ < 1000 Å):* tengri's panel drops steeply on the blue side
-# of Lyα while CIGALE's tail decays more gradually. The cause is
-# attenuation-law extrapolation outside the law's defined range —
-# Calzetti+2000 was fit on 1200 Å – 22000 Å, and tengri's
-# implementation lets `A_λ/A_V` climb to ~150 at λ < 300 Å while
-# CIGALE's drops cleanly to zero. The panel comparison in §4 shows
-# this directly. Both behaviours are extrapolation choices; neither
-# is more physically motivated than the other.
-#
-# *Long-wavelength tail (λ > 10⁷ Å):* the tengri side carries a small
-# rising νL_ν tail from 10 to 200 mm where CIGALE's reads zero. This
-# is the published-Dale-vs-CIGALE-truncated-Dale template difference
-# documented in §6.
+# **One remaining wing difference — a §-cross-reference, not a §7-physics
+# issue.** *Long-wavelength tail (λ > 10⁷ Å):* the tengri side carries a
+# small rising νL_ν tail from 10 to 200 mm where CIGALE's reads zero.
+# This is the published-Dale-vs-CIGALE-truncated-Dale template
+# difference documented in §6, normalised away by energy balance.
 
 # %%
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
