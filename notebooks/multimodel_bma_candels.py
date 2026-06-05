@@ -479,22 +479,6 @@ def bin_to_grid(wave, y, grid):
     return out
 
 
-def vmap_chunked(fn, batch, n, chunk=16):
-    """``jax.vmap`` ``fn`` over an ``n``-draw batch in memory-bounded chunks.
-
-    vmapping all draws at once materialises every draw's forward-pass
-    intermediates simultaneously and can OOM; chunking caps peak memory while
-    still collapsing the Python loop into a handful of vectorised dispatches.
-    Results are concatenated along the draw axis (works for tuple / NamedTuple /
-    dict returns).
-    """
-    parts = []
-    for start in range(0, n, chunk):
-        sub = {k: v[start : start + chunk] for k, v in batch.items()}
-        parts.append(jax.vmap(fn)(sub))
-    return jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *parts)
-
-
 def collect_predictions(g):
     """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
 
@@ -504,9 +488,12 @@ def collect_predictions(g):
     4*pi*d_L^2 / (1+z)), then bin every config onto the common ``WAVE_SPEC``
     grid so the four can be pooled for the BMA predictive.
 
-    Posterior draws are evaluated with ``jax.vmap`` over the sample batch (one
-    vectorised forward call per config) rather than a Python loop — same
-    numbers, ~10x faster.
+    Draws are evaluated in a plain Python loop. ``jax.vmap`` would be the
+    natural speedup, but the ``predict_*`` forward path is not robustly
+    vmap/jit-safe across mixed calls on one model in a single process (tracer
+    leaks → ``UnexpectedTracerError``; ``predict_sfh`` is not jittable at all) —
+    tracked in the perf issue. The eager loop is reliable and, per benchmark,
+    faster than a bare (un-jitted) ``vmap`` here.
     """
     weff = np.array([WAVE_EFF[n] for n in g["names"]])
     spec, sfh, props = {}, {}, {}
@@ -515,29 +502,37 @@ def collect_predictions(g):
         samples = g["posteriors"][cfg].samples
         n_avail = next(iter(samples.values())).shape[0]
         n_use = min(N_DRAWS, n_avail)
-        batch = {k: v[:n_use] for k, v in samples.items()}
 
-        # SED: chunked-vmapped predict_obs_sed over the whole draw batch.
-        wave_b, lnu_b = vmap_chunked(model.predict_obs_sed, batch, n_use)
-        wave_nat, lnu_b = np.asarray(wave_b[0]), np.asarray(lnu_b)
         # L_nu -> observed f_nu scale factor (cosmology-only constant; from draw 0).
-        phot0 = np.asarray(model.predict_photometry({k: v[0] for k, v in batch.items()}))
-        flux_factor = np.median(phot0 / np.interp(weff, wave_nat, lnu_b[0]))
-        spec[cfg] = np.array(
-            [bin_to_grid(wave_nat, lnu_b[i] * flux_factor, WAVE_SPEC) for i in range(n_use)]
-        )
+        s0 = {k: v[0] for k, v in samples.items()}
+        wave_nat, lnu0 = (np.asarray(a) for a in model.predict_obs_sed(s0))
+        phot0 = np.asarray(model.predict_photometry(s0))
+        flux_factor = np.median(phot0 / np.interp(weff, wave_nat, lnu0))
 
-        # SFH: chunked-vmapped predict_sfh over the (possibly smaller) SFH batch.
-        n_sfh = min(n_use, N_SFH)
-        sfh_b = vmap_chunked(model.predict_sfh, {k: v[:n_sfh] for k, v in samples.items()}, n_sfh)
-        sfh[cfg] = {"t_gyr": np.asarray(sfh_b["t_gyr"][0]), "sfr": np.asarray(sfh_b["sfr_full"])}
+        spec_arr = []
+        for i in range(n_use):
+            s = {k: v[i] for k, v in samples.items()}
+            lnu = np.asarray(model.predict_obs_sed(s)[1])
+            spec_arr.append(bin_to_grid(wave_nat, lnu * flux_factor, WAVE_SPEC))
+        spec[cfg] = np.array(spec_arr)
 
-        # Derived (M*, SFR): chunked-vmapped predict_sfh_quantities over the batch.
-        q = vmap_chunked(model.predict_sfh_quantities, batch, n_use)
-        logm = np.asarray(q.stellar_mass) * RETURN_FRAC
+        sfr_arr, t_gyr = [], None
+        for i in range(min(n_use, N_SFH)):
+            s = {k: v[i] for k, v in samples.items()}
+            out = model.predict_sfh(s)
+            t_gyr = np.asarray(out["t_gyr"]) if t_gyr is None else t_gyr
+            sfr_arr.append(np.asarray(out["sfr_full"]))
+        sfh[cfg] = {"t_gyr": t_gyr, "sfr": np.array(sfr_arr)}
+
+        logm, logsfr = [], []
+        for i in range(n_use):
+            s = {k: v[i] for k, v in samples.items()}
+            q = model.predict_sfh_quantities(s)
+            logm.append(float(q.stellar_mass) * RETURN_FRAC)
+            logsfr.append(float(q.sfr_100myr))
         props[cfg] = {
             "log_mass": np.log10(np.maximum(logm, 1e-30)),
-            "log_sfr": np.log10(np.maximum(np.asarray(q.sfr_100myr), 1e-30)),
+            "log_sfr": np.log10(np.maximum(logsfr, 1e-30)),
         }
     return spec, sfh, props
 
