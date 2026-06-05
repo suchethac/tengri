@@ -12,7 +12,9 @@ Regression for the two gaps that broke the canonical
   with the age grid (``sub got incompatible shapes for broadcasting: (12,), (3,)``).
 
 These run on the synthetic wide SSP (no ``data/ssp_*.h5`` needed) so they guard
-the canonical spectroscopy-population path on CI.
+the canonical spectroscopy-population path on CI. The end-to-end native-VI fit
+acceptance lives in the slow tier
+(``tests/inference/test_population_spectroscopy_vi.py``).
 """
 
 from __future__ import annotations
@@ -24,7 +26,6 @@ import pytest
 from tengri import FIXED, FREE, Fixed, Observation, SEDModel
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population_sed_model import PopulationSEDModel
-from tengri.inference.fitter import Fitter
 from tengri.observation.spectroscopy import Spectroscopy
 
 jax.config.update("jax_enable_x64", True)
@@ -82,25 +83,3 @@ def test_forward_predict_spectrum_is_batched_over_galaxies(population, spec_obs)
     spectra = forward.predict_spectrum(params)
     assert spectra.shape == (_N_GAL, _N_PIX)
     assert jnp.all(jnp.isfinite(spectra))
-
-
-def test_canonical_native_vi_produces_shared_psd_samples(population, spec_obs):
-    """Acceptance: the canonical path yields shared PSD + per-galaxy samples."""
-    forward = ForwardModel.build(population=population, observation=spec_obs)
-    post = Fitter(forward).run(
-        "native_vi_linear",
-        key=jax.random.PRNGKey(1),
-        n_iterations=2,
-        n_seeds=1,
-        n_posterior_samples=64,
-        verbose=False,
-    )
-    samples = post.samples
-    # Shared PSD hyper-parameters: one scalar value per posterior draw.
-    for shared in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-        assert shared in samples
-        assert samples[shared].ndim == 1
-    # Per-galaxy parameters carry a trailing galaxy axis of length N_gal.
-    assert samples["sfh_tsnorm_peak_lbt_gyr"].shape[-1] == _N_GAL
-    # Per-galaxy stochastic field: (n_samples, N_gal, n_grid).
-    assert samples["psd_xi"].shape[-2:] == (_N_GAL, _N_GRID)
