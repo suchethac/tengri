@@ -79,6 +79,7 @@ from jax import Array
 
 __all__ = [
     "AGN_BLOCKS",
+    "AGN_BLOCK_META",
     "BLOCK_CATEGORIES",
     "BlockCategory",
     "register_agn_block",
@@ -92,8 +93,20 @@ BLOCK_CATEGORIES: tuple[str, ...] = ("disc", "nlr", "blr", "feii", "torus", "att
 # Two-level dict: category -> name -> callable.
 AGN_BLOCKS: dict[str, dict[str, Callable]] = {cat: {} for cat in BLOCK_CATEGORIES}
 
+# Parallel dict: (category, name) -> metadata dict
+# Stores citation, status, short_doc alongside the callable in AGN_BLOCKS.
+# Enables introspection (list_agn_blocks, describe_agn_block) while keeping
+# resolve_agn_block() returning a bare callable for backward compatibility.
+AGN_BLOCK_META: dict[tuple[str, str], dict[str, str]] = {}
 
-def register_agn_block(category: BlockCategory, name: str) -> Callable:
+
+def register_agn_block(
+    category: BlockCategory,
+    name: str,
+    citation: str = "",
+    status: str = "production",
+    short_doc: str = "",
+) -> Callable:
     """Decorator factory: register a block implementation in
     :data:`AGN_BLOCKS`.
 
@@ -104,6 +117,15 @@ def register_agn_block(category: BlockCategory, name: str) -> Callable:
     name : str
         Unique identifier within the category. Examples: ``"grahsp"``,
         ``"powerlaw"``, ``"none"``, ``"smc_prevot"``.
+    citation : str, optional
+        Academic citation (e.g., paper title, authors, journal reference).
+        Default ``""``.
+    status : str, optional
+        Block maturity: ``"production"``, ``"experimental"``, ``"demo"``,
+        or ``"deprecated"``. Default ``"production"``.
+    short_doc : str, optional
+        One-line description (e.g., "Power-law continuum with 2 free params").
+        Default ``""``.
 
     Returns
     -------
@@ -120,7 +142,12 @@ def register_agn_block(category: BlockCategory, name: str) -> Callable:
 
     Examples
     --------
-    >>> @register_agn_block("torus", "grahsp")
+    >>> @register_agn_block(
+    ...     "torus",
+    ...     "grahsp",
+    ...     citation="Nenkova et al. 2008",
+    ...     short_doc="Clumpy toroidal dust model",
+    ... )
     ... def grahsp_torus_block(wavelength, agn_log_lbol, l5100_disc, **params): ...
     """
     if category not in AGN_BLOCKS:
@@ -133,6 +160,11 @@ def register_agn_block(category: BlockCategory, name: str) -> Callable:
                 f"(by {AGN_BLOCKS[category][name].__module__})."
             )
         AGN_BLOCKS[category][name] = fn
+        AGN_BLOCK_META[(category, name)] = {
+            "citation": citation,
+            "status": status,
+            "short_doc": short_doc,
+        }
         return fn
 
     return decorator

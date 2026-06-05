@@ -27,6 +27,7 @@ from tengri.components.agn.blocks import (
     blr_blocks,
     composable_precompute,
     disc_blocks,
+    feii_blocks,
     grahsp_blocks,
     nlr_blocks,
     qsogen_blocks,

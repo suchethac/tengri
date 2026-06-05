@@ -78,6 +78,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("disc", "multicolor"): frozenset({"agn_a_spin", "agn_log_ledd", "agn_log_mbh"}),
     ("disc", "powerlaw"): frozenset({"agn_alpha"}),
     ("disc", "qsogen"): frozenset(),
+    ("disc", "richards2006"): frozenset(),
     ("disc", "schartmann2005"): frozenset({"agn_cigale_disk_delta"}),
     ("disc", "schartmann2005_skirtor_atten"): frozenset(
         {
@@ -178,6 +179,13 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf"}),
     ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
     ("blr", "qsogen"): frozenset(),
+    ("feii", "boroson_green"): frozenset(
+        {
+            "agn_fe2_strength",
+            "agn_blr_cf",
+            "agn_blr_line_efficiency",
+        }
+    ),
     ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
     ("feii", "qsogen_balmer"): frozenset(),
     ("attenuation", "grahsp_biatten"): frozenset({"agn_grahsp_ebv", "agn_grahsp_ebv_agn"}),

@@ -33,6 +33,7 @@ from tengri.parameters.sentinels import FIXED, FREE
 
 __all__ = [
     "agn_panchromatic",
+    "composable_agn",
     "dust_demo",
     "mock_recovery_minimal",
     "quiescent_z0",
@@ -196,6 +197,83 @@ def agn_panchromatic() -> dict:
             torus=builders.agn.torus.skirtor(defaults=FREE),
             nlr=builders.agn.nlr.analytic(defaults=FREE),
         ),
+        radio=True,
+        xray=True,
+        redshift=Uniform(0.01, 6.0),
+        approx=WavePrecomp(),
+    )
+
+
+def composable_agn() -> dict:
+    """Fully composable AGN — all slots switchable on committed data.
+
+    Provides a fully wired AGN recipe where every slot (disc, NLR, BLR, FeII,
+    torus, attenuation) uses committed data only. All six blocks are present
+    and their parameters are free, making this recipe ideal for exploratory
+    fitting and model swapping without grid dependencies.
+
+    **SSP requirement:** bare-stellar (Cue nebular backend; see
+    :func:`star_forming_photometry` for details).
+
+    **Data requirement:** All components use committed templates bundled with
+    tengri. No external Synthesizer Cloudy grids or other downloads needed.
+
+    **Configuration:**
+    - **Disc**: Multicolor accretion disc (free)
+    - **NLR**: Analytic narrow-line region (free)
+    - **BLR**: Analytic broad-line region (free)
+    - **FeII**: Boroson & Green FeII pseudo-continuum (free)
+    - **Torus**: SKIRTOR clumpy torus model (free)
+    - **Attenuation**: Polar dust Type-1/2 screen (free)
+    - **SFH**: DPL (free)
+    - **Dust**: Two-component Calzetti attenuation (free)
+    - **Dust IR emission**: Dale2014 (free)
+    - **Nebular**: Cue (fixed)
+    - **Radio**: Enabled (free)
+    - **X-ray**: Enabled (free)
+    - **Redshift**: Free
+    - **AGN normalization**: CIGALE joint (disc + torus coupled energy balance)
+
+    Returns
+    -------
+    dict
+        Nested-dict ready for parse_groups() or SEDModel.build().
+
+    Notes
+    -----
+    The CIGALE joint normalization couples the disc and torus luminosities via
+    the energy reprocessing fraction, ensuring energy conservation across AGN
+    components. All slots are independently switchable by changing the ``type``
+    key (e.g., ``disc={'type': 'powerlaw'}`` or ``nlr={'type': 'none'}``).
+
+    Examples
+    --------
+    >>> from tengri import recipes
+    >>> params = recipes.composable_agn()
+    >>> assert "agn" in params
+    >>> assert "disc" in params["agn"]
+    >>> assert "feii" in params["agn"]
+    """
+    return dict(
+        sfh=builders.sfh.dpl(defaults=FREE),
+        dust=builders.dust.two_component(
+            defaults=FREE,
+            emission=builders.dust.emission.dale2014(defaults=FREE),
+        ),
+        neb=builders.neb.cue(defaults=FIXED),
+        agn={
+            "type": "composable",
+            "disc": {"type": "multicolor"},
+            "nlr": {"type": "analytic"},
+            "blr": {"type": "analytic"},
+            "feii": {"type": "boroson_green"},
+            "torus": {"type": "skirtor"},
+            "atten": {"type": "polar_dust"},
+            "norm": "cigale_joint",
+            # agn_fracAGN constraint is [0, 1) — keep the upper bound strictly < 1.
+            "fracAGN": Uniform(0.01, 0.99),
+            "*": FREE,
+        },
         radio=True,
         xray=True,
         redshift=Uniform(0.01, 6.0),
@@ -368,20 +446,31 @@ def dust_demo() -> dict:
 
 
 def unified_agn() -> dict:
-    """Fully composable unified AGN — disc + torus + NLR + BLR + Type-1/2 mask.
+    """Faithful Synthesizer UnifiedAGN reproduction (disc + NLR/BLR grids).
 
-    The grammar-native equivalent of the monolithic ``unified_nlr_blr`` model: a
-    multicolor accretion disc, a single-temperature greybody torus, and the
-    combined narrow + broad line region. The runner applies the grey Type-1/2
+    Reproduces the Synthesizer UnifiedAGN model: a Kubota & Done disc,
+    SKIRTOR simple torus, and narrow + broad line region photoionization grids
+    from the Cloudy+AGNfitter framework. The runner applies the Type-1/2
     visibility mask to the anisotropic central engine (disc + BLR), driven by
-    ``agn_cos_inc`` / ``agn_theta_torus``, while the spatially-extended NLR
-    stays isotropic — so the AGN transitions smoothly from Type-1 (face-on) to
-    Type-2 (edge-on) as a differentiable function of inclination. ``frac`` is
-    fixed so the luminosity is set parametrically by the (free) ``agn_log_lbol``.
+    ``agn_cos_inc`` / ``agn_theta_torus``, while the isotropic NLR stays
+    unmasked.
 
-    **SSP requirement:** any (analytic line templates; no Cloudy grids needed).
-    Set ``nlr`` and ``blr`` to ``synthesizer_spectra`` to read the Synthesizer
-    Cloudy grids instead.
+    **SSP requirement:** bare-stellar (Cue nebular backend; see
+    :func:`star_forming_photometry` for details). Synthesizer grids cannot be
+    paired with wNE SSP files.
+
+    **Grid requirement:** The Synthesizer AGN Cloudy grids must be present at
+    ``data/synthesizer_grids/``. Fetch via ``synthesizer-download
+    --agn-test-grids``. Tests will be skipped if grids are absent.
+
+    **Configuration:**
+    - **Disc**: Kubota & Done accretion disc (free)
+    - **NLR**: Synthesizer Cloudy photoionization grid (free)
+    - **BLR**: Synthesizer Cloudy photoionization grid (free)
+    - **Torus**: Simple greybody (fixed)
+    - **SFH**: Delayed exponential (fixed)
+    - **Dust**: Two-component Calzetti (both optical depths fixed to 0)
+    - **Redshift**: Fixed at z=0.0
 
     Returns
     -------
@@ -392,18 +481,18 @@ def unified_agn() -> dict:
     --------
     >>> from tengri import recipes
     >>> params = recipes.unified_agn()
-    >>> assert params["agn"]["nlr"]["type"] == "analytic"
-    >>> assert params["agn"]["blr"]["type"] == "analytic"
+    >>> assert params["agn"]["nlr"]["type"] == "synthesizer_spectra"
+    >>> assert params["agn"]["blr"]["type"] == "synthesizer_spectra"
     """
     return dict(
         sfh={"type": "delayed", "*": FIXED},
         dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor"},
+            "disc": {"type": "kubota_done"},
             "torus": {"type": "simple"},
-            "nlr": {"type": "analytic"},
-            "blr": {"type": "analytic"},
+            "nlr": {"type": "synthesizer_spectra"},
+            "blr": {"type": "synthesizer_spectra"},
             # Parametric luminosity mode: the AGN strength is set by the free
             # agn_log_lbol, so the two alternative scaling knobs are held fixed
             # (freeing them would add no-op nuisance dimensions in this mode).

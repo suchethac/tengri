@@ -355,9 +355,14 @@ def _agn_block_types(category: str) -> frozenset[str]:
     # decorators have fired. Mirrors the eager imports done by AGN
     # ``unified.py`` at module-load time; safe to redo here.
     import tengri.components.agn.blocks.alternates
+    import tengri.components.agn.blocks.atten_blocks
     import tengri.components.agn.blocks.blr_blocks
     import tengri.components.agn.blocks.disc_blocks
-    import tengri.components.agn.blocks.nlr_blocks  # noqa: F401
+    import tengri.components.agn.blocks.feii_blocks
+    import tengri.components.agn.blocks.grahsp_blocks
+    import tengri.components.agn.blocks.nlr_blocks
+    import tengri.components.agn.blocks.qsogen_blocks
+    import tengri.components.agn.blocks.torus_blocks  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
@@ -377,21 +382,13 @@ _VALID_AGN_NLR_TYPES = _agn_block_types("nlr")
 #: Includes ``"qsogen"`` which lives on the qsogen model.
 _VALID_AGN_BLR_TYPES = _agn_block_types("blr") | {"qsogen"}
 
-#: Valid AGN feii block types.
-_VALID_AGN_FEII_TYPES = {
-    "none",
-    "grahsp",
-    "qsogen_balmer",
-}
+#: Valid AGN feii block types (derived from ``AGN_BLOCKS['feii']`` — the
+#: block-registration decorator is the single source of truth, so a new feii
+#: block like ``boroson_green`` is picked up automatically without editing here).
+_VALID_AGN_FEII_TYPES = _agn_block_types("feii")
 
-#: Valid AGN attenuation block types.
-_VALID_AGN_ATTEN_TYPES = {
-    "none",
-    "smc_prevot",
-    "polar_dust",
-    "grahsp_biatten",
-    "qsogen_smc",
-}
+#: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
+_VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)

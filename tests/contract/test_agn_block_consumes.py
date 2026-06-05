@@ -280,10 +280,11 @@ def test_unified_agn_recipe_structure():
 
     agn = tengri.recipes.unified_agn()["agn"]
     assert agn["type"] == "composable"
-    assert agn["disc"]["type"] == "multicolor"
+    # Faithful Synthesizer UnifiedAGN reproduction (grid-backed line regions).
+    assert agn["disc"]["type"] == "kubota_done"
     assert agn["torus"]["type"] == "simple"
-    assert agn["nlr"]["type"] == "analytic"  # independent NLR block
-    assert agn["blr"]["type"] == "analytic"  # independent BLR block
+    assert agn["nlr"]["type"] == "synthesizer_spectra"  # independent NLR block
+    assert agn["blr"]["type"] == "synthesizer_spectra"  # independent BLR block
     # Parametric luminosity mode: the two scaling knobs are pinned fixed.
     assert isinstance(agn["frac"], Fixed)
     assert isinstance(agn["fracAGN"], Fixed)

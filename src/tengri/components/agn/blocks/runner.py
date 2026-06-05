@@ -131,6 +131,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
         "multicolor",
         "kubota_done",
         "qsogen",
+        "richards2006",
     }
 )
 
