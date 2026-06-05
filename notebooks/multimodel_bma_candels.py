@@ -444,12 +444,25 @@ RETURN_FRAC = 0.6  # surviving / formed mass (Chabrier; Madau & Dickinson 2014)
 WAVE_SPEC = np.logspace(np.log10(3000), np.log10(1e5), 300)  # observed-frame Å
 rng = np.random.default_rng(0)
 
-# Effective wavelengths [Å] of the catalogue bands (for placing data + scaling).
-WAVE_EFF = {
-    "hst_f435w": 4328, "hst_f606w": 5921, "hst_f775w": 7693, "hst_f814w": 8057,
-    "hst_f850lp": 9036, "hst_f105w": 10552, "hst_f125w": 12486, "hst_f160w": 15369,
-    "vista_ks": 21440, "irac_36": 35634, "irac_45": 45110, "irac_58": 57593, "irac_80": 79594,
-}  # fmt: skip
+
+# Effective wavelengths + half-widths [Å] of the catalogue bands, computed from
+# the *actual* filter transmission curves (single source of truth — not
+# hardcoded): mean effective wavelength and rectangular-equivalent half-width
+# W/2 = (1/2) ∫T dλ / max(T), used for the photometry x error bars.
+def _filter_eff_and_halfwidth(names):
+    phot = Photometry.from_names(names)
+    eff, half = {}, {}
+    for i, nm in enumerate(phot.names):
+        w = np.asarray(phot.filter_waves[i], dtype=float)
+        t = np.asarray(phot.filter_trans[i], dtype=float)
+        good = t > 0
+        w, t = w[good], t[good]
+        eff[nm] = float(np.trapz(w * t, w) / np.trapz(t, w))
+        half[nm] = float(0.5 * np.trapz(t, w) / t.max())
+    return eff, half
+
+
+WAVE_EFF, FILTER_HALFWIDTH = _filter_eff_and_halfwidth(filter_names)
 
 
 def bma_weights(posteriors):
@@ -588,12 +601,8 @@ plt.rcParams.update(
 )
 
 POINT_COLOR = "#e8000b"  # red photometry markers (matches proposal figure)
-# Approximate filter half-widths [Å] for the photometry x error bars.
-FILTER_HALFWIDTH = {
-    "hst_f435w": 500, "hst_f606w": 1100, "hst_f775w": 750, "hst_f814w": 1250,
-    "hst_f850lp": 600, "hst_f105w": 1500, "hst_f125w": 1500, "hst_f160w": 1400,
-    "vista_ks": 1600, "irac_36": 3800, "irac_45": 5100, "irac_58": 7100, "irac_80": 14300,
-}  # fmt: skip
+# FILTER_HALFWIDTH is computed from the real transmission curves above (the x
+# error bars on the photometry are the filters' rectangular-equivalent widths).
 
 
 def pool(per_cfg, weights, total):
@@ -656,15 +665,30 @@ def filled_kde(ax, x, y, color, *, zorder=2, bma=False):
     )  # fmt: skip
 
 
-def plot_galaxy(gal_id):
-    """Render the three-panel multi-model + BMA figure for one galaxy."""
+def plot_galaxy(gal_id, *, presentation=False):
+    """Render the three-panel multi-model + BMA figure for one galaxy.
+
+    ``presentation=True`` produces a larger, slide-ready version (bigger fonts
+    and panels, thicker lines, a BMA-weight annotation) saved as ``*_pres.png``;
+    the default is the compact paper figure (``*.png``).
+    """
     g = galaxies[gal_id]
     w = g["weights"]
-    fig = plt.figure(figsize=(6.5, 1.65))
-    gs = GridSpec(
-        1, 3, figure=fig, width_ratios=[1.15, 1.0, 1.0],
-        wspace=0.38, left=0.08, right=0.98, bottom=0.18, top=0.88,
-    )  # fmt: skip
+    # Sizing / styling: (paper, presentation).
+    P = presentation
+    figsize = (13.0, 3.7) if P else (6.5, 1.65)
+    margins = dict(bottom=0.17, top=0.84) if P else dict(bottom=0.18, top=0.88)
+    fs_pan, fs_lab, fs_tick = (16, 15, 12) if P else (8, 8, 7)
+    fs_leg, fs_box = (12, 13) if P else (6.5, 6)
+    lw_cfg, lw_bma, ms, ew = (1.8, 3.2, 7.5, 1.4) if P else (0.8, 1.5, 3.5, 0.7)
+    leg_y = 1.14 if P else 1.12
+
+    fig = plt.figure(figsize=figsize)
+    gs = GridSpec(1, 3, figure=fig, width_ratios=[1.15, 1.0, 1.0],
+                  wspace=0.42 if P else 0.38, left=0.07, right=0.985, **margins)  # fmt: skip
+
+    def panel_label(ax, s):
+        ax.text(0.04, 0.93, s, transform=ax.transAxes, fontsize=fs_pan, va="top")
 
     # ---- (a) SED ----
     ax = fig.add_subplot(gs[0])
@@ -672,31 +696,32 @@ def plot_galaxy(gal_id):
         d = g["spec"][cfg]
         ax.fill_between(WAVE_SPEC, np.percentile(d, 16, 0), np.percentile(d, 84, 0),
                         color=COLORS[cfg], alpha=0.12, lw=0)  # fmt: skip
-        ax.plot(WAVE_SPEC, np.median(d, 0), "-", color=COLORS[cfg], lw=0.8, alpha=0.85)
+        ax.plot(WAVE_SPEC, np.median(d, 0), "-", color=COLORS[cfg], lw=lw_cfg, alpha=0.85)
     bma = pool(g["spec"], w, 300)
     ax.fill_between(WAVE_SPEC, np.percentile(bma, 16, 0), np.percentile(bma, 84, 0),
                     color=BMA_COLOR, alpha=0.10, lw=0)  # fmt: skip
-    ax.plot(WAVE_SPEC, np.median(bma, 0), "-", color=BMA_COLOR, lw=1.5, alpha=0.95, zorder=5)
+    ax.plot(WAVE_SPEC, np.median(bma, 0), "-", color=BMA_COLOR, lw=lw_bma, alpha=0.95, zorder=5)
     wobs = np.array([WAVE_EFF[n] for n in g["names"]])
-    xerr = np.array([FILTER_HALFWIDTH.get(n, 500) for n in g["names"]])
-    ax.errorbar(wobs, g["fnu"], yerr=g["sigma"], xerr=xerr, fmt="o", ms=3.5,
-                color=POINT_COLOR, ecolor="0.3", elinewidth=0.7, capsize=0,
+    xerr = np.array([FILTER_HALFWIDTH[n] for n in g["names"]])  # real filter half-widths
+    ax.errorbar(wobs, g["fnu"], yerr=g["sigma"], xerr=xerr, fmt="o", ms=ms,
+                color=POINT_COLOR, ecolor="0.3", elinewidth=ew, capsize=0,
                 markeredgewidth=0, zorder=10)  # fmt: skip
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(3200, 1e5)
     fnu_pos = g["fnu"][g["fnu"] > 0]
     ax.set_ylim(0.3 * fnu_pos.min(), 4 * fnu_pos.max())  # frame on the data
-    ax.set_xlabel(r"$\lambda_\mathrm{obs}$ [$\AA$]")
-    ax.set_ylabel(r"$f_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
-    ax.text(0.04, 0.93, r"$\bf{(a)}$", transform=ax.transAxes, fontsize=8, va="top")
+    ax.set_xlabel(r"$\lambda_\mathrm{obs}$ [$\AA$]", fontsize=fs_lab)
+    ax.set_ylabel(r"$f_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]", fontsize=fs_lab)
+    ax.tick_params(labelsize=fs_tick)
+    panel_label(ax, r"$\bf{(a)}$")
     ax.text(
         0.96, 0.08, f"CANDELS {gal_id}\n$z = {g['z']:.3f}$", transform=ax.transAxes,
-        fontsize=6, ha="right", va="bottom",
-        bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "0.7", "lw": 0.4, "alpha": 0.9},
+        fontsize=fs_box, ha="right", va="bottom",
+        bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "0.7", "lw": 0.5, "alpha": 0.9},
     )  # fmt: skip
 
-    # ---- (b) SFH + legend ----
+    # ---- (b) SFH ----
     ax = fig.add_subplot(gs[1])
     maxes = []
     for cfg in CONFIG_ORDER:
@@ -704,18 +729,21 @@ def plot_galaxy(gal_id):
         med = np.median(sfr, 0)
         ax.fill_between(t, np.percentile(sfr, 16, 0), np.percentile(sfr, 84, 0),
                         color=COLORS[cfg], alpha=0.15, lw=0)  # fmt: skip
-        ax.plot(t, med, "-", color=COLORS[cfg], lw=0.9, alpha=0.9)
-        maxes.append(np.max(med[t < 5]))
+        ax.plot(t, med, "-", color=COLORS[cfg], lw=lw_cfg, alpha=0.9)
+        maxes.append(np.max(med[(t >= 0.15) & (t < 5)]))  # ignore the t->0 instantaneous spike
     t_common = g["sfh"]["A"]["t_gyr"]
     bma_sfr = pool({c: g["sfh"][c]["sfr"] for c in CONFIG_ORDER}, w, 200)
+    bma_med = np.median(bma_sfr, 0)
     ax.fill_between(t_common, np.percentile(bma_sfr, 16, 0), np.percentile(bma_sfr, 84, 0),
                     color=BMA_COLOR, alpha=0.15, lw=0)  # fmt: skip
-    ax.plot(t_common, np.median(bma_sfr, 0), "-", color=BMA_COLOR, lw=1.8, alpha=0.95)
+    ax.plot(t_common, bma_med, "-", color=BMA_COLOR, lw=lw_bma, alpha=0.95)
+    maxes.append(np.max(bma_med[(t_common >= 0.15) & (t_common < 5)]))
     ax.set_xlim(0, 5)
-    ax.set_ylim(0, 1.5 * max(maxes))
-    ax.set_xlabel("Lookback time [Gyr]")
-    ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
-    ax.text(0.04, 0.93, r"$\bf{(b)}$", transform=ax.transAxes, fontsize=8, va="top")
+    ax.set_ylim(0, 1.25 * max(maxes))  # robust: fills the panel, ignores t->0 spike
+    ax.set_xlabel("Lookback time [Gyr]", fontsize=fs_lab)
+    ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]", fontsize=fs_lab)
+    ax.tick_params(labelsize=fs_tick)
+    panel_label(ax, r"$\bf{(b)}$")
 
     # ---- (c) M*-SFR ----
     ax = fig.add_subplot(gs[2])
@@ -725,27 +753,34 @@ def plot_galaxy(gal_id):
     bm, bs = pool_pairs(
         {c: g["props"][c]["log_mass"] for c in CONFIG_ORDER},
         {c: g["props"][c]["log_sfr"] for c in CONFIG_ORDER},
-        w,
-        2000,
-    )
+        w, 2000,
+    )  # fmt: skip
     filled_kde(ax, bm, bs, BMA_COLOR, zorder=6, bma=True)
-    ax.set_xlabel(r"$\log\,(M_\star\,/\,M_\odot)$")
-    ax.set_ylabel(r"$\log\,(\mathrm{SFR}_{100}\,/\,M_\odot\,\mathrm{yr}^{-1})$")
-    ax.text(0.04, 0.93, r"$\bf{(c)}$", transform=ax.transAxes, fontsize=8, va="top")
+    ax.margins(0.18)  # padding so the small clusters aren't cramped
+    ax.set_xlabel(r"$\log\,(M_\star\,/\,M_\odot)$", fontsize=fs_lab)
+    ax.set_ylabel(r"$\log\,(\mathrm{SFR}_{100}\,/\,M_\odot\,\mathrm{yr}^{-1})$", fontsize=fs_lab)
+    ax.tick_params(labelsize=fs_tick)
+    panel_label(ax, r"$\bf{(c)}$")
+    wstr = "   ".join(f"{c} {x:.2f}" for c, x in zip(CONFIG_ORDER, w))
+    ax.text(0.5, 0.97, f"BMA weights:  {wstr}", transform=ax.transAxes,
+            ha="center", va="top", fontsize=fs_box)  # fmt: skip
 
     # Shared legend across the top, two rows (3 + 2 entries).
-    handles = [Line2D([0], [0], color=COLORS[c], lw=1.6, label=LABELS[c]) for c in CONFIG_ORDER]
-    handles.append(Line2D([0], [0], color=BMA_COLOR, lw=2.5, label="Bayesian Model Avg."))
-    fig.legend(
-        handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.12), ncol=3,
-        fontsize=6.5, frameon=True, edgecolor="0.7", framealpha=0.95,
-        handlelength=1.6, columnspacing=1.4, handletextpad=0.4, labelspacing=0.3,
-    )  # fmt: skip
+    handles = [Line2D([0], [0], color=COLORS[c], lw=2.2 if P else 1.6, label=LABELS[c])
+               for c in CONFIG_ORDER]  # fmt: skip
+    handles.append(
+        Line2D([0], [0], color=BMA_COLOR, lw=3.0 if P else 2.5, label="Bayesian Model Avg.")
+    )
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, leg_y), ncol=3,
+               fontsize=fs_leg, frameon=True, edgecolor="0.7", framealpha=0.95,
+               handlelength=1.6, columnspacing=1.4, handletextpad=0.4, labelspacing=0.3)  # fmt: skip
 
-    fig.savefig(FIG_DIR / f"multimodel_bma_candels_{gal_id}.png", dpi=400, bbox_inches="tight")
+    suffix = "_pres" if P else ""
+    fig.savefig(FIG_DIR / f"multimodel_bma_candels_{gal_id}{suffix}.png",
+                dpi=200 if P else 400, bbox_inches="tight")  # fmt: skip
     plt.show()
-    wstr = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, w))
-    print(f"CANDELS {gal_id}: BMA weights  {wstr}")
+    wstr_print = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, w))
+    print(f"CANDELS {gal_id}: BMA weights  {wstr_print}")
 
 
 def show_timings(gal_id):
@@ -780,6 +815,19 @@ plot_galaxy(17418)
 
 # %%
 show_timings(17418)
+
+# %% [markdown]
+# ## 10. Presentation-quality figures
+#
+# Slide-ready renders of the same two panels: larger fonts and panels, thicker
+# lines, a robust SFH y-limit (so the panel fills), padded $M_\star$–SFR axes,
+# and the BMA weights annotated on panel (c). Saved as ``*_pres.png``.
+
+# %%
+plot_galaxy(4171, presentation=True)
+
+# %%
+plot_galaxy(17418, presentation=True)
 
 # %% [markdown]
 # ## 9. Takeaways
