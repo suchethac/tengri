@@ -159,6 +159,13 @@ model = SEDModel.build(
 - Sub-blocks: `dust.emission`, plus the five AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`, `agn.atten`. Each nests as
   a dict with its own `'type'`, `'*'`, and per-param keys.
+- AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
+  'norm': 'cigale_joint' | 'independent'}` (#556). `'cigale_joint'` (default)
+  ties disc/torus/polar to CIGALE's single `agn_power` reference (energy-
+  conserving; active only for `torus='skirtor'` + `agn_fracAGN>0`).
+  `'independent'` keeps each component on its own luminosity scale (disc on
+  `agn_log_lbol`, torus on `agn_power`, polar via the legacy face-on proxy) —
+  the GRAHSP/AGNfitter-style bookkeeping. See `AGNSEDComponentConfig.agn_norm`.
 - Sentinels (`FREE`, `FIXED`) are singletons exported from `tengri`.
 - Recipes: `tengri.recipes.*` — five curated starting points
   (`star_forming_photometry`, `quiescent_z0`, `agn_panchromatic`,

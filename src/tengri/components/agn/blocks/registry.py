@@ -32,6 +32,7 @@ def composable(
     agn_feii_block: str = "none",
     agn_torus_block: str = "none",
     agn_attenuation_block: str = "none",
+    agn_norm: str = "cigale_joint",
     **params,
 ) -> jnp.ndarray:
     r"""Composable AGN — registered AGN_MODELS entry.
@@ -53,6 +54,14 @@ agn_attenuation_block : str, optional
         Per-stage block selectors (default ``"none"`` everywhere — the
         user **must** opt in by name, and a warning is emitted if the
         recipe is degenerate).
+    agn_norm : {"cigale_joint", "independent"}, optional
+        Cross-block normalisation policy (#556). ``"cigale_joint"``
+        (default) ties the disc, torus, and polar dust to a *single*
+        ``agn_power`` reference via the fixed SKIRTOR template ratios —
+        bit-faithful to X-CIGALE's energy balance (Stalevski+2016).
+        ``"independent"`` keeps the legacy two-reference scaling (disc on
+        ``agn_log_lbol``, dust on the absorbed-energy ``agn_power``),
+        which does *not* conserve energy across the disc/dust boundary.
     **params
         Per-impl free parameters forwarded to every block.
 
@@ -74,5 +83,6 @@ agn_attenuation_block : str, optional
         agn_feii_block=agn_feii_block,
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,
+        agn_norm=agn_norm,
         **params,
     )

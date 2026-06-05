@@ -40,7 +40,7 @@ def _reset_emission_caches():
 def _reset_skirtor_cache():
     _skirtor_mod._skirtor_default = None
     # Clear functools.cache on default loaders so monkeypatched paths take effect.
-    for attr in ("_load_skirtor_default",):
+    for attr in ("_load_skirtor_default", "_load_skirtor_components", "_load_raw_disk_dust_grid"):
         fn = getattr(_skirtor_mod, attr, None)
         if fn is not None and hasattr(fn, "cache_clear"):
             fn.cache_clear()

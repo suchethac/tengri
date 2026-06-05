@@ -73,6 +73,16 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ride in ``params``). Each defaults to ``"none"`` so non-composable
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
+    agn_norm : str
+        Cross-block normalisation policy (#556). ``"cigale_joint"``
+        (default) ties the disc, torus and polar to CIGALE's single
+        ``agn_power`` reference via the fixed SKIRTOR template ratios
+        (energy-conserving; only active for ``agn_torus_block="skirtor"`` +
+        ``agn_fracAGN>0``). ``"independent"`` keeps each component on its own
+        luminosity scale (disc on ``agn_log_lbol``, torus on ``agn_power``,
+        polar via the legacy face-on proxy) — the GRAHSP/AGNfitter-style
+        bookkeeping. A static string, read by the runner like the block
+        selectors.
     """
 
     name: str = "agn"
@@ -82,6 +92,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     agn_lines_block: str = "none"
     agn_feii_block: str = "none"
     agn_attenuation_block: str = "none"
+    agn_norm: str = "cigale_joint"
 
 
 @dataclass(frozen=True)
@@ -335,6 +346,7 @@ class AGNSEDComponent:
         agn_kwargs["agn_lines_block"] = self.config.agn_lines_block
         agn_kwargs["agn_feii_block"] = self.config.agn_feii_block
         agn_kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
+        agn_kwargs["agn_norm"] = self.config.agn_norm
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
 

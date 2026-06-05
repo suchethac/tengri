@@ -64,6 +64,9 @@ from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_PARAMS,
     torus_screen_transmission,
 )
+from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
+from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the grey Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -364,6 +367,75 @@ agn_attenuation_block : str
         **params,
     )
 
+    # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
+    # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
+    # reddened: ``disk *= ext_fac``. The energy the reddening removes is
+    # routed to the polar greybody (the SKIRTOR torus block normalises
+    # disc+torus+polar jointly to agn_power — see below). Gated on
+    # ``agn_polar_ebv > 0`` → models without polar dust are untouched.
+    _polar_ebv = jnp.asarray(params.get("agn_polar_ebv", 0.0))
+    _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
+    _oa_deg = jnp.asarray(params.get("agn_oa_skirtor", params.get("agn_polar_oa", 40.0)))
+    _is_type1 = _cos_inc >= jnp.sin(jnp.deg2rad(_oa_deg))
+    _disc_ext = jnp.exp(-0.921 * _polar_ebv * _RV_SMC * smc_extinction_curve(wave))
+    _disc_ext = jnp.where(_is_type1 & (_polar_ebv > 0.0), _disc_ext, 1.0)
+
+    # CIGALE single-reference disc normalisation (#556). In fracAGN-coupled
+    # mode with the SKIRTOR torus, CIGALE ties the disc to the SAME
+    # ``agn_power`` as the dust via the fixed template ratio
+    # ``R = lumin_disk/lumin_dust`` (skirtor2016.py ``norm = 1/∫dust``), so
+    # disc, torus and polar all scale together and the disc-reddening
+    # absorbed power is conserved into the polar greybody. ``R`` carries the
+    # anisotropy factor ``η(i) = cos(i)(1+2cos(i))/3``. We capture R from the
+    # *un-reddened* disc shape here (CIGALE normalises before reddening) and
+    # apply the disc renormalisation after the torus block fixes agn_power.
+    # Static dispatch on the torus name (JIT-safe); the fracAGN>0 gate is
+    # applied branchlessly after the torus block (below).
+    _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
+    _disc_R = None
+    _disc_incl = None
+    # ``agn_norm`` policy (#556): "cigale_joint" ties disc/torus/polar to the
+    # single agn_power reference (only meaningful for the SKIRTOR torus, whose
+    # template ratios define R); "independent" keeps the legacy per-component
+    # scaling. Static string (JIT-safe Python branch).
+    _agn_norm = params.get("agn_norm", "cigale_joint")
+    if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
+        _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
+            wave,
+            L_lambda_disc,
+            _disc_ext,
+            agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
+            agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
+            agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
+            agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
+            agn_cos_inc=_cos_inc,
+        )
+        # #556 mechanism 3 — tie the polar ``l_ext`` to the SAME agn_power as
+        # the disc. The SKIRTOR torus block estimates the absorbed disc power
+        # from a FACE-ON disc proxy; in fracAGN mode it must use the
+        # agn_power-tied face-on disc ``agn_power·R/η`` (not the legacy
+        # ``18/7·10^agn_log_lbol`` which assumes agn_log_lbol = intrinsic 4π
+        # power, over-estimating l_ext ~2× → FIR +15%). ``agn_power`` here is
+        # the L_absorbed-coupled value the torus block normalises to
+        # (``agn_torus_frac × L_bol``), available *before* the torus runs so
+        # there is no circular dependency on ∫torus. Branchless: fall back to
+        # the legacy proxy where ``agn_fracAGN == 0``.
+        _agn_torus_frac = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        _Lbol = 10.0**agn_log_lbol * L_SUN
+        _agn_power_pre = _agn_torus_frac * _Lbol
+        # Face-on UN-reddened disc ∫AGN1.disk = agn_power × R_faceon (the
+        # ratio the CIGALE l_ext proxy needs), NOT agn_power × R (which is the
+        # reddened, inclination-weighted *observed* disc).
+        _faceon_frac = _agn_power_pre * _disc_R_faceon
+        _faceon_proxy = _Lbol * (18.0 / 7.0)
+        _faceon = jnp.where(_agn_fracAGN > 0.0, _faceon_frac, _faceon_proxy)
+        params = {
+            **params,
+            "agn_disc_faceon_lbol": jnp.log10(jnp.maximum(_faceon / L_SUN, 1e-30)),
+        }
+
+    L_lambda_disc = L_lambda_disc * _disc_ext
+
     # Compute lambda*L_lambda(5100Å) for downstream block normalisations.
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
@@ -402,6 +474,24 @@ agn_attenuation_block : str
         templates=grahsp_templates,
         **params,
     )
+
+    # CIGALE single-reference disc normalisation (#556), part 2. The SKIRTOR
+    # torus block fixes ``agn_power = ∫L_lambda_torus`` (disc+torus+polar
+    # share this budget). Tie the disc bolometric to ``agn_power × R`` so
+    # the disc scales with the same reference as the dust — energy conserved,
+    # inclination-correct via the ``η(i)`` baked into R. Applied branchlessly:
+    # only when ``agn_fracAGN > 0`` (the CIGALE-coupled mode); otherwise the
+    # disc keeps its independent ``agn_log_lbol`` scaling.
+    if _disc_R is not None:
+        _agn_power = jnp.trapezoid(L_lambda_torus, wave)
+        # Apply the wavelength-dependent ``disk(i)/disk(0)`` inclination
+        # attenuation to the disc *shape* (CIGALE ``SKIRTOR.disk(i)/AGN1.disk(0)``)
+        # so the disc spectrum is inclination-correct, then renormalise the
+        # reweighted shape to the agn_power-tied bolometric ``agn_power × R``.
+        _disc_reweighted = L_lambda_disc * _disc_incl
+        _disc_int = jnp.maximum(jnp.trapezoid(_disc_reweighted, wave), 1e-30)
+        _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
+        L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, L_lambda_disc)
 
     # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
     # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays

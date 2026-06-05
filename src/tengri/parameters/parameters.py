@@ -444,6 +444,10 @@ class Parameters:
         self.agn_feii_block = kwargs.pop("agn_feii_block", "none")
         self.agn_torus_block = kwargs.pop("agn_torus_block", "none")
         self.agn_attenuation_block = kwargs.pop("agn_attenuation_block", "none")
+        # Cross-block normalisation policy (#556): static selector, not a
+        # fittable param. "cigale_joint" (default) ties disc/torus/polar to
+        # the single agn_power reference; "independent" keeps legacy scaling.
+        self.agn_norm = kwargs.pop("agn_norm", "cigale_joint")
         # Eagerly validate block selectors so a typo raises *before* the
         # forward model is built. Mirrors how unknown agn_model values are
         # caught by resolve_agn_model().
@@ -1654,7 +1658,18 @@ class Parameters:
             modules.append(f"dust_emission={dust_em}")
         agn = getattr(self, "agn_model", None)
         if agn:
-            modules.append(f"agn={agn}")
+            if agn == "composable":
+                # Surface the composable block selectors + cross-block
+                # normalisation policy so the energy-balance choice is visible
+                # in the model description (not buried in source).
+                _blocks = [
+                    f"disc={getattr(self, 'agn_disc_block', 'none')}",
+                    f"torus={getattr(self, 'agn_torus_block', 'none')}",
+                ]
+                _norm = getattr(self, "agn_norm", "cigale_joint")
+                modules.append(f"agn=composable[{', '.join(_blocks)}, norm={_norm}]")
+            else:
+                modules.append(f"agn={agn}")
         if getattr(self, "apply_igm", False):
             modules.append("igm")
         if getattr(self, "dla", False):

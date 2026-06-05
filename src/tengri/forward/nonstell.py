@@ -201,6 +201,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         _agn_feii_block = getattr(model, "_agn_feii_block", "none")
         _agn_torus_block = getattr(model, "_agn_torus_block", "none")
         _agn_attenuation_block = getattr(model, "_agn_attenuation_block", "none")
+        _agn_norm = getattr(model, "_agn_norm", "cigale_joint")
 
     # --- Radio ---
     has_radio = model._uses_radio
@@ -449,6 +450,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 agn_feii_block=_agn_feii_block,
                 agn_torus_block=_agn_torus_block,
                 agn_attenuation_block=_agn_attenuation_block,
+                agn_norm=_agn_norm,
             )
             sed = sed + agn_sed
 
