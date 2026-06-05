@@ -762,7 +762,6 @@ def build_jit_engine(fitter, pos_dict):
         slices.append((idx, idx + arr.shape[0], shape))
         idx += arr.shape[0]
     d_total = idx
-    n_data = len(fitter.data)  # static shape — same for all galaxies with same obs
 
     def flatten(d):
         """Flatten parameter dict to 1D vector."""
@@ -921,13 +920,18 @@ def build_jit_engine(fitter, pos_dict):
     def draw_residuals(pos_f, subkeys, data_args):
         """Draw n linear residual samples (vmapped)."""
         sqrt_ni = data_args["sqrt_noise_inv"]
-        n_d = n_data  # static, captured at engine-build time
 
         def draw_one(subkey):
             """Draw one posterior residual sample."""
             k1, k2 = jax.random.split(subkey)
             eta_pr = jax.random.normal(k1, shape=(d_total,))
-            eta_lh = jax.random.normal(k2, shape=(n_d,))
+            # Whitened-data residual draw matches the data array's shape — 1-D
+            # ``(n_pix,)`` for a single galaxy, ``(N_gal, n_pix)`` for a
+            # hierarchical fit. Deriving it from ``sqrt_ni`` keeps the engine
+            # topology-agnostic (was ``shape=(len(fitter.data),)``, which
+            # collapsed a batched ``(N_gal, n_pix)`` data array to ``N_gal``
+            # and broke population spectroscopy — suchethac/tengri#711).
+            eta_lh = jax.random.normal(k2, shape=sqrt_ni.shape)
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
             jt = flatten(vjp_fn(sqrt_ni * eta_lh)[0])
             return cg_solve(
@@ -983,10 +987,10 @@ def build_jit_engine(fitter, pos_dict):
         in NIFTy. The metric sample is NOT CG-inverted.
         """
         sqrt_ni = data_args["sqrt_noise_inv"]
-        n_d = n_data  # static, captured at engine-build time
         k1, k2 = jax.random.split(subkey)
         eta_pr = jax.random.normal(k1, shape=(d_total,))
-        eta_lh = jax.random.normal(k2, shape=(n_d,))
+        # See ``draw_residuals``: shape follows the data array, not its len().
+        eta_lh = jax.random.normal(k2, shape=sqrt_ni.shape)
         _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
         jt = flatten(vjp_fn(sqrt_ni * eta_lh)[0])
         return jt + eta_pr

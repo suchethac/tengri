@@ -151,7 +151,31 @@ class ForwardModel:
         return self._inner_sed_for_delegation().compile_signature()
 
     def predict_spectrum(self, params, wave_obs=None, wave_chunk_size=None):
-        """Delegate to :meth:`SEDModel.predict_spectrum` on the inner SED."""
+        """Channel-specific prediction: ``spec_fnu`` extracted from :meth:`predict_observables`.
+
+        Symmetric with :meth:`predict_photometry`. Routing the default
+        (no explicit ``wave_obs``/``wave_chunk_size``) spectrum call through
+        :meth:`predict_observables` keeps the **standardized forward seam**:
+        single-galaxy fits return shape ``(n_pix,)`` and hierarchical fits
+        (:class:`PopulationSEDModel`) return ``(N_gal, n_pix)`` — the per-galaxy
+        batching and the spectrum projection are vmapped *below* this method
+        (see :func:`_predict_observation`). The previous delegation to the inner
+        *scalar* SED bypassed the population vmap, so stacked per-galaxy SFH
+        params collided with the age grid (suchethac/tengri#711, Gap 2).
+
+        An explicit ``wave_obs``/``wave_chunk_size`` (interactive plotting on a
+        custom grid) still delegates to the inner SED, which evaluates the SED
+        on the requested grid (suchethac/tengri#707).
+        """
+        if wave_obs is None and wave_chunk_size is None:
+            pred = self.predict_observables(params)
+            for key in ("spec_fnu", "spec_obs"):
+                if key in pred:
+                    return pred[key]
+            raise KeyError(
+                f"predict_spectrum: no spectroscopic channel in prediction dict "
+                f"(saw keys: {list(pred)})"
+            )
         return self._inner_sed_for_delegation().predict_spectrum(
             params, wave_obs=wave_obs, wave_chunk_size=wave_chunk_size
         )

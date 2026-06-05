@@ -29,9 +29,12 @@ publication-grade until the component you rely on has been cross-validated.**
   observation, either precompute opt-in (`approx=WavePrecomp()` or
   `approx=SpectrumPrecomp()`) builds **both** LUT families; the forward pass
   projects photometry and spectroscopy together inside one fused, cached JIT
-  kernel. Velocity dispersion / LSF are not applied on the per-pixel continuum
-  LUT (`SpectrumPrecomp`'s documented low-to-medium-R domain) — use
-  `approx=None` if you need the exact LSF-convolved spectrum.
+  kernel. For independent per-channel tuning, pass a composite tuple —
+  `approx=(WavePrecomp(n_z=200), SpectrumPrecomp())` — which accelerates both
+  channels with each LUT configured separately (suchethac/tengri#610). Velocity
+  dispersion / LSF are not applied on the per-pixel continuum LUT
+  (`SpectrumPrecomp`'s documented low-to-medium-R domain) — use `approx=None` if
+  you need the exact LSF-convolved spectrum.
 
 ## Inference backends
 

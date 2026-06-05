@@ -107,8 +107,20 @@ class PopulationSpecView:
         return self._template._distributions
 
     @property
+    def n_grid(self) -> int:
+        """Stochastic-SFH grid size — delegates to the template's public ``n_grid``.
+
+        Mirrors :attr:`tengri.parameters.parameters.Parameters.n_grid` so the
+        population spec satisfies the same Parameters-protocol surface the
+        scalar spec does. ``Fitter.compile_signature`` reads ``spec.n_grid``
+        for stochastic fits regardless of topology; without this the
+        hierarchical path raised ``AttributeError`` (suchethac/tengri#711, Gap 1).
+        """
+        return self._template.n_grid
+
+    @property
     def _n_grid(self):
-        """Stochastic-SFH grid size on the template (if stochastic)."""
+        """Private alias kept for back-compat — see the public :attr:`n_grid`."""
         return getattr(self._template, "_n_grid", None)
 
     def get_distribution(self, name: str):
