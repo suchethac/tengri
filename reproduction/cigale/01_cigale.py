@@ -1258,8 +1258,9 @@ save_fig("cigale_08_nebular_cue_vs_cloudy.png")
 # `skirtor2016` defaults — `agn_torus_frac=0.5` (covering factor),
 # `agn_polar_ebv=0.03` (Casey-2012 polar dust on, T=100 K, β=1.6) — so
 # the disc + torus + polar-dust greybody is engaged automatically with
-# no per-fit overrides. Net agreement vs CIGALE: UV–NIR within ~20 %,
-# FIR tail within ~30 %.
+# no per-fit overrides. Net agreement vs CIGALE: UV–NIR within ~1 %,
+# MIR/FIR within ~6 % under the default `norm='cigale_joint'` energy
+# balance (see "Energy-balance normalisation" below, #556).
 #
 # **Alternative.** For users who want a differentiable disc (M_BH, ṁ,
 # spin), the composable AGN still accepts `disc={"type": "multicolor",
@@ -1279,22 +1280,39 @@ save_fig("cigale_08_nebular_cue_vs_cloudy.png")
 # composable; set `Fixed(0.0)` to disable) — lifts the FIR tail
 # (~100 µm) by a factor of a few.
 #
-# **Remaining torus residual (#556).** At the §9 fiducial the AGN-only
-# SED runs ~12–15 % high in the MIR/FIR (MIR 1.12, FIR 1.15;
-# `consistency_audit.py`). Decomposing `sed_agn` into the SKIRTOR
-# clumpy-torus dust vs the Casey-2012 polar-dust greybody (build with
-# `disc={'type':'none'}` and toggle `agn_polar_ebv`) locates the cause:
-# tengri's SKIRTOR `dust_emission` template **falls off steeply past
-# ~30 µm** and carries little cold-dust FIR (it supplies only ~6 % of the
-# flux at 100 µm, ~1.5 % at 300 µm), so the polar-dust greybody
-# *dominates* the FIR (94–98 %) and over-compensates by ~15 %. The disc
-# itself is bit-exact — `disc.schartmann2005` reproduces CIGALE
-# `skirtor2016 disk_type=1` to 1e-16 — so this is purely a torus-dust /
-# polar-dust normalisation issue, **not** a disc-type or disc-double-count
-# error: `torus.skirtor` already interpolates the v3 *dust-only* grid
-# (`_grid_key = 'dust'`). Closing the gap means reconciling the SKIRTOR
-# `dust_emission` FIR tail against CIGALE's SKIRTOR dust template at grid
-# level (tracked in #556); it is not a notebook tweak.
+# **Energy-balance normalisation (#556, closed).** Earlier this panel ran
+# ~12–15 % high in the MIR/FIR (MIR 1.12, FIR 1.15). The cause was *not* a
+# template-shape problem but a **two-reference energy-balance bug**:
+# tengri normalised the torus and polar dust against the absorbed-energy
+# `agn_power = L_abs × frac/(1-frac)`, but normalised the disc
+# *independently* off `agn_log_lbol` — so ~16 % of the disc energy was
+# never conserved across the disc→dust boundary. CIGALE instead ties
+# disc, torus, **and** polar dust to one `agn_power` reference via the
+# fixed SKIRTOR template ratios (`skirtor2016.py`, `norm = 1/∫dust`).
+#
+# tengri now does the same under the default `norm='cigale_joint'`
+# policy. Four mechanisms compose: (1) the disc is reddened by the Pei-SMC
+# extinction `ext_fac` for Type-1 sightlines; (2) the disc is tied to
+# `agn_power × R` where `R = η(i)·∫disc/∫dust` is the SKIRTOR
+# disc/dust bolometric ratio and `η(i) = cos i (1+2cos i)/3` is the
+# Stalevski+2016 anisotropy factor (η = 0.789 at i = 30°); (3) `R` is
+# evaluated **node-exact** on the native SKIRTOR grid via PCHIP (the
+# triweight smoother distorts the integral ratio ~10 %), with the disc
+# inclination shape reweighted to the chosen `cos_inc`; (4) the polar
+# greybody's absorbed-energy budget `l_ext` is tied to the face-on
+# un-reddened ratio `R_faceon = ∫disc(i=0)/∫dust`. With all four engaged
+# the stellar+AGN SED lands at {UV: 0.99, opt: 1.00, NIR: 0.99,
+# 30 µm: 0.96, 100 µm: 0.94} vs CIGALE (`consistency_audit.py`) — within
+# ~6 % end-to-end, at the template / BC03→DSPS SSP-conversion precision
+# floor (cf. ~12–15 % before the fix).
+#
+# **The policy is switchable.** `agn={'type':'composable', …,
+# 'norm':'cigale_joint'}` (default) is the CIGALE-faithful path above;
+# `'norm':'independent'` restores the legacy two-reference scaling
+# (~0.80 / 0.79 / 1.06 / 1.15) for users who want the disc decoupled
+# from the absorbed-energy budget. The choice is surfaced in
+# `model.spec.summary()` (the `agn=composable[…, norm=…]` line) and in
+# `tengri.describe_agn_model('composable')`.
 
 # %%
 _sfh_args_d = (
