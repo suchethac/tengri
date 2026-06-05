@@ -154,6 +154,10 @@ def test_combined_nlr_blr_lines_blocks_registered_and_mapped():
 
     assert "nlr_blr" in AGN_BLOCKS["lines"]
     assert "nlr_blr_synthesizer" in AGN_BLOCKS["lines"]
+    # The /spectra/nebular reproduction blocks (issue #694) are registered too.
+    assert "nlr_synthesizer_spectra" in AGN_BLOCKS["lines"]
+    assert "blr_synthesizer_spectra" in AGN_BLOCKS["lines"]
+    assert "nlr_blr_synthesizer_spectra" in AGN_BLOCKS["lines"]
     assert (
         AGN_BLOCK_CONSUMES[("lines", "nlr_blr")]
         == AGN_BLOCK_CONSUMES[("lines", "nlr")] | AGN_BLOCK_CONSUMES[("lines", "blr")]
@@ -162,6 +166,11 @@ def test_combined_nlr_blr_lines_blocks_registered_and_mapped():
         AGN_BLOCK_CONSUMES[("lines", "nlr_blr_synthesizer")]
         == AGN_BLOCK_CONSUMES[("lines", "nlr_synthesizer")]
         | AGN_BLOCK_CONSUMES[("lines", "blr_synthesizer")]
+    )
+    assert (
+        AGN_BLOCK_CONSUMES[("lines", "nlr_blr_synthesizer_spectra")]
+        == AGN_BLOCK_CONSUMES[("lines", "nlr_synthesizer_spectra")]
+        | AGN_BLOCK_CONSUMES[("lines", "blr_synthesizer_spectra")]
     )
     cfg = {
         "agn_model": "composable",
