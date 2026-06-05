@@ -60,6 +60,7 @@ from tengri.components.agn.blocks.masking import (
     sigmoid_visibility_mask,
     split_lines_result,
 )
+from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.blocks.torus_screen import (
     TORUS_SCREEN_PARAMS,
     torus_screen_transmission,
@@ -363,6 +364,24 @@ agn_attenuation_block : str
         templates=grahsp_templates,
         **params,
     )
+
+    # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
+    # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
+    # reddened by the polar dust; the absorbed energy re-emerges as the
+    # polar greybody added by the SKIRTOR torus block from the same
+    # ``l_ext``. Without this the disc keeps its full UV *and* the polar
+    # BB re-emits the "absorbed" power, double-counting the energy and
+    # leaving the disc UV ~40% too bright vs CIGALE (#556). Uses the same
+    # Pei-1992 SMC curve + R_V + ``agn_polar_ebv`` as the torus block's
+    # ``l_ext`` computation, so disc loss = polar gain. Gated on
+    # ``agn_polar_ebv > 0`` → models without polar dust are untouched.
+    _polar_ebv = jnp.asarray(params.get("agn_polar_ebv", 0.0))
+    _cos_inc = jnp.asarray(params.get("agn_cos_inc", 0.86602540378443864))
+    _oa_deg = jnp.asarray(params.get("agn_oa_skirtor", params.get("agn_polar_oa", 40.0)))
+    _is_type1 = _cos_inc >= jnp.sin(jnp.deg2rad(_oa_deg))
+    _disc_ext = jnp.exp(-0.921 * _polar_ebv * _RV_SMC * smc_extinction_curve(wave))
+    _disc_ext = jnp.where(_is_type1 & (_polar_ebv > 0.0), _disc_ext, 1.0)
+    L_lambda_disc = L_lambda_disc * _disc_ext
 
     # Compute lambda*L_lambda(5100Å) for downstream block normalisations.
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
