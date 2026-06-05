@@ -848,6 +848,16 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     """
     dust_type = dust_dict.get("type", "two_component")
 
+    # Lyman-limit clip is wired only through the two-component screen. Flag any
+    # other type rather than silently dropping the request (single-component,
+    # WG00, and SEDModelComponent ports do not route through it yet).
+    if dust_dict.get("lyman_cutoff") and dust_type != "two_component":
+        raise ValueError(
+            f"dust 'lyman_cutoff' is only supported for type='two_component' "
+            f"(got type={dust_type!r}). Use a two-component dust block, or drop "
+            f"'lyman_cutoff'."
+        )
+
     # Check if this is a SEDModelComponent type (consult _REGISTRY)
     from tengri.components.sed_model_component import _REGISTRY
 
@@ -927,6 +937,11 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                 overrides.setdefault(comp, {})[law_kw] = float(dust_dict[key])
     if overrides:
         result["dust_law_overrides"] = overrides
+
+    # Lyman-limit clip (912 Å). Boolean in the grammar; stored as the cutoff
+    # wavelength so the forward model and compile_signature carry a single float.
+    if dust_dict.get("lyman_cutoff"):
+        result["dust_lyman_cutoff_aa"] = 912.0
 
     # Extract dust emission sub-block
     if "emission" in dust_dict:
@@ -1118,6 +1133,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "Rv_bc",
             "Rv_diff",
             "Rv_neb",
+            # Lyman-limit clip: zero the attenuation curve below 912 Å (CIGALE
+            # parity). Two-component only; routed to dust_lyman_cutoff_aa.
+            "lyman_cutoff",
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
@@ -2048,6 +2066,9 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
                 short = _law_kw_to_short.get(law_kw)
                 if short is not None:
                     group_output[f"{short}_{comp}"] = value
+        # Round-trip the Lyman-limit clip back to its boolean grammar form.
+        if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
+            group_output["lyman_cutoff"] = True
     elif group_name == "stellar":
         # Emit met_mode whenever it's non-default (default = 'delta').
         # Always-emit would force a stellar={} entry on every round-trip, which

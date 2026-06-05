@@ -1748,6 +1748,44 @@ def resolve_bc_diff_law_params(
     return bc, diff
 
 
+def apply_lyman_cutoff(
+    k: jnp.ndarray, wavelength: jnp.ndarray, cutoff_aa: float = 0.0
+) -> jnp.ndarray:
+    r"""Zero an attenuation curve below a wavelength cutoff (Lyman-limit clip).
+
+    Sets :math:`k(\lambda) = 0` for :math:`\lambda < \lambda_{\rm cut}`, leaving
+    the curve untouched elsewhere. The standard choice is the hydrogen Lyman
+    limit (912 Å): far-UV photons are absorbed by H ionisation before reaching
+    dust grains, so CIGALE's ``dustatt_modified_starburst`` zeros its curve
+    there (``a_vs_ebv`` clips at 91.2 nm). tengri's ``calzetti`` / ``leitherer02``
+    polynomials instead *extrapolate* through the FUV by default; this helper
+    is the opt-in that reproduces the CIGALE behaviour.
+
+    Parameters
+    ----------
+    k : ndarray, shape (n_wave,)
+        Attenuation curve :math:`k(\lambda) = A_\lambda / A_V`. [dimensionless]
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    cutoff_aa : float, optional
+        Cutoff wavelength. [Å] Default ``0.0`` -> no-op (``wavelength >= 0`` is
+        always true), so passing ``0.0`` disables the clip without a Python
+        branch.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Curve with values below ``cutoff_aa`` set to zero.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — a single ``jnp.where``; ``cutoff_aa`` is a static
+    Python float (never a traced parameter), so no ``TracerBoolConversionError``
+    risk. **Gradient-safe**: yes — ``jnp.where`` on a static mask.
+    """
+    return jnp.where(wavelength >= cutoff_aa, k, 0.0)
+
+
 def two_component_dust(
     wavelength: jnp.ndarray,
     age_grid: jnp.ndarray,
@@ -1760,6 +1798,7 @@ def two_component_dust(
     transition_width: float = 0.3,
     bc_params: dict | None = None,
     diff_params: dict | None = None,
+    lyman_cutoff_aa: float = 0.0,
     **law_params,
 ) -> jnp.ndarray:
     r"""Two-component dust attenuation following Charlot & Fall (2000) with smooth age transition.
@@ -1800,6 +1839,11 @@ def two_component_dust(
     diff_params : dict, optional
         Per-component overrides for the **diffuse ISM** law. Same merge
         semantics as ``bc_params``. Default ``None`` → shared parameters.
+    lyman_cutoff_aa : float, optional
+        Zero both attenuation curves below this wavelength. [Å] Default ``0.0``
+        -> disabled (the polynomial extrapolates through the FUV). Set to
+        ``912.0`` to match CIGALE's Lyman-limit clip (see
+        :func:`apply_lyman_cutoff`).
     **law_params
         Shared keyword arguments passed to both attenuation curve functions
         (e.g., ``n_slope``, ``dust_bump_strength``, ``dust_delta``,
@@ -1872,6 +1916,11 @@ def two_component_dust(
     diff_kw = {**law_params, **(diff_params or {})}
     k_bc = resolve_dust_law(law_bc)(wavelength, **bc_kw)
     k_diff = resolve_dust_law(law_diff)(wavelength, **diff_kw)
+    # Optional Lyman-limit clip: zero the curve below ``lyman_cutoff_aa`` (CIGALE
+    # parity). ``cutoff_aa=0.0`` is a no-op, so the default leaves the FUV
+    # extrapolation in place.
+    k_bc = apply_lyman_cutoff(k_bc, wavelength, lyman_cutoff_aa)
+    k_diff = apply_lyman_cutoff(k_diff, wavelength, lyman_cutoff_aa)
 
     log_age = jnp.log10(jnp.maximum(age_grid, 1.0))
     log_t_birth = jnp.log10(t_birth)
