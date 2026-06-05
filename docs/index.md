@@ -218,4 +218,5 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :hidden:
 
    spine/experimental/stochastic_sfh_recovery
+   spine/experimental/multimodel_bma_candels
 ```
