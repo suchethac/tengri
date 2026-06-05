@@ -167,6 +167,7 @@ def build_components(
     # Dust two-component
     dust_law_bc: str = "power_law",
     dust_law_diff: str = "power_law",
+    dust_law_neb: str | None = None,
     dust_law_overrides: dict | None = None,
     dust_emission_model: str = "modified_blackbody",
     use_dust: bool = True,
@@ -233,6 +234,9 @@ def build_components(
         ``None`` to omit AGN.
     dust_law_bc, dust_law_diff : str
         Birth-cloud / diffuse-ISM attenuation-law registry keys.
+    dust_law_neb : str or None
+        Nebular birth-cloud attenuation-law key. ``None`` inherits
+        ``dust_law_bc`` (nebular reddened like the youngest stars).
     dust_emission_model : str
         IR emission template registry key.
     use_dust : bool
@@ -311,8 +315,10 @@ def build_components(
                     config=DustSEDComponentConfig(
                         law_bc=dust_law_bc,
                         law_diff=dust_law_diff,
+                        law_neb=dust_law_neb,
                         bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
                         diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
+                        neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                         emission_model=dust_emission_model,
                     )
                 )

@@ -3,401 +3,437 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "6ed993ffbf96d6d487f8279ffd0216834d874eb96b6c14c26f0f86a17e92ab2a",
+    "digest": "9f48673e89899cc44abe0d3e918506948290740f259c0ff37ae902646d9ba5e5",
     "rows": [
       [
+        "DustSEDComponent",
+        "optional_inputs",
+        "sed_nebular",
+        "erg/s/Hz"
+      ],
+      [
         "IGMSEDComponent",
-        "publishes",
+        "outputs",
         "igm_transmission",
         ""
       ],
       [
         "NebularSEDComponent",
-        "publishes",
+        "outputs",
         "line_lums",
         "erg/s"
       ],
       [
         "NebularSEDComponent",
-        "publishes",
+        "outputs",
         "line_waves",
         "Angstrom"
       ],
       [
         "NebularSEDComponent",
-        "publishes",
+        "outputs",
         "sed_nebular",
         "erg/s/Hz"
       ],
       [
         "NebularSEDComponent",
-        "publishes",
+        "outputs",
         "sed_shock",
         "erg/s/Hz"
       ],
       [
         "RadioSEDComponent",
-        "publishes",
-        "sed_radio",
-        "erg/s/Hz"
-      ],
-      [
-        "RadioSEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "L_agn_bol",
         "erg/s"
       ],
       [
         "RadioSEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "L_ir",
         "erg/s"
       ],
       [
         "RadioSEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "log_mstar",
         "dex"
       ],
       [
+        "RadioSEDComponent",
+        "outputs",
+        "sed_radio",
+        "erg/s/Hz"
+      ],
+      [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "L_age",
         "erg/s"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "age_weights",
         "Msun"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_metallicity_history",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_mstar",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_mstar_formed",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "nion",
         "photons/s"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfh_grid_lbt_yr",
         "yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_100myr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_10myr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_history",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "ssp_ages_yr",
         "yr"
       ],
       [
-        "XRaySEDComponent",
-        "publishes",
-        "sed_xray",
+        "StellarSEDComponent",
+        "outputs",
+        "stellar_phot_lnu_precomp",
         "erg/s/Hz"
       ],
       [
         "XRaySEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "L_agn_bol",
         "erg/s"
       ],
       [
         "XRaySEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "log_mstar",
         "dex"
       ],
       [
         "XRaySEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "sfr",
         "Msun/yr"
+      ],
+      [
+        "XRaySEDComponent",
+        "outputs",
+        "sed_xray",
+        "erg/s/Hz"
       ]
     ]
   },
   "contract_graph::minimal_phot": {
-    "digest": "9992085ce8d5974c0596f8360e1d8601759231fbd69682747032801db35ede80",
+    "digest": "ccda2050e6c71ea5cea7c2d300b6addcfc2e891c60556ff1ff909737bb060e12",
     "rows": [
       [
-        "NebularSEDComponent",
-        "publishes",
-        "line_lums",
-        "erg/s"
-      ],
-      [
-        "NebularSEDComponent",
-        "publishes",
-        "line_waves",
-        "Angstrom"
-      ],
-      [
-        "NebularSEDComponent",
-        "publishes",
+        "DustSEDComponent",
+        "optional_inputs",
         "sed_nebular",
         "erg/s/Hz"
       ],
       [
         "NebularSEDComponent",
-        "publishes",
+        "outputs",
+        "line_lums",
+        "erg/s"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "line_waves",
+        "Angstrom"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "sed_nebular",
+        "erg/s/Hz"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
         "sed_shock",
         "erg/s/Hz"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "L_age",
         "erg/s"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "age_weights",
         "Msun"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_metallicity_history",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_mstar",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_mstar_formed",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "nion",
         "photons/s"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfh_grid_lbt_yr",
         "yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_100myr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_10myr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_history",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "ssp_ages_yr",
         "yr"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
+        "stellar_phot_lnu_precomp",
+        "erg/s/Hz"
       ]
     ]
   },
   "contract_graph::single_component_dust": {
-    "digest": "e30a93fb0297d050369144d8bd79499695fc13f757b37c727fffc7c40e99fd18",
+    "digest": "0e9ccc182b181663a258ea48abf2f68d45b17cd0d706f59b699faf741d3dc690",
     "rows": [
       [
-        "NebularSEDComponent",
-        "publishes",
-        "line_lums",
-        "erg/s"
-      ],
-      [
-        "NebularSEDComponent",
-        "publishes",
-        "line_waves",
-        "Angstrom"
-      ],
-      [
-        "NebularSEDComponent",
-        "publishes",
+        "DustSEDComponent",
+        "optional_inputs",
         "sed_nebular",
         "erg/s/Hz"
       ],
       [
         "NebularSEDComponent",
-        "publishes",
+        "outputs",
+        "line_lums",
+        "erg/s"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "line_waves",
+        "Angstrom"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "sed_nebular",
+        "erg/s/Hz"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
         "sed_shock",
         "erg/s/Hz"
       ],
       [
         "RadioSEDComponent",
-        "publishes",
-        "sed_radio",
-        "erg/s/Hz"
-      ],
-      [
-        "RadioSEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "L_agn_bol",
         "erg/s"
       ],
       [
         "RadioSEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "L_ir",
         "erg/s"
       ],
       [
         "RadioSEDComponent",
-        "requires_optional",
+        "optional_inputs",
         "log_mstar",
         "dex"
       ],
       [
+        "RadioSEDComponent",
+        "outputs",
+        "sed_radio",
+        "erg/s/Hz"
+      ],
+      [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "L_age",
         "erg/s"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "age_weights",
         "Msun"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_metallicity_history",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_mstar",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "log_mstar_formed",
         "dex"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "nion",
         "photons/s"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfh_grid_lbt_yr",
         "yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_100myr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_10myr",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "sfr_history",
         "Msun/yr"
       ],
       [
         "StellarSEDComponent",
-        "publishes",
+        "outputs",
         "ssp_ages_yr",
         "yr"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
+        "stellar_phot_lnu_precomp",
+        "erg/s/Hz"
       ]
     ]
   },

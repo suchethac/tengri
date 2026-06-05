@@ -193,6 +193,12 @@ class Parameters:
     dust_law_diff : str
         Attenuation curve for diffuse ISM.  Default: same as ``dust_law_bc``.
         Can be different for per-component control.
+    dust_law_neb : str or None
+        Attenuation curve for the nebular birth cloud.  Default ``None`` —
+        inherit ``dust_law_bc`` so the nebular continuum is reddened exactly
+        like the youngest stars (bagpipes/FSPS/CIGALE).  Set it to give
+        HII-region emission its own birth-cloud curve while still sharing the
+        diffuse ISM screen (``dust_law_diff``) with the stars.
 
     Dust Emission Settings
     ~~~~~~~~~~~~~~~~~~~~~~
@@ -761,9 +767,17 @@ class Parameters:
                 self.dust_law_bc = law_bc_explicit
                 self.dust_law_diff = law_diff_explicit
 
-        # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...}.
-        # Empty -> both components share the global dust_slope / dust_bump_strength
-        # / dust_delta / dust_Rv. Set by the builder from slope_bc / delta_diff /…
+        # Nebular birth-cloud law. None -> inherit the stellar birth cloud
+        # (``dust_law_bc``), so the nebular continuum is reddened exactly like
+        # the youngest stars (default). Set it to give HII-region emission its
+        # own birth-cloud curve while still sharing the diffuse ISM screen.
+        self.dust_law_neb = kwargs.pop("dust_law_neb", None)
+
+        # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
+        # 'neb': {...}}. Empty -> both stellar components share the global
+        # dust_slope / dust_bump_strength / dust_delta / dust_Rv, and the
+        # nebular birth cloud inherits the stellar birth-cloud params. Set by
+        # the builder from slope_bc / delta_diff / slope_neb /…
         self.dust_law_overrides = kwargs.pop("dust_law_overrides", {}) or {}
 
         self.dust_emission = kwargs.pop("dust_emission", None)

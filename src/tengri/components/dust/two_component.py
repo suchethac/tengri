@@ -79,6 +79,15 @@ class DustSEDComponentConfig(SEDComponentConfig):
     law_diff : str
         Attenuation-law registry key for the diffuse ISM (old star)
         component. Default ``"power_law"``.
+    law_neb : str or None
+        Attenuation-law registry key for the **nebular** birth-cloud
+        screen. ``None`` (default) inherits ``law_bc`` — the nebular
+        continuum is then reddened by exactly the same young-limit screen
+        as the youngest stars (Charlot & Fall 2000; bagpipes/FSPS/CIGALE
+        behaviour). Set it to give HII-region emission a *different*
+        birth-cloud law from the stars while still sharing the diffuse ISM
+        screen (``law_diff``). See ``neb_law_overrides`` for the matching
+        per-parameter knob.
     emission_model : str or None
         IR emission template registry key. One of
         ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
@@ -97,6 +106,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     name: str = "dust"
     law_bc: str = "power_law"
     law_diff: str = "power_law"
+    law_neb: str | None = None
     emission_model: str | None = "modified_blackbody"
     t_birth_yr: float = 1e7
     transition_width_dex: float = 0.3
@@ -107,6 +117,13 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: e.g. ``bc_law_overrides=(("n_slope", -1.0),)`` for the FSPS birth cloud.
     bc_law_overrides: tuple[tuple[str, float], ...] = ()
     diff_law_overrides: tuple[tuple[str, float], ...] = ()
+    #: Per-parameter overrides for the **nebular** birth-cloud screen, same
+    #: ``(law_kwarg, value)`` tuple form. Empty -> the nebular birth cloud
+    #: inherits the *stellar* birth-cloud parameters (default = identical to the
+    #: youngest stars). Layered on top of the resolved stellar ``bc`` params, so
+    #: an override changes only the nebular screen. e.g.
+    #: ``neb_law_overrides=(("dust_delta", 0.2),)``.
+    neb_law_overrides: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -438,14 +455,21 @@ class DustSEDComponent:
 
         _sed_neb = state.derived.get("sed_nebular")
         sed_neb = jnp.zeros_like(wave) if _sed_neb is None else jnp.asarray(_sed_neb)
-        _neb_law_kw = dict(
-            n_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
-            dust_delta=jnp.asarray(params.get("dust_delta", 0.0)),
-            dust_Rv=jnp.asarray(params.get("dust_Rv", 3.1)),
-        )
-        k_bc_neb = _resolve_law(self.config.law_bc)(wave, **_neb_law_kw)
-        k_diff_neb = _resolve_law(self.config.law_diff)(wave, **_neb_law_kw)
+        # Nebular birth cloud: its own law/params, defaulting to the *stellar*
+        # birth cloud (``law_bc`` + the resolved ``bc_law_params``) so the
+        # default reddens the continuum exactly like the youngest stars. Setting
+        # ``law_neb`` / ``neb_law_overrides`` decouples only the nebular
+        # birth-cloud screen; the diffuse ISM screen (``law_diff`` +
+        # ``diff_law_params``) is always shared with the stars — HII regions sit
+        # in their own clouds behind the same foreground ISM.
+        neb_law = self.config.law_neb or self.config.law_bc
+        _neb_overrides = dict(self.config.neb_law_overrides)
+        neb_bc_params = {
+            k: jnp.asarray(_neb_overrides.get(k, v)) for k, v in bc_law_params.items()
+        }
+        diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
+        k_bc_neb = _resolve_law(neb_law)(wave, **neb_bc_params)
+        k_diff_neb = _resolve_law(self.config.law_diff)(wave, **diff_law_kw)
         tau_neb = (
             jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
             + jnp.asarray(params["dust_tau_diff"]) * k_diff_neb

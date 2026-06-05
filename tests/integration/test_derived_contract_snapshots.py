@@ -77,6 +77,13 @@ _CONFIGS: dict[str, dict] = {
         "sfh_model": "tsnorm",
         "nebular_backend": "baked_in",
         "use_dust": True,
+        # NOTE: "one_component" is not a recognised dust_model — it silently
+        # falls through to the two-component path. The single-screen
+        # DustAttenuationSEDComponent (now declaring optional_inputs(
+        # 'sed_nebular')) is exercised directly by
+        # tests/contract/test_single_screen_attenuates_nebular.py. Fixing this
+        # to "single_component" also drifts the Part-2 SED baseline, which needs
+        # SSP data on disk to re-generate, so it is left for a follow-up.
         "dust_model": "one_component",
         "use_radio": True,
         "use_xray": False,
@@ -100,14 +107,25 @@ def _contract_graph(components) -> list[tuple[str, str, str, str]]:
     """Canonicalised tuple list of every declared cross-component edge.
 
     Each entry is ``(component_class, role, key_name, units)`` where
-    ``role`` is one of ``"publishes"``, ``"requires"``,
-    ``"requires_optional"``. Sorted for deterministic hashing.
+    ``role`` is one of ``"outputs"``, ``"inputs"``, ``"optional_inputs"``.
+    Sorted for deterministic hashing.
+
+    The role names were renamed from ``publishes`` / ``requires`` /
+    ``requires_optional`` to ``outputs`` / ``inputs`` / ``optional_inputs``
+    in 2026-05-18 (see ``tengri.protocols.component``); the old names are
+    accepted as a fallback so a component that has not yet migrated still
+    contributes its edges instead of silently dropping out of the graph.
     """
+    _role_aliases = {
+        "outputs": "publishes",
+        "inputs": "requires",
+        "optional_inputs": "requires_optional",
+    }
     rows: list[tuple[str, str, str, str]] = []
     for c in components:
         cls = type(c).__name__
-        for role in ("publishes", "requires", "requires_optional"):
-            fn = getattr(c, role, None)
+        for role, legacy in _role_aliases.items():
+            fn = getattr(c, role, None) or getattr(c, legacy, None)
             if not callable(fn):
                 continue
             for k in fn():
