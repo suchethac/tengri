@@ -187,9 +187,11 @@ class SpectrumPrecomp:
 
     Examples
     --------
-    >>> from tengri import SEDModel, SpectrumPrecomp
+    >>> from tengri import SEDModel, SpectrumPrecomp, WavePrecomp
     >>> SEDModel(..., approx=SpectrumPrecomp())  # spectrum LUT path
     >>> SEDModel(..., approx=SpectrumPrecomp(n_z=200))  # finer free-z table
+    >>> # Joint fit — accelerate both channels with independent LUT configs:
+    >>> SEDModel(..., approx=(WavePrecomp(n_z=200), SpectrumPrecomp()))
     """
 
     n_z: int = 100
@@ -408,6 +410,57 @@ class SEDModel:
             return None
         return float(jnp.max(jnp.asarray(resolution)))
 
+    def _resolve_wave_precomp(self, cfg) -> None:
+        """Activate the photometry SSP × filter LUT for one ``WavePrecomp`` config.
+
+        The WavePrecomp LUT bakes the filter-convolution convention at build time
+        (ADR-0017). Only the photon-counting Bessell weight is threaded through the
+        component preintegration so far; refuse the energy convention rather than
+        silently producing Bessell fluxes. Shared by the single-object and the
+        composite ``(WavePrecomp, SpectrumPrecomp)`` paths (#610).
+        """
+        _phot = getattr(self.observation, "photometry", None)
+        _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
+        if _conv != FilterConvention.BESSELL:
+            raise NotImplementedError(
+                f"approx=WavePrecomp(...) currently supports only the photon-counting "
+                f"'bessell' convention, got convention={_conv!r}. Use the exact path "
+                f"(approx=None) for the energy/CIGALE convention."
+            )
+        self._approx["wave_precomp"] = True
+
+    def _resolve_spectrum_precomp(self, cfg, observation) -> None:
+        """Activate the per-pixel spectrum LUT for one ``SpectrumPrecomp`` config.
+
+        Valid for low-to-medium R, where the continuum is smooth across the pixel
+        kernel. At high R the kernel is narrower than the spectral features the
+        approximation assumes are flat, so fall back to the exact wave-grid path
+        (with a clear warning) rather than silently returning a biased spectrum.
+        Line-publishing nebular backends (Cue, CloudyGrid, …) are supported: their
+        discrete ``line_waves``/``line_lums`` are grid-independent and survive the
+        LUT path. Sets :attr:`_approx_config_spec` to the config (or ``None`` on the
+        R-fallback). Shared by the single-object and composite paths (#610).
+        """
+        r_max = self._max_spectral_resolution(observation)
+        if r_max is not None and r_max > self._SPECTRUM_PRECOMP_R_MAX:
+            import warnings
+
+            warnings.warn(
+                f"approx=SpectrumPrecomp() requested but the spectrum "
+                f"resolution R≈{r_max:g} exceeds the SpectrumPrecomp limit "
+                f"of {self._SPECTRUM_PRECOMP_R_MAX}. The per-pixel "
+                f"effective-wavelength LUT is inaccurate near spectral "
+                f"features at this resolution, so the model falls back to "
+                f"the exact wave-grid path (no speed-up). Use approx=None "
+                f"to silence this, or down-bin the spectrum.",
+                stacklevel=3,
+            )
+            self._approx["spectrum_precomp"] = False
+            self._approx_config_spec = None
+        else:
+            self._approx["spectrum_precomp"] = True
+            self._approx_config_spec = cfg
+
     # ── Construction ──────────────────────────────────────────────────
 
     def __init__(
@@ -463,73 +516,46 @@ class SEDModel:
         #     ztable sampling; ``WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)``
         #     for custom grids.
         # Dict / bool / string forms (the pre-3d surface) are rejected.
+        # ``_approx_config`` is the primary z-grid/Taylor/catalog config (the
+        # WavePrecomp when present, else the SpectrumPrecomp); ``_approx_config_spec``
+        # holds the SpectrumPrecomp when a composite ``(WavePrecomp, SpectrumPrecomp)``
+        # tuple is passed so a joint fit can accelerate BOTH channels (#610).
+        self._approx_config: WavePrecomp | SpectrumPrecomp | None = None
+        self._approx_config_spec: SpectrumPrecomp | None = None
         if approx is None:
             self._approx = dict(self._DEFAULT_APPROX)
             self._approx["wave_precomp"] = False
             self._approx["ztable"] = False
-            self._approx_config: WavePrecomp | None = None
-        elif isinstance(approx, WavePrecomp):
-            # The WavePrecomp LUT bakes the filter-convolution convention at
-            # build time (ADR-0017). Only the photon-counting Bessell weight is
-            # threaded through the component preintegration so far; refuse the
-            # energy convention rather than silently producing Bessell fluxes.
-            _phot = getattr(self.observation, "photometry", None)
-            _conv = getattr(_phot, "convention", FilterConvention.BESSELL)
-            if _conv != FilterConvention.BESSELL:
-                raise NotImplementedError(
-                    f"approx=WavePrecomp(...) currently supports only the photon-counting "
-                    f"'bessell' convention, got convention={_conv!r}. Use the exact path "
-                    f"(approx=None) for the energy/CIGALE convention."
-                )
-            self._approx = dict(self._DEFAULT_APPROX)
-            self._approx["wave_precomp"] = True
-            self._approx_config = approx
-        elif isinstance(approx, SpectrumPrecomp):
-            # Phase 5: spectrum LUT path — the per-pixel effective-wavelength
-            # trick. Valid for low-to-medium R; the continuum is smooth across
-            # the pixel kernel. At high R the kernel is narrower than the
-            # spectral features the approximation assumes are flat, so fall
-            # back to the exact wave-grid path (with a clear warning) rather
-            # than silently returning a biased spectrum.
-            self._approx = dict(self._DEFAULT_APPROX)
-            self._approx_config = approx
-            r_max = self._max_spectral_resolution(observation)
-            if r_max is not None and r_max > self._SPECTRUM_PRECOMP_R_MAX:
-                import warnings
-
-                warnings.warn(
-                    f"approx=SpectrumPrecomp() requested but the spectrum "
-                    f"resolution R≈{r_max:g} exceeds the SpectrumPrecomp limit "
-                    f"of {self._SPECTRUM_PRECOMP_R_MAX}. The per-pixel "
-                    f"effective-wavelength LUT is inaccurate near spectral "
-                    f"features at this resolution, so the model falls back to "
-                    f"the exact wave-grid path (no speed-up). Use approx=None "
-                    f"to silence this, or down-bin the spectrum.",
-                    stacklevel=2,
-                )
-                self._approx["spectrum_precomp"] = False
-                self._approx_config = None
-            else:
-                # Line-publishing nebular backends (Cue, CloudyGrid, …) are
-                # supported: their discrete ``line_waves`` / ``line_lums`` are
-                # grid-independent and survive the LUT path (see
-                # ``SEDModelComponent._apply_spec_precomp``), so
-                # ``predict_line_fluxes``, line ratios, and ``pred.lines.*``
-                # work under SpectrumPrecomp. Emission-line *rendering into the
-                # continuous spectrum* follows the same eline handling as the
-                # exact path (continuum on the LUT, lines via the likelihood's
-                # eline treatment), so no continuum bias is introduced here.
-                self._approx["spectrum_precomp"] = True
         else:
-            raise TypeError(
-                f"approx={approx!r} is not a legal value. Legal forms: "
-                "None (default — exact wave-grid), "
-                "WavePrecomp() / WavePrecomp(n_z=..., z_min=..., z_max=...) "
-                "for the precomputed SSP × filter LUT path, or "
-                "SpectrumPrecomp() for the spectrum LUT path (Phase 5). "
-                "The pre-3d dict / bool / string forms (e.g. approx={'wave_precomp': True}, "
-                "approx=True, approx='wave_precomp') were removed."
-            )
+            # Accept a single config or a composite ``(WavePrecomp, SpectrumPrecomp)``
+            # sequence (order-independent, at most one of each).
+            configs = list(approx) if isinstance(approx, (tuple, list)) else [approx]
+            wave_cfgs = [c for c in configs if isinstance(c, WavePrecomp)]
+            spec_cfgs = [c for c in configs if isinstance(c, SpectrumPrecomp)]
+            unknown = [c for c in configs if not isinstance(c, (WavePrecomp, SpectrumPrecomp))]
+            if unknown or len(wave_cfgs) > 1 or len(spec_cfgs) > 1 or not configs:
+                raise TypeError(
+                    f"approx={approx!r} is not a legal value. Legal forms: "
+                    "None (default — exact wave-grid), "
+                    "WavePrecomp() for the SSP × filter LUT path, "
+                    "SpectrumPrecomp() for the spectrum LUT path, or a composite "
+                    "(WavePrecomp(...), SpectrumPrecomp()) tuple for a joint fit "
+                    "(at most one of each). The pre-3d dict / bool / string forms "
+                    "(e.g. approx={'wave_precomp': True}, approx=True, "
+                    "approx='wave_precomp') were removed."
+                )
+            self._approx = dict(self._DEFAULT_APPROX)
+            if wave_cfgs:
+                self._resolve_wave_precomp(wave_cfgs[0])
+            if spec_cfgs:
+                self._resolve_spectrum_precomp(spec_cfgs[0], observation)
+            # Primary config: WavePrecomp drives the shared z-table / Taylor /
+            # catalog knobs when present (back-compat); else the SpectrumPrecomp
+            # (but only when it actually activated — an R-fallback leaves it None).
+            if wave_cfgs:
+                self._approx_config = wave_cfgs[0]
+            else:
+                self._approx_config = self._approx_config_spec
 
         # Thread the Taylor-correction toggle (default True) from the config into
         # the approx dict, so the stellar precompute knows whether to build the Ψ
@@ -2487,13 +2513,24 @@ class SEDModel:
         approx_resolved_flags = tuple(
             sorted((k, bool(v)) for k, v in (self._approx or {}).items() if isinstance(v, bool))
         )
-        if self._approx_config is not None:
-            cfg = self._approx_config
-            approx_resolved = (
-                approx_resolved_flags,
+
+        def _cfg_key(cfg):
+            if cfg is None:
+                return None
+            return (
                 ("n_z", int(cfg.n_z)),
                 ("z_min", None if cfg.z_min is None else round(float(cfg.z_min), 12)),
                 ("z_max", None if cfg.z_max is None else round(float(cfg.z_max), 12)),
+            )
+
+        if self._approx_config is not None or self._approx_config_spec is not None:
+            # Key BOTH configs so a composite ``(WavePrecomp, SpectrumPrecomp)``
+            # model (#610) gets a distinct slot from either single-LUT model and
+            # from a composite with different ztable sampling.
+            approx_resolved = (
+                approx_resolved_flags,
+                ("primary", _cfg_key(self._approx_config)),
+                ("spec", _cfg_key(self._approx_config_spec)),
             )
         else:
             approx_resolved = approx_resolved_flags
@@ -2748,35 +2785,93 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
-        # wave_obs resolution (the legacy ``self._precomputed.spectroscopy``
-        # tier was dead — ``_build_precomputed_data`` never populates it — and
-        # was removed; #620 retires ``PrecomputedData`` entirely).
-        if wave_obs is None and hasattr(self, "_wave_obs"):
-            wave_obs = self._wave_obs
-        elif (
-            wave_obs is None
-            and self.observation is not None
+        # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
+        # independent of any configured spectroscopy channel or the cached
+        # ``predict_observables`` (which is photometry-only on a photometry
+        # model and previously raised ``'Observables' has no attribute
+        # 'spec_fnu'`` after a ``predict_photometry``/fit call). This makes the
+        # documented ``wave_obs`` argument do what it says — give me the model
+        # spectrum on this grid — on any model and in any call order
+        # (suchethac/tengri#707).
+        if wave_obs is not None:
+            return self._predict_spectrum_on_grid(params, jnp.asarray(wave_obs), wave_chunk_size)
+
+        # No explicit grid: a configured spectroscopy channel routes through the
+        # orchestrator — the JIT/grad/LUT-friendly cached path the Fitter relies
+        # on (honours the SpectrumPrecomp LUT, LSF and any calibration). This is
+        # the inference hot path and must stay on predict_observables.
+        if (
+            self.observation is not None
             and getattr(self.observation, "spectroscopy", None) is not None
             and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
         ):
-            # Tier fallback documented in the docstring above (#389):
-            # honour observation.spectroscopy.wave_obs so Fitter-driven
-            # spectroscopy fits don't need a manual `model._wave_obs` hack.
-            wave_obs = self.observation.spectroscopy.wave_obs
-        elif wave_obs is None:
-            raise ValueError(
-                "No wavelength grid. Pass wave_obs, "
-                "or attach an Observation with spectroscopy.wave_obs set."
+            del wave_obs, wave_chunk_size
+            return self.predict_observables_jit(params).spec_fnu
+
+        # No spectroscopy channel but a manually attached grid (``model._wave_obs``)
+        # — evaluate directly so photometry-only models with an ad-hoc grid work
+        # regardless of the predict_observables cache state (#707).
+        manual_grid = getattr(self, "_wave_obs", None)
+        if manual_grid is not None:
+            return self._predict_spectrum_on_grid(
+                params, jnp.asarray(manual_grid), wave_chunk_size
             )
+        raise ValueError(
+            "No wavelength grid. Pass wave_obs, "
+            "or attach an Observation with spectroscopy.wave_obs set."
+        )
 
-        # Use instance default if not overridden
-        if wave_chunk_size is None:
-            wave_chunk_size = self._wave_chunk_size
+    def _predict_spectrum_on_grid(self, params, wave_obs, wave_chunk_size=None):
+        """Evaluate the observed-frame model spectrum on an arbitrary grid.
 
-        # ``wave_obs`` / ``wave_chunk_size`` are honoured by the orchestrator
-        # path via the configured spectroscopy grid (Phase 6-prep, 2026-05-20).
-        del wave_obs, wave_chunk_size
-        return self.predict_observables_jit(params).spec_fnu
+        Self-contained projector that does **not** depend on the model having a
+        spectroscopy channel or on the ``predict_observables`` cache: it builds
+        the observed-frame SED (rest SED + IGM/DLA/MW via :meth:`predict_obs_sed`)
+        and resamples it onto ``wave_obs`` with the same kernel
+        (:func:`~tengri.observation.spectrum.compute_spectrum`) the configured
+        spectroscopy path uses. The instrument LSF is applied only when the
+        attached observation declares a spectroscopic resolution. Underpins the
+        ``wave_obs`` argument of :meth:`predict_spectrum` (suchethac/tengri#707).
+
+        Parameters
+        ----------
+        params : dict
+            Public-name parameter values.
+        wave_obs : array_like, shape (n_pix,)
+            Observed-frame wavelength grid [Angstrom].
+        wave_chunk_size : int, optional
+            Currently advisory on this direct path — the per-pixel projection is
+            cheap and LSF convolution couples pixels, so the grid is evaluated in
+            one pass. Chunking remains active on the configured-grid orchestrator
+            path.
+
+        Returns
+        -------
+        ndarray, shape (n_pix,)
+            Observed spectral flux density [erg/s/cm^2/Hz].
+        """
+        del wave_chunk_size  # see Parameters note
+        from tengri.cosmology import luminosity_distance
+        from tengri.observation.spectrum import apply_lsf, compute_spectrum
+
+        sed_obs = self.predict_obs_sed(params)
+        z = self._get_redshift(params)
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        wave_rest = sed_obs.wavelength / (1.0 + z)
+        flux = compute_spectrum(sed_obs.sed, wave_rest, wave_obs, z, dl_cm)
+
+        spectroscopy = (
+            getattr(self.observation, "spectroscopy", None) if self.observation else None
+        )
+        if spectroscopy is not None and getattr(spectroscopy, "resolution", None) is not None:
+            flux = apply_lsf(
+                flux,
+                wave_obs,
+                spectroscopy.resolution,
+                sigma_lib_kms=spectroscopy.sigma_lib_kms,
+                sigma_v_kms=params.get("sigma_v_kms", 0.0),
+            )
+        return flux
 
     def predict_magnitudes(self, params):
         """Compute observed AB magnitudes through all filters.

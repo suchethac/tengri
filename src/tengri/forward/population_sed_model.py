@@ -84,6 +84,42 @@ _DEFAULT_PRIORS: dict[str, tuple[float, float]] = {
 }
 
 
+def _validate_homogeneous_galaxies(galaxies: Sequence[Mapping[str, Any]]) -> None:
+    """Validate the shared-observation contract: galaxies share one data grid.
+
+    The batched forward vmaps the SED template over the population and stacks
+    per-galaxy data into a rectangular ``(N_gal, n_data)`` array
+    (:meth:`PopulationSEDModel.batched_data`), so every galaxy must carry
+    ``flux_obs``/``noise`` of the **same** shape — i.e. the same measurement grid
+    (same filters or the same observed-frame spectroscopy pixels). Per-galaxy
+    *values* (flux, noise, redshift and other free parameters) still vary freely;
+    only the grid is shared. Truly heterogeneous per-galaxy grids would need
+    ragged/padded batching and are out of scope for the batched Hamiltonian path.
+
+    Raising here turns the otherwise cryptic ``jnp.stack`` broadcast error into a
+    message that names the offending galaxy and the contract it violates.
+    """
+    ref_shapes: dict[str, tuple[int, ...]] = {}
+    for i, gal in enumerate(galaxies):
+        for key in ("flux_obs", "noise"):
+            if key not in gal:
+                raise ValueError(
+                    f"PopulationSEDModel: galaxy {i} is missing required '{key}'. "
+                    f"Each galaxy dict needs 'flux_obs' and 'noise'."
+                )
+            shape = jnp.asarray(gal[key]).shape
+            if i == 0:
+                ref_shapes[key] = shape
+            elif shape != ref_shapes[key]:
+                raise ValueError(
+                    f"PopulationSEDModel: galaxy {i} '{key}' has shape {shape}, but "
+                    f"galaxy 0 has {ref_shapes[key]}. All galaxies must share one "
+                    f"measurement grid (same filters / spectroscopy pixels) — the "
+                    f"batched forward stacks them into a rectangular array. "
+                    f"Per-galaxy redshift and other parameters may still differ."
+                )
+
+
 @dataclass(frozen=True)
 class PopulationSEDModel:
     """SubModel for a hierarchical galaxy population with shared parameters.
@@ -145,6 +181,7 @@ class PopulationSEDModel:
                 f"PopulationSEDModel.priors is missing entries for shared parameters: {missing}. "
                 f"Pass priors={{name: (lo, hi), ...}} covering every shared name."
             )
+        _validate_homogeneous_galaxies(galaxies)
         object.__setattr__(self, "sed", sed)
         object.__setattr__(self, "galaxies", tuple(galaxies))
         object.__setattr__(self, "shared", tuple(shared))
