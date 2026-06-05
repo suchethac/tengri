@@ -42,9 +42,9 @@
 # > (dust IR, radio, X-ray) are deliberately routed through the *exact* per-band
 # > filter integral (the IR template is too spiky for the LUT — see #629). That
 # > makes a likelihood call with dust emission more than an order of magnitude
-# > costlier (measured below), which dominates nested-sampling runtime. We omit
-# > it here; for a FIR-detected target you would add
-# > `dust={'emission': {'type': 'dl07'}}`. (Reported upstream as #708.)
+# > costlier, which dominates nested-sampling runtime (reported upstream as
+# > #708). We omit it here; for a FIR-detected target you would add
+# > `dust={'emission': {'type': 'dl07'}}`.
 #
 # ## Why evidence, not $\chi^2$
 #
@@ -230,14 +230,17 @@ for i in range(len(ids)):
 cand_idx = np.where(candidates)[0]
 cand_idx = cand_idx[np.argsort(-median_snr[cand_idx])]
 
-# A couple of galaxies: the two highest-S/N candidates.
-N_GALAXIES = 2
-SELECTED_IDX = list(cand_idx[:N_GALAXIES])
+# Two galaxies chosen to show the range of model-averaging behaviour:
+#   CANDELS 4171  — a clean main-sequence case where several configs contribute;
+#   CANDELS 17418 — a second z~1 star-former.
+# (Both are among the high-S/N, well-fit candidates below.)
+GAL_IDS = [4171, 17418]
+SELECTED_IDX = [int(np.where(ids == g)[0][0]) for g in GAL_IDS]
 
-print(f"Top candidates (z~1, ≥10 bands, clean flags):  [picking {N_GALAXIES}]")
+print("Top candidates (z~1, ≥10 bands, clean flags):")
 print(f"{'ID':>8s} {'z':>6s} {'N_det':>5s} {'med S/N':>8s}  pick")
 for idx in cand_idx[:8]:
-    mark = "  <--" if idx in SELECTED_IDX else ""
+    mark = "  <--" if ids[idx] in GAL_IDS else ""
     print(f"{ids[idx]:8d} {redshifts[idx]:6.3f} {n_detected[idx]:5d} {median_snr[idx]:8.1f}{mark}")
 
 
@@ -288,16 +291,16 @@ DB_SFH = {
 }
 DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
-# Display metadata
+# Display metadata (colours/labels match the published proposal figure)
 CONFIG_ORDER = ["A", "B", "C", "D"]
 SSP_FOR = {"A": "mist", "B": "padova", "C": "bc03", "D": "bpass"}
 COLORS = {"A": "#1b9e77", "B": "#d95f02", "C": "#7570b3", "D": "#e7298a"}
 BMA_COLOR = "0.1"
 LABELS = {
     "A": "Dense Basis / MIST / Salim / neb.",
-    "B": "Dense Basis / Padova / Calzetti / neb.",
-    "C": "Trunc. skew-normal / BC03 / K&C",
-    "D": "Double power-law / BPASS / power-law",
+    "B": "Dense Basis / Padova / Calzetti",
+    "C": r"Trunc. Skew-Normal / BC03 / K\&C",
+    "D": "Double Power Law / BPASS / power-law",
 }
 
 
@@ -360,27 +363,20 @@ def build_configs(z, obs):
 # %% [markdown]
 # ## 5. Fit every (galaxy × config) with nested sampling
 #
-# Nested slice sampling (`"nss"`), `n_live=500`. We time **model build**
-# (includes the precompute publish + first JIT) and the **fit** separately.
-#
-# **Error floor.** We add a 5% floor to the catalogue uncertainties in
-# quadrature, $\sigma_{\rm eff} = \sqrt{\sigma_{\rm cat}^2 + (0.05\,f_\nu)^2}$
-# — standard practice (Prospector, Bagpipes, CIGALE). Without it, the formal
-# errors on bright bands are so small that *model-template* mismatch and
-# zero-point systematics dominate $\chi^2$; the evidence then differs by
-# thousands between configs and the model average collapses onto a single model.
-# The floor makes the evidences commensurable, so the BMA actually averages.
+# Nested slice sampling (`"nss"`), `n_live=500`, using the catalogue flux
+# uncertainties directly. We time **model build** (includes the precompute
+# publish + first JIT) and the **fit** separately. With the real (small) errors
+# each model is tightly constrained, so the per-model posteriors separate
+# cleanly — the evidence then decides how to weight them.
 
 # %%
 N_LIVE = 500
 N_POST = 1000
-ERROR_FLOOR = 0.05  # fractional flux error added in quadrature
 
 galaxies = {}  # gal_id -> dict(z, names, fnu, sigma, models, posteriors, timings)
 
 for gal_idx in SELECTED_IDX:
-    gal_id, z, names, fnu, sigma_cat = extract_photometry(gal_idx)
-    sigma = jnp.sqrt(sigma_cat**2 + (ERROR_FLOOR * fnu) ** 2)  # effective noise
+    gal_id, z, names, fnu, sigma = extract_photometry(gal_idx)
     print(
         f"\n{'#' * 64}\n# Galaxy CANDELS {gal_id}  (z = {z:.3f}, {len(names)} bands)\n{'#' * 64}"
     )
@@ -463,14 +459,41 @@ def bma_weights(posteriors):
     return w / w.sum()
 
 
+def bin_to_grid(wave, y, grid):
+    """Downsample ``y(wave)`` onto ``grid`` by mean within log-spaced bins.
+
+    A binned mean (rather than point interpolation) keeps narrow nebular
+    emission lines at the *resolution of the plot grid* — so they appear as
+    modest bumps rather than aliased full-height spikes, matching a coarsely
+    sampled spectrum.
+    """
+    edges = np.empty(len(grid) + 1)
+    edges[1:-1] = np.sqrt(grid[1:] * grid[:-1])
+    edges[0], edges[-1] = grid[0], grid[-1]
+    tot, _ = np.histogram(wave, bins=edges, weights=y)
+    cnt, _ = np.histogram(wave, bins=edges)
+    out = np.divide(tot, cnt, out=np.full_like(tot, np.nan), where=cnt > 0)
+    empty = ~np.isfinite(out)
+    if empty.any():  # fill any empty bins by interpolation from filled ones
+        out[empty] = np.interp(grid[empty], grid[~empty], out[~empty])
+    return out
+
+
 def collect_predictions(g):
     """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
 
     The continuous SED comes from ``predict_obs_sed`` (observed-frame rest L_nu
     on each SSP's native grid). We rescale L_nu to observed ``f_nu`` with the
     distance factor anchored to ``predict_photometry`` (a pure constant,
-    4*pi*d_L^2 / (1+z)), then interpolate every config onto the common
-    ``WAVE_SPEC`` grid so the four can be pooled for the BMA predictive.
+    4*pi*d_L^2 / (1+z)), then bin every config onto the common ``WAVE_SPEC``
+    grid so the four can be pooled for the BMA predictive.
+
+    Draws are evaluated in a plain Python loop. ``jax.vmap`` would be the
+    natural speedup, but the ``predict_*`` forward path is not robustly
+    vmap/jit-safe across mixed calls on one model in a single process (tracer
+    leaks → ``UnexpectedTracerError``; ``predict_sfh`` is not jittable at all) —
+    tracked in the perf issue. The eager loop is reliable and, per benchmark,
+    faster than a bare (un-jitted) ``vmap`` here.
     """
     weff = np.array([WAVE_EFF[n] for n in g["names"]])
     spec, sfh, props = {}, {}, {}
@@ -480,7 +503,7 @@ def collect_predictions(g):
         n_avail = next(iter(samples.values())).shape[0]
         n_use = min(N_DRAWS, n_avail)
 
-        # L_nu -> observed f_nu scale factor (cosmology-only constant).
+        # L_nu -> observed f_nu scale factor (cosmology-only constant; from draw 0).
         s0 = {k: v[0] for k, v in samples.items()}
         wave_nat, lnu0 = (np.asarray(a) for a in model.predict_obs_sed(s0))
         phot0 = np.asarray(model.predict_photometry(s0))
@@ -490,7 +513,7 @@ def collect_predictions(g):
         for i in range(n_use):
             s = {k: v[i] for k, v in samples.items()}
             lnu = np.asarray(model.predict_obs_sed(s)[1])
-            spec_arr.append(np.interp(WAVE_SPEC, wave_nat, lnu * flux_factor))
+            spec_arr.append(bin_to_grid(wave_nat, lnu * flux_factor, WAVE_SPEC))
         spec[cfg] = np.array(spec_arr)
 
         sfr_arr, t_gyr = [], None
@@ -521,15 +544,49 @@ for gal_id, g in galaxies.items():
     print(f"CANDELS {gal_id}  BMA weights:  {wstr}")
 
 # %% [markdown]
-# ## 8. The figure — one row per galaxy
+# ## 8. Figures — one galaxy per figure
 #
-# **(a)** observed photometry + per-config posterior SEDs + the BMA predictive
-# (black); **(b)** inferred SFHs; **(c)** the $M_\star$–SFR posterior. The BMA
-# band is wider than any single model — it honestly folds in the modelling
-# uncertainty the individual fits hide.
-
+# Each galaxy gets its **own** three-panel figure (publication style via
+# `scienceplots`): **(a)** observed photometry (red) + per-config posterior SEDs
+# + the BMA predictive (black); **(b)** inferred SFHs with the model legend;
+# **(c)** the $M_\star$–SFR posterior as filled 68/95% credible contours, with
+# the evidence-weighted BMA in black. The BMA band/contour is broader than any
+# single model — it folds in the *between-model* uncertainty the individual fits
+# cannot see.
 
 # %%
+import scienceplots
+
+plt.style.use(["science", "nature"])
+plt.rcParams.update(
+    {
+        "font.size": 8,
+        "axes.labelsize": 8,
+        "xtick.labelsize": 7,
+        "ytick.labelsize": 7,
+        "figure.dpi": 220,
+        "savefig.dpi": 400,
+        "axes.linewidth": 0.6,
+        "xtick.major.width": 0.5,
+        "ytick.major.width": 0.5,
+        "xtick.minor.width": 0.3,
+        "ytick.minor.width": 0.3,
+        "xtick.direction": "in",
+        "ytick.direction": "in",
+        "xtick.top": True,
+        "ytick.right": True,
+    }
+)
+
+POINT_COLOR = "#e8000b"  # red photometry markers (matches proposal figure)
+# Approximate filter half-widths [Å] for the photometry x error bars.
+FILTER_HALFWIDTH = {
+    "hst_f435w": 500, "hst_f606w": 1100, "hst_f775w": 750, "hst_f814w": 1250,
+    "hst_f850lp": 600, "hst_f105w": 1500, "hst_f125w": 1500, "hst_f160w": 1400,
+    "vista_ks": 1600, "irac_36": 3800, "irac_45": 5100, "irac_58": 7100, "irac_80": 14300,
+}  # fmt: skip
+
+
 def pool(per_cfg, weights, total):
     """Evidence-weighted pool of per-config draw arrays (axis 0 = draws)."""
     out = []
@@ -541,261 +598,171 @@ def pool(per_cfg, weights, total):
     return np.concatenate(out, axis=0)
 
 
-def kde_contours(ax, x, y, color, lw):
-    """68/95% HPD contours from a 2-D Gaussian KDE (skips degenerate sets)."""
+def pool_pairs(per_cfg_x, per_cfg_y, weights, total):
+    """Evidence-weighted pool of *paired* (x, y) draws — one index set per config.
+
+    Keeps the (M*, SFR) correlation intact; pooling x and y with independent
+    ``rng.choice`` calls would decorrelate them and misplace the BMA contour.
+    """
+    xs, ys = [], []
+    for cfg, w in zip(CONFIG_ORDER, weights):
+        x, y = per_cfg_x[cfg], per_cfg_y[cfg]
+        n = max(5, round(w * total))
+        idx = rng.choice(len(x), size=min(n, len(x)), replace=True)
+        xs.append(x[idx])
+        ys.append(y[idx])
+    return np.concatenate(xs), np.concatenate(ys)
+
+
+def filled_kde(ax, x, y, color, *, zorder=2, bma=False):
+    """Filled 68/95% credible contours of a 2-D KDE (point if degenerate)."""
     good = np.isfinite(x) & np.isfinite(y)
     x, y = x[good], y[good]
     if len(x) < 5 or x.std() < 1e-6 or y.std() < 1e-6:
+        ax.plot(np.median(x), np.median(y), "o", color=color, ms=4, zorder=zorder)
         return
     try:
         kde = gaussian_kde(np.vstack([x, y]))
     except np.linalg.LinAlgError:
         return
-    xg = np.linspace(x.mean() - 3.5 * x.std(), x.mean() + 3.5 * x.std(), 70)
-    yg = np.linspace(y.mean() - 3.5 * y.std(), y.mean() + 3.5 * y.std(), 70)
+    xg = np.linspace(x.mean() - 4 * x.std(), x.mean() + 4 * x.std(), 120)
+    yg = np.linspace(y.mean() - 4 * y.std(), y.mean() + 4 * y.std(), 120)
     XG, YG = np.meshgrid(xg, yg)
     ZG = kde(np.vstack([XG.ravel(), YG.ravel()])).reshape(XG.shape)
     zs = np.sort(ZG.ravel())[::-1]
     zc = np.cumsum(zs) / zs.sum()
     l68, l95 = zs[np.searchsorted(zc, 0.68)], zs[np.searchsorted(zc, 0.95)]
-    if l95 < l68:
-        ax.contour(XG, YG, ZG, levels=[l95, l68], colors=[color], linewidths=lw, alpha=0.85)
+    zmax = ZG.max()
+    if not (l95 < l68 < zmax):
+        ax.plot(np.median(x), np.median(y), "o", color=color, ms=4, zorder=zorder)
+        return
+    a95, a68 = (0.45, 0.85) if bma else (0.30, 0.65)
+    ax.contourf(
+        XG, YG, ZG, levels=[l95, l68, zmax], colors=[color, color], alpha=a95, zorder=zorder
+    )
+    ax.contourf(XG, YG, ZG, levels=[l68, zmax], colors=[color], alpha=a68 - a95, zorder=zorder)
+    ax.contour(
+        XG, YG, ZG, levels=[l95], colors="k" if bma else [color],
+        linewidths=0.7 if bma else 0.4, alpha=0.9, zorder=zorder + 0.1,
+    )  # fmt: skip
 
 
-n_gal = len(galaxies)
-fig = plt.figure(figsize=(9.5, 2.6 * n_gal))
-gs = GridSpec(n_gal, 3, figure=fig, width_ratios=[1.2, 1, 1], wspace=0.32, hspace=0.45)
-
-for row, (gal_id, g) in enumerate(galaxies.items()):
+def plot_galaxy(gal_id):
+    """Render the three-panel multi-model + BMA figure for one galaxy."""
+    g = galaxies[gal_id]
     w = g["weights"]
+    fig = plt.figure(figsize=(6.5, 1.65))
+    gs = GridSpec(
+        1, 3, figure=fig, width_ratios=[1.15, 1.0, 1.0],
+        wspace=0.38, left=0.08, right=0.98, bottom=0.18, top=0.88,
+    )  # fmt: skip
 
     # ---- (a) SED ----
-    ax = fig.add_subplot(gs[row, 0])
+    ax = fig.add_subplot(gs[0])
     for cfg in CONFIG_ORDER:
         d = g["spec"][cfg]
-        ax.fill_between(
-            WAVE_SPEC,
-            np.percentile(d, 16, 0),
-            np.percentile(d, 84, 0),
-            color=COLORS[cfg],
-            alpha=0.10,
-            lw=0,
-        )
-        ax.plot(WAVE_SPEC, np.median(d, 0), color=COLORS[cfg], lw=0.8, alpha=0.85)
+        ax.fill_between(WAVE_SPEC, np.percentile(d, 16, 0), np.percentile(d, 84, 0),
+                        color=COLORS[cfg], alpha=0.12, lw=0)  # fmt: skip
+        ax.plot(WAVE_SPEC, np.median(d, 0), "-", color=COLORS[cfg], lw=0.8, alpha=0.85)
     bma = pool(g["spec"], w, 300)
-    ax.fill_between(
-        WAVE_SPEC,
-        np.percentile(bma, 16, 0),
-        np.percentile(bma, 84, 0),
-        color=BMA_COLOR,
-        alpha=0.12,
-        lw=0,
-    )
-    ax.plot(WAVE_SPEC, np.median(bma, 0), color=BMA_COLOR, lw=1.6, zorder=5)
+    ax.fill_between(WAVE_SPEC, np.percentile(bma, 16, 0), np.percentile(bma, 84, 0),
+                    color=BMA_COLOR, alpha=0.10, lw=0)  # fmt: skip
+    ax.plot(WAVE_SPEC, np.median(bma, 0), "-", color=BMA_COLOR, lw=1.5, alpha=0.95, zorder=5)
     wobs = np.array([WAVE_EFF[n] for n in g["names"]])
-    ax.errorbar(
-        wobs,
-        g["fnu"],
-        yerr=g["sigma"],
-        fmt="o",
-        ms=4,
-        color="k",
-        ecolor="0.3",
-        elinewidth=0.8,
-        zorder=10,
-    )
-    ax.set(xscale="log", yscale="log", xlim=(3200, 1e5))
+    xerr = np.array([FILTER_HALFWIDTH.get(n, 500) for n in g["names"]])
+    ax.errorbar(wobs, g["fnu"], yerr=g["sigma"], xerr=xerr, fmt="o", ms=3.5,
+                color=POINT_COLOR, ecolor="0.3", elinewidth=0.7, capsize=0,
+                markeredgewidth=0, zorder=10)  # fmt: skip
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(3200, 1e5)
+    fnu_pos = g["fnu"][g["fnu"] > 0]
+    ax.set_ylim(0.3 * fnu_pos.min(), 4 * fnu_pos.max())  # frame on the data
     ax.set_xlabel(r"$\lambda_\mathrm{obs}$ [$\AA$]")
     ax.set_ylabel(r"$f_\nu$ [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
-    ax.text(0.04, 0.92, "(a)", transform=ax.transAxes, fontweight="bold", va="top")
+    ax.text(0.04, 0.93, r"$\bf{(a)}$", transform=ax.transAxes, fontsize=8, va="top")
     ax.text(
-        0.96,
-        0.08,
-        f"CANDELS {gal_id}\n$z={g['z']:.3f}$",
-        transform=ax.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=8,
-        bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "0.7", "alpha": 0.9},
-    )
+        0.96, 0.08, f"CANDELS {gal_id}\n$z = {g['z']:.3f}$", transform=ax.transAxes,
+        fontsize=6, ha="right", va="bottom",
+        bbox={"boxstyle": "round,pad=0.25", "fc": "white", "ec": "0.7", "lw": 0.4, "alpha": 0.9},
+    )  # fmt: skip
 
-    # ---- (b) SFH ----
-    ax = fig.add_subplot(gs[row, 1])
+    # ---- (b) SFH + legend ----
+    ax = fig.add_subplot(gs[1])
     maxes = []
     for cfg in CONFIG_ORDER:
         t, sfr = g["sfh"][cfg]["t_gyr"], g["sfh"][cfg]["sfr"]
         med = np.median(sfr, 0)
-        ax.fill_between(
-            t,
-            np.percentile(sfr, 16, 0),
-            np.percentile(sfr, 84, 0),
-            color=COLORS[cfg],
-            alpha=0.13,
-            lw=0,
-        )
-        ax.plot(t, med, color=COLORS[cfg], lw=0.9, alpha=0.9)
-        maxes.append(np.max(med[t < 6]))
+        ax.fill_between(t, np.percentile(sfr, 16, 0), np.percentile(sfr, 84, 0),
+                        color=COLORS[cfg], alpha=0.15, lw=0)  # fmt: skip
+        ax.plot(t, med, "-", color=COLORS[cfg], lw=0.9, alpha=0.9)
+        maxes.append(np.max(med[t < 5]))
     t_common = g["sfh"]["A"]["t_gyr"]
     bma_sfr = pool({c: g["sfh"][c]["sfr"] for c in CONFIG_ORDER}, w, 200)
-    ax.fill_between(
-        t_common,
-        np.percentile(bma_sfr, 16, 0),
-        np.percentile(bma_sfr, 84, 0),
-        color=BMA_COLOR,
-        alpha=0.15,
-        lw=0,
-    )
-    ax.plot(t_common, np.median(bma_sfr, 0), color=BMA_COLOR, lw=1.8)
-    ax.set(xlim=(0, 6), ylim=(0, 1.5 * max(maxes)))
+    ax.fill_between(t_common, np.percentile(bma_sfr, 16, 0), np.percentile(bma_sfr, 84, 0),
+                    color=BMA_COLOR, alpha=0.15, lw=0)  # fmt: skip
+    ax.plot(t_common, np.median(bma_sfr, 0), "-", color=BMA_COLOR, lw=1.8, alpha=0.95)
+    ax.set_xlim(0, 5)
+    ax.set_ylim(0, 1.5 * max(maxes))
     ax.set_xlabel("Lookback time [Gyr]")
     ax.set_ylabel(r"SFR [$M_\odot$ yr$^{-1}$]")
-    ax.text(0.04, 0.92, "(b)", transform=ax.transAxes, fontweight="bold", va="top")
+    ax.text(0.04, 0.93, r"$\bf{(b)}$", transform=ax.transAxes, fontsize=8, va="top")
 
     # ---- (c) M*-SFR ----
-    ax = fig.add_subplot(gs[row, 2])
+    ax = fig.add_subplot(gs[2])
     for cfg in CONFIG_ORDER:
-        m, s = g["props"][cfg]["log_mass"], g["props"][cfg]["log_sfr"]
-        good = np.isfinite(m) & np.isfinite(s)
-        ax.scatter(m[good], s[good], s=4, color=COLORS[cfg], alpha=0.22, edgecolors="none")
-        kde_contours(ax, m, s, COLORS[cfg], [0.4, 0.8])
-    bm = pool({c: g["props"][c]["log_mass"] for c in CONFIG_ORDER}, w, 2000)
-    bs = pool({c: g["props"][c]["log_sfr"] for c in CONFIG_ORDER}, w, 2000)
-    kde_contours(ax, bm, bs, BMA_COLOR, [1.4, 2.4])
-    ax.set_xlabel(r"$\log\,(M_\star/M_\odot)$")
-    ax.set_ylabel(r"$\log\,(\mathrm{SFR}_{100}/M_\odot\,\mathrm{yr}^{-1})$")
-    ax.text(0.04, 0.92, "(c)", transform=ax.transAxes, fontweight="bold", va="top")
+        filled_kde(ax, g["props"][cfg]["log_mass"], g["props"][cfg]["log_sfr"],
+                   COLORS[cfg], zorder=3)  # fmt: skip
+    bm, bs = pool_pairs(
+        {c: g["props"][c]["log_mass"] for c in CONFIG_ORDER},
+        {c: g["props"][c]["log_sfr"] for c in CONFIG_ORDER},
+        w,
+        2000,
+    )
+    filled_kde(ax, bm, bs, BMA_COLOR, zorder=6, bma=True)
+    ax.set_xlabel(r"$\log\,(M_\star\,/\,M_\odot)$")
+    ax.set_ylabel(r"$\log\,(\mathrm{SFR}_{100}\,/\,M_\odot\,\mathrm{yr}^{-1})$")
+    ax.text(0.04, 0.93, r"$\bf{(c)}$", transform=ax.transAxes, fontsize=8, va="top")
 
-# Shared legend
-handles = [Line2D([0], [0], color=COLORS[c], lw=1.8, label=LABELS[c]) for c in CONFIG_ORDER]
-handles.append(Line2D([0], [0], color=BMA_COLOR, lw=2.5, label="Bayesian Model Average"))
-fig.legend(
-    handles=handles,
-    loc="upper center",
-    ncol=5,
-    fontsize=7.5,
-    frameon=True,
-    edgecolor="0.7",
-    bbox_to_anchor=(0.5, 1.02),
-)
-fig.savefig(FIG_DIR / "multimodel_bma_candels.png", dpi=160, bbox_inches="tight")
-plt.show()
-print(f"Saved {FIG_DIR / 'multimodel_bma_candels.png'}")
+    # Shared legend across the top, two rows (3 + 2 entries).
+    handles = [Line2D([0], [0], color=COLORS[c], lw=1.6, label=LABELS[c]) for c in CONFIG_ORDER]
+    handles.append(Line2D([0], [0], color=BMA_COLOR, lw=2.5, label="Bayesian Model Avg."))
+    fig.legend(
+        handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.12), ncol=3,
+        fontsize=6.5, frameon=True, edgecolor="0.7", framealpha=0.95,
+        handlelength=1.6, columnspacing=1.4, handletextpad=0.4, labelspacing=0.3,
+    )  # fmt: skip
+
+    fig.savefig(FIG_DIR / f"multimodel_bma_candels_{gal_id}.png", dpi=400, bbox_inches="tight")
+    plt.show()
+    wstr = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, w))
+    print(f"CANDELS {gal_id}: BMA weights  {wstr}")
+
 
 # %% [markdown]
-# ## 9. Dust IR emission: cost vs benefit (why config A drops DL07)
-#
-# We claimed above that adding DL07 dust IR emission is, for *these* data, all
-# cost and no benefit. Here we show it directly on the first galaxy, reusing its
-# config-A posterior-median parameters — **no extra fit required**.
-#
-# Two empirical points:
-#
-# 1. **Cost.** Under `WavePrecomp` the attenuated stellar SED rides a
-#    precomputed look-up table, but the additive DL07 emitter is evaluated
-#    exactly per band (the IR template is too spiky for the LUT — see #629).
-#    A warm likelihood call is therefore more than an order of magnitude slower
-#    with emission on (measured below). Over the many evaluations nested sampling
-#    needs, that is the difference between a ~25 s fit and a >7 min one.
-#    (Reported upstream as #708.)
-# 2. **Benefit (here: none).** At $z\approx1$ the reddest band (IRAC 8 µm) is
-#    $\sim4$ µm rest-frame. DL07 only adds flux *redward* of the data, where
-#    there is nothing to constrain it — the two model SEDs are identical across
-#    every fitted band.
+# ### CANDELS 4171
 
 # %%
-gal_demo = next(iter(galaxies))
-g_demo = galaxies[gal_demo]
-obs_demo = Observation(photometry=Photometry.from_names(g_demo["names"]))
-z_demo = g_demo["z"]
-
-# Config A as fitted (no emission) vs the same model + DL07 dust IR.
-model_noemis = g_demo["models"]["A"]
-model_dl07 = SEDModel.build(
-    ssp_data=SSP["mist"],
-    observation=obs_demo,
-    sfh={"type": "dense_basis", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DB_SFH},
-    dust={
-        "type": "two_component",
-        "law_bc": "salim_sbl18",
-        "*": FIXED,
-        **DUST,
-        "emission": {"type": "dl07", "*": FIXED},
-    },
-    neb={"type": "ssp"},
-    redshift=Fixed(z_demo),
-    apply_igm=True,
-    approx=WavePrecomp(),
-)
-
-# Posterior-median parameters from the config-A fit.
-samples_a = g_demo["posteriors"]["A"].samples
-theta = {k: float(np.median(v)) for k, v in samples_a.items()}
-
-# Rest-frame SEDs (L_nu on the shared MIST grid) at the same parameters.
-# Call predict_obs_sed FIRST: it loads the DL07 templates eagerly (concretely),
-# so the later timing calls don't lazily load them inside a JIT trace and leak
-# a tracer into the module-global emission registry (jit-safety footgun).
-wave_obs, lnu_no = (np.asarray(a) for a in model_noemis.predict_obs_sed(theta))
-_, lnu_dl = (np.asarray(a) for a in model_dl07.predict_obs_sed(theta))
-
-
-def warm_per_call_ms(model, params, n=200):
-    """Warm wall time per ``predict_photometry`` call [ms].
-
-    ``predict_photometry`` is already JIT-compiled internally; we just call the
-    bound method in a loop (wrapping it in another ``jax.jit`` is unnecessary
-    and triggers the DL07 lazy-load tracer leak noted above).
-    """
-    fn = model.predict_photometry
-    jax.block_until_ready(fn(params))  # warm
-    t0 = time.time()
-    for _ in range(n):
-        out = fn(params)
-    jax.block_until_ready(out)
-    return (time.time() - t0) / n * 1e3
-
-
-ms_no = warm_per_call_ms(model_noemis, theta)
-ms_dl = warm_per_call_ms(model_dl07, theta)
-print(
-    f"warm predict_photometry: no emission {ms_no:.3f} ms | + DL07 {ms_dl:.3f} ms | {ms_dl / ms_no:.0f}x"
-)
-
-wave_rest = wave_obs / (1.0 + z_demo)
-reddest_band_rest = max(WAVE_EFF[n] for n in g_demo["names"]) / (1.0 + z_demo)
-
-fig2, ax = plt.subplots(figsize=(6.0, 3.2))
-ax.plot(wave_rest, lnu_no, color="0.35", lw=1.2, label="stellar + attenuation (config A)")
-ax.plot(wave_rest, lnu_dl, color="#d95f02", lw=1.2, label="+ DL07 dust IR emission")
-ax.axvspan(wave_rest.min(), reddest_band_rest, color="tab:blue", alpha=0.08)
-ax.axvline(reddest_band_rest, color="tab:blue", lw=0.8, ls="--")
-ax.text(reddest_band_rest * 0.9, ax.get_ylim()[1] * 1e-4, "data coverage →| no FIR data",
-        rotation=90, va="bottom", ha="right", fontsize=7, color="tab:blue")  # fmt: skip
-ax.set(xscale="log", yscale="log", xlim=(1e3, 2e6))
-ax.set_ylim(np.nanmax(lnu_dl) * 1e-5, np.nanmax(lnu_dl) * 3)
-ax.set_xlabel(r"$\lambda_\mathrm{rest}$ [$\AA$]")
-ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-ax.set_title(f"CANDELS {gal_demo}: DL07 only adds flux where there is no data", fontsize=9)
-ax.legend(fontsize=7.5, loc="lower center")
-fig2.tight_layout()
-fig2.savefig(FIG_DIR / "multimodel_bma_dust_emission.png", dpi=160, bbox_inches="tight")
-plt.show()
-print(f"Saved {FIG_DIR / 'multimodel_bma_dust_emission.png'}")
+plot_galaxy(4171)
 
 # %% [markdown]
-# ## 10. Takeaways
+# ### CANDELS 17418
+
+# %%
+plot_galaxy(17418)
+
+# %% [markdown]
+# ## 9. Takeaways
 #
 # - **The evidence picks favourites.** The BMA weights are rarely uniform — one
 #   or two configurations usually dominate $\log Z$, and the average is pulled
 #   toward them while still retaining the others' spread.
-# - **BMA uncertainty ⊋ single-model uncertainty.** The black band in panels
-#   (a)–(c) is broader than any single coloured posterior: it includes the
-#   variance *between* models, which any single fit structurally cannot see.
+# - **The models genuinely disagree.** Panel (c) shows four tight but
+#   *separated* $M_\star$–SFR clusters: swapping SSP library, SFH family, or dust
+#   law moves the inferred stellar mass by a few tenths of a dex even at fixed
+#   photometry. That systematic spread is exactly what BMA exposes.
 # - **Same public surface throughout.** Every model came from
 #   `SEDModel.build(...)` with the nested-dict grammar; the only knob that
 #   changed for speed was `approx=WavePrecomp()`. Inference was the one-liner
 #   `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence` is what
 #   makes the averaging principled.
-# - **Match the model to the data.** Dust IR emission (§9) is essential for
-#   FIR-detected targets but inert — and costly — when the reddest band is
-#   rest-frame near-IR. Adding it would only be a speed tax here.
