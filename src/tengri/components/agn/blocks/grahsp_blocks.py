@@ -43,7 +43,13 @@ __all__: list[str] = []  # blocks are registered via decorators; no public API
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("disc", "grahsp_sbpl")
+@register_agn_block(
+    "disc",
+    "grahsp_sbpl",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP smooth bending power-law BBB continuum",
+)
 def grahsp_sbpl_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -115,7 +121,13 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("nlr", "grahsp")
+@register_agn_block(
+    "nlr",
+    "grahsp",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP Netzer 1990 narrow-line Gaussians",
+)
 def grahsp_nlr_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -165,7 +177,13 @@ def grahsp_nlr_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("blr", "grahsp")
+@register_agn_block(
+    "blr",
+    "grahsp",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP Netzer 1990 broad-line Gaussians",
+)
 def grahsp_blr_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -214,7 +232,13 @@ def grahsp_blr_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("feii", "grahsp")
+@register_agn_block(
+    "feii",
+    "grahsp",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP Bruhweiler & Verner 2008 FeII forest",
+)
 def grahsp_feii_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -252,7 +276,13 @@ def grahsp_feii_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("torus", "grahsp")
+@register_agn_block(
+    "torus",
+    "grahsp",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP infrared torus with Si feature",
+)
 def grahsp_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -300,7 +330,13 @@ def grahsp_torus_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("attenuation", "grahsp_biatten")
+@register_agn_block(
+    "attenuation",
+    "grahsp_biatten",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="production",
+    short_doc="GRAHSP SMC-like broken power-law bi-attenuation",
+)
 def grahsp_biatten_block(
     wavelength: Array,
     *,

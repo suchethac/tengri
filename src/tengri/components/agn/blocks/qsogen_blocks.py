@@ -90,7 +90,13 @@ def _l_nu_to_l_lambda(L_nu: Array, wave_aa: Array) -> Array:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("disc", "qsogen")
+@register_agn_block(
+    "disc",
+    "qsogen",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen broken power-law continuum",
+)
 def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> Array:
     r"""QSOgen broken power-law continuum block.
 
@@ -121,7 +127,13 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("torus", "qsogen")
+@register_agn_block(
+    "torus",
+    "qsogen",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen hot-dust blackbody",
+)
 def qsogen_hot_dust_block(
     wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params
 ) -> Array:
@@ -151,7 +163,13 @@ def qsogen_hot_dust_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("blr", "qsogen")
+@register_agn_block(
+    "blr",
+    "qsogen",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen empirical broad-line region",
+)
 def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params) -> Array:
     r"""QSOgen empirical broad-line region block.
 
@@ -189,7 +207,13 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("feii", "qsogen_balmer")
+@register_agn_block(
+    "feii",
+    "qsogen_balmer",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen Balmer continuum",
+)
 def qsogen_balmer_block(
     wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params
 ) -> Array:
@@ -220,7 +244,13 @@ def qsogen_balmer_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("attenuation", "qsogen_smc")
+@register_agn_block(
+    "attenuation",
+    "qsogen_smc",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen SMC reddening factor",
+)
 def qsogen_smc_block(wavelength: Array, **params) -> Array:
     r"""QSOgen SMC reddening factor block.
 

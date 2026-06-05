@@ -60,7 +60,13 @@ def _resolve_synthesizer_grid(kind: str) -> str:
     )
 
 
-@register_agn_block("nlr", "analytic")
+@register_agn_block(
+    "nlr",
+    "analytic",
+    citation="Richardson et al. 2014, ApJ, 786, 87",
+    status="production",
+    short_doc="Analytic NLR with Richardson+2014 line ratios and Gaussian broadening",
+)
 def nlr_analytic_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -123,7 +129,13 @@ def nlr_analytic_block(
     return jnp.zeros_like(L_lambda), L_lambda
 
 
-@register_agn_block("nlr", "synthesizer")
+@register_agn_block(
+    "nlr",
+    "synthesizer",
+    citation="Lovell et al. 2025, arXiv:2508.03888",
+    status="production",
+    short_doc="Synthesizer Cloudy grid narrow-line region",
+)
 def nlr_synthesizer_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -187,7 +199,13 @@ def nlr_synthesizer_block(
     return jnp.zeros_like(L_lambda), L_lambda
 
 
-@register_agn_block("nlr", "synthesizer_spectra")
+@register_agn_block(
+    "nlr",
+    "synthesizer_spectra",
+    citation="Lovell et al. 2025, arXiv:2508.03888",
+    status="production",
+    short_doc="Synthesizer UnifiedAGN NLR reprocessed nebular spectrum",
+)
 def nlr_synthesizer_spectra_block(
     wavelength: Array,
     agn_log_lbol: float,

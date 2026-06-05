@@ -343,6 +343,17 @@ def build_components(
     # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
     # is available for the CIGALE-coupled ``agn_fracAGN`` flow.
     if agn_model is not None:
+        # NOTE (#721): ``dust_frac_agn`` (Dale2014's embedded quasar template) and
+        # the composable AGN's ``agn_fracAGN`` are two distinct AGN surfaces, both
+        # keyed off the same stellar ``L_absorbed`` — using both with positive
+        # values double-counts AGN MIR. A *value-aware* guard cannot live here:
+        # ``build_components`` sees only structural selectors, not the resolved
+        # ``dust_frac_agn``/``agn_fracAGN`` values (which may be FREE), so a
+        # construction-time check would false-positive on legitimate models such
+        # as ``recipes.composable_agn()`` (Dale2014 + composable AGN with
+        # ``dust_frac_agn=0``). The disambiguation is documented in ADR-0018 and
+        # surfaced via ``describe``; a value-aware runtime guard is tracked as a
+        # follow-up (only fire when both resolved values are > 0).
         components.append(
             AGNSEDComponent(
                 config=AGNSEDComponentConfig(

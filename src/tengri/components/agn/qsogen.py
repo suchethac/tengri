@@ -744,7 +744,12 @@ def compute_qsogen_sed(
 # ── Register in AGN_MODELS ────────────────────────────────────────
 
 
-@register_agn_model("qsogen")
+@register_agn_model(
+    "qsogen",
+    citation="Temple, Hewett & Banerji 2021, MNRAS, 508, 737",
+    status="deprecated",
+    short_doc="QSOgen empirical quasar SED (Temple+2021)",
+)
 def qsogen(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,

@@ -34,7 +34,13 @@ _C_AA_PER_S: float = 2.99792458e18
 DEFAULT_F_BOL_5100: float = 9.0
 
 
-@register_agn_block("feii", "boroson_green")
+@register_agn_block(
+    "feii",
+    "boroson_green",
+    citation="Boroson & Green 1992, ApJS, 80, 109",
+    status="production",
+    short_doc="Boroson & Green 1992 FeII pseudo-continuum template",
+)
 def boroson_green_feii_block(
     wavelength: Array,
     agn_log_lbol: float,

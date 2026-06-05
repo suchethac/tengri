@@ -40,7 +40,13 @@ _C_AA_PER_S: float = 2.99792458e18
 _L_SUN_ERG: float = L_SUN
 
 
-@register_agn_block("disc", "multicolor")
+@register_agn_block(
+    "disc",
+    "multicolor",
+    citation="Shakura & Sunyaev 1973, A&A, 24, 337",
+    status="production",
+    short_doc="Shakura-Sunyaev multi-color thin-disc",
+)
 def multicolor_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -90,7 +96,13 @@ def multicolor_disc_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("disc", "kubota_done")
+@register_agn_block(
+    "disc",
+    "kubota_done",
+    citation="Kubota & Done 2018, MNRAS, 480, 1247",
+    status="production",
+    short_doc="Kubota & Done 2018 three-zone disc and corona",
+)
 def kubota_done_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -156,7 +168,13 @@ def kubota_done_disc_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("disc", "adaf")
+@register_agn_block(
+    "disc",
+    "adaf",
+    citation="Mahadevan 1997, ApJ, 477, 585",
+    status="production",
+    short_doc="ADAF inner flow with truncated outer thin disc",
+)
 def adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -274,7 +292,13 @@ def _cigale_disc_lambda(
     return s_per_aa * L_bol_erg
 
 
-@register_agn_block("disc", "skirtor")
+@register_agn_block(
+    "disc",
+    "skirtor",
+    citation="Stalevski et al. 2016, MNRAS, 458, 2288",
+    status="production",
+    short_doc="CIGALE SKIRTOR2016 empirical disc (disk_type=0)",
+)
 def cigale_skirtor_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -336,7 +360,13 @@ def cigale_skirtor_disc_block(
     )
 
 
-@register_agn_block("disc", "schartmann2005")
+@register_agn_block(
+    "disc",
+    "schartmann2005",
+    citation="Schartmann et al. 2005, A&A, 437, 861",
+    status="production",
+    short_doc="CIGALE SKIRTOR2016 Schartmann 2005 disc (disk_type=1)",
+)
 def cigale_schartmann_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -396,7 +426,13 @@ def cigale_schartmann_disc_block(
     )
 
 
-@register_agn_block("disc", "schartmann2005_skirtor_atten")
+@register_agn_block(
+    "disc",
+    "schartmann2005_skirtor_atten",
+    citation="Stalevski et al. 2016, MNRAS, 458, 2288",
+    status="production",
+    short_doc="Schartmann 2005 disc with SKIRTOR self-attenuation",
+)
 def cigale_schartmann_skirtor_attenuated_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -485,7 +521,13 @@ def cigale_schartmann_skirtor_attenuated_disc_block(
     return L_lambda_analytic * att
 
 
-@register_agn_block("disc", "adaf_lopez2024")
+@register_agn_block(
+    "disc",
+    "adaf_lopez2024",
+    citation="Lopez et al. 2024, A&A, 691, A163",
+    status="production",
+    short_doc="CIGALE SKIRTOR2016 ADAF-thin disc blend (disk_type=2)",
+)
 def cigale_adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -541,7 +583,13 @@ def cigale_adaf_disc_block(
     )
 
 
-@register_agn_block("disc", "slone_netzer")
+@register_agn_block(
+    "disc",
+    "slone_netzer",
+    citation="Slone & Netzer 2012, MNRAS, 426, 656",
+    status="production",
+    short_doc="Slone & Netzer 2012 alpha-disc library interpolation",
+)
 def slone_netzer_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -589,7 +637,13 @@ def slone_netzer_disc_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("disc", "richards2006")
+@register_agn_block(
+    "disc",
+    "richards2006",
+    citation="Richards et al. 2006, ApJ, 166, 470",
+    status="production",
+    short_doc="Richards et al. 2006 mean SDSS quasar composite SED",
+)
 def richards2006_disc_block(
     wavelength: Array,
     agn_log_lbol: float,

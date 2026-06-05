@@ -44,7 +44,13 @@ _C_AA_PER_S: float = 2.99792458e18
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("disc", "powerlaw")
+@register_agn_block(
+    "disc",
+    "powerlaw",
+    citation="",
+    status="production",
+    short_doc="Power-law disc with UV cutoff",
+)
 def powerlaw_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -88,7 +94,13 @@ def powerlaw_disc_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("torus", "simple")
+@register_agn_block(
+    "torus",
+    "simple",
+    citation="",
+    status="production",
+    short_doc="Single-temperature greybody torus",
+)
 def simple_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -126,7 +138,13 @@ def simple_torus_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("torus", "two_temperature")
+@register_agn_block(
+    "torus",
+    "two_temperature",
+    citation="",
+    status="production",
+    short_doc="Two-temperature (hot + warm) greybody torus",
+)
 def two_temperature_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -162,7 +180,13 @@ def two_temperature_torus_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("attenuation", "smc_prevot")
+@register_agn_block(
+    "attenuation",
+    "smc_prevot",
+    citation="Prevot et al. 1984, A&A, 137, 371",
+    status="production",
+    short_doc="Prevot et al. 1984 SMC extinction curve",
+)
 def smc_prevot_block(
     wavelength: Array,
     *,

@@ -72,7 +72,13 @@ def _resolve_synthesizer_grid(kind: str) -> str:
     )
 
 
-@register_agn_block("blr", "analytic")
+@register_agn_block(
+    "blr",
+    "analytic",
+    citation="Krawczyk et al. 2013, ApJS, 206, 4",
+    status="production",
+    short_doc="Analytic broad-line region with Gaussian broadening",
+)
 def blr_analytic_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -135,7 +141,13 @@ def blr_analytic_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("blr", "synthesizer")
+@register_agn_block(
+    "blr",
+    "synthesizer",
+    citation="Lovell et al. 2025, arXiv:2508.03888",
+    status="production",
+    short_doc="Synthesizer Cloudy grid broad-line region",
+)
 def blr_synthesizer_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -187,7 +199,13 @@ def blr_synthesizer_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("blr", "synthesizer_spectra")
+@register_agn_block(
+    "blr",
+    "synthesizer_spectra",
+    citation="Lovell et al. 2025, arXiv:2508.03888",
+    status="production",
+    short_doc="Synthesizer UnifiedAGN BLR reprocessed nebular spectrum",
+)
 def blr_synthesizer_spectra_block(
     wavelength: Array,
     agn_log_lbol: float,
