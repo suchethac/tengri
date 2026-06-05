@@ -41,9 +41,10 @@
 # > a precomputed effective-wavelength look-up table, but **additive emitters**
 # > (dust IR, radio, X-ray) are deliberately routed through the *exact* per-band
 # > filter integral (the IR template is too spiky for the LUT — see #629). That
-# > makes a likelihood call with dust emission ~15× costlier (≈0.7 ms vs
-# > ≈0.05 ms), which dominates nested-sampling runtime. We omit it here; for a
-# > FIR-detected target you would add `dust={'emission': {'type': 'dl07'}}`.
+# > makes a likelihood call with dust emission more than an order of magnitude
+# > costlier (measured below), which dominates nested-sampling runtime. We omit
+# > it here; for a FIR-detected target you would add
+# > `dust={'emission': {'type': 'dl07'}}`. (Reported upstream as #708.)
 #
 # ## Why evidence, not $\chi^2$
 #
@@ -681,7 +682,108 @@ plt.show()
 print(f"Saved {FIG_DIR / 'multimodel_bma_candels.png'}")
 
 # %% [markdown]
-# ## 9. Takeaways
+# ## 9. Dust IR emission: cost vs benefit (why config A drops DL07)
+#
+# We claimed above that adding DL07 dust IR emission is, for *these* data, all
+# cost and no benefit. Here we show it directly on the first galaxy, reusing its
+# config-A posterior-median parameters — **no extra fit required**.
+#
+# Two empirical points:
+#
+# 1. **Cost.** Under `WavePrecomp` the attenuated stellar SED rides a
+#    precomputed look-up table, but the additive DL07 emitter is evaluated
+#    exactly per band (the IR template is too spiky for the LUT — see #629).
+#    A warm likelihood call is therefore more than an order of magnitude slower
+#    with emission on (measured below). Over the many evaluations nested sampling
+#    needs, that is the difference between a ~25 s fit and a >7 min one.
+#    (Reported upstream as #708.)
+# 2. **Benefit (here: none).** At $z\approx1$ the reddest band (IRAC 8 µm) is
+#    $\sim4$ µm rest-frame. DL07 only adds flux *redward* of the data, where
+#    there is nothing to constrain it — the two model SEDs are identical across
+#    every fitted band.
+
+# %%
+gal_demo = next(iter(galaxies))
+g_demo = galaxies[gal_demo]
+obs_demo = Observation(photometry=Photometry.from_names(g_demo["names"]))
+z_demo = g_demo["z"]
+
+# Config A as fitted (no emission) vs the same model + DL07 dust IR.
+model_noemis = g_demo["models"]["A"]
+model_dl07 = SEDModel.build(
+    ssp_data=SSP["mist"],
+    observation=obs_demo,
+    sfh={"type": "dense_basis", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DB_SFH},
+    dust={
+        "type": "two_component",
+        "law_bc": "salim_sbl18",
+        "*": FIXED,
+        **DUST,
+        "emission": {"type": "dl07", "*": FIXED},
+    },
+    neb={"type": "ssp"},
+    redshift=Fixed(z_demo),
+    apply_igm=True,
+    approx=WavePrecomp(),
+)
+
+# Posterior-median parameters from the config-A fit.
+samples_a = g_demo["posteriors"]["A"].samples
+theta = {k: float(np.median(v)) for k, v in samples_a.items()}
+
+# Rest-frame SEDs (L_nu on the shared MIST grid) at the same parameters.
+# Call predict_obs_sed FIRST: it loads the DL07 templates eagerly (concretely),
+# so the later timing calls don't lazily load them inside a JIT trace and leak
+# a tracer into the module-global emission registry (jit-safety footgun).
+wave_obs, lnu_no = (np.asarray(a) for a in model_noemis.predict_obs_sed(theta))
+_, lnu_dl = (np.asarray(a) for a in model_dl07.predict_obs_sed(theta))
+
+
+def warm_per_call_ms(model, params, n=200):
+    """Warm wall time per ``predict_photometry`` call [ms].
+
+    ``predict_photometry`` is already JIT-compiled internally; we just call the
+    bound method in a loop (wrapping it in another ``jax.jit`` is unnecessary
+    and triggers the DL07 lazy-load tracer leak noted above).
+    """
+    fn = model.predict_photometry
+    jax.block_until_ready(fn(params))  # warm
+    t0 = time.time()
+    for _ in range(n):
+        out = fn(params)
+    jax.block_until_ready(out)
+    return (time.time() - t0) / n * 1e3
+
+
+ms_no = warm_per_call_ms(model_noemis, theta)
+ms_dl = warm_per_call_ms(model_dl07, theta)
+print(
+    f"warm predict_photometry: no emission {ms_no:.3f} ms | + DL07 {ms_dl:.3f} ms | {ms_dl / ms_no:.0f}x"
+)
+
+wave_rest = wave_obs / (1.0 + z_demo)
+reddest_band_rest = max(WAVE_EFF[n] for n in g_demo["names"]) / (1.0 + z_demo)
+
+fig2, ax = plt.subplots(figsize=(6.0, 3.2))
+ax.plot(wave_rest, lnu_no, color="0.35", lw=1.2, label="stellar + attenuation (config A)")
+ax.plot(wave_rest, lnu_dl, color="#d95f02", lw=1.2, label="+ DL07 dust IR emission")
+ax.axvspan(wave_rest.min(), reddest_band_rest, color="tab:blue", alpha=0.08)
+ax.axvline(reddest_band_rest, color="tab:blue", lw=0.8, ls="--")
+ax.text(reddest_band_rest * 0.9, ax.get_ylim()[1] * 1e-4, "data coverage →| no FIR data",
+        rotation=90, va="bottom", ha="right", fontsize=7, color="tab:blue")  # fmt: skip
+ax.set(xscale="log", yscale="log", xlim=(1e3, 2e6))
+ax.set_ylim(np.nanmax(lnu_dl) * 1e-5, np.nanmax(lnu_dl) * 3)
+ax.set_xlabel(r"$\lambda_\mathrm{rest}$ [$\AA$]")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.set_title(f"CANDELS {gal_demo}: DL07 only adds flux where there is no data", fontsize=9)
+ax.legend(fontsize=7.5, loc="lower center")
+fig2.tight_layout()
+fig2.savefig(FIG_DIR / "multimodel_bma_dust_emission.png", dpi=160, bbox_inches="tight")
+plt.show()
+print(f"Saved {FIG_DIR / 'multimodel_bma_dust_emission.png'}")
+
+# %% [markdown]
+# ## 10. Takeaways
 #
 # - **The evidence picks favourites.** The BMA weights are rarely uniform — one
 #   or two configurations usually dominate $\log Z$, and the average is pulled
@@ -694,3 +796,6 @@ print(f"Saved {FIG_DIR / 'multimodel_bma_candels.png'}")
 #   changed for speed was `approx=WavePrecomp()`. Inference was the one-liner
 #   `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence` is what
 #   makes the averaging principled.
+# - **Match the model to the data.** Dust IR emission (§9) is essential for
+#   FIR-detected targets but inert — and costly — when the reddest band is
+#   rest-frame near-IR. Adding it would only be a speed tax here.
