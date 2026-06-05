@@ -18,8 +18,8 @@
 .. _sphx_glr_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:
 
 
-QSOgen disc: dust reddening tunes UV to optical colour
-=======================================================
+QSO continuum: polar-dust reddening tunes UV to optical colour
+==============================================================
 
 .. image:: images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
    :alt: plot agn qsogen ebv sweep
@@ -27,14 +27,36 @@ QSOgen disc: dust reddening tunes UV to optical colour
 
 
 Dust-free quasar spectra are intrinsically blue in the UV and optical.
-Intrinsic dust reddening ``ebv`` (E(B−V)) reddens the continuum via
-extinction. Varying ``ebv`` from 0 to 0.4 shows the transition from
-unobscured type-1 QSO colours to moderately dust-enshrouded systems.
+Adding a polar-dust attenuation component reddens the accretion-disc
+continuum: increasing the polar-dust reddening ``agn_polar_ebv`` (E(B−V),
+[mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colours to
+a moderately dust-reddened continuum, while the absorbed UV energy is
+re-radiated as a polar-dust infrared bump.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-73
+The disc is QSOgen (Temple+ 2021); the reddening is applied by the
+composable AGN ``atten`` block (``polar_dust``), and the swept quantity
+``agn_polar_ebv`` is overridden directly at prediction time rather than
+fitted, so no inference is run.
+
+.. GENERATED FROM PYTHON SOURCE LINES 17-92
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :alt: plot agn qsogen ebv sweep
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_ebv_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -50,6 +72,9 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     warnings.filterwarnings("ignore", message=".*deprecated.*")
+    # At E(B-V)=0 the polar-dust block applies no extinction (expected for the
+    # unobscured baseline of the sweep); silence its informational notice.
+    warnings.filterwarnings("ignore", message=".*agn_polar_ebv=0.*")
 
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
@@ -58,18 +83,21 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
         agn={
             "type": "composable",
-            "disc": {"type": "multicolor", "*": tengri.FIXED},
+            "disc": {"type": "qsogen", "*": tengri.FIXED},
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
+            "atten": {"type": "polar_dust", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "agn_frac": 1.0,
             "log_lbol": 11.0,
+            "frac": 1.0,  # composable AGN is scaled by agn_frac * frac; keep both at 1
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -81,7 +109,9 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for ebv in ebv_values:
-        params = {**baseline, "agn_grahsp_ebv": jnp.float64(ebv)}
+        # agn_polar_ebv is a fixed model parameter; override it per curve to
+        # sweep the reddening without re-fitting.
+        params = {**baseline, "agn_polar_ebv": jnp.float64(ebv)}
         out = model.predict_rest_sed(params)
         wave = np.asarray(out.wavelength)
         nu = 2.998e18 / wave
@@ -94,10 +124,15 @@ unobscured type-1 QSO colours to moderately dust-enshrouded systems.
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
-    cbar.set_label(r"$E(B-V)$ [mag]")
+    cbar.set_label(r"polar-dust $E(B-V)$ [mag]")
 
     fig.tight_layout()
     plt.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.258 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:
