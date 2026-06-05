@@ -38,7 +38,7 @@ from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
     wavelength_to_nu as _wavelength_to_nu,
 )
-from tengri.utils.grid_interp import interp_nd_triweight
+from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight
 from tengri.utils.interpolation import edges_for_grid
 
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
@@ -585,6 +585,10 @@ def skirtor_disc_dust_ratio(
     R : ndarray, scalar
         Disc/dust bolometric luminosity ratio. Returns 1.0 if the v3 grid
         (separate disk/dust components) is unavailable.
+    incl_ratio : ndarray, shape (n_wave,)
+        Wavelength-dependent disc inclination attenuation ``disk(i)/disk(0)``
+        for reweighting the disc output spectrum. Ones if the grid is
+        unavailable.
 
     Notes
     -----
@@ -594,10 +598,10 @@ def skirtor_disc_dust_ratio(
     """
     raw = _load_raw_disk_dust_grid()
     if raw is None:
-        return jnp.asarray(1.0)
-    disk_jax, dust_jax, wave_grid, axes, edges = raw
+        return jnp.asarray(1.0), jnp.ones_like(wave)
+    disk_jax, dust_jax, wave_grid, axes = raw
 
-    def _interp(grid, cos_inc):
+    def _interp_native(grid, cos_inc):
         point = (
             jnp.asarray(agn_tau_skirtor),
             jnp.asarray(agn_p_skirtor),
@@ -605,50 +609,74 @@ def skirtor_disc_dust_ratio(
             jnp.asarray(agn_oa_skirtor),
             jnp.asarray(cos_inc),
         )
-        # RAW interpolated L_λ template — NO per-component normalisation, so
-        # the disk/dust template ratio is preserved (unlike
-        # ``create_skirtor_components_from_grid`` which scales each to l_scale).
-        tmpl = interp_nd_triweight(grid, axes, edges, point)
-        return jnp.interp(wave, wave_grid, tmpl, left=0.0, right=0.0)
+        # RAW interpolated L_λ template on the NATIVE grid — NO per-component
+        # normalisation (preserves the disk/dust ratio) and NO wave resampling
+        # (CIGALE integrates lumin_disk/lumin_dust on the SKIRTOR template grid;
+        # resampling onto the user grid distorts the integrals → R ~10% off).
+        # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
+        # does not pass through grid nodes, distorting the disk/dust *integral
+        # ratio* by ~10% even at exact-node params (R 2.45 vs CIGALE 2.22).
+        return interp_nd_pchip(grid, axes, point)
 
-    disk_i = _interp(disk_jax, agn_cos_inc)
-    dust_i = _interp(dust_jax, agn_cos_inc)
-    disk_0 = _interp(disk_jax, 1.0)  # face-on
+    disk_i_n = _interp_native(disk_jax, agn_cos_inc)
+    dust_i_n = _interp_native(dust_jax, agn_cos_inc)
+    disk_0_n = _interp_native(disk_jax, 1.0)  # face-on
 
-    int_disk0 = jnp.trapezoid(disk_0, wave)
-    shape = disc_lambda_unreddened / jnp.maximum(
-        jnp.trapezoid(disc_lambda_unreddened, wave), 1e-30
-    )
-    disk_analytic = shape * int_disk0
+    # --- R on the native template grid (CIGALE convention) ---
+    # Bring the analytic disc shape + reddening onto the native grid.
+    disc_n = jnp.interp(wave_grid, wave, disc_lambda_unreddened, left=0.0, right=0.0)
+    ext_n = jnp.interp(wave_grid, wave, disc_ext_fac, left=1.0, right=1.0)
+    int_disk0 = jnp.trapezoid(disk_0_n, wave_grid)
+    shape_n = disc_n / jnp.maximum(jnp.trapezoid(disc_n, wave_grid), 1e-30)
+    disk_analytic = shape_n * int_disk0
     # CIGALE nan_to_num: zero the disc where the face-on disc vanishes.
-    incl_ratio = jnp.where(disk_0 > 0, disk_i / jnp.where(disk_0 > 0, disk_0, 1.0), 0.0)
-    sk_disk_reddened = disk_analytic * incl_ratio * disc_ext_fac
+    incl_n = jnp.where(disk_0_n > 0, disk_i_n / jnp.where(disk_0_n > 0, disk_0_n, 1.0), 0.0)
+    sk_disk_reddened = disk_analytic * incl_n * ext_n
 
     eta = agn_cos_inc * (1.0 + 2.0 * agn_cos_inc) / 3.0
-    return (
+    R = (
         eta
-        * jnp.trapezoid(sk_disk_reddened, wave)
-        / jnp.maximum(jnp.trapezoid(dust_i, wave), 1e-30)
+        * jnp.trapezoid(sk_disk_reddened, wave_grid)
+        / jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
     )
+    # ``incl_ratio`` on the *user* grid for the disc-shape reweighting.
+    incl_ratio = jnp.interp(wave, wave_grid, incl_n, left=0.0, right=0.0)
+    # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
+    # inclination attenuation of the disc continuum (CIGALE
+    # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc
+    # output *shape* so the disc spectrum (not just its bolometric R) is
+    # inclination-correct.
+    return R, incl_ratio
 
 
 @functools.cache
 def _load_raw_disk_dust_grid():
     """Load raw (un-normalised) SKIRTOR disk/dust template grids for R.
 
-    Returns ``(disk_jax, dust_jax, wave_grid, axes, edges)`` or ``None`` if
-    the v3 grid (separate disk/dust components) is unavailable.
+    Returns ``(disk_jax, dust_jax, wave_grid, axes)`` or ``None`` if the v3
+    grid (separate disk/dust components) is unavailable. Any descending axis
+    (the grid stores ``cos_inclination`` 1→0) is reversed so the node-exact
+    PCHIP interpolant used for R sees strictly-ascending coordinates.
     """
+    import numpy as _np
+
     raw = _load_grid_arrays(_find_skirtor_grid())
     if "disk" not in raw or "dust" not in raw:
         return None
+    disk = _np.asarray(raw["disk"])
+    dust = _np.asarray(raw["dust"])
+    axes_list = [_np.asarray(ax) for ax in raw["axes"]]
+    for i, ax in enumerate(axes_list):
+        if ax.size > 1 and ax[0] > ax[-1]:  # descending → reverse axis i
+            axes_list[i] = ax[::-1]
+            disk = _np.flip(disk, axis=i)
+            dust = _np.flip(dust, axis=i)
     with jax.ensure_compile_time_eval():
-        disk_jax = jnp.array(raw["disk"])
-        dust_jax = jnp.array(raw["dust"])
+        disk_jax = jnp.array(disk)
+        dust_jax = jnp.array(dust)
         wave_grid = jnp.array(raw["wave"])
-        axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
-    return disk_jax, dust_jax, wave_grid, axes, edges
+        axes = tuple(jnp.array(ax) for ax in axes_list)
+    return disk_jax, dust_jax, wave_grid, axes
 
 
 # ── Auto-load tabulated SKIRTOR as the default ────────────────────

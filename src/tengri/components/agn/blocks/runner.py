@@ -392,8 +392,9 @@ agn_attenuation_block : str
     # applied branchlessly after the torus block (below).
     _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
     _disc_R = None
+    _disc_incl = None
     if agn_torus_block == "skirtor":
-        _disc_R = skirtor_disc_dust_ratio(
+        _disc_R, _disc_incl = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
             _disc_ext,
@@ -454,8 +455,13 @@ agn_attenuation_block : str
     # disc keeps its independent ``agn_log_lbol`` scaling.
     if _disc_R is not None:
         _agn_power = jnp.trapezoid(L_lambda_torus, wave)
-        _disc_int = jnp.maximum(jnp.trapezoid(L_lambda_disc, wave), 1e-30)
-        _disc_scaled = L_lambda_disc * (_agn_power * _disc_R) / _disc_int
+        # Apply the wavelength-dependent ``disk(i)/disk(0)`` inclination
+        # attenuation to the disc *shape* (CIGALE ``SKIRTOR.disk(i)/AGN1.disk(0)``)
+        # so the disc spectrum is inclination-correct, then renormalise the
+        # reweighted shape to the agn_power-tied bolometric ``agn_power × R``.
+        _disc_reweighted = L_lambda_disc * _disc_incl
+        _disc_int = jnp.maximum(jnp.trapezoid(_disc_reweighted, wave), 1e-30)
+        _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
         L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, L_lambda_disc)
 
     # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
