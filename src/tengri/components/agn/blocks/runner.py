@@ -66,6 +66,7 @@ from tengri.components.agn.blocks.torus_screen import (
 )
 from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the grey Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
@@ -394,7 +395,7 @@ agn_attenuation_block : str
     _disc_R = None
     _disc_incl = None
     if agn_torus_block == "skirtor":
-        _disc_R, _disc_incl = skirtor_disc_dust_ratio(
+        _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
             _disc_ext,
@@ -404,6 +405,29 @@ agn_attenuation_block : str
             agn_oa_skirtor=params.get("agn_oa_skirtor", 40.0),
             agn_cos_inc=_cos_inc,
         )
+        # #556 mechanism 3 — tie the polar ``l_ext`` to the SAME agn_power as
+        # the disc. The SKIRTOR torus block estimates the absorbed disc power
+        # from a FACE-ON disc proxy; in fracAGN mode it must use the
+        # agn_power-tied face-on disc ``agn_power·R/η`` (not the legacy
+        # ``18/7·10^agn_log_lbol`` which assumes agn_log_lbol = intrinsic 4π
+        # power, over-estimating l_ext ~2× → FIR +15%). ``agn_power`` here is
+        # the L_absorbed-coupled value the torus block normalises to
+        # (``agn_torus_frac × L_bol``), available *before* the torus runs so
+        # there is no circular dependency on ∫torus. Branchless: fall back to
+        # the legacy proxy where ``agn_fracAGN == 0``.
+        _agn_torus_frac = jnp.asarray(params.get("agn_torus_frac", 0.5))
+        _Lbol = 10.0**agn_log_lbol * L_SUN
+        _agn_power_pre = _agn_torus_frac * _Lbol
+        # Face-on UN-reddened disc ∫AGN1.disk = agn_power × R_faceon (the
+        # ratio the CIGALE l_ext proxy needs), NOT agn_power × R (which is the
+        # reddened, inclination-weighted *observed* disc).
+        _faceon_frac = _agn_power_pre * _disc_R_faceon
+        _faceon_proxy = _Lbol * (18.0 / 7.0)
+        _faceon = jnp.where(_agn_fracAGN > 0.0, _faceon_frac, _faceon_proxy)
+        params = {
+            **params,
+            "agn_disc_faceon_lbol": jnp.log10(jnp.maximum(_faceon / L_SUN, 1e-30)),
+        }
 
     L_lambda_disc = L_lambda_disc * _disc_ext
 

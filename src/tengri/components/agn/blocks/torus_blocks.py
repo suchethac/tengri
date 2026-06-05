@@ -196,14 +196,24 @@ def skirtor_torus_block(
     # the hemispherical-aniso factor 1/(7/18) = 18/7 ≈ 2.571, equal
     # to the inverse of CIGALE's 0.493 × 0.789 = 0.389
     # transformation in ``skirtor2016.py:407``.
-    _L_DISC_FACE_PER_4PI = 18.0 / 7.0  # = 1/(7/18) ≈ 2.5714
-    L_disc_lambda = (
-        schartmann2005_disk_spectrum(wave_aa / 10.0, delta=0.0)
-        / 10.0
-        * (10.0**agn_log_lbol)
-        * _L_SUN_ERG
-        * _L_DISC_FACE_PER_4PI
-    )  # [erg/s/Å], integrated face-on luminosity = 18/7 × L_bol_4π
+    _sch_shape = schartmann2005_disk_spectrum(wave_aa / 10.0, delta=0.0) / 10.0
+    _faceon_lbol = _params.get("agn_disc_faceon_lbol", None)
+    if _faceon_lbol is not None:
+        # CIGALE single-reference mode (#556): the runner passes the
+        # agn_power-tied FACE-ON disc luminosity ``log10(agn_power·R/η / L☉)``
+        # so the polar ``l_ext`` tracks the SAME disc the output is tied to.
+        # Normalise the Schartmann shape to that bolometric.
+        L_disc_lambda = (
+            _sch_shape
+            / jnp.maximum(jnp.trapezoid(_sch_shape, wave_aa), 1e-30)
+            * (10.0 ** jnp.asarray(_faceon_lbol))
+            * _L_SUN_ERG
+        )
+    else:
+        # Legacy proxy: agn_log_lbol assumed = intrinsic 4π power; the face-on
+        # disc is larger by 18/7 (inverse of CIGALE's 7/18 hemispherical aniso).
+        _L_DISC_FACE_PER_4PI = 18.0 / 7.0  # = 1/(7/18) ≈ 2.5714
+        L_disc_lambda = _sch_shape * (10.0**agn_log_lbol) * _L_SUN_ERG * _L_DISC_FACE_PER_4PI
     L_disc_nu = L_disc_lambda * wave_aa**2 / _C_AA_PER_S
 
     # Anisotropic-geometry-weighted absorbed disc luminosity [erg/s].

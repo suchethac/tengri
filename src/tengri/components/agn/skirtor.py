@@ -589,6 +589,10 @@ def skirtor_disc_dust_ratio(
         Wavelength-dependent disc inclination attenuation ``disk(i)/disk(0)``
         for reweighting the disc output spectrum. Ones if the grid is
         unavailable.
+    R_faceon : ndarray, scalar
+        Face-on UN-reddened disc/dust ratio ``∫disk(i=0)/∫dust(i)`` — the
+        ratio the polar ``l_ext`` proxy needs (CIGALE ``l_ext =
+        geom·∫AGN1.disk·(1-ext_fac)``). 1.0 if the grid is unavailable.
 
     Notes
     -----
@@ -598,7 +602,7 @@ def skirtor_disc_dust_ratio(
     """
     raw = _load_raw_disk_dust_grid()
     if raw is None:
-        return jnp.asarray(1.0), jnp.ones_like(wave)
+        return jnp.asarray(1.0), jnp.ones_like(wave), jnp.asarray(1.0)
     disk_jax, dust_jax, wave_grid, axes = raw
 
     def _interp_native(grid, cos_inc):
@@ -633,12 +637,14 @@ def skirtor_disc_dust_ratio(
     incl_n = jnp.where(disk_0_n > 0, disk_i_n / jnp.where(disk_0_n > 0, disk_0_n, 1.0), 0.0)
     sk_disk_reddened = disk_analytic * incl_n * ext_n
 
+    int_dust = jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
     eta = agn_cos_inc * (1.0 + 2.0 * agn_cos_inc) / 3.0
-    R = (
-        eta
-        * jnp.trapezoid(sk_disk_reddened, wave_grid)
-        / jnp.maximum(jnp.trapezoid(dust_i_n, wave_grid), 1e-30)
-    )
+    R = eta * jnp.trapezoid(sk_disk_reddened, wave_grid) / int_dust
+    # ``R_faceon`` = ∫AGN1.disk(face-on, UN-reddened) / ∫dust — the ratio the
+    # polar ``l_ext`` proxy needs (CIGALE l_ext = geom·∫AGN1.disk·(1-ext_fac)),
+    # distinct from ``R`` (the reddened, inclination-weighted *observed* disc
+    # used for the disc output bolometric).
+    R_faceon = int_disk0 / int_dust
     # ``incl_ratio`` on the *user* grid for the disc-shape reweighting.
     incl_ratio = jnp.interp(wave, wave_grid, incl_n, left=0.0, right=0.0)
     # ``incl_ratio`` = disk(i)/disk(0) is the wavelength-dependent SKIRTOR
@@ -646,7 +652,7 @@ def skirtor_disc_dust_ratio(
     # ``SKIRTOR.disk(i)/AGN1.disk(0)``); the caller applies it to the disc
     # output *shape* so the disc spectrum (not just its bolometric R) is
     # inclination-correct.
-    return R, incl_ratio
+    return R, incl_ratio, R_faceon
 
 
 @functools.cache
