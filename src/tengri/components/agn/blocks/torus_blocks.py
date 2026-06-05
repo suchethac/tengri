@@ -197,7 +197,7 @@ def skirtor_torus_block(
     # to the inverse of CIGALE's 0.493 × 0.789 = 0.389
     # transformation in ``skirtor2016.py:407``.
     _sch_shape = schartmann2005_disk_spectrum(wave_aa / 10.0, delta=0.0) / 10.0
-    _faceon_lbol = _params.get("agn_disc_faceon_lbol", None)
+    _faceon_lbol = _params.get("agn_disc_faceon_lbol")
     if _faceon_lbol is not None:
         # CIGALE single-reference mode (#556): the runner passes the
         # agn_power-tied FACE-ON disc luminosity ``log10(agn_power·R/η / L☉)``

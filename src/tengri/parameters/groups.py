@@ -1543,9 +1543,7 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         _norm = agn_dict["norm"]
         _valid_norms = {"cigale_joint", "independent"}
         if _norm not in _valid_norms:
-            raise ValueError(
-                f"Unknown agn['norm'] = '{_norm}'. Valid: {sorted(_valid_norms)}."
-            )
+            raise ValueError(f"Unknown agn['norm'] = '{_norm}'. Valid: {sorted(_valid_norms)}.")
         result["agn_norm"] = _norm
 
 
