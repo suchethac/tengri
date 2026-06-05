@@ -394,7 +394,12 @@ agn_attenuation_block : str
     _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
     _disc_R = None
     _disc_incl = None
-    if agn_torus_block == "skirtor":
+    # ``agn_norm`` policy (#556): "cigale_joint" ties disc/torus/polar to the
+    # single agn_power reference (only meaningful for the SKIRTOR torus, whose
+    # template ratios define R); "independent" keeps the legacy per-component
+    # scaling. Static string (JIT-safe Python branch).
+    _agn_norm = params.get("agn_norm", "cigale_joint")
+    if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
         _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,

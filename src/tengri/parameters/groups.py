@@ -1126,7 +1126,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "igm.dla": frozenset({"type", "*"}),
     "radio": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
-    "agn": frozenset({"type", "*"}) | _AGN_SUBBLOCK_KEYS,
+    "agn": frozenset({"type", "*", "norm"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*"}),
     "agn.torus": frozenset({"type", "*"}),
     "agn.lines": frozenset({"type", "*"}),
@@ -1535,6 +1535,18 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
             raise ValueError(f"Unknown agn_{block_name}_block type '{block_type}'.{suggest_str}")
 
         result[block_to_kwarg[block_name]] = block_type
+
+    # Cross-block normalisation policy (#556). ``agn={'norm': 'cigale_joint' |
+    # 'independent'}`` selects how disc/torus/polar share a luminosity
+    # reference. Default (unset) leaves AGNConfig.agn_norm at "cigale_joint".
+    if "norm" in agn_dict:
+        _norm = agn_dict["norm"]
+        _valid_norms = {"cigale_joint", "independent"}
+        if _norm not in _valid_norms:
+            raise ValueError(
+                f"Unknown agn['norm'] = '{_norm}'. Valid: {sorted(_valid_norms)}."
+            )
+        result["agn_norm"] = _norm
 
 
 def _partition_by_group(
