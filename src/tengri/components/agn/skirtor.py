@@ -537,6 +537,120 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
     return skirtor_components
 
 
+def skirtor_disc_dust_ratio(
+    wave: jnp.ndarray,
+    disc_lambda_unreddened: jnp.ndarray,
+    disc_ext_fac: jnp.ndarray,
+    *,
+    agn_tau_skirtor: float = 7.0,
+    agn_p_skirtor: float = 1.0,
+    agn_q_skirtor: float = 1.0,
+    agn_oa_skirtor: float = 40.0,
+    agn_cos_inc: float = 0.86602540378443864,
+) -> jnp.ndarray:
+    r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
+
+    Replicates CIGALE ``skirtor2016.py`` so the composable AGN can tie the
+    disc to the single ``agn_power`` reference (energy-conserving). The
+    analytic disc shape is renormalised to the **face-on** SKIRTOR disc
+    integral ``∫disk(i=0)``, reweighted by the inclination ratio
+    ``disk(i)/disk(0)``, reddened, and the **anisotropy factor**
+    ``η(i) = cos(i)(1+2cos(i))/3`` (= 0.789 at i=30°) applied — then divided
+    by the SKIRTOR dust integral ``∫dust(i)``::
+
+        R = η(i) · ∫[ŝ·∫disk(0) · disk(i)/disk(0) · ext_fac] dλ / ∫dust(i) dλ
+
+    where ``ŝ`` is the unit-area analytic disc shape. At the §9 fiducial this
+    yields R ≈ 2.23, matching CIGALE ``lumin_disk/total_dust = 2.22``. The η
+    factor (the disc's anisotropic emission, Stalevski+2016 §2.2.1) is what
+    sets the *observed* disc bolometric with viewing angle and couples it to
+    the polar-dust energy balance.
+
+    Parameters
+    ----------
+    wave : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid [Å].
+    disc_lambda_unreddened : ndarray, shape (n_wave,)
+        Analytic disc spectrum *before* reddening, any normalisation
+        (shape only is used). [erg/s/Å]
+    disc_ext_fac : ndarray, shape (n_wave,)
+        Line-of-sight reddening factor ``10^(-0.4·k·E(B-V))`` (1.0 = no
+        reddening). [dimensionless]
+    agn_tau_skirtor, agn_p_skirtor, agn_q_skirtor, agn_oa_skirtor, agn_cos_inc
+        SKIRTOR grid parameters (edge-on τ_9.7, radial/polar density
+        indices, half-opening angle, cos inclination).
+
+    Returns
+    -------
+    R : ndarray, scalar
+        Disc/dust bolometric luminosity ratio. Returns 1.0 if the v3 grid
+        (separate disk/dust components) is unavailable.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — grid interpolation is pure JAX.
+
+    **Upstream**: Ported from CIGALE ``skirtor2016.py`` (Boquien+2019).
+    """
+    raw = _load_raw_disk_dust_grid()
+    if raw is None:
+        return jnp.asarray(1.0)
+    disk_jax, dust_jax, wave_grid, axes, edges = raw
+
+    def _interp(grid, cos_inc):
+        point = (
+            jnp.asarray(agn_tau_skirtor),
+            jnp.asarray(agn_p_skirtor),
+            jnp.asarray(agn_q_skirtor),
+            jnp.asarray(agn_oa_skirtor),
+            jnp.asarray(cos_inc),
+        )
+        # RAW interpolated L_λ template — NO per-component normalisation, so
+        # the disk/dust template ratio is preserved (unlike
+        # ``create_skirtor_components_from_grid`` which scales each to l_scale).
+        tmpl = interp_nd_triweight(grid, axes, edges, point)
+        return jnp.interp(wave, wave_grid, tmpl, left=0.0, right=0.0)
+
+    disk_i = _interp(disk_jax, agn_cos_inc)
+    dust_i = _interp(dust_jax, agn_cos_inc)
+    disk_0 = _interp(disk_jax, 1.0)  # face-on
+
+    int_disk0 = jnp.trapezoid(disk_0, wave)
+    shape = disc_lambda_unreddened / jnp.maximum(
+        jnp.trapezoid(disc_lambda_unreddened, wave), 1e-30
+    )
+    disk_analytic = shape * int_disk0
+    # CIGALE nan_to_num: zero the disc where the face-on disc vanishes.
+    incl_ratio = jnp.where(disk_0 > 0, disk_i / jnp.where(disk_0 > 0, disk_0, 1.0), 0.0)
+    sk_disk_reddened = disk_analytic * incl_ratio * disc_ext_fac
+
+    eta = agn_cos_inc * (1.0 + 2.0 * agn_cos_inc) / 3.0
+    return (
+        eta
+        * jnp.trapezoid(sk_disk_reddened, wave)
+        / jnp.maximum(jnp.trapezoid(dust_i, wave), 1e-30)
+    )
+
+
+@functools.cache
+def _load_raw_disk_dust_grid():
+    """Load raw (un-normalised) SKIRTOR disk/dust template grids for R.
+
+    Returns ``(disk_jax, dust_jax, wave_grid, axes, edges)`` or ``None`` if
+    the v3 grid (separate disk/dust components) is unavailable.
+    """
+    raw = _load_grid_arrays(_find_skirtor_grid())
+    if "disk" not in raw or "dust" not in raw:
+        return None
+    with jax.ensure_compile_time_eval():
+        disk_jax = jnp.array(raw["disk"])
+        dust_jax = jnp.array(raw["dust"])
+        wave_grid = jnp.array(raw["wave"])
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        edges = tuple(edges_for_grid(ax) for ax in axes)
+    return disk_jax, dust_jax, wave_grid, axes, edges
+
+
 # ── Auto-load tabulated SKIRTOR as the default ────────────────────
 
 
