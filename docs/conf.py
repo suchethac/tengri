@@ -104,12 +104,14 @@ sphinx_gallery_conf = {
         #   * Population vmap scripts — galaxy_stack_1000 (1k) and
         #     vmap_population_throughput (10k) peak past 30 GB and SIGKILL the
         #     build; they run standalone with enough RAM.
-        #   * Examples blocked on an upstream library gap, hidden until fixed:
-        #     cat3d_wind_sweep (the a_cat3d / fwd_cat3d grid axes are settable
-        #     but a no-op in the forward pass) and skirtor_agnfitter_vs_cigale
-        #     (skirtor_agnfitter is not a registered composable torus selector).
-        #     (recipes_gallery was un-deferred once #683 — SFH high-z NaN — was
-        #     fixed; it now renders all five recipes.)
+        #   * Examples that were blocked on an upstream library gap and are now
+        #     un-deferred once the gap was fixed:
+        #     - recipes_gallery (#683 — SFH high-z NaN — fixed; renders all five
+        #       recipes).
+        #     - cat3d_wind_sweep (the a_cat3d / fwd_cat3d grid axes were a no-op
+        #       in the forward pass; #677 wired them — both now move the SED).
+        #     - skirtor_agnfitter_vs_cigale (skirtor_agnfitter is now a
+        #       registered composable torus selector, #677).
         r"plot_("
         r"population_scaling|"
         r"hierarchical|hierarchical_convergence|"
@@ -124,9 +126,7 @@ sphinx_gallery_conf = {
         r"real_data_fit|"
         r"dust_attenuation_recovery|"
         r"jit_cache_speedup|"
-        r"waveprecomp_scaling|"
-        r"cat3d_wind_sweep|"
-        r"skirtor_agnfitter_vs_cigale"
+        r"waveprecomp_scaling"
         r")\.py$"
     ),
     "download_all_examples": False,
