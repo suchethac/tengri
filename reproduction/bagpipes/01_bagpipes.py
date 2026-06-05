@@ -1452,16 +1452,20 @@ print(
 # photometry integration — tengri and BAGPIPES use the same
 # `∫ F_ν T dν / ∫ T dν` definition of band-averaged flux.
 #
-# **What the residual panel shows.** With the §7 dust now applied as a
-# single screen matching BAGPIPES (`τ_bc = 0`, full `A_V` on the diffuse
-# component — see §7 and #562), tengri reproduces the BAGPIPES SDSS
-# magnitudes to **≈ 0.02 mag in g/r/i/z and ≈ 0.17 mag in u**. The u-band
-# residual is the bluest band, where the Cue-vs-Cloudy nebular difference
-# (§9) and the steep stellar-UV slope both bite hardest. The earlier
-# 0.3–0.7 mag offset across all bands was the dust-mapping artifact (the
-# old 50/50 `τ_bc`/`τ_diff` split under-attenuated the old population),
-# not a stellar-colour or nebular effect — §13b confirms the residual is
-# now small with or without nebular.
+# **What the residual panel shows.** With the §7 dust as a single screen
+# matching BAGPIPES (`τ_bc = 0`, full `A_V` on the diffuse component — see
+# §7 and #562) and the nebular continuum now reddened by that same screen
+# (#668/#690), tengri reproduces the BAGPIPES SDSS magnitudes to **≤ 0.02 mag
+# in r/i/z** but stays **−0.11 mag (u)** and **−0.15 mag (g)** brighter. The
+# two bluest bands carry the strongest nebular emission lines — u spans
+# [O II] 3727 and g spans Hβ 4862 + [O III] 4959/5007 — and that is exactly
+# where the Cue-vs-Cloudy nebular difference (§9) bites: §13b shows the gap
+# collapses to ≤ 0.02 mag in every band once the nebular block is removed.
+# So the residual is a nebular **line-strength** difference between tengri's
+# Cue backend and BAGPIPES' CLOUDY grid, not a dust or stellar-colour effect.
+# The earlier 0.3–0.7 mag offset across *all* bands was the dust-mapping
+# artifact (the old 50/50 `τ_bc`/`τ_diff` split under-attenuated the old
+# population, #562), now removed.
 
 # %%
 from tengri.observation.filters import load_filter
@@ -1518,16 +1522,17 @@ for band, m_b, m_t in zip(_sdss_bands, bp_mags, tng_mags):
 
 
 # %% [markdown]
-# ### §13b Photometry without nebular — isolating the small residual
+# ### §13b Photometry without nebular — the residual is nebular lines
 #
-# With the §7 dust applied as a single screen (§13), the tengri–BAGPIPES
-# SDSS residual is already down to a few hundredths of a magnitude. This
-# cell isolates how much of what remains is the §9 Cue/Cloudy nebular
-# difference: rebuild both codes' SEDs with the nebular block removed and
-# re-run the same convolution. The band-averaged residual drops from
-# ⟨Δ⟩ ≈ −0.03 mag (full) to ≈ −0.01 mag (no nebular) — so the leftover is
-# split between the nebular grid difference and the residual §4
-# stellar-continuum colour, both at the ~0.01–0.03 mag level.
+# §13 leaves tengri −0.11 mag (u) and −0.15 mag (g) brighter than BAGPIPES
+# while r/i/z agree to ≤ 0.02 mag. This cell pins that on the §9 Cue/CLOUDY
+# nebular difference: rebuild both codes' SEDs with the nebular block removed
+# and re-run the same convolution. The band-averaged residual drops from
+# ⟨Δ⟩ ≈ −0.06 mag (full) to ≈ −0.01 mag (no nebular), and crucially the u/g
+# excess collapses with it — confirming the gap is a nebular **line-strength**
+# difference (Cue vs CLOUDY) in the bands carrying [O II] 3727 (u) and
+# Hβ + [O III] 4959/5007 (g), not a dust or stellar-continuum effect. What
+# remains without nebular is the ≈ 0.01 mag residual §4 stellar colour.
 
 # %%
 comp_b_nonneb = dict(comp_b_full)
@@ -1809,11 +1814,14 @@ plt.show()
 #   CGM damping wing (§12b, tengri-only) produces the full Totani+06
 #   damping-wing shape at z = 7.
 # - **§13 SDSS photometry.** With the §7 single-screen dust, tengri
-#   reproduces the BAGPIPES ugriz magnitudes to ≈ 0.02 mag in g/r/i/z and
-#   ≈ 0.17 mag in u. §13b shows the small residual is split between the §9
-#   nebular grid difference (⟨Δ⟩ −0.03 → −0.01 mag without nebular) and the
-#   residual §4 stellar colour. The earlier 0.3–0.7 mag offset was the
-#   50/50 dust-split artifact (#562), now removed.
+#   reproduces the BAGPIPES ugriz magnitudes to ≤ 0.02 mag in r/i/z but stays
+#   −0.11 mag (u) and −0.15 mag (g) brighter — the two bands carrying the
+#   strongest nebular lines ([O II] 3727 in u; Hβ + [O III] 4959/5007 in g).
+#   §13b pins this on the §9 Cue-vs-CLOUDY nebular line-strength difference:
+#   the band-averaged residual drops from ⟨Δ⟩ −0.06 → −0.01 mag with the
+#   nebular block removed, leaving only the ≈ 0.01 mag §4 stellar colour. The
+#   earlier 0.3–0.7 mag offset across all bands was the 50/50 dust-split
+#   artifact (#562), now removed.
 # - **§14 timing.** Both codes finish a full SED in 80–120 ms.
 # - **full-SED head-to-head.** The whole BAGPIPES-mode forward model on
 #   one axis with a fractional-residual panel and an optical normalization
