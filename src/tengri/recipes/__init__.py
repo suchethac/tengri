@@ -160,7 +160,7 @@ def agn_panchromatic() -> dict:
     - **AGN**:
         - **Disc**: Multicolor disc (free)
         - **Torus**: SKIRTOR clumpy torus model (free)
-        - **Lines**: NLR emission (free)
+        - **NLR**: Analytic narrow-line region (free)
     - **Radio**: Enabled (free)
     - **X-ray**: Enabled (free)
     - **Redshift**: Free
@@ -194,7 +194,7 @@ def agn_panchromatic() -> dict:
             defaults=FREE,
             disc=builders.agn.disc.multicolor(defaults=FREE),
             torus=builders.agn.torus.skirtor(defaults=FREE),
-            lines=builders.agn.lines.nlr(defaults=FREE),
+            nlr=builders.agn.nlr.analytic(defaults=FREE),
         ),
         radio=True,
         xray=True,
@@ -372,16 +372,16 @@ def unified_agn() -> dict:
 
     The grammar-native equivalent of the monolithic ``unified_nlr_blr`` model: a
     multicolor accretion disc, a single-temperature greybody torus, and the
-    combined narrow + broad line region (``nlr_blr``). The runner applies the
-    grey Type-1/2 visibility mask to the anisotropic central engine (disc + BLR),
-    driven by ``agn_cos_inc`` / ``agn_theta_torus``, while the spatially-extended
-    NLR stays isotropic — so the AGN transitions smoothly from Type-1 (face-on)
-    to Type-2 (edge-on) as a differentiable function of inclination. ``frac`` is
+    combined narrow + broad line region. The runner applies the grey Type-1/2
+    visibility mask to the anisotropic central engine (disc + BLR), driven by
+    ``agn_cos_inc`` / ``agn_theta_torus``, while the spatially-extended NLR
+    stays isotropic — so the AGN transitions smoothly from Type-1 (face-on) to
+    Type-2 (edge-on) as a differentiable function of inclination. ``frac`` is
     fixed so the luminosity is set parametrically by the (free) ``agn_log_lbol``.
 
     **SSP requirement:** any (analytic line templates; no Cloudy grids needed).
-    Swap ``lines`` to ``nlr_blr_synthesizer`` to read the Synthesizer Cloudy
-    grids instead.
+    Set ``nlr`` and ``blr`` to ``synthesizer_spectra`` to read the Synthesizer
+    Cloudy grids instead.
 
     Returns
     -------
@@ -392,7 +392,8 @@ def unified_agn() -> dict:
     --------
     >>> from tengri import recipes
     >>> params = recipes.unified_agn()
-    >>> assert params["agn"]["lines"]["type"] == "nlr_blr"
+    >>> assert params["agn"]["nlr"]["type"] == "analytic"
+    >>> assert params["agn"]["blr"]["type"] == "analytic"
     """
     return dict(
         sfh={"type": "delayed", "*": FIXED},
@@ -401,7 +402,8 @@ def unified_agn() -> dict:
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "simple"},
-            "lines": {"type": "nlr_blr"},
+            "nlr": {"type": "analytic"},
+            "blr": {"type": "analytic"},
             # Parametric luminosity mode: the AGN strength is set by the free
             # agn_log_lbol, so the two alternative scaling knobs are held fixed
             # (freeing them would add no-op nuisance dimensions in this mode).

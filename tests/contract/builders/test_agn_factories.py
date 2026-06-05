@@ -12,9 +12,10 @@ pytestmark = pytest.mark.contract
 from tengri import FIXED, FREE, Uniform, builders, parse_groups
 from tengri.parameters.groups import (
     _VALID_AGN_ATTEN_TYPES,
+    _VALID_AGN_BLR_TYPES,
     _VALID_AGN_DISC_TYPES,
     _VALID_AGN_FEII_TYPES,
-    _VALID_AGN_LINES_TYPES,
+    _VALID_AGN_NLR_TYPES,
     _VALID_AGN_TORUS_TYPES,
 )
 
@@ -26,7 +27,8 @@ from tengri.parameters.groups import (
     [
         ("disc", _VALID_AGN_DISC_TYPES),
         ("torus", _VALID_AGN_TORUS_TYPES),
-        ("lines", _VALID_AGN_LINES_TYPES),
+        ("nlr", _VALID_AGN_NLR_TYPES),
+        ("blr", _VALID_AGN_BLR_TYPES),
         ("feii", _VALID_AGN_FEII_TYPES),
         ("atten", _VALID_AGN_ATTEN_TYPES),
     ],
@@ -49,8 +51,12 @@ def test_torus_default_call() -> None:
     assert out["*"] is FIXED
 
 
-def test_lines_none_default_call() -> None:
-    assert builders.agn.lines.none() == {"type": "none", "*": FIXED}
+def test_nlr_none_default_call() -> None:
+    assert builders.agn.nlr.none() == {"type": "none", "*": FIXED}
+
+
+def test_blr_none_default_call() -> None:
+    assert builders.agn.blr.none() == {"type": "none", "*": FIXED}
 
 
 # ── Sub-block signatures: variants within an axis share the same params ──
@@ -84,7 +90,7 @@ def test_composable_signature_lists_sub_block_kwargs() -> None:
     params = list(sig.parameters)
     assert params[0] == "defaults"
     # Sub-blocks come right after the wildcard.
-    assert set(params[1:6]) == {"disc", "torus", "lines", "feii", "atten"}
+    assert set(params[1:7]) == {"disc", "torus", "nlr", "blr", "feii", "atten"}
 
 
 def test_composable_signature_includes_shared_short_params() -> None:
@@ -105,7 +111,8 @@ def test_full_composition_produces_grammar_shape() -> None:
         log_lbol=Uniform(43.0, 47.0),
         disc=builders.agn.disc.multicolor(_=FREE),
         torus=builders.agn.torus.skirtor(_=FIXED),
-        lines=builders.agn.lines.nlr(),
+        nlr=builders.agn.nlr.analytic(),
+        blr=builders.agn.blr.analytic(),
         feii=builders.agn.feii.none(),
         atten=builders.agn.atten.smc_prevot(),
     )
@@ -153,7 +160,8 @@ def test_composable_round_trips_to_free_log_lbol() -> None:
             log_lbol=Uniform(43, 47),
             disc=builders.agn.disc.powerlaw(),
             torus=builders.agn.torus.skirtor(),
-            lines=builders.agn.lines.nlr(),
+            nlr=builders.agn.nlr.analytic(),
+            blr=builders.agn.blr.none(),
             feii=builders.agn.feii.none(),
             atten=builders.agn.atten.smc_prevot(),
         ),
@@ -166,13 +174,13 @@ def test_composable_round_trips_to_free_log_lbol() -> None:
 
 def test_agn_in_builders_namespace() -> None:
     assert builders.agn is not None
-    for axis in ("disc", "torus", "lines", "feii", "atten"):
+    for axis in ("disc", "torus", "nlr", "blr", "feii", "atten"):
         assert getattr(builders.agn, axis) is not None
 
 
 def test_available_axes_returns_dict_of_lists() -> None:
     axes = builders.agn.available_axes()
-    assert set(axes) == {"disc", "torus", "lines", "feii", "atten"}
+    assert set(axes) == {"disc", "torus", "nlr", "blr", "feii", "atten"}
     for _axis, variants in axes.items():
         assert isinstance(variants, list)
         assert variants == sorted(variants)

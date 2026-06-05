@@ -21,14 +21,15 @@ __all__ = ["composable"]
 @register_agn_model(
     "composable",
     citation="(no single paper — block recipe of registered tengri AGN blocks)",
-    short_doc="Composable AGN: pick one block per stage (disc/lines/feii/torus/atten)",
+    short_doc="Composable AGN: pick one block per stage (disc/nlr/blr/feii/torus/atten)",
 )
 def composable(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,
     agn_frac: float = 1.0,
     agn_disc_block: str = "none",
-    agn_lines_block: str = "none",
+    agn_nlr_block: str = "none",
+    agn_blr_block: str = "none",
     agn_feii_block: str = "none",
     agn_torus_block: str = "none",
     agn_attenuation_block: str = "none",
@@ -49,8 +50,8 @@ def composable(
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Default ``45.0``.
     agn_frac : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
-    agn_disc_block, agn_lines_block, agn_feii_block, agn_torus_block, \
-agn_attenuation_block : str, optional
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
+agn_torus_block, agn_attenuation_block : str, optional
         Per-stage block selectors (default ``"none"`` everywhere — the
         user **must** opt in by name, and a warning is emitted if the
         recipe is degenerate).
@@ -79,7 +80,8 @@ agn_attenuation_block : str, optional
         agn_log_lbol=agn_log_lbol,
         agn_frac=agn_frac,
         agn_disc_block=agn_disc_block,
-        agn_lines_block=agn_lines_block,
+        agn_nlr_block=agn_nlr_block,
+        agn_blr_block=agn_blr_block,
         agn_feii_block=agn_feii_block,
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,

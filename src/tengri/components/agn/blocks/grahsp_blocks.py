@@ -12,7 +12,8 @@ Identifier convention
 Block names within each category mirror the upstream module names::
 
     disc          → ``"grahsp_sbpl"``     (smooth bending power-law BBB)
-    lines         → ``"grahsp"``          (Netzer 1990 / Mor & Netzer 2012)
+    nlr           → ``"grahsp"``          (Netzer 1990 narrow Gaussians)
+    blr           → ``"grahsp"``          (Netzer 1990 broad Gaussians)
     feii          → ``"grahsp"``          (Bruhweiler+Verner 2008 forest)
     torus         → ``"grahsp"``          (cool+hot log-Gaussian + Si)
     attenuation   → ``"grahsp_biatten"``  (SMC-like broken PL)
@@ -110,12 +111,12 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
 
 
 # ──────────────────────────────────────────────────────────────────────
-# GRAHSP lines block — Netzer 1990 broad+narrow Gaussians
+# GRAHSP NLR block — Netzer 1990 narrow Gaussians
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("lines", "grahsp")
-def grahsp_lines_block(
+@register_agn_block("nlr", "grahsp")
+def grahsp_nlr_block(
     wavelength: Array,
     agn_log_lbol: float,
     l5100_disc: Array,
@@ -126,10 +127,11 @@ def grahsp_lines_block(
     templates=None,
     **_params,
 ) -> Array:
-    r"""GRAHSP broad + narrow emission-line Gaussians as a lines-stage block.
+    r"""GRAHSP narrow emission-line Gaussians as an nlr-stage block.
 
     Uses the disc's :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` as the
     line-luminosity normalisation reference (matching upstream §2.1.2).
+    Returns the narrow-line component on the isotropic channel.
 
     Parameters
     ----------
@@ -143,7 +145,7 @@ def grahsp_lines_block(
     wave_nm = wave_aa * 0.1
     if templates is None:
         templates = load_grahsp_templates()
-    broad, narrow = gaussian_lines(
+    _, narrow = gaussian_lines(
         wave_nm=wave_nm,
         line_wave_nm=templates.line_wave_nm,
         line_broad=templates.line_broad,
@@ -154,7 +156,57 @@ def grahsp_lines_block(
         linewidth_kms=agn_grahsp_linewidth_kms,
         agn_type=agn_type,
     )
-    return (broad + narrow) * 0.1  # nm -> Å
+    narrow_L_lambda = narrow * 0.1  # nm -> Å
+    return jnp.zeros_like(narrow_L_lambda), narrow_L_lambda
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GRAHSP BLR block — Netzer 1990 broad Gaussians
+# ──────────────────────────────────────────────────────────────────────
+
+
+@register_agn_block("blr", "grahsp")
+def grahsp_blr_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_grahsp_a_lines: float = 1.0,
+    agn_grahsp_linewidth_kms: float = 5000.0,
+    agn_type: int = 1,
+    templates=None,
+    **_params,
+) -> Array:
+    r"""GRAHSP broad emission-line Gaussians as a blr-stage block.
+
+    Uses the disc's :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` as the
+    line-luminosity normalisation reference (matching upstream §2.1.2).
+    Returns the broad-line component as a bare maskable array.
+
+    Parameters
+    ----------
+    templates : GRAHSPTemplates, optional
+        Pre-loaded template bundle threaded in via the runner's
+        ``template_state``. When ``None`` (default), the block falls back to
+        the lru_cache-backed :func:`load_grahsp_templates` for backwards
+        compatibility — keeps the block usable as a standalone callable.
+    """
+    wave_aa = jnp.asarray(wavelength)
+    wave_nm = wave_aa * 0.1
+    if templates is None:
+        templates = load_grahsp_templates()
+    broad, _ = gaussian_lines(
+        wave_nm=wave_nm,
+        line_wave_nm=templates.line_wave_nm,
+        line_broad=templates.line_broad,
+        line_narrow_sy2=templates.line_narrow_sy2,
+        line_narrow_liner=templates.line_narrow_liner,
+        l5100=l5100_disc,
+        a_lines=agn_grahsp_a_lines,
+        linewidth_kms=agn_grahsp_linewidth_kms,
+        agn_type=agn_type,
+    )
+    return broad * 0.1  # nm -> Å
 
 
 # ──────────────────────────────────────────────────────────────────────

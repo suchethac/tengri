@@ -1297,7 +1297,8 @@ class SEDModel:
         # Static block selectors for the "composable" AGN recipe; default to
         # "none" so non-composable models receive harmless no-op selectors.
         self._agn_disc_block = getattr(spec, "agn_disc_block", "none")
-        self._agn_lines_block = getattr(spec, "agn_lines_block", "none")
+        self._agn_nlr_block = getattr(spec, "agn_nlr_block", "none")
+        self._agn_blr_block = getattr(spec, "agn_blr_block", "none")
         self._agn_feii_block = getattr(spec, "agn_feii_block", "none")
         self._agn_torus_block = getattr(spec, "agn_torus_block", "none")
         self._agn_attenuation_block = getattr(spec, "agn_attenuation_block", "none")
@@ -1339,20 +1340,25 @@ class SEDModel:
             # with the same grid path the forward resolves so the cached
             # instance is reused under trace. (The Gaussian ``nlr`` / ``blr``
             # blocks are JIT-safe and need no warming.)
-            if self._agn_lines_block in ("nlr_synthesizer", "blr_synthesizer"):
+            if self._agn_nlr_block in ("synthesizer", "synthesizer_spectra") or (
+                self._agn_blr_block in ("synthesizer", "synthesizer_spectra")
+            ):
                 with contextlib.suppress(Exception):
-                    from tengri.components.agn.blocks.lines_blocks import (
-                        _resolve_synthesizer_grid,
+                    from tengri.components.agn.blocks.blr_blocks import (
+                        _resolve_synthesizer_grid as _resolve_blr_grid,
+                    )
+                    from tengri.components.agn.blocks.nlr_blocks import (
+                        _resolve_synthesizer_grid as _resolve_nlr_grid,
                     )
                     from tengri.components.agn.nlr_cloudy import (
                         get_synthesizer_blr_backend,
                         get_synthesizer_nlr_backend,
                     )
 
-                    if self._agn_lines_block == "nlr_synthesizer":
-                        get_synthesizer_nlr_backend(_resolve_synthesizer_grid("nlr"))
-                    else:
-                        get_synthesizer_blr_backend(_resolve_synthesizer_grid("blr"))
+                    if self._agn_nlr_block in ("synthesizer", "synthesizer_spectra"):
+                        get_synthesizer_nlr_backend(_resolve_nlr_grid("nlr"))
+                    if self._agn_blr_block in ("synthesizer", "synthesizer_spectra"):
+                        get_synthesizer_blr_backend(_resolve_blr_grid("blr"))
 
         return delta
 
@@ -4350,9 +4356,10 @@ class SEDModel:
             cue_full_catalogue=bool(getattr(self.spec, "cue_full_catalogue", False)),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
-            agn_torus_block=getattr(self, "_agn_torus_block", "none"),
-            agn_lines_block=getattr(self, "_agn_lines_block", "none"),
+            agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),
+            agn_blr_block=getattr(self, "_agn_blr_block", "none"),
             agn_feii_block=getattr(self, "_agn_feii_block", "none"),
+            agn_torus_block=getattr(self, "_agn_torus_block", "none"),
             agn_attenuation_block=getattr(self, "_agn_attenuation_block", "none"),
             agn_norm=getattr(self, "_agn_norm", "cigale_joint"),
             dust_law_bc=getattr(self, "_dust_law_bc", "power_law"),

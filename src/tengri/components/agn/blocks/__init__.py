@@ -24,10 +24,11 @@ Public API
 from tengri.components.agn.blocks import (
     alternates,
     atten_blocks,
+    blr_blocks,
     composable_precompute,
     disc_blocks,
     grahsp_blocks,
-    lines_blocks,
+    nlr_blocks,
     qsogen_blocks,
     registry,
     torus_blocks,

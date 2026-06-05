@@ -440,7 +440,32 @@ class Parameters:
         # here and let typo-detection happen at composition time so the
         # error message points at the right registry.
         self.agn_disc_block = kwargs.pop("agn_disc_block", "none")
-        self.agn_lines_block = kwargs.pop("agn_lines_block", "none")
+        # Handle legacy agn_lines_block → (agn_nlr_block, agn_blr_block) split.
+        # Accept both new independent selectors and deprecated combined form.
+        agn_nlr_block_explicit = kwargs.pop("agn_nlr_block", None)
+        agn_blr_block_explicit = kwargs.pop("agn_blr_block", None)
+        agn_lines_block_legacy = kwargs.pop("agn_lines_block", None)
+        if agn_lines_block_legacy is not None and agn_lines_block_legacy != "none":
+            # Expand the legacy name to (nlr, blr) pair
+            import warnings
+
+            from tengri.components.agn.blocks._aliases import expand_lines_alias
+
+            nlr_expanded, blr_expanded = expand_lines_alias(agn_lines_block_legacy)
+            warnings.warn(
+                f"The AGN 'lines' selector is deprecated; use agn_nlr_block / "
+                f"agn_blr_block. '{agn_lines_block_legacy}' maps to "
+                f"nlr='{nlr_expanded}', blr='{blr_expanded}'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            # Set from expansion if user didn't provide explicit nlr/blr
+            if agn_nlr_block_explicit is None:
+                agn_nlr_block_explicit = nlr_expanded
+            if agn_blr_block_explicit is None:
+                agn_blr_block_explicit = blr_expanded
+        self.agn_nlr_block = agn_nlr_block_explicit or "none"
+        self.agn_blr_block = agn_blr_block_explicit or "none"
         self.agn_feii_block = kwargs.pop("agn_feii_block", "none")
         self.agn_torus_block = kwargs.pop("agn_torus_block", "none")
         self.agn_attenuation_block = kwargs.pop("agn_attenuation_block", "none")
@@ -456,7 +481,8 @@ class Parameters:
 
             validate_block_recipe(
                 agn_disc_block=self.agn_disc_block,
-                agn_lines_block=self.agn_lines_block,
+                agn_nlr_block=self.agn_nlr_block,
+                agn_blr_block=self.agn_blr_block,
                 agn_feii_block=self.agn_feii_block,
                 agn_torus_block=self.agn_torus_block,
                 agn_attenuation_block=self.agn_attenuation_block,

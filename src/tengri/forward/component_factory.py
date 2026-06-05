@@ -160,8 +160,9 @@ def build_components(
     # build time. For other AGN models the registered function absorbs
     # them via ``**kwargs`` and they have no effect.
     agn_disc_block: str = "none",
+    agn_nlr_block: str = "none",
+    agn_blr_block: str = "none",
     agn_torus_block: str = "none",
-    agn_lines_block: str = "none",
     agn_feii_block: str = "none",
     agn_attenuation_block: str = "none",
     agn_norm: str = "cigale_joint",
@@ -347,9 +348,10 @@ def build_components(
                 config=AGNSEDComponentConfig(
                     model=agn_model,
                     agn_disc_block=agn_disc_block,
-                    agn_torus_block=agn_torus_block,
-                    agn_lines_block=agn_lines_block,
+                    agn_nlr_block=agn_nlr_block,
+                    agn_blr_block=agn_blr_block,
                     agn_feii_block=agn_feii_block,
+                    agn_torus_block=agn_torus_block,
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
                 )

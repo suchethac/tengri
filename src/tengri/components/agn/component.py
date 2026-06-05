@@ -65,8 +65,8 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``, or
         ``"composable"`` (block-composed via the selectors below).
         Default ``"multicolor_agn"``.
-    agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
-    agn_attenuation_block : str
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block,
+    agn_torus_block, agn_attenuation_block : str
         Composable-AGN block selectors. Only consulted when
         ``model == "composable"`` — the runner reads them from this config
         (they are static strings, not traced JAX values, so they cannot
@@ -88,9 +88,10 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     name: str = "agn"
     model: str = "multicolor_agn"
     agn_disc_block: str = "none"
-    agn_torus_block: str = "none"
-    agn_lines_block: str = "none"
+    agn_nlr_block: str = "none"
+    agn_blr_block: str = "none"
     agn_feii_block: str = "none"
+    agn_torus_block: str = "none"
     agn_attenuation_block: str = "none"
     agn_norm: str = "cigale_joint"
 
@@ -342,9 +343,10 @@ class AGNSEDComponent:
         # callable. For non-composable AGN models the registered function
         # absorbs them via ``**kwargs`` and they have no effect.
         agn_kwargs["agn_disc_block"] = self.config.agn_disc_block
-        agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
-        agn_kwargs["agn_lines_block"] = self.config.agn_lines_block
+        agn_kwargs["agn_nlr_block"] = self.config.agn_nlr_block
+        agn_kwargs["agn_blr_block"] = self.config.agn_blr_block
         agn_kwargs["agn_feii_block"] = self.config.agn_feii_block
+        agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
         agn_kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
         agn_kwargs["agn_norm"] = self.config.agn_norm
         if skirtor_template is not None:

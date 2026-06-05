@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Suchetha Cooray
 
-"""Shared helper for the five AGN sub-block factory modules.
+"""Shared helper for the six AGN sub-block factory modules.
 
-The AGN grammar has five orthogonal composable axes: ``disc``,
-``torus``, ``lines``, ``feii``, ``atten``. Each axis has a fixed set
+The AGN grammar has six orthogonal composable axes: ``disc``,
+``torus``, ``nlr``, ``blr``, ``feii``, ``atten``. Each axis has a fixed set
 of valid variant strings (the parser's
 ``_VALID_AGN_<AXIS>_TYPES`` enums) and a sub-block-specific param
 partition: all variants within an axis share the same parameter set
@@ -64,7 +64,8 @@ def build_axis_factories(
     Parameters
     ----------
     axis : str
-        One of ``"disc"``, ``"torus"``, ``"lines"``, ``"feii"``, ``"atten"``.
+        One of ``"disc"``, ``"torus"``, ``"nlr"``, ``"blr"``, ``"feii"``,
+        ``"atten"``.
     variants : set[str]
         Variant names for this axis (from ``_VALID_AGN_<AXIS>_TYPES``).
     representative_variant : str

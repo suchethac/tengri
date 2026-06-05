@@ -45,9 +45,11 @@ def test_torus_alternates_registered():
         assert name in AGN_BLOCKS["torus"], f"torus/{name!r} not registered"
 
 
-def test_lines_alternates_registered():
-    for name in ("blr", "nlr", "qsogen"):
-        assert name in AGN_BLOCKS["lines"], f"lines/{name!r} not registered"
+def test_nlr_blr_alternates_registered():
+    for name in ("analytic", "synthesizer", "synthesizer_spectra", "grahsp"):
+        assert name in AGN_BLOCKS["nlr"], f"nlr/{name!r} not registered"
+    for name in ("analytic", "synthesizer", "synthesizer_spectra", "grahsp", "qsogen"):
+        assert name in AGN_BLOCKS["blr"], f"blr/{name!r} not registered"
 
 
 def test_feii_alternates_registered():
@@ -127,7 +129,8 @@ def test_blr_lines_smoke():
     out = composable_agn_l_nu(
         wave_aa,
         agn_disc_block="powerlaw",
-        agn_lines_block="blr",
+        agn_nlr_block="none",
+        agn_blr_block="analytic",
         agn_log_lbol=44.0,
         agn_blr_cf=0.1,
         agn_blr_fwhm_kms=3000.0,
@@ -141,7 +144,8 @@ def test_nlr_lines_smoke():
     out = composable_agn_l_nu(
         wave_aa,
         agn_disc_block="powerlaw",
-        agn_lines_block="nlr",
+        agn_nlr_block="analytic",
+        agn_blr_block="none",
         agn_log_lbol=44.0,
         agn_nlr_cf=0.05,
         agn_nlr_fwhm_kms=300.0,
@@ -183,7 +187,8 @@ def test_validate_blr_with_adaf_disc_warns():
     with pytest.warns(RecipeWarning, match="lambda\\*L_lambda\\(5100A\\)"):
         validate_block_recipe(
             agn_disc_block="adaf",
-            agn_lines_block="blr",
+            agn_nlr_block="none",
+            agn_blr_block="analytic",
             agn_feii_block="none",
             agn_torus_block="none",
             agn_attenuation_block="none",
@@ -195,7 +200,8 @@ def test_validate_polar_dust_zero_ebv_warns():
     with pytest.warns(RecipeWarning, match="agn_polar_ebv=0"):
         validate_block_recipe(
             agn_disc_block="powerlaw",
-            agn_lines_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
             agn_feii_block="none",
             agn_torus_block="none",
             agn_attenuation_block="polar_dust",
@@ -209,7 +215,8 @@ def test_validate_polar_dust_nonzero_ebv_clean():
         warnings.simplefilter("always", RecipeWarning)
         issues = validate_block_recipe(
             agn_disc_block="powerlaw",
-            agn_lines_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
             agn_feii_block="none",
             agn_torus_block="none",
             agn_attenuation_block="polar_dust",

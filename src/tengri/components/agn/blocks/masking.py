@@ -23,10 +23,10 @@ __all__ = ["sigmoid_visibility_mask", "split_lines_result"]
 
 
 def split_lines_result(result: Array | tuple[Array, Array]) -> tuple[Array, Array]:
-    """Normalise a lines-block return to ``(anisotropic, isotropic)`` L_lambda.
+    """Normalise an NLR/BLR block return to ``(anisotropic, isotropic)`` L_lambda.
 
-    A lines block may return either a single ``L_lambda`` array (treated as fully
-    anisotropic / maskable — the back-compatible default) or a
+    An NLR or BLR block may return either a single ``L_lambda`` array (treated as
+    fully anisotropic / maskable — the back-compatible default) or a
     ``(L_maskable, L_isotropic)`` tuple (e.g. BLR maskable, NLR isotropic). This
     collapses both forms to a fixed ``(aniso, iso)`` pair so the runner can mask
     only the anisotropic central engine. The branch is on the Python return type,

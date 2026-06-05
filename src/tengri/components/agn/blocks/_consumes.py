@@ -113,6 +113,17 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("torus", "simple"): frozenset(
         {"agn_T_torus", "agn_fracAGN", "agn_torus_frac", "agn_cos_inc", "agn_theta_torus"}
     ),
+    ("torus", "fritz"): frozenset(
+        {
+            "agn_fritz_r_ratio",
+            "agn_fritz_tau",
+            "agn_fritz_beta",
+            "agn_fritz_gamma",
+            "agn_fritz_oa",
+            "agn_fritz_psy",
+            "agn_torus_frac",
+        }
+    ),
     ("torus", "skirtor"): frozenset(
         {
             "agn_cos_inc",
@@ -133,6 +144,14 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_torus_frac",
         }
     ),
+    ("torus", "skirtor_agnfitter"): frozenset(
+        {
+            "agn_oa_skirtor",
+            "agn_incl_skirtor",
+            "agn_tv_skirtor",
+            "agn_torus_frac",
+        }
+    ),
     ("torus", "two_temperature"): frozenset(
         {
             "agn_T_hot",
@@ -144,43 +163,21 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_theta_torus",
         }
     ),
-    ("lines", "blr"): frozenset(
+    ("nlr", "analytic"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
+    ("nlr", "synthesizer"): frozenset({"agn_nlr_cf"}),
+    ("nlr", "synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
+    ("nlr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    ("blr", "analytic"): frozenset(
         {
             "agn_blr_cf",
             "agn_blr_line_efficiency",
             "agn_fe2_strength",
         }
     ),
-    ("lines", "blr_synthesizer"): frozenset({"agn_blr_cf"}),
-    ("lines", "nlr"): frozenset({"agn_nlr_cf", "agn_nlr_line_efficiency"}),
-    ("lines", "nlr_synthesizer"): frozenset({"agn_nlr_cf"}),
-    # Combined narrow + broad line region (unified-AGN line spectrum in one
-    # block) = the union of the matching single-region consumed sets, verified
-    # by perturb-and-diff on a kubota_done+simple+<block> config.
-    ("lines", "nlr_blr"): frozenset(
-        {
-            "agn_nlr_cf",
-            "agn_nlr_line_efficiency",
-            "agn_blr_cf",
-            "agn_blr_line_efficiency",
-            "agn_fe2_strength",
-        }
-    ),
-    ("lines", "nlr_blr_synthesizer"): frozenset({"agn_nlr_cf", "agn_blr_cf"}),
-    # /spectra/nebular reproduction blocks (issue #694): read the reprocessed
-    # nebular spectrum instead of re-broadening /lines. Same covering-fraction
-    # knobs as the discrete-line siblings; the combined block = the union.
-    ("lines", "nlr_synthesizer_spectra"): frozenset({"agn_nlr_cf"}),
-    ("lines", "blr_synthesizer_spectra"): frozenset({"agn_blr_cf"}),
-    ("lines", "nlr_blr_synthesizer_spectra"): frozenset({"agn_nlr_cf", "agn_blr_cf"}),
-    ("lines", "qsogen"): frozenset(),
-    # GRAHSP broad/narrow line forest (Buchner+2024). Empirically (perturb-and-
-    # diff on a grahsp_sbpl+grahsp config) the line block moves the SED via its
-    # amplitude and width; the FeII block shares the line amplitude. Missing
-    # entries here made any grahsp lines/feii selection an *unknown* block, so
-    # agn_active_param_set fell back to the full superset — over-freeing ~39
-    # no-op nuisance dimensions under a top-level agn={'*': FREE}.
-    ("lines", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    ("blr", "synthesizer"): frozenset({"agn_blr_cf"}),
+    ("blr", "synthesizer_spectra"): frozenset({"agn_blr_cf"}),
+    ("blr", "grahsp"): frozenset({"agn_grahsp_a_lines", "agn_grahsp_linewidth_kms"}),
+    ("blr", "qsogen"): frozenset(),
     ("feii", "grahsp"): frozenset({"agn_grahsp_a_feii", "agn_grahsp_a_lines"}),
     ("feii", "qsogen_balmer"): frozenset(),
     ("attenuation", "grahsp_biatten"): frozenset({"agn_grahsp_ebv", "agn_grahsp_ebv_agn"}),
@@ -266,9 +263,10 @@ AGN_MODEL_CONSUMES: dict[str, frozenset[str]] = {
 
 _BLOCK_SELECTOR_KWARGS: tuple[tuple[str, str], ...] = (
     ("disc", "agn_disc_block"),
-    ("torus", "agn_torus_block"),
-    ("lines", "agn_lines_block"),
+    ("nlr", "agn_nlr_block"),
+    ("blr", "agn_blr_block"),
     ("feii", "agn_feii_block"),
+    ("torus", "agn_torus_block"),
     ("attenuation", "agn_attenuation_block"),
 )
 

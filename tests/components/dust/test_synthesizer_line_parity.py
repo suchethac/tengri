@@ -137,7 +137,7 @@ def test_covering_fraction_is_separate_multiplier(backends):
 def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     """SEDModel.build can compose a unified AGN with grid-backed NLR/BLR (#588).
 
-    The composable ``lines`` block exposes ``nlr_synthesizer`` / ``blr_synthesizer``
+    The composable ``nlr`` and ``blr`` blocks expose ``synthesizer``
     selectors that route to the Synthesizer Cloudy grids, so a unified AGN built
     through the high-level API uses the same photoionisation grids as the direct
     adapters — not just the analytic templates.
@@ -146,8 +146,8 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
         pytest.skip(f"Synthesizer AGN test grids not found under {_DATA}")
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
-    assert "nlr_synthesizer" in AGN_BLOCKS["lines"]
-    assert "blr_synthesizer" in AGN_BLOCKS["lines"]
+    assert "synthesizer" in AGN_BLOCKS["nlr"]
+    assert "synthesizer" in AGN_BLOCKS["blr"]
 
     monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(_DATA))
     from tengri import FIXED, Fixed, SEDModel, load_ssp_data
@@ -177,7 +177,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
             "type": "composable",
             "disc": {"type": "kubota_done"},
             "torus": {"type": "nenkova"},
-            "lines": {"type": "nlr_synthesizer"},
+            "nlr": {"type": "synthesizer"},
             "agn_log_lbol": Fixed(12.0),
             "*": FIXED,
         },
@@ -188,8 +188,12 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     assert (sed > 0).any()
 
 
-@pytest.mark.parametrize("lines_type", ["nlr_synthesizer", "blr_synthesizer"])
-def test_synth_lines_photometry_under_jit_and_precompute(monkeypatch, lines_type):
+@pytest.mark.parametrize(
+    "nlr_block_type,blr_block_type", [("synthesizer", "none"), ("none", "synthesizer")]
+)
+def test_synth_lines_photometry_under_jit_and_precompute(
+    monkeypatch, nlr_block_type, blr_block_type
+):
     """Grid-backed AGN lines must work through the JIT photometry / precompute path.
 
     Regression for the build-time-artifact-in-JIT-trace bug: the Synthesizer
@@ -260,7 +264,8 @@ def test_synth_lines_photometry_under_jit_and_precompute(monkeypatch, lines_type
                 "type": "composable",
                 "disc": {"type": "kubota_done"},
                 "torus": {"type": "none"},
-                "lines": {"type": lines_type},
+                "nlr": {"type": nlr_block_type},
+                "blr": {"type": blr_block_type},
                 "agn_log_lbol": Fixed(12.0),
                 "*": FIXED,
             },

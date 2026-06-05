@@ -180,7 +180,8 @@ SETTINGS_KEYS = frozenset(
         "agn_model",
         # AGN block-recipe selectors (consumed by agn_model="composable")
         "agn_disc_block",
-        "agn_lines_block",
+        "agn_nlr_block",
+        "agn_blr_block",
         "agn_feii_block",
         "agn_torus_block",
         "agn_attenuation_block",

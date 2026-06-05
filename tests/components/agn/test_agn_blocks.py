@@ -47,7 +47,8 @@ def test_grahsp_blocks_registered_for_all_categories():
     """GRAHSP must provide an impl for every pipeline stage."""
     expected = {
         "disc": "grahsp_sbpl",
-        "lines": "grahsp",
+        "nlr": "grahsp",
+        "blr": "grahsp",
         "feii": "grahsp",
         "torus": "grahsp",
         "attenuation": "grahsp_biatten",
@@ -91,7 +92,8 @@ def test_validate_clean_recipe_emits_no_warnings():
         warnings.simplefilter("always", RecipeWarning)
         issues = validate_block_recipe(
             agn_disc_block="grahsp_sbpl",
-            agn_lines_block="grahsp",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
             agn_feii_block="grahsp",
             agn_torus_block="grahsp",
             agn_attenuation_block="grahsp_biatten",
@@ -104,7 +106,8 @@ def test_validate_all_none_warns():
     with pytest.warns(RecipeWarning, match="every block selector is 'none'"):
         validate_block_recipe(
             agn_disc_block="none",
-            agn_lines_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
             agn_feii_block="none",
             agn_torus_block="none",
             agn_attenuation_block="none",
@@ -112,11 +115,12 @@ def test_validate_all_none_warns():
 
 
 def test_validate_active_downstream_no_disc_warns():
-    """Forgetting the disc but enabling lines/feii/torus must warn loudly."""
+    """Forgetting the disc but enabling nlr/blr/feii/torus must warn loudly."""
     with pytest.warns(RecipeWarning, match="agn_disc_block='none'"):
         validate_block_recipe(
             agn_disc_block="none",
-            agn_lines_block="grahsp",
+            agn_nlr_block="grahsp",
+            agn_blr_block="none",
             agn_feii_block="none",
             agn_torus_block="grahsp",
             agn_attenuation_block="none",
@@ -128,7 +132,8 @@ def test_validate_unknown_block_raises_not_warns():
     with pytest.raises(ValueError, match="Unknown disc block"):
         validate_block_recipe(
             agn_disc_block="grahps_sbpl",  # deliberate typo
-            agn_lines_block="none",
+            agn_nlr_block="none",
+            agn_blr_block="none",
             agn_feii_block="none",
             agn_torus_block="none",
             agn_attenuation_block="none",
@@ -190,7 +195,8 @@ def test_all_grahsp_recipe_matches_compute_grahsp_sed():
     out_composable = composable_agn_l_nu(
         wave_aa,
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="grahsp",
+        agn_nlr_block="grahsp",
+        agn_blr_block="grahsp",
         agn_feii_block="grahsp",
         agn_torus_block="grahsp",
         agn_attenuation_block="grahsp_biatten",
@@ -216,7 +222,8 @@ def test_mix_grahsp_disc_with_simple_torus():
     out = composable_agn_l_nu(
         wave_aa,
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="none",
+        agn_nlr_block="none",
+        agn_blr_block="none",
         agn_feii_block="none",
         agn_torus_block="two_temperature",
         agn_attenuation_block="smc_prevot",
@@ -235,12 +242,13 @@ def test_mix_grahsp_disc_with_simple_torus():
 
 
 def test_disc_only_recipe_is_pure_continuum():
-    """No lines/feii/torus → output is just the disc continuum (in L_nu)."""
+    """No nlr/blr/feii/torus → output is just the disc continuum (in L_nu)."""
     wave_aa = jnp.logspace(2, 5, 200)
     out = composable_agn_l_nu(
         wave_aa,
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="none",
+        agn_nlr_block="none",
+        agn_blr_block="none",
         agn_feii_block="none",
         agn_torus_block="none",
         agn_attenuation_block="none",
@@ -267,7 +275,8 @@ def test_runner_jit_compatible():
             wave_aa,
             agn_log_lbol=44.5,
             agn_disc_block="grahsp_sbpl",
-            agn_lines_block="grahsp",
+            agn_nlr_block="grahsp",
+            agn_blr_block="grahsp",
             agn_feii_block="grahsp",
             agn_torus_block="grahsp",
             agn_attenuation_block="grahsp_biatten",
@@ -286,7 +295,8 @@ def test_resolve_via_agn_models_registry():
     wave_aa = jnp.logspace(2, 6, 100)
     p = dict(
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="none",
+        agn_nlr_block="none",
+        agn_blr_block="none",
         agn_feii_block="none",
         agn_torus_block="grahsp",
         agn_attenuation_block="none",
