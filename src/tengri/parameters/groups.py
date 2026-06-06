@@ -554,6 +554,17 @@ def parse_groups(**kwargs) -> Parameters:
     # inactive blocks (e.g. GRAHSP params under a SKIRTOR torus).
     agn_active_params = _agn_active_param_set(structural_kwargs)
 
+    # Which radio sub-block params the active sf / agn radio model consumes.
+    # A ``radio={'sf': {'*': FREE}}`` / ``radio={'agn': {'*': FREE}}`` wildcard
+    # frees only these — the inactive model's params collapse to Fixed (mirrors
+    # the AGN block-scoped wildcard above).
+    radio_sf_active = _RADIO_SF_PARAMS_BY_MODE.get(
+        structural_kwargs.get("radio_sfr_mode"), frozenset()
+    )
+    radio_agn_active = _RADIO_AGN_PARAMS_BY_MODEL.get(
+        structural_kwargs.get("radio_agn_model"), frozenset()
+    )
+
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
         if group is None:
@@ -614,6 +625,14 @@ def parse_groups(**kwargs) -> Parameters:
             # Both should work. Build a merged search view across the
             # canonical location and the sibling locations; conflicts raise.
             group_dict = _build_agn_search_view(param_name, kwargs.get("agn", {}), group)
+        elif group == "radio.sf" or group == "radio.agn":
+            # Radio sub-blocks: descend into radio={'sf': {...}} / {'agn': {...}}
+            # (mirrors the dust.emission sub-group path above).
+            radio_top = kwargs.get("radio")
+            radio_top = radio_top if isinstance(radio_top, dict) else {}
+            subkey = "sf" if group == "radio.sf" else "agn"
+            sub = radio_top.get(subkey, {})
+            group_dict = sub if isinstance(sub, dict) else {}
         else:
             group_dict = kwargs.get(group, {})
 
@@ -628,6 +647,10 @@ def parse_groups(**kwargs) -> Parameters:
         wildcard_active = True
         if is_agn:
             wildcard_active = param_name in agn_active_params
+        elif group == "radio.sf":
+            wildcard_active = param_name in radio_sf_active
+        elif group == "radio.agn":
+            wildcard_active = param_name in radio_agn_active
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -1130,6 +1153,35 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
         result["radio_agn_model"] = agn_variant
 
 
+#: Model-specific radio sub-block params, routed to the ``radio.sf`` /
+#: ``radio.agn`` sub-groups so they resolve when nested in
+#: ``radio={'sf': {...}, 'agn': {...}}`` (mirrors the ``dust.emission``
+#: sub-group). Keyed by the active mode: a sub-block ``'*'`` wildcard frees
+#: only the active model's params (block-scoped, like the AGN grammar), so
+#: selecting ``delvecchio2021`` never frees the McCheyne coefficients and a
+#: ``powerlaw`` AGN radio never frees the DPL turnover knobs.
+_RADIO_SF_PARAMS_BY_MODE: dict[str, frozenset[str]] = {
+    "delvecchio2021": frozenset({"radio_delv_q0", "radio_delv_mass_slope", "radio_delv_z_slope"}),
+    "mccheyne2022": frozenset({"radio_mcch_q0", "radio_mcch_mass_slope", "radio_mcch_z_slope"}),
+}
+_RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
+    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn"}),
+    "dpl": frozenset(
+        {
+            "radio_loudness",
+            "radio_alpha_thin",
+            "radio_alpha_thick",
+            "radio_log_nu_t",
+            "radio_log_nu_cut",
+        }
+    ),
+}
+#: Union of every param owned by each radio sub-group, used by the partition
+#: to route names away from the flat ``radio`` group.
+_RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_MODE.values())
+_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY_MODEL.values())
+
+
 #: Valid laws for the MW foreground screen (#297). Only the closed-form
 #: laws that take a single ``R_V`` parameter are usable as a foreground
 #: screen — host-dust laws with two free knobs (slope, bump, ...) would
@@ -1403,6 +1455,18 @@ def _validate_user_keys(
                     sub_allowed | sub_params | agn_shared_names,
                     param_partition,
                 )
+        elif top_key == "radio":
+            # Validate nested radio={'sf': {...}} / {'agn': {...}} sub-blocks
+            # so a typo'd FIRRC / DPL key raises instead of silently vanishing.
+            for sub_name in ("sf", "agn"):
+                sub = top_val.get(sub_name)
+                if not isinstance(sub, dict):
+                    continue
+                sub_group = f"radio.{sub_name}"
+                sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
+                sub_params = _short_names_for_group(sub_group, param_partition)
+                sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
 def _check_dict_keys(
@@ -1758,6 +1822,13 @@ def _partition_by_group(
                 partition[name] = "agn.disc"
         elif name.startswith("xray_"):
             partition[name] = "xray"
+        elif name in _RADIO_SF_PARAM_NAMES:
+            # Model-specific FIRRC evolution coefficients live in the radio.sf
+            # sub-block (radio={'sf': {...}}).
+            partition[name] = "radio.sf"
+        elif name in _RADIO_AGN_PARAM_NAMES:
+            # AGN radio loudness / power-law / DPL knobs live in radio.agn.
+            partition[name] = "radio.agn"
         elif name.startswith("radio_"):
             partition[name] = "radio"
         elif name.startswith("dla_"):

@@ -35,7 +35,7 @@ Examples
 ...     "sf": {"type": "delvecchio2021"},
 ...     "agn": {"type": "dpl"},
 ... }
->>> radio = builders.radio.sf.delvecchio2021(q0=Uniform(2.4, 3.1))  # doctest: +SKIP
+>>> radio = builders.radio.sf.delvecchio2021(delv_q0=Uniform(2.4, 3.1))  # doctest: +SKIP
 """
 
 from __future__ import annotations

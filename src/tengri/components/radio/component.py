@@ -212,6 +212,42 @@ class RadioSEDComponent:
         del ssp_data, wave_grid, filters
         return RadioSEDComponentState(name=self.name)
 
+    def _firrc_overrides(
+        self, params: Mapping[str, jnp.ndarray]
+    ) -> tuple[jnp.ndarray | None, jnp.ndarray | None, jnp.ndarray | None]:
+        r"""Resolve the FIRRC ``(q0, mass_slope, z_slope)`` triplet for the
+        active ``sfr_mode``.
+
+        Returns the model-specific ``radio_delv_*`` or ``radio_mcch_*``
+        parameters when an evolving SF-radio model is selected, or
+        ``(None, None, None)`` for ``bell2003`` / ``none`` (the SF functions
+        then use their own literature defaults). Selection is on the static
+        ``self.config.sfr_mode`` string, so this introduces no traced branch.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives all declared ``radio_*`` keys.
+
+        Returns
+        -------
+        tuple
+            ``(q0, mass_slope, z_slope)`` as JAX arrays, or ``(None, None,
+            None)`` when the active mode does not consume them.
+        """
+        mode = self.config.sfr_mode
+        if mode == "delvecchio2021":
+            prefix = "radio_delv_"
+        elif mode == "mccheyne2022":
+            prefix = "radio_mcch_"
+        else:
+            return None, None, None
+        return (
+            jnp.asarray(params[f"{prefix}q0"]),
+            jnp.asarray(params[f"{prefix}mass_slope"]),
+            jnp.asarray(params[f"{prefix}z_slope"]),
+        )
+
     def apply(
         self,
         state: ForwardState,
@@ -255,6 +291,12 @@ class RadioSEDComponent:
         log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         z = jnp.asarray(params.get("redshift", 0.0))
 
+        # FIRRC evolution coefficients for the evolving SF-radio models. The
+        # active ``sfr_mode`` (static config) selects which model-specific
+        # triplet is consumed; bell2003 / none ignore them (pass None → the
+        # SF functions fall through to their literature defaults / zeros).
+        firrc_q0, firrc_mass_slope, firrc_z_slope = self._firrc_overrides(params)
+
         # Rest-frame radio Lν on an arbitrary wavelength grid. Radio is a smooth
         # (broken-)power-law, so evaluating it at the per-filter / per-pixel
         # effective wavelength is an excellent LUT approximation (#624).
@@ -273,9 +315,9 @@ class RadioSEDComponent:
                     alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
                     log_mstar=log_mstar,
                     redshift=z,
-                    q0=None,
-                    mass_slope=None,
-                    z_slope=None,
+                    q0=firrc_q0,
+                    mass_slope=firrc_mass_slope,
+                    z_slope=firrc_z_slope,
                     apply_suppression=True,
                 )
                 ff = (
@@ -301,6 +343,9 @@ class RadioSEDComponent:
                     sfr_mode=self.config.sfr_mode,
                     log_mstar=log_mstar,
                     redshift=z,
+                    q0=firrc_q0,
+                    mass_slope=firrc_mass_slope,
+                    z_slope=firrc_z_slope,
                     include_freefree=self.config.include_freefree,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
@@ -321,6 +366,9 @@ class RadioSEDComponent:
                 sfr_mode=self.config.sfr_mode,
                 log_mstar=log_mstar,
                 redshift=z,
+                q0=firrc_q0,
+                mass_slope=firrc_mass_slope,
+                z_slope=firrc_z_slope,
                 include_freefree=self.config.include_freefree,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
