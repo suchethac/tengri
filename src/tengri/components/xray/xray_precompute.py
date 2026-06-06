@@ -130,23 +130,25 @@ def _build_grid_corona(
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_ox_grid = np.asarray(alpha_ox_grid, dtype=np.float64)
     # Convert reference L_bol → L_2500_30deg via Hopkins+2007 BC_2500.
-    # The post-#329 xray_agn_corona drives off L_2500; alpha_ox is no
-    # longer a direct knob — it's a delta offset to the Just+2007
-    # empirical prior at this L_2500. We compute that prior here so the
-    # precomputed grid lookup still keys on α_ox semantically.
+    # The runtime parameter xray_alpha_ox is a delta offset to the Just+2007
+    # empirical prior at this L_2500. The grid axis is now indexed by delta
+    # values (not absolute), so the grid lookup directly uses xray_alpha_ox
+    # as the axis coordinate. Internally, we compute the prior to apply.
     _NU_2500 = 1.199e15  # Hz
     _BC_2500 = 5.15
     L_2500_REF = _LBOL_REF / (_BC_2500 * _NU_2500)  # erg/s/Hz
     alpha_ox_prior = -0.137 * np.log10(L_2500_REF) + 2.638  # Just+2007 at L_2500_REF
+    # Interpret the grid axis as delta_alpha_ox (offset to the prior)
+    delta_alpha_ox_axis = alpha_ox_grid - alpha_ox_prior
     templates = np.empty((gamma_grid.size, alpha_ox_grid.size, _WAVE_REST.size), dtype=np.float64)
     for i, g in enumerate(gamma_grid):
-        for j, aox in enumerate(alpha_ox_grid):
+        for j, daox in enumerate(delta_alpha_ox_axis):
             templates[i, j] = np.asarray(
                 _xray_corona(
                     jnp.asarray(_WAVE_REST),
                     l_2500_30deg_erg_hz=L_2500_REF,
                     gamma=float(g),
-                    delta_alpha_ox=float(aox) - float(alpha_ox_prior),
+                    delta_alpha_ox=float(daox),
                 )
             )
     return precompute_template_photometry(
@@ -154,7 +156,7 @@ def _build_grid_corona(
         wave_rest=_WAVE_REST,
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(gamma_grid, alpha_ox_grid),
+        axes=(gamma_grid, delta_alpha_ox_axis),
         redshift=redshift,
         dl_cm=1.0,
         energy_normalize=False,

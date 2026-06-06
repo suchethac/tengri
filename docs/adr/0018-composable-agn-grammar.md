@@ -61,6 +61,38 @@ Each stage has a registry of swappable implementations (e.g., `agn_disc_block="m
    - Radio component anchors to the B-band (4400 Å) via an L_bol BC (NOT UV-based) — radio remains independent of `L_2500_intrinsic` to preserve loudness physics; UV-anchored radio is a noted follow-up.
    - X-ray/radio are NOT slots in the AGN grammar; they are separate downstream components that depend on AGN luminosity.
 
+8a. **Radio's own composable sub-block grammar** (canonical builder surface):
+   - Radio is itself decomposed into two **additive** axes via the nested-dict
+     grammar: `radio={'sf': {'type': ...}, 'agn': {'type': ...}}`. SF
+     synchrotron (`bell2003`/`delvecchio2021`/`mccheyne2022`/`none`) and AGN
+     radio (`powerlaw`/`dpl`/`none`) are selected independently. This mirrors
+     the AGN block grammar's sub-block nesting (cf. `dust.emission`,
+     `agn.disc`) — the builder grammar (`SEDModel.build` /
+     `builders.radio.sf.<variant>()` / `builders.radio.agn.<variant>()`) is the
+     **canonical surface**, and the contract is verified through it.
+   - **FIRRC evolution coefficients are free parameters.** The mass/redshift
+     `q_IR(M*, z)` coefficients `(q0, mass_slope, z_slope)` are surfaced as
+     fittable, **model-specific** `radio_delv_*` / `radio_mcch_*` params,
+     addressable in the `radio.sf` sub-block. Names are model-specific (not a
+     shared `radio_q0`) because the two calibrations carry genuinely different
+     literature defaults and mass-slope **sign conventions**; a shared name
+     would silently apply the wrong default to the inactive model. Only the
+     active `sfr_mode`'s triplet is consumed — a `radio.sf` `'*'` wildcard is
+     scoped to the active model (block-scoped, as in the AGN grammar), and the
+     inactive model's coefficients stay Fixed no-ops. DPL turnover knobs
+     (`radio_alpha_thin`/`_thick`, `radio_log_nu_t`/`_nu_cut`) are the symmetric
+     `radio.agn` sub-block params. These coefficients are designed to promote
+     to `PopulationFitter` hyperparameters without code changes.
+   - **Degeneracy guard.** The FIRRC *slopes* (`*_mass_slope`, `*_z_slope`) are
+     identifiable only *across* a sample: at one galaxy's fixed (M\*, z) they
+     collapse to a single scalar `q_IR`, degenerate with the `*_q0`
+     normalization. Freeing a slope raises a filterable
+     `RadioFIRRCDegeneracyWarning` at `parse_groups` time, steering single-galaxy
+     fits toward freeing the normalization (`radio_delv_q0` / `radio_mcch_q0` /
+     `radio_q_ir`, the radio-excess amplitude) and reserving the slopes for
+     hierarchical fits. The `q0` normalizations and the AGN knobs are
+     warning-free; the guard never blocks (warn-only).
+
 9. **Impact on Posterior**:
    - Users prefer one canonical surface. Composable blocks are simpler to discover, mix, and extend than hand-written monolithic adapters.
    - Fine-grained control (e.g., swapping lines while keeping disc fixed) reduces model complexity and speeds iteration.

@@ -486,7 +486,7 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 stellar_mass=mstar,
                 L_agn_bol=agn_bol_erg,
                 gamma_agn=p.get("xray_gamma_agn", 1.8),
-                alpha_ox=p.get("xray_alpha_ox", -1.4),
+                delta_alpha_ox=p.get("xray_alpha_ox", 0.0),
                 gamma_hmxb=p.get("xray_gamma_hmxb", 2.0),
                 gamma_lmxb=p.get("xray_gamma_lmxb", 1.6),
                 E_cut=p.get("xray_E_cut", 300.0),

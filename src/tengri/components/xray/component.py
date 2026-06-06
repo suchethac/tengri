@@ -222,11 +222,10 @@ class XRaySEDComponent:
         def _emit(w):
             # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
             # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
-            # the X-ray corona). ``delta_alpha_ox`` is the *offset* knob (default
-            # 0). The legacy ``xray_alpha_ox`` param is an ABSOLUTE slope, not an
-            # offset, and was historically a no-op on this path — passing it as
-            # ``delta_alpha_ox`` would double-shift alpha_ox, so we leave the
-            # offset at 0 and let L_2500 set the slope.
+            # the X-ray corona). ``xray_alpha_ox`` is now a live *offset* knob
+            # (default 0.0 = pure empirical alpha_ox(L_2500); negative hardens
+            # the corona, positive softens it). See ADR-0009 / xray_precompute.py
+            # line 149 for the delta semantics.
             return xray_total(
                 w,
                 sfr=sfr,
@@ -236,7 +235,7 @@ class XRaySEDComponent:
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
-                delta_alpha_ox=0.0,
+                delta_alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
             )
 
         L_xray = _emit(wave)

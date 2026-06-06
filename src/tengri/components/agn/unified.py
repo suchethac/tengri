@@ -369,6 +369,7 @@ def resolve_agn_model(name: str) -> Callable:
         "silva04": "disc=powerlaw + torus=silva04 (via composable grammar)",
         "cat3d_wind": "disc=powerlaw + torus=cat3d_wind (via composable grammar)",
         "adaf": "disc=adaf + torus=silva04 (via composable grammar)",
+        "relagn": "disc=relagn + torus=silva04 (via composable grammar)",
         "skirtor": "disc=skirtor + torus=skirtor (via composable grammar)",
         "qsogen": "composable AGN blocks (qsogen disc, qsogen nlr, qsogen blr)",
         "grahsp": "composable AGN blocks (grahsp disc, grahsp nlr, grahsp blr, grahsp feii)",
@@ -987,6 +988,7 @@ def adaf_agn(
 @register_agn_model(
     "relagn",
     citation="Hagen & Done 2023 (MNRAS 521, 251)",
+    status="deprecated",
     short_doc="RELAGN relativistic disc + 2-T torus",
 )
 def relagn_agn(
@@ -1178,7 +1180,7 @@ def unified_nlr_blr(
     blr_fn: "Callable | None" = None,
     include_xray: bool = False,
     xray_gamma_agn: float = 1.8,
-    xray_alpha_ox: float = -1.4,
+    xray_alpha_ox: float = 0.0,
     xray_E_cut: float = 300.0,
     include_radio: bool = False,
     radio_q_ir: float = 2.64,
@@ -1345,8 +1347,9 @@ def unified_nlr_blr(
     xray_gamma_agn : float
         X-ray photon index (power-law slope). Default 1.8. Valid range: 1.4–2.4.
     xray_alpha_ox : float
-        UV-to-X-ray slope. Default -1.4. Valid range: -2.0 to -1.0. Controls
-        the relative normalization of X-ray vs. optical SED.
+        Offset [dex] to the empirical alpha_OX (Just+2007). Default 0.0 (pure
+        empirical). Negative values harden the corona, positive soften it.
+        Valid range: -2.0 to -1.0 for typical AGN.
     xray_E_cut : float
         X-ray exponential cutoff energy [keV]. Default 300.0.
     include_radio : bool
@@ -1497,12 +1500,11 @@ def unified_nlr_blr(
     l_blr = mask_blr * l_blr_raw * polar_trans
 
     # --- X-ray corona (optional) ---
-    # ``unified_nlr_blr`` exposes ``xray_alpha_ox`` as an explicit user
-    # parameter, matching the original Synthesizer / Yang+2020 interface.
-    # The new canonical ``xray_agn_corona(l_2500_30deg_erg_hz, ...)`` path
-    # derives α_OX from L_2500 via Just+2007 instead of accepting it
-    # directly, so we route through the bolometric helper to preserve the
-    # user-facing semantics here.
+    # ``unified_nlr_blr`` exposes ``xray_alpha_ox`` as a delta offset
+    # (default 0.0 = pure empirical), consistent with the composable
+    # component path. The legacy ``_xray_agn_corona_legacy`` expects an
+    # absolute alpha_ox; we map the offset to the historical base of
+    # -1.4 to preserve backwards compatibility (0.0 delta → -1.4 absolute).
     l_xray_contrib = jnp.zeros_like(wavelength)
     if include_xray:
         l_xray_contrib = _xray_agn_corona_legacy(
@@ -1510,7 +1512,7 @@ def unified_nlr_blr(
             L_agn_bol=l_bol_erg,
             gamma=xray_gamma_agn,
             E_cut=xray_E_cut,
-            alpha_ox=xray_alpha_ox,
+            alpha_ox=-1.4 + xray_alpha_ox,
         )
 
     # --- Radio emission (optional) ---

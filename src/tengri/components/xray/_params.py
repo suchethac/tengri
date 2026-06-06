@@ -23,8 +23,10 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "xray_alpha_ox",
-        Fixed(-1.4),
-        "UV-to-X-ray slope alpha_ox (typical -2.0 to -1.0)",
+        Fixed(0.0),
+        "Offset [dex] applied to the L_2500-derived alpha_ox (Just+2007,"
+        " CIGALE convention). 0 (default) = pure empirical alpha_ox(L_2500);"
+        " negative hardens the X-ray corona, positive softens it.",
     ),
     ParamDeclaration(
         "xray_gamma_hmxb",

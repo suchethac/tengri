@@ -554,6 +554,17 @@ def parse_groups(**kwargs) -> Parameters:
     # inactive blocks (e.g. GRAHSP params under a SKIRTOR torus).
     agn_active_params = _agn_active_param_set(structural_kwargs)
 
+    # Which radio sub-block params the active sf / agn radio model consumes.
+    # A ``radio={'sf': {'*': FREE}}`` / ``radio={'agn': {'*': FREE}}`` wildcard
+    # frees only these — the inactive model's params collapse to Fixed (mirrors
+    # the AGN block-scoped wildcard above).
+    radio_sf_active = _RADIO_SF_PARAMS_BY_MODE.get(
+        structural_kwargs.get("radio_sfr_mode"), frozenset()
+    )
+    radio_agn_active = _RADIO_AGN_PARAMS_BY_MODEL.get(
+        structural_kwargs.get("radio_agn_model"), frozenset()
+    )
+
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
         if group is None:
@@ -614,6 +625,14 @@ def parse_groups(**kwargs) -> Parameters:
             # Both should work. Build a merged search view across the
             # canonical location and the sibling locations; conflicts raise.
             group_dict = _build_agn_search_view(param_name, kwargs.get("agn", {}), group)
+        elif group == "radio.sf" or group == "radio.agn":
+            # Radio sub-blocks: descend into radio={'sf': {...}} / {'agn': {...}}
+            # (mirrors the dust.emission sub-group path above).
+            radio_top = kwargs.get("radio")
+            radio_top = radio_top if isinstance(radio_top, dict) else {}
+            subkey = "sf" if group == "radio.sf" else "agn"
+            sub = radio_top.get(subkey, {})
+            group_dict = sub if isinstance(sub, dict) else {}
         else:
             group_dict = kwargs.get(group, {})
 
@@ -628,6 +647,10 @@ def parse_groups(**kwargs) -> Parameters:
         wildcard_active = True
         if is_agn:
             wildcard_active = param_name in agn_active_params
+        elif group == "radio.sf":
+            wildcard_active = param_name in radio_sf_active
+        elif group == "radio.agn":
+            wildcard_active = param_name in radio_agn_active
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -691,7 +714,42 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    _warn_firrc_slope_degeneracy(final_params)
+
     return final_params
+
+
+def _warn_firrc_slope_degeneracy(final_params: Parameters) -> None:
+    """Warn when a FIRRC *slope* coefficient is freed (per-galaxy degeneracy).
+
+    The mass/redshift FIRRC slopes vary q_IR *across* a sample; at one
+    galaxy's fixed (M*, z) they collapse to a single scalar, degenerate with
+    the ``radio_*_q0`` normalization. Freeing them only makes sense as
+    ``PopulationFitter`` hyperparameters — see ADR-0018 §8a. The
+    :class:`RadioFIRRCDegeneracyWarning` category is filterable so a
+    deliberate hierarchical fit can silence it.
+    """
+    from tengri.components.radio._params import (
+        FIRRC_SLOPE_PARAMS,
+        RadioFIRRCDegeneracyWarning,
+    )
+
+    freed = sorted(FIRRC_SLOPE_PARAMS.intersection(final_params.free_params))
+    if not freed:
+        return
+    warnings.warn(
+        f"Radio FIRRC slope coefficient(s) {freed} are free, but the FIR-radio "
+        f"correlation slopes are degenerate with the normalization at a single "
+        f"galaxy's fixed (M*, z) — they map to one scalar q_IR, so a per-galaxy "
+        f"fit cannot constrain them. Free the normalization instead "
+        f"('radio_delv_q0' / 'radio_mcch_q0' / 'radio_q_ir') for the radio-excess "
+        f"amplitude, and reserve the slopes for PopulationFitter hyperparameters "
+        f"(see ADR-0018 §8a). Filter RadioFIRRCDegeneracyWarning to silence this "
+        f"for a deliberate hierarchical fit.",
+        RadioFIRRCDegeneracyWarning,
+        stacklevel=3,
+    )
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────
@@ -1043,17 +1101,120 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
 
 
 def _translate_radio(radio_dict: dict, result: dict) -> None:
-    """Translate radio group to radio=True/False."""
-    radio_type = radio_dict.get("type", "none")
+    """Translate radio group with composable SF + AGN sub-blocks.
 
-    # Validate type
-    valid_radio = _valid_radio_types()
-    if radio_type not in valid_radio:
-        suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
+    Supports two grammar styles:
 
-    result["radio"] = radio_type != "none"
+    **New composable form (preferred)**:
+
+    .. code-block:: python
+
+        radio = {
+            "sf": {"type": "delvecchio2021"},  # SF variant
+            "agn": {"type": "dpl"},  # AGN variant
+        }
+
+    **Legacy form (back-compat)**:
+
+    .. code-block:: python
+
+        radio = {"type": "condon92"}  # radio on with default sf/agn models
+
+    Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
+    """
+    has_legacy_type = "type" in radio_dict
+    has_sf_block = "sf" in radio_dict
+    has_agn_block = "agn" in radio_dict
+
+    if has_legacy_type and (has_sf_block or has_agn_block):
+        raise ValueError(
+            "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
+            "Use either: radio={'type': 'bell2003'} (legacy) "
+            "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
+        )
+
+    # Legacy form: radio={'type': 'X'} → interpret as SF variant with default AGN
+    if has_legacy_type and not has_sf_block and not has_agn_block:
+        radio_type = radio_dict["type"]
+        valid_radio = _valid_radio_types()
+        if radio_type not in valid_radio:
+            suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
+        result["radio"] = radio_type != "none"
+        if radio_type != "none":
+            # Legacy 'type' predates the SF/AGN split → default both models.
+            result["radio_sfr_mode"] = "bell2003"
+            result["radio_agn_model"] = "powerlaw"
+        return
+
+    # New composable form: extract SF and AGN sub-blocks
+    sf_variant = "bell2003"  # default
+    agn_variant = "powerlaw"  # default
+    radio_enabled = False
+
+    if has_sf_block:
+        sf_dict = radio_dict["sf"]
+        if isinstance(sf_dict, dict):
+            sf_variant = sf_dict.get("type", "bell2003")
+            valid_sf = frozenset({"none", "bell2003", "delvecchio2021", "mccheyne2022"})
+            if sf_variant not in valid_sf:
+                suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown radio sf type '{sf_variant}'.{suggest_str}")
+        else:
+            raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
+
+    if has_agn_block:
+        agn_dict = radio_dict["agn"]
+        if isinstance(agn_dict, dict):
+            agn_variant = agn_dict.get("type", "powerlaw")
+            from tengri.components.radio.component import AGN_RADIO_MODELS
+
+            valid_agn = frozenset(AGN_RADIO_MODELS)
+            if agn_variant not in valid_agn:
+                suggestions = difflib.get_close_matches(agn_variant, valid_agn, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown radio agn type '{agn_variant}'.{suggest_str}")
+        else:
+            raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
+
+    # Determine if radio is overall enabled: True if either SF or AGN is not 'none'
+    radio_enabled = sf_variant != "none" or agn_variant != "none"
+
+    result["radio"] = radio_enabled
+    if radio_enabled:
+        result["radio_sfr_mode"] = sf_variant
+        result["radio_agn_model"] = agn_variant
+
+
+#: Model-specific radio sub-block params, routed to the ``radio.sf`` /
+#: ``radio.agn`` sub-groups so they resolve when nested in
+#: ``radio={'sf': {...}, 'agn': {...}}`` (mirrors the ``dust.emission``
+#: sub-group). Keyed by the active mode: a sub-block ``'*'`` wildcard frees
+#: only the active model's params (block-scoped, like the AGN grammar), so
+#: selecting ``delvecchio2021`` never frees the McCheyne coefficients and a
+#: ``powerlaw`` AGN radio never frees the DPL turnover knobs.
+_RADIO_SF_PARAMS_BY_MODE: dict[str, frozenset[str]] = {
+    "delvecchio2021": frozenset({"radio_delv_q0", "radio_delv_mass_slope", "radio_delv_z_slope"}),
+    "mccheyne2022": frozenset({"radio_mcch_q0", "radio_mcch_mass_slope", "radio_mcch_z_slope"}),
+}
+_RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
+    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn"}),
+    "dpl": frozenset(
+        {
+            "radio_loudness",
+            "radio_alpha_thin",
+            "radio_alpha_thick",
+            "radio_log_nu_t",
+            "radio_log_nu_cut",
+        }
+    ),
+}
+#: Union of every param owned by each radio sub-group, used by the partition
+#: to route names away from the flat ``radio`` group.
+_RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_MODE.values())
+_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY_MODEL.values())
 
 
 #: Valid laws for the MW foreground screen (#297). Only the closed-form
@@ -1152,7 +1313,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),
-    "radio": frozenset({"type", "*"}),
+    "radio": frozenset({"type", "*", "sf", "agn"}),
+    "radio.sf": frozenset({"type", "*"}),
+    "radio.agn": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
     "agn": frozenset({"type", "*", "norm"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*"}),
@@ -1327,6 +1490,18 @@ def _validate_user_keys(
                     sub_allowed | sub_params | agn_shared_names,
                     param_partition,
                 )
+        elif top_key == "radio":
+            # Validate nested radio={'sf': {...}} / {'agn': {...}} sub-blocks
+            # so a typo'd FIRRC / DPL key raises instead of silently vanishing.
+            for sub_name in ("sf", "agn"):
+                sub = top_val.get(sub_name)
+                if not isinstance(sub, dict):
+                    continue
+                sub_group = f"radio.{sub_name}"
+                sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
+                sub_params = _short_names_for_group(sub_group, param_partition)
+                sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
 def _check_dict_keys(
@@ -1682,6 +1857,13 @@ def _partition_by_group(
                 partition[name] = "agn.disc"
         elif name.startswith("xray_"):
             partition[name] = "xray"
+        elif name in _RADIO_SF_PARAM_NAMES:
+            # Model-specific FIRRC evolution coefficients live in the radio.sf
+            # sub-block (radio={'sf': {...}}).
+            partition[name] = "radio.sf"
+        elif name in _RADIO_AGN_PARAM_NAMES:
+            # AGN radio loudness / power-law / DPL knobs live in radio.agn.
+            partition[name] = "radio.agn"
         elif name.startswith("radio_"):
             partition[name] = "radio"
         elif name.startswith("dla_"):

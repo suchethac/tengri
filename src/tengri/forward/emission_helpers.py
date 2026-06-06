@@ -518,7 +518,7 @@ def xray_emission(
     L_agn_bol: float,
     *,
     gamma_agn: float = 1.8,
-    alpha_ox: float = -1.4,
+    delta_alpha_ox: float = 0.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
     E_cut: float = 300.0,
@@ -537,8 +537,9 @@ def xray_emission(
         AGN bolometric luminosity [erg/s].
     gamma_agn : float, optional
         AGN photon index. Default 1.8.
-    alpha_ox : float, optional
-        UV-to-X-ray slope. Default -1.4.
+    delta_alpha_ox : float, optional
+        Offset [dex] to empirical alpha_ox from bolometric luminosity.
+        Default 0.0.
     gamma_hmxb : float, optional
         HMXB photon index. Default 2.0.
     gamma_lmxb : float, optional
@@ -563,7 +564,7 @@ def xray_emission(
         stellar_mass=stellar_mass,
         L_agn_bol=L_agn_bol,
         gamma_agn=gamma_agn,
-        alpha_ox=alpha_ox,
+        delta_alpha_ox=delta_alpha_ox,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
         E_cut=E_cut,

@@ -340,7 +340,7 @@ class Parameters:
 
     ========================== ================= =======================================
     xray_gamma_agn             Fixed(1.8)        AGN X-ray photon index
-    xray_alpha_ox              Fixed(-1.4)       UV-to-X-ray slope
+    xray_alpha_ox              Fixed(0.0)        Offset to L_2500-derived alpha_ox [dex]
     ========================== ================= =======================================
 
     **Evolving metallicity** (``evolving_metallicity=True``):
@@ -507,6 +507,8 @@ class Parameters:
                     "use agn_axis_grids=None (default) to disable precompute."
                 )
         self.radio = kwargs.pop("radio", False)
+        self.radio_sfr_mode = kwargs.pop("radio_sfr_mode", "bell2003")
+        self.radio_agn_model = kwargs.pop("radio_agn_model", "powerlaw")
         self.xray = kwargs.pop("xray", False)
         self.shock = kwargs.pop("shock", False)
 

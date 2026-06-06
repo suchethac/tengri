@@ -741,6 +741,7 @@ class SEDModel:
             uses_xray=self._uses_xray,
             radio_include_freefree=getattr(self, "_radio_include_freefree", None),
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", None),
+            radio_agn_model=getattr(self, "_radio_agn_model", None),
             z_fixed=self._z_fixed,
             dl_cm_fixed=self._dl_cm_fixed,
             param_map=self._param_map,
@@ -1556,6 +1557,7 @@ class SEDModel:
             # in _build_param_map (Step B).
             self._radio_include_freefree = getattr(spec, "radio_include_freefree", True)
             self._radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
+            self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
 
         self._uses_xray = getattr(spec, "xray", False)
 
@@ -2655,6 +2657,9 @@ class SEDModel:
             else False
         )
         radio_sfr_mode = str(self._radio_sfr_mode) if hasattr(self, "_radio_sfr_mode") else "none"
+        radio_agn_model = (
+            str(self._radio_agn_model) if hasattr(self, "_radio_agn_model") else "powerlaw"
+        )
 
         # Velocity dispersion
         has_sigma_v = bool(self._has_sigma_v)
@@ -2770,6 +2775,7 @@ class SEDModel:
             z_interp,
             radio_include_freefree,
             radio_sfr_mode,
+            radio_agn_model,
             has_sigma_v,
             compile_mode,
             approx_resolved,
@@ -4629,6 +4635,8 @@ class SEDModel:
             wg00_geometry=getattr(self, "_wg00_geometry", "shell"),
             wg00_structure=getattr(self, "_wg00_structure", "homogeneous"),
             use_radio=bool(getattr(self, "_uses_radio", False)),
+            radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
+            radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             use_xray=bool(getattr(self, "_uses_xray", False)),
             use_igm=bool(getattr(self, "_uses_igm", False)),
         )
