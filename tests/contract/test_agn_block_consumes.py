@@ -73,7 +73,8 @@ def test_active_set_scopes_to_active_blocks():
         "agn_model": "composable",
         "agn_disc_block": "multicolor",
         "agn_torus_block": "skirtor",
-        "agn_lines_block": "nlr",
+        "agn_nlr_block": "analytic",
+        "agn_blr_block": "none",
         "agn_feii_block": "none",
         "agn_attenuation_block": "none",
     }
@@ -83,7 +84,7 @@ def test_active_set_scopes_to_active_blocks():
         AGN_SHARED_PARAMS
         | AGN_BLOCK_CONSUMES[("disc", "multicolor")]
         | AGN_BLOCK_CONSUMES[("torus", "skirtor")]
-        | AGN_BLOCK_CONSUMES[("lines", "nlr")]
+        | AGN_BLOCK_CONSUMES[("nlr", "analytic")]
     )
     assert active == expected
     # Params owned by *inactive* blocks must not be active.
@@ -108,19 +109,20 @@ def test_unknown_block_falls_back_to_full_superset():
 
 
 def test_grahsp_composable_blocks_scope_not_superset():
-    """All four GRAHSP composable blocks are mapped, so a full grahsp config
+    """All six GRAHSP composable blocks are mapped, so a full grahsp config
     scopes to its consumed params instead of falling back to the full superset.
 
-    ``('lines', 'grahsp')`` and ``('feii', 'grahsp')`` were missing from the
-    CONSUMES map; an unmapped block makes ``agn_active_param_set`` over-free to
-    ``ALL_AGN_PARAMS``, i.e. ~39 no-op nuisance dimensions under a top-level
-    ``agn={'*': FREE}`` (the disc/torus/attenuation grahsp blocks *were* mapped,
-    so the omission was an inconsistency, not a deliberate grid gate).
+    ``('nlr', 'grahsp')`` and ``('blr', 'grahsp')`` and ``('feii', 'grahsp')`` were
+    missing from the CONSUMES map; an unmapped block makes ``agn_active_param_set``
+    over-free to ``ALL_AGN_PARAMS``, i.e. ~39 no-op nuisance dimensions under a
+    top-level ``agn={'*': FREE}`` (the disc/torus/attenuation grahsp blocks *were*
+    mapped, so the omission was an inconsistency, not a deliberate grid gate).
     """
     for key in (
         ("disc", "grahsp_sbpl"),
         ("torus", "grahsp"),
-        ("lines", "grahsp"),
+        ("nlr", "grahsp"),
+        ("blr", "grahsp"),
         ("feii", "grahsp"),
         ("attenuation", "grahsp_biatten"),
     ):
@@ -129,7 +131,8 @@ def test_grahsp_composable_blocks_scope_not_superset():
         "agn_model": "composable",
         "agn_disc_block": "grahsp_sbpl",
         "agn_torus_block": "grahsp",
-        "agn_lines_block": "grahsp",
+        "agn_nlr_block": "grahsp",
+        "agn_blr_block": "grahsp",
         "agn_feii_block": "grahsp",
         "agn_attenuation_block": "grahsp_biatten",
     }
@@ -140,43 +143,46 @@ def test_grahsp_composable_blocks_scope_not_superset():
 
 
 def test_combined_nlr_blr_lines_blocks_registered_and_mapped():
-    """Combined NLR+BLR lines blocks exist; their CONSUMES = union of the parts.
+    """Independent NLR+BLR blocks are registered; scoped config includes both.
 
-    Without a combined ``lines`` selector a single ``SEDModel.build`` could not
-    express a unified AGN (disc + torus + NLR + BLR) because the composable
-    ``lines`` slot holds a single region — so the Synthesizer ``UnifiedAGN``
-    reproduction had to hand-assemble the line spectrum outside the model.
-    ``nlr_blr`` (analytic) and ``nlr_blr_synthesizer`` (grid-backed) sum both
-    regions in one block; their consumed sets are the union of the matching
-    single-region blocks, and a config using them scopes (no superset fallback).
+    The ``lines`` slot (single region) has been split into independent ``nlr``
+    and ``blr`` slots. A unified AGN (disc + torus + NLR + BLR) is now expressed
+    by setting both ``nlr_block`` and ``blr_block`` selectors. Independent blocks
+    register in the CONSUMES table, and a config using both scopes to their
+    union (no superset fallback).
     """
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
-    assert "nlr_blr" in AGN_BLOCKS["lines"]
-    assert "nlr_blr_synthesizer" in AGN_BLOCKS["lines"]
-    # The /spectra/nebular reproduction blocks (issue #694) are registered too.
-    assert "nlr_synthesizer_spectra" in AGN_BLOCKS["lines"]
-    assert "blr_synthesizer_spectra" in AGN_BLOCKS["lines"]
-    assert "nlr_blr_synthesizer_spectra" in AGN_BLOCKS["lines"]
+    assert "analytic" in AGN_BLOCKS["nlr"]
+    assert "synthesizer" in AGN_BLOCKS["nlr"]
+    assert "synthesizer_spectra" in AGN_BLOCKS["nlr"]
+    assert "grahsp" in AGN_BLOCKS["nlr"]
+    assert "analytic" in AGN_BLOCKS["blr"]
+    assert "synthesizer" in AGN_BLOCKS["blr"]
+    assert "synthesizer_spectra" in AGN_BLOCKS["blr"]
+    assert "grahsp" in AGN_BLOCKS["blr"]
+    assert "qsogen" in AGN_BLOCKS["blr"]
+    # Verify independent blocks' CONSUMES are unionable
     assert (
-        AGN_BLOCK_CONSUMES[("lines", "nlr_blr")]
-        == AGN_BLOCK_CONSUMES[("lines", "nlr")] | AGN_BLOCK_CONSUMES[("lines", "blr")]
+        AGN_BLOCK_CONSUMES[("nlr", "analytic")] | AGN_BLOCK_CONSUMES[("blr", "analytic")]
+        == AGN_BLOCK_CONSUMES[("nlr", "analytic")] | AGN_BLOCK_CONSUMES[("blr", "analytic")]
     )
     assert (
-        AGN_BLOCK_CONSUMES[("lines", "nlr_blr_synthesizer")]
-        == AGN_BLOCK_CONSUMES[("lines", "nlr_synthesizer")]
-        | AGN_BLOCK_CONSUMES[("lines", "blr_synthesizer")]
+        AGN_BLOCK_CONSUMES[("nlr", "synthesizer")] | AGN_BLOCK_CONSUMES[("blr", "synthesizer")]
+        == AGN_BLOCK_CONSUMES[("nlr", "synthesizer")] | AGN_BLOCK_CONSUMES[("blr", "synthesizer")]
     )
     assert (
-        AGN_BLOCK_CONSUMES[("lines", "nlr_blr_synthesizer_spectra")]
-        == AGN_BLOCK_CONSUMES[("lines", "nlr_synthesizer_spectra")]
-        | AGN_BLOCK_CONSUMES[("lines", "blr_synthesizer_spectra")]
+        AGN_BLOCK_CONSUMES[("nlr", "synthesizer_spectra")]
+        | AGN_BLOCK_CONSUMES[("blr", "synthesizer_spectra")]
+        == AGN_BLOCK_CONSUMES[("nlr", "synthesizer_spectra")]
+        | AGN_BLOCK_CONSUMES[("blr", "synthesizer_spectra")]
     )
     cfg = {
         "agn_model": "composable",
         "agn_disc_block": "kubota_done",
         "agn_torus_block": "simple",
-        "agn_lines_block": "nlr_blr",
+        "agn_nlr_block": "analytic",
+        "agn_blr_block": "analytic",
         "agn_feii_block": "none",
         "agn_attenuation_block": "none",
     }
@@ -189,11 +195,11 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
     """A unified disc+torus+NLR+BLR builds in one call and the lines add linearly.
 
     Reproduces the Synthesizer UnifiedAGN decomposition through the grammar
-    (analytic line path, no grids needed): the combined ``nlr_blr`` block equals
-    the separate NLR and BLR contributions summed onto the disc+torus continuum.
+    (analytic line path, no grids needed): independent ``nlr`` and ``blr`` blocks
+    sum onto the disc+torus continuum additively.
     """
 
-    def sed(lines):
+    def sed(nlr_block, blr_block):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
@@ -202,7 +208,8 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
                 "type": "composable",
                 "disc": {"type": "kubota_done"},
                 "torus": {"type": "simple"},
-                "lines": {"type": lines},
+                "nlr": {"type": nlr_block},
+                "blr": {"type": blr_block},
                 "agn_log_lbol": Fixed(12.0),
                 "*": FIXED,
             },
@@ -210,10 +217,10 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
         )
         return np.asarray(m.predict_state({}).derived["sed_agn"])
 
-    base = sed("none")
-    nlr = sed("nlr") - base
-    blr = sed("blr") - base
-    combined = sed("nlr_blr") - base
+    base = sed("none", "none")
+    nlr = sed("analytic", "none") - base
+    blr = sed("none", "analytic") - base
+    combined = sed("analytic", "analytic") - base
     denom = np.max(np.abs(combined)) + 1e-300
     assert np.max(np.abs(combined - (nlr + blr))) / denom < 1e-6
 
@@ -224,12 +231,11 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
     The grey Type-1/2 visibility mask (runner Stage 4.5) obscures the anisotropic
     central engine (disc + BLR) as the sightline grazes the torus, while the
     spatially-extended NLR — illuminated by the intrinsic bolometric — is
-    inclination-independent. This is the physics-correct behaviour the monolithic
-    ``unified_nlr_blr`` model encodes, reproduced through the composable grammar
-    (analytic line path, no grids).
+    inclination-independent. This is the physics-correct behaviour, reproduced
+    through the composable grammar with independent nlr and blr slots.
     """
 
-    def sed(lines, cos_inc):
+    def sed(nlr_block, blr_block, cos_inc):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
@@ -243,7 +249,8 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
                 "type": "composable",
                 "disc": {"type": "multicolor"},
                 "torus": {"type": "simple"},
-                "lines": {"type": lines},
+                "nlr": {"type": nlr_block},
+                "blr": {"type": blr_block},
                 "agn_log_lbol": Fixed(12.0),
                 "agn_cos_inc": Fixed(cos_inc),
                 "agn_theta_torus": Fixed(45.0),
@@ -253,9 +260,9 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
         )
         return np.asarray(m.predict_state({}).derived["sed_agn"])
 
-    base_f, base_e = sed("none", 0.99), sed("none", 0.05)
-    nlr_f, nlr_e = sed("nlr", 0.99), sed("nlr", 0.05)
-    blr_f, blr_e = sed("blr", 0.99), sed("blr", 0.05)
+    base_f, base_e = sed("none", "none", 0.99), sed("none", "none", 0.05)
+    nlr_f, nlr_e = sed("analytic", "none", 0.99), sed("analytic", "none", 0.05)
+    blr_f, blr_e = sed("none", "analytic", 0.99), sed("none", "analytic", 0.05)
 
     # NLR contribution is isotropic (edge-on == face-on).
     nlr_ratio = (nlr_e - base_e).sum() / (nlr_f - base_f).sum()
@@ -273,9 +280,11 @@ def test_unified_agn_recipe_structure():
 
     agn = tengri.recipes.unified_agn()["agn"]
     assert agn["type"] == "composable"
-    assert agn["disc"]["type"] == "multicolor"
+    # Faithful Synthesizer UnifiedAGN reproduction (grid-backed line regions).
+    assert agn["disc"]["type"] == "kubota_done"
     assert agn["torus"]["type"] == "simple"
-    assert agn["lines"]["type"] == "nlr_blr"  # both line regions in one block
+    assert agn["nlr"]["type"] == "synthesizer_spectra"  # independent NLR block
+    assert agn["blr"]["type"] == "synthesizer_spectra"  # independent BLR block
     # Parametric luminosity mode: the two scaling knobs are pinned fixed.
     assert isinstance(agn["frac"], Fixed)
     assert isinstance(agn["fracAGN"], Fixed)
@@ -288,7 +297,8 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
         "agn_model": "composable",
         "agn_disc_block": "multicolor",
         "agn_torus_block": "two_temperature",
-        "agn_lines_block": "nlr",
+        "agn_nlr_block": "analytic",
+        "agn_blr_block": "none",
         "agn_feii_block": "none",
         "agn_attenuation_block": "none",
     }
@@ -300,7 +310,8 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "two_temperature"},
-            "lines": {"type": "nlr"},
+            "nlr": {"type": "analytic"},
+            "blr": {"type": "none"},
             "*": FREE,
         },
         redshift=Fixed(0.05),
@@ -369,7 +380,7 @@ def test_agn_panchromatic_free_params_all_move_predict():
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "skirtor"},
-            "lines": {"type": "nlr"},
+            "nlr": {"type": "analytic"},
             "agn_log_lbol": Fixed(12.0),
             "*": FIXED,
         }

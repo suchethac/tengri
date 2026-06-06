@@ -355,8 +355,14 @@ def _agn_block_types(category: str) -> frozenset[str]:
     # decorators have fired. Mirrors the eager imports done by AGN
     # ``unified.py`` at module-load time; safe to redo here.
     import tengri.components.agn.blocks.alternates
+    import tengri.components.agn.blocks.atten_blocks
+    import tengri.components.agn.blocks.blr_blocks
     import tengri.components.agn.blocks.disc_blocks
-    import tengri.components.agn.blocks.lines_blocks  # noqa: F401
+    import tengri.components.agn.blocks.feii_blocks
+    import tengri.components.agn.blocks.grahsp_blocks
+    import tengri.components.agn.blocks.nlr_blocks
+    import tengri.components.agn.blocks.qsogen_blocks
+    import tengri.components.agn.blocks.torus_blocks  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
@@ -368,24 +374,21 @@ _VALID_AGN_DISC_TYPES = _agn_block_types("disc")
 #: Valid AGN torus block types (derived from ``AGN_BLOCKS['torus']``).
 _VALID_AGN_TORUS_TYPES = _agn_block_types("torus")
 
-#: Valid AGN lines block types (derived from ``AGN_BLOCKS['lines']``).
-_VALID_AGN_LINES_TYPES = _agn_block_types("lines") | {"qsogen"}  # qsogen lives on the qsogen model
+#: Valid AGN narrow-line region block types (derived from
+#: ``AGN_BLOCKS['nlr']``).
+_VALID_AGN_NLR_TYPES = _agn_block_types("nlr")
 
-#: Valid AGN feii block types.
-_VALID_AGN_FEII_TYPES = {
-    "none",
-    "grahsp",
-    "qsogen_balmer",
-}
+#: Valid AGN broad-line region block types (derived from ``AGN_BLOCKS['blr']``).
+#: Includes ``"qsogen"`` which lives on the qsogen model.
+_VALID_AGN_BLR_TYPES = _agn_block_types("blr") | {"qsogen"}
 
-#: Valid AGN attenuation block types.
-_VALID_AGN_ATTEN_TYPES = {
-    "none",
-    "smc_prevot",
-    "polar_dust",
-    "grahsp_biatten",
-    "qsogen_smc",
-}
+#: Valid AGN feii block types (derived from ``AGN_BLOCKS['feii']`` — the
+#: block-registration decorator is the single source of truth, so a new feii
+#: block like ``boroson_green`` is picked up automatically without editing here).
+_VALID_AGN_FEII_TYPES = _agn_block_types("feii")
+
+#: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
+_VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
@@ -425,12 +428,13 @@ _AGN_PARTITION = {
     "agn_fritz_gamma": "agn.torus",
     "agn_fritz_oa": "agn.torus",
     "agn_fritz_psy": "agn.torus",
-    # Lines
-    "agn_blr_cf": "agn.lines",
-    "agn_nlr_cf": "agn.lines",
-    "agn_alpha_ion": "agn.lines",
-    "agn_feltre_cf": "agn.lines",
-    "neb_xid": "agn.lines",
+    # Narrow-line region
+    "agn_nlr_cf": "agn.nlr",
+    "agn_alpha_ion": "agn.nlr",  # NLR photoionisation knob
+    "agn_feltre_cf": "agn.nlr",  # Feltre calibration for NLR
+    "neb_xid": "agn.nlr",  # Nebular ionization for NLR
+    # Broad-line region
+    "agn_blr_cf": "agn.blr",
     # FeII
     "agn_fe2_strength": "agn.feii",
     # Attenuation
@@ -484,7 +488,7 @@ def parse_groups(**kwargs) -> Parameters:
     ----------
     **kwargs : keyword arguments
         Model configuration. Keys are group names (sfh, dust, neb, igm,
-        radio, xray) or top-level settings (redshift, apply_igm, n_grid).
+        radio, xray, agn) or top-level settings (redshift, apply_igm, n_grid).
 
     Returns
     -------
@@ -495,13 +499,17 @@ def parse_groups(**kwargs) -> Parameters:
     ------
     ValueError
         If an unknown group key, unknown type value, or unknown parameter
-        name is provided.
-    NotImplementedError
-        If AGN group is provided or if SFH type is a list.
+        name is provided. Also raised if both deprecated 'lines' and new
+        'nlr'/'blr' sub-blocks are provided under 'agn'.
 
     Notes
     -----
     **JIT-compatible**: no — this is a pure Python translator.
+
+    **AGN blocks**: The new composable AGN grammar supports independent
+    ``nlr`` (narrow-line region) and ``blr`` (broad-line region) sub-blocks
+    under the ``agn`` group. The deprecated ``lines`` sub-block is expanded
+    to an (nlr, blr) pair with a ``DeprecationWarning``.
 
     Examples
     --------
@@ -1098,8 +1106,10 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
 
 #: AGN sub-block keys recognised by the nested-dict grammar. Used when
 #: walking a user's top-level ``agn`` dict to tell sub-block dicts apart
-#: from per-parameter overrides.
-_AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
+#: from per-parameter overrides. The new split includes independent ``nlr``
+#: and ``blr`` categories; ``lines`` is deprecated (expanded to an (nlr, blr)
+#: pair via expand_lines_alias).
+_AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", "lines"})
 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
@@ -1147,9 +1157,12 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn": frozenset({"type", "*", "norm"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*"}),
     "agn.torus": frozenset({"type", "*"}),
-    "agn.lines": frozenset({"type", "*"}),
+    "agn.nlr": frozenset({"type", "*"}),
+    "agn.blr": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
     "agn.atten": frozenset({"type", "*"}),
+    # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
+    "agn.lines": frozenset({"type", "*"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
 
@@ -1345,9 +1358,9 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     """Build the resolution view for one AGN parameter.
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
-    plus up to five sub-block dicts (``disc``/``torus``/``lines``/``feii``/
-    ``atten``). To keep the API friendly, a parameter can be supplied at
-    *either* level — the partition table records the canonical location,
+    plus up to six sub-block dicts (``disc``/``torus``/``nlr``/``blr``/
+    ``feii``/``atten``). To keep the API friendly, a parameter can be supplied
+    at *either* level — the partition table records the canonical location,
     but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
     expects the value to take effect even though ``agn_log_lbol`` is
     nominally a shared (top-level) param.
@@ -1459,14 +1472,18 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     """Translate agn group to AGN composable block selectors.
 
     Activates agn_model='composable' and sets per-block selectors
-    (agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
-    agn_attenuation_block). Omitted blocks default to 'none'.
+    (agn_disc_block, agn_torus_block, agn_nlr_block, agn_blr_block,
+    agn_feii_block, agn_attenuation_block). Omitted blocks default to 'none'.
 
     A top-level ``'type'`` key picks a non-composable monolithic AGN model
     registered in :data:`tengri.components.agn.AGN_MODELS` (e.g.
     ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``). When
     ``type='composable'`` (or absent), the sub-block selectors are honoured.
     Mixing a non-composable ``type`` with sub-blocks is an error.
+
+    The deprecated ``lines`` sub-block (which combined NLR and BLR) is
+    expanded to independent ``nlr`` and ``blr`` sub-blocks via
+    ``expand_lines_alias``, with a ``DeprecationWarning`` emitted.
 
     Parameters
     ----------
@@ -1479,7 +1496,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     ------
     ValueError
         If unknown block type, unknown model type, or invalid block
-        specification.
+        specification. Also raised if both ``lines`` and ``nlr``/``blr``
+        are provided.
     """
     # Top-level 'type' selects a monolithic AGN model when not 'composable'.
     # Previously this key was silently dropped and the model collapsed to
@@ -1507,11 +1525,73 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # Activate composable model
     result["agn_model"] = "composable"
 
-    # Define the five canonical sub-blocks and their type validator sets
+    # Handle deprecated `lines` sub-block: expand to independent nlr/blr
+    # and emit a DeprecationWarning.
+    agn_dict = dict(agn_dict)  # Shallow copy to avoid modifying the original
+    if "lines" in agn_dict:
+        lines_spec = agn_dict.pop("lines")
+        # Check for conflicting specification: both lines and nlr/blr
+        if isinstance(lines_spec, dict) and ("nlr" in agn_dict or "blr" in agn_dict):
+            raise ValueError(
+                "Cannot specify both deprecated 'lines' sub-block and "
+                "the new 'nlr' and/or 'blr' sub-blocks. Use only 'nlr' "
+                "and 'blr', or update your code to use the new grammar."
+            )
+        # Expand the deprecated lines type to (nlr_type, blr_type)
+        if isinstance(lines_spec, dict):
+            lines_type = lines_spec.get("type", "none")
+            from tengri.components.agn.blocks._aliases import expand_lines_alias
+
+            try:
+                nlr_type, blr_type = expand_lines_alias(lines_type)
+            except ValueError as e:
+                raise ValueError(f"Invalid 'lines' type in agn dict: {e}") from e
+
+            # Emit the deprecation warning
+            warnings.warn(
+                f"The AGN 'lines' slot is deprecated; use independent 'nlr' "
+                f"and 'blr' slots. 'lines' type '{lines_type}' maps to "
+                f"nlr='{nlr_type}', blr='{blr_type}'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            # Construct nlr and blr sub-blocks from the expanded types.
+            # Carry over any wildcard and per-param overrides from lines.
+            nlr_spec = {"type": nlr_type}
+            blr_spec = {"type": blr_type}
+
+            # Copy over wildcard and per-param overrides from lines_spec.
+            # Heuristic: parameters with "blr" in the name go to blr only;
+            # those with "nlr" go to nlr only; wildcard and other params
+            # replicate to both.
+            for key, val in lines_spec.items():
+                if key == "type":
+                    continue
+                if key == "*":
+                    # Wildcard applies to both sub-blocks
+                    nlr_spec["*"] = val
+                    blr_spec["*"] = val
+                elif isinstance(key, str) and "blr" in key:
+                    # BLR-specific parameter
+                    blr_spec[key] = val
+                elif isinstance(key, str) and "nlr" in key:
+                    # NLR-specific parameter
+                    nlr_spec[key] = val
+                else:
+                    # Ambiguous or shared: replicate to both
+                    nlr_spec[key] = val
+                    blr_spec[key] = val
+
+            agn_dict["nlr"] = nlr_spec
+            agn_dict["blr"] = blr_spec
+
+    # Define the six canonical sub-blocks and their type validator sets
     block_specs = {
         "disc": _VALID_AGN_DISC_TYPES,
         "torus": _VALID_AGN_TORUS_TYPES,
-        "lines": _VALID_AGN_LINES_TYPES,
+        "nlr": _VALID_AGN_NLR_TYPES,
+        "blr": _VALID_AGN_BLR_TYPES,
         "feii": _VALID_AGN_FEII_TYPES,
         "atten": _VALID_AGN_ATTEN_TYPES,
     }
@@ -1520,7 +1600,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     block_to_kwarg = {
         "disc": "agn_disc_block",
         "torus": "agn_torus_block",
-        "lines": "agn_lines_block",
+        "nlr": "agn_nlr_block",
+        "blr": "agn_blr_block",
         "feii": "agn_feii_block",
         "atten": "agn_attenuation_block",
     }
@@ -1641,7 +1722,7 @@ def _resolve_value(
     ``wildcard_active`` (keyword-only, default ``True``) gates the
     wildcard-``FREE`` branch only. When ``False`` a ``'*': FREE`` is treated
     as ``'*': FIXED`` for *this* parameter — used by the AGN group so a group
-    wildcard frees only the parameters the active disc/torus/lines/feii/atten
+    wildcard frees only the parameters the active disc/torus/nlr/blr/feii/atten
     blocks actually consume, not the full declared superset (which would
     otherwise create unconstrained no-op nuisance dimensions). An *explicit*
     per-parameter ``FREE`` is handled earlier and is never gated, so the user

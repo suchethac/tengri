@@ -50,7 +50,12 @@ from tengri.components.agn.unified import register_agn_model
 __all__ = ["grahsp"]
 
 
-@register_agn_model("grahsp")
+@register_agn_model(
+    "grahsp",
+    citation="Buchner et al. 2024, arXiv:2405.19297",
+    status="deprecated",
+    short_doc="GRAHSP AGN SED (Buchner+2024)",
+)
 def grahsp(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,

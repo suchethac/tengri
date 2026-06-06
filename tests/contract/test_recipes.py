@@ -8,6 +8,8 @@ expected structural and parameter properties.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from tengri import parse_groups, recipes
@@ -25,6 +27,7 @@ class TestRecipesAvailable:
             "star_forming_photometry",
             "quiescent_z0",
             "agn_panchromatic",
+            "composable_agn",
             "stochastic_sfh_jwst",
             "mock_recovery_minimal",
         }
@@ -37,6 +40,7 @@ class TestRecipesAvailable:
             "star_forming_photometry",
             "quiescent_z0",
             "agn_panchromatic",
+            "composable_agn",
             "stochastic_sfh_jwst",
             "mock_recovery_minimal",
         ]
@@ -362,6 +366,165 @@ class TestMockRecoveryMinimal:
         assert len(dust_emission_free) == 0, "Expected no dust emission params"
 
 
+class TestUnifiedAgn:
+    """Tests for unified_agn() recipe — grid-gated Synthesizer reproduction."""
+
+    pytestmark = pytest.mark.contract
+
+    def test_unified_agn_returns_dict(self):
+        """Recipe returns a dict."""
+        result = recipes.unified_agn()
+        assert isinstance(result, dict)
+
+    def test_unified_agn_grid_gated(self):
+        """Recipe is grid-gated on Synthesizer AGN grids.
+
+        Skips if data/synthesizer_grids/ not present. Tests that require the
+        grids can be marked with this skip and will be run only when grids
+        are available.
+        """
+        synthesizer_grid_dir = Path("data/synthesizer_grids")
+        if not synthesizer_grid_dir.exists():
+            pytest.skip("Synthesizer AGN grids not available at data/synthesizer_grids/")
+
+    def test_unified_agn_has_synthesizer_spectra_nlr(self):
+        """Recipe uses synthesizer_spectra for NLR."""
+        self.test_unified_agn_grid_gated()  # Skip if grids absent
+        recipe_dict = recipes.unified_agn()
+        assert "agn" in recipe_dict
+        assert recipe_dict["agn"]["nlr"]["type"] == "synthesizer_spectra"
+
+    def test_unified_agn_has_synthesizer_spectra_blr(self):
+        """Recipe uses synthesizer_spectra for BLR."""
+        self.test_unified_agn_grid_gated()  # Skip if grids absent
+        recipe_dict = recipes.unified_agn()
+        assert "agn" in recipe_dict
+        assert recipe_dict["agn"]["blr"]["type"] == "synthesizer_spectra"
+
+    def test_unified_agn_has_kubota_done_disc(self):
+        """Recipe uses Kubota & Done disc."""
+        recipe_dict = recipes.unified_agn()
+        assert recipe_dict["agn"]["disc"]["type"] == "kubota_done"
+
+    def test_unified_agn_has_simple_torus(self):
+        """Recipe uses simple greybody torus."""
+        recipe_dict = recipes.unified_agn()
+        assert recipe_dict["agn"]["torus"]["type"] == "simple"
+
+    def test_unified_agn_fixed_sfh(self):
+        """SFH is fixed (delayed exponential)."""
+        recipe_dict = recipes.unified_agn()
+        assert recipe_dict["sfh"]["type"] == "delayed"
+        assert recipe_dict["sfh"]["*"] == recipes.FIXED
+
+    def test_unified_agn_fixed_dust(self):
+        """Dust attenuation optical depths are fixed to zero."""
+        recipe_dict = recipes.unified_agn()
+        assert recipe_dict["dust"]["tau_bc"] == 0.0
+        assert recipe_dict["dust"]["tau_diff"] == 0.0
+
+    def test_unified_agn_fixed_redshift(self):
+        """Redshift is fixed at z=0.0."""
+        recipe_dict = recipes.unified_agn()
+        assert recipe_dict["redshift"] == recipes.Fixed(0.0)
+
+
+class TestComposableAgn:
+    """Tests for composable_agn() recipe — all slots on committed data."""
+
+    pytestmark = pytest.mark.contract
+
+    def test_composable_agn_returns_dict(self):
+        """Recipe returns a dict."""
+        result = recipes.composable_agn()
+        assert isinstance(result, dict)
+
+    def test_composable_agn_builds_parameters(self):
+        """Recipe output passes to parse_groups()."""
+        recipe_dict = recipes.composable_agn()
+        spec = parse_groups(**recipe_dict)
+        assert isinstance(spec, Parameters)
+
+    def test_composable_agn_has_agn_group(self):
+        """Recipe includes AGN group with all six slots."""
+        recipe_dict = recipes.composable_agn()
+        assert "agn" in recipe_dict
+        assert "disc" in recipe_dict["agn"]
+        assert "nlr" in recipe_dict["agn"]
+        assert "blr" in recipe_dict["agn"]
+        assert "feii" in recipe_dict["agn"]
+        assert "torus" in recipe_dict["agn"]
+        assert "atten" in recipe_dict["agn"]
+
+    def test_composable_agn_disc_multicolor(self):
+        """AGN disc is multicolor."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["disc"]["type"] == "multicolor"
+
+    def test_composable_agn_nlr_analytic(self):
+        """AGN NLR is analytic."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["nlr"]["type"] == "analytic"
+
+    def test_composable_agn_blr_analytic(self):
+        """AGN BLR is analytic."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["blr"]["type"] == "analytic"
+
+    def test_composable_agn_feii_boroson_green(self):
+        """AGN FeII is Boroson & Green."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["feii"]["type"] == "boroson_green"
+
+    def test_composable_agn_torus_skirtor(self):
+        """AGN torus is SKIRTOR."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["torus"]["type"] == "skirtor"
+
+    def test_composable_agn_atten_polar_dust(self):
+        """AGN attenuation is polar dust."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["atten"]["type"] == "polar_dust"
+
+    def test_composable_agn_norm_cigale_joint(self):
+        """AGN normalization is CIGALE joint."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["agn"]["norm"] == "cigale_joint"
+
+    def test_composable_agn_fracagn_positive(self):
+        """AGN fracAGN is set (>0 via Uniform or Fixed)."""
+        recipe_dict = recipes.composable_agn()
+        # fracAGN should be present and its bound should reflect >0
+        assert "fracAGN" in recipe_dict["agn"]
+        # Check that it's a Uniform distribution with bounds > 0
+        fracagn = recipe_dict["agn"]["fracAGN"]
+        assert hasattr(fracagn, "lo") and fracagn.lo > 0 and fracagn.hi < 1.0
+
+    def test_composable_agn_has_dpl_sfh(self):
+        """Recipe uses DPL SFH."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["sfh"]["type"] == "dpl"
+
+    def test_composable_agn_includes_radio_xray(self):
+        """Recipe includes radio and xray."""
+        recipe_dict = recipes.composable_agn()
+        assert recipe_dict["radio"] is True
+        assert recipe_dict["xray"] is True
+
+    def test_composable_agn_free_redshift(self):
+        """Redshift is free with appropriate bounds."""
+        recipe_dict = recipes.composable_agn()
+        spec = parse_groups(**recipe_dict)
+        assert "redshift" in spec.free_params
+
+    def test_composable_agn_free_param_count(self):
+        """Recipe has reasonable number of free parameters."""
+        recipe_dict = recipes.composable_agn()
+        spec = parse_groups(**recipe_dict)
+        # DPL + dust + AGN + radio + xray should be substantial
+        assert 10 <= spec.n_free <= 60, f"Expected 10-60 free params, got {spec.n_free}"
+
+
 class TestRecipesIntegration:
     """Integration tests: recipes work with SEDModel (if SSP data available)."""
 
@@ -371,6 +534,7 @@ class TestRecipesIntegration:
             recipes.star_forming_photometry,
             recipes.quiescent_z0,
             recipes.agn_panchromatic,
+            recipes.composable_agn,
             recipes.stochastic_sfh_jwst,
             recipes.mock_recovery_minimal,
         ]:

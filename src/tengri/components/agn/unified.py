@@ -361,10 +361,23 @@ def resolve_agn_model(name: str) -> Callable:
     if name not in AGN_MODELS:
         raise ValueError(f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}")
 
-    # Emit deprecation warning for old model names
-    if name == "kubota_done":
+    # Emit deprecation warnings for deprecated monolithic models
+    _deprecation_map = {
+        "kubota_done": "disc=kubota_done + torus=silva04 (via composable grammar)",
+        "multicolor_agn": "disc=multicolor + torus=silva04 (via composable grammar)",
+        "kubota_done_full": "disc=kubota_done + torus=silva04 (via composable grammar)",
+        "silva04": "disc=powerlaw + torus=silva04 (via composable grammar)",
+        "cat3d_wind": "disc=powerlaw + torus=cat3d_wind (via composable grammar)",
+        "adaf": "disc=adaf + torus=silva04 (via composable grammar)",
+        "skirtor": "disc=skirtor + torus=skirtor (via composable grammar)",
+        "qsogen": "composable AGN blocks (qsogen disc, qsogen nlr, qsogen blr)",
+        "grahsp": "composable AGN blocks (grahsp disc, grahsp nlr, grahsp blr, grahsp feii)",
+        "unified_nlr_blr": "recipes.unified_agn()",
+    }
+
+    if name in _deprecation_map:
         warnings.warn(
-            "'kubota_done' is deprecated. Use 'multicolor_agn' instead.",
+            f"'{name}' is deprecated. Use '{_deprecation_map[name]}' instead.",
             DeprecationWarning,
             stacklevel=2,
         )
@@ -466,6 +479,7 @@ def unified_agn(
 @register_agn_model(
     "multicolor_agn",
     citation="Kubota & Done 2018 (MNRAS 480, 1247)",
+    status="deprecated",
     short_doc="Shakura-Sunyaev disc + 2-T torus",
 )
 def multicolor_agn(
@@ -550,6 +564,7 @@ AGN_MODELS["kubota_done"] = AGN_MODELS["multicolor_agn"]
 @register_agn_model(
     "kubota_done_full",
     citation="Kubota & Done 2018 (MNRAS 480, 1247)",
+    status="deprecated",
     short_doc="K&D 3-zone disc + 2-T torus + Comptonization",
 )
 def kubota_done_full_agn(
@@ -660,6 +675,7 @@ def kubota_done_full_agn(
 @register_agn_model(
     "skirtor",
     citation="Stalevski et al. 2012 (MNRAS 420, 2756); Stalevski et al. 2016 (MNRAS 458, 2288)",
+    status="deprecated",
     short_doc="Power-law disc + SKIRTOR clumpy torus",
 )
 def skirtor_agn(
@@ -737,6 +753,7 @@ def skirtor_agn(
 @register_agn_model(
     "silva04",
     citation="Silva et al. 2004 (MNRAS 355, 973)",
+    status="deprecated",
     short_doc="Power-law disc + Silva+04 smooth torus",
 )
 def silva04_agn(
@@ -797,6 +814,7 @@ def silva04_agn(
 @register_agn_model(
     "cat3d_wind",
     citation="Hönig & Kishimoto 2017 (ApJL 838, L20)",
+    status="deprecated",
     short_doc="Power-law disc + CAT3D-Wind clumpy torus",
 )
 def cat3d_wind_agn(
@@ -867,6 +885,7 @@ def cat3d_wind_agn(
 @register_agn_model(
     "adaf",
     citation="Mahadevan 1997 (ApJ 477, 585)",
+    status="deprecated",
     short_doc="ADAF + truncated disc + simple torus (low-luminosity)",
 )
 def adaf_agn(
@@ -1136,7 +1155,7 @@ def _sigmoid_mask(
 @register_agn_model(
     "unified_nlr_blr",
     citation="Lovell et al. 2025; Roper et al. 2025 (Synthesizer); Hönig & Kishimoto 2017",
-    status="experimental",
+    status="deprecated",
     short_doc="Unified AGN + NLR/BLR decomposition + geometric masking",
 )
 def unified_nlr_blr(

@@ -40,18 +40,20 @@ class TestAGNBasics:
         )
         assert params.agn_disc_block == "powerlaw"
         assert params.agn_torus_block == "none"
-        assert params.agn_lines_block == "none"
+        assert params.agn_nlr_block == "none"
+        assert params.agn_blr_block == "none"
         assert params.agn_feii_block == "none"
         assert params.agn_attenuation_block == "none"
 
     def test_agn_all_blocks_specified(self):
-        """User can specify all 5 blocks."""
+        """User can specify all 6 blocks."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             agn={
                 "disc": {"type": "powerlaw", "*": FIXED},
                 "torus": {"type": "simple", "*": FIXED},
-                "lines": {"type": "nlr", "*": FIXED},
+                "nlr": {"type": "analytic", "*": FIXED},
+                "blr": {"type": "analytic", "*": FIXED},
                 "feii": {"type": "none", "*": FIXED},
                 "atten": {"type": "none", "*": FIXED},
             },
@@ -59,7 +61,8 @@ class TestAGNBasics:
         )
         assert params.agn_disc_block == "powerlaw"
         assert params.agn_torus_block == "simple"
-        assert params.agn_lines_block == "nlr"
+        assert params.agn_nlr_block == "analytic"
+        assert params.agn_blr_block == "analytic"
         assert params.agn_feii_block == "none"
         assert params.agn_attenuation_block == "none"
 
@@ -283,16 +286,29 @@ class TestAGNValidBlockTypes:
 
     @pytest.mark.parametrize(
         "block_type",
-        ["none", "blr", "nlr", "grahsp", "qsogen"],
+        ["none", "analytic", "synthesizer", "synthesizer_spectra", "grahsp"],
     )
-    def test_valid_lines_types(self, block_type):
-        """All known lines block types accepted."""
+    def test_valid_nlr_types(self, block_type):
+        """All known NLR block types accepted."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            agn={"lines": {"type": block_type, "*": FIXED}},
+            agn={"nlr": {"type": block_type, "*": FIXED}},
             redshift=Fixed(0.1),
         )
-        assert params.agn_lines_block == block_type
+        assert params.agn_nlr_block == block_type
+
+    @pytest.mark.parametrize(
+        "block_type",
+        ["none", "analytic", "synthesizer", "synthesizer_spectra", "grahsp", "qsogen"],
+    )
+    def test_valid_blr_types(self, block_type):
+        """All known BLR block types accepted."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={"blr": {"type": block_type, "*": FIXED}},
+            redshift=Fixed(0.1),
+        )
+        assert params.agn_blr_block == block_type
 
     @pytest.mark.parametrize(
         "block_type",
@@ -331,7 +347,8 @@ class TestAGNComplexScenarios:
             agn={
                 "disc": {"type": "grahsp_sbpl", "*": FIXED},
                 "torus": {"type": "grahsp", "*": FIXED},
-                "lines": {"type": "grahsp", "*": FIXED},
+                "nlr": {"type": "grahsp", "*": FIXED},
+                "blr": {"type": "grahsp", "*": FIXED},
                 "feii": {"type": "grahsp", "*": FIXED},
                 "atten": {"type": "grahsp_biatten", "*": FIXED},
             },
@@ -340,7 +357,8 @@ class TestAGNComplexScenarios:
         assert params.agn_model == "composable"
         assert params.agn_disc_block == "grahsp_sbpl"
         assert params.agn_torus_block == "grahsp"
-        assert params.agn_lines_block == "grahsp"
+        assert params.agn_nlr_block == "grahsp"
+        assert params.agn_blr_block == "grahsp"
         assert params.agn_feii_block == "grahsp"
         assert params.agn_attenuation_block == "grahsp_biatten"
 
@@ -350,7 +368,8 @@ class TestAGNComplexScenarios:
             sfh={"type": "dpl", "*": FIXED},
             agn={
                 "disc": {"type": "grahsp_sbpl", "*": FIXED},
-                "lines": {"type": "none", "*": FIXED},
+                "nlr": {"type": "none", "*": FIXED},
+                "blr": {"type": "none", "*": FIXED},
                 "feii": {"type": "none", "*": FIXED},
                 "torus": {"type": "two_temperature", "*": FIXED},
                 "atten": {"type": "smc_prevot", "*": FIXED},
@@ -358,7 +377,8 @@ class TestAGNComplexScenarios:
             redshift=Fixed(0.1),
         )
         assert params.agn_disc_block == "grahsp_sbpl"
-        assert params.agn_lines_block == "none"
+        assert params.agn_nlr_block == "none"
+        assert params.agn_blr_block == "none"
         assert params.agn_feii_block == "none"
         assert params.agn_torus_block == "two_temperature"
         assert params.agn_attenuation_block == "smc_prevot"
@@ -373,7 +393,8 @@ class TestAGNComplexScenarios:
         assert params.agn_model == "composable"
         assert params.agn_disc_block == "none"
         assert params.agn_torus_block == "none"
-        assert params.agn_lines_block == "none"
+        assert params.agn_nlr_block == "none"
+        assert params.agn_blr_block == "none"
         assert params.agn_feii_block == "none"
         assert params.agn_attenuation_block == "none"
 
@@ -713,4 +734,59 @@ class TestComposableAGNRuntimeWiring:
                     "type": "richards2006",
                     "disc": {"type": "multicolor"},
                 },
+            )
+
+
+class TestAGNLinesDeprecation:
+    """The retired ``lines`` slot maps to ``nlr``/``blr`` via a deprecated alias.
+
+    PR-A back-compat contract: external code using the old single ``lines`` slot
+    keeps working, expands to the independent ``nlr``/``blr`` selectors, and emits
+    a ``DeprecationWarning`` naming the mapping. Specifying both surfaces is an error.
+    """
+
+    def test_nested_lines_alias_warns_and_maps(self):
+        """``agn={'lines': {'type': 'nlr_blr'}}`` -> nlr='analytic', blr='analytic'."""
+        with pytest.warns(DeprecationWarning, match="lines"):
+            params = parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={"disc": {"type": "multicolor"}, "lines": {"type": "nlr_blr"}, "*": FIXED},
+                redshift=Fixed(0.1),
+            )
+        assert params.agn_nlr_block == "analytic"
+        assert params.agn_blr_block == "analytic"
+
+    def test_nested_lines_single_region_alias(self):
+        """A single-region legacy name maps to one slot only (other stays 'none')."""
+        with pytest.warns(DeprecationWarning):
+            params = parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={"disc": {"type": "multicolor"}, "lines": {"type": "blr"}, "*": FIXED},
+                redshift=Fixed(0.1),
+            )
+        assert params.agn_nlr_block == "none"
+        assert params.agn_blr_block == "analytic"
+
+    def test_flat_lines_kwarg_alias_warns_and_maps(self):
+        """Flat ``Parameters(agn_lines_block='nlr_blr_synthesizer_spectra')`` expands."""
+        with pytest.warns(DeprecationWarning, match="lines"):
+            p = Parameters(
+                agn_model="composable",
+                agn_lines_block="nlr_blr_synthesizer_spectra",
+            )
+        assert p.agn_nlr_block == "synthesizer_spectra"
+        assert p.agn_blr_block == "synthesizer_spectra"
+
+    def test_specifying_both_lines_and_nlr_blr_raises(self):
+        """Mixing the deprecated ``lines`` with new ``nlr``/``blr`` is an error."""
+        with pytest.raises(ValueError, match="both"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "multicolor"},
+                    "lines": {"type": "nlr_blr"},
+                    "nlr": {"type": "analytic"},
+                    "*": FIXED,
+                },
+                redshift=Fixed(0.1),
             )

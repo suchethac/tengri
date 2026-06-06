@@ -16,7 +16,7 @@ are summed and the SMC factor multiplied — the regression test
 Block names registered::
 
     disc           → "qsogen"          (broken power-law continuum)
-    lines          → "qsogen"          (Vanden Berk + Baldwin scaling)
+    blr            → "qsogen"          (Vanden Berk + Baldwin scaling)
     feii           → "qsogen_balmer"   (Balmer continuum; conceptually the
                                         feii-stage analogue)
     torus          → "qsogen"          (single-temperature hot-dust BB)
@@ -90,7 +90,13 @@ def _l_nu_to_l_lambda(L_nu: Array, wave_aa: Array) -> Array:
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("disc", "qsogen")
+@register_agn_block(
+    "disc",
+    "qsogen",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen broken power-law continuum",
+)
 def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> Array:
     r"""QSOgen broken power-law continuum block.
 
@@ -121,7 +127,13 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("torus", "qsogen")
+@register_agn_block(
+    "torus",
+    "qsogen",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen hot-dust blackbody",
+)
 def qsogen_hot_dust_block(
     wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params
 ) -> Array:
@@ -147,29 +159,41 @@ def qsogen_hot_dust_block(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Lines — Vanden Berk emission lines with Baldwin effect
+# BLR — Vanden Berk emission lines with Baldwin effect
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("lines", "qsogen")
-def qsogen_emlines_block(
-    wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params
-) -> Array:
-    r"""QSOgen empirical emission-lines block.
+@register_agn_block(
+    "blr",
+    "qsogen",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen empirical broad-line region",
+)
+def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params) -> Array:
+    r"""QSOgen empirical broad-line region block.
 
-    Median Vanden Berk template scaled by ``agn_emline_scale`` and the
-    Baldwin-effect EW correction (luminous quasars have weaker lines).
+    The complete quasar line spectrum from Vanden Berk template scaled by
+    ``agn_emline_scale`` and the Baldwin-effect EW correction (luminous
+    quasars have weaker lines). For use with ``nlr={'type': 'none'}``.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Å].
     agn_log_lbol : float
+        log10(L_bol / L_sun) of the AGN.
     l5100_disc : array
         Ignored — qsogen lines anchor on the internally-computed
         normalised continuum at line wavelengths, not on a single 5100 Å
         scalar.
     **params
         QSOgen kwargs.
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        BLR :math:`L_\lambda` [erg/s/Å].
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -183,7 +207,13 @@ def qsogen_emlines_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("feii", "qsogen_balmer")
+@register_agn_block(
+    "feii",
+    "qsogen_balmer",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen Balmer continuum",
+)
 def qsogen_balmer_block(
     wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **params
 ) -> Array:
@@ -214,7 +244,13 @@ def qsogen_balmer_block(
 # ──────────────────────────────────────────────────────────────────────
 
 
-@register_agn_block("attenuation", "qsogen_smc")
+@register_agn_block(
+    "attenuation",
+    "qsogen_smc",
+    citation="Temple et al. 2021, MNRAS, 508, 737",
+    status="production",
+    short_doc="Temple et al. 2021 QSOgen SMC reddening factor",
+)
 def qsogen_smc_block(wavelength: Array, **params) -> Array:
     r"""QSOgen SMC reddening factor block.
 

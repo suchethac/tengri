@@ -22,7 +22,13 @@ from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_ext
 __all__: list[str] = ["polar_dust_reemission_lnu"]  # registrations only
 
 
-@register_agn_block("attenuation", "polar_dust")
+@register_agn_block(
+    "attenuation",
+    "polar_dust",
+    citation="Pei 1992, ApJ, 395, 130",
+    status="production",
+    short_doc="Polar-dust extinction with Type-1-only screen",
+)
 def polar_dust_attenuation_block(
     wavelength: Array,
     *,

@@ -410,6 +410,63 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
+def list_agn_blocks(*, category: str | None = None, status: str | None = None) -> _RegistryTable:
+    """List all registered composable AGN block implementations.
+
+    Blocks are the fine-grained components of AGN SEDs: disc, nlr, blr,
+    feii, torus, and attenuation. Users compose an AGN by selecting one
+    block per category via ``SEDModel.build(..., agn_disc_block="multicolor",
+    agn_nlr_block="analytic", ...)``.
+
+    This coexists with monolithic AGN models (:func:`list_agn_models`) —
+    blocks offer mix-and-match flexibility while monolithic models bundle
+    a complete recipe.
+
+    Parameters
+    ----------
+    category : str, optional
+        Filter to a specific category: ``"disc"``, ``"nlr"``, ``"blr"``,
+        ``"feii"``, ``"torus"``, or ``"attenuation"``. If ``None``, list
+        all categories.
+    status : str, optional
+        Filter by ``"production"``, ``"experimental"``, ``"demo"``, or
+        ``"deprecated"``.
+
+    Returns
+    -------
+    _RegistryTable
+        List of metadata dicts. Prints as a table in a notebook.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tengri.list_agn_blocks(category="disc")
+    >>> tengri.list_agn_blocks(status="production")
+    """
+    from tengri.components.agn.blocks._protocol import AGN_BLOCK_META, AGN_BLOCKS
+
+    out: list[dict] = []
+    for cat in AGN_BLOCKS:
+        if category is not None and cat != category:
+            continue
+        for name in AGN_BLOCKS[cat]:
+            meta = AGN_BLOCK_META.get((cat, name), {})
+            entry_dict = {
+                "name": name,
+                "category": cat,
+                "kind": "agn_block",
+                "status": meta.get("status", "production"),
+                "citation": meta.get("citation", ""),
+                "short_doc": meta.get("short_doc", ""),
+                "use": f"SEDModel.build(..., agn_{cat}_block='{name}')",
+            }
+            out.append(entry_dict)
+
+    if status:
+        out = [m for m in out if m["status"] == status]
+    return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
+
+
 def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     """List all registered dust **attenuation** laws.
 
@@ -1164,6 +1221,7 @@ def describe(name: str) -> _DescribeRecord:
     for fn in (
         list_inference_methods,
         list_agn_models,
+        list_agn_blocks,
         list_dust_laws,
         list_dust_emission_models,
         list_sfh_models,
@@ -1309,6 +1367,72 @@ def describe_agn_model(name: str) -> _DescribeRecord:
     for a cross-kind lookup.
     """
     return _describe_from_list(name, list_agn_models, "AGN model", "list_agn_models")
+
+
+def describe_agn_block(
+    name: str, *, category: str | None = None
+) -> _DescribeRecord | list[_DescribeRecord]:
+    """Return the descriptor record(s) for one composable AGN block.
+
+    Since block names may not be globally unique (e.g., "grahsp" appears in
+    disc, nlr, blr, torus, attenuation categories), this function returns:
+
+    - A single `_DescribeRecord` if ``category`` is specified or the name
+      is unambiguous.
+    - A list of `_DescribeRecord` (one per matching category) if the name is
+      ambiguous and ``category=None``.
+
+    Parameters
+    ----------
+    name : str
+        Block name (e.g., ``"grahsp"``, ``"multicolor"``, ``"analytic"``).
+    category : str, optional
+        Category to narrow the search: ``"disc"``, ``"nlr"``, ``"blr"``,
+        ``"feii"``, ``"torus"``, or ``"attenuation"``. If ``None``, search
+        all categories.
+
+    Returns
+    -------
+    _DescribeRecord or list[_DescribeRecord]
+        Single record if unambiguous, list of records if ambiguous.
+
+    Raises
+    ------
+    KeyError
+        If the name is not found in the specified (or any) category.
+    """
+    blocks = list_agn_blocks(category=category)
+    matches = [b for b in blocks if b["name"] == name]
+
+    if not matches:
+        # Try a cross-category search
+        all_blocks = list_agn_blocks()
+        matches = [b for b in all_blocks if b["name"] == name]
+        if not matches:
+            known_in_category = (
+                sorted(b["name"] for b in list_agn_blocks(category=category))
+                if category
+                else sorted(set(b["name"] for b in list_agn_blocks()))
+            )
+            raise KeyError(
+                f"Unknown AGN block '{name}' {f'in category {category!r}' if category else ''}. "
+                f"Known names: {known_in_category}. See list_agn_blocks() for the full menu."
+            )
+
+    # If category was specified, we expect exactly one match.
+    if category:
+        if len(matches) != 1:
+            raise KeyError(
+                f"Expected 1 match for block '{name}' in category {category!r}, "
+                f"got {len(matches)}."
+            )
+        return _DescribeRecord(matches[0])
+
+    # If category was not specified and there are multiple matches,
+    # return them all. Otherwise return the single match.
+    if len(matches) == 1:
+        return _DescribeRecord(matches[0])
+    return [_DescribeRecord(m) for m in matches]
 
 
 def describe_dust_law(name: str) -> _DescribeRecord:

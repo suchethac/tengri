@@ -197,7 +197,8 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
         # ``agn_model``, these default to ``"none"`` and the strings reach
         # the registered fn as kwargs that get absorbed by its **_kwargs.
         _agn_disc_block = getattr(model, "_agn_disc_block", "none")
-        _agn_lines_block = getattr(model, "_agn_lines_block", "none")
+        _agn_nlr_block = getattr(model, "_agn_nlr_block", "none")
+        _agn_blr_block = getattr(model, "_agn_blr_block", "none")
         _agn_feii_block = getattr(model, "_agn_feii_block", "none")
         _agn_torus_block = getattr(model, "_agn_torus_block", "none")
         _agn_attenuation_block = getattr(model, "_agn_attenuation_block", "none")
@@ -446,7 +447,8 @@ def build_nonstell_fn(model, law_bc_fn, law_diff_fn, ssp_wave_f64, rest_wave_f64
                 # the spec into ``_agn_*_block`` attributes which are
                 # closed over here.
                 agn_disc_block=_agn_disc_block,
-                agn_lines_block=_agn_lines_block,
+                agn_nlr_block=_agn_nlr_block,
+                agn_blr_block=_agn_blr_block,
                 agn_feii_block=_agn_feii_block,
                 agn_torus_block=_agn_torus_block,
                 agn_attenuation_block=_agn_attenuation_block,

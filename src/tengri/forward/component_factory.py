@@ -160,8 +160,9 @@ def build_components(
     # build time. For other AGN models the registered function absorbs
     # them via ``**kwargs`` and they have no effect.
     agn_disc_block: str = "none",
+    agn_nlr_block: str = "none",
+    agn_blr_block: str = "none",
     agn_torus_block: str = "none",
-    agn_lines_block: str = "none",
     agn_feii_block: str = "none",
     agn_attenuation_block: str = "none",
     agn_norm: str = "cigale_joint",
@@ -342,14 +343,28 @@ def build_components(
     # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
     # is available for the CIGALE-coupled ``agn_fracAGN`` flow.
     if agn_model is not None:
+        # NOTE (#721): ``dust_frac_agn`` (Dale2014's embedded quasar template) and
+        # the composable AGN's ``agn_fracAGN`` are two distinct AGN surfaces, both
+        # keyed off the same stellar ``L_absorbed`` — using both with positive
+        # values double-counts AGN MIR. A *value-aware* guard cannot live here:
+        # ``build_components`` sees only structural selectors, not the resolved
+        # ``dust_frac_agn``/``agn_fracAGN`` values (which may be FREE), so a
+        # construction-time check would false-positive on legitimate models such
+        # as ``recipes.composable_agn()`` (Dale2014 + composable AGN with
+        # ``dust_frac_agn=0``). The value-aware guard therefore lives at
+        # ``SEDModel.build`` (``_warn_agn_dust_double_count``), where the resolved
+        # spec is available: it warns only when both surfaces are positive-active
+        # (FREE, or Fixed > 0), emitting a filterable ``AGNDustDoubleCountWarning``
+        # (ADR-0018 §5).
         components.append(
             AGNSEDComponent(
                 config=AGNSEDComponentConfig(
                     model=agn_model,
                     agn_disc_block=agn_disc_block,
-                    agn_torus_block=agn_torus_block,
-                    agn_lines_block=agn_lines_block,
+                    agn_nlr_block=agn_nlr_block,
+                    agn_blr_block=agn_blr_block,
                     agn_feii_block=agn_feii_block,
+                    agn_torus_block=agn_torus_block,
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
                 )

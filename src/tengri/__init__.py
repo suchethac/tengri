@@ -323,6 +323,7 @@ from tengri._tutorials import examples, explain, tutorial
 from tengri.registry import (
     cite_components,
     describe,
+    describe_agn_block,
     describe_agn_model,
     describe_dust_emission_model,
     describe_dust_law,
@@ -331,6 +332,7 @@ from tengri.registry import (
     describe_recipe,
     describe_sfh_model,
     help,
+    list_agn_blocks,
     list_agn_models,
     list_all,
     list_components,

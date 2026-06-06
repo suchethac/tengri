@@ -11,12 +11,9 @@ custom glue code.
 This module introduces a finer-grained registry for pluggable **blocks** —
 the natural spectral decomposition of an AGN SED::
 
-    [disc]  →  [lines]  →  [feii]  →  [torus]  →  [attenuation]
-                                                       │
-                                                       ▼
-                                                 final L_nu
+    disc → nlr → blr → feii → torus → attenuation
 
-Each *category* (`disc`, `lines`, `feii`, `torus`, `attenuation`) hosts a
+Each *category* (`disc`, `nlr`, `blr`, `feii`, `torus`, `attenuation`) hosts a
 named registry of implementations. A user composes an AGN by picking one
 implementation per category, and :func:`composable_agn` runs them in the
 canonical order above.
@@ -34,10 +31,11 @@ on its category::
     # disc — produces the AGN UV/optical continuum.
     disc(wavelength, agn_log_lbol, **params) -> L_lambda  [erg/s/Å]
 
-    # lines / feii / torus — additive contributions, normalised to the
+    # nlr / blr / feii / torus — additive contributions, normalised to the
     # disc-side λL_λ(5100Å) already computed by the disc block.
-    lines(wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda
-    feii (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda
+    nlr (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda or (L_maskable, L_isotropic)
+    blr (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda or (L_maskable, L_isotropic)
+    feii(wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda
     torus(wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda
 
     # attenuation — multiplicative wavelength factor in [0, 1].
@@ -81,31 +79,53 @@ from jax import Array
 
 __all__ = [
     "AGN_BLOCKS",
+    "AGN_BLOCK_META",
     "BLOCK_CATEGORIES",
     "BlockCategory",
     "register_agn_block",
     "resolve_agn_block",
 ]
 
-BlockCategory = Literal["disc", "lines", "feii", "torus", "attenuation"]
-BLOCK_CATEGORIES: tuple[str, ...] = ("disc", "lines", "feii", "torus", "attenuation")
+BlockCategory = Literal["disc", "nlr", "blr", "feii", "torus", "attenuation"]
+BLOCK_CATEGORIES: tuple[str, ...] = ("disc", "nlr", "blr", "feii", "torus", "attenuation")
 """Fixed canonical pipeline order; do not reorder without updating runner."""
 
 # Two-level dict: category -> name -> callable.
 AGN_BLOCKS: dict[str, dict[str, Callable]] = {cat: {} for cat in BLOCK_CATEGORIES}
 
+# Parallel dict: (category, name) -> metadata dict
+# Stores citation, status, short_doc alongside the callable in AGN_BLOCKS.
+# Enables introspection (list_agn_blocks, describe_agn_block) while keeping
+# resolve_agn_block() returning a bare callable for backward compatibility.
+AGN_BLOCK_META: dict[tuple[str, str], dict[str, str]] = {}
 
-def register_agn_block(category: BlockCategory, name: str) -> Callable:
+
+def register_agn_block(
+    category: BlockCategory,
+    name: str,
+    citation: str = "",
+    status: str = "production",
+    short_doc: str = "",
+) -> Callable:
     """Decorator factory: register a block implementation in
     :data:`AGN_BLOCKS`.
 
     Parameters
     ----------
-    category : {"disc", "lines", "feii", "torus", "attenuation"}
+    category : {"disc", "nlr", "blr", "feii", "torus", "attenuation"}
         Pipeline stage this block implements.
     name : str
         Unique identifier within the category. Examples: ``"grahsp"``,
         ``"powerlaw"``, ``"none"``, ``"smc_prevot"``.
+    citation : str, optional
+        Academic citation (e.g., paper title, authors, journal reference).
+        Default ``""``.
+    status : str, optional
+        Block maturity: ``"production"``, ``"experimental"``, ``"demo"``,
+        or ``"deprecated"``. Default ``"production"``.
+    short_doc : str, optional
+        One-line description (e.g., "Power-law continuum with 2 free params").
+        Default ``""``.
 
     Returns
     -------
@@ -122,7 +142,12 @@ def register_agn_block(category: BlockCategory, name: str) -> Callable:
 
     Examples
     --------
-    >>> @register_agn_block("torus", "grahsp")
+    >>> @register_agn_block(
+    ...     "torus",
+    ...     "grahsp",
+    ...     citation="Nenkova et al. 2008",
+    ...     short_doc="Clumpy toroidal dust model",
+    ... )
     ... def grahsp_torus_block(wavelength, agn_log_lbol, l5100_disc, **params): ...
     """
     if category not in AGN_BLOCKS:
@@ -135,6 +160,11 @@ def register_agn_block(category: BlockCategory, name: str) -> Callable:
                 f"(by {AGN_BLOCKS[category][name].__module__})."
             )
         AGN_BLOCKS[category][name] = fn
+        AGN_BLOCK_META[(category, name)] = {
+            "citation": citation,
+            "status": status,
+            "short_doc": short_doc,
+        }
         return fn
 
     return decorator
@@ -177,9 +207,15 @@ def _disc_none(wavelength: Array, agn_log_lbol: float, **_params) -> Array:
     return jnp.zeros_like(jnp.asarray(wavelength))
 
 
-@register_agn_block("lines", "none")
-def _lines_none(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params) -> Array:
-    r"""Skip the line stage: emit zero L_lambda."""
+@register_agn_block("nlr", "none")
+def _nlr_none(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params) -> Array:
+    r"""Skip the NLR stage: emit zero L_lambda."""
+    return jnp.zeros_like(jnp.asarray(wavelength))
+
+
+@register_agn_block("blr", "none")
+def _blr_none(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, **_params) -> Array:
+    r"""Skip the BLR stage: emit zero L_lambda."""
     return jnp.zeros_like(jnp.asarray(wavelength))
 
 
