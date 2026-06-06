@@ -16,61 +16,55 @@
 # %% [markdown]
 # # Multi-model Bayesian model averaging on CANDELS galaxies
 #
-# A real observation never tells you which *modelling assumptions* are right.
-# Pick a single SFH family, one SSP library, one dust law, and you get a tidy
-# posterior — but it is conditioned on choices you cannot defend from the data
-# alone. This notebook does the honest thing instead: it fits the **same
-# galaxy** under **four genuinely different model configurations** and combines
-# them by **Bayesian model averaging (BMA)**, weighting each by its marginal
-# likelihood (evidence).
+# Any SED fit is conditioned on a set of modelling choices — the SFH family, the
+# stellar library, the dust law — that the photometry alone does not pin down. A
+# single fit gives the posterior for one such choice but says nothing about how
+# much that choice contributes to the error budget. Here we fit each galaxy under
+# four different model configurations and combine them by Bayesian model
+# averaging (BMA), weighting each configuration by its marginal likelihood
+# (evidence).
 #
-# We run this for **seven** CANDELS GOODS-South galaxies at $z\sim1$ (the
-# proposal target plus six more selected for clean fits), and report **per-fit
-# timings** throughout.
+# We apply this to seven CANDELS GOODS-South galaxies at $z\sim1$ and report the
+# fit times alongside the results.
 #
 # | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
 # |--------|-----|-----|----------|------------|---------|
-# | **A** | Dense Basis | MIST/C3K | Salim+2018 | — | SSP-baked |
-# | **B** | Dense Basis | PARSEC/MILES | Calzetti | — | SSP-baked |
-# | **C** | Trunc. skew-normal | BC03 | Kriek & Conroy | — | off |
-# | **D** | Double power-law | BPASS | power-law | — | off |
+# | A | Dense Basis | MIST/C3K | Salim+2018 | — | SSP-baked |
+# | B | Dense Basis | PARSEC/MILES | Calzetti | — | SSP-baked |
+# | C | Trunc. skew-normal | BC03 | Kriek & Conroy | — | off |
+# | D | Double power-law | BPASS | power-law | — | off |
 #
-# > **Why no dust IR emission?** At $z\sim1$ the reddest band (IRAC 8 µm) maps
-# > to $\sim4$ µm rest-frame — there is no far-IR photometry to constrain a
-# > dust-emission template, so it cannot affect the fit. It would also be a pure
-# > speed tax: under `WavePrecomp` the attenuated **stellar** SED is served from
-# > a precomputed effective-wavelength look-up table, but **additive emitters**
-# > (dust IR, radio, X-ray) are deliberately routed through the *exact* per-band
-# > filter integral (the IR template is too spiky for the LUT — see #629). That
-# > makes a likelihood call with dust emission more than an order of magnitude
-# > costlier, which dominates nested-sampling runtime (reported upstream as
-# > #708). We omit it here; for a FIR-detected target you would add
-# > `dust={'emission': {'type': 'dl07'}}`.
+# We leave dust IR emission out of every configuration. At $z\sim1$ the reddest
+# band (IRAC 8 µm) samples $\sim4$ µm rest-frame, so there is no far-IR
+# photometry to constrain a dust-emission template and it cannot affect the fit.
+# For a FIR-detected target one would add `dust={'emission': {'type': 'dl07'}}`.
 #
-# ## Why evidence, not $\chi^2$
+# ## Why the evidence, not $\chi^2$
 #
-# BMA weights are posterior model probabilities. With flat model priors,
+# The BMA weights are posterior model probabilities. With flat model priors,
 #
 # $$
 # w_k \;=\; \frac{Z_k}{\sum_j Z_j}\;,\qquad
 # Z_k \;=\; \int \mathcal{L}(d\mid\theta, M_k)\,\pi(\theta\mid M_k)\,\mathrm{d}\theta ,
 # $$
 #
-# where $Z_k$ is the **marginal likelihood** of model $M_k$. The evidence
-# automatically penalises model complexity (the Occam factor), so a more
-# flexible model only wins if the extra freedom is justified by the data. This
-# is why we fit with **nested sampling** (`"nss"`) — unlike VI/MCMC it returns a
-# calibrated $\log Z$ for free.
+# where $Z_k$ is the marginal likelihood of model $M_k$. The evidence penalises
+# model complexity (the Occam factor): a more flexible model wins only if the
+# extra freedom is justified by the data. We therefore fit with nested sampling
+# (`"nss"`), which returns a calibrated $\log Z$; variational inference and MCMC
+# do not.
 #
-# ## Current public API only
-#
-# Models are built with the recommended **nested-dict grammar**
-# (`SEDModel.build(...)`), priors with `Uniform`/`Fixed`, and we opt into the
-# **precompute** speed path (`approx=WavePrecomp()`) which publishes the
-# SSP × filter look-up table. Inference is `Fitter(model, data, noise).run("nss")`.
+# All models are built through the public API: the nested-dict grammar of
+# `SEDModel.build(...)`, priors set with `Uniform`/`Fixed`, and the precompute
+# speed path enabled with `approx=WavePrecomp()`. Inference is
+# `Fitter(model, data, noise).run("nss")`.
 
 # %% tags=["imports"]
 from __future__ import annotations
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import time
 import warnings
@@ -367,25 +361,15 @@ def build_configs(z, obs):
 # %% [markdown]
 # ## 5. Fit every (galaxy × config) with nested sampling
 #
-# Nested slice sampling (`"nss"`), `n_live=250`, using the catalogue flux
-# uncertainties directly. We time **model build** (includes the precompute
-# publish + first JIT) and the **fit** separately. With the real (small) errors
-# each model is tightly constrained, so the per-model posteriors separate
-# cleanly — the evidence then decides how to weight them.
+# We run nested slice sampling (`"nss"`) with `n_live=250`, using the catalogue
+# flux uncertainties directly, and time the model build (which includes the
+# precompute publish and first compile) and the fit separately. With the small
+# catalogue errors each configuration is tightly constrained, so the per-model
+# posteriors separate cleanly and the evidence decides how to weight them.
 #
-# > **Why this is slow, and how it is sped up.** Almost all the wall-clock is the
-# > nested sampling itself: each fit makes ~30–60k likelihood evaluations to
-# > integrate a *calibrated* `log Z` (the evidence — which is exactly what the BMA
-# > weights are). The likelihood is already JIT-compiled (~0.3 ms warm; the
-# > one-off compile is ~0.3 s and cached), so there is no compilation to remove.
-# > Two cheap, science-preserving knobs help: **(1)** the four configs are
-# > independent fits, and XLA releases the GIL during compute, so we run them on a
-# > `ThreadPoolExecutor` (~2–3× wall-clock, bit-identical results); **(2)**
-# > `n_live=250` instead of 500 roughly halves each fit with a negligible shift in
-# > `log Z`. Batching all fits through a single `jax.vmap`/`jit` kernel — the trick
-# > behind `tengri.fit_batch_map_vmap` — does *not* apply here: that is for MAP
-# > (fixed-iteration Adam on one shared model), whereas nested sampling terminates
-# > adaptively per dataset and our four configs are structurally different models.
+# The four configurations of a galaxy are independent fits, so we run them on a
+# thread pool. XLA releases the GIL during compute, giving a roughly 2-3x
+# speed-up on a multi-core machine with identical results.
 
 # %%
 N_LIVE = 250  # nested-sampling live points (250 vs 500 ~halves runtime, logZ ~unchanged)
@@ -604,15 +588,19 @@ for gal_id, g in galaxies.items():
     print(f"CANDELS {gal_id}  BMA weights:  {wstr}")
 
 # %% [markdown]
-# ## 8. Figures — one galaxy per figure
+# ## 8. Figures
 #
-# Each galaxy gets its **own** three-panel figure (publication style via
-# `scienceplots`): **(a)** observed photometry (red) + per-config posterior SEDs
-# + the BMA predictive (black); **(b)** inferred SFHs with the model legend;
-# **(c)** the $M_\star$–SFR posterior as filled 68/95% credible contours, with
-# the evidence-weighted BMA in black. The BMA band/contour is broader than any
-# single model — it folds in the *between-model* uncertainty the individual fits
-# cannot see.
+# Each galaxy gets one three-panel figure (styled with `scienceplots`):
+#
+# - (a) Observed photometry (red points) over the posterior predictive spectrum
+#   of each configuration (median line and 68% credible band) and the BMA
+#   prediction (black).
+# - (b) The inferred star-formation histories.
+# - (c) The $M_\star$-SFR posterior, shown as filled 68/95% credible contours per
+#   configuration with the evidence-weighted BMA as a black contour.
+#
+# The BMA contour is broader than any single configuration because it includes
+# the between-model uncertainty that the individual fits do not see.
 
 # %%
 import scienceplots
@@ -709,40 +697,42 @@ def filled_kde(ax, x, y, color, *, zorder=2, fill=True, lw=2.0):
                    alpha=0.95, zorder=zorder)  # fmt: skip
 
 
-def plot_galaxy(gal_id, *, presentation=False, source=None, tag=""):
+def _span(arrays, k=4.0):
+    """Union of ``mean +/- k*std`` across several 1-D samples (for axis limits)."""
+    los, his = [], []
+    for a in arrays:
+        a = a[np.isfinite(a)]
+        if a.size:
+            los.append(a.mean() - k * a.std())
+            his.append(a.mean() + k * a.std())
+    return min(los), max(his)
+
+
+def plot_galaxy(gal_id, *, source=None, tag=""):
     """Render the three-panel multi-model + BMA figure for one galaxy.
 
-    ``presentation=True`` produces a larger, slide-ready version (bigger fonts
-    and panels, thicker lines, a BMA-weight annotation) saved as ``*_pres.png``;
-    the default is the compact paper figure (``*.png``). ``source`` selects the
-    results dict (defaults to ``galaxies``) and ``tag`` is appended to the saved
-    filename — used for the error-floor variants (``source=galaxies_floor``,
-    ``tag="_floor"``).
+    ``source`` selects the results dict (defaults to ``galaxies``); ``tag`` is
+    appended to the saved filename for the error-floor variants
+    (``source=galaxies_floor``, ``tag="_floor"``).
     """
     g = (source if source is not None else galaxies)[gal_id]
     w = g["weights"]
-    # Sizing / styling: (paper, presentation).
-    P = presentation
-    figsize = (13.0, 3.7) if P else (6.5, 1.65)
-    margins = dict(bottom=0.17, top=0.84) if P else dict(bottom=0.18, top=0.88)
-    fs_pan, fs_lab, fs_tick = (16, 15, 12) if P else (8, 8, 7)
-    fs_leg, fs_box = (12, 13) if P else (6.5, 6)
-    lw_cfg, lw_bma, ms, ew = (1.8, 3.2, 7.5, 1.4) if P else (0.8, 1.5, 3.5, 0.7)
-    leg_y = 1.14 if P else 1.12
+    fs_pan, fs_lab, fs_tick, fs_box = 16, 15, 12, 13
+    lw_cfg, lw_bma, ms, ew = 1.8, 3.2, 7.5, 1.4
 
-    fig = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=(13.0, 3.7))
     gs = GridSpec(1, 3, figure=fig, width_ratios=[1.15, 1.0, 1.0],
-                  wspace=0.42 if P else 0.38, left=0.07, right=0.985, **margins)  # fmt: skip
+                  wspace=0.42, left=0.07, right=0.985, bottom=0.17, top=0.84)  # fmt: skip
 
     def panel_label(ax, s):
         ax.text(0.04, 0.93, s, transform=ax.transAxes, fontsize=fs_pan, va="top")
 
-    # ---- (a) SED ----
+    # ---- (a) posterior predictive spectrum ----
     ax = fig.add_subplot(gs[0])
     for cfg in CONFIG_ORDER:
         d = g["spec"][cfg]
         ax.fill_between(WAVE_SPEC, np.percentile(d, 16, 0), np.percentile(d, 84, 0),
-                        color=COLORS[cfg], alpha=0.12, lw=0)  # fmt: skip
+                        color=COLORS[cfg], alpha=0.16, lw=0)  # fmt: skip
         ax.plot(WAVE_SPEC, np.median(d, 0), "-", color=COLORS[cfg], lw=lw_cfg, alpha=0.85)
     bma = pool(g["spec"], w, 300)
     # BMA shown as a line only (not shaded) so it never hides the model bands.
@@ -767,7 +757,7 @@ def plot_galaxy(gal_id, *, presentation=False, source=None, tag=""):
         bbox={"boxstyle": "round,pad=0.3", "fc": "white", "ec": "0.7", "lw": 0.5, "alpha": 0.9},
     )  # fmt: skip
 
-    # ---- (b) SFH ----
+    # ---- (b) star-formation history ----
     ax = fig.add_subplot(gs[1])
     maxes = []
     for cfg in CONFIG_ORDER:
@@ -790,7 +780,7 @@ def plot_galaxy(gal_id, *, presentation=False, source=None, tag=""):
     ax.tick_params(labelsize=fs_tick)
     panel_label(ax, r"$\bf{(b)}$")
 
-    # ---- (c) M*-SFR ----
+    # ---- (c) M*-SFR posterior ----
     ax = fig.add_subplot(gs[2])
     for cfg in CONFIG_ORDER:
         filled_kde(ax, g["props"][cfg]["log_mass"], g["props"][cfg]["log_sfr"],
@@ -801,43 +791,31 @@ def plot_galaxy(gal_id, *, presentation=False, source=None, tag=""):
         w, 2000,
     )  # fmt: skip
     filled_kde(ax, bm, bs, BMA_COLOR, zorder=6, fill=False, lw=lw_bma)  # outline, not shaded
-    # Explicit limits that enclose every model's 95% region (no clipped posteriors).
-    lo_m, hi_m, lo_s, hi_s = [], [], [], []
-    for cfg in CONFIG_ORDER:
-        m = g["props"][cfg]["log_mass"][np.isfinite(g["props"][cfg]["log_mass"])]
-        sfr = g["props"][cfg]["log_sfr"][np.isfinite(g["props"][cfg]["log_sfr"])]
-        if m.size and sfr.size:
-            lo_m.append(m.mean() - 3 * m.std())
-            hi_m.append(m.mean() + 3 * m.std())
-            lo_s.append(sfr.mean() - 3 * sfr.std()); hi_s.append(sfr.mean() + 3 * sfr.std())  # fmt: skip
-    if lo_m:
-        px = 0.08 * (max(hi_m) - min(lo_m) + 1e-3)
-        py = 0.10 * (max(hi_s) - min(lo_s) + 1e-3)
-        ax.set_xlim(min(lo_m) - px, max(hi_m) + px)
-        ax.set_ylim(min(lo_s) - py, max(hi_s) + py * 1.6)  # extra headroom for the weight label
+    # Zoom out to enclose every configuration AND the broader BMA contour (which
+    # the 95% lines of the per-model fits alone would clip), with generous padding.
+    m_arrs = [g["props"][c]["log_mass"] for c in CONFIG_ORDER] + [bm]
+    s_arrs = [g["props"][c]["log_sfr"] for c in CONFIG_ORDER] + [bs]
+    lo_m, hi_m = _span(m_arrs)
+    lo_s, hi_s = _span(s_arrs)
+    px = 0.15 * (hi_m - lo_m + 1e-3)
+    py = 0.15 * (hi_s - lo_s + 1e-3)
+    ax.set_xlim(lo_m - px, hi_m + px)
+    ax.set_ylim(lo_s - py, hi_s + py)
     ax.set_xlabel(r"$\log\,(M_\star\,/\,M_\odot)$", fontsize=fs_lab)
     ax.set_ylabel(r"$\log\,(\mathrm{SFR}_{100}\,/\,M_\odot\,\mathrm{yr}^{-1})$", fontsize=fs_lab)
     ax.tick_params(labelsize=fs_tick)
     panel_label(ax, r"$\bf{(c)}$")
-    # BMA weights along the bottom (clear of the (c) label and the contours).
-    wstr = "   ".join(f"{c} {x:.2f}" for c, x in zip(CONFIG_ORDER, w))
-    ax.text(0.5, 0.04, f"BMA weights:  {wstr}", transform=ax.transAxes,
-            ha="center", va="bottom", fontsize=fs_box,
-            bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "0.8", "lw": 0.4, "alpha": 0.85})  # fmt: skip
 
     # Shared legend across the top, two rows (3 + 2 entries).
-    handles = [Line2D([0], [0], color=COLORS[c], lw=2.2 if P else 1.6, label=LABELS[c])
-               for c in CONFIG_ORDER]  # fmt: skip
-    handles.append(
-        Line2D([0], [0], color=BMA_COLOR, lw=3.0 if P else 2.5, label="Bayesian Model Avg.")
-    )
-    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, leg_y), ncol=3,
-               fontsize=fs_leg, frameon=True, edgecolor="0.7", framealpha=0.95,
+    handles = [Line2D([0], [0], color=COLORS[c], lw=2.2, label=LABELS[c]) for c in CONFIG_ORDER]
+    handles.append(Line2D([0], [0], color=BMA_COLOR, lw=3.0, label="Bayesian Model Avg."))
+    fig.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, 1.14), ncol=3,
+               fontsize=12, frameon=True, edgecolor="0.7", framealpha=0.95,
                handlelength=1.6, columnspacing=1.4, handletextpad=0.4, labelspacing=0.3)  # fmt: skip
 
-    suffix = "_pres" if P else ""
-    fig.savefig(FIG_DIR / f"multimodel_bma_candels_{gal_id}{tag}{suffix}.png",
-                dpi=200 if P else 400, bbox_inches="tight")  # fmt: skip
+    fig.savefig(
+        FIG_DIR / f"multimodel_bma_candels_{gal_id}{tag}.png", dpi=200, bbox_inches="tight"
+    )
     plt.show()
     wstr_print = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, w))
     print(f"CANDELS {gal_id}: BMA weights  {wstr_print}")
@@ -925,38 +903,25 @@ plot_galaxy(13097)
 show_timings(13097)
 
 # %% [markdown]
-# ## 10. Presentation-quality figures
-#
-# Slide-ready renders of the three panels: larger fonts and panels, thicker
-# lines, a robust SFH y-limit (so the panel fills), padded $M_\star$–SFR axes,
-# the BMA shown as an unshaded outline, and the BMA weights annotated on panel
-# (c). Saved as ``*_pres.png``.
-
-# %%
-for _gid in GAL_IDS:
-    plot_galaxy(_gid, presentation=True)
-
-# %% [markdown]
-# ## 11. Genuine model averaging with an error floor
+# ## 9. Model averaging with an error floor
 #
 # Every galaxy above collapses onto a single configuration: with the raw
-# catalogue errors (~1–2% at this S/N) the evidence is overwhelmingly decisive,
-# so the BMA *is* the single best model. That is honest, but it hides what BMA is
-# for.
+# catalogue errors (~1-2% at this S/N) the evidence is decisive, so the BMA is
+# the single best model. This is correct, but it does not show what BMA is for.
 #
-# Catalogue errors are **statistical only** — they omit systematics
-# (zero-points, aperture matching, filter curves) and, crucially for model
-# comparison, **template imperfection** (the SPS models are good to only a few
-# percent). Standard practice (EAZY/FAST template-error + ~5% systematic,
-# Prospector noise inflation, CIGALE per-band floors) is to add a fractional
-# **error floor in quadrature to the uncertainty that enters the likelihood**,
+# Catalogue errors are statistical only. They omit systematics (zero-points,
+# aperture matching, filter curves) and, more importantly for model comparison,
+# template imperfection: the SPS models are accurate to only a few percent. The
+# standard remedy (EAZY/FAST template errors plus a ~5% systematic, Prospector
+# noise inflation, CIGALE per-band floors) is to add a fractional error floor in
+# quadrature to the uncertainty that enters the likelihood,
 #
 # $$\sigma_\mathrm{eff}^2 = \sigma_\mathrm{cat}^2 + (f_\mathrm{floor}\,f_\nu)^2 .$$
 #
 # With a 10% floor the per-band $\chi^2$ no longer explodes, the evidences become
-# commensurable, and the BMA spreads its weight across configurations — genuine
-# averaging. (The cost is broader, more overlapping $M_\star$–SFR clusters: the
-# floor trades the artificially tight per-model posteriors for honest ones.)
+# comparable, and the BMA spreads its weight across configurations. The cost is
+# broader, more overlapping $M_\star$-SFR contours, which is the honest
+# uncertainty once template error is included.
 
 # %%
 ERROR_FLOOR = 0.10  # 10% systematic + template-error floor, added in quadrature
@@ -998,22 +963,21 @@ plot_galaxy(18160, source=galaxies_floor, tag="_floor")
 plot_galaxy(17418, source=galaxies_floor, tag="_floor")
 
 # %% [markdown]
-# ## 12. Takeaways
+# ## 10. Summary
 #
-# - **The evidence picks favourites.** The BMA weights are rarely uniform — one
-#   or two configurations usually dominate $\log Z$, and the average is pulled
-#   toward them while still retaining the others' spread.
-# - **The models genuinely disagree.** Panel (c) shows four tight but
-#   *separated* $M_\star$–SFR clusters: swapping SSP library, SFH family, or dust
-#   law moves the inferred stellar mass by a few tenths of a dex even at fixed
-#   photometry. That systematic spread is exactly what BMA exposes.
-# - **Same public surface throughout.** Every model came from
-#   `SEDModel.build(...)` with the nested-dict grammar; the only knob that
-#   changed for speed was `approx=WavePrecomp()`. Inference was the one-liner
-#   `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence` is what
-#   makes the averaging principled.
-# - **The error budget decides whether you average.** With raw catalogue errors
-#   the evidence collapses onto one model; adding a realistic ~10% systematic
-#   floor (§11) makes the evidences commensurable and the BMA genuinely averages.
-#   Whether to average — or to trust the single best model — is set by how well
-#   you believe your photometry *and templates*, not by the fitter.
+# - The BMA weights are rarely uniform. One or two configurations usually
+#   dominate $\log Z$, and the average is pulled toward them while keeping some of
+#   the others' spread.
+# - The configurations disagree. Panel (c) shows four tight but separated
+#   $M_\star$-SFR clusters: changing the SSP library, SFH family, or dust law
+#   shifts the inferred stellar mass by a few tenths of a dex at fixed
+#   photometry. BMA makes that systematic spread explicit.
+# - Everything runs through the public API. Each model comes from
+#   `SEDModel.build(...)`, the speed path is `approx=WavePrecomp()`, and inference
+#   is `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence`
+#   supplies the averaging weights.
+# - The error budget decides whether averaging matters. With raw catalogue errors
+#   the evidence collapses onto one model; a realistic ~10% floor (§9) makes the
+#   evidences comparable and the BMA averages. Whether to average or to trust the
+#   single best model depends on how well the photometry and templates are known,
+#   not on the fitter.
