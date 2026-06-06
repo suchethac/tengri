@@ -314,8 +314,9 @@ def compose_l_nu(
     agn_torus_block: str,
     agn_attenuation_block: str,
     template_state: dict | None = None,
+    return_l2500: bool = False,
     **params,
-) -> Array:
+) -> Array | tuple[Array, float]:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
 
     Pipeline (paper §2.1.6 / upstream module order)::
@@ -344,6 +345,10 @@ agn_torus_block, agn_attenuation_block : str
         ``load_*_templates()`` helper at trace time — keeps HDF5 / file
         I/O out of the JIT trace boundary. ``None`` (default) falls back
         to the in-block lru_cache load.
+    return_l2500 : bool, optional
+        When True, return ``(L_nu, L_2500_intrinsic)`` tuple. When False
+        (default), return only ``L_nu`` for backward compatibility with
+        existing single-return callers. Default: False.
     **params
         Per-impl free parameters. Each block consumes the keys it
         recognises and ignores the rest.
@@ -352,6 +357,11 @@ agn_torus_block, agn_attenuation_block : str
     -------
     L_nu : ndarray, shape (n_wave,)
         Total AGN-side :math:`L_\nu` [erg/s/Hz].
+    L_2500_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 2500 Å [erg/s/Hz], capturing the
+        disc shape at the ``agn_log_lbol`` normalization. Returned as
+        second element of tuple. Otherwise not returned.
 
     Notes
     -----
@@ -360,6 +370,11 @@ agn_torus_block, agn_attenuation_block : str
     ``ActivateBroadLines``/``ActivatePL``/``BiAttenuationLaw`` chain so
     an all-grahsp selection is numerically equivalent to
     :func:`tengri.components.agn.grahsp.compute_grahsp_sed`.
+
+    **Disc shape propagation**: ``L_2500_intrinsic`` differs between disc
+    implementations (e.g. ``multicolor`` vs ``richards2006``) at the same
+    ``agn_log_lbol``, enabling disc-shape-dependent downstream physics
+    (e.g. α_ox in X-ray corona).
     """
     wave = jnp.asarray(wavelength)
     # If templates are pre-loaded, forward them under a stable kwarg name
@@ -376,6 +391,11 @@ agn_torus_block, agn_attenuation_block : str
         templates=grahsp_templates,
         **params,
     )
+
+    # Capture L_2500_intrinsic: un-reddened, agn_log_lbol-normalized disc
+    # monochromatic luminosity at 2500 Å [erg/s/Hz]. Interpolate at 2500 Å,
+    # then convert L_lambda -> L_nu using L_nu = L_lambda * lambda^2 / c.
+    L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc) * (2500.0**2 / C_AA_PER_S)
 
     # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
     # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
@@ -560,9 +580,15 @@ agn_torus_block, agn_attenuation_block : str
         # central engine + torus IR).
         L_lambda_pre_atten = L_lambda_central + L_lambda_torus
         L_nu_reemit = polar_dust_reemission_lnu(wave, L_lambda_pre_atten, **params)
-        return L_nu_atten + L_nu_reemit
+        L_nu_result = L_nu_atten + L_nu_reemit
     else:
-        return L_nu_atten
+        L_nu_result = L_nu_atten
+
+    # Return with optional L_2500_intrinsic tuple.
+    if return_l2500:
+        return (L_nu_result, L_2500_intrinsic)
+    else:
+        return L_nu_result
 
 
 def composable_agn_l_nu(
@@ -576,8 +602,9 @@ def composable_agn_l_nu(
     agn_torus_block: str = "none",
     agn_attenuation_block: str = "none",
     template_state: dict | None = None,
+    return_l2500: bool = False,
     **params,
-) -> Array:
+) -> Array | tuple[Array, float]:
     r"""AGN_MODELS["composable"] entry point — :data:`L_ν` in erg/s/Hz.
 
     Thin wrapper around :func:`compose_l_nu` matching the AGN_MODELS
@@ -597,19 +624,33 @@ def composable_agn_l_nu(
 agn_torus_block, agn_attenuation_block : str, optional
         Per-stage block selectors. Default ``"none"`` for every stage
         (a no-op pipeline; users **must** opt in by name).
+    return_l2500 : bool, optional
+        When True, return ``(L_nu, L_2500_intrinsic)`` tuple. When False
+        (default), return only ``L_nu`` for backward compatibility. Default:
+        False.
     **params
         Per-impl free parameters forwarded to every block.
 
     Returns
     -------
     L_nu : ndarray, shape (n_wave,)
-        Total AGN :math:`L_\nu` [erg/s/Hz].
+        Total AGN :math:`L_\nu` [erg/s/Hz], scaled by ``agn_frac``.
+    L_2500_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 2500 Å [erg/s/Hz]. NOT scaled by
+        ``agn_frac`` (maintains the unscaled-intrinsic convention of
+        ``L_agn_bol``). Returned as second element of tuple when enabled.
 
     Notes
     -----
     JIT-compatible (block selectors are static). Validation runs once at
     Python entry, so the JIT cache picks up changes only on selector
     changes (which trigger a recompile anyway).
+
+    The returned ``L_2500_intrinsic`` (when ``return_l2500=True``) is NOT
+    scaled by ``agn_frac``, matching the normalization convention of
+    ``L_agn_bol``. This allows downstream components (e.g. X-ray) to scale
+    the UV-based luminosity independently.
     """
     validate_block_recipe(
         agn_disc_block=agn_disc_block,
@@ -620,7 +661,7 @@ agn_torus_block, agn_attenuation_block : str, optional
         agn_attenuation_block=agn_attenuation_block,
         params=params,
     )
-    return agn_frac * compose_l_nu(
+    result = compose_l_nu(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_disc_block=agn_disc_block,
@@ -630,5 +671,11 @@ agn_torus_block, agn_attenuation_block : str, optional
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,
         template_state=template_state,
+        return_l2500=return_l2500,
         **params,
     )
+    if return_l2500:
+        L_nu, L_2500_intrinsic = result
+        return (agn_frac * L_nu, L_2500_intrinsic)
+    else:
+        return agn_frac * result
