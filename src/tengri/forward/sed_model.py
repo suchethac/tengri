@@ -715,6 +715,114 @@ class SEDModel:
         if self._approx.get("spectrum_precomp"):
             self._cached_component_chain = self._build_component_chain()
 
+        # Build-time accuracy guard (#617): the photometry LUT bakes the
+        # SSP×filter integral at zero dust and re-applies attenuation as a
+        # first-order Taylor projection about each filter's effective
+        # wavelength. That linear-in-λ model breaks down where the attenuation
+        # curve is steep across the bandpass — the rest-UV — so blue bands at
+        # moderate/high z are biased silently (the far-UV by >10×). Warn loudly
+        # so no fit is biased without the astronomer knowing. Cheap: no SED
+        # evaluation, so it is safe on every build.
+        self._warn_if_wave_precomp_dust_blue_bias()
+
+    def _max_plausible_tau(self, name: str) -> float:
+        """Representative upper optical depth for a dust τ parameter.
+
+        Returns the fixed value (fixed param), the prior upper bound (bounded
+        free param), a representative ``1.0`` (unbounded free param), or ``0.0``
+        when the parameter is absent. Used by
+        :meth:`_warn_if_wave_precomp_dust_blue_bias` to decide whether dust is
+        in play at all.
+        """
+        try:
+            d = self.spec.get_distribution(name)
+        except Exception:
+            return 0.0
+        if d is None:
+            return 0.0
+        if getattr(d, "is_fixed", False):
+            try:
+                return float(d.value)
+            except Exception:
+                return 0.0
+        hi = getattr(d, "hi", None)
+        return float(hi) if hi is not None else 1.0
+
+    def _representative_redshift(self) -> float:
+        """A single representative redshift (fixed value or prior midpoint)."""
+        try:
+            d = self.spec.get_distribution("redshift")
+        except Exception:
+            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
+        if d is None:
+            return float(getattr(self, "_z_fixed", 0.0) or 0.0)
+        if getattr(d, "is_fixed", False):
+            try:
+                return float(d.value)
+            except Exception:
+                return 0.0
+        lo, hi = getattr(d, "lo", None), getattr(d, "hi", None)
+        if lo is not None and hi is not None:
+            return 0.5 * (float(lo) + float(hi))
+        return float(getattr(self, "_z_fixed", 0.0) or 0.0)
+
+    def _warn_if_wave_precomp_dust_blue_bias(self) -> None:
+        """Warn when the WavePrecomp first-order dust projection (#617) is unreliable.
+
+        The photometry LUT re-applies dust as a first-order Taylor expansion of
+        the attenuation about each filter's effective wavelength. That linear
+        model is accurate where the attenuation curve is smooth across the
+        bandpass (optical/IR) but biases bands sampling the rest-UV, where the
+        curve is steep and extrapolated — silently, and by an order of magnitude
+        for far-UV bands at moderate/high redshift. The exact path
+        (``approx=None``) and ``SpectrumPrecomp`` (per-pixel attenuation; only a
+        small intra-pixel error) are unaffected.
+
+        Configuration-level heuristic — fires only when a photometry LUT, a
+        non-trivial dust screen, and at least one rest-UV band coincide. Does
+        **not** evaluate the SED, so it is cheap on every build. It flags the
+        *risk*; quantify the actual per-band bias by comparing against
+        ``approx=None``.
+        """
+        if not self._approx.get("wave_precomp"):
+            return
+        if self.observation is None or self.filter_waves is None:
+            return
+        # Dust screen with potentially non-trivial optical depth? (Zero dust →
+        # the LUT is exact, so there is nothing to warn about.)
+        if (
+            max(self._max_plausible_tau("dust_tau_diff"), self._max_plausible_tau("dust_tau_bc"))
+            < 0.1
+        ):
+            return
+        z_rep = self._representative_redshift()
+        names = list(getattr(self.observation.photometry, "names", []) or [])
+        blue: list[tuple[str, float]] = []
+        for i, (w, t) in enumerate(zip(self.filter_waves, self.filter_trans)):
+            w = jnp.asarray(w)
+            t = jnp.asarray(t)
+            denom = float(jnp.sum(t * w))
+            if denom <= 0.0:
+                continue
+            # Bessell photon-counting pivot ∫ λ²T dλ / ∫ λT dλ (observed frame).
+            lam_eff_rest = float(jnp.sum(t * w * w) / denom) / (1.0 + z_rep)
+            if lam_eff_rest < 2000.0:  # rest-UV: Calzetti steepens / is extrapolated
+                blue.append((names[i] if i < len(names) else f"band[{i}]", lam_eff_rest))
+        if not blue:
+            return
+        bands = ", ".join(f"{n} (rest~{lam:.0f} Å)" for n, lam in blue)
+        warnings.warn(
+            "WavePrecomp applies dust as a first-order Taylor projection across "
+            f"each filter (#617); at z~{z_rep:.2f} these rest-UV band(s) are "
+            f"biased versus the exact path: {bands}. The bias grows steeply "
+            "toward the far-UV (>10x for the bluest bands at moderate/high z) "
+            "and with optical depth. For unbiased blue-band photometry use "
+            "approx=None, or validate against it; SpectrumPrecomp is unaffected. "
+            "See docs/known_limitations.md.",
+            UserWarning,
+            stacklevel=2,
+        )
+
     def __repr__(self) -> str:
         """One-line summary of how this model is wired."""
         sfh = getattr(self.spec, "mean_sfh_type", "?")
@@ -2657,9 +2765,17 @@ class SEDModel:
         parameter gradients.
 
         **Approximation accuracy**: Driven by the build-time ``approx=``
-        policy (e.g. :class:`WavePrecomp` swaps in the SSP×filter LUT
-        for ~0.4 % stellar photometry, Zacharegkas+2025 [1]_). The
-        orchestrator path is itself bit-exact for the configured policy.
+        policy. :class:`WavePrecomp` swaps in the SSP×filter LUT, which is
+        ~0.4 % accurate for the *stellar* photometry (Zacharegkas+2025 [1]_)
+        **but re-applies dust as a first-order Taylor projection across each
+        filter (#617)**. That linear-in-λ model is accurate in the optical/IR,
+        where the attenuation curve is smooth across a band, but biases bands
+        sampling the **rest-UV** (steep, extrapolated attenuation) — by an
+        order of magnitude for far-UV bands at moderate/high redshift. Such
+        configurations emit a build-time ``UserWarning``; use ``approx=None``
+        for unbiased blue-band photometry, or validate against it.
+        ``SpectrumPrecomp`` applies attenuation per pixel and is unaffected.
+        The orchestrator path is itself bit-exact for the configured policy.
 
         **Filter wavelengths**: All filters loaded via :func:`load_filter_set`
         or :class:`Photometry` are assumed to be in observed frame (redshifted).
