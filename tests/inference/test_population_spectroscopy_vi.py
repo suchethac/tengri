@@ -63,12 +63,20 @@ def _mock_galaxies(template, n, key):
     return galaxies
 
 
-def test_canonical_native_vi_produces_shared_psd_samples(template, spec_obs):
-    """#711 acceptance: shared PSD hyper-params + per-galaxy samples."""
+@pytest.mark.parametrize("backend", ["native_vi_linear", "native_vi_nonlinear"])
+def test_canonical_native_vi_produces_shared_psd_samples(template, spec_obs, backend):
+    """#711 acceptance: shared PSD hyper-params + per-galaxy samples.
+
+    Parametrised over both native VI backends — the canonical population path
+    must be topology-agnostic across backends, not just the linear one. The
+    geoVI (``native_vi_nonlinear``) engine has its own residual-draw and
+    data-space inner products that previously assumed a flat 1-D data vector and
+    crashed on a batched ``(N_gal, n_pix)`` population fit.
+    """
     galaxies = _mock_galaxies(template, _N_GAL, jax.random.PRNGKey(0))
     pop = PopulationSEDModel(sed=template, galaxies=galaxies, data_type="spectroscopy")
     forward = ForwardModel.build(population=pop, observation=spec_obs)
-    post = Fitter(forward).run("native_vi_linear", key=jax.random.PRNGKey(1), **_VI_KW)
+    post = Fitter(forward).run(backend, key=jax.random.PRNGKey(1), **_VI_KW)
 
     samples = post.samples
     # Shared PSD hyper-parameters: one scalar value per posterior draw.
