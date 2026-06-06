@@ -323,13 +323,18 @@ def test_xray_radio_grad_compatible(wave_uv_to_radio, agn_lbol_physical):
 
 
 def test_xray_alpha_ox_sensitivity(wave_xray_only, agn_lbol_physical):
-    """Varying alpha_ox should change X-ray normalization (not shape)."""
+    """Varying alpha_ox offset should change X-ray normalization (not shape).
+
+    xray_alpha_ox is now a delta offset to the empirical Just+2007 relation.
+    delta=0.2 → absolute alpha_ox=-1.2 (harder corona)
+    delta=-0.2 → absolute alpha_ox=-1.6 (softer corona)
+    """
     sed_ao1 = unified_nlr_blr(
         wave_xray_only,
         agn_log_lbol=agn_lbol_physical,
         include_xray=True,
         xray_gamma_agn=1.8,
-        xray_alpha_ox=-1.2,  # Harder UV-X coupling
+        xray_alpha_ox=0.2,  # Delta → absolute -1.2 (harder UV-X coupling)
         xray_E_cut=300.0,
         include_radio=False,
     )
@@ -339,14 +344,14 @@ def test_xray_alpha_ox_sensitivity(wave_xray_only, agn_lbol_physical):
         agn_log_lbol=agn_lbol_physical,
         include_xray=True,
         xray_gamma_agn=1.8,
-        xray_alpha_ox=-1.6,  # Softer UV-X coupling
+        xray_alpha_ox=-0.2,  # Delta → absolute -1.6 (softer UV-X coupling)
         xray_E_cut=300.0,
         include_radio=False,
     )
 
     # SEDs should differ
     assert not jnp.allclose(sed_ao1, sed_ao2, rtol=0.05), (
-        "Varying alpha_ox should change X-ray flux."
+        "Varying alpha_ox offset should change X-ray flux."
     )
     # Fluxes should be in the same ballpark (not inverted or zeroed)
     assert jnp.all(sed_ao1 > 0.0) and jnp.all(sed_ao2 > 0.0)

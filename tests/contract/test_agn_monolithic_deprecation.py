@@ -9,8 +9,6 @@ Marker: contract
 
 from __future__ import annotations
 
-import warnings
-
 import jax.numpy as jnp
 import pytest
 
@@ -31,6 +29,7 @@ class TestMonolithicAGNDeprecation:
             "silva04",
             "cat3d_wind",
             "adaf",
+            "relagn",
             "skirtor",
             "qsogen",
             "grahsp",
@@ -79,21 +78,21 @@ class TestMonolithicAGNDeprecation:
         assert callable(fn_kubota)
         assert callable(fn_multicolor)
 
-    def test_relagn_not_deprecated(self):
-        """relagn remains in production (no committed composable block yet).
+    def test_relagn_deprecated(self):
+        """relagn is now deprecated in favor of composable grammar.
 
         Notes
         -----
         **Marker:** contract
 
-        RELAGN relativistic disc is deferred to a later phase when a
-        composable disc block is added. Should NOT emit DeprecationWarning.
+        RELAGN relativistic disc is now available as a composable disc block
+        (``disc="relagn"``). The monolithic ``relagn`` model is deprecated
+        and must emit DeprecationWarning.
         """
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)
+        with pytest.warns(DeprecationWarning, match="'relagn' is deprecated"):
             fn = resolve_agn_model("relagn")
 
-        # Should reach here without raising DeprecationWarning
+        # Callable signature: fn(wavelength, agn_log_lbol, **kwargs) -> L_nu
         assert callable(fn)
 
 

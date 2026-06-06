@@ -51,9 +51,11 @@ class TestRunnerReturnsL2500:
             agn_attenuation_block="none",
         )
         l_nu = compose_l_nu(wave, agn_log_lbol=45.0, **kw)
-        l_nu2, l_2500 = compose_l_nu(wave, agn_log_lbol=45.0, return_l2500=True, **kw)
+        # return_l2500=True returns (L_nu, L_2500_intrinsic, L_4400_intrinsic).
+        l_nu2, l_2500, l_4400 = compose_l_nu(wave, agn_log_lbol=45.0, return_l2500=True, **kw)
         assert isinstance(l_nu, jnp.ndarray) and l_nu.shape == wave.shape
         assert l_2500 > 0.0 and jnp.isfinite(l_2500)
+        assert l_4400 > 0.0 and jnp.isfinite(l_4400)
         # return_l2500=False is byte-identical to the legacy single-return.
         assert jnp.array_equal(l_nu, l_nu2)
 
@@ -68,13 +70,13 @@ class TestRunnerReturnsL2500:
             agn_attenuation_block="none",
             return_l2500=True,
         )
-        _, l2500_mc = composable_agn_l_nu(
+        _, l2500_mc, _ = composable_agn_l_nu(
             wave, agn_log_lbol=45.0, agn_disc_block="multicolor", **common
         )
-        _, l2500_r6 = composable_agn_l_nu(
+        _, l2500_r6, _ = composable_agn_l_nu(
             wave, agn_log_lbol=45.0, agn_disc_block="richards2006", **common
         )
-        _, l2500_pl = composable_agn_l_nu(
+        _, l2500_pl, _ = composable_agn_l_nu(
             wave, agn_log_lbol=45.0, agn_disc_block="powerlaw", **common
         )
         vals = np.array([float(l2500_mc), float(l2500_r6), float(l2500_pl)])

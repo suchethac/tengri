@@ -470,6 +470,7 @@ def radio_agn(
     radio_loudness: float = 0.0,
     alpha_agn: float = 0.7,
     nu_ref: float = 1.4e9,
+    l_bband: float = 0.0,
 ) -> jnp.ndarray:
     """Radio emission from AGN jets/lobes.
 
@@ -490,6 +491,10 @@ def radio_agn(
         AGN radio spectral index. Default 0.7.
     nu_ref : float
         Reference frequency [Hz]. Default 1.4 GHz.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
+        When > 0, used directly instead of deriving from L_agn_bol bolometric
+        correction. Default 0.0 (uses L_bol correction).
 
     Returns
     -------
@@ -503,11 +508,13 @@ def radio_agn(
     nu = _C_AA / wavelength
 
     # Monochromatic luminosity density at B-band (4400 A) in erg/s/Hz.
-    # L_bol = BC_B * nu_B * L_nu(4400) => L_nu = L_bol / (BC_B * nu_B)
-    # BC_B ~ 5.15 (Hopkins+2007, Table 1), nu_B = c / 4400 A = 6.818e14 Hz
+    # When l_bband is provided (disc-derived), use it directly; else derive from
+    # L_bol via bolometric correction. L_bol = BC_B * nu_B * L_nu(4400) =>
+    # L_nu = L_bol / (BC_B * nu_B). BC_B ~ 5.15 (Hopkins+2007, Table 1),
+    # nu_B = c / 4400 A = 6.818e14 Hz.
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007 bolometric correction at 4400 A
-    L_B = L_agn_bol / (_BC_B * _NU_B)  # erg/s/Hz
+    L_B = jnp.where(l_bband > 0.0, l_bband, L_agn_bol / (_BC_B * _NU_B))  # erg/s/Hz
 
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
@@ -528,6 +535,7 @@ def radio_agn_dpl(
     log_nu_t: float = 10.0,
     log_nu_cut: float = 13.0,
     nu_ref: float = 5.0e9,
+    l_bband: float = 0.0,
 ) -> jnp.ndarray:
     """Double power-law AGN radio emission (AGNfitter-rx).
 
@@ -560,6 +568,10 @@ def radio_agn_dpl(
         log10(synchrotron aging cutoff frequency / Hz). Default 13.0.
     nu_ref : float
         Reference frequency for L_5GHz normalization. Default 5 GHz.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
+        When > 0, used directly instead of deriving from L_agn_bol bolometric
+        correction. Default 0.0 (uses L_bol correction).
 
     Returns
     -------
@@ -575,10 +587,11 @@ def radio_agn_dpl(
     """
     nu = _C_AA / wavelength  # Hz
 
-    # B-band luminosity density (same as radio_agn)
+    # B-band luminosity density (same as radio_agn). When l_bband is provided
+    # (disc-derived), use it directly; else derive from L_bol bolometric correction.
     _NU_B = 6.818e14  # Hz
     _BC_B = 5.15  # Hopkins+2007
-    L_B = L_agn_bol / (_BC_B * _NU_B)  # erg/s/Hz
+    L_B = jnp.where(l_bband > 0.0, l_bband, L_agn_bol / (_BC_B * _NU_B))  # erg/s/Hz
 
     # L_5GHz from radio-loudness definition
     L_5GHz = L_B * 10.0**radio_loudness  # erg/s/Hz
@@ -622,6 +635,7 @@ def radio_total(
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
+    l_bband: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission (star-forming synchrotron + optional free-free + AGN power-law).
@@ -666,6 +680,10 @@ def radio_total(
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float
         Free-free spectral index (L_ν ∝ ν^{α}). Default -0.1.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
+        When > 0, used directly in radio_agn instead of deriving from L_agn_bol
+        bolometric correction. Default 0.0 (uses L_bol correction).
 
     Returns
     -------
@@ -689,7 +707,7 @@ def radio_total(
         z_slope,
         apply_suppression,
     )
-    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn)
+    agn = radio_agn(wavelength, L_agn_bol, radio_loudness, alpha_agn, l_bband=l_bband)
     ff = radio_freefree(wavelength, L_ir, T_e, alpha_ff) if include_freefree else 0.0
     return sf + ff + agn
 
@@ -715,6 +733,7 @@ def radio_total_dpl(
     include_freefree: bool = True,
     T_e: float = 1e4,
     alpha_ff: float = -0.1,
+    l_bband: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
     """Total radio emission: star-forming + optional free-free + AGN double power-law.
@@ -764,6 +783,10 @@ def radio_total_dpl(
         Electron temperature [K] for free-free component. Default 1e4.
     alpha_ff : float
         Free-free spectral index. Default -0.1.
+    l_bband : float
+        AGN intrinsic disc B-band (4400 A) monochromatic luminosity [erg/s/Hz].
+        When > 0, used directly in radio_agn_dpl instead of deriving from
+        L_agn_bol bolometric correction. Default 0.0 (uses L_bol correction).
 
     Returns
     -------
@@ -788,7 +811,14 @@ def radio_total_dpl(
         apply_suppression,
     )
     agn = radio_agn_dpl(
-        wavelength, L_agn_bol, radio_loudness, alpha1, alpha2, log_nu_t, log_nu_cut
+        wavelength,
+        L_agn_bol,
+        radio_loudness,
+        alpha1,
+        alpha2,
+        log_nu_t,
+        log_nu_cut,
+        l_bband=l_bband,
     )
     ff = radio_freefree(wavelength, L_ir, T_e, alpha_ff) if include_freefree else 0.0
     return sf + ff + agn

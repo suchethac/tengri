@@ -169,6 +169,11 @@ class AGNSEDComponent:
                 "erg/s/Hz",
                 "AGN intrinsic disc L_nu at 2500 A (un-reddened); drives X-ray alpha_ox",
             ),
+            DerivedKey(
+                "L_4400_intrinsic",
+                "erg/s/Hz",
+                "AGN intrinsic disc L_nu at 4400 A (un-reddened); drives radio loudness",
+            ),
         )
 
     def precompute(
@@ -357,22 +362,27 @@ class AGNSEDComponent:
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
 
-        # Call AGN function. For composable models, request L_2500_intrinsic.
-        # For monolithic models, L_2500_intrinsic defaults to 0.0 (X-ray falls
-        # back to L_bol BC or SKIRTOR's published L_2500_30deg).
+        # Call AGN function. For composable models, request L_2500_intrinsic
+        # and L_4400_intrinsic. For monolithic models, both default to 0.0
+        # (X-ray falls back to L_bol BC or SKIRTOR's published L_2500_30deg;
+        # radio falls back to L_bol bolometric correction).
         if self.config.model == "composable":
-            L_agn, L_2500_intrinsic = agn_fn(
+            L_agn, L_2500_intrinsic, L_4400_intrinsic = agn_fn(
                 wave, agn_log_lbol=agn_log_lbol, return_l2500=True, **agn_kwargs
             )
         else:
             L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
             L_2500_intrinsic = jnp.asarray(0.0)
+            L_4400_intrinsic = jnp.asarray(0.0)
 
         # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
         # can include the AGN contribution in the LUT sum.
         derived_overrides = dict(
-            L_agn_bol=L_agn_bol, sed_agn=L_agn, L_2500_intrinsic=L_2500_intrinsic
+            L_agn_bol=L_agn_bol,
+            sed_agn=L_agn,
+            L_2500_intrinsic=L_2500_intrinsic,
+            L_4400_intrinsic=L_4400_intrinsic,
         )
         if (
             self._state is not None

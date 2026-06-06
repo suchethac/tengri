@@ -131,6 +131,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
         "multicolor",
         "kubota_done",
         "qsogen",
+        "relagn",
         "richards2006",
     }
 )
@@ -346,9 +347,9 @@ agn_torus_block, agn_attenuation_block : str
         I/O out of the JIT trace boundary. ``None`` (default) falls back
         to the in-block lru_cache load.
     return_l2500 : bool, optional
-        When True, return ``(L_nu, L_2500_intrinsic)`` tuple. When False
-        (default), return only ``L_nu`` for backward compatibility with
-        existing single-return callers. Default: False.
+        When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
+        tuple. When False (default), return only ``L_nu`` for backward
+        compatibility with existing single-return callers. Default: False.
     **params
         Per-impl free parameters. Each block consumes the keys it
         recognises and ignores the rest.
@@ -362,6 +363,11 @@ agn_torus_block, agn_attenuation_block : str
         monochromatic luminosity at 2500 Å [erg/s/Hz], capturing the
         disc shape at the ``agn_log_lbol`` normalization. Returned as
         second element of tuple. Otherwise not returned.
+    L_4400_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 4400 Å [erg/s/Hz], capturing the
+        disc shape at the ``agn_log_lbol`` normalization. Returned as
+        third element of tuple. Otherwise not returned.
 
     Notes
     -----
@@ -392,10 +398,12 @@ agn_torus_block, agn_attenuation_block : str
         **params,
     )
 
-    # Capture L_2500_intrinsic: un-reddened, agn_log_lbol-normalized disc
-    # monochromatic luminosity at 2500 Å [erg/s/Hz]. Interpolate at 2500 Å,
-    # then convert L_lambda -> L_nu using L_nu = L_lambda * lambda^2 / c.
+    # Capture L_2500_intrinsic and L_4400_intrinsic: un-reddened,
+    # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz].
+    # Interpolate at 2500 Å and 4400 Å, then convert L_lambda -> L_nu using
+    # L_nu = L_lambda * lambda^2 / c.
     L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc) * (2500.0**2 / C_AA_PER_S)
+    L_4400_intrinsic = jnp.interp(4400.0, wave, L_lambda_disc) * (4400.0**2 / C_AA_PER_S)
 
     # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
     # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
@@ -584,9 +592,9 @@ agn_torus_block, agn_attenuation_block : str
     else:
         L_nu_result = L_nu_atten
 
-    # Return with optional L_2500_intrinsic tuple.
+    # Return with optional L_2500_intrinsic and L_4400_intrinsic tuple.
     if return_l2500:
-        return (L_nu_result, L_2500_intrinsic)
+        return (L_nu_result, L_2500_intrinsic, L_4400_intrinsic)
     else:
         return L_nu_result
 
@@ -625,9 +633,9 @@ agn_torus_block, agn_attenuation_block : str, optional
         Per-stage block selectors. Default ``"none"`` for every stage
         (a no-op pipeline; users **must** opt in by name).
     return_l2500 : bool, optional
-        When True, return ``(L_nu, L_2500_intrinsic)`` tuple. When False
-        (default), return only ``L_nu`` for backward compatibility. Default:
-        False.
+        When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
+        tuple. When False (default), return only ``L_nu`` for backward
+        compatibility. Default: False.
     **params
         Per-impl free parameters forwarded to every block.
 
@@ -640,6 +648,11 @@ agn_torus_block, agn_attenuation_block : str, optional
         monochromatic luminosity at 2500 Å [erg/s/Hz]. NOT scaled by
         ``agn_frac`` (maintains the unscaled-intrinsic convention of
         ``L_agn_bol``). Returned as second element of tuple when enabled.
+    L_4400_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 4400 Å [erg/s/Hz]. NOT scaled by
+        ``agn_frac`` (maintains the unscaled-intrinsic convention of
+        ``L_agn_bol``). Returned as third element of tuple when enabled.
 
     Notes
     -----
@@ -647,10 +660,11 @@ agn_torus_block, agn_attenuation_block : str, optional
     Python entry, so the JIT cache picks up changes only on selector
     changes (which trigger a recompile anyway).
 
-    The returned ``L_2500_intrinsic`` (when ``return_l2500=True``) is NOT
-    scaled by ``agn_frac``, matching the normalization convention of
-    ``L_agn_bol``. This allows downstream components (e.g. X-ray) to scale
-    the UV-based luminosity independently.
+    The returned ``L_2500_intrinsic`` and ``L_4400_intrinsic`` (when
+    ``return_l2500=True``) are NOT scaled by ``agn_frac``, matching the
+    normalization convention of ``L_agn_bol``. This allows downstream
+    components (e.g. X-ray, radio) to scale the monochromatic luminosities
+    independently.
     """
     validate_block_recipe(
         agn_disc_block=agn_disc_block,
@@ -675,7 +689,7 @@ agn_torus_block, agn_attenuation_block : str, optional
         **params,
     )
     if return_l2500:
-        L_nu, L_2500_intrinsic = result
-        return (agn_frac * L_nu, L_2500_intrinsic)
+        L_nu, L_2500_intrinsic, L_4400_intrinsic = result
+        return (agn_frac * L_nu, L_2500_intrinsic, L_4400_intrinsic)
     else:
         return agn_frac * result

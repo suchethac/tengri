@@ -187,6 +187,11 @@ class RadioSEDComponent:
         return (
             DerivedKey("L_ir", "erg/s", "Read from dust if present; falls back to 0.0"),
             DerivedKey("L_agn_bol", "erg/s", "Read from AGN if present; falls back to 0.0"),
+            DerivedKey(
+                "L_4400_intrinsic",
+                "erg/s/Hz",
+                "Read from AGN if present; drives radio loudness normalization",
+            ),
             DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
@@ -240,6 +245,7 @@ class RadioSEDComponent:
 
         L_ir = jnp.asarray(state.derived.get("L_ir", 0.0))
         L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
+        L_4400_intrinsic = jnp.asarray(state.derived.get("L_4400_intrinsic", 0.0))
         log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         z = jnp.asarray(params.get("redshift", 0.0))
 
@@ -262,6 +268,7 @@ class RadioSEDComponent:
                     include_freefree=self.config.include_freefree,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                    l_bband=L_4400_intrinsic,
                 )
             return radio_total_dpl(
                 w,
@@ -280,6 +287,7 @@ class RadioSEDComponent:
                 include_freefree=self.config.include_freefree,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                l_bband=L_4400_intrinsic,
             )
 
         L_radio = _emit(wave)

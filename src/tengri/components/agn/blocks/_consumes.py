@@ -78,6 +78,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
     ("disc", "multicolor"): frozenset({"agn_a_spin", "agn_log_ledd", "agn_log_mbh"}),
     ("disc", "powerlaw"): frozenset({"agn_alpha"}),
     ("disc", "qsogen"): frozenset(),
+    ("disc", "relagn"): frozenset({"agn_log_mbh", "agn_log_mdot", "agn_astar", "agn_cos_inc"}),
     ("disc", "richards2006"): frozenset(),
     ("disc", "schartmann2005"): frozenset({"agn_cigale_disk_delta"}),
     ("disc", "schartmann2005_skirtor_atten"): frozenset(
