@@ -42,6 +42,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   importable but not advertised. `load_filter_set` was considered but
   stays demoted per existing design — import from
   `tengri.observation.load_filter_set`.
+- Experimental notebook `multimodel_bma_candels` now builds its plotted
+  posterior SEDs via the exact public `lnu_to_fnu(1, d_L, z)` conversion
+  instead of an empirical `predict_photometry`-anchored scale factor
+  (the old anchor was ~10% off because it equated a filter-integrated
+  flux with a point-interpolated `L_ν`). The eager-warm tracer-leak
+  workaround is dropped — `jax.jit(jax.vmap(...))` over `predict_obs_sed`
+  / `predict_sfh_quantities` now runs cold. Possible now that
+  `predict_spectrum(wave_obs=...)` is fixed (#707, #712). No change to
+  fits, evidences, or BMA weights — plotting/prediction only (#730).
+- `multimodel_bma_candels` fits the four configs per galaxy concurrently
+  with a `ThreadPoolExecutor` (XLA releases the GIL during compute, so
+  this is a ~2–3× wall-clock win for bit-identical results) and uses
+  `n_live=250` (≈2× faster than 500, negligible `log Z` shift). Added a
+  note documenting that compilation is *not* the bottleneck (~0.3 s,
+  cached) and why `fit_batch_map_vmap` (MAP-only, single shared model)
+  cannot vectorise nested sampling across these structurally-different
+  configs.
 
 ## [0.1.0] - 2026-05-22
 
