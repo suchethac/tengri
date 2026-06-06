@@ -546,6 +546,16 @@ class DustSEDComponent:
                 dust_tdust=jnp.asarray(params.get("dust_tdust", 25.0)),
                 dust_fpah=jnp.asarray(params.get("dust_fpah", 0.05)),
                 dust_epsilon_mbb=jnp.asarray(params.get("dust_epsilon_mbb", 1.0)),
+                # Two-temperature ``energy_balance_split`` knobs. ``L_ir`` is
+                # already η-scaled above, so ``eta_balance`` stays at the
+                # function default (1.0) here — η is applied once. ``L_agn_ir``
+                # adds AGN-heated IR on top (breaks strict balance by design).
+                f_cold=jnp.asarray(params.get("dust_f_cold", 0.5)),
+                L_agn_ir=jnp.asarray(params.get("dust_L_agn_ir", 0.0)),
+                dust_T_warm=jnp.asarray(params.get("dust_T_warm", 45.0)),
+                dust_T_cold=jnp.asarray(params.get("dust_T_cold", 20.0)),
+                dust_beta_warm=jnp.asarray(params.get("dust_beta_warm", 1.5)),
+                dust_beta_cold=jnp.asarray(params.get("dust_beta_cold", 2.0)),
                 redshift=z,
             )
 
