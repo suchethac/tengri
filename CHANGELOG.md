@@ -59,6 +59,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   cached) and why `fit_batch_map_vmap` (MAP-only, single shared model)
   cannot vectorise nested sampling across these structurally-different
   configs.
+- Editorial pass on `multimodel_bma_candels` for the public docs: prose
+  rewritten in plain scientific style, one publication-quality figure per
+  galaxy (the separate compact/presentation variants are merged), the
+  $M_\star$-SFR panel zoomed out so the broader BMA contour is not
+  clipped, the on-figure weight annotation removed, and XLA/PjRt C++ logs
+  suppressed via `TF_CPP_MIN_LOG_LEVEL`.
 
 ## [0.1.0] - 2026-05-22
 
