@@ -229,7 +229,34 @@ _kernels/*.py                ← fused JIT orchestrators (private)
 
 **Energy conservation:** `L_absorbed = L_absorbed_stellar + L_absorbed_nebular`.
 The `apply_dust_attenuation()` helper returns the absorbed luminosity as a side
-output, which feeds into the dust IR energy balance.
+output, which feeds into the dust IR energy balance. The absorbed integral
+excludes Lyman-continuum photons (λ < 912 Å — they ionise gas, not heat dust),
+matching CIGALE's `dustatt_modified_starburst`. Every full-SED IR model
+(`dale2014`, `draine_li2007/2014`, `themis`, `astrodust`, `bosa`,
+`schreiber2018`, `modified_blackbody`, `casey2012`, `energy_balance_split`)
+renormalises so `∫ L_ν,emit dν ≡ L_IR` to floating point. (`pah_drude` is the
+one exception: a PAH-only building block, not a standalone balanced emitter.)
+
+**Strict by default, relaxable on demand.** The default is strict balance
+(`L_IR = L_absorbed`), as in CIGALE/MAGPHYS. The `dust_eta_balance` factor
+(`L_IR = η · L_absorbed`, default `Fixed(1.0)`) is the opt-in escape hatch for
+galaxies whose UV/optical and FIR are spatially decoupled and so violate energy
+balance (e.g. high-z sources) — analogous to AGNfitter's *optional* energy-
+balance prior. Free it under a soft prior to allow controlled deviation:
+
+```python
+dust={'type': 'two_component', '*': 'fixed',
+      'emission': {'type': 'dale2014',
+                   'eta_balance': LogNormal(mu=0.0, sigma=0.2)}}   # median η=1
+# or, equivalently:
+dust={'type': 'two_component', '*': 'fixed',
+      'emission': builders.dust.emission.relaxed_energy_balance('dale2014')}
+```
+
+The two-temperature `energy_balance_split` model additionally exposes a
+warm/cold split (`dust_f_cold`, `dust_T_warm/cold`, `dust_beta_warm/cold`) and
+an additive AGN-IR term (`dust_L_agn_ir`) that intentionally exceeds the stellar
+budget — all free-able through the grammar.
 
 ## Data flow
 

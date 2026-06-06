@@ -93,11 +93,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_eta_balance",
         Fixed(1.0),
-        "Energy balance relaxation: L_IR = eta * L_absorbed. "
-        "eta=1.0 = strict energy balance; eta>1 = extra IR from obscured "
-        "sources (e.g. embedded AGN, Kokorev+2021/Stardust); eta<1 = "
-        "geometric mismatch where some absorbed UV escapes without "
-        "re-emission into the line of sight",
+        "Energy-balance relaxation factor: L_IR = eta * L_absorbed. "
+        "eta=1.0 (default) = strict energy balance, as in CIGALE/MAGPHYS — the "
+        "total dust IR luminosity equals the stellar+nebular energy absorbed by "
+        "dust. eta>1 = extra IR from obscured sources (embedded AGN, "
+        "Kokorev+2021/Stardust); eta<1 = geometric mismatch where some absorbed "
+        "UV escapes without re-emission into the line of sight. Leave fixed for "
+        "strict balance; free it to fit galaxies whose UV/optical and FIR are "
+        "spatially decoupled and so violate energy balance (e.g. high-z "
+        "sources), the way AGNfitter offers an *optional* energy-balance prior. "
+        "Recommended relaxed prior: ``LogNormal(mu=0.0, sigma=0.2)`` (median "
+        "eta=1, ~+/-20%), keeping balance as the soft default while allowing "
+        "controlled deviation.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
@@ -112,6 +119,42 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_T_cold",
         Fixed(20.0),
         "Cold ISM grain temperature (K) — used by the two-temperature emission model (15-25K)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "dust_f_cold",
+        Fixed(0.5),
+        "Fraction of the IR luminosity in the cold (diffuse-ISM) component of "
+        "the two-temperature ``energy_balance_split`` model (Kokorev+2021 / "
+        "MAGPHYS-style warm+cold split, 0-1). The warm (SF-heated) component "
+        "carries the remaining 1 - f_cold.",
+        lambda lo, hi: lo >= 0.0 and hi <= 1.0,
+        "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "dust_L_agn_ir",
+        Fixed(0.0),
+        "Additional AGN-heated IR luminosity added on top of the energy-balance "
+        "budget by the ``energy_balance_split`` model (same units as L_absorbed; "
+        ">= 0). Non-zero values intentionally exceed strict stellar energy "
+        "balance — the AGN supplies the extra IR.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "dust_beta_warm",
+        Fixed(1.5),
+        "Warm-component emissivity index β of the two-temperature "
+        "``energy_balance_split`` model (dimensionless, typ. 1.5-2.0)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
+        "dust_beta_cold",
+        Fixed(2.0),
+        "Cold-component emissivity index β of the two-temperature "
+        "``energy_balance_split`` model (dimensionless, typ. 1.5-2.0)",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
