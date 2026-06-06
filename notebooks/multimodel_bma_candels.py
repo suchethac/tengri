@@ -24,8 +24,9 @@
 # them by **Bayesian model averaging (BMA)**, weighting each by its marginal
 # likelihood (evidence).
 #
-# We run this for **two** CANDELS GOODS-South galaxies at $z\sim1$, and report
-# **per-fit timings** throughout.
+# We run this for **seven** CANDELS GOODS-South galaxies at $z\sim1$ (the
+# proposal target plus six more selected for clean fits), and report **per-fit
+# timings** throughout.
 #
 # | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
 # |--------|-----|-----|----------|------------|---------|
@@ -197,8 +198,9 @@ print(f"Flagged  : {len(flagged_ids)}")
 # ## 2. AB mag → $f_\nu$, and galaxy selection
 #
 # We use the public `tengri.units.ab_mag_to_fnu` for the flux conversion and
-# pick the two highest-S/N star-forming galaxies at $z\sim1$ with $\ge10$
-# detected bands and clean flags.
+# work with star-forming galaxies at $z\sim1$ that have $\ge10$ detected bands
+# and clean flags; the seven `GAL_IDS` below were picked from these for clean
+# fits.
 
 # %%
 NON_DETECT = 90.0  # mag > 90 ⇒ non-detection in this catalogue
@@ -230,11 +232,11 @@ for i in range(len(ids)):
 cand_idx = np.where(candidates)[0]
 cand_idx = cand_idx[np.argsort(-median_snr[cand_idx])]
 
-# Two galaxies chosen to show the range of model-averaging behaviour:
-#   CANDELS 4171  — a clean main-sequence case where several configs contribute;
-#   CANDELS 17418 — a second z~1 star-former.
-# (Both are among the high-S/N, well-fit candidates below.)
-GAL_IDS = [4171, 17418]
+# Seven z~1 star-forming galaxies that the models fit well. The first is the
+# proposal target (CANDELS 4171); the rest were chosen from the high-S/N
+# candidates by a quick MAP screen on their best-fit reduced chi^2 (so we show
+# galaxies the four configurations actually reproduce, not pathological cases).
+GAL_IDS = [4171, 17418, 16435, 16514, 18160, 15775, 13097]
 SELECTED_IDX = [int(np.where(ids == g)[0][0]) for g in GAL_IDS]
 
 print("Top candidates (z~1, ≥10 bands, clean flags):")
@@ -632,8 +634,14 @@ def pool_pairs(per_cfg_x, per_cfg_y, weights, total):
     return np.concatenate(xs), np.concatenate(ys)
 
 
-def filled_kde(ax, x, y, color, *, zorder=2, bma=False):
-    """Filled 68/95% credible contours of a 2-D KDE (point if degenerate)."""
+def filled_kde(ax, x, y, color, *, zorder=2, fill=True, lw=2.0):
+    """68/95% credible contours of a 2-D KDE.
+
+    ``fill=True`` shades the contours (used for the individual models);
+    ``fill=False`` draws outline-only 68/95 lines (used for the BMA, so the
+    averaged result is never shaded over the models). Falls back to a point
+    marker for a degenerate (near-zero-variance) posterior.
+    """
     good = np.isfinite(x) & np.isfinite(y)
     x, y = x[good], y[good]
     if len(x) < 5 or x.std() < 1e-6 or y.std() < 1e-6:
@@ -654,15 +662,15 @@ def filled_kde(ax, x, y, color, *, zorder=2, bma=False):
     if not (l95 < l68 < zmax):
         ax.plot(np.median(x), np.median(y), "o", color=color, ms=4, zorder=zorder)
         return
-    a95, a68 = (0.45, 0.85) if bma else (0.30, 0.65)
-    ax.contourf(
-        XG, YG, ZG, levels=[l95, l68, zmax], colors=[color, color], alpha=a95, zorder=zorder
-    )
-    ax.contourf(XG, YG, ZG, levels=[l68, zmax], colors=[color], alpha=a68 - a95, zorder=zorder)
-    ax.contour(
-        XG, YG, ZG, levels=[l95], colors="k" if bma else [color],
-        linewidths=0.7 if bma else 0.4, alpha=0.9, zorder=zorder + 0.1,
-    )  # fmt: skip
+    if fill:
+        ax.contourf(XG, YG, ZG, levels=[l95, l68, zmax], colors=[color, color],
+                    alpha=0.30, zorder=zorder)  # fmt: skip
+        ax.contourf(XG, YG, ZG, levels=[l68, zmax], colors=[color], alpha=0.35, zorder=zorder)
+        ax.contour(XG, YG, ZG, levels=[l95], colors=[color], linewidths=0.4,
+                   alpha=0.9, zorder=zorder + 0.1)  # fmt: skip
+    else:  # outline only (BMA): two lines, no shading
+        ax.contour(XG, YG, ZG, levels=[l95, l68], colors=[color], linewidths=[lw * 0.6, lw],
+                   alpha=0.95, zorder=zorder)  # fmt: skip
 
 
 def plot_galaxy(gal_id, *, presentation=False):
@@ -698,8 +706,7 @@ def plot_galaxy(gal_id, *, presentation=False):
                         color=COLORS[cfg], alpha=0.12, lw=0)  # fmt: skip
         ax.plot(WAVE_SPEC, np.median(d, 0), "-", color=COLORS[cfg], lw=lw_cfg, alpha=0.85)
     bma = pool(g["spec"], w, 300)
-    ax.fill_between(WAVE_SPEC, np.percentile(bma, 16, 0), np.percentile(bma, 84, 0),
-                    color=BMA_COLOR, alpha=0.10, lw=0)  # fmt: skip
+    # BMA shown as a line only (not shaded) so it never hides the model bands.
     ax.plot(WAVE_SPEC, np.median(bma, 0), "-", color=BMA_COLOR, lw=lw_bma, alpha=0.95, zorder=5)
     wobs = np.array([WAVE_EFF[n] for n in g["names"]])
     xerr = np.array([FILTER_HALFWIDTH[n] for n in g["names"]])  # real filter half-widths
@@ -734,8 +741,7 @@ def plot_galaxy(gal_id, *, presentation=False):
     t_common = g["sfh"]["A"]["t_gyr"]
     bma_sfr = pool({c: g["sfh"][c]["sfr"] for c in CONFIG_ORDER}, w, 200)
     bma_med = np.median(bma_sfr, 0)
-    ax.fill_between(t_common, np.percentile(bma_sfr, 16, 0), np.percentile(bma_sfr, 84, 0),
-                    color=BMA_COLOR, alpha=0.15, lw=0)  # fmt: skip
+    # BMA as a line only (not shaded).
     ax.plot(t_common, bma_med, "-", color=BMA_COLOR, lw=lw_bma, alpha=0.95)
     maxes.append(np.max(bma_med[(t_common >= 0.15) & (t_common < 5)]))
     ax.set_xlim(0, 5)
@@ -755,15 +761,30 @@ def plot_galaxy(gal_id, *, presentation=False):
         {c: g["props"][c]["log_sfr"] for c in CONFIG_ORDER},
         w, 2000,
     )  # fmt: skip
-    filled_kde(ax, bm, bs, BMA_COLOR, zorder=6, bma=True)
-    ax.margins(0.18)  # padding so the small clusters aren't cramped
+    filled_kde(ax, bm, bs, BMA_COLOR, zorder=6, fill=False, lw=lw_bma)  # outline, not shaded
+    # Explicit limits that enclose every model's 95% region (no clipped posteriors).
+    lo_m, hi_m, lo_s, hi_s = [], [], [], []
+    for cfg in CONFIG_ORDER:
+        m = g["props"][cfg]["log_mass"][np.isfinite(g["props"][cfg]["log_mass"])]
+        sfr = g["props"][cfg]["log_sfr"][np.isfinite(g["props"][cfg]["log_sfr"])]
+        if m.size and sfr.size:
+            lo_m.append(m.mean() - 3 * m.std())
+            hi_m.append(m.mean() + 3 * m.std())
+            lo_s.append(sfr.mean() - 3 * sfr.std()); hi_s.append(sfr.mean() + 3 * sfr.std())  # fmt: skip
+    if lo_m:
+        px = 0.08 * (max(hi_m) - min(lo_m) + 1e-3)
+        py = 0.10 * (max(hi_s) - min(lo_s) + 1e-3)
+        ax.set_xlim(min(lo_m) - px, max(hi_m) + px)
+        ax.set_ylim(min(lo_s) - py, max(hi_s) + py * 1.6)  # extra headroom for the weight label
     ax.set_xlabel(r"$\log\,(M_\star\,/\,M_\odot)$", fontsize=fs_lab)
     ax.set_ylabel(r"$\log\,(\mathrm{SFR}_{100}\,/\,M_\odot\,\mathrm{yr}^{-1})$", fontsize=fs_lab)
     ax.tick_params(labelsize=fs_tick)
     panel_label(ax, r"$\bf{(c)}$")
+    # BMA weights along the bottom (clear of the (c) label and the contours).
     wstr = "   ".join(f"{c} {x:.2f}" for c, x in zip(CONFIG_ORDER, w))
-    ax.text(0.5, 0.97, f"BMA weights:  {wstr}", transform=ax.transAxes,
-            ha="center", va="top", fontsize=fs_box)  # fmt: skip
+    ax.text(0.5, 0.04, f"BMA weights:  {wstr}", transform=ax.transAxes,
+            ha="center", va="bottom", fontsize=fs_box,
+            bbox={"boxstyle": "round,pad=0.2", "fc": "white", "ec": "0.8", "lw": 0.4, "alpha": 0.85})  # fmt: skip
 
     # Shared legend across the top, two rows (3 + 2 entries).
     handles = [Line2D([0], [0], color=COLORS[c], lw=2.2 if P else 1.6, label=LABELS[c])
@@ -817,17 +838,61 @@ plot_galaxy(17418)
 show_timings(17418)
 
 # %% [markdown]
+# ### CANDELS 16435
+
+# %%
+plot_galaxy(16435)
+
+# %%
+show_timings(16435)
+
+# %% [markdown]
+# ### CANDELS 16514
+
+# %%
+plot_galaxy(16514)
+
+# %%
+show_timings(16514)
+
+# %% [markdown]
+# ### CANDELS 18160
+
+# %%
+plot_galaxy(18160)
+
+# %%
+show_timings(18160)
+
+# %% [markdown]
+# ### CANDELS 15775
+
+# %%
+plot_galaxy(15775)
+
+# %%
+show_timings(15775)
+
+# %% [markdown]
+# ### CANDELS 13097
+
+# %%
+plot_galaxy(13097)
+
+# %%
+show_timings(13097)
+
+# %% [markdown]
 # ## 10. Presentation-quality figures
 #
-# Slide-ready renders of the same two panels: larger fonts and panels, thicker
+# Slide-ready renders of the three panels: larger fonts and panels, thicker
 # lines, a robust SFH y-limit (so the panel fills), padded $M_\star$–SFR axes,
-# and the BMA weights annotated on panel (c). Saved as ``*_pres.png``.
+# the BMA shown as an unshaded outline, and the BMA weights annotated on panel
+# (c). Saved as ``*_pres.png``.
 
 # %%
-plot_galaxy(4171, presentation=True)
-
-# %%
-plot_galaxy(17418, presentation=True)
+for _gid in GAL_IDS:
+    plot_galaxy(_gid, presentation=True)
 
 # %% [markdown]
 # ## 9. Takeaways
