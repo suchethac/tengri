@@ -99,7 +99,8 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
-from tengri.units import ab_mag_to_fnu
+from tengri.cosmology import luminosity_distance
+from tengri.units import ab_mag_to_fnu, lnu_to_fnu
 
 
 # %% [markdown]
@@ -510,21 +511,23 @@ def vmap_chunked(fn, batch, n, chunk=16):
 def collect_predictions(g):
     """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
 
-    The continuous SED comes from ``predict_obs_sed`` (observed-frame rest L_nu
-    on each SSP's native grid). We rescale L_nu to observed ``f_nu`` with the
-    distance factor anchored to ``predict_photometry`` (a pure constant,
-    4*pi*d_L^2 / (1+z)), then bin every config onto the common ``WAVE_SPEC``
-    grid so the four can be pooled for the BMA predictive.
+    The continuous SED is the observed-frame model spectrum. ``predict_obs_sed``
+    gives the rest-frame :math:`L_\\nu` on each SSP's native (line-resolved)
+    grid; we convert it to observed :math:`f_\\nu` with the exact public relation
+    ``lnu_to_fnu`` — the same :math:`f_\\nu = L_\\nu (1+z) / (4\\pi d_L^2)` that
+    ``predict_spectrum`` applies internally (suchethac/tengri#707) — then bin
+    every config onto the common ``WAVE_SPEC`` grid so the four can be pooled for
+    the BMA predictive. Binning the native grid (rather than point-sampling
+    ``predict_spectrum`` on the coarse plot grid) keeps narrow nebular lines as
+    modest, area-correct bumps instead of aliased spikes.
 
     SED and derived (M*, SFR) draws use chunked ``jax.jit(jax.vmap)`` (~7x vs a
-    Python loop). The forward path lazily builds its precompute LUT *inside* the
-    traced call and would leak a tracer under JIT (perf issue #715), so we
-    **eager-warm** each model once (a plain call per method) to make the LUT
-    concrete before jitting. ``predict_sfh`` is not jittable
-    (``ConcretizationTypeError``), so the SFH curve stays an eager loop.
+    Python loop). ``predict_sfh`` is not jittable (``ConcretizationTypeError``),
+    so the SFH curve stays an eager loop.
     """
-    weff = np.array([WAVE_EFF[n] for n in g["names"]])
     spec, sfh, props = {}, {}, {}
+    # Exact rest-frame L_nu -> observed f_nu factor (k-correction + distance).
+    flux_factor = float(lnu_to_fnu(1.0, luminosity_distance(g["z"]), g["z"]))
     for cfg in CONFIG_ORDER:
         model = g["models"][cfg]
         samples = g["posteriors"][cfg].samples
@@ -532,16 +535,12 @@ def collect_predictions(g):
         n_use = min(N_DRAWS, n_avail)
         batch = {k: v[:n_use] for k, v in samples.items()}
 
-        # Eager-warm the forward caches concretely (so the LUT is not built under
-        # the JIT trace -> no tracer leak), and get the L_nu->f_nu scale factor.
+        # Observed-frame wavelength grid (config-fixed, so a single eager call).
         s0 = {k: v[0] for k, v in samples.items()}
-        wave_nat, lnu0 = (np.asarray(a) for a in model.predict_obs_sed(s0))
-        phot0 = np.asarray(model.predict_photometry(s0))
-        model.predict_sfh_quantities(s0)  # warm
-        flux_factor = np.median(phot0 / np.interp(weff, wave_nat, lnu0))
+        wave_nat = np.asarray(model.predict_obs_sed(s0).wavelength)
 
         # SED + derived quantities: chunked jit(vmap) over the draw batch.
-        lnu_b = np.asarray(vmap_chunked(model.predict_obs_sed, batch, n_use)[1])
+        lnu_b = np.asarray(vmap_chunked(model.predict_obs_sed, batch, n_use).sed)
         spec[cfg] = np.array(
             [bin_to_grid(wave_nat, lnu_b[i] * flux_factor, WAVE_SPEC) for i in range(n_use)]
         )
