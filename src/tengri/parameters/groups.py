@@ -714,7 +714,42 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    _warn_firrc_slope_degeneracy(final_params)
+
     return final_params
+
+
+def _warn_firrc_slope_degeneracy(final_params: Parameters) -> None:
+    """Warn when a FIRRC *slope* coefficient is freed (per-galaxy degeneracy).
+
+    The mass/redshift FIRRC slopes vary q_IR *across* a sample; at one
+    galaxy's fixed (M*, z) they collapse to a single scalar, degenerate with
+    the ``radio_*_q0`` normalization. Freeing them only makes sense as
+    ``PopulationFitter`` hyperparameters — see ADR-0018 §8a. The
+    :class:`RadioFIRRCDegeneracyWarning` category is filterable so a
+    deliberate hierarchical fit can silence it.
+    """
+    from tengri.components.radio._params import (
+        FIRRC_SLOPE_PARAMS,
+        RadioFIRRCDegeneracyWarning,
+    )
+
+    freed = sorted(FIRRC_SLOPE_PARAMS.intersection(final_params.free_params))
+    if not freed:
+        return
+    warnings.warn(
+        f"Radio FIRRC slope coefficient(s) {freed} are free, but the FIR-radio "
+        f"correlation slopes are degenerate with the normalization at a single "
+        f"galaxy's fixed (M*, z) — they map to one scalar q_IR, so a per-galaxy "
+        f"fit cannot constrain them. Free the normalization instead "
+        f"('radio_delv_q0' / 'radio_mcch_q0' / 'radio_q_ir') for the radio-excess "
+        f"amplitude, and reserve the slopes for PopulationFitter hyperparameters "
+        f"(see ADR-0018 §8a). Filter RadioFIRRCDegeneracyWarning to silence this "
+        f"for a deliberate hierarchical fit.",
+        RadioFIRRCDegeneracyWarning,
+        stacklevel=3,
+    )
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────

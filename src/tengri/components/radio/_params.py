@@ -19,6 +19,30 @@ from __future__ import annotations
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import ParamDeclaration
 
+
+class RadioFIRRCDegeneracyWarning(UserWarning):
+    """A FIRRC *slope* coefficient was freed in a single-galaxy fit.
+
+    The FIR-radio correlation slopes vary q_IR(M*, z) *across* a sample;
+    at one galaxy's fixed (M*, z) they collapse to a single scalar and are
+    degenerate with the normalization (``radio_*_q0`` / ``radio_q_ir``).
+    They are identifiable only as ``PopulationFitter`` hyperparameters.
+    Filter this category to silence the notice for a deliberate hierarchical
+    fit.
+    """
+
+
+#: The FIRRC slope coefficients whose freedom is degenerate per-galaxy
+#: (the q0 normalizations are fine — they *are* the radio-excess knob).
+FIRRC_SLOPE_PARAMS: frozenset[str] = frozenset(
+    {
+        "radio_delv_mass_slope",
+        "radio_delv_z_slope",
+        "radio_mcch_mass_slope",
+        "radio_mcch_z_slope",
+    }
+)
+
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "radio_q_ir",
@@ -132,4 +156,4 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
 )
 
-__all__ = ["PARAMS"]
+__all__ = ["FIRRC_SLOPE_PARAMS", "PARAMS", "RadioFIRRCDegeneracyWarning"]

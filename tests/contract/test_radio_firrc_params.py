@@ -79,16 +79,16 @@ class TestFirrcGrammar:
     def test_mcch_per_param_free(self):
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            radio={"sf": {"type": "mccheyne2022", "mcch_z_slope": Uniform(-0.1, 0.2)}},
+            radio={"sf": {"type": "mccheyne2022", "mcch_q0": Uniform(1.5, 2.5)}},
         )
-        assert "radio_mcch_z_slope" in params.free_params
+        assert "radio_mcch_q0" in params.free_params
 
     def test_full_name_also_accepted(self):
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            radio={"sf": {"type": "delvecchio2021", "radio_delv_mass_slope": Uniform(0.0, 0.5)}},
+            radio={"sf": {"type": "delvecchio2021", "radio_delv_q0": Uniform(2.4, 3.1)}},
         )
-        assert "radio_delv_mass_slope" in params.free_params
+        assert "radio_delv_q0" in params.free_params
 
     def test_dpl_agn_per_param_free(self):
         """The symmetric radio={'agn': {...}} sub-block frees DPL knobs."""
@@ -113,6 +113,71 @@ class TestFirrcGrammar:
         )
         freed = [n for n in params.free_params if n.startswith("radio_")]
         assert freed == ["radio_delv_q0"]
+
+
+@pytest.mark.unit
+class TestFirrcSlopeDegeneracyGuard:
+    """Freeing a FIRRC *slope* per-galaxy is degenerate — warn, don't crash.
+
+    The slopes vary q_IR across a sample; at one galaxy's fixed (M*, z) they
+    collapse to a single scalar (degenerate with the q0 normalization). They
+    are identifiable only as PopulationFitter hyperparameters.
+    """
+
+    @pytest.mark.parametrize(
+        "radio_sf",
+        [
+            {"type": "delvecchio2021", "delv_mass_slope": Uniform(0.0, 0.5)},
+            {"type": "delvecchio2021", "delv_z_slope": Uniform(-0.2, 0.05)},
+            {"type": "mccheyne2022", "mcch_mass_slope": Uniform(-0.5, 0.0)},
+            {"type": "mccheyne2022", "mcch_z_slope": Uniform(-0.1, 0.2)},
+        ],
+    )
+    def test_free_slope_warns(self, radio_sf):
+        from tengri.components.radio._params import RadioFIRRCDegeneracyWarning
+
+        with pytest.warns(RadioFIRRCDegeneracyWarning, match="degenerate"):
+            parse_groups(sfh={"type": "dpl", "*": FIXED}, radio={"sf": radio_sf})
+
+    def test_free_q0_does_not_warn(self):
+        """The q0 normalization is the legitimate per-galaxy radio-excess knob."""
+        import warnings
+
+        from tengri.components.radio._params import RadioFIRRCDegeneracyWarning
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RadioFIRRCDegeneracyWarning)
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
+            )
+
+    def test_all_fixed_does_not_warn(self):
+        import warnings
+
+        from tengri.components.radio._params import RadioFIRRCDegeneracyWarning
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RadioFIRRCDegeneracyWarning)
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"sf": {"type": "delvecchio2021"}},
+            )
+
+    def test_warning_is_filterable(self):
+        """A deliberate hierarchical fit can silence the category."""
+        import warnings
+
+        from tengri.components.radio._params import RadioFIRRCDegeneracyWarning
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RadioFIRRCDegeneracyWarning)
+            params = parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"sf": {"type": "mccheyne2022", "mcch_mass_slope": Uniform(-0.5, 0.0)}},
+            )
+        # The param is still freed — the guard only warns, never blocks.
+        assert "radio_mcch_mass_slope" in params.free_params
 
 
 @pytest.mark.unit

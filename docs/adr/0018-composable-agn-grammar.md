@@ -83,6 +83,15 @@ Each stage has a registry of swappable implementations (e.g., `agn_disc_block="m
      (`radio_alpha_thin`/`_thick`, `radio_log_nu_t`/`_nu_cut`) are the symmetric
      `radio.agn` sub-block params. These coefficients are designed to promote
      to `PopulationFitter` hyperparameters without code changes.
+   - **Degeneracy guard.** The FIRRC *slopes* (`*_mass_slope`, `*_z_slope`) are
+     identifiable only *across* a sample: at one galaxy's fixed (M\*, z) they
+     collapse to a single scalar `q_IR`, degenerate with the `*_q0`
+     normalization. Freeing a slope raises a filterable
+     `RadioFIRRCDegeneracyWarning` at `parse_groups` time, steering single-galaxy
+     fits toward freeing the normalization (`radio_delv_q0` / `radio_mcch_q0` /
+     `radio_q_ir`, the radio-excess amplitude) and reserving the slopes for
+     hierarchical fits. The `q0` normalizations and the AGN knobs are
+     warning-free; the guard never blocks (warn-only).
 
 9. **Impact on Posterior**:
    - Users prefer one canonical surface. Composable blocks are simpler to discover, mix, and extend than hand-written monolithic adapters.
