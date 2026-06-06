@@ -177,6 +177,9 @@ class DerivedState:
     L_agn_bol: jnp.ndarray | None = None
     L_agn_torus: jnp.ndarray | None = None
     L_agn_absorbed: jnp.ndarray | None = None
+    # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];
+    # drives X-ray alpha_ox (Just+2007). Published by the composable AGN (#722).
+    L_2500_intrinsic: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
     # AGN — filter-integrated LUT (Phase 3c-3d-agn). Rest-frame Lν of

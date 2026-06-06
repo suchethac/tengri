@@ -54,9 +54,11 @@ Each stage has a registry of swappable implementations (e.g., `agn_disc_block="m
    - **CIGALE-embedded `dust_frac_agn`** (dust SEDModelComponent): a separate DALE2014 fixture allowing a fixed AGN luminosity proxy inside the dust continuum. These are orthogonal and should not coexist (duplication warning at model construction time).
    - Why composable blocks are canonical for AGN but dust-emission is a SEDModelComponent (#718): AGN requires per-wavelength masking (Type-1/2 screens) that the component protocol cannot express, while dust-emission is purely multiplicative.
 
-8. **Consumed Keys Contract** (from #XXX):
+8. **Consumed Keys Contract** (from #722):
    - Runner publishes `L_agn_bol` = intrinsic bolometric luminosity (4π-averaged).
-   - X-ray and radio components (downstream) consume `L_agn_bol` and published `L_2500_intrinsic` (where available) as anchors.
+   - Composable AGN publishes `L_2500_intrinsic` = un-reddened disc monochromatic luminosity at 2500 Å (captures disc shape). Monolithic models publish 0.0 (disabled).
+   - X-ray component consumes `L_2500_intrinsic` (fallback: `L_2500_30deg` from SKIRTOR, then L_bol BC) to compute AGN corona via the α_ox–L_2500 relation (disc-shape-dependent).
+   - Radio component anchors to the B-band (4400 Å) via an L_bol BC (NOT UV-based) — radio remains independent of `L_2500_intrinsic` to preserve loudness physics; UV-anchored radio is a noted follow-up.
    - X-ray/radio are NOT slots in the AGN grammar; they are separate downstream components that depend on AGN luminosity.
 
 9. **Impact on Posterior**:

@@ -147,6 +147,16 @@ class XRaySEDComponent:
                 "erg/s",
                 "Read from AGN if present; falls back to 0.0",
             ),
+            DerivedKey(
+                "L_2500_intrinsic",
+                "erg/s/Hz",
+                "Read from AGN if present; else fall back to L_2500_30deg, else L_bol->L_2500 BC",
+            ),
+            DerivedKey(
+                "L_2500_30deg",
+                "erg/s/Hz",
+                "Fallback when L_2500_intrinsic unavailable (e.g. SKIRTOR monolithic path)",
+            ),
         )
 
     def precompute(
@@ -195,17 +205,38 @@ class XRaySEDComponent:
         stellar_mass = 10.0**log_mstar
         L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
 
+        # Compute l_2500_30deg with fallback chain:
+        # 1. L_2500_intrinsic from composable AGN (un-reddened disc shape)
+        # 2. L_2500_30deg from SKIRTOR or other torus models
+        # 3. L_bol -> L_2500 BC (Hopkins+2007) as last resort
+        L_2500 = jnp.asarray(state.derived.get("L_2500_intrinsic", 0.0))
+        L_2500_skirtor = jnp.asarray(state.derived.get("L_2500_30deg", 0.0))
+        # BC_2500 from Hopkins+2007: nu_2500 = 1.199e15 Hz, BC = 5.15
+        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)
+        l_2500 = jnp.where(
+            L_2500 > 0.0,
+            L_2500,
+            jnp.where(L_2500_skirtor > 0.0, L_2500_skirtor, L_2500_fallback),
+        )
+
         def _emit(w):
+            # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
+            # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
+            # the X-ray corona). ``delta_alpha_ox`` is the *offset* knob (default
+            # 0). The legacy ``xray_alpha_ox`` param is an ABSOLUTE slope, not an
+            # offset, and was historically a no-op on this path — passing it as
+            # ``delta_alpha_ox`` would double-shift alpha_ox, so we leave the
+            # offset at 0 and let L_2500 set the slope.
             return xray_total(
                 w,
                 sfr=sfr,
                 stellar_mass=stellar_mass,
-                L_agn_bol=L_agn_bol,
+                l_2500_30deg=l_2500,
                 gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
-                alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
+                delta_alpha_ox=0.0,
             )
 
         L_xray = _emit(wave)
