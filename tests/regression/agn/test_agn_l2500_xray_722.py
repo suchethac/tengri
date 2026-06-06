@@ -84,6 +84,33 @@ class TestRunnerReturnsL2500:
         # All three disc shapes give distinct intrinsic 2500 A luminosities.
         assert len(set(np.round(vals, 6))) == 3, f"expected distinct L_2500, got {vals}"
 
+    def test_l2500_independent_of_free_inclination(self):
+        """CIGALE intrin_Lnu_2500A_30deg: L_2500/L_4400 are evaluated at a FIXED
+
+        30 deg reference, so they do NOT change with the (free) viewing angle
+        agn_cos_inc — only the observed SED foreshortens. This keeps alpha_ox and
+        radio loudness anchored to the intrinsic accretion luminosity.
+        """
+        wave = jnp.linspace(1000.0, 10000.0, 300)
+        common = dict(
+            agn_disc_block="multicolor",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="none",
+            agn_attenuation_block="none",
+            return_l2500=True,
+        )
+        # Edge-on vs face-on viewing — same disc, same L_bol.
+        _, l2500_edge, l4400_edge = composable_agn_l_nu(
+            wave, agn_log_lbol=45.0, agn_cos_inc=0.2, **common
+        )
+        _, l2500_face, l4400_face = composable_agn_l_nu(
+            wave, agn_log_lbol=45.0, agn_cos_inc=0.98, **common
+        )
+        assert np.isclose(float(l2500_edge), float(l2500_face), rtol=1e-9)
+        assert np.isclose(float(l4400_edge), float(l4400_face), rtol=1e-9)
+
 
 class TestEndToEndPublish:
     """``L_2500_intrinsic`` reaches ``state.derived`` through SEDModel.build."""

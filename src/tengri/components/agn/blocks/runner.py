@@ -398,12 +398,26 @@ agn_torus_block, agn_attenuation_block : str
         **params,
     )
 
-    # Capture L_2500_intrinsic and L_4400_intrinsic: un-reddened,
-    # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz].
-    # Interpolate at 2500 Å and 4400 Å, then convert L_lambda -> L_nu using
-    # L_nu = L_lambda * lambda^2 / c.
-    L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc) * (2500.0**2 / C_AA_PER_S)
-    L_4400_intrinsic = jnp.interp(4400.0, wave, L_lambda_disc) * (4400.0**2 / C_AA_PER_S)
+    # Capture L_2500_intrinsic and L_4400_intrinsic: the un-reddened,
+    # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz] that
+    # drive X-ray alpha_ox and radio loudness. These follow CIGALE's
+    # ``intrin_Lnu_2500A_30deg`` convention — they are evaluated at a FIXED 30 deg
+    # reference inclination, NOT the (free) viewing angle ``agn_cos_inc``. The
+    # disc viewing inclination stays free and shapes the observed SED
+    # (foreshortening, Type-1/2 mask), but the *intrinsic* accretion luminosity
+    # that anchors alpha_ox / radio-loudness must be inclination-INDEPENDENT, or a
+    # fit would let the viewing angle spuriously drive the X-ray/radio normalisation.
+    # Re-evaluate the disc block at cos(30 deg) (block-agnostic: each disc models
+    # its own inclination law). Cheap relative to the full pipeline.
+    _COS_30DEG = 0.86602540378443864
+    L_lambda_disc_30deg = disc_fn(
+        wave,
+        agn_log_lbol=agn_log_lbol,
+        templates=grahsp_templates,
+        **{**params, "agn_cos_inc": _COS_30DEG},
+    )
+    L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc_30deg) * (2500.0**2 / C_AA_PER_S)
+    L_4400_intrinsic = jnp.interp(4400.0, wave, L_lambda_disc_30deg) * (4400.0**2 / C_AA_PER_S)
 
     # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
     # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
