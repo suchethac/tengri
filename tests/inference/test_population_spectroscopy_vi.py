@@ -20,7 +20,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, FREE, Fixed, Observation, SEDModel
+from tengri import FIXED, FREE, Fixed, Observation, SEDModel, SpectrumPrecomp
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population_sed_model import PopulationSEDModel
 from tengri.inference.fitter import Fitter
@@ -51,6 +51,21 @@ def template(synthetic_ssp_wide, spec_obs):
         neb={"type": "none"},
         redshift=Fixed(_Z),
         n_grid=_N_GRID,
+    )
+
+
+@pytest.fixture(scope="module")
+def template_precomp(synthetic_ssp_wide, spec_obs):
+    """Same template but with the spectrum LUT — the original #711 repro config."""
+    return SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=spec_obs,
+        sfh={"type": ["tsnorm", "field"], "*": FREE},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+        redshift=Fixed(_Z),
+        n_grid=_N_GRID,
+        approx=SpectrumPrecomp(),
     )
 
 
@@ -87,6 +102,23 @@ def test_canonical_native_vi_produces_shared_psd_samples(template, spec_obs, bac
     assert samples["sfh_tsnorm_peak_lbt_gyr"].shape[-1] == _N_GAL
     # Per-galaxy stochastic field: (n_samples, N_gal, n_grid).
     assert samples["psd_xi"].shape[-2:] == (_N_GAL, _N_GRID)
+
+
+@pytest.mark.parametrize("backend", ["native_vi_linear", "native_vi_nonlinear"])
+def test_population_with_spectrum_precomp(template_precomp, spec_obs, backend):
+    """The original #711 repro config: a population fit under ``SpectrumPrecomp``.
+
+    The issue's repro built the template with ``approx=SpectrumPrecomp()``; the
+    spectrum-LUT projection must flow through the same batched seam as the exact
+    path for both VI backends.
+    """
+    galaxies = _mock_galaxies(template_precomp, _N_GAL, jax.random.PRNGKey(0))
+    pop = PopulationSEDModel(sed=template_precomp, galaxies=galaxies, data_type="spectroscopy")
+    forward = ForwardModel.build(population=pop, observation=spec_obs)
+    post = Fitter(forward).run(backend, key=jax.random.PRNGKey(1), **_VI_KW)
+    samples = post.samples
+    assert samples["sfh_field_psd_sigma"].ndim == 1
+    assert samples["sfh_tsnorm_peak_lbt_gyr"].shape[-1] == _N_GAL
 
 
 def test_single_and_population_share_the_backend_path(template, spec_obs):
