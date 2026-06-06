@@ -673,14 +673,17 @@ def filled_kde(ax, x, y, color, *, zorder=2, fill=True, lw=2.0):
                    alpha=0.95, zorder=zorder)  # fmt: skip
 
 
-def plot_galaxy(gal_id, *, presentation=False):
+def plot_galaxy(gal_id, *, presentation=False, source=None, tag=""):
     """Render the three-panel multi-model + BMA figure for one galaxy.
 
     ``presentation=True`` produces a larger, slide-ready version (bigger fonts
     and panels, thicker lines, a BMA-weight annotation) saved as ``*_pres.png``;
-    the default is the compact paper figure (``*.png``).
+    the default is the compact paper figure (``*.png``). ``source`` selects the
+    results dict (defaults to ``galaxies``) and ``tag`` is appended to the saved
+    filename — used for the error-floor variants (``source=galaxies_floor``,
+    ``tag="_floor"``).
     """
-    g = galaxies[gal_id]
+    g = (source if source is not None else galaxies)[gal_id]
     w = g["weights"]
     # Sizing / styling: (paper, presentation).
     P = presentation
@@ -797,7 +800,7 @@ def plot_galaxy(gal_id, *, presentation=False):
                handlelength=1.6, columnspacing=1.4, handletextpad=0.4, labelspacing=0.3)  # fmt: skip
 
     suffix = "_pres" if P else ""
-    fig.savefig(FIG_DIR / f"multimodel_bma_candels_{gal_id}{suffix}.png",
+    fig.savefig(FIG_DIR / f"multimodel_bma_candels_{gal_id}{tag}{suffix}.png",
                 dpi=200 if P else 400, bbox_inches="tight")  # fmt: skip
     plt.show()
     wstr_print = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, w))
@@ -895,7 +898,65 @@ for _gid in GAL_IDS:
     plot_galaxy(_gid, presentation=True)
 
 # %% [markdown]
-# ## 9. Takeaways
+# ## 11. Genuine model averaging with an error floor
+#
+# Every galaxy above collapses onto a single configuration: with the raw
+# catalogue errors (~1–2% at this S/N) the evidence is overwhelmingly decisive,
+# so the BMA *is* the single best model. That is honest, but it hides what BMA is
+# for.
+#
+# Catalogue errors are **statistical only** — they omit systematics
+# (zero-points, aperture matching, filter curves) and, crucially for model
+# comparison, **template imperfection** (the SPS models are good to only a few
+# percent). Standard practice (EAZY/FAST template-error + ~5% systematic,
+# Prospector noise inflation, CIGALE per-band floors) is to add a fractional
+# **error floor in quadrature to the uncertainty that enters the likelihood**,
+#
+# $$\sigma_\mathrm{eff}^2 = \sigma_\mathrm{cat}^2 + (f_\mathrm{floor}\,f_\nu)^2 .$$
+#
+# With a 10% floor the per-band $\chi^2$ no longer explodes, the evidences become
+# commensurable, and the BMA spreads its weight across configurations — genuine
+# averaging. (The cost is broader, more overlapping $M_\star$–SFR clusters: the
+# floor trades the artificially tight per-model posteriors for honest ones.)
+
+# %%
+ERROR_FLOOR = 0.10  # 10% systematic + template-error floor, added in quadrature
+FLOOR_IDS = [18160, 17418]  # picked (by a weight-entropy screen) to show real averaging
+galaxies_floor = {}
+for gal_idx in [int(np.where(ids == g)[0][0]) for g in FLOOR_IDS]:
+    gal_id, z, names, fnu, sigma_cat = extract_photometry(gal_idx)
+    sigma = jnp.sqrt(sigma_cat**2 + (ERROR_FLOOR * fnu) ** 2)  # inflated uncertainty
+    obs = Observation(photometry=Photometry.from_names(names))
+    models = build_configs(z, obs)
+    posteriors = {}
+    for cfg in CONFIG_ORDER:
+        key = jax.random.PRNGKey(abs(hash((gal_id, cfg, "floor"))) % (2**31))
+        posteriors[cfg] = Fitter(models[cfg], fnu, sigma).run(
+            "nss", key=key, n_live=N_LIVE, n_posterior_samples=N_POST, verbose=False
+        )
+    g = dict(z=z, names=names, fnu=np.asarray(fnu), sigma=np.asarray(sigma),
+             models=models, posteriors=posteriors, build_s=0.0,
+             fit_timings={c: 0.0 for c in CONFIG_ORDER})  # fmt: skip
+    g["weights"] = bma_weights(posteriors)
+    g["spec"], g["sfh"], g["props"] = collect_predictions(g)
+    galaxies_floor[gal_id] = g
+    wstr = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, g["weights"]))
+    print(f"CANDELS {gal_id} (floor {ERROR_FLOOR:.0%}):  BMA weights  {wstr}")
+
+# %% [markdown]
+# ### CANDELS 18160 — 10% error floor (BMA averages four configurations)
+
+# %%
+plot_galaxy(18160, source=galaxies_floor, tag="_floor")
+
+# %% [markdown]
+# ### CANDELS 17418 — 10% error floor (BMA averages three configurations)
+
+# %%
+plot_galaxy(17418, source=galaxies_floor, tag="_floor")
+
+# %% [markdown]
+# ## 12. Takeaways
 #
 # - **The evidence picks favourites.** The BMA weights are rarely uniform — one
 #   or two configurations usually dominate $\log Z$, and the average is pulled
@@ -909,3 +970,8 @@ for _gid in GAL_IDS:
 #   changed for speed was `approx=WavePrecomp()`. Inference was the one-liner
 #   `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence` is what
 #   makes the averaging principled.
+# - **The error budget decides whether you average.** With raw catalogue errors
+#   the evidence collapses onto one model; adding a realistic ~10% systematic
+#   floor (§11) makes the evidences commensurable and the BMA genuinely averages.
+#   Whether to average — or to trust the single best model — is set by how well
+#   you believe your photometry *and templates*, not by the fitter.
