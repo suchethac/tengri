@@ -351,9 +351,11 @@ def build_components(
         # ``dust_frac_agn``/``agn_fracAGN`` values (which may be FREE), so a
         # construction-time check would false-positive on legitimate models such
         # as ``recipes.composable_agn()`` (Dale2014 + composable AGN with
-        # ``dust_frac_agn=0``). The disambiguation is documented in ADR-0018 and
-        # surfaced via ``describe``; a value-aware runtime guard is tracked as a
-        # follow-up (only fire when both resolved values are > 0).
+        # ``dust_frac_agn=0``). The value-aware guard therefore lives at
+        # ``SEDModel.build`` (``_warn_agn_dust_double_count``), where the resolved
+        # spec is available: it warns only when both surfaces are positive-active
+        # (FREE, or Fixed > 0), emitting a filterable ``AGNDustDoubleCountWarning``
+        # (ADR-0018 §5).
         components.append(
             AGNSEDComponent(
                 config=AGNSEDComponentConfig(
