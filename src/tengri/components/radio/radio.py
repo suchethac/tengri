@@ -405,35 +405,42 @@ def _dispatch_sfr(
 
     Parameters
     ----------
-    wavelength : array
-        Wavelength in Angstrom.
+    wavelength : array, shape (n_wave,)
+        Wavelength [Angstrom].
     L_ir : float
-        IR luminosity in erg/s.
+        IR luminosity [erg/s].
     sfr_mode : str
-        One of ``"bell2003"``, ``"delvecchio2021"``, ``"mccheyne2022"``.
+        One of ``"none"``, ``"bell2003"``, ``"delvecchio2021"``,
+        ``"mccheyne2022"``. Default ``"bell2003"``.
     q_ir : float
-        Fixed q_IR (bell2003 mode only).
+        Fixed q_IR (bell2003 mode only) [dimensionless].
     alpha_sf : float
-        Synchrotron spectral index.
+        Synchrotron spectral index [dimensionless].
     log_mstar : float
-        log10(M★/M⊙).
+        log10(M★/M⊙) [dex].
     redshift : float
-        Galaxy redshift.
+        Galaxy redshift [dimensionless].
     q0 : float or None
-        FIRRC normalization override (None = use mode default).
+        FIRRC normalization override; None uses mode default.
     mass_slope : float or None
-        Mass slope override.
+        Mass slope override; None uses mode default.
     z_slope : float or None
-        Redshift slope override.
+        Redshift slope override; None uses mode default.
     apply_suppression : bool
         Apply Bell+2003 synchrotron suppression.
 
     Returns
     -------
-    array
-        L_nu in erg/s/Hz.
+    array, shape (n_wave,)
+        L_nu [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure JAX function.
     """
-    if sfr_mode == "bell2003":
+    if sfr_mode == "none":
+        return jnp.zeros_like(wavelength)
+    elif sfr_mode == "bell2003":
         return radio_sfr_bell2003(wavelength, L_ir, q_ir, alpha_sf)
     elif sfr_mode == "delvecchio2021":
         kw = {}
@@ -460,7 +467,7 @@ def _dispatch_sfr(
     else:
         raise ValueError(
             f"Unknown sfr_mode {sfr_mode!r}. "
-            "Choose 'bell2003', 'delvecchio2021', or 'mccheyne2022'."
+            "Choose 'none', 'bell2003', 'delvecchio2021', or 'mccheyne2022'."
         )
 
 

@@ -185,6 +185,8 @@ def build_components(
     wg00_structure: str = "homogeneous",
     # Multiwavelength
     use_radio: bool = False,
+    radio_sfr_mode: str = "bell2003",
+    radio_agn_model: str = "powerlaw",
     use_xray: bool = False,
     use_igm: bool = False,
 ) -> list[SEDComponent]:
@@ -371,7 +373,16 @@ def build_components(
 
     # 5-7. Multiwavelength + IGM (each optional)
     if use_radio:
-        components.append(RadioSEDComponent())
+        from tengri.components.radio.component import RadioSEDComponentConfig
+
+        components.append(
+            RadioSEDComponent(
+                config=RadioSEDComponentConfig(
+                    sfr_mode=radio_sfr_mode,
+                    agn_radio_model=radio_agn_model,
+                )
+            )
+        )
     if use_xray:
         components.append(XRaySEDComponent())
     if use_igm:

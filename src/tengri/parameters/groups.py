@@ -1043,17 +1043,91 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
 
 
 def _translate_radio(radio_dict: dict, result: dict) -> None:
-    """Translate radio group to radio=True/False."""
-    radio_type = radio_dict.get("type", "none")
+    """Translate radio group with composable SF + AGN sub-blocks.
 
-    # Validate type
-    valid_radio = _valid_radio_types()
-    if radio_type not in valid_radio:
-        suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
+    Supports two grammar styles:
 
-    result["radio"] = radio_type != "none"
+    **New composable form (preferred)**:
+
+    .. code-block:: python
+
+        radio = {
+            "sf": {"type": "delvecchio2021"},  # SF variant
+            "agn": {"type": "dpl"},  # AGN variant
+        }
+
+    **Legacy form (back-compat)**:
+
+    .. code-block:: python
+
+        radio = {"type": "condon92"}  # radio on with default sf/agn models
+
+    Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
+    """
+    has_legacy_type = "type" in radio_dict
+    has_sf_block = "sf" in radio_dict
+    has_agn_block = "agn" in radio_dict
+
+    if has_legacy_type and (has_sf_block or has_agn_block):
+        raise ValueError(
+            "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
+            "Use either: radio={'type': 'bell2003'} (legacy) "
+            "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
+        )
+
+    # Legacy form: radio={'type': 'X'} → interpret as SF variant with default AGN
+    if has_legacy_type and not has_sf_block and not has_agn_block:
+        radio_type = radio_dict["type"]
+        valid_radio = _valid_radio_types()
+        if radio_type not in valid_radio:
+            suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
+        result["radio"] = radio_type != "none"
+        if radio_type != "none":
+            # Legacy 'type' predates the SF/AGN split → default both models.
+            result["radio_sfr_mode"] = "bell2003"
+            result["radio_agn_model"] = "powerlaw"
+        return
+
+    # New composable form: extract SF and AGN sub-blocks
+    sf_variant = "bell2003"  # default
+    agn_variant = "powerlaw"  # default
+    radio_enabled = False
+
+    if has_sf_block:
+        sf_dict = radio_dict["sf"]
+        if isinstance(sf_dict, dict):
+            sf_variant = sf_dict.get("type", "bell2003")
+            valid_sf = frozenset({"none", "bell2003", "delvecchio2021", "mccheyne2022"})
+            if sf_variant not in valid_sf:
+                suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown radio sf type '{sf_variant}'.{suggest_str}")
+        else:
+            raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
+
+    if has_agn_block:
+        agn_dict = radio_dict["agn"]
+        if isinstance(agn_dict, dict):
+            agn_variant = agn_dict.get("type", "powerlaw")
+            from tengri.components.radio.component import AGN_RADIO_MODELS
+
+            valid_agn = frozenset(AGN_RADIO_MODELS)
+            if agn_variant not in valid_agn:
+                suggestions = difflib.get_close_matches(agn_variant, valid_agn, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown radio agn type '{agn_variant}'.{suggest_str}")
+        else:
+            raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
+
+    # Determine if radio is overall enabled: True if either SF or AGN is not 'none'
+    radio_enabled = sf_variant != "none" or agn_variant != "none"
+
+    result["radio"] = radio_enabled
+    if radio_enabled:
+        result["radio_sfr_mode"] = sf_variant
+        result["radio_agn_model"] = agn_variant
 
 
 #: Valid laws for the MW foreground screen (#297). Only the closed-form
@@ -1152,7 +1226,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),
-    "radio": frozenset({"type", "*"}),
+    "radio": frozenset({"type", "*", "sf", "agn"}),
+    "radio.sf": frozenset({"type", "*"}),
+    "radio.agn": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
     "agn": frozenset({"type", "*", "norm"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*"}),

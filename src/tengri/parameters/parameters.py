@@ -507,6 +507,8 @@ class Parameters:
                     "use agn_axis_grids=None (default) to disable precompute."
                 )
         self.radio = kwargs.pop("radio", False)
+        self.radio_sfr_mode = kwargs.pop("radio_sfr_mode", "bell2003")
+        self.radio_agn_model = kwargs.pop("radio_agn_model", "powerlaw")
         self.xray = kwargs.pop("xray", False)
         self.shock = kwargs.pop("shock", False)
 
