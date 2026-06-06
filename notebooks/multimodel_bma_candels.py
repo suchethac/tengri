@@ -66,6 +66,7 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
+import hashlib
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -367,18 +368,36 @@ def build_configs(z, obs):
 # catalogue errors each configuration is tightly constrained, so the per-model
 # posteriors separate cleanly and the evidence decides how to weight them.
 #
+# Each fit is seeded deterministically (see `stable_seed`), so the figures
+# reproduce exactly from run to run. Nested sampling is stochastic, so the
+# evidences carry a Monte-Carlo uncertainty that shrinks with `n_live`; raising
+# it past 250 tightens the absolute weights at a higher cost, but the model
+# ordering is already stable here.
+#
 # The four configurations of a galaxy are independent fits, so we run them on a
 # thread pool. XLA releases the GIL during compute, giving a roughly 2-3x
 # speed-up on a multi-core machine with identical results.
 
 # %%
-N_LIVE = 250  # nested-sampling live points (250 vs 500 ~halves runtime, logZ ~unchanged)
+N_LIVE = 250  # nested-sampling live points
 N_POST = 1000
+
+
+def stable_seed(*parts):
+    """Deterministic 31-bit seed from the given parts.
+
+    Python's built-in ``hash`` is salted per process (``PYTHONHASHSEED``), so a
+    key derived from ``hash((gal_id, cfg))`` changes every run and the nested
+    sampling draws a different realisation each time. Hashing the parts with
+    ``hashlib`` instead makes every fit reproducible across sessions.
+    """
+    digest = hashlib.sha256("_".join(map(str, parts)).encode()).hexdigest()
+    return int(digest, 16) % (2**31)
 
 
 def fit_one(model, fnu, sigma, *, gal_id, cfg, salt=""):
     """Run one nested-sampling fit; return ``(cfg, posterior, seconds)``."""
-    key = jax.random.PRNGKey(abs(hash((gal_id, cfg, salt))) % (2**31))
+    key = jax.random.PRNGKey(stable_seed(gal_id, cfg, salt))
     t = time.time()
     post = Fitter(model, fnu, sigma).run(
         "nss", key=key, n_live=N_LIVE, n_posterior_samples=N_POST, verbose=False
