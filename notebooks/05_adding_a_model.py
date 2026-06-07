@@ -296,6 +296,5 @@ else:
 #   the base class exists and what alternatives were considered.
 # - **The base class**: `src/tengri/components/sed_model_component.py`.
 # - **Canonical ports**: `src/tengri/components/dust/wg00_model.py`
-#   (closed-form attenuation), `src/tengri/components/dust/dl07_ir.py` (library),
-#   `src/tengri/components/nebular/cue_model.py` (NN emulator),
-#   `src/tengri/components/agn/skirtor_model.py` (library).
+#   (closed-form attenuation), `src/tengri/components/dust/draine2021_pah_ir.py`
+#   (template library), `src/tengri/components/agn/skirtor_model.py` (library).

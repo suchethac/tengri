@@ -65,10 +65,12 @@ class TestBuildResolverDustEmission:
             pytest.skip(f"{emission!r} template not on disk: {exc}")
         assert model is not None
 
-    @pytest.mark.parametrize("port", ["dl07_ir", "dl14_ir", "modified_blackbody_ir"])
+    @pytest.mark.parametrize("port", ["dl07_ir", "schreiber2016_ir", "draine2021_pah_ir"])
     def test_ir_port_names_rejected_as_emission_types(self, ssp_data_bc03, port):
-        """The ``*_ir`` port names are not valid emission grammar — they used to
-        be silently accepted then fail at predict (the removed #738 footgun)."""
+        """``*_ir`` SEDModelComponent port names are not valid emission grammar —
+        not the deleted duplicates (``dl07_ir``) nor the surviving unique ports
+        (``schreiber2016_ir``/``draine2021_pah_ir``, still in ``_REGISTRY``). They
+        used to be silently accepted then fail at predict (the removed #738 footgun)."""
         with pytest.raises(ValueError, match="Unknown dust emission type"):
             SEDModel.build(
                 ssp_data=ssp_data_bc03,
