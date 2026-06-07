@@ -478,13 +478,12 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
         # two-component / single / wg00 engine — NOT standalone _REGISTRY ports.
         # The thin single-law port duplicates (calzetti/smc/mw/salim18/charlot_fall)
         # were deleted (Direction B, #738); the live WG00 component stays.
-        # Dust IR emission
-        "modified_blackbody_ir",
-        "dl07_ir",
-        "dl14_ir",
-        "dale2014_ir",
-        "astrodust_ir",
+        # Dust IR emission — only the two UNIQUE-physics ports remain; the 5
+        # exact-engine-duplicate *_ir ports were deleted (#738, Phase 2b). The
+        # engine models (modified_blackbody/dl07/dl14/dale2014/astrodust) are the
+        # canonical emission surface.
         "draine2021_pah_ir",
+        "schreiber2016_ir",
         # AGN
         "skirtor",
         "kd18_disc",
@@ -492,10 +491,9 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
         "silva04",
         "cat3d_wind",
         "agn_nlr",
-        # Nebular
-        "cue_emulator",
-        "cloudy_grid",
-        "cb19",
+        # Nebular — cue/cloudy/cb19 dispatch to the canonical NebularSEDComponent
+        # engine + backend; the port duplicates (cue_emulator/cloudy_grid/cb19)
+        # were deleted (#738, Phase 3b). mappings/shock remain standalone ports.
         "mappings",
         "shock",
         # Radio

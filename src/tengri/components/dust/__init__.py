@@ -21,10 +21,6 @@ Narayanan+2018 cosmological RT simulations.
 # Convenience re-exports for `from tengri.dust import ...`
 # Dust block in the SEDComponent pipeline — combines UV–optical attenuation
 # with IR re-emission via ``DustEmissionSEDComponentConfig.template``.
-from tengri.components.dust.astrodust_ir import (
-    AstrodustIRConfig as AstrodustIRConfig,
-    AstrodustIRSEDComponent as AstrodustIRSEDComponent,
-)
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
     apply_lyman_cutoff as apply_lyman_cutoff,
@@ -55,14 +51,6 @@ from tengri.components.dust.attenuation import (
 )
 
 # SEDModelComponent-style attenuation ports
-from tengri.components.dust.dale2014_ir import (
-    Dale2014IRConfig as Dale2014IRConfig,
-    Dale2014IRSEDComponent as Dale2014IRSEDComponent,
-)
-from tengri.components.dust.dl14_ir import (
-    DL14IRConfig as DL14IRConfig,
-    DL14IRSEDComponent as DL14IRSEDComponent,
-)
 from tengri.components.dust.draine2021_pah_ir import (
     Draine2021PAHIRConfig as Draine2021PAHIRConfig,
     Draine2021PAHIRSEDComponent as Draine2021PAHIRSEDComponent,
@@ -187,14 +175,8 @@ _CURATED_DIR = (
     "DustEmissionSEDComponentConfig",
     "DustEmissionSEDComponentState",
     # Standalone IR emission SEDComponent backends
-    "DL14IRSEDComponent",
-    "DL14IRConfig",
-    "Dale2014IRSEDComponent",
-    "Dale2014IRConfig",
     "Schreiber2016IRSEDComponent",
     "Schreiber2016IRConfig",
-    "AstrodustIRSEDComponent",
-    "AstrodustIRConfig",
     "Draine2021PAHIRSEDComponent",
     "Draine2021PAHIRConfig",
     # Draine+2021 PAHspec template loader
