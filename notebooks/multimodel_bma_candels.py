@@ -29,10 +29,15 @@
 #
 # | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
 # |--------|-----|-----|----------|------------|---------|
-# | A | Dense Basis | MIST/C3K | Salim+2018 | — | SSP-baked |
-# | B | Dense Basis | PARSEC/MILES | Calzetti | — | SSP-baked |
+# | A | Continuity (Leja+19) | MIST/C3K | Salim+2018 | — | SSP-baked |
+# | B | Dirichlet (Leja+17) | PARSEC/MILES | Calzetti | — | SSP-baked |
 # | C | Trunc. skew-normal | BC03 | Kriek & Conroy | — | off |
 # | D | Double power-law | BPASS | power-law | — | off |
+#
+# Configs A and B use non-parametric SFHs (the continuity and Dirichlet priors of
+# Leja et al. 2019/2017); C and D use parametric forms. (An earlier version used
+# the Dense Basis prior for A and B, but its quantile parameters are strongly
+# degenerate, which left the nested-sampling weights unstable from seed to seed.)
 #
 # We leave dust IR emission out of every configuration. At $z\sim1$ the reddest
 # band (IRAC 8 µm) samples $\sim4$ µm rest-frame, so there is no far-IR
@@ -86,6 +91,7 @@ warnings.filterwarnings("ignore")
 # --- Current tengri public API ---
 from tengri import (
     FIXED,
+    FREE,
     Fitter,
     Fixed,
     Observation,
@@ -280,13 +286,20 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # the precompute speed path.
 
 # %%
-# Shared priors
-DB_SFH = {
+# Shared priors. Configs A and B use the two standard non-parametric SFHs —
+# the continuity prior (Leja+2019) and the Dirichlet prior (Leja+2017). We keep
+# their native priors on the bin variables (the continuity log-SFR ratios and the
+# Dirichlet fractions), freeing them with the ``FREE`` sentinel; only total mass
+# and metallicity get explicit uniform priors. (We previously used the Dense
+# Basis prior here but dropped it: its quantile parameters are strongly
+# degenerate, leaving the nested-sampling weights unstable from seed to seed.)
+CONT_SFH = {
     "log_total_mass": Uniform(8.0, 12.5),
-    "log_sfr_inst": Uniform(-2.0, 3.0),
-    "tx_frac_0": Uniform(0.05, 0.95),
-    "tx_frac_1": Uniform(0.05, 0.95),
-    "tx_frac_2": Uniform(0.05, 0.95),
+    **{f"ratio_{i}": FREE for i in range(6)},  # Leja+2019 continuity log-SFR ratios
+}
+DIR_SFH = {
+    "log_total_mass": Uniform(8.0, 12.5),
+    **{f"z_{i}": FREE for i in range(6)},  # Leja+2017 Dirichlet bin variables
 }
 DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
@@ -296,8 +309,8 @@ SSP_FOR = {"A": "mist", "B": "padova", "C": "bc03", "D": "bpass"}
 COLORS = {"A": "#1b9e77", "B": "#d95f02", "C": "#7570b3", "D": "#e7298a"}
 BMA_COLOR = "0.1"
 LABELS = {
-    "A": "Dense Basis / MIST / Salim / neb.",
-    "B": "Dense Basis / Padova / Calzetti",
+    "A": "Continuity / MIST / Salim / neb.",
+    "B": "Dirichlet / Padova / Calzetti",
     "C": r"Trunc. Skew-Normal / BC03 / K\&C",
     "D": "Double Power Law / BPASS / power-law",
 }
@@ -313,14 +326,14 @@ def build_configs(z, obs):
 
     model_a = SEDModel.build(
         ssp_data=SSP["mist"],
-        sfh={"type": "dense_basis", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DB_SFH},
+        sfh={"type": "continuity", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **CONT_SFH},
         dust={"type": "two_component", "law_bc": "salim_sbl18", "*": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
     model_b = SEDModel.build(
         ssp_data=SSP["padova"],
-        sfh={"type": "dense_basis", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DB_SFH},
+        sfh={"type": "dirichlet", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DIR_SFH},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
