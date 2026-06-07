@@ -29,10 +29,15 @@
 #
 # | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
 # |--------|-----|-----|----------|------------|---------|
-# | A | Dense Basis | MIST/C3K | Salim+2018 | — | SSP-baked |
-# | B | Dense Basis | PARSEC/MILES | Calzetti | — | SSP-baked |
+# | A | Continuity (Leja+19) | MIST/C3K | Salim+2018 | — | SSP-baked |
+# | B | Dirichlet (Leja+17) | PARSEC/MILES | Calzetti | — | SSP-baked |
 # | C | Trunc. skew-normal | BC03 | Kriek & Conroy | — | off |
 # | D | Double power-law | BPASS | power-law | — | off |
+#
+# Configs A and B use non-parametric SFHs (the continuity and Dirichlet priors of
+# Leja et al. 2019/2017); C and D use parametric forms. (An earlier version used
+# the Dense Basis prior for A and B, but its quantile parameters are strongly
+# degenerate, which left the nested-sampling weights unstable from seed to seed.)
 #
 # We leave dust IR emission out of every configuration. At $z\sim1$ the reddest
 # band (IRAC 8 µm) samples $\sim4$ µm rest-frame, so there is no far-IR
@@ -66,6 +71,7 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
+import hashlib
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
@@ -85,6 +91,7 @@ warnings.filterwarnings("ignore")
 # --- Current tengri public API ---
 from tengri import (
     FIXED,
+    FREE,
     Fitter,
     Fixed,
     Observation,
@@ -279,13 +286,20 @@ print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 # the precompute speed path.
 
 # %%
-# Shared priors
-DB_SFH = {
+# Shared priors. Configs A and B use the two standard non-parametric SFHs —
+# the continuity prior (Leja+2019) and the Dirichlet prior (Leja+2017). We keep
+# their native priors on the bin variables (the continuity log-SFR ratios and the
+# Dirichlet fractions), freeing them with the ``FREE`` sentinel; only total mass
+# and metallicity get explicit uniform priors. (We previously used the Dense
+# Basis prior here but dropped it: its quantile parameters are strongly
+# degenerate, leaving the nested-sampling weights unstable from seed to seed.)
+CONT_SFH = {
     "log_total_mass": Uniform(8.0, 12.5),
-    "log_sfr_inst": Uniform(-2.0, 3.0),
-    "tx_frac_0": Uniform(0.05, 0.95),
-    "tx_frac_1": Uniform(0.05, 0.95),
-    "tx_frac_2": Uniform(0.05, 0.95),
+    **{f"ratio_{i}": FREE for i in range(6)},  # Leja+2019 continuity log-SFR ratios
+}
+DIR_SFH = {
+    "log_total_mass": Uniform(8.0, 12.5),
+    **{f"z_{i}": FREE for i in range(6)},  # Leja+2017 Dirichlet bin variables
 }
 DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
@@ -295,8 +309,8 @@ SSP_FOR = {"A": "mist", "B": "padova", "C": "bc03", "D": "bpass"}
 COLORS = {"A": "#1b9e77", "B": "#d95f02", "C": "#7570b3", "D": "#e7298a"}
 BMA_COLOR = "0.1"
 LABELS = {
-    "A": "Dense Basis / MIST / Salim / neb.",
-    "B": "Dense Basis / Padova / Calzetti",
+    "A": "Continuity / MIST / Salim / neb.",
+    "B": "Dirichlet / Padova / Calzetti",
     "C": r"Trunc. Skew-Normal / BC03 / K\&C",
     "D": "Double Power Law / BPASS / power-law",
 }
@@ -312,14 +326,14 @@ def build_configs(z, obs):
 
     model_a = SEDModel.build(
         ssp_data=SSP["mist"],
-        sfh={"type": "dense_basis", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DB_SFH},
+        sfh={"type": "continuity", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **CONT_SFH},
         dust={"type": "two_component", "law_bc": "salim_sbl18", "*": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
     model_b = SEDModel.build(
         ssp_data=SSP["padova"],
-        sfh={"type": "dense_basis", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DB_SFH},
+        sfh={"type": "dirichlet", "*": FIXED, "met_logzsol": Uniform(-2.0, 0.3), **DIR_SFH},
         dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
@@ -367,18 +381,36 @@ def build_configs(z, obs):
 # catalogue errors each configuration is tightly constrained, so the per-model
 # posteriors separate cleanly and the evidence decides how to weight them.
 #
+# Each fit is seeded deterministically (see `stable_seed`), so the figures
+# reproduce exactly from run to run. Nested sampling is stochastic, so the
+# evidences carry a Monte-Carlo uncertainty that shrinks with `n_live`; raising
+# it past 250 tightens the absolute weights at a higher cost, but the model
+# ordering is already stable here.
+#
 # The four configurations of a galaxy are independent fits, so we run them on a
 # thread pool. XLA releases the GIL during compute, giving a roughly 2-3x
 # speed-up on a multi-core machine with identical results.
 
 # %%
-N_LIVE = 250  # nested-sampling live points (250 vs 500 ~halves runtime, logZ ~unchanged)
+N_LIVE = 250  # nested-sampling live points
 N_POST = 1000
+
+
+def stable_seed(*parts):
+    """Deterministic 31-bit seed from the given parts.
+
+    Python's built-in ``hash`` is salted per process (``PYTHONHASHSEED``), so a
+    key derived from ``hash((gal_id, cfg))`` changes every run and the nested
+    sampling draws a different realisation each time. Hashing the parts with
+    ``hashlib`` instead makes every fit reproducible across sessions.
+    """
+    digest = hashlib.sha256("_".join(map(str, parts)).encode()).hexdigest()
+    return int(digest, 16) % (2**31)
 
 
 def fit_one(model, fnu, sigma, *, gal_id, cfg, salt=""):
     """Run one nested-sampling fit; return ``(cfg, posterior, seconds)``."""
-    key = jax.random.PRNGKey(abs(hash((gal_id, cfg, salt))) % (2**31))
+    key = jax.random.PRNGKey(stable_seed(gal_id, cfg, salt))
     t = time.time()
     post = Fitter(model, fnu, sigma).run(
         "nss", key=key, n_live=N_LIVE, n_posterior_samples=N_POST, verbose=False
