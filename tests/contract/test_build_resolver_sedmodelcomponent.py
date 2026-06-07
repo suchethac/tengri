@@ -198,24 +198,29 @@ class TestBuildResolverAGNTorus:
 
 
 class TestBuildResolverAGNDisc:
-    """Test that SEDModel.build resolves AGN disc SEDModelComponent types."""
+    """Test that SEDModel.build resolves AGN disc composable-block types.
 
-    def test_agn_disc_kd18(self, ssp_data_bc03):
-        """Build with AGN disc type 'kd18_disc' from registry."""
-        assert "kd18_disc" in _REGISTRY
+    Unlike dust/nebular ports (whose ``_REGISTRY`` names *are* the grammar
+    keys), AGN disc physics is reached through the composable disc-block
+    grammar (ADR-0018) — ``agn={'disc': {'type': 'kubota_done'}}`` — not via the
+    bare ``SEDModelComponent`` names (``kd18_disc`` / ``powerlaw_disc``), which
+    are not wired into the disc resolver. These assert the canonical surface.
+    """
+
+    def test_agn_disc_kubota_done(self, ssp_data_bc03):
+        """Build with AGN disc block 'kubota_done' (Kubota & Done 2018)."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
-            agn={"disc": {"type": "kd18_disc"}},
+            agn={"disc": {"type": "kubota_done"}},
             redshift=Fixed(0.1),
         )
         assert model is not None
 
     def test_agn_disc_powerlaw(self, ssp_data_bc03):
-        """Build with AGN disc type 'powerlaw_disc' from registry."""
-        assert "powerlaw_disc" in _REGISTRY
+        """Build with AGN disc block 'powerlaw'."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
-            agn={"disc": {"type": "powerlaw_disc"}},
+            agn={"disc": {"type": "powerlaw"}},
             redshift=Fixed(0.1),
         )
         assert model is not None
