@@ -27,6 +27,7 @@ from scipy.integrate import simpson
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
+from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular.cue import CueBackend
 
 
@@ -201,25 +202,25 @@ def test_fesc_linearity(cue_backend, cue_default_params):
         pytest.skip("Continuum luminosity too small to test linearity")
 
 
-def test_fesc_gradient_matches_expected_linear_wiring(cue_backend, cue_default_params):
+def test_fesc_gradient_matches_kfactor_wiring(cue_backend, cue_default_params):
     """Verify fesc is wired to JAX's differentiable computation graph.
 
     Pitfall P-9: Even if forward-pass values scale with fesc correctly, if fesc
     is *not* part of JAX's traced computation, gradient-based inference (VI,
     HMC) will see flat posteriors for ``neb_fesc`` (zero gradient signal).
 
-    The wiring in tengri's Cue backend is
-    ``cont_lum_out = cont_lum * (1 - neb_fesc)``
-    (cue.py:1519), which is a JAX-traced multiplication. Therefore
-    ``∂(Σ L_neb) / ∂(neb_fesc) = − Σ cont_lum``. We assert the actual
-    gradient equals this *expected* linear-wiring value to one part in 1e-4
-    — much stricter than an absolute-magnitude threshold, and robust to the
-    fact that Cue's continuum has a small numerical scale (~1e-8 for the
-    default params here).
+    The Cue backend reddens nebular emission by the CIGALE ionizing-budget
+    k-factor ``k = lyc_dust_escape_factor(neb_fesc, neb_fdust)`` (Ferland 1980;
+    not the simpler ``1 − neb_fesc`` linear form). It is a JAX-traced
+    multiplication, so the continuum sum is ``S_intrinsic · k(fesc)`` and
 
-    If fesc were applied outside the traced region (the P-9 bug), the gradient
-    would be exactly 0, not ``−Σ cont_lum``, and this test would fail.
+        ∂(Σ L_neb) / ∂(neb_fesc) = S_intrinsic · k'(fesc) = (Σ L_neb|_{fesc=0}) · k'(fesc)
+
+    (since ``k(0) = 1`` for ``neb_fdust = 0``). We assert the actual gradient
+    equals this to one part in 1e-4 — decisively distinct from the P-9 unwired
+    case, where the gradient would be exactly 0.
     """
+    fdust = float(cue_default_params.get("neb_fdust", 0.0))
 
     def loss_fn(fesc_traced):
         _, lum = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=fesc_traced)
@@ -229,19 +230,20 @@ def test_fesc_gradient_matches_expected_linear_wiring(cue_backend, cue_default_p
     _, lum_ref = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=0.0)
     sum_ref = float(jnp.sum(lum_ref))
 
-    grad_at_03 = jax.grad(loss_fn)(jnp.array(0.3))
-    actual = float(grad_at_03)
-    expected = -sum_ref  # linear wiring prediction
+    # Expected gradient from the actual k-factor wiring:
+    #   Σ L_neb(fesc) = Σ L_neb(0) · k(fesc)/k(0)  ⇒  grad = sum_ref · k'(fesc)/k(0).
+    k0 = float(lyc_dust_escape_factor(0.0, fdust))
+    kprime = float(jax.grad(lambda f: lyc_dust_escape_factor(f, fdust))(jnp.array(0.3)))
+    expected = sum_ref * kprime / k0
 
-    # Test that the gradient is non-trivially within machine precision of the
-    # linear-wiring expectation. P-9 unwiring would manifest as `actual == 0`
-    # while expected != 0, which fails this rel-error check decisively.
+    actual = float(jax.grad(loss_fn)(jnp.array(0.3)))
+
     assert sum_ref > 0.0, (
         f"Continuum sum at fesc=0 is non-positive ({sum_ref}); test setup invalid."
     )
     rel_err = abs(actual - expected) / abs(expected)
     assert rel_err < 1e-4, (
         f"P-9 BUG: ∂L_neb/∂fesc = {actual:.3e}, expected ≈ {expected:.3e} "
-        f"(linear wiring of (1−fesc)). Relative error {rel_err:.3e} > 1e-4. "
+        f"(k-factor wiring). Relative error {rel_err:.3e} > 1e-4. "
         "fesc may be applied as a Python scalar outside the JAX trace."
     )

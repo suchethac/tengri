@@ -109,9 +109,16 @@ def lyc_dust_escape_factor(f_esc: jnp.ndarray | float, f_dust: jnp.ndarray | flo
     f_esc = jnp.asarray(f_esc)
     f_dust = jnp.asarray(f_dust)
 
-    # Clamp f_esc + f_dust to [0, 1) so the budget stays physical and the
-    # denominator stays strictly positive.
-    f_total = jnp.clip(f_esc + f_dust, 0.0, 1.0 - 1e-8)
+    # Clamp f_esc + f_dust to [0, 1]. The denominator ``1 + (α1/αB)·f`` is
+    # strictly positive for any ``f ∈ [0, 1]`` (it ranges [1, ~1.597]), so —
+    # unlike a denominator-vanishing case — no ``1 - ε`` margin is needed.
+    # Clamping to a hard 1.0 lets the numerator ``(1 - f)`` reach exactly 0 at
+    # full photon loss (f_esc + f_dust = 1), so nebular emission vanishes
+    # cleanly instead of leaving a ~6e-9 residual that, scaled by bright line
+    # luminosities (~1e38 erg/s), left ~1e30 erg/s of "suppressed" emission
+    # (P-11). The ``jnp.clip`` upper bound has zero gradient for f > 1, keeping
+    # the VJP finite.
+    f_total = jnp.clip(f_esc + f_dust, 0.0, 1.0)
 
     alpha_ratio = ALPHA_1 / ALPHA_B  # ~= 0.5969
 
