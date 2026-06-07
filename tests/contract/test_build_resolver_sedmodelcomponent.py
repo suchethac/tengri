@@ -43,96 +43,68 @@ class TestBuildResolverDustAttenuation:
 
 
 class TestBuildResolverDustEmission:
-    """Test that SEDModel.build resolves dust emission SEDModelComponent types."""
-
-    def test_dust_emission_modified_blackbody(self, ssp_data_bc03):
-        """Build with dust emission type 'modified_blackbody_ir' from registry."""
-        assert "modified_blackbody_ir" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"emission": {"type": "modified_blackbody_ir"}},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_emission_dl07(self, ssp_data_bc03):
-        """Build with dust emission type 'dl07_ir' from registry."""
-        assert "dl07_ir" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"emission": {"type": "dl07_ir"}},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_emission_dl14(self, ssp_data_bc03):
-        """Build with dust emission type 'dl14_ir' from registry."""
-        assert "dl14_ir" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"emission": {"type": "dl14_ir"}},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_emission_dale2014(self, ssp_data_bc03):
-        """Build with dust emission type 'dale2014_ir' from registry."""
-        assert "dale2014_ir" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"emission": {"type": "dale2014_ir"}},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_emission_astrodust(self, ssp_data_bc03):
-        """Build with dust emission type 'astrodust_ir' from registry."""
-        assert "astrodust_ir" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"emission": {"type": "astrodust_ir"}},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_emission_draine2021_pah(self, ssp_data_bc03):
-        """Build with dust emission type 'draine2021_pah_ir' from registry."""
-        assert "draine2021_pah_ir" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"emission": {"type": "draine2021_pah_ir"}},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-
-def _assert_nebular_sedmodelcomponent(model, expected_cls: str) -> None:
-    """Assert the build dispatched nebular to its SEDModelComponent port.
-
-    ADR-0011: nebular grammar keys must land on their ``SEDModelComponent``
-    class, not the legacy bare-Protocol ``NebularSEDComponent``. Currently RED
-    — dispatch migration is incomplete (#738).
+    """Dust IR emission models are engine sub-selectors of the two-component
+    engine (resolved by ``resolve_emission_model``), not standalone ``_REGISTRY``
+    ports. The ``*_ir`` SEDModelComponent classes are unused parity mirrors — the
+    grammar surface is the engine name (#738).
     """
-    from tengri.components.sed_model_component import SEDModelComponent
+
+    @pytest.mark.parametrize(
+        "emission",
+        ["modified_blackbody", "dl07", "dl14", "dale2014", "astrodust", "draine_li2014"],
+    )
+    def test_emission_model_builds(self, ssp_data_bc03, emission):
+        """``dust={'emission':{'type': <engine name>}}`` builds on the engine."""
+        try:
+            model = SEDModel.build(
+                ssp_data=ssp_data_bc03,
+                dust={"emission": {"type": emission}},
+                redshift=Fixed(0.1),
+            )
+        except (FileNotFoundError, OSError) as exc:
+            pytest.skip(f"{emission!r} template not on disk: {exc}")
+        assert model is not None
+
+    @pytest.mark.parametrize("port", ["dl07_ir", "dl14_ir", "modified_blackbody_ir"])
+    def test_ir_port_names_rejected_as_emission_types(self, ssp_data_bc03, port):
+        """The ``*_ir`` port names are not valid emission grammar — they used to
+        be silently accepted then fail at predict (the removed #738 footgun)."""
+        with pytest.raises(ValueError, match="Unknown dust emission type"):
+            SEDModel.build(
+                ssp_data=ssp_data_bc03,
+                dust={"emission": {"type": port}},
+                redshift=Fixed(0.1),
+            )
+
+
+def _assert_nebular_backend(model, expected_backend: str) -> None:
+    """Assert build dispatched nebular to the canonical engine + backend.
+
+    Direction B (#738): nebular grammar keys land on the tested
+    ``NebularSEDComponent`` engine with ``config.backend`` set — NOT a
+    per-backend ``SEDModelComponent`` port (those duplicates were deleted).
+    """
+    from tengri.components.nebular.component import NebularSEDComponent
 
     chain = model._build_component_chain()
-    classes = {type(c).__name__ for c in chain if isinstance(c, SEDModelComponent)}
-    assert expected_cls in classes, (
-        f"nebular dispatched to {sorted(type(c).__name__ for c in chain)} — expected "
-        f"the {expected_cls} SEDModelComponent, not the legacy NebularSEDComponent (#738)."
+    neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+    assert neb is not None, (
+        f"no NebularSEDComponent in chain {sorted(type(c).__name__ for c in chain)}"
+    )
+    assert neb.config.backend == expected_backend, (
+        f"nebular dispatched to backend {neb.config.backend!r}, expected {expected_backend!r}."
     )
 
 
 class TestBuildResolverNebular:
-    """Test that SEDModel.build dispatches nebular grammar keys to their ports.
-
-    The nebular grammar keys ``cue`` / ``cloudy`` / ``cb19`` must dispatch to
-    their ``SEDModelComponent`` classes (ADR-0011). Data-gated backends skip
-    when their grid is absent. These currently fail — see #738.
+    """Nebular grammar keys dispatch to the canonical ``NebularSEDComponent`` +
+    backend (Direction B, #738). ``cue`` → backend ``'cue'``, ``cloudy`` →
+    ``'cloudy_grid'``, ``cb19`` → ``'cb19'``. Data-gated backends skip when
+    their grid is absent.
     """
 
     def test_neb_cue(self, ssp_data_bc03):
-        """'cue' dispatches to the CueNebularSEDComponent port."""
+        """'cue' dispatches to NebularSEDComponent with the 'cue' backend."""
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
@@ -145,10 +117,10 @@ class TestBuildResolverNebular:
             if any(t in str(exc).lower() for t in ("grid", "requires", "not on disk")):
                 pytest.skip(f"cue weights not on disk: {exc}")
             raise
-        _assert_nebular_sedmodelcomponent(model, "CueNebularSEDComponent")
+        _assert_nebular_backend(model, "cue")
 
     def test_neb_cloudy(self, ssp_data_bc03):
-        """'cloudy' dispatches to the CloudyGridSEDComponent port."""
+        """'cloudy' dispatches to NebularSEDComponent with the 'cloudy_grid' backend."""
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
@@ -161,16 +133,16 @@ class TestBuildResolverNebular:
             if any(t in str(exc).lower() for t in ("grid", "requires", "not on disk")):
                 pytest.skip(f"cloudy grid not on disk: {exc}")
             raise
-        _assert_nebular_sedmodelcomponent(model, "CloudyGridSEDComponent")
+        _assert_nebular_backend(model, "cloudy_grid")
 
     def test_neb_cb19(self, ssp_data_bc03):
-        """'cb19' dispatches to the CB19SEDComponent port."""
+        """'cb19' dispatches to NebularSEDComponent with the 'cb19' backend."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
             neb={"type": "cb19"},
             redshift=Fixed(0.1),
         )
-        _assert_nebular_sedmodelcomponent(model, "CB19SEDComponent")
+        _assert_nebular_backend(model, "cb19")
 
 
 class TestBuildResolverAGNTorus:

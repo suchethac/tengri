@@ -205,29 +205,22 @@ def test_agn_e2e(ssp, obs, agn_id):
 # ─────────────────────────────────────────────────────────────────────
 
 
-# Nebular is a SEDModelComponent surface (ADR-0011): the ``neb={'type': ...}``
-# grammar key MUST dispatch to the backend's SEDModelComponent port, not the
-# legacy bare-Protocol ``NebularSEDComponent``. The grammar key maps to its
-# SEDModelComponent class below. A FIXED dust screen keeps
-# ``predict_photometry({})`` free-param-less.
-#
-# NOTE: these currently FAIL with data present — ``SEDModel.build`` still
-# dispatches nebular to the legacy ``NebularSEDComponent`` (the SEDModelComponent
-# migration is incomplete, tracked in #738). They are intentionally NOT masked:
-# #736 had them pass via the legacy path, hiding the gap. Like
-# ``test_calzetti_build_dispatches_to_sedmodelcomponent_class`` they stay red
-# until dispatch is wired.
-_NEB_SEDMODELCOMPONENT = {
-    "cue": "CueNebularSEDComponent",
-    "cloudy": "CloudyGridSEDComponent",
-    "cb19": "CB19SEDComponent",
+# Nebular dispatches to the canonical ``NebularSEDComponent`` engine + a backend
+# instance (Direction B, #738): ``neb={'type': X}`` builds NebularSEDComponent
+# with ``config.backend`` set, NOT a per-backend SEDModelComponent port (those
+# duplicates were deleted). A FIXED dust screen keeps ``predict_photometry({})``
+# free-param-less.
+_NEB_BACKEND = {
+    "cue": "cue",
+    "cloudy": "cloudy_grid",
+    "cb19": "cb19",
 }
 
 
-@pytest.mark.parametrize("neb_type", list(_NEB_SEDMODELCOMPONENT))
+@pytest.mark.parametrize("neb_type", list(_NEB_BACKEND))
 def test_nebular_e2e(ssp, obs, neb_type):
-    """Each nebular grammar key dispatches to its SEDModelComponent + predicts."""
-    from tengri.components.sed_model_component import SEDModelComponent
+    """Each nebular grammar key dispatches to NebularSEDComponent + its backend and predicts."""
+    from tengri.components.nebular.component import NebularSEDComponent
 
     try:
         model = _silent_build(
@@ -247,13 +240,16 @@ def test_nebular_e2e(ssp, obs, neb_type):
             _skip_with_tally(f"{neb_type!r} build skipped (grid missing): {exc}", neb_type)
         raise
     _assert_phot_ok(model.predict_photometry({}))
-    # Dispatch provenance (ADR-0011) — currently RED, see #738.
+    # Dispatch provenance (Direction B, #738): canonical engine + backend.
     chain = model._build_component_chain()
-    classes = {type(c).__name__ for c in chain if isinstance(c, SEDModelComponent)}
-    assert _NEB_SEDMODELCOMPONENT[neb_type] in classes, (
-        f"neb={neb_type!r} dispatched to {sorted(type(c).__name__ for c in chain)} — "
-        f"expected the {_NEB_SEDMODELCOMPONENT[neb_type]} SEDModelComponent, not the "
-        f"legacy NebularSEDComponent. SEDModelComponent dispatch migration: see #738."
+    neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+    assert neb is not None, (
+        f"neb={neb_type!r}: no NebularSEDComponent in chain "
+        f"{sorted(type(c).__name__ for c in chain)}"
+    )
+    assert neb.config.backend == _NEB_BACKEND[neb_type], (
+        f"neb={neb_type!r} dispatched to backend {neb.config.backend!r}, "
+        f"expected {_NEB_BACKEND[neb_type]!r}."
     )
 
 
