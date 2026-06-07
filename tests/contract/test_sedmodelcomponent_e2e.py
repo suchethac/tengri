@@ -198,14 +198,30 @@ def test_agn_e2e(ssp, obs, agn_id):
 # ─────────────────────────────────────────────────────────────────────
 
 
-# Nebular backend physics lives in SEDModelComponent ports (``cue_emulator`` /
-# ``cloudy_grid`` in ``_REGISTRY``), but the canonical build surface uses the
-# grammar names ``cue`` / ``cloudy`` / ``cb19`` (the ``_REGISTRY`` aliases are
-# not wired into the neb grammar). A FIXED dust screen keeps
+# Nebular is a SEDModelComponent surface (ADR-0011): the ``neb={'type': ...}``
+# grammar key MUST dispatch to the backend's SEDModelComponent port, not the
+# legacy bare-Protocol ``NebularSEDComponent``. The grammar key maps to its
+# SEDModelComponent class below. A FIXED dust screen keeps
 # ``predict_photometry({})`` free-param-less.
-@pytest.mark.parametrize("neb_type", ["cue", "cloudy", "cb19"])
+#
+# NOTE: these currently FAIL with data present — ``SEDModel.build`` still
+# dispatches nebular to the legacy ``NebularSEDComponent`` (the SEDModelComponent
+# migration is incomplete, tracked in #738). They are intentionally NOT masked:
+# #736 had them pass via the legacy path, hiding the gap. Like
+# ``test_calzetti_build_dispatches_to_sedmodelcomponent_class`` they stay red
+# until dispatch is wired.
+_NEB_SEDMODELCOMPONENT = {
+    "cue": "CueNebularSEDComponent",
+    "cloudy": "CloudyGridSEDComponent",
+    "cb19": "CB19SEDComponent",
+}
+
+
+@pytest.mark.parametrize("neb_type", list(_NEB_SEDMODELCOMPONENT))
 def test_nebular_e2e(ssp, obs, neb_type):
-    """Each nebular backend builds + predicts via its canonical grammar name."""
+    """Each nebular grammar key dispatches to its SEDModelComponent + predicts."""
+    from tengri.components.sed_model_component import SEDModelComponent
+
     try:
         model = _silent_build(
             ssp_data=ssp,
@@ -224,6 +240,14 @@ def test_nebular_e2e(ssp, obs, neb_type):
             _skip_with_tally(f"{neb_type!r} build skipped (grid missing): {exc}", neb_type)
         raise
     _assert_phot_ok(model.predict_photometry({}))
+    # Dispatch provenance (ADR-0011) — currently RED, see #738.
+    chain = model._build_component_chain()
+    classes = {type(c).__name__ for c in chain if isinstance(c, SEDModelComponent)}
+    assert _NEB_SEDMODELCOMPONENT[neb_type] in classes, (
+        f"neb={neb_type!r} dispatched to {sorted(type(c).__name__ for c in chain)} — "
+        f"expected the {_NEB_SEDMODELCOMPONENT[neb_type]} SEDModelComponent, not the "
+        f"legacy NebularSEDComponent. SEDModelComponent dispatch migration: see #738."
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────

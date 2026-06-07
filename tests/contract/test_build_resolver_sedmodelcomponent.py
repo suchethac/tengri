@@ -118,18 +118,33 @@ class TestBuildResolverDustEmission:
         assert model is not None
 
 
-class TestBuildResolverNebular:
-    """Test that SEDModel.build resolves nebular backends via the grammar.
+def _assert_nebular_sedmodelcomponent(model, expected_cls: str) -> None:
+    """Assert the build dispatched nebular to its SEDModelComponent port.
 
-    The nebular backend physics lives in SEDModelComponent ports
-    (``cue_emulator`` / ``cloudy_grid`` in ``_REGISTRY``), but the canonical
-    build surface uses the grammar names ``cue`` / ``cloudy`` / ``cb19`` (the
-    ``_REGISTRY`` aliases are not wired into the neb grammar). These assert the
-    canonical surface; data-gated backends skip when their grid is absent.
+    ADR-0011: nebular grammar keys must land on their ``SEDModelComponent``
+    class, not the legacy bare-Protocol ``NebularSEDComponent``. Currently RED
+    — dispatch migration is incomplete (#738).
+    """
+    from tengri.components.sed_model_component import SEDModelComponent
+
+    chain = model._build_component_chain()
+    classes = {type(c).__name__ for c in chain if isinstance(c, SEDModelComponent)}
+    assert expected_cls in classes, (
+        f"nebular dispatched to {sorted(type(c).__name__ for c in chain)} — expected "
+        f"the {expected_cls} SEDModelComponent, not the legacy NebularSEDComponent (#738)."
+    )
+
+
+class TestBuildResolverNebular:
+    """Test that SEDModel.build dispatches nebular grammar keys to their ports.
+
+    The nebular grammar keys ``cue`` / ``cloudy`` / ``cb19`` must dispatch to
+    their ``SEDModelComponent`` classes (ADR-0011). Data-gated backends skip
+    when their grid is absent. These currently fail — see #738.
     """
 
     def test_neb_cue(self, ssp_data_bc03):
-        """Build with nebular backend 'cue' (Cue emulator)."""
+        """'cue' dispatches to the CueNebularSEDComponent port."""
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
@@ -142,10 +157,10 @@ class TestBuildResolverNebular:
             if any(t in str(exc).lower() for t in ("grid", "requires", "not on disk")):
                 pytest.skip(f"cue weights not on disk: {exc}")
             raise
-        assert model is not None
+        _assert_nebular_sedmodelcomponent(model, "CueNebularSEDComponent")
 
     def test_neb_cloudy(self, ssp_data_bc03):
-        """Build with nebular backend 'cloudy' (CloudyGrid)."""
+        """'cloudy' dispatches to the CloudyGridSEDComponent port."""
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
@@ -158,16 +173,16 @@ class TestBuildResolverNebular:
             if any(t in str(exc).lower() for t in ("grid", "requires", "not on disk")):
                 pytest.skip(f"cloudy grid not on disk: {exc}")
             raise
-        assert model is not None
+        _assert_nebular_sedmodelcomponent(model, "CloudyGridSEDComponent")
 
     def test_neb_cb19(self, ssp_data_bc03):
-        """Build with nebular backend 'cb19'."""
+        """'cb19' dispatches to the CB19SEDComponent port."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
             neb={"type": "cb19"},
             redshift=Fixed(0.1),
         )
-        assert model is not None
+        _assert_nebular_sedmodelcomponent(model, "CB19SEDComponent")
 
 
 class TestBuildResolverAGNTorus:
