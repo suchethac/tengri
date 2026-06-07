@@ -1005,15 +1005,8 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         if isinstance(emission_dict, dict):
             emission_type = emission_dict.get("type", None)
             if emission_type is not None:
-                # Dust IR emission ports (modified_blackbody_ir, dl07_ir, …) are
-                # genuine SEDModelComponent ports dispatched via _REGISTRY — unlike
-                # the attenuation laws, which are config sub-selectors of the engine.
-                from tengri.components.sed_model_component import _REGISTRY
-
-                if emission_type in _REGISTRY:
-                    result["dust_emission"] = emission_type
-                    return
-
+                # Dust IR emission types are engine names (modified_blackbody, dale2014,
+                # dl07, dl14, astrodust, etc.) resolved by resolve_emission_model.
                 valid_emission_types = _valid_dust_emission_types()
                 if emission_type not in valid_emission_types:
                     suggestions = difflib.get_close_matches(
