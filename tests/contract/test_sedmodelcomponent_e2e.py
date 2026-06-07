@@ -198,21 +198,31 @@ def test_agn_e2e(ssp, obs, agn_id):
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("neb_type", ["cue_emulator", "cloudy_grid", "cb19", "mappings"])
+# Nebular backend physics lives in SEDModelComponent ports (``cue_emulator`` /
+# ``cloudy_grid`` in ``_REGISTRY``), but the canonical build surface uses the
+# grammar names ``cue`` / ``cloudy`` / ``cb19`` (the ``_REGISTRY`` aliases are
+# not wired into the neb grammar). A FIXED dust screen keeps
+# ``predict_photometry({})`` free-param-less.
+@pytest.mark.parametrize("neb_type", ["cue", "cloudy", "cb19"])
 def test_nebular_e2e(ssp, obs, neb_type):
-    """Each nebular library / emulator port builds + predicts."""
-    if neb_type not in _REGISTRY:
-        pytest.skip(f"{neb_type!r} not registered")
+    """Each nebular backend builds + predicts via its canonical grammar name."""
     try:
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             neb={"type": neb_type, "*": FIXED},
+            dust=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except FileNotFoundError as exc:
-        pytest.skip(f"{neb_type!r} build skipped (data missing): {exc}")
+        _skip_with_tally(f"{neb_type!r} build skipped (data missing): {exc}", neb_type)
+    except ValueError as exc:
+        # Grid-backed backends (e.g. cloudy) raise a ValueError asking for the
+        # grid path when their grid is absent — treat as a data skip.
+        if any(t in str(exc).lower() for t in ("grid", "requires", "not on disk")):
+            _skip_with_tally(f"{neb_type!r} build skipped (grid missing): {exc}", neb_type)
+        raise
     _assert_phot_ok(model.predict_photometry({}))
 
 
