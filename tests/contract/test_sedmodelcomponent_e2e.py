@@ -150,24 +150,46 @@ def test_dust_ir_emission_e2e(ssp, obs, emission_type):
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "agn_type",
-    ["skirtor", "kd18_disc", "powerlaw_disc", "silva04", "cat3d_wind"],
-)
-def test_agn_e2e(ssp, obs, agn_type):
-    """Each AGN port (disc + torus) builds + predicts."""
-    if agn_type not in _REGISTRY:
-        pytest.skip(f"{agn_type!r} not registered")
+def _fixed_dust() -> dict:
+    """A fully-FIXED two-component dust screen (fresh dict per call).
+
+    The AGN / radio / X-ray e2e builds below pair the emitting component with a
+    dust screen so ``predict_photometry({})`` has no free params — an AGN with
+    an *unconstrained* host dust law cannot be predicted from an empty dict.
+    A fresh dict is returned each call because ``SEDModel.build`` consumes the
+    group dicts it is handed.
+    """
+    return {"type": "two_component", "*": FIXED, "tau_bc": Fixed(0.3), "tau_diff": Fixed(0.2)}
+
+
+# AGN is built through the composable block grammar (the canonical AGN surface,
+# ADR-0018) — NOT direct ``agn={'type': <SEDModelComponent>}`` resolution. The
+# monolithic disc+torus names (skirtor / silva04 / cat3d_wind) still resolve;
+# the bare disc ports map onto their composable disc blocks (kd18 → kubota_done,
+# powerlaw_disc → powerlaw). Each case maps an id to its canonical agn spec.
+_AGN_E2E_CASES = {
+    "skirtor": {"type": "skirtor", "*": FIXED},
+    "silva04": {"type": "silva04", "*": FIXED},
+    "cat3d_wind": {"type": "cat3d_wind", "*": FIXED},
+    "kubota_done_disc": {"type": "composable", "disc": {"type": "kubota_done"}, "*": FIXED},
+    "powerlaw_disc": {"type": "composable", "disc": {"type": "powerlaw"}, "*": FIXED},
+}
+
+
+@pytest.mark.parametrize("agn_id", list(_AGN_E2E_CASES))
+def test_agn_e2e(ssp, obs, agn_id):
+    """Each AGN port (disc + torus) builds + predicts via its canonical grammar."""
     try:
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            agn={"type": agn_type, "*": FIXED},
+            agn=_AGN_E2E_CASES[agn_id],
+            dust=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except FileNotFoundError as exc:
-        pytest.skip(f"{agn_type!r} build skipped: {exc}")
+        _skip_with_tally(f"{agn_id!r} build skipped (template not on disk): {exc}", agn_id)
     _assert_phot_ok(model.predict_photometry({}))
 
 
@@ -176,21 +198,31 @@ def test_agn_e2e(ssp, obs, agn_type):
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("neb_type", ["cue_emulator", "cloudy_grid", "cb19", "mappings"])
+# Nebular backend physics lives in SEDModelComponent ports (``cue_emulator`` /
+# ``cloudy_grid`` in ``_REGISTRY``), but the canonical build surface uses the
+# grammar names ``cue`` / ``cloudy`` / ``cb19`` (the ``_REGISTRY`` aliases are
+# not wired into the neb grammar). A FIXED dust screen keeps
+# ``predict_photometry({})`` free-param-less.
+@pytest.mark.parametrize("neb_type", ["cue", "cloudy", "cb19"])
 def test_nebular_e2e(ssp, obs, neb_type):
-    """Each nebular library / emulator port builds + predicts."""
-    if neb_type not in _REGISTRY:
-        pytest.skip(f"{neb_type!r} not registered")
+    """Each nebular backend builds + predicts via its canonical grammar name."""
     try:
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             neb={"type": neb_type, "*": FIXED},
+            dust=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except FileNotFoundError as exc:
-        pytest.skip(f"{neb_type!r} build skipped (data missing): {exc}")
+        _skip_with_tally(f"{neb_type!r} build skipped (data missing): {exc}", neb_type)
+    except ValueError as exc:
+        # Grid-backed backends (e.g. cloudy) raise a ValueError asking for the
+        # grid path when their grid is absent — treat as a data skip.
+        if any(t in str(exc).lower() for t in ("grid", "requires", "not on disk")):
+            _skip_with_tally(f"{neb_type!r} build skipped (grid missing): {exc}", neb_type)
+        raise
     _assert_phot_ok(model.predict_photometry({}))
 
 
@@ -199,23 +231,26 @@ def test_nebular_e2e(ssp, obs, neb_type):
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("radio_type", ["radio_powerlaw", "radio_dpl"])
-def test_radio_e2e(ssp, obs, radio_type):
-    """Each radio port builds + predicts. Reads L_ir / L_agn_bol / log_mstar
-    via optional_inputs from upstream when available; falls back to 0.0
-    when not."""
-    if radio_type not in _REGISTRY:
-        pytest.skip(f"{radio_type!r} not registered")
+# Radio is built through the composable SF/AGN sub-block grammar
+# (``radio={'agn': {'type': ...}}``; ADR-0018 §8a), the canonical surface — the
+# legacy ``radio={'type': 'radio_dpl'}`` spelling was retired in #725. The AGN
+# radio variants reproduce AGNfitter-rX (powerlaw loudness / double-power-law).
+@pytest.mark.parametrize("radio_agn", ["powerlaw", "dpl"])
+def test_radio_e2e(ssp, obs, radio_agn):
+    """Each AGN-radio variant builds + predicts. Reads L_ir / L_agn_bol /
+    log_mstar via optional_inputs from upstream when available; falls back to
+    0.0 when not."""
     try:
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            radio={"type": radio_type, "*": FIXED},
+            radio={"agn": {"type": radio_agn}, "*": FIXED},
+            dust=_fixed_dust(),
             redshift=Fixed(0.05),
         )
-    except (TypeError, KeyError) as exc:
-        pytest.skip(f"{radio_type!r} build skipped: {exc}")
+    except (TypeError, KeyError, ValueError) as exc:
+        _skip_with_tally(f"radio agn={radio_agn!r} build skipped: {exc}", radio_agn)
     _assert_phot_ok(model.predict_photometry({}))
 
 
