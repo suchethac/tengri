@@ -711,6 +711,14 @@ class NebularSEDComponent:
             )
             derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
 
+        # NOTE: SpectrumPrecomp also silently drops the Cue/CloudyGrid nebular
+        # contribution (it publishes no ``nebular_spec_lnu_precomp``), but a
+        # simple point-sample of ``nebular_sed`` here over-counts the emission
+        # lines ~3x — the nebular SED is re-published/attenuated downstream by
+        # the dust path and the lines are handled separately, so the per-pixel
+        # nebular projection must reconcile with that machinery rather than
+        # mirror the radio/X-ray pattern. Tracked as a dedicated follow-up.
+
         # Issue #301: ``neb_fesc`` is the fraction of LyC photons that
         # *escape* the HII region (observed unattenuated); the absorbed
         # fraction (1 - fesc) drives the nebular emission. The current

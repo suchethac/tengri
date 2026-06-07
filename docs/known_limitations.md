@@ -38,7 +38,15 @@ publication-grade until the component you rely on has been cross-validated.**
   because a pixel is narrow (tens of Å) rather than a full filter — typically
   ≲1 % on the continuum, growing to ~10–15 % only in the deep rest-UV at high
   optical depth. At high spectral resolution it auto-falls-back to the exact
-  wave-grid path with a warning.
+  wave-grid path with a warning. **Component coverage:** stellar, dust IR, radio,
+  X-ray, and **AGN** are all included in the spectrum LUT (the AGN was previously
+  dropped — fixed by publishing ``agn_spec_lnu_precomp``). **Known gap:**
+  non-baked nebular backends (``Cue`` / ``CloudyGrid``) are **not yet** carried by
+  the spectrum LUT, so their emission lines are missing from ``predict_spectrum``
+  under ``approx=SpectrumPrecomp()`` — use ``approx=None`` for emission-line
+  spectroscopy with those backends. ``BakedIn`` nebular (baked into the SSP) is
+  unaffected. A faithful per-pixel nebular projection (reconciling with the dust
+  attenuation / emission-line machinery) is tracked as a follow-up.
 - **Joint photometry + spectroscopy is supported under precompute.** On a joint
   observation, either precompute opt-in (`approx=WavePrecomp()` or
   `approx=SpectrumPrecomp()`) builds **both** LUT families; the forward pass

@@ -411,6 +411,18 @@ class AGNSEDComponent:
             )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
 
+        # Spectrum LUT family (SpectrumPrecomp): a spectrum pixel is a single
+        # wavelength, so point-sampling the rest-frame AGN SED at the pixel
+        # wavelengths is exact (mirrors radio/X-ray ``_emit(spec_eff)`` and the
+        # dust-IR ``jnp.interp`` projection). Without this, ``predict_spectrum``
+        # under ``approx=SpectrumPrecomp()`` silently dropped the AGN
+        # contribution — ``predict_spectrum_via_precomp`` only sums the
+        # ``*_spec_lnu_precomp`` families that components actually publish, and
+        # AGN previously published only the photometry family.
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            derived_overrides["agn_spec_lnu_precomp"] = jnp.interp(spec_eff, state.wave, L_agn)
+
         return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(**derived_overrides),
         )
