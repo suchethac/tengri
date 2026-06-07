@@ -31,7 +31,6 @@ def _force_import_all_components() -> None:
 
     # Non-auto-imported components — list grows when new components ship.
     import tengri.components.agn.nlr_model
-    import tengri.components.dust.charlot_fall_model
     import tengri.components.dust.dl07_ir
     import tengri.components.dust.modified_blackbody_ir
     import tengri.components.nebular.shock_model

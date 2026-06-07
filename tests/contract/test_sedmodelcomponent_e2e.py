@@ -93,16 +93,18 @@ def _skip_with_tally(reason: str, port_name: str = "") -> None:
 # ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("dust_type", ["calzetti", "smc", "milky_way", "salim18"])
-def test_dust_attenuation_e2e(ssp, obs, dust_type):
-    """Each single-screen attenuation port builds and predicts finite photometry."""
-    if dust_type not in _REGISTRY:
-        pytest.skip(f"{dust_type!r} not registered (resolver fallback to legacy)")
+@pytest.mark.parametrize("law", ["calzetti", "smc", "cardelli", "salim"])
+def test_dust_attenuation_e2e(ssp, obs, law):
+    """Each attenuation law builds and predicts finite photometry.
+
+    Direction B (#738): laws are config sub-selectors of the canonical
+    two-component engine (``law_bc``), not standalone ``type`` ports.
+    """
     model = _silent_build(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": dust_type, "tau_v": Fixed(0.3)},
+        dust={"type": "two_component", "law_bc": law, "*": FIXED},
         redshift=Fixed(0.05),
     )
     _assert_phot_ok(model.predict_photometry({}))
@@ -116,31 +118,36 @@ def test_dust_attenuation_e2e(ssp, obs, dust_type):
 @pytest.mark.parametrize(
     "emission_type",
     [
-        "modified_blackbody_ir",
-        "dl07_ir",
-        "dl14_ir",
-        "dale2014_ir",
-        "astrodust_ir",
-        "draine2021_pah_ir",
+        "modified_blackbody",
+        "dl07",
+        "dl14",
+        "dale2014",
+        "astrodust",
+        "draine_li2014",
     ],
 )
 def test_dust_ir_emission_e2e(ssp, obs, emission_type):
-    """Each dust IR emission port builds + predicts when paired with Calzetti."""
-    if emission_type not in _REGISTRY:
-        pytest.skip(f"{emission_type!r} not registered")
+    """Each dust IR emission model builds + predicts on the canonical engine.
+
+    Emission models are config sub-selectors of the two-component engine
+    (``emission={'type': ...}``, resolved by ``resolve_emission_model``) —
+    paired here with a Calzetti birth-cloud screen. Template-backed models
+    skip when their HDF5 grid is absent.
+    """
     try:
         model = _silent_build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             dust={
-                "type": "calzetti",
-                "tau_v": Fixed(0.5),
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
                 "emission": {"type": emission_type, "*": FIXED},
             },
             redshift=Fixed(0.05),
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, OSError) as exc:
         pytest.skip(f"{emission_type!r} requires HDF5 template not on disk: {exc}")
     _assert_phot_ok(model.predict_photometry({}))
 
@@ -391,34 +398,74 @@ def test_radio_powerlaw_actually_reads_L_ir_when_published():
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_calzetti_build_dispatches_to_sedmodelcomponent_class(ssp, obs):
-    """``dust={'type': 'calzetti'}`` must land on the new
-    :class:`Calzetti` SEDModelComponent subclass, not on the legacy
-    bare-Protocol :class:`DustAttenuationSEDComponent`. This pins the
-    resolver provenance — a regression that re-routes ``calzetti`` to
-    the legacy class would silently bypass the new wiring."""
-    from tengri.components.dust.calzetti_model import Calzetti
-    from tengri.components.sed_model_component import SEDModelComponent
+def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
+    """The dust LAW is a sub-selector of the canonical engine, not a phantom type.
 
+    Regression guard for the removed ``#664`` silent no-op. ``build()`` used to
+    accept ``dust={'type': 'calzetti'}`` and SILENTLY drop the law (defaulting to
+    ``power_law``) by routing through a ``_REGISTRY`` pass-through to thin
+    single-law "ports". Those toy ports were deleted; the canonical dust surface
+    is ``dust={'type': 'two_component', 'law_bc': ...}`` and the law must actually
+    reach the engine.
+    """
+    # (a) the phantom type is gone — fail loud rather than silently no-op.
+    with pytest.raises(ValueError, match="Unknown dust type"):
+        _silent_build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "*": FIXED},
+            dust={"type": "calzetti"},
+            redshift=Fixed(0.05),
+        )
+
+    # (b) the law surface wires the chosen law through to the engine (not dropped).
     model = _silent_build(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "calzetti", "tau_v": Fixed(0.3)},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
         redshift=Fixed(0.05),
     )
-    chain = model._build_component_chain()
-
-    dust_components = [
-        c for c in chain if isinstance(c, SEDModelComponent) and c.name == "calzetti"
-    ]
-    assert len(dust_components) == 1, (
-        f"expected exactly one SEDModelComponent for calzetti in the chain; "
-        f"found {len(dust_components)}. Chain: {[type(c).__name__ for c in chain]}"
+    assert model._dust_law_bc == "calzetti", (
+        f"law_bc silently dropped: got {model._dust_law_bc!r} — the #664 no-op."
     )
-    assert isinstance(dust_components[0], Calzetti), (
-        f"resolver dispatched 'calzetti' to {type(dust_components[0]).__name__!r}, "
-        f"not to the new Calzetti SEDModelComponent class. Resolver regression?"
+    _assert_phot_ok(model.predict_photometry({}))
+
+    # (c) the law genuinely changes the SED (calzetti vs smc differ under load).
+    model_smc = _silent_build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": FIXED},
+        dust={
+            "type": "two_component",
+            "law_bc": "smc",
+            "*": FIXED,
+            "tau_bc": 1.0,
+            "tau_diff": 0.5,
+        },
+        redshift=Fixed(0.05),
+    )
+    model_cal = _silent_build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl", "*": FIXED},
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_bc": 1.0,
+            "tau_diff": 0.5,
+        },
+        redshift=Fixed(0.05),
+    )
+    f_cal = jnp.asarray(model_cal.predict_photometry({}))
+    f_smc = jnp.asarray(model_smc.predict_photometry({}))
+    # Scale-invariant: the absolute fluxes are ~1e-27, so jnp.allclose's default
+    # atol=1e-8 would call everything "equal" — compare relative difference.
+    rel_diff = jnp.max(jnp.abs(f_cal - f_smc) / (jnp.abs(f_smc) + 1e-300))
+    assert rel_diff > 1e-2, (
+        f"calzetti and smc dust laws produced near-identical photometry "
+        f"(max rel diff {float(rel_diff):.2e}) — law not applied?"
     )
 
 
@@ -431,12 +478,10 @@ def test_calzetti_build_dispatches_to_sedmodelcomponent_class(ssp, obs):
 # set in their own PR; removals must update this list explicitly.
 _EXPECTED_REGISTRY_NAMES = frozenset(
     {
-        # Dust attenuation
-        "calzetti",
-        "smc",
-        "mw",
-        "salim18",
-        "charlot_fall",
+        # Dust attenuation laws are config sub-selectors of the canonical
+        # two-component / single / wg00 engine — NOT standalone _REGISTRY ports.
+        # The thin single-law port duplicates (calzetti/smc/mw/salim18/charlot_fall)
+        # were deleted (Direction B, #738); the live WG00 component stays.
         # Dust IR emission
         "modified_blackbody_ir",
         "dl07_ir",
