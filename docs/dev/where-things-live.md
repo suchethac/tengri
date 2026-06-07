@@ -41,7 +41,7 @@ For most new models — closed-form attenuation laws, dust IR libraries, AGN
 torus libraries, nebular emulators — write **one file** at
 `components/<domain>/<name>_model.py` subclassing `SEDModelComponent`. The
 canonical small example is
-[`components/dust/calzetti_model.py`](../../src/tengri/components/dust/calzetti_model.py);
+[`components/dust/wg00_model.py`](../../src/tengri/components/dust/wg00_model.py);
 a library example is
 [`components/agn/skirtor_model.py`](../../src/tengri/components/agn/skirtor_model.py).
 

@@ -907,10 +907,9 @@ def _translate_stellar(stellar_dict: dict, result: dict) -> None:
 def _translate_dust(dust_dict: dict, result: dict) -> None:
     """Translate dust group to dust_model, dust_law_bc, dust_emission.
 
-    Consults the SEDModelComponent _REGISTRY to allow SEDModelComponent port names
-    to pass through as valid dust types. When a SEDModelComponent type is recognized,
-    the resolution is deferred to the component factory, and we use a default
-    Parameters dust_model to avoid validation errors.
+    Resolves dust type against the set of supported dust models
+    (two_component, single_component, wg00) and extracts structural
+    configuration and law selections.
     """
     dust_type = dust_dict.get("type", "two_component")
 
@@ -923,15 +922,6 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             f"(got type={dust_type!r}). Use a two-component dust block, or drop "
             f"'lyman_cutoff'."
         )
-
-    # Check if this is a SEDModelComponent type (consult _REGISTRY)
-    from tengri.components.sed_model_component import _REGISTRY
-
-    if dust_type in _REGISTRY:
-        # Recognized as a SEDModelComponent port — use default Parameters dust model
-        # and let the component factory handle component selection
-        result["dust_model"] = "two_component"
-        return
 
     # Validate type against hard-coded dust model types
     if dust_type not in _VALID_DUST_TYPES:
@@ -1015,7 +1005,11 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         if isinstance(emission_dict, dict):
             emission_type = emission_dict.get("type", None)
             if emission_type is not None:
-                # Check if this is a SEDModelComponent port
+                # Dust IR emission ports (modified_blackbody_ir, dl07_ir, …) are
+                # genuine SEDModelComponent ports dispatched via _REGISTRY — unlike
+                # the attenuation laws, which are config sub-selectors of the engine.
+                from tengri.components.sed_model_component import _REGISTRY
+
                 if emission_type in _REGISTRY:
                     result["dust_emission"] = emission_type
                     return

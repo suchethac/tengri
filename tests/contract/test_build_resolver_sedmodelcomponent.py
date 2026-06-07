@@ -3,55 +3,43 @@
 
 import pytest
 
-from tengri import Fixed, SEDModel
+from tengri import FIXED, Fixed, SEDModel
 from tengri.components.sed_model_component import _REGISTRY
 
 pytestmark = pytest.mark.contract
 
 
 class TestBuildResolverDustAttenuation:
-    """Test that SEDModel.build resolves dust attenuation SEDModelComponent types."""
+    """Dust attenuation laws are config sub-selectors of the canonical engine.
 
-    def test_dust_calzetti_from_registry(self, ssp_data_bc03):
-        """Build with dust type 'calzetti' from registry."""
-        assert "calzetti" in _REGISTRY
-        # Should not raise ValueError for unknown type
+    Direction B (#738): the thin single-law "ports" (calzetti/smc/mw/salim18)
+    were deleted — they were silent no-ops. ``calzetti``/``smc``/… are dust
+    *laws* selected via ``law_bc``/``law_diff`` on the ``two_component`` /
+    ``single`` / ``wg00`` engine, NOT standalone ``_REGISTRY`` component types.
+    """
+
+    @pytest.mark.parametrize("law", ["calzetti", "smc", "mw", "salim18"])
+    def test_law_is_not_a_phantom_dust_type(self, ssp_data_bc03, law):
+        """``dust={'type': <law>}`` must fail loud — not silently no-op.
+
+        Before #738 these routed through a ``_REGISTRY`` pass-through that set
+        ``dust_model='two_component'`` and dropped the law (built ``power_law``).
+        """
+        assert law not in _REGISTRY
+        with pytest.raises(ValueError, match="Unknown dust type"):
+            SEDModel.build(ssp_data=ssp_data_bc03, dust={"type": law}, redshift=Fixed(0.1))
+
+    @pytest.mark.parametrize("law", ["calzetti", "smc", "cardelli", "salim"])
+    def test_law_surface_builds_and_threads(self, ssp_data_bc03, law):
+        """The canonical surface ``dust={'type':'two_component','law_bc':<law>}``
+        builds and threads the chosen law through to the engine (not dropped)."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
-            dust={"type": "calzetti", "tau_v": Fixed(0.3)},
+            dust={"type": "two_component", "law_bc": law, "*": FIXED},
             redshift=Fixed(0.1),
         )
         assert model is not None
-
-    def test_dust_smc_from_registry(self, ssp_data_bc03):
-        """Build with dust type 'smc' from registry."""
-        assert "smc" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"type": "smc", "tau_v": Fixed(0.2)},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_mw_from_registry(self, ssp_data_bc03):
-        """Build with dust type 'mw' (Milky Way) from registry."""
-        assert "mw" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"type": "mw", "tau_v": Fixed(0.3)},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
-
-    def test_dust_salim18_from_registry(self, ssp_data_bc03):
-        """Build with dust type 'salim18' from registry."""
-        assert "salim18" in _REGISTRY
-        model = SEDModel.build(
-            ssp_data=ssp_data_bc03,
-            dust={"type": "salim18", "tau_v": Fixed(0.3)},
-            redshift=Fixed(0.1),
-        )
-        assert model is not None
+        assert model._dust_law_bc == law
 
 
 class TestBuildResolverDustEmission:
