@@ -884,13 +884,15 @@ class Observation:
                 stellar_attenuated = stellar_attenuated + jnp.sum(
                     moment_per_age * t_slope_per_age, axis=0
                 )
-            # Nebular emission (Cue / CloudyGrid) is not age-resolved, so the
-            # per-age expansion doesn't apply. Approximate the nebular dust
-            # treatment as the diffuse-layer-only expansion ``A_diff·Φ_neb`` —
-            # consistent with Charlot & Fall, where nebular continuum + lines
-            # arise predominantly from young (BC) sites but the simpler
-            # diffuse-only approximation is used here for tractability.
-            nebular_attenuated = a_diff_lut * nebular_phi_for_dust
+            # Nebular emission (Cue / CloudyGrid) arises in the HII regions
+            # around the youngest stars, so it sees the full young-limit screen
+            # — birth cloud AND diffuse (A_bc·A_diff, i.e. y=1) — matching the
+            # exact path (two_component.py reddens the nebular SED by both
+            # screens). The earlier diffuse-only ``A_diff·Φ_neb`` left
+            # nebular-line-dominated bands ~18 % (τ=0.5) to ~37 % (τ=1) too
+            # bright. Zeroth order in the filter; the residual intra-filter
+            # Taylor term (#617) is the same one the stellar continuum carries.
+            nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
             total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
         # Phase 3c-3c-iii: single-component dust via the Taylor expansion
@@ -1011,9 +1013,13 @@ class Observation:
             y_age = state.derived["dust_young_indicator"]
             atten_bc_per_age = t_bc[None, :] ** y_age[:, None]  # (n_age, n_pix)
             stellar_attenuated = jnp.sum(per_age * atten_bc_per_age, axis=0) * t_diff
-            # Nebular continuum is not age-resolved → diffuse-only (same
-            # approximation as the photometry path).
-            nebular_attenuated = t_diff * nebular_phi
+            # Nebular emission arises in the HII regions around the youngest
+            # stars, so it sees the full young-limit screen — birth cloud AND
+            # diffuse (T_bc · T_diff, i.e. y=1) — matching the exact path's
+            # emission treatment (two_component.py reddens the nebular SED by
+            # τ_bc·k_bc + τ_diff·k_diff). Applying only T_diff here under-
+            # attenuated the nebular lines by the missing 1/T_bc factor.
+            nebular_attenuated = t_diff * t_bc * nebular_phi
             total_spec_lnu = stellar_attenuated + nebular_attenuated + unattenuated
         elif t_single is not None:
             # Single-component: uniform screen T(λ_pix) on the attenuable bucket.
