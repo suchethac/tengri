@@ -13,13 +13,26 @@ on:
 
 # Cancel older runs of this workflow on the same ref when a new push lands.
 # Saves compute when commits land back-to-back.
+#
+# `labeled` PR events get a UNIQUE group (run_id) so they never cancel the real
+# push / opened / synchronize run — a label add must not abort an in-flight
+# suite. (Their jobs also skip via the per-job `if:` below, so the unique-group
+# run is a near-instant no-op.) Every other event shares one group per ref so a
+# newer commit supersedes the older run.
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'labeled') && github.run_id || 'commit' }}
   cancel-in-progress: true
 
+# Skip the heavy jobs on bare `labeled` PR events. GitHub fires one `labeled`
+# webhook PER label added, so labelling a PR with N labels used to spawn N
+# duplicate workflow runs that immediately cancelled each other under
+# `cancel-in-progress` (and occasionally killed the surviving run mid-suite).
+# Only the `slow` job cares about labels (`run-slow-tests`); everything else
+# should run on push / opened / synchronize / reopened, not on label adds.
 jobs:
   lint:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -37,6 +50,7 @@ jobs:
   # without blocking. Promote to required once the baseline is clean.
   security:
     runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -57,6 +71,7 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -72,6 +87,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: smoke
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -80,6 +96,18 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # Persist the tengri JAX compile cache across CI runs. `import tengri`
+      # auto-enables an on-disk cache at $TENGRI_JAX_CACHE_DIR; caching it keyed
+      # on the source hash lets re-runs (and unchanged kernels across commits via
+      # restore-keys) skip the expensive first-compile of geoVI/MGVI/per-filter
+      # kernels. See docs/installation.md and src/tengri/__init__.py.
+      - name: Cache JAX compile cache
+        uses: actions/cache@v4
+        with:
+          path: .jax_cache
+          key: jax-cache-${{ runner.os }}-py3.12-${{ hashFiles('src/tengri/**/*.py', 'pyproject.toml') }}
+          restore-keys: |
+            jax-cache-${{ runner.os }}-py3.12-
       # Match the pre-rehome scope: fast tests only.
       # tests/integration/ and tests/crossval/ are gated; the new
       # physics-first tree (components/, contract/, inference/,
@@ -104,7 +132,11 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        timeout-minutes: 15
+        env:
+          TENGRI_JAX_CACHE_DIR: ${{ github.workspace }}/.jax_cache
+        # 25 min (was 15): headroom for cold-cache runs so a slightly-slow suite
+        # is not cancelled mid-flight. The xdist `-n auto` fast suite is ~12-13 min.
+        timeout-minutes: 25
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
