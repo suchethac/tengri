@@ -514,17 +514,21 @@ sed_total = np.asarray(state.sed_intrinsic)
 # X-ray, with line-of-sight obscuration as a teaching point.
 # ``state.derived["sed_xray"]`` is the full Yang+2020 / X-CIGALE X-ray —
 # XRB + hot gas + AGN corona — at the default column N_H = 1e20 (the corona
-# is driven by the AGN-published ``l_2500`` via the Just+2007 α_ox relation;
-# fixed in #746). It is already in the black total. To show how line-of-sight
-# absorption carves the soft band, we recompute the X-ray at N_H = 1e23 with
-# the model's own ``l_2500`` (Morrison & McCammon 1983 + Wilms+2000
-# photoelectric + Compton). N_H is not yet a build-time parameter, so the
-# obscured variant goes through the public ``tengri.xray`` API.
+# is driven by the AGN-published ``L_2500_intrinsic`` via the Just+2007 α_ox
+# relation; #722/#746). It is already in the black total. To show how
+# line-of-sight absorption carves the soft band, we recompute the X-ray at
+# N_H = 1e23 with the model's own 2500 Å luminosity (Morrison & McCammon 1983
+# + Wilms+2000 photoelectric + Compton). N_H is not yet a build-time
+# parameter, so the obscured variant goes through the public ``tengri.xray`` API.
 from tengri.xray import xray_total
 
 _sfr = float(state.derived["sfr"])
 _mstar = 10.0 ** float(state.derived["log_mstar"])
-_l2500 = float(state.derived["l_2500"])
+# Same l_2500 the X-ray component uses: intrinsic disc 2500 Å, falling back to
+# the Hopkins+2007 bolometric correction when the disc value is unavailable.
+_l2500 = float(state.derived.get("L_2500_intrinsic", 0.0))
+if _l2500 <= 0.0:
+    _l2500 = float(state.derived["L_agn_bol"]) / (5.15 * 1.199e15)
 sed_xray_unobs = _comp("sed_xray")  # build's corona-complete X-ray (N_H=1e20)
 sed_xray_obsc = np.asarray(
     xray_total(wave_aa, sfr=_sfr, stellar_mass=_mstar, l_2500_30deg=_l2500, log_nh=23.0)
