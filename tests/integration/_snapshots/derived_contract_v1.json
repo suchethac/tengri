@@ -3,7 +3,7 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "9f48673e89899cc44abe0d3e918506948290740f259c0ff37ae902646d9ba5e5",
+    "digest": "5527efbb32fe790400d480198cab8f0abd31f4cdfe059a2bd15c92b237fb22d7",
     "rows": [
       [
         "DustSEDComponent",
@@ -154,6 +154,12 @@
         "optional_inputs",
         "L_agn_bol",
         "erg/s"
+      ],
+      [
+        "XRaySEDComponent",
+        "optional_inputs",
+        "l_2500",
+        "erg/s/Hz"
       ],
       [
         "XRaySEDComponent",

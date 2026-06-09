@@ -177,6 +177,9 @@ class DerivedState:
     L_agn_bol: jnp.ndarray | None = None
     L_agn_torus: jnp.ndarray | None = None
     L_agn_absorbed: jnp.ndarray | None = None
+    # AGN monochromatic luminosity at rest-frame 2500 Å [erg/s/Hz]. Drives
+    # the X-ray corona via the Just+2007 alpha_ox relation (#746).
+    l_2500: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
     # AGN — filter-integrated LUT (Phase 3c-3d-agn). Rest-frame Lν of

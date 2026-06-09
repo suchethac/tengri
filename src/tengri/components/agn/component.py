@@ -37,6 +37,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn.disc import compute_l2500
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.protocols.component import (
     DerivedKey,
@@ -163,6 +164,12 @@ class AGNSEDComponent:
         return (
             DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity"),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
+            DerivedKey(
+                "l_2500",
+                "erg/s/Hz",
+                "AGN monochromatic luminosity at rest-frame 2500 Å (drives the "
+                "X-ray corona via the Just+2007 alpha_ox relation)",
+            ),
         )
 
     def precompute(
@@ -355,7 +362,12 @@ class AGNSEDComponent:
         # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
         # can include the AGN contribution in the LUT sum.
-        derived_overrides = dict(L_agn_bol=L_agn_bol, sed_agn=L_agn)
+        # Publish L_2500 (rest-frame 2500 Å) so the X-ray component can drive
+        # the AGN corona via the Just+2007 alpha_ox relation (#746). At 2500 Å
+        # the AGN SED is disc-dominated (torus/lines are negligible in the
+        # rest-UV), so this is the emergent disc UV the model actually produces.
+        l_2500 = compute_l2500(wave, L_agn)
+        derived_overrides = dict(L_agn_bol=L_agn_bol, sed_agn=L_agn, l_2500=l_2500)
         if (
             self._state is not None
             and self._state.filter_waves is not None

@@ -147,6 +147,12 @@ class XRaySEDComponent:
                 "erg/s",
                 "Read from AGN if present; falls back to 0.0",
             ),
+            DerivedKey(
+                "l_2500",
+                "erg/s/Hz",
+                "AGN 2500 Å luminosity; read from AGN if present, drives the "
+                "corona. Falls back to 0.0 (no AGN corona).",
+            ),
         )
 
     def precompute(
@@ -193,19 +199,32 @@ class XRaySEDComponent:
         # takes M_* in M_⊙; exponentiate at the boundary.
         log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
+        # AGN corona normalisation: the canonical ``xray_total`` derives the
+        # corona from the disc 2500 Å luminosity (Just+2007 alpha_ox), NOT from
+        # L_bol. The AGN component publishes ``l_2500``; when it is absent (no
+        # AGN, or AGN block off) it falls back to 0.0 and the corona vanishes.
+        # (#746: the previous ``L_agn_bol=``/``alpha_ox=`` kwargs were not
+        # accepted by ``xray_total`` and were silently dropped, so the corona
+        # never appeared.)
+        l_2500 = jnp.asarray(state.derived.get("l_2500", 0.0))
+
+        # ``xray_delta_alpha_ox`` is the offset from the Just+2007
+        # alpha_ox(L_2500) relation (default 0.0 = self-consistent). The
+        # canonical corona consumes it directly; when ``l_2500`` is 0 (no AGN)
+        # the corona vanishes regardless of the offset.
+        delta_alpha_ox = jnp.asarray(params["xray_delta_alpha_ox"])
 
         def _emit(w):
             return xray_total(
                 w,
                 sfr=sfr,
                 stellar_mass=stellar_mass,
-                L_agn_bol=L_agn_bol,
+                l_2500_30deg=l_2500,
                 gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
-                alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
+                delta_alpha_ox=delta_alpha_ox,
             )
 
         L_xray = _emit(wave)
