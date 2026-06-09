@@ -87,9 +87,9 @@ def test_torus_block_is_faithful_wrapper_of_single_source_primitive(name, primit
 # physics module (the block pulls the ``*_sed`` primitive; the port pulls its
 # grid loader from the same module), so there is one source of truth per model.
 _SHARED_MODULE = [
-    ("blocks.torus_blocks", "silva04_model", "components.agn.silva04"),
-    ("blocks.torus_blocks", "cat3d_torus_model", "components.agn.cat3d_wind"),
-    ("blocks.torus_blocks", "skirtor_model", "components.agn.skirtor"),
+    ("blocks.silva04_torus", "silva04_model", "components.agn.silva04"),
+    ("blocks.cat3d_wind_torus", "cat3d_torus_model", "components.agn.cat3d_wind"),
+    ("blocks.skirtor_torus", "skirtor_model", "components.agn.skirtor"),
     ("blocks.disc_blocks", "kd18_disc_model", "components.agn.disc"),
     ("blocks.nlr_blocks", "nlr_model", "components.agn.nlr"),
 ]
