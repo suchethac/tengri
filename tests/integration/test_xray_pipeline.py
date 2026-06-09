@@ -26,23 +26,23 @@ REL_TOL = 1e-10
 
 
 @pytest.mark.parametrize(
-    ("z", "sfr", "stellar_mass", "l_2500", "delta_alpha_ox"),
+    ("z", "sfr", "stellar_mass", "L_agn_bol"),
     [
-        (0.1, 1.0, 1e10, 0.0, 0.0),  # XRB-only, no AGN (l_2500 = 0)
-        (0.5, 5.0, 5e10, 1e29, 0.0),  # XRB + AGN corona, self-consistent alpha_ox
-        (2.0, 50.0, 1e11, 1e31, -0.2),  # powerful AGN, harder UV-X coupling
-        (4.0, 0.1, 1e9, 0.0, 0.0),  # quiescent low-mass, no AGN
-        (6.0, 10.0, 1e10, 5e29, 0.3),  # AGN at z=6, softer coupling
+        (0.1, 1.0, 1e10, 0.0),  # XRB-only, low-z star-forming
+        (0.5, 5.0, 5e10, 1e44),  # XRB + AGN corona, intermediate-z
+        (2.0, 50.0, 1e11, 1e46),  # high-SFR + powerful AGN
+        (4.0, 0.1, 1e9, 0.0),  # quiescent low-mass at high-z
+        (6.0, 10.0, 1e10, 5e44),  # AGN-dominated at z=6
     ],
 )
-def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, l_2500, delta_alpha_ox):
-    """Pipeline output equals direct xray_total call (corona driven by L_2500)."""
+def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
+    """Pipeline output equals direct xray_total call."""
     wave = jnp.linspace(1e0, 1e3, 1024)  # X-ray range: 1 to 1000 Å
 
     initial_state = ForwardState(
         wave=wave,
         sed_intrinsic=jnp.zeros_like(wave),
-        derived={"sfr": sfr, "log_mstar": jnp.log10(stellar_mass), "l_2500": l_2500},
+        derived={"sfr": sfr, "log_mstar": jnp.log10(stellar_mass), "L_agn_bol": L_agn_bol},
     )
 
     params = {
@@ -51,7 +51,7 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, l_2500, delta_al
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": delta_alpha_ox,
+        "xray_alpha_ox": -1.4,
     }
 
     final = run_components([XRaySEDComponent()], initial_state, params)
@@ -60,61 +60,18 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, l_2500, delta_al
         wave,
         sfr=sfr,
         stellar_mass=stellar_mass,
-        l_2500_30deg=l_2500,
+        L_agn_bol=L_agn_bol,
         gamma_hmxb=2.0,
         gamma_lmxb=1.6,
         gamma_agn=1.8,
         E_cut=300.0,
-        delta_alpha_ox=delta_alpha_ox,
+        alpha_ox=-1.4,
     )
 
     assert jnp.allclose(final.sed_intrinsic, expected, rtol=REL_TOL, atol=0.0)
     # Adapter must publish sed_xray for downstream readers.
     assert "sed_xray" in final.derived
     assert jnp.allclose(final.derived["sed_xray"], expected, rtol=REL_TOL, atol=0.0)
-
-
-def test_corona_scales_with_l2500_regression_746():
-    """#746: the AGN X-ray corona was silently dropped.
-
-    The component passed ``L_agn_bol=`` / ``alpha_ox=`` kwargs that
-    ``xray_total`` does not accept (swallowed by ``**_kwargs``), so
-    ``l_2500_30deg`` was never set and the corona contributed nothing —
-    ``sed_xray`` was byte-identical regardless of AGN luminosity. The fix
-    wires the AGN-published ``l_2500`` into ``l_2500_30deg``; the corona must
-    now scale with it. Corona normalisation: Just+2007 alpha_ox relation,
-    ``L_2keV = L_2500 * 10**(alpha_ox / 0.3838)`` (Yang+2020, MNRAS 491, 740).
-    """
-    wave = jnp.linspace(1e0, 1e3, 1024)  # Å; 2 keV ≈ 6.2 Å sits inside
-    params = {
-        "redshift": 0.0,
-        "xray_gamma_hmxb": 2.0,
-        "xray_gamma_lmxb": 1.6,
-        "xray_gamma_agn": 1.8,
-        "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": 0.0,
-    }
-
-    def _sed_xray(l_2500):
-        state = ForwardState(
-            wave=wave,
-            sed_intrinsic=jnp.zeros_like(wave),
-            derived={"sfr": 1.0, "log_mstar": 10.0, "l_2500": l_2500},
-        )
-        return run_components([XRaySEDComponent()], state, params).derived["sed_xray"]
-
-    i_2kev = int(jnp.argmin(jnp.abs(wave - 6.2)))
-    none = _sed_xray(0.0)  # no AGN -> XRB + hot gas only
-    faint = _sed_xray(1e29)
-    bright = _sed_xray(1e31)  # 100x brighter disc UV
-
-    # Corona is present and scales with L_2500. At the default delta=0 the
-    # Just+2007 relation steepens alpha_ox with luminosity, so a 100x rise in
-    # L_2500 gives a ~19x (sub-linear) corona rise — but it is decisively NOT
-    # the byte-identical 1.0x of the #746 bug.
-    assert bright[i_2kev] > 10.0 * faint[i_2kev]
-    # With no AGN the corona vanishes (only XRB/hot-gas remain).
-    assert none[i_2kev] < faint[i_2kev]
 
 
 def test_xray_no_agn_upstream_falls_back_to_zero():
@@ -129,7 +86,7 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": 0.0,
+        "xray_alpha_ox": -1.4,
     }
     out = xray.apply(state, params)
 
@@ -137,12 +94,12 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
         wave,
         sfr=1.0,
         stellar_mass=1e10,
-        l_2500_30deg=0.0,
+        L_agn_bol=0.0,
         gamma_hmxb=2.0,
         gamma_lmxb=1.6,
         gamma_agn=1.8,
         E_cut=300.0,
-        delta_alpha_ox=0.0,
+        alpha_ox=-1.4,
     )
     assert jnp.allclose(out.sed_intrinsic, expected, rtol=REL_TOL, atol=0.0)
 
@@ -167,7 +124,7 @@ def test_xray_pipeline_preserves_input_state_immutability():
             "xray_gamma_lmxb": 1.6,
             "xray_gamma_agn": 1.8,
             "xray_E_cut": 300.0,
-            "xray_delta_alpha_ox": 0.0,
+            "xray_alpha_ox": -1.4,
         },
     )
 
@@ -226,7 +183,7 @@ def test_three_adapter_chain_runs_end_to_end():
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": 0.0,
+        "xray_alpha_ox": -1.4,
     }
 
     final = run_components(

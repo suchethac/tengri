@@ -35,7 +35,13 @@ _RV_SMC: float = 2.93  # Pei 1992 SMC R_V (matches polar_dust.py)
 _L_SUN_ERG: float = L_SUN  # already in erg/s, see physics_constants.py
 
 
-@register_agn_block("torus", "nenkova")
+@register_agn_block(
+    "torus",
+    "nenkova",
+    citation="Nenkova et al. 2008, ApJ, 685, 147",
+    status="production",
+    short_doc="Nenkova et al. 2008 CLUMPY radiative-transfer torus",
+)
 def nenkova_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -78,7 +84,13 @@ def nenkova_torus_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("torus", "skirtor")
+@register_agn_block(
+    "torus",
+    "skirtor",
+    citation="Stalevski et al. 2016, MNRAS, 458, 2288",
+    status="production",
+    short_doc="Stalevski et al. 2016 SKIRTOR torus with polar dust",
+)
 def skirtor_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -237,7 +249,13 @@ def skirtor_torus_block(
     return (L_lambda_thermal + polar_L_lambda) * rescale
 
 
-@register_agn_block("torus", "silva04")
+@register_agn_block(
+    "torus",
+    "silva04",
+    citation="Silva et al. 2004, MNRAS, 355, 973",
+    status="production",
+    short_doc="Silva et al. 2004 smooth torus model",
+)
 def silva04_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -266,7 +284,13 @@ def silva04_torus_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("torus", "cat3d_wind")
+@register_agn_block(
+    "torus",
+    "cat3d_wind",
+    citation="Hönig & Kishimoto 2017, ApJ, 838, L20",
+    status="production",
+    short_doc="Hönig & Kishimoto 2017 CAT3D-wind torus",
+)
 def cat3d_wind_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -299,7 +323,13 @@ def cat3d_wind_torus_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("torus", "skirtor_agnfitter")
+@register_agn_block(
+    "torus",
+    "skirtor_agnfitter",
+    citation="Stalevski et al. 2016, MNRAS, 458, 2288",
+    status="production",
+    short_doc="Stalevski et al. 2016 SKIRTOR_mean_3p AGNfitter-rX torus",
+)
 def skirtor_agnfitter_torus_block(
     wavelength: Array,
     agn_log_lbol: float,
@@ -337,7 +367,13 @@ def skirtor_agnfitter_torus_block(
     return L_nu * _C_AA_PER_S / wave_aa**2
 
 
-@register_agn_block("torus", "fritz")
+@register_agn_block(
+    "torus",
+    "fritz",
+    citation="Fritz et al. 2006, A&A, 470, 221",
+    status="production",
+    short_doc="Fritz et al. 2006 smooth-dust torus",
+)
 def fritz_torus_block(
     wavelength: Array,
     agn_log_lbol: float,

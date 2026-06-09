@@ -42,6 +42,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   importable but not advertised. `load_filter_set` was considered but
   stays demoted per existing design — import from
   `tengri.observation.load_filter_set`.
+- Experimental notebook `multimodel_bma_candels` now builds its plotted
+  posterior SEDs via the exact public `lnu_to_fnu(1, d_L, z)` conversion
+  instead of an empirical `predict_photometry`-anchored scale factor
+  (the old anchor was ~10% off because it equated a filter-integrated
+  flux with a point-interpolated `L_ν`). The eager-warm tracer-leak
+  workaround is dropped — `jax.jit(jax.vmap(...))` over `predict_obs_sed`
+  / `predict_sfh_quantities` now runs cold. Possible now that
+  `predict_spectrum(wave_obs=...)` is fixed (#707, #712). No change to
+  fits, evidences, or BMA weights — plotting/prediction only (#730).
+- `multimodel_bma_candels` fits the four configs per galaxy concurrently
+  with a `ThreadPoolExecutor` (XLA releases the GIL during compute, so
+  this is a ~2–3× wall-clock win for bit-identical results) and uses
+  `n_live=250` (≈2× faster than 500, negligible `log Z` shift). Added a
+  note documenting that compilation is *not* the bottleneck (~0.3 s,
+  cached) and why `fit_batch_map_vmap` (MAP-only, single shared model)
+  cannot vectorise nested sampling across these structurally-different
+  configs.
+- Editorial pass on `multimodel_bma_candels` for the public docs: prose
+  rewritten in plain scientific style, one publication-quality figure per
+  galaxy (the separate compact/presentation variants are merged), the
+  $M_\star$-SFR panel zoomed out so the broader BMA contour is not
+  clipped, the on-figure weight annotation removed, and XLA/PjRt C++ logs
+  suppressed via `TF_CPP_MIN_LOG_LEVEL`.
+- Made `multimodel_bma_candels` reproducible and swapped its non-parametric
+  SFHs. The per-fit PRNG seed was derived from Python's built-in `hash`,
+  which is salted per process (`PYTHONHASHSEED`), so every run drew a
+  different nested-sampling realisation and the figures changed run to
+  run; it now uses a `hashlib`-based `stable_seed`, so the notebook
+  reproduces exactly. Configs A and B now use the continuity (Leja+2019)
+  and Dirichlet (Leja+2017) priors instead of Dense Basis, whose quantile
+  parameters are strongly degenerate (near-singular Hessian) and left the
+  evidence — and therefore the BMA weights — unstable from seed to seed.
+  (Laplace/MAP evidence was evaluated as a faster, deterministic
+  alternative but disagreed with converged nested sampling for the same
+  degeneracy reason, so the calibrated nested-sampling `log Z` is kept.)
 
 ## [0.1.0] - 2026-05-22
 

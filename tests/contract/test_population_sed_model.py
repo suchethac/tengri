@@ -355,14 +355,25 @@ def test_batched_data_stacks_flux_and_noise() -> None:
     assert jnp.allclose(noise[2], jnp.array([0.7, 0.8, 0.9]))
 
 
-def test_batched_data_raises_on_missing_keys() -> None:
-    """Galaxy dict missing flux_obs/noise → KeyError."""
-    pop = PopulationSEDModel(
-        sed=_StubSED(),
-        galaxies=[{"flux_obs": jnp.zeros(3)}],  # missing noise
-    )
-    with pytest.raises(KeyError):
-        pop.batched_data()
+def test_construction_raises_on_missing_keys() -> None:
+    """Galaxy dict missing flux_obs/noise → fail fast at construction."""
+    with pytest.raises(ValueError, match="missing required 'noise'"):
+        PopulationSEDModel(
+            sed=_StubSED(),
+            galaxies=[{"flux_obs": jnp.zeros(3)}],  # missing noise
+        )
+
+
+def test_construction_raises_on_heterogeneous_grids() -> None:
+    """Galaxies with mismatched data shapes violate the shared-grid contract."""
+    with pytest.raises(ValueError, match="must share one measurement grid"):
+        PopulationSEDModel(
+            sed=_StubSED(),
+            galaxies=[
+                {"flux_obs": jnp.zeros(3), "noise": jnp.ones(3)},
+                {"flux_obs": jnp.zeros(5), "noise": jnp.ones(5)},  # different n
+            ],
+        )
 
 
 # ── Fitter standard path (single-Hamiltonian milestone) ────────────────

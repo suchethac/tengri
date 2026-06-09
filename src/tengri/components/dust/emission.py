@@ -879,13 +879,18 @@ def pah_drude(
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Smith et al. (2007) PAH Drude profiles dust emission.
+    """Smith et al. (2007) PAH Drude profiles — mid-IR PAH building block.
 
     A sum of 18 PAH Drude profiles (normalized to Smith+2007 SINGS median
-    strengths). Runtime evaluation prefers the precomputed lookup from
-    :mod:`~tengri.components.dust.dust_analytic_precompute`; this function
-    provides a direct full-wavelength evaluation used when precompute is
-    unavailable.
+    strengths). This is a **PAH-only building block**, not a standalone
+    energy-balanced dust emitter: it carries the aromatic-feature forest only
+    (no thermal continuum), so its frequency integral is *not* renormalized to
+    ``L_absorbed`` — it is scaled by ``L_absorbed`` but deliberately leaves the
+    bulk of the absorbed energy for a continuum component to carry. Select a
+    full model (``dale2014``, ``draine_li2007/2014``, ``themis``,
+    ``modified_blackbody``, ``casey2012``, ``schreiber2018``) for an
+    energy-conserving dust SED; ``pah_drude`` is intended as a diagnostic /
+    composition primitive (it backs the PAH term of ``schreiber2016``).
 
     Parameters
     ----------
@@ -903,10 +908,14 @@ def pah_drude(
 
     Notes
     -----
-    **JIT-compatible**: yes — computed via triweight interpolation in precompute
-    mode; this function is a fallback stub.
+    **JIT-compatible**: yes — pure ``jnp`` primitives (a precomputed lookup in
+    :mod:`~tengri.components.dust.dust_analytic_precompute` is preferred in the
+    hybrid kernel; this is the direct full-wavelength evaluation).
 
-    **Gradient-safe**: yes — inherited from precompute lookup.
+    **Gradient-safe**: yes.
+
+    **Not energy-balanced standalone** — see the summary above; excluded from
+    the cross-model energy-balance contract test for this reason.
 
     The PAH template is a pure shape (no free axes). Runtime evaluation uses the
     precomputed lookup from :mod:`~tengri.components.dust.dust_analytic_precompute`
@@ -940,12 +949,16 @@ def schreiber2016(
     redshift: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    r"""Schreiber et al. (2016) 2-parameter dust emission model.
+    r"""Schreiber et al. (2016) 2-parameter dust emission model (analytic).
 
     Mixes dust continuum and PAH emission by a fractional parameter.
     The dust continuum is a modified blackbody (modified_blackbody with
-    beta=1.5). The PAH component is approximated as a sum of Drude profiles
-    at standard wavelengths.
+    beta=1.5). The PAH component is **approximated** as a sum of Drude profiles
+    at standard wavelengths (not the full Schreiber+ mid-IR aromatic forest).
+
+    For the CIGALE-faithful tabulated version with the real PAH feature forest,
+    select ``schreiber2018`` (``data/schreiber2018_templates.h5``) instead —
+    this analytic model is the lightweight, grid-free approximation.
 
     Parameters
     ----------

@@ -40,12 +40,12 @@ __all__ = ["Recipe"]
 
 @dataclass(frozen=True)
 class Recipe:
-    r"""Frozen 5-tuple of AGN block selectors plus precompute metadata.
+    r"""Frozen 6-tuple of AGN block selectors plus precompute metadata.
 
     Attributes
     ----------
-    agn_disc_block, agn_lines_block, agn_feii_block, agn_torus_block, \
-agn_attenuation_block : str
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
+agn_torus_block, agn_attenuation_block : str
         Names of registered block implementations (see
         :data:`tengri.components.agn.blocks.AGN_BLOCKS`). Each defaults
         to ``"none"`` so a bare ``Recipe()`` is the no-op pipeline.
@@ -61,7 +61,8 @@ agn_attenuation_block : str
     """
 
     agn_disc_block: str = "none"
-    agn_lines_block: str = "none"
+    agn_nlr_block: str = "none"
+    agn_blr_block: str = "none"
     agn_feii_block: str = "none"
     agn_torus_block: str = "none"
     agn_attenuation_block: str = "none"
@@ -76,7 +77,8 @@ agn_attenuation_block : str
         """
         validate_block_recipe(
             agn_disc_block=self.agn_disc_block,
-            agn_lines_block=self.agn_lines_block,
+            agn_nlr_block=self.agn_nlr_block,
+            agn_blr_block=self.agn_blr_block,
             agn_feii_block=self.agn_feii_block,
             agn_torus_block=self.agn_torus_block,
             agn_attenuation_block=self.agn_attenuation_block,
@@ -114,7 +116,8 @@ agn_attenuation_block : str
         """
         return cls(
             agn_disc_block=getattr(params, "agn_disc_block", "none"),
-            agn_lines_block=getattr(params, "agn_lines_block", "none"),
+            agn_nlr_block=getattr(params, "agn_nlr_block", "none"),
+            agn_blr_block=getattr(params, "agn_blr_block", "none"),
             agn_feii_block=getattr(params, "agn_feii_block", "none"),
             agn_torus_block=getattr(params, "agn_torus_block", "none"),
             agn_attenuation_block=getattr(params, "agn_attenuation_block", "none"),
@@ -127,7 +130,8 @@ agn_attenuation_block : str
         cls,
         *,
         disc: str = "none",
-        lines: str = "none",
+        nlr: str = "none",
+        blr: str = "none",
         feii: str = "none",
         torus: str = "none",
         attenuation: str = "none",
@@ -141,7 +145,8 @@ agn_attenuation_block : str
         """
         return cls(
             agn_disc_block=disc,
-            agn_lines_block=lines,
+            agn_nlr_block=nlr,
+            agn_blr_block=blr,
             agn_feii_block=feii,
             agn_torus_block=torus,
             agn_attenuation_block=attenuation,
@@ -157,7 +162,8 @@ agn_attenuation_block : str
         """Return ``{stage_name: block_name}`` for splicing into kwargs."""
         return {
             "agn_disc_block": self.agn_disc_block,
-            "agn_lines_block": self.agn_lines_block,
+            "agn_nlr_block": self.agn_nlr_block,
+            "agn_blr_block": self.agn_blr_block,
             "agn_feii_block": self.agn_feii_block,
             "agn_torus_block": self.agn_torus_block,
             "agn_attenuation_block": self.agn_attenuation_block,

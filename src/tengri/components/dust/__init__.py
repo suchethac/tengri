@@ -21,10 +21,6 @@ Narayanan+2018 cosmological RT simulations.
 # Convenience re-exports for `from tengri.dust import ...`
 # Dust block in the SEDComponent pipeline — combines UV–optical attenuation
 # with IR re-emission via ``DustEmissionSEDComponentConfig.template``.
-from tengri.components.dust.astrodust_ir import (
-    AstrodustIRConfig as AstrodustIRConfig,
-    AstrodustIRSEDComponent as AstrodustIRSEDComponent,
-)
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
     apply_lyman_cutoff as apply_lyman_cutoff,
@@ -55,15 +51,6 @@ from tengri.components.dust.attenuation import (
 )
 
 # SEDModelComponent-style attenuation ports
-from tengri.components.dust.calzetti_model import Calzetti as Calzetti
-from tengri.components.dust.dale2014_ir import (
-    Dale2014IRConfig as Dale2014IRConfig,
-    Dale2014IRSEDComponent as Dale2014IRSEDComponent,
-)
-from tengri.components.dust.dl14_ir import (
-    DL14IRConfig as DL14IRConfig,
-    DL14IRSEDComponent as DL14IRSEDComponent,
-)
 from tengri.components.dust.draine2021_pah_ir import (
     Draine2021PAHIRConfig as Draine2021PAHIRConfig,
     Draine2021PAHIRSEDComponent as Draine2021PAHIRSEDComponent,
@@ -123,19 +110,16 @@ from tengri.components.dust.emission_templates import (
     Draine2021PAHTemplates,
     load_draine2021_pahspec_templates,
 )
-from tengri.components.dust.mw_model import MilkyWay as MilkyWay
 
 # New names
 from tengri.components.dust.priors import (
     narayanan_prior,
     narayanan_tau_prior,
 )
-from tengri.components.dust.salim18_model import Salim18 as Salim18
 from tengri.components.dust.schreiber2016_ir import (
     Schreiber2016IRConfig as Schreiber2016IRConfig,
     Schreiber2016IRSEDComponent as Schreiber2016IRSEDComponent,
 )
-from tengri.components.dust.smc_model import SMC as SMC
 from tengri.components.dust.wg00 import (
     WG00_DUST_CURVES as WG00_DUST_CURVES,
     WG00_GEOMETRIES as WG00_GEOMETRIES,
@@ -184,25 +168,15 @@ _CURATED_DIR = (
     "modified_blackbody",
     "themis",
     # SEDModelComponent-style attenuation ports
-    "Calzetti",
     "WG00AttenuationSEDComponent",
     "WG00AttenuationSEDComponentConfig",
-    "MilkyWay",
-    "Salim18",
-    "SMC",
     # Composable SEDComponent adapter (template= dispatch)
     "DustEmissionSEDComponent",
     "DustEmissionSEDComponentConfig",
     "DustEmissionSEDComponentState",
     # Standalone IR emission SEDComponent backends
-    "DL14IRSEDComponent",
-    "DL14IRConfig",
-    "Dale2014IRSEDComponent",
-    "Dale2014IRConfig",
     "Schreiber2016IRSEDComponent",
     "Schreiber2016IRConfig",
-    "AstrodustIRSEDComponent",
-    "AstrodustIRConfig",
     "Draine2021PAHIRSEDComponent",
     "Draine2021PAHIRConfig",
     # Draine+2021 PAHspec template loader

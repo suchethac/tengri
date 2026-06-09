@@ -625,9 +625,10 @@ def dale2014_emission_lnu(
     r"""Dale+2014 star-forming + AGN dust emission, mixed and scaled to L_nu.
 
     Single source of truth for the Dale2014 ``fracAGN`` mixing, shared by the
-    canonical :class:`~tengri.components.dust.dale2014_ir.Dale2014IRSEDComponent`
-    and the legacy :func:`create_dale2014_from_grid` registry closure so the two
-    paths cannot diverge again (#717 consolidation).
+    ``dale2014`` engine emission model (:func:`create_dale2014_from_grid` registry
+    closure, resolved via
+    :func:`~tengri.components.dust.emission.resolve_emission_model`) so the
+    template-loading and mixing paths cannot diverge (#717 consolidation).
 
     .. math::
         L_\nu(\lambda) = \frac{L_{\rm abs}}{1 - f_{\rm AGN}}
@@ -697,9 +698,9 @@ def dale2014_emission_lnu(
 def load_dale2014_lnu_grid(grid_path: str) -> dict:
     r"""Load + normalise a Dale+2014 template grid into L_nu jnp arrays.
 
-    Single source of truth for Dale2014 template loading + normalisation, shared
-    by :class:`~tengri.components.dust.dale2014_ir.Dale2014IRSEDComponent` and
-    :func:`create_dale2014_from_grid` (#717 consolidation).
+    Single source of truth for Dale2014 template loading + normalisation, used by
+    the ``dale2014`` engine model via :func:`create_dale2014_from_grid`
+    (#717 consolidation).
 
     SF templates are unit-normalised (:math:`\int L_\nu\,d\nu = 1`). The QSO
     template is unit-normalised then rescaled by the fraction of a unit quasar
@@ -832,8 +833,7 @@ def create_dale2014_from_grid(grid_path: str) -> Callable:
     Thin registry-closure wrapper: loads + normalises the grid via
     :func:`load_dale2014_lnu_grid` and returns a function that delegates to the
     shared :func:`dale2014_emission_lnu` mixing — identical physics and
-    normalisation to the canonical
-    :class:`~tengri.components.dust.dale2014_ir.Dale2014IRSEDComponent`
+    normalisation across every consumer of the ``dale2014`` engine model
     (#717 consolidation).
 
     Parameters

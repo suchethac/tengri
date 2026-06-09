@@ -641,7 +641,7 @@ def build_xray_component(model):
         stellar_mass,
         L_agn_bol,
         xray_gamma_agn=1.8,
-        xray_alpha_ox=-1.4,
+        xray_alpha_ox=0.0,
     ):
         """Synthesize X-ray SED from XRB and AGN emission.
 
@@ -657,7 +657,7 @@ def build_xray_component(model):
             AGN X-ray spectral index (photon index) [dimensionless].
             Default 1.8.
         xray_alpha_ox : float, optional
-            X-ray to optical slope (alpha_ox) [dimensionless]. Default -1.4.
+            Offset [dex] to empirical alpha_ox. Default 0.0 (pure empirical).
 
         Returns
         -------
@@ -674,7 +674,7 @@ def build_xray_component(model):
             stellar_mass=stellar_mass,
             L_agn_bol=L_agn_bol,
             gamma_agn=xray_gamma_agn,
-            alpha_ox=xray_alpha_ox,
+            delta_alpha_ox=xray_alpha_ox,
         )
 
     return xray_fn

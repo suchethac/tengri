@@ -711,6 +711,20 @@ class NebularSEDComponent:
             )
             derived_overrides["nebular_phot_lnu_precomp"] = nebular_phot_lnu_precomp
 
+        # Spectrum LUT family (SpectrumPrecomp): point-sample the *un-attenuated*
+        # rest-frame nebular SED at the pixel wavelengths (a pixel is a single
+        # wavelength, so this is exact). ``predict_spectrum_via_precomp`` puts
+        # this in the dust-attenuable bucket and reddens it by the young-limit
+        # screen (T_bc·T_diff), matching the exact path. Without this family the
+        # Cue/CloudyGrid nebular emission was silently dropped from
+        # ``predict_spectrum`` under ``approx=SpectrumPrecomp()`` (lines
+        # vanished). BakedIn nebular is carried by ``stellar_spec_lnu_precomp``.
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            derived_overrides["nebular_spec_lnu_precomp"] = jnp.interp(
+                spec_eff, state.wave, nebular_sed
+            )
+
         # Issue #301: ``neb_fesc`` is the fraction of LyC photons that
         # *escape* the HII region (observed unattenuated); the absorbed
         # fraction (1 - fesc) drives the nebular emission. The current

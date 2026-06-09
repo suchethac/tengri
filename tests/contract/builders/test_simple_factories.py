@@ -38,7 +38,7 @@ from tengri import FIXED, Uniform, builders, parse_groups
     "module_name,representative_variant,sample_short_param",
     [
         ("radio", "condon92", "q_ir"),
-        ("xray", "simple", "delta_alpha_ox"),
+        ("xray", "simple", "alpha_ox"),
         ("igm", "inoue14", None),  # IGM tested separately for flags
     ],
 )
@@ -73,12 +73,12 @@ def test_radio_q_ir_override_round_trips() -> None:
     assert "radio_q_ir" in spec.free_params
 
 
-def test_xray_delta_alpha_ox_override_round_trips() -> None:
+def test_xray_alpha_ox_override_round_trips() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        xray=builders.xray.simple(delta_alpha_ox=Uniform(-0.3, 0.3)),
+        xray=builders.xray.simple(alpha_ox=Uniform(-2.0, -1.0)),
     )
-    assert "xray_delta_alpha_ox" in spec.free_params
+    assert "xray_alpha_ox" in spec.free_params
 
 
 # ── Validation: typos and bad wildcard ────────────────────────────

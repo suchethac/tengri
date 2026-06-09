@@ -4,7 +4,7 @@
 """Callable factories for the AGN group — most complex of the builders.
 
 AGN composition has five orthogonal sub-block axes (``disc``,
-``torus``, ``lines``, ``feii``, ``atten``) plus a top-level
+``torus``, ``nlr``, ``blr``, ``feii``, ``atten``) plus a top-level
 ``composable`` model that orchestrates them. The grammar's intent:
 
 >>> agn = {
@@ -13,7 +13,8 @@ AGN composition has five orthogonal sub-block axes (``disc``,
 ...     "log_lbol": Uniform(43, 47),
 ...     "disc": {"type": "multicolor", "*": FREE},
 ...     "torus": {"type": "skirtor", "*": FIXED},
-...     "lines": {"type": "nlr"},
+...     "nlr": {"type": "analytic"},
+...     "blr": {"type": "analytic"},
 ...     "feii": {"type": "none"},
 ...     "atten": {"type": "smc_prevot", "*": FIXED},
 ... }
@@ -26,14 +27,15 @@ The factory mirror:
 ...     log_lbol=Uniform(43, 47),
 ...     disc=builders.agn.disc.multicolor(defaults=FREE),
 ...     torus=builders.agn.torus.skirtor(defaults=FIXED),
-...     lines=builders.agn.lines.nlr(),
+...     nlr=builders.agn.nlr.analytic(),
+...     blr=builders.agn.blr.analytic(),
 ...     feii=builders.agn.feii.none(),
 ...     atten=builders.agn.atten.smc_prevot(defaults=FIXED),
 ... )
 
 All 14 top-level AGN models are exposed as factories:
 
-- ``composable`` — orchestrator for the five sub-blocks
+- ``composable`` — orchestrator for the six sub-blocks
 - ``simple`` — power-law disc + single-temperature torus
 - ``standard`` — multi-color disc + two-temperature torus
 - ``multicolor_agn`` — Shakura-Sunyaev disc + 2-T torus (Kubota & Done 2018)
@@ -62,7 +64,7 @@ from collections.abc import Callable
 from typing import Any
 
 from tengri.builders._factory import UNSET, _pop_wildcard, make_factory, short_form
-from tengri.builders.agn import atten, disc, feii, lines, torus
+from tengri.builders.agn import atten, blr, disc, feii, nlr, torus
 from tengri.parameters.groups import _AGN_PARTITION
 from tengri.parameters.registry import recipe_parameters
 from tengri.parameters.sentinels import FIXED, FREE
@@ -70,7 +72,8 @@ from tengri.parameters.sentinels import FIXED, FREE
 _AXIS_MODULES = {
     "disc": disc,
     "torus": torus,
-    "lines": lines,
+    "nlr": nlr,
+    "blr": blr,
     "feii": feii,
     "atten": atten,
 }
@@ -91,7 +94,8 @@ def _discover_shared_params() -> list[str]:
             "*": FREE,
             "disc": {"type": "powerlaw"},
             "torus": {"type": "skirtor"},
-            "lines": {"type": "nlr"},
+            "nlr": {"type": "analytic"},
+            "blr": {"type": "analytic"},
             "feii": {"type": "none"},
             "atten": {"type": "smc_prevot"},
         },
@@ -109,7 +113,7 @@ _SHARED_SHORT_PARAMS = _discover_shared_params()
 
 
 def composable(**kwargs: Any) -> dict:
-    """Build a ``composable`` AGN config dict with five sub-block selectors."""
+    """Build a ``composable`` AGN config dict with six sub-block selectors."""
     wildcard = _pop_wildcard("agn.composable", kwargs)
     if wildcard not in (FREE, FIXED):
         raise ValueError(
@@ -227,7 +231,7 @@ def available() -> list[str]:
 
 
 def available_axes() -> dict[str, list[str]]:
-    """Return ``{axis: [variants]}`` for the five composable sub-block axes."""
+    """Return ``{axis: [variants]}`` for the six composable sub-block axes."""
     return {axis: mod.available() for axis, mod in _AXIS_MODULES.items()}
 
 
@@ -237,10 +241,11 @@ __all__ = [
     "atten",
     "available",
     "available_axes",
+    "blr",
     "composable",
     "disc",
     "feii",
-    "lines",
+    "nlr",
     "torus",
     *_TOP_LEVEL_MODELS,
 ]

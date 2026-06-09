@@ -54,7 +54,8 @@ def test_recipe_from_parameters():
 
     class _StubParams:
         agn_disc_block = "grahsp_sbpl"
-        agn_lines_block = "none"
+        agn_nlr_block = "none"
+        agn_blr_block = "none"
         agn_feii_block = "none"
         agn_torus_block = "skirtor"
         agn_attenuation_block = "smc_prevot"
@@ -70,7 +71,9 @@ def test_recipe_summary():
     rows = r.summary()
     assert ("disc", "grahsp_sbpl") in rows
     assert ("torus", "grahsp") in rows
-    assert len(rows) == 5
+    # Six canonical stages after the lines->nlr/blr split:
+    # disc, nlr, blr, feii, torus, attenuation.
+    assert len(rows) == 6
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -87,7 +90,8 @@ def test_template_hoist_returns_same_output_as_lru_load():
     params = dict(
         agn_log_lbol=44.5,
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="grahsp",
+        agn_nlr_block="grahsp",
+        agn_blr_block="grahsp",
         agn_feii_block="grahsp",
         agn_torus_block="grahsp",
         agn_attenuation_block="grahsp_biatten",
@@ -160,7 +164,8 @@ def test_auto_collapse_fixed_axis():
 
     class _StubParams:
         agn_disc_block = "grahsp_sbpl"
-        agn_lines_block = "none"
+        agn_nlr_block = "none"
+        agn_blr_block = "none"
         agn_feii_block = "none"
         agn_torus_block = "grahsp"
         agn_attenuation_block = "none"
@@ -232,7 +237,8 @@ def test_parity_at_grid_centre():
     l_nu = composable_agn_l_nu(
         wave_jax,
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="none",
+        agn_nlr_block="none",
+        agn_blr_block="none",
         agn_feii_block="none",
         agn_torus_block="grahsp",
         agn_attenuation_block="none",

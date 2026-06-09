@@ -19,19 +19,42 @@ publication-grade until the component you rely on has been cross-validated.**
 
 - **`WavePrecomp` accelerates the photometry channel.** It precomputes the
   SSP × filter integrals for a large speedup, with free redshift handled via an
-  interpolation table.
+  interpolation table. The stellar photometry is ~0.4 % accurate, **but dust is
+  re-applied as a first-order Taylor projection across each filter
+  (suchethac/tengri#617)**. That linear-in-λ model is accurate where the
+  attenuation curve is smooth across a band (optical / IR) but biases bands
+  sampling the **rest-UV**, where the curve is steep and extrapolated — by an
+  order of magnitude for far-UV bands at moderate/high redshift (e.g. at
+  z ≈ 2 with τ ≈ 0.5: SDSS *u/g* ~5–10 % high, GALEX FUV off by >10×; with zero
+  dust the LUT is exact). Such configurations (`WavePrecomp` + a non-trivial
+  dust screen + a rest-UV band) emit a build-time `UserWarning`. For unbiased
+  blue-band photometry use `approx=None`, or validate against it. The full fix
+  (a per-band exact-integral fallback in the steep-attenuation regime) is
+  tracked separately.
 - **`SpectrumPrecomp` accelerates the spectroscopy channel.** It precomputes a
   per-pixel effective-wavelength continuum lookup table. It agrees with the
-  exact path to machine precision on the stellar continuum; the two-component
-  birth-cloud dust LUT carries a known ~1% residual. At high spectral resolution
-  it auto-falls-back to the exact wave-grid path with a warning.
+  exact path to machine precision with zero dust; with dust it carries the same
+  *class* of intra-element attenuation error as `WavePrecomp` but **far milder**,
+  because a pixel is narrow (tens of Å) rather than a full filter — typically
+  ≲1 % on the continuum, growing to ~10–15 % only in the deep rest-UV at high
+  optical depth. At high spectral resolution it auto-falls-back to the exact
+  wave-grid path with a warning. **Component coverage:** stellar, dust IR, radio,
+  X-ray, **AGN**, and non-baked **nebular** (``Cue`` / ``CloudyGrid``) are all
+  included in the spectrum LUT. Nebular emission is reddened by the young-limit
+  screen (birth cloud + diffuse), matching the exact path. (Earlier the AGN was
+  dropped, and Cue/CloudyGrid nebular emission lines were dropped from
+  ``predict_spectrum`` then over-counted ~2.3× by diffuse-only attenuation — both
+  fixed.) ``BakedIn`` nebular (baked into the SSP) is carried by the stellar LUT.
 - **Joint photometry + spectroscopy is supported under precompute.** On a joint
   observation, either precompute opt-in (`approx=WavePrecomp()` or
   `approx=SpectrumPrecomp()`) builds **both** LUT families; the forward pass
   projects photometry and spectroscopy together inside one fused, cached JIT
-  kernel. Velocity dispersion / LSF are not applied on the per-pixel continuum
-  LUT (`SpectrumPrecomp`'s documented low-to-medium-R domain) — use
-  `approx=None` if you need the exact LSF-convolved spectrum.
+  kernel. For independent per-channel tuning, pass a composite tuple —
+  `approx=(WavePrecomp(n_z=200), SpectrumPrecomp())` — which accelerates both
+  channels with each LUT configured separately (suchethac/tengri#610). Velocity
+  dispersion / LSF are not applied on the per-pixel continuum LUT
+  (`SpectrumPrecomp`'s documented low-to-medium-R domain) — use `approx=None` if
+  you need the exact LSF-convolved spectrum.
 
 ## Inference backends
 

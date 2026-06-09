@@ -236,7 +236,7 @@ The contract:
 - [`docs/dev/sed-model-components.md`](docs/dev/sed-model-components.md) — full how-to + three worked examples (closed-form, library, NN emulator)
 - [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md) — architectural context
 - [`docs/adr/0011-sed-model-component-base.md`](docs/adr/0011-sed-model-component-base.md) — the design decision
-- [`src/tengri/components/dust/calzetti_model.py`](src/tengri/components/dust/calzetti_model.py) — canonical small port (analytic closed-form)
+- [`src/tengri/components/dust/wg00_model.py`](src/tengri/components/dust/wg00_model.py) — canonical small port (closed-form attenuation)
 - [`src/tengri/components/agn/skirtor_model.py`](src/tengri/components/agn/skirtor_model.py) — canonical library port
 
 **Advanced fallback — the bare `SEDComponent` Protocol:**

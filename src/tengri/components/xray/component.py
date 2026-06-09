@@ -148,10 +148,14 @@ class XRaySEDComponent:
                 "Read from AGN if present; falls back to 0.0",
             ),
             DerivedKey(
-                "l_2500",
+                "L_2500_intrinsic",
                 "erg/s/Hz",
-                "AGN 2500 Å luminosity; read from AGN if present, drives the "
-                "corona. Falls back to 0.0 (no AGN corona).",
+                "Read from AGN if present; else fall back to L_2500_30deg, else L_bol->L_2500 BC",
+            ),
+            DerivedKey(
+                "L_2500_30deg",
+                "erg/s/Hz",
+                "Fallback when L_2500_intrinsic unavailable (e.g. SKIRTOR monolithic path)",
             ),
         )
 
@@ -199,22 +203,29 @@ class XRaySEDComponent:
         # takes M_* in M_⊙; exponentiate at the boundary.
         log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        # AGN corona normalisation: the canonical ``xray_total`` derives the
-        # corona from the disc 2500 Å luminosity (Just+2007 alpha_ox), NOT from
-        # L_bol. The AGN component publishes ``l_2500``; when it is absent (no
-        # AGN, or AGN block off) it falls back to 0.0 and the corona vanishes.
-        # (#746: the previous ``L_agn_bol=``/``alpha_ox=`` kwargs were not
-        # accepted by ``xray_total`` and were silently dropped, so the corona
-        # never appeared.)
-        l_2500 = jnp.asarray(state.derived.get("l_2500", 0.0))
+        L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
 
-        # ``xray_delta_alpha_ox`` is the offset from the Just+2007
-        # alpha_ox(L_2500) relation (default 0.0 = self-consistent). The
-        # canonical corona consumes it directly; when ``l_2500`` is 0 (no AGN)
-        # the corona vanishes regardless of the offset.
-        delta_alpha_ox = jnp.asarray(params["xray_delta_alpha_ox"])
+        # Compute l_2500_30deg with fallback chain:
+        # 1. L_2500_intrinsic from composable AGN (un-reddened disc shape)
+        # 2. L_2500_30deg from SKIRTOR or other torus models
+        # 3. L_bol -> L_2500 BC (Hopkins+2007) as last resort
+        L_2500 = jnp.asarray(state.derived.get("L_2500_intrinsic", 0.0))
+        L_2500_skirtor = jnp.asarray(state.derived.get("L_2500_30deg", 0.0))
+        # BC_2500 from Hopkins+2007: nu_2500 = 1.199e15 Hz, BC = 5.15
+        L_2500_fallback = L_agn_bol / (5.15 * 1.199e15)
+        l_2500 = jnp.where(
+            L_2500 > 0.0,
+            L_2500,
+            jnp.where(L_2500_skirtor > 0.0, L_2500_skirtor, L_2500_fallback),
+        )
 
         def _emit(w):
+            # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
+            # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
+            # the X-ray corona). ``xray_alpha_ox`` is now a live *offset* knob
+            # (default 0.0 = pure empirical alpha_ox(L_2500); negative hardens
+            # the corona, positive softens it). See ADR-0009 / xray_precompute.py
+            # line 149 for the delta semantics.
             return xray_total(
                 w,
                 sfr=sfr,
@@ -224,7 +235,7 @@ class XRaySEDComponent:
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
-                delta_alpha_ox=delta_alpha_ox,
+                delta_alpha_ox=jnp.asarray(params["xray_alpha_ox"]),
             )
 
         L_xray = _emit(wave)

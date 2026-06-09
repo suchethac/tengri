@@ -157,12 +157,28 @@ tengri.list_nebular_backends()
 # %% [markdown]
 # ## AGN composables
 #
-# AGN is built from four orthogonal pieces — disc, torus, lines, FeII —
-# each with its own registry. `recipes.agn_panchromatic()` is one
-# stable composition.
+# AGN is built from six orthogonal stages — disc, nlr, blr, feii, torus,
+# attenuation — each with its own registry of swappable blocks. The
+# composable blocks are the recommended surface for mixing and matching AGN
+# components. `recipes.agn_panchromatic()` is one stable composition.
 
 # %%
 tengri.list_agn_models()
+
+# %% [markdown]
+# ### Composable AGN blocks — discovery and mixing
+#
+# The composable grammar groups blocks by pipeline stage. Use
+# `list_agn_blocks()` to see all available options, grouped by category.
+# Each block has a citation, status, and description accessible via
+# `describe_agn_block()`.
+
+# %%
+tengri.list_agn_blocks()
+
+# %%
+# Inspect a specific block
+tengri.describe_agn_block("skirtor", category="torus")
 
 # %% [markdown]
 # ## Recipes — five curated starting points

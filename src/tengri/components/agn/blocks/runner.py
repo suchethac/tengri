@@ -3,7 +3,7 @@
 
 Canonical execution order (paper §2.1.6 / upstream GRAHSP module ordering)::
 
-    [disc] → [lines] → [feii] → [torus] → [attenuation]
+    [disc] → [nlr] → [blr] → [feii] → [torus] → [attenuation]
 
 Each stage is owned by a registered block from
 :mod:`tengri.components.agn.blocks._protocol`.
@@ -21,7 +21,8 @@ GRAHSP-pure recipe (every stage uses the GRAHSP impl)::
     p = Parameters(
         agn_model="composable",
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="grahsp",
+        agn_nlr_block="grahsp",
+        agn_blr_block="grahsp",
         agn_feii_block="grahsp",
         agn_torus_block="grahsp",
         agn_attenuation_block="grahsp_biatten",
@@ -34,7 +35,8 @@ attenuation)::
     p = Parameters(
         agn_model="composable",
         agn_disc_block="grahsp_sbpl",
-        agn_lines_block="none",
+        agn_nlr_block="none",
+        agn_blr_block="none",
         agn_feii_block="none",
         agn_torus_block="two_temperature",
         agn_attenuation_block="smc_prevot",
@@ -115,7 +117,8 @@ _DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset(
 # Includes BLR/NLR (their λL_λ → L_disc_bol conversion uses the Krawczyk+2013
 # bolometric correction, which assumes a UV/optical continuum at 5100Å).
 _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
-    "lines": frozenset({"grahsp", "blr", "nlr"}),
+    "nlr": frozenset({"analytic", "grahsp"}),
+    "blr": frozenset({"analytic", "grahsp"}),
     "feii": frozenset({"grahsp"}),
     "torus": frozenset({"grahsp"}),
 }
@@ -128,6 +131,8 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
         "multicolor",
         "kubota_done",
         "qsogen",
+        "relagn",
+        "richards2006",
     }
 )
 
@@ -137,7 +142,8 @@ C_AA_PER_S: float = 2.99792458e18
 #: Selector keys recognised by the runner. Match the canonical pipeline order.
 BLOCK_SELECTOR_KEYS: tuple[str, ...] = (
     "agn_disc_block",
-    "agn_lines_block",
+    "agn_nlr_block",
+    "agn_blr_block",
     "agn_feii_block",
     "agn_torus_block",
     "agn_attenuation_block",
@@ -147,7 +153,8 @@ BLOCK_SELECTOR_KEYS: tuple[str, ...] = (
 #: silently emit garbage — users must opt in to each block by name.
 DEFAULT_BLOCK_SELECTORS: dict[str, str] = {
     "agn_disc_block": "none",
-    "agn_lines_block": "none",
+    "agn_nlr_block": "none",
+    "agn_blr_block": "none",
     "agn_feii_block": "none",
     "agn_torus_block": "none",
     "agn_attenuation_block": "none",
@@ -157,7 +164,8 @@ DEFAULT_BLOCK_SELECTORS: dict[str, str] = {
 def validate_block_recipe(
     *,
     agn_disc_block: str,
-    agn_lines_block: str,
+    agn_nlr_block: str,
+    agn_blr_block: str,
     agn_feii_block: str,
     agn_torus_block: str,
     agn_attenuation_block: str,
@@ -179,12 +187,12 @@ def validate_block_recipe(
        error so users notice immediately).
     2. **All-none recipe** — every selector is ``"none"``; output will be
        identically zero. Almost certainly a misuse.
-    3. **No disc, active downstream** — disc is ``"none"`` but lines /
+    3. **No disc, active downstream** — disc is ``"none"`` but nlr / blr /
        feii / torus are not. The downstream blocks scale by the disc's
        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` (zero), so they emit
        zero too. Either the user forgot to pick a disc impl, or the recipe
        is genuinely degenerate.
-    4. **GRAHSP downstream + non-5100Å disc** — GRAHSP lines / feii / torus
+    4. **GRAHSP downstream + non-5100Å disc** — GRAHSP nlr / blr / feii / torus
        expect the disc to deliver a meaningful UV/optical continuum at
        5100Å. Pairing them with an exotic disc (e.g. pure ADAF) likely
        produces an unintended SED.
@@ -192,7 +200,7 @@ def validate_block_recipe(
        generic, so this is technically valid; warn that the user might
        prefer the more clearly named ``"smc_prevot"`` block (when wrapped
        in a future PR).
-    6. **BLR / NLR without UV/optical disc** — these lines blocks convert
+    6. **NLR / BLR without UV/optical disc** — these lines blocks convert
        :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` to a bolometric disc
        luminosity via the Krawczyk+ 2013 correction. A non-5100Å disc
        triggers the same warning as rule 4.
@@ -202,8 +210,8 @@ def validate_block_recipe(
 
     Parameters
     ----------
-    agn_disc_block, agn_lines_block, agn_feii_block, agn_torus_block, \
-agn_attenuation_block : str
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
+agn_torus_block, agn_attenuation_block : str
         Selectors for each pipeline stage.
     params : dict, optional
         Free parameter dict; reserved for future per-impl param-presence
@@ -222,7 +230,8 @@ agn_attenuation_block : str
     """
     selectors = {
         "disc": agn_disc_block,
-        "lines": agn_lines_block,
+        "nlr": agn_nlr_block,
+        "blr": agn_blr_block,
         "feii": agn_feii_block,
         "torus": agn_torus_block,
         "attenuation": agn_attenuation_block,
@@ -249,11 +258,11 @@ agn_attenuation_block : str
         )
 
     # Rule 3: no disc, active downstream.
-    downstream_active = any(selectors[cat] != "none" for cat in ("lines", "feii", "torus"))
+    downstream_active = any(selectors[cat] != "none" for cat in ("nlr", "blr", "feii", "torus"))
     if selectors["disc"] == "none" and downstream_active:
         active = [
             f"{cat}={selectors[cat]!r}"
-            for cat in ("lines", "feii", "torus")
+            for cat in ("nlr", "blr", "feii", "torus")
             if selectors[cat] != "none"
         ]
         _emit(
@@ -300,23 +309,25 @@ def compose_l_nu(
     agn_log_lbol: float,
     *,
     agn_disc_block: str,
-    agn_lines_block: str,
+    agn_nlr_block: str,
+    agn_blr_block: str,
     agn_feii_block: str,
     agn_torus_block: str,
     agn_attenuation_block: str,
     template_state: dict | None = None,
+    return_l2500: bool = False,
     **params,
-) -> Array:
+) -> Array | tuple[Array, float]:
     r"""Compose AGN-side :math:`L_\nu` from per-stage block implementations.
 
     Pipeline (paper §2.1.6 / upstream module order)::
 
-        L_λ_total = L_disc + L_lines + L_feii + L_torus
+        L_λ_total = L_disc + L_nlr + L_blr + L_feii + L_torus
         L_λ_atten = L_λ_total × attenuation_factor
         L_ν       = L_λ_atten × λ²/c
 
-    The disc stage runs first so its 5100Å luminosity can scale the line /
-    FeII / torus normalisations (matching upstream GRAHSP convention).
+    The disc stage runs first so its 5100Å luminosity can scale the NLR /
+    BLR / FeII / torus normalisations (matching upstream GRAHSP convention).
 
     Parameters
     ----------
@@ -324,8 +335,8 @@ def compose_l_nu(
         Rest-frame wavelength grid [Å].
     agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
-    agn_disc_block, agn_lines_block, agn_feii_block, agn_torus_block, \
-agn_attenuation_block : str
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
+agn_torus_block, agn_attenuation_block : str
         Names of the registered block implementations to use. **Static**
         under JIT (Python strings; the runner resolves them at trace time).
     template_state : dict, optional
@@ -335,6 +346,10 @@ agn_attenuation_block : str
         ``load_*_templates()`` helper at trace time — keeps HDF5 / file
         I/O out of the JIT trace boundary. ``None`` (default) falls back
         to the in-block lru_cache load.
+    return_l2500 : bool, optional
+        When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
+        tuple. When False (default), return only ``L_nu`` for backward
+        compatibility with existing single-return callers. Default: False.
     **params
         Per-impl free parameters. Each block consumes the keys it
         recognises and ignores the rest.
@@ -343,13 +358,29 @@ agn_attenuation_block : str
     -------
     L_nu : ndarray, shape (n_wave,)
         Total AGN-side :math:`L_\nu` [erg/s/Hz].
+    L_2500_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 2500 Å [erg/s/Hz], capturing the
+        disc shape at the ``agn_log_lbol`` normalization. Returned as
+        second element of tuple. Otherwise not returned.
+    L_4400_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 4400 Å [erg/s/Hz], capturing the
+        disc shape at the ``agn_log_lbol`` normalization. Returned as
+        third element of tuple. Otherwise not returned.
 
     Notes
     -----
     JIT-compatible (selectors are static). The order of operations matches
-    the upstream GRAHSP ``ActivateGTorus``/``ActivateLines``/``ActivatePL``/
-    ``BiAttenuationLaw`` chain so an all-grahsp selection is numerically
-    equivalent to :func:`tengri.components.agn.grahsp.compute_grahsp_sed`.
+    the upstream GRAHSP ``ActivateGTorus``/``ActivateNarrowLines``/
+    ``ActivateBroadLines``/``ActivatePL``/``BiAttenuationLaw`` chain so
+    an all-grahsp selection is numerically equivalent to
+    :func:`tengri.components.agn.grahsp.compute_grahsp_sed`.
+
+    **Disc shape propagation**: ``L_2500_intrinsic`` differs between disc
+    implementations (e.g. ``multicolor`` vs ``richards2006``) at the same
+    ``agn_log_lbol``, enabling disc-shape-dependent downstream physics
+    (e.g. α_ox in X-ray corona).
     """
     wave = jnp.asarray(wavelength)
     # If templates are pre-loaded, forward them under a stable kwarg name
@@ -366,6 +397,27 @@ agn_attenuation_block : str
         templates=grahsp_templates,
         **params,
     )
+
+    # Capture L_2500_intrinsic and L_4400_intrinsic: the un-reddened,
+    # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz] that
+    # drive X-ray alpha_ox and radio loudness. These follow CIGALE's
+    # ``intrin_Lnu_2500A_30deg`` convention — they are evaluated at a FIXED 30 deg
+    # reference inclination, NOT the (free) viewing angle ``agn_cos_inc``. The
+    # disc viewing inclination stays free and shapes the observed SED
+    # (foreshortening, Type-1/2 mask), but the *intrinsic* accretion luminosity
+    # that anchors alpha_ox / radio-loudness must be inclination-INDEPENDENT, or a
+    # fit would let the viewing angle spuriously drive the X-ray/radio normalisation.
+    # Re-evaluate the disc block at cos(30 deg) (block-agnostic: each disc models
+    # its own inclination law). Cheap relative to the full pipeline.
+    _COS_30DEG = 0.86602540378443864
+    L_lambda_disc_30deg = disc_fn(
+        wave,
+        agn_log_lbol=agn_log_lbol,
+        templates=grahsp_templates,
+        **{**params, "agn_cos_inc": _COS_30DEG},
+    )
+    L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc_30deg) * (2500.0**2 / C_AA_PER_S)
+    L_4400_intrinsic = jnp.interp(4400.0, wave, L_lambda_disc_30deg) * (4400.0**2 / C_AA_PER_S)
 
     # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
     # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
@@ -440,13 +492,10 @@ agn_attenuation_block : str
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
 
-    # Stage 2: emission lines. A block returns either an ``L_lambda`` array
-    # (fully anisotropic / maskable) or a ``(maskable, isotropic)`` split — the
-    # extended NLR is isotropic and bypasses the Type-1/2 mask, the compact BLR
-    # is maskable. ``split_lines_result`` normalises both forms.
-    lines_fn = resolve_agn_block("lines", agn_lines_block)
-    L_lambda_lines_aniso, L_lambda_lines_iso = split_lines_result(
-        lines_fn(
+    # Stage 2a: narrow-line region.
+    nlr_fn = resolve_agn_block("nlr", agn_nlr_block)
+    nlr_aniso, nlr_iso = split_lines_result(
+        nlr_fn(
             wave,
             agn_log_lbol=agn_log_lbol,
             l5100_disc=l5100_disc,
@@ -454,6 +503,19 @@ agn_attenuation_block : str
             **params,
         )
     )
+    # Stage 2b: broad-line region.
+    blr_fn = resolve_agn_block("blr", agn_blr_block)
+    blr_aniso, blr_iso = split_lines_result(
+        blr_fn(
+            wave,
+            agn_log_lbol=agn_log_lbol,
+            l5100_disc=l5100_disc,
+            templates=grahsp_templates,
+            **params,
+        )
+    )
+    L_lambda_lines_aniso = nlr_aniso + blr_aniso
+    L_lambda_lines_iso = nlr_iso + blr_iso
 
     # Stage 3: FeII forest.
     feii_fn = resolve_agn_block("feii", agn_feii_block)
@@ -540,9 +602,15 @@ agn_attenuation_block : str
         # central engine + torus IR).
         L_lambda_pre_atten = L_lambda_central + L_lambda_torus
         L_nu_reemit = polar_dust_reemission_lnu(wave, L_lambda_pre_atten, **params)
-        return L_nu_atten + L_nu_reemit
+        L_nu_result = L_nu_atten + L_nu_reemit
     else:
-        return L_nu_atten
+        L_nu_result = L_nu_atten
+
+    # Return with optional L_2500_intrinsic and L_4400_intrinsic tuple.
+    if return_l2500:
+        return (L_nu_result, L_2500_intrinsic, L_4400_intrinsic)
+    else:
+        return L_nu_result
 
 
 def composable_agn_l_nu(
@@ -550,13 +618,15 @@ def composable_agn_l_nu(
     agn_log_lbol: float = 45.0,
     agn_frac: float = 1.0,
     agn_disc_block: str = "none",
-    agn_lines_block: str = "none",
+    agn_nlr_block: str = "none",
+    agn_blr_block: str = "none",
     agn_feii_block: str = "none",
     agn_torus_block: str = "none",
     agn_attenuation_block: str = "none",
     template_state: dict | None = None,
+    return_l2500: bool = False,
     **params,
-) -> Array:
+) -> Array | tuple[Array, float]:
     r"""AGN_MODELS["composable"] entry point — :data:`L_ν` in erg/s/Hz.
 
     Thin wrapper around :func:`compose_l_nu` matching the AGN_MODELS
@@ -572,40 +642,68 @@ def composable_agn_l_nu(
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`. Default ``45.0``.
     agn_frac : float, optional
         Overall AGN fraction scaling [dimensionless]. Default ``1.0``.
-    agn_disc_block, agn_lines_block, agn_feii_block, agn_torus_block, \
-agn_attenuation_block : str, optional
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block, \
+agn_torus_block, agn_attenuation_block : str, optional
         Per-stage block selectors. Default ``"none"`` for every stage
         (a no-op pipeline; users **must** opt in by name).
+    return_l2500 : bool, optional
+        When True, return ``(L_nu, L_2500_intrinsic, L_4400_intrinsic)``
+        tuple. When False (default), return only ``L_nu`` for backward
+        compatibility. Default: False.
     **params
         Per-impl free parameters forwarded to every block.
 
     Returns
     -------
     L_nu : ndarray, shape (n_wave,)
-        Total AGN :math:`L_\nu` [erg/s/Hz].
+        Total AGN :math:`L_\nu` [erg/s/Hz], scaled by ``agn_frac``.
+    L_2500_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 2500 Å [erg/s/Hz]. NOT scaled by
+        ``agn_frac`` (maintains the unscaled-intrinsic convention of
+        ``L_agn_bol``). Returned as second element of tuple when enabled.
+    L_4400_intrinsic : float, optional
+        When ``return_l2500=True``, the un-reddened intrinsic disc
+        monochromatic luminosity at 4400 Å [erg/s/Hz]. NOT scaled by
+        ``agn_frac`` (maintains the unscaled-intrinsic convention of
+        ``L_agn_bol``). Returned as third element of tuple when enabled.
 
     Notes
     -----
     JIT-compatible (block selectors are static). Validation runs once at
     Python entry, so the JIT cache picks up changes only on selector
     changes (which trigger a recompile anyway).
+
+    The returned ``L_2500_intrinsic`` and ``L_4400_intrinsic`` (when
+    ``return_l2500=True``) are NOT scaled by ``agn_frac``, matching the
+    normalization convention of ``L_agn_bol``. This allows downstream
+    components (e.g. X-ray, radio) to scale the monochromatic luminosities
+    independently.
     """
     validate_block_recipe(
         agn_disc_block=agn_disc_block,
-        agn_lines_block=agn_lines_block,
+        agn_nlr_block=agn_nlr_block,
+        agn_blr_block=agn_blr_block,
         agn_feii_block=agn_feii_block,
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,
         params=params,
     )
-    return agn_frac * compose_l_nu(
+    result = compose_l_nu(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_disc_block=agn_disc_block,
-        agn_lines_block=agn_lines_block,
+        agn_nlr_block=agn_nlr_block,
+        agn_blr_block=agn_blr_block,
         agn_feii_block=agn_feii_block,
         agn_torus_block=agn_torus_block,
         agn_attenuation_block=agn_attenuation_block,
         template_state=template_state,
+        return_l2500=return_l2500,
         **params,
     )
+    if return_l2500:
+        L_nu, L_2500_intrinsic, L_4400_intrinsic = result
+        return (agn_frac * L_nu, L_2500_intrinsic, L_4400_intrinsic)
+    else:
+        return agn_frac * result

@@ -96,6 +96,10 @@ _BLR_FWHM_KMS = 5000.0
 # with Uniform(0.05, 0.15) prior in _params.py.
 _BLR_LINE_EFFICIENCY_DEFAULT = 0.08
 
+# Default covering fraction of the BLR.
+# This is promoted to a free parameter `agn_blr_cf` in _params.py.
+_BLR_COVERING_FRACTION_DEFAULT = 0.1
+
 
 # ── Fe II template loading ────────────────────────────────────────
 
@@ -266,6 +270,51 @@ def _fe2_pseudo_continuum(
     return fe2_strength * fe2_broadened / opt_window_flux
 
 
+def _blr_l_hbeta(
+    l_disc_bol_erg: float,
+    covering_fraction: float = _BLR_COVERING_FRACTION_DEFAULT,
+    line_efficiency: float = _BLR_LINE_EFFICIENCY_DEFAULT,
+) -> jnp.ndarray:
+    """Compute H-beta luminosity from disc bolometric and BLR parameters.
+
+    This helper computes the H-beta luminosity used to normalize the Fe II
+    pseudo-continuum. It ensures consistent normalization between the
+    analytic BLR (compute_blr_sed) and the standalone FeII block.
+
+    Parameters
+    ----------
+    l_disc_bol_erg : float
+        Bolometric disc luminosity [erg/s].
+    covering_fraction : float, optional
+        BLR covering fraction (0 to 1). Default 0.1.
+    line_efficiency : float, optional
+        Fraction of intercepted luminosity converted to line emission.
+        Default 0.08.
+
+    Returns
+    -------
+    jnp.ndarray
+        H-beta luminosity [erg/s].
+
+    Notes
+    -----
+    The H-beta strength in _BLR_LINES is 1.0 (rest wavelength 4862.68 Å,
+    Vanden Berk et al. 2001). Its fractional share of total line luminosity
+    is hbeta_strength / strength_sum, where strength_sum ≈ 25.0 is the sum
+    of all _BLR_LINE_STRENGTHS.
+
+    The Fe II pseudo-continuum (from _fe2_pseudo_continuum) is normalized
+    per unit H-beta, so scaling by this value produces the absolute Fe II
+    luminosity in the same units as compute_blr_sed.
+    """
+    hbeta_strength = 1.0000  # H-beta (4862.68 Å, VB01 rel flux 8.649)
+    strength_sum = jnp.sum(_BLR_LINE_STRENGTHS)
+    l_intercepted = covering_fraction * l_disc_bol_erg
+    l_lines_total = line_efficiency * l_intercepted
+    l_hbeta = hbeta_strength * l_lines_total / jnp.maximum(strength_sum, 1e-30)
+    return l_hbeta
+
+
 def compute_blr_sed(
     wavelength: jnp.ndarray,
     l_disc_bol_erg: float,
@@ -360,10 +409,7 @@ def compute_blr_sed(
     l_nu_blr = jnp.sum(line_spectra, axis=0) / jnp.maximum(strength_sum, 1e-30)
 
     # Fe II pseudo-continuum (scaled relative to H-beta luminosity)
-    # H-beta relative strength in _BLR_LINES is 0.50; its share of total
-    # line luminosity is 0.50 / strength_sum.
-    hbeta_strength = 0.50  # must match _BLR_LINES H-beta entry
-    l_hbeta = hbeta_strength * l_lines_total / jnp.maximum(strength_sum, 1e-30)
+    l_hbeta = _blr_l_hbeta(l_disc_bol_erg, covering_fraction, line_efficiency)
 
     # _fe2_pseudo_continuum returns per-Hz template per unit H-beta luminosity
     fe2_spectrum = _fe2_pseudo_continuum(wavelength, fwhm_kms, agn_fe2_strength)

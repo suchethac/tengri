@@ -122,6 +122,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(-2.0, 0.5, default=-1.0),
         "AGN Eddington ratio log10(L/L_Edd)",
     ),
+    ParamDeclaration(
+        "agn_log_mdot",
+        # log10(Mdot / Mdot_Edd): RELAGN grid extent -1.5 to 0.3.
+        Uniform(-1.5, 0.3, default=-1.0),
+        "RELAGN Eddington-scaled accretion rate log10(Mdot/Mdot_Edd)",
+    ),
+    ParamDeclaration(
+        "agn_astar",
+        # Black hole spin a*: prograde only, grid extent 0 to 0.998.
+        Uniform(0.0, 0.998, default=0.0),
+        "RELAGN black hole spin a* (prograde)",
+    ),
     # SKIRTOR clumpy torus parameters (Stalevski et al. 2012, 2016) — ranges
     # are the SKIRTOR library axes.
     ParamDeclaration(

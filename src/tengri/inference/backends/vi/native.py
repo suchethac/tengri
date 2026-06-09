@@ -1048,10 +1048,28 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     where :math:`m_s` is the metric sample, :math:`t(x) = \\sqrt{N^{-1}} f(x)`
     is the whitened transform, and :math:`L(m)` is the left square-root metric.
+
+    Notes
+    -----
+    The geoVI curving machinery (``curve_residual``/``sampnorm``) takes
+    **data-space inner products** with ``jnp.dot``, which silently does a
+    matrix product on a 2-D array. Hierarchical/population fits hand in
+    ``(N_gal, n_pix)`` data and a ``signal_response`` returning the same shape,
+    so the data space is flattened to 1-D here (and the prediction raveled to
+    match). Single-galaxy 1-D data is unchanged. Without this the canonical path
+    crashes under ``native_vi_nonlinear`` even though ``native_vi_linear``
+    works — the topology-agnostic contract must hold across backends
+    (suchethac/tengri#711).
     """
+    _signal_response_nd = signal_response
+
+    def signal_response(xi):
+        return jnp.ravel(_signal_response_nd(xi))
+
+    data = jnp.ravel(jnp.asarray(data))
+    noise = jnp.ravel(jnp.asarray(noise))
     noise_inv = 1.0 / noise**2
     sqrt_noise_inv = jnp.sqrt(noise_inv)
-    n_data = data.shape[0]
 
     def metric_vec(xi, v):
         xi_d, v_d = unflatten(xi), unflatten(v)
@@ -1084,7 +1102,11 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
         """Metric sample (NOT CG-inverted): J^T sqrt_N^-1 eta_lh + eta_pr."""
         k1, k2 = jax.random.split(subkey)
         eta_pr = jax.random.normal(k1, shape=xi.shape)
-        eta_lh = jax.random.normal(k2, shape=(n_data,))
+        # Whitened-data draw follows the noise array's shape — 1-D for a single
+        # galaxy, (N_gal, n_pix) for a hierarchical population fit. Was
+        # ``shape=(data.shape[0],)``, which collapsed a batched (N_gal, n_pix)
+        # data array to N_gal and broke population geoVI (suchethac/tengri#711).
+        eta_lh = jax.random.normal(k2, shape=sqrt_noise_inv.shape)
         _, vjp_fn = jax.vjp(signal_response, unflatten(xi))
         jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
         return jt + eta_pr
@@ -1093,7 +1115,8 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
         """Draw one CG-inverted linear residual (same as MGVI draw)."""
         k1, k2 = jax.random.split(subkey)
         eta_pr = jax.random.normal(k1, shape=pos_f.shape)
-        eta_lh = jax.random.normal(k2, shape=(n_data,))
+        # See draw_metric_sample: shape follows the noise array, not data.shape[0].
+        eta_lh = jax.random.normal(k2, shape=sqrt_noise_inv.shape)
         _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
         jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
         return _cg_solve(

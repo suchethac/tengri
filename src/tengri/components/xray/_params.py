@@ -22,12 +22,11 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be > 0",
     ),
     ParamDeclaration(
-        "xray_delta_alpha_ox",
+        "xray_alpha_ox",
         Fixed(0.0),
-        "Deviation from the Just+2007 alpha_ox(L_2500) relation [dex]. The "
-        "canonical X-CIGALE / Yang+2020 corona derives alpha_ox self-"
-        "consistently from the AGN 2500 Å luminosity; this offset (default "
-        "0.0) lets a fit explore harder/softer UV-to-X-ray coupling.",
+        "Offset [dex] applied to the L_2500-derived alpha_ox (Just+2007,"
+        " CIGALE convention). 0 (default) = pure empirical alpha_ox(L_2500);"
+        " negative hardens the X-ray corona, positive softens it.",
     ),
     ParamDeclaration(
         "xray_gamma_hmxb",

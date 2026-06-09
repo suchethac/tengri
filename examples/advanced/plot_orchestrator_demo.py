@@ -74,7 +74,7 @@ try:
         "xray_gamma_lmxb": jnp.asarray(1.6),
         "xray_gamma_agn": jnp.asarray(1.8),
         "xray_E_cut": jnp.asarray(300.0),
-        "xray_delta_alpha_ox": jnp.asarray(0.0),
+        "xray_alpha_ox": jnp.asarray(-1.4),
         "redshift": jnp.asarray(0.0),
     }
 

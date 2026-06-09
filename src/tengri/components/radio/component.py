@@ -55,7 +55,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.radio._params import PARAMS as _RADIO_PARAMS
-from tengri.components.radio.radio import radio_total, radio_total_dpl
+from tengri.components.radio.radio import radio_freefree, radio_total, radio_total_dpl
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -70,12 +70,16 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 # constant so tests and downstream code can import it without
 # instantiating the dataclass.
 #
+# - ``"none"`` (new 2026-06) — AGN radio turned off; SF component only.
+# - ``"powerlaw"`` (default) — single power-law AGN radio
+# - ``"dpl"`` — double power-law AGN radio with aging cutoff
+#
 # JP / KP / tribble (Jaffe & Perola 1973; Kardashev/Pacholczyk; Tribble
 # 1993) are NOT in this tuple — they require precomputed pitch-angle
 # integrals validated against BRATS (Harwood+2013). When that physics
 # lands, the kernel names and their two free parameters (radio_alpha_inj,
 # radio_log_nu_break) get added together in the same PR.
-AGN_RADIO_MODELS: tuple[str, ...] = ("powerlaw", "dpl")
+AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 
 
 @dataclass(frozen=True)
@@ -87,19 +91,21 @@ class RadioSEDComponentConfig(SEDComponentConfig):
     name : str
         Diagnostic identifier. Default ``"radio"``.
     sfr_mode : str
-        FIR-radio correlation mode passed to :func:`radio_total`. One of
-        ``{"bell2003", "delvecchio2021", "mccheyne2022"}``. Default
-        ``"bell2003"``.
+        Star-formation synchrotron mode. One of
+        ``{"none", "bell2003", "delvecchio2021", "mccheyne2022"}``. The
+        ``"none"`` mode turns off the SF component entirely (pure AGN radio).
+        Default ``"bell2003"``.
     include_freefree : bool
         Add Murphy+2011 thermal free-free component. Default ``True``
         (matches :func:`radio_total`'s default).
     agn_radio_model : str
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` —
-        ``{"powerlaw", "dpl"}``. Default ``"powerlaw"`` preserves the
-        pre-aging-cutoff behaviour bit-identically. Physical-aging
-        kernels ``"JP"``, ``"KP"``, ``"tribble"`` are reserved names
-        rejected at construction with a :class:`ValueError`; the physics
-        lands in a follow-up PR.
+        ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
+        the AGN radio component (SF synchrotron + optional free-free only).
+        Default ``"powerlaw"`` preserves the pre-aging-cutoff behaviour
+        bit-identically. Physical-aging kernels ``"JP"``, ``"KP"``,
+        ``"tribble"`` are reserved names rejected at construction with a
+        :class:`ValueError`; the physics lands in a follow-up PR.
     """
 
     name: str = "radio"
@@ -187,6 +193,11 @@ class RadioSEDComponent:
         return (
             DerivedKey("L_ir", "erg/s", "Read from dust if present; falls back to 0.0"),
             DerivedKey("L_agn_bol", "erg/s", "Read from AGN if present; falls back to 0.0"),
+            DerivedKey(
+                "L_4400_intrinsic",
+                "erg/s/Hz",
+                "Read from AGN if present; drives radio loudness normalization",
+            ),
             DerivedKey("log_mstar", "dex", "Read from stellar if present; falls back to 10.0"),
         )
 
@@ -200,6 +211,42 @@ class RadioSEDComponent:
         r"""No-op precompute. Radio is a closed-form function of (λ, params)."""
         del ssp_data, wave_grid, filters
         return RadioSEDComponentState(name=self.name)
+
+    def _firrc_overrides(
+        self, params: Mapping[str, jnp.ndarray]
+    ) -> tuple[jnp.ndarray | None, jnp.ndarray | None, jnp.ndarray | None]:
+        r"""Resolve the FIRRC ``(q0, mass_slope, z_slope)`` triplet for the
+        active ``sfr_mode``.
+
+        Returns the model-specific ``radio_delv_*`` or ``radio_mcch_*``
+        parameters when an evolving SF-radio model is selected, or
+        ``(None, None, None)`` for ``bell2003`` / ``none`` (the SF functions
+        then use their own literature defaults). Selection is on the static
+        ``self.config.sfr_mode`` string, so this introduces no traced branch.
+
+        Parameters
+        ----------
+        params : mapping
+            Receives all declared ``radio_*`` keys.
+
+        Returns
+        -------
+        tuple
+            ``(q0, mass_slope, z_slope)`` as JAX arrays, or ``(None, None,
+            None)`` when the active mode does not consume them.
+        """
+        mode = self.config.sfr_mode
+        if mode == "delvecchio2021":
+            prefix = "radio_delv_"
+        elif mode == "mccheyne2022":
+            prefix = "radio_mcch_"
+        else:
+            return None, None, None
+        return (
+            jnp.asarray(params[f"{prefix}q0"]),
+            jnp.asarray(params[f"{prefix}mass_slope"]),
+            jnp.asarray(params[f"{prefix}z_slope"]),
+        )
 
     def apply(
         self,
@@ -240,14 +287,51 @@ class RadioSEDComponent:
 
         L_ir = jnp.asarray(state.derived.get("L_ir", 0.0))
         L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
+        L_4400_intrinsic = jnp.asarray(state.derived.get("L_4400_intrinsic", 0.0))
         log_mstar = jnp.asarray(state.derived.get("log_mstar", 10.0))
         z = jnp.asarray(params.get("redshift", 0.0))
+
+        # FIRRC evolution coefficients for the evolving SF-radio models. The
+        # active ``sfr_mode`` (static config) selects which model-specific
+        # triplet is consumed; bell2003 / none ignore them (pass None → the
+        # SF functions fall through to their literature defaults / zeros).
+        firrc_q0, firrc_mass_slope, firrc_z_slope = self._firrc_overrides(params)
 
         # Rest-frame radio Lν on an arbitrary wavelength grid. Radio is a smooth
         # (broken-)power-law, so evaluating it at the per-filter / per-pixel
         # effective wavelength is an excellent LUT approximation (#624).
+        # Dispatch on agn_radio_model ("none" = SF only, "powerlaw" = SF + AGN,
+        # "dpl" = SF + AGN double power-law).
         def _emit(w):
-            if model == "powerlaw":
+            if model == "none":
+                # SF component only; AGN radio turned off
+                from tengri.components.radio.radio import _dispatch_sfr
+
+                sf = _dispatch_sfr(
+                    w,
+                    L_ir=L_ir,
+                    sfr_mode=self.config.sfr_mode,
+                    q_ir=jnp.asarray(params["radio_q_ir"]),
+                    alpha_sf=jnp.asarray(params["radio_alpha_sf"]),
+                    log_mstar=log_mstar,
+                    redshift=z,
+                    q0=firrc_q0,
+                    mass_slope=firrc_mass_slope,
+                    z_slope=firrc_z_slope,
+                    apply_suppression=True,
+                )
+                ff = (
+                    radio_freefree(
+                        w,
+                        L_ir,
+                        jnp.asarray(params["radio_T_e"]),
+                        jnp.asarray(params["radio_alpha_ff"]),
+                    )
+                    if self.config.include_freefree
+                    else 0.0
+                )
+                return sf + ff
+            elif model == "powerlaw":
                 return radio_total(
                     w,
                     L_ir=L_ir,
@@ -259,10 +343,15 @@ class RadioSEDComponent:
                     sfr_mode=self.config.sfr_mode,
                     log_mstar=log_mstar,
                     redshift=z,
+                    q0=firrc_q0,
+                    mass_slope=firrc_mass_slope,
+                    z_slope=firrc_z_slope,
                     include_freefree=self.config.include_freefree,
                     T_e=jnp.asarray(params["radio_T_e"]),
                     alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                    l_bband=L_4400_intrinsic,
                 )
+            # model == "dpl"
             return radio_total_dpl(
                 w,
                 L_ir=L_ir,
@@ -277,9 +366,13 @@ class RadioSEDComponent:
                 sfr_mode=self.config.sfr_mode,
                 log_mstar=log_mstar,
                 redshift=z,
+                q0=firrc_q0,
+                mass_slope=firrc_mass_slope,
+                z_slope=firrc_z_slope,
                 include_freefree=self.config.include_freefree,
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
+                l_bband=L_4400_intrinsic,
             )
 
         L_radio = _emit(wave)

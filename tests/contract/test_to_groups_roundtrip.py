@@ -169,7 +169,8 @@ class TestToGroupsRoundtrip:
             agn={
                 "disc": {"type": "powerlaw", "*": FREE},
                 "torus": {"type": "simple", "*": FIXED},
-                "lines": {"type": "none"},
+                "nlr": {"type": "analytic"},
+                "blr": {"type": "none"},
             },
             redshift=Fixed(0.1),
         )

@@ -777,6 +777,45 @@ When unsure, use `log_total_mass=10.0` as a sensible default for observable gala
 
 ---
 
+## Phase II-5 — AGN monolithic model deprecation (2026-06)
+
+**Deprecation (non-breaking; v0.x → v1.0):** The nine monolithic AGN models are
+now deprecated in favor of the composable block-based grammar introduced in
+Phase II-3. All deprecated models continue to resolve and remain fully functional;
+users will receive a `DeprecationWarning` naming the recommended composable
+equivalent. Migration is **optional** in v0.x; mandatory deprecation shims will
+be added in v1.0, with actual removal in v2.0.
+
+**Rationale:** The monolithic models (`agn={'type':'X'}`) are less flexible and
+harder to maintain than the composable blocks (`agn={disc=..., torus=..., ...}`).
+The blocks are the canonical surface going forward; monolithic models are
+deprecated to consolidate the maintenance burden on one API.
+
+| Deprecated model | Recommended composable | Deprecation route |
+|---|---|---|
+| `agn={'type':'multicolor_agn'}` | `agn={disc='multicolor', torus='silva04', ...}` | `resolve_agn_model` emits `DeprecationWarning` |
+| `agn={'type':'kubota_done'}` | (alias of multicolor_agn) | —— |
+| `agn={'type':'kubota_done_full'}` | `agn={disc='kubota_done', torus='silva04', ...}` | —— |
+| `agn={'type':'silva04'}` | `agn={disc='powerlaw', torus='silva04', ...}` | —— |
+| `agn={'type':'cat3d_wind'}` | `agn={disc='powerlaw', torus='cat3d_wind', ...}` | —— |
+| `agn={'type':'adaf'}` | `agn={disc='adaf', torus='silva04', ...}` | —— |
+| `agn={'type':'skirtor'}` | `agn={disc='skirtor', torus='skirtor', ...}` | —— |
+| `agn={'type':'qsogen'}` | `agn={disc='qsogen', nlr='none', blr='qsogen'}` | —— |
+| `agn={'type':'grahsp'}` | `agn={disc='grahsp', nlr='grahsp', blr='grahsp', feii='grahsp', torus='grahsp'}` | —— |
+| `agn={'type':'unified_nlr_blr'}` | `recipes.unified_agn()` | —— |
+
+**Special case:** `agn={'type':'relagn'}` (RELAGN relativistic disc) remains in
+**production** status. Its Kerr ray-tracing grid has no committed composable block
+yet; migration is deferred to a follow-up when a composable disc block is added.
+
+**Double-counting guard (#721):** When both composable AGN (`agn_fracAGN > 0`) and
+Dale2014 dust emission with embedded quasar (`dust_frac_agn > 0`) are active in
+the same model, a `UserWarning` alerts users to the double-count risk. Recommend
+setting `dust_frac_agn=0` when using real AGN. See
+`src/tengri/forward/component_factory.py` for the guard location.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

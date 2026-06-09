@@ -355,8 +355,14 @@ def _agn_block_types(category: str) -> frozenset[str]:
     # decorators have fired. Mirrors the eager imports done by AGN
     # ``unified.py`` at module-load time; safe to redo here.
     import tengri.components.agn.blocks.alternates
+    import tengri.components.agn.blocks.atten_blocks
+    import tengri.components.agn.blocks.blr_blocks
     import tengri.components.agn.blocks.disc_blocks
-    import tengri.components.agn.blocks.lines_blocks  # noqa: F401
+    import tengri.components.agn.blocks.feii_blocks
+    import tengri.components.agn.blocks.grahsp_blocks
+    import tengri.components.agn.blocks.nlr_blocks
+    import tengri.components.agn.blocks.qsogen_blocks
+    import tengri.components.agn.blocks.torus_blocks  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
@@ -368,24 +374,21 @@ _VALID_AGN_DISC_TYPES = _agn_block_types("disc")
 #: Valid AGN torus block types (derived from ``AGN_BLOCKS['torus']``).
 _VALID_AGN_TORUS_TYPES = _agn_block_types("torus")
 
-#: Valid AGN lines block types (derived from ``AGN_BLOCKS['lines']``).
-_VALID_AGN_LINES_TYPES = _agn_block_types("lines") | {"qsogen"}  # qsogen lives on the qsogen model
+#: Valid AGN narrow-line region block types (derived from
+#: ``AGN_BLOCKS['nlr']``).
+_VALID_AGN_NLR_TYPES = _agn_block_types("nlr")
 
-#: Valid AGN feii block types.
-_VALID_AGN_FEII_TYPES = {
-    "none",
-    "grahsp",
-    "qsogen_balmer",
-}
+#: Valid AGN broad-line region block types (derived from ``AGN_BLOCKS['blr']``).
+#: Includes ``"qsogen"`` which lives on the qsogen model.
+_VALID_AGN_BLR_TYPES = _agn_block_types("blr") | {"qsogen"}
 
-#: Valid AGN attenuation block types.
-_VALID_AGN_ATTEN_TYPES = {
-    "none",
-    "smc_prevot",
-    "polar_dust",
-    "grahsp_biatten",
-    "qsogen_smc",
-}
+#: Valid AGN feii block types (derived from ``AGN_BLOCKS['feii']`` — the
+#: block-registration decorator is the single source of truth, so a new feii
+#: block like ``boroson_green`` is picked up automatically without editing here).
+_VALID_AGN_FEII_TYPES = _agn_block_types("feii")
+
+#: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
+_VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
@@ -425,12 +428,13 @@ _AGN_PARTITION = {
     "agn_fritz_gamma": "agn.torus",
     "agn_fritz_oa": "agn.torus",
     "agn_fritz_psy": "agn.torus",
-    # Lines
-    "agn_blr_cf": "agn.lines",
-    "agn_nlr_cf": "agn.lines",
-    "agn_alpha_ion": "agn.lines",
-    "agn_feltre_cf": "agn.lines",
-    "neb_xid": "agn.lines",
+    # Narrow-line region
+    "agn_nlr_cf": "agn.nlr",
+    "agn_alpha_ion": "agn.nlr",  # NLR photoionisation knob
+    "agn_feltre_cf": "agn.nlr",  # Feltre calibration for NLR
+    "neb_xid": "agn.nlr",  # Nebular ionization for NLR
+    # Broad-line region
+    "agn_blr_cf": "agn.blr",
     # FeII
     "agn_fe2_strength": "agn.feii",
     # Attenuation
@@ -484,7 +488,7 @@ def parse_groups(**kwargs) -> Parameters:
     ----------
     **kwargs : keyword arguments
         Model configuration. Keys are group names (sfh, dust, neb, igm,
-        radio, xray) or top-level settings (redshift, apply_igm, n_grid).
+        radio, xray, agn) or top-level settings (redshift, apply_igm, n_grid).
 
     Returns
     -------
@@ -495,13 +499,17 @@ def parse_groups(**kwargs) -> Parameters:
     ------
     ValueError
         If an unknown group key, unknown type value, or unknown parameter
-        name is provided.
-    NotImplementedError
-        If AGN group is provided or if SFH type is a list.
+        name is provided. Also raised if both deprecated 'lines' and new
+        'nlr'/'blr' sub-blocks are provided under 'agn'.
 
     Notes
     -----
     **JIT-compatible**: no — this is a pure Python translator.
+
+    **AGN blocks**: The new composable AGN grammar supports independent
+    ``nlr`` (narrow-line region) and ``blr`` (broad-line region) sub-blocks
+    under the ``agn`` group. The deprecated ``lines`` sub-block is expanded
+    to an (nlr, blr) pair with a ``DeprecationWarning``.
 
     Examples
     --------
@@ -545,6 +553,17 @@ def parse_groups(**kwargs) -> Parameters:
     # unconstrained no-op nuisance dimensions for parameters belonging to
     # inactive blocks (e.g. GRAHSP params under a SKIRTOR torus).
     agn_active_params = _agn_active_param_set(structural_kwargs)
+
+    # Which radio sub-block params the active sf / agn radio model consumes.
+    # A ``radio={'sf': {'*': FREE}}`` / ``radio={'agn': {'*': FREE}}`` wildcard
+    # frees only these — the inactive model's params collapse to Fixed (mirrors
+    # the AGN block-scoped wildcard above).
+    radio_sf_active = _RADIO_SF_PARAMS_BY_MODE.get(
+        structural_kwargs.get("radio_sfr_mode"), frozenset()
+    )
+    radio_agn_active = _RADIO_AGN_PARAMS_BY_MODEL.get(
+        structural_kwargs.get("radio_agn_model"), frozenset()
+    )
 
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
@@ -606,6 +625,14 @@ def parse_groups(**kwargs) -> Parameters:
             # Both should work. Build a merged search view across the
             # canonical location and the sibling locations; conflicts raise.
             group_dict = _build_agn_search_view(param_name, kwargs.get("agn", {}), group)
+        elif group == "radio.sf" or group == "radio.agn":
+            # Radio sub-blocks: descend into radio={'sf': {...}} / {'agn': {...}}
+            # (mirrors the dust.emission sub-group path above).
+            radio_top = kwargs.get("radio")
+            radio_top = radio_top if isinstance(radio_top, dict) else {}
+            subkey = "sf" if group == "radio.sf" else "agn"
+            sub = radio_top.get(subkey, {})
+            group_dict = sub if isinstance(sub, dict) else {}
         else:
             group_dict = kwargs.get(group, {})
 
@@ -620,6 +647,10 @@ def parse_groups(**kwargs) -> Parameters:
         wildcard_active = True
         if is_agn:
             wildcard_active = param_name in agn_active_params
+        elif group == "radio.sf":
+            wildcard_active = param_name in radio_sf_active
+        elif group == "radio.agn":
+            wildcard_active = param_name in radio_agn_active
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -683,7 +714,42 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    _warn_firrc_slope_degeneracy(final_params)
+
     return final_params
+
+
+def _warn_firrc_slope_degeneracy(final_params: Parameters) -> None:
+    """Warn when a FIRRC *slope* coefficient is freed (per-galaxy degeneracy).
+
+    The mass/redshift FIRRC slopes vary q_IR *across* a sample; at one
+    galaxy's fixed (M*, z) they collapse to a single scalar, degenerate with
+    the ``radio_*_q0`` normalization. Freeing them only makes sense as
+    ``PopulationFitter`` hyperparameters — see ADR-0018 §8a. The
+    :class:`RadioFIRRCDegeneracyWarning` category is filterable so a
+    deliberate hierarchical fit can silence it.
+    """
+    from tengri.components.radio._params import (
+        FIRRC_SLOPE_PARAMS,
+        RadioFIRRCDegeneracyWarning,
+    )
+
+    freed = sorted(FIRRC_SLOPE_PARAMS.intersection(final_params.free_params))
+    if not freed:
+        return
+    warnings.warn(
+        f"Radio FIRRC slope coefficient(s) {freed} are free, but the FIR-radio "
+        f"correlation slopes are degenerate with the normalization at a single "
+        f"galaxy's fixed (M*, z) — they map to one scalar q_IR, so a per-galaxy "
+        f"fit cannot constrain them. Free the normalization instead "
+        f"('radio_delv_q0' / 'radio_mcch_q0' / 'radio_q_ir') for the radio-excess "
+        f"amplitude, and reserve the slopes for PopulationFitter hyperparameters "
+        f"(see ADR-0018 §8a). Filter RadioFIRRCDegeneracyWarning to silence this "
+        f"for a deliberate hierarchical fit.",
+        RadioFIRRCDegeneracyWarning,
+        stacklevel=3,
+    )
 
 
 # ── Internal helpers ───────────────────────────────────────────────────────
@@ -841,10 +907,9 @@ def _translate_stellar(stellar_dict: dict, result: dict) -> None:
 def _translate_dust(dust_dict: dict, result: dict) -> None:
     """Translate dust group to dust_model, dust_law_bc, dust_emission.
 
-    Consults the SEDModelComponent _REGISTRY to allow SEDModelComponent port names
-    to pass through as valid dust types. When a SEDModelComponent type is recognized,
-    the resolution is deferred to the component factory, and we use a default
-    Parameters dust_model to avoid validation errors.
+    Resolves dust type against the set of supported dust models
+    (two_component, single_component, wg00) and extracts structural
+    configuration and law selections.
     """
     dust_type = dust_dict.get("type", "two_component")
 
@@ -857,15 +922,6 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             f"(got type={dust_type!r}). Use a two-component dust block, or drop "
             f"'lyman_cutoff'."
         )
-
-    # Check if this is a SEDModelComponent type (consult _REGISTRY)
-    from tengri.components.sed_model_component import _REGISTRY
-
-    if dust_type in _REGISTRY:
-        # Recognized as a SEDModelComponent port — use default Parameters dust model
-        # and let the component factory handle component selection
-        result["dust_model"] = "two_component"
-        return
 
     # Validate type against hard-coded dust model types
     if dust_type not in _VALID_DUST_TYPES:
@@ -949,11 +1005,8 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         if isinstance(emission_dict, dict):
             emission_type = emission_dict.get("type", None)
             if emission_type is not None:
-                # Check if this is a SEDModelComponent port
-                if emission_type in _REGISTRY:
-                    result["dust_emission"] = emission_type
-                    return
-
+                # Dust IR emission types are engine names (modified_blackbody, dale2014,
+                # dl07, dl14, astrodust, etc.) resolved by resolve_emission_model.
                 valid_emission_types = _valid_dust_emission_types()
                 if emission_type not in valid_emission_types:
                     suggestions = difflib.get_close_matches(
@@ -1035,17 +1088,120 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
 
 
 def _translate_radio(radio_dict: dict, result: dict) -> None:
-    """Translate radio group to radio=True/False."""
-    radio_type = radio_dict.get("type", "none")
+    """Translate radio group with composable SF + AGN sub-blocks.
 
-    # Validate type
-    valid_radio = _valid_radio_types()
-    if radio_type not in valid_radio:
-        suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
-        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
+    Supports two grammar styles:
 
-    result["radio"] = radio_type != "none"
+    **New composable form (preferred)**:
+
+    .. code-block:: python
+
+        radio = {
+            "sf": {"type": "delvecchio2021"},  # SF variant
+            "agn": {"type": "dpl"},  # AGN variant
+        }
+
+    **Legacy form (back-compat)**:
+
+    .. code-block:: python
+
+        radio = {"type": "condon92"}  # radio on with default sf/agn models
+
+    Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
+    """
+    has_legacy_type = "type" in radio_dict
+    has_sf_block = "sf" in radio_dict
+    has_agn_block = "agn" in radio_dict
+
+    if has_legacy_type and (has_sf_block or has_agn_block):
+        raise ValueError(
+            "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
+            "Use either: radio={'type': 'bell2003'} (legacy) "
+            "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
+        )
+
+    # Legacy form: radio={'type': 'X'} → interpret as SF variant with default AGN
+    if has_legacy_type and not has_sf_block and not has_agn_block:
+        radio_type = radio_dict["type"]
+        valid_radio = _valid_radio_types()
+        if radio_type not in valid_radio:
+            suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
+        result["radio"] = radio_type != "none"
+        if radio_type != "none":
+            # Legacy 'type' predates the SF/AGN split → default both models.
+            result["radio_sfr_mode"] = "bell2003"
+            result["radio_agn_model"] = "powerlaw"
+        return
+
+    # New composable form: extract SF and AGN sub-blocks
+    sf_variant = "bell2003"  # default
+    agn_variant = "powerlaw"  # default
+    radio_enabled = False
+
+    if has_sf_block:
+        sf_dict = radio_dict["sf"]
+        if isinstance(sf_dict, dict):
+            sf_variant = sf_dict.get("type", "bell2003")
+            valid_sf = frozenset({"none", "bell2003", "delvecchio2021", "mccheyne2022"})
+            if sf_variant not in valid_sf:
+                suggestions = difflib.get_close_matches(sf_variant, valid_sf, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown radio sf type '{sf_variant}'.{suggest_str}")
+        else:
+            raise TypeError(f"radio['sf'] must be a dict, got {type(sf_dict).__name__}.")
+
+    if has_agn_block:
+        agn_dict = radio_dict["agn"]
+        if isinstance(agn_dict, dict):
+            agn_variant = agn_dict.get("type", "powerlaw")
+            from tengri.components.radio.component import AGN_RADIO_MODELS
+
+            valid_agn = frozenset(AGN_RADIO_MODELS)
+            if agn_variant not in valid_agn:
+                suggestions = difflib.get_close_matches(agn_variant, valid_agn, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown radio agn type '{agn_variant}'.{suggest_str}")
+        else:
+            raise TypeError(f"radio['agn'] must be a dict, got {type(agn_dict).__name__}.")
+
+    # Determine if radio is overall enabled: True if either SF or AGN is not 'none'
+    radio_enabled = sf_variant != "none" or agn_variant != "none"
+
+    result["radio"] = radio_enabled
+    if radio_enabled:
+        result["radio_sfr_mode"] = sf_variant
+        result["radio_agn_model"] = agn_variant
+
+
+#: Model-specific radio sub-block params, routed to the ``radio.sf`` /
+#: ``radio.agn`` sub-groups so they resolve when nested in
+#: ``radio={'sf': {...}, 'agn': {...}}`` (mirrors the ``dust.emission``
+#: sub-group). Keyed by the active mode: a sub-block ``'*'`` wildcard frees
+#: only the active model's params (block-scoped, like the AGN grammar), so
+#: selecting ``delvecchio2021`` never frees the McCheyne coefficients and a
+#: ``powerlaw`` AGN radio never frees the DPL turnover knobs.
+_RADIO_SF_PARAMS_BY_MODE: dict[str, frozenset[str]] = {
+    "delvecchio2021": frozenset({"radio_delv_q0", "radio_delv_mass_slope", "radio_delv_z_slope"}),
+    "mccheyne2022": frozenset({"radio_mcch_q0", "radio_mcch_mass_slope", "radio_mcch_z_slope"}),
+}
+_RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
+    "powerlaw": frozenset({"radio_loudness", "radio_alpha_agn"}),
+    "dpl": frozenset(
+        {
+            "radio_loudness",
+            "radio_alpha_thin",
+            "radio_alpha_thick",
+            "radio_log_nu_t",
+            "radio_log_nu_cut",
+        }
+    ),
+}
+#: Union of every param owned by each radio sub-group, used by the partition
+#: to route names away from the flat ``radio`` group.
+_RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_MODE.values())
+_RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY_MODEL.values())
 
 
 #: Valid laws for the MW foreground screen (#297). Only the closed-form
@@ -1098,8 +1254,10 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
 
 #: AGN sub-block keys recognised by the nested-dict grammar. Used when
 #: walking a user's top-level ``agn`` dict to tell sub-block dicts apart
-#: from per-parameter overrides.
-_AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "lines", "feii", "atten"})
+#: from per-parameter overrides. The new split includes independent ``nlr``
+#: and ``blr`` categories; ``lines`` is deprecated (expanded to an (nlr, blr)
+#: pair via expand_lines_alias).
+_AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", "lines"})
 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
@@ -1142,14 +1300,19 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "neb": frozenset({"type", "*", "full_catalogue"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),
-    "radio": frozenset({"type", "*"}),
+    "radio": frozenset({"type", "*", "sf", "agn"}),
+    "radio.sf": frozenset({"type", "*"}),
+    "radio.agn": frozenset({"type", "*"}),
     "xray": frozenset({"type", "*"}),
     "agn": frozenset({"type", "*", "norm"}) | _AGN_SUBBLOCK_KEYS,
     "agn.disc": frozenset({"type", "*"}),
     "agn.torus": frozenset({"type", "*"}),
-    "agn.lines": frozenset({"type", "*"}),
+    "agn.nlr": frozenset({"type", "*"}),
+    "agn.blr": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
     "agn.atten": frozenset({"type", "*"}),
+    # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
+    "agn.lines": frozenset({"type", "*"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
 
@@ -1314,6 +1477,18 @@ def _validate_user_keys(
                     sub_allowed | sub_params | agn_shared_names,
                     param_partition,
                 )
+        elif top_key == "radio":
+            # Validate nested radio={'sf': {...}} / {'agn': {...}} sub-blocks
+            # so a typo'd FIRRC / DPL key raises instead of silently vanishing.
+            for sub_name in ("sf", "agn"):
+                sub = top_val.get(sub_name)
+                if not isinstance(sub, dict):
+                    continue
+                sub_group = f"radio.{sub_name}"
+                sub_allowed = _GROUP_STRUCTURAL_KEYS[sub_group]
+                sub_params = _short_names_for_group(sub_group, param_partition)
+                sub_params = sub_params | _short_names_for_registered_type(sub.get("type"))
+                _check_dict_keys(sub_group, sub, sub_allowed | sub_params, param_partition)
 
 
 def _check_dict_keys(
@@ -1345,9 +1520,9 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     """Build the resolution view for one AGN parameter.
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
-    plus up to five sub-block dicts (``disc``/``torus``/``lines``/``feii``/
-    ``atten``). To keep the API friendly, a parameter can be supplied at
-    *either* level — the partition table records the canonical location,
+    plus up to six sub-block dicts (``disc``/``torus``/``nlr``/``blr``/
+    ``feii``/``atten``). To keep the API friendly, a parameter can be supplied
+    at *either* level — the partition table records the canonical location,
     but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
     expects the value to take effect even though ``agn_log_lbol`` is
     nominally a shared (top-level) param.
@@ -1459,14 +1634,18 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     """Translate agn group to AGN composable block selectors.
 
     Activates agn_model='composable' and sets per-block selectors
-    (agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
-    agn_attenuation_block). Omitted blocks default to 'none'.
+    (agn_disc_block, agn_torus_block, agn_nlr_block, agn_blr_block,
+    agn_feii_block, agn_attenuation_block). Omitted blocks default to 'none'.
 
     A top-level ``'type'`` key picks a non-composable monolithic AGN model
     registered in :data:`tengri.components.agn.AGN_MODELS` (e.g.
     ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``). When
     ``type='composable'`` (or absent), the sub-block selectors are honoured.
     Mixing a non-composable ``type`` with sub-blocks is an error.
+
+    The deprecated ``lines`` sub-block (which combined NLR and BLR) is
+    expanded to independent ``nlr`` and ``blr`` sub-blocks via
+    ``expand_lines_alias``, with a ``DeprecationWarning`` emitted.
 
     Parameters
     ----------
@@ -1479,7 +1658,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     ------
     ValueError
         If unknown block type, unknown model type, or invalid block
-        specification.
+        specification. Also raised if both ``lines`` and ``nlr``/``blr``
+        are provided.
     """
     # Top-level 'type' selects a monolithic AGN model when not 'composable'.
     # Previously this key was silently dropped and the model collapsed to
@@ -1507,11 +1687,73 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     # Activate composable model
     result["agn_model"] = "composable"
 
-    # Define the five canonical sub-blocks and their type validator sets
+    # Handle deprecated `lines` sub-block: expand to independent nlr/blr
+    # and emit a DeprecationWarning.
+    agn_dict = dict(agn_dict)  # Shallow copy to avoid modifying the original
+    if "lines" in agn_dict:
+        lines_spec = agn_dict.pop("lines")
+        # Check for conflicting specification: both lines and nlr/blr
+        if isinstance(lines_spec, dict) and ("nlr" in agn_dict or "blr" in agn_dict):
+            raise ValueError(
+                "Cannot specify both deprecated 'lines' sub-block and "
+                "the new 'nlr' and/or 'blr' sub-blocks. Use only 'nlr' "
+                "and 'blr', or update your code to use the new grammar."
+            )
+        # Expand the deprecated lines type to (nlr_type, blr_type)
+        if isinstance(lines_spec, dict):
+            lines_type = lines_spec.get("type", "none")
+            from tengri.components.agn.blocks._aliases import expand_lines_alias
+
+            try:
+                nlr_type, blr_type = expand_lines_alias(lines_type)
+            except ValueError as e:
+                raise ValueError(f"Invalid 'lines' type in agn dict: {e}") from e
+
+            # Emit the deprecation warning
+            warnings.warn(
+                f"The AGN 'lines' slot is deprecated; use independent 'nlr' "
+                f"and 'blr' slots. 'lines' type '{lines_type}' maps to "
+                f"nlr='{nlr_type}', blr='{blr_type}'.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
+            # Construct nlr and blr sub-blocks from the expanded types.
+            # Carry over any wildcard and per-param overrides from lines.
+            nlr_spec = {"type": nlr_type}
+            blr_spec = {"type": blr_type}
+
+            # Copy over wildcard and per-param overrides from lines_spec.
+            # Heuristic: parameters with "blr" in the name go to blr only;
+            # those with "nlr" go to nlr only; wildcard and other params
+            # replicate to both.
+            for key, val in lines_spec.items():
+                if key == "type":
+                    continue
+                if key == "*":
+                    # Wildcard applies to both sub-blocks
+                    nlr_spec["*"] = val
+                    blr_spec["*"] = val
+                elif isinstance(key, str) and "blr" in key:
+                    # BLR-specific parameter
+                    blr_spec[key] = val
+                elif isinstance(key, str) and "nlr" in key:
+                    # NLR-specific parameter
+                    nlr_spec[key] = val
+                else:
+                    # Ambiguous or shared: replicate to both
+                    nlr_spec[key] = val
+                    blr_spec[key] = val
+
+            agn_dict["nlr"] = nlr_spec
+            agn_dict["blr"] = blr_spec
+
+    # Define the six canonical sub-blocks and their type validator sets
     block_specs = {
         "disc": _VALID_AGN_DISC_TYPES,
         "torus": _VALID_AGN_TORUS_TYPES,
-        "lines": _VALID_AGN_LINES_TYPES,
+        "nlr": _VALID_AGN_NLR_TYPES,
+        "blr": _VALID_AGN_BLR_TYPES,
         "feii": _VALID_AGN_FEII_TYPES,
         "atten": _VALID_AGN_ATTEN_TYPES,
     }
@@ -1520,7 +1762,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     block_to_kwarg = {
         "disc": "agn_disc_block",
         "torus": "agn_torus_block",
-        "lines": "agn_lines_block",
+        "nlr": "agn_nlr_block",
+        "blr": "agn_blr_block",
         "feii": "agn_feii_block",
         "atten": "agn_attenuation_block",
     }
@@ -1601,6 +1844,13 @@ def _partition_by_group(
                 partition[name] = "agn.disc"
         elif name.startswith("xray_"):
             partition[name] = "xray"
+        elif name in _RADIO_SF_PARAM_NAMES:
+            # Model-specific FIRRC evolution coefficients live in the radio.sf
+            # sub-block (radio={'sf': {...}}).
+            partition[name] = "radio.sf"
+        elif name in _RADIO_AGN_PARAM_NAMES:
+            # AGN radio loudness / power-law / DPL knobs live in radio.agn.
+            partition[name] = "radio.agn"
         elif name.startswith("radio_"):
             partition[name] = "radio"
         elif name.startswith("dla_"):
@@ -1641,7 +1891,7 @@ def _resolve_value(
     ``wildcard_active`` (keyword-only, default ``True``) gates the
     wildcard-``FREE`` branch only. When ``False`` a ``'*': FREE`` is treated
     as ``'*': FIXED`` for *this* parameter — used by the AGN group so a group
-    wildcard frees only the parameters the active disc/torus/lines/feii/atten
+    wildcard frees only the parameters the active disc/torus/nlr/blr/feii/atten
     blocks actually consume, not the full declared superset (which would
     otherwise create unconstrained no-op nuisance dimensions). An *explicit*
     per-parameter ``FREE`` is handled earlier and is never gated, so the user

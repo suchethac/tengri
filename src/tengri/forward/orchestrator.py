@@ -142,6 +142,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     "L_agn_bol": "erg/s",
     "L_agn_torus": "erg/s",
     "L_agn_absorbed": "erg/s",
+    "L_2500_intrinsic": "erg/s/Hz",
+    "L_4400_intrinsic": "erg/s/Hz",
     "sed_agn": "erg/s/Hz",
     "sed_grahsp": "erg/s/Hz",
     # AGN — filter LUT (Phase 3c-3d-agn).

@@ -37,7 +37,6 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
-from tengri.components.agn.disc import compute_l2500
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.protocols.component import (
     DerivedKey,
@@ -66,8 +65,8 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         ``"silva04"``, ``"cat3d_wind"``, ``"relagn"``, ``"qsogen"``, or
         ``"composable"`` (block-composed via the selectors below).
         Default ``"multicolor_agn"``.
-    agn_disc_block, agn_torus_block, agn_lines_block, agn_feii_block,
-    agn_attenuation_block : str
+    agn_disc_block, agn_nlr_block, agn_blr_block, agn_feii_block,
+    agn_torus_block, agn_attenuation_block : str
         Composable-AGN block selectors. Only consulted when
         ``model == "composable"`` — the runner reads them from this config
         (they are static strings, not traced JAX values, so they cannot
@@ -89,9 +88,10 @@ class AGNSEDComponentConfig(SEDComponentConfig):
     name: str = "agn"
     model: str = "multicolor_agn"
     agn_disc_block: str = "none"
-    agn_torus_block: str = "none"
-    agn_lines_block: str = "none"
+    agn_nlr_block: str = "none"
+    agn_blr_block: str = "none"
     agn_feii_block: str = "none"
+    agn_torus_block: str = "none"
     agn_attenuation_block: str = "none"
     agn_norm: str = "cigale_joint"
 
@@ -165,10 +165,14 @@ class AGNSEDComponent:
             DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity"),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
-                "l_2500",
+                "L_2500_intrinsic",
                 "erg/s/Hz",
-                "AGN monochromatic luminosity at rest-frame 2500 Å (drives the "
-                "X-ray corona via the Just+2007 alpha_ox relation)",
+                "AGN intrinsic disc L_nu at 2500 A (un-reddened); drives X-ray alpha_ox",
+            ),
+            DerivedKey(
+                "L_4400_intrinsic",
+                "erg/s/Hz",
+                "AGN intrinsic disc L_nu at 4400 A (un-reddened); drives radio loudness",
             ),
         )
 
@@ -349,25 +353,37 @@ class AGNSEDComponent:
         # callable. For non-composable AGN models the registered function
         # absorbs them via ``**kwargs`` and they have no effect.
         agn_kwargs["agn_disc_block"] = self.config.agn_disc_block
-        agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
-        agn_kwargs["agn_lines_block"] = self.config.agn_lines_block
+        agn_kwargs["agn_nlr_block"] = self.config.agn_nlr_block
+        agn_kwargs["agn_blr_block"] = self.config.agn_blr_block
         agn_kwargs["agn_feii_block"] = self.config.agn_feii_block
+        agn_kwargs["agn_torus_block"] = self.config.agn_torus_block
         agn_kwargs["agn_attenuation_block"] = self.config.agn_attenuation_block
         agn_kwargs["agn_norm"] = self.config.agn_norm
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
 
-        L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
+        # Call AGN function. For composable models, request L_2500_intrinsic
+        # and L_4400_intrinsic. For monolithic models, both default to 0.0
+        # (X-ray falls back to L_bol BC or SKIRTOR's published L_2500_30deg;
+        # radio falls back to L_bol bolometric correction).
+        if self.config.model == "composable":
+            L_agn, L_2500_intrinsic, L_4400_intrinsic = agn_fn(
+                wave, agn_log_lbol=agn_log_lbol, return_l2500=True, **agn_kwargs
+            )
+        else:
+            L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
+            L_2500_intrinsic = jnp.asarray(0.0)
+            L_4400_intrinsic = jnp.asarray(0.0)
 
         # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
         # can include the AGN contribution in the LUT sum.
-        # Publish L_2500 (rest-frame 2500 Å) so the X-ray component can drive
-        # the AGN corona via the Just+2007 alpha_ox relation (#746). At 2500 Å
-        # the AGN SED is disc-dominated (torus/lines are negligible in the
-        # rest-UV), so this is the emergent disc UV the model actually produces.
-        l_2500 = compute_l2500(wave, L_agn)
-        derived_overrides = dict(L_agn_bol=L_agn_bol, sed_agn=L_agn, l_2500=l_2500)
+        derived_overrides = dict(
+            L_agn_bol=L_agn_bol,
+            sed_agn=L_agn,
+            L_2500_intrinsic=L_2500_intrinsic,
+            L_4400_intrinsic=L_4400_intrinsic,
+        )
         if (
             self._state is not None
             and self._state.filter_waves is not None
@@ -394,6 +410,18 @@ class AGNSEDComponent:
                 ]
             )
             derived_overrides["agn_phot_lnu_precomp"] = agn_phot_lnu_precomp
+
+        # Spectrum LUT family (SpectrumPrecomp): a spectrum pixel is a single
+        # wavelength, so point-sampling the rest-frame AGN SED at the pixel
+        # wavelengths is exact (mirrors radio/X-ray ``_emit(spec_eff)`` and the
+        # dust-IR ``jnp.interp`` projection). Without this, ``predict_spectrum``
+        # under ``approx=SpectrumPrecomp()`` silently dropped the AGN
+        # contribution — ``predict_spectrum_via_precomp`` only sums the
+        # ``*_spec_lnu_precomp`` families that components actually publish, and
+        # AGN previously published only the photometry family.
+        spec_eff = state.derived.get("spec_eff_waves")
+        if spec_eff is not None:
+            derived_overrides["agn_spec_lnu_precomp"] = jnp.interp(spec_eff, state.wave, L_agn)
 
         return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(**derived_overrides),
