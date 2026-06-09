@@ -74,7 +74,7 @@ def _full_params() -> dict:
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_alpha_ox": -1.4,
+        "xray_delta_alpha_ox": -1.4,
         "dust_tau_v": 0.3,
         "dust_T": 30.0,
         "dust_beta_ir": 1.8,
