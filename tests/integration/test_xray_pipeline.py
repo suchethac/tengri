@@ -51,21 +51,27 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_alpha_ox": -1.4,
+        "xray_delta_alpha_ox": -1.4,
     }
 
     final = run_components([XRaySEDComponent()], initial_state, params)
 
+    # The component derives l_2500 from L_agn_bol via the Hopkins+2007 BC
+    # fallback (no L_2500_intrinsic / L_2500_30deg in this minimal state) and
+    # passes the xray_delta_alpha_ox offset through as delta_alpha_ox. Replicate
+    # both so the equivalence contract holds (#722/#746: the old expected used
+    # L_agn_bol=/alpha_ox= kwargs that xray_total silently swallows).
+    l_2500 = L_agn_bol / (5.15 * 1.199e15)
     expected = xray_total(
         wave,
         sfr=sfr,
         stellar_mass=stellar_mass,
-        L_agn_bol=L_agn_bol,
+        l_2500_30deg=l_2500,
         gamma_hmxb=2.0,
         gamma_lmxb=1.6,
         gamma_agn=1.8,
         E_cut=300.0,
-        alpha_ox=-1.4,
+        delta_alpha_ox=-1.4,
     )
 
     assert jnp.allclose(final.sed_intrinsic, expected, rtol=REL_TOL, atol=0.0)
@@ -86,7 +92,7 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_alpha_ox": -1.4,
+        "xray_delta_alpha_ox": -1.4,
     }
     out = xray.apply(state, params)
 
@@ -124,7 +130,7 @@ def test_xray_pipeline_preserves_input_state_immutability():
             "xray_gamma_lmxb": 1.6,
             "xray_gamma_agn": 1.8,
             "xray_E_cut": 300.0,
-            "xray_alpha_ox": -1.4,
+            "xray_delta_alpha_ox": -1.4,
         },
     )
 
@@ -183,7 +189,7 @@ def test_three_adapter_chain_runs_end_to_end():
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
-        "xray_alpha_ox": -1.4,
+        "xray_delta_alpha_ox": -1.4,
     }
 
     final = run_components(

@@ -96,34 +96,37 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      # Persist the tengri JAX compile cache across CI runs. `import tengri`
-      # auto-enables an on-disk cache at $TENGRI_JAX_CACHE_DIR; caching it keyed
-      # on the source hash lets re-runs (and unchanged kernels across commits via
-      # restore-keys) skip the expensive first-compile of geoVI/MGVI/per-filter
-      # kernels. See docs/installation.md and src/tengri/__init__.py.
-      - name: Cache JAX compile cache
-        uses: actions/cache@v4
+      # Fast PR feedback: NO coverage instrumentation (cov adds ~30-50% wall
+      # clock) and NO JAX disk-cache (it never warmed — cancelled runs don't
+      # save it — and added restore/save overhead). Coverage runs separately on
+      # push/nightly in the `coverage` job below. tests/inference + integration
+      # are gated to the slow tier; crossval + the data-only nebular/draine
+      # parity files are ignored (they skip without their grids).
+      #
+      # pytest-xdist `-n auto` parallelises across the runner's CPUs (≈4 vCPU).
+      - run: |
+          pytest tests/components tests/contract tests/physics tests/regression -q \
+            -n auto \
+            --ignore=tests/crossval \
+            --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
+            --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
+            --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
+        timeout-minutes: 25
+
+  # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
+  # push-to-main, the nightly schedule, and manual dispatch — not on PRs.
+  coverage:
+    runs-on: ubuntu-latest
+    needs: smoke
+    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
-          path: .jax_cache
-          key: jax-cache-${{ runner.os }}-py3.12-${{ hashFiles('src/tengri/**/*.py', 'pyproject.toml') }}
-          restore-keys: |
-            jax-cache-${{ runner.os }}-py3.12-
-      # Match the pre-rehome scope: fast tests only.
-      # tests/integration/ and tests/crossval/ are gated; the new
-      # physics-first tree (components/, contract/, inference/,
-      # physics/, regression/) sits alongside the legacy tests/unit/
-      # subdirs and runs in the same fast-suite scope.
-      # tests/inference/ is excluded from fast CI: many files do real
-      # MAP/VI/MCMC fits and individually push runtime past 15 min.
-      # Re-introduce via a slow-tier job in a follow-up PR.
-      #
-      # Two missing-fixture files remain skipped; the three numerical
-      # / autodiff failures the rehome surfaced were fixed in the same
-      # PR that removed the --deselect lines.
-      #
-      # pytest-xdist `-n auto` runs tests in parallel across all CPU cores on
-      # the GitHub runner (typically 4 vCPUs). Gives ~2-3x wall-clock speedup
-      # on the ~5800-test fast suite.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
             -n auto \
@@ -132,11 +135,7 @@ jobs:
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
-        env:
-          TENGRI_JAX_CACHE_DIR: ${{ github.workspace }}/.jax_cache
-        # 25 min (was 15): headroom for cold-cache runs so a slightly-slow suite
-        # is not cancelled mid-flight. The xdist `-n auto` fast suite is ~12-13 min.
-        timeout-minutes: 25
+        timeout-minutes: 35
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v6
         with:
