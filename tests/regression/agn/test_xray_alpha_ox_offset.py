@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression test for xray_alpha_ox as delta offset to L_2500-derived alpha_ox.
+"""Regression test for xray_delta_alpha_ox as delta offset to L_2500-derived alpha_ox.
 
-Verifies that the composable X-ray component now consumes xray_alpha_ox as a
+Verifies that the composable X-ray component now consumes xray_delta_alpha_ox as a
 live offset parameter (not a no-op), consistent with CIGALE/Just+2007 convention.
 """
 
@@ -28,7 +28,7 @@ def l_2500_fixed():
     return 1.0e29
 
 
-def test_xray_alpha_ox_offset_zero_default(wave_xray_rest, l_2500_fixed):
+def test_xray_delta_alpha_ox_offset_zero_default(wave_xray_rest, l_2500_fixed):
     """Default delta_alpha_ox=0.0 gives pure empirical L_2500-derived corona.
 
     At default (0.0 offset), the X-ray corona follows the Just+2007 empirical
@@ -46,7 +46,7 @@ def test_xray_alpha_ox_offset_zero_default(wave_xray_rest, l_2500_fixed):
     assert jnp.all(jnp.isfinite(sed_default)), "Default corona should be finite"
 
 
-def test_xray_alpha_ox_offset_hardening(wave_xray_rest, l_2500_fixed):
+def test_xray_delta_alpha_ox_offset_hardening(wave_xray_rest, l_2500_fixed):
     """Negative delta_alpha_ox hardens the X-ray corona (steeper spectrum).
 
     A negative offset (e.g., -0.3) shifts alpha_ox to more negative values,
@@ -86,7 +86,7 @@ def test_xray_alpha_ox_offset_hardening(wave_xray_rest, l_2500_fixed):
     assert ratio < 1.0, f"More negative alpha_ox should reduce X-ray flux; ratio = {ratio}"
 
 
-def test_xray_alpha_ox_offset_softening(wave_xray_rest, l_2500_fixed):
+def test_xray_delta_alpha_ox_offset_softening(wave_xray_rest, l_2500_fixed):
     """Positive delta_alpha_ox softens the X-ray corona (shallower spectrum).
 
     A positive offset (e.g., +0.3) shifts alpha_ox to less negative values,
@@ -119,8 +119,8 @@ def test_xray_alpha_ox_offset_softening(wave_xray_rest, l_2500_fixed):
     )
 
 
-def test_xray_alpha_ox_no_longer_noop():
-    """Verify that xray_alpha_ox parameter is no longer a no-op on composable path.
+def test_xray_delta_alpha_ox_no_longer_noop():
+    """Verify that xray_delta_alpha_ox parameter is no longer a no-op on composable path.
 
     This is the regression test proving the fix: directly calling
     xray_agn_corona (used by the SEDComponent) with different delta_alpha_ox
@@ -146,7 +146,7 @@ def test_xray_alpha_ox_no_longer_noop():
 
     # The SEDs must differ meaningfully (not close)
     assert not jnp.allclose(sed_1, sed_2, rtol=0.05), (
-        "xray_alpha_ox should produce different spectra when varied"
+        "xray_delta_alpha_ox should produce different spectra when varied"
     )
 
     # Both should be physically reasonable

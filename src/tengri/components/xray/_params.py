@@ -22,7 +22,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be > 0",
     ),
     ParamDeclaration(
-        "xray_alpha_ox",
+        "xray_delta_alpha_ox",
         Fixed(0.0),
         "Offset [dex] applied to the L_2500-derived alpha_ox (Just+2007,"
         " CIGALE convention). 0 (default) = pure empirical alpha_ox(L_2500);"

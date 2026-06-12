@@ -117,16 +117,23 @@ print(
 # `trapezoid(SFR, t_lookback) = 10**log_total_mass` exactly. Setting
 # `log_total_mass = 0.0` is the bit-for-bit equivalent.
 #
-# Dust mapping: CIGALE's `dustatt_modified_starburst(E_BV_lines=0.3)`
-# splits between birth-cloud and diffuse components by the Calzetti
-# R_V = 4.05 and the standard E(B-V)_cont / E(B-V)_lines = 0.44 ratio.
-# τ_diff carries the diffuse-ISM continuum attenuation; τ_bc + τ_diff
-# is the total line-region attenuation.
+# Dust mapping (#747): CIGALE's `dustatt_modified_starburst(E_BV_lines)`
+# applies a **single** Calzetti screen with `E(B-V)_cont = 0.44 * E_BV_lines`
+# to the *entire* stellar continuum — the birth-cloud / `E_BV_lines` part
+# reddens nebular *lines*, not the continuum. tengri's `two_component` is
+# Charlot & Fall: `tau_bc` reddens the *young-star* continuum on top of the
+# diffuse `tau_diff`. The CIGALE-equivalent build is therefore a single
+# diffuse screen — `tau_bc = 0`, `tau_diff = R_V * 0.44 * E_BV / 1.086`.
+# A `tau_bc + tau_diff` split (the earlier mapping) put both terms on the
+# continuum and over-attenuated the young-star-dominated FUV by ~2x (and, by
+# energy balance, inflated the dust IR / radio ~12-20%). See
+# `validate_matched_physics.py`, which reproduces CIGALE to ~2-3% FUV->FIR
+# with the single screen.
 _E_BV_LINES = 0.3
 _R_V_CALZETTI = 4.05
 _F_CONT_OVER_LINES = 0.44
 TAU_DIFF_FIDUCIAL = _R_V_CALZETTI * _F_CONT_OVER_LINES * _E_BV_LINES / 1.086
-TAU_BC_FIDUCIAL = _R_V_CALZETTI * (1.0 - _F_CONT_OVER_LINES) * _E_BV_LINES / 1.086
+TAU_BC_FIDUCIAL = 0.0  # CIGALE modified_starburst = single continuum screen
 
 # Metallicity pin — CIGALE bc03(metallicity=0.02) is Z_abs = 0.02 (≈ Z_⊙).
 # tengri's met_logzsol = log10(Z/Z_⊙) with Z_⊙ = 10**LOG10_ZSUN ≈ 0.0142
@@ -1899,10 +1906,13 @@ save_fig("cigale_12_igm_transmission.png")
 # on CIGALE's own panchromatic output at matched parameters (the §6/§7
 # chain). The top panel is the overlay; the bottom is the fractional
 # residual `tengri / CIGALE − 1` with the ±25 % band shaded. Optical
-# agreement is reported as a normalization ratio and its 16–84 % spread;
-# the far-UV and mm-tail
-# excursions are the §7 attenuation-extrapolation and Dale-template
-# differences, not new disagreements.
+# agreement is reported as a normalization ratio and its 16–84 % spread.
+# With the single-screen dust mapping (`tau_bc = 0`; see Setup, #747) the
+# residual sits inside ±25 % across the whole panchromatic range — including
+# the far-UV, which the earlier `tau_bc + tau_diff` split over-attenuated by
+# ~2×. The small residual that remains shortward of ~912 Å is the
+# Lyman-continuum extrapolation difference; the mm-tail offset is the
+# Dale-template cutoff (§6), not a disagreement in the dust energy budget.
 
 # %%
 import chex
@@ -1922,10 +1932,11 @@ resid = np.full(w_ext.shape, np.nan, dtype=float)
 resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
 # Headline numbers: the optical normalization ratio tengri/CIGALE and
-# its 16–84% spread. With the shared BC03 grid and matched mass
-# convention the ratio sits at ~1; the spread is set by the far-UV
-# attenuation-extrapolation and mm-tail differences (§7), not by
-# emission lines (this chain carries no nebular block).
+# its 16–84% spread. With the shared BC03 grid, matched mass convention,
+# and single-screen dust mapping the ratio sits at ~1 with a few-percent
+# spread; the only residual is the sub-912 Å Lyman-continuum extrapolation
+# and the mm-tail Dale-template cutoff (§6), not emission lines (this
+# chain carries no nebular block).
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))

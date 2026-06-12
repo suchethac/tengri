@@ -8,7 +8,7 @@ three X-ray emitters in :mod:`tengri.components.xray.xray`:
    and Gilfanov+2004 calibrations.  Free axes: ``xray_gamma_hmxb``,
    ``xray_gamma_lmxb``.
 2. **xray_corona** — AGN corona via the α_OX relation (Lusso+2010 / Just+2007).
-   Free axes: ``xray_gamma``, ``xray_alpha_ox``.
+   Free axes: ``xray_gamma``, ``xray_delta_alpha_ox``.
 3. **xray_corona_lopez24** — AGN corona via the α_IRX relation (López+2024,
    Yang+2022 anisotropy).  Free axes: ``xray_gamma``, ``xray_alpha_irx``.
 
@@ -66,7 +66,7 @@ from tengri.utils.grid_interp import (
 )
 
 AXIS_PARAMS_XRB = ("xray_gamma_hmxb", "xray_gamma_lmxb")
-AXIS_PARAMS_CORONA = ("xray_gamma", "xray_alpha_ox")
+AXIS_PARAMS_CORONA = ("xray_gamma", "xray_delta_alpha_ox")
 AXIS_PARAMS_CORONA_LOPEZ24 = ("xray_gamma", "xray_alpha_irx")
 
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
@@ -130,9 +130,9 @@ def _build_grid_corona(
     gamma_grid = np.asarray(gamma_grid, dtype=np.float64)
     alpha_ox_grid = np.asarray(alpha_ox_grid, dtype=np.float64)
     # Convert reference L_bol → L_2500_30deg via Hopkins+2007 BC_2500.
-    # The runtime parameter xray_alpha_ox is a delta offset to the Just+2007
+    # The runtime parameter xray_delta_alpha_ox is a delta offset to the Just+2007
     # empirical prior at this L_2500. The grid axis is now indexed by delta
-    # values (not absolute), so the grid lookup directly uses xray_alpha_ox
+    # values (not absolute), so the grid lookup directly uses xray_delta_alpha_ox
     # as the axis coordinate. Internally, we compute the prior to apply.
     _NU_2500 = 1.199e15  # Hz
     _BC_2500 = 5.15

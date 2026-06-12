@@ -340,7 +340,7 @@ class Parameters:
 
     ========================== ================= =======================================
     xray_gamma_agn             Fixed(1.8)        AGN X-ray photon index
-    xray_alpha_ox              Fixed(0.0)        Offset to L_2500-derived alpha_ox [dex]
+    xray_delta_alpha_ox              Fixed(0.0)        Offset to L_2500-derived alpha_ox [dex]
     ========================== ================= =======================================
 
     **Evolving metallicity** (``evolving_metallicity=True``):
