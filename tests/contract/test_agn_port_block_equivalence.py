@@ -90,8 +90,8 @@ _SHARED_MODULE = [
     ("blocks.silva04_torus", "silva04_model", "components.agn.silva04"),
     ("blocks.cat3d_wind_torus", "cat3d_torus_model", "components.agn.cat3d_wind"),
     ("blocks.skirtor_torus", "skirtor_model", "components.agn.skirtor"),
-    ("blocks.disc_blocks", "kd18_disc_model", "components.agn.disc"),
-    ("blocks.nlr_blocks", "nlr_model", "components.agn.nlr"),
+    ("blocks.kubota_done_disc", "kd18_disc_model", "components.agn.disc"),
+    ("blocks.nlr_analytic", "nlr_model", "components.agn.nlr"),
 ]
 
 
