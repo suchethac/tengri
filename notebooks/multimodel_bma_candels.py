@@ -29,15 +29,24 @@
 #
 # | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
 # |--------|-----|-----|----------|------------|---------|
-# | A | Continuity (Leja+19) | MIST/C3K | Salim+2018 | — | SSP-baked |
-# | B | Dirichlet (Leja+17) | PARSEC/MILES | Calzetti | — | SSP-baked |
-# | C | Trunc. skew-normal | BC03 | Kriek & Conroy | — | off |
-# | D | Double power-law | BPASS | power-law | — | off |
+# | A | Continuity (Leja+19) | MIST/C3K | Salim+2018 | — | SSP-baked, $\log U=-3$ |
+# | B | Dirichlet (Leja+17) | PARSEC/MILES | Calzetti | — | SSP-baked, $\log U=-3$ |
+# | C | Trunc. skew-normal | Padova/MILES | Kriek & Conroy | — | SSP-baked, $\log U=-2$ |
+# | D | Double power-law | BaSTI/MILES | power-law | — | SSP-baked, $\log U=-2$ |
 #
 # Configs A and B use non-parametric SFHs (the continuity and Dirichlet priors of
 # Leja et al. 2019/2017); C and D use parametric forms. (An earlier version used
 # the Dense Basis prior for A and B, but its quantile parameters are strongly
 # degenerate, which left the nested-sampling weights unstable from seed to seed.)
+#
+# Every configuration includes nebular emission, so the comparison is not
+# confounded by an on/off nebular switch. All four use a different stellar
+# isochrone (MIST, PARSEC, Padova, BaSTI) with the line + continuum emission
+# baked into the wNE SSP grid — served from the precompute LUT at no runtime
+# cost. (BC03 and BPASS, used in an earlier draft, have no baked-nebular grids
+# — FSPS, which generates them, does not implement those isochrones — so we use
+# the closest FSPS libraries: Padova for BC03's Padova isochrone, and BaSTI as a
+# fourth distinct library.)
 #
 # We leave dust IR emission out of every configuration. At $z\sim1$ the reddest
 # band (IRAC 8 µm) samples $\sim4$ µm rest-frame, so there is no far-IR
@@ -266,13 +275,19 @@ def extract_photometry(gal_idx):
 
 # %%
 t0 = time.time()
+# All four libraries are wNE (with-Nebular-Emission) DSPS grids: the nebular
+# line + continuum emission is baked into the SSP at a fixed ionization
+# parameter, so it is served from the precompute LUT at no extra cost. MIST and
+# PARSEC are at logU = -3; Padova and BaSTI at logU = -2 (the FSPS default).
 SSP = {
     "mist": load_ssp_data(str(DATA_DIR / "ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")),
     "padova": load_ssp_data(
         str(DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
     ),
-    "bc03": load_ssp_data(str(DATA_DIR / "bc03_pdva_stelib_chabrier.h5")),
-    "bpass": load_ssp_data(str(DATA_DIR / "bpss_stars_c3k_a_chabrier.h5")),
+    "pdva": load_ssp_data(str(DATA_DIR / "ssp_pdva_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0.h5")),
+    "basti": load_ssp_data(
+        str(DATA_DIR / "ssp_bsti_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0.h5")
+    ),
 }
 print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 
@@ -305,14 +320,14 @@ DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
 # Display metadata (colours/labels match the published proposal figure)
 CONFIG_ORDER = ["A", "B", "C", "D"]
-SSP_FOR = {"A": "mist", "B": "padova", "C": "bc03", "D": "bpass"}
+SSP_FOR = {"A": "mist", "B": "padova", "C": "pdva", "D": "basti"}
 COLORS = {"A": "#1b9e77", "B": "#d95f02", "C": "#7570b3", "D": "#e7298a"}
 BMA_COLOR = "0.1"
 LABELS = {
     "A": "Continuity / MIST / Salim / neb.",
-    "B": "Dirichlet / Padova / Calzetti",
-    "C": r"Trunc. Skew-Normal / BC03 / K\&C",
-    "D": "Double Power Law / BPASS / power-law",
+    "B": "Dirichlet / PARSEC / Calzetti",
+    "C": r"Trunc. Skew-Normal / Padova / K\&C",
+    "D": "Double Power Law / BaSTI / power-law",
 }
 
 
@@ -339,7 +354,7 @@ def build_configs(z, obs):
         **common,
     )
     model_c = SEDModel.build(
-        ssp_data=SSP["bc03"],
+        ssp_data=SSP["pdva"],
         sfh={
             "type": "tsnorm",
             "*": FIXED,
@@ -351,11 +366,11 @@ def build_configs(z, obs):
             "trunc": Uniform(1.0, 10.0),
         },
         dust={"type": "two_component", "law_bc": "kriek_conroy", "*": FIXED, **DUST},
-        neb={"type": "none"},
+        neb={"type": "ssp"},
         **common,
     )
     model_d = SEDModel.build(
-        ssp_data=SSP["bpass"],
+        ssp_data=SSP["basti"],
         sfh={
             "type": "dpl",
             "*": FIXED,
@@ -366,7 +381,7 @@ def build_configs(z, obs):
             "log_total_mass": Uniform(8.0, 12.0),
         },
         dust={"type": "two_component", "law_bc": "power_law", "*": FIXED, **DUST},
-        neb={"type": "none"},
+        neb={"type": "ssp"},
         **common,
     )
     return {"A": model_a, "B": model_b, "C": model_c, "D": model_d}
