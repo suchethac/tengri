@@ -162,30 +162,11 @@ class TestDale2014FracAGN:
             "(#717)."
         )
 
-    def test_closure_and_component_are_identical(self):
-        """#717 consolidation: the ``dale2014`` registry closure and the
-        ``dale2014_ir`` SEDModelComponent now share one loader + one mixing, so
-        they must produce bit-identical SEDs for the same templates/params.
-        """
-        from tengri.components.dust.dale2014_ir import Dale2014IRSEDComponent
-        from tengri.components.dust.emission_templates import load_dale2014_lnu_grid
-
-        path = _require("data/dale2014_templates_cigale.h5")
-        fn = self._fn()
-        comp = Dale2014IRSEDComponent()
-        object.__setattr__(comp, "data", load_dale2014_lnu_grid(path))
-        for f in (0.0, 0.4, 0.6):
-            closure_sed = fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=f)
-            comp_sed, _ = comp.predict(
-                {"alpha_dale": jnp.float64(2.0), "frac_agn": jnp.float64(f)},
-                jnp.zeros_like(WAVE),
-                WAVE,
-                L_ir=1.0,
-            )
-            assert jnp.allclose(closure_sed, comp_sed, rtol=1e-10, atol=0.0), (
-                f"closure and component diverge at frac_agn={f} (#717 "
-                "consolidation must keep them identical)"
-            )
+    # NOTE: the former ``test_closure_and_component_are_identical`` compared the
+    # ``dale2014`` engine closure against the ``dale2014_ir`` port. The port was an
+    # exact duplicate of the closure (#717 shared one loader + mixing) and was
+    # deleted in #738 (Phase 2b); the engine closure is now the single source, so
+    # there is no second implementation to compare against.
 
 
 # ── Schreiber2016: tabulated continuum + PAH ──────────────────────
@@ -247,39 +228,38 @@ class TestSchreiber2016Tabulated:
 
 
 class TestModifiedBlackbodyEpsilon:
-    """CIGALE mbb epsilon_mbb: fraction of L_dust carried by the MBB."""
+    """CIGALE mbb epsilon_mbb: fraction of L_dust carried by the MBB.
 
-    def _component(self):
-        from tengri.components.dust.modified_blackbody_ir import ModifiedBlackbodySED
+    Direction B (#738): the ``modified_blackbody_ir`` port was an exact duplicate
+    of the engine ``modified_blackbody`` model (the port literally called it) — so
+    the parity is asserted on the canonical engine model directly.
+    """
 
-        return ModifiedBlackbodySED()
+    def _sed(self, epsilon):
+        from tengri.components.dust.emission import resolve_emission_model
 
-    def _sed(self, comp, epsilon):
-        sed_out, _ = comp.predict(
-            {"T": 35.0, "beta_ir": 1.8, "epsilon_mbb": epsilon},
-            jnp.zeros_like(WAVE),
+        return resolve_emission_model("modified_blackbody")(
             WAVE,
-            L_ir=1.0,
+            1.0,
+            dust_T=35.0,
+            dust_beta_ir=1.8,
+            dust_epsilon_mbb=epsilon,
         )
-        return sed_out
 
     def test_epsilon_default_one_full_luminosity(self):
-        sed = self._sed(self._component(), 1.0)
+        sed = self._sed(1.0)
         assert jnp.all(jnp.isfinite(sed))
         assert jnp.any(sed > 0)
 
     def test_epsilon_scales_luminosity_linearly(self):
-        comp = self._component()
-        full = _bolometric(self._sed(comp, 1.0))
-        half = _bolometric(self._sed(comp, 0.5))
+        full = _bolometric(self._sed(1.0))
+        half = _bolometric(self._sed(0.5))
         assert np.isclose(half, 0.5 * full, rtol=1e-3)
 
     def test_epsilon_jit_and_grad(self):
-        comp = self._component()
-
         @jax.jit
         def total(eps):
-            return jnp.sum(self._sed(comp, eps))
+            return jnp.sum(self._sed(eps))
 
         assert jnp.isfinite(total(0.5))
         assert jnp.isfinite(jax.grad(total)(0.5))

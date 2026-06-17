@@ -65,6 +65,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   $M_\star$-SFR panel zoomed out so the broader BMA contour is not
   clipped, the on-figure weight annotation removed, and XLA/PjRt C++ logs
   suppressed via `TF_CPP_MIN_LOG_LEVEL`.
+- Made `multimodel_bma_candels` reproducible and swapped its non-parametric
+  SFHs. The per-fit PRNG seed was derived from Python's built-in `hash`,
+  which is salted per process (`PYTHONHASHSEED`), so every run drew a
+  different nested-sampling realisation and the figures changed run to
+  run; it now uses a `hashlib`-based `stable_seed`, so the notebook
+  reproduces exactly. Configs A and B now use the continuity (Leja+2019)
+  and Dirichlet (Leja+2017) priors instead of Dense Basis, whose quantile
+  parameters are strongly degenerate (near-singular Hessian) and left the
+  evidence — and therefore the BMA weights — unstable from seed to seed.
+  (Laplace/MAP evidence was evaluated as a faster, deterministic
+  alternative but disagreed with converged nested sampling for the same
+  degeneracy reason, so the calibrated nested-sampling `log Z` is kept.)
+- Gave every `multimodel_bma_candels` config baked-in nebular emission, so
+  the averaging is no longer confounded by an on/off nebular switch. C and
+  D moved off the bare-stellar BC03/BPASS grids (which have no baked-nebular
+  variant — FSPS does not implement those isochrones) onto the wNE Padova
+  and BaSTI grids (logU=−2, the FSPS default; downloaded from the `dsps_ssp`
+  catalogue). All four configs now use a distinct isochrone (MIST, PARSEC,
+  Padova, BaSTI) with nebular baked into the SSP LUT — so the full render
+  stays fast (~0.7 ms/eval, vs ~2 ms for the Cue emulator, which timed out
+  the render at 7 galaxies).
 
 ## [0.1.0] - 2026-05-22
 

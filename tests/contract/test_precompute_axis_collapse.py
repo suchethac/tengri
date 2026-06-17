@@ -132,7 +132,7 @@ class TestXrayPrecomputeAxisCollapse:
         "model,params",
         [
             ("xray_xrb", ("xray_gamma_hmxb", "xray_gamma_lmxb")),
-            ("xray_corona", ("xray_gamma", "xray_alpha_ox")),
+            ("xray_corona", ("xray_gamma", "xray_delta_alpha_ox")),
             ("xray_corona_lopez24", ("xray_gamma", "xray_alpha_irx")),
         ],
     )
