@@ -50,7 +50,7 @@ class TestDustEmissionTraceable:
         ],
     )
     def test_dust_ir_grids_no_large_constants(
-        self, ssp_data_wne, filter_waves_trans, dust_emission
+        self, synthetic_ssp_wide, filter_waves_trans, dust_emission
     ):
         """Verify dust IR templates don't appear as large closure constants in HLO.
         For each backend:
@@ -72,7 +72,7 @@ class TestDustEmissionTraceable:
         try:
             model = SEDModel(
                 spec,
-                ssp_data=ssp_data_wne,
+                ssp_data=synthetic_ssp_wide,
                 filter_waves=filter_waves,
                 filter_trans=filter_trans,
                 redshift=0.1,
@@ -116,7 +116,7 @@ class TestDustEmissionTraceable:
         except Exception as e:
             pytest.skip(f"Compositional kernel not available: {e}")
 
-    def test_dust_ir_lookup_backward_compatibility(self, ssp_data_wne, filter_waves_trans):
+    def test_dust_ir_lookup_backward_compatibility(self, synthetic_ssp_wide, filter_waves_trans):
         """Verify dust IR lookup still works without grid_arrays_traced.
         Backward compatibility test: old callers that don't pass grid_arrays_traced
         should still work via closure-captured arrays.
@@ -129,7 +129,7 @@ class TestDustEmissionTraceable:
         try:
             model = SEDModel(
                 spec,
-                ssp_data=ssp_data_wne,
+                ssp_data=synthetic_ssp_wide,
                 filter_waves=filter_waves,
                 filter_trans=filter_trans,
                 redshift=0.1,
@@ -160,7 +160,7 @@ class TestDustEmissionTraceable:
 class TestDustEmissionDL07:
     """DL07-specific tests."""
 
-    def test_dl07_lookup_signature(self, ssp_data_wne, filter_waves_trans):
+    def test_dl07_lookup_signature(self, synthetic_ssp_wide, filter_waves_trans):
         """Verify DL07 lookup accepts correct number of parameters."""
         filter_waves, filter_trans = filter_waves_trans
         spec = Parameters(
@@ -170,7 +170,7 @@ class TestDustEmissionDL07:
         try:
             model = SEDModel(
                 spec,
-                ssp_data=ssp_data_wne,
+                ssp_data=synthetic_ssp_wide,
                 filter_waves=filter_waves,
                 filter_trans=filter_trans,
                 redshift=0.1,
@@ -192,7 +192,7 @@ class TestDustEmissionDL07:
 class TestDustEmissionDL14:
     """DL14-specific tests."""
 
-    def test_dl14_lookup_signature(self, ssp_data_wne, filter_waves_trans):
+    def test_dl14_lookup_signature(self, synthetic_ssp_wide, filter_waves_trans):
         """Verify DL14 lookup accepts correct number of parameters."""
         filter_waves, filter_trans = filter_waves_trans
         spec = Parameters(
@@ -202,7 +202,7 @@ class TestDustEmissionDL14:
         try:
             model = SEDModel(
                 spec,
-                ssp_data=ssp_data_wne,
+                ssp_data=synthetic_ssp_wide,
                 filter_waves=filter_waves,
                 filter_trans=filter_trans,
                 redshift=0.1,

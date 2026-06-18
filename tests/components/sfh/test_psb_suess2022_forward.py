@@ -45,18 +45,18 @@ def _build_psb(ssp, log_total_mass=10.0):
     )
 
 
-def test_psb_suess2022_forward_models(ssp_data_wne):
+def test_psb_suess2022_forward_models(synthetic_ssp_wide):
     """predict_state must run (no NotImplementedError) and return a usable SED."""
-    state = _build_psb(ssp_data_wne).predict_state({})
+    state = _build_psb(synthetic_ssp_wide).predict_state({})
     sed = np.asarray(state.sed_intrinsic)
     assert np.isfinite(sed).all(), "psb_suess2022 SED has non-finite values"
     assert (sed > 0).any(), "psb_suess2022 SED is all zero/negative"
 
 
-def test_psb_suess2022_conserves_mass(ssp_data_wne):
+def test_psb_suess2022_conserves_mass(synthetic_ssp_wide):
     """∫ SFR dt over the lookback grid equals the formed mass 10**log_total_mass."""
     log_total_mass = 10.0
-    state = _build_psb(ssp_data_wne, log_total_mass=log_total_mass).predict_state({})
+    state = _build_psb(synthetic_ssp_wide, log_total_mass=log_total_mass).predict_state({})
     lbt_yr = np.asarray(state.derived["sfh_grid_lbt_yr"])
     sfr = np.asarray(state.derived["sfr_history"])
     order = np.argsort(lbt_yr)

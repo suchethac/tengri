@@ -19,10 +19,10 @@ class TestParamMapFreeze:
     """Ensure _param_map is unmodifiable after construction."""
 
     @pytest.fixture
-    def minimal_model(self, ssp_data_fsps):
+    def minimal_model(self, synthetic_ssp_wide):
         """Build a minimal SEDModel."""
         spec = Parameters(redshift=0.05)
-        return SEDModel(spec, ssp_data_fsps)
+        return SEDModel(spec, synthetic_ssp_wide)
 
     def test_param_map_is_frozen_type(self, minimal_model):
         """_param_map should be a MappingProxyType (read-only)."""
@@ -55,18 +55,18 @@ class TestParamMapFreeze:
 class TestParamMapValidation:
     """Test parameter map validation during construction."""
 
-    def test_all_free_params_registered(self, ssp_data_fsps):
+    def test_all_free_params_registered(self, synthetic_ssp_wide):
         """All free params in spec should have entries in _param_map."""
         # This should not raise; all free params are registered
         spec = Parameters(
             sfh_dpl_alpha=Uniform(0.1, 2.0),
             redshift=Fixed(0.05),
         )
-        model = SEDModel(spec, ssp_data_fsps)
+        model = SEDModel(spec, synthetic_ssp_wide)
         assert "sfh_dpl_alpha" in model._param_map
         assert "redshift" in model._param_map
 
-    def test_missing_free_param_raises(self, ssp_data_fsps):
+    def test_missing_free_param_raises(self, synthetic_ssp_wide):
         """If a free param is not registered, construction should fail.
 
         This is a synthetic test case where we manually inject a free param
@@ -87,16 +87,16 @@ class TestParamMapValidation:
         mock_spec = MockSpec(redshift=0.05)
         # This should raise ParameterMapError during construction
         with pytest.raises(ParameterMapError, match="nonexistent_param"):
-            SEDModel(mock_spec, ssp_data_fsps)
+            SEDModel(mock_spec, synthetic_ssp_wide)
 
-    def test_param_map_contains_expected_entries(self, ssp_data_fsps):
+    def test_param_map_contains_expected_entries(self, synthetic_ssp_wide):
         """Parameter map should have expected entries for a given spec."""
         spec = Parameters(
             sfh_dpl_alpha=Uniform(0.1, 2.0),
             dust_tau_bc=Fixed(0.5),
             redshift=Fixed(0.05),
         )
-        model = SEDModel(spec, ssp_data_fsps)
+        model = SEDModel(spec, synthetic_ssp_wide)
 
         # Check that all free params are in the map
         for param in spec.free_params:
@@ -116,7 +116,13 @@ class TestRecipeParamMapConsistency:
     """Spot-check that recipe models build consistent param maps."""
 
     def test_star_forming_photometry_builds(self, ssp_data_fsps):
-        """star_forming_photometry recipe should build successfully."""
+        """star_forming_photometry recipe should build successfully.
+
+        Kept on the real-SSP fixture: this recipe pulls the Cue nebular backend,
+        which needs ``data/cue_weights.npz`` on disk — a real-data dependency
+        beyond the SSP grid, so it gates rather than migrating to the synthetic
+        SSP fixture (#613).
+        """
         from tengri import recipes
 
         # Build a model using the recipe
@@ -136,40 +142,40 @@ class TestRecipeParamMapConsistency:
 class TestParamMapDeltas:
     """Test the internal _init_* methods return proper deltas."""
 
-    def test_init_sfh_returns_dict(self, ssp_data_fsps):
+    def test_init_sfh_returns_dict(self, synthetic_ssp_wide):
         """_init_sfh should return a dict, not mutate self._param_map."""
         spec = Parameters(redshift=0.05)
-        model = SEDModel(spec, ssp_data_fsps)
+        model = SEDModel(spec, synthetic_ssp_wide)
 
         # If we got here, the refactoring worked (no mutation during init)
         # The param_map is now frozen, so we can't check intermediate state
         assert isinstance(model._param_map, MappingProxyType)
 
-    def test_model_with_agn_builds(self, ssp_data_fsps):
+    def test_model_with_agn_builds(self, synthetic_ssp_wide):
         """Model with AGN should build without errors."""
         spec = Parameters(
             agn_model="parametric",
             agn_log_lbol=Fixed(45.5),
             redshift=Fixed(0.05),
         )
-        model = SEDModel(spec, ssp_data_fsps)
+        model = SEDModel(spec, synthetic_ssp_wide)
 
         assert isinstance(model._param_map, MappingProxyType)
         assert "agn_log_lbol" in model._param_map
 
-    def test_model_with_dust_emission_builds(self, ssp_data_fsps):
+    def test_model_with_dust_emission_builds(self, synthetic_ssp_wide):
         """Model with dust emission should build without errors."""
         spec = Parameters(
             dust_emission="draine_li2007",
             redshift=Fixed(0.05),
         )
-        model = SEDModel(spec, ssp_data_fsps)
+        model = SEDModel(spec, synthetic_ssp_wide)
 
         assert isinstance(model._param_map, MappingProxyType)
         # Dust emission identity params should be in the map
         assert any("dust" in name for name in model._param_map)
 
-    def test_model_with_multiple_components_builds(self, ssp_data_fsps):
+    def test_model_with_multiple_components_builds(self, synthetic_ssp_wide):
         """Model with multiple optional components should build."""
         spec = Parameters(
             sfh_dpl_alpha=Uniform(0.1, 2.0),
@@ -178,7 +184,7 @@ class TestParamMapDeltas:
             dust_emission="draine_li2007",
             redshift=Fixed(0.05),
         )
-        model = SEDModel(spec, ssp_data_fsps)
+        model = SEDModel(spec, synthetic_ssp_wide)
 
         assert isinstance(model._param_map, MappingProxyType)
         # Should have entries from multiple components

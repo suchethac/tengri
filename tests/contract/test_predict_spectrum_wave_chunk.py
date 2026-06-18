@@ -12,8 +12,6 @@ These tests require SSP data on disk; they are skipped gracefully when missing.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -28,19 +26,15 @@ from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SSP_FILES = list(_DATA_DIR.glob("ssp_*.h5"))
-_SSP_EXISTS = len(_SSP_FILES) > 0
-
-pytestmark = pytest.mark.skipif(
-    not _SSP_EXISTS,
-    reason="SSP data file not found — unit test requires data/ssp_*.h5",
-)
+# Migrated to the synthetic SSP fixture (#613): the chunked-vs-unchunked
+# equality this asserts is SSP-physics-independent, so it runs in CI on the
+# synthetic SSP instead of skipping on missing data. ``pytest.mark.bounds``
+# (set above) is the taxonomy marker — previously clobbered by the skipif.
 
 
 @pytest.fixture(scope="module")
-def ssp(ssp_data_wne):
-    return ssp_data_wne
+def ssp(synthetic_ssp_wide):
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
