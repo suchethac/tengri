@@ -73,6 +73,84 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 # ``_N_MET_BINS_DEFAULT``.
 _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 from tengri.parameters.translate import LOG10_ZSUN
+
+
+def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
+    """Dense log-spaced age grid spanning the SSP template ages [yr] (#758).
+
+    Non-parametric SFHs (continuity / dirichlet / post-starburst) are
+    piecewise-constant in lookback time. Sampling them only at the ~107 coarse
+    SSP template ages linearly smears each bin-edge transition when DSPS
+    integrates the SFH table, producing a 2-4.5 % optical residual vs
+    Prospector (#758). Evaluating the SFH on this ``factor``x denser grid
+    resolves the edges. DSPS still returns age weights on ``ssp_lg_age_gyr``,
+    so ``age_weights`` and every downstream consumer are unchanged — only the
+    integrand resolution improves.
+
+    Parameters
+    ----------
+    ssp_ages_yr : ndarray, shape (n_ssp,)
+        Ascending SSP template ages [yr].
+    factor : int, optional
+        Sub-sampling factor between adjacent SSP ages (static; default 16).
+
+    Returns
+    -------
+    ndarray, shape ((n_ssp - 1) * factor + 1,)
+        Dense ascending age grid [yr], log-spaced over the SSP age span.
+    """
+    n = ssp_ages_yr.shape[0]
+    log_lo = jnp.log10(ssp_ages_yr[0])
+    log_hi = jnp.log10(ssp_ages_yr[-1])
+    return 10.0 ** jnp.linspace(log_lo, log_hi, (n - 1) * factor + 1)
+
+
+def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr):
+    """Ascending cosmic-time (t, SFR) table for DSPS, NaN-safe at the high-z edge.
+
+    SSP ages older than the universe at the observation redshift imply negative
+    cosmic time; those bins are clamped onto a strictly-increasing ramp and
+    zeroed so they contribute nothing (avoids the DSPS NaN at #683).
+
+    Parameters
+    ----------
+    age_yr : ndarray, shape (n,)
+        Ascending lookback ages [yr].
+    sfr : ndarray, shape (n,)
+        Star-formation rate at ``age_yr`` [Msun/yr].
+    t_obs_gyr : float
+        Cosmic age at the observation redshift [Gyr].
+
+    Returns
+    -------
+    t_cosmic_asc : ndarray, shape (n,)
+        Strictly-increasing cosmic time [Gyr].
+    sfr_asc : ndarray, shape (n,)
+        SFR aligned to ``t_cosmic_asc`` [Msun/yr] (pre-Big-Bang bins zeroed).
+    total_mass : float
+        Trapezoidal mass formed [Msun].
+    """
+    T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
+    age_gyr = age_yr / 1e9
+    n = age_yr.shape[0]
+    t_cosmic_raw = t_obs_gyr - age_gyr
+    t_cosmic_floor = jnp.maximum(t_cosmic_raw, T_TABLE_MIN)
+    valid_asc = (t_cosmic_raw > 0.0)[::-1]
+    t_cosmic_asc_raw = t_cosmic_floor[::-1]
+    sfr_asc_raw = sfr[::-1]
+    n_invalid = jnp.sum(~valid_asc)
+    idx_pos = jnp.arange(n)
+    is_invalid_pos = idx_pos < n_invalid
+    ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx_pos + 1) / jnp.maximum(n_invalid, 1)
+    t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
+    # Guarantee strictly-increasing knots: at high z boundary-valid bins can
+    # clamp to T_TABLE_MIN below the invalid-bin ramp, which DSPS NaNs on. #683
+    t_cosmic_asc = enforce_increasing_cosmic_time(t_cosmic_asc)
+    sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
+    total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
+    return t_cosmic_asc, sfr_asc, total_mass
+
+
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -924,24 +1002,12 @@ class StellarSEDComponent:
         # build a strictly-monotonic ramp at the invalid end and zero
         # the SFR there so those bins contribute nothing.
         ssp_age_gyr = ssp_ages_yr / 1e9
-        T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
-        t_cosmic_raw = t_obs_gyr - ssp_age_gyr
-        n_ssp_for_ramp = ssp_ages_yr.shape[0]
-        t_cosmic_floor = jnp.maximum(t_cosmic_raw, T_TABLE_MIN)
-        valid = t_cosmic_raw > 0.0
-        valid_asc = valid[::-1]
-        t_cosmic_asc_raw = t_cosmic_floor[::-1]
-        sfr_asc_raw = sfr_on_ssp[::-1]
-        n_invalid = jnp.sum(~valid_asc)
-        idx_pos = jnp.arange(n_ssp_for_ramp)
-        is_invalid_pos = idx_pos < n_invalid
-        ramp = T_TABLE_MIN + (T_TABLE_MIN * 0.5) * (idx_pos + 1) / jnp.maximum(n_invalid, 1)
-        t_cosmic_asc = jnp.where(is_invalid_pos, ramp, t_cosmic_asc_raw)
-        # Guarantee strictly-increasing knots: at high z boundary-valid bins can
-        # clamp to T_TABLE_MIN below the invalid-bin ramp, which DSPS NaNs on. #683
-        t_cosmic_asc = enforce_increasing_cosmic_time(t_cosmic_asc)
-        sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
-        total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
+        # Coarse (per-SSP-age) cosmic-time table — used by the eager mass guard
+        # below and the per-age-metallicity DSPS path. The delta-metallicity
+        # path swaps in a dense integrand for non-parametric SFHs (#758).
+        t_cosmic_asc, sfr_asc, total_mass = _build_dsps_sfh_table(
+            ssp_ages_yr, sfr_on_ssp, t_obs_gyr
+        )
 
         # Eager physicality guard: the masking above truncates any SFH mass at
         # lookback ages older than the universe at this redshift. When that
@@ -976,9 +1042,21 @@ class StellarSEDComponent:
                 )
 
         if self.config.metallicity_model == "delta":
+            # #758: for non-parametric (non-field) SFHs the coarse per-SSP-age
+            # table smears bin edges; evaluate the SFH on a dense integrand grid
+            # so DSPS resolves them. The GP-field draw lives on the lookback
+            # grid by construction, so it keeps the coarse per-SSP-age table.
+            if self.config.field:
+                gal_t_table, gal_sfr_table = t_cosmic_asc, sfr_asc
+            else:
+                _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
+                _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
+                gal_t_table, gal_sfr_table, total_mass = _build_dsps_sfh_table(
+                    _fine_age_yr, _fine_sfr, t_obs_gyr
+                )
             dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
-                gal_t_table=t_cosmic_asc,
-                gal_sfr_table=sfr_asc,
+                gal_t_table=gal_t_table,
+                gal_sfr_table=gal_sfr_table,
                 gal_lgmet=log_z_abs_scalar,
                 gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
