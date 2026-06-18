@@ -845,28 +845,15 @@ w_p8, L_p8 = P.nebular_lnu(sfr=SFR_NEB, Z=Z_SOLAR)
 print(f"§8 matched SFR = {SFR_NEB:.2f} M⊙/yr")
 
 
-def _line_lum(wave, L_nu, centre, half=12.0):
-    """Integrated line luminosity [erg/s] in ±``half`` Å, local continuum removed.
-
-    Converts to L_λ, subtracts the window floor as a flat continuum (zero for
-    ProSpect's line-only spectrum, the nebular continuum for Cue), and
-    integrates — a width-independent measure that is fair to both line
-    representations.
-    """
-    m = (wave >= centre - half) & (wave <= centre + half)
-    if int(m.sum()) < 2:
-        return 0.0
-    order = np.argsort(wave[m])
-    lam = wave[m][order]
-    l_lambda = L_nu[m][order] * U.C_ANGSTROM_PER_S / lam**2  # erg/s/Å
-    return float(np.trapezoid(np.clip(l_lambda - l_lambda.min(), 0.0, None), lam))
-
-
+# Width-independent integrated line luminosity (shared helper U.line_lum) — a
+# single-bin peak ratio would measure line width, not luminosity, since
+# ProSpect broadens its lines to a fixed velocity dispersion while Cue places
+# them at its grid resolution.
 _lines = [(6563.0, "Hα"), (5007.0, "[O III]"), (3727.0, "[O II]")]
 print("§8 integrated line luminosity (Cue / ProSpect):")
 for _c, _name in _lines:
-    _lp = _line_lum(w_p8, L_p8, _c)
-    _lt = _line_lum(w_t8, L_t8, _c)
+    _lp = U.line_lum(w_p8, L_p8, _c)
+    _lt = U.line_lum(w_t8, L_t8, _c)
     if _lp > 0:
         print(
             f"    {_name} {_c:.0f} Å: ProSpect {_lp:.2e}, "

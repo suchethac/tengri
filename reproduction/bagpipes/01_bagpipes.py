@@ -1022,8 +1022,10 @@ save_fig("bagpipes_06_dust_ir.png")
 # v17. **They will not agree.** The difference reflects three years
 # of Cloudy development plus the different convolution paths (Cue
 # operates on bare-stellar SSPs; BAGPIPES on the SFH-integrated
-# spectrum). The panel quantifies the residual rather than papering
-# over it.
+# spectrum). The panel quantifies the residual with the **integrated**
+# line luminosity (continuum-subtracted, width-independent) rather than
+# papering over it — a single-bin peak ratio would measure line width and
+# grid resolution, not physics (the §10 LSF panel handles widths).
 
 # %%
 # Young 10 Myr constant-SFR fiducial — the regime where nebular
@@ -1104,17 +1106,23 @@ for ax in (ax_l, ax_r):
     ax.set_xlim(900, 7000)
     ax.set_xscale("linear")
     ax.grid(True, alpha=0.3)
-# Quantify the Hα residual.
-_b_halpha = L_b_neb_alone[np.argmin(np.abs(w_b_neb - 6563))]
-_t_halpha_idx = int(np.argmin(np.abs(np.asarray(s_neb_on.wave) - 6563)))
-_t_halpha = float(L_t_neb_alone[_t_halpha_idx])
-if _b_halpha > 0:
-    _halpha_ratio = _t_halpha / _b_halpha
-    print(
-        f"§9 Hα (6563 Å) tengri Cue / BAGPIPES Cloudy v25 = "
-        f"{_halpha_ratio:.2f}× — Cloudy v17 → v25 + bare-stellar vs "
-        f"SFH-integrated convolution path"
-    )
+# Quantify the residual by integrated line luminosity (width- and grid-
+# independent). A single-bin peak ratio measures line width, not luminosity —
+# Cue broadens its lines (see §10) while BAGPIPES' grid places them at its
+# resolution, so a peak ratio is meaningless. §10 below addresses widths.
+_w_t_neb = np.asarray(s_neb_on.wave)
+print(
+    "§9 integrated line luminosity (tengri Cue v17 / BAGPIPES Cloudy v25; "
+    "residual = Cloudy v17→v25 + bare-stellar vs SFH-integrated path):"
+)
+for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+    _lb = U.line_lum(w_b_neb, L_b_neb_alone, _c)
+    _lt = U.line_lum(_w_t_neb, L_t_neb_alone, _c)
+    if _lb > 0:
+        print(
+            f"    {_name} {_c:.0f} Å: BAGPIPES {_lb:.2e}, "
+            f"tengri {_lt:.2e} erg/s → {_lt / _lb:.2f}×"
+        )
 fig.tight_layout()
 save_fig("bagpipes_08_nebular.png")
 

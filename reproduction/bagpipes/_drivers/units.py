@@ -173,3 +173,44 @@ def two_panel_fig(figsize: tuple[float, float] = (12, 4.5)):
     """Create a standard 2-panel figure for SED comparisons."""
     fig, (ax_left, ax_right) = plt.subplots(1, 2, sharey=True, figsize=figsize)
     return fig, ax_left, ax_right
+
+
+def line_lum(wave, L_nu, centre, half=12.0):
+    """Integrated emission-line luminosity [erg/s] within +/- ``half`` Å of ``centre``.
+
+    Converts ``L_nu`` [erg/s/Hz] to ``L_lambda`` [erg/s/Å], subtracts the
+    in-window floor as a flat local continuum, and integrates the excess.
+
+    This is **width- and grid-independent** — the fair way to compare an
+    emission line between codes that represent it with different intrinsic
+    broadening or wavelength sampling. A single-bin peak ``L_nu`` ratio
+    measures line *width* (and grid resolution), not luminosity: tengri's Cue
+    applies an intrinsic velocity broadening while several reference codes
+    place lines at the grid resolution, so peak ratios are meaningless.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Å].
+    L_nu : array_like, shape (n_wave,)
+        Spectral luminosity density [erg/s/Hz] on ``wave``.
+    centre : float
+        Line-centre wavelength [Å].
+    half : float, optional
+        Half-width of the integration window [Å]. Default 12.
+
+    Returns
+    -------
+    float
+        Continuum-subtracted integrated line luminosity [erg/s]; 0.0 if the
+        window holds fewer than two grid points.
+    """
+    wave = np.asarray(wave)
+    L_nu = np.asarray(L_nu)
+    m = (wave >= centre - half) & (wave <= centre + half)
+    if int(m.sum()) < 2:
+        return 0.0
+    order = np.argsort(wave[m])
+    lam = wave[m][order]
+    l_lambda = L_nu[m][order] * C_ANGSTROM_PER_S / lam**2  # erg/s/Å
+    return float(np.trapezoid(np.clip(l_lambda - l_lambda.min(), 0.0, None), lam))
