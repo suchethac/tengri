@@ -361,14 +361,16 @@ def lognormal(
 
     .. math::
 
-       \mathrm{SFR}(T) \propto
-       \exp\!\Bigl[-\tfrac{1}{2}\bigl(\log_{10} T - \log_{10} T_{\rm peak}\bigr)^2 / w^2\Bigr],
+       \mathrm{SFR}(T) \propto \frac{1}{T}
+       \exp\!\Bigl[-\tfrac{1}{2}\bigl(\ln T - \mu\bigr)^2 / \sigma^2\Bigr],
        \quad T = \mathrm{age} - t_{\mathrm{lb}} \ge 0
 
     where :math:`T` is **cosmic time since galaxy formation**,
-    :math:`t_{\mathrm{lb}}` is lookback time, :math:`T_{\rm peak}` is
-    ``peak`` and :math:`w` is ``width``. Rescaled so the integrated mass
-    equals ``10**log_total_mass``.
+    :math:`t_{\mathrm{lb}}` is lookback time. The mode (peak) is located at
+    :math:`T_{\mathrm{mode}} = \exp(\mu - \sigma^2) = \text{peak}`, and
+    :math:`\sigma = \text{width} \times \ln(10)` (converting from log10-space
+    width in dex). Rescaled so the integrated mass equals
+    ``10**log_total_mass``.
 
     **Convention.** With ``age`` set to the age of the universe at the
     source redshift, the peak sits at cosmic time ``peak`` after the Big
@@ -377,12 +379,9 @@ def lognormal(
     conversion ``T = age - t_lookback`` happens here. Resolves the
     time-reversal of #514.
 
-    .. note::
-       This is a log10-space Gaussian, not the exact 1/T ln-space
-       lognormal of Carnall+2018 (which carries a ``1/T`` Jacobian and
-       solves ``(t0, sigma)`` from ``(tmax, fwhm)``). Peak *location* and
-       direction now match; the detailed wing shape differs. See the
-       follow-up issue for full Carnall lognormal parity.
+    The ``1/T`` Jacobian factor arises from the change of variables in the
+    lognormal probability distribution and is essential for matching the
+    Carnall et al. (2018) formulation exactly.
 
     Parameters
     ----------
@@ -392,9 +391,10 @@ def lognormal(
         log10 of total stellar mass formed [Msun]. The shape is rescaled so
         that ``trapezoid(sfr, t_lookback) = 10**log_total_mass`` exactly.
     peak : float
-        Peak location in cosmic time since formation [yr].
+        Peak location (mode) in cosmic time since formation [yr].
     width : float
-        Width in log10(T) space [dex].
+        Width in log10(T) space [dex]. Converted internally to natural-log
+        standard deviation σ = width × ln(10).
     age : float
         Cosmic time available for star formation [yr] = lookback time of
         formation. Set to ``age_of_universe(z)`` for BAGPIPES direction.
@@ -409,6 +409,16 @@ def lognormal(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
+    **Gradient-safe**: yes — the 1/T factor is computed using safe division
+    to avoid NaN leakage in gradients when T ≤ 0.
+
+    References
+    ----------
+    .. [1] A. C. Carnall et al., "Inferring the star formation histories of
+       massive quiescent galaxies with BAGPIPES: evidence for multiple
+       quenching mechanisms," MNRAS, 480, 4379 (2018). arXiv:1712.04452.
+       https://doi.org/10.1093/mnras/sty2169
+
     Examples
     --------
     >>> import jax.numpy as jnp
@@ -420,11 +430,29 @@ def lognormal(
     """
     # Cosmic time since formation; SFR is zero before the galaxy formed.
     T = age - t_lookback
-    T_pos = jnp.where(T > 0.0, T, 1e5)
-    log_T = jnp.log10(T_pos)
-    log_peak = jnp.log10(jnp.maximum(peak, 1e5))
-    exponent = -0.5 * ((log_T - log_peak) / width) ** 2
-    shape = jnp.where(T > 0.0, jnp.exp(exponent), 0.0)
+
+    # Convert width from log10 space (dex) to natural-log space.
+    sigma_ln = width * jnp.log(10.0)
+
+    # Compute the mean in natural-log space such that the mode is at peak.
+    # Mode of lognormal: exp(mu - sigma^2) = peak
+    # => mu = ln(peak) + sigma^2
+    ln_peak = jnp.log(jnp.maximum(peak, 1e5))
+    mu = ln_peak + sigma_ln**2
+
+    # Safe computation for T > 0 using a dummy value for the masked region.
+    # Use T=peak (so ln(T)=mu) to keep both the 1/T and exp terms finite
+    # during backward passes when T <= 0 is masked.
+    T_safe = jnp.where(T > 0.0, T, peak)
+    ln_T = jnp.log(T_safe)
+    inv_T = 1.0 / T_safe
+
+    # Lognormal kernel: (1/T) * exp(-(ln(T) - mu)^2 / (2*sigma^2))
+    exponent = -0.5 * ((ln_T - mu) / sigma_ln) ** 2
+    kernel = inv_T * jnp.exp(exponent)
+
+    # Apply mask: zero out regions where T <= 0.
+    shape = jnp.where(T > 0.0, kernel, 0.0)
     return _renormalize_to_mass(jnp.maximum(shape, 0.0), t_lookback, log_total_mass)
 
 
