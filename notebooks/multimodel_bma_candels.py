@@ -25,7 +25,8 @@
 # (evidence).
 #
 # We apply this to seven CANDELS GOODS-South galaxies at $z\sim1$ and report the
-# fit times alongside the results.
+# fit times alongside the results. The four configurations vary the star-formation
+# history family, the stellar isochrone, the dust law, and the nebular treatment.
 #
 # | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
 # |--------|-----|-----|----------|------------|---------|
