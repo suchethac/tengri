@@ -291,14 +291,16 @@ class Uniform(Distribution):
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    **Standardization**: Maps ξ ~ N(0,1) to θ via the sigmoid function:
+    **Standardization**: Maps ξ ~ N(0,1) to θ via the Gaussian CDF:
 
     .. math::
 
-        \\theta = lo + (hi - lo) \\cdot \\sigma(\\xi)
+        \\theta = lo + (hi - lo) \\cdot \\Phi(\\xi)
 
-    where σ(ξ) = 1 / (1 + exp(-ξ)). At ξ = 0 (prior center), θ = (lo + hi) / 2.
-    This ensures automatic bound satisfaction and smooth gradients.
+    where Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) is the standard normal CDF.
+    At ξ = 0 (prior center), Φ(0) = 0.5, so θ = (lo + hi) / 2.
+    This ensures an N(0,1) latent yields a genuine uniform prior on [lo, hi],
+    not a midpoint-peaked one. Automatic bound satisfaction and smooth gradients.
 
     Examples
     --------
@@ -394,11 +396,12 @@ class Uniform(Distribution):
         return jnp.where(in_bounds, -jnp.log(self._hi - self._lo), -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → Uniform(lo, hi) via sigmoid.
+        """ξ ~ N(0,1) → Uniform(lo, hi) via Gaussian CDF.
 
-        At ξ=0 (prior center), sigmoid(0) = 0.5, so θ = midpoint of [lo, hi].
-        At ξ=±3 (~99.7% of N(0,1) mass), θ covers ~95% of [lo, hi].
-        The sigmoid naturally respects bounds without clipping.
+        Uses the standard normal CDF Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) to map
+        N(0,1) latent variables to uniform on (lo, hi). At ξ=0, Φ(0) = 0.5,
+        so θ = midpoint of [lo, hi]. This ensures an N(0,1) latent yields a
+        genuine uniform prior, not a midpoint-peaked one.
 
         Parameters
         ----------
@@ -410,10 +413,15 @@ class Uniform(Distribution):
         float or ndarray
             Physical-space parameter in [lo, hi].
         """
-        return self._lo + (self._hi - self._lo) * jax.nn.sigmoid(xi)
+        # Standard normal CDF: Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2)))
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        return self._lo + (self._hi - self._lo) * phi_xi
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """Uniform(lo, hi) → ξ via logit.
+        """Uniform(lo, hi) → ξ via inverse Gaussian CDF.
+
+        Inverts the unstandardize map: given θ ∈ (lo, hi), returns ξ such that
+        θ = lo + (hi-lo) * Φ(ξ). Uses the inverse error function erfinv.
 
         Parameters
         ----------
@@ -425,9 +433,12 @@ class Uniform(Distribution):
         float or ndarray
             Standardized latent-space value.
         """
-        u = (theta - self._lo) / (self._hi - self._lo)
-        u = jnp.clip(u, 1e-6, 1 - 1e-6)
-        return jnp.log(u / (1 - u))  # logit
+        # Normalize to [0, 1]
+        p = (theta - self._lo) / (self._hi - self._lo)
+        # Clip to avoid numerical issues at the extremes
+        p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
+        # Inverse of Φ: Φ^{-1}(p) = sqrt(2) * erfinv(2p - 1)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * p - 1.0)
 
     def __repr__(self) -> str:
         return f"Uniform({self._lo}, {self._hi})"
