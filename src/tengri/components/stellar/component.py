@@ -75,6 +75,28 @@ _DEFAULT_MET_BIN_EDGES_LOG_YR = jnp.array([6.0, 7.5, 8.5, 9.0, 9.5, 9.9, 10.14])
 from tengri.parameters.translate import LOG10_ZSUN
 
 
+def _nonparametric_sfh_fns():
+    """Frozenset of the binned (non-parametric) SFH callables (#758).
+
+    Only these — continuity, continuity_flex, dirichlet, psb_continuity — carry
+    piecewise bin edges that the coarse per-SSP-age integrand smears. The dense
+    integrand is gated to them so parametric SFHs stay byte-identical and the
+    delta path stays consistent with the per-age-metallicity path. Imported
+    lazily to avoid any import-order coupling at module load.
+    """
+    from tengri.components.stellar.sfh.nonparametric import (
+        continuity,
+        continuity_flex,
+        dirichlet,
+        psb_continuity,
+    )
+
+    return frozenset({continuity, continuity_flex, dirichlet, psb_continuity})
+
+
+_NONPARAMETRIC_SFH_FNS = _nonparametric_sfh_fns()
+
+
 def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
     """Dense log-spaced age grid spanning the SSP template ages [yr] (#758).
 
@@ -1042,18 +1064,22 @@ class StellarSEDComponent:
                 )
 
         if self.config.metallicity_model == "delta":
-            # #758: for non-parametric (non-field) SFHs the coarse per-SSP-age
-            # table smears bin edges; evaluate the SFH on a dense integrand grid
-            # so DSPS resolves them. The GP-field draw lives on the lookback
-            # grid by construction, so it keeps the coarse per-SSP-age table.
-            if self.config.field:
-                gal_t_table, gal_sfr_table = t_cosmic_asc, sfr_asc
-            else:
+            # #758: ONLY non-parametric (binned) SFHs need the dense integrand —
+            # their piecewise bin edges are what the coarse per-SSP-age table
+            # smears. Parametric SFHs (delayed/dpl/…) are smooth and already
+            # resolved on the coarse grid, so they keep it: this leaves their SED
+            # byte-identical AND keeps the delta path consistent with the per-age
+            # metallicity path below (which uses the coarse table), so degenerate
+            # per-age modes still reduce exactly to delta. The GP-field draw lives
+            # on the lookback grid by construction, so it also keeps the coarse table.
+            if (not self.config.field) and (sfh_spec.fn in _NONPARAMETRIC_SFH_FNS):
                 _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
                 _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
                 gal_t_table, gal_sfr_table, total_mass = _build_dsps_sfh_table(
                     _fine_age_yr, _fine_sfr, t_obs_gyr
                 )
+            else:
+                gal_t_table, gal_sfr_table = t_cosmic_asc, sfr_asc
             dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
                 gal_t_table=gal_t_table,
                 gal_sfr_table=gal_sfr_table,
