@@ -206,6 +206,21 @@ def _load_skirtor_fn():
     return create_skirtor_from_grid(_find_skirtor_grid())
 
 
+@functools.cache
+def _load_skirtor_components_fn():
+    """Load the SKIRTOR disc+dust+total component interpolator (cached).
+
+    Unlike :func:`_load_skirtor_fn` (torus only), this returns the full
+    :class:`SKIRTORComponents` interpolator whose ``.total`` is the raw
+    Stalevski (2016) radiative-transfer SED — the disc *and* torus exactly as
+    SKIRTOR computed them at the viewing angle, with no analytic-disc
+    substitution. Used by the ``skirtor_stalevski`` model.
+    """
+    from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+
+    return create_skirtor_components_from_grid(_find_skirtor_grid())
+
+
 def _find_relagn_grid() -> str:
     """Locate the RELAGN outer-disc grid file.
 
@@ -749,6 +764,90 @@ def skirtor_agn(
     )
 
     return (l_disc + l_torus) * agn_frac
+
+
+@register_agn_model(
+    "skirtor_stalevski",
+    citation="Stalevski et al. 2012 (MNRAS 420, 2756); Stalevski et al. 2016 (MNRAS 458, 2288)",
+    status="production",
+    short_doc="Raw SKIRTOR 2016 radiative-transfer SED (disc+torus as published)",
+)
+def skirtor_stalevski_agn(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = 11.0,
+    agn_frac: float = 0.1,
+    agn_tau_skirtor: float = 7.0,
+    agn_p_skirtor: float = 1.0,
+    agn_q_skirtor: float = 1.0,
+    agn_oa_skirtor: float = 40.0,
+    agn_cos_inc: float = 0.86602540378443864,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Raw Stalevski (2016) SKIRTOR SED — the published radiative-transfer output.
+
+    Returns the SKIRTOR template's **total** SED (accretion disc + clumpy torus
+    + scattered light) exactly as the Stalevski et al. (2016) radiative-transfer
+    grid computed it at the requested viewing angle, scaled to the requested
+    bolometric luminosity. Unlike the ``skirtor`` model (power-law disc) and the
+    composable ``disc.skirtor`` block (CIGALE's analytic disc + ``norm=1/∫dust``
+    energy balance), this applies **no analytic-disc substitution and no
+    re-normalisation** — it is the faithful SKIRTOR template, matching codes that
+    read SKIRTOR directly (e.g. ProSpect's ``SKIRTOR_interp``) rather than CIGALE's
+    reconstruction.
+
+    Use this model to reproduce the raw SKIRTOR SED; use the composable
+    ``disc.skirtor`` + ``torus.skirtor`` blocks (``norm='cigale_joint'``) to
+    reproduce CIGALE's ``skirtor2016`` instead. The two answer different
+    questions — the raw template vs CIGALE's tunable-disc variant.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float, optional
+        log10 of bolometric luminosity [Lsun]. Default 11.0.
+    agn_frac : float, optional
+        AGN luminosity fraction (host scaling) [dimensionless]. Default 0.1.
+    agn_tau_skirtor : float, optional
+        Optical depth at 9.7 um [dimensionless], grid range [3, 11]. Default 7.0.
+    agn_p_skirtor, agn_q_skirtor : float, optional
+        Radial / polar dust-density gradients [dimensionless]. Default 1.0.
+    agn_oa_skirtor : float, optional
+        Half-opening angle of the dust-free cone [degrees]. Default 40.0.
+    agn_cos_inc : float, optional
+        cos(inclination); 1 = face-on (Type 1), 0 = edge-on. Default cos(30 deg).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz], total SKIRTOR SED scaled to ``10**agn_log_lbol * L_sun
+        * agn_frac``.
+
+    Notes
+    -----
+    **JIT-compatible**: no — requires SKIRTOR grid interpolation.
+
+    **Grid caveat**: tengri ships the SKIRTOR v3 grid (tau in {3,5,7,9,11}); a
+    requested ``agn_tau_skirtor`` outside that range is clamped. Bit-for-bit
+    agreement with another code additionally requires the same SKIRTOR grid
+    version.
+
+    References
+    ----------
+    .. [S16] Stalevski, M. et al. 2016, MNRAS, 458, 2288. arXiv:1602.06954.
+       https://doi.org/10.1093/mnras/stw444
+    """
+    comp = _load_skirtor_components_fn()(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_tau_skirtor=agn_tau_skirtor,
+        agn_p_skirtor=agn_p_skirtor,
+        agn_q_skirtor=agn_q_skirtor,
+        agn_oa_skirtor=agn_oa_skirtor,
+        agn_cos_inc=agn_cos_inc,
+        frac_agn=1.0,
+    )
+    return comp.total * agn_frac
 
 
 @register_agn_model(

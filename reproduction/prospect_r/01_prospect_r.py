@@ -944,14 +944,16 @@ save_fig("prospect_r_08_nebular.png")
 # is a true maximum. (In `L_ν` a torus rises into the far-IR simply because
 # `L_ν = νL_ν · λ/c`, easy to misread as a cold spectrum.) Both the **torus** (peak
 # 9.3 µm with the 10 µm silicate feature) and the **accretion-disc continuum**
-# shortward of ~1 µm now match ProSpect: the disc reads ~0.9× ProSpect's
-# `SKIRTOR_interp` at 2000 Å. This uses the composable `disc.skirtor` block — the
-# tabulated SKIRTOR primary-source disc (the same disc CIGALE's `skirtor2016`
-# uses). The monolithic `agn={'type': 'skirtor'}` model instead pairs the SKIRTOR
-# torus with a *power-law* disc (documented in `components/agn/__init__.py`), which
-# reads ~0.28× here and was the earlier mismatch (#756). For a faithful SKIRTOR
-# disc, select the tabulated disc via the composable grammar, as this notebook now
-# does.
+# shortward of ~1 µm match ProSpect: the disc reads ~0.96× ProSpect's
+# `SKIRTOR_interp` at 2000 Å. This uses the **`skirtor_stalevski`** model — the raw
+# Stalevski (2016) radiative-transfer SED (disc+torus as published, no analytic-disc
+# substitution), the same template ProSpect reads. Three SKIRTOR choices exist, all
+# swappable (`tengri.list_agn_models()`): `skirtor_stalevski` (raw, ~0.96× here),
+# the composable `disc.skirtor`+`torus.skirtor` (CIGALE's analytic disc + `norm=
+# 1/∫dust` energy balance, ~0.86× — the right choice for reproducing CIGALE), and
+# the monolithic `agn={'type':'skirtor'}` (power-law disc, ~0.28× — deprecated). The
+# residual to a perfect 1.0× is the SKIRTOR grid version (tengri v3 vs ProSpect's
+# data), not the disc treatment.
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -979,18 +981,18 @@ m_agn = SEDModel.build(
         "*": FIXED,
     },
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    # Composable AGN with the tabulated SKIRTOR disc + torus (#756). The
-    # monolithic `agn={'type': 'skirtor'}` model pairs the SKIRTOR torus with a
-    # *power-law* accretion disc (documented in components/agn/__init__.py), which
-    # under-represents the UV continuum (~0.28x ProSpect at 2000 Å). The
-    # composable `disc.skirtor` reads the tabulated SKIRTOR primary-source disc —
-    # the same one CIGALE's skirtor2016 uses — so disc and torus both come from
-    # the SKIRTOR library, matching ProSpect's SKIRTOR_interp (disc ~0.9x, torus
-    # peak 9.3 µm). Verified component-by-component against the SKIRTOR grid.
+    # Raw-Stalevski SKIRTOR model (#756). ProSpect's `SKIRTOR_interp` reads the
+    # SKIRTOR template directly — the disc + torus as Stalevski's radiative
+    # transfer computed them. tengri's `skirtor_stalevski` model does the same
+    # (returns `create_skirtor_components.total`, no analytic-disc substitution),
+    # so it reproduces ProSpect to ~0.96× at the 2000 Å disc and 9.3 µm at the
+    # torus peak. (The monolithic `agn={'type':'skirtor'}` pairs the torus with a
+    # *power-law* disc → 0.28×; the composable `disc.skirtor` uses CIGALE's
+    # analytic disc + `norm=1/∫dust` → ~0.86×, the right choice for reproducing
+    # CIGALE rather than the raw template. All three are swappable — see
+    # `tengri.list_agn_models()`.)
     agn={
-        "type": "composable",
-        "disc": {"type": "skirtor"},
-        "torus": {"type": "skirtor"},
+        "type": "skirtor_stalevski",
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "agn_cos_inc": Fixed(float(np.cos(np.radians(30.0)))),  # ProSpect an=30°
         "agn_oa_skirtor": Fixed(40.0),  # ProSpect ct=40°
