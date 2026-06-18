@@ -236,6 +236,7 @@ class XRaySEDComponent:
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
                 delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
+                log_nh=jnp.asarray(params["xray_log_nh"]),
             )
 
         L_xray = _emit(wave)
