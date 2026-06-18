@@ -9,8 +9,6 @@ Requires SSP data on disk; skipped gracefully when missing.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -20,19 +18,13 @@ from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, Unifo
 
 jax.config.update("jax_enable_x64", True)
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data"
-_SSP_FILES = list(_DATA_DIR.glob("ssp_*.h5"))
-_SSP_EXISTS = len(_SSP_FILES) > 0
-
-pytestmark = pytest.mark.skipif(
-    not _SSP_EXISTS,
-    reason="SSP data file not found — integration test requires data/ssp_*.h5",
-)
+# Migrated to the synthetic SSP fixture (#613) so this structural population
+# spectroscopy-chunking test runs in CI instead of skipping on missing data.
 
 
 @pytest.fixture(scope="module")
-def ssp(ssp_data_wne):
-    return ssp_data_wne
+def ssp(synthetic_ssp_wide):
+    return synthetic_ssp_wide
 
 
 @pytest.fixture(scope="module")
