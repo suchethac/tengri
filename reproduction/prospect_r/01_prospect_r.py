@@ -942,16 +942,16 @@ save_fig("prospect_r_08_nebular.png")
 #
 # The panels show `νL_ν` — the right way to read a torus SED, where the thermal bump
 # is a true maximum. (In `L_ν` a torus rises into the far-IR simply because
-# `L_ν = νL_ν · λ/c`, easy to misread as a cold spectrum.) The **torus** — the reason
-# tengri carries SKIRTOR at all — matches well: both peak at 9.3 µm with the 10 µm
-# silicate feature (peaks printed). Where the two ports diverge is the **accretion-disc
-# continuum** shortward of ~1 µm: ProSpect's `SKIRTOR_interp` carries a bright,
-# strongly inclination-dependent disc (the UV plateau in the left panel), whereas
-# tengri's tabulated grid emits a disc continuum several × fainter and nearly flat with
-# inclination (printed ratio at 2000 Å). This is a real difference between the two
-# SKIRTOR ports, not a units or plotting effect — and it is minor for tengri's use of
-# the block, where the unobscured accretion-disc light is better supplied by a dedicated
-# disc component than by the torus library's built-in primary source.
+# `L_ν = νL_ν · λ/c`, easy to misread as a cold spectrum.) Both the **torus** (peak
+# 9.3 µm with the 10 µm silicate feature) and the **accretion-disc continuum**
+# shortward of ~1 µm now match ProSpect: the disc reads ~0.9× ProSpect's
+# `SKIRTOR_interp` at 2000 Å. This uses the composable `disc.skirtor` block — the
+# tabulated SKIRTOR primary-source disc (the same disc CIGALE's `skirtor2016`
+# uses). The monolithic `agn={'type': 'skirtor'}` model instead pairs the SKIRTOR
+# torus with a *power-law* disc (documented in `components/agn/__init__.py`), which
+# reads ~0.28× here and was the earlier mismatch (#756). For a faithful SKIRTOR
+# disc, select the tabulated disc via the composable grammar, as this notebook now
+# does.
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -979,8 +979,18 @@ m_agn = SEDModel.build(
         "*": FIXED,
     },
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    # Composable AGN with the tabulated SKIRTOR disc + torus (#756). The
+    # monolithic `agn={'type': 'skirtor'}` model pairs the SKIRTOR torus with a
+    # *power-law* accretion disc (documented in components/agn/__init__.py), which
+    # under-represents the UV continuum (~0.28x ProSpect at 2000 Å). The
+    # composable `disc.skirtor` reads the tabulated SKIRTOR primary-source disc —
+    # the same one CIGALE's skirtor2016 uses — so disc and torus both come from
+    # the SKIRTOR library, matching ProSpect's SKIRTOR_interp (disc ~0.9x, torus
+    # peak 9.3 µm). Verified component-by-component against the SKIRTOR grid.
     agn={
-        "type": "skirtor",
+        "type": "composable",
+        "disc": {"type": "skirtor"},
+        "torus": {"type": "skirtor"},
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "agn_cos_inc": Fixed(float(np.cos(np.radians(30.0)))),  # ProSpect an=30°
         "agn_oa_skirtor": Fixed(40.0),  # ProSpect ct=40°
