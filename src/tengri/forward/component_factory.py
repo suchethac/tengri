@@ -40,6 +40,11 @@ from tengri.components.dust.component import (
     DustAttenuationSEDComponent,
     DustAttenuationSEDComponentConfig,
 )
+from tengri.components.dust.emission_component import (
+    _SUPPORTED_TEMPLATES,
+    DustEmissionSEDComponent,
+    DustEmissionSEDComponentConfig,
+)
 from tengri.components.dust.two_component import (
     DustSEDComponent,
     DustSEDComponentConfig,
@@ -313,6 +318,34 @@ def build_components(
                     config=DustAttenuationSEDComponentConfig(law=dust_law_diff)
                 )
             )
+            # Energy-balanced IR re-emission for the single-screen geometry.
+            # DustAttenuationSEDComponent publishes state.derived["L_ir"] (the
+            # absorbed UV/optical/NIR luminosity); without a downstream emission
+            # component that L_ir is computed but never re-radiated, silently
+            # dropping the dust IR (#565). The two_component path re-emits inside
+            # DustSEDComponent; the single-screen path must append the Protocol-
+            # native DustEmissionSEDComponent explicitly. Only the analytic
+            # 'modified_blackbody' (needs no structural config — just dust_T /
+            # dust_beta_ir params) and the template-grid models DustEmissionSEDComponent
+            # natively supports (draine2021_pah, astrodust) are wired here. Other
+            # libraries (dale2014, dl07, draine_li2007, themis, bosa) route through
+            # the bundled DustSEDComponent on the two_component path — fail loud.
+            if dust_emission_model is not None:
+                if dust_emission_model in _SUPPORTED_TEMPLATES:
+                    components.append(
+                        DustEmissionSEDComponent(
+                            config=DustEmissionSEDComponentConfig(template=dust_emission_model)
+                        )
+                    )
+                else:
+                    raise ValueError(
+                        f"dust emission {dust_emission_model!r} is not supported with "
+                        "dust={'type': 'single_component'}: the single-screen geometry "
+                        "re-emits via the Protocol-native DustEmissionSEDComponent, which "
+                        f"supports only {_SUPPORTED_TEMPLATES}. For other IR libraries "
+                        "(dale2014, dl07, draine_li2007, themis, bosa) use "
+                        "dust={'type': 'two_component', ...}."
+                    )
         else:
             _overrides = dust_law_overrides or {}
             components.append(
