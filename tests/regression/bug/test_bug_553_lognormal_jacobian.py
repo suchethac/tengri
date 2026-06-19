@@ -34,27 +34,36 @@ class TestLognormalJacobianFix:
         width = 0.3  # dex
         log_total_mass = 10.0
 
-        # Create a symmetric grid in ln(T) about the peak.
-        # ln(peak) is the center.
-        ln_peak = np.log(peak)
-        delta_ln = 1.0  # ~2.718× offset from peak in linear T
+        # The kernel is a Gaussian in ln(T) centred at mu = ln(peak) + sigma^2
+        # (the code's convention places the *mode* at ``peak``), multiplied by
+        # the 1/T Jacobian. Sample two points placed symmetrically about mu in
+        # ln-space: there the Gaussian weights are equal, so the ONLY thing
+        # distinguishing them is the 1/T factor — SFR(T_early) must strictly
+        # exceed SFR(T_late). A pure log-Gaussian (no 1/T) would make them
+        # equal.
+        sigma_ln = width * np.log(10.0)
+        mu = np.log(peak) + sigma_ln**2
+        delta_ln = 0.8
+        T_early = float(np.exp(mu - delta_ln))
+        T_late = float(np.exp(mu + delta_ln))
 
-        ln_grid = np.array([ln_peak - delta_ln, ln_peak, ln_peak + delta_ln])
-        T_grid = np.exp(ln_grid)
-
-        # Convert to lookback time.
-        t_lookback = age - T_grid
-
-        # Evaluate SFR.
+        # Evaluate on a fine, *increasing* lookback grid so the mass
+        # renormalization (a trapezoid over t_lookback) is well defined and
+        # strictly positive — a non-monotonic grid makes the integral sign
+        # ill-defined and the normalization blows up (the original failure).
+        t_lookback = jnp.linspace(1e5, age - 1e8, 6000)
         sfr = lognormal(t_lookback, log_total_mass, peak, width, age)
+        T = age - np.asarray(t_lookback)
 
-        # For a pure log-Gaussian (without 1/T), sfr[0] would equal sfr[2]
-        # (symmetry). With the 1/T factor, sfr[0] > sfr[2] (earlier times
-        # are enhanced relative to later times).
-        assert sfr[0] > sfr[2], (
-            f"SFR should be higher at earlier cosmic time (T={T_grid[0]:.2e}) "
-            f"than later (T={T_grid[2]:.2e}) due to 1/T factor. "
-            f"Got sfr[0]={sfr[0]:.4f}, sfr[2]={sfr[2]:.4f}"
+        i_early = int(np.argmin(np.abs(T - T_early)))
+        i_late = int(np.argmin(np.abs(T - T_late)))
+
+        # Renormalization is a single positive scale factor, so it cannot flip
+        # the ordering. Equal Gaussian weight + 1/T_early > 1/T_late => strict.
+        assert sfr[i_early] > sfr[i_late], (
+            f"SFR should be higher at earlier cosmic time (T={T_early:.2e}) "
+            f"than later (T={T_late:.2e}) due to 1/T factor. "
+            f"Got sfr_early={float(sfr[i_early]):.4e}, sfr_late={float(sfr[i_late]):.4e}"
         )
 
     def test_lognormal_matches_theoretical_shape(self):
