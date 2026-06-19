@@ -17,10 +17,17 @@ on:
 # `labeled` PR events get a UNIQUE group (run_id) so they never cancel the real
 # push / opened / synchronize run — a label add must not abort an in-flight
 # suite. (Their jobs also skip via the per-job `if:` below, so the unique-group
-# run is a near-instant no-op.) Every other event shares one group per ref so a
-# newer commit supersedes the older run.
+# run is a near-instant no-op.)
+#
+# Every other event keys the group on `github.event_name`, so a newer event of
+# the SAME kind supersedes the older one (two quick pushes → the second cancels
+# the first; PR synchronize cancels the prior PR run) while DIFFERENT event kinds
+# coexist. The latter matters on `main`, where `push` and `schedule` both resolve
+# to `github.ref == refs/heads/main`: keying only on the ref made a nightly
+# `schedule` run and a `push` run share one group and cancel each other mid-suite
+# (a spurious `cancelled` red on main). Separate event keys keep them independent.
 concurrency:
-  group: tests-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'labeled') && github.run_id || 'commit' }}
+  group: tests-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'labeled') && github.run_id || github.event_name }}
   cancel-in-progress: true
 
 # Skip the heavy jobs on bare `labeled` PR events. GitHub fires one `labeled`
@@ -103,10 +110,29 @@ jobs:
       # are gated to the slow tier; crossval + the data-only nebular/draine
       # parity files are ignored (they skip without their grids).
       #
-      # pytest-xdist `-n auto` parallelises across the runner's CPUs (≈4 vCPU).
+      # pytest-xdist parallelism is capped at `-n 2`, NOT `-n auto`. The runner
+      # is 4 vCPU / 16 GB; `-n auto` spawns 4 workers, and when several
+      # JAX-compile-heavy tests spike (XLA compile working set + SSP grids,
+      # ~4–5 GB each) on different workers near the suite tail, peak RSS blew
+      # past 16 GB and the host OOM-killed the VM — surfacing as
+      # "##[error]The runner has received a shutdown signal" → "operation was
+      # canceled" at 85–94 %, intermittently, with zero test failures (it hit
+      # `main`, this job, and the `coverage` job below for ~2 days). `-n 2` caps
+      # peak at ~2×5 GB + base ≈ 12 GB, which fits with headroom. Trade-off:
+      # ~9–10 min → ~15 min wall clock; a warm JAX compile cache is the
+      # speed-recovery follow-up. The OOM kills the VM before any per-test
+      # `--timeout` thread can fire, so fewer workers — not a tighter timeout —
+      # is the fix.
+      #
+      # `--timeout=600 --timeout-method=thread` still guards the OTHER tail
+      # failure mode: a single test that genuinely hangs (cold compile / deadlock)
+      # stalls its worker while the others finish; the per-test cap converts that
+      # into a fast, named failure (10 min ≫ any healthy test — all run < 150 s
+      # locally) instead of a silent job-timeout.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
-            -n auto \
+            -n 2 \
+            --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
@@ -127,9 +153,13 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # `-n 2` (not `-n auto`): `--cov` adds ~30–50 % memory on top of the test
+      # job, so this job OOM-killed the runner even more often than `test`
+      # (the dominant cause of red `main`). Same cap as the fast job; the 35 min
+      # timeout absorbs the longer cov wall clock.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
-            -n auto \
+            -n 2 \
             --cov=src/tengri --cov-report=xml --cov-report=term:skip-covered \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \

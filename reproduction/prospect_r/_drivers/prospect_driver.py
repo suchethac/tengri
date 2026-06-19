@@ -409,7 +409,7 @@ def prospect_sed(
 # §8 — nebular emission (SFHfunc emission isolation)
 # ---------------------------------------------------------------------------
 def nebular_lnu(
-    *, sfr: float = 1.0, Z: float = 0.02, veldisp: float = 50.0
+    *, sfr: float = 1.0, Z: float = 0.02, veldisp: float = 50.0, q: float | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     r"""Return ProSpect's nebular-line :math:`L_\nu` [erg/s/Hz] for a given SFR.
 
@@ -428,6 +428,16 @@ def nebular_lnu(
         Gas-phase metallicity (absolute mass fraction).
     veldisp : float
         Line velocity dispersion [km/s] used to broaden the lines.
+    q : float, optional
+        Ionisation parameter [cm/s] passed to ``emissionLines``. If ``None``
+        (default), ProSpect derives it from metallicity via ``Z2q`` (Orsi 2014),
+        which at solar Z returns a low ``q ≈ 1.4e7`` cm/s appropriate for soft
+        ionisation — this strongly suppresses the collisionally-excited metal
+        lines ([O III], [O II]), giving an anomalously weak [O III]/Hα ≈ 0.014
+        (#761). To compare on a **matched ionisation parameter** against a Cloudy
+        grid run at ``logU``, pass ``q = U·c`` (e.g. ``logU = -2`` → ``q = 3e8``);
+        recombination lines (Hα, Hβ) are q-insensitive so this only fixes the
+        metal-line ratios.
 
     Returns
     -------
@@ -438,7 +448,10 @@ def nebular_lnu(
     """
     fn = _rfn("emissionLines")
     lkl10 = _rfn("LKL10_NormHalpha")  # lazy-loaded line-ratio table
-    e = fn(SFR=sfr, Z=Z, veldisp=veldisp, LKL10=lkl10)
+    kw = dict(SFR=sfr, Z=Z, veldisp=veldisp, LKL10=lkl10)
+    if q is not None:
+        kw["q"] = q
+    e = fn(**kw)
     wave = _np(_listget(e, "wave"))
     lum = _np(_listget(e, "lum"))  # L⊙/Å
     return U.lsun_per_aa_to_erg_per_hz(wave, lum)

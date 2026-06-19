@@ -51,9 +51,10 @@
 # matched parameters. One block differs by design: the nebular emitter
 # uses Cue (a neural emulator trained on Cloudy 17, Li et al. 2025)
 # rather than CIGALE's bundled Cloudy 13.x grids. With all gas inputs
-# matched, Cue's Hα reads ~3.5× below CIGALE's CLOUDY — downstream of
-# the gas knobs, traceable to Cloudy version and the bare-stellar vs
-# wNE-SSP convolution path. Each discrepancy is called out at the
+# matched, Cue's integrated Hα carries a Cloudy-version offset vs
+# CIGALE's CLOUDY — downstream of the gas knobs, traceable to Cloudy
+# version and the bare-stellar vs wNE-SSP convolution path (§8 reports
+# the width-independent integrated ratio). Each discrepancy is called out at the
 # relevant section.
 
 # %% [markdown]
@@ -85,6 +86,14 @@ import tengri
 from tengri import FIXED, Fixed, SEDModel
 from tengri.components.dust.emission_templates import register_dale2014_tabulated
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+
+# Force the inline backend so figures embed on (re-)render regardless of the
+# ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
+# auto-display and produces a figure-less notebook. No-op when run as a script.
+try:  # noqa: SIM105
+    get_ipython().run_line_magic("matplotlib", "inline")
+except NameError:
+    pass
 
 # nbclient kernels don't bind ``__file__``; fall back to cwd so the Setup
 # cell doesn't crash and zero out every downstream panel (issue #540).
@@ -1128,14 +1137,16 @@ plt.show()
 # the stellar component and consumed by the nebular component on every
 # forward pass.
 #
-# **Remaining residual.** At matched gas inputs, tengri's Cue Hα peak
-# reads **~3.5× lower than CIGALE's CLOUDY** at this fiducial (and the
-# same ratio at the 5 Gyr quiescent reference — not a stress-test
-# artifact). The gap lives downstream of the gas knobs: Cue was trained
-# on Cloudy 17 (Li et al. 2025) while CIGALE bundles Cloudy 13.x grids,
-# and Cue's bare-stellar SSP path differs from CIGALE's wNE-SSP
-# convolution. Nebular continuum shape and emission-line ratios
-# reproduce well; the absolute line normalisation does not.
+# **Remaining residual.** The gap lives downstream of the gas knobs:
+# Cue was trained on Cloudy 17 (Li et al. 2025) while CIGALE bundles
+# Cloudy 13.x grids, and Cue's bare-stellar SSP path differs from
+# CIGALE's wNE-SSP convolution. Nebular continuum shape and
+# emission-line ratios reproduce well; the absolute line normalisation
+# carries a Cloudy-version offset. The residual is quantified below with
+# the **integrated** line luminosity (continuum-subtracted,
+# width-independent) — *not* a single-bin peak ratio, which would
+# measure line width and grid resolution (CIGALE broadens to
+# `lines_width = 300 km/s`) rather than physics.
 #
 # **Grid coverage.** The Cue emulator ships a native continuum grid
 # (~915 Å – 10⁸ Å, 1841 points) inside `cue_weights.npz`. The
@@ -1237,7 +1248,7 @@ ax_l.legend(fontsize=8)
 # tengri side — same three traces (stellar dashed, stellar+Cue solid,
 # Cue-only dotted). Agreement is limited by Cloudy version (17 vs
 # 13.x), bare-stellar vs wNE-SSP path, and line-broadening kernel;
-# see markdown above for the ~3.5× Hα residual.
+# see the integrated-line-luminosity ratio printed below.
 # Attaching Cue extends the master grid to ~10⁸ Å via the
 # native-grid union (cue_weights.npz/cont_wavelength), so s_neb has more
 # points than s_no_neb. Regrid the no-neb baseline onto the with-Cue
@@ -1263,6 +1274,47 @@ for ax in (ax_l, ax_r):
     ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_08_nebular_cue_vs_cloudy.png")
+
+# Quantify the residual by integrated line luminosity (width- and grid-
+# independent). A single-bin peak ratio measures line width, not luminosity —
+# CIGALE broadens its lines (lines_width=300 km/s) while Cue applies its own.
+#
+# CIGALE's native BC03 grid (ported faithfully into `bc03_from_cigale.h5`) is
+# non-uniform and only ~20 Å in the optical — that is CIGALE's own spectral
+# resolution, not a port artifact, and it cannot resolve an emission line (a
+# ±12 Å window holds a single grid point). So the integrated measure is taken on
+# the dense FSPS MIST+MILES bare-stellar SSP that Cue was validated on (the same
+# SSP swap the ProSpect notebook §8 makes, and for the same reason). The CIGALE
+# reference stays CLOUDY-on-BC03.
+_ssp_neb_dense = load_ssp_data(
+    str(tengri.download_ssp("fsps_mist_miles_chabrier", dest=str(_HERE / "_drivers" / "data")))
+)
+_m_neb_dense = SEDModel.build(
+    ssp_data=_ssp_neb_dense,
+    stellar={"logzsol": Fixed(0.0), "*": FIXED},
+    sfh=_neb_sfh_kw,
+    neb={
+        "type": "cue",
+        "neb_logU": Fixed(-2.0),
+        "neb_logZ_gas": Fixed(0.0),
+        "neb_fesc": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+_s_neb_dense = _m_neb_dense.predict_state({})
+_w_t_dense = np.asarray(_s_neb_dense.wave)
+_L_t_dense = np.asarray(_s_neb_dense.derived["sed_nebular"])
+print("§8 integrated line luminosity (tengri Cue / CIGALE CLOUDY; tengri on dense FSPS SSP):")
+for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+    _lc = U.line_lum(w_c_neb, L_c_neb_only, _c)
+    _lt = U.line_lum(_w_t_dense, _L_t_dense, _c)
+    if _lc > 0:
+        print(
+            f"    {_name} {_c:.0f} Å: CIGALE {_lc:.2e}, "
+            f"tengri {_lt:.2e} erg/s → {_lt / _lc:.2f}×"
+        )
 
 
 # %% [markdown]
@@ -1516,6 +1568,62 @@ for ax in (ax_l, ax_r):
 
 fig.tight_layout()
 save_fig("cigale_09_agn_skirtor.png")
+
+
+# %% [markdown]
+# ### §9c AGN parity — quantified head-to-head + per-band ratios
+#
+# The side-by-side panels above read one-to-one by eye; this overlays the two
+# full `stellar + dust + AGN` SEDs on CIGALE's grid with a ratio panel and
+# prints per-band `tengri / CIGALE` ratios for the AGN-dominated windows — the
+# disc UV continuum, the torus mid-IR bump, and the polar/FIR tail. Under the
+# default `norm='cigale_joint'` energy balance (#556) the disc and torus track
+# CIGALE to a few percent; the residual MIR/FIR offset is the SKIRTOR
+# data-release / template-integration difference, not a normalisation gap.
+
+# %%
+w_c_agn, L_c_agn = w_skirt, np.asarray(L_skirt)  # CIGALE stellar+dust+SKIRTOR
+w_t_agn, L_t_agn = np.asarray(s_agn.wave), np.asarray(s_agn.sed_intrinsic)  # tengri full
+L_t_on_c_agn = U.regrid(w_t_agn, L_t_agn, w_c_agn)
+ratio_agn = L_t_on_c_agn / np.maximum(L_c_agn, 1e-50)
+
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(w_c_agn, L_c_agn, "C0-", linewidth=1.6, label="CIGALE  skirtor2016")
+ax.plot(w_c_agn, L_t_on_c_agn, "C1--", linewidth=1.4, label="tengri  (regridded)")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1e3, 1e7)
+_ymx_agn = float(max(np.nanmax(L_c_agn), np.nanmax(L_t_on_c_agn)))
+ax.set_ylim(_ymx_agn * 1e-5, _ymx_agn * 2.0)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+ax.set_title("AGN parity — CIGALE skirtor2016 vs tengri (stellar + dust + AGN)")
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.plot(w_c_agn, ratio_agn, "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_ylim(0.5, 1.5)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
+
+# Per-band AGN ratios (median over each AGN-dominated window).
+print("§9 AGN per-band parity (tengri / CIGALE, full stellar+dust+AGN SED):")
+for _name, _lo, _hi in [
+    ("disc UV    1500-3000 Å", 1500.0, 3000.0),
+    ("torus MIR  5-30 µm    ", 5.0e4, 3.0e5),
+    ("polar FIR  100 µm     ", 8.0e5, 1.2e6),
+]:
+    _m = (w_c_agn >= _lo) & (w_c_agn <= _hi) & (L_c_agn > 0)
+    if _m.any():
+        print(f"  {_name}: {float(np.median(ratio_agn[_m])):.3f}×")
+fig.tight_layout()
+save_fig("cigale_09c_agn_parity_ratio.png")
+plt.show()
 
 
 # %% [markdown]

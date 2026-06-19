@@ -182,9 +182,16 @@ def _populate_factories() -> dict[str, Callable[..., dict]]:
     skipped: we emit one factory per spec, keyed by the spec's canonical name.
     Same convention as the dict grammar's primary keys.
     """
+    from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
+
     factories: dict[str, Callable[..., dict]] = {}
     seen: set[int] = set()
     for key, entry in SFH_REGISTRY.items():
+        # Skip SFHs not yet validated against the DSPS forward path — the
+        # grammar rejects them, so emitting a factory would produce a callable
+        # that errors at build (advertised-but-unusable). See UNVALIDATED_SFH_TYPES.
+        if key in UNVALIDATED_SFH_TYPES:
+            continue
         spec = entry.callable if hasattr(entry, "callable") else entry
         if id(spec) in seen:
             continue

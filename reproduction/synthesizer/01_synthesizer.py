@@ -73,6 +73,14 @@ from reproduction.synthesizer._drivers import (
 import tengri
 from tengri import FIXED, Fixed, SEDModel, Uniform, load_ssp_data
 
+# Force the inline backend so figures embed on (re-)render regardless of the
+# ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
+# auto-display and produces a figure-less notebook. No-op when run as a script.
+try:  # noqa: SIM105
+    get_ipython().run_line_magic("matplotlib", "inline")
+except NameError:
+    pass
+
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 
@@ -580,7 +588,9 @@ save_fig("synthesizer_07_panchromatic.png")
 # 2025), a neural emulator trained on a different Cloudy version with a different
 # ionising-spectrum parametrisation. **They will not agree**, and the gap is the
 # point — it reflects the Cloudy version and the different convolution paths. The
-# panel quantifies the Hα ratio rather than hiding it.
+# panel quantifies the gap with the **integrated** line luminosity
+# (continuum-subtracted, width-independent), not a single-bin peak ratio (which
+# would measure line width and grid resolution rather than physics).
 
 # %%
 NEB_AGE = 0.01  # Gyr — young constant-SFR population
@@ -629,10 +639,29 @@ for ax in (ax_l, ax_r):
     ax.set_ylim(_npk * 1e-3, _npk * 2)
     ax.set_xscale("linear")
     ax.grid(True, alpha=0.3)
-_s_ha = float(L_neb_s[np.argmin(np.abs(w_neb_s - 6563))])
-_t_ha = float(L_neb_t[int(np.argmin(np.abs(np.asarray(s_neb.wave) - 6563)))])
-if _s_ha > 0:
-    print(f"§8 Hα (6563 Å) tengri Cue / Synthesizer Cloudy = {_t_ha / _s_ha:.2f}×")
+# Integrated line luminosity (width- and grid-independent). A single-bin peak
+# ratio measures line width, not luminosity, so it is not used here.
+#
+# Note on the window: this notebook reads Synthesizer's *test* grid, which is
+# coarse in the optical (~17 Å), so a line's flux spreads beyond a tight ±12 Å
+# window (Hα lands on a single grid point). A wider ±30 Å window captures the
+# full line on both sides; with it the integrated ratio is well behaved and
+# consistent with the other Cloudy codes (Hα/Hβ ≈ 1.0× vs FSPS and BAGPIPES),
+# confirming Cue's line physics is sound. [O III] carries the usual
+# Cloudy-version spread. (The notebook's headline Synthesizer comparison is the
+# Unified AGN model in §9.)
+_w_t = np.asarray(s_neb.wave)
+print("§8 integrated line luminosity (tengri Cue / Synthesizer Cloudy; test grid, ±30 Å):")
+for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+    _ls = U.line_lum(w_neb_s, L_neb_s, _c, half=30.0)
+    _lt = U.line_lum(_w_t, L_neb_t, _c, half=30.0)
+    if _ls > 0:
+        print(
+            f"    {_name} {_c:.0f} Å: Synthesizer {_ls:.2e}, "
+            f"tengri {_lt:.2e} erg/s → {_lt / _ls:.2f}×"
+        )
+    else:
+        print(f"    {_name} {_c:.0f} Å: unmeasurable on the coarse test grid")
 fig.tight_layout()
 save_fig("synthesizer_08_nebular.png")
 

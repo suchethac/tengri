@@ -111,15 +111,20 @@ class TestSFHNormalizationContract:
         )
 
     def test_lognormal_normalization(self):
-        """lognormal(log_total_mass) must conserve mass."""
+        """lognormal(log_total_mass) must conserve mass.
+
+        ``width`` is the log-space (dex) standard deviation, not a time —
+        see the registry prior ``Uniform(0.1, 2.0)`` and the function
+        docstring (sigma = width x ln 10). ``peak``/``age`` are in years.
+        """
         self._check_normalization(
-            lognormal, T_LOOKBACK, log_total_mass=1.0, peak=5e9, width=1e9, age=_AGE_UNIV_YR
+            lognormal, T_LOOKBACK, log_total_mass=1.0, peak=5e9, width=0.3, age=_AGE_UNIV_YR
         )
         self._check_normalization(
-            lognormal, T_LOOKBACK, log_total_mass=0.5, peak=6e9, width=0.5e9, age=_AGE_UNIV_YR
+            lognormal, T_LOOKBACK, log_total_mass=0.5, peak=6e9, width=0.5, age=_AGE_UNIV_YR
         )
         self._check_normalization(
-            lognormal, T_LOOKBACK, log_total_mass=2.0, peak=4e9, width=2e9, age=_AGE_UNIV_YR
+            lognormal, T_LOOKBACK, log_total_mass=2.0, peak=4e9, width=0.2, age=_AGE_UNIV_YR
         )
 
     def test_truncated_skewnormal_normalization(self):

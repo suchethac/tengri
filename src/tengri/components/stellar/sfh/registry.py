@@ -185,6 +185,18 @@ class SFHModelSpec(NamedTuple):
 
 SFH_REGISTRY: dict[str, Any] = {}
 
+#: SFH names present in :data:`SFH_REGISTRY` but NOT yet validated against the
+#: DSPS forward path (the ``_SUPPORTED_SFH`` allowlist in
+#: ``components/stellar/component.py``). The public grammar
+#: (``parameters.groups._valid_sfh_types``) and the auto-generated
+#: ``tengri.builders.sfh.*`` factories exclude these, so the advertised set
+#: matches what actually forward-models — otherwise ``SEDModel.build`` succeeds
+#: and ``predict`` then raises ``NotImplementedError``. Promote a name out of
+#: this set once it is added to ``_SUPPORTED_SFH`` and crossvalidated.
+UNVALIDATED_SFH_TYPES: frozenset[str] = frozenset(
+    {"bursty_continuity", "gaussian_burst", "prospector_beta", "psb_wild2020", "top_hat"}
+)
+
 # Field sub-model registry: PSD model name -> sqrt_power function
 FIELD_MODEL_REGISTRY: dict[str, object] = {
     "drw": compute_sqrt_power_drw,

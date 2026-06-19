@@ -70,6 +70,14 @@ from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
 
+# Force the inline backend so figures embed on (re-)render regardless of the
+# ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
+# auto-display and produces a figure-less notebook. No-op when run as a script.
+try:  # noqa: SIM105
+    get_ipython().run_line_magic("matplotlib", "inline")
+except NameError:
+    pass
+
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 
@@ -654,6 +662,15 @@ save_fig("prospect_r_05_dust_applied.png")
 # `alpha_SF`; tengri uses its own Dale 2014 grid and enforces energy balance,
 # `L_IR ≡ L_absorbed`, to floating point. Both panels show the attenuated
 # stellar SED plus the Dale IR; the tengri energy-balance residual is annotated.
+#
+# **Matching `alpha_SF`.** ProSpect applies two Dale components — a birth cloud
+# (`alpha_SF_birth = 1.0`) and a diffuse screen (`alpha_SF_screen = 3.0`) — and
+# the diffuse screen, carrying most of the dust mass, sets the far-IR peak. The
+# tengri side is single-component Dale, so to put the two on the same axis we
+# pin `alpha_dale = 3.0` to ProSpect's screen hardness. With the default
+# `alpha_dale = 2.0` tengri peaked at 116 µm vs ProSpect's 148 µm (#757); at the
+# matched αSF = 3.0 both peak at ~148 µm (verified: αSF ≥ 2.5 → 148 µm on
+# tengri's grid). The residual is then template-vintage, not a knob mismatch.
 
 # %%
 sed_ir = P.prospect_sed(
@@ -685,7 +702,7 @@ m_ir = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
         "*": FIXED,
     },
     redshift=Fixed(0.0),
@@ -812,6 +829,17 @@ print(
 # ratio measures line widths, not physics. The comparison below is therefore the
 # **integrated line luminosity** (width-independent), at a matched star
 # formation rate, for the brightest optical lines.
+#
+# **Matched ionisation parameter (#761).** Left to itself, ProSpect's
+# `emissionLines` derives the ionisation parameter from metallicity via `Z2q`
+# (Orsi 2014), which at solar Z returns a soft `q ≈ 1.4e7` cm/s. That suppresses
+# the collisionally-excited metal lines, giving [O III]/Hα ≈ 0.014 — ~50× below
+# the Cloudy value and not comparable to Cue's grid run at `logU = -2`. We
+# therefore pass ProSpect the matching `q = U·c = 10^(-2)·c ≈ 3e8` cm/s. At this
+# matched ionisation ProSpect returns [O III]/Hα ≈ 0.21 (verified at the R
+# level); the residual versus Cue's 0.72 is then a genuine Levesque-2010 vs
+# Cloudy-17 difference, not an ionisation-parameter mismatch. Recombination
+# lines (Hα, Hβ) are q-insensitive, so this leaves the Balmer comparison intact.
 
 # %%
 NEB_AGE_GYR = 0.01
@@ -839,39 +867,51 @@ s_neb = m_neb.predict_state({})
 w_t8 = np.asarray(s_neb.wave)
 L_t8 = np.asarray(s_neb.derived["sed_nebular"])
 
-# Match ProSpect's SFR to tengri's recent SFR so the line budgets are comparable.
+# Match ProSpect's SFR to tengri's recent SFR so the line budgets are comparable,
+# and its ionisation parameter to Cue's logU = -2 (q = U·c) so the metal-line
+# ratios are a fair physics comparison rather than a q mismatch (#761).
 SFR_NEB = float(s_neb.derived["sfr_10myr"])
-w_p8, L_p8 = P.nebular_lnu(sfr=SFR_NEB, Z=Z_SOLAR)
-print(f"§8 matched SFR = {SFR_NEB:.2f} M⊙/yr")
+_NEB_Q = 10.0**-2.0 * 2.99792458e10  # q = U·c [cm/s] for logU = -2  → ≈ 3.0e8
+w_p8, L_p8 = P.nebular_lnu(sfr=SFR_NEB, Z=Z_SOLAR, q=_NEB_Q)
+print(f"§8 matched SFR = {SFR_NEB:.2f} M⊙/yr, ProSpect q = {_NEB_Q:.2e} cm/s (logU=-2)")
 
 
-def _line_lum(wave, L_nu, centre, half=12.0):
-    """Integrated line luminosity [erg/s] in ±``half`` Å, local continuum removed.
-
-    Converts to L_λ, subtracts the window floor as a flat continuum (zero for
-    ProSpect's line-only spectrum, the nebular continuum for Cue), and
-    integrates — a width-independent measure that is fair to both line
-    representations.
-    """
-    m = (wave >= centre - half) & (wave <= centre + half)
-    if int(m.sum()) < 2:
-        return 0.0
-    order = np.argsort(wave[m])
-    lam = wave[m][order]
-    l_lambda = L_nu[m][order] * U.C_ANGSTROM_PER_S / lam**2  # erg/s/Å
-    return float(np.trapezoid(np.clip(l_lambda - l_lambda.min(), 0.0, None), lam))
-
-
-_lines = [(6563.0, "Hα"), (5007.0, "[O III]"), (3727.0, "[O II]")]
+# Width-independent integrated line luminosity (shared helper U.line_lum) — a
+# single-bin peak ratio would measure line width, not luminosity, since
+# ProSpect broadens its lines to a fixed velocity dispersion while Cue places
+# them at its grid resolution.
+_lines = [(6563.0, "Hα"), (5007.0, "[O III]"), (3727.0, "[O II]"), (4861.0, "Hβ")]
+_L = {}
 print("§8 integrated line luminosity (Cue / ProSpect):")
 for _c, _name in _lines:
-    _lp = _line_lum(w_p8, L_p8, _c)
-    _lt = _line_lum(w_t8, L_t8, _c)
+    _lp = U.line_lum(w_p8, L_p8, _c)
+    _lt = U.line_lum(w_t8, L_t8, _c)
+    _L[_name] = (_lp, _lt)
     if _lp > 0:
         print(
             f"    {_name} {_c:.0f} Å: ProSpect {_lp:.2e}, "
             f"tengri {_lt:.2e} erg/s → {_lt / _lp:.2f}×"
         )
+# Line *ratios* are the fair, normalisation-free comparison. The absolute Hα is
+# offset because ProSpect ties L_Hα to SFR via a fixed Kennicutt-style
+# coefficient, while Cue derives it from the ionising-photon budget — so the
+# whole nebular spectrum carries that ~3x scale. The [O III]/Hα ratio isolates
+# the line physics: at the matched q (#761) it is a modest Levesque-2010 vs
+# Cloudy-17 difference, not the 50x q-mismatch artifact of the default Z2q.
+if _L["Hα"][0] > 0 and _L["Hβ"][0] > 0:
+    print("§8 line ratios (q-matched, normalisation-free):")
+    print(
+        f"    [O III]/Hβ: ProSpect {_L['[O III]'][0] / _L['Hβ'][0]:.2f}, "
+        f"tengri {_L['[O III]'][1] / _L['Hβ'][1]:.2f}"
+    )
+    print(
+        f"    [O III]/Hα: ProSpect {_L['[O III]'][0] / _L['Hα'][0]:.3f}, "
+        f"tengri {_L['[O III]'][1] / _L['Hα'][1]:.3f}"
+    )
+    print(
+        f"    Hα/Hβ (Balmer): ProSpect {_L['Hα'][0] / _L['Hβ'][0]:.2f}, "
+        f"tengri {_L['Hα'][1] / _L['Hβ'][1]:.2f}  (Case B ≈ 2.86)"
+    )
 
 fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
 U.panel(
@@ -910,16 +950,22 @@ save_fig("prospect_r_08_nebular.png")
 #
 # The panels show `νL_ν` — the right way to read a torus SED, where the thermal bump
 # is a true maximum. (In `L_ν` a torus rises into the far-IR simply because
-# `L_ν = νL_ν · λ/c`, easy to misread as a cold spectrum.) The **torus** — the reason
-# tengri carries SKIRTOR at all — matches well: both peak at 9.3 µm with the 10 µm
-# silicate feature (peaks printed). Where the two ports diverge is the **accretion-disc
-# continuum** shortward of ~1 µm: ProSpect's `SKIRTOR_interp` carries a bright,
-# strongly inclination-dependent disc (the UV plateau in the left panel), whereas
-# tengri's tabulated grid emits a disc continuum several × fainter and nearly flat with
-# inclination (printed ratio at 2000 Å). This is a real difference between the two
-# SKIRTOR ports, not a units or plotting effect — and it is minor for tengri's use of
-# the block, where the unobscured accretion-disc light is better supplied by a dedicated
-# disc component than by the torus library's built-in primary source.
+# `L_ν = νL_ν · λ/c`, easy to misread as a cold spectrum.) Both the **torus** (peak
+# 9.3 µm with the 10 µm silicate feature) and the **accretion-disc continuum**
+# shortward of ~1 µm track ProSpect: the disc reads ~0.9× ProSpect's
+# `SKIRTOR_interp` at 2000 Å. This uses the **`skirtor_stalevski`** model — the raw
+# Stalevski (2016) radiative-transfer SED (disc+torus as published, no analytic-disc
+# substitution), reading the faithful full-coverage SKIRTOR grid
+# (`scripts/build_skirtor_raw_grid.py`): the **published RT total** (`.dat` column 2,
+# the exact quantity ProSpect reads) on the full `ta,p,q,oa,R,i` axes — fixing the v3
+# grid's two shortcuts (R fixed at 20; total reconstructed as disk+dust). Three
+# SKIRTOR choices are swappable (`tengri.list_agn_models()`): `skirtor_stalevski`
+# (raw, ~0.9× here), the composable `disc.skirtor`+`torus.skirtor` (CIGALE's analytic
+# disc + `norm=1/∫dust`, the right choice for reproducing CIGALE), and the deprecated
+# monolithic `agn={'type':'skirtor'}` (power-law disc, ~0.28×). The residual to a
+# perfect 1.0× is a parameter-convention mismatch — ProSpect's `ct`/`rm` differ from
+# SKIRTOR's `oa`/`R` (ProSpect `ct=40`↔`oa≈30`; ProSpect's default `rm=60` is outside
+# the {10,20,30} SKIRTOR grid) — not the disc/total treatment.
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -947,8 +993,19 @@ m_agn = SEDModel.build(
         "*": FIXED,
     },
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    # Raw-Stalevski SKIRTOR model (#756). ProSpect's `SKIRTOR_interp` reads the
+    # SKIRTOR template directly — the disc + torus as Stalevski's radiative
+    # transfer computed them. tengri's `skirtor_stalevski` model does the same:
+    # it reads the published RT total from the faithful full-coverage grid
+    # (`scripts/build_skirtor_raw_grid.py`), no analytic-disc substitution, so it
+    # reproduces ProSpect to ~0.9× at the 2000 Å disc and 9.3 µm at the torus
+    # peak. (The monolithic `agn={'type':'skirtor'}` pairs the torus with a
+    # *power-law* disc → 0.28×; the composable `disc.skirtor` uses CIGALE's
+    # analytic disc + `norm=1/∫dust` → ~0.86×, the right choice for reproducing
+    # CIGALE rather than the raw template. All three are swappable — see
+    # `tengri.list_agn_models()`.)
     agn={
-        "type": "skirtor",
+        "type": "skirtor_stalevski",
         "agn_log_lbol": Fixed(_agn_log_lbol),
         "agn_cos_inc": Fixed(float(np.cos(np.radians(30.0)))),  # ProSpect an=30°
         "agn_oa_skirtor": Fixed(40.0),  # ProSpect ct=40°
@@ -1048,7 +1105,7 @@ m_radio = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
         "*": FIXED,
     },
     radio={"type": "condon92", "*": FIXED},

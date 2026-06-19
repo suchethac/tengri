@@ -120,13 +120,18 @@ def _load_grid_arrays(grid_path: str):
             result["wave"] = np.array(f["wavelength"][:])
             if "grid" in f and isinstance(f["grid"], _h5py.Group):
                 result["total"] = np.array(f["spectra/torus_emission"][:])
-                result["axes"] = (
+                has_R = "radius_ratio" in f["grid"]
+                axes = [
                     np.array(f["grid/tau_97"][:]),
                     np.array(f["grid/p"][:]),
                     np.array(f["grid/q"][:]),
                     np.array(f["grid/opening_angle"][:]),
-                    np.array(f["grid/cos_inclination"][:]),
-                )
+                ]
+                if has_R:
+                    axes.append(np.array(f["grid/radius_ratio"][:]))
+                axes.append(np.array(f["grid/cos_inclination"][:]))
+                result["axes"] = tuple(axes)
+                result["has_radius_ratio"] = has_R
                 if "spectra/disk_emission" in f:
                     result["disk"] = np.array(f["spectra/disk_emission"][:])
                 if "spectra/dust_emission" in f:
@@ -140,8 +145,25 @@ def _load_grid_arrays(grid_path: str):
                     np.array(f["oa"][:]),
                     np.array(f["cos_inc"][:]),
                 )
+                result["has_radius_ratio"] = False
 
+    # ``has_radius_ratio`` tells callers whether the grid carries the R axis
+    # (6-axis: tau, p, q, oa, radius_ratio, cos_inc) or is a legacy 5-axis grid
+    # (tau, p, q, oa, cos_inc). The interpolation helpers drop the R coordinate
+    # from the query point for legacy grids — see ``_match_point_to_axes`` (#772).
     return result
+
+
+def _match_point_to_axes(point: tuple, axes: tuple) -> tuple:
+    """Drop the R (radius_ratio) coordinate when the grid lacks that axis.
+
+    Interpolation points are built with the R coordinate at index 4 (after
+    ``oa``). Legacy 5-axis grids (no ``radius_ratio``) need it removed so the
+    point length matches the grid (#772).
+    """
+    if len(point) == len(axes) + 1:
+        return point[:4] + point[5:]
+    return point
 
 
 def _interpolate_and_normalize(
@@ -195,7 +217,7 @@ def _interpolate_and_normalize(
     **Citation**: matches CIGALE skirtor2016 processing (see
     ``scripts/download_skirtor_templates.py``).
     """
-    template = interp_nd_triweight(grid_jax, axes, edges, point)
+    template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
     # over-normalise on truncated grids; trapezoid in λ matches the
@@ -353,6 +375,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
+        agn_radius_ratio: float = 20.0,
         agn_cos_inc: float = 0.86602540378443864,
         agn_torus_frac: float = 0.5,
         **_kwargs,
@@ -392,6 +415,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             agn_cos_inc,
         )
         return _interpolate_and_normalize(
@@ -474,6 +498,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
+        agn_radius_ratio: float = 20.0,
         agn_cos_inc: float = 0.86602540378443864,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
@@ -521,6 +546,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             agn_cos_inc,
         )
         disk = _interpolate_and_normalize(
@@ -546,6 +572,7 @@ def skirtor_disc_dust_ratio(
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
+    agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = 0.86602540378443864,
 ) -> jnp.ndarray:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
@@ -611,6 +638,7 @@ def skirtor_disc_dust_ratio(
             jnp.asarray(agn_p_skirtor),
             jnp.asarray(agn_q_skirtor),
             jnp.asarray(agn_oa_skirtor),
+            jnp.asarray(agn_radius_ratio),
             jnp.asarray(cos_inc),
         )
         # RAW interpolated L_λ template on the NATIVE grid — NO per-component
@@ -620,7 +648,7 @@ def skirtor_disc_dust_ratio(
         # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
         # does not pass through grid nodes, distorting the disk/dust *integral
         # ratio* by ~10% even at exact-node params (R 2.45 vs CIGALE 2.22).
-        return interp_nd_pchip(grid, axes, point)
+        return interp_nd_pchip(grid, axes, _match_point_to_axes(point, axes))
 
     disk_i_n = _interp_native(disk_jax, agn_cos_inc)
     dust_i_n = _interp_native(dust_jax, agn_cos_inc)
@@ -715,6 +743,97 @@ def _find_skirtor_grid() -> str:
     raise FileNotFoundError(_NOT_FOUND_MSG)
 
 
+def _find_skirtor_raw_grid() -> str | None:
+    """Locate the faithful full-coverage SKIRTOR v4 grid, or None if absent.
+
+    Built by ``scripts/build_skirtor_raw_grid.py``; carries the full
+    ``ta,p,q,oa,R,i`` axes and the published radiative-transfer total.
+    """
+    from pathlib import Path
+
+    base = Path(__file__).resolve().parents[4]
+    for candidate in [base / "data" / "skirtor_raw_v4.h5", Path("data/skirtor_raw_v4.h5")]:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
+    r"""Loader for the faithful v4 SKIRTOR grid: the published RT total SED.
+
+    The v4 grid (``scripts/build_skirtor_raw_grid.py``) carries the full
+    ``(tau_97, p, q, opening_angle, radius_ratio, inclination)`` axes and stores
+    the **radiative-transfer total** (``.dat`` column 2) — the disc + torus as
+    Stalevski (2016) computed them, with no analytic-disc substitution. The
+    returned function interpolates that total at any point (so a fixed parameter
+    is just a slice) and scales it to the requested bolometric luminosity.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to a v4 SKIRTOR HDF5 grid.
+
+    Returns
+    -------
+    callable
+        ``fn(wavelength, agn_log_lbol, agn_tau_skirtor, agn_p_skirtor,
+        agn_q_skirtor, agn_oa_skirtor, agn_radius_ratio, agn_cos_inc,
+        frac_agn) -> L_nu [erg/s/Hz]``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure-JAX triweight interpolation; grid load cached.
+    """
+    import h5py
+
+    with h5py.File(grid_path, "r") as f:
+        ta = f["grid/tau_97"][:]
+        p = f["grid/p"][:]
+        q = f["grid/q"][:]
+        oa = f["grid/opening_angle"][:]
+        rr = f["grid/radius_ratio"][:]
+        ideg = f["grid/inclination_deg"][:]
+        total = f["spectra/total_emission"][:]
+        wave = f["wavelength"][:]
+
+    with jax.ensure_compile_time_eval():
+        total_j = jnp.array(total)
+        wave_g = jnp.array(wave)
+        axes = tuple(jnp.array(a) for a in (ta, p, q, oa, rr, ideg))
+        edges = tuple(edges_for_grid(a) for a in axes)
+        nu_g = _C_AA_PER_S / wave_g
+        order = jnp.argsort(nu_g)
+
+    def fn(
+        wavelength,
+        agn_log_lbol,
+        agn_tau_skirtor=7.0,
+        agn_p_skirtor=1.0,
+        agn_q_skirtor=1.0,
+        agn_oa_skirtor=40.0,
+        agn_radius_ratio=20.0,
+        agn_cos_inc=0.86602540378443864,
+        frac_agn=1.0,
+        **_kwargs,
+    ):
+        i_deg = jnp.degrees(jnp.arccos(jnp.clip(agn_cos_inc, 0.0, 1.0)))
+        point = (
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            agn_radius_ratio,
+            i_deg,
+        )
+        spec = interp_nd_triweight(total_j, axes, edges, point)  # L_nu shape on wave_g
+        l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
+        bolo = jnp.trapezoid(spec[order], nu_g[order])
+        spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), 1e-100))
+        return jnp.interp(wavelength, wave_g, spec_n, left=0.0, right=0.0)
+
+    return fn
+
+
 @functools.cache
 def _load_skirtor_default():
     """Load SKIRTOR template grid from file (total-only)."""
@@ -790,6 +909,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
+        agn_radius_ratio: float = 20.0,
         agn_cos_inc: float = 0.86602540378443864,  # cos(30°)
     ) -> jnp.ndarray:
         r"""Wavelength-dependent disc attenuation factor at chosen i.
@@ -802,6 +922,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             agn_cos_inc,
         )
         point_face = (
@@ -809,10 +930,15 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             1.0,  # cos_inc = 1 = face-on
         )
-        disk_at_i = interp_nd_triweight(disk_grid, axes, edges, point_i)
-        disk_at_face = interp_nd_triweight(disk_grid, axes, edges, point_face)
+        disk_at_i = interp_nd_triweight(
+            disk_grid, axes, edges, _match_point_to_axes(point_i, axes)
+        )
+        disk_at_face = interp_nd_triweight(
+            disk_grid, axes, edges, _match_point_to_axes(point_face, axes)
+        )
         # Safe ratio: where face-on is zero (shouldn't be, but be safe),
         # return 0 attenuation (no contribution).
         ratio_template = jnp.where(

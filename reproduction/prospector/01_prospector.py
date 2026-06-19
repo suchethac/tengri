@@ -83,6 +83,14 @@ from reproduction.prospector._drivers import prospector_driver as P, units as U
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
 
+# Force the inline backend so figures embed on (re-)render regardless of the
+# ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
+# auto-display and produces a figure-less notebook. No-op when run as a script.
+try:  # noqa: SIM105
+    get_ipython().run_line_magic("matplotlib", "inline")
+except NameError:
+    pass
+
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 
@@ -1107,7 +1115,10 @@ save_fig("prospector_07_panchromatic.png")
 # parametrisation. **They will not agree**, and the gap is the point: it
 # reflects the Cloudy version difference plus the different convolution
 # paths (Cue operates on bare-stellar SSPs; FSPS on the SFH-integrated
-# spectrum). The panel quantifies the Hα ratio rather than hiding it.
+# spectrum). The panel quantifies the gap rather than hiding it, using the
+# **integrated** line luminosity (continuum-subtracted, width-independent) —
+# not a single-bin peak ratio, which would measure line width and grid
+# resolution rather than physics.
 
 # %%
 NEB_AGE = 0.01  # Gyr — a young constant-SFR population, where lines dominate
@@ -1153,10 +1164,17 @@ for ax in (ax_l, ax_r):
     ax.set_xlim(900, 7000)
     ax.set_xscale("linear")
     ax.grid(True, alpha=0.3)
-_p_ha = L_p_neb_scaled[np.argmin(np.abs(w_p_neb - 6563))]
-_t_ha = float(L_t_neb[int(np.argmin(np.abs(np.asarray(s_neb.wave) - 6563)))])
-if _p_ha > 0:
-    print(f"§8 Hα (6563 Å) tengri Cue / FSPS Byler+2017 = {_t_ha / _p_ha:.2f}×")
+# Integrated line luminosity (width- and grid-independent). A single-bin peak
+# ratio measures line width, not luminosity — Cue broadens its lines while FSPS
+# places them at the grid resolution, so a peak ratio is meaningless. Compare
+# the brightest optical lines by their continuum-subtracted integrated flux.
+_w_t = np.asarray(s_neb.wave)
+print("§8 integrated line luminosity (tengri Cue / FSPS Byler+2017):")
+for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
+    _lp = U.line_lum(w_p_neb, L_p_neb_scaled, _c)
+    _lt = U.line_lum(_w_t, L_t_neb, _c)
+    if _lp > 0:
+        print(f"    {_name} {_c:.0f} Å: FSPS {_lp:.2e}, tengri {_lt:.2e} erg/s → {_lt / _lp:.2f}×")
 fig.tight_layout()
 save_fig("prospector_08_nebular.png")
 

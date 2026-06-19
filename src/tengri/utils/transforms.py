@@ -80,11 +80,12 @@ def softplus(x: jnp.ndarray) -> jnp.ndarray:
 
 @jax.jit
 def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
-    """Map unbounded parameter to (lo, hi) via sigmoid.
+    """Map unbounded parameter to (lo, hi) via Gaussian CDF.
 
-    Centered at x0=0 so that u=0 maps to the midpoint of (lo, hi).
-    With k=1.0, u in [-3, +3] covers ~95% of the bounded range,
-    matching the scale of standard-normal latent variables.
+    Uses the standard normal CDF Φ(u) = 0.5 * (1 + erf(u / sqrt(2))) to map
+    N(0,1) latent variables to Uniform(lo, hi). At u=0, Φ(0) = 0.5,
+    so θ maps to the midpoint. This ensures that an N(0,1) latent yields a
+    genuine uniform prior on the bounded interval, not a midpoint-peaked one.
 
     Parameters
     ----------
@@ -97,13 +98,24 @@ def to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     -------
     ndarray
         Bounded output in (lo, hi).
+
+    Notes
+    -----
+    JIT-compatible, differentiable everywhere. The Gaussian-CDF
+    standardization (vs logistic sigmoid) ensures Uniform(lo,hi) is a flat
+    prior under N(0,1) latent, fundamental for standardized inference.
     """
-    return sigmoid(u_param, 0.0, 1.0, lo, hi)
+    # Standard normal CDF: Φ(u) = 0.5 * (1 + erf(u / sqrt(2)))
+    phi_u = 0.5 * (1.0 + jax.scipy.special.erf(u_param / jnp.sqrt(2.0)))
+    return lo + (hi - lo) * phi_u
 
 
 @jax.jit
 def to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
-    """Map bounded parameter from (lo, hi) to R.
+    """Map bounded parameter from (lo, hi) to R via inverse Gaussian CDF.
+
+    Inverts the to_bounded map: given θ ∈ (lo, hi), returns u such that
+    θ = lo + (hi-lo) * Φ(u). Uses the inverse error function erfinv.
 
     Parameters
     ----------
@@ -116,19 +128,29 @@ def to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     -------
     ndarray
         Unbounded output in R.
+
+    Notes
+    -----
+    JIT-compatible, differentiable. Clipping to (1e-7, 1-1e-7) prevents
+    numerical issues at the extremes.
     """
-    return inverse_sigmoid(param, 0.0, 1.0, lo, hi)
+    # Normalize to [0, 1]
+    p = (param - lo) / (hi - lo)
+    # Clip to avoid numerical issues at the extremes
+    p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
+    # Inverse of Φ: Φ^{-1}(p) = sqrt(2) * erfinv(2p - 1)
+    return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * p - 1.0)
 
 
 @jax.jit
 def log_det_jacobian_to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> jnp.ndarray:
     """Log determinant of Jacobian: d(bounded)/d(unbounded).
 
-    For the sigmoid transform θ = lo + (hi - lo) * sigmoid(u),
-    the Jacobian is: dθ/du = (hi - lo) * sigmoid(u) * (1 - sigmoid(u))
+    For the Gaussian-CDF transform θ = lo + (hi - lo) * Φ(u),
+    the Jacobian is: dθ/du = (hi - lo) * φ(u),
+    where φ(u) is the standard normal PDF.
 
     This is the log|dθ/du| term needed when transforming densities:
-        p(θ) = p(u) * |du/dθ| = p(u) / |dθ/du|
         log p(θ) = log p(u) - log|dθ/du|
 
     Parameters
@@ -141,21 +163,17 @@ def log_det_jacobian_to_bounded(u_param: jnp.ndarray, lo: float, hi: float) -> j
     Returns
     -------
     array
-        log|dθ/du| = log(hi - lo) + log(sigmoid(u)) + log(1 - sigmoid(u))
+        log|dθ/du| = log(hi - lo) + log_phi(u)
 
     Notes
     -----
-    With k=1.0 (as used in to_bounded), this simplifies to:
-        log|dθ/du| = log(hi - lo) + u - 2*log(1 + exp(u))
-                    = log(hi - lo) + u - 2*softplus(u)
+    where log_phi(u) = -0.5*u**2 - 0.5*log(2π) is the log standard normal PDF.
+    JIT-compatible and differentiable everywhere.
     """
     width = hi - lo
-    # log(sig * (1 - sig)) = log(sig) + log(1 - sig)
-    # Numerically stable:
-    # log(sigmoid(u)) = -softplus(-u)
-    # log(1 - sigmoid(u)) = -softplus(u)
-    log_jac = jnp.log(width) - jax.nn.softplus(-u_param) - jax.nn.softplus(u_param)
-    return log_jac
+    # Log of standard normal PDF: log φ(u) = -0.5*u^2 - 0.5*log(2π)
+    log_phi = -0.5 * u_param**2 - 0.5 * jnp.log(2.0 * jnp.pi)
+    return jnp.log(width) + log_phi
 
 
 @jax.jit
@@ -175,6 +193,10 @@ def log_det_jacobian_to_unbounded(param: jnp.ndarray, lo: float, hi: float) -> j
     -------
     array
         log|du/dθ| = -log|dθ/du|
+
+    Notes
+    -----
+    Evaluated at u = to_unbounded(param, lo, hi). JIT-compatible.
     """
     # Compute u first
     u = to_unbounded(param, lo, hi)
