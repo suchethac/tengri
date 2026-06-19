@@ -65,6 +65,7 @@ from tengri.components.dust.draine2021_pah import (
 from tengri.components.dust.emission import modified_blackbody
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
+    DerivedKey,
     ForwardState,
     ParamDeclaration,
     SEDComponentConfig,
@@ -275,6 +276,36 @@ class DustEmissionSEDComponent:
             sps_family=self.config.pahspec_auto_sps_family,
             age_myr=self.config.pahspec_auto_age_myr,
             log_z_solar=self.config.pahspec_auto_log_z_solar,
+        )
+
+    def optional_inputs(self) -> tuple[DerivedKey, ...]:
+        r"""Cross-component reads that order this adapter in the pipeline.
+
+        Declares a soft dependency on ``L_ir`` (the dust-absorbed
+        luminosity published by the attenuator, e.g.
+        :class:`~tengri.components.dust.component.DustAttenuationSEDComponent`
+        or :class:`~tengri.components.dust.two_component.DustSEDComponent`).
+        The orchestrator's :func:`~tengri.forward.orchestrator.topological_sort`
+        uses this to place the emission adapter **after** the attenuator that
+        produces ``L_ir``; without it the adapter could run first, read the
+        ``state.derived.get("L_ir", 0.0)`` fallback, and re-radiate nothing —
+        the silent single-screen IR drop of #565.
+
+        It is *optional* (not a hard ``inputs`` requirement) because the
+        adapter is a graceful no-op when ``L_ir == 0`` (no upstream
+        attenuator), so a missing producer must not fail pipeline validation.
+
+        Returns
+        -------
+        tuple of DerivedKey
+            ``(L_ir [erg/s],)``.
+        """
+        return (
+            DerivedKey(
+                "L_ir",
+                "erg/s",
+                "Dust-absorbed luminosity to re-radiate (energy balance)",
+            ),
         )
 
     def citations(self) -> tuple[str, ...]:
