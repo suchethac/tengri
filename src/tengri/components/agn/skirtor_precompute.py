@@ -113,6 +113,16 @@ def precompute_skirtor_photometry(
     wave_grid = np.asarray(raw["wave"], dtype=np.float64)
     axes_np = tuple(np.asarray(ax) for ax in raw["axes"])
 
+    # The photometry precompute pins the SKIRTOR radius ratio R to the CIGALE
+    # default (R=20) and stays 5-D (tau, p, q, oa, cos_inc). It is an opt-in
+    # speed approximation; the exact spectral path interpolates R fully (#772).
+    # ``_load_grid_arrays`` always returns the R axis at position 4 (a degenerate
+    # length-1 axis for legacy grids), so this node-exact slice is safe.
+    if len(axes_np) == 6:
+        r_idx = int(np.argmin(np.abs(axes_np[4] - 20.0)))
+        grid = grid[:, :, :, :, r_idx, :]
+        axes_np = axes_np[:4] + axes_np[5:]
+
     # Convert raw L_λ-like templates to L_ν [erg/s/Hz per L_sun of L_bol].
     # SKIRTOR v3 templates are stored as L_λ-like (issue #459), so the
     # bolometric normalisation must be taken in the *wavelength* variable and

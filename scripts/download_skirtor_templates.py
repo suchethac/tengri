@@ -56,6 +56,7 @@ TAU_VALUES = np.array([3.0, 5.0, 7.0, 9.0, 11.0])
 P_VALUES = np.array([0.0, 0.5, 1.0, 1.5])
 Q_VALUES = np.array([0.0, 0.5, 1.0, 1.5])
 OA_VALUES = np.array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0])
+R_VALUES = np.array([10.0, 20.0, 30.0])  # outer/inner radius ratio (Stalevski grid)
 INC_VALUES = np.arange(0.0, 91.0, 10.0)
 COS_INC_VALUES = np.cos(np.deg2rad(INC_VALUES))
 
@@ -161,6 +162,7 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
     n_p = len(P_VALUES)
     n_q = len(Q_VALUES)
     n_oa = len(OA_VALUES)
+    n_R = len(R_VALUES)
     n_inc = len(COS_INC_VALUES)
 
     disk_spectra = {}
@@ -180,9 +182,10 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
         i_p = _find_index(P_VALUES, params["p"])
         i_q = _find_index(Q_VALUES, params["q"])
         i_oa = _find_index(OA_VALUES, params["oa"])
+        i_R = _find_index(R_VALUES, params["R"])
         i_inc = _find_index(INC_VALUES, params["i"])
 
-        if any(idx is None for idx in [i_tau, i_p, i_q, i_oa, i_inc]):
+        if any(idx is None for idx in [i_tau, i_p, i_q, i_oa, i_R, i_inc]):
             print(f"  Skipping (out of grid): {sed_file.name}")
             n_skipped += 1
             continue
@@ -205,7 +208,7 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
         else:
             norm = 1.0
 
-        key = (i_tau, i_p, i_q, i_oa, i_inc)
+        key = (i_tau, i_p, i_q, i_oa, i_R, i_inc)
         disk_spectra[key] = disk
         dust_spectra[key] = dust_col
         norm_values[key] = norm
@@ -224,20 +227,21 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
     n_wave = len(reference_wl)
     wl_angstrom = reference_wl * 10.0  # nm -> Angstrom
 
-    disk_grid = np.full((n_tau, n_p, n_q, n_oa, n_inc, n_wave), 1e-99)
-    dust_grid = np.full((n_tau, n_p, n_q, n_oa, n_inc, n_wave), 1e-99)
-    total_grid = np.full((n_tau, n_p, n_q, n_oa, n_inc, n_wave), 1e-99)
-    norms = np.zeros((n_tau, n_p, n_q, n_oa, n_inc))
+    disk_grid = np.full((n_tau, n_p, n_q, n_oa, n_R, n_inc, n_wave), 1e-99)
+    dust_grid = np.full((n_tau, n_p, n_q, n_oa, n_R, n_inc, n_wave), 1e-99)
+    total_grid = np.full((n_tau, n_p, n_q, n_oa, n_R, n_inc, n_wave), 1e-99)
+    norms = np.zeros((n_tau, n_p, n_q, n_oa, n_R, n_inc))
 
     for key, disk_spec in disk_spectra.items():
-        i_tau, i_p, i_q, i_oa, i_inc = key
-        disk_grid[i_tau, i_p, i_q, i_oa, i_inc, :] = disk_spec
-        dust_grid[i_tau, i_p, i_q, i_oa, i_inc, :] = dust_spectra[key]
-        total_grid[i_tau, i_p, i_q, i_oa, i_inc, :] = disk_spec + dust_spectra[key]
-        norms[i_tau, i_p, i_q, i_oa, i_inc] = norm_values[key]
+        i_tau, i_p, i_q, i_oa, i_R, i_inc = key
+        disk_grid[i_tau, i_p, i_q, i_oa, i_R, i_inc, :] = disk_spec
+        dust_grid[i_tau, i_p, i_q, i_oa, i_R, i_inc, :] = dust_spectra[key]
+        total_grid[i_tau, i_p, i_q, i_oa, i_R, i_inc, :] = disk_spec + dust_spectra[key]
+        norms[i_tau, i_p, i_q, i_oa, i_R, i_inc] = norm_values[key]
 
-    coverage = n_loaded / (n_tau * n_p * n_q * n_oa * n_inc)
-    print(f"Grid coverage: {n_loaded}/{n_tau * n_p * n_q * n_oa * n_inc} ({coverage:.1%})")
+    _ncell = n_tau * n_p * n_q * n_oa * n_R * n_inc
+    coverage = n_loaded / _ncell
+    print(f"Grid coverage: {n_loaded}/{_ncell} ({coverage:.1%})")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(output_path, "w") as f:
@@ -248,6 +252,7 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
         grp.create_dataset("p", data=P_VALUES)
         grp.create_dataset("q", data=Q_VALUES)
         grp.create_dataset("opening_angle", data=OA_VALUES)
+        grp.create_dataset("radius_ratio", data=R_VALUES)
         grp.create_dataset("cos_inclination", data=COS_INC_VALUES)
 
         spec = f.create_group("spectra")

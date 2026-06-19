@@ -120,13 +120,18 @@ def _load_grid_arrays(grid_path: str):
             result["wave"] = np.array(f["wavelength"][:])
             if "grid" in f and isinstance(f["grid"], _h5py.Group):
                 result["total"] = np.array(f["spectra/torus_emission"][:])
-                result["axes"] = (
+                has_R = "radius_ratio" in f["grid"]
+                axes = [
                     np.array(f["grid/tau_97"][:]),
                     np.array(f["grid/p"][:]),
                     np.array(f["grid/q"][:]),
                     np.array(f["grid/opening_angle"][:]),
-                    np.array(f["grid/cos_inclination"][:]),
-                )
+                ]
+                if has_R:
+                    axes.append(np.array(f["grid/radius_ratio"][:]))
+                axes.append(np.array(f["grid/cos_inclination"][:]))
+                result["axes"] = tuple(axes)
+                result["has_radius_ratio"] = has_R
                 if "spectra/disk_emission" in f:
                     result["disk"] = np.array(f["spectra/disk_emission"][:])
                 if "spectra/dust_emission" in f:
@@ -140,6 +145,21 @@ def _load_grid_arrays(grid_path: str):
                     np.array(f["oa"][:]),
                     np.array(f["cos_inc"][:]),
                 )
+                result["has_radius_ratio"] = False
+
+    # Backward-compat: legacy grids lack the R (radius_ratio) axis. Insert a
+    # degenerate length-1 R axis (value 20, the CIGALE default) after ``oa`` so
+    # all downstream interpolation can use a uniform 6-axis point (#772). New
+    # grids built by download_skirtor_templates.py carry the real R axis.
+    if not result.get("has_radius_ratio", False):
+        r_pos = 4  # after (tau, p, q, oa)
+        axes = list(result["axes"])
+        axes.insert(r_pos, np.array([20.0]))
+        result["axes"] = tuple(axes)
+        for k in ("total", "disk", "dust"):
+            if k in result:
+                result[k] = np.expand_dims(result[k], axis=r_pos)
+    result["has_radius_ratio"] = True
 
     return result
 
@@ -353,6 +373,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
+        agn_radius_ratio: float = 20.0,
         agn_cos_inc: float = 0.86602540378443864,
         agn_torus_frac: float = 0.5,
         **_kwargs,
@@ -392,6 +413,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             agn_cos_inc,
         )
         return _interpolate_and_normalize(
@@ -474,6 +496,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
+        agn_radius_ratio: float = 20.0,
         agn_cos_inc: float = 0.86602540378443864,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
@@ -521,6 +544,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             agn_cos_inc,
         )
         disk = _interpolate_and_normalize(
@@ -546,6 +570,7 @@ def skirtor_disc_dust_ratio(
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
+    agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = 0.86602540378443864,
 ) -> jnp.ndarray:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
@@ -611,6 +636,7 @@ def skirtor_disc_dust_ratio(
             jnp.asarray(agn_p_skirtor),
             jnp.asarray(agn_q_skirtor),
             jnp.asarray(agn_oa_skirtor),
+            jnp.asarray(agn_radius_ratio),
             jnp.asarray(cos_inc),
         )
         # RAW interpolated L_λ template on the NATIVE grid — NO per-component
@@ -881,6 +907,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
         agn_p_skirtor: float = 1.0,
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
+        agn_radius_ratio: float = 20.0,
         agn_cos_inc: float = 0.86602540378443864,  # cos(30°)
     ) -> jnp.ndarray:
         r"""Wavelength-dependent disc attenuation factor at chosen i.
@@ -893,6 +920,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             agn_cos_inc,
         )
         point_face = (
@@ -900,6 +928,7 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
             agn_p_skirtor,
             agn_q_skirtor,
             agn_oa_skirtor,
+            agn_radius_ratio,
             1.0,  # cos_inc = 1 = face-on
         )
         disk_at_i = interp_nd_triweight(disk_grid, axes, edges, point_i)
