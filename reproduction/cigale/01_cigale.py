@@ -1561,15 +1561,10 @@ save_fig("cigale_09_agn_skirtor.png")
 
 
 # %% [markdown]
-# ### §9c AGN parity — quantified head-to-head + per-band ratios
+# ### §9c AGN parity — full-spectrum ratio
 #
-# The side-by-side panels above read one-to-one by eye; this overlays the two
-# full `stellar + dust + AGN` SEDs on CIGALE's grid with a ratio panel and
-# prints per-band `tengri / CIGALE` ratios for the AGN-dominated windows — the
-# disc UV continuum, the torus mid-IR bump, and the polar/FIR tail. Under the
-# default `norm='cigale_joint'` energy-balance policy, the disc and torus track
-# CIGALE to a few percent; the residual MIR/FIR offset is the SKIRTOR
-# data-release / template-integration difference, not a normalisation gap.
+# The two `stellar + dust + AGN` SEDs on a shared grid, with the tengri / CIGALE
+# ratio and per-band readouts (disc UV, torus mid-IR, polar/FIR).
 
 # %%
 w_c_agn, L_c_agn = w_skirt, np.asarray(L_skirt)  # CIGALE stellar+dust+SKIRTOR
