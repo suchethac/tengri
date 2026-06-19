@@ -255,15 +255,29 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
         grp.create_dataset("radius_ratio", data=R_VALUES)
         grp.create_dataset("cos_inclination", data=COS_INC_VALUES)
 
+        # Store spectra as float32 to keep the committed grid small (the R axis
+        # tripled the cell count). Templates are normalised per-∫dust at f64 build
+        # precision above; f32 storage (~1e-7) is well below all SED tolerances,
+        # and node-exact / path-vs-path tests stay machine-precise (same stored
+        # values on both sides). Axes/norm stay f64.
         spec = f.create_group("spectra")
         spec.create_dataset(
-            "disk_emission", data=disk_grid, compression="gzip", compression_opts=9
+            "disk_emission",
+            data=disk_grid.astype(np.float32),
+            compression="gzip",
+            compression_opts=9,
         )
         spec.create_dataset(
-            "dust_emission", data=dust_grid, compression="gzip", compression_opts=9
+            "dust_emission",
+            data=dust_grid.astype(np.float32),
+            compression="gzip",
+            compression_opts=9,
         )
         spec.create_dataset(
-            "torus_emission", data=total_grid, compression="gzip", compression_opts=9
+            "torus_emission",
+            data=total_grid.astype(np.float32),
+            compression="gzip",
+            compression_opts=9,
         )
         spec.create_dataset("norm", data=norms)
 
