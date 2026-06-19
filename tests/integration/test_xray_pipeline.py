@@ -52,6 +52,7 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
         "xray_delta_alpha_ox": -1.4,
+        "xray_log_nh": 20.0,
     }
 
     final = run_components([XRaySEDComponent()], initial_state, params)
@@ -93,6 +94,7 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
         "xray_delta_alpha_ox": -1.4,
+        "xray_log_nh": 20.0,
     }
     out = xray.apply(state, params)
 
@@ -131,6 +133,7 @@ def test_xray_pipeline_preserves_input_state_immutability():
             "xray_gamma_agn": 1.8,
             "xray_E_cut": 300.0,
             "xray_delta_alpha_ox": -1.4,
+            "xray_log_nh": 20.0,
         },
     )
 
@@ -190,6 +193,7 @@ def test_three_adapter_chain_runs_end_to_end():
         "xray_gamma_agn": 1.8,
         "xray_E_cut": 300.0,
         "xray_delta_alpha_ox": -1.4,
+        "xray_log_nh": 20.0,
     }
 
     final = run_components(
