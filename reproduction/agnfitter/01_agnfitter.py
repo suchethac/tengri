@@ -933,6 +933,36 @@ fig.tight_layout()
 save_fig("agnfitter_10a_alphaox.png")
 
 # %% [markdown]
+# ### §10′ X-ray α_ox–L₂₅₀₀ parity (tengri vs AGNFITTER-RX)
+#
+# tengri's `just2007` relation should reproduce AGNFITTER-RX's
+# `α_ox = −0.137 log L₂₅₀₀ + 2.638` exactly across the luminosity range — the
+# residual panel makes that one-to-one explicit (it's the same Just+2007 fit).
+
+# %%
+aox_t = np.array([float(alpha_ox_from_l2500(x, relation="just2007")) for x in l2500])
+aox_ref = -0.137 * np.log10(l2500) + 2.638
+fig, (ax, axr) = plt.subplots(
+    2, 1, figsize=(8, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(np.log10(l2500), aox_t, "C1-", lw=1.6, label="tengri  just2007")
+ax.plot(np.log10(l2500), aox_ref, "k--", lw=1.2, label="AGNFITTER-RX  Just+2007")
+ax.set_ylabel(r"$\alpha_{ox}$")
+ax.set_title(r"$\alpha_{ox}$–$L_{2500}$ parity")
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+axr.axhline(0.0, color="0.5", lw=0.8)
+axr.plot(np.log10(l2500), aox_t - aox_ref, "C1-", lw=1.2)
+axr.set_ylabel(r"$\Delta\alpha_{ox}$", fontsize=9)
+axr.set_xlabel(r"$\log_{10}\ L_{2500\,\AA}$ [erg/s/Hz]")
+axr.grid(True, alpha=0.3)
+_aox_dmax = float(np.max(np.abs(aox_t - aox_ref)))
+print(f"§10 α_ox parity: max |tengri − AGNFITTER-RX| = {_aox_dmax:.2e}")
+fig.tight_layout()
+save_fig("agnfitter_10c_alphaox_residual.png")
+plt.show()
+
+# %% [markdown]
 # ## §11 Radio
 #
 # AGNFITTER-RX models AGN core/jet radio with a simple power law (SPL,
@@ -986,6 +1016,43 @@ ax.legend()
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_11a_radio_agn.png")
+
+# %% [markdown]
+# ### §11′ Radio SPL slope parity (tengri vs analytic ν^−0.75)
+#
+# AGNFITTER-RX's AGN core/jet SPL is `S_ν ∝ ν^α` with `α = −0.75`. tengri's
+# `radio_agn` reproduces that slope exactly **within the radio regime** (it
+# returns zero above ~300 GHz, where the synchrotron core no longer applies);
+# over its support the ratio to an analytic ν^−0.75 is ≡ 1 to floating point.
+# The DPL (`radio_agn_dpl`) is the direct Eq. 9–10 port shown in §11.
+
+# %%
+ref_spl = (freq / 5e9) ** (-0.75)
+t_spl = np.asarray(norm_at(wave_radio, L_spl, U.C_ANGSTROM_PER_S / 5e9))
+valid_spl = t_spl > 0  # radio_agn support (zero above the ~300 GHz core cutoff)
+ratio_spl = np.where(valid_spl, t_spl / ref_spl, np.nan)
+fig, (ax, axr) = plt.subplots(
+    2, 1, figsize=(8, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.loglog(
+    freq / 1e9, np.where(valid_spl, t_spl, np.nan), "C0-", lw=1.6, label="tengri  radio_agn (SPL)"
+)
+ax.loglog(freq / 1e9, ref_spl, "k--", lw=1.2, label=r"analytic  $\nu^{-0.75}$")
+ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
+ax.set_title("Radio SPL slope parity (within radio_agn support)")
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+axr.axhline(1.0, color="0.5", lw=0.8)
+axr.semilogx(freq / 1e9, ratio_spl, "C0-", lw=1.2)
+axr.set_ylim(0.98, 1.02)
+axr.set_ylabel(r"tengri / $\nu^{-0.75}$", fontsize=9)
+axr.set_xlabel(r"$\nu$ [GHz]")
+axr.grid(True, alpha=0.3)
+_spl_dmax = float(np.nanmax(np.abs(ratio_spl[valid_spl] - 1.0)))
+print(f"§11 radio SPL slope parity (within support): max |ratio − 1| = {_spl_dmax:.2e}")
+fig.tight_layout()
+save_fig("agnfitter_11c_radio_spl_residual.png")
+plt.show()
 
 # %% [markdown]
 # ## §10b X-ray corona shape + host-galaxy floor
