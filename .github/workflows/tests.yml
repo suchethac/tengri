@@ -104,9 +104,18 @@ jobs:
       # parity files are ignored (they skip without their grids).
       #
       # pytest-xdist `-n auto` parallelises across the runner's CPUs (≈4 vCPU).
+      #
+      # `--timeout=600 --timeout-method=thread`: under `-n auto` a single test
+      # that OOM-thrashes or hits a cold JAX compile on the runner can stall its
+      # worker for ~20 min while the others finish, hanging the whole run until
+      # the `timeout-minutes` job cap with no indication of which test. A
+      # generous per-test timeout (10 min ≫ any healthy test — all run < 150 s
+      # locally) converts that into a fast, named failure so CI stays
+      # deterministic instead of silently timing out.
       - run: |
           pytest tests/components tests/contract tests/physics tests/regression -q \
             -n auto \
+            --timeout=600 --timeout-method=thread \
             --ignore=tests/crossval \
             --ignore=tests/regression/paper/test_draine2021_pah_loader.py \
             --ignore=tests/regression/synthesizer_parity/test_nebular_continuum.py \
