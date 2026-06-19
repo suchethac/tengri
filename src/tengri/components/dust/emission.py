@@ -940,6 +940,14 @@ def pah_drude(
     return lnu
 
 
+# Deprecated alias: ``draine2021_pah`` was the original name for the Drude-profile
+# PAH emission model and is still accepted by the grammar (it was advertised in
+# the validator's lazy set but never resolved — #693). It now resolves to the
+# canonical ``pah_drude`` so ``dust={'emission': {'type': 'draine2021_pah'}}``
+# works instead of raising "Unknown dust emission model". Prefer ``pah_drude``.
+DUST_EMISSION_MODELS["draine2021_pah"] = DUST_EMISSION_MODELS["pah_drude"]
+
+
 @register_emission_model("schreiber2016")
 def schreiber2016(
     wavelength_aa: jnp.ndarray,

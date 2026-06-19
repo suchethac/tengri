@@ -8,8 +8,9 @@ hand-maintained ``_VALID_SFH_TYPES`` and ``SFH_REGISTRY``. PR #324
 surfaced the drift footgun (three new registry entries were silently
 rejected by the validator). Per ADR-0005 / ADR-0008, the registry is the
 canonical source; this test pins the invariant that the validator's
-accepted set is exactly ``SFH_REGISTRY.keys()`` so the divergence cannot
-re-emerge.
+accepted set is exactly ``SFH_REGISTRY.keys()`` *minus* the explicitly
+not-yet-validated names (``UNVALIDATED_SFH_TYPES``), so advertised types
+always forward-model and the drift cannot re-emerge.
 """
 
 from __future__ import annotations
@@ -19,35 +20,39 @@ import pytest
 pytestmark = pytest.mark.contract
 
 
-def test_valid_sfh_types_mirrors_registry_keys() -> None:
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+def test_valid_sfh_types_mirrors_registry_minus_unvalidated() -> None:
+    from tengri.components.stellar.sfh.registry import (
+        SFH_REGISTRY,
+        UNVALIDATED_SFH_TYPES,
+    )
     from tengri.parameters.groups import _valid_sfh_types
 
-    assert set(_valid_sfh_types()) == set(SFH_REGISTRY.keys()), (
-        "groups._valid_sfh_types() drifted from SFH_REGISTRY. See ADR-0005 / "
-        "ADR-0008: the registry is the canonical source; the validator must "
-        "derive from it, not duplicate its keys."
+    assert set(_valid_sfh_types()) == set(SFH_REGISTRY.keys()) - set(UNVALIDATED_SFH_TYPES), (
+        "groups._valid_sfh_types() must be SFH_REGISTRY.keys() minus "
+        "UNVALIDATED_SFH_TYPES. See ADR-0005 / ADR-0008: the registry is the "
+        "canonical catalog; the validator advertises only forward-validated types."
     )
 
 
-def test_translate_sfh_accepts_every_registered_name() -> None:
-    """Every registry key should round-trip through the dict-grammar parser.
+def test_translate_sfh_accepts_every_validated_name_and_gates_the_rest() -> None:
+    """Every validated registry key round-trips; unvalidated names raise clearly.
 
-    Catches the failure mode where ``_valid_sfh_types`` itself is correct
-    but a separate hand-maintained list (e.g. an old hard-coded tuple in
-    ``_translate_sfh``) silently rejects a registered name.
+    Catches both the old drift footgun (a registered name silently rejected)
+    and the advertised-but-unusable footgun (a name accepted by the grammar
+    that then raises NotImplementedError at predict time).
     """
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.components.stellar.sfh.registry import (
+        SFH_REGISTRY,
+        UNVALIDATED_SFH_TYPES,
+    )
     from tengri.parameters.groups import _translate_sfh
 
-    # Compositor names ("burst", "field") are valid but live in their own
-    # composition slot — _translate_sfh accepts them via the same allowlist
-    # so they're fine to include.
     for name in SFH_REGISTRY:
+        if name in UNVALIDATED_SFH_TYPES:
+            with pytest.raises(ValueError, match="not yet validated"):
+                _translate_sfh({"type": name}, {})
+            continue
         result: dict = {}
-        # Should not raise. We only care that the validator does not reject
-        # the name; downstream resolution (parameter buckets, etc.) is
-        # exercised by other tests.
         _translate_sfh({"type": name}, result)
         assert result["mean_sfh_type"] == name
 

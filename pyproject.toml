@@ -74,6 +74,12 @@ dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-xdist>=3.5",
+    # Per-test timeout safety net. Under `-n auto` a single test that
+    # OOM-thrashes / hits a cold JAX compile on the CI runner can stall its
+    # worker for many minutes while the others finish, leaving the whole run
+    # to sit until the 25-min job timeout (a silent, undiagnosable hang). A
+    # generous per-test `--timeout` turns that into a fast, named failure.
+    "pytest-timeout>=2.3",
     "ruff>=0.9",
     "jupytext>=1.16",
     # JAX-native test assertions (shape, finiteness, tree-allclose, JIT/eager

@@ -165,6 +165,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be > 0",
     ),
     ParamDeclaration(
+        "agn_radius_ratio",
+        # SKIRTOR outer/inner torus radius ratio R. Grid nodes {10, 20, 30}
+        # (Stalevski 2016); used by the skirtor_stalevski model's v4 grid.
+        Uniform(10.0, 30.0, default=20.0),
+        "SKIRTOR torus outer/inner radius ratio R (grid: 10, 20, 30)",
+        lambda lo, hi: lo > 0,
+        "must be > 0",
+    ),
+    ParamDeclaration(
         "agn_cos_inc",
         # cos(30°) — matches CIGALE skirtor2016 ``i=30`` default
         # (Boquien+2019 A&A 622, A103). Previous library default 0.5

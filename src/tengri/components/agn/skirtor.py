@@ -715,6 +715,97 @@ def _find_skirtor_grid() -> str:
     raise FileNotFoundError(_NOT_FOUND_MSG)
 
 
+def _find_skirtor_raw_grid() -> str | None:
+    """Locate the faithful full-coverage SKIRTOR v4 grid, or None if absent.
+
+    Built by ``scripts/build_skirtor_raw_grid.py``; carries the full
+    ``ta,p,q,oa,R,i`` axes and the published radiative-transfer total.
+    """
+    from pathlib import Path
+
+    base = Path(__file__).resolve().parents[4]
+    for candidate in [base / "data" / "skirtor_raw_v4.h5", Path("data/skirtor_raw_v4.h5")]:
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
+def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
+    r"""Loader for the faithful v4 SKIRTOR grid: the published RT total SED.
+
+    The v4 grid (``scripts/build_skirtor_raw_grid.py``) carries the full
+    ``(tau_97, p, q, opening_angle, radius_ratio, inclination)`` axes and stores
+    the **radiative-transfer total** (``.dat`` column 2) — the disc + torus as
+    Stalevski (2016) computed them, with no analytic-disc substitution. The
+    returned function interpolates that total at any point (so a fixed parameter
+    is just a slice) and scales it to the requested bolometric luminosity.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to a v4 SKIRTOR HDF5 grid.
+
+    Returns
+    -------
+    callable
+        ``fn(wavelength, agn_log_lbol, agn_tau_skirtor, agn_p_skirtor,
+        agn_q_skirtor, agn_oa_skirtor, agn_radius_ratio, agn_cos_inc,
+        frac_agn) -> L_nu [erg/s/Hz]``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure-JAX triweight interpolation; grid load cached.
+    """
+    import h5py
+
+    with h5py.File(grid_path, "r") as f:
+        ta = f["grid/tau_97"][:]
+        p = f["grid/p"][:]
+        q = f["grid/q"][:]
+        oa = f["grid/opening_angle"][:]
+        rr = f["grid/radius_ratio"][:]
+        ideg = f["grid/inclination_deg"][:]
+        total = f["spectra/total_emission"][:]
+        wave = f["wavelength"][:]
+
+    with jax.ensure_compile_time_eval():
+        total_j = jnp.array(total)
+        wave_g = jnp.array(wave)
+        axes = tuple(jnp.array(a) for a in (ta, p, q, oa, rr, ideg))
+        edges = tuple(edges_for_grid(a) for a in axes)
+        nu_g = _C_AA_PER_S / wave_g
+        order = jnp.argsort(nu_g)
+
+    def fn(
+        wavelength,
+        agn_log_lbol,
+        agn_tau_skirtor=7.0,
+        agn_p_skirtor=1.0,
+        agn_q_skirtor=1.0,
+        agn_oa_skirtor=40.0,
+        agn_radius_ratio=20.0,
+        agn_cos_inc=0.86602540378443864,
+        frac_agn=1.0,
+        **_kwargs,
+    ):
+        i_deg = jnp.degrees(jnp.arccos(jnp.clip(agn_cos_inc, 0.0, 1.0)))
+        point = (
+            agn_tau_skirtor,
+            agn_p_skirtor,
+            agn_q_skirtor,
+            agn_oa_skirtor,
+            agn_radius_ratio,
+            i_deg,
+        )
+        spec = interp_nd_triweight(total_j, axes, edges, point)  # L_nu shape on wave_g
+        l_scale = 10.0**agn_log_lbol * _L_SUN * frac_agn
+        bolo = jnp.trapezoid(spec[order], nu_g[order])
+        spec_n = spec * (l_scale / jnp.maximum(jnp.abs(bolo), 1e-100))
+        return jnp.interp(wavelength, wave_g, spec_n, left=0.0, right=0.0)
+
+    return fn
+
+
 @functools.cache
 def _load_skirtor_default():
     """Load SKIRTOR template grid from file (total-only)."""
