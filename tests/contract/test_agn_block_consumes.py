@@ -349,8 +349,14 @@ _BARE = _SSP / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 
 @pytest.mark.skipif(not _BARE.exists(), reason="SSP grid not present (CI has no data/ssp_*.h5)")
-def test_agn_panchromatic_free_params_all_move_predict():
-    """No-op guard: each free AGN param in agn_panchromatic changes predict()."""
+def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
+    """No-op guard: each free AGN param in agn_panchromatic changes predict().
+
+    Requires the real SSP grid: the synthetic #613 fixture is a smooth,
+    featureless continuum on which the AGN contribution is swamped, so the
+    per-param ``predict`` deltas fall below the no-op threshold. Skips on CI
+    (synthetic-only) via ``real_ssp_only``.
+    """
     from tengri import load_ssp_data, recipes
     from tengri.observation import Observation, Photometry
     from tengri.observation.photometry import FilterCurve

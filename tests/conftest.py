@@ -120,6 +120,23 @@ def ssp_data_bc03():
     return load_ssp_data(str(_SSP_FILE_BC03))
 
 
+@pytest.fixture
+def real_ssp_only():
+    """Skip a physics-value test when only the synthetic SSP fixture is present.
+
+    #613 writes a synthetic SSP at ``_SSP_FILE_WNE`` so *structural* tests run
+    on CI. Tests that assert calibrated physical values (magnitudes, SED ratios,
+    energy balance) must NOT run on that uncalibrated grid — request this fixture
+    to skip cleanly when the real grid is absent (file missing or tagged
+    ``synthetic``).
+    """
+    if not _SSP_FILE_WNE.is_file():
+        pytest.skip(f"real SSP grid not found: {_SSP_FILE_WNE}")
+    with h5py.File(_SSP_FILE_WNE, "r") as f:
+        if f.attrs.get("synthetic", False):
+            pytest.skip("only the synthetic SSP fixture is present (#613); needs the real grid")
+
+
 @pytest.fixture(scope="session")
 def sdss_filters():
     """Load SDSS ugriz filters once per session."""
@@ -259,6 +276,11 @@ def pytest_configure(config):
     _create_silva04_fixture_if_missing(
         Path(__file__).parent.parent / "data" / "silva04_torus_grid.h5"
     )
+    # #613: a schema-faithful synthetic SSP at the canonical default path so the
+    # ~20 SSP-gated *structural* contract tests RUN in CI instead of skipping
+    # (the masking that let #608/#768 regressions reach main). Physics-value
+    # tests still gate themselves on the real grid via ``real_ssp_only``.
+    _create_synthetic_ssp_if_missing(_SSP_FILE_WNE)
 
 
 def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
@@ -384,6 +406,71 @@ def _create_silva04_fixture_if_missing(silva04_path: Path) -> None:
     warnings.warn(
         f"Created synthetic Silva+04 grid at {silva04_path} for tests. "
         "Run scripts/build_silva04_grid.py to replace with the real grid.",
+        UserWarning,
+        stacklevel=1,
+    )
+
+
+def _create_synthetic_ssp_if_missing(ssp_path: Path) -> None:
+    """Synthesise a schema-faithful SSP HDF5 grid at the default path if absent.
+
+    Purpose (#613): CI ships no real ``data/ssp_*.h5`` grids, so every
+    ``skipif(not _SSP_FILE_WNE.is_file())`` contract test silently skips — the
+    exact masking that let the spectroscopy/joint break (#608) and the
+    ``xray_log_nh`` KeyError (#768) reach main while CI stayed green. Writing a
+    tiny synthetic SSP at the canonical default path lets the *structural*
+    contract tests (API surface, cross-component threading, builder grammar)
+    actually run on CI. Mirrors ``_create_cb19_fixture_if_missing`` /
+    ``_create_silva04_fixture_if_missing``.
+
+    The grid is smooth and broad (91 Å – 1 mm) so it drives the full forward
+    chain: ionising photons below the Lyman limit (nebular), UV/optical
+    luminosity for dust energy balance, and a far-IR tail for dust re-emission.
+    It is **not** physically calibrated — physics-value tests (``regression_paper``,
+    ``crossval``) must guard on the real grid via the ``real_ssp_only`` fixture.
+
+    When the real file is present (dev machine after ``tengri.download_ssp``),
+    this is a no-op.
+    """
+    if ssp_path.exists():
+        return
+    import warnings
+
+    ssp_path.parent.mkdir(parents=True, exist_ok=True)
+
+    n_met, n_age, n_wave = 5, 22, 1200
+    # 91 Å (Lyman limit) – 1 mm (1e7 Å): spans ionising → far-IR.
+    wave = np.logspace(np.log10(91.0), np.log10(1.0e7), n_wave).astype(np.float64)
+    # log10(age/Gyr): ~0.3 Myr – 13.8 Gyr.
+    lg_age_gyr = np.linspace(-3.5, 1.14, n_age).astype(np.float64)
+    # Absolute log10(Z); with LOG10_ZSUN = -1.848 this is logzsol ≈ [-2.15, 0.85].
+    lgmet = np.linspace(-4.0, -1.0, n_met).astype(np.float64)
+
+    # Smooth continuum: bright in the UV/optical, ~0 in the far-IR (∝ λ^-1.5),
+    # with mild monotonic age (younger = bluer/brighter) and metallicity trends.
+    base = (5000.0 / wave) ** 1.5  # (n_wave,)
+    age_factor = 1.0 + 0.20 * (lg_age_gyr.mean() - lg_age_gyr)  # younger → larger
+    met_factor = 1.0 + 0.10 * (lgmet - lgmet.mean())
+    flux = base[None, None, :] * age_factor[None, :, None] * met_factor[:, None, None]
+    flux = np.abs(flux).astype(np.float64) + 1e-12  # strictly positive
+
+    # Surviving stellar mass fraction: ~0.97 (young) → ~0.55 (old), monotone.
+    frac = np.linspace(0.97, 0.55, n_age)
+    mass_remaining = np.broadcast_to(frac[None, :], (n_met, n_age)).astype(np.float64)
+
+    with h5py.File(ssp_path, "w") as f:
+        f.create_dataset("ssp_wave", data=wave)
+        f.create_dataset("ssp_flux", data=flux)
+        f.create_dataset("ssp_lg_age_gyr", data=lg_age_gyr)
+        f.create_dataset("ssp_lgmet", data=lgmet)
+        f.create_dataset("ssp_mass_remaining", data=mass_remaining)
+        f.attrs["synthetic"] = True
+        f.attrs["imf"] = "chabrier"
+
+    warnings.warn(
+        f"Created synthetic SSP grid at {ssp_path} for tests (#613). "
+        "It is NOT physically calibrated — run tengri.download_ssp(...) for the "
+        "real grid. Physics-value tests guard on it via the real_ssp_only fixture.",
         UserWarning,
         stacklevel=1,
     )

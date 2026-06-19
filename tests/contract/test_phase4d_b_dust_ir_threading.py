@@ -99,8 +99,13 @@ def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
         )
 
 
-def test_pahspec_dust_publishes_template_data_for_jit(ssp_wneref, obs):
-    """PAHspec dust backend publishes template_data with dust_ir arrays."""
+def test_pahspec_dust_publishes_template_data_for_jit(real_ssp_only, ssp_wneref, obs):
+    """PAHspec dust backend publishes template_data with dust_ir arrays.
+
+    Requires real grids: PAHspec's IR template is not shipped to CI, where the
+    synthetic #613 SSP lets the build succeed but publish no dust_ir template.
+    ``real_ssp_only`` skips on synthetic-only CI.
+    """
 
     try:
         dust_cfg = "draine2021_pah"
@@ -126,8 +131,12 @@ def test_pahspec_dust_publishes_template_data_for_jit(ssp_wneref, obs):
     assert jnp.prod(jnp.asarray(dust_ir["pahspec_norm_per_lgU"]).shape) > 0
 
 
-def test_astrodust_dust_publishes_template_data_for_jit(ssp_wneref, obs):
-    """Astrodust backend publishes template_data with dust_ir arrays."""
+def test_astrodust_dust_publishes_template_data_for_jit(real_ssp_only, ssp_wneref, obs):
+    """Astrodust backend publishes template_data with dust_ir arrays.
+
+    Requires real grids (see PAHspec sibling): ``real_ssp_only`` skips on
+    synthetic-only CI.
+    """
 
     try:
         dust_cfg = "astrodust"

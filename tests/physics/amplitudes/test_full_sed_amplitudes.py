@@ -18,11 +18,18 @@ pytestmark = pytest.mark.conservation
 def _make_ssp_if_available():
     from pathlib import Path
 
+    import h5py
+
     from tengri import load_ssp_data
 
     p = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
     if not p.exists():
         return None
+    # These assert calibrated absolute amplitudes (L_ν, L_bol), so they need the
+    # real grid — the synthetic #613 CI fixture has an arbitrary flux scale.
+    with h5py.File(p, "r") as f:
+        if f.attrs.get("synthetic", False):
+            return None
     return load_ssp_data(str(p))
 
 
