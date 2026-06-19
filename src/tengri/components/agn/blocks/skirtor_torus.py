@@ -37,6 +37,7 @@ def skirtor_torus_block(
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
+    agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = 0.86602540378443864,
     agn_torus_frac: float = 0.5,
     agn_polar_ebv: float = 0.03,
@@ -125,6 +126,7 @@ def skirtor_torus_block(
         agn_p_skirtor=agn_p_skirtor,
         agn_q_skirtor=agn_q_skirtor,
         agn_oa_skirtor=agn_oa_skirtor,
+        agn_radius_ratio=agn_radius_ratio,
         agn_cos_inc=agn_cos_inc,
         agn_torus_frac=agn_torus_frac,
     )
