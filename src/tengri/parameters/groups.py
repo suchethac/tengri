@@ -412,6 +412,7 @@ _AGN_PARTITION = {
     "agn_p_skirtor": "agn.torus",
     "agn_q_skirtor": "agn.torus",
     "agn_oa_skirtor": "agn.torus",
+    "agn_radius_ratio": "agn.torus",
     # SKIRTOR_mean_3p (AGNfitter-rX averaged) torus
     "agn_incl_skirtor": "agn.torus",
     "agn_tv_skirtor": "agn.torus",
