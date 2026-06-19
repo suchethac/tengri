@@ -695,8 +695,12 @@ torus_pairs = [
     (
         "CAT3D",
         "CAT3D-Wind",
-        lambda: tengri_torus("cat3d_wind"),
-        "cat3d_wind (port)",
+        # Match AGNFITTER-RX's incl=0 sightline (cos_inc=1) so the panel compares
+        # the same CAT3D-Wind geometry, not two inclinations. With the default
+        # cos_inc (i=30°) the shape ran 0.86× — an inclination mismatch, not a
+        # port error; matched, it is ~1.02× (#781).
+        lambda: tengri_torus("cat3d_wind", cos_inc=1.0),
+        "cat3d_wind (port, incl 0°)",
         dict(incl=0.0),
     ),
 ]
@@ -721,6 +725,60 @@ for ax in axes[:, 0]:
 fig.suptitle("Torus libraries — dotted line marks the 10 µm silicate feature", y=1.0)
 fig.tight_layout()
 save_fig("agnfitter_09c_torus_library.png")
+
+# %% [markdown]
+# ### §9c″ Torus-library parity — full-spectrum shape ratio
+#
+# The 2×2 panels above match by eye; this quantifies the tengri / AGNFITTER-RX
+# peak-normalised **shape** ratio for each torus library, continuously across
+# 5×10³–10⁷ Å (median over 1–100 µm printed below). The readout is honest about
+# where the libraries differ:
+#
+# * **S04 ≈ 0.99×** — the node-exact Silva+2004 port reproduces AGNFITTER-RX's
+#   shape across the band.
+# * **SKIRTOR ≈ 0.95×** — the full-grid X-CIGALE reduction vs AGNFITTER-RX's
+#   averaged `SKIRTOR_mean_3p` (a modelling choice, §9c′), not a port error.
+# * **CAT3D-Wind ≈ 1.0×** — the node-exact Hönig&Kishimoto port reproduces
+#   AGNFITTER-RX once compared on the *same* sightline. The earlier 0.86× was an
+#   inclination mismatch (tengri's default i=30° vs AGNFITTER-RX's incl=0 here),
+#   not a port error — matched to incl=0 it lands ~1.02× (#781).
+# * **NK08 ≈ 0.88×** — this one is a genuine *model* difference, not a sightline
+#   mismatch: tengri's `nenkova` is an **independent analytic** Nenkova+2008
+#   torus, not a port of AGNFITTER-RX's NK08 pickle, so its peak-normalised shape
+#   sits ~12% off (inclination-independent) and runs 2–4× in the NIR (§9c intro).
+#   Use `silva04` / `cat3d_wind` for node-exact AGNFITTER-RX parity.
+
+# %%
+fig, ax = plt.subplots(figsize=(9, 4.6))
+ax.axhspan(0.8, 1.25, color="0.9", zorder=0)
+ax.axhline(1.0, color="0.5", lw=0.8)
+_ratio_grid = np.geomspace(5e3, 1e7, 400)
+print("§9c torus-library full-spectrum shape parity (tengri / AGNFITTER, peak-norm):")
+for (af_name, _title, tengri_fn, _tlabel, af_kw), _c in zip(torus_pairs, ["C0", "C1", "C2", "C3"]):
+    w_a, L_a = A.torus_template(af_name, **af_kw)
+    w_t, L_t = tengri_fn()
+    a_on = np.interp(
+        np.log10(_ratio_grid), np.log10(w_a), norm_peak(L_a), left=np.nan, right=np.nan
+    )
+    t_on = np.interp(
+        np.log10(_ratio_grid), np.log10(w_t), norm_peak(L_t), left=np.nan, right=np.nan
+    )
+    _ratio = t_on / a_on
+    ax.loglog(_ratio_grid, _ratio, _c, lw=1.4, label=_title)
+    _m = (_ratio_grid > 1e4) & (_ratio_grid < 1e6) & np.isfinite(_ratio) & (a_on > 1e-3)
+    if _m.any():
+        print(f"  {_title:12s}: median (1-100 µm) = {float(np.nanmedian(_ratio[_m])):.3f}×")
+ax.set_xlim(5e3, 1e7)
+ax.set_ylim(0.3, 3.0)
+ax.set_xlabel(r"$\lambda$ [Å]")
+ax.set_ylabel("tengri / AGNFITTER (peak-norm.)")
+ax.set_title("Torus-library full-spectrum shape parity")
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("agnfitter_09c2_torus_ratio.png")
+plt.show()
+
 
 # %% [markdown]
 # ### §9c′ Both SKIRTOR reductions, side by side
@@ -882,6 +940,36 @@ fig.tight_layout()
 save_fig("agnfitter_10a_alphaox.png")
 
 # %% [markdown]
+# ### §10′ X-ray α_ox–L₂₅₀₀ parity (tengri vs AGNFITTER-RX)
+#
+# tengri's `just2007` relation should reproduce AGNFITTER-RX's
+# `α_ox = −0.137 log L₂₅₀₀ + 2.638` exactly across the luminosity range — the
+# residual panel makes that one-to-one explicit (it's the same Just+2007 fit).
+
+# %%
+aox_t = np.array([float(alpha_ox_from_l2500(x, relation="just2007")) for x in l2500])
+aox_ref = -0.137 * np.log10(l2500) + 2.638
+fig, (ax, axr) = plt.subplots(
+    2, 1, figsize=(8, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(np.log10(l2500), aox_t, "C1-", lw=1.6, label="tengri  just2007")
+ax.plot(np.log10(l2500), aox_ref, "k--", lw=1.2, label="AGNFITTER-RX  Just+2007")
+ax.set_ylabel(r"$\alpha_{ox}$")
+ax.set_title(r"$\alpha_{ox}$–$L_{2500}$ parity")
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+axr.axhline(0.0, color="0.5", lw=0.8)
+axr.plot(np.log10(l2500), aox_t - aox_ref, "C1-", lw=1.2)
+axr.set_ylabel(r"$\Delta\alpha_{ox}$", fontsize=9)
+axr.set_xlabel(r"$\log_{10}\ L_{2500\,\AA}$ [erg/s/Hz]")
+axr.grid(True, alpha=0.3)
+_aox_dmax = float(np.max(np.abs(aox_t - aox_ref)))
+print(f"§10 α_ox parity: max |tengri − AGNFITTER-RX| = {_aox_dmax:.2e}")
+fig.tight_layout()
+save_fig("agnfitter_10c_alphaox_residual.png")
+plt.show()
+
+# %% [markdown]
 # ## §11 Radio
 #
 # AGNFITTER-RX models AGN core/jet radio with a simple power law (SPL,
@@ -935,6 +1023,43 @@ ax.legend()
 ax.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("agnfitter_11a_radio_agn.png")
+
+# %% [markdown]
+# ### §11′ Radio SPL slope parity (tengri vs analytic ν^−0.75)
+#
+# AGNFITTER-RX's AGN core/jet SPL is `S_ν ∝ ν^α` with `α = −0.75`. tengri's
+# `radio_agn` reproduces that slope exactly **within the radio regime** (it
+# returns zero above ~300 GHz, where the synchrotron core no longer applies);
+# over its support the ratio to an analytic ν^−0.75 is ≡ 1 to floating point.
+# The DPL (`radio_agn_dpl`) is the direct Eq. 9–10 port shown in §11.
+
+# %%
+ref_spl = (freq / 5e9) ** (-0.75)
+t_spl = np.asarray(norm_at(wave_radio, L_spl, U.C_ANGSTROM_PER_S / 5e9))
+valid_spl = t_spl > 0  # radio_agn support (zero above the ~300 GHz core cutoff)
+ratio_spl = np.where(valid_spl, t_spl / ref_spl, np.nan)
+fig, (ax, axr) = plt.subplots(
+    2, 1, figsize=(8, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.loglog(
+    freq / 1e9, np.where(valid_spl, t_spl, np.nan), "C0-", lw=1.6, label="tengri  radio_agn (SPL)"
+)
+ax.loglog(freq / 1e9, ref_spl, "k--", lw=1.2, label=r"analytic  $\nu^{-0.75}$")
+ax.set_ylabel(r"$L_\nu$ (norm. at 5 GHz)")
+ax.set_title("Radio SPL slope parity (within radio_agn support)")
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+axr.axhline(1.0, color="0.5", lw=0.8)
+axr.semilogx(freq / 1e9, ratio_spl, "C0-", lw=1.2)
+axr.set_ylim(0.98, 1.02)
+axr.set_ylabel(r"tengri / $\nu^{-0.75}$", fontsize=9)
+axr.set_xlabel(r"$\nu$ [GHz]")
+axr.grid(True, alpha=0.3)
+_spl_dmax = float(np.nanmax(np.abs(ratio_spl[valid_spl] - 1.0)))
+print(f"§11 radio SPL slope parity (within support): max |ratio − 1| = {_spl_dmax:.2e}")
+fig.tight_layout()
+save_fig("agnfitter_11c_radio_spl_residual.png")
+plt.show()
 
 # %% [markdown]
 # ## §10b X-ray corona shape + host-galaxy floor
