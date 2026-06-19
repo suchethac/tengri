@@ -405,7 +405,9 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
     reach the engine.
     """
     # (a) the phantom type is gone — fail loud rather than silently no-op.
-    with pytest.raises(ValueError, match="Unknown dust type"):
+    # A registered law name used as a 'type' raises the law-vs-type redirect
+    # (#664/#784); a non-law unknown type raises "Unknown dust type".
+    with pytest.raises(ValueError, match=r"Unknown dust type|is a dust attenuation \*law\*"):
         _silent_build(
             ssp_data=ssp,
             observation=obs,
@@ -528,9 +530,14 @@ def test_registered_port_names_against_baseline():
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_catalog_z_range_end_to_end(ssp, obs):
+def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
     """Three SEDModels at different Fixed(z) under WavePrecomp(catalog_z_range)
-    share the same compile_signature AND produce sensible per-row photometry."""
+    share the same compile_signature AND produce sensible per-row photometry.
+
+    Requires the real SSP: the assertion that photometry *differs* across z needs
+    real spectral features; the smooth synthetic #613 SSP gives near-identical
+    bands across z, so ``real_ssp_only`` skips it on synthetic-only CI.
+    """
     from tengri import WavePrecomp
 
     cz = WavePrecomp(catalog_z_range=(0.01, 1.5), n_z=200)
@@ -540,7 +547,7 @@ def test_catalog_z_range_end_to_end(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "calzetti", "tau_v": Fixed(0.3)},
+            dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
             redshift=Fixed(z),
             approx=cz,
         )
@@ -583,7 +590,7 @@ def test_waveprecomp_agreement_with_exact(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "calzetti", "tau_v": Fixed(0.4)},
+            dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.4)},
             redshift=Fixed(0.1),
             approx=approx,
         )

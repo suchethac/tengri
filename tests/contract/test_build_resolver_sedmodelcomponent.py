@@ -26,7 +26,11 @@ class TestBuildResolverDustAttenuation:
         ``dust_model='two_component'`` and dropped the law (built ``power_law``).
         """
         assert law not in _REGISTRY
-        with pytest.raises(ValueError, match="Unknown dust type"):
+        # Two loud-failure messages are acceptable (#664/#784): an outright
+        # "Unknown dust type" (e.g. 'mw', 'salim18' — not registered laws) or
+        # the law-vs-type redirect for names that ARE registered attenuation
+        # laws ('calzetti', 'smc'): "<law> is a dust attenuation *law*…".
+        with pytest.raises(ValueError, match=r"Unknown dust type|is a dust attenuation \*law\*"):
             SEDModel.build(ssp_data=ssp_data_bc03, dust={"type": law}, redshift=Fixed(0.1))
 
     @pytest.mark.parametrize("law", ["calzetti", "smc", "cardelli", "salim"])
