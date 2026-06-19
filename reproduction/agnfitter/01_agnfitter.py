@@ -695,8 +695,12 @@ torus_pairs = [
     (
         "CAT3D",
         "CAT3D-Wind",
-        lambda: tengri_torus("cat3d_wind"),
-        "cat3d_wind (port)",
+        # Match AGNFITTER-RX's incl=0 sightline (cos_inc=1) so the panel compares
+        # the same CAT3D-Wind geometry, not two inclinations. With the default
+        # cos_inc (i=30°) the shape ran 0.86× — an inclination mismatch, not a
+        # port error; matched, it is ~1.02× (#781).
+        lambda: tengri_torus("cat3d_wind", cos_inc=1.0),
+        "cat3d_wind (port, incl 0°)",
         dict(incl=0.0),
     ),
 ]
@@ -734,12 +738,15 @@ save_fig("agnfitter_09c_torus_library.png")
 #   shape across the band.
 # * **SKIRTOR ≈ 0.95×** — the full-grid X-CIGALE reduction vs AGNFITTER-RX's
 #   averaged `SKIRTOR_mean_3p` (a modelling choice, §9c′), not a port error.
-# * **NK08 ≈ 0.87×, CAT3D-Wind ≈ 0.86×** — a real ~13% peak-normalised *shape*
-#   difference between tengri's and AGNFITTER-RX's reductions of the same
-#   underlying Nenkova+2008 / Hönig&Kishimoto 2017 libraries (grid sampling /
-#   interpolation, and for NK08 the inclination handling). These are genuine
-#   library-reduction differences the ratio panel surfaces — worth an audit
-#   rather than hiding behind a peak-normalised overlay.
+# * **CAT3D-Wind ≈ 1.0×** — the node-exact Hönig&Kishimoto port reproduces
+#   AGNFITTER-RX once compared on the *same* sightline. The earlier 0.86× was an
+#   inclination mismatch (tengri's default i=30° vs AGNFITTER-RX's incl=0 here),
+#   not a port error — matched to incl=0 it lands ~1.02× (#781).
+# * **NK08 ≈ 0.88×** — this one is a genuine *model* difference, not a sightline
+#   mismatch: tengri's `nenkova` is an **independent analytic** Nenkova+2008
+#   torus, not a port of AGNFITTER-RX's NK08 pickle, so its peak-normalised shape
+#   sits ~12% off (inclination-independent) and runs 2–4× in the NIR (§9c intro).
+#   Use `silva04` / `cat3d_wind` for node-exact AGNFITTER-RX parity.
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 4.6))
