@@ -723,6 +723,57 @@ fig.tight_layout()
 save_fig("agnfitter_09c_torus_library.png")
 
 # %% [markdown]
+# ### §9c″ Torus-library parity — full-spectrum shape ratio
+#
+# The 2×2 panels above match by eye; this quantifies the tengri / AGNFITTER-RX
+# peak-normalised **shape** ratio for each torus library, continuously across
+# 5×10³–10⁷ Å (median over 1–100 µm printed below). The readout is honest about
+# where the libraries differ:
+#
+# * **S04 ≈ 0.99×** — the node-exact Silva+2004 port reproduces AGNFITTER-RX's
+#   shape across the band.
+# * **SKIRTOR ≈ 0.95×** — the full-grid X-CIGALE reduction vs AGNFITTER-RX's
+#   averaged `SKIRTOR_mean_3p` (a modelling choice, §9c′), not a port error.
+# * **NK08 ≈ 0.87×, CAT3D-Wind ≈ 0.86×** — a real ~13% peak-normalised *shape*
+#   difference between tengri's and AGNFITTER-RX's reductions of the same
+#   underlying Nenkova+2008 / Hönig&Kishimoto 2017 libraries (grid sampling /
+#   interpolation, and for NK08 the inclination handling). These are genuine
+#   library-reduction differences the ratio panel surfaces — worth an audit
+#   rather than hiding behind a peak-normalised overlay.
+
+# %%
+fig, ax = plt.subplots(figsize=(9, 4.6))
+ax.axhspan(0.8, 1.25, color="0.9", zorder=0)
+ax.axhline(1.0, color="0.5", lw=0.8)
+_ratio_grid = np.geomspace(5e3, 1e7, 400)
+print("§9c torus-library full-spectrum shape parity (tengri / AGNFITTER, peak-norm):")
+for (af_name, _title, tengri_fn, _tlabel, af_kw), _c in zip(torus_pairs, ["C0", "C1", "C2", "C3"]):
+    w_a, L_a = A.torus_template(af_name, **af_kw)
+    w_t, L_t = tengri_fn()
+    a_on = np.interp(
+        np.log10(_ratio_grid), np.log10(w_a), norm_peak(L_a), left=np.nan, right=np.nan
+    )
+    t_on = np.interp(
+        np.log10(_ratio_grid), np.log10(w_t), norm_peak(L_t), left=np.nan, right=np.nan
+    )
+    _ratio = t_on / a_on
+    ax.loglog(_ratio_grid, _ratio, _c, lw=1.4, label=_title)
+    _m = (_ratio_grid > 1e4) & (_ratio_grid < 1e6) & np.isfinite(_ratio) & (a_on > 1e-3)
+    if _m.any():
+        print(f"  {_title:12s}: median (1-100 µm) = {float(np.nanmedian(_ratio[_m])):.3f}×")
+ax.set_xlim(5e3, 1e7)
+ax.set_ylim(0.3, 3.0)
+ax.set_xlabel(r"$\lambda$ [Å]")
+ax.set_ylabel("tengri / AGNFITTER (peak-norm.)")
+ax.set_title("Torus-library full-spectrum shape parity")
+ax.legend(fontsize=9)
+ax.grid(True, alpha=0.3)
+fig.tight_layout()
+save_fig("agnfitter_09c2_torus_ratio.png")
+plt.show()
+
+
+# %% [markdown]
 # ### §9c′ Both SKIRTOR reductions, side by side
 #
 # The panel above contrasts AGNFITTER-RX's averaged `SKIRTOR_mean_3p` with
