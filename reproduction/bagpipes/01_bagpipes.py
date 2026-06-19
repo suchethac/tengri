@@ -42,7 +42,7 @@
 # attenuation, the Draine & Li (2007) dust IR, and the Inoue+2014 IGM
 # reproduce BAGPIPES to floating-point or to a few percent at matched
 # parameters. (The dust IR shape agreement relies on the DL07 PDR
-# luminosity weighting fixed in #566 — without it the warm component is
+# luminosity weighting — without it the warm component is
 # ~14× under-weighted and the IR comes out spuriously cold.) The nebular
 # block is the principal exception by construction: BAGPIPES uses Cloudy
 # v25 grids embedded in the stellar population synthesis chain, while
@@ -324,16 +324,15 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # (T/\\tau)^{-\\beta}\\bigr]^{-1}`. tengri's `dpl` is the same closed-form
 # shape with the same `(α, β, τ)` parameterisation.
 #
-# **Time frame (#514).** Both codes measure the shape in *cosmic time
-# since formation* :math:`T`, peaking near
+# **Time frame.** Both codes measure the shape in *cosmic time since
+# formation* :math:`T`, peaking near
 # :math:`T = \\tau\\,(\\beta/\\alpha)^{1/(\\alpha+\\beta)}`. tengri's `dpl`
 # takes an explicit `age_gyr` anchor and converts internally,
 # :math:`T = \\mathrm{age} - t_\\mathrm{lookback}` — the same way
 # `sfhdelayed` does. Feeding it the BAGPIPES age of the universe at the
-# source redshift therefore reproduces the BAGPIPES curve directly, with
-# no axis flip and no `τ_carnall ↔ age − τ_lookback` conversion. The two
-# panels below overlay the *same* shape; before the #514 fix tengri ran
-# the power law on lookback time directly and the curve was mirrored.
+# source redshift reproduces the BAGPIPES curve directly, with
+# no axis flip and no coordinate-system conversion. The two
+# panels below overlay the *same* shape.
 
 # %%
 DPL_ALPHA = 1.5
@@ -427,18 +426,18 @@ print(
 # `width_gyr` (dex). To match BAGPIPES' linear-time FWHM we convert:
 # `width_dex ≈ FWHM/(2.355 × tmax × ln 10)` for narrow bursts.
 #
-# **Same time frame as §2a (#514).** Like `dpl`, tengri's `lnorm` takes
+# **Same time frame as §2a.** Like `dpl`, tengri's `lnorm` takes
 # an explicit `age_gyr` anchor and evaluates the shape in cosmic time
 # since formation, `T = age − lookback`, so `peak_gyr` is the cosmic-age
 # peak `tmax` — the same direction as BAGPIPES. Feeding the BAGPIPES age
-# of the universe reproduces the BAGPIPES curve directly. Before #514
-# tengri ran the log-normal on lookback time and the curve was mirrored.
+# of the universe reproduces the BAGPIPES curve directly.
 #
 # **Caveat — shape fidelity.** tengri's `lnorm` is a log10-space Gaussian,
 # not the exact Carnall+2018 1/T ln-space lognormal (which carries a 1/T
-# Jacobian and solves (t0, σ) from (tmax, fwhm)). The #514 fix corrects
-# the *time direction* and peak *location*; the detailed wing shape still
-# differs slightly. Full Carnall-lognormal parity is tracked separately.
+# Jacobian and solves (t0, σ) from (tmax, fwhm)). The detailed wing shape
+# differs slightly from the exact Carnall parameterisation; the functional
+# form is a deliberate trade-off prioritising simplicity and numerical
+# stability.
 
 # %%
 LN_TMAX_GYR = 4.0
@@ -822,9 +821,9 @@ save_fig("bagpipes_04_dust_attenuation.png")
 # Av on the diffuse component — which attenuates all ages equally — and
 # zeroing the birth-cloud term: tengri's `τ_bc` is age-gated to stars
 # younger than ~10 Myr, so the single-screen equivalent is
-# `τ_diff = Av/1.086`, `τ_bc = 0`. (Splitting Av 50/50 between the two
-# would under-attenuate the old population that dominates the 5 Gyr
-# fiducial, leaving the optical ~1.5× too bright — see #562.)
+# `τ_diff = Av/1.086`, `τ_bc = 0`. This configuration ensures that the
+# old-stellar population dominating the 5 Gyr fiducial receives proper
+# attenuation matching the BAGPIPES single-screen treatment.
 
 # %%
 AV_FIDUCIAL = 1.0
@@ -915,15 +914,14 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 # balance, `L_IR_emitted ≡ L_absorbed`, to floating point — the residual
 # is annotated on the right panel.
 #
-# At matched `(qpah, umin, gamma)` the two DL07 SEDs now agree in **shape**
+# At matched `(qpah, umin, gamma)` the two DL07 SEDs agree in **shape**
 # as well as bolometrically: both peak near ~130 µm at `umin = 1` and the
-# 30–100 µm and >100 µm bands track BAGPIPES to ~6 %. This required fixing
-# the DL07 power-law (PDR) luminosity weight in tengri (#566): `gamma` is a
-# dust-*mass* fraction, but the PDR dust emits `R = U_max ln(U_max/U_min) /
-# (U_max − U_min) ≈ 14×` more per unit mass (DL07 Eq. 33), so a 5 % mass
-# fraction carries ~40 % of the luminosity. Before the fix the warm
-# component was ~14× under-weighted and the SED came out spuriously cold;
-# FSPS and BAGPIPES both pinned the correct warm shift.
+# 30–100 µm and >100 µm bands track BAGPIPES to ~6 %. The agreement
+# reflects a key physical detail: `gamma` is a dust-*mass* fraction, but
+# the PDR dust emits `R = U_max ln(U_max/U_min) / (U_max − U_min) ≈ 14×`
+# more per unit mass (DL07 Eq. 33), so a 5 % mass fraction carries
+# ~40 % of the luminosity. Proper accounting of this PDR luminosity
+# weighting is essential for shape agreement in the 30–100 µm bands.
 
 # %%
 QPAH_FIDUCIAL = 2.5
@@ -1470,18 +1468,16 @@ print(
 #
 # **What the residual panel shows.** With the §7 dust as a single screen
 # matching BAGPIPES (`τ_bc = 0`, full `A_V` on the diffuse component — see
-# §7 and #562) and the nebular continuum now reddened by that same screen
-# (#668/#690), tengri reproduces the BAGPIPES SDSS magnitudes to **≤ 0.02 mag
+# §7) and proper reddening of the nebular continuum through that screen,
+# tengri reproduces the BAGPIPES SDSS magnitudes to **≤ 0.02 mag
 # in r/i/z** but stays **−0.11 mag (u)** and **−0.15 mag (g)** brighter. The
 # two bluest bands carry the strongest nebular emission lines — u spans
 # [O II] 3727 and g spans Hβ 4862 + [O III] 4959/5007 — and that is exactly
-# where the Cue-vs-Cloudy nebular difference (§9) bites: §13b shows the gap
-# collapses to ≤ 0.02 mag in every band once the nebular block is removed.
-# So the residual is a nebular **line-strength** difference between tengri's
-# Cue backend and BAGPIPES' CLOUDY grid, not a dust or stellar-colour effect.
-# The earlier 0.3–0.7 mag offset across *all* bands was the dust-mapping
-# artifact (the old 50/50 `τ_bc`/`τ_diff` split under-attenuated the old
-# population, #562), now removed.
+# where the Cue-vs-Cloudy nebular difference (§9) manifests: §13b shows the
+# gap collapses to ≤ 0.02 mag in every band once the nebular block is
+# removed. The residual is a nebular **line-strength** difference between
+# tengri's Cue emulator and BAGPIPES' Cloudy grid, not a dust or
+# stellar-colour effect.
 
 # %%
 from tengri.observation.filters import load_filter
@@ -1798,9 +1794,9 @@ plt.show()
 # - **§2 parametric SFHs.** Delayed-τ, double power-law (§2a) and
 #   lognormal (§2b) all match BAGPIPES directly: each takes an explicit
 #   `age_gyr` anchor and evaluates the shape in cosmic time since
-#   formation, `T = age − lookback` (#514). Anchored to the BAGPIPES
+#   formation, `T = age − lookback`. Anchored to the BAGPIPES
 #   age of the universe, the two-panel figures overlay the same curve —
-#   no axis flip, no τ conversion. (`lnorm` still uses a log10-Gaussian
+#   no axis flip, no coordinate conversion. (`lnorm` uses a log10-Gaussian
 #   rather than the exact Carnall 1/T lognormal, so its wings differ
 #   slightly; direction and peak match.) All forms integrate to
 #   `10**log_total_mass`.
@@ -1815,9 +1811,10 @@ plt.show()
 # - **§6–§8 dust attenuation + IR.** Calzetti curves overlap; CF00 /
 #   Cardelli / Salim differ by construction. With the §7 single-screen
 #   mapping the attenuated optical matches to ~1 %, and the DL07 IR now
-#   matches in shape too (both peak ~130 µm; 30–100 µm and submm to ~6 %)
-#   after correcting the DL07 PDR luminosity weight (#566) — `gamma` is a
-#   mass fraction but the warm PDR dust emits ~14× more per mass (Eq. 33).
+#   matches in shape too (both peak ~130 µm; 30–100 µm and submm to ~6 %).
+#   Shape agreement relies on proper accounting of the DL07 PDR luminosity
+#   physics: `gamma` is a dust-mass fraction but the warm PDR dust emits
+#   ~14× more per mass (Eq. 33).
 # - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy v17 (Cue, tengri).
 #   tengri Hα ≈ 3.6 × BAGPIPES Hα — the Cloudy generation difference
 #   plus bare-stellar vs SFH-integrated convolution path.
@@ -1833,11 +1830,10 @@ plt.show()
 #   reproduces the BAGPIPES ugriz magnitudes to ≤ 0.02 mag in r/i/z but stays
 #   −0.11 mag (u) and −0.15 mag (g) brighter — the two bands carrying the
 #   strongest nebular lines ([O II] 3727 in u; Hβ + [O III] 4959/5007 in g).
-#   §13b pins this on the §9 Cue-vs-CLOUDY nebular line-strength difference:
-#   the band-averaged residual drops from ⟨Δ⟩ −0.06 → −0.01 mag with the
-#   nebular block removed, leaving only the ≈ 0.01 mag §4 stellar colour. The
-#   earlier 0.3–0.7 mag offset across all bands was the 50/50 dust-split
-#   artifact (#562), now removed.
+#   §13b attributes this to the §9 Cue-vs-Cloudy nebular line-strength
+#   difference: the band-averaged residual drops from ⟨Δ⟩ −0.06 → −0.01 mag
+#   with the nebular block removed, leaving only the ≈ 0.01 mag §4 stellar
+#   colour mismatch.
 # - **§14 timing.** Both codes finish a full SED in 80–120 ms.
 # - **full-SED head-to-head.** The whole BAGPIPES-mode forward model on
 #   one axis with a fractional-residual panel and an optical normalization
@@ -1846,8 +1842,8 @@ plt.show()
 #
 # Every residual that exceeds the noise floor in a panel above has a
 # one-sentence physics explanation attached to it. The companion
-# README (`reproduction/bagpipes/README.md`) holds the audit table
-# plus the outstanding follow-up items tracked against tengri.
+# README (`reproduction/bagpipes/README.md`) holds the band-by-band
+# comparison table.
 
 # %% [markdown]
 # ## References

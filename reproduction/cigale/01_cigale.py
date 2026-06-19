@@ -53,9 +53,8 @@
 # rather than CIGALE's bundled Cloudy 13.x grids. With all gas inputs
 # matched, Cue's integrated Hα carries a Cloudy-version offset vs
 # CIGALE's CLOUDY — downstream of the gas knobs, traceable to Cloudy
-# version and the bare-stellar vs wNE-SSP convolution path (§8 reports
-# the width-independent integrated ratio). Each discrepancy is called out at the
-# relevant section.
+# version and the bare-stellar vs wNE-SSP convolution path. Each
+# discrepancy is called out at the relevant section.
 
 # %% [markdown]
 # ## Setup
@@ -69,7 +68,7 @@ import warnings
 
 # Override the ``dale2014`` emission model to use CIGALE-sourced templates
 # for this reproduction notebook. The shipped ``data/dale2014_templates.h5``
-# is the Wyoming-source bit-faithful Dale et al. 2014 release; the audit
+# is the Wyoming-source bit-faithful Dale et al. 2014 release; the comparison
 # panel uses ``data/dale2014_templates_cigale.h5`` so it matches CIGALE's
 # actual ``dale2014`` SED template directly. Both files come from
 # ``scripts/regenerate_dale2014_from_{cigale,official}.py``.
@@ -95,8 +94,8 @@ try:  # noqa: SIM105
 except NameError:
     pass
 
-# nbclient kernels don't bind ``__file__``; fall back to cwd so the Setup
-# cell doesn't crash and zero out every downstream panel (issue #540).
+# nbclient kernels don't bind ``__file__``; fall back to cwd to work around
+# environment differences between kernel and file-system contexts.
 _CIGALE_DALE_PARENT = (
     _Path(__file__).parent.parent.parent
     if "__file__" in dir()
@@ -126,7 +125,7 @@ print(
 # `trapezoid(SFR, t_lookback) = 10**log_total_mass` exactly. Setting
 # `log_total_mass = 0.0` is the bit-for-bit equivalent.
 #
-# Dust mapping (#747): CIGALE's `dustatt_modified_starburst(E_BV_lines)`
+# Dust mapping: CIGALE's `dustatt_modified_starburst(E_BV_lines)`
 # applies a **single** Calzetti screen with `E(B-V)_cont = 0.44 * E_BV_lines`
 # to the *entire* stellar continuum — the birth-cloud / `E_BV_lines` part
 # reddens nebular *lines*, not the continuum. tengri's `two_component` is
@@ -349,8 +348,8 @@ save_fig("cigale_01_ssp_bc03.png")
 # closed-form formulas rather than a test of tengri. Instead the panel
 # reads `state.derived["sfr_history"]` off a built `SEDModel`, on the
 # 256-point log-spaced lookback grid the SFH-convolution code actually
-# uses (default since #514; the earlier 64-pt grid was visibly stepped
-# near formation). The printed `∫SFR dt = 1.0000 M☉` check confirms
+# uses — visibly smooth across the rise and decay. The printed
+# `∫SFR dt = 1.0000 M☉` check confirms
 # the area integrates to `log_total_mass`, the only test that matters
 # for downstream physics.
 
@@ -434,10 +433,10 @@ save_fig("cigale_02_sfh_tau.png")
 # CIGALE's `sfh2exp(f_burst=0)` and FSPS's `sfh=1` both produce a
 # declining exponential peaking at galaxy formation — a *different*
 # shape from CIGALE's `sfhdelayed` plotted above. tengri intentionally
-# does **not** register this shape as `sfh.tau` (was a #406-era
-# footgun: same name, opposite shape silently). The
+# does **not** register this shape as `sfh.tau` — to avoid confusion with
+# the τ-delayed model, which has opposite physics. The
 # `declining_exponential` function remains importable from
-# `tengri.components.stellar.sfh.mean_sfh` for power users who need it.
+# `tengri.components.stellar.sfh.mean_sfh` for expert use cases.
 # The only τ-style SFH in the registry is `delayed` (= CIGALE
 # `sfhdelayed`).
 
@@ -822,7 +821,7 @@ plt.show()
 # instead zeros the curve below 91.2 nm, on the assumption that those
 # photons are absorbed by H ionization before reaching dust grains. To
 # reproduce CIGALE here, the tengri models in this section set
-# **`dust={'lyman_cutoff': True}`** (#704), which zeros the attenuation
+# **`dust={'lyman_cutoff': True}`**, which zeros the attenuation
 # curve below 912 Å — so the emergent far-UV continuum is transmitted
 # rather than over-attenuated, matching CIGALE wavelength-by-wavelength
 # (see §7). The `L_absorbed` integral that feeds the IR re-emission
@@ -949,8 +948,8 @@ plt.show()
 # luminosity over its *full* native grid (~60 nm onward), where ~46 % of the
 # quasar energy is the UV/optical accretion-disc continuum below the dust
 # grid's blue edge. Only its ~0.42 IR share enters the dust mixing; tengri
-# carries that exact partition, so the mid-IR lift matches rather than running
-# ~40 % high at $f_{\rm AGN}=0.6$ (the pre-#717 truncate-then-renormalise bug).
+# carries that exact partition faithfully, so the mid-IR lift matches and
+# does not run high at $f_{\rm AGN}=0.6$.
 #
 # **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$,
 # matched `qhac=0.17, umin=1.0, gamma=0.1`).** The *total* IR matches to ~1.6 %
@@ -958,7 +957,7 @@ plt.show()
 # panels disagree because **CIGALE deviates from the original source, not
 # tengri**: tengri's THEMIS templates are built **directly from the published
 # DustEM grids** (`$SPS_HOME/dust/dustem/THEMIS_MW3.1_*.dat`, Jones+2017,
-# `ias.u-psud.fr/DUSTEM`) and reproduce them **bit-for-bit** (verified: the
+# `ias.u-psud.fr/DUSTEM`) and reproduce them **bit-for-bit**: the
 # single-U and power-law spectra match the raw `.dat` files to machine
 # precision). CIGALE runs its own DustEM with a different power-law `umax`
 # (1e7), giving a hotter PDR component — so its `themis` SED differs from the
@@ -1074,9 +1073,9 @@ plt.show()
 # 1200 Å – 22000 Å; tengri's polynomial *extrapolates* below that,
 # letting `A_λ/A_V` climb to ~150 at λ < 300 Å, while CIGALE's
 # `dustatt_modified_starburst` drops cleanly to zero at 912 Å. The
-# tengri model in this section sets `dust={'lyman_cutoff': True}`
-# (§6, #704), which applies the same 912 Å clip — so the far-UV
-# continuum is transmitted on both sides and the panels now agree
+# tengri model in this section sets `dust={'lyman_cutoff': True}`,
+# which applies the same 912 Å clip — so the far-UV continuum is
+# transmitted on both sides and the panels now agree
 # blueward of Lyα. (Drop the toggle to recover tengri's default
 # extrapolation, which over-attenuates the FUV relative to CIGALE.)
 #
@@ -1337,7 +1336,8 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # the disc + torus + polar-dust greybody is engaged automatically with
 # no per-fit overrides. Net agreement vs CIGALE: UV–NIR within ~1 %,
 # MIR/FIR within ~6 % under the default `norm='cigale_joint'` energy
-# balance (see "Energy-balance normalisation" below, #556).
+# balance, which ties all AGN components to a shared reference (described
+# below).
 #
 # **Alternative.** For users who want a differentiable disc (M_BH, ṁ,
 # spin), the composable AGN still accepts `disc={"type": "multicolor",
@@ -1357,31 +1357,22 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # composable; set `Fixed(0.0)` to disable) — lifts the FIR tail
 # (~100 µm) by a factor of a few.
 #
-# **Energy-balance normalisation (#556, closed).** Earlier this panel ran
-# ~12–15 % high in the MIR/FIR (MIR 1.12, FIR 1.15). The cause was *not* a
-# template-shape problem but a **two-reference energy-balance bug**:
-# tengri normalised the torus and polar dust against the absorbed-energy
-# `agn_power = L_abs × frac/(1-frac)`, but normalised the disc
-# *independently* off `agn_log_lbol` — so ~16 % of the disc energy was
-# never conserved across the disc→dust boundary. CIGALE instead ties
-# disc, torus, **and** polar dust to one `agn_power` reference via the
-# fixed SKIRTOR template ratios (`skirtor2016.py`, `norm = 1/∫dust`).
-#
-# tengri now does the same under the default `norm='cigale_joint'`
-# policy. Four mechanisms compose: (1) the disc is reddened by the Pei-SMC
-# extinction `ext_fac` for Type-1 sightlines; (2) the disc is tied to
-# `agn_power × R` where `R = η(i)·∫disc/∫dust` is the SKIRTOR
-# disc/dust bolometric ratio and `η(i) = cos i (1+2cos i)/3` is the
-# Stalevski+2016 anisotropy factor (η = 0.789 at i = 30°); (3) `R` is
-# evaluated **node-exact** on the native SKIRTOR grid via PCHIP (the
-# triweight smoother distorts the integral ratio ~10 %), with the disc
-# inclination shape reweighted to the chosen `cos_inc`; (4) the polar
+# **Energy-balance normalisation.** CIGALE ties disc, torus, and polar
+# dust to a single `agn_power` reference via the fixed SKIRTOR template
+# ratios (`skirtor2016.py`, `norm = 1/∫dust`), ensuring energy
+# conservation across all AGN components. tengri's default `norm='cigale_joint'`
+# policy implements the same accounting via four coordinated mechanisms:
+# (1) the disc is reddened by the Pei-SMC extinction `ext_fac` for Type-1
+# sightlines; (2) the disc is tied to `agn_power × R` where `R = η(i)·∫disc/∫dust`
+# is the SKIRTOR disc/dust bolometric ratio and `η(i) = cos i (1+2cos i)/3`
+# is the Stalevski+2016 anisotropy factor (η = 0.789 at i = 30°); (3) `R`
+# is evaluated on the native SKIRTOR grid via PCHIP interpolation, with the
+# disc inclination shape reweighted to the chosen `cos_inc`; (4) the polar
 # greybody's absorbed-energy budget `l_ext` is tied to the face-on
-# un-reddened ratio `R_faceon = ∫disc(i=0)/∫dust`. With all four engaged
+# un-reddened ratio `R_faceon = ∫disc(i=0)/∫dust`. With all four engaged,
 # the stellar+AGN SED lands at {UV: 0.99, opt: 1.00, NIR: 0.99,
-# 30 µm: 0.96, 100 µm: 0.94} vs CIGALE (`consistency_audit.py`) — within
-# ~6 % end-to-end, at the template / BC03→DSPS SSP-conversion precision
-# floor (cf. ~12–15 % before the fix).
+# 30 µm: 0.96, 100 µm: 0.94} vs CIGALE — within ~6 % end-to-end, at the
+# template and SSP-conversion precision floor.
 #
 # **The policy is switchable.** `agn={'type':'composable', …,
 # 'norm':'cigale_joint'}` (default) is the CIGALE-faithful path above;
@@ -1486,12 +1477,11 @@ m_agn = SEDModel.build(
     },
     # ``agn_log_lbol`` matches CIGALE's ``sed.info["agn.accretion_power"]``
     # at the §9 fiducial: 9.18e25 W = 0.240 L☉ → log_lbol = -0.620.
-    # This is the **intrinsic 4π disc bolometric** (the L_bol that the
-    # accretion engine actually produces); CIGALE derives it from
-    # agn_power × ∫AGN1.disk × norm × 0.493 (skirtor2016.py:507). PR
-    # #492's earlier choice of -0.42 used agn.disk_luminosity (= the
-    # OBSERVED disc lum at i=30°, post-extinction) — the wrong
-    # reference, off by a factor of ~1.6.
+    # This is the **intrinsic 4π disc bolometric** — the L_bol that the
+    # accretion engine produces, before extinction. CIGALE derives it from
+    # agn_power × ∫AGN1.disk × norm × 0.493 (skirtor2016.py:507). Using
+    # the observed (extinction-corrected) disc luminosity instead would
+    # underestimate the intrinsic power by a factor of ~1.6.
     #
     # All other tengri AGN defaults already match CIGALE skirtor2016
     # defaults (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6,
@@ -1509,7 +1499,7 @@ m_agn = SEDModel.build(
         # tengri's AGN component reads ``state.derived["L_absorbed"]``
         # and computes ``agn_power = L_abs × frac/(1-frac)`` exactly
         # like CIGALE ``skirtor2016.py:498`` (lambda_fracAGN="0/0")
-        # via the cross-component coupling shipped in PR #522.
+        # via cross-component energy coupling.
         "agn_fracAGN": Fixed(0.3),
         "*": FIXED,
     },
@@ -1577,7 +1567,7 @@ save_fig("cigale_09_agn_skirtor.png")
 # full `stellar + dust + AGN` SEDs on CIGALE's grid with a ratio panel and
 # prints per-band `tengri / CIGALE` ratios for the AGN-dominated windows — the
 # disc UV continuum, the torus mid-IR bump, and the polar/FIR tail. Under the
-# default `norm='cigale_joint'` energy balance (#556) the disc and torus track
+# default `norm='cigale_joint'` energy-balance policy, the disc and torus track
 # CIGALE to a few percent; the residual MIR/FIR offset is the SKIRTOR
 # data-release / template-integration difference, not a normalisation gap.
 
@@ -1639,8 +1629,8 @@ plt.show()
 # against CIGALE `disk_type=0`. The UV–optical disc continuum (where the
 # disc, not the torus, dominates) overlies CIGALE exactly — the
 # shallower SKIRTOR disc with its 1200 Å bend, distinct from the
-# Schartmann disc's shape. The shared MIR/FIR torus residual (§9, #556)
-# is independent of the disc choice.
+# Schartmann disc's shape. The MIR/FIR torus agreement is independent of
+# the disc choice.
 
 # %%
 sed_skirtor0 = C.run_chain(
@@ -2015,8 +2005,8 @@ save_fig("cigale_12_igm_transmission.png")
 # chain). The top panel is the overlay; the bottom is the fractional
 # residual `tengri / CIGALE − 1` with the ±25 % band shaded. Optical
 # agreement is reported as a normalization ratio and its 16–84 % spread.
-# With the single-screen dust mapping (`tau_bc = 0`; see Setup, #747) the
-# residual sits inside ±25 % across the whole panchromatic range — including
+# With the single-screen dust mapping (`tau_bc = 0`; see Setup section),
+# the residual sits inside ±25 % across the whole panchromatic range — including
 # the far-UV, which the earlier `tau_bc + tau_diff` split over-attenuated by
 # ~2×. The small residual that remains shortward of ~912 Å is the
 # Lyman-continuum extrapolation difference; the mm-tail offset is the
