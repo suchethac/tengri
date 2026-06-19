@@ -938,6 +938,19 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
 
     # Validate type against hard-coded dust model types
     if dust_type not in _VALID_DUST_TYPES:
+        # A common mistake (#664): passing an attenuation *law* name as the dust
+        # ``type``. Laws (calzetti, smc, salim_sbl18, …) are not standalone dust
+        # models — they are selected via ``law_bc`` / ``law_diff`` inside a
+        # ``two_component`` (or ``single_component``) block. Point there instead
+        # of emitting a bare "unknown type" so the request is not lost.
+        if dust_type in _valid_dust_laws():
+            raise ValueError(
+                f"'{dust_type}' is a dust attenuation *law*, not a dust model type. "
+                f"Select it via 'law_bc'/'law_diff' in a two-component block, e.g. "
+                f"dust={{'type': 'two_component', 'law_bc': '{dust_type}', "
+                f"'law_diff': '{dust_type}', 'tau_v': ...}}. "
+                f"Valid dust types are: {', '.join(sorted(_VALID_DUST_TYPES))}."
+            )
         suggestions = difflib.get_close_matches(dust_type, _VALID_DUST_TYPES, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown dust type '{dust_type}'.{suggest_str}")
