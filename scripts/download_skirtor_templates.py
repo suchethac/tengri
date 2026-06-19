@@ -257,13 +257,13 @@ def convert_skirtor_grid(input_dir: Path, output_path: Path) -> None:
 
         spec = f.create_group("spectra")
         spec.create_dataset(
-            "disk_emission", data=disk_grid, compression="gzip", compression_opts=4
+            "disk_emission", data=disk_grid, compression="gzip", compression_opts=9
         )
         spec.create_dataset(
-            "dust_emission", data=dust_grid, compression="gzip", compression_opts=4
+            "dust_emission", data=dust_grid, compression="gzip", compression_opts=9
         )
         spec.create_dataset(
-            "torus_emission", data=total_grid, compression="gzip", compression_opts=4
+            "torus_emission", data=total_grid, compression="gzip", compression_opts=9
         )
         spec.create_dataset("norm", data=norms)
 

@@ -147,21 +147,23 @@ def _load_grid_arrays(grid_path: str):
                 )
                 result["has_radius_ratio"] = False
 
-    # Backward-compat: legacy grids lack the R (radius_ratio) axis. Insert a
-    # degenerate length-1 R axis (value 20, the CIGALE default) after ``oa`` so
-    # all downstream interpolation can use a uniform 6-axis point (#772). New
-    # grids built by download_skirtor_templates.py carry the real R axis.
-    if not result.get("has_radius_ratio", False):
-        r_pos = 4  # after (tau, p, q, oa)
-        axes = list(result["axes"])
-        axes.insert(r_pos, np.array([20.0]))
-        result["axes"] = tuple(axes)
-        for k in ("total", "disk", "dust"):
-            if k in result:
-                result[k] = np.expand_dims(result[k], axis=r_pos)
-    result["has_radius_ratio"] = True
-
+    # ``has_radius_ratio`` tells callers whether the grid carries the R axis
+    # (6-axis: tau, p, q, oa, radius_ratio, cos_inc) or is a legacy 5-axis grid
+    # (tau, p, q, oa, cos_inc). The interpolation helpers drop the R coordinate
+    # from the query point for legacy grids — see ``_match_point_to_axes`` (#772).
     return result
+
+
+def _match_point_to_axes(point: tuple, axes: tuple) -> tuple:
+    """Drop the R (radius_ratio) coordinate when the grid lacks that axis.
+
+    Interpolation points are built with the R coordinate at index 4 (after
+    ``oa``). Legacy 5-axis grids (no ``radius_ratio``) need it removed so the
+    point length matches the grid (#772).
+    """
+    if len(point) == len(axes) + 1:
+        return point[:4] + point[5:]
+    return point
 
 
 def _interpolate_and_normalize(
@@ -215,7 +217,7 @@ def _interpolate_and_normalize(
     **Citation**: matches CIGALE skirtor2016 processing (see
     ``scripts/download_skirtor_templates.py``).
     """
-    template = interp_nd_triweight(grid_jax, axes, edges, point)
+    template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
     # over-normalise on truncated grids; trapezoid in λ matches the
@@ -646,7 +648,7 @@ def skirtor_disc_dust_ratio(
         # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
         # does not pass through grid nodes, distorting the disk/dust *integral
         # ratio* by ~10% even at exact-node params (R 2.45 vs CIGALE 2.22).
-        return interp_nd_pchip(grid, axes, point)
+        return interp_nd_pchip(grid, axes, _match_point_to_axes(point, axes))
 
     disk_i_n = _interp_native(disk_jax, agn_cos_inc)
     dust_i_n = _interp_native(dust_jax, agn_cos_inc)
@@ -931,8 +933,12 @@ def create_skirtor_disc_attenuation_from_grid(grid_path: str) -> Callable:
             agn_radius_ratio,
             1.0,  # cos_inc = 1 = face-on
         )
-        disk_at_i = interp_nd_triweight(disk_grid, axes, edges, point_i)
-        disk_at_face = interp_nd_triweight(disk_grid, axes, edges, point_face)
+        disk_at_i = interp_nd_triweight(
+            disk_grid, axes, edges, _match_point_to_axes(point_i, axes)
+        )
+        disk_at_face = interp_nd_triweight(
+            disk_grid, axes, edges, _match_point_to_axes(point_face, axes)
+        )
         # Safe ratio: where face-on is zero (shouldn't be, but be safe),
         # return 0 attenuation (no contribution).
         ratio_template = jnp.where(
