@@ -73,6 +73,22 @@ def test_dust_validator_still_rejects_unknown_emission_with_suggestion() -> None
         )
 
 
+def test_dust_law_name_as_type_points_to_law_bc() -> None:
+    """A law name used as a dust 'type' must raise a law-vs-type hint (#664).
+
+    The deleted SEDModelComponent ports (calzetti/salim18/mw/smc) used to make
+    ``dust={'type': 'calzetti'}`` a silent no-op. After their removal the type
+    is rejected; this pins the *targeted* message that redirects the common
+    mistake to the correct ``law_bc``/``law_diff`` grammar instead of a bare
+    "Unknown dust type".
+    """
+    from tengri.parameters.groups import _translate_dust
+
+    for law in ("calzetti", "smc", "salim_sbl18"):
+        with pytest.raises(ValueError, match=rf"'{law}' is a dust attenuation \*law\*"):
+            _translate_dust({"type": law, "tau_v": 2.0}, {})
+
+
 def test_previously_rejected_dust_laws_now_accepted() -> None:
     """Before this refactor, 13 registered laws were silently rejected.
 
