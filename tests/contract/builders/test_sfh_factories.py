@@ -31,9 +31,18 @@ from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
 
 def _canonical_variants() -> list[str]:
-    """Return the canonical SFH variant names (skipping alias keys)."""
+    """Return the canonical SFH variant names (skipping alias keys).
+
+    Excludes the not-yet-validated SFHs (``UNVALIDATED_SFH_TYPES``): the
+    grammar rejects them and the factory layer does not surface them, so
+    they have no factory to introspect.
+    """
+    from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
+
     canonical: list[str] = []
     for key, entry in SFH_REGISTRY.items():
+        if key in UNVALIDATED_SFH_TYPES:
+            continue
         spec = entry.callable if hasattr(entry, "callable") else entry
         if getattr(spec, "name", None) == key:
             canonical.append(key)

@@ -210,16 +210,20 @@ _OPTIONAL_NEB_PARAM_NAMES = frozenset(
 def _valid_sfh_types() -> frozenset[str]:
     """Return the set of accepted ``sfh.type`` values, derived from the registry.
 
-    Mirrors ``SFH_REGISTRY.keys()`` so the dict-grammar validator and the
-    auto-generated ``tengri.builders.sfh.*`` factories share one source of
-    truth (per ADR-0005 / ADR-0008). Includes alias keys (``psb_wild2020``,
-    ``db``, ``dbp``) because they live in the registry as duplicate keys
-    pointing at the same spec. Looked up at call time so newly-registered
-    SFHs (e.g. plugins) are picked up without re-importing this module.
+    Mirrors ``SFH_REGISTRY.keys()`` minus
+    :data:`~tengri.components.stellar.sfh.registry.UNVALIDATED_SFH_TYPES` so the
+    dict-grammar validator and the auto-generated ``tengri.builders.sfh.*``
+    factories share one source of truth (per ADR-0005 / ADR-0008) and only
+    advertise SFHs that actually forward-model. Includes alias keys (``db``,
+    ``dbp``) that point at the same spec. Looked up at call time so newly-
+    registered SFHs (e.g. plugins) are picked up without re-importing.
     """
-    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+    from tengri.components.stellar.sfh.registry import (
+        SFH_REGISTRY,
+        UNVALIDATED_SFH_TYPES,
+    )
 
-    return frozenset(SFH_REGISTRY.keys())
+    return frozenset(SFH_REGISTRY.keys()) - UNVALIDATED_SFH_TYPES
 
 
 #: Valid dust model types.
@@ -244,7 +248,6 @@ _WG00_STRUCTURES = ("homogeneous", "clumpy")
 _LAZY_DUST_EMISSION_TYPES = frozenset(
     {
         "dl07_tabulated",
-        "draine2021_pah",
     }
 )
 
@@ -864,6 +867,15 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
                 raise ValueError(f"Unknown SFH type '{type_name}' in composition.{suggest_str}")
         result["mean_sfh_type"] = sfh_type
         return
+
+    from tengri.components.stellar.sfh.registry import UNVALIDATED_SFH_TYPES
+
+    if sfh_type in UNVALIDATED_SFH_TYPES:
+        raise ValueError(
+            f"SFH type '{sfh_type}' is registered but not yet validated against "
+            f"the DSPS forward path, so it is not available via the builder. Use a "
+            f"validated SFH (see tengri.builders.sfh / list of accepted types)."
+        )
 
     if sfh_type not in valid:
         suggestions = difflib.get_close_matches(sfh_type, valid, n=3, cutoff=0.6)
