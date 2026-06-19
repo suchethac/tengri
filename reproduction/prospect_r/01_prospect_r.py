@@ -658,28 +658,18 @@ save_fig("prospect_r_05_dust_applied.png")
 # ## §6 Dust IR re-emission and energy balance
 #
 # Absorbed starlight reappears in the infrared. ProSpect re-emits it with the
-# Dale et al. (2014) templates, parametrised by the radiation-field hardness
-# `alpha_SF`; tengri uses its own Dale 2014 grid and enforces energy balance,
-# `L_IR ≡ L_absorbed`, to floating point. Both panels show the attenuated
-# stellar SED plus the Dale IR; the tengri energy-balance residual is annotated.
-#
-# **Matching the radiation-field hardness.** ProSpect applies two Dale
-# components — a birth cloud (`alpha_SF_birth = 1.0`) and a diffuse screen
-# (`alpha_SF_screen = 3.0`) — and the diffuse screen, carrying most of the dust
-# mass, sets the far-IR peak. tengri's single-component Dale takes one
-# `alpha_dale`; on tengri's grid the far-IR peak moves from 89 µm at
-# `alpha_dale = 2.0` to 116 µm at 3.0 and 148 µm at 3.5. ProSpect's αSF = 3.0
-# screen peaks at 148 µm — so the two codes' Dale α parametrisations carry a
-# ~0.5 offset, the radiation-field index being sampled slightly differently
-# between the two template realisations. Pinning `alpha_dale = 3.5` reproduces
-# ProSpect's diffuse-screen hardness, and both then peak at ~148 µm.
+# Dale et al. (2014) templates (radiation-field hardness `alpha_SF`); tengri uses
+# the same Dale 2014 grid and enforces energy balance, `L_IR ≡ L_absorbed`, to
+# floating point. At the matched hardness — ProSpect's diffuse screen
+# `alpha_SF = 3.0`, tengri `alpha_dale = 3.0` — the two dust IR SEDs agree across
+# the far-IR.
 
 # %%
 sed_ir = P.prospect_sed(
     massfunc="snorm",
     sfh_pars=SNORM_FIDUCIAL,
     Z=Z_SOLAR,
-    tau_birth=TAU_BIRTH_FIDUCIAL,
+    tau_birth=0.0,
     tau_screen=TAU_SCREEN_FIDUCIAL,
     pow_birth=POW_FIDUCIAL,
     pow_screen=POW_FIDUCIAL,
@@ -702,9 +692,9 @@ m_ir = SEDModel.build(
         "type": "two_component",
         "law_bc": "power_law",
         "law_diff": "power_law",
-        "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
+        "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.5), "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
         "*": FIXED,
     },
     redshift=Fixed(0.0),
@@ -741,13 +731,15 @@ for ax in (ax_l, ax_r):
 fig.tight_layout()
 save_fig("prospect_r_06_dust_ir.png")
 
+# Both SEDs are L_nu [erg/s/Hz]; compare the nu*L_nu peak on each side so the
+# peak is measured the same way (a raw L_nu argmax lands ~30 um redward).
 _fir = (w_p6 > 1e5) & (w_p6 < 1e7)
-_peak_p6 = w_p6[_fir][np.argmax(L_p6[_fir])]
+_peak_p6 = w_p6[_fir][np.argmax((L_p6 * U.C_ANGSTROM_PER_S / w_p6)[_fir])]
 _w_t6 = np.asarray(s_ir.wave)
 _L_t6 = np.asarray(s_ir.derived["sed_dust_ir"])
 _fir_t = (_w_t6 > 1e5) & (_w_t6 < 1e7)
-_peak_t6 = _w_t6[_fir_t][np.argmax(_L_t6[_fir_t])]
-print(f"§6 far-IR peak: ProSpect {_peak_p6 / 1e4:.0f} µm, tengri {_peak_t6 / 1e4:.0f} µm")
+_peak_t6 = _w_t6[_fir_t][np.argmax((_L_t6 * U.C_ANGSTROM_PER_S / _w_t6)[_fir_t])]
+print(f"§6 dust IR nu*Lnu peak: ProSpect {_peak_p6 / 1e4:.0f} um, tengri {_peak_t6 / 1e4:.0f} um")
 
 
 # %% [markdown]
@@ -1107,7 +1099,7 @@ m_radio = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.5), "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
         "*": FIXED,
     },
     radio={"type": "condon92", "*": FIXED},
