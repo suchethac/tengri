@@ -87,6 +87,14 @@ from tengri import FIXED, Fixed, SEDModel
 from tengri.components.dust.emission_templates import register_dale2014_tabulated
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 
+# Force the inline backend so figures embed on (re-)render regardless of the
+# ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
+# auto-display and produces a figure-less notebook. No-op when run as a script.
+try:  # noqa: SIM105
+    get_ipython().run_line_magic("matplotlib", "inline")
+except NameError:
+    pass
+
 # nbclient kernels don't bind ``__file__``; fall back to cwd so the Setup
 # cell doesn't crash and zero out every downstream panel (issue #540).
 _CIGALE_DALE_PARENT = (

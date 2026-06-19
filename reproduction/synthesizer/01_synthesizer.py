@@ -73,6 +73,14 @@ from reproduction.synthesizer._drivers import (
 import tengri
 from tengri import FIXED, Fixed, SEDModel, Uniform, load_ssp_data
 
+# Force the inline backend so figures embed on (re-)render regardless of the
+# ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
+# auto-display and produces a figure-less notebook. No-op when run as a script.
+try:  # noqa: SIM105
+    get_ipython().run_line_magic("matplotlib", "inline")
+except NameError:
+    pass
+
 warnings.filterwarnings("ignore")
 tengri.plot.setup_style()
 

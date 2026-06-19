@@ -49,6 +49,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
+    ParamDeclaration(
+        "xray_log_nh",
+        Fixed(20.0),
+        "Line-of-sight equivalent hydrogen column density [log10(cm^-2)]. "
+        "Typical range 20 (unobscured) to 24 (Compton-thick). Controls "
+        "photoelectric absorption below ~2 keV (Morrison & McCammon 1983).",
+        lambda lo, hi: 0 <= lo <= 26,
+        "must be in [0, 26]",
+    ),
 )
 
 __all__ = ["PARAMS"]

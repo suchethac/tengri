@@ -56,13 +56,17 @@ def test_precompute_matches_runtime_midir_to_farir_ratio():
     node = tuple(s // 2 for s in grid_phot.shape[:-1])
     precomp_ratio = float(grid_phot[node][0] / grid_phot[node][1])
 
-    # Exact runtime SED at the same node parameters.
-    axes = [np.asarray(a) for a in skirtor._load_grid_arrays(grid_path)["axes"]]
+    # Exact runtime SED at the same node parameters. The photometry precompute
+    # is 5-D (tau, p, q, oa, cos_inc) with the radius ratio pinned to R=20
+    # (#772), so map the node over the precompute's own axes and pass R=20 to
+    # the exact (R-aware) runtime path.
+    axes = [np.asarray(a) for a in precomp["axes"]]
     pt = {
         "agn_tau_skirtor": float(axes[0][node[0]]),
         "agn_p_skirtor": float(axes[1][node[1]]),
         "agn_q_skirtor": float(axes[2][node[2]]),
         "agn_oa_skirtor": float(axes[3][node[3]]),
+        "agn_radius_ratio": 20.0,
         "agn_cos_inc": float(axes[4][node[4]]),
     }
     fn = skirtor.create_skirtor_from_grid(grid_path)
