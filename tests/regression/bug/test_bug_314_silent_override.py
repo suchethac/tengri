@@ -49,7 +49,9 @@ def model_with_filters():
     )
 
 
-def test_unknown_override_key_raises(model_with_filters):
+def test_unknown_override_key_raises(real_ssp_only, model_with_filters):
+    # Needs the real grid: the expected suggestion set / valid-param list depends
+    # on the real model's params; ``real_ssp_only`` skips on synthetic-only CI.
     m = model_with_filters
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     p["age"] = 1.0

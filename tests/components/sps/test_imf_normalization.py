@@ -16,11 +16,18 @@ pytestmark = pytest.mark.bounds
 def _make_ssp_if_available():
     from pathlib import Path
 
+    import h5py
+
     from tengri import load_ssp_data
 
     p = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
     if not p.exists():
         return None
+    # Line amplitudes and the SSP metallicity-range check need the real grid;
+    # the synthetic #613 CI fixture has an arbitrary flux scale and lgmet axis.
+    with h5py.File(p, "r") as f:
+        if f.attrs.get("synthetic", False):
+            return None
     return load_ssp_data(str(p))
 
 
@@ -71,8 +78,11 @@ class TestEmissionLineAmplitudes:
 class TestSSPMetallicity:
     """SSP metallicity grid ensures canonical Zsun offset."""
 
-    def test_ssp_log_metallicity_range(self):
+    def test_ssp_log_metallicity_range(self, real_ssp_only):
         """Standard SSP grids cover ~[-2.3, +0.3] in log10(Z/Z_sun).
+
+        Asserts the real MILES grid's absolute lgmet range, so it needs the real
+        grid — the synthetic #613 fixture has its own (different) lgmet axis.
 
         tengri stores ``ssp_lgmet`` in ABSOLUTE log10(Z), with LOG10_ZSUN = -1.848
         (MILES convention). So ssp_lgmet range should be ~[-4.1, -1.55].

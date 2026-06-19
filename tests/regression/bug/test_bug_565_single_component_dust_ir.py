@@ -83,12 +83,16 @@ def test_single_component_emission_reradiates_absorbed_energy():
 
 
 @pytest.mark.skipif(tengri is None, reason="tengri not installed")
-def test_single_component_emission_matches_two_component():
+def test_single_component_emission_matches_two_component(real_ssp_only):
     """The single-screen IR must be energy-balance-consistent with two_component.
 
     With matched diffuse optical depth, the absorbed luminosity (hence the
     re-radiated far-IR) should agree to within a small factor; #565 made the
     single-screen value ~370x too small.
+
+    Needs the real grid: the balance is set by UV/optical absorption, which the
+    smooth synthetic #613 SSP does not reproduce (two-component far-IR ~0 there,
+    so the ratio diverges). ``real_ssp_only`` skips on synthetic-only CI.
     """
     try:
         tengri.load_ssp()

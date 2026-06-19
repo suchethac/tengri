@@ -76,8 +76,13 @@ class TestBug299Warning:
         assert "sfh_tsnorm_width_gyr" in msg
         assert "0.05" in msg
 
-    def test_wide_burst_silent(self, ssp):
-        """A burst wider than local SSP grid spacing should not warn."""
+    def test_wide_burst_silent(self, real_ssp_only, ssp):
+        """A burst wider than local SSP grid spacing should not warn.
+
+        Needs the real grid: "wide" is defined relative to the real SSP's
+        log-age spacing; the coarse synthetic #613 grid shifts that threshold.
+        ``real_ssp_only`` skips on synthetic-only CI.
+        """
         # 1.0 Gyr is comfortably wider than the SSP grid step at 6 Gyr
         # (~0.6-0.8 Gyr for the standard log-spaced grid).
         hits = _build_with_burst(ssp, width_gyr=1.0, peak_lbt_gyr=6.0)

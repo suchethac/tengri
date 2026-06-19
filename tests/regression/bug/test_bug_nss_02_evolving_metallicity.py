@@ -36,8 +36,13 @@ class TestBugNSS02EvolvingMetFusedKernel:
     5. Remove silent fallback; raise clear KeyError if neither path is available.
     """
 
-    def test_fused_kernel_evolving_metallicity_finite(self):
-        """Fused kernel with evolving_metallicity=True must return finite photometry."""
+    def test_fused_kernel_evolving_metallicity_finite(self, real_ssp_only):
+        """Fused kernel with evolving_metallicity=True must return finite photometry.
+
+        Needs the real grid: the evolving-metallicity ramp interpolates over the
+        SSP lgmet axis; the synthetic #613 grid's narrow axis drives it out of
+        range. ``real_ssp_only`` skips on synthetic-only CI.
+        """
         from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
         from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set

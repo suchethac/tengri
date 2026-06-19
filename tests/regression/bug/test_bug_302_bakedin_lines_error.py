@@ -29,7 +29,7 @@ def test_bakedin_predict_emission_lines_raises():
         warnings.simplefilter("ignore")
         model = tengri.SEDModel.build(
             ssp,
-            sfh={"type": "const", "*": tengri.FIXED, "log_sfr": 0.0},
+            sfh={"type": "const", "*": tengri.FIXED},
             dust={
                 "type": "two_component",
                 "*": tengri.FIXED,
