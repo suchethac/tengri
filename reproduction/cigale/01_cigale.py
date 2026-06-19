@@ -1571,6 +1571,62 @@ save_fig("cigale_09_agn_skirtor.png")
 
 
 # %% [markdown]
+# ### §9c AGN parity — quantified head-to-head + per-band ratios
+#
+# The side-by-side panels above read one-to-one by eye; this overlays the two
+# full `stellar + dust + AGN` SEDs on CIGALE's grid with a ratio panel and
+# prints per-band `tengri / CIGALE` ratios for the AGN-dominated windows — the
+# disc UV continuum, the torus mid-IR bump, and the polar/FIR tail. Under the
+# default `norm='cigale_joint'` energy balance (#556) the disc and torus track
+# CIGALE to a few percent; the residual MIR/FIR offset is the SKIRTOR
+# data-release / template-integration difference, not a normalisation gap.
+
+# %%
+w_c_agn, L_c_agn = w_skirt, np.asarray(L_skirt)  # CIGALE stellar+dust+SKIRTOR
+w_t_agn, L_t_agn = np.asarray(s_agn.wave), np.asarray(s_agn.sed_intrinsic)  # tengri full
+L_t_on_c_agn = U.regrid(w_t_agn, L_t_agn, w_c_agn)
+ratio_agn = L_t_on_c_agn / np.maximum(L_c_agn, 1e-50)
+
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(w_c_agn, L_c_agn, "C0-", linewidth=1.6, label="CIGALE  skirtor2016")
+ax.plot(w_c_agn, L_t_on_c_agn, "C1--", linewidth=1.4, label="tengri  (regridded)")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1e3, 1e7)
+_ymx_agn = float(max(np.nanmax(L_c_agn), np.nanmax(L_t_on_c_agn)))
+ax.set_ylim(_ymx_agn * 1e-5, _ymx_agn * 2.0)
+ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+ax.set_title("AGN parity — CIGALE skirtor2016 vs tengri (stellar + dust + AGN)")
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.plot(w_c_agn, ratio_agn, "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_ylim(0.5, 1.5)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
+
+# Per-band AGN ratios (median over each AGN-dominated window).
+print("§9 AGN per-band parity (tengri / CIGALE, full stellar+dust+AGN SED):")
+for _name, _lo, _hi in [
+    ("disc UV    1500-3000 Å", 1500.0, 3000.0),
+    ("torus MIR  5-30 µm    ", 5.0e4, 3.0e5),
+    ("polar FIR  100 µm     ", 8.0e5, 1.2e6),
+]:
+    _m = (w_c_agn >= _lo) & (w_c_agn <= _hi) & (L_c_agn > 0)
+    if _m.any():
+        print(f"  {_name}: {float(np.median(ratio_agn[_m])):.3f}×")
+fig.tight_layout()
+save_fig("cigale_09c_agn_parity_ratio.png")
+plt.show()
+
+
+# %% [markdown]
 # ### §9b The other disc — `disc.skirtor` ↔ CIGALE `disk_type=0`
 #
 # CIGALE's `skirtor2016` offers two analytic discs (`skirtor2016.py`):
