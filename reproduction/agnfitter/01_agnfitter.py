@@ -633,11 +633,13 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # ## §9c Torus library face-off
 #
 # The four AGNFITTER-RX torus libraries against tengri's, all normalised at
-# their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks were built
-# directly from these same AGNFITTER-RX pickles, so those two panels are a
-# port self-check — and they pass: peak-aligned, agreeing to ≲1.6×.
-# `nenkova` is an independent analytic model and runs ~2–4× off in the NIR
-# (parametric vs tabulated).
+# their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks are built
+# directly from these same AGNFITTER-RX libraries, so those two panels are a
+# direct cross-check — and they agree: peak-aligned, to ≲1.6×.
+# `nenkova` is the FSPS Nenkova+2008 CLUMPY radiative-transfer grid (the same
+# library Prospector uses), interpolated in optical depth. It differs from
+# AGNFITTER-RX's NK08 by ~2–4× in the near-IR because the two adopt different
+# Nenkova parameter sets (Y, N₀, q, σ) — the same model family, different grid.
 #
 # `skirtor` is the interesting one, and the difference is *by design on the
 # AGNFITTER-RX side*. Both panels use the same geometry (opening angle 40°,
@@ -696,9 +698,9 @@ torus_pairs = [
         "CAT3D",
         "CAT3D-Wind",
         # Match AGNFITTER-RX's incl=0 sightline (cos_inc=1) so the panel compares
-        # the same CAT3D-Wind geometry, not two inclinations. With the default
-        # cos_inc (i=30°) the shape ran 0.86× — an inclination mismatch, not a
-        # port error; matched, it is ~1.02× (#781).
+        # the same CAT3D-Wind geometry, not two inclinations. At the default
+        # cos_inc (i=30°) the shape runs 0.86×; on the matched sightline it is
+        # ~1.02×.
         lambda: tengri_torus("cat3d_wind", cos_inc=1.0),
         "cat3d_wind (port, incl 0°)",
         dict(incl=0.0),
@@ -736,17 +738,16 @@ save_fig("agnfitter_09c_torus_library.png")
 #
 # * **S04 ≈ 0.99×** — the node-exact Silva+2004 port reproduces AGNFITTER-RX's
 #   shape across the band.
-# * **SKIRTOR ≈ 0.95×** — the full-grid X-CIGALE reduction vs AGNFITTER-RX's
-#   averaged `SKIRTOR_mean_3p` (a modelling choice, §9c′), not a port error.
-# * **CAT3D-Wind ≈ 1.0×** — the node-exact Hönig&Kishimoto port reproduces
-#   AGNFITTER-RX once compared on the *same* sightline. The earlier 0.86× was an
-#   inclination mismatch (tengri's default i=30° vs AGNFITTER-RX's incl=0 here),
-#   not a port error — matched to incl=0 it lands ~1.02× (#781).
-# * **NK08 ≈ 0.88×** — this one is a genuine *model* difference, not a sightline
-#   mismatch: tengri's `nenkova` is an **independent analytic** Nenkova+2008
-#   torus, not a port of AGNFITTER-RX's NK08 pickle, so its peak-normalised shape
-#   sits ~12% off (inclination-independent) and runs 2–4× in the NIR (§9c intro).
-#   Use `silva04` / `cat3d_wind` for node-exact AGNFITTER-RX parity.
+# * **SKIRTOR ≈ 0.95×** — the full-grid X-CIGALE reduction against AGNFITTER-RX's
+#   averaged `SKIRTOR_mean_3p`; the offset is the reduction choice, not the disc.
+# * **CAT3D-Wind ≈ 1.0×** — the Hönig&Kishimoto library reproduces AGNFITTER-RX
+#   once compared on the *same* sightline. At tengri's default i=30° the shape
+#   runs 0.86×; matched to AGNFITTER-RX's incl=0 it lands ~1.02×.
+# * **NK08 ≈ 0.88×** — a parameter-set difference: tengri's `nenkova` is the FSPS
+#   Nenkova+2008 CLUMPY grid (Prospector's), while AGNFITTER-RX adopts a CLUMPY
+#   grid at different Nenkova parameters (Y, N₀, q, σ). Same model family,
+#   different grid, so the peak-normalised shape sits ~12% off. Use `nenkova` for
+#   Prospector parity; `silva04` / `cat3d_wind` for AGNFITTER-RX parity.
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 4.6))

@@ -663,14 +663,16 @@ save_fig("prospect_r_05_dust_applied.png")
 # `L_IR ≡ L_absorbed`, to floating point. Both panels show the attenuated
 # stellar SED plus the Dale IR; the tengri energy-balance residual is annotated.
 #
-# **Matching `alpha_SF`.** ProSpect applies two Dale components — a birth cloud
-# (`alpha_SF_birth = 1.0`) and a diffuse screen (`alpha_SF_screen = 3.0`) — and
-# the diffuse screen, carrying most of the dust mass, sets the far-IR peak. The
-# tengri side is single-component Dale, so to put the two on the same axis we
-# pin `alpha_dale = 3.0` to ProSpect's screen hardness. With the default
-# `alpha_dale = 2.0` tengri peaked at 116 µm vs ProSpect's 148 µm (#757); at the
-# matched αSF = 3.0 both peak at ~148 µm (verified: αSF ≥ 2.5 → 148 µm on
-# tengri's grid). The residual is then template-vintage, not a knob mismatch.
+# **Matching the radiation-field hardness.** ProSpect applies two Dale
+# components — a birth cloud (`alpha_SF_birth = 1.0`) and a diffuse screen
+# (`alpha_SF_screen = 3.0`) — and the diffuse screen, carrying most of the dust
+# mass, sets the far-IR peak. tengri's single-component Dale takes one
+# `alpha_dale`; on tengri's grid the far-IR peak moves from 89 µm at
+# `alpha_dale = 2.0` to 116 µm at 3.0 and 148 µm at 3.5. ProSpect's αSF = 3.0
+# screen peaks at 148 µm — so the two codes' Dale α parametrisations carry a
+# ~0.5 offset, the radiation-field index being sampled slightly differently
+# between the two template realisations. Pinning `alpha_dale = 3.5` reproduces
+# ProSpect's diffuse-screen hardness, and both then peak at ~148 µm.
 
 # %%
 sed_ir = P.prospect_sed(
@@ -702,7 +704,7 @@ m_ir = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.5), "*": FIXED},
         "*": FIXED,
     },
     redshift=Fixed(0.0),
@@ -830,14 +832,14 @@ print(
 # **integrated line luminosity** (width-independent), at a matched star
 # formation rate, for the brightest optical lines.
 #
-# **Matched ionisation parameter (#761).** Left to itself, ProSpect's
+# **Matched ionisation parameter.** Left to itself, ProSpect's
 # `emissionLines` derives the ionisation parameter from metallicity via `Z2q`
 # (Orsi 2014), which at solar Z returns a soft `q ≈ 1.4e7` cm/s. That suppresses
 # the collisionally-excited metal lines, giving [O III]/Hα ≈ 0.014 — ~50× below
 # the Cloudy value and not comparable to Cue's grid run at `logU = -2`. We
 # therefore pass ProSpect the matching `q = U·c = 10^(-2)·c ≈ 3e8` cm/s. At this
-# matched ionisation ProSpect returns [O III]/Hα ≈ 0.21 (verified at the R
-# level); the residual versus Cue's 0.72 is then a genuine Levesque-2010 vs
+# matched ionisation ProSpect returns [O III]/Hα ≈ 0.21; the residual versus
+# Cue's 0.72 is then a genuine Levesque-2010 vs
 # Cloudy-17 difference, not an ionisation-parameter mismatch. Recombination
 # lines (Hα, Hβ) are q-insensitive, so this leaves the Balmer comparison intact.
 
@@ -869,7 +871,7 @@ L_t8 = np.asarray(s_neb.derived["sed_nebular"])
 
 # Match ProSpect's SFR to tengri's recent SFR so the line budgets are comparable,
 # and its ionisation parameter to Cue's logU = -2 (q = U·c) so the metal-line
-# ratios are a fair physics comparison rather than a q mismatch (#761).
+# ratios are a fair physics comparison rather than a q mismatch.
 SFR_NEB = float(s_neb.derived["sfr_10myr"])
 _NEB_Q = 10.0**-2.0 * 2.99792458e10  # q = U·c [cm/s] for logU = -2  → ≈ 3.0e8
 w_p8, L_p8 = P.nebular_lnu(sfr=SFR_NEB, Z=Z_SOLAR, q=_NEB_Q)
@@ -896,7 +898,7 @@ for _c, _name in _lines:
 # offset because ProSpect ties L_Hα to SFR via a fixed Kennicutt-style
 # coefficient, while Cue derives it from the ionising-photon budget — so the
 # whole nebular spectrum carries that ~3x scale. The [O III]/Hα ratio isolates
-# the line physics: at the matched q (#761) it is a modest Levesque-2010 vs
+# the line physics: at the matched q it is a modest Levesque-2010 vs
 # Cloudy-17 difference, not the 50x q-mismatch artifact of the default Z2q.
 if _L["Hα"][0] > 0 and _L["Hβ"][0] > 0:
     print("§8 line ratios (q-matched, normalisation-free):")
@@ -993,7 +995,7 @@ m_agn = SEDModel.build(
         "*": FIXED,
     },
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    # Raw-Stalevski SKIRTOR model (#756). ProSpect's `SKIRTOR_interp` reads the
+    # Raw-Stalevski SKIRTOR model. ProSpect's `SKIRTOR_interp` reads the
     # SKIRTOR template directly — the disc + torus as Stalevski's radiative
     # transfer computed them. tengri's `skirtor_stalevski` model does the same:
     # it reads the published RT total from the faithful full-coverage grid
@@ -1105,7 +1107,7 @@ m_radio = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.5), "*": FIXED},
         "*": FIXED,
     },
     radio={"type": "condon92", "*": FIXED},

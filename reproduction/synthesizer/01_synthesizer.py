@@ -37,9 +37,9 @@
 # interpolation alone, not a different spectral library. For the AGN line regions
 # (§9c, §9d) tengri reads the *same* `/spectra/nebular` reprocessed array that
 # Synthesizer's `UnifiedAGN` extracts for its NLR/BLR, through the public grammar
-# (`lines='nlr_synthesizer_spectra'`), so the line regions land on the same axes
-# (issue #694). A discrete-line path (`nlr_synthesizer`, re-broadening the grid's
-# `/lines` table) also exists but is scrambled on the placeholder *test* grid.
+# (`lines='nlr_synthesizer_spectra'`), so the line regions land on the same axes.
+# A discrete-line path (`nlr_synthesizer`, re-broadening the grid's `/lines` table)
+# also exists but is scrambled on the placeholder *test* grid.
 #
 # **Grids.** This notebook runs on Synthesizer's *test* grids
 # (`synthesizer-download --stellar-test-grids --agn-test-grids --dust-grid`).
@@ -900,12 +900,11 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 # two nodes per axis (the same gradient-friendly kernel as the §9f mask), which
 # shrinks on a production grid.
 #
-# This closes **issue #694**. The earlier discrete-line path
-# (`nlr_synthesizer`, which re-broadens the grid's `/lines/luminosity` table) is
-# still available for non-Synthesizer use, but on this downloadable *test* grid
-# the `/lines/*` arrays are a scrambled placeholder — not parallel to
-# `/lines/id` (off by up to 22660 Å) and inconsistent with `/spectra/nebular` —
-# so the reprocessed `/spectra` path is the one that reproduces `UnifiedAGN`.
+# The earlier discrete-line path (`nlr_synthesizer`, which re-broadens the grid's
+# `/lines/luminosity` table) is still available for non-Synthesizer use, but on
+# this downloadable *test* grid the `/lines/*` arrays are a scrambled placeholder —
+# not parallel to `/lines/id` (off by up to 22660 Å) and inconsistent with
+# `/spectra/nebular` — so the reprocessed `/spectra` path reproduces the physics.
 
 # %%
 w_nlr_s, L_nlr_s = agn["nlr"]
@@ -939,7 +938,7 @@ def _peak(w, L, w0, half=15.0):
 _o3hb_t = _peak(_wave_nlr, L_nlr_t, 5006.84) / _peak(_wave_nlr, L_nlr_t, 4861.33)
 _o3hb_s = _peak(w_nlr_s, L_nlr_s, 5006.84) / _peak(w_nlr_s, L_nlr_s, 4861.33)
 print(
-    "§9c NLR (/spectra/nebular path, issue #694): "
+    "§9c NLR (/spectra/nebular path): "
     f"[OIII]5007/Hβ tengri={_o3hb_t:.1f} vs Synthesizer={_o3hb_s:.1f} — both [O III]-dominant."
 )
 
@@ -981,8 +980,8 @@ ax.legend(fontsize=8, loc="upper left")
 fig.tight_layout()
 save_fig("synthesizer_09d_blr.png")
 print(
-    "§9d BLR (/spectra/nebular path, issue #694): tengri reproduces UnifiedAGN's "
-    "isotropic BLR component via the public grammar."
+    "§9d BLR (/spectra/nebular path): tengri reproduces UnifiedAGN's isotropic "
+    "BLR component via the public grammar."
 )
 
 
@@ -1061,8 +1060,8 @@ print(
 # (left) next to tengri's unified AGN (right) — built in a **single**
 # `SEDModel.build` call: disc + torus + NLR + BLR through the composable grammar
 # via the combined `nlr_blr_synthesizer_spectra` lines block, which reads the
-# *same* `/spectra/nebular` reprocessed array `UnifiedAGN` extracts (§9c/§9d,
-# issue #694). No hand-assembly of raw adapter calls; the four components shown
+# *same* `/spectra/nebular` reprocessed array `UnifiedAGN` extracts (§9c/§9d).
+# No hand-assembly of raw adapter calls; the four components shown
 # are decomposed back out of that one model. The disc UV bump, the [O III]/Balmer
 # line forest, and the torus IR bump now stack into the *same* panchromatic shape
 # on both sides.
@@ -1084,13 +1083,9 @@ print(
 # tengri builds the *entire* unified AGN in ONE ``SEDModel.build`` call (via the
 # ``_agn_grammar`` helper defined in the §9 setup): disc + torus + NLR + BLR
 # reading the same ``/spectra/nebular`` reprocessed array as Synthesizer's
-# ``UnifiedAGN``, through the combined ``nlr_blr_synthesizer_spectra`` lines block
-# (issue #694). The runner masks the disc with inclination while the line regions
-# stay isotropic (Synthesizer's convention) — no hand-assembly of raw adapter calls.
-
-# The unified AGN — disc + torus + NLR + BLR — in a single build call, with the
-# line regions reading the same /spectra/nebular array as Synthesizer's UnifiedAGN
-# (the combined nlr_blr_synthesizer_spectra block, issue #694).
+# ``UnifiedAGN``, through the combined ``nlr_blr_synthesizer_spectra`` lines block.
+# The runner masks the disc with inclination while the line regions stay isotropic
+# (Synthesizer's convention) — no hand-assembly of raw adapter calls.
 w_t, L_tot_t = _agn_grammar(lines="nlr_blr_synthesizer_spectra")
 # Decompose it for the component panel, every piece through the same grammar:
 # disc-only and torus-only as standalone builds; the line regions as the
@@ -1244,8 +1239,7 @@ print(
 
 # %%
 # Inoue14 IGM is public (``tengri.igm_transmission``). The Madau96 variant is not
-# yet re-exported — the one remaining internal import in this notebook, tracked as
-# a public-API gap in issue #687.
+# yet re-exported — the one remaining internal import in this notebook.
 from tengri.components.igm.igm import igm_transmission_madau
 
 Z_IGM = 4.0
