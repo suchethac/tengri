@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for issue #553: lognormal SFH now has correct 1/T Jacobian.
 
 This test verifies that the lognormal SFH implementation matches Carnall+2018
