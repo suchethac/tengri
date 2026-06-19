@@ -207,18 +207,26 @@ def _load_skirtor_fn():
 
 
 @functools.cache
-def _load_skirtor_components_fn():
-    """Load the SKIRTOR disc+dust+total component interpolator (cached).
+def _load_skirtor_raw_total_fn():
+    """Load the faithful raw-Stalevski SKIRTOR total interpolator (cached).
 
-    Unlike :func:`_load_skirtor_fn` (torus only), this returns the full
-    :class:`SKIRTORComponents` interpolator whose ``.total`` is the raw
-    Stalevski (2016) radiative-transfer SED — the disc *and* torus exactly as
-    SKIRTOR computed them at the viewing angle, with no analytic-disc
-    substitution. Used by the ``skirtor_stalevski`` model.
+    Prefers the v4 grid (``scripts/build_skirtor_raw_grid.py``) — full
+    ``ta,p,q,oa,R,i`` axes with the published radiative-transfer total — and
+    returns ``(fn, has_radius_ratio=True)``. If the v4 grid is absent, falls
+    back to the v3 component interpolator's reconstructed ``.total`` (no R axis),
+    returning ``(fn, has_radius_ratio=False)``. Used by ``skirtor_stalevski``.
     """
-    from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+    from tengri.components.agn.skirtor import (
+        _find_skirtor_raw_grid,
+        create_skirtor_components_from_grid,
+        create_skirtor_raw_total_from_grid,
+    )
 
-    return create_skirtor_components_from_grid(_find_skirtor_grid())
+    v4 = _find_skirtor_raw_grid()
+    if v4 is not None:
+        return create_skirtor_raw_total_from_grid(v4), True
+    comp_fn = create_skirtor_components_from_grid(_find_skirtor_grid())
+    return (lambda *a, **k: comp_fn(*a, **k).total), False
 
 
 def _find_relagn_grid() -> str:
@@ -780,6 +788,7 @@ def skirtor_stalevski_agn(
     agn_p_skirtor: float = 1.0,
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
+    agn_radius_ratio: float = 20.0,
     agn_cos_inc: float = 0.86602540378443864,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -837,8 +846,8 @@ def skirtor_stalevski_agn(
     .. [S16] Stalevski, M. et al. 2016, MNRAS, 458, 2288. arXiv:1602.06954.
        https://doi.org/10.1093/mnras/stw444
     """
-    comp = _load_skirtor_components_fn()(
-        wavelength,
+    fn, has_radius_ratio = _load_skirtor_raw_total_fn()
+    kw = dict(
         agn_log_lbol=agn_log_lbol,
         agn_tau_skirtor=agn_tau_skirtor,
         agn_p_skirtor=agn_p_skirtor,
@@ -847,7 +856,9 @@ def skirtor_stalevski_agn(
         agn_cos_inc=agn_cos_inc,
         frac_agn=1.0,
     )
-    return comp.total * agn_frac
+    if has_radius_ratio:
+        kw["agn_radius_ratio"] = agn_radius_ratio
+    return fn(wavelength, **kw) * agn_frac
 
 
 @register_agn_model(

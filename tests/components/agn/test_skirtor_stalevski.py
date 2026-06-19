@@ -40,10 +40,19 @@ def test_skirtor_stalevski_registered():
 
 
 def test_skirtor_stalevski_is_raw_total():
-    """The model SED equals the raw create_skirtor_components.total (no substitution)."""
-    grid = _grid_or_skip()
+    """The model SED equals the faithful raw-Stalevski total interpolator.
+
+    Prefers the v4 grid (published RT total); falls back to the v3 component
+    ``.total`` if v4 is absent — matching the loader's own fallback.
+    """
+    _grid_or_skip()
     from tengri.components.agn import resolve_agn_model
-    from tengri.components.agn.skirtor import create_skirtor_components_from_grid
+    from tengri.components.agn.skirtor import (
+        _find_skirtor_grid,
+        _find_skirtor_raw_grid,
+        create_skirtor_components_from_grid,
+        create_skirtor_raw_total_from_grid,
+    )
 
     wave = np.geomspace(1e3, 1e7, 3000)
     kw = dict(
@@ -55,8 +64,14 @@ def test_skirtor_stalevski_is_raw_total():
         agn_cos_inc=float(np.cos(np.radians(30.0))),
     )
     sed = resolve_agn_model("skirtor_stalevski")(wave, agn_frac=1.0, **kw)
-    comp = create_skirtor_components_from_grid(grid)(wave, frac_agn=1.0, **kw)
-    chex.assert_trees_all_close(np.asarray(sed), np.asarray(comp.total), rtol=1e-5, atol=0.0)
+    v4 = _find_skirtor_raw_grid()
+    if v4 is not None:
+        ref = create_skirtor_raw_total_from_grid(v4)(wave, frac_agn=1.0, **kw)
+    else:
+        ref = create_skirtor_components_from_grid(_find_skirtor_grid())(
+            wave, frac_agn=1.0, **kw
+        ).total
+    chex.assert_trees_all_close(np.asarray(sed), np.asarray(ref), rtol=1e-5, atol=0.0)
 
 
 def test_skirtor_stalevski_disc_brighter_than_powerlaw():
