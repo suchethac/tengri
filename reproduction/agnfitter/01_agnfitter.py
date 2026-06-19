@@ -731,23 +731,9 @@ save_fig("agnfitter_09c_torus_library.png")
 # %% [markdown]
 # ### §9c″ Torus-library parity — full-spectrum shape ratio
 #
-# The 2×2 panels above match by eye; this quantifies the tengri / AGNFITTER-RX
-# peak-normalised **shape** ratio for each torus library, continuously across
-# 5×10³–10⁷ Å (median over 1–100 µm printed below). The readout is honest about
-# where the libraries differ:
-#
-# * **S04 ≈ 0.99×** — the node-exact Silva+2004 port reproduces AGNFITTER-RX's
-#   shape across the band.
-# * **SKIRTOR ≈ 0.95×** — the full-grid X-CIGALE reduction against AGNFITTER-RX's
-#   averaged `SKIRTOR_mean_3p`; the offset is the reduction choice, not the disc.
-# * **CAT3D-Wind ≈ 1.0×** — the Hönig&Kishimoto library reproduces AGNFITTER-RX
-#   once compared on the *same* sightline. At tengri's default i=30° the shape
-#   runs 0.86×; matched to AGNFITTER-RX's incl=0 it lands ~1.02×.
-# * **NK08 ≈ 0.88×** — a parameter-set difference: tengri's `nenkova` is the FSPS
-#   Nenkova+2008 CLUMPY grid (Prospector's), while AGNFITTER-RX adopts a CLUMPY
-#   grid at different Nenkova parameters (Y, N₀, q, σ). Same model family,
-#   different grid, so the peak-normalised shape sits ~12% off. Use `nenkova` for
-#   Prospector parity; `silva04` / `cat3d_wind` for AGNFITTER-RX parity.
+# The tengri / AGNFITTER-RX peak-normalised shape ratio for each torus library,
+# with the 1–100 µm median printed below. S04 and CAT3D-Wind (matched sightline)
+# reproduce AGNFITTER-RX; SKIRTOR and NK08 use different library reductions.
 
 # %%
 fig, ax = plt.subplots(figsize=(9, 4.6))
@@ -943,9 +929,8 @@ save_fig("agnfitter_10a_alphaox.png")
 # %% [markdown]
 # ### §10′ X-ray α_ox–L₂₅₀₀ parity (tengri vs AGNFITTER-RX)
 #
-# tengri's `just2007` relation should reproduce AGNFITTER-RX's
-# `α_ox = −0.137 log L₂₅₀₀ + 2.638` exactly across the luminosity range — the
-# residual panel makes that one-to-one explicit (it's the same Just+2007 fit).
+# tengri's `just2007` relation vs AGNFITTER-RX's `α_ox = −0.137 log L₂₅₀₀ +
+# 2.638`, with the residual below.
 
 # %%
 aox_t = np.array([float(alpha_ox_from_l2500(x, relation="just2007")) for x in l2500])
@@ -1028,11 +1013,8 @@ save_fig("agnfitter_11a_radio_agn.png")
 # %% [markdown]
 # ### §11′ Radio SPL slope parity (tengri vs analytic ν^−0.75)
 #
-# AGNFITTER-RX's AGN core/jet SPL is `S_ν ∝ ν^α` with `α = −0.75`. tengri's
-# `radio_agn` reproduces that slope exactly **within the radio regime** (it
-# returns zero above ~300 GHz, where the synchrotron core no longer applies);
-# over its support the ratio to an analytic ν^−0.75 is ≡ 1 to floating point.
-# The DPL (`radio_agn_dpl`) is the direct Eq. 9–10 port shown in §11.
+# tengri's `radio_agn` SPL vs an analytic ν^−0.75, with the ratio below (over
+# `radio_agn`'s support, which falls to zero above ~300 GHz).
 
 # %%
 ref_spl = (freq / 5e9) ** (-0.75)
