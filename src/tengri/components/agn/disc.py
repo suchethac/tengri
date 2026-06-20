@@ -366,10 +366,18 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
 
     Laor & Netzer (1989), Eq. 10:
         r_sg = 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9}
-               * (M_BH / 10^8 M_sun)^{-2/9}   [R_g]
+               * (M_BH / 10^9 M_sun)^{-2/9}   [R_g]
 
     where lambda_Edd = L_bol / L_Edd is the Eddington ratio and
     alpha is the Shakura-Sunyaev viscosity parameter (default 0.1).
+
+    The mass normalisation is 10^9 M_sun, matching the canonical qsosed
+    implementation (Quera-Bofarull, ``Sed.gravity_radius``):
+    ``r_sg = 2150 * mass^{-2/9} * mdot^{4/9} * alpha^{2/9}`` with
+    ``mass = M_BH / 10^9 M_sun``. A prior version normalised by 10^8 M_sun,
+    which made r_sg a factor 10^{2/9} ~ 1.67 too small at every mass and
+    truncated the coolest outer annuli (deficient near-IR disc tail vs the
+    AGNfitter-rX KD18 reference).
 
     Reference: Laor, A. & Netzer, H. (1989), MNRAS 238, 897.
     Also used in qsosed (Quera-Bofarull) as `gravity_radius`.
@@ -388,7 +396,7 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
     float
         r_sg in units of R_g.
     """
-    m9 = 10.0**log_mbh / 1.0e8  # M_BH / 10^8 M_sun
+    m9 = 10.0**log_mbh / 1.0e9  # M_BH / 10^9 M_sun (qsosed convention)
     m9_safe = jnp.maximum(m9, 1e-6)
     lambda_safe = jnp.clip(l_edd_ratio, 1e-10, 1.0)
     alpha_safe = jnp.maximum(alpha_visc, 1e-4)

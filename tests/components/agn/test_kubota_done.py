@@ -190,3 +190,56 @@ class TestHotCoronaSeedRollover:
 
         rel_err = abs(float(preint) - full) / full
         assert rel_err < 0.12, f"preint {float(preint):.3e} vs full {full:.3e}, err {rel_err:.1%}"
+
+
+@pytest.mark.regression_bug
+class TestSelfGravityRadiusQsosedConvention:
+    """The outer disc radius must follow the canonical qsosed normalisation.
+
+    The Laor & Netzer (1989) self-gravity radius in qsosed (Quera-Bofarull,
+    ``Sed.gravity_radius``) is
+
+        r_sg / R_g = 2150 * (M_BH / 10^9 M_sun)^{-2/9}
+                          * mdot^{4/9} * (alpha/0.1)^{2/9},
+
+    with the mass normalised to 10^9 M_sun. A prior tengri version normalised
+    by 10^8 M_sun, making r_sg a factor 10^{2/9} ~ 1.67 too small at every
+    mass: it truncated the coolest outer annuli and produced a near-IR disc
+    tail ~30% below the AGNfitter-rX KD18 reference. This pins the convention.
+    """
+
+    def test_matches_qsosed_gravity_radius_formula(self):
+        """``_self_gravity_radius`` reproduces the qsosed 10^9-M_sun form."""
+        import numpy as np
+
+        from tengri.components.agn.disc import _self_gravity_radius
+
+        for log_mbh, lam, alpha in [
+            (8.0, 0.5, 0.1),
+            (9.0, 0.1, 0.1),
+            (7.0, 1.0, 0.05),
+            (8.5, 0.3, 0.2),
+        ]:
+            mass = 10.0**log_mbh / 1.0e9  # qsosed convention: M / 10^9 Msun
+            expected = (
+                2150.0 * mass ** (-2.0 / 9.0) * lam ** (4.0 / 9.0) * (alpha / 0.1) ** (2.0 / 9.0)
+            )
+            got = float(_self_gravity_radius(log_mbh, lam, alpha))
+            assert np.isclose(got, expected, rtol=1e-6), (
+                f"log_mbh={log_mbh} lam={lam} alpha={alpha}: "
+                f"got {got:.4f} R_g, expected {expected:.4f} R_g"
+            )
+
+    def test_not_the_buggy_1e8_normalisation(self):
+        """Guard against regressing to the 10^8-M_sun normalisation."""
+        import numpy as np
+
+        from tengri.components.agn.disc import _self_gravity_radius
+
+        got = float(_self_gravity_radius(8.0, 0.5, 0.1))
+        buggy_1e8 = 2150.0 * (10.0**8.0 / 1.0e8) ** (-2.0 / 9.0) * 0.5 ** (4.0 / 9.0)
+        # The correct value is a factor 10^{2/9} ~ 1.67 larger than the bug.
+        assert got > buggy_1e8 * 1.6, (
+            f"r_sg {got:.1f} R_g looks like the 1e8 bug ({buggy_1e8:.1f})"
+        )
+        assert np.isclose(got / buggy_1e8, 10.0 ** (2.0 / 9.0), rtol=1e-6)
