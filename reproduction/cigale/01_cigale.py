@@ -82,9 +82,8 @@ import numpy as np
 from reproduction.cigale._drivers import cigale_driver as C, units as U
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel
-from tengri.components.dust.emission_templates import register_dale2014_tabulated
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.dust import register_dale2014_tabulated
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -436,7 +435,7 @@ save_fig("cigale_02_sfh_tau.png")
 # does **not** register this shape as `sfh.tau` — to avoid confusion with
 # the τ-delayed model, which has opposite physics. The
 # `declining_exponential` function remains importable from
-# `tengri.components.stellar.sfh.mean_sfh` for expert use cases.
+# the `sfh` builder grammar for expert use cases.
 # The only τ-style SFH in the registry is `delayed` (= CIGALE
 # `sfhdelayed`).
 
@@ -1962,7 +1961,7 @@ save_fig("cigale_11_radio_synchrotron.png")
 import jax.numpy as _jnp
 from pcigale.sed_modules.redshifting import igm_transmission as cigale_igm
 
-from tengri.components.igm import igm_transmission_meiksin06
+from tengri.igm import igm_transmission_meiksin06
 
 fig, ax_l, ax_r = U.two_panel_fig()
 for ax in (ax_l, ax_r):

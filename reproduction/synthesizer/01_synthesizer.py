@@ -584,13 +584,10 @@ save_fig("synthesizer_07_panchromatic.png")
 # ## §8 Nebular emission
 #
 # Synthesizer's nebular emission comes from the Cloudy grid baked into the SSP
-# grid (`NebularEmission`, lines + continuum). tengri's emitter is Cue (Li et al.
-# 2025), a neural emulator trained on a different Cloudy version with a different
-# ionising-spectrum parametrisation. **They will not agree**, and the gap is the
-# point — it reflects the Cloudy version and the different convolution paths. The
-# panel quantifies the gap with the **integrated** line luminosity
-# (continuum-subtracted, width-independent), not a single-bin peak ratio (which
-# would measure line width and grid resolution rather than physics).
+# grid (`NebularEmission`, lines + continuum); tengri's emitter is Cue (Li et al.
+# 2025), a neural emulator on a different Cloudy version, so the lines differ
+# accordingly. The panel reports the integrated, continuum-subtracted line
+# luminosity (width- and grid-independent).
 
 # %%
 NEB_AGE = 0.01  # Gyr — young constant-SFR population
@@ -1240,7 +1237,7 @@ print(
 # %%
 # Inoue14 IGM is public (``tengri.igm_transmission``). The Madau96 variant is not
 # yet re-exported — the one remaining internal import in this notebook.
-from tengri.components.igm.igm import igm_transmission_madau
+from tengri.igm import igm_transmission_madau
 
 Z_IGM = 4.0
 w_obs, T_s_inoue = S.igm_transmission(redshift=Z_IGM, model="inoue14")

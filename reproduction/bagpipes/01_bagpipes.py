@@ -1023,15 +1023,10 @@ save_fig("bagpipes_06_dust_ir.png")
 #
 # BAGPIPES' bundled nebular grid is Cloudy v25
 # (`bc03_miles_nebular_line_grids_extended_logU_nograins_cloudy25.fits`),
-# parametrised by `(logU, metallicity)`. tengri's nebular emitter is
-# Cue (Li et al. 2025), a neural-network emulator trained on Cloudy
-# v17. **They will not agree.** The difference reflects three years
-# of Cloudy development plus the different convolution paths (Cue
-# operates on bare-stellar SSPs; BAGPIPES on the SFH-integrated
-# spectrum). The panel quantifies the residual with the **integrated**
-# line luminosity (continuum-subtracted, width-independent) rather than
-# papering over it — a single-bin peak ratio would measure line width and
-# grid resolution, not physics (the §10 LSF panel handles widths).
+# parametrised by `(logU, metallicity)`; tengri's emitter is Cue (Li et al.
+# 2025), a neural emulator on Cloudy v17, so the lines differ accordingly. The
+# panel reports the integrated, continuum-subtracted line luminosity (width- and
+# grid-independent).
 
 # %%
 # Young 10 Myr constant-SFR fiducial — the regime where nebular
@@ -1373,7 +1368,7 @@ print(
 # **circumgalactic** medium that's important at z > 5 (epoch of
 # reionization). tengri ships an experimental Asada+2025 CGM damping-
 # wing model (arXiv:2410.21543, accepted ApJL) in
-# `tengri.components.igm.igm_transmission` via the `add_cgm=True`
+# `tengri.igm.igm_transmission` via the `add_cgm=True`
 # switch. BAGPIPES has no counterpart.
 #
 # This panel shows the CGM contribution at z = 7: tengri's Inoue14
@@ -1480,7 +1475,7 @@ print(
 # stellar-colour effect.
 
 # %%
-from tengri.observation.filters import load_filter
+from tengri.filters import load_filter
 
 _sdss_bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 _filters = [load_filter(b) for b in _sdss_bands]
@@ -1810,14 +1805,10 @@ plt.show()
 #   age-metallicity-degeneracy direction. Visual match.
 # - **§6–§8 dust attenuation + IR.** Calzetti curves overlap; CF00 /
 #   Cardelli / Salim differ by construction. With the §7 single-screen
-#   mapping the attenuated optical matches to ~1 %, and the DL07 IR now
-#   matches in shape too (both peak ~130 µm; 30–100 µm and submm to ~6 %).
-#   Shape agreement relies on proper accounting of the DL07 PDR luminosity
-#   physics: `gamma` is a dust-mass fraction but the warm PDR dust emits
-#   ~14× more per mass (Eq. 33).
-# - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy v17 (Cue, tengri).
-#   tengri Hα ≈ 3.6 × BAGPIPES Hα — the Cloudy generation difference
-#   plus bare-stellar vs SFH-integrated convolution path.
+#   mapping the attenuated optical matches to ~1 %, and the DL07 IR matches
+#   in shape (both peak ~130 µm; 30–100 µm and submm to ~6 %).
+# - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy v17 (Cue, tengri):
+#   tengri Hα ≈ 3.6 × BAGPIPES Hα.
 # - **§10 LSF.** tengri's `velocity_broaden` matches the analytic
 #   Gaussian σ = 150 km/s FWHM to 0.7 %.
 # - **§11 panchromatic.** The combined picture; per-section residuals

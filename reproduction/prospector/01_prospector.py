@@ -1108,17 +1108,10 @@ save_fig("prospector_07_panchromatic.png")
 # %% [markdown]
 # ## §8 Nebular emission
 #
-# FSPS' nebular grid is Byler+2017 — Cloudy photoionisation models baked
-# into the population synthesis, parametrised by `(gas_logu, gas_logz)`.
-# tengri's nebular emitter is Cue (Li et al. 2025), a neural emulator
-# trained on a different Cloudy version with a different ionising-spectrum
-# parametrisation. **They will not agree**, and the gap is the point: it
-# reflects the Cloudy version difference plus the different convolution
-# paths (Cue operates on bare-stellar SSPs; FSPS on the SFH-integrated
-# spectrum). The panel quantifies the gap rather than hiding it, using the
-# **integrated** line luminosity (continuum-subtracted, width-independent) —
-# not a single-bin peak ratio, which would measure line width and grid
-# resolution rather than physics.
+# FSPS uses the Byler+2017 Cloudy grid (parametrised by `gas_logu`, `gas_logz`);
+# tengri uses Cue (Li et al. 2025), a neural emulator on a different Cloudy
+# version, so the lines differ accordingly. The panel reports the integrated,
+# continuum-subtracted line luminosity (width- and grid-independent).
 
 # %%
 NEB_AGE = 0.01  # Gyr — a young constant-SFR population, where lines dominate
@@ -1280,7 +1273,7 @@ print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t
 # Prospector.)
 
 # %%
-from tengri.components.igm.igm import igm_transmission_madau
+from tengri.igm import igm_transmission_madau
 
 Z_IGM = 4.0
 w_p_igm, T_p_igm = P.igm_transmission(zred=Z_IGM, age_gyr=0.05)

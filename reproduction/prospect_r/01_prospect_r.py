@@ -774,7 +774,7 @@ save_fig("prospect_r_07_panchromatic.png")
 # reproduction notebooks, where §8–§11 cover nebular, AGN, and radio.)
 
 # %%
-from tengri.components.igm.igm import igm_transmission as tengri_igm
+from tengri.igm import igm_transmission as tengri_igm
 
 Z_IGM = 4.0
 _wave_rest = np.linspace(700.0, 1300.0, 800)
