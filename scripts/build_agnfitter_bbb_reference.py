@@ -204,8 +204,119 @@ def main() -> None:
         )
         g.create_dataset("logEddra", data=axes["logEddra"].astype(np.float32), compression="gzip")
 
+        # SN12 — Slone & Netzer 2012 disc grid. Pickle is a dict with a single
+        # SED cube (n_freq, n_mbh, n_edd) sharing one linear frequency axis,
+        # NOT a per-row DataFrame, so it needs its own conversion.
+        sn = _load(args.src / "SN12.pickle")
+        sn_lognu = np.log10(np.asarray(sn["frequency"], dtype=np.float64))
+        sn_mbh = np.asarray(sn["logBHmass-values"], dtype=np.float64).ravel()
+        sn_edd = np.asarray(sn["logEddra-values"], dtype=np.float64).ravel()
+        sn_cube = np.asarray(sn["SED"], dtype=np.float64)  # (n_freq, n_mbh, n_edd)
+        n_mbh, n_edd = sn_cube.shape[1], sn_cube.shape[2]  # axis lists can be longer
+        sn_mbh, sn_edd = sn_mbh[:n_mbh], sn_edd[:n_edd]
+        common = _common_axis([sn_lognu], args.n_wave)
+        sn_grid = np.stack(
+            [
+                np.stack([_regrid(sn_lognu, sn_cube[:, i, j], common) for j in range(n_edd)])
+                for i in range(n_mbh)
+            ]
+        )  # (n_mbh, n_edd, n_wave)
+        g = f.create_group("sn12")
+        g.create_dataset("wavelength", data=common.astype(np.float32), compression="gzip")
+        g.create_dataset("sed", data=sn_grid.astype(np.float32), compression="gzip")
+        g.create_dataset("logBHmass", data=sn_mbh.astype(np.float32), compression="gzip")
+        g.create_dataset("logEddra", data=sn_edd.astype(np.float32), compression="gzip")
+
     size_kb = args.out.stat().st_size / 1024
     print(f"Wrote {args.out} ({size_kb:.0f} KB)")
+
+    # ── Cold-dust (starburst) reference: DH02_CE01 ──────────────────────────
+    # Dale & Helou 2002 + Chary & Elbaz 2001, an IR-luminosity grid. Lives in
+    # models/STARBURST; stored 'wavelength' is already log10(nu/Hz) per node.
+    cold_src = args.src.parent / "STARBURST" / "DH02_CE01.pickle"
+    if cold_src.is_file():
+        dh = _load(cold_src)
+        dh_irlum = np.asarray(dh["irlum-values"], dtype=np.float64).ravel()
+        dh_lognu_rows = [np.asarray(w, dtype=np.float64) for w in dh["wavelength"]]
+        common_dh = _common_axis(dh_lognu_rows, args.n_wave)
+        dh_grid = np.stack(
+            [
+                _regrid(ln, np.asarray(s, dtype=np.float64), common_dh)
+                for ln, s in zip(dh_lognu_rows, dh["SED"])
+            ]
+        )  # (n_irlum, n_wave)
+        cold_out = args.out.parent / "agnfitter_cold_dust_reference.h5"
+        with h5py.File(cold_out, "w") as fc:
+            fc.attrs["source"] = "AGNfitter-rX models/STARBURST"
+            fc.attrs["wavelength_unit"] = "Angstrom"
+            fc.attrs["sed_unit"] = "F_nu (relative)"
+            g = fc.create_group("dh02_ce01")
+            g.create_dataset("wavelength", data=common_dh.astype(np.float32), compression="gzip")
+            g.create_dataset("sed", data=dh_grid.astype(np.float32), compression="gzip")
+            g.create_dataset("irlum", data=dh_irlum.astype(np.float32), compression="gzip")
+        print(f"Wrote {cold_out} ({cold_out.stat().st_size / 1024:.0f} KB)")
+    else:
+        print(f"  (skipped cold dust: {cold_src} not found)")
+
+    # ── Torus references: S04 / NK08 / SKIRTOR / CAT3D ──────────────────────
+    # Built from models/TORUS so the AGNfitter torus comparison is available
+    # without the /tmp clone. The existing data/*_torus_grid.h5 are tengri's OWN
+    # model grids (different normalisation/coverage) — NOT the AGNfitter refs —
+    # so these are stored separately as the upstream tabulation.
+    torus_src = args.src.parent / "TORUS"
+    torus_out = args.out.parent / "agnfitter_torus_reference.h5"
+    if (torus_src / "SKIRTOR_mean_3p.pickle").is_file():
+        with h5py.File(torus_out, "w") as ft:
+            ft.attrs["source"] = "AGNfitter-rX models/TORUS"
+            ft.attrs["wavelength_unit"] = "Angstrom"
+            ft.attrs["sed_unit"] = "F_nu (relative)"
+
+            def _write_node_dict(grp_name, pickle_name, axis_key):
+                d = _load(torus_src / pickle_name)
+                lognu_rows = [np.asarray(w, dtype=np.float64) for w in d["wavelength"]]
+                common = _common_axis(lognu_rows, args.n_wave)
+                sed = np.stack(
+                    [
+                        _regrid(ln, np.asarray(s, dtype=np.float64).squeeze(), common)
+                        for ln, s in zip(lognu_rows, d["SED"])
+                    ]
+                )
+                g = ft.create_group(grp_name)
+                g.create_dataset("wavelength", data=common.astype(np.float32), compression="gzip")
+                g.create_dataset("sed", data=sed.astype(np.float64), compression="gzip")
+                g.create_dataset(
+                    "axis",
+                    data=np.asarray(d[axis_key], dtype=np.float64).ravel().astype(np.float32),
+                    compression="gzip",
+                )
+                g.attrs["axis_name"] = axis_key
+
+            def _write_df_grid(grp_name, pickle_name, axis_cols, row_slice=None):
+                df = _load(torus_src / pickle_name)
+                if row_slice is not None:
+                    df = df.iloc[row_slice:]
+                common, axes, sed = _convert_grid(df, axis_cols, args.n_wave)
+                g = ft.create_group(grp_name)
+                g.create_dataset("wavelength", data=common.astype(np.float32), compression="gzip")
+                g.create_dataset("sed", data=sed.astype(np.float64), compression="gzip")
+                for k, v in axes.items():
+                    g.create_dataset(k, data=v.astype(np.float32), compression="gzip")
+                g.attrs["axis_cols"] = ",".join(axis_cols)
+
+            _write_node_dict("s04", "S04.pickle", "Nh-values")
+            _write_node_dict("nk08", "NK0_mean_1p.pickle", "incl-values")
+            _write_df_grid(
+                "skirtor", "SKIRTOR_mean_3p.pickle", ["oa-values", "incl-values", "tv-values"]
+            )
+            _write_df_grid(
+                "cat3d",
+                "CAT3D_mean_3p.pickle",
+                ["incl-values", "a-values", "fwd-values"],
+                row_slice=210,
+            )
+        print(f"Wrote {torus_out} ({torus_out.stat().st_size / 1024:.0f} KB)")
+    else:
+        print(f"  (skipped torus: {torus_src} not found)")
 
 
 if __name__ == "__main__":
