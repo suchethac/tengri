@@ -258,6 +258,66 @@ def main() -> None:
     else:
         print(f"  (skipped cold dust: {cold_src} not found)")
 
+    # ── Torus references: S04 / NK08 / SKIRTOR / CAT3D ──────────────────────
+    # Built from models/TORUS so the AGNfitter torus comparison is available
+    # without the /tmp clone. The existing data/*_torus_grid.h5 are tengri's OWN
+    # model grids (different normalisation/coverage) — NOT the AGNfitter refs —
+    # so these are stored separately as the upstream tabulation.
+    torus_src = args.src.parent / "TORUS"
+    torus_out = args.out.parent / "agnfitter_torus_reference.h5"
+    if (torus_src / "SKIRTOR_mean_3p.pickle").is_file():
+        with h5py.File(torus_out, "w") as ft:
+            ft.attrs["source"] = "AGNfitter-rX models/TORUS"
+            ft.attrs["wavelength_unit"] = "Angstrom"
+            ft.attrs["sed_unit"] = "F_nu (relative)"
+
+            def _write_node_dict(grp_name, pickle_name, axis_key):
+                d = _load(torus_src / pickle_name)
+                lognu_rows = [np.asarray(w, dtype=np.float64) for w in d["wavelength"]]
+                common = _common_axis(lognu_rows, args.n_wave)
+                sed = np.stack(
+                    [
+                        _regrid(ln, np.asarray(s, dtype=np.float64).squeeze(), common)
+                        for ln, s in zip(lognu_rows, d["SED"])
+                    ]
+                )
+                g = ft.create_group(grp_name)
+                g.create_dataset("wavelength", data=common.astype(np.float32), compression="gzip")
+                g.create_dataset("sed", data=sed.astype(np.float64), compression="gzip")
+                g.create_dataset(
+                    "axis",
+                    data=np.asarray(d[axis_key], dtype=np.float64).ravel().astype(np.float32),
+                    compression="gzip",
+                )
+                g.attrs["axis_name"] = axis_key
+
+            def _write_df_grid(grp_name, pickle_name, axis_cols, row_slice=None):
+                df = _load(torus_src / pickle_name)
+                if row_slice is not None:
+                    df = df.iloc[row_slice:]
+                common, axes, sed = _convert_grid(df, axis_cols, args.n_wave)
+                g = ft.create_group(grp_name)
+                g.create_dataset("wavelength", data=common.astype(np.float32), compression="gzip")
+                g.create_dataset("sed", data=sed.astype(np.float64), compression="gzip")
+                for k, v in axes.items():
+                    g.create_dataset(k, data=v.astype(np.float32), compression="gzip")
+                g.attrs["axis_cols"] = ",".join(axis_cols)
+
+            _write_node_dict("s04", "S04.pickle", "Nh-values")
+            _write_node_dict("nk08", "NK0_mean_1p.pickle", "incl-values")
+            _write_df_grid(
+                "skirtor", "SKIRTOR_mean_3p.pickle", ["oa-values", "incl-values", "tv-values"]
+            )
+            _write_df_grid(
+                "cat3d",
+                "CAT3D_mean_3p.pickle",
+                ["incl-values", "a-values", "fwd-values"],
+                row_slice=210,
+            )
+        print(f"Wrote {torus_out} ({torus_out.stat().st_size / 1024:.0f} KB)")
+    else:
+        print(f"  (skipped torus: {torus_src} not found)")
+
 
 if __name__ == "__main__":
     main()
