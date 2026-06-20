@@ -492,8 +492,9 @@ print(
 #
 # * **THB21 — reproduced.** The 0.7 µm bump is an emission-line feature, so
 #   `qsogen` must run *with* its line and FeII blocks (continuum alone misses
-#   it entirely). With them on, tengri's Hα/2500 Å contrast is 4.4 vs THB21's
-#   3.8 — the headline feature is recovered.
+#   it entirely). With them on, tengri's Hα/2500 Å contrast (≈5.0) sits above
+#   THB21's (3.98) along the qsogen luminosity sequence — matching log_lbol
+#   aligns the two templates.
 # * **SN12 — reproduced** by the new `slone_netzer` port. It interpolates the
 #   108-template grid with node-exact bilinear interpolation, so the SN12 peak
 #   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
@@ -871,7 +872,9 @@ save_fig("agnfitter_09d_best_combo.png")
 # ``α_ox = −0.137 log L₂₅₀₀ + 2.638 + Δα_ox``, then lays down a Γ = 1.8
 # power law with a 300 keV exponential cutoff. The dispersion Δα_ox ∈
 # [−0.4, 0.4] is a free parameter. tengri exposes the same `just2007`,
-# `lusso_risaliti_2016/2017` relations in `alpha_ox_from_l2500`.
+# `lusso_risaliti_2016/2017` relations in `alpha_ox_from_l2500`. Soft X-ray
+# amplitude differences (10–20% level) sit within the corona-model uncertainty
+# set by α_ox scatter and cutoff-edge location.
 #
 # The relation is valid only for type-1, radio-quiet, non-BAL AGN — the
 # paper is explicit that it should not be applied to type-2, BAL, or blazar
