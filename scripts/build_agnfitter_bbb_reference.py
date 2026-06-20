@@ -204,8 +204,59 @@ def main() -> None:
         )
         g.create_dataset("logEddra", data=axes["logEddra"].astype(np.float32), compression="gzip")
 
+        # SN12 — Slone & Netzer 2012 disc grid. Pickle is a dict with a single
+        # SED cube (n_freq, n_mbh, n_edd) sharing one linear frequency axis,
+        # NOT a per-row DataFrame, so it needs its own conversion.
+        sn = _load(args.src / "SN12.pickle")
+        sn_lognu = np.log10(np.asarray(sn["frequency"], dtype=np.float64))
+        sn_mbh = np.asarray(sn["logBHmass-values"], dtype=np.float64).ravel()
+        sn_edd = np.asarray(sn["logEddra-values"], dtype=np.float64).ravel()
+        sn_cube = np.asarray(sn["SED"], dtype=np.float64)  # (n_freq, n_mbh, n_edd)
+        n_mbh, n_edd = sn_cube.shape[1], sn_cube.shape[2]  # axis lists can be longer
+        sn_mbh, sn_edd = sn_mbh[:n_mbh], sn_edd[:n_edd]
+        common = _common_axis([sn_lognu], args.n_wave)
+        sn_grid = np.stack(
+            [
+                np.stack([_regrid(sn_lognu, sn_cube[:, i, j], common) for j in range(n_edd)])
+                for i in range(n_mbh)
+            ]
+        )  # (n_mbh, n_edd, n_wave)
+        g = f.create_group("sn12")
+        g.create_dataset("wavelength", data=common.astype(np.float32), compression="gzip")
+        g.create_dataset("sed", data=sn_grid.astype(np.float32), compression="gzip")
+        g.create_dataset("logBHmass", data=sn_mbh.astype(np.float32), compression="gzip")
+        g.create_dataset("logEddra", data=sn_edd.astype(np.float32), compression="gzip")
+
     size_kb = args.out.stat().st_size / 1024
     print(f"Wrote {args.out} ({size_kb:.0f} KB)")
+
+    # ── Cold-dust (starburst) reference: DH02_CE01 ──────────────────────────
+    # Dale & Helou 2002 + Chary & Elbaz 2001, an IR-luminosity grid. Lives in
+    # models/STARBURST; stored 'wavelength' is already log10(nu/Hz) per node.
+    cold_src = args.src.parent / "STARBURST" / "DH02_CE01.pickle"
+    if cold_src.is_file():
+        dh = _load(cold_src)
+        dh_irlum = np.asarray(dh["irlum-values"], dtype=np.float64).ravel()
+        dh_lognu_rows = [np.asarray(w, dtype=np.float64) for w in dh["wavelength"]]
+        common_dh = _common_axis(dh_lognu_rows, args.n_wave)
+        dh_grid = np.stack(
+            [
+                _regrid(ln, np.asarray(s, dtype=np.float64), common_dh)
+                for ln, s in zip(dh_lognu_rows, dh["SED"])
+            ]
+        )  # (n_irlum, n_wave)
+        cold_out = args.out.parent / "agnfitter_cold_dust_reference.h5"
+        with h5py.File(cold_out, "w") as fc:
+            fc.attrs["source"] = "AGNfitter-rX models/STARBURST"
+            fc.attrs["wavelength_unit"] = "Angstrom"
+            fc.attrs["sed_unit"] = "F_nu (relative)"
+            g = fc.create_group("dh02_ce01")
+            g.create_dataset("wavelength", data=common_dh.astype(np.float32), compression="gzip")
+            g.create_dataset("sed", data=dh_grid.astype(np.float32), compression="gzip")
+            g.create_dataset("irlum", data=dh_irlum.astype(np.float32), compression="gzip")
+        print(f"Wrote {cold_out} ({cold_out.stat().st_size / 1024:.0f} KB)")
+    else:
+        print(f"  (skipped cold dust: {cold_src} not found)")
 
 
 if __name__ == "__main__":
