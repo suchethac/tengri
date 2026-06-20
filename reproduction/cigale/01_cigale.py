@@ -586,32 +586,25 @@ save_fig("cigale_03_stellar_sed.png")
 # %% [markdown]
 # ## §4 Dust attenuation curves
 #
-# CIGALE's library of attenuation laws — Calzetti+2000, the Charlot &
-# Fall 2000 + Noll+09 modification, the modified starburst (Leitherer+02
-# UV slope), and a power law — shown against tengri's `calzetti`,
-# `noll09`, `leitherer02`, and `power_law`. Both sides evaluate the
-# analytic law directly (tengri via `tengri.dust.list_laws`), normalised
-# to `A(λ)/A_V` at 5500 Å, so the comparison is curve against curve with
-# no SSP-convolution noise. The Noll+09 row also reports the 2175 Å bump
-# height above the local Calzetti baseline.
+# tengri's `calzetti`, `noll09`, and `power_law` attenuation laws against
+# their CIGALE counterparts (`dustatt_calzleit`,
+# `dustatt_modified_starburst`, `dustatt_modified_CF00`). Both sides
+# evaluate the analytic law directly (tengri via `tengri.dust.list_laws`),
+# normalised to `A(λ)/A_V` at 5500 Å — curve against curve, no
+# SSP-convolution noise. CIGALE's default laws carry no 2175 Å bump (it is
+# opt-in via `uv_bump_amplitude`); tengri's `noll09` reproduces the
+# Noll+2009 Drude bump, pinned against `dust_attenuation` in the test suite.
 
 # %%
 from tengri.dust import list_laws
 
-# (CIGALE module, CIGALE kwargs for A_V ≈ 1.2, tengri law, label). CIGALE's
-# `modified_starburst` is tengri's Leitherer+02 modification of Calzetti+00;
-# CIGALE's `modified_CF00` is tengri's `noll09` (Noll-style power-law
-# modifier on a CF00 base).
+# (CIGALE module, CIGALE kwargs for A_V ≈ 1.2, tengri law, label). Pairs
+# match by curve family: Calzetti, Calzetti + Leitherer UV slope, and the
+# (λ/550)^δ power law.
 _law_pairs = [
     ("dustatt_calzleit", dict(E_BVs_young=0.3), "calzetti", "Calzetti+2000"),
-    ("dustatt_modified_CF00", dict(Av_ISM=1.2), "noll09", "Charlot & Fall 2000 + Noll+09"),
-    (
-        "dustatt_modified_starburst",
-        dict(E_BV_lines=0.3),
-        "leitherer02",
-        "Mod. starburst (Leitherer+02)",
-    ),
-    ("dustatt_powerlaw", dict(Av_young=1.2), "power_law", "Power law"),
+    ("dustatt_modified_starburst", dict(E_BV_lines=0.3), "noll09", "Calzetti + Leitherer UV"),
+    ("dustatt_modified_CF00", dict(Av_ISM=1.2), "power_law", "Charlot & Fall power law"),
 ]
 _tengri_laws = list_laws(headline=False)  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
@@ -620,14 +613,6 @@ wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 def _norm_AV(wave, A):
     """A(λ) normalised to A_V at 5500 Å."""
     return A / A[np.argmin(np.abs(wave - 5500.0))]
-
-
-def _bump_excess(wave, A_over_AV):
-    """2175 Å bump height above the local Calzetti baseline, in A_λ/A_V."""
-    i = np.argmin(np.abs(wave - 2175.0))
-    lo = A_over_AV[np.argmin(np.abs(wave - 1950.0))]
-    hi = A_over_AV[np.argmin(np.abs(wave - 2500.0))]
-    return float(A_over_AV[i] - 0.5 * (lo + hi))
 
 
 fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(13, 5.5), sharey=True)
@@ -647,24 +632,14 @@ ax_l.set_ylabel(r"$A_\lambda / A_V$")
 for cig_law, cig_kw, tengri_law, label in _law_pairs:
     try:
         w_c, A_c = C.attenuation_curve(cig_law, **cig_kw)
-        A_c_norm = _norm_AV(w_c, A_c)
-        ax_l.plot(w_c, A_c_norm, linewidth=2.0, label=label)
+        ax_l.plot(w_c, _norm_AV(w_c, A_c), linewidth=2.0, label=label)
     except Exception:
-        A_c_norm = None
+        pass
 
     # tengri's law functions are JAX-native but accept array-likes; the
     # result is wrapped back to NumPy for plotting.
     A_t = np.asarray(_tengri_laws[tengri_law](wave_law))
-    A_t_norm = _norm_AV(wave_law, A_t)
-    ax_r.plot(wave_law, A_t_norm, linewidth=2.0, label=label)
-
-    if tengri_law == "noll09":
-        bump_t = _bump_excess(wave_law, A_t_norm)
-        bump_c = _bump_excess(w_c, A_c_norm) if A_c_norm is not None else float("nan")
-        print(
-            f"§4 Noll+09 2175 Å bump (A_λ/A_V above baseline): "
-            f"tengri = {bump_t:.3f}, CIGALE modified_CF00 = {bump_c:.3f}"
-        )
+    ax_r.plot(wave_law, _norm_AV(wave_law, A_t), linewidth=2.0, label=label)
 ax_l.legend(fontsize=10)
 ax_r.legend(fontsize=10)
 fig.tight_layout()
@@ -951,17 +926,11 @@ plt.show()
 # does not run high at $f_{\rm AGN}=0.6$.
 #
 # **Right — THEMIS slope $\alpha$ (`themis.alpha`, $dU/dM \propto U^{-\alpha}$,
-# matched `qhac=0.17, umin=1.0, gamma=0.1`).** The *total* IR matches to ~1.6 %
-# by energy balance, but the FIR/MIR *partition* differs by ~15 %. Here the
-# panels disagree because **CIGALE deviates from the original source, not
-# tengri**: tengri's THEMIS templates are built **directly from the published
-# DustEM grids** (`$SPS_HOME/dust/dustem/THEMIS_MW3.1_*.dat`, Jones+2017,
-# `ias.u-psud.fr/DUSTEM`) and reproduce them **bit-for-bit**: the
-# single-U and power-law spectra match the raw `.dat` files to machine
-# precision). CIGALE runs its own DustEM with a different power-law `umax`
-# (1e7), giving a hotter PDR component — so its `themis` SED differs from the
-# published THEMIS templates by the ~15 % seen here. tengri is the faithful
-# reproduction of the *original* model; the gap is CIGALE's processing choice.
+# matched `qhac=0.17, umin=1.0, gamma=0.1`).** tengri's THEMIS templates are
+# built from the published DustEM grids (Jones+2017) and conserve the absorbed
+# energy. CIGALE runs its own DustEM with `umax=1e7` (a hotter PDR), so the IR
+# partition — and the band total — differ at the tens-of-percent level, not the
+# few percent the energy-balanced FIR peak alone would suggest.
 
 # %%
 import jax
