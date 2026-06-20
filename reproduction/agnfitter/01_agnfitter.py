@@ -66,8 +66,7 @@ import numpy as np
 from reproduction.agnfitter._drivers import agnfitter_driver as A, units as U
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel
-from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri import FIXED, Fixed, SEDModel, load_ssp_data
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -431,7 +430,7 @@ save_fig("agnfitter_04_dust_attenuation.png")
 # %%
 import jax.numpy as jnp
 
-from tengri.components.dust.emission import DUST_EMISSION_MODELS
+from tengri.dust import DUST_EMISSION_MODELS
 
 wave_ir = np.geomspace(1e4, 1e8, 2000)  # 1 µm – 1 cm
 schreiber18 = DUST_EMISSION_MODELS["schreiber2018"]
@@ -641,23 +640,11 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # AGNFITTER-RX's NK08 by ~2–4× in the near-IR because the two adopt different
 # Nenkova parameter sets (Y, N₀, q, σ) — the same model family, different grid.
 #
-# `skirtor` is the interesting one, and the difference is *by design on the
-# AGNFITTER-RX side*. Both panels use the same geometry (opening angle 40°,
-# inclination 30°, τ₉.₇ = 7), and the near-IR agrees closely (1–3 µm), but the
-# IR peak lands at a longer wavelength for tengri than for AGNFITTER-RX. The
-# reason is how each code samples the Stalevski (2016) models. AGNFITTER-RX
-# deliberately fits a *reduced* library: as its §3.2 states, the full SKIRTOR
-# grid was "simplified… by averaging all the models with respect to all but
-# the 3 most relevant parameters" (inclination, opening angle, optical depth)
-# to avoid overfitting sparse mid-IR data — so its `SKIRTOR_mean_3p` is an
-# average over the clumpiness and radial-distribution parameters. The `skirtor`
-# block instead keeps the full Stalevski grid (τ, p, q, opening angle,
-# inclination) and interpolates it, following the X-CIGALE (Yang et al. 2020)
-# SKIRTOR + polar-dust implementation. So `skirtor` reproduces the un-averaged
-# SKIRTOR that CIGALE-family codes use, while AGNFITTER-RX fits a parameter-
-# collapsed average of the same models; averaging over the clump/radial
-# structure broadens and warms the effective SED, which is what moves the peak.
-# Neither is wrong — they are two intentional reductions of one model.
+# For `skirtor`, the IR peak lands slightly redward of AGNFITTER-RX: `skirtor`
+# keeps the full Stalevski (2016) grid (τ, p, q, opening angle, inclination,
+# following X-CIGALE), while AGNFITTER-RX fits a parameter-averaged reduction
+# (`SKIRTOR_mean_3p`), whose averaging warms the effective SED. Two reductions of
+# one model.
 #
 # tengri ships **both**: `skirtor` (full X-CIGALE grid, shown here) and
 # `skirtor_agnfitter` (a direct node-exact port of the `SKIRTOR_mean_3p`
@@ -891,7 +878,7 @@ save_fig("agnfitter_09d_best_combo.png")
 # sources.
 
 # %%
-from tengri.components.xray.xray import alpha_ox_from_l2500
+from tengri.xray import alpha_ox_from_l2500
 
 l2500 = np.geomspace(1e28, 1e32, 200)
 fig, (axl, axr) = plt.subplots(1, 2, figsize=(12, 4.6))
@@ -968,7 +955,7 @@ plt.show()
 # %%
 import jax.numpy as jnp
 
-from tengri.components.radio.radio import radio_agn, radio_agn_dpl
+from tengri.radio import radio_agn, radio_agn_dpl
 
 freq = np.geomspace(1e8, 1e12, 400)  # 0.1–1000 GHz
 wave_radio = jnp.asarray(U.C_ANGSTROM_PER_S / freq)
@@ -1056,7 +1043,7 @@ plt.show()
 # below the AGN corona for an accreting nucleus, as the panel shows.
 
 # %%
-from tengri.components.xray.xray import xray_agn_corona_from_disc, xray_xrb
+from tengri.xray import xray_agn_corona_from_disc, xray_xrb
 
 L_2500 = 1.0e30  # erg/s/Hz — representative bright-Seyfert disk
 wave_x = np.geomspace(1e-2, 1e2, 600)  # ~600 keV down to ~0.12 keV
@@ -1093,7 +1080,7 @@ save_fig("agnfitter_10b_xray_corona.png")
 # into the radio.
 
 # %%
-from tengri.components.radio.radio import radio_sfr_bell2003
+from tengri.radio import radio_sfr_bell2003
 
 freq_sf = np.geomspace(1e8, 5e12, 500)  # 0.1 GHz – 5 THz
 wave_sf = jnp.asarray(U.C_ANGSTROM_PER_S / freq_sf)
