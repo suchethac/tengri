@@ -20,8 +20,8 @@ import jax
 import matplotlib.pyplot as plt
 
 import tengri
+from tengri import Posterior
 from tengri.analysis.plotting import setup_style
-from tengri.inference.posterior import Posterior
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
