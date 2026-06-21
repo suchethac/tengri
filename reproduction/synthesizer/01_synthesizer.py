@@ -774,12 +774,14 @@ def _agn_grammar(disc="kubota_done", torus="simple", lines="none", cos_inc=BH_CO
 # %% [markdown]
 # ### §9a Accretion disc
 #
-# These AGN grids were generated with Synthesizer's **qsosed** disc (Kubota &
-# Done 2018) — so the matched comparison is against tengri's `kubota_done` disc.
-# We also overlay tengri's broken power-law disc (the form the Feltre et al. 2016
-# grids assume) for context. The codes use independent disc implementations, so
-# this is a comparison of shape at matched bolometric luminosity, not an exact
-# match.
+# The reference here is the incident disc of Synthesizer's bundled **test** AGN
+# grid (qsosed, Kubota & Done 2018), compared against tengri's `kubota_done`
+# disc; we also overlay tengri's broken power-law disc (the Feltre et al. 2016
+# form) for context. tengri's disc inner temperature follows Novikov-Thorne
+# theory (efficiency η from spin, $T_{\rm in}\propto\lambda_{\rm Edd}^{1/4}$),
+# so its big-blue-bump peak is set by the standard disc physics at the given
+# $M_{\rm BH}$ and $\lambda_{\rm Edd}$; the test grid runs cooler. This is a
+# shape comparison at matched bolometric luminosity, not an exact match.
 
 # %%
 w_disc_s, L_disc_s = agn["disc"]
