@@ -471,4 +471,16 @@ exclude_patterns = [
     # dropped from the index in the 2026-05 polish pass).
     "spine/08_emission_lines.ipynb",
     "spine/09_parameter_sweeps.ipynb",
+    # Fitting-photometry spine notebook hidden from the published sidebar
+    # (2026-06): the quickstart already covers a full photometry fit +
+    # posterior, so this longer treatment is redundant. Inbound prose links
+    # in 04/06/07 now point at the quickstart instead.
+    "spine/05_fitting_photometry.ipynb",
+    # Guides section hidden from the published sidebar (2026-06). These four
+    # pages cross-reference only each other and index.md, so excluding them
+    # together leaves no dangling toctree entries or broken links.
+    "recipes.md",
+    "joint_fitting.md",
+    "method_selection.md",
+    "known_limitations.md",
 ]

@@ -16,8 +16,9 @@
 # %% [markdown]
 # # Fitting optical spectroscopy
 #
-# [`05_fitting_photometry`](05_fitting_photometry.py) left metallicity and the
-# dust split prior-dominated. An optical spectrum carries the absorption-line
+# Broadband photometry alone — the [`quickstart`](00_quickstart.py) — leaves
+# stellar metallicity and the dust split prior-dominated. An optical spectrum
+# carries the absorption-line
 # depths — Hβ, the Mgb triplet, the Fe blends — that pin stellar age and
 # metallicity. This notebook fits a spectrum *alone* with the same machinery as
 # the quickstart (`SEDModel.build`, validated HMC) and shows what it does and
