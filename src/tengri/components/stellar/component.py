@@ -94,6 +94,13 @@ def _nonparametric_sfh_fns():
     return frozenset({continuity, continuity_flex, dirichlet, psb_continuity})
 
 
+def _sfh_bin_edges_yr(fn, sfh_kwargs):
+    """Lazy proxy to :func:`...sfh.nonparametric.sfh_bin_edges_yr` (#765)."""
+    from tengri.components.stellar.sfh.nonparametric import sfh_bin_edges_yr
+
+    return sfh_bin_edges_yr(fn, sfh_kwargs)
+
+
 _NONPARAMETRIC_SFH_FNS = _nonparametric_sfh_fns()
 
 
@@ -125,6 +132,38 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
     log_lo = jnp.log10(ssp_ages_yr[0])
     log_hi = jnp.log10(ssp_ages_yr[-1])
     return 10.0 ** jnp.linspace(log_lo, log_hi, (n - 1) * factor + 1)
+
+
+def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
+    """Add SFH bin edges as exact knots to a dense lookback-age integrand (#765).
+
+    The dense log grid from :func:`_refine_sfh_table_ages` never lands exactly
+    on a step SFH's bin edges, so DSPS interpolates across each transition and
+    smears the mass — a resolution-insensitive 2-4.5 % optical residual vs
+    Prospector (#765, follow-up to the #758/#764 dense integrand). Each edge is
+    doubled just inside/outside (±1e-6 fractional) so the step is represented
+    sharply; knots are clamped into the SSP age span and the result re-sorted
+    ascending. The output size is static (``len(fine_age_yr) + 2*len(edges_yr)``),
+    so this stays JIT/grad/vmap-safe.
+
+    Parameters
+    ----------
+    fine_age_yr : ndarray, shape (n_fine,)
+        Dense ascending lookback-age grid [yr].
+    edges_yr : ndarray, shape (n_edges,)
+        SFH bin edges in lookback time [yr] (may be traced).
+    lo_yr, hi_yr : float
+        SSP age span bounds [yr] to clamp knots into.
+
+    Returns
+    -------
+    ndarray, shape (n_fine + 2*n_edges,)
+        Ascending lookback-age grid with edge knots merged in.
+    """
+    eps = 1e-6
+    knots = jnp.concatenate([edges_yr * (1.0 - eps), edges_yr * (1.0 + eps)])
+    knots = jnp.clip(knots, lo_yr * (1.0 + eps), hi_yr * (1.0 - eps))
+    return jnp.sort(jnp.concatenate([fine_age_yr, knots]))
 
 
 def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr):
@@ -1074,6 +1113,15 @@ class StellarSEDComponent:
             # on the lookback grid by construction, so it also keeps the coarse table.
             if (not self.config.field) and (sfh_spec.fn in _NONPARAMETRIC_SFH_FNS):
                 _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
+                # #765: inject the SFH's exact bin edges as knots so DSPS does not
+                # interpolate across each piecewise-constant step (the dense log
+                # grid alone leaves a resolution-insensitive ~2 % residual). The
+                # parametric path is untouched (gated to non-parametric SFHs).
+                _edges_yr = _sfh_bin_edges_yr(sfh_spec.fn, sfh_kwargs)
+                if _edges_yr is not None:
+                    _fine_age_yr = _inject_edge_knots(
+                        _fine_age_yr, _edges_yr, ssp_ages_yr[0], ssp_ages_yr[-1]
+                    )
                 _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
                 gal_t_table, gal_sfr_table, total_mass = _build_dsps_sfh_table(
                     _fine_age_yr, _fine_sfr, t_obs_gyr
