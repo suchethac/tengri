@@ -30,6 +30,15 @@ concurrency:
   group: tests-${{ github.ref }}-${{ (github.event_name == 'pull_request' && github.event.action == 'labeled') && github.run_id || github.event_name }}
   cancel-in-progress: true
 
+# Supply a version for the `dsps` build. The published dsps sdists use
+# setuptools-scm, which (in the fresh pip build-isolation env) raises
+# `LookupError: unable to detect version` when built without a .git checkout —
+# turning the install step red for every dsps release. Pretending a version lets
+# the sdist build; it is purely a build-time stamp and does not change the
+# resolved dependency (pinned to <0.4.8 in pyproject.toml). See #798.
+env:
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+
 # Skip the heavy jobs on bare `labeled` PR events. GitHub fires one `labeled`
 # webhook PER label added, so labelling a PR with N labels used to spawn N
 # duplicate workflow runs that immediately cancelled each other under
