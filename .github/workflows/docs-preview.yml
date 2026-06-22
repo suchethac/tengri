@@ -26,6 +26,12 @@ concurrency:
   group: docs-preview-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
+# The dsps 0.4.8 PyPI sdist breaks setuptools-scm version detection at install
+# (LookupError). #797 pinned dsps<0.4.8 and added this env to tests.yml; mirror
+# it here so the docs build's `pip install -e .` also succeeds.
+env:
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+
 jobs:
   build:
     runs-on: ubuntu-latest
