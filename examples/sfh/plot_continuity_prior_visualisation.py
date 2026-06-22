@@ -61,28 +61,14 @@ sfr_samples = []
 
 for i in range(n_samples):
     key = jr.fold_in(key, i)
-    params = spec.sample(key)
+    params = dict(spec.sample(key))
 
-    # Evaluate the continuity SFH at the lookback time grid
-    # The SFH is constructed inside model.predict, so we extract it via
-    # the forward model's SFH component
-    pred = model.predict(params)
-
-    # SFR is stored in pred.sfh_mean or similar; extract via component introspection
-    # For now, we call the continuity function directly with the sampled ratios
-    from tengri.components.stellar.sfh.nonparametric import continuity
-
-    sfr = continuity(
-        age_lookback_yr,
-        log_total_mass=float(params.get("sfh_cont_log_total_mass", 10.0)),
-        ratio_0=float(params.get("sfh_cont_ratio_0", 0.0)),
-        ratio_1=float(params.get("sfh_cont_ratio_1", 0.0)),
-        ratio_2=float(params.get("sfh_cont_ratio_2", 0.0)),
-        ratio_3=float(params.get("sfh_cont_ratio_3", 0.0)),
-        ratio_4=float(params.get("sfh_cont_ratio_4", 0.0)),
-        ratio_5=float(params.get("sfh_cont_ratio_5", 0.0)),
-    )
-    sfr_samples.append(np.array(sfr))
+    # Evaluate the continuity SFH via the public predict_sfh path (no reach into
+    # internal SFH functions), then resample onto the plotting grid.
+    sfh = model.predict_sfh(params)
+    t_gyr = np.asarray(sfh["t_gyr"])
+    sfr = np.asarray(sfh["sfr_mean"])
+    sfr_samples.append(np.interp(age_lookback_gyr, t_gyr, sfr))
 
 sfr_samples = np.array(sfr_samples)  # (n_samples, n_age)
 

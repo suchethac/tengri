@@ -38,7 +38,7 @@ from tengri import Observation, Photometry, SEDModel
 # Setup
 tengri.analysis.plotting.setup_style()
 
-ssp = tengri.load_ssp('fsps_prsc_miles_chabrier')
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 sdss_filters = Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 observation = Observation(photometry=sdss_filters)
 
@@ -129,7 +129,7 @@ model_c = SEDModel.build(
     sfh={
         "type": "lnorm",
         "*": tengri.FIXED,
-        "peak_lbt_gyr": 1.0,
+        "peak_gyr": 1.0,
         "width_gyr": 0.5,
         "log_total_mass": 10.0,  # Will be tuned
     },
@@ -154,7 +154,7 @@ baseline_c["dust_tau_diff"] = 0.3
 # Bisection helper to find log_total_mass that produces target r-band magnitude
 def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
     """Binary search for log_total_mass that produces m_r = m_r_target."""
-    for iteration in range(30):
+    for _iteration in range(30):
         mid = 0.5 * (lo + hi)
         params = {**baseline, sfh_param_name: mid}
         try:
