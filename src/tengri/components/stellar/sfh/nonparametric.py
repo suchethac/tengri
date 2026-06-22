@@ -735,6 +735,65 @@ def continuity_flex(
     return jnp.maximum(sfr_bins[bin_idx], 0.0)
 
 
+def _continuity_flex_edges_yr(sfh_kwargs: dict, bin_edges_gyr=None) -> jnp.ndarray:
+    """Lookback-time bin edges [yr] for :func:`continuity_flex` (#765).
+
+    Mirrors the flex-edge derivation inside :func:`continuity_flex` (the same
+    constant-mass-per-bin width construction) so the edges can be injected as
+    exact knots into the DSPS SFH integrand. Kept as a separate helper rather
+    than returned from ``continuity_flex`` to leave that function's SED output
+    byte-identical. Returns ``n_flex+3`` ascending edges
+    ``[0, t_young_end, flex_interior..., t_max]``; traced-safe (the flex
+    interior edges depend on the ``flex_*`` ratio kwargs).
+    """
+    if bin_edges_gyr is None:
+        bin_edges_gyr = CFLEX_DEFAULT_ANCHOR_GYR
+    t_young_end_yr = float(bin_edges_gyr[0]) * 1e9
+    t_old_start_yr = float(bin_edges_gyr[1]) * 1e9
+    t_max_yr = float(bin_edges_gyr[2]) * 1e9
+    n_flex_ratios = sum(1 for k in sfh_kwargs if k.startswith("flex_"))
+    if n_flex_ratios > 0:
+        flex_ratios_log = jnp.array(
+            [sfh_kwargs.get(f"flex_{i}", 0.0) for i in range(n_flex_ratios)]
+        )
+        sfr_ratios = jnp.power(10.0, flex_ratios_log)
+        cumprod_prefixed = jnp.concatenate([jnp.ones(1), jnp.cumprod(sfr_ratios)])
+    else:
+        cumprod_prefixed = jnp.ones(1)
+    T_flex_yr = t_old_start_yr - t_young_end_yr
+    dt_flex_yr = T_flex_yr * cumprod_prefixed / (jnp.sum(cumprod_prefixed) + 1e-30)
+    flex_interior_edges_yr = t_young_end_yr + jnp.cumsum(dt_flex_yr)
+    return jnp.concatenate(
+        [jnp.array([0.0, t_young_end_yr]), flex_interior_edges_yr, jnp.array([t_max_yr])]
+    )
+
+
+def sfh_bin_edges_yr(fn, sfh_kwargs: dict) -> jnp.ndarray | None:
+    """Lookback-time bin edges [yr] for a non-parametric SFH callable (#765).
+
+    The piecewise-constant non-parametric SFHs (continuity / dirichlet /
+    psb_continuity / continuity_flex) have sharp bin-edge transitions. When the
+    SFH is sampled onto a log-spaced integrand grid for DSPS, those edges fall
+    *between* grid points, so DSPS interpolates across each step and smears the
+    mass distribution — a resolution-insensitive 2-4.5 % optical residual vs
+    Prospector (#765). Injecting these exact edges as knots makes the step
+    representation exact at any resolution.
+
+    Returns the ascending bin edges in [yr], or ``None`` for callables without
+    a known edge set (which then keep the plain dense integrand).
+    """
+    if fn is continuity_flex:
+        return _continuity_flex_edges_yr(sfh_kwargs)
+    if fn is psb_continuity:
+        tlast_gyr = sfh_kwargs.get("tlast_gyr", 0.5)
+        tflex_gyr = sfh_kwargs.get("tflex_gyr", 2.0)
+        old_edges_gyr = DEFAULT_BIN_EDGES_GYR[2:]  # [0.3, 1.0, 3.0, 6.0, 13.7]
+        return jnp.concatenate([jnp.array([0.0, tlast_gyr, tflex_gyr]), old_edges_gyr[1:]]) * 1e9
+    if fn is continuity or fn is dirichlet:
+        return DEFAULT_BIN_EDGES_GYR * 1e9
+    return None
+
+
 def continuity_flex_prior_logp(
     logsfr_ratio_young: float,
     logsfr_ratios: jnp.ndarray,
