@@ -21,8 +21,9 @@ on:
     types: [published]
   workflow_dispatch:  # allow manual trigger from Actions UI
 
-# dsps 0.4.8 PyPI sdist breaks setuptools-scm at install; mirror the #797 fix
-# (tests.yml) so the distribution build's dependency install succeeds.
+# dsps sdists build via setuptools-scm, which raises in the fresh pip
+# build-isolation env without a .git checkout; stamp a version so the build
+# succeeds (matches tests.yml; see #798).
 env:
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
 
