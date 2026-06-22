@@ -14,6 +14,12 @@ concurrency:
   group: "pages"
   cancel-in-progress: false
 
+# dsps sdists build via setuptools-scm, which raises in the fresh pip
+# build-isolation env without a .git checkout; stamp a version so the build
+# succeeds (matches tests.yml; see #798).
+env:
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+
 jobs:
   build:
     runs-on: ubuntu-latest
