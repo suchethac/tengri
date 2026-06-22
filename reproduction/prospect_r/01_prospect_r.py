@@ -191,7 +191,9 @@ I_ZSUN = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - np.log10(Z_SOLAR))))
 # panel shows the relative residual `|tengri − ProSpect| / ProSpect`. The two
 # are independent ports of one underlying library, so the residual is a
 # resolution and interpolation effect, a percent-level floor rather than a
-# physics difference.
+# physics difference. Residual spikes sit at spectral features and reflect
+# ProSpect's coarse wavelength grid (1221 λ vs 6900 λ); they vanish when
+# both spectra are regridded to the same wavelength mesh.
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]

@@ -59,28 +59,53 @@ import numpy as np
 
 from . import units
 
-# ── AGNFITTER-RX checkout location ──────────────────────────────────────────
+# ── Committed reference grids (always available; NO external clone needed) ──
+# The disk/torus/cold-dust AGNfitter-RX reference templates are vendored as
+# committed HDF5 under data/, so the reproduction runs in CI and on any clean
+# checkout. The /tmp/AGNfitter-rX clone is needed ONLY to *regenerate* those
+# grids (build-time), via scripts/build_agnfitter_bbb_reference.py — never at
+# runtime. data/ lives at the repo root: <root>/reproduction/agnfitter/_drivers/.
+_DATA_DIR = Path(__file__).resolve().parents[3] / "data"
+_DISK_H5 = _DATA_DIR / "agnfitter_bbb_reference.h5"
+_TORUS_H5 = _DATA_DIR / "agnfitter_torus_reference.h5"
+_COLD_H5 = _DATA_DIR / "agnfitter_cold_dust_reference.h5"
+_C_AA = 2.99792458e18  # speed of light [Å/s]
+
+# Build-time regeneration source (optional; runtime never reads it).
 AGNFITTER_HOME = Path(os.environ.get("AGNFITTER_HOME", "/tmp/AGNfitter-rX"))
 _MODELS = AGNFITTER_HOME / "models"
 
-_CLONE_HINT = (
-    "AGNFITTER-RX checkout not found at "
-    f"{AGNFITTER_HOME}. Clone it with:\n"
-    "  git clone --depth 1 --branch AGNfitter-rX_v0.1 "
-    "https://github.com/GabrielaCR/AGNfitter /tmp/AGNfitter-rX\n"
-    "or set AGNFITTER_HOME to an existing checkout."
-)
+
+@cache
+def _ref(h5_path: Path, group: str) -> dict:
+    """Load all datasets of one group from a committed reference h5 (cached)."""
+    import h5py
+
+    with h5py.File(h5_path, "r") as h:
+        g = h[group]
+        return {k: np.asarray(g[k]) for k in g}
+
+
+def _h5_to_lnu(wavelength_aa, fnu, component: str):
+    """(Å, F_nu) committed-h5 template -> (wave_aa, L_nu) in tengri units."""
+    log_nu = np.log10(_C_AA / np.asarray(wavelength_aa, dtype=np.float64))
+    return units.lognu_fnu_to_lnu(log_nu, _renorm(component, np.asarray(fnu, dtype=np.float64)))
 
 
 def available() -> bool:
-    """True if the AGNFITTER-RX model libraries are present on disk."""
-    return _MODELS.is_dir()
+    """True if the committed reference grids are present (they ship in data/)."""
+    return _DISK_H5.is_file() and _TORUS_H5.is_file() and _COLD_H5.is_file()
 
 
 def require_available() -> None:
-    """Raise a clear, actionable error if the checkout is missing."""
+    """Raise a clear, actionable error if the committed grids are missing."""
     if not available():
-        raise FileNotFoundError(_CLONE_HINT)
+        raise FileNotFoundError(
+            "AGNfitter reference grids missing from data/ "
+            "(agnfitter_bbb_reference.h5 / agnfitter_torus_reference.h5 / "
+            "agnfitter_cold_dust_reference.h5). Regenerate with "
+            "scripts/build_agnfitter_bbb_reference.py (needs an AGNfitter-rX clone)."
+        )
 
 
 # ── Restricted unpickler (mirrors scripts/build_cat3d_wind_grid.py) ─────────
@@ -216,21 +241,16 @@ def disk_axes(name: str) -> dict[str, np.ndarray]:
     """
     name = name.upper()
     if name == "SN12":
-        d = _safe_load("BBB/SN12.pickle")
-        # SED is (n_freq, n_mbh, n_edd) = (375, 9, 12). logBHmass-values (9)
-        # matches the M_BH axis; logEddra-values (259) is the full Slone-Netzer
-        # accretion-rate label list, of which the library stores a 12-column
-        # subgrid -- so the Eddington axis is addressed by integer column index.
-        sed = np.asarray(d["SED"])
+        d = _ref(_DISK_H5, "sn12")
         return {
-            "log_mbh": np.asarray(d["logBHmass-values"], dtype=np.float64).ravel(),
-            "edd_index": np.arange(sed.shape[2]),
+            "log_mbh": np.asarray(d["logBHmass"], dtype=np.float64).ravel(),
+            "edd_index": np.arange(d["sed"].shape[1]),
         }
     if name == "KD18":
-        d = _safe_load("BBB/KD18.pickle")
+        d = _ref(_DISK_H5, "kd18")
         return {
-            "log_mbh": np.sort(np.asarray(d["logBHmass"].unique(), dtype=np.float64)),
-            "log_edd": np.sort(np.asarray(d["logEddra"].unique(), dtype=np.float64)),
+            "log_mbh": np.sort(np.unique(d["logBHmass"])),
+            "log_edd": np.sort(np.unique(d["logEddra"])),
         }
     return {}
 
@@ -265,33 +285,26 @@ def disk_template(
     """
     name = name.upper()
     if name == "R06":
-        d = _safe_load("BBB/R06.pickle")
-        log_nu = np.asarray(d["wavelength"], dtype=np.float64)  # mislabelled: log10 nu
-        fnu = np.asarray(d["SED"], dtype=np.float64).squeeze()
-    elif name == "THB21":
-        d = _safe_load("BBB/THB21.pickle")
-        log_nu = np.asarray(d["nu"].values.item(), dtype=np.float64)
-        fnu = np.asarray(d["SED"].values.item(), dtype=np.float64)
-    elif name == "SN12":
-        d = _safe_load("BBB/SN12.pickle")
-        sed = np.asarray(d["SED"], dtype=np.float64)  # (n_freq, n_mbh, n_edd)
-        mbh = np.asarray(d["logBHmass-values"], dtype=np.float64).ravel()
-        i = _nearest(mbh, log_mbh)
-        j = sed.shape[2] // 2 if edd_index is None else int(edd_index)
-        log_nu = np.log10(np.asarray(d["frequency"], dtype=np.float64))
-        fnu = sed[:, i, j].squeeze()
-    elif name == "KD18":
-        d = _safe_load("BBB/KD18.pickle")
-        mbh = np.sort(np.asarray(d["logBHmass"].unique(), dtype=np.float64))
-        edd = np.sort(np.asarray(d["logEddra"].unique(), dtype=np.float64))
+        d = _ref(_DISK_H5, "r06")
+        return _h5_to_lnu(d["wavelength"], d["sed"], "BB")
+    if name == "THB21":
+        d = _ref(_DISK_H5, "thb21")
+        return _h5_to_lnu(d["wavelength"], d["sed"][0], "BB")
+    if name == "SN12":
+        d = _ref(_DISK_H5, "sn12")
+        sed = d["sed"]  # (n_mbh, n_edd, n_wave)
+        i = _nearest(d["logBHmass"], log_mbh)
+        j = sed.shape[1] // 2 if edd_index is None else int(edd_index)
+        return _h5_to_lnu(d["wavelength"], sed[i, j], "BB")
+    if name == "KD18":
+        d = _ref(_DISK_H5, "kd18")  # flat per-row grid + per-row axis values
+        mbh = np.sort(np.unique(d["logBHmass"]))
+        edd = np.sort(np.unique(d["logEddra"]))
         mbh_sel = mbh[_nearest(mbh, log_mbh)]
         edd_sel = edd[_nearest(edd, log_edd)]
-        row = d[(d["logBHmass"] == mbh_sel) & (d["logEddra"] == edd_sel)]
-        log_nu = np.asarray(row["wavelength"].values.item(), dtype=np.float64)
-        fnu = np.asarray(row["SED"].values.item(), dtype=np.float64)
-    else:
-        raise ValueError(f"Unknown disk library {name!r}; choose from {list_disks()}")
-    return units.lognu_fnu_to_lnu(log_nu, _renorm("BB", fnu))
+        k = int(np.argmax((d["logBHmass"] == mbh_sel) & (d["logEddra"] == edd_sel)))
+        return _h5_to_lnu(d["wavelength"], d["sed"][k], "BB")
+    raise ValueError(f"Unknown disk library {name!r}; choose from {list_disks()}")
 
 
 # ── Torus libraries ─────────────────────────────────────────────────────────
@@ -340,73 +353,66 @@ def torus_template(
     """
     name = name.upper()
     if name == "S04":
-        d = _safe_load("TORUS/S04.pickle")
-        axis = np.asarray(d["Nh-values"], dtype=np.float64)
-        i = _nearest(axis, log_nh)
-        log_nu = np.asarray(d["wavelength"][i], dtype=np.float64)
-        fnu = np.asarray(d["SED"][i], dtype=np.float64).squeeze()
-    elif name == "NK08":
-        d = _safe_load("TORUS/NK0_mean_1p.pickle")
-        axis = np.asarray(d["incl-values"], dtype=np.float64)
-        i = _nearest(axis, incl)
-        log_nu = np.asarray(d["wavelength"][i], dtype=np.float64)
-        fnu = np.asarray(d["SED"][i], dtype=np.float64).squeeze()
-    elif name == "SKIRTOR":
-        d = _safe_load("TORUS/SKIRTOR_mean_3p.pickle")
-        oa_ax = np.sort(np.asarray(d["oa-values"].unique(), dtype=np.float64))
-        incl_ax = np.sort(np.asarray(d["incl-values"].unique(), dtype=np.float64))
-        tv_ax = np.sort(np.asarray(d["tv-values"].unique(), dtype=np.float64))
+        d = _ref(_TORUS_H5, "s04")
+        i = _nearest(d["axis"], log_nh)
+        return _h5_to_lnu(d["wavelength"], d["sed"][i], "TO")
+    if name == "NK08":
+        d = _ref(_TORUS_H5, "nk08")
+        i = _nearest(d["axis"], incl)
+        return _h5_to_lnu(d["wavelength"], d["sed"][i], "TO")
+    if name == "SKIRTOR":
+        d = _ref(_TORUS_H5, "skirtor")  # flat per-row grid + per-row axis values
+        oa_ax = np.sort(np.unique(d["oa-values"]))
+        incl_ax = np.sort(np.unique(d["incl-values"]))
+        tv_ax = np.sort(np.unique(d["tv-values"]))
         oa_s = oa_ax[_nearest(oa_ax, oa)]
         incl_s = incl_ax[_nearest(incl_ax, incl)]
         tv_s = tv_ax[_nearest(tv_ax, tau)]
-        row = d[(d["oa-values"] == oa_s) & (d["incl-values"] == incl_s) & (d["tv-values"] == tv_s)]
-        log_nu = np.asarray(row["wavelength"].values.item(), dtype=np.float64)
-        fnu = np.asarray(row["SED"].values.item(), dtype=np.float64)
-    elif name == "CAT3D":
-        d = _safe_load("TORUS/CAT3D_mean_3p.pickle")
-        # The 3-parameter view starts at row 210 (two sub-libraries were
-        # concatenated); mirror AGNFITTER-RX's exact slicing.
-        sub = d.iloc[210:]
-        incl_ax = np.sort(np.asarray(sub["incl-values"].unique(), dtype=np.float64))
-        a_ax = np.sort(np.asarray(sub["a-values"].unique(), dtype=np.float64))
-        fwd_ax = np.sort(np.asarray(sub["fwd-values"].unique(), dtype=np.float64))
+        k = int(
+            np.argmax(
+                (d["oa-values"] == oa_s) & (d["incl-values"] == incl_s) & (d["tv-values"] == tv_s)
+            )
+        )
+        return _h5_to_lnu(d["wavelength"], d["sed"][k], "TO")
+    if name == "CAT3D":
+        d = _ref(_TORUS_H5, "cat3d")  # already the row-210+ 3-parameter view
+        incl_ax = np.sort(np.unique(d["incl-values"]))
+        a_ax = np.sort(np.unique(d["a-values"]))
+        fwd_ax = np.sort(np.unique(d["fwd-values"]))
         incl_s = incl_ax[_nearest(incl_ax, incl)]
         a_s = a_ax[_nearest(a_ax, a)]
         fwd_s = fwd_ax[_nearest(fwd_ax, fwd)]
-        row = sub[
-            (sub["incl-values"] == incl_s)
-            & (sub["a-values"] == a_s)
-            & (sub["fwd-values"] == fwd_s)
-        ]
-        log_nu = np.asarray(row["wavelength"].values.item(), dtype=np.float64).ravel()
-        fnu = np.asarray(row["SED"].values.item(), dtype=np.float64).ravel()
-    else:
-        raise ValueError(f"Unknown torus library {name!r}; choose from {list_tori()}")
-    return units.lognu_fnu_to_lnu(log_nu, _renorm("TO", fnu))
+        k = int(
+            np.argmax(
+                (d["incl-values"] == incl_s) & (d["a-values"] == a_s) & (d["fwd-values"] == fwd_s)
+            )
+        )
+        return _h5_to_lnu(d["wavelength"], d["sed"][k], "TO")
+    raise ValueError(f"Unknown torus library {name!r}; choose from {list_tori()}")
 
 
 def torus_axes(name: str) -> dict[str, np.ndarray]:
     """Grid axes for a torus library."""
     name = name.upper()
     if name == "S04":
-        d = _safe_load("TORUS/S04.pickle")
-        return {"log_nh": np.asarray(d["Nh-values"], dtype=np.float64)}
+        d = _ref(_TORUS_H5, "s04")
+        return {"log_nh": np.asarray(d["axis"], dtype=np.float64)}
     if name == "NK08":
-        d = _safe_load("TORUS/NK0_mean_1p.pickle")
-        return {"incl": np.asarray(d["incl-values"], dtype=np.float64)}
+        d = _ref(_TORUS_H5, "nk08")
+        return {"incl": np.asarray(d["axis"], dtype=np.float64)}
     if name == "SKIRTOR":
-        d = _safe_load("TORUS/SKIRTOR_mean_3p.pickle")
+        d = _ref(_TORUS_H5, "skirtor")
         return {
-            "oa": np.sort(np.asarray(d["oa-values"].unique(), dtype=np.float64)),
-            "incl": np.sort(np.asarray(d["incl-values"].unique(), dtype=np.float64)),
-            "tau": np.sort(np.asarray(d["tv-values"].unique(), dtype=np.float64)),
+            "oa": np.sort(np.unique(d["oa-values"])),
+            "incl": np.sort(np.unique(d["incl-values"])),
+            "tau": np.sort(np.unique(d["tv-values"])),
         }
     if name == "CAT3D":
-        sub = _safe_load("TORUS/CAT3D_mean_3p.pickle").iloc[210:]
+        d = _ref(_TORUS_H5, "cat3d")
         return {
-            "incl": np.sort(np.asarray(sub["incl-values"].unique(), dtype=np.float64)),
-            "a": np.sort(np.asarray(sub["a-values"].unique(), dtype=np.float64)),
-            "fwd": np.sort(np.asarray(sub["fwd-values"].unique(), dtype=np.float64)),
+            "incl": np.sort(np.unique(d["incl-values"])),
+            "a": np.sort(np.unique(d["a-values"])),
+            "fwd": np.sort(np.unique(d["fwd-values"])),
         }
     raise ValueError(f"Unknown torus library {name!r}; choose from {list_tori()}")
 
@@ -450,12 +456,9 @@ def cold_dust_template(
     """
     name = name.upper()
     if name == "DH02_CE01":
-        d = _safe_load("STARBURST/DH02_CE01.pickle")
-        axis = np.asarray(d["irlum-values"], dtype=np.float64)
-        i = _nearest(axis, log_irlum)
-        log_nu = np.asarray(d["wavelength"][i], dtype=np.float64)
-        fnu = np.asarray(d["SED"][i], dtype=np.float64).squeeze()
-        return units.lognu_fnu_to_lnu(log_nu, _renorm("SB", fnu))
+        d = _ref(_COLD_H5, "dh02_ce01")
+        i = _nearest(d["irlum"], log_irlum)
+        return _h5_to_lnu(d["wavelength"], d["sed"][i], "SB")
     if name == "S17":
         return _s17_template(tdust=tdust, fpah=fpah)
     raise ValueError(f"Unknown cold-dust library {name!r}; choose from {list_cold_dust()}")

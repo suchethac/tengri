@@ -988,7 +988,10 @@ print(
 # Synthesizer reprocesses the obscured disc luminosity into the IR with a
 # blackbody torus (here T = 1000 K). tengri's torus blocks (`nenkova`, `skirtor`,
 # `two_temperature`) are independent radiative-transfer / parametric models, so we
-# compare the mid-IR shape and peak at matched bolometric luminosity.
+# compare the mid-IR shape and peak at matched bolometric luminosity. The
+# parametric `two_temperature` model peaks warmer than Synthesizer's 1000 K BB;
+# the radiative-transfer `nenkova` (CLUMPY) peaks cooler — the spread reflects
+# the model-family differences, not a physics mismatch.
 
 # %%
 w_torus_s, L_torus_s = agn["torus"]
