@@ -51,12 +51,14 @@ you set, which are free, and which fell back to library defaults.
 
 ```python
 import jax
+import tengri
 from tengri import (
     SEDModel, Fitter, ForwardModel,
     Observation, Photometry, load_ssp_data, recipes,
 )
 
-ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
+# Downloads a stellar-population grid on first use, then caches it locally.
+ssp = load_ssp_data(tengri.download_ssp("fsps_prsc_miles_chabrier"))
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
@@ -197,6 +199,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :hidden:
 
    spine/04_building_models
+   api/index
    performance/index
    performance/memory
    units
