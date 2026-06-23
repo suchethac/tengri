@@ -59,6 +59,10 @@ import numpy as np
 # absolute mass scale is irrelevant for the shape-only anatomy figure).
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
+warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
+warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*Composable AGN.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 logging.getLogger("jax").setLevel(logging.ERROR)
 
 import tengri
