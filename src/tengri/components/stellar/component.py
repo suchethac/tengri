@@ -166,7 +166,7 @@ def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
     return jnp.sort(jnp.concatenate([fine_age_yr, knots]))
 
 
-def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr):
+def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     """Ascending cosmic-time (t, SFR) table for DSPS, NaN-safe at the high-z edge.
 
     SSP ages older than the universe at the observation redshift imply negative
@@ -181,17 +181,36 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr):
         Star-formation rate at ``age_yr`` [Msun/yr].
     t_obs_gyr : float
         Cosmic age at the observation redshift [Gyr].
+    add_young_knot : bool, optional
+        Prepend a lookback-0 knot so DSPS integrates the youngest SSP bin down
+        to the observation time (#538). Default ``False``.
 
     Returns
     -------
-    t_cosmic_asc : ndarray, shape (n,)
-        Strictly-increasing cosmic time [Gyr].
-    sfr_asc : ndarray, shape (n,)
+    t_cosmic_asc : ndarray, shape (n,) or (n+1,)
+        Strictly-increasing cosmic time [Gyr]. Length ``n+1`` when
+        ``add_young_knot`` is set.
+    sfr_asc : ndarray, shape (n,) or (n+1,)
         SFR aligned to ``t_cosmic_asc`` [Msun/yr] (pre-Big-Bang bins zeroed).
     total_mass : float
-        Trapezoidal mass formed [Msun].
+        Trapezoidal mass formed [Msun], EXCLUDING the young-boundary knot's
+        ``[0, age0]`` segment so the knot redistributes — not inflates — mass.
     """
     T_TABLE_MIN = 0.01  # Gyr; matches dsps.constants.T_TABLE_MIN
+    # Young-boundary knot (#538): ``age_yr`` starts at the youngest SSP age
+    # (~1 Myr), so the mass formed between lookback 0 and that age is never
+    # integrated into the youngest SSP bin — under-weighting the ionizing
+    # population and biasing Q_H ~16 % low vs the analytic (and CIGALE) SFH->SSP
+    # convolution (n_ly drops 3+ dex past ~10 Myr, so the youngest bin dominates
+    # Q_H). Prepend a lookback-0 knot holding SFR constant from the youngest
+    # sample (SFR varies negligibly over the first Myr) so DSPS redistributes the
+    # youngest-bin mass down to the observation time. Static size (n -> n+1) keeps
+    # the path JIT/grad/vmap-safe. Gated off by default so the shared coarse
+    # table (mass guard + per-age-metallicity path, which aligns a length-n
+    # metallicity table) is byte-unchanged.
+    if add_young_knot:
+        age_yr = jnp.concatenate([jnp.zeros((1,), age_yr.dtype), age_yr])
+        sfr = jnp.concatenate([sfr[:1], sfr])
     age_gyr = age_yr / 1e9
     n = age_yr.shape[0]
     t_cosmic_raw = t_obs_gyr - age_gyr
@@ -208,7 +227,16 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr):
     # clamp to T_TABLE_MIN below the invalid-bin ramp, which DSPS NaNs on. #683
     t_cosmic_asc = enforce_increasing_cosmic_time(t_cosmic_asc)
     sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
-    total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
+    if add_young_knot:
+        # Exclude the young-boundary knot's [0, age0] segment (the last ascending
+        # element, at t_cosmic = t_obs) from the normalisation: the knot
+        # REDISTRIBUTES mass into the youngest SSP bin via DSPS's (sum-to-one)
+        # weights, it must not inflate the total. Trapezoid over all-but-the-knot
+        # is exactly the as-given SFH mass, so ``sum(age_weights) ==
+        # 10**log_total_mass`` is preserved (#538).
+        total_mass = jnp.maximum(jnp.trapezoid(sfr_asc[:-1], t_cosmic_asc[:-1] * 1e9), 0.0)
+    else:
+        total_mass = jnp.maximum(jnp.trapezoid(sfr_asc, t_cosmic_asc * 1e9), 0.0)
     return t_cosmic_asc, sfr_asc, total_mass
 
 
@@ -1063,12 +1091,14 @@ class StellarSEDComponent:
         # build a strictly-monotonic ramp at the invalid end and zero
         # the SFR there so those bins contribute nothing.
         ssp_age_gyr = ssp_ages_yr / 1e9
-        # Coarse (per-SSP-age) cosmic-time table — used by the eager mass guard
-        # below and the per-age-metallicity DSPS path. The delta-metallicity
-        # path swaps in a dense integrand for non-parametric SFHs (#758).
-        t_cosmic_asc, sfr_asc, total_mass = _build_dsps_sfh_table(
-            ssp_ages_yr, sfr_on_ssp, t_obs_gyr
-        )
+        # Coarse (per-SSP-age) total formed mass — the conserved normalisation
+        # basis (without the young-boundary knot) shared by every DSPS path
+        # below. Each path rebuilds its own (t, SFR) table: the non-parametric
+        # delta path with a dense integrand (#758), and both the parametric
+        # delta and per-age-metallicity paths with the young-boundary knot
+        # (#538). The knot's [0, age0] segment is excluded from this total, so it
+        # redistributes mass into the youngest bin without inflating it.
+        _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
 
         # Eager physicality guard: the masking above truncates any SFH mass at
         # lookback ages older than the universe at this redshift. When that
@@ -1124,10 +1154,19 @@ class StellarSEDComponent:
                     )
                 _fine_sfr = sfh_spec.fn(_fine_age_yr, **sfh_kwargs)
                 gal_t_table, gal_sfr_table, total_mass = _build_dsps_sfh_table(
-                    _fine_age_yr, _fine_sfr, t_obs_gyr
+                    _fine_age_yr, _fine_sfr, t_obs_gyr, add_young_knot=True
                 )
             else:
-                gal_t_table, gal_sfr_table = t_cosmic_asc, sfr_asc
+                # Parametric (smooth) SFH on the delta path: keep the coarse
+                # per-SSP-age integrand (byte-identical away from the young edge),
+                # but add the young-boundary knot so the youngest SSP bin captures
+                # the [0, age0] mass — the delayed-τ Q_H fix (#538). total_mass
+                # stays the conserved coarse value from above (the knot's segment
+                # is excluded), so mass conservation and the per-age-metallicity
+                # path below are unaffected.
+                gal_t_table, gal_sfr_table, _ = _build_dsps_sfh_table(
+                    ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+                )
             dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
                 gal_t_table=gal_t_table,
                 gal_sfr_table=gal_sfr_table,
@@ -1141,10 +1180,18 @@ class StellarSEDComponent:
         else:  # ramp / chem_evol — per-age metallicity table
             from dsps.sed.stellar_sed import calc_rest_sed_sfh_table_met_table
 
+            # Apply the young-boundary knot (#538) consistently with the delta
+            # path so degenerate per-age modes still reduce exactly to delta. The
+            # knot is the last ascending element (t_cosmic = t_obs), so the
+            # per-age metallicity table is extended by the youngest-age value.
+            _t_k, _sfr_k, _ = _build_dsps_sfh_table(
+                ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+            )
+            _lgmet_k = jnp.concatenate([lgmet_on_ssp_ages[::-1], lgmet_on_ssp_ages[:1]])
             dsps_result = calc_rest_sed_sfh_table_met_table(
-                gal_t_table=t_cosmic_asc,
-                gal_sfr_table=sfr_asc,
-                gal_lgmet_table=lgmet_on_ssp_ages[::-1],
+                gal_t_table=_t_k,
+                gal_sfr_table=_sfr_k,
+                gal_lgmet_table=_lgmet_k,
                 gal_lgmet_scatter=self.config.lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
