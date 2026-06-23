@@ -90,6 +90,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "load_ssp",
         "load_ssp_data",
         "SSPData",
+        # ── Dust-emission template loaders (closes #803) ────────────
+        "load_astrodust_hd23",
+        "load_pahspec_draine2021",
         # ── Component helpers (closes #497 / #498) ──────────────────
         # The BAGPIPES reproduction notebook (PR #493) needed direct
         # callable access to these — tying them to a full SEDModel
@@ -198,10 +201,15 @@ DEMOTED_BUT_IMPORTABLE: frozenset[str] = frozenset(
         # (exp_squared_kernel / matern32_kernel / gp_noise_covariance were
         # re-promoted to top-level as of #511 — they're the standard noise-model
         # kernels and every spectroscopy fit needs them.)
-        # Single-purpose loaders — use `tengri.observation.load_filter_set` instead.
+        # Single-purpose filter loaders — importable but not advertised; the
+        # gallery uses `from tengri import load_filter` / `load_filter_set` (#802).
         # (load_ssp_data is RE-PROMOTED to top-level as of #496 — every reproduction
         # notebook needs it, so back into ALLOWED_TOP_LEVEL it goes.)
+        "load_filter",
         "load_filter_set",
+        # PAHspec axis-selection helper — importable but not advertised; paired
+        # with the advertised `load_pahspec_draine2021` loader (#803).
+        "select_pahspec_axes",
         # Cache machinery — use `tengri.utils.jax_cache.*` /
         # `tengri.inference.jit_engine.*` instead
         "cache_size_bytes",
