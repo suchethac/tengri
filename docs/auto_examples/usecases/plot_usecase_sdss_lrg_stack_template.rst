@@ -45,32 +45,14 @@ References:
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-151
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
-   :alt: SDSS LRG Quiescent Template (z=0.3, R=2000) Red sequence ages 6–11 Gyr per Thomas+2005
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
-      Batch shape: (200, 2400)
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 24-155
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -120,7 +102,7 @@ References:
             "width_gyr": 0.10,  # 50 Myr / sqrt(2.355) = narrow burst
             "skew": 0.0,
             "trunc": 13.5,
-            "log_peak_sfr": 0.5,  # ~ log M* = 11 when integrated
+            "log_total_mass": 10.0,  # ~ log M* = 11 when integrated
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(REDSHIFT),
@@ -132,6 +114,7 @@ References:
     # --- Generate age samples for population ---
     # Sample N_MODELS ages uniformly within the red-sequence range
     ages_gyr = np.linspace(AGE_GYR_MIN, AGE_GYR_MAX, N_MODELS)
+
 
     # --- Define vmap-friendly predict function ---
     def predict_single_spectrum(age_gyr):
@@ -192,8 +175,7 @@ References:
     ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
     ax.legend(frameon=False, fontsize=8, loc="upper right")
     ax.set_title(
-        "SDSS LRG Quiescent Template (z=0.3, R=2000)\n"
-        "Red sequence ages 6–11 Gyr per Thomas+2005"
+        "SDSS LRG Quiescent Template (z=0.3, R=2000)\nRed sequence ages 6–11 Gyr per Thomas+2005"
     )
 
     fig.tight_layout()

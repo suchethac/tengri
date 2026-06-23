@@ -35,10 +35,14 @@ intrinsic clock used to interpret observed UV slopes: a galaxy with
 younger one with moderate reddening (the classic IRX–β degeneracy
 that ``plot_usecase_uv_slope_beta`` recovers).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-77
+.. GENERATED FROM PYTHON SOURCE LINES 14-96
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,11 +60,20 @@ that ``plot_usecase_uv_slope_beta`` recovers).
     C_AA_PER_S = 2.998e18
 
     # Calzetti+1994 windows for the UV slope fit.
-    WINDOWS = np.array([
-        [1268, 1284], [1309, 1316], [1342, 1371], [1407, 1515],
-        [1562, 1583], [1677, 1740], [1760, 1833], [1866, 1890],
-        [1930, 1950], [2400, 2580],
-    ])
+    WINDOWS = np.array(
+        [
+            [1268, 1284],
+            [1309, 1316],
+            [1342, 1371],
+            [1407, 1515],
+            [1562, 1583],
+            [1677, 1740],
+            [1760, 1833],
+            [1866, 1890],
+            [1930, 1950],
+            [2400, 2580],
+        ]
+    )
 
 
     def _beta_uv(wave, l_nu):
@@ -74,12 +87,16 @@ that ``plot_usecase_uv_slope_beta`` recovers).
 
     model = tengri.SEDModel.build(
         tengri.load_ssp(),
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "peak_lbt_gyr": tengri.Uniform(0.01, 13.0),
-             "width_gyr": 0.05, "log_peak_sfr": 1.0,
-             "skew": 0.0, "trunc": 13.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "peak_lbt_gyr": tengri.Uniform(0.01, 13.0),
+            "width_gyr": 0.05,
+            "log_total_mass": 10.0,
+            "skew": 0.0,
+            "trunc": 13.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.01),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -94,11 +111,13 @@ that ``plot_usecase_uv_slope_beta`` recovers).
     fig, ax = plt.subplots(figsize=(6.4, 4.4))
     ax.plot(ages * 1.0e3, beta, color="C0", lw=1.6)
     ax.axhline(-2.5, color="0.55", lw=0.5, ls=":")
-    ax.text(11, -2.48, "young-starburst floor β ≈ -2.5",
-            color="0.4", fontsize=8, va="bottom")
-    ax.set(xscale="log", xlim=(10, 1000),
-           xlabel="Stellar burst age  [Myr]",
-           ylabel=r"UV continuum slope  $\beta$  (Calzetti+1994 windows)")
+    ax.text(11, -2.48, "young-starburst floor β ≈ -2.5", color="0.4", fontsize=8, va="bottom")
+    ax.set(
+        xscale="log",
+        xlim=(10, 1000),
+        xlabel="Stellar burst age  [Myr]",
+        ylabel=r"UV continuum slope  $\beta$  (Calzetti+1994 windows)",
+    )
 
     fig.tight_layout()
     plt.savefig("plot_uv_slope_age.png", dpi=150, bbox_inches="tight")

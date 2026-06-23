@@ -30,10 +30,14 @@ Nebular gas density controls ionization balance and recombination rates,
 affecting emission line strengths. Higher density increases cooling efficiency,
 shifting line ratios through recombination rate changes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-64
+.. GENERATED FROM PYTHON SOURCE LINES 9-68
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -59,10 +63,10 @@ shifting line ratios through recombination rate changes.
             "alpha": 1.0,
             "beta": 2.5,
             "tau_gyr": 0.3,
-            "log_peak_sfr": 1.5,
+            "log_total_mass": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1},
-        neb={"type": "cue", "*": tengri.FIXED, "neb_n_h": tengri.Uniform(1.0, 1e3)},
+        neb={"type": "cue", "*": tengri.FIXED, "gas_logn": tengri.Uniform(0.0, 3.0)},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -73,7 +77,7 @@ shifting line ratios through recombination rate changes.
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for nh in nh_values:
-        params = {**baseline, "neb_n_h": jnp.float64(nh)}
+        params = {**baseline, "gas_logn": jnp.float64(np.log10(nh))}
         out = model.predict_rest_sed(params)
         wave = np.asarray(out.wavelength)
         nu = 2.998e18 / wave

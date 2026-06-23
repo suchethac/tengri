@@ -2631,7 +2631,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Intrinsic dust reddening ebv (E(B−V)) reddens the continuum via extinction. Varying ebv from 0 to 0.4 shows the transition from unobscured type-1 QSO colours to moderately dust-enshrouded systems.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Adding a polar-dust attenuation component reddens the accretion-disc continuum: increasing the polar-dust reddening agn_polar_ebv (E(B−V), [mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colours to a moderately dust-reddened continuum, while the absorbed UV energy is re-radiated as a polar-dust infrared bump.">
 
 .. only:: html
 
@@ -2642,7 +2642,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSOgen disc: dust reddening tunes UV to optical colour</div>
+      <div class="sphx-glr-thumbnail-title">QSO continuum: polar-dust reddening tunes UV to optical colour</div>
     </div>
 
 
@@ -2711,6 +2711,40 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">delta_alpha_OX pivots the X-ray spectrum about the disc UV anchor</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="agn={&quot;feii&quot;: {&quot;type&quot;: &quot;boroson_green&quot;}} adds the empirical Boroson &amp; Green (1992) Fe II pseudo-continuum to a composable AGN — the broad iron-line blanket that fills the 2200–3000 Å and 4400–4700 Å windows of type-1 quasars. Its amplitude is set by agn_fe2_strength (the standard R_{\rm Fe} ratio of Fe II to broad H\ \beta).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_boroson_green_feii_template_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_boroson_green_feii_template`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Boroson & Green (1992) Fe II template: the optical/UV iron blanket</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The CAT3D-Wind torus (Hönig &amp; Kishimoto 2017) splits the circumnuclear dust into a mid-plane clumpy disc plus a polar outflow (&quot;wind&quot;). Its infrared reprocessing is controlled by three observables: the wind mass fraction fwd, the radial cloud-distribution index a, and the viewing angle cos i.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_cat3d_wind_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_cat3d_wind_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">CAT3D-Wind clumpy torus: wind fraction and viewing angle</div>
     </div>
 
 
@@ -3056,6 +3090,57 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The Silva, Maiolino &amp; Granato (2004) AGN torus templates are empirical reprocessed-dust SEDs binned by line-of-sight hydrogen column density agn_log_nh_silva. As the column rises from unobscured (Type-1-like, N_\mathrm{H} \sim 10^{22}\,\mathrm{cm^{-2}}) to Compton-thick (N_\mathrm{H} \sim 10^{25}\,\mathrm{cm^{-2}}):">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_silva04_nh_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_silva04_nh_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Silva+04 torus: Obscuration and the 9.7 micron silicate feature</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR_mean_3p torus is the Stalevski+2016 clumpy two-phase torus library averaged over its clumpiness parameters, as packaged by AGNfitter-rX. Three observables remain: the half-opening angle oa, the equatorial optical depth tau_V, and the inclination incl.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_agnfitter_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_agnfitter_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR_mean_3p torus: optical depth and inclination</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="SKIRTOR (Stalevski et al. 2016) is a clumpy radiative transfer torus model with a three-dimensional parameter space (half-opening angle, inclination, optical depth). Two different implementations exist in tengri:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_agnfitter_vs_cigale_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_agnfitter_vs_cigale`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus: AGNfitter-averaged vs. X-CIGALE full grid</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+ 2012, 2016) reprocesses the hot accretion disc and dust as a function of viewing angle.">
 
 .. only:: html
@@ -3068,6 +3153,23 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">SKIRTOR AGN torus: inclination-dependent obscuration and silicate features</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="agn={&quot;type&quot;: &quot;skirtor_stalevski&quot;} returns the SKIRTOR 2016 SED exactly as Stalevski&#x27;s radiative transfer computed it — accretion disc + clumpy torus + scattered light, read straight from the full-coverage grid with no analytic-disc substitution and no re-normalisation. This is the faithful template that codes reading SKIRTOR directly (e.g. ProSpect&#x27;s SKIRTOR_interp) reproduce.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_stalevski_raw_template_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_stalevski_raw_template`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Raw SKIRTOR (Stalevski 2016): the published radiative-transfer template</div>
     </div>
 
 
@@ -3102,6 +3204,40 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">SKIRTOR clumpy vs Silva+04 smooth-torus comparison (X-CIGALE Fig. 2)</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="This is tengri&#x27;s full-grid SKIRTOR torus (Stalevski+2012, 2016), following the X-CIGALE skirtor2016 conventions: a 5-D clumpy two-phase library indexed by equatorial optical depth tau, radial and polar density gradients p / q, half-opening angle oa, and inclination cos i (plus an optional Casey-2012 polar-dust greybody). It is the science-grade counterpart to the parameter-averaged skirtor_agnfitter library — and, having the full grid, it responds strongly to its parameters.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_xcigale_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_xcigale_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">SKIRTOR torus (full X-CIGALE grid): optical depth and inclination</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="The Slone &amp; Netzer (2012) accretion-disc library (SN12, as packaged by AGNfitter-rX) tabulates the big-blue-bump continuum over black-hole mass and Eddington ratio. The disc&#x27;s characteristic temperature scales as T_\mathrm{max} \propto (\dot m / M_\mathrm{BH})^{1/4}, so the spectral peak walks across the UV/optical as those two knobs change:">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_slone_netzer_disc_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_slone_netzer_disc_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Slone & Netzer 2012 disc: Black-hole mass and Eddington ratio</div>
     </div>
 
 
@@ -5726,6 +5862,23 @@ forward modelling, JAX gradient diagnostics, and end-to-end recipe tours.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Automatic differentiation: parameter sensitivities via jax.grad</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Each recipe is a nested-dict configuration — drop-in templates for common galaxy fitting scenarios. This gallery overlays the rest-frame SED of all five shipped recipes, highlighting how model complexity scales from minimal mock-recovery to panchromatic AGN:">
+
+.. only:: html
+
+  .. image:: /auto_examples/showcase/images/thumb/sphx_glr_plot_recipes_gallery_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/showcase/plot_recipes_gallery`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">recipes for common science cases</div>
     </div>
 
 

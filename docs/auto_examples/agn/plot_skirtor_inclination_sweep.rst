@@ -18,26 +18,16 @@
 .. _sphx_glr_auto_examples_agn_plot_skirtor_inclination_sweep.py:
 
 
-<<<<<<< HEAD
-SKIRTOR AGN torus: inclination-dependent obscuration
-======================================================
-=======
 SKIRTOR AGN torus: inclination-dependent obscuration and silicate features
 ===========================================================================
->>>>>>> origin/main
 
 .. image:: images/sphx_glr_plot_skirtor_inclination_sweep_001.png
    :alt: plot skirtor inclination sweep
    :class: sphx-glr-single-img
 
 
-<<<<<<< HEAD
-Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+2016)
-reprocesses the hot accretion disc as a function of viewing angle.
-=======
 Demonstrate how the SKIRTOR clumpy radiative-transfer torus (Stalevski+ 2012, 2016)
 reprocesses the hot accretion disc and dust as a function of viewing angle.
->>>>>>> origin/main
 
 **Physical picture:**
 
@@ -51,14 +41,6 @@ reprocesses the hot accretion disc and dust as a function of viewing angle.
 
 The SED transitions continuously as inclination increases, illustrating
 the unified AGN model: Seyfert 1s and 2s are the same object viewed at
-<<<<<<< HEAD
-different angles.
-
-**Reference:** Stalevski et al. 2016, MNRAS, clumpy 3D radiative-transfer
-modeling of dusty obscuring structures around AGN.
-
-.. GENERATED FROM PYTHON SOURCE LINES 25-115
-=======
 different angles. The silicate bands (9.7 and 18 μm) transition from
 emission to absorption across the inclination range.
 
@@ -76,45 +58,10 @@ emission to absorption across the inclination range.
    Mid-Infrared Properties of Dust-Obscured Quasars. ApJ, 655, L77.
 
 .. GENERATED FROM PYTHON SOURCE LINES 36-236
->>>>>>> origin/main
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-<<<<<<< HEAD
-   :alt: plot skirtor inclination sweep
-=======
-   :alt: (a) IR SED shape vs cos_inc, (b) Silicate 9.7 & 18 μm features, (c) UV/optical obscuration
->>>>>>> origin/main
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-<<<<<<< HEAD
-    Saved plot_skirtor_inclination_sweep.png
-=======
-    Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)
->>>>>>> origin/main
-
-
-
-
-
-
-|
 
 .. code-block:: Python
 
 
-<<<<<<< HEAD
-    import warnings
-
-    import jax
-=======
     import os
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
@@ -123,7 +70,6 @@ emission to absorption across the inclination range.
 
     import jax
     import jax.numpy as jnp
->>>>>>> origin/main
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -132,10 +78,7 @@ emission to absorption across the inclination range.
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
-<<<<<<< HEAD
-=======
     warnings.filterwarnings("ignore", message=".*deprecated.*")
->>>>>>> origin/main
 
     C_AA_PER_S = 2.998e18
 
@@ -143,28 +86,18 @@ emission to absorption across the inclination range.
     inclination_deg = np.array([0.0, 15.0, 30.0, 45.0, 60.0, 75.0, 90.0])
     cos_inc_values = np.cos(np.radians(inclination_deg))
 
-<<<<<<< HEAD
-    # Minimal SED model: just the AGN disc + torus, no starburst dust
-    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
-=======
     # Minimal SED model: just the AGN disc + torus
     # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
     # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
     # ``const`` SFH parametrises by total mass over [start_gyr, end_gyr]
     # instead.
     SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
->>>>>>> origin/main
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
 
-<<<<<<< HEAD
-    # Build model once, then modify inclination for each prediction
-    model = tengri.SEDModel.build(
-=======
     # Build two models: one minimal (no dust), one with dust for silicate features
     model_agn_only = tengri.SEDModel.build(
->>>>>>> origin/main
         ssp,
         sfh=SFH,
         dust=DUST,
@@ -178,12 +111,6 @@ emission to absorption across the inclination range.
         redshift=tengri.Fixed(0.0),
     )
 
-<<<<<<< HEAD
-    # Sample baseline params
-    baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
-
-    fig, ax = plt.subplots(figsize=(8.5, 5.5))
-=======
     model_with_dust = tengri.SEDModel.build(
         ssp,
         sfh={
@@ -209,33 +136,21 @@ emission to absorption across the inclination range.
 
     baseline_agn = dict(model_agn_only.spec.sample(jax.random.PRNGKey(0)))
     baseline_dust = dict(model_with_dust.spec.sample(jax.random.PRNGKey(0)))
->>>>>>> origin/main
 
     # Colormap for inclination angle
     colors = plt.cm.viridis(np.linspace(0.0, 1.0, len(inclination_deg)))
 
-<<<<<<< HEAD
-    for cos_inc, inc_deg, color in zip(cos_inc_values, inclination_deg, colors):
-        # Modify inclination parameter for this prediction
-        params = {**baseline, "agn_cos_inc": np.float64(cos_inc)}
-        out = model.predict_rest_sed(params)
-=======
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(16.0, 5.0))
 
     # Panel (a): Full-spectrum inclination sweep (7 angles)
     for cos_inc, inc_deg, color in zip(cos_inc_values, inclination_deg, colors):
         params = {**baseline_agn, "agn_cos_inc": np.float64(cos_inc)}
         out = model_agn_only.predict_rest_sed(params)
->>>>>>> origin/main
         wave = np.asarray(out.wavelength)
         sed = np.asarray(out.sed)
         nu_l_nu = C_AA_PER_S / wave * sed
 
-<<<<<<< HEAD
-        ax.loglog(
-=======
         ax1.loglog(
->>>>>>> origin/main
             wave,
             nu_l_nu,
             color=color,
@@ -244,37 +159,11 @@ emission to absorption across the inclination range.
             alpha=0.85,
         )
 
-<<<<<<< HEAD
-    # Axis labels and limits
-    ax.set(
-=======
     ax1.set(
->>>>>>> origin/main
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
         xlim=(1e3, 1e6),
         ylim=(1e43, 1e47),
-<<<<<<< HEAD
-    )
-
-    # Legend: inclination angles
-    legend = ax.legend(
-        title="Inclination angle",
-        frameon=False,
-        fontsize=8.5,
-        loc="upper right",
-        title_fontsize=9,
-        ncol=1,
-    )
-
-    # Reference wavelengths
-    for um, name in [(3.0, "L"), (10.0, "N"), (24.0, "MIPS-24"), (100.0, "FIR")]:
-        ax.axvline(um * 1.0e4, color="0.85", lw=0.5, alpha=0.5)
-
-    fig.tight_layout()
-    plt.savefig("plot_skirtor_inclination_sweep.png", dpi=150, bbox_inches="tight")
-    print("Saved plot_skirtor_inclination_sweep.png")
-=======
         title="(a) IR SED shape vs cos_inc",
     )
     legend = ax1.legend(
@@ -372,7 +261,6 @@ emission to absorption across the inclination range.
     fig.tight_layout()
     plt.savefig("plot_skirtor_inclination_sweep.png", dpi=150, bbox_inches="tight")
     print("Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)")
->>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_inclination_sweep.py:

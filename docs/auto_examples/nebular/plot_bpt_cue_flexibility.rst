@@ -32,7 +32,7 @@ galaxy on the BPT-N plane ``log [OIII]/Hβ`` vs ``log [NII]/Hα``. Each
 panel sweeps one parameter while holding fiducial values fixed. Kewley+2001
 and Kauffmann+2003 demarcations shown for reference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-99
+.. GENERATED FROM PYTHON SOURCE LINES 11-95
 
 .. code-block:: Python
 
@@ -59,14 +59,14 @@ and Kauffmann+2003 demarcations shown for reference.
     sweeps = {
         r"$\log U$": ("neb_logU", np.linspace(-4.0, -1.8, 7)),
         r"$\log Z_{\rm gas}$": ("neb_logZ_gas", np.linspace(-1.5, 0.4, 7)),
-        r"$\log n_{\rm H}$": ("neb_n_h", np.linspace(1.0, 1e3, 7)),
+        r"$\log n_{\rm H}$": ("gas_logn", np.linspace(0.0, 3.0, 7)),
     }
 
     nh_grid = np.linspace(-2.0, 0.45, 200)
     log_oiii_hb_kewley = 0.61 / (nh_grid - 0.47) + 1.19
     log_oiii_hb_kauff = 0.61 / (nh_grid - 0.05) + 1.3
 
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    fig, axes = plt.subplots(1, len(sweeps), figsize=(4.4 * len(sweeps), 4))
 
     for ax, (_label, (param_name, param_values)) in zip(axes, sweeps.items()):
         log_n2_ha_points = []
@@ -92,18 +92,14 @@ and Kauffmann+2003 demarcations shown for reference.
             }
             model = tengri.SEDModel.build(ssp, **spec_dict)
             params = dict(model.spec.sample(jax.random.PRNGKey(0)))
-            out = model.predict_rest_sed(params)
-            lines = out.emission_lines
-
-            if lines is not None:
-                lines_dict = dict(lines)
-                ha = lines_dict.get(6562.79, 1e-20)
-                hb = lines_dict.get(4860.2, 1e-20)
-                nii = lines_dict.get(6583.34, 1e-20)
-                oiii = lines_dict.get(5008.24, 1e-20)
-                if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
-                    log_n2_ha_points.append(np.log10(nii / ha))
-                    log_o3_hb_points.append(np.log10(oiii / hb))
+            lines = model.predict_emission_lines(params)
+            ha = float(lines.halpha)
+            hb = float(lines.hbeta)
+            nii = float(lines.nii_6584)
+            oiii = float(lines.oiii_5007)
+            if ha > 0 and hb > 0 and oiii > 0 and nii > 0:
+                log_n2_ha_points.append(np.log10(nii / ha))
+                log_o3_hb_points.append(np.log10(oiii / hb))
 
         if log_n2_ha_points:
             cmap = plt.get_cmap("viridis")

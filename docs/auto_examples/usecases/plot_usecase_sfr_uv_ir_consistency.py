@@ -25,6 +25,10 @@ References
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -99,10 +103,10 @@ for i, tau_v in enumerate(tau_v_values):
     model_dict = {
         "sfh": {
             "type": "dpl",
-            "alpha": Fixed(0.1),              # shallow rising slope
-            "beta": Fixed(4.0),               # steep quenching
-            "tau_gyr": Fixed(2.0),            # turnover timescale
-            "log_peak_sfr": Fixed(1.0),       # log10(10 Msun/yr) = 1.0
+            "alpha": Fixed(0.1),  # shallow rising slope
+            "beta": Fixed(4.0),  # steep quenching
+            "tau_gyr": Fixed(2.0),  # turnover timescale
+            "log_total_mass": 10.0,  # log10(10 Msun/yr) = 1.0
         },
         "dust": {
             "type": "two_component",
@@ -124,7 +128,7 @@ for i, tau_v in enumerate(tau_v_values):
     pred = model.predict_rest_sed({})
 
     # Extract actual SFH-derived SFR (if available)
-    if hasattr(pred, 'sfr_100myr'):
+    if hasattr(pred, "sfr_100myr"):
         actual_sfr = pred.sfr_100myr
     else:
         actual_sfr = None
@@ -214,7 +218,7 @@ ax.axhline(
 
 ax.set_xlabel(r"Dust optical depth $\tau_V$")
 ax.set_ylabel(r"SFR estimator [M$_{\odot}$/yr]")
-ax.set_ylim(bottom=0)
+ax.set_ylim(bottom=0, top=11)
 ax.legend(loc="upper left", frameon=False, fontsize=9)
 ax.grid(True, alpha=0.2)
 

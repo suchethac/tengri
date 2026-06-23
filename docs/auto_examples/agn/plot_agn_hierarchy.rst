@@ -40,17 +40,6 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-87
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
-   :alt: plot agn hierarchy
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -123,11 +112,6 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_agn_hierarchy.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.711 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_hierarchy.py:

@@ -34,10 +34,14 @@ demonstrating how radio loudness evolves (Bell 2003).
 
 Reference: Bell 2003, ApJ 586, 794.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-52
+.. GENERATED FROM PYTHON SOURCE LINES 13-56
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

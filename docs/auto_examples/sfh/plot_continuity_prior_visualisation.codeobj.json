@@ -26,15 +26,6 @@
    "name": "SEDModel"
   }
  ],
- "continuity": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar.sfh.nonparametric",
-   "module_short": "tengri.components.stellar.sfh",
-   "name": "continuity"
-  }
- ],
  "jr.PRNGKey": [
   {
    "is_class": false,
@@ -71,6 +62,24 @@
    "name": "array"
   }
  ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
+  }
+ ],
+ "np.interp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "interp"
+  }
+ ],
  "np.logspace": [
   {
    "is_class": false,
@@ -89,31 +98,13 @@
    "name": "percentile"
   }
  ],
- "os.path.abspath": [
+ "os.environ": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "os.path",
-   "module_short": "os.path",
-   "name": "abspath"
-  }
- ],
- "os.path.dirname": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "os.path",
-   "module_short": "os.path",
-   "name": "dirname"
-  }
- ],
- "os.path.join": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "os.path",
-   "module_short": "os.path",
-   "name": "join"
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.savefig": [
@@ -123,15 +114,6 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "savefig"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
   }
  ],
  "plt.subplots": [

@@ -35,33 +35,14 @@ degeneracies with dust and metallicity.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-123
-
-
-
-.. image-sg:: /auto_examples/inference/images/sphx_glr_plot_sfh_recovery_test_001.png
-   :alt: plot sfh recovery test
-   :srcset: /auto_examples/inference/images/sphx_glr_plot_sfh_recovery_test_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    DPL parameters: alpha=2.50 (true) vs 2.10 (fit)
-    DPL parameters: beta=1.20 (true) vs 1.47 (fit)
-    Photometric residual sigma: 0.86
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 14-127
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -101,7 +82,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
         sfh_dpl_alpha=2.5,
         sfh_dpl_beta=1.2,
         sfh_dpl_tau_gyr=8.0,
-        sfh_dpl_log_peak_sfr=1.1,
+        sfh_dpl_log_total_mass=10.0,
         dust_tau_diff=0.3,
     )
 
@@ -171,11 +152,6 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     print(f"Photometric residual sigma: {np.std(residual):.2f}")
 
     plt.savefig("plot_sfh_recovery_test.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.699 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_sfh_recovery_test.py:

@@ -62,7 +62,7 @@ model = tengri.SEDModel.build(
     agn={
         "type": "composable",
         "disc": {"type": "multicolor", "*": tengri.FIXED},
-        "lines": {"type": "blr", "*": tengri.FIXED, "agn_blr_cf": 0.1},
+        "blr": {"type": "analytic", "*": tengri.FIXED, "agn_blr_cf": 0.1},
         "*": tengri.FIXED,
         "log_lbol": 12.0,
         "log_ledd": -1.0,

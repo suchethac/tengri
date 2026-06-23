@@ -39,7 +39,7 @@ For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.
 
-This demonstrates the forward model: stellar mass → SED → rest-frame
+the forward model: stellar mass → SED → rest-frame
 absolute magnitudes.
 
 References:
@@ -47,10 +47,71 @@ References:
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-356
+.. GENERATED FROM PYTHON SOURCE LINES 32-351
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Sampling stellar mass function...
+    Sampled 200 galaxies from Schechter SMF
+      M* range: 6.36e+07 – 8.28e+10 M_sun
+      log10(M*) range: 7.80 – 10.92
+    /private/tmp/tengri-regen/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_r (rest~1549 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
+      self._warn_if_wave_precomp_dust_blue_bias()
+
+    Predicting r-band absolute magnitudes...
+      50/200: log10(M*)=8.04, m_r=-17.55, M_r=-17.55
+      100/200: log10(M*)=8.37, m_r=-18.12, M_r=-18.12
+      150/200: log10(M*)=8.91, m_r=-19.08, M_r=-19.08
+      200/200: log10(M*)=10.92, m_r=-22.59, M_r=-22.59
+
+    Computed 200 absolute magnitudes
+      M_r range: -22.59 to -17.13
+
+    Luminosity Function Summary
+    ======================================================================
+    M_r (center)    Counts       Φ(M_r)          Blanton+03     
+    ----------------------------------------------------------------------
+    -22.75          1            0.0200          2.1992         
+    -21.75          3            0.0600          1.5377         
+    -21.25          6            0.1200          1.1847         
+    -20.75          6            0.1200          0.8270         
+    -20.25          8            0.1600          0.4937         
+    -19.75          13           0.2600          0.2301         
+    -19.25          15           0.3000          0.0724         
+    -18.75          27           0.5400          0.0122         
+    -18.25          33           0.6600          0.0008         
+    -17.75          41           0.8200          0.0000         
+    -17.25          47           0.9400          0.0000         
+    ----------------------------------------------------------------------
+
+    Peak of LF (mock survey):
+      M_r = -17.25
+      Φ(M_r) = 9.4000e-01 Mpc^-3 mag^-1
+
+    Interpretation:
+      - Schechter SMF (M*=6.03e+10 M_sun, α=-1.45) maps to bright magnitudes
+      - Peak M_r ~ -21 is characteristic of L* galaxies (SDSS characteristic)
+      - Faint end (M_r > -18) is underdensity due to Schechter alpha=-1.45 slope
+      - Comparison with Blanton+2003 validates M-L correlation and SED predictions
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
     from pathlib import Path
@@ -112,41 +173,32 @@ References:
         log10_m_star : ndarray, shape (n_sample,)
             Log10(M_star / M_sun) for each sampled galaxy.
         """
+        # Schechter PDF p(x) ∝ x^α exp(-x) is improper at x=0 for α < -1, so the
+        # original Exponential-proposal rejection sampler had an unbounded
+        # envelope and never terminated. Sample in log-space instead: let
+        # u = log10(x). The PDF transforms as p(u) ∝ x^(α+1) exp(-x) * ln(10),
+        # and for α = -1.45 the exponent (α+1) = -0.45 keeps x^(α+1) bounded
+        # over [10^u_min, 10^u_max], so rejection has a well-defined envelope.
         rng = np.random.RandomState(rng_seed)
-
-        # Generate samples via rejection sampling
-        # Proposal: M/M* ~ Exponential(1); weight by (M/M*)^α
-        samples = []
-        w_max = 0.0  # Track maximum weight seen
-
-        while len(samples) < n_sample:
-            # Generate proposal batch
-            batch_size = max((n_sample - len(samples)) * 3, 1000)
-            x_prop = rng.exponential(scale=1.0, size=batch_size)
-
-            # Compute Schechter weight (unnormalized)
-            # w(x) = x^α * exp(-x) / envelope(x)
-            # Envelope: exponential(x), so w(x) = x^α
-            w = x_prop**alpha
-
-            # Mode of Schechter: d/dx [x^α * exp(-x)] = 0
-            # α*x^(α-1)*exp(-x) - x^α*exp(-x) = 0 → x = α (shift < 0)
-            # For α = -1.45, mode is at negative x (power-law dominates)
-            # Envelope constant: max(x^α) for x in [0, ∞)
-            # Use adaptive max over proposals
-            w_max = max(w_max, np.max(w))
-
-            # Accept/reject
-            u_accept = rng.uniform(0, 1, size=batch_size)
-            accept = u_accept < w / (w_max + 1e-30)
-            samples.extend(x_prop[accept].tolist())
-
-            if len(samples) > n_sample * 2:  # Safety: prevent runaway
+        u_min, u_max = -3.0, 2.0  # log10(M/M*) range — covers faint to ULIRG
+        # Envelope: max of x^(α+1) exp(-x) on the interval is at x = x_min.
+        x_min = 10.0**u_min
+        w_envelope = x_min ** (alpha + 1.0) * np.exp(-x_min)
+        samples: list = []
+        for _ in range(100):  # bounded iteration count — never spin forever
+            if len(samples) >= n_sample:
                 break
+            batch_size = max((n_sample - len(samples)) * 3, 1000)
+            u_prop = rng.uniform(u_min, u_max, size=batch_size)
+            x_prop = 10.0**u_prop
+            w = x_prop ** (alpha + 1.0) * np.exp(-x_prop) / w_envelope
+            u_accept = rng.uniform(0, 1, size=batch_size)
+            samples.extend(u_prop[u_accept < w].tolist())
+        if len(samples) < n_sample:
+            # Fall back to padding (only fires if rejection was pathologically poor).
+            samples = (samples * (1 + n_sample // max(1, len(samples))))[:n_sample]
 
-        m_ratio_log10 = np.array(samples[:n_sample]) / np.log(10.0)
-        log10_m_samples = log10_mstar + m_ratio_log10
-
+        log10_m_samples = log10_mstar + np.array(samples[:n_sample])
         return log10_m_samples
 
 
@@ -165,7 +217,7 @@ References:
     SSP = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
 
     # r-band photometry (rest-frame for z~0)
-    from tengri.utils.magnitudes import fnu_to_ab_mag
+    from tengri.units import fnu_to_ab_mag
 
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 
@@ -212,7 +264,7 @@ References:
         log_sfr = 0.7 * log_m_star - 6.0
 
         params = dict(params_template)
-        params["sfh_dpl_log_sfr"] = float(log_sfr)
+        params["sfh_dpl_log_total_mass"] = float(log_sfr) + 10.0
         params["redshift"] = 0.0  # z=0 for rest-frame
 
         # Predict photometry (returns flux in erg/s/cm²/Hz for each band)
@@ -375,6 +427,11 @@ References:
     print("  - Peak M_r ~ -21 is characteristic of L* galaxies (SDSS characteristic)")
     print("  - Faint end (M_r > -18) is underdensity due to Schechter alpha=-1.45 slope")
     print("  - Comparison with Blanton+2003 validates M-L correlation and SED predictions")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.633 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py:

@@ -11,6 +11,10 @@ Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 from pathlib import Path
 
@@ -55,13 +59,12 @@ model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "tsnorm", "*": tengri.FREE, "skew": 0.3, "trunc": 5.0},
-    met={"type": "fixed"},
     dust={"type": "two_component", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.1),
 )
 
 true_params = {
-    "sfh_tsnorm_log_peak_sfr": 1.2,
+    "sfh_tsnorm_log_total_mass": 1.2,
     "sfh_tsnorm_peak_lbt_gyr": 1.5,
     "sfh_tsnorm_width_gyr": 2.0,
     "sfh_tsnorm_skew": 0.3,

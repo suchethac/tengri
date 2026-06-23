@@ -39,17 +39,6 @@ limit (a true thin-disc turnover) where the power-law keeps rising.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-97
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_grahsp_disc_vs_bbb_001.png
-   :alt: GRAHSP big blue bump: Netzer disc grid vs bending power-law
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_grahsp_disc_vs_bbb_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

@@ -31,10 +31,14 @@ luminous quasar with radio-loud jets. Combines AGN disc continuum,
 X-ray corona, and radio components, showing how AGN dominate across
 0.1 keV through centimeter wavelengths.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-75
+.. GENERATED FROM PYTHON SOURCE LINES 10-82
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -46,6 +50,8 @@ X-ray corona, and radio components, showing how AGN dominate across
     from tengri.analysis.plotting import setup_style
 
     setup_style()
+
+
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     # Wavelength grid: hard X-ray to radio
@@ -67,7 +73,8 @@ X-ray corona, and radio components, showing how AGN dominate across
     )
 
     # X-ray: AGN corona + host XRBs
-    l_xray_agn = np.array(tengri.xray.xray_agn_corona(wave, L_agn_bol=l_agn_bol_erg))
+    _l_2500 = float(tengri.agn.compute_l2500(jnp.asarray(wave_uv), jnp.asarray(l_disc)))
+    l_xray_agn = np.array(tengri.xray.xray_agn_corona(wave, l_2500_30deg_erg_hz=_l_2500))
     l_xrb = np.array(tengri.xray.xray_xrb(wave, sfr=sfr, stellar_mass=stellar_mass))
 
     # Radio: AGN jets + host star formation

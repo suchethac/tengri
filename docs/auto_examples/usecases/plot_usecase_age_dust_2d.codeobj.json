@@ -26,6 +26,15 @@
    "name": "arange"
   }
  ],
+ "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "array"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -69,6 +78,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "log10"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.savefig": [

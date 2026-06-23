@@ -1,22 +1,4 @@
 {
- "data_path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "data_path"
-  }
- ],
- "load_astrodust_hd23_or_raise": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.dust.astrodust_hd23",
-   "module_short": "tengri.components.dust.astrodust_hd23",
-   "name": "load_astrodust_hd23_or_raise"
-  }
- ],
  "np.abs": [
   {
    "is_class": false,
@@ -80,6 +62,15 @@
    "name": "where"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.savefig": [
   {
    "is_class": false,
@@ -105,6 +96,15 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "tengri.load_astrodust_hd23": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_astrodust_hd23"
   }
  ],
  "warnings.filterwarnings": [

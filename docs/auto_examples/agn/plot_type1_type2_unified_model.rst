@@ -38,89 +38,30 @@ effect** — the same accretion disc + dusty torus system appears as:
   emission visible.
 
 This gallery shows both sightlines for the same AGN (L_bol = 10^12 L_sun) using
-<<<<<<< HEAD
-the composable unified AGN model in tengri. The Type 2 configuration demonstrates
-the library limitation noted in caveat #294: the torus does not properly screen
-the disc from the observer, resulting in over-bright Type-2 continuum.
-=======
 the composable unified AGN model in tengri, plus a smooth 3-angle transition
 narrative (Type 1 → Intermediate → Type 2) demonstrating how the optical SED
 and feature visibility evolve continuously with inclination angle. The Type 2
 configuration demonstrates the library limitation noted in caveat #294: the
 torus does not properly screen the disc from the observer, resulting in
 over-bright Type-2 continuum.
->>>>>>> origin/main
 
 References
 ----------
 .. [1] Urry, C. M., & Padovani, P. 1995, PASP, 107, 803
    "Unified Schemes for Radio-Loud Active Galactic Nuclei"
 
-<<<<<<< HEAD
-.. GENERATED FROM PYTHON SOURCE LINES 26-153
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-   :class: sphx-glr-single-img
-=======
 .. [2] Antonucci, R. 1993, ARA&A, 31, 473
    "Unified Models for Active Galactic Nuclei and Quasars"
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-215
 
-
-
-.. rst-class:: sphx-glr-horizontal
-
-
-    *
-
-      .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-         :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
-         :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
-         :class: sphx-glr-multi-img
-
-    *
-
-      .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_002.png
-         :alt: Inclination transition: Type 1 → Intermediate → Type 2
-         :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_002.png
-         :class: sphx-glr-multi-img
->>>>>>> origin/main
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Building Type 1 (face-on, BLR) model...
-    Building Type 2 (edge-on, NLR) model...
-    Saved: plot_type1_type2_unified_model.png
-<<<<<<< HEAD
-=======
-    Saved: plot_type1_type2_unified_model_transition.png
->>>>>>> origin/main
-
-
-
-
-
-
-|
-
 .. code-block:: Python
 
 
-<<<<<<< HEAD
-=======
     import os
 
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
->>>>>>> origin/main
     import warnings
 
     import jax
@@ -144,11 +85,7 @@ References
 
     # Shared model components (minimal star formation, no dust).
     COMMON = dict(
-<<<<<<< HEAD
-        sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
-=======
         sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
->>>>>>> origin/main
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
@@ -197,13 +134,7 @@ References
     nu_lnu_type2 = nu_type2 * sed_type2
 
     # Create side-by-side comparison
-<<<<<<< HEAD
-    fig, (ax1, ax2) = plt.subplots(
-        1, 2, figsize=(12.0, 4.5), sharey=True, gridspec_kw={"hspace": 0.0}
-    )
-=======
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12.0, 4.5), sharey=True, gridspec_kw={"hspace": 0.0})
->>>>>>> origin/main
 
     # Type 1 (face-on): blue continuum, prominent broad lines
     ax1.loglog(wave_type1, nu_lnu_type1, color="#1f77b4", lw=2.0)
@@ -219,11 +150,7 @@ References
     ax1.grid(True, alpha=0.2, which="both")
 
     # Mark prominent Type-1 features
-<<<<<<< HEAD
-    for wl, lbl in [(1216, r"Ly$\alpha$"), (4861, r"H$\beta$"), (6563, r"H$\alpha$")]:
-=======
     for wl, _lbl in [(1216, r"Ly$\alpha$"), (4861, r"H$\beta$"), (6563, r"H$\alpha$")]:
->>>>>>> origin/main
         ax1.axvline(wl, color="navy", ls=":", lw=0.8, alpha=0.4)
 
     # Type 2 (edge-on): attenuated continuum, narrow lines only
@@ -238,11 +165,6 @@ References
     ax2.grid(True, alpha=0.2, which="both")
 
     # Mark prominent Type-2 features
-<<<<<<< HEAD
-    for wl, lbl in [(6563, r"[N II]"), (6583, r"H$\alpha$"), (5007, r"[O III]")]:
-        ax2.axvline(wl, color="darkred", ls=":", lw=0.8, alpha=0.4)
-
-=======
     for wl, _lbl in [(6563, r"[N II]"), (6583, r"H$\alpha$"), (5007, r"[O III]")]:
         ax2.axvline(wl, color="darkred", ls=":", lw=0.8, alpha=0.4)
 
@@ -299,17 +221,12 @@ References
     fig2.tight_layout()
     plt.savefig("plot_type1_type2_unified_model_transition.png", dpi=150, bbox_inches="tight")
 
->>>>>>> origin/main
     fig.text(
         0.5,
         0.02,
         (
             "Unified AGN model with viewing-angle dependent line and continuum "
-<<<<<<< HEAD
-            "masking (Urry & Padovani 1995).\n"
-=======
             "masking (Urry & Padovani 1995; Antonucci 1993).\n"
->>>>>>> origin/main
             "Caveat: tengri's composable AGN does not properly screen the disc "
             "in Type 2 sightlines; the observed disc flux is over-bright."
         ),
@@ -322,10 +239,7 @@ References
     fig.tight_layout(rect=[0, 0.08, 1, 1])
     plt.savefig("plot_type1_type2_unified_model.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_type1_type2_unified_model.png")
-<<<<<<< HEAD
-=======
     print("Saved: plot_type1_type2_unified_model_transition.png")
->>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

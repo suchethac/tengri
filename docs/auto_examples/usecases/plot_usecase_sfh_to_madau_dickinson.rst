@@ -37,51 +37,48 @@ main sequence, compute their instantaneous SFR from tengri models, bin in
 redshift, compute SFRD per comoving volume element, and show the population
 average matches the Madau & Dickinson 2014 fit.
 
-This demonstrates that from a proper sample spanning M* space and correcting
+that from a proper sample spanning M* space and correcting
 for cosmic volume, galaxy-level SFR integrates to the observed SFRD history.
 
 Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 (arXiv:1403.0007; "Cosmic Star Formation History")
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-222
+.. GENERATED FROM PYTHON SOURCE LINES 28-230
+
+
 
 
 .. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+ .. code-block:: none
 
-    Traceback (most recent call last):
-      File "/Users/suchethacooray/Projects/tengri/examples/usecases/plot_usecase_sfh_to_madau_dickinson.py", line 86, in <module>
-        model = tengri.SEDModel.build(
-                ^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 4850, in build
-        return cls(
-               ^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 498, in __init__
-        param_map_deltas.append(self._init_nebular(spec, ssp_data))
-                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py", line 965, in _init_nebular
-        self._nebular_backend = CueBackend(spec.cue_weights_path, ssp_data=ssp_data)
-                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/cue.py", line 966, in __init__
-        self._precompute_ionizing_params(ssp_data)
-      File "/Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/cue.py", line 1018, in _precompute_ionizing_params
-        raise CueWNESSPError(msg)
-    tengri.components.nebular.cue.CueWNESSPError: CueBackend received a wNE (with-Nebular-Emission) SSP. Max log10(Q_H) for bins younger than 10 Myr is 42.8, well below the ~47-50 floor for bare stellar populations. Cue's ionizing-spectrum fit will under-predict line luminosities by 4-7 dex.
+    Simulating 10 × 5 = 50 galaxies
+    /private/tmp/tengri-regen/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_u (rest~892 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
+      self._warn_if_wave_precomp_dust_blue_bias()
 
-    Fix (one of):
-      1. Use a bare-stellar SSP. The four recipes that
-         use Cue (star_forming_photometry, quiescent_z0,
-         stochastic_sfh_jwst, agn_panchromatic) need a
-         file like fsps_prsc_miles_chabrier.h5. Download with:
-             from tengri.data import download_ssp
-             path = download_ssp('fsps_prsc_miles_chabrier.h5')
-         then  load_ssp_data(str(path)). See
-         tengri.data.list_remote_ssps() for the full catalogue.
-      2. Pass ssp_data=None to CueBackend and provide Q_H
-         externally.
-      3. Bypass for testing: set TENGRI_ALLOW_WNE_CUE=1
-         (downgrades to a warning).
+    Cosmic SFRD Summary
+    ======================================================================
+    Redshift     SFRD_pop        SFRD_MD14       Ratio       
+    ----------------------------------------------------------------------
+    0.20         0.000000        0.024366        0.000       
+    0.55         0.000000        0.047552        0.000       
+    0.95         0.000000        0.082132        0.000       
+    1.35         0.000000        0.115177        0.000       
+    1.75         0.000000        0.132147        0.000       
+    2.15         0.000000        0.128353        0.000       
+    2.55         0.000000        0.111829        0.000       
+    3.15         0.000000        0.082874        0.000       
+    ----------------------------------------------------------------------
+
+    Peak SFRD (population):   z=0.20, ψ=0.0000 M☉/yr/Mpc³
+    Peak SFRD (MD14):         z=1.87, ψ=0.1330 M☉/yr/Mpc³
+
+    Interpretation:
+      - SFRD rises from z~0 to peak at z~2
+      - Declines toward z~3+ as the universe ages
+      - Population-level SFRD should qualitatively match MD14
+      - Deviations are expected due to simple main-sequence SFR scaling
+        and small mock sample (use >1000 galaxies for convergence)
 
 
 
@@ -92,6 +89,10 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -130,7 +131,7 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
     # Load SSP and prepare observation
     # ============================================================================
 
-    SSP = tengri.load_ssp()
+    SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
 
     # Simple observation: SDSS u-band (UV rest-frame proxy)
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u"]))
@@ -177,7 +178,7 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
             log_sfr = 0.7 * log_mstar - 6.0
 
             params = dict(params_template)
-            params["sfh_dpl_log_sfr"] = float(log_sfr)
+            params["sfh_dpl_log_total_mass"] = float(log_sfr) + 10.0
             params["redshift"] = float(z)
 
             # Compute SFH and extract instantaneous SFR
@@ -276,21 +277,20 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
     # Peak location
     idx_peak_pop = np.argmax(sfrd_pop)
     idx_peak_md = np.argmax(psi_md14)
-    print(f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
-          f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³")
-    print(f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
-          f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³")
+    print(
+        f"\nPeak SFRD (population):   z={z_bin_centers[idx_peak_pop]:.2f}, "
+        f"ψ={sfrd_pop[idx_peak_pop]:.4f} M☉/yr/Mpc³"
+    )
+    print(
+        f"Peak SFRD (MD14):         z={z_md14[idx_peak_md]:.2f}, "
+        f"ψ={psi_md14[idx_peak_md]:.4f} M☉/yr/Mpc³"
+    )
     print("\nInterpretation:")
     print("  - SFRD rises from z~0 to peak at z~2")
     print("  - Declines toward z~3+ as the universe ages")
     print("  - Population-level SFRD should qualitatively match MD14")
     print("  - Deviations are expected due to simple main-sequence SFR scaling")
     print("    and small mock sample (use >1000 galaxies for convergence)")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.030 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py:

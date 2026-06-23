@@ -31,7 +31,7 @@ Balmer continuum on top of the underlying disc. The relative strength
 of these line features with respect to the continuum controls the slope
 and colour of the UV–optical SED.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-74
+.. GENERATED FROM PYTHON SOURCE LINES 10-75
 
 .. code-block:: Python
 
@@ -56,7 +56,7 @@ and colour of the UV–optical SED.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 3.0,
-            "log_peak_sfr": 0.5,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 2.5,
         },
@@ -67,6 +67,7 @@ and colour of the UV–optical SED.
             "torus": {"type": "skirtor", "*": tengri.FIXED},
             "lines": {"type": "nlr", "*": tengri.FIXED},
             "*": tengri.FIXED,
+            "agn_frac": 1.0,
             "log_lbol": 11.0,
         },
         redshift=tengri.Fixed(0.05),

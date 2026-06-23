@@ -11,6 +11,10 @@ Reference: Automatic differentiation via JAX enables exact gradients
 for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -32,13 +36,12 @@ model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "tsnorm", "*": tengri.FREE},
-    met={"type": "fixed"},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.5, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 
 fiducial = {
-    "sfh_tsnorm_log_peak_sfr": 1.0,
+    "sfh_tsnorm_log_total_mass": 10.5,
     "sfh_tsnorm_peak_lbt_gyr": 4.0,
     "sfh_tsnorm_width_gyr": 2.0,
     "sfh_tsnorm_skew": 0.0,

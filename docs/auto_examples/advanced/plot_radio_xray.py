@@ -11,6 +11,10 @@ Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
 (X-ray binaries in galaxies, ARA&A, 44, 323).
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax.numpy as jnp
@@ -32,7 +36,14 @@ L_IR = 1e11
 L_AGN_BOL = 1e44
 
 l_xrb = tengri.xray.xray_xrb(wavelength, sfr=SFR, stellar_mass=STELLAR_MASS)
-l_xray_agn = tengri.xray.xray_agn_corona(wavelength, L_agn_bol=L_AGN_BOL)
+# AGN corona X-rays are normalised to the disc's 2500 A monochromatic
+# luminosity (alpha_ox relation), so derive L_2500 from a multicolor disc.
+_disc_wave = jnp.logspace(2.5, 4.5, 500)  # 316 A - 31600 A, covers 2500 A
+_disc_lnu = tengri.agn.multicolor_disc(
+    _disc_wave, agn_log_lbol=float(np.log10(L_AGN_BOL / 3.828e33))
+)
+_l_2500 = float(tengri.agn.compute_l2500(_disc_wave, _disc_lnu))
+l_xray_agn = tengri.xray.xray_agn_corona(wavelength, l_2500_30deg_erg_hz=_l_2500)
 l_radio_sf = tengri.radio.radio_star_forming(wavelength, L_ir=L_IR)
 l_radio_agn = tengri.radio.radio_agn(
     wavelength,

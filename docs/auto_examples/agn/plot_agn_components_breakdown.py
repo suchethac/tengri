@@ -14,6 +14,10 @@ fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -30,20 +34,24 @@ C_AA_PER_S = 2.998e18
 
 ssp = tengri.load_ssp()
 COMMON = dict(
-    sfh={"type": "const", "*": tengri.FIXED, "log_sfr": -10.0},
+    sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
     dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
     redshift=tengri.Fixed(0.05),
 )
 BASE_AGN = dict(disc={"type": "multicolor", "*": tengri.FIXED})
 
 
-def _agn(extra_blocks=()):
+def _agn(extra_blocks=(), wave=None):
     agn = {"*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0, **BASE_AGN}
     for key, value in extra_blocks:
         agn[key] = value
     model = tengri.SEDModel.build(ssp, agn=agn, **COMMON)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
+    # Pin every config to a shared rest grid so the panels can subtract and
+    # overplot SEDs: components such as the GRAHSP FeII template otherwise
+    # inject their own wavelength nodes, giving each config a different-length
+    # native grid (5994 vs 6127).
+    out = model.predict_rest_sed(p, wave=wave)
     return np.asarray(out.wavelength), np.asarray(out.sed)
 
 
@@ -54,7 +62,7 @@ configs = [
         "+ NLR",
         (
             ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-            ("lines", {"type": "nlr", "*": tengri.FIXED}),
+            ("nlr", {"type": "analytic", "*": tengri.FIXED}),
         ),
         "#5588cc",
     ),
@@ -62,19 +70,32 @@ configs = [
         "+ BLR",
         (
             ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-            ("lines", {"type": "blr", "*": tengri.FIXED}),
+            ("blr", {"type": "analytic", "*": tengri.FIXED}),
         ),
         "#4477aa",
     ),
+    (
+        "+ FeII",
+        (
+            ("torus", {"type": "skirtor", "*": tengri.FIXED}),
+            ("blr", {"type": "analytic", "*": tengri.FIXED}),
+            ("feii", {"type": "grahsp", "*": tengri.FIXED}),
+        ),
+        "#dd6699",
+    ),
 ]
 
-waves, seds = {}, {}
+# Establish the shared rest grid from the richest config (all blocks active,
+# so it spans every component's wavelength coverage), then evaluate every
+# config on it.
+common_wave, _ = _agn(configs[-1][1])
+
+seds = {}
 for label, blocks, _ in configs:
-    w, s = _agn(blocks)
-    waves[label] = w
+    _, s = _agn(blocks, wave=common_wave)
     seds[label] = s
 
-wave = waves["disc only"]
+wave = common_wave
 nu = C_AA_PER_S / wave
 
 fig, (ax_top, ax_bot) = plt.subplots(
@@ -94,6 +115,7 @@ disc_only = seds["disc only"]
 torus_contrib = seds["+ torus (SKIRTOR)"] - disc_only
 nlr_contrib = seds["+ NLR"] - seds["+ torus (SKIRTOR)"]
 blr_contrib = seds["+ BLR"] - seds["+ torus (SKIRTOR)"]
+feii_contrib = seds["+ FeII"] - seds["+ BLR"]
 
 ax_bot.loglog(wave, nu * disc_only, color="#8b4513", lw=1.2, label="disc")
 ax_bot.loglog(
@@ -117,6 +139,13 @@ ax_bot.loglog(
     lw=1.2,
     ls=":",
     label="BLR lines",
+)
+ax_bot.loglog(
+    wave,
+    nu * np.where(feii_contrib > 0, feii_contrib, np.nan),
+    color="#dd6699",
+    lw=1.2,
+    label="FeII",
 )
 ax_bot.set(
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",

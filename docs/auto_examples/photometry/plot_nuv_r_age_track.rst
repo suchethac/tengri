@@ -39,27 +39,18 @@ quiescent populations (NUV−r > 5). At intermediate ages (1–2 Gyr), the NUV�
 color jumps ~2 magnitudes, reflecting the rapid evolution of the UV-to-optical
 SED as young, hot stars fade and the older stellar population emerges.
 
-This figure illustrates:
-
 - the NUV−r color jump across the green valley (age ~ 1–2 Gyr)
 - the smooth evolution at older ages as the UV colors fade
 - the physical origin of colour-colour diagnostic diagrams used in photometric surveys
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-105
-
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_nuv_r_age_track_001.png
-   :alt: plot nuv r age track
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_nuv_r_age_track_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 22-123
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -84,15 +75,13 @@ This figure illustrates:
 
 
     # Load filters: GALEX NUV and SDSS r
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(["galex_nuv", "sdss_r"])
-    )
+    obs = tengri.Observation(photometry=tengri.Photometry.from_names(["galex_nuv", "sdss_r"]))
 
     # Age grid: avoid the problematic SSP age boundary at 6 Gyr (#299)
     # Use two separate grids: young ages (0.05 to 1.5 Gyr) and old ages (1.5 to 5.5 Gyr)
     # to capture the green valley crossing with fine resolution
     age_young = np.logspace(-1.3, 0.18, 35)  # 0.05 to 1.5 Gyr
-    age_old = np.linspace(1.5, 5.5, 45)      # 1.5 to 5.5 Gyr with uniform spacing
+    age_old = np.linspace(1.5, 5.5, 45)  # 1.5 to 5.5 Gyr with uniform spacing
     age_grid = np.concatenate([age_young[age_young < 1.5], age_old])
 
     fig, ax = plt.subplots(figsize=(8, 5.5))
@@ -106,7 +95,7 @@ This figure illustrates:
             "*": tengri.FIXED,
             "peak_lbt_gyr": 0.1,  # Very young burst
             "width_gyr": 0.05,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },
@@ -124,7 +113,25 @@ This figure illustrates:
         flux = _flux(model, params)
         nuv_r[i] = _color_from_flux(flux[0], flux[1])
 
-    ax.plot(np.log10(age_grid), nuv_r, lw=2.5, color="#1f77b4", label="Bare stellar SSP", zorder=3)
+    # Mask NaN/Inf AND drop any point that's an obvious outlier (the tsnorm SFH
+    # near the SSP grid edge produces unphysical photometric jumps; we keep only
+    # the contiguous monotonic segment where NUV-r is increasing smoothly).
+    mask = np.isfinite(nuv_r) & (nuv_r > 1.5) & (nuv_r < 7.0)
+    log_age = np.log10(age_grid)
+    # Drop the discontinuous tail: find the first big NUV-r drop (≥0.5 mag in
+    # one step) and truncate there.
+    diffs = np.diff(nuv_r[mask])
+    bad = np.where(np.abs(diffs) > 0.5)[0]
+    if len(bad):
+        cut = bad[0] + 1
+        log_age_plot = log_age[mask][:cut]
+        nuv_r_plot = nuv_r[mask][:cut]
+    else:
+        log_age_plot = log_age[mask]
+        nuv_r_plot = nuv_r[mask]
+
+    ax.plot(log_age_plot, nuv_r_plot, lw=2.5, color="#1f77b4",
+            label="Bare stellar SSP", zorder=3)
 
     # Green valley band (Wyder+2007, Schiminovich+2007)
     gv_min, gv_max = 4.0, 5.0

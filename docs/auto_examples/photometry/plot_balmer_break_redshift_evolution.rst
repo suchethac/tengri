@@ -56,27 +56,6 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 
 .. GENERATED FROM PYTHON SOURCE LINES 33-196
 
-
-
-.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
-   :alt: plot balmer break redshift evolution
-   :srcset: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Saved: plot_balmer_break_redshift_evolution.png
-
-
-
-
-
-
-|
-
 .. code-block:: Python
 
 
@@ -91,8 +70,8 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
     import numpy as np
 
     import tengri
+    from tengri import load_filter_set
     from tengri.analysis.plotting import setup_style
-    from tengri.observation.filters import load_filter_set
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

@@ -32,8 +32,6 @@ by observing the same intrinsic SED at resolutions R = 100 (SDSS lores), 500
 (rest ~6550–6600 Å) transitions from fully blended at low R to completely
 resolved at high R, revealing the forbidden and Balmer lines separately.
 
-This example demonstrates:
-
 - Building an SED model with the public API using ``SEDModel.build()``
 - Observing spectra at different instrumental resolutions via
   ``Spectroscopy(resolution=R)``
@@ -42,12 +40,17 @@ This example demonstrates:
 
 Reference: Oxygen doublet [O III] λλ4959,5007 and forbidden nitrogen
 [N II] λλ6549,6585 are kinematically degenerate with Balmer lines at
+
 low instrumental resolution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-127
+.. GENERATED FROM PYTHON SOURCE LINES 22-149
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -73,11 +76,22 @@ low instrumental resolution.
     # Build model with fixed, simple SFH and dust properties
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
-             "skew": -0.2, "trunc": 2.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "log_total_mass": 10.0,
+            "peak_lbt_gyr": 1.5,
+            "width_gyr": 1.2,
+            "skew": -0.2,
+            "trunc": 2.0,
+        },
+        dust={
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_bc": 0.2,
+            "tau_diff": 0.1,
+            "slope": -0.7,
+        },
         redshift=tengri.Fixed(REDSHIFT),
     )
 
@@ -103,11 +117,22 @@ low instrumental resolution.
         model_r = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "tsnorm", "*": tengri.FIXED,
-                 "log_peak_sfr": 0.5, "peak_lbt_gyr": 1.5, "width_gyr": 1.2,
-                 "skew": -0.2, "trunc": 2.0},
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_bc": 0.2, "tau_diff": 0.1, "slope": -0.7},
+            sfh={
+                "type": "tsnorm",
+                "*": tengri.FIXED,
+                "log_total_mass": 10.0,
+                "peak_lbt_gyr": 1.5,
+                "width_gyr": 1.2,
+                "skew": -0.2,
+                "trunc": 2.0,
+            },
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_bc": 0.2,
+                "tau_diff": 0.1,
+                "slope": -0.7,
+            },
             redshift=tengri.Fixed(REDSHIFT),
         )
 
@@ -136,12 +161,9 @@ low instrumental resolution.
     ax.axvline(6585.27, ls="--", lw=0.7, color="0.5", alpha=0.6)
 
     # Text labels
-    ax.text(6549.85, 0.88, r"[N II]$\lambda$6549", fontsize=8, ha="right",
-            color="0.5", rotation=90)
-    ax.text(6564.61, 0.88, r"H$\alpha$", fontsize=8, ha="center", color="0.5",
-            rotation=90)
-    ax.text(6585.27, 0.88, r"[N II]$\lambda$6585", fontsize=8, ha="left",
-            color="0.5", rotation=90)
+    ax.text(6549.85, 0.88, r"[N II]$\lambda$6549", fontsize=8, ha="right", color="0.5", rotation=90)
+    ax.text(6564.61, 0.88, r"H$\alpha$", fontsize=8, ha="center", color="0.5", rotation=90)
+    ax.text(6585.27, 0.88, r"[N II]$\lambda$6585", fontsize=8, ha="left", color="0.5", rotation=90)
 
     # Formatting
     ax.set_xlabel(r"Rest-frame wavelength [$\mathrm{\AA}$]", fontsize=11)

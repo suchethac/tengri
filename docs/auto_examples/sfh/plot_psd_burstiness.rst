@@ -18,8 +18,8 @@
 .. _sphx_glr_auto_examples_sfh_plot_psd_burstiness.py:
 
 
-PSD parameter space: amplitude σ (rows) and timescale τ (columns) control burstiness
-===================================================================================
+PSD parameter space: amplitude σ and timescale τ control burstiness
+===================================================================
 
 .. image:: images/sphx_glr_plot_psd_burstiness_001.png
    :alt: plot psd burstiness
@@ -29,18 +29,24 @@ PSD parameter space: amplitude σ (rows) and timescale τ (columns) control burs
 A 3×3 grid showing five stochastic-SFH realizations for each combination of
 amplitude σ (vertical axis) and damping timescale τ (horizontal axis). Larger σ
 produces more dramatic bursts; longer τ sustains those bursts. Each panel shows
-the mean smooth SFH (dashed) and colored realizations, revealing how the two
-PSD parameters together map to observable burstiness regimes.
+the mean smooth SFH (dashed) and colored realizations. Bottom panels show
+representative SEDs for σ alone (left) and τ alone (right), illustrating how
+each parameter independently shapes the UV continuum and optical colors.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-85
+.. GENERATED FROM PYTHON SOURCE LINES 12-183
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
+    import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -58,7 +64,7 @@ PSD parameters together map to observable burstiness regimes.
     t_gyr = np.array(t_lookback) / 1e9
 
     mean_sfr = tengri.tsnorm(
-        t_lookback, log_peak_sfr=1.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
+        t_lookback, log_total_mass=10.0, peak_lbt=6e9, width=2e9, skew=0.5, trunc=3.0
     )
 
     # --- Parameter grid ---
@@ -109,6 +115,98 @@ PSD parameters together map to observable burstiness regimes.
                 ax.set_xlabel("Lookback time [Gyr]")
 
     fig.tight_layout(rect=[0, 0, 1, 0.96])
+
+    # --- Add bottom panels: σ and τ 1D sweeps in SED space ---
+    C_AA_PER_S = 2.998e18
+    ssp = tengri.load_ssp()
+
+    # Panel σ sweep (fixed τ)
+    model_sigma = tengri.SEDModel.build(
+        ssp,
+        sfh=[
+            {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+            {
+                "type": "field",
+                "*": tengri.FIXED,
+                "psd_sigma": tengri.Uniform(0.1, 3.5),
+                "psd_tau_myr": 100.0,
+            },
+        ],
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        redshift=tengri.Fixed(0.1),
+    )
+    baseline_sigma = dict(model_sigma.spec.sample(jax.random.PRNGKey(0)))
+
+    sigma_values = np.array([0.1, 0.5, 1.0, 2.0, 3.5])
+    norm_sigma = mpl.colors.Normalize(vmin=sigma_values.min(), vmax=sigma_values.max())
+    cmap = plt.get_cmap("viridis")
+
+    fig_bottom = plt.figure(figsize=(14, 4.5))
+    ax_sigma = fig_bottom.add_subplot(121)
+    ax_tau = fig_bottom.add_subplot(122)
+
+    key_base_sigma = jax.random.PRNGKey(0)
+    for i, sigma in enumerate(sigma_values):
+        for k in range(3):
+            params = {**baseline_sigma, "sfh_field_psd_sigma": jnp.float64(sigma)}
+            key = jax.random.fold_in(key_base_sigma, i * 10 + k)
+            out = model_sigma.predict_rest_sed(params)
+            wave = np.asarray(out.wavelength)
+            nu = C_AA_PER_S / wave
+            nu_l_nu = nu * np.asarray(out.sed)
+            ax_sigma.loglog(wave, nu_l_nu, color=cmap(norm_sigma(sigma)), lw=0.8, alpha=0.6)
+
+    ax_sigma.set_xlim(800, 3e4)
+    ax_sigma.set_ylim(1e40, 5e43)
+    ax_sigma.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax_sigma.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    cbar_sigma = fig_bottom.colorbar(
+        plt.cm.ScalarMappable(norm=norm_sigma, cmap=cmap), ax=ax_sigma, pad=0.01
+    )
+    cbar_sigma.set_label(r"PSD amplitude $\sigma$")
+
+    # Panel τ sweep (fixed σ)
+    model_tau = tengri.SEDModel.build(
+        ssp,
+        sfh=[
+            {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+            {
+                "type": "field",
+                "*": tengri.FIXED,
+                "psd_sigma": 1.0,
+                "psd_tau_myr": tengri.Uniform(30, 3000),
+            },
+        ],
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        redshift=tengri.Fixed(0.1),
+    )
+    baseline_tau = dict(model_tau.spec.sample(jax.random.PRNGKey(0)))
+
+    tau_values = np.array([30, 100, 300, 1000, 3000])
+    norm_tau = mpl.colors.Normalize(vmin=tau_values.min(), vmax=tau_values.max())
+
+    key_base_tau = jax.random.PRNGKey(42)
+    for i, tau in enumerate(tau_values):
+        for k in range(3):
+            params = {**baseline_tau, "sfh_field_psd_tau_myr": jnp.float64(tau)}
+            key = jax.random.fold_in(key_base_tau, i * 10 + k)
+            out = model_tau.predict_rest_sed(params)
+            wave = np.asarray(out.wavelength)
+            nu = C_AA_PER_S / wave
+            nu_l_nu = nu * np.asarray(out.sed)
+            ax_tau.loglog(wave, nu_l_nu, color=cmap(norm_tau(tau)), lw=0.8, alpha=0.6)
+
+    ax_tau.set_xlim(800, 3e4)
+    ax_tau.set_ylim(1e40, 5e43)
+    ax_tau.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
+    ax_tau.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
+    cbar_tau = fig_bottom.colorbar(
+        plt.cm.ScalarMappable(norm=norm_tau, cmap=cmap), ax=ax_tau, pad=0.01
+    )
+    cbar_tau.set_label(r"PSD timescale $\tau$ [Myr]")
+
+    fig_bottom.tight_layout()
+    fig_bottom.savefig("plot_psd_burstiness_sedsweeps.png", dpi=150, bbox_inches="tight")
     plt.savefig("plot_psd_burstiness.png", dpi=150, bbox_inches="tight")
 
 

@@ -36,7 +36,7 @@ try:
         sfh_model="tsnorm",
         metallicity_model="ramp",
         nebular_backend="baked_in",
-        agn_model="simple",
+        agn_model="multicolor_agn",
         dust_law_bc="calzetti",
         dust_emission_model="modified_blackbody",
         use_radio=True,
@@ -50,7 +50,7 @@ try:
         sed_observed=jnp.ones(len(ssp.ssp_wave)),
     )
     params = {
-        "sfh_tsnorm_log_peak_sfr": jnp.asarray(1.0),
+        "sfh_tsnorm_log_total_mass": jnp.asarray(1.0),
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),
         "sfh_tsnorm_width_gyr": jnp.asarray(1.0),
         "sfh_tsnorm_skew": jnp.asarray(0.0),
@@ -74,7 +74,9 @@ try:
         "xray_gamma_lmxb": jnp.asarray(1.6),
         "xray_gamma_agn": jnp.asarray(1.8),
         "xray_E_cut": jnp.asarray(300.0),
-        "xray_alpha_ox": jnp.asarray(-1.4),
+        "xray_delta_alpha_ox": jnp.asarray(-1.4),
+        # log10 N_H [cm^-2] photoelectric absorption (#768); 20 = unobscured.
+        "xray_log_nh": jnp.asarray(20.0),
         "redshift": jnp.asarray(0.0),
     }
 

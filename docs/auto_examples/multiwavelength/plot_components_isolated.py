@@ -11,6 +11,10 @@ into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The colour at each wavelength tells you which block matters most.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -30,7 +34,7 @@ HOST = dict(
         "type": "dpl",
         "*": tengri.FIXED,
         "tau_gyr": 1.5,
-        "log_peak_sfr": 1.3,
+        "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 2.0,
     },
@@ -86,7 +90,7 @@ for x, name in [(1000, "UV"), (5500, "optical"), (1e5, "MIR"), (1e8, "radio")]:
     ax.text(x, 4e44, name, fontsize=7, color="0.5", ha="center", alpha=0.7)
 
 ax.set(
-    xlim=(10, 3e9),
+    xlim=(10, 1e10),
     ylim=(1e35, 1e45),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
     ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",

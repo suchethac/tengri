@@ -42,17 +42,6 @@ and Active Galactic Nuclei* (line classification by FWHM).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-86
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_nlr_blr_lines_001.png
-   :alt: plot nlr blr lines
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_nlr_blr_lines_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

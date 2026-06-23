@@ -32,17 +32,6 @@ the Lyα emission line while leaving other nebular lines unchanged.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-92
 
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :alt: plot fesc lya sweep
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_fesc_lya_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

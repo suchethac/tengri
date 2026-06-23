@@ -30,18 +30,7 @@ Emission per H per ionization parameter U across the Hensley & Draine 2023
 grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
 (U-independent) but rises steeply with U in MIR.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-60
-
-
-
-.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
-   :alt: plot astrodust hd23 02 emission vs lgU
-   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 9-59
 
 .. code-block:: Python
 
@@ -55,15 +44,14 @@ grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import data_path
+    import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-    tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
+    tpl = tengri.load_astrodust_hd23()
     wave_um = np.asarray(tpl.wavelength_um)
     lgU = np.asarray(tpl.lgU)
     L_nu_total = np.asarray(tpl.L_nu_total)

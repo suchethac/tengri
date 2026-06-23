@@ -26,50 +26,40 @@ AGN dusty torus: library comparison at fixed L_bol
    :class: sphx-glr-single-img
 
 
-Six dusty-torus libraries reprocessing the same accretion-disc
+Seven dusty-torus libraries reprocessing the same accretion-disc
 continuum at fixed ``log L_bol = 12.5`` (in log L_sun) and standard
 inclination. The disc is held at ``multicolor`` (Kubota & Done 2018)
 so the differences in the curves are entirely how each torus library
 geometrically distributes hot grains and re-emits the absorbed UV in
 the MIR.
 
-Torus libraries (the six production selectors under
+Torus libraries (the seven production selectors under
 ``agn.torus.type``):
 - ``skirtor``          — Stalevski+2016 clumpy radiative-transfer grid
 - ``cat3d_wind``       — Hönig & Kishimoto 2017 disc + wind grid
 - ``nenkova``          — Nenkova+2008 clumpy CLUMPY grid
+- ``fritz``            — Fritz+2006 smooth-dust grid (CIGALE/X-CIGALE)
 - ``silva04``          — Silva+2004 smooth two-temperature
 - ``qsogen``           — Temple+2021 empirical NIR/MIR pasted on disc
 - ``two_temperature``  — simple two-blackbody phenomenological torus
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-88
+``fritz`` and ``skirtor`` are the two CIGALE production tori — smooth
+(Fritz+2006) versus clumpy (Stalevski+2016) — so contrasting them on
+this panel isolates the smooth-vs-clumpy silicate-feature behaviour
+near 9.7 and 18 micron.
+
+.. GENERATED FROM PYTHON SOURCE LINES 27-95
 
 
-.. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/private/tmp/tengri-split/regen-a/examples/agn/plot_agn_torus_compare.py", line 56, in <module>
-        model = tengri.SEDModel.build(
-                ^^^^^^^^^^^^^^^^^^^^^^
-      File "/private/tmp/tengri-split/regen-a/src/tengri/forward/sed_model.py", line 4929, in build
-        spec = parse_groups(**groups)
-               ^^^^^^^^^^^^^^^^^^^^^^
-      File "/private/tmp/tengri-split/regen-a/src/tengri/parameters/groups.py", line 538, in parse_groups
-        _validate_user_keys(kwargs, structural_params, param_partition)
-      File "/private/tmp/tengri-split/regen-a/src/tengri/parameters/groups.py", line 1023, in _validate_user_keys
-        _check_dict_keys(top_key, top_val, group_allowed | param_names, param_partition)
-      File "/private/tmp/tengri-split/regen-a/src/tengri/parameters/groups.py", line 1072, in _check_dict_keys
-        raise ValueError(
-    ValueError: Unknown key 'log_sfr' in group 'sfh'. Valid structural keys for this group are: ['*', 'bin_edges_gyr', 'type'].
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_torus_compare_001.png
+   :alt: plot agn torus compare
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_torus_compare_001.png
+   :class: sphx-glr-single-img
 
 
 
 
-
-
-|
 
 .. code-block:: Python
 
@@ -94,6 +84,7 @@ Torus libraries (the six production selectors under
         ("skirtor", "SKIRTOR (Stalevski+2016)"),
         ("cat3d_wind", "CAT3D-WIND (Hönig & Kishimoto 2017)"),
         ("nenkova", "CLUMPY (Nenkova+2008)"),
+        ("fritz", "Fritz+2006 smooth"),
         ("silva04", "Silva+2004"),
         ("qsogen", "QSOGEN MIR"),
         ("two_temperature", "two-T blackbody"),
@@ -101,7 +92,7 @@ Torus libraries (the six production selectors under
     COLORS = plt.cm.viridis(np.linspace(0.05, 0.92, len(TORI)))
 
     C_AA_PER_S = 2.998e18
-    SFH = {"type": "const", "*": tengri.FIXED, "log_sfr": -10.0}
+    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
     DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     ssp = tengri.load_ssp()
@@ -140,6 +131,11 @@ Torus libraries (the six production selectors under
 
     fig.tight_layout()
     plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 8.100 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

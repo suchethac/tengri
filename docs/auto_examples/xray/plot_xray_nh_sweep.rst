@@ -42,6 +42,7 @@ This sweep reproduces the spectral evolution behind Matsumoto+2026
 Figure 11 (hardness-ratio model tracks) for log N_H from 20 to 25.
 
 References
+
 ----------
 - Ricci et al. 2017, Nature 549, 488 (zphabs × cabs × cut-off PL +
   scattered component spectral model).
@@ -49,10 +50,14 @@ References
   selected obscured AGN at z > 3).
 - Morrison & McCammon 1983, ApJ 270, 119 (photoelectric cross-sections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-114
+.. GENERATED FROM PYTHON SOURCE LINES 29-126
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -72,6 +77,8 @@ References
     wave_keV = 12.398 / np.array(wavelength)
 
     L_BOL = 1e45  # erg/s — luminous AGN
+    # Hopkins+2007 BC=5.15 at 2500 A
+    L_2500 = L_BOL / (5.15 * 1.199e15)
     log_nh_vals = np.array([20.0, 22.0, 23.0, 24.0, 24.5, 25.0])
 
     # ---------------------------------------------------------------------- figure
@@ -81,12 +88,10 @@ References
 
     # Panel a: spectral evolution with N_H
     ax = axes[0]
-    l_intr = np.array(
-        xray_agn_corona(wavelength, L_agn_bol=L_BOL, log_nh=15.0, scattered_frac=0.0)
-    )
+    l_intr = np.array(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, log_nh=15.0))
     ax.loglog(wave_keV, l_intr, color="0.5", ls="--", lw=1.3, label="intrinsic")
     for log_nh in log_nh_vals:
-        l_obs = np.array(xray_agn_corona(wavelength, L_agn_bol=L_BOL, log_nh=log_nh))
+        l_obs = np.array(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, log_nh=float(log_nh)))
         ax.loglog(
             wave_keV,
             l_obs,
@@ -104,9 +109,12 @@ References
     ax.text(0.7, 1.5e21, "soft\n(0.5–2 keV)", fontsize=7, color="C0", ha="center")
     ax.text(4.0, 1.5e21, "hard\n(2–10 keV)", fontsize=7, color="C2", ha="center")
     ax.text(
-        0.04, 0.96,
+        0.04,
+        0.96,
         rf"$L_{{\rm bol}} = 10^{{{np.log10(L_BOL):.0f}}}$ erg/s",
-        transform=ax.transAxes, va="top", fontsize=9,
+        transform=ax.transAxes,
+        va="top",
+        fontsize=9,
     )
     ax.legend(fontsize=8, frameon=False, loc="lower right")
 
@@ -118,11 +126,15 @@ References
 
     soft_frac, hard_frac = [], []
     for log_nh in log_nh_grid:
-        l_obs = np.array(xray_agn_corona(wavelength, L_agn_bol=L_BOL, log_nh=log_nh))
-        soft_frac.append(np.trapezoid(l_obs[soft_mask], wave_keV[soft_mask]) /
-                         np.trapezoid(l_intr[soft_mask], wave_keV[soft_mask]))
-        hard_frac.append(np.trapezoid(l_obs[hard_mask], wave_keV[hard_mask]) /
-                         np.trapezoid(l_intr[hard_mask], wave_keV[hard_mask]))
+        l_obs = np.array(xray_agn_corona(wavelength, l_2500_30deg_erg_hz=L_2500, log_nh=float(log_nh)))
+        soft_frac.append(
+            np.trapezoid(l_obs[soft_mask], wave_keV[soft_mask])
+            / np.trapezoid(l_intr[soft_mask], wave_keV[soft_mask])
+        )
+        hard_frac.append(
+            np.trapezoid(l_obs[hard_mask], wave_keV[hard_mask])
+            / np.trapezoid(l_intr[hard_mask], wave_keV[hard_mask])
+        )
 
     ax.semilogy(log_nh_grid, soft_frac, color="C0", lw=2.0, label="0.5–2 keV (soft)")
     ax.semilogy(log_nh_grid, hard_frac, color="C2", lw=2.0, label="2–10 keV (hard)")

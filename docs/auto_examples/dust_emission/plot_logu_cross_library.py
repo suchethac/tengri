@@ -23,13 +23,9 @@ import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import data_path
+import tengri
+from tengri import load_pahspec_draine2021, select_pahspec_axes
 from tengri.analysis.plotting import setup_style
-from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
-from tengri.components.dust.draine2021_pah import (
-    load_pahspec_or_raise,
-    select_pahspec_axes,
-)
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -38,13 +34,13 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 C_CGS = 2.99792458e10
 SHOWN_LGU = (-1.0, 1.0, 3.0)
 
-hd23 = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
+hd23 = tengri.load_astrodust_hd23()
 wave_um_hd23 = np.asarray(hd23.wavelength_um)
 lgU_hd23 = np.asarray(hd23.lgU)
 lam_cm_hd23 = wave_um_hd23 * 1.0e-4
 li_um_hd23 = np.asarray(hd23.L_nu_total) * C_CGS / (4.0 * np.pi * lam_cm_hd23[None, :])
 
-pah = load_pahspec_or_raise(data_path("pahspec_draine2021.h5"))
+pah = load_pahspec_draine2021()
 nu_pnu_pah = select_pahspec_axes(
     pah, starlight="mMMP", ionization="st", size_distribution="std", slab=False
 )

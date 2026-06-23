@@ -46,21 +46,14 @@ References:
 - Mannucci et al. 2010, MNRAS, 408, 2115 (the FMR definition)
 - Lara-López et al. 2010, A&A, 521, L53 (confirmation with SDSS)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-163
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
-   :alt: plot usecase fundamental metallicity relation
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 25-171
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -75,6 +68,7 @@ References:
     # ==============================================================================
     # Schematic FMR metallicity function: Z as function of M* and sSFR
     # ==============================================================================
+
 
     def schematic_metallicity(log_m_star, log_ssfr):
         r"""
@@ -110,8 +104,8 @@ References:
     # Generate grid: (M*, sSFR) → (M*, Z)
     # ==============================================================================
 
-    log_m_star_vals = np.linspace(9.0, 11.0, 6)      # 9, 9.4, 9.8, 10.2, 10.6, 11.0
-    log_ssfr_vals = np.linspace(-11.0, -9.0, 5)     # -11, -10.5, -10, -9.5, -9
+    log_m_star_vals = np.linspace(9.0, 11.0, 6)  # 9, 9.4, 9.8, 10.2, 10.6, 11.0
+    log_ssfr_vals = np.linspace(-11.0, -9.0, 5)  # -11, -10.5, -10, -9.5, -9
 
     # Create 2D mesh
     log_m_grid, log_ssfr_grid = np.meshgrid(log_m_star_vals, log_ssfr_vals)
@@ -122,7 +116,7 @@ References:
     log_z_flat = schematic_metallicity(log_m_flat, log_ssfr_flat)
 
     # Extract SFR for coloring (log sSFR → linear sSFR for visual scaling)
-    ssfr_linear = 10.0 ** log_ssfr_flat
+    ssfr_linear = 10.0**log_ssfr_flat
 
     # ==============================================================================
     # Left panel: M* vs Z colored by SFR
@@ -132,7 +126,8 @@ References:
 
     # Scatter with SFR as color dimension
     sc_left = ax_left.scatter(
-        log_m_flat, log_z_flat,
+        log_m_flat,
+        log_z_flat,
         c=log_ssfr_flat,
         cmap="plasma",
         s=80,
@@ -160,7 +155,8 @@ References:
     mu = log_m_flat - 0.32 * log_ssfr_flat
 
     sc_right = ax_right.scatter(
-        mu, log_z_flat,
+        mu,
+        log_z_flat,
         c=log_ssfr_flat,
         cmap="plasma",
         s=80,
@@ -186,7 +182,8 @@ References:
     mu_line = np.linspace(mu.min() - 0.2, mu.max() + 0.2, 50)
     z_line = np.polyval(p_fit, mu_line)
     ax_right.plot(
-        mu_line, z_line,
+        mu_line,
+        z_line,
         color="gray",
         lw=1.2,
         ls="--",

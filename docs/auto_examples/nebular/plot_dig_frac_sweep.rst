@@ -32,17 +32,6 @@ DIG fraction from pure HII (0) to mixed gas (0.8).
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-68
 
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_dig_frac_sweep_001.png
-   :alt: plot dig frac sweep
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_dig_frac_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

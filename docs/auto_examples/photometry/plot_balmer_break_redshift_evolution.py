@@ -42,8 +42,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
+from tengri import load_filter_set
 from tengri.analysis.plotting import setup_style
-from tengri.observation.filters import load_filter_set
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

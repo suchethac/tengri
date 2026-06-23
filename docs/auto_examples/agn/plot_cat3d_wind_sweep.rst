@@ -50,17 +50,6 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 27-110
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_cat3d_wind_sweep_001.png
-   :alt: CAT3D-Wind torus: wind fraction and viewing angle, face-on (cos i = 0.85), edge-on (cos i = 0.2)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_cat3d_wind_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -146,11 +135,6 @@ References
         weight="bold",
     )
     plt.savefig("plot_cat3d_wind_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.226 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_cat3d_wind_sweep.py:

@@ -170,7 +170,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Intrinsic dust reddening ebv (E(B−V)) reddens the continuum via extinction. Varying ebv from 0 to 0.4 shows the transition from unobscured type-1 QSO colours to moderately dust-enshrouded systems.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-free quasar spectra are intrinsically blue in the UV and optical. Adding a polar-dust attenuation component reddens the accretion-disc continuum: increasing the polar-dust reddening agn_polar_ebv (E(B−V), [mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colours to a moderately dust-reddened continuum, while the absorbed UV energy is re-radiated as a polar-dust infrared bump.">
 
 .. only:: html
 
@@ -181,7 +181,7 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">QSOgen disc: dust reddening tunes UV to optical colour</div>
+      <div class="sphx-glr-thumbnail-title">QSO continuum: polar-dust reddening tunes UV to optical colour</div>
     </div>
 
 
@@ -250,6 +250,23 @@ AGN disc and torus SED templates.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">delta_alpha_OX pivots the X-ray spectrum about the disc UV anchor</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="agn={&quot;feii&quot;: {&quot;type&quot;: &quot;boroson_green&quot;}} adds the empirical Boroson &amp; Green (1992) Fe II pseudo-continuum to a composable AGN — the broad iron-line blanket that fills the 2200–3000 Å and 4400–4700 Å windows of type-1 quasars. Its amplitude is set by agn_fe2_strength (the standard R_{\rm Fe} ratio of Fe II to broad H\ \beta).">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_boroson_green_feii_template_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_boroson_green_feii_template`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Boroson & Green (1992) Fe II template: the optical/UV iron blanket</div>
     </div>
 
 
@@ -680,6 +697,23 @@ AGN disc and torus SED templates.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="agn={&quot;type&quot;: &quot;skirtor_stalevski&quot;} returns the SKIRTOR 2016 SED exactly as Stalevski&#x27;s radiative transfer computed it — accretion disc + clumpy torus + scattered light, read straight from the full-coverage grid with no analytic-disc substitution and no re-normalisation. This is the faithful template that codes reading SKIRTOR directly (e.g. ProSpect&#x27;s SKIRTOR_interp) reproduce.">
+
+.. only:: html
+
+  .. image:: /auto_examples/agn/images/thumb/sphx_glr_plot_skirtor_stalevski_raw_template_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/agn/plot_skirtor_stalevski_raw_template`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Raw SKIRTOR (Stalevski 2016): the published radiative-transfer template</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The SKIRTOR clumpy torus model (Stalevski et al. 2016) emits thermal IR radiation that depends strongly on two parameters: viewing angle (inclination θ via cos_inc) and optical depth (``tau_97`` at 9.7 μm). Face-on systems show a smooth thermal continuum; edge-on systems develop deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.">
 
 .. only:: html
@@ -855,6 +889,7 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_agn_torus_compare
    /auto_examples/agn/plot_alpha_ox_lusso_risaliti
    /auto_examples/agn/plot_alpha_ox_uv_xray_connection
+   /auto_examples/agn/plot_boroson_green_feii_template
    /auto_examples/agn/plot_cat3d_wind_sweep
    /auto_examples/agn/plot_composable_block_toggles
    /auto_examples/agn/plot_composable_recipes
@@ -880,6 +915,7 @@ AGN disc and torus SED templates.
    /auto_examples/agn/plot_skirtor_agnfitter_sweep
    /auto_examples/agn/plot_skirtor_agnfitter_vs_cigale
    /auto_examples/agn/plot_skirtor_inclination_sweep
+   /auto_examples/agn/plot_skirtor_stalevski_raw_template
    /auto_examples/agn/plot_skirtor_variants
    /auto_examples/agn/plot_skirtor_vs_smooth_torus
    /auto_examples/agn/plot_skirtor_xcigale_sweep

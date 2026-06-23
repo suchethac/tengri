@@ -51,17 +51,6 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-125
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_silva04_nh_sweep_001.png
-   :alt: Silva+04 torus: obscuration and the silicate feature, Full reprocessed SED, Mid-IR zoom: 9.7 $\mu$m silicate feature
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_silva04_nh_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -161,11 +150,6 @@ References
         weight="bold",
     )
     plt.savefig("plot_silva04_nh_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.177 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_silva04_nh_sweep.py:
