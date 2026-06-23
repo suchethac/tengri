@@ -117,7 +117,12 @@ from tengri.citations import (
     print_paper_citation,
 )
 from tengri.components import register_component
+from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23
 from tengri.components.dust.attenuation import two_component_dust
+from tengri.components.dust.draine2021_pah import (
+    load_pahspec_draine2021,
+    select_pahspec_axes,
+)
 from tengri.components.igm import igm_transmission
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
@@ -235,7 +240,7 @@ from tengri.forward.result import SEDResult
 from tengri.forward.sed_model import PriorPredictive, SEDModel, SpectrumPrecomp, WavePrecomp
 from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
-from tengri.observation.filters import load_filter_set
+from tengri.observation.filters import load_filter, load_filter_set
 from tengri.observation.noise import (
     PoissonNoiseLikelihood,
     StudentTLikelihood,
@@ -468,6 +473,8 @@ __all__ = [
     "list_recipes",
     "list_sfh_models",
     "list_xray_models",
+    "load_astrodust_hd23",
+    "load_pahspec_draine2021",
     "load_ssp",
     "load_ssp_data",
     "matern32_kernel",

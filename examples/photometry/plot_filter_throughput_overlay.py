@@ -30,9 +30,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
+from tengri import load_filter
 from tengri.analysis.plotting import setup_style
 from tengri.igm import igm_transmission
-from tengri.observation.filters import load_filter
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

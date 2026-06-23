@@ -119,6 +119,9 @@ EXPECTED_ALL = frozenset(
         "load_ssp",
         "load_ssp_data",
         "SSPData",
+        # Dust-emission template loaders (closes #803)
+        "load_astrodust_hd23",
+        "load_pahspec_draine2021",
         # Component helpers (closes #497 / #498)
         "igm_transmission",
         "velocity_broaden",

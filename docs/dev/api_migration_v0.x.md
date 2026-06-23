@@ -816,6 +816,27 @@ setting `dust_frac_agn=0` when using real AGN. See
 
 ---
 
+## Dust-emission template loaders + single-filter loader (2026-06, #802 / #803)
+
+Public entry points for the bundled dust-emission template grids and a single
+filter curve, so gallery examples no longer reach into `data_path(...)` + raw
+`h5py` or internal component modules.
+
+| Old path                                                                                       | New path                            | Status (v0.x)                                          |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------------------------ |
+| `data_path("astrodust_templates.h5")` + `h5py` / `astrodust_hd23.load_astrodust_hd23_or_raise` | `tengri.load_astrodust_hd23()`      | New (advertised in `__all__`)                          |
+| `data_path("pahspec_draine2021.h5")` + `draine2021_pah.load_pahspec_or_raise`                  | `tengri.load_pahspec_draine2021()`  | New (advertised in `__all__`)                          |
+| `tengri.components.dust.draine2021_pah.select_pahspec_axes`                                     | `tengri.select_pahspec_axes`        | Importable, not advertised                             |
+| `tengri.observation.filters.load_filter`                                                       | `tengri.load_filter`                | Importable, not advertised (mirrors `load_filter_set`) |
+
+The two grid loaders take an optional `template_path=` override; with the
+default they walk parent dirs for `data/<grid>.h5` (via `tengri.data_path`), so
+they resolve from an example subdirectory under sphinx-gallery's `chdir`.
+`AstrodustHD23Templates` gains a `size_distribution` field so the grain-size
+example no longer opens the HDF5 by hand.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

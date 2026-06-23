@@ -12,19 +12,17 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 
 import warnings
 
-import h5py
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import data_path
+import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
-    size_dist = np.asarray(f["size_distribution"])
+size_dist = np.asarray(tengri.load_astrodust_hd23().size_distribution)
 
 rad_um = size_dist[:, 0]
 dn_Ad_per_H = size_dist[:, 1]
