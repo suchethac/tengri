@@ -459,6 +459,11 @@ exclude_patterns = [
     "advanced/**",
     "developer/**",
     "dev/**",
+    # Architecture Decision Records are contributor-facing design history, not
+    # part of the published user docs. They live on disk / GitHub but are
+    # excluded here so they don't build as orphans (each emitted a
+    # "not in any toctree" warning).
+    "adr/**",
     "install.md",
     "known_bugs.md",
     "NEBULAR_REFACTOR.md",
@@ -471,6 +476,12 @@ exclude_patterns = [
     # dropped from the index in the 2026-05 polish pass).
     "spine/08_emission_lines.ipynb",
     "spine/09_parameter_sweeps.ipynb",
+    # Orphaned leftover pages (not in any toctree, not linked from the
+    # published sidebar). Excluded so they don't build as half-accessible
+    # orphans emitting "not in any toctree" warnings. Still on disk / GitHub.
+    "spine/05_adding_a_model.ipynb",
+    "recipes/**",
+    "user/**",
     # Fitting-photometry spine notebook hidden from the published sidebar
     # (2026-06): the quickstart already covers a full photometry fit +
     # posterior, so this longer treatment is redundant. Inbound prose links
