@@ -31,6 +31,17 @@ Spinning dust microwave emission across 10–100 GHz, decomposed by grain
 
 .. GENERATED FROM PYTHON SOURCE LINES 8-59
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_07_spinning_dust_001.png
+   :alt: plot astrodust hd23 07 spinning dust
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_07_spinning_dust_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

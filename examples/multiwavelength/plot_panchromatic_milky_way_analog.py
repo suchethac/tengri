@@ -156,6 +156,4 @@ ax.legend(frameon=False, fontsize=8.5, loc="lower left", ncol=2, handlelength=1.
 ax.grid(True, alpha=0.15, linestyle="--", linewidth=0.5)
 
 fig.tight_layout()
-_script_dir = os.path.dirname(os.path.abspath(__file__))
-_outfile = os.path.join(_script_dir, "plot_panchromatic_milky_way_analog.png")
-plt.savefig(_outfile, dpi=150, bbox_inches="tight")
+plt.savefig("plot_panchromatic_milky_way_analog.png", dpi=150, bbox_inches="tight")

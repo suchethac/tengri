@@ -41,6 +41,17 @@ not shipped with the gallery):
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-94
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
+   :alt: plot agn lines compare
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_lines_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

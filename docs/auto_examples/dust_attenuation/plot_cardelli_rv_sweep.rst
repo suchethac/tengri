@@ -31,6 +31,17 @@ on the same intrinsic SED at τ_V = 1.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-86
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_cardelli_rv_sweep_001.png
+   :alt: plot cardelli rv sweep
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_cardelli_rv_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

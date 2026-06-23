@@ -42,6 +42,17 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-108
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_composable_block_toggles_001.png
+   :alt: plot composable block toggles
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_composable_block_toggles_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -133,6 +144,11 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
     axes[0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
     fig.tight_layout()
     plt.savefig("plot_composable_block_toggles.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.303 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_block_toggles.py:

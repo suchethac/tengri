@@ -41,6 +41,17 @@ in its native normalisation.)
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-94
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_grahsp_torus_modes_001.png
+   :alt: Torus prescription, MN12 template temperature blend
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_grahsp_torus_modes_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

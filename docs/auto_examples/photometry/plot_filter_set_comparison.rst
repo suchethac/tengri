@@ -37,6 +37,17 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-101
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_filter_set_comparison_001.png
+   :alt: plot filter set comparison
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_filter_set_comparison_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

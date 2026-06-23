@@ -38,6 +38,17 @@ Reference: Temple, Hewett & Banerji 2021, MNRAS, 508, 737.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-76
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_qsogen_spectrum_001.png
+   :alt: plot qsogen spectrum
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_qsogen_spectrum_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

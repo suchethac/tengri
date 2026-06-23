@@ -36,6 +36,17 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718 (age-dependent dust attenuation).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-64
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_two_component_001.png
+   :alt: plot two component
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_two_component_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

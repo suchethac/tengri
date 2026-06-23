@@ -35,6 +35,17 @@ time.
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-118
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_continuity_prior_visualisation_001.png
+   :alt: plot continuity prior visualisation
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_continuity_prior_visualisation_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

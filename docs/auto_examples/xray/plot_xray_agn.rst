@@ -50,6 +50,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 27-110
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_agn_001.png
+   :alt: plot xray agn
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_agn_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

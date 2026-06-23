@@ -47,6 +47,17 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-173
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
+   :alt: plot ulirg to qso transition
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_ulirg_to_qso_transition_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -43,6 +43,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-130
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_nebular_backends_001.png
+   :alt: plot nebular backends
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_nebular_backends_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

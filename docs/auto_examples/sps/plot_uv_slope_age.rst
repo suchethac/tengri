@@ -37,6 +37,28 @@ that ``plot_usecase_uv_slope_beta`` recovers).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-96
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_uv_slope_age_001.png
+   :alt: plot uv slope age
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_uv_slope_age_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

@@ -35,6 +35,28 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-76
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_slope_sweep_001.png
+   :alt: plot dust slope sweep
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_slope_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 24% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

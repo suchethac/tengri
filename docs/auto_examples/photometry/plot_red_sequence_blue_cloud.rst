@@ -45,6 +45,17 @@ Physical insight made obvious:
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-165
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_red_sequence_blue_cloud_001.png
+   :alt: plot red sequence blue cloud
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_red_sequence_blue_cloud_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

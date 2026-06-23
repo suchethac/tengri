@@ -36,6 +36,17 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-72
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_logz_gas_sweep_001.png
+   :alt: plot logz gas sweep
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_logz_gas_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -97,6 +108,11 @@ Reference: Kewley & Ellison 2008, ApJ, 681, 1183.
 
     fig.tight_layout()
     plt.savefig("plot_logz_gas_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.209 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_logz_gas_sweep.py:

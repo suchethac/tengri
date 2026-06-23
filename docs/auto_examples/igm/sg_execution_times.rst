@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.108** total execution time for 9 files **from auto_examples/igm**:
+**00:05.310** total execution time for 9 files **from auto_examples/igm**:
 
 .. container::
 
@@ -32,30 +32,30 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``plot_igm_redshift.py``)
+     - 00:00.994
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``plot_igm_models_comparison.py``)
-     - 00:00.808
+     - 00:00.888
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_alpha_forest_QSO_template.py` (``plot_lyman_alpha_forest_QSO_template.py``)
-     - 00:00.435
+     - 00:00.686
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_alpha_igm_attenuation.py` (``plot_lyman_alpha_igm_attenuation.py``)
-     - 00:00.433
+     - 00:00.638
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_lyman_dropout_redshift_sweep.py` (``plot_lyman_dropout_redshift_sweep.py``)
-     - 00:00.431
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``plot_dla_absorption.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_model_comparison.py` (``plot_igm_model_comparison.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``plot_igm_redshift.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``plot_igm_z_evolution.py``)
-     - 00:00.000
+     - 00:00.630
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_sed_with_igm.py` (``plot_sed_with_igm.py``)
+     - 00:00.568
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``plot_dla_absorption.py``)
+     - 00:00.493
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_z_evolution.py` (``plot_igm_z_evolution.py``)
+     - 00:00.412
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_inoue_vs_madau_z5_z7.py` (``plot_inoue_vs_madau_z5_z7.py``)
      - 00:00.000
      - 0.0

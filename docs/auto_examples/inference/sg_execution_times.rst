@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.005** total execution time for 9 files **from auto_examples/inference**:
+**00:00.004** total execution time for 9 files **from auto_examples/inference**:
 
 .. container::
 
@@ -33,7 +33,7 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_inference_plot_multichain_speedup.py` (``plot_multichain_speedup.py``)
-     - 00:00.005
+     - 00:00.004
      - 0.0
    * - :ref:`sphx_glr_auto_examples_inference_plot_convergence.py` (``plot_convergence.py``)
      - 00:00.000

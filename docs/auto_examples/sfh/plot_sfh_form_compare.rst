@@ -46,6 +46,70 @@ when the data resolve > 5 SFR-bins.
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-83
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_sfh_form_compare_001.png
+   :alt: plot sfh form compare
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_sfh_form_compare_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_const_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_exp_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_exp_tau_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.05, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_dexp_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_dexp_tau_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.05, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_lnorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_lnorm_peak_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(6.25, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_lnorm_width_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(1.05, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_snorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_snorm_peak_lbt_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(6.25, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_snorm_skew' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(0., dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_snorm_width_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(2.6, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_peak_lbt_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(6.25, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_skew' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(0., dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_trunc' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.5, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_width_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(2.6, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_delayed_bq_age_bq_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(2.505, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_delayed_bq_age_main_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(6.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_delayed_bq_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_delayed_bq_r_sfr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.005, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_delayed_bq_tau_main_gyr' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.05, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

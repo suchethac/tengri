@@ -37,6 +37,29 @@ the Z(t) history and observable photometry.
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-234
 
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_001.png
+         :alt: plot chemical evolution
+         :srcset: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_002.png
+         :alt: plot chemical evolution
+         :srcset: /auto_examples/sfh/images/sphx_glr_plot_chemical_evolution_002.png
+         :class: sphx-glr-multi-img
+
+
+
+
+
 .. code-block:: Python
 
 

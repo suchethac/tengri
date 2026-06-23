@@ -31,6 +31,17 @@ Hensley & Draine 2023 fiducial ionization parameter :math:`\log_{10} U = 0.2`.
 
 .. GENERATED FROM PYTHON SOURCE LINES 8-66
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_03_components_at_fiducial_U_001.png
+   :alt: plot astrodust hd23 03 components at fiducial U
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_03_components_at_fiducial_U_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

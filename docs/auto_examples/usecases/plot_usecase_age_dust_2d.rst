@@ -49,6 +49,30 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-254
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_age_dust_2d_001.png
+   :alt: (Left) Optical g−r Degeneracy, (Right) UV Photometry Breaks Ambiguity
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_age_dust_2d_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.3 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.55 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+    /private/tmp/tengri-full/examples/usecases/plot_usecase_age_dust_2d.py:252: UserWarning: Tight layout not applied. The bottom and top margins cannot be made large enough to accommodate all Axes decorations.
+      fig.tight_layout()
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -279,6 +303,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_age_dust_2d.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.083 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_2d.py:

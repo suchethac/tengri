@@ -42,6 +42,17 @@ Reference: Kewley et al. 2001, ApJ, 556, 121 (BPT diagnostics).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-113
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_emission_line_pcc_001.png
+   :alt: plot usecase emission line pcc
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_emission_line_pcc_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

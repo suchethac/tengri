@@ -42,6 +42,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-171
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_geometry_screen_vs_mixed_001.png
+   :alt: plot dust geometry screen vs mixed
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_geometry_screen_vs_mixed_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

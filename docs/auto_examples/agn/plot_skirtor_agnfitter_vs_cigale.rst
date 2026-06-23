@@ -61,6 +61,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 38-144
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_agnfitter_vs_cigale_001.png
+   :alt: plot skirtor agnfitter vs cigale
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_agnfitter_vs_cigale_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

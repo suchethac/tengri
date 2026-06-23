@@ -34,6 +34,17 @@ and Kauffmann+2003 demarcations shown for reference.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-95
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_bpt_cue_flexibility_001.png
+   :alt: plot bpt cue flexibility
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_bpt_cue_flexibility_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -120,6 +131,11 @@ and Kauffmann+2003 demarcations shown for reference.
 
     fig.tight_layout()
     plt.savefig("plot_bpt_cue_flexibility.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.147 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_cue_flexibility.py:

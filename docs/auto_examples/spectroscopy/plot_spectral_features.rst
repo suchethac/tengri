@@ -34,6 +34,17 @@ Mg b traces metallicity on the RGB/AGB branch.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-98
 
+
+
+.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_spectral_features_001.png
+   :alt: plot spectral features
+   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_spectral_features_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -117,6 +128,11 @@ Mg b traces metallicity on the RGB/AGB branch.
 
     fig.tight_layout()
     plt.savefig("plot_spectral_features.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.297 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_spectral_features.py:

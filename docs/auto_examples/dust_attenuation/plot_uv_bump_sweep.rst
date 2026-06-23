@@ -35,6 +35,17 @@ Reference: Kriek & Conroy 2013, ApJ, 775, L16 (extended attenuation model).
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-57
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_bump_sweep_001.png
+   :alt: plot uv bump sweep
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_uv_bump_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -36,6 +36,17 @@ The colour at each wavelength tells you which block matters most.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-102
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_components_isolated_001.png
+   :alt: plot components isolated
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_components_isolated_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -127,6 +138,11 @@ The colour at each wavelength tells you which block matters most.
 
     fig.tight_layout()
     plt.savefig("plot_components_isolated.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.313 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_components_isolated.py:

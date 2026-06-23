@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:09.027** total execution time for 50 files **from auto_examples/agn**:
+**00:01.430** total execution time for 50 files **from auto_examples/agn**:
 
 .. container::
 
@@ -32,11 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
-     - 00:08.100
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_lusso_risaliti.py` (``plot_alpha_ox_lusso_risaliti.py``)
-     - 00:00.927
+     - 00:01.430
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py` (``plot_agn_alpha_ox_lbol_2d.py``)
      - 00:00.000
@@ -69,6 +66,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_qsogen_emline_sweep.py` (``plot_agn_qsogen_emline_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_agn_plot_agn_torus_compare.py` (``plot_agn_torus_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_alpha_ox_uv_xray_connection.py` (``plot_alpha_ox_uv_xray_connection.py``)

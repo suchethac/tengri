@@ -51,6 +51,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-125
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_silva04_nh_sweep_001.png
+   :alt: Silva+04 torus: obscuration and the silicate feature, Full reprocessed SED, Mid-IR zoom: 9.7 $\mu$m silicate feature
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_silva04_nh_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

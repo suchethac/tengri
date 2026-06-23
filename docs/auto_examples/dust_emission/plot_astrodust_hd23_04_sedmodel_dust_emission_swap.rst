@@ -32,6 +32,17 @@ Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-104
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
+   :alt: plot astrodust hd23 04 sedmodel dust emission swap
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_04_sedmodel_dust_emission_swap_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -129,6 +140,11 @@ Hensley & Draine 2023 Astrodust while bolometric output remains conserved.
     ax.legend(loc="lower center", frameon=False, fontsize=10)
     fig.tight_layout()
     plt.savefig("plot_astrodust_hd23_04_sedmodel_dust_emission_swap.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.070 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_astrodust_hd23_04_sedmodel_dust_emission_swap.py:

@@ -56,6 +56,32 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 33-187
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_fnu_vs_flambda_units_001.png
+   :alt: Same SED, Three Conventions: Peak Position Depends on Unit Choice, $F_\lambda$ vs $\lambda$, $F_\nu$ vs $\nu$, $\nu F_\nu$ vs $\lambda$ (luminosity-weighted)
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_fnu_vs_flambda_units_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_log_total_mass' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(9.75, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_skew' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(0., dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+    /private/tmp/tengri-full/src/tengri/parameters/groups.py:658: UserWarning: Parameter 'sfh_tsnorm_trunc' was marked FIXED via the '*': FIXED wildcard but its registry default carries no explicit ``default=``. Falling back to the prior midpoint (Array(5.5, dtype=float64, weak_type=True)); the contract test ``tests/contract/test_param_defaults.py`` should be failing in CI to flag this. Fix: set ``default=<physical_value>`` at the declaration site (e.g. ``Uniform(0, 5, default=2.0)``).
+      final_dist, tag = _resolve_value(
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

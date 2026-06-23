@@ -31,6 +31,17 @@ Hensley & Draine 2023 fiducial size distribution.
 
 .. GENERATED FROM PYTHON SOURCE LINES 8-48
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
+   :alt: PAH ionization fraction (Eq. 20)
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_05_ionization_alignment_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

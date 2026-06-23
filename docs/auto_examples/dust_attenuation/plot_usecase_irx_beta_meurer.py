@@ -345,11 +345,9 @@ ax.text(
 )
 
 fig.tight_layout()
-import pathlib
 
-save_path = pathlib.Path(__file__).parent / "plot_usecase_irx_beta_meurer.png"
-plt.savefig(str(save_path), dpi=150, bbox_inches="tight")
-print(f"\nSaved: {save_path}")
+plt.savefig("plot_usecase_irx_beta_meurer.png", dpi=150, bbox_inches="tight")
+print("\nSaved: plot_usecase_irx_beta_meurer.png")
 
 # ============================================================================
 # Verification: Check extrema

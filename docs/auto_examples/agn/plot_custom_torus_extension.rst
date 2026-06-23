@@ -42,6 +42,17 @@ class — see ``docs/dev/sed-model-components.md``.
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-138
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_custom_torus_extension_001.png
+   :alt: plot custom torus extension
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_custom_torus_extension_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -60,7 +60,7 @@ References:
     Sampled 200 galaxies from Schechter SMF
       M* range: 6.36e+07 – 8.28e+10 M_sun
       log10(M*) range: 7.80 – 10.92
-    /private/tmp/tengri-regen/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_r (rest~1549 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_r (rest~1549 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
       self._warn_if_wave_precomp_dust_blue_bias()
 
     Predicting r-band absolute magnitudes...
@@ -431,7 +431,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.633 seconds)
+   **Total running time of the script:** (0 minutes 3.558 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py:

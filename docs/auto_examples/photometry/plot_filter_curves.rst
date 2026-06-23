@@ -33,6 +33,17 @@ registry.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-70
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_filter_curves_001.png
+   :alt: plot filter curves
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_filter_curves_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

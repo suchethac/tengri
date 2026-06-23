@@ -43,6 +43,17 @@ Madau+1996 dropout technique.
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-207
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
+   :alt: Lyman-break galaxy z~3 U-dropout selection
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_dropout_selection_z3_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -232,6 +243,11 @@ Madau+1996 dropout technique.
     fig.tight_layout()
     plt.savefig("plot_usecase_dropout_selection_z3.png", dpi=150, bbox_inches="tight")
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.375 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

@@ -36,6 +36,17 @@ Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-56
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_geometry_sweep_001.png
+   :alt: plot dust geometry sweep
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_geometry_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

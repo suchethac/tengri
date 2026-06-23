@@ -51,6 +51,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-138
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_feii_sweep_001.png
+   :alt: Full AGN SED, Fe II excess
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_feii_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -163,6 +174,11 @@ References
 
     fig.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.272 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_feii_sweep.py:

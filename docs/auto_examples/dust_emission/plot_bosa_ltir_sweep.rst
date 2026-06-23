@@ -33,6 +33,17 @@ and enhancing PAH relative to continuum. Library is normalised by
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-58
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_bosa_ltir_sweep_001.png
+   :alt: plot bosa ltir sweep
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_bosa_ltir_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -36,6 +36,17 @@ Reference: Wilkins et al. 2020, MNRAS, 493, 5548.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-56
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_E_cut_sweep_001.png
+   :alt: plot E cut sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_E_cut_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

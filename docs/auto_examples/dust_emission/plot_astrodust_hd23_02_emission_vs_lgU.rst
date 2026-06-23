@@ -32,6 +32,17 @@ grid. Dividing by U reveals its effect: PAH-to-FIR ratio plateaus in FIR
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-59
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
+   :alt: plot astrodust hd23 02 emission vs lgU
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_02_emission_vs_lgU_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

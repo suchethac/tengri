@@ -35,6 +35,17 @@ Reference: Cardelli et al. 1989, ApJ, 345, 245 (extended optical extinction).
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-45
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_curves_001.png
+   :alt: plot dust curves
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_curves_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -39,6 +39,17 @@ the accretion-disc continuum), both scaled to the same ``agn_grahsp_a_feii``.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-68
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_grahsp_feii_templates_001.png
+   :alt: GRAHSP FeII forest templates, isolated ($A_{\rm FeII}=10$)
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_grahsp_feii_templates_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

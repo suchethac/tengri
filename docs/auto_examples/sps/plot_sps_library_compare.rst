@@ -43,6 +43,32 @@ physics, not nebular treatment.
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-96
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
+   :alt: plot sps library compare
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_sps_library_compare_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.259 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.259 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.124 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.124 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -121,6 +147,11 @@ physics, not nebular treatment.
 
     fig.tight_layout()
     plt.savefig("plot_sps_library_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 8.528 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

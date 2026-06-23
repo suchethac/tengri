@@ -44,6 +44,28 @@ IGM attenuation.
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-145
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_filter_throughput_overlay_001.png
+   :alt: plot filter throughput overlay
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_filter_throughput_overlay_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/examples/photometry/plot_filter_throughput_overlay.py:143: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+      fig.tight_layout()
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -170,6 +192,11 @@ IGM attenuation.
 
     fig.tight_layout()
     plt.savefig("plot_filter_throughput_overlay.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.925 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

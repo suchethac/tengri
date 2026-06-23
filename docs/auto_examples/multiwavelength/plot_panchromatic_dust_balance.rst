@@ -33,6 +33,17 @@ between the attenuation and emission components.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-84
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_dust_balance_001.png
+   :alt: plot panchromatic dust balance
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_dust_balance_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

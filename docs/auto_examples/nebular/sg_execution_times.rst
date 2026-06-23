@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.485** total execution time for 23 files **from auto_examples/nebular**:
+**00:02.076** total execution time for 23 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -32,8 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``plot_line_sigma_sweep.py``)
+     - 00:01.689
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_qh_vs_age_metallicity.py` (``plot_qh_vs_age_metallicity.py``)
-     - 00:00.485
+     - 00:00.386
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
      - 00:00.000
@@ -69,9 +72,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_halpha_sfr_calibration_age.py` (``plot_halpha_sfr_calibration_age.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``plot_line_sigma_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``plot_logz_gas_sweep.py``)

@@ -1,5 +1,483 @@
 {
+ "DUST": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "SFH": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "SWEEPS": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "_halpha_lum": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "ax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Axes"
+  }
+ ],
+ "ax.axhline": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Axes.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._base",
+   "module_short": "matplotlib.axes._base",
+   "name": "_AxesBase.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "_AxesBase.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "_AxesBase.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist.axhline"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist.axhline"
+  }
+ ],
+ "ax.plot": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Axes.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._base",
+   "module_short": "matplotlib.axes._base",
+   "name": "_AxesBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "_AxesBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "_AxesBase.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist.plot"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist.plot"
+  }
+ ],
+ "ax.set_xlabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Axes.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._base",
+   "module_short": "matplotlib.axes._base",
+   "name": "_AxesBase.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "_AxesBase.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "_AxesBase.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist.set_xlabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist.set_xlabel"
+  }
+ ],
+ "ax.set_ylabel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Axes.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._base",
+   "module_short": "matplotlib.axes._base",
+   "name": "_AxesBase.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "_AxesBase.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "_AxesBase.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist.set_ylabel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist.set_ylabel"
+  }
+ ],
+ "ax.text": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "Axes.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Axes.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes._base",
+   "module_short": "matplotlib.axes._base",
+   "name": "_AxesBase.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.axes",
+   "module_short": "matplotlib.axes",
+   "name": "_AxesBase.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "_AxesBase.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist.text"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist.text"
+  }
+ ],
+ "ax.transAxes": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.transforms",
+   "module_short": "matplotlib.transforms",
+   "name": "BboxTransformTo"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "BboxTransformTo"
+  }
+ ],
+ "ax_idx": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "axes": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "axes.ravel": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
+ "axes_flat": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "baseline": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
+ "colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "delta_dex": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "fig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.figure",
+   "module_short": "matplotlib.figure",
+   "name": "Figure"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Figure"
+  }
+ ],
+ "ha_baseline": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "halpha_vals": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "hi": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
  "jax.random.PRNGKey": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -10,6 +488,20 @@
  ],
  "jnp.float64": [
   {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "float64"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "jax",
+   "module_short": "jax",
+   "name": "float64"
+  },
+  {
    "is_class": false,
    "is_explicit": false,
    "module": "jax.numpy",
@@ -17,7 +509,110 @@
    "name": "float64"
   }
  ],
+ "label": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "lo": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel"
+  }
+ ],
+ "model.predict_emission_lines": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.predict_emission_lines"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.predict_emission_lines"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.predict_emission_lines"
+  }
+ ],
+ "model.spec.sample": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters.parameters",
+   "module_short": "tengri.parameters.parameters",
+   "name": "Parameters.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Parameters.sample"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Parameters.sample"
+  }
+ ],
+ "n_vals": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
  "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -32,10 +627,24 @@
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
    "name": "linspace"
   }
  ],
  "np.log10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ufunc"
+  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -50,10 +659,42 @@
    "is_explicit": false,
    "module": "os",
    "module_short": "os",
+   "name": "_Environ"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
    "name": "environ"
   }
  ],
+ "param_name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "str"
+  }
+ ],
+ "param_name.replace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  }
+ ],
  "plt.savefig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -66,6 +707,13 @@
   {
    "is_class": false,
    "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "subplots"
@@ -75,12 +723,77 @@
   {
    "is_class": false,
    "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
   }
  ],
+ "ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar.sps.dsps_wrapper",
+   "module_short": "tengri.components.stellar.sps",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar.sps",
+   "module_short": "tengri.components.stellar.sps",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.stellar",
+   "module_short": "tengri.components.stellar",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components",
+   "module_short": "tengri.components",
+   "name": "SSPData"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SSPData"
+  }
+ ],
  "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters.sentinels",
+   "module_short": "tengri.parameters.sentinels",
+   "name": "_Sentinel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "_Sentinel"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "_Sentinel"
+  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -91,6 +804,48 @@
  ],
  "tengri.Fixed": [
   {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri",
+   "name": "Fixed"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri",
+   "name": "Fixed"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri.parameters.priors",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Distribution"
+  },
+  {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
@@ -100,6 +855,27 @@
  ],
  "tengri.SEDModel.build": [
   {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.forward.sed_model",
+   "module_short": "tengri.forward.sed_model",
+   "name": "SEDModel.build"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.forward",
+   "module_short": "tengri.forward",
+   "name": "SEDModel.build"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "SEDModel.build"
+  },
+  {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri.SEDModel",
@@ -108,6 +884,48 @@
   }
  ],
  "tengri.Uniform": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri",
+   "name": "Uniform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri",
+   "name": "Uniform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Uniform"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri.parameters.priors",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Distribution"
+  },
   {
    "is_class": false,
    "is_explicit": false,
@@ -120,12 +938,35 @@
   {
    "is_class": false,
    "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
    "name": "load_ssp"
   }
  ],
+ "values": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
  "warnings.filterwarnings": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
   {
    "is_class": false,
    "is_explicit": false,

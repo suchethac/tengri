@@ -34,6 +34,17 @@ synchrotron emission.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-97
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_galaxy_001.png
+   :alt: plot panchromatic galaxy
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_galaxy_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

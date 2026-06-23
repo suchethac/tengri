@@ -42,6 +42,17 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-141
 
+
+
+.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_bpt_classification_001.png
+   :alt: plot workflow bpt classification
+   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_bpt_classification_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -55,6 +55,42 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 32-215
 
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
+         :alt: Type 1 (face-on, cos θ = 1.0), Type 2 (edge-on, cos θ = 0.0)
+         :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_002.png
+         :alt: Inclination transition: Type 1 → Intermediate → Type 2
+         :srcset: /auto_examples/agn/images/sphx_glr_plot_type1_type2_unified_model_002.png
+         :class: sphx-glr-multi-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Building Type 1 (face-on, BLR) model...
+    Building Type 2 (edge-on, NLR) model...
+    Saved: plot_type1_type2_unified_model.png
+    Saved: plot_type1_type2_unified_model_transition.png
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -240,6 +276,11 @@ References
     plt.savefig("plot_type1_type2_unified_model.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_type1_type2_unified_model.png")
     print("Saved: plot_type1_type2_unified_model_transition.png")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.849 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

@@ -37,6 +37,17 @@ Reference: Kellermann et al. 1989, ApJ 345, 171.
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-59
 
+
+
+.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_radio_loudness_sweep_001.png
+   :alt: plot radio loudness sweep
+   :srcset: /auto_examples/radio/images/sphx_glr_plot_radio_loudness_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

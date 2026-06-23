@@ -45,6 +45,17 @@ Useful intuition this figure makes obvious:
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-109
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_color_tracks_redshift_001.png
+   :alt: plot color tracks redshift
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_color_tracks_redshift_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

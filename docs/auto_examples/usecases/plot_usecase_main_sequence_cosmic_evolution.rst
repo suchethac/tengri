@@ -51,6 +51,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-276
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_001.png
+   :alt: z = 0.05 (Recovery), z = 2.0 (Cosmic Evolution)
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_main_sequence_cosmic_evolution_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

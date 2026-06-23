@@ -44,6 +44,28 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-135
 
+
+
+.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_quenching_diagnostics_001.png
+   :alt: plot workflow quenching diagnostics
+   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_quenching_diagnostics_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

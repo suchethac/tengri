@@ -40,6 +40,17 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-161
 
+
+
+.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_zh_evolution_compare_001.png
+   :alt: plot zh evolution compare
+   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_zh_evolution_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -186,6 +197,11 @@ neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics)
 
     fig.tight_layout()
     plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.220 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_zh_evolution_compare.py:

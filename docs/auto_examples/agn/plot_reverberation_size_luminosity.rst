@@ -57,6 +57,12 @@ Reference
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 37-50
 
 .. code-block:: Python
@@ -73,6 +79,12 @@ Reference
     warnings.filterwarnings("ignore", category=FutureWarning)
 
     from tengri.agn import resolve_agn_model
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 51-52
@@ -110,6 +122,12 @@ Setup plotting style
     # Output directory for figures
     FIG_DIR = "figures"
     os.makedirs(FIG_DIR, exist_ok=True)
+
+
+
+
+
+
 
 
 
@@ -151,6 +169,12 @@ Define the Bentz+2013 reverberation size-luminosity relation
 
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 113-115
 
 Compute L_5100 and R_BLR for a range of AGN models
@@ -178,6 +202,12 @@ Select AGN model — qsogen is empirically-calibrated and well-documented
     # Extended wavelength grid for SED visualization
     wave_plotting = jnp.logspace(np.log10(100), np.log10(1e5), 1000)  # 100 A to 100 um
     nu_plotting = 2.99792458e18 / np.asarray(wave_plotting)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 135-136
@@ -212,6 +242,12 @@ Compute L_5100 values and corresponding BLR sizes
     log_l5100_computed = np.array(log_l5100_computed)
     r_blr_computed = np.array(r_blr_computed)
     log_lbol_used = np.array(log_lbol_used)
+
+
+
+
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 162-163
@@ -284,6 +320,24 @@ Create figure with two panels
     plt.show()
 
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_reverberation_size_luminosity_001.png
+   :alt: AGN Reverberation Size-Luminosity Relation (Bentz et al. 2013)
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_reverberation_size_luminosity_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/examples/agn/plot_reverberation_size_luminosity.py:218: UserWarning: Tight layout not applied. The bottom and top margins cannot be made large enough to accommodate all Axes decorations.
+      fig.tight_layout()
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 225-226
 
 Verify scatter follows the L-R^0.5 slope: fit a power law to the results
@@ -324,6 +378,48 @@ Verify scatter follows the L-R^0.5 slope: fit a power law to the results
     print("\nCitations:")
     print("  Bentz et al. (2013), ApJ 767:149, arXiv:1303.1742")
     print("  Peterson (1993), PASP 105:247 — Reverberation mapping review")
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    ======================================================================
+
+.. image:: images/sphx_glr_plot_reverberation_size_luminosity_001.png
+   :alt: plot reverberation size luminosity
+   :class: sphx-glr-single-img
+
+    Reverberation Size-Luminosity Relation Verification
+    ======================================================================
+
+    Bentz et al. (2013) relation:
+      log(R_BLR) = -21.3 + 0.533 * log(L_5100)
+
+    Fitted to tengri qsogen AGN model:
+      log(R_BLR) = -21.30 + 0.533 * log(L_5100)
+
+    Slope comparison:
+      Bentz:   0.533
+      Fitted:  0.533
+      Deviation: 0.0%
+
+    Data summary:
+      AGN model: qsogen (Temple, Hewett & Banerji 2021)
+      Wavelength of interest: 5100 Å (Balmer alpha region)
+      Number of luminosity samples: 15
+      L_5100 range: 10^121.4 to 10^124.4 erg/s
+      R_BLR range: 2.46e+43 to 9.78e+44 light-days
+
+    Citations:
+      Bentz et al. (2013), ApJ 767:149, arXiv:1303.1742
+      Peterson (1993), PASP 105:247 — Reverberation mapping review
+
+
+
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_reverberation_size_luminosity.py:

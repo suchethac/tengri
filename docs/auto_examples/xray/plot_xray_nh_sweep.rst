@@ -52,6 +52,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 29-126
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_nh_sweep_001.png
+   :alt: plot xray nh sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_nh_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

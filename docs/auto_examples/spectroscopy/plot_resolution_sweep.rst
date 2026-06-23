@@ -45,6 +45,17 @@ low instrumental resolution.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-149
 
+
+
+.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_resolution_sweep_001.png
+   :alt: plot resolution sweep
+   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_resolution_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

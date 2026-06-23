@@ -37,6 +37,17 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-59
 
+
+
+.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_igm_redshift_001.png
+   :alt: plot igm redshift
+   :srcset: /auto_examples/igm/images/sphx_glr_plot_igm_redshift_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

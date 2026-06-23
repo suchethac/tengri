@@ -59,6 +59,27 @@ emission to absorption across the inclination range.
 
 .. GENERATED FROM PYTHON SOURCE LINES 36-236
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
+   :alt: (a) IR SED shape vs cos_inc, (b) Silicate 9.7 & 18 μm features, (c) UV/optical obscuration
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_inclination_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -261,6 +282,11 @@ emission to absorption across the inclination range.
     fig.tight_layout()
     plt.savefig("plot_skirtor_inclination_sweep.png", dpi=150, bbox_inches="tight")
     print("Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.645 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_inclination_sweep.py:

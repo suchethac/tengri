@@ -34,6 +34,17 @@ of higher-velocity stellar populations.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-120
 
+
+
+.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_velocity_dispersion_sweep_001.png
+   :alt: plot velocity dispersion sweep
+   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_velocity_dispersion_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -38,6 +38,17 @@ breaks (young stars are bluer).
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-111
 
+
+
+.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_metallicity_age_grid_001.png
+   :alt: plot metallicity age grid
+   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_metallicity_age_grid_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -136,6 +147,11 @@ breaks (young stars are bluer).
 
     fig.tight_layout()
     plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.218 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_metallicity_age_grid.py:

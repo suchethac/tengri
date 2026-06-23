@@ -47,6 +47,30 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-155
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
+   :alt: SDSS LRG Quiescent Template (z=0.3, R=2000) Red sequence ages 6–11 Gyr per Thomas+2005
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sdss_lrg_stack_template_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+    Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
+      Batch shape: (200, 2400)
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -180,6 +204,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_sdss_lrg_stack_template.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.842 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py:

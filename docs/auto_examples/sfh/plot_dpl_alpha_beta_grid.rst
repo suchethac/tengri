@@ -35,6 +35,70 @@ shapes the full UV-to-IR SED.
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-168
 
+
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
+         :alt: plot dpl alpha beta grid
+         :srcset: /auto_examples/sfh/images/sphx_glr_plot_dpl_alpha_beta_grid_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_dpl_alpha_beta_grid_002.png
+         :alt: plot dpl alpha beta grid
+         :srcset: /auto_examples/sfh/images/sphx_glr_plot_dpl_alpha_beta_grid_002.png
+         :class: sphx-glr-multi-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 6% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 11% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 20% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 9% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 1% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 3% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 14% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 31% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 49% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 66% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 78% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 87% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 13% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 4% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -193,6 +257,11 @@ shapes the full UV-to-IR SED.
     fig_bottom.tight_layout()
     fig_bottom.savefig("plot_dpl_alpha_beta_grid_sedsweeps.png", dpi=150, bbox_inches="tight")
     plt.savefig("plot_dpl_alpha_beta_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.787 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_dpl_alpha_beta_grid.py:

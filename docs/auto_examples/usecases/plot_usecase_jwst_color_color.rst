@@ -37,6 +37,32 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-178
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_jwst_color_color_001.png
+   :alt: plot usecase jwst color color
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_jwst_color_color_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+    /private/tmp/tengri-full/examples/usecases/plot_usecase_jwst_color_color.py:109: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /private/tmp/tengri-full/examples/usecases/plot_usecase_jwst_color_color.py:110: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -203,6 +229,11 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     fig.tight_layout()
     plt.savefig("plot_usecase_jwst_color_color.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 26.362 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_jwst_color_color.py:

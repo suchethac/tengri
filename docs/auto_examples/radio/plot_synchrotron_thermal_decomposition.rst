@@ -44,6 +44,17 @@ Helou, G. & Bicay, D. A. 1993, ApJ, 415, 93
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-138
 
+
+
+.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
+   :alt: plot synchrotron thermal decomposition
+   :srcset: /auto_examples/radio/images/sphx_glr_plot_synchrotron_thermal_decomposition_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

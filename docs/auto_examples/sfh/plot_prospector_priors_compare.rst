@@ -53,6 +53,17 @@ follow-up.
 
 .. GENERATED FROM PYTHON SOURCE LINES 30-113
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_prospector_priors_compare_001.png
+   :alt: plot prospector priors compare
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_prospector_priors_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

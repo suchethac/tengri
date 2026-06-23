@@ -46,6 +46,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-114
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_cue_flex_tour_001.png
+   :alt: plot cue flex tour
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_cue_flex_tour_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -139,6 +150,11 @@ References:
         ax.set_ylabel(r"$\Delta \log_{10}\,L_{\rm H\alpha}$  [dex]", fontsize=9)
 
     plt.savefig("plot_cue_flex_tour.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 9.409 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_flex_tour.py:

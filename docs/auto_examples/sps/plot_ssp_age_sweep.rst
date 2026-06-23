@@ -35,6 +35,17 @@ Reference: DSPS SSP grid (Conroy et al. 2009).
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-55
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_age_sweep_001.png
+   :alt: plot ssp age sweep
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_age_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

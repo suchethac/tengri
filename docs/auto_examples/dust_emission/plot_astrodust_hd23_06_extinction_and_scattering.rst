@@ -31,6 +31,17 @@ the Hensley & Draine 2023 fiducial size distribution.
 
 .. GENERATED FROM PYTHON SOURCE LINES 8-82
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
+   :alt: plot astrodust hd23 06 extinction and scattering
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_06_extinction_and_scattering_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
