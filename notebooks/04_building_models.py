@@ -1087,7 +1087,7 @@ print("sensitivity study, vmap() when you want the whole batch at once.")
 # - `model.spec.to_groups()` — pull the structure back out to edit
 # - `model.spec.summary_str()` — where each parameter value came from
 #
-# From here, [`05_fitting_photometry`](05_fitting_photometry.py)
+# From here, the [`quickstart`](00_quickstart.py)
 # runs a real fit and reads its posterior;
 # [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py) breaks age, dust,
 # and metallicity degeneracies with a spectrum. Stochastic SFHs live

@@ -16,9 +16,9 @@
 # %% [markdown]
 # # Joint photometry + spectroscopy
 #
-# [`05_fitting_photometry`](05_fitting_photometry.py) showed that broadband
-# photometry leaves the SFH shape and the metallicity–dust split prior-
-# dominated. Here we add an optical spectrum covering the metallicity-
+# Broadband photometry alone — the [`quickstart`](00_quickstart.py) — leaves
+# the SFH shape and the metallicity–dust split prior-dominated. Here we add an
+# optical spectrum covering the metallicity-
 # sensitive absorption features (Hβ, Mgb, the Fe blends) and fit both datasets
 # together. The joint posterior is narrower than either single-dataset fit and
 # pins down parameters photometry alone cannot: the line depths break the
@@ -356,7 +356,7 @@ plt.show()
 # adds the absorption-line depths that pin metallicity and the dust split.
 # Fitted together through one `Observation`, the posterior is narrower than
 # either alone and recovers the truth the photometry-only fit
-# ([notebook 05](05_fitting_photometry.py)) left degenerate. `SpectrumPrecomp`
+# (the [quickstart](00_quickstart.py)) left degenerate. `SpectrumPrecomp`
 # runs both channels on lookup tables, so the joint fit lands in a couple of
 # minutes; what is left of the cost is the per-pixel spectral likelihood and
 # its gradient, not the forward integration.

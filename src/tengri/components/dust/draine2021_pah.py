@@ -198,15 +198,59 @@ def load_pahspec_or_raise(template_path: str | None) -> Draine2021PAHTemplates:
         message contains the exact build-script invocation needed to
         produce the file.
     """
-    resolved = (
-        template_path
-        if template_path is not None
-        else os.environ.get(PAHSPEC_PATH_ENV, DRAINE2021_PAH_DEFAULT_PATH)
-    )
-    path = Path(resolved)
+    if template_path is not None:
+        path = Path(template_path)
+    elif os.environ.get(PAHSPEC_PATH_ENV):
+        path = Path(os.environ[PAHSPEC_PATH_ENV])
+    else:
+        # Walk parent dirs for data/pahspec_draine2021.h5 so the bundled grid
+        # is found from example subdirectories (sphinx-gallery chdir's in).
+        from tengri._data_setup import data_path
+
+        try:
+            path = data_path("pahspec_draine2021.h5")
+        except FileNotFoundError:
+            path = Path(DRAINE2021_PAH_DEFAULT_PATH)
     if not path.is_file():
         raise FileNotFoundError(missing_template_message(path))
     return load_draine2021_pahspec_templates(str(path))
+
+
+def load_pahspec_draine2021(template_path: str | None = None) -> Draine2021PAHTemplates:
+    r"""Load the Draine 2021 PAH emission-spectrum templates.
+
+    Public entry point for the bundled Draine (2021) PAHspec grid. Use it
+    instead of opening ``data/pahspec_draine2021.h5`` by hand; pair it with
+    :func:`select_pahspec_axes` to pick a (starlight, ionization,
+    size-distribution, slab) slice.
+
+    Parameters
+    ----------
+    template_path : str or None, optional
+        Override the grid location. When ``None`` (default), resolves the
+        :data:`PAHSPEC_PATH_ENV` env var, then the bundled
+        :data:`DRAINE2021_PAH_DEFAULT_PATH` (``data/pahspec_draine2021.h5``).
+
+    Returns
+    -------
+    Draine2021PAHTemplates
+        Frozen container of JAX arrays.
+
+    Raises
+    ------
+    FileNotFoundError
+        When the resolved path does not exist on disk.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O. Call once at setup.
+
+    References
+    ----------
+    .. [1] Draine, B. T., et al. 2021, ApJ, 917, 3. Excitation of Polycyclic
+       Aromatic Hydrocarbon Emission. arXiv:2106.07415.
+    """
+    return load_pahspec_or_raise(template_path)
 
 
 # ─────────────────────────────────────────────────────────────────────

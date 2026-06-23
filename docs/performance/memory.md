@@ -100,7 +100,8 @@ tengri.clear_cache()
 ```
 
 stale entries are evicted. See
-[compilation_cache.md](../inference/compilation_cache.md) for details.
+[compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md)
+for details.
 
 ## A safety-net watchdog
 

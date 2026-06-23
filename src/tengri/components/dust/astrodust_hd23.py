@@ -122,6 +122,10 @@ class AstrodustHD23Templates:
     sigma_sca_per_H: jnp.ndarray
     p_pol_per_H: jnp.ndarray
     lambda_P_lambda_polarized: jnp.ndarray
+    #: Fiducial per-H grain size distribution, shape ``(n_radii, 5)``:
+    #: columns are ``[a_um, dn_Ad/n_H, dn_PAH/n_H, ...]``. ``None`` for older
+    #: grids that predate the dataset.
+    size_distribution: jnp.ndarray | None = None
     M_Ad_over_M_H: float = 0.00642
     M_PAH_over_M_H: float = 0.000659
     paper: str = "Hensley & Draine 2023, ApJ 948, 55"
@@ -151,6 +155,28 @@ def missing_astrodust_template_message(path: Path) -> str:
     )
 
 
+def _resolve_astrodust_path(template_path: str | None) -> Path:
+    """Resolve the grid location: explicit arg → env var → ancestor-walk.
+
+    When neither an explicit path nor the env var is given, walk parent dirs
+    for ``data/astrodust_templates.h5`` (via :func:`tengri.data_path`) so the
+    bundled grid is found even when the cwd is an example subdirectory
+    (sphinx-gallery ``chdir``s into each script's folder). Falls back to the
+    bare relative default so the caller's FileNotFoundError message still fires.
+    """
+    if template_path is not None:
+        return Path(template_path)
+    env = os.environ.get(ASTRODUST_HD23_PATH_ENV)
+    if env:
+        return Path(env)
+    from tengri._data_setup import data_path
+
+    try:
+        return data_path("astrodust_templates.h5")
+    except FileNotFoundError:
+        return Path(ASTRODUST_HD23_DEFAULT_PATH)
+
+
 def load_astrodust_hd23_or_raise(template_path: str | None) -> AstrodustHD23Templates:
     r"""Load the Astrodust+PAH HDF5 grid, raising on missing file.
 
@@ -173,12 +199,7 @@ def load_astrodust_hd23_or_raise(template_path: str | None) -> AstrodustHD23Temp
     """
     import h5py
 
-    resolved = (
-        template_path
-        if template_path is not None
-        else os.environ.get(ASTRODUST_HD23_PATH_ENV, ASTRODUST_HD23_DEFAULT_PATH)
-    )
-    path = Path(resolved)
+    path = _resolve_astrodust_path(template_path)
     if not path.is_file():
         raise FileNotFoundError(missing_astrodust_template_message(path))
 
@@ -197,6 +218,9 @@ def load_astrodust_hd23_or_raise(template_path: str | None) -> AstrodustHD23Temp
         sigma_sca_per_H = jnp.asarray(f["scattering"][...])
         p_pol_per_H = jnp.asarray(f["polarized_extinction"][...])
         lambda_P_lambda_polarized = jnp.asarray(f["lambda_P_lambda_polarized"][...])
+        size_distribution = (
+            jnp.asarray(f["size_distribution"][...]) if "size_distribution" in f else None
+        )
         M_Ad_over_M_H = float(f.attrs.get("M_Ad_over_M_H", 0.00642))
         M_PAH_over_M_H = float(f.attrs.get("M_PAH_over_M_H", 0.000659))
 
@@ -215,9 +239,56 @@ def load_astrodust_hd23_or_raise(template_path: str | None) -> AstrodustHD23Temp
         sigma_sca_per_H=sigma_sca_per_H,
         p_pol_per_H=p_pol_per_H,
         lambda_P_lambda_polarized=lambda_P_lambda_polarized,
+        size_distribution=size_distribution,
         M_Ad_over_M_H=M_Ad_over_M_H,
         M_PAH_over_M_H=M_PAH_over_M_H,
     )
+
+
+def load_astrodust_hd23(template_path: str | None = None) -> AstrodustHD23Templates:
+    r"""Load the Hensley & Draine 2023 Astrodust+PAH emission grid.
+
+    Public entry point for the bundled Astrodust+PAH templates — emission
+    (:math:`L_\nu` per H for total / astrodust / PAH / spinning-dust
+    components), extinction / scattering / polarisation per H, and the
+    fiducial grain ``size_distribution``. Use it instead of opening
+    ``data/astrodust_templates.h5`` by hand.
+
+    Parameters
+    ----------
+    template_path : str or None, optional
+        Override the grid location. When ``None`` (default), resolves the
+        :data:`ASTRODUST_HD23_PATH_ENV` env var, then the bundled
+        :data:`ASTRODUST_HD23_DEFAULT_PATH` (``data/astrodust_templates.h5``).
+
+    Returns
+    -------
+    AstrodustHD23Templates
+        Frozen container of JAX arrays (see the class for the full field list).
+
+    Raises
+    ------
+    FileNotFoundError
+        When the resolved path does not exist on disk.
+
+    Notes
+    -----
+    **JIT-compatible**: no — file I/O. Call once at setup, then pass the
+    returned arrays into JIT-compiled code.
+
+    References
+    ----------
+    .. [1] Hensley, B. S. & Draine, B. T. 2023, ApJ, 948, 55.
+       The Astrodust+PAH Model. arXiv:2208.12365. doi:10.7910/DVN/3B6E6S.
+
+    Examples
+    --------
+    >>> import tengri
+    >>> tpl = tengri.load_astrodust_hd23()  # doctest: +SKIP
+    >>> tpl.wavelength_um.shape  # doctest: +SKIP
+    (...,)
+    """
+    return load_astrodust_hd23_or_raise(template_path)
 
 
 def resample_lnu_on_aa_grid(

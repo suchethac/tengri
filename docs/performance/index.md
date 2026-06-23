@@ -77,9 +77,10 @@ import tengri
 tengri.clear_cache()
 ```
 
-Default `min_compile_time_secs=5.0` keeps small SSP/dust kernels out of
-the cache. See [compilation_cache.md](../inference/compilation_cache.md)
-and [compilation_diagnostics.md](../inference/compilation_diagnostics.md)
+Default `min_compile_time_secs=0.05` persists per-filter kernels and
+component precompute compiles. See
+[compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md)
+and [compilation_diagnostics.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_diagnostics.md)
 for full details.
 
 ## Health check and dispatcher
@@ -140,8 +141,9 @@ tracks which scripts are due for a re-run.
 
 - All numbers above are **single CPU core** on Apple M-series hardware.
   Tengri runs on JAX, so the same code executes on GPU/TPU without
-  modification — but those platforms have not been benchmarked. See
-  [Getting Started → GPU](../getting_started/index.md) for setup.
+  modification — but those platforms have not been benchmarked. See the
+  [JAX installation guide](https://docs.jax.dev/en/latest/installation.html)
+  for GPU/TPU setup.
 - JAX Metal (Apple GPU) is experimental and causes test failures; CPU
   is the supported reference platform for benchmarks. Set
   `JAX_PLATFORMS=cpu` to be explicit.

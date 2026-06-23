@@ -41,6 +41,7 @@ import numpy as np
 from tengri import (
     FIXED,
     FREE,
+    Fitter,
     Fixed,
     Observation,
     Photometry,
@@ -52,7 +53,6 @@ from tengri import (
     load_ssp_data,
     plot,
 )
-from tengri.inference.fitter import Fitter
 
 plot.setup_style()
 HERE = Path(__file__).parent

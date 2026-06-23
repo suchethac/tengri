@@ -31,7 +31,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.utils.magnitudes import fnu_to_ab_mag
+from tengri.units import fnu_to_ab_mag
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

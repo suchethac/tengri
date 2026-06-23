@@ -41,13 +41,17 @@ COMMON = dict(
 BASE_AGN = dict(disc={"type": "multicolor", "*": tengri.FIXED})
 
 
-def _agn(extra_blocks=()):
+def _agn(extra_blocks=(), wave=None):
     agn = {"*": tengri.FIXED, "log_lbol": 12.5, "frac": 1.0, **BASE_AGN}
     for key, value in extra_blocks:
         agn[key] = value
     model = tengri.SEDModel.build(ssp, agn=agn, **COMMON)
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
-    out = model.predict_rest_sed(p)
+    # Pin every config to a shared rest grid so the panels can subtract and
+    # overplot SEDs: components such as the GRAHSP FeII template otherwise
+    # inject their own wavelength nodes, giving each config a different-length
+    # native grid (5994 vs 6127).
+    out = model.predict_rest_sed(p, wave=wave)
     return np.asarray(out.wavelength), np.asarray(out.sed)
 
 
@@ -58,7 +62,7 @@ configs = [
         "+ NLR",
         (
             ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-            ("lines", {"type": "nlr", "*": tengri.FIXED}),
+            ("nlr", {"type": "analytic", "*": tengri.FIXED}),
         ),
         "#5588cc",
     ),
@@ -66,7 +70,7 @@ configs = [
         "+ BLR",
         (
             ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-            ("lines", {"type": "blr", "*": tengri.FIXED}),
+            ("blr", {"type": "analytic", "*": tengri.FIXED}),
         ),
         "#4477aa",
     ),
@@ -74,20 +78,24 @@ configs = [
         "+ FeII",
         (
             ("torus", {"type": "skirtor", "*": tengri.FIXED}),
-            ("lines", {"type": "blr", "*": tengri.FIXED}),
+            ("blr", {"type": "analytic", "*": tengri.FIXED}),
             ("feii", {"type": "grahsp", "*": tengri.FIXED}),
         ),
         "#dd6699",
     ),
 ]
 
-waves, seds = {}, {}
+# Establish the shared rest grid from the richest config (all blocks active,
+# so it spans every component's wavelength coverage), then evaluate every
+# config on it.
+common_wave, _ = _agn(configs[-1][1])
+
+seds = {}
 for label, blocks, _ in configs:
-    w, s = _agn(blocks)
-    waves[label] = w
+    _, s = _agn(blocks, wave=common_wave)
     seds[label] = s
 
-wave = waves["disc only"]
+wave = common_wave
 nu = C_AA_PER_S / wave
 
 fig, (ax_top, ax_bot) = plt.subplots(

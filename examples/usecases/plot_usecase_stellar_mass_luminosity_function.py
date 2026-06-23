@@ -103,7 +103,7 @@ def schechter_sample(
     rng = np.random.RandomState(rng_seed)
     u_min, u_max = -3.0, 2.0  # log10(M/M*) range — covers faint to ULIRG
     # Envelope: max of x^(α+1) exp(-x) on the interval is at x = x_min.
-    x_min = 10.0 ** u_min
+    x_min = 10.0**u_min
     w_envelope = x_min ** (alpha + 1.0) * np.exp(-x_min)
     samples: list = []
     for _ in range(100):  # bounded iteration count — never spin forever
@@ -111,7 +111,7 @@ def schechter_sample(
             break
         batch_size = max((n_sample - len(samples)) * 3, 1000)
         u_prop = rng.uniform(u_min, u_max, size=batch_size)
-        x_prop = 10.0 ** u_prop
+        x_prop = 10.0**u_prop
         w = x_prop ** (alpha + 1.0) * np.exp(-x_prop) / w_envelope
         u_accept = rng.uniform(0, 1, size=batch_size)
         samples.extend(u_prop[u_accept < w].tolist())
@@ -138,7 +138,7 @@ repo_root = next(
 SSP = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5"))
 
 # r-band photometry (rest-frame for z~0)
-from tengri.utils.magnitudes import fnu_to_ab_mag
+from tengri.units import fnu_to_ab_mag
 
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"]))
 

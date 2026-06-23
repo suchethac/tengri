@@ -34,7 +34,7 @@ glued them together.
 
 - [DSPS](https://github.com/ArgonneCPAC/dsps): differentiable stellar
   population synthesis. Hearin et al. (2023),
-  [arXiv:2112.08423](https://arxiv.org/abs/2112.08423).
+  [arXiv:2112.06830](https://arxiv.org/abs/2112.06830).
 - [FSPS](https://github.com/cconroy20/fsps), BC03, BPASS, ProGeny:
   SSP grids re-formatted into the DSPS schema.
 - [Cue](https://github.com/yi-jia-li/cue): neural emulator for
