@@ -16,6 +16,10 @@
 # %% [markdown]
 # # Multi-model Bayesian model averaging on CANDELS galaxies
 #
+# > ⚠️ **Experimental.** This notebook is a research demonstration. It
+# > explores experimental features and may use APIs that change between
+# > releases; it sits outside the supported tutorial sequence.
+#
 # Any SED fit is conditioned on a set of modelling choices — the SFH family, the
 # stellar library, the dust law — that the photometry alone does not pin down. A
 # single fit gives the posterior for one such choice but says nothing about how
