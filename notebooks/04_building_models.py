@@ -39,6 +39,21 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
+import warnings
+
+# Keep the rendered tutorial clean: silence framework notices that do not
+# change the science shown here (baked-in nebular, the WavePrecomp blue-band
+# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# recipe/parameter-provenance notices). Genuine deprecations in user-facing
+# calls are fixed in the code, not hidden.
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
+warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*Composable AGN.*")
+warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 import time
 from pathlib import Path
 
@@ -149,7 +164,7 @@ print()
 # you don't have to wait until SEDModel.build() runs.
 print("PATH 3: Builder factories")
 factory_groups = {
-    "sfh": builders.sfh.dpl(_=FREE, log_total_mass=Uniform(9.0, 11.0)),
+    "sfh": builders.sfh.dpl(defaults=FREE, log_total_mass=Uniform(9.0, 11.0)),
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
@@ -162,7 +177,7 @@ factory_groups = {
 }
 model_factory = SEDModel.build(ssp_data=ssp, observation=observation, **factory_groups)
 print(f"  Model: {model_factory.spec.n_free} free params from factory + dict mix")
-print(f"  builders.sfh.dpl(_=FREE) → {builders.sfh.dpl(_=FREE)}")
+print(f"  builders.sfh.dpl(defaults=FREE) → {builders.sfh.dpl(defaults=FREE)}")
 print(f"  Available SFH variants ({len(builders.sfh.available())} total):")
 print(f"    {', '.join(builders.sfh.available()[:8])}, ...")
 print()
@@ -196,7 +211,7 @@ print()
 
 # Build a model with tsnorm (instead of dpl from PATH 3)
 groups_sfh_tour = {
-    "sfh": builders.sfh.tsnorm(_=FREE, skew=Uniform(-1.0, 1.0)),
+    "sfh": builders.sfh.tsnorm(defaults=FREE, skew=Uniform(-1.0, 1.0)),
     "dust": {
         "type": "two_component",
         "law_bc": "calzetti",
@@ -224,9 +239,9 @@ groups_dust_tour = {
     "sfh": {"type": "tsnorm", "*": FIXED},
     "dust": builders.dust.two_component(
         law_bc="calzetti",
-        _=FREE,
+        defaults=FREE,
         tau_bc=Uniform(0.0, 2.0),
-        emission=builders.dust.emission.dale2014(_=FIXED),
+        emission=builders.dust.emission.dale2014(defaults=FIXED),
     ),
     "neb": {"type": "cue", "*": FIXED},
     "redshift": Fixed(0.05),
@@ -252,7 +267,7 @@ try:
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "*": FIXED},
         "dust": {"type": "two_component", "*": FIXED},
-        "neb": builders.neb.cb19(_=FREE, log_nH=Uniform(1.0, 4.0)),
+        "neb": builders.neb.cb19(defaults=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
     spec_neb_tour = parse_groups(**groups_neb_tour)
@@ -264,7 +279,7 @@ except Exception as e:
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "*": FIXED},
         "dust": {"type": "two_component", "*": FIXED},
-        "neb": builders.neb.cue(_=FIXED),
+        "neb": builders.neb.cue(defaults=FIXED),
         "redshift": Fixed(0.05),
     }
     spec_neb_tour = parse_groups(**groups_neb_tour)
@@ -286,7 +301,7 @@ print("Note: Supplying log_n_hi auto-sets dla=True (Damped Lyman Alpha)")
 print()
 
 # %% [markdown]
-# ### Composable AGN — disc, torus, lines, feii, attenuation
+# ### Composable AGN — disc, torus, NLR, FeII, attenuation
 
 # %%
 print("Composable AGN Tour")
@@ -294,19 +309,19 @@ print("─" * 70)
 
 # Build AGN dict using composable factories (do NOT build full SEDModel here)
 agn_dict = builders.agn.composable(
-    _=FREE,
+    defaults=FREE,
     log_lbol=Uniform(43.0, 47.0),
-    disc=builders.agn.disc.multicolor(_=FREE),
-    torus=builders.agn.torus.skirtor(_=FIXED),
-    lines=builders.agn.lines.nlr(),
+    disc=builders.agn.disc.multicolor(defaults=FREE),
+    torus=builders.agn.torus.skirtor(defaults=FIXED),
+    nlr=builders.agn.nlr.analytic(),
     feii=builders.agn.feii.none(),
-    atten=builders.agn.atten.smc_prevot(_=FIXED),
+    atten=builders.agn.atten.smc_prevot(defaults=FIXED),
 )
 print(f"Composable AGN dict keys: {list(agn_dict.keys())}")
 print(f"  agn_dict['type'] = '{agn_dict['type']}'")
 print(f"  agn_dict['disc']['type'] = '{agn_dict['disc']['type']}'")
 print(f"  agn_dict['torus']['type'] = '{agn_dict['torus']['type']}'")
-print("Tip: Swap any sub-block (disc, torus, lines) to explore AGN physics.")
+print("Tip: Swap any sub-block (disc, torus, nlr) to explore AGN physics.")
 print()
 
 # %% [markdown]

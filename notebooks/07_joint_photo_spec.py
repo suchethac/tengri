@@ -32,6 +32,21 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
+import warnings
+
+# Keep the rendered tutorial clean: silence framework notices that do not
+# change the science shown here (baked-in nebular, the WavePrecomp blue-band
+# approximation, the intentional Fitter(sed_model, ...) LUT path, and
+# recipe/parameter-provenance notices). Genuine deprecations in user-facing
+# calls are fixed in the code, not hidden.
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
+warnings.filterwarnings("ignore", message=".*Fitter.*deprecated.*")
+warnings.filterwarnings("ignore", message=".*was marked FIXED.*")
+warnings.filterwarnings("ignore", message=".*Composable AGN.*")
+warnings.filterwarnings("ignore", message=".*before the Big Bang.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning)
+
 import time
 from pathlib import Path
 
