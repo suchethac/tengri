@@ -26,6 +26,15 @@
    "name": "exp"
   }
  ],
+ "jnp.float64": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "float64"
+  }
+ ],
  "jnp.var": [
   {
    "is_class": false,
@@ -35,6 +44,15 @@
    "name": "var"
   }
  ],
+ "mpl.colors.Normalize": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "Normalize"
+  }
+ ],
  "np.array": [
   {
    "is_class": false,
@@ -42,6 +60,42 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
+  }
+ ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
+ "plt.cm.ScalarMappable": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "ScalarMappable"
+  }
+ ],
+ "plt.figure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "figure"
   }
  ],
  "plt.get_cmap": [
@@ -80,6 +134,42 @@
    "name": "setup_style"
   }
  ],
+ "tengri.FIXED": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "FIXED"
+  }
+ ],
+ "tengri.Fixed": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
+ "tengri.SEDModel.build": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.SEDModel",
+   "module_short": "tengri.SEDModel",
+   "name": "build"
+  }
+ ],
+ "tengri.Uniform": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Uniform"
+  }
+ ],
  "tengri.compute_sqrt_power_drw": [
   {
    "is_class": false,
@@ -96,6 +186,15 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "generate_gp_fourier"
+  }
+ ],
+ "tengri.load_ssp": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_ssp"
   }
  ],
  "tengri.make_log_age_grid": [

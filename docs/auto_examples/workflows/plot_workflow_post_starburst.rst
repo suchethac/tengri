@@ -34,10 +34,14 @@ model flexibility directly impacts star formation history inference.
 Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
 classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-167
+.. GENERATED FROM PYTHON SOURCE LINES 13-171
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -58,7 +62,7 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
     # --- Truth: post-starburst (E+A) --- burst 500 Myr ago, then quench
     key = jax.random.PRNGKey(42)
     truth_params = {
-        "sfh_tsnorm_log_peak_sfr": 1.5,
+        "sfh_tsnorm_log_total_mass": 1.5,
         "sfh_tsnorm_peak_lbt_gyr": 0.5,
         "sfh_tsnorm_width_gyr": 0.2,
         "sfh_tsnorm_skew": 0.8,
@@ -85,7 +89,7 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(0.5, 2.5),
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(0.2, 2.0),
             "width_gyr": tengri.Uniform(0.1, 1.0),
             "skew": tengri.Uniform(-0.5, 2.0),
@@ -117,7 +121,7 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs,
         sfh={
             "type": "dpl",
-            "log_peak_sfr": tengri.Uniform(0.5, 2.5),
+            "log_total_mass": 10.0,
             "tau_gyr": tengri.Uniform(0.5, 10.0),
             "alpha": tengri.Fixed(1.0),
             "beta": tengri.Fixed(0.1),

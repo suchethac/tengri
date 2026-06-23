@@ -44,17 +44,6 @@ Models compared (the six production disc selectors under
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-88
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :alt: plot agn disc compare
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_disc_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -124,14 +113,6 @@ Models compared (the six production disc selectors under
 
     fig.tight_layout()
     plt.savefig("plot_agn_disc_compare.png", dpi=150, bbox_inches="tight")
-<<<<<<< HEAD
-=======
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.947 seconds)
->>>>>>> origin/main
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

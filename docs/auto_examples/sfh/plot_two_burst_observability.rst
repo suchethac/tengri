@@ -27,7 +27,7 @@ The outshining problem: young bursts eclipse ancient populations
 
 
 How observable is an underlying ancient burst (10 Gyr ago) beneath a young (300 Myr)
-starburst? This example demonstrates the *outshining* problem in broadband photometry
+starburst? *outshining* problem in broadband photometry
 (Trager+ 2000, Renzini 2006): the young burst's UV emission completely dominates over
 the ancient burst's optical/IR, rendering the ancient population invisible to
 broadband SED fitting.
@@ -39,38 +39,18 @@ Shows three scenarios:
 
 Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-244
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_two_burst_observability_001.png
-   :alt: plot two burst observability
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_two_burst_observability_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Saved: plot_two_burst_observability.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 18-247
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -95,7 +75,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
     # ────────────────────────────────────────────────────────────────────────────
     sfh_ancient = tengri.tsnorm(
         t_lookback=t_yr,
-        log_peak_sfr=1.0,
+        log_total_mass=10.0,
         peak_lbt=10.0e9,  # 10 Gyr in years
         width=0.5e9,  # 0.5 Gyr in years
         skew=0.3,
@@ -107,7 +87,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 10.0,
             "width_gyr": 0.5,
             "skew": 0.3,
@@ -123,7 +103,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
     # ────────────────────────────────────────────────────────────────────────────
     sfh_young = tengri.tsnorm(
         t_lookback=t_yr,
-        log_peak_sfr=1.0,
+        log_total_mass=10.0,
         peak_lbt=0.3e9,  # 0.3 Gyr (300 Myr) in years
         width=0.1e9,  # 0.1 Gyr (100 Myr) in years
         skew=0.3,
@@ -135,7 +115,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.3,
             "width_gyr": 0.1,
             "skew": 0.3,
@@ -152,10 +132,10 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
     # To achieve 1:1 mass ratio, scale the ancient peak to be ~1.0 - log10(timescale_ratio)
     # Rough: ancient width 0.5 Gyr vs young width 0.1 Gyr → 5x longer
     # Adjust ancient peak to lower value to equalize integrated mass
-    # log_peak_sfr_ancient ≈ 0.3 achieves approximate 1:1
+    # log_total_mass_ancient ≈ 0.3 achieves approximate 1:1
     sfh_ancient_component = tengri.tsnorm(
         t_lookback=t_yr,
-        log_peak_sfr=0.3,
+        log_total_mass=10.0,
         peak_lbt=10.0e9,
         width=0.5e9,
         skew=0.3,
@@ -164,7 +144,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
 
     sfh_young_component = tengri.tsnorm(
         t_lookback=t_yr,
-        log_peak_sfr=1.0,
+        log_total_mass=10.0,
         peak_lbt=0.3e9,
         width=0.1e9,
         skew=0.3,
@@ -181,7 +161,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 0.3,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 10.0,
             "width_gyr": 0.5,
             "skew": 0.3,
@@ -197,7 +177,7 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
         sfh={
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 0.3,
             "width_gyr": 0.1,
             "skew": 0.3,
@@ -244,14 +224,14 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
     # ────────────────────────────────────────────────────────────────────────────
     # Plot: Top panel = SFH, Bottom panel = rest-frame νL_ν SEDs
     # ────────────────────────────────────────────────────────────────────────────
-    fig, axes = plt.subplots(
-        2, 1, figsize=(7, 7), sharex=False, gridspec_kw={"height_ratios": [1, 1]}
-    )
+    fig, axes = plt.subplots(2, 1, figsize=(7, 7), sharex=False, gridspec_kw={"height_ratios": [1, 1]})
 
     # ── Top panel: SFH ──────────────────────────────────────────────────────────
     ax_sfh = axes[0]
 
-    ax_sfh.fill_between(t_gyr, 0, sfh_ancient, alpha=0.5, color="#1f77b4", label="Ancient burst (10 Gyr)")
+    ax_sfh.fill_between(
+        t_gyr, 0, sfh_ancient, alpha=0.5, color="#1f77b4", label="Ancient burst (10 Gyr)"
+    )
     ax_sfh.plot(t_gyr, sfh_ancient, color="#1f77b4", lw=1.5)
 
     ax_sfh.fill_between(t_gyr, 0, sfh_young, alpha=0.5, color="#ff7f0e", label="Young burst (300 Myr)")
@@ -292,11 +272,6 @@ Uses rest-frame SED modeling with public API only (no hand-rolled photometry).
     fig.tight_layout()
     plt.savefig("plot_two_burst_observability.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_two_burst_observability.png")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 27.376 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_two_burst_observability.py:

@@ -6,20 +6,23 @@ Polarized emission and polarization fraction from Astrodust grains at the
 Hensley & Draine 2023 fiducial ionization parameter.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import data_path
+import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.dust.astrodust_hd23 import load_astrodust_hd23_or_raise
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-tpl = load_astrodust_hd23_or_raise(data_path("astrodust_templates.h5"))
+tpl = tengri.load_astrodust_hd23()
 wave_um = np.asarray(tpl.wavelength_um)
 lgU = np.asarray(tpl.lgU)
 

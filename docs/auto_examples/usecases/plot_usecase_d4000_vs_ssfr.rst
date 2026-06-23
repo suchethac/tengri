@@ -37,21 +37,14 @@ star formation, weak break). Old populations climb to
 The Kauffmann+2003 green-valley cut at ``D_n(4000) ≈ 1.5`` is the
 horizontal divider.
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-87
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
-   :alt: plot usecase d4000 vs ssfr
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_d4000_vs_ssfr_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 16-104
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -78,12 +71,16 @@ horizontal divider.
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "*": tengri.FIXED,
-             "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
-             "width_gyr": 0.05, "log_peak_sfr": 1.0,
-             "skew": 0.0, "trunc": 13.0},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.0, "tau_bc": 0.0},
+        sfh={
+            "type": "tsnorm",
+            "*": tengri.FIXED,
+            "peak_lbt_gyr": tengri.Uniform(0.03, 13.0),
+            "width_gyr": 0.05,
+            "log_total_mass": 10.0,
+            "skew": 0.0,
+            "trunc": 13.0,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -107,17 +104,26 @@ horizontal divider.
         ssfr[i] = sfr_now / max(m_star, 1e-30)
 
     fig, ax = plt.subplots(figsize=(6.4, 5.0))
-    sc = ax.scatter(d4000, np.log10(np.maximum(ssfr, 1e-15)), c=ages,
-                    cmap="viridis", s=44, lw=0.4, edgecolor="0.2",
-                    norm=plt.matplotlib.colors.LogNorm())
+    sc = ax.scatter(
+        d4000,
+        np.log10(np.maximum(ssfr, 1e-15)),
+        c=ages,
+        cmap="viridis",
+        s=44,
+        lw=0.4,
+        edgecolor="0.2",
+        norm=plt.matplotlib.colors.LogNorm(),
+    )
 
     ax.axvspan(1.5, 1.6, color="0.92", alpha=0.6, lw=0)
-    ax.text(1.62, -8.5, "Kauffmann+2003\ngreen-valley cut",
-            fontsize=8, color="0.4")
+    ax.text(1.62, -8.5, "Kauffmann+2003\ngreen-valley cut", fontsize=8, color="0.4")
 
-    ax.set(xlabel=r"$D_n(4000)$",
-           ylabel=r"$\log\,\mathrm{sSFR}$  [yr$^{-1}$]",
-           xlim=(0.95, 2.05), ylim=(-13.5, -8.0))
+    ax.set(
+        xlabel=r"$D_n(4000)$",
+        ylabel=r"$\log\,\mathrm{sSFR}$  [yr$^{-1}$]",
+        xlim=(0.95, 2.05),
+        ylim=(-13.5, -8.0),
+    )
     cb = fig.colorbar(sc, ax=ax, pad=0.01)
     cb.set_label("Stellar burst age [Gyr]")
 

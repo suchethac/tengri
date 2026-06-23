@@ -48,36 +48,14 @@ References
 - Kennicutt 1998, ARA&A, 36, 189 — SFR UV/IR/radio calibrations
 - Hao et al. 2011, ApJ, 741, 124 — hybrid UV+IR SFR recipe
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-247
-
-
-
-.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sfr_uv_ir_consistency_001.png
-   :alt: plot usecase sfr uv ir consistency
-   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sfr_uv_ir_consistency_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    SFR recovery statistics:
-      tau_V range: 0.00 – 4.00
-      Hybrid SFR relative error: 87.7% – 88.1%
-      Mean error: 87.9%
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 27-251
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -153,10 +131,10 @@ References
         model_dict = {
             "sfh": {
                 "type": "dpl",
-                "alpha": Fixed(0.1),              # shallow rising slope
-                "beta": Fixed(4.0),               # steep quenching
-                "tau_gyr": Fixed(2.0),            # turnover timescale
-                "log_peak_sfr": Fixed(1.0),       # log10(10 Msun/yr) = 1.0
+                "alpha": Fixed(0.1),  # shallow rising slope
+                "beta": Fixed(4.0),  # steep quenching
+                "tau_gyr": Fixed(2.0),  # turnover timescale
+                "log_total_mass": 10.0,  # log10(10 Msun/yr) = 1.0
             },
             "dust": {
                 "type": "two_component",
@@ -178,7 +156,7 @@ References
         pred = model.predict_rest_sed({})
 
         # Extract actual SFH-derived SFR (if available)
-        if hasattr(pred, 'sfr_100myr'):
+        if hasattr(pred, "sfr_100myr"):
             actual_sfr = pred.sfr_100myr
         else:
             actual_sfr = None
@@ -268,7 +246,7 @@ References
 
     ax.set_xlabel(r"Dust optical depth $\tau_V$")
     ax.set_ylabel(r"SFR estimator [M$_{\odot}$/yr]")
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=0, top=11)
     ax.legend(loc="upper left", frameon=False, fontsize=9)
     ax.grid(True, alpha=0.2)
 
@@ -298,11 +276,6 @@ References
             "\n⚠ WARNING: hybrid SFR error >100% detected."
             " Check dust emission model or IR integration bounds."
         )
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (1 minutes 16.912 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

@@ -18,23 +18,29 @@
 .. _sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py:
 
 
-Log-normal peak lookback time shifts stellar age and SED morphology
-===================================================================
+Log-normal peak time shifts stellar age and SED morphology
+==========================================================
 
 .. image:: images/sphx_glr_plot_lnorm_peak_sweep_001.png
    :alt: plot lnorm peak sweep
    :class: sphx-glr-single-img
 
 
-The peak lookback time of a log-normal SFH controls when most stars formed,
-shifting the age structure and dramatically affecting UV slope, 4000 Å break
-strength, and NIR luminosity. We vary the peak time across its prior range with
-every other parameter fixed.
+The peak time of a log-normal SFH controls when most stars formed, shifting the
+age structure and dramatically affecting UV slope, 4000 Å break strength, and
+NIR luminosity. Following the Carnall+2018 / BAGPIPES convention (#514), the
+peak is measured in *cosmic time since formation* (T = age - lookback); larger
+peak times therefore correspond to more recent star formation. We vary the peak
+across its prior range with every other parameter fixed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-63
+.. GENERATED FROM PYTHON SOURCE LINES 12-69
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -56,8 +62,8 @@ every other parameter fixed.
         sfh={
             "type": "lnorm",
             "*": tengri.FIXED,
-            "peak_lbt_gyr": tengri.Uniform(1.0, 11.0),
-            "log_peak_sfr": 1.0,
+            "peak_gyr": tengri.Uniform(1.0, 11.0),
+            "log_total_mass": 10.0,
             "width_gyr": 0.3,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
@@ -71,7 +77,7 @@ every other parameter fixed.
 
     fig, ax = plt.subplots(figsize=(6.5, 4.2))
     for peak in peak_values:
-        params = {**baseline, "sfh_lnorm_peak_lbt_gyr": jnp.float64(peak)}
+        params = {**baseline, "sfh_lnorm_peak_gyr": jnp.float64(peak)}
         out = model.predict_rest_sed(params)
         wave = np.asarray(out.wavelength)
         nu = 2.998e18 / wave  # Å/s -> Hz
@@ -84,7 +90,7 @@ every other parameter fixed.
     ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
     cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
-    cbar.set_label(r"Peak lookback time [Gyr]")
+    cbar.set_label(r"Peak time, cosmic since formation [Gyr]")
 
     fig.tight_layout()
     plt.savefig("plot_lnorm_peak_sweep.png", dpi=150, bbox_inches="tight")

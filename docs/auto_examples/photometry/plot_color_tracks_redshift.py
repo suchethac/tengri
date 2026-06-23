@@ -20,6 +20,10 @@ Useful intuition this figure makes obvious:
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -49,7 +53,7 @@ def _build_population(peak_lbt, width, tau_diff):
             "*": tengri.FIXED,
             "peak_lbt_gyr": peak_lbt,
             "width_gyr": width,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },

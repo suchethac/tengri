@@ -19,12 +19,6 @@
 
 
 Cardelli MW attenuation: sweeping R_V
-=======================================
-
-.. image:: images/sphx_glr_plot_cardelli_rv_sweep_001.png
-   :alt: plot cardelli rv sweep
-   :class: sphx-glr-single-img
-
 
 The Cardelli+1989 Milky Way attenuation curve is a family
 parameterised by ``R_V = A_V / E(B-V)``. Smaller R_V (≲ 3) gives a
@@ -35,26 +29,18 @@ small grains dominate); larger R_V (≳ 4.5) flattens the UV slope
 Sweep over the canonical range R_V ∈ [2.0, 5.5] showing the family
 on the same intrinsic SED at τ_V = 1.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-69
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_cardelli_rv_sweep_001.png
-   :alt: plot cardelli rv sweep
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_cardelli_rv_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 13-86
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np
@@ -67,16 +53,29 @@ on the same intrinsic SED at τ_V = 1.
 
     C_AA_PER_S = 2.998e18
     ssp = tengri.load_ssp()
-    SFH = {"type": "tsnorm", "*": tengri.FIXED, "peak_lbt_gyr": 0.05,
-           "width_gyr": 0.05, "log_peak_sfr": 1.0, "skew": 0.0, "trunc": 13.0}
+    SFH = {
+        "type": "tsnorm",
+        "*": tengri.FIXED,
+        "peak_lbt_gyr": 0.05,
+        "width_gyr": 0.05,
+        "log_total_mass": 10.0,
+        "skew": 0.0,
+        "trunc": 13.0,
+    }
 
 
     def _model(rv):
         return tengri.SEDModel.build(
-            ssp, sfh=SFH,
-            dust={"type": "two_component", "*": tengri.FIXED,
-                  "tau_diff": 1.0, "tau_bc": 0.0, "law_diff": "cardelli",
-                  "Rv": rv},
+            ssp,
+            sfh=SFH,
+            dust={
+                "type": "two_component",
+                "*": tengri.FIXED,
+                "tau_diff": 1.0,
+                "tau_bc": 0.0,
+                "law_diff": "cardelli",
+                "Rv": rv,
+            },
             redshift=tengri.Fixed(0.05),
         )
 
@@ -95,11 +94,13 @@ on the same intrinsic SED at τ_V = 1.
         ax.loglog(wave, nu_l_nu, color=cmap(norm(rv)), lw=1.4)
 
     ax.axvline(2175, color="0.55", lw=0.4, ls=":")
-    ax.text(2175, 8e43, "2175 Å bump", fontsize=8, color="0.4",
-            ha="right", rotation=90)
-    ax.set(xlim=(900, 1e4), ylim=(1e41, 1e44),
-           xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-           ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]")
+    ax.text(2175, 8e43, "2175 Å bump", fontsize=8, color="0.4", ha="right", rotation=90)
+    ax.set(
+        xlim=(900, 1e4),
+        ylim=(1e41, 1e44),
+        xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+    )
     cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
     cb.set_label(r"$R_V = A_V / E(B-V)$")
 

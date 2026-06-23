@@ -39,20 +39,6 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-105
 
-<<<<<<< HEAD
-=======
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
-   :alt: plot emission line atlas
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
->>>>>>> origin/main
 .. code-block:: Python
 
 

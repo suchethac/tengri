@@ -32,7 +32,6 @@ The calculation integrates the ionizing flux (λ < 912 Å) weighted by photon en
 across the hydrogen-ionizing frequency domain. The result is normalized by the
 stellar mass of a single-age population to give photons per second per solar mass.
 
-This example demonstrates:
 - Loading bare-stellar SSP data via ``tengri.load_ssp()``
 - Extracting age and metallicity arrays from the SSP grid
 - Computing Q_H via ``compute_qh(ssp_wave, ssp_flux)`` from the ionizing part
@@ -45,7 +44,7 @@ References
 - Eldridge, J. J. & Stanway, E. R. 2016, "Binary population synthesis and the
   morphology-density relation at z ~ 0.05," MNRAS, 462, 3302 (binaries).
 
-.. GENERATED FROM PYTHON SOURCE LINES 29-114
+.. GENERATED FROM PYTHON SOURCE LINES 28-116
 
 
 
@@ -68,9 +67,12 @@ References
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
-    import jax.numpy as jnp
     import matplotlib as mpl
     import matplotlib.pyplot as plt
     import numpy as np

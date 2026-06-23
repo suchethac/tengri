@@ -31,10 +31,14 @@ falls after its peak: short τ means rapid decline and old stars, long τ means
 a sustained tail and younger mean age. We vary τ across the prior range with
 every other parameter fixed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-63
+.. GENERATED FROM PYTHON SOURCE LINES 10-67
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -57,7 +61,7 @@ every other parameter fixed.
             "type": "dexp",
             "*": tengri.FIXED,
             "tau_gyr": tengri.Uniform(0.1, 10.0),
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "start_gyr": 10.0,
         },
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},

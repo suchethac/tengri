@@ -40,10 +40,14 @@ so users can pick by eye:
 
 Each is built with no overrides and evaluated at default parameter values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-78
+.. GENERATED FROM PYTHON SOURCE LINES 19-82
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

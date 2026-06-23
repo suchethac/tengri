@@ -1,20 +1,20 @@
 {
- "jax.random.PRNGKey": [
+ "np.abs": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jax.random",
-   "module_short": "jax.random",
-   "name": "PRNGKey"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "abs"
   }
  ],
- "jax.random.split": [
+ "np.asarray": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "jax.random",
-   "module_short": "jax.random",
-   "name": "split"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
   }
  ],
  "np.linspace": [
@@ -35,13 +35,22 @@
    "name": "log10"
   }
  ],
- "np.random.uniform": [
+ "np.trapezoid": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "numpy.random",
-   "module_short": "numpy.random",
-   "name": "uniform"
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "trapezoid"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.savefig": [
@@ -80,15 +89,6 @@
    "name": "FIXED"
   }
  ],
- "tengri.Fixed": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Fixed"
-  }
- ],
  "tengri.SEDModel.build": [
   {
    "is_class": false,
@@ -96,15 +96,6 @@
    "module": "tengri.SEDModel",
    "module_short": "tengri.SEDModel",
    "name": "build"
-  }
- ],
- "tengri.Uniform": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Uniform"
   }
  ],
  "tengri.load_ssp": [

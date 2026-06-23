@@ -34,17 +34,6 @@ magnetic field strength.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-141
 
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_shock_emission_001.png
-   :alt: BPT: Shock Velocity (200–500 km/s), BPT: Density (200 km/s), BPT: Magnetic Field (250 km/s)
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_shock_emission_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

@@ -29,26 +29,28 @@ Astrodust+PAH ionization fraction and alignment
 Ionization fraction and alignment efficiency versus grain size for the
 Hensley & Draine 2023 fiducial size distribution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-46
+.. GENERATED FROM PYTHON SOURCE LINES 8-48
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
-    import h5py
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import data_path
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-    with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
-        size_dist = np.asarray(f["size_distribution"])
+    size_dist = np.asarray(tengri.load_astrodust_hd23().size_distribution)
 
     rad_um = size_dist[:, 0]
     f_ion = size_dist[:, 3]

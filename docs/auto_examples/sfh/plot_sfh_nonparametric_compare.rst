@@ -43,10 +43,14 @@ reference. The dispersion of each family is the visual prior — wide
 clouds mean the form is permissive, narrow clouds mean the form is
 restrictive.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-93
+.. GENERATED FROM PYTHON SOURCE LINES 22-97
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 

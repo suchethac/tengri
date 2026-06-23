@@ -58,17 +58,6 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 35-138
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_slone_netzer_disc_sweep_001.png
-   :alt: Slone & Netzer 2012 disc: black-hole mass vs Eddington ratio, Mass sweep  ($\log \lambda_\mathrm{Edd} = -2.5$), Eddington sweep  ($\log M_\mathrm{BH} = 8.5$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_slone_netzer_disc_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

@@ -32,17 +32,6 @@ to old (5 Gyr) populations.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-68
 
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_neb_age_dependence_001.png
-   :alt: plot neb age dependence
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_neb_age_dependence_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

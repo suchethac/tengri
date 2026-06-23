@@ -31,10 +31,14 @@ Moderate (σ=1.0, τ=50 Myr), Bursty (σ=2.0, τ=20 Myr), and Extreme (σ=3.0, �
 Each panel shows one forward-model draw with the smooth mean SFH overlaid,
 illustrating the range of morphologies that each regime produces before inference.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-77
+.. GENERATED FROM PYTHON SOURCE LINES 10-78
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -54,18 +58,15 @@ illustrating the range of morphologies that each regime produces before inferenc
     # Quick minimal observation (just for SFH predictions)
     model = tengri.SEDModel.build(
         ssp,
-        sfh={
-            "type": "field_psd",
-            "*": tengri.FIXED,
-            "mean": "tsnorm",
-            "tsnorm_log_peak_sfr": 1.2,
-            "tsnorm_peak_lbt_gyr": 3.0,
-            "tsnorm_width_gyr": 3.0,
-            "tsnorm_skew": 0.3,
-            "tsnorm_trunc": 2.0,
-            "psd_sigma": tengri.Uniform(0.1, 4.0),
-            "psd_tau_myr": tengri.Uniform(1.0, 300.0),
-        },
+        sfh=[
+            {"type": "const", "*": tengri.FIXED, "log_total_mass": 10.5},
+            {
+                "type": "field",
+                "*": tengri.FIXED,
+                "psd_sigma": tengri.Uniform(0.1, 4.0),
+                "psd_tau_myr": tengri.Uniform(1.0, 300.0),
+            },
+        ],
         dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
         redshift=tengri.Fixed(0.0),
     )

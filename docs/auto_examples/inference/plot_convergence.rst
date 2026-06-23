@@ -34,10 +34,14 @@ recovered SFH against the truth.
 
 Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-108
+.. GENERATED FROM PYTHON SOURCE LINES 13-112
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -74,7 +78,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
     truth.update(
         sfh_tsnorm_peak_lbt_gyr=3.0,
         sfh_tsnorm_width_gyr=2.0,
-        sfh_tsnorm_log_peak_sfr=1.0,
+        sfh_tsnorm_log_total_mass=10.0,
         sfh_tsnorm_skew=0.3,
         sfh_tsnorm_trunc=10.0,
         dust_tau_diff=0.3,

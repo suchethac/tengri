@@ -17,7 +17,6 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import data_path
 from tengri.analysis.plotting import setup_style
 from tengri.components.dust.emission_component import (
     DustEmissionSEDComponent,
@@ -55,7 +54,6 @@ d21 = DustEmissionSEDComponent(
     config=DustEmissionSEDComponentConfig(
         template="draine2021_pah",
         pahspec_starlight="mMMP",
-        pahspec_template_path=data_path("pahspec_draine2021.h5"),
     ),
 )
 d21_sed = _eval(d21, wave_aa, {"dust_lgU": 1.0, "redshift": 0.0})
@@ -63,7 +61,6 @@ d21_sed = _eval(d21, wave_aa, {"dust_lgU": 1.0, "redshift": 0.0})
 ad = DustEmissionSEDComponent(
     config=DustEmissionSEDComponentConfig(
         template="astrodust",
-        astrodust_template_path=data_path("astrodust_templates.h5"),
     ),
 )
 ad_sed = _eval(ad, wave_aa, {"dust_lgU": 0.2, "redshift": 0.0})

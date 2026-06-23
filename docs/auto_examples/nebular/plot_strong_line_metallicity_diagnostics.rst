@@ -46,17 +46,6 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-120
 
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_strong_line_metallicity_diagnostics_001.png
-   :alt: plot strong line metallicity diagnostics
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_strong_line_metallicity_diagnostics_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

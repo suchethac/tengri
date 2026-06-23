@@ -18,134 +18,105 @@
 .. _sphx_glr_auto_examples_agn_plot_composable_recipes.py:
 
 
-Composable AGN: mix-and-match recipes
-======================================
+Three AGN recipes built by swapping selectors, not call sites
+==============================================================
 
 .. image:: images/sphx_glr_plot_composable_recipes_001.png
    :alt: plot composable recipes
    :class: sphx-glr-single-img
 
 
-The composable AGN block subsystem (``agn_model="composable"``) lets users
-pick one block per pipeline stage and combine across models. This example
-compares four recipes built from the registered block set:
+The composable AGN grammar (``agn.disc``, ``agn.torus``, ``agn.lines``,
+``agn.feii``, ``agn.atten``) lets the user mix sub-blocks across model
+families. Same SEDModel.build call, three different physics tuples:
 
-1. **All-GRAHSP** — Buchner+ 2024 end-to-end (SBPL BBB + Netzer lines +
-   FeII forest + log-Gaussian torus + bi-attenuation).
-2. **All-QSOgen** — Temple+ 2021 monolithic recipe expressed as five
-   blocks (continuum + emission lines + Balmer + hot dust + SMC).
-3. **GRAHSP BBB + SKIRTOR torus + SMC** — UV/optical from Buchner,
-   mid-IR from Stalevski clumpy templates, attenuation by Pei SMC.
-4. **Multicolor disc + Nenkova torus** — Shakura-Sunyaev disc with the
-   CLUMPY (Nenkova+ 2008) radiative-transfer torus.
+1. **all-GRAHSP** — Buchner+2024 end-to-end (SBPL disc, GRAHSP lines,
+   FeII forest, log-Gaussian torus, bi-attenuation).
+2. **multicolour + SKIRTOR + NLR** — Kubota-Done disc with Stalevski
+   clumpy torus and Gaussian NLR forest.
+3. **QSOgen monolithic** — Temple+2021 empirical template as a single
+   ``disc`` selector, no other blocks.
 
-All four are evaluated through ``composable_agn_l_nu`` on the same
-wavelength grid; the headline is that the user only changes selector
-strings between them, not the call site.
+All three are evaluated at the same log L_bol = 12 in L_sun units
+through ``SEDModel.build`` with the nested-dict grammar.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-121
+References: Buchner et al. 2024 (GRAHSP); Kubota & Done 2018;
+Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
+
+.. GENERATED FROM PYTHON SOURCE LINES 22-92
 
 .. code-block:: Python
 
 
-    # TODO: refactor to SEDModel.build API (currently uses low-level internal API)
+    import os
 
-    import jax.numpy as jnp
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+    import warnings
+
+    import jax
     import matplotlib.pyplot as plt
     import numpy as np
 
+    import tengri
     from tengri.analysis.plotting import setup_style
-    from tengri.components.agn.blocks import composable_agn_l_nu
 
     setup_style()
+    warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-    wave_aa = jnp.logspace(np.log10(500.0), np.log10(1.0e6), 1000)
-    wave_um = np.asarray(wave_aa) / 1e4
+    C_AA_PER_S = 2.998e18
+    SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
+    DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
-    # Common scaling — every recipe is evaluated at the same bolometric luminosity.
-    # Note: ``agn_log_lbol = 12`` means log10(L_bol / L_sun) = 12 → L_bol ≈ 4e45
-    # erg/s, a luminous-quasar value. All recipes auto-normalise from this; we do
-    # *not* pass ``agn_grahsp_l5100`` explicitly so GRAHSP uses the same bolometric
-    # anchor instead of bypassing it with a hard-coded scale.
-    COMMON = dict(agn_log_lbol=12.0, agn_frac=1.0)
+    ssp = tengri.load_ssp()
 
-    # Each entry: (label, color, kwargs to override defaults).
     RECIPES = [
         (
             "all-GRAHSP",
             "tab:blue",
-            dict(
-                agn_disc_block="grahsp_sbpl",
-                agn_lines_block="grahsp",
-                agn_feii_block="grahsp",
-                agn_torus_block="grahsp",
-                agn_attenuation_block="grahsp_biatten",
-                agn_grahsp_a_feii=5.0,
-                agn_grahsp_fcov=0.4,
-                agn_grahsp_ebv=0.0,
-                agn_grahsp_ebv_agn=0.0,
-            ),
+            {
+                "disc": {"type": "grahsp_sbpl", "*": tengri.FIXED},
+                "lines": {"type": "grahsp", "*": tengri.FIXED},
+                "feii": {"type": "grahsp", "*": tengri.FIXED},
+                "torus": {"type": "grahsp", "*": tengri.FIXED},
+                "atten": {"type": "grahsp_biatten", "*": tengri.FIXED},
+            },
         ),
         (
-            "all-QSOgen",
-            "tab:orange",
-            dict(
-                agn_disc_block="qsogen",
-                agn_lines_block="qsogen",
-                agn_feii_block="qsogen_balmer",
-                agn_torus_block="qsogen",
-                agn_attenuation_block="qsogen_smc",
-                agn_ebv=0.0,
-            ),
-        ),
-        (
-            "GRAHSP BBB + SKIRTOR torus + SMC",
+            "multicolour disc + SKIRTOR torus + NLR",
             "tab:green",
-            dict(
-                agn_disc_block="grahsp_sbpl",
-                agn_lines_block="grahsp",
-                agn_feii_block="grahsp",
-                agn_torus_block="skirtor",
-                agn_attenuation_block="smc_prevot",
-                agn_grahsp_ebv=0.0,
-                agn_grahsp_ebv_agn=0.0,
-                agn_tau_skirtor=7.0,
-                agn_torus_frac=0.5,
-                agn_attenuation_ebv=0.1,
-            ),
+            {
+                "disc": {"type": "multicolor", "*": tengri.FIXED},
+                "torus": {"type": "skirtor", "*": tengri.FIXED},
+                "lines": {"type": "nlr", "*": tengri.FIXED},
+            },
         ),
         (
-            "multicolor disc + Nenkova torus",
-            "tab:red",
-            dict(
-                agn_disc_block="multicolor",
-                agn_torus_block="nenkova",
-                agn_log_mbh=8.0,
-                agn_log_ledd=-1.0,
-                agn_tau=30.0,
-                agn_torus_frac=0.5,
-            ),
+            "QSOgen monolithic",
+            "tab:orange",
+            {"disc": {"type": "qsogen", "*": tengri.FIXED}},
         ),
     ]
 
-    fig, ax = plt.subplots(figsize=(8.5, 5.5))
+    fig, ax = plt.subplots(figsize=(8.0, 5.0))
+    for label, color, blocks in RECIPES:
+        agn = {"*": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
+        model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
+        p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        out = model.predict_rest_sed(p)
+        wave_um = np.asarray(out.wavelength) * 1.0e-4
+        nu_lnu = C_AA_PER_S / np.asarray(out.wavelength) * np.asarray(out.sed)
+        ax.loglog(wave_um, np.where(nu_lnu > 0, nu_lnu, np.nan), lw=1.6, color=color, label=label)
 
-    for label, color, kw in RECIPES:
-        l_nu = np.asarray(composable_agn_l_nu(wave_aa, **COMMON, **kw))
-        nu_l_nu = l_nu * (2.99792458e18 / np.asarray(wave_aa))
-        nu_l_nu = np.where(nu_l_nu > 0, nu_l_nu, np.nan)
-        ax.loglog(wave_um, nu_l_nu, lw=2.0, color=color, label=label)
-
-    ax.set_xlabel(r"Wavelength [$\mu$m]")
-    ax.set_ylabel(r"$\nu L_\nu$ [erg s$^{-1}$]")
-    ax.set_xlim(5e-3, 1e2)
-    ax.set_ylim(1e43, 1e47)
-    ax.legend(loc="lower center", fontsize=9, frameon=False, ncol=1)
-    ax.set_title(
-        r"Composable AGN recipes ($\log_{10}(L_\mathrm{bol}/L_\odot) = 12$): "
-        "same call site, four selector tuples"
+    ax.set(
+        xlim=(5.0e-3, 1.0e2),
+        ylim=(1.0e43, 1.0e47),
+        xlabel=r"Rest-frame wavelength [$\mu$m]",
+        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
     )
+    ax.legend(loc="lower center", fontsize=9, frameon=False)
     fig.tight_layout()
+    plt.savefig("plot_composable_recipes.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_recipes.py:

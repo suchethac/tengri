@@ -41,17 +41,6 @@ isolation (zero above the edge, rising blueward).
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-94
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_grahsp_balmer_continuum_001.png
-   :alt: GRAHSP Balmer continuum (Grandi 1982) strength sweep, Bending power-law + Balmer continuum, Balmer continuum contribution (isolated)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_grahsp_balmer_continuum_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

@@ -41,21 +41,14 @@ This example does two things:
    ``continuity`` and ``bursty_continuity`` so the visual width of the
    recent-time bands directly shows the σ-doubling effect.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-107
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
-   :alt: Bursty σ schedule on the default 7-bin grid
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-125
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -64,6 +57,7 @@ This example does two things:
     import numpy as np
 
     import tengri
+    from tengri import Parameters, SEDModel
     from tengri.analysis.plotting import setup_style
     from tengri.components.stellar.sfh.nonparametric import DEFAULT_BIN_EDGES_GYR
     from tengri.components.stellar.sfh.registry import SFH_REGISTRY
@@ -71,6 +65,13 @@ This example does two things:
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
+    # ``bursty_continuity`` is registered but not yet validated against the DSPS
+    # *flux* forward path, so it is intentionally gated out of the high-level
+    # ``SEDModel.build`` grammar. We only need its star-formation *history* here, so
+    # we construct it through the expert flat-kwarg ``Parameters(...)`` escape hatch
+    # (documented in CLAUDE.md) and call ``predict_sfh`` — which evaluates the SFH
+    # alone and is unaffected by the flux-path gate. The prior shape it draws is the
+    # whole point of this example.
     N_DRAWS = 60
 
     # ── σ schedule ────────────────────────────────────────────────────
@@ -84,9 +85,21 @@ This example does two things:
         sigmas.append(float(repr(prior).split("sigma=")[1].split(",")[0]))
     sigmas = np.asarray(sigmas)
 
-    # ── prior draws ───────────────────────────────────────────────────
+    # ── prior draws (via predict_sfh, with the gated SFH built through the
+    #    expert escape hatch) ───────────────────────────────────────────
     ssp = tengri.load_ssp()
     key0 = jax.random.PRNGKey(13)
+
+
+    def _model_for(sfh_type):
+        """Build an SFH-only model, bypassing the high-level builder's type gate.
+
+        ``Parameters(mean_sfh_type=...)`` accepts gated (DSPS-unvalidated) SFHs; the
+        gate lives only in ``SEDModel.build``. ``precompute=False`` skips the SPS
+        LUT we never touch — only ``predict_sfh`` is called.
+        """
+        spec = Parameters(mean_sfh_type=sfh_type, redshift=0.0)
+        return SEDModel(spec=spec, ssp_data=ssp, precompute=False)
 
 
     def _sample_normalized_sfh(model, n_draws, key):
@@ -103,14 +116,8 @@ This example does two things:
         return t, np.asarray(out)
 
 
-    cont = tengri.SEDModel.build(
-        ssp, sfh={"type": "continuity", "*": tengri.FREE}, redshift=tengri.Fixed(0.0)
-    )
-    burst = tengri.SEDModel.build(
-        ssp, sfh={"type": "bursty_continuity", "*": tengri.FREE}, redshift=tengri.Fixed(0.0)
-    )
-    t, sfr_cont = _sample_normalized_sfh(cont, N_DRAWS, key0)
-    _, sfr_burst = _sample_normalized_sfh(burst, N_DRAWS, key0)
+    t, sfr_cont = _sample_normalized_sfh(_model_for("continuity"), N_DRAWS, key0)
+    _, sfr_burst = _sample_normalized_sfh(_model_for("bursty_continuity"), N_DRAWS, key0)
 
     # ── figure ────────────────────────────────────────────────────────
     fig, (ax_sig, ax_sfh) = plt.subplots(

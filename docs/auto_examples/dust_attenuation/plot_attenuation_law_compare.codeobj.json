@@ -8,6 +8,15 @@
    "name": "linspace"
   }
  ],
+ "jnp.logspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jax.numpy",
+   "module_short": "jax.numpy",
+   "name": "logspace"
+  }
+ ],
  "list_laws": [
   {
    "is_class": false,
@@ -15,6 +24,24 @@
    "module": "tengri.dust",
    "module_short": "tengri.dust",
    "name": "list_laws"
+  }
+ ],
+ "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "array"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.savefig": [

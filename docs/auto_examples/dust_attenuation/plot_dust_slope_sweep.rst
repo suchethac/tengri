@@ -33,10 +33,14 @@ to make slope effects visible (low dust opacities wash out the continuum slope).
 
 Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-72
+.. GENERATED FROM PYTHON SOURCE LINES 12-76
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -61,14 +65,14 @@ Reference: Conroy et al. 2009, ApJ, 699, 626 (power-law attenuation model).
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
-            "dust_slope": tengri.Uniform(-1.5, 0.5),
+            "slope": tengri.Uniform(-1.5, 0.5),
         },
         redshift=tengri.Fixed(0.1),
     )

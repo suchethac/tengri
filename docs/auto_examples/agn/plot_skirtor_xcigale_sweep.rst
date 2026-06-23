@@ -58,17 +58,6 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 35-141
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_xcigale_sweep_001.png
-   :alt: SKIRTOR torus (full X-CIGALE grid): optical depth and inclination, Optical-depth sweep  ($\cos i = 0.85$), Inclination sweep  ($\tau = 7$)
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_xcigale_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 

@@ -26,6 +26,24 @@
    "name": "asarray"
   }
  ],
+ "np.nanmax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "nanmax"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.savefig": [
   {
    "is_class": false,

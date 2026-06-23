@@ -27,8 +27,7 @@ Radial metallicity gradients and integrated-light SED
 
 
 Spiral galaxies exhibit radial metallicity gradients: metal-rich centres
-and metal-poor discs (e.g. NGC 891, Searle 1971). This example illustrates
-how three common gradient scenarios—steep positive, flat, and inverted
+and metal-poor discs (e.g. NGC 891, Searle 1971). three common gradient scenarios—steep positive, flat, and inverted
 depletion—reshape the integrated SED when weighted by disc area.
 
 Left panel: metallicity profile Z(R) for a radial grid from 0–15 kpc.
@@ -42,21 +41,14 @@ metal enrichment (stellar line blanketing) affects the integrated UV-optical.
 Reference: Searle, L. 1971, ApJ, 168, 327 (radial gradients in galaxies);
 Henry, R. B. C., & Worthey, G. 1999, PASP, 111, 919 (abundance gradients).
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-165
-
-
-
-.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_metallicity_radial_gradient_001.png
-   :alt: plot metallicity radial gradient
-   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_metallicity_radial_gradient_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 20-168
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -81,7 +73,7 @@ Henry, R. B. C., & Worthey, G. 1999, PASP, 111, 919 (abundance gradients).
             "alpha": 2.0,
             "beta": 2.5,
             "tau_gyr": 1.5,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
         },
         dust={
             "type": "two_component",

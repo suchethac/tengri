@@ -32,10 +32,14 @@ of higher-velocity stellar populations.
    :alt: plot_velocity_dispersion_sweep
    :class: sphx-glr-single-img
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-116
+.. GENERATED FROM PYTHON SOURCE LINES 17-120
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -62,7 +66,7 @@ of higher-velocity stellar populations.
     )
 
     spec = Parameters(
-        sfh_tsnorm_log_peak_sfr=Fixed(0.8),
+        sfh_tsnorm_log_total_mass=Fixed(10.0),
         sfh_tsnorm_peak_lbt_gyr=Fixed(2.5),
         sfh_tsnorm_width_gyr=Fixed(1.8),
         sfh_tsnorm_skew=Fixed(0.1),

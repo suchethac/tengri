@@ -51,17 +51,6 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-138
 
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_feii_sweep_001.png
-   :alt: Full AGN SED, Fe II excess
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_feii_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
 .. code-block:: Python
 
 
@@ -101,7 +90,7 @@ References
         agn={
             "type": "composable",
             "disc": {"type": "multicolor", "*": tengri.FIXED},
-            "lines": {"type": "blr", "*": tengri.FIXED, "agn_blr_cf": 0.1},
+            "blr": {"type": "analytic", "*": tengri.FIXED, "agn_blr_cf": 0.1},
             "*": tengri.FIXED,
             "log_lbol": 12.0,
             "log_ledd": -1.0,

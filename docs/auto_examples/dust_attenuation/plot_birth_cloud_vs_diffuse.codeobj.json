@@ -17,6 +17,15 @@
    "name": "Normalize"
   }
  ],
+ "np.array": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "array"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -35,6 +44,15 @@
    "name": "linspace"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.cm.ScalarMappable": [
   {
    "is_class": false,
@@ -44,6 +62,15 @@
    "name": "ScalarMappable"
   }
  ],
+ "plt.cm.cool": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "cool"
+  }
+ ],
  "plt.cm.viridis": [
   {
    "is_class": false,
@@ -51,6 +78,15 @@
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
    "name": "viridis"
+  }
+ ],
+ "plt.figure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "figure"
   }
  ],
  "plt.savefig": [

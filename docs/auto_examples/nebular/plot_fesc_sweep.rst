@@ -43,28 +43,6 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-107
 
-
-
-.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_fesc_sweep_001.png
-   :alt: plot fesc sweep
-   :srcset: /auto_examples/nebular/images/sphx_glr_plot_fesc_sweep_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /private/tmp/tengri-split/regen-a/examples/nebular/plot_fesc_sweep.py:105: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
-      fig.tight_layout()
-
-
-
-
-
-
-|
-
 .. code-block:: Python
 
 

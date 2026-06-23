@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.257** total execution time for 16 files **from auto_examples/photometry**:
+**00:24.467** total execution time for 18 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
-     - 00:01.257
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_k_correction_grid.py` (``plot_k_correction_grid.py``)
+     - 00:24.467
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_balmer_break_redshift_evolution.py` (``plot_balmer_break_redshift_evolution.py``)
      - 00:00.000
@@ -56,13 +56,16 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_k_correction_grid.py` (``plot_k_correction_grid.py``)
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_hsc_vs_des_color_high_z.py` (``plot_hsc_vs_des_color_high_z.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_nuv_r_age_track.py` (``plot_nuv_r_age_track.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_photometric_fit.py` (``plot_photometric_fit.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py` (``plot_photoz_color_degeneracy_grid.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_red_sequence_blue_cloud.py` (``plot_red_sequence_blue_cloud.py``)
@@ -75,6 +78,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py` (``plot_spitzer_irac_agn_wedge.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_wise_agn_color_color.py` (``plot_wise_agn_color_color.py``)

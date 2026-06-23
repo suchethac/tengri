@@ -51,21 +51,14 @@ edges via :func:`~tengri.make_agebins_from_zred` requires passing
 ``bin_edges_gyr`` through the composer, which is a separate plumbing
 follow-up.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-100
-
-
-
-.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_prospector_priors_compare_001.png
-   :alt: plot prospector priors compare
-   :srcset: /auto_examples/sfh/images/sphx_glr_plot_prospector_priors_compare_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 30-113
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -74,12 +67,25 @@ follow-up.
     import numpy as np
 
     import tengri
+    from tengri import Parameters, SEDModel
     from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     N_DRAWS = 40
+
+    # ``bursty_continuity`` is registered but not yet validated against the DSPS
+    # *flux* forward path, so it is gated out of ``SEDModel.build``. Since we only
+    # draw the star-formation *history* (via ``predict_sfh``, which the gate does
+    # not touch), we construct every family through the expert flat-kwarg
+    # ``Parameters(...)`` escape hatch — uniform across validated and gated types.
+
+
+    def _sfh_model(sfh_type):
+        spec = Parameters(mean_sfh_type=sfh_type, redshift=0.0)
+        return SEDModel(spec=spec, ssp_data=ssp, precompute=False)
+
 
     FORMS = [
         ("continuity", "continuity (Leja+19)", "#3388aa"),
@@ -96,11 +102,7 @@ follow-up.
 
     key0 = jax.random.PRNGKey(7)
     for ax, (form, label, color) in zip(axes, FORMS):
-        model = tengri.SEDModel.build(
-            ssp,
-            sfh={"type": form, "*": tengri.FREE},
-            redshift=tengri.Fixed(0.0),
-        )
+        model = _sfh_model(form)
 
         sfr_stack = []
         for sub_key in jax.random.split(key0, N_DRAWS):

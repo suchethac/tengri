@@ -19,12 +19,6 @@
 
 
 Screen vs. mixed dust geometry: identical optical depths, different SEDs
-=========================================================================
-
-.. image:: images/sphx_glr_plot_dust_geometry_screen_vs_mixed_001.png
-   :alt: plot dust geometry screen vs mixed
-   :class: sphx-glr-single-img
-
 
 Dust geometry determines how dust affects starlight. A **screen**
 (foreground dust) filters the light as it leaves the galaxy:
@@ -32,7 +26,7 @@ Dust geometry determines how dust affects starlight. A **screen**
 distributed with stars) is more gentle:
 ``transmission = (1 - exp(-τ_λ)) / τ_λ``.
 
-This example shows both geometries applied to the *same intrinsic SED*
+both geometries applied to the *same intrinsic SED*
 at the *same V-band optical depth* (τ_V = 0.5, 1.0, 2.0). Despite
 identical τ_V, the resulting SEDs are qualitatively different — mixed
 geometry produces less attenuation in the UV, creating a shallower
@@ -46,28 +40,22 @@ References
 - Witt & Gordon 2000, ApJ, 528, 799 (dust geometry effects)
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-168
-
-
-
-.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_geometry_screen_vs_mixed_001.png
-   :alt: plot dust geometry screen vs mixed
-   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_geometry_screen_vs_mixed_001.png
-   :class: sphx-glr-single-img
-
-
-
-
+.. GENERATED FROM PYTHON SOURCE LINES 24-171
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
     import jax
     import jax.numpy as jnp
     import matplotlib
-    matplotlib.use('Agg')
+
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
 
@@ -89,7 +77,7 @@ References
         "alpha": 1.0,
         "beta": 2.0,
         "tau_gyr": 4.0,
-        "log_peak_sfr": 0.5,
+        "log_total_mass": 10.0,
     }
 
     ssp = tengri.load_ssp()
@@ -118,8 +106,7 @@ References
     fig, (ax_sed, ax_attn) = plt.subplots(1, 2, figsize=(11.0, 4.5))
 
     ax_sed.loglog(
-        wave, nu * sed_intrinsic, color="0.0", lw=1.5, label="intrinsic",
-        zorder=5, alpha=0.6
+        wave, nu * sed_intrinsic, color="0.0", lw=1.5, label="intrinsic", zorder=5, alpha=0.6
     )
 
     for tau_v, color_s, color_m in zip(tau_v_values, colors_screen, colors_mixed):
@@ -127,20 +114,20 @@ References
         tau_lambda = k_lambda * tau_v
         transmission_screen = np.exp(-tau_lambda)
         sed_screen = sed_intrinsic * transmission_screen
-        ax_sed.loglog(wave, nu * sed_screen, color=color_s, lw=1.3,
-                      label=f"screen τ_V={tau_v:.1f}")
+        ax_sed.loglog(wave, nu * sed_screen, color=color_s, lw=1.3, label=f"screen τ_V={tau_v:.1f}")
 
         # Mixed geometry: transmission = (1 - exp(-tau_lambda)) / tau_lambda
         # For small tau_lambda, use Taylor expansion to avoid division by zero
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             transmission_mixed = np.where(
                 tau_lambda > 1e-6,
                 (1.0 - np.exp(-tau_lambda)) / tau_lambda,
-                1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda)  # Taylor expansion
+                1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda),  # Taylor expansion
             )
         sed_mixed = sed_intrinsic * transmission_mixed
-        ax_sed.loglog(wave, nu * sed_mixed, color=color_m, lw=1.3,
-                      label=f"mixed τ_V={tau_v:.1f}", ls="--")
+        ax_sed.loglog(
+            wave, nu * sed_mixed, color=color_m, lw=1.3, label=f"mixed τ_V={tau_v:.1f}", ls="--"
+        )
 
     ax_sed.set(
         xlim=(900, 3e4),
@@ -166,15 +153,14 @@ References
         a_v_screen = -2.5 * np.log10(np.exp(-tau_v) + 1e-10)
         a_eff_screen = a_lambda_screen / a_v_screen
 
-        ax_attn.semilogx(wave, a_eff_screen, color=color_s, lw=1.3,
-                         label=f"screen τ_V={tau_v:.1f}")
+        ax_attn.semilogx(wave, a_eff_screen, color=color_s, lw=1.3, label=f"screen τ_V={tau_v:.1f}")
 
         # Mixed transmission
-        with np.errstate(divide='ignore', invalid='ignore'):
+        with np.errstate(divide="ignore", invalid="ignore"):
             transmission_mixed = np.where(
                 tau_lambda > 1e-6,
                 (1.0 - np.exp(-tau_lambda)) / tau_lambda,
-                1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda)
+                1.0 - tau_lambda * (1.0 - 0.5 * tau_lambda),
             )
         a_lambda_mixed = -2.5 * np.log10(transmission_mixed + 1e-10)
         # For mixed, A_V is different from tau_V; compute from V-band transmission
@@ -182,8 +168,9 @@ References
         a_v_mixed = -2.5 * np.log10(tau_v_mixed + 1e-10)
         a_eff_mixed = a_lambda_mixed / a_v_mixed
 
-        ax_attn.semilogx(wave, a_eff_mixed, color=color_m, lw=1.3,
-                         label=f"mixed τ_V={tau_v:.1f}", ls="--")
+        ax_attn.semilogx(
+            wave, a_eff_mixed, color=color_m, lw=1.3, label=f"mixed τ_V={tau_v:.1f}", ls="--"
+        )
 
     # Calzetti reference curve
     rv = 4.05

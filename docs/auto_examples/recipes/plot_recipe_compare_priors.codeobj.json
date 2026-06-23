@@ -8,13 +8,13 @@
    "name": "PRNGKey"
   }
  ],
- "np.array": [
+ "np.asarray": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "numpy",
    "module_short": "numpy",
-   "name": "array"
+   "name": "asarray"
   }
  ],
  "np.exp": [
@@ -60,6 +60,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "sqrt"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.savefig": [
@@ -143,15 +152,6 @@
    "name": "Observation"
   }
  ],
- "tengri.Parameters": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "Parameters"
-  }
- ],
  "tengri.Photometry.from_names": [
   {
    "is_class": false,
@@ -159,15 +159,6 @@
    "module": "tengri.Photometry",
    "module_short": "tengri.Photometry",
    "name": "from_names"
-  }
- ],
- "tengri.SEDModel": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SEDModel"
   }
  ],
  "tengri.SEDModel.build": [

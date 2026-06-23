@@ -23,12 +23,15 @@ on SDSS template K-corrections.
 
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 # sphinx_gallery_thumbnail_number = 1
 
 from pathlib import Path
 
 import jax
-import jax.numpy as jnp
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -63,9 +66,7 @@ ssp = tengri.load_ssp()
 filter_dir = _find_filters()
 
 # Observation: SDSS r-band only
-obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(["sdss_r"], cache_dir=filter_dir)
-)
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_r"], cache_dir=filter_dir))
 
 
 def _build_galaxy(sfh_config, dust_config, label):
@@ -86,7 +87,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,  # 10 Msun/yr
+            "log_total_mass": 10.0,  # 10 Msun/yr
             "peak_lbt_gyr": 0.2,  # age ≈ 0.2 Gyr
             "width_gyr": 0.15,
             "skew": 0.0,
@@ -106,7 +107,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 5.0,  # age ≈ 5 Gyr
             "width_gyr": 1.0,
             "skew": 0.0,
@@ -126,7 +127,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 2.0,  # 100 Msun/yr
+            "log_total_mass": 10.0,  # 100 Msun/yr
             "peak_lbt_gyr": 10.0,  # age ≈ 10 Gyr (old starburst)
             "width_gyr": 0.5,
             "skew": 0.0,
@@ -146,7 +147,7 @@ GALAXY_TYPES = [
         {
             "type": "tsnorm",
             "*": tengri.FIXED,
-            "log_peak_sfr": 2.0,
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": 1.5,  # intermediate age
             "width_gyr": 0.3,
             "skew": 0.0,
@@ -208,7 +209,5 @@ fig.tight_layout()
 
 # Save to script directory
 script_dir = Path(__file__).resolve().parent if "__file__" in dir() else Path(".")
-plt.savefig(
-    str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight"
-)
+plt.savefig(str(script_dir / "plot_k_correction_grid.png"), dpi=150, bbox_inches="tight")
 plt.close()

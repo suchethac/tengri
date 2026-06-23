@@ -26,6 +26,24 @@
    "name": "array"
   }
  ],
+ "np.log10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "log10"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "plt.savefig": [
   {
    "is_class": false,
@@ -51,6 +69,24 @@
    "module": "tengri.analysis.plotting",
    "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
+  }
+ ],
+ "tengri.agn.compute_l2500": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
+   "name": "compute_l2500"
+  }
+ ],
+ "tengri.agn.multicolor_disc": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.agn",
+   "module_short": "tengri.agn",
+   "name": "multicolor_disc"
   }
  ],
  "tengri.radio.radio_agn": [

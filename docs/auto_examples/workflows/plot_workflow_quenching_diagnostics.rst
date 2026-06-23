@@ -42,10 +42,14 @@ References:
 - Kauffmann+2003, MNRAS, 341, 33 (D_n(4000) vs Hα EW)
 - Martin+2007, ApJS, 173, 342 (NUV − r and the green valley)
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-131
+.. GENERATED FROM PYTHON SOURCE LINES 21-135
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -89,7 +93,7 @@ References:
             "*": tengri.FIXED,
             "peak_lbt_gyr": tengri.Uniform(0.01, 8.0),
             "width_gyr": 0.05,  # narrow truncation: an explicit quench
-            "log_peak_sfr": 1.0,
+            "log_total_mass": 10.0,
             "skew": 0.0,
             "trunc": 13.0,
         },

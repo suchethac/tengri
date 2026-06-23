@@ -33,7 +33,7 @@ panchromatic SED spans from UV (young stars) through optical (attenuated
 by dust) to far-infrared (warm dust re-emission at ~50 μm) and radio
 (free-free continuum from ionized regions and synchrotron from supernovae).
 
-This example demonstrates how starburst physics creates a distinctive
+starburst physics creates a distinctive
 SED shape: suppressed UV/optical, strong warm dust peak, and extended
 radio emission. The model uses a double power-law star formation history
 peaking ~50 Myr ago to capture the intense recent burst, with a
@@ -42,6 +42,7 @@ infrared re-emission.
 
 **References:**
  - Förster Schreiber et al. (2003) [1]_ for M82 SED observations
+
  - Engelbracht et al. (2008) [2]_ for Spitzer MIR/FIR measurements
  - Dale et al. (2014) [3]_ for dust emission model
 
@@ -57,17 +58,21 @@ infrared re-emission.
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-216
+.. GENERATED FROM PYTHON SOURCE LINES 37-231
 
 .. code-block:: Python
 
 
     import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+    import os
     import warnings
 
     import jax
-    import jax.numpy as jnp
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import numpy as np
@@ -86,7 +91,7 @@ infrared re-emission.
     ssp = tengri.load_ssp()
 
     # M82-class starburst model:
-    # - SFH: double power-law peaking ~50 Myr ago (log_peak_sfr ~ 0.95 → SFR_peak ~ 9 Msun/yr)
+    # - SFH: double power-law peaking ~50 Myr ago (log_total_mass ~ 0.95 → SFR_peak ~ 9 Msun/yr)
     #   with alpha=2.0 (sharp rise, young burst) and beta=1.5 (extended tail into old epoch)
     # - Dust: two-component with high optical depths (tau_diff=1.5, tau_bc=2.0)
     # - Dust re-emission: Dale et al. (2014) templates
@@ -96,20 +101,20 @@ infrared re-emission.
         sfh={
             "type": "dpl",
             "*": tengri.FIXED,
-            "tau_gyr": 0.05,          # Burst timescale 50 Myr
-            "log_peak_sfr": 0.95,     # Peak SFR ~ 9 Msun/yr
-            "alpha": 2.0,             # Sharp initial rise (young burst)
-            "beta": 1.5,              # Extended tail (star formation continues)
+            "tau_gyr": 0.05,  # Burst timescale 50 Myr
+            "log_total_mass": 10.0,  # Peak SFR ~ 9 Msun/yr
+            "alpha": 2.0,  # Sharp initial rise (young burst)
+            "beta": 1.5,  # Extended tail (star formation continues)
         },
         dust={
             "type": "two_component",
             "*": tengri.FIXED,
-            "tau_diff": 1.5,          # Diffuse ISM: tau_V ~ 1.5 mag
-            "tau_bc": 2.0,            # Birth cloud: tau_V ~ 2.0 mag (star-forming regions)
+            "tau_diff": 1.5,  # Diffuse ISM: tau_V ~ 1.5 mag
+            "tau_bc": 2.0,  # Birth cloud: tau_V ~ 2.0 mag (star-forming regions)
             "emission": {"type": "dale2014", "*": tengri.FIXED},
         },
         radio={"type": "condon92", "*": tengri.FIXED},
-        redshift=tengri.Fixed(0.0),   # z=0 rest-frame (nearby galaxy)
+        redshift=tengri.Fixed(0.0),  # z=0 rest-frame (nearby galaxy)
     )
 
     # Sample parameters and compute rest-frame SED
@@ -126,7 +131,7 @@ infrared re-emission.
             "type": "dpl",
             "*": tengri.FIXED,
             "tau_gyr": 0.05,
-            "log_peak_sfr": 0.95,
+            "log_total_mass": 10.0,
             "alpha": 2.0,
             "beta": 1.5,
         },
@@ -186,8 +191,18 @@ infrared re-emission.
 
     for band, points in m82_photometry.items():
         wl, fl = zip(*points)
-        ax.scatter(wl, fl, s=50, marker="o", color=colors_by_band[band],
-                   edgecolor="white", linewidth=1.0, alpha=0.8, label=band, zorder=4)
+        ax.scatter(
+            wl,
+            fl,
+            s=50,
+            marker="o",
+            color=colors_by_band[band],
+            edgecolor="white",
+            linewidth=1.0,
+            alpha=0.8,
+            label=band,
+            zorder=4,
+        )
 
     # Wavelength region labels
     ax.text(1000, 1.2e46, "UV", fontsize=7, color="0.5", ha="center", alpha=0.6, style="italic")
@@ -216,7 +231,7 @@ infrared re-emission.
     ax.text(
         0.97,
         0.06,
-        rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir/L_SUN_CGS):.1f}}}\,L_\odot$",
+        rf"$L_{{\rm IR}}^{{(8\text{{–}}1000\,\mu\mathrm{{m}})}} \approx 10^{{{np.log10(L_ir / L_SUN_CGS):.1f}}}\,L_\odot$",
         transform=ax.transAxes,
         ha="right",
         fontsize=9,

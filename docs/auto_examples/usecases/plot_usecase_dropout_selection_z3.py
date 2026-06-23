@@ -18,6 +18,10 @@ demonstrating the technique's redshift selectivity. References: Steidel+1996,
 Madau+1996 dropout technique.
 """
 
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
 import warnings
 
 import jax
@@ -27,7 +31,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.utils.magnitudes import fnu_to_ab_mag
+from tengri.units import fnu_to_ab_mag
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -40,6 +44,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
 
 # ── Build model (fixed SFH and dust, variable redshift) ──────────────
 
+
 def build_model(z: float) -> tengri.SEDModel:
     """Build a model at a given redshift."""
     return tengri.SEDModel.build(
@@ -47,7 +52,7 @@ def build_model(z: float) -> tengri.SEDModel:
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-0.5, 1.5),
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(0.5, 6.0),
             "width_gyr": tengri.Uniform(0.8, 3.0),
             "skew": tengri.Uniform(-0.5, 1.0),
@@ -145,24 +150,39 @@ gr_box = np.linspace(-0.5, 2.0, 100)
 ug_box = 1.5 * gr_box + 0.3
 
 # Plot the selection box boundary
-ax.plot([1.0, 1.0], [-0.5, 2.5], color="0.35", lw=1.8, ls="--",
-        label="Steidel+1996 U-dropout box", alpha=0.8)
+ax.plot(
+    [1.0, 1.0],
+    [-0.5, 2.5],
+    color="0.35",
+    lw=1.8,
+    ls="--",
+    label="Steidel+1996 U-dropout box",
+    alpha=0.8,
+)
 ax.plot(gr_box, ug_box, color="0.35", lw=1.8, ls="--", alpha=0.8)
 ax.plot([-0.5, 2.0], [1.5, 1.5], color="0.35", lw=1.8, ls="--", alpha=0.8)
 
 # Shade the selection region
 gr_fill = np.linspace(0.0, 1.5, 100)
 ug_fill = 1.5 * gr_fill + 0.3
-ax.fill_between(gr_fill, ug_fill, 1.5, alpha=0.08, color="gray",
-                label="U-dropout region")
+ax.fill_between(gr_fill, ug_fill, 1.5, alpha=0.08, color="gray", label="U-dropout region")
 
 # Color by redshift
 cmap = plt.cm.viridis
 norm = plt.Normalize(vmin=z_vals.min(), vmax=z_vals.max())
 
-scatter = ax.scatter(all_colors[:, 1], all_colors[:, 0], c=all_z, cmap=cmap,
-                     s=45, alpha=0.65, edgecolor="0.1", linewidth=0.3,
-                     norm=norm, rasterized=True)
+scatter = ax.scatter(
+    all_colors[:, 1],
+    all_colors[:, 0],
+    c=all_z,
+    cmap=cmap,
+    s=45,
+    alpha=0.65,
+    edgecolor="0.1",
+    linewidth=0.3,
+    norm=norm,
+    rasterized=True,
+)
 
 # Colorbar
 cbar = plt.colorbar(scatter, ax=ax, label=r"Redshift $z$")
@@ -176,10 +196,10 @@ ax.set_title("Lyman-break galaxy z~3 U-dropout selection")
 ax.legend(frameon=False, loc="upper left", fontsize=10)
 
 # Add region annotations
-ax.text(0.3, 2.2, r"$z \sim 3$" + "\n(inside)", fontsize=9,
-        ha="center", color="#2ca02c", weight="bold")
-ax.text(1.7, 0.3, r"$z \sim 0{-}1$" + "\n(outside)", fontsize=9,
-        ha="center", color="#d62728")
+ax.text(
+    0.3, 2.2, r"$z \sim 3$" + "\n(inside)", fontsize=9, ha="center", color="#2ca02c", weight="bold"
+)
+ax.text(1.7, 0.3, r"$z \sim 0{-}1$" + "\n(outside)", fontsize=9, ha="center", color="#d62728")
 
 fig.tight_layout()
 plt.savefig("plot_usecase_dropout_selection_z3.png", dpi=150, bbox_inches="tight")

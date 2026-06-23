@@ -1,4 +1,13 @@
 {
+ "inset_axes": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mpl_toolkits.axes_grid1.inset_locator",
+   "module_short": "mpl_toolkits.axes_grid1.inset_locator",
+   "name": "inset_axes"
+  }
+ ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -26,6 +35,15 @@
    "name": "Normalize"
   }
  ],
+ "np.any": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "any"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -42,6 +60,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "linspace"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.cm.ScalarMappable": [

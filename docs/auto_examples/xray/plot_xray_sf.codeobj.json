@@ -8,13 +8,13 @@
    "name": "logspace"
   }
  ],
- "mpl.colors.Normalize": [
+ "mpl.colors.LogNorm": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.colors",
    "module_short": "matplotlib.colors",
-   "name": "Normalize"
+   "name": "LogNorm"
   }
  ],
  "np.array": [
@@ -24,6 +24,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
+  }
+ ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
   }
  ],
  "np.log10": [
@@ -42,6 +51,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "logspace"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.cm.ScalarMappable": [

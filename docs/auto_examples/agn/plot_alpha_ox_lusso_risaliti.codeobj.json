@@ -915,6 +915,22 @@
    "name": "float"
   }
  ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "_Environ"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
  "out": [
   {
    "is_class": false,

@@ -35,10 +35,14 @@ from the dropout depth.
 Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
 Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-149
+.. GENERATED FROM PYTHON SOURCE LINES 14-153
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -67,7 +71,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
         observation=obs,
         sfh={
             "type": "tsnorm",
-            "log_peak_sfr": tengri.Uniform(-1.0, 2.5),
+            "log_total_mass": 10.0,
             "peak_lbt_gyr": tengri.Uniform(0.1, 2.0),
             "width_gyr": tengri.Uniform(0.05, 1.0),
             "skew": tengri.Fixed(0.5),
@@ -87,7 +91,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
     # Generate mock data
     key = jax.random.PRNGKey(42)
     truth_params = {
-        "sfh_tsnorm_log_peak_sfr": 1.2,
+        "sfh_tsnorm_log_total_mass": 1.2,
         "sfh_tsnorm_peak_lbt_gyr": 0.3,
         "sfh_tsnorm_width_gyr": 0.2,
         "sfh_tsnorm_skew": 0.5,

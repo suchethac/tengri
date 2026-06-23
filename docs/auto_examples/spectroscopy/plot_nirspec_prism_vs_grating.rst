@@ -43,33 +43,14 @@ References
 .. [3] Cameron et al. (2023). The assembly of metals in galaxies at z~3-5.
        MNRAS (submitted).
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-208
-
-
-
-.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
-   :alt: PRISM (blended): $R \approx 100$ — H$\alpha$ + [N\,II] appear as single feature, G395M (resolved): $R \approx 1000$ — Three distinct peaks clearly separated
-   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_nirspec_prism_vs_grating_001.png
-   :class: sphx-glr-single-img
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/src/tengri/components/nebular/ionizing_spectrum.py:96: RuntimeWarning: invalid value encountered in scalar divide
-      np.abs((_seg_wave[-1] ** params[0] - _seg_wave[0] ** params[0]) / params[0])
-    Saved: plot_nirspec_prism_vs_grating.png
-
-
-
-
-
-
-|
+.. GENERATED FROM PYTHON SOURCE LINES 23-219
 
 .. code-block:: Python
 
+
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
 
@@ -97,10 +78,15 @@ References
     # z=5 star-forming model: moderate ongoing star formation, modest dust.
     model = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": tengri.FIXED,
-             "tau_gyr": 0.3, "log_peak_sfr": 0.8, "alpha": 2.5, "beta": 1.8},
-        dust={"type": "two_component", "*": tengri.FIXED,
-              "tau_diff": 0.06, "tau_bc": 0.10},
+        sfh={
+            "type": "dpl",
+            "*": tengri.FIXED,
+            "tau_gyr": 0.3,
+            "log_total_mass": 10.0,
+            "alpha": 2.5,
+            "beta": 1.8,
+        },
+        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.06, "tau_bc": 0.10},
         neb={"type": "cue", "*": tengri.FIXED, "logZ_gas": -0.5, "logU": -1.5},
         redshift=tengri.Fixed(5.0),
     )
@@ -131,6 +117,7 @@ References
     # ============================================================================
     # Resolution convolution: PRISM (R~100) and grating (R~1000)
     # ============================================================================
+
 
     def convolve_with_resolution(wave, sed, R):
         """Convolve SED with Gaussian LSF for constant resolution R.
@@ -167,7 +154,8 @@ References
     # ============================================================================
 
     fig, (ax_prism, ax_grating) = plt.subplots(
-        2, 1,
+        2,
+        1,
         figsize=(10, 7),
         sharex=True,
     )
@@ -255,11 +243,6 @@ References
     plt.savefig("plot_nirspec_prism_vs_grating.png", dpi=150, bbox_inches="tight")
     print("Saved: plot_nirspec_prism_vs_grating.png")
     plt.show()
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.801 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_nirspec_prism_vs_grating.py:

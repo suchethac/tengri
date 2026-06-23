@@ -35,6 +35,15 @@
    "name": "asarray"
   }
  ],
+ "np.log10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "log10"
+  }
+ ],
  "np.logspace": [
   {
    "is_class": false,
@@ -42,6 +51,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "logspace"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.cm.ScalarMappable": [

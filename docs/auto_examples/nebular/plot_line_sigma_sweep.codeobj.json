@@ -44,6 +44,33 @@
    "name": "asarray"
   }
  ],
+ "np.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "linspace"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
+  }
+ ],
+ "plt.close": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "close"
+  }
+ ],
  "plt.cm.ScalarMappable": [
   {
    "is_class": false,
@@ -107,6 +134,15 @@
    "name": "Fixed"
   }
  ],
+ "tengri.Observation": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Observation"
+  }
+ ],
  "tengri.SEDModel.build": [
   {
    "is_class": false,
@@ -116,13 +152,13 @@
    "name": "build"
   }
  ],
- "tengri.Uniform": [
+ "tengri.Spectroscopy": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "Uniform"
+   "name": "Spectroscopy"
   }
  ],
  "tengri.load_ssp": [

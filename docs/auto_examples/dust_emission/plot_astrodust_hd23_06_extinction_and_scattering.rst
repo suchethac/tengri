@@ -29,28 +29,31 @@ Astrodust+PAH extinction, scattering, and albedo
 Extinction opacity, polarized extinction, and single-scattering albedo for
 the Hensley & Draine 2023 fiducial size distribution.
 
-.. GENERATED FROM PYTHON SOURCE LINES 8-79
+.. GENERATED FROM PYTHON SOURCE LINES 8-82
 
 .. code-block:: Python
 
 
+    import os
+
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
     import warnings
 
-    import h5py
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri import data_path
+    import tengri
     from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-    with h5py.File(data_path("astrodust_templates.h5"), "r") as f:
-        ext = np.asarray(f["extinction"])
-        scatt = np.asarray(f["scattering"])
-        extpol = np.asarray(f["polarized_extinction"])
+    _tpl = tengri.load_astrodust_hd23()
+    ext = np.asarray(_tpl.tau_per_H)
+    scatt = np.asarray(_tpl.sigma_sca_per_H)
+    extpol = np.asarray(_tpl.p_pol_per_H)
 
     wave_um = ext[:, 0]
     tau_Ad = ext[:, 1]

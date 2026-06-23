@@ -17,6 +17,15 @@
    "name": "Normalize"
   }
  ],
+ "np.argsort": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "argsort"
+  }
+ ],
  "np.array": [
   {
    "is_class": false,
@@ -24,6 +33,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "array"
+  }
+ ],
+ "np.asarray": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "asarray"
   }
  ],
  "np.linspace": [
@@ -42,6 +60,24 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "log10"
+  }
+ ],
+ "np.trapezoid": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "trapezoid"
+  }
+ ],
+ "os.environ": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os",
+   "module_short": "os",
+   "name": "environ"
   }
  ],
  "plt.cm.ScalarMappable": [
