@@ -16,6 +16,10 @@
 # %% [markdown]
 # # Recovering a bursty star-formation history from joint UV–NIR photometry + an optical spectrum
 #
+# > ⚠️ **Experimental.** This notebook is a research demonstration. It
+# > explores experimental features and may use APIs that change between
+# > releases; it sits outside the supported tutorial sequence.
+#
 # A star-forming galaxy observed two ways at once: **10 broadband fluxes**
 # (GALEX FUV/NUV + SDSS *ugriz* + 2MASS *JHKs*) and an **800-pixel optical
 # spectrum** (rest 3000–8636 Å, R≈2000). Fitted jointly with a **stochastic**

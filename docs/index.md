@@ -169,6 +169,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
 
    spine/02_sed_anatomy
    spine/03_discovering_the_menu
+   spine/04_building_models
 
 .. toctree::
    :caption: Fitting workflows
@@ -198,7 +199,6 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :maxdepth: 1
    :hidden:
 
-   spine/04_building_models
    api/index
    performance/index
    performance/memory
