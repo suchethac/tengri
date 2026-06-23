@@ -46,6 +46,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-120
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_strong_line_metallicity_diagnostics_001.png
+   :alt: plot strong line metallicity diagnostics
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_strong_line_metallicity_diagnostics_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -145,6 +156,11 @@ References:
         ax.set_xlabel(r"$12 + \log(\mathrm{O/H})$")
 
     plt.savefig("plot_strong_line_metallicity_diagnostics.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.795 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

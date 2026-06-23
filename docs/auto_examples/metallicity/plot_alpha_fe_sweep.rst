@@ -37,6 +37,17 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-81
 
+
+
+.. image-sg:: /auto_examples/metallicity/images/sphx_glr_plot_alpha_fe_sweep_001.png
+   :alt: plot alpha fe sweep
+   :srcset: /auto_examples/metallicity/images/sphx_glr_plot_alpha_fe_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

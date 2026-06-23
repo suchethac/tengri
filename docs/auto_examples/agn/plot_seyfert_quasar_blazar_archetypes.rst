@@ -47,6 +47,17 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-240
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
+   :alt: plot seyfert quasar blazar archetypes
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_seyfert_quasar_blazar_archetypes_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -265,6 +276,11 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
     fig.tight_layout()
     plt.savefig("plot_seyfert_quasar_blazar_archetypes.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.016 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py:

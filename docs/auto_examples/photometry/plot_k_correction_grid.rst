@@ -49,7 +49,7 @@ on SDSS template K-corrections.
 
  .. code-block:: none
 
-    /private/tmp/tengri-regen/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.5 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behaviour.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -253,7 +253,7 @@ on SDSS template K-corrections.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 24.467 seconds)
+   **Total running time of the script:** (0 minutes 26.742 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_k_correction_grid.py:

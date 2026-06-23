@@ -39,6 +39,17 @@ grids and overlay the curves.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-97
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ionising_lum_001.png
+   :alt: plot ionising lum
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_ionising_lum_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -41,6 +41,17 @@ formulation).
 
 .. GENERATED FROM PYTHON SOURCE LINES 18-94
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_relagn_spin_001.png
+   :alt: plot relagn spin
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_relagn_spin_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

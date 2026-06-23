@@ -40,6 +40,28 @@ law-dependent in the literature.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-138
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_uv_slope_response_001.png
+   :alt: plot dust law uv slope response
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_uv_slope_response_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/examples/dust_attenuation/plot_dust_law_uv_slope_response.py:123: UserWarning: set_ticklabels() should only be used with a fixed number of ticks, i.e. after set_ticks() or using a FixedLocator.
+      ax.set_xticklabels([lbl for _, lbl, _ in LAWS], rotation=20, ha="right", fontsize=8.5)
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

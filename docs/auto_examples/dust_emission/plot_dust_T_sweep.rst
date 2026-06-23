@@ -32,6 +32,17 @@ redward toward the submillimeter.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-53
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_dust_T_sweep_001.png
+   :alt: plot dust T sweep
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_dust_T_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -36,6 +36,17 @@ Reference: Conroy et al. 2010 (FSPS; radio connections); Fabbiano 2006
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-93
 
+
+
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_radio_xray_001.png
+   :alt: plot radio xray
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_radio_xray_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

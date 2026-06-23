@@ -32,6 +32,17 @@ dependence of PAH features on starlight hardness.
 
 .. GENERATED FROM PYTHON SOURCE LINES 9-70
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_pahspec_starlight_sweep_001.png
+   :alt: plot pahspec starlight sweep
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_pahspec_starlight_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

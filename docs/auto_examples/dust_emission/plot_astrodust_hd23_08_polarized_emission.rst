@@ -31,6 +31,17 @@ Hensley & Draine 2023 fiducial ionization parameter.
 
 .. GENERATED FROM PYTHON SOURCE LINES 8-63
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_08_polarized_emission_001.png
+   :alt: plot astrodust hd23 08 polarized emission
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_08_polarized_emission_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

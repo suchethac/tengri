@@ -39,6 +39,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-89
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_logu_cross_library_001.png
+   :alt: plot logu cross library
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_logu_cross_library_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -114,6 +125,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_logu_cross_library.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.797 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_logu_cross_library.py:

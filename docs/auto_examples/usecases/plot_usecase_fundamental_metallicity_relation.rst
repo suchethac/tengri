@@ -48,6 +48,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 25-171
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
+   :alt: plot usecase fundamental metallicity relation
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_fundamental_metallicity_relation_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

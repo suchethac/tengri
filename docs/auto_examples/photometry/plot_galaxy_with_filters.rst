@@ -38,6 +38,17 @@ up rest-frame ``5500 Å`` at moderate z, etc.
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-108
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_galaxy_with_filters_001.png
+   :alt: plot galaxy with filters
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_galaxy_with_filters_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

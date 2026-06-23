@@ -48,6 +48,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 25-97
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_attenuation_law_compare_001.png
+   :alt: plot attenuation law compare
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_attenuation_law_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -122,6 +133,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_attenuation_law_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.400 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_attenuation_law_compare.py:

@@ -42,6 +42,17 @@ Kauffmann et al. 2003, MNRAS, 346, 1055.
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-111
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_neb_bpt_logu_grid_001.png
+   :alt: plot neb bpt logu grid
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_neb_bpt_logu_grid_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

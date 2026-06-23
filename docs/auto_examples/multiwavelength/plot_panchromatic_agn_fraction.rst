@@ -33,6 +33,17 @@ increasingly dominates stellar and dust emission.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-96
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_agn_fraction_001.png
+   :alt: plot panchromatic agn fraction
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_agn_fraction_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

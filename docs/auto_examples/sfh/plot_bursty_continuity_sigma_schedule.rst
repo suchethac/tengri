@@ -43,6 +43,17 @@ This example does two things:
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-125
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
+   :alt: Bursty σ schedule on the default 7-bin grid
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_bursty_continuity_sigma_schedule_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

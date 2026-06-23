@@ -37,6 +37,17 @@ Reference: Hogg et al. 2002, astro-ph/0210394 (k-correction primer).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-96
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_redshift_filter_grid_001.png
+   :alt: plot redshift filter grid
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_redshift_filter_grid_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

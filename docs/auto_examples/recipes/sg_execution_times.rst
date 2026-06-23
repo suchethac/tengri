@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:30.626** total execution time for 6 files **from auto_examples/recipes**:
+**00:02.610** total execution time for 7 files **from auto_examples/recipes**:
 
 .. container::
 
@@ -32,13 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_custom_filter.py` (``plot_recipe_custom_filter.py``)
+     - 00:02.610
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare.py` (``plot_recipe_compare.py``)
-     - 00:30.626
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_compare_priors.py` (``plot_recipe_compare_priors.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_custom_filter.py` (``plot_recipe_custom_filter.py``)
+   * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_introspection_tour.py` (``plot_recipe_introspection_tour.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_recipes_plot_recipe_load_real_csv.py` (``plot_recipe_load_real_csv.py``)

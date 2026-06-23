@@ -44,6 +44,17 @@ attenuation law).
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-158
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_balmer_decrement_av_001.png
+   :alt: plot usecase balmer decrement av
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_balmer_decrement_av_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -183,6 +194,11 @@ attenuation law).
 
     fig.tight_layout()
     plt.savefig("plot_usecase_balmer_decrement_av.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.990 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

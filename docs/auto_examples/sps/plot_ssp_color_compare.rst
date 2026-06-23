@@ -40,6 +40,17 @@ grid even before any prior or noise is involved.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-121
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_color_compare_001.png
+   :alt: plot ssp color compare
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_color_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -146,6 +157,11 @@ grid even before any prior or noise is involved.
 
     fig.tight_layout()
     plt.savefig("plot_ssp_color_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.284 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ssp_color_compare.py:

@@ -37,6 +37,32 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-134
 
+
+
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_diag_mass_conservation_sfh_001.png
+   :alt: plot diag mass conservation sfh
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_diag_mass_conservation_sfh_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    Mass conservation diagnostic:
+    N combos: 36
+    Mean relative error: 0.02%
+    Max relative error: 0.04%
+    Status: PASS
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

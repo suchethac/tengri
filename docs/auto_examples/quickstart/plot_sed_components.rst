@@ -33,6 +33,17 @@ removes from the intrinsic stellar continuum.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-88
 
+
+
+.. image-sg:: /auto_examples/quickstart/images/sphx_glr_plot_sed_components_001.png
+   :alt: plot sed components
+   :srcset: /auto_examples/quickstart/images/sphx_glr_plot_sed_components_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

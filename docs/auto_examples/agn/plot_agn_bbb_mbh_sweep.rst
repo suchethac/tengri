@@ -39,6 +39,17 @@ supermassive black holes.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-100
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_bbb_mbh_sweep_001.png
+   :alt: plot agn bbb mbh sweep
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_bbb_mbh_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

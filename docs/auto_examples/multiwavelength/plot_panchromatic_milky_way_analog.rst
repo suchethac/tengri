@@ -49,7 +49,18 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-162
+.. GENERATED FROM PYTHON SOURCE LINES 33-160
+
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_milky_way_analog_001.png
+   :alt: plot panchromatic milky way analog
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_milky_way_analog_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -179,9 +190,12 @@ Reading order: stellar continuum (grey) → dust-attenuated stellar
     ax.grid(True, alpha=0.15, linestyle="--", linewidth=0.5)
 
     fig.tight_layout()
-    _script_dir = os.path.dirname(os.path.abspath(__file__))
-    _outfile = os.path.join(_script_dir, "plot_panchromatic_milky_way_analog.png")
-    plt.savefig(_outfile, dpi=150, bbox_inches="tight")
+    plt.savefig("plot_panchromatic_milky_way_analog.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.648 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_milky_way_analog.py:

@@ -31,6 +31,17 @@ Per-H grain volume distribution versus grain radius for the Hensley & Draine
 
 .. GENERATED FROM PYTHON SOURCE LINES 8-52
 
+
+
+.. image-sg:: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
+   :alt: plot astrodust hd23 01 size distribution
+   :srcset: /auto_examples/dust_emission/images/sphx_glr_plot_astrodust_hd23_01_size_distribution_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

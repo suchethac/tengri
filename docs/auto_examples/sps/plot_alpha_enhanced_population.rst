@@ -45,6 +45,40 @@ into the 5050–5350 Å region to reveal the Mg b (≈5175 Å) and Fe5270
 
 .. GENERATED FROM PYTHON SOURCE LINES 23-164
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_alpha_enhanced_population_001.png
+   :alt: Age = 5.0 Gyr, Z = 0.0 dex (solar), z = 0.05, Mg b / Fe5270 diagnostic region (zoomed)
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_alpha_enhanced_population_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.01 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+    === Alpha-element enhancement diagnostics ===
+    Age: 5.0 Gyr | Metallicity: Z = 0.0 dex | Redshift: 0.05
+
+    All four models use the same SSP age & metallicity, varying only [α/Fe].
+    Mg b and Fe5270 are absorption features; higher Mg/Fe ratio indicates faster
+    star-formation timescale (less iron-peak enrichment from supernovae Ia).
+
+      [α/Fe] = 0.0 dex (typical for elliptical: 0.0–0.6)
+      [α/Fe] = 0.2 dex (typical for elliptical: 0.0–0.6)
+      [α/Fe] = 0.4 dex (typical for elliptical: 0.0–0.6)
+      [α/Fe] = 0.6 dex (typical for elliptical: 0.0–0.6)
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

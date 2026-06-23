@@ -34,6 +34,17 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-100
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_skirtor_variants_001.png
+   :alt: Face-on ($\cos \theta \approx 1$), Face-on ($\cos \theta \approx 1$), Edge-on ($\cos \theta \approx 0.3$), Edge-on ($\cos \theta \approx 0.3$)
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_skirtor_variants_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -125,6 +136,11 @@ deep 9.7 μm silicate absorption. Higher τ increases reprocessed flux.
 
     fig.tight_layout()
     plt.savefig("plot_skirtor_variants.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.155 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_variants.py:

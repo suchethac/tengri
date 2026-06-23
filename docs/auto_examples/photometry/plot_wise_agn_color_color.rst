@@ -63,6 +63,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 41-273
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_wise_agn_color_color_001.png
+   :alt: plot wise agn color color
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_wise_agn_color_color_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

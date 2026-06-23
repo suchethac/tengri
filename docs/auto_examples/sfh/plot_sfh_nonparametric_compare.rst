@@ -45,6 +45,17 @@ restrictive.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-97
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_sfh_nonparametric_compare_001.png
+   :alt: plot sfh nonparametric compare
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_sfh_nonparametric_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -56,6 +56,31 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 
 .. GENERATED FROM PYTHON SOURCE LINES 33-196
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :alt: plot balmer break redshift evolution
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 39% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 83% of its stellar mass before the Big Bang at z=4.00 (cosmic age 1.54 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    Saved: plot_balmer_break_redshift_evolution.png
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

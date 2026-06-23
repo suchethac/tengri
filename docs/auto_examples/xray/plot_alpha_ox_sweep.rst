@@ -42,6 +42,17 @@ Wilkins et al. 2020, MNRAS 493, 5548 (alpha_OX scatter study).
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-74
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_alpha_ox_sweep_001.png
+   :alt: plot alpha ox sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_alpha_ox_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

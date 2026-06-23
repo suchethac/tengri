@@ -39,6 +39,28 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-116
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_age_metallicity_color_grid_001.png
+   :alt: plot age metallicity color grid
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_age_metallicity_color_grid_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

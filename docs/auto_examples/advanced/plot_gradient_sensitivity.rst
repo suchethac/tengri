@@ -36,6 +36,17 @@ for SED model validation and Fisher analysis (Conroy 2013, ARA&A, 51, 393).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-83
 
+
+
+.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_gradient_sensitivity_001.png
+   :alt: plot gradient sensitivity
+   :srcset: /auto_examples/advanced/images/sphx_glr_plot_gradient_sensitivity_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

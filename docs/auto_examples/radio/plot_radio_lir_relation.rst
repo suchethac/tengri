@@ -36,6 +36,17 @@ Reference: Bell 2003, ApJ 586, 794.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-59
 
+
+
+.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_radio_lir_relation_001.png
+   :alt: plot radio lir relation
+   :srcset: /auto_examples/radio/images/sphx_glr_plot_radio_lir_relation_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

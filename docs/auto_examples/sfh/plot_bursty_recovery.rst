@@ -33,6 +33,17 @@ illustrating the range of morphologies that each regime produces before inferenc
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-78
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_bursty_recovery_001.png
+   :alt: plot bursty recovery
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_bursty_recovery_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

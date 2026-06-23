@@ -47,6 +47,74 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-242
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
+   :alt: Strong-lensed z=7 LAE: JWST NIRCam detection thresholds
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_lensed_galaxy_magnification_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+
+    ======================================================================
+    STRONG-LENSING MAGNIFICATION SUMMARY (z=7 LAE)
+    ======================================================================
+
+    Intrinsic (unlensed) magnitudes:
+    ----------------------------------------------------------------------
+      JWST_F150W          :  24.58 AB (5.370e-30 erg/s/Hz)
+      JWST_F200W          :  24.63 AB (5.128e-30 erg/s/Hz)
+      JWST_F277W          :  24.52 AB (5.635e-30 erg/s/Hz)
+      JWST_F356W          :  24.26 AB (7.196e-30 erg/s/Hz)
+      JWST_F444W          :  24.29 AB (6.998e-30 erg/s/Hz)
+
+    JWST NIRCam 5σ detection limit: 28.0 AB
+    (Rieke+2023, NIRCam module performance)
+
+    Magnified magnitudes and detectability:
+    ----------------------------------------------------------------------
+
+    μ =    1.0:
+      JWST_F150W          :  24.58 AB  [✓ DETECT]
+      JWST_F200W          :  24.63 AB  [✓ DETECT]
+      JWST_F277W          :  24.52 AB  [✓ DETECT]
+      JWST_F356W          :  24.26 AB  [✓ DETECT]
+      JWST_F444W          :  24.29 AB  [✓ DETECT]
+
+    μ =    5.0:
+      JWST_F150W          :  22.83 AB  [✓ DETECT]
+      JWST_F200W          :  22.88 AB  [✓ DETECT]
+      JWST_F277W          :  22.78 AB  [✓ DETECT]
+      JWST_F356W          :  22.51 AB  [✓ DETECT]
+      JWST_F444W          :  22.54 AB  [✓ DETECT]
+
+    μ =   20.0:
+      JWST_F150W          :  21.32 AB  [✓ DETECT]
+      JWST_F200W          :  21.37 AB  [✓ DETECT]
+      JWST_F277W          :  21.27 AB  [✓ DETECT]
+      JWST_F356W          :  21.00 AB  [✓ DETECT]
+      JWST_F444W          :  21.04 AB  [✓ DETECT]
+
+    μ =  100.0:
+      JWST_F150W          :  19.58 AB  [✓ DETECT]
+      JWST_F200W          :  19.63 AB  [✓ DETECT]
+      JWST_F277W          :  19.52 AB  [✓ DETECT]
+      JWST_F356W          :  19.26 AB  [✓ DETECT]
+      JWST_F444W          :  19.29 AB  [✓ DETECT]
+
+    ======================================================================
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

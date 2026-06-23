@@ -39,6 +39,17 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-105
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
+   :alt: plot emission line atlas
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_emission_line_atlas_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -130,6 +141,11 @@ runs in rest-frame-only mode (which is all the atlas needs anyway).
     ax_opt.set(xlabel=r"Rest-frame wavelength [$\mathrm{\AA}$]", ylabel=r"$F_\lambda$ [arbitrary]")
 
     plt.savefig("plot_emission_line_atlas.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.433 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_emission_line_atlas.py:

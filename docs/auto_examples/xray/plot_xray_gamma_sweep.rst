@@ -36,6 +36,17 @@ photon index dependence).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-58
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_gamma_sweep_001.png
+   :alt: plot xray gamma sweep
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_gamma_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

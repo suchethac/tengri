@@ -38,6 +38,17 @@ Bell et al. 2003, ApJS, 149, 289 (stellar mass completeness).
 
 .. GENERATED FROM PYTHON SOURCE LINES 15-121
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_mass_completeness_001.png
+   :alt: plot usecase mass completeness
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_mass_completeness_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

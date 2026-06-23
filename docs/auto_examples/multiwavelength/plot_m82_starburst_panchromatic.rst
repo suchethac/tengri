@@ -58,7 +58,18 @@ infrared re-emission.
    *Astrophys. J.* **784**, 83.
    https://doi.org/10.1088/0004-637X/784/1/83
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-231
+.. GENERATED FROM PYTHON SOURCE LINES 37-229
+
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_m82_starburst_panchromatic_001.png
+   :alt: plot m82 starburst panchromatic
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_m82_starburst_panchromatic_001.png
+   :class: sphx-glr-single-img
+
+
+
+
 
 .. code-block:: Python
 
@@ -253,9 +264,7 @@ infrared re-emission.
     ax.grid(True, alpha=0.15, linestyle="--", linewidth=0.5)
 
     fig.tight_layout()
-    _script_dir = os.path.dirname(os.path.abspath(__file__))
-    _outfile = os.path.join(_script_dir, "plot_m82_starburst_panchromatic.png")
-    plt.savefig(_outfile, dpi=150, bbox_inches="tight")
+    plt.savefig("plot_m82_starburst_panchromatic.png", dpi=150, bbox_inches="tight")
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_m82_starburst_panchromatic.py:

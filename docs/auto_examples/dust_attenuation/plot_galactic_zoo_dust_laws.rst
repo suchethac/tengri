@@ -51,6 +51,17 @@ Gordon et al. (2003), Kriek & Conroy (2013).
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-130
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_galactic_zoo_dust_laws_001.png
+   :alt: plot galactic zoo dust laws
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_galactic_zoo_dust_laws_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

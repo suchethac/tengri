@@ -43,6 +43,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-100
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_hubble_sequence_001.png
+   :alt: plot usecase hubble sequence
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_hubble_sequence_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

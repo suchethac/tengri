@@ -35,6 +35,17 @@ Reference: Conroy 2012, ApJ, 747, 69; Conroy, Gunn & White 2009.
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-60
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_imf_compare_001.png
+   :alt: plot ssp imf compare
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_imf_compare_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

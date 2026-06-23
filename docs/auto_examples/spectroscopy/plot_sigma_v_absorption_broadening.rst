@@ -34,6 +34,17 @@ rotational broadening (not modelled here, sigma only).
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-84
 
+
+
+.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_sigma_v_absorption_broadening_001.png
+   :alt: plot sigma v absorption broadening
+   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_sigma_v_absorption_broadening_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

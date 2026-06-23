@@ -45,6 +45,17 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-92
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_composable_recipes_001.png
+   :alt: plot composable recipes
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_composable_recipes_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

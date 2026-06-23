@@ -31,6 +31,29 @@ at z ≳ 6.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-145
 
+
+
+.. image-sg:: /auto_examples/spectroscopy/images/sphx_glr_plot_jwst_nirspec_high_z_spectrum_001.png
+   :alt: plot jwst nirspec high z spectrum
+   :srcset: /auto_examples/spectroscopy/images/sphx_glr_plot_jwst_nirspec_high_z_spectrum_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    Saved: plot_jwst_nirspec_high_z_spectrum.png
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 

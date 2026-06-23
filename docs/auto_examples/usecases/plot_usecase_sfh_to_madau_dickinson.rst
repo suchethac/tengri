@@ -53,7 +53,7 @@ Reference: Madau & Dickinson 2014, ARA&A, 52, 415–486
  .. code-block:: none
 
     Simulating 10 × 5 = 50 galaxies
-    /private/tmp/tengri-regen/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_u (rest~892 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:771: UserWarning: WavePrecomp applies dust as a first-order Taylor projection across each filter (#617); at z~3.00 these rest-UV band(s) are biased versus the exact path: sdss_u (rest~892 Å). The bias grows steeply toward the far-UV (>10x for the bluest bands at moderate/high z) and with optical depth. For unbiased blue-band photometry use approx=None, or validate against it; SpectrumPrecomp is unaffected. See docs/known_limitations.md.
       self._warn_if_wave_precomp_dust_blue_bias()
 
     Cosmic SFRD Summary

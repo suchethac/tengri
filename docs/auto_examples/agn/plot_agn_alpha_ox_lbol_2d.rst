@@ -40,6 +40,17 @@ correlation); Wilkins et al. 2020, MNRAS, 493, 5548.
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-79
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
+   :alt: plot agn alpha ox lbol 2d
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_alpha_ox_lbol_2d_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -104,6 +115,11 @@ correlation); Wilkins et al. 2020, MNRAS, 493, 5548.
 
     fig.tight_layout()
     plt.savefig("plot_agn_alpha_ox_lbol_2d.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.128 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_alpha_ox_lbol_2d.py:

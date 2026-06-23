@@ -34,6 +34,17 @@ with the smooth mean SFH overlaid.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-68
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_stochastic_sfh_001.png
+   :alt: plot stochastic sfh
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_stochastic_sfh_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

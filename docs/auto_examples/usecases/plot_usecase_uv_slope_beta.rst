@@ -49,6 +49,28 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 26-244
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_uv_slope_beta_001.png
+   :alt: (Left) IRX–β Dust Relation, (Right) Age-Dust β Degeneracy
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_uv_slope_beta_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /private/tmp/tengri-full/src/tengri/forward/sed_model.py:666: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behaviour.
+      param_map_deltas.append(self._init_sfh(spec))
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -269,6 +291,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_uv_slope_beta.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.922 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

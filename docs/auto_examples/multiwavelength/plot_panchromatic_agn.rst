@@ -33,6 +33,17 @@ X-ray corona, and radio components, showing how AGN dominate across
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-82
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_agn_001.png
+   :alt: plot panchromatic agn
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_panchromatic_agn_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -107,6 +118,11 @@ X-ray corona, and radio components, showing how AGN dominate across
 
     fig.tight_layout()
     plt.savefig("plot_panchromatic_agn.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.060 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_panchromatic_agn.py:

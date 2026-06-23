@@ -33,6 +33,17 @@ and colour of the UV–optical SED.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-75
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
+   :alt: plot agn qsogen emline sweep
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_qsogen_emline_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

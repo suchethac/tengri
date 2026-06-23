@@ -40,6 +40,17 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
 .. GENERATED FROM PYTHON SOURCE LINES 17-87
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
+   :alt: plot agn hierarchy
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_hierarchy_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

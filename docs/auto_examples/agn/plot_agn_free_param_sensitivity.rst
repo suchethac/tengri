@@ -86,6 +86,12 @@ disc); Feltre et al. 2016 (NLR grid).
     ssp = tengri.load_ssp()
 
 
+
+
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 61-63
 
 The headline: ``'*': FREE`` now frees the AGN parameters the active blocks
@@ -101,6 +107,18 @@ consume. Before the registry fix this set was empty.
     )
     free_agn = [p for p in model_free.spec.free_params if p.startswith("agn_")]
     print(f"AGN parameters freed by agn={{'*': FREE}} (block-scoped): {sorted(free_agn)}")
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    AGN parameters freed by agn={'*': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_fracAGN', 'agn_log_ledd', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
+
+
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 71-74
@@ -149,6 +167,22 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
     fig.suptitle("Each freed AGN parameter visibly reshapes the SED (no silent no-ops)")
     fig.tight_layout()
     plt.savefig("plot_agn_free_param_sensitivity.png", dpi=150, bbox_inches="tight")
+
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
+   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, $\log_{10}(L/L_{\rm Edd})$, Nenkova torus $\tau_{9.7}$
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.695 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

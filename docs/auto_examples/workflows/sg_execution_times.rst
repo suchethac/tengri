@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.930** total execution time for 7 files **from auto_examples/workflows**:
+**00:04.061** total execution time for 8 files **from auto_examples/workflows**:
 
 .. container::
 
@@ -32,13 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``plot_workflow_photoz_degeneracy.py``)
-     - 00:04.906
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_quenching_diagnostics.py` (``plot_workflow_quenching_diagnostics.py``)
-     - 00:02.024
+     - 00:01.810
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_photoz_degeneracy.py` (``plot_workflow_photoz_degeneracy.py``)
+     - 00:01.371
      - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_bpt_classification.py` (``plot_workflow_bpt_classification.py``)
+     - 00:00.880
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_workflows_plot_prior_systematic_dust.py` (``plot_prior_systematic_dust.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_workflows_plot_workflow_dust_mc_resampling.py` (``plot_workflow_dust_mc_resampling.py``)

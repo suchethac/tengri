@@ -21,11 +21,6 @@
 Emission line broadening traces gas kinematics
 ================================================
 
-.. image:: images/sphx_glr_plot_line_sigma_sweep_001.png
-   :alt: plot line sigma sweep
-   :class: sphx-glr-single-img
-
-
 A galaxy's velocity dispersion ``sigma_v_kms`` broadens *every* spectral
 feature — including the nebular emission lines — from a few tens of km/s
 (dynamically cold disks) to several hundred km/s (dispersion-dominated
@@ -42,6 +37,12 @@ is the emission-line template width used when *fitting* line amplitudes, not a
 forward-broadening knob.)
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-91
+
+
+
+
+
+
 
 .. code-block:: Python
 

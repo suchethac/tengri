@@ -50,6 +50,30 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 27-251
 
+
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_sfr_uv_ir_consistency_001.png
+   :alt: plot usecase sfr uv ir consistency
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_sfr_uv_ir_consistency_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    SFR recovery statistics:
+      tau_V range: 0.00 – 4.00
+      Hybrid SFR relative error: 70.2% – 95.2%
+      Mean error: 90.6%
+
+
+
+
+
+
+|
+
 .. code-block:: Python
 
 
@@ -276,6 +300,11 @@ References
             "\n⚠ WARNING: hybrid SFR error >100% detected."
             " Check dust emission model or IR integration bounds."
         )
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.163 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

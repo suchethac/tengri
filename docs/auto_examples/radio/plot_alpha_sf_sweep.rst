@@ -36,6 +36,17 @@ Reference: Condon 1992, ApJ 388, 113.
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-61
 
+
+
+.. image-sg:: /auto_examples/radio/images/sphx_glr_plot_alpha_sf_sweep_001.png
+   :alt: plot alpha sf sweep
+   :srcset: /auto_examples/radio/images/sphx_glr_plot_alpha_sf_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

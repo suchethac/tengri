@@ -43,6 +43,17 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-113
 
+
+
+.. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_application_001.png
+   :alt: plot dust law application
+   :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_dust_law_application_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -45,6 +45,17 @@ absorption; dotted). Component colours map to the GRAHSP/pcigale modules
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-172
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_grahsp_paper_fig3_params_001.png
+   :alt: plot grahsp paper fig3 params
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_grahsp_paper_fig3_params_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

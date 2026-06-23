@@ -37,6 +37,17 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
 
 .. GENERATED FROM PYTHON SOURCE LINES 14-132
 
+
+
+.. image-sg:: /auto_examples/quickstart/images/sphx_glr_plot_first_fit_001.png
+   :alt: plot first fit
+   :srcset: /auto_examples/quickstart/images/sphx_glr_plot_first_fit_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
@@ -157,6 +168,11 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     ax_res.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]")
 
     plt.savefig("plot_first_fit.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 16.961 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

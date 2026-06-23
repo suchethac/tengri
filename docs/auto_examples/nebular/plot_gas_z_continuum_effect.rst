@@ -43,6 +43,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-116
 
+
+
+.. image-sg:: /auto_examples/nebular/images/sphx_glr_plot_gas_z_continuum_effect_001.png
+   :alt: Nebular continuum sensitivity to gas-phase metallicity (residual vs. lowest-Z)
+   :srcset: /auto_examples/nebular/images/sphx_glr_plot_gas_z_continuum_effect_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -36,6 +36,17 @@ Reference: Wolfe et al. 2005, ARA&A, 43, 861 (DLA review and cross-sections).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-61
 
+
+
+.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_dla_absorption_001.png
+   :alt: plot dla absorption
+   :srcset: /auto_examples/igm/images/sphx_glr_plot_dla_absorption_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

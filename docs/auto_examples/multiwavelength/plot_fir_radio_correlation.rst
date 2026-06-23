@@ -33,6 +33,17 @@ how the empirical parameter q_IR varies with model calibration.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-80
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_fir_radio_correlation_001.png
+   :alt: plot fir radio correlation
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_fir_radio_correlation_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

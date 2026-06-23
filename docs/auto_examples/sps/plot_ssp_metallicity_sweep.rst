@@ -35,6 +35,17 @@ Reference: DSPS SSP grid (Conroy et al. 2009).
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-57
 
+
+
+.. image-sg:: /auto_examples/sps/images/sphx_glr_plot_ssp_metallicity_sweep_001.png
+   :alt: plot ssp metallicity sweep
+   :srcset: /auto_examples/sps/images/sphx_glr_plot_ssp_metallicity_sweep_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

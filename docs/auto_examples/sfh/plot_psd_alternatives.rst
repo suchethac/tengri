@@ -33,6 +33,17 @@ representative parameters. No SSP data required.
 
 .. GENERATED FROM PYTHON SOURCE LINES 10-95
 
+
+
+.. image-sg:: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
+   :alt: plot psd alternatives
+   :srcset: /auto_examples/sfh/images/sphx_glr_plot_psd_alternatives_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

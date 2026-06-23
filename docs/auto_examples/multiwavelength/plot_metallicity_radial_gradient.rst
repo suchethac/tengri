@@ -43,6 +43,17 @@ Henry, R. B. C., & Worthey, G. 1999, PASP, 111, 919 (abundance gradients).
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-168
 
+
+
+.. image-sg:: /auto_examples/multiwavelength/images/sphx_glr_plot_metallicity_radial_gradient_001.png
+   :alt: plot metallicity radial gradient
+   :srcset: /auto_examples/multiwavelength/images/sphx_glr_plot_metallicity_radial_gradient_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

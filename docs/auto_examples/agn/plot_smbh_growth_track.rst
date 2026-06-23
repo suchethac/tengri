@@ -44,6 +44,17 @@ References:
 
 .. GENERATED FROM PYTHON SOURCE LINES 21-206
 
+
+
+.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_smbh_growth_track_001.png
+   :alt: plot smbh growth track
+   :srcset: /auto_examples/agn/images/sphx_glr_plot_smbh_growth_track_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

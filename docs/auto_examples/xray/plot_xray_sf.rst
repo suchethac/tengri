@@ -42,6 +42,17 @@ References
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-75
 
+
+
+.. image-sg:: /auto_examples/xray/images/sphx_glr_plot_xray_sf_001.png
+   :alt: plot xray sf
+   :srcset: /auto_examples/xray/images/sphx_glr_plot_xray_sf_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

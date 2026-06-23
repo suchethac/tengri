@@ -36,6 +36,17 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-54
 
+
+
+.. image-sg:: /auto_examples/igm/images/sphx_glr_plot_igm_z_evolution_001.png
+   :alt: plot igm z evolution
+   :srcset: /auto_examples/igm/images/sphx_glr_plot_igm_z_evolution_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 

@@ -45,6 +45,17 @@ SED as young, hot stars fade and the older stellar population emerges.
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-123
 
+
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_nuv_r_age_track_001.png
+   :alt: plot nuv r age track
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_nuv_r_age_track_001.png
+   :class: sphx-glr-single-img
+
+
+
+
+
 .. code-block:: Python
 
 
