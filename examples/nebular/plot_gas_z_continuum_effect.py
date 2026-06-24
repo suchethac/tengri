@@ -101,9 +101,7 @@ for sed, color, label in zip(seds, colors, labels):
 ax.axhline(0.0, color="0.4", lw=0.6, ls=":")
 ax.set_xlim(1000, 1e4)
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=12)
-ax.set_ylabel(
-    r"$\Delta L_\nu / L_\nu(Z_{\rm gas}=10^{-1.5}Z_\odot)$  [%]", fontsize=12
-)
+ax.set_ylabel(r"$\Delta L_\nu / L_\nu(Z_{\rm gas}=10^{-1.5}Z_\odot)$  [%]", fontsize=12)
 ax.set_title(
     "Nebular continuum sensitivity to gas-phase metallicity (residual vs. lowest-Z)",
     fontsize=11,

@@ -73,6 +73,7 @@ def _build_sed(torus: dict | None) -> tuple[np.ndarray, np.ndarray]:
 
 WAVE, DISC_ONLY = _build_sed(None)
 
+
 def torus_sed(cos_inc: float, fwd: float) -> tuple[np.ndarray, np.ndarray]:
     """Return (wavelength [AA], nu*L_nu [erg/s]) for the CAT3D-Wind torus alone."""
     wave, total = _build_sed(

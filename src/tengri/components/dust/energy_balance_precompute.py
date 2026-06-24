@@ -9,7 +9,7 @@ energy-balance absorbed luminosity — feed the output, and the exact
 stellar cube. That single dependency resurrects the cube and costs ~40× per
 evaluation (30 µs → 1.2 ms on a photometry-only fit).
 
-The integral factorises. With per-age transmission ``T_a(λ)`` independent of the
+The integral factorizes. With per-age transmission ``T_a(λ)`` independent of the
 SFH,
 
 .. math::

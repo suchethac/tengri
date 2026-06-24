@@ -203,7 +203,7 @@ class DerivedState:
     line_waves: jnp.ndarray | None = None
     line_lums: jnp.ndarray | None = None
     # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
-    # published by photoionised backends so two-component dust can honour the
+    # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
     # Nebular — photometry LUT (Phase 3c-3b, published only when

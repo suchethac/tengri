@@ -411,7 +411,7 @@ class TestAGNCrossLevelPlacement:
     contract with conflict detection.
     """
 
-    def test_shared_param_inside_sub_block_is_honoured(self):
+    def test_shared_param_inside_sub_block_is_honored(self):
         """``agn_log_lbol`` (shared) supplied inside ``disc`` must apply."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
@@ -429,7 +429,7 @@ class TestAGNCrossLevelPlacement:
         assert dist.bounds == (43.0, 47.0)
         assert params._group_provenance.get("agn_log_lbol") == "user_prior"
 
-    def test_sub_block_param_at_top_level_is_honoured(self):
+    def test_sub_block_param_at_top_level_is_honored(self):
         """``tau_skirtor`` (torus-only) supplied at the top level must apply."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},

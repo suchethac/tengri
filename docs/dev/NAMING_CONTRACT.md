@@ -321,3 +321,12 @@ British spellings are gone, not deprecated. Per §2's file-path stability rule t
 | `SSP_CATALOGUE_URL` | `SSP_CATALOG_URL` | `data/__init__.py` |
 
 See `CHANGELOG.md` for the full record.
+
+### Enforcement
+
+`tools/check_british_spelling.py` is a CI guard (in the `lint` job) that fails
+the build on any British spelling in `src/`, `tests/`, hand-written docs,
+`examples/`, and active notebooks. Run `python tools/check_british_spelling.py`
+locally, or `--fix` to rewrite case-preserving. Data-contract exceptions live in
+`ALLOWED_TOKENS`; the rename-ledger docs and this guard's own test fixtures are
+in `EXCLUDE_FILES`.

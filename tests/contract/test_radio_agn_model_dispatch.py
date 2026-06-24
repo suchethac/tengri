@@ -134,7 +134,7 @@ class TestConfigValidation:
 class TestPowerLawDispatch:
     """``agn_radio_model="powerlaw"`` matches direct radio_total call."""
 
-    def test_default_behaviour_unchanged(self, state, wave):
+    def test_default_behavior_unchanged(self, state, wave):
         comp = RadioSEDComponent()  # default config
         params = _all_radio_params()
         new_state = comp.apply(state, params)

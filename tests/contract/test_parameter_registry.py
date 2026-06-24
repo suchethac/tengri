@@ -97,7 +97,7 @@ class TestDescribeParameter:
             describe_parameter(typo)
 
 
-class TestCacheBehaviour:
+class TestCacheBehavior:
     def test_repeated_calls_return_same_object(self):
         a = registry()
         b = registry()

@@ -119,7 +119,7 @@ class TestPolarDustEmission:
         integral = jnp.sum(l_reemit * delta_nu)
         assert jnp.abs(integral - l_absorbed_total) / l_absorbed_total < 0.01
 
-    def test_greybody_peaks_in_fir(self):
+    def test_graybody_peaks_in_fir(self):
         """At T=100K, peak should be around 30 um = 3e5 A."""
         l_reemit = polar_dust_emission(1e12, WAVELENGTH, temperature=100.0)
         peak_idx = jnp.argmax(l_reemit)
@@ -128,7 +128,7 @@ class TestPolarDustEmission:
         # Allow factor-of-3 tolerance due to graybody modification
         assert 1e5 < peak_wave < 1e6, f"Peak at {peak_wave:.0f} A, expected ~3e5 A"
 
-    def test_reemission_shape_is_greybody(self):
+    def test_reemission_shape_is_graybody(self):
         """Longward of peak, emission should monotonically decrease."""
         l_reemit = polar_dust_emission(1e12, WAVELENGTH, temperature=100.0)
         peak_idx = int(jnp.argmax(l_reemit))

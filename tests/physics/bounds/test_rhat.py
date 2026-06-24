@@ -149,7 +149,7 @@ class TestPosteriorRhatMethod:
 # ── Vehtari+2021 rank-normalized folded split-Rhat ────────────────────
 
 
-class TestRankNormalisedRhat:
+class TestRankNormalizedRhat:
     def test_white_noise_close_to_one(self):
         rng = np.random.default_rng(100)
         chain = rng.normal(size=4000)

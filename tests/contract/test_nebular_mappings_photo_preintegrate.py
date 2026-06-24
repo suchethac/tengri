@@ -137,7 +137,7 @@ class TestPreintegrateForPhotometry:
         assert cont.phot.shape == (n_z, n_age, n_u, len(fw))
         assert bool(jnp.all(cont.phot == 0.0))
 
-    def test_axis0_relabelled_to_absolute_logz(self, backend_for_preint, synthetic_filters):
+    def test_axis0_relabeled_to_absolute_logz(self, backend_for_preint, synthetic_filters):
         """Axis 0 of the preint surface must be absolute log10(Z), not ζ_O.
 
         Conversion: log10(Z) = log10(ζ_O × Z_sun) = log10(ζ_O) + log10(Z_sun).

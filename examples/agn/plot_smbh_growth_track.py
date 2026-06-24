@@ -160,7 +160,7 @@ ax_track.text(
     fontsize=10,
     color="0.5",
     rotation=0,
-    bbox=dict(facecolor='white', alpha=0.8, edgecolor='none', pad=2),
+    bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2),
     zorder=10,
 )
 

@@ -262,10 +262,8 @@ def _run_map_scipy(
     )
 
 
-def _run_map_multistart(
-    context, *, key, n_restarts, n_steps, learning_rate, optimizer, verbose
-):
-    """Run ``n_restarts`` independent ADAM optimisations in parallel; keep the best.
+def _run_map_multistart(context, *, key, n_restarts, n_steps, learning_rate, optimizer, verbose):
+    """Run ``n_restarts`` independent ADAM optimizations in parallel; keep the best.
 
     Each restart starts from its own prior-sampled init (``key`` split
     ``n_restarts`` ways) and runs ``n_steps`` optax updates inside a single
@@ -399,7 +397,7 @@ def run_map(
     # (seeded from splits of ``key``) in parallel via ``jax.vmap`` and keeping
     # the best-loss restart recovers robustness while staying fully JAX-native
     # (jittable, vmappable, scales to high-D). Only for the optax path and only
-    # when no explicit ``init_from`` is given (an explicit start is honoured).
+    # when no explicit ``init_from`` is given (an explicit start is honored).
     if (
         n_restarts > 1
         and init_from is None

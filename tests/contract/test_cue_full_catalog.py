@@ -49,7 +49,7 @@ class TestGrammarPlumbing:
         # Allowed by the validator, but not interpreted for cb19.
         assert params.cue_full_catalog is False
 
-    def test_full_catalog_is_a_recognised_neb_key(self):
+    def test_full_catalog_is_a_recognized_neb_key(self):
         """Don't trip the unknown-key validator when the user adds the
         flag on the cue group."""
         # No raise means the key is in _GROUP_STRUCTURAL_KEYS['neb'].

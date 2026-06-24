@@ -187,9 +187,9 @@ class DustSEDComponent:
         (BakedIn) publish ``sed_nebular`` as zeros, so this is a no-op there.
 
         Also reads ``lyc_transmission`` — the stellar Lyman-continuum survival
-        fraction ``where(λ<912, neb_fesc, 1)`` published by a photoionised
+        fraction ``where(λ<912, neb_fesc, 1)`` published by a photoionized
         backend. Applied to the per-age stellar reconstruction so the fesc
-        absorption is honoured on the ``lnu_age`` path (see :meth:`apply` §2a
+        absorption is honored on the ``lnu_age`` path (see :meth:`apply` §2a
         and #824). Absent for BakedIn -> LyC passes through unchanged.
         """
         return (
@@ -468,7 +468,7 @@ class DustSEDComponent:
         # ── 2a. Lyman-continuum escape (neb_fesc) ──────────────────────
         # Stellar LyC (λ < 912 Å) is absorbed by the same gas that powers the
         # nebular emission; only the escaping fraction ``neb_fesc`` survives.
-        # A photoionised nebular backend publishes
+        # A photoionized nebular backend publishes
         # ``lyc_transmission = where(λ<912, neb_fesc, 1)``; apply it to BOTH the
         # attenuated and the intrinsic stellar reconstruction. This path rebuilds
         # the stellar SED from the *unmasked* per-age ``lnu_age`` cube, so without
@@ -476,7 +476,7 @@ class DustSEDComponent:
         # bypassed — the LyC leaks into ``sed_dust_attenuated`` and reappears as a
         # phantom ``-stellar_LyC`` in ``non_stellar_other`` below, giving negative
         # flux at fesc < 1. Matches CIGALE (pcigale ``nebular``: stellar below the
-        # Lyman break × (1 − fesc) is removed). Absent (no photoionised nebular,
+        # Lyman break × (1 − fesc) is removed). Absent (no photoionized nebular,
         # or BakedIn) -> no factor, LyC passes through unchanged. See #824.
         _lyc_t = state.derived.get("lyc_transmission")
         if _lyc_t is not None:
@@ -732,7 +732,7 @@ class DustSEDComponent:
                     derived_overrides["dust_emission_phot_lnu_precomp"] = L_ir * band_response
                 elif getattr(self, "fast_emission", False):
                     # Approximate path for free-shape / structured templates where
-                    # R is not constant: sample the self-normalising template at
+                    # R is not constant: sample the self-normalizing template at
                     # the filter effective wavelength (drops the ~310 us/eval
                     # dense integral). See WavePrecomp(fast_dust_emission=...).
                     derived_overrides["dust_emission_phot_lnu_precomp"] = jnp.interp(

@@ -63,7 +63,7 @@ def test_interp_matches_table_at_interior_nodes():
 
 
 @pytest.mark.bounds
-def test_geometry_greying_ordering():
+def test_geometry_graying_ordering():
     """WG00 graying: at fixed τ_V the shell screen attenuates most, cloudy least."""
     w, tau = jnp.array([1500.0]), 3.0
     a = {

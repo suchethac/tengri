@@ -468,7 +468,7 @@ class TestPreintegrateForPhotometry:
         assert cont.phot.shape == (n_met, n_age, n_u, len(fw))
         assert bool(jnp.all(cont.phot == 0.0))
 
-    def test_axis0_relabelled_to_absolute_logz(self, backend_for_preint, synthetic_filters):
+    def test_axis0_relabeled_to_absolute_logz(self, backend_for_preint, synthetic_filters):
         """Axis 0 of the preint surface must be absolute log10(Z), not log10(O/H).
         The kernel queries with ``_gas_z`` (absolute log10(Z)); the relabeling
         makes ``log_OH_grid - _LOG_OH_OFFSET`` land on the right coordinate.

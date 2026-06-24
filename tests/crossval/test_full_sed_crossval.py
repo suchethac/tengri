@@ -451,7 +451,7 @@ class TestDustySFG:
 # ── Cross-case sanity: color trends ──────────────────────────────
 
 
-class TestColourTrends:
+class TestColorTrends:
     """Cross-case SED shapes must obey physically expected color trends."""
 
     def test_starforming_is_bluer_than_quenched(self, ssp_data):
@@ -561,7 +561,7 @@ def _build_tengri_sed_raw(
     return np.asarray(result.wavelength), np.asarray(result.sed)
 
 
-class TestSFRNormalisation:
+class TestSFRNormalization:
     """Verify that SED scales linearly with SFR and stellar mass.
 
     If SFR doubles, the SED should double at every wavelength (linear scaling
@@ -1593,7 +1593,7 @@ class TestNebularTengri:
         """V-band continuum amplitude per Msun within factor 2 of FSPS.
 
         V-band is dominated by the stellar continuum (not lines), so this is
-        equivalent to a stellar amplitude check similar to TestSFRNormalisation.
+        equivalent to a stellar amplitude check similar to TestSFRNormalization.
         Factor 2 tolerance allows for MILES vs BaSeL SSP differences.
         """
         key = "fsps_nebular_neb_young_u2"

@@ -102,8 +102,7 @@ else:
     log_age_plot = log_age[mask]
     nuv_r_plot = nuv_r[mask]
 
-ax.plot(log_age_plot, nuv_r_plot, lw=2.5, color="#1f77b4",
-        label="Bare stellar SSP", zorder=3)
+ax.plot(log_age_plot, nuv_r_plot, lw=2.5, color="#1f77b4", label="Bare stellar SSP", zorder=3)
 
 # Green valley band (Wyder+2007, Schiminovich+2007)
 gv_min, gv_max = 4.0, 5.0

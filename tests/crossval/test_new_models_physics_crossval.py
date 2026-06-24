@@ -651,7 +651,7 @@ class TestLi08AttenuationPhysics:
         mostly_decreasing = np.sum(diff < 0) > 0.8 * len(diff)
         assert mostly_decreasing, "SMC-like (c4=0) should be mostly monotonic in UV"
 
-    def test_calzetti_preset_greyer(self):
+    def test_calzetti_preset_grayer(self):
         """Calzetti-like preset is grayer than MW-like (smaller k_1500 / k_5500)."""
         from tengri.components.dust.attenuation import li08
 

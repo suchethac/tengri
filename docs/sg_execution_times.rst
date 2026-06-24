@@ -605,7 +605,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_chemical_evolution_ramp.py` (``../examples/sfh/plot_chemical_evolution_ramp.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_continuity_prior_visualisation.py` (``../examples/sfh/plot_continuity_prior_visualisation.py``)
+   * - :ref:`sphx_glr_auto_examples_sfh_plot_continuity_prior_visualization.py` (``../examples/sfh/plot_continuity_prior_visualization.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_dexp_tau_sweep.py` (``../examples/sfh/plot_dexp_tau_sweep.py``)
@@ -707,7 +707,7 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sps_plot_fnu_vs_flambda_units.py` (``../examples/sps/plot_fnu_vs_flambda_units.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sps_plot_ionising_lum.py` (``../examples/sps/plot_ionising_lum.py``)
+   * - :ref:`sphx_glr_auto_examples_sps_plot_ionizing_lum.py` (``../examples/sps/plot_ionizing_lum.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sps_plot_mass_to_light_band_comparison.py` (``../examples/sps/plot_mass_to_light_band_comparison.py``)

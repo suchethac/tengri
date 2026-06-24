@@ -135,7 +135,7 @@ def test_precompute_lookup_finite_positive(torus_model):
     assert (phot > 0).all(), f"{torus_model} precompute photometry not all-positive"
 
 
-def test_precompute_torus_model_is_honoured_in_midIR():
+def test_precompute_torus_model_is_honored_in_midIR():
     """Selecting ``torus_model`` changes the precomputed mid-IR photometry more
     than the optical — i.e. the selector reaches the torus, not just a no-op.
 

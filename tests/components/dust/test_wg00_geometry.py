@@ -131,7 +131,7 @@ class TestWG00Cloudy:
             assert jnp.all(result >= 0.0), f"Negative T at tau={tau}"
             assert jnp.all(result <= 1.0 + 1e-10), f"T > 1 at tau={tau}"
 
-    def test_greyer_than_shell(self, wavelength):
+    def test_grayer_than_shell(self, wavelength):
         """Cloudy geometry gives higher mean transmission (grayer) than shell."""
         tau_v = 2.0
         t_shell = wg00_shell(wavelength, tau_v=tau_v)
@@ -210,21 +210,21 @@ class TestWG00Dusty:
             assert jnp.all(result >= 0.0), f"Negative T at tau={tau}"
             assert jnp.all(result <= 1.0 + 1e-10), f"T > 1 at tau={tau}"
 
-    def test_greyer_than_shell(self, wavelength):
+    def test_grayer_than_shell(self, wavelength):
         """Clumpy geometry gives higher mean transmission (grayer) than shell."""
         tau_v = 2.0
         t_shell = wg00_shell(wavelength, tau_v=tau_v)
         t_dusty = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=10.0)
         assert float(jnp.mean(t_dusty)) > float(jnp.mean(t_shell))
 
-    def test_fewer_clumps_greyer_than_many(self, wavelength):
+    def test_fewer_clumps_grayer_than_many(self, wavelength):
         """With fewer clumps (same tau), attenuation is grayer."""
         tau_v = 4.0
         t_few = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=3.0)
         t_many = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=30.0)
         assert float(jnp.mean(t_few)) > float(jnp.mean(t_many))
 
-    def test_many_clumps_greyer_than_few(self, wavelength):
+    def test_many_clumps_grayer_than_few(self, wavelength):
         """More clumps (same total tau) gives less gray attenuation."""
         tau_v = 2.0
         t_100 = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=100.0)
@@ -257,7 +257,7 @@ class TestWG00Dusty:
         t_high = wg00_dusty(wavelength, tau_v=4.0, n_clumps=10.0)
         assert float(jnp.mean(t_high)) < float(jnp.mean(t_low))
 
-    def test_fewer_clumps_greyer(self, wavelength):
+    def test_fewer_clumps_grayer(self, wavelength):
         """Fewer clumps (same total tau) gives grayer attenuation."""
         tau_v = 4.0
         t_few = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=3.0)

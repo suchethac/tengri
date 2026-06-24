@@ -40,12 +40,12 @@ LSUN_ERG = 3.828e33
 
 
 @register_agn_model(
-    "demo_greybody_torus",
+    "demo_graybody_torus",
     citation="gallery demo (replace with your reference)",
     status="experimental",
     short_doc="Single-T graybody torus — demonstration only",
 )
-def demo_greybody_torus(
+def demo_graybody_torus(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
     agn_frac: float = 1.0,
@@ -83,7 +83,7 @@ def demo_greybody_torus(
 
 # Discoverability check — the registry now sees the demo entry.
 registered = {m["name"] for m in tengri.list_agn_models(status="experimental")}
-assert "demo_greybody_torus" in registered, "Registration failed"
+assert "demo_graybody_torus" in registered, "Registration failed"
 
 # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
@@ -113,7 +113,7 @@ wave_um = np.asarray(out_skirtor.wavelength) * 1.0e-4
 nu_lnu_skirtor = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * np.asarray(out_skirtor.sed)
 
 L_nu_toy = np.asarray(
-    demo_greybody_torus(
+    demo_graybody_torus(
         jnp.asarray(out_skirtor.wavelength),
         agn_log_lbol=LOG_LBOL,
         agn_frac=1.0,

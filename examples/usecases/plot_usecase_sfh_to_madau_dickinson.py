@@ -67,7 +67,7 @@ def madau_dickinson_2014(z):
 # Load SSP and prepare observation
 # ============================================================================
 
-SSP = tengri.load_ssp('fsps_prsc_miles_chabrier')
+SSP = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
 # Simple observation: SDSS u-band (UV rest-frame proxy)
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u"]))

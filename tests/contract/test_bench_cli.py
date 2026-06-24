@@ -13,7 +13,7 @@ from tengri.bench import BENCHMARK_SCRIPTS, run
 pytestmark = pytest.mark.contract
 
 
-def test_catalogue_non_empty() -> None:
+def test_catalog_non_empty() -> None:
     assert len(BENCHMARK_SCRIPTS) >= 10
     for name, (script, desc) in BENCHMARK_SCRIPTS.items():
         assert script.startswith("benchmark_") and script.endswith(".py")

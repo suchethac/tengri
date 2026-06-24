@@ -53,7 +53,7 @@ def params(phot_model):
     return {p: 0.5 for p in phot_model.spec.free_params}
 
 
-def test_wave_obs_is_honoured_after_photometry_on_photometry_only_model(phot_model, params):
+def test_wave_obs_is_honored_after_photometry_on_photometry_only_model(phot_model, params):
     """The exact #707 repro: photometry first, then a custom-grid spectrum."""
     phot_model.predict_photometry(params)  # would poison the observables cache
     wave_obs = jnp.logspace(np.log10(3000.0), 5.0, 50)

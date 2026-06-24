@@ -38,7 +38,7 @@ def test_auto_policy_diagonal_at_and_above_threshold():
         )
 
 
-def test_explicit_true_honoured_at_high_dim():
+def test_explicit_true_honored_at_high_dim():
     """User passing ``dense_mass_matrix=True`` at D >= 8 must be respected.
     The warning fires (locked by a separate test) but the value goes
     through unchanged."""
@@ -46,7 +46,7 @@ def test_explicit_true_honoured_at_high_dim():
         assert _resolve_dense_mass_matrix(True, n_dim) is True
 
 
-def test_explicit_false_honoured_at_low_dim():
+def test_explicit_false_honored_at_low_dim():
     """User passing ``dense_mass_matrix=False`` at D < 8 must be respected
     (e.g. user already has a converged init and wants diagonal for speed)."""
     for n_dim in (1, 5, 7):
