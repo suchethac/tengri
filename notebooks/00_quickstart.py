@@ -228,20 +228,19 @@ print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 # %% [markdown]
 # ## Fit
 #
-# MAP (L-BFGS) for the point estimate; NUTS with four parallel chains via
-# `jax.vmap` for the full posterior. Both calls reuse the prewarmed
-# adaptation cache.
+# MAP (multi-start ADAM) for the point estimate; NUTS with four parallel chains
+# via `jax.vmap` for the full posterior.
 #
-# *Note*: the MAP uses the quasi-Newton **L-BFGS** optimiser rather than a
-# fixed number of ADAM steps. Under the standardized prior (an N(0,1) latent
-# mapped to a *genuinely uniform* physical prior), a random init can start far
-# from the truth in flux space; L-BFGS converges robustly in tens of iterations
-# where a short ADAM run would stall. NUTS is then initialised from this MAP
-# point.
+# *Note*: the standardized prior maps an N(0,1) latent to a *genuinely uniform*
+# physical prior, so a single random init can land in a poor basin and stall a
+# lone ADAM run. `n_restarts=16` runs sixteen independent inits in parallel
+# (`jax.vmap`, seeded from the run key) and keeps the lowest-loss one — fully
+# JAX-native (jittable, vmappable, scales to high-D), robust without leaving the
+# JAX ecosystem. NUTS is then seeded from this MAP point.
 
 # %%
 t = time.perf_counter()
-map_result = fitter.run(method="map", key=key_fit, optimizer="lbfgs")
+map_result = fitter.run(method="map", key=key_fit, n_restarts=16, n_steps=8000)
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
