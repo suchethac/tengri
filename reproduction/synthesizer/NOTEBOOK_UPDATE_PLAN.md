@@ -6,8 +6,8 @@ Plan (not code) for the changes that follow from the AGN-parity work on
 Synthesizer AGN test grids and a multi-minute execution, so this is authored in
 the worktree and rendered later in the canonical repo (see *Rendering*).
 
-tengri is an **independent** code; Synthesizer (Roper/Lovell/Wilkins 2025,
-arXiv:2508.03888) is a peer comparator, not a north-star. No lineage language —
+tengri is an **independent** code; Synthesizer (Lovell et al. 2025, OJA; Roper
+et al. 2026, JOSS) is a peer comparator, not a north-star. No lineage language —
 the `compute_nlr_sed_synthesizer` adapter reading the same Cloudy grid is a
 unit-matching convenience, not evidence of derivation.
 

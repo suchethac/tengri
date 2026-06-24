@@ -101,7 +101,7 @@ downloaded from ``http://www.iap.fr/neogal/``).
 
 Relation to Synthesizer stellar grids
 --------------------------------------
-Synthesizer (Lovell et al. 2025) ships stellar photoionization grids
+Synthesizer (Lovell et al. 2025; Roper et al. 2026) ships stellar photoionization grids
 (``test_grid_sfzh-*.hdf5``) produced with CLOUDY c23.01, a decade newer
 than CB_19 (c17.01).  Their HDF5 schema stores ``lines/luminosity`` in W
 per bolometric luminosity, normalized to ``bolometric_luminosities`` weight
@@ -142,7 +142,7 @@ References
 - Morisset et al. 2015, A&A, 3MdBs database
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
-- Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+- Lovell et al. 2025 (doi:10.33232/001c.145766) + Roper et al. 2026 (doi:10.21105/joss.09436)
 
 """
 

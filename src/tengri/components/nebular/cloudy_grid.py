@@ -63,7 +63,7 @@ If ionizing SED shape variation is scientifically important, use
 
 Relation to Synthesizer stellar grids
 --------------------------------------
-Synthesizer (Lovell et al. 2025) provides stellar photoionization grids
+Synthesizer (Lovell et al. 2025; Roper et al. 2026) provides stellar photoionization grids
 alongside its AGN grids.  The stellar grids (``test_grid_sfzh-*.hdf5``)
 use CLOUDY c23.01 and cover HII region emission for various SSP models.
 Their HDF5 schema uses the same ``axes/`` + ``lines/`` + ``spectra/``
@@ -95,7 +95,7 @@ References
 - Byler et al. 2017, ApJ, 840, 44
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
-- Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+- Lovell et al. 2025 (doi:10.33232/001c.145766) + Roper et al. 2026 (doi:10.21105/joss.09436)
 - diffhtwo (ArgonneCPAC) for JAX grid interpolation patterns
 
 """

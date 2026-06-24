@@ -37,7 +37,8 @@ from tengri.presets._registry import register_preset
         "Shakura_1973",  # AGN disc baseline
         "Stalevski_2016",  # SKIRTOR torus
         "Groves_2004",  # NLR templates
-        "Lovell_2025",  # Synthesizer architecture inspiration
+        "Lovell_2025",  # Synthesizer (cite together with Roper_2026)
+        "Roper_2026",  # Synthesizer JOSS paper — both required by citation policy
     ],
     status="experimental",
 )

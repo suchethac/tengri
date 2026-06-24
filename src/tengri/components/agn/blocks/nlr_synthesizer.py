@@ -15,7 +15,7 @@ from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG
 @register_agn_block(
     "nlr",
     "synthesizer",
-    citation="Lovell et al. 2025, arXiv:2508.03888",
+    citation="Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS) — Synthesizer",
     status="production",
     short_doc="Synthesizer Cloudy grid narrow-line region",
 )

@@ -134,8 +134,8 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Groves, Dopita & Sutherland 2004 (NLR) | `Groves_2004` | |
 | Ricci et al. 2017 (X-ray BAT survey) | `Federicaricci_2017` | Unusual key — first author parsed as "Federica Ricci" |
 | Ueda et al. 2014 (X-ray luminosity function) | `Ueda_2014` | |
-| Lovell et al. 2025 (synthesizer UnifiedAGN methods) | `Lovell_2025` | Architectural inspiration only — not a physics source |
-| Roper et al. 2025 (geometric masking) | `Roper_2025` | |
+| Lovell et al. 2025, OJA 8 (Synthesizer; doi:10.33232/001c.145766) | `synthesizer` | **Cite together with `synthesizer_joss`** (upstream citation policy) |
+| Roper et al. 2026, JOSS 11, 9436 (Synthesizer; doi:10.21105/joss.09436) | `synthesizer_joss` | **Cite together with `synthesizer`** |
 | Vanden Berk et al. 2001 (BLR composite quasar template) | `VandenBerk_2001` | Fetched 2026-05-08 |
 | Hönig & Kishimoto 2010 (original CAT3D torus) | `Hoenig_2010` | Fetched 2026-05-08 |
 

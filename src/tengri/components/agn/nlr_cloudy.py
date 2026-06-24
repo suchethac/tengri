@@ -42,8 +42,13 @@ References
 .. [1] A. Feltre, S. Charlot, J. Gutkin, "Nuclear activity in galaxies:
    the effective slope of the ionizing spectrum," MNRAS 456, 3354 (2016).
    https://doi.org/10.1093/mnras/stv2794
-.. [2] C. C. Lovell et al., "Synthesizer," MNRAS submitted (2025),
-   arXiv:2004.07283.
+.. [2] C. C. Lovell et al. 2025, Open Journal of Astrophysics, 8,
+   "Synthesizer: a Software Package for Synthetic Astronomical Observables",
+   https://doi.org/10.33232/001c.145766
+.. [3] W. J. Roper et al. 2026, Journal of Open Source Software, 11, 9436,
+   "Synthesizer: Synthetic Observables for Modern Astronomy",
+   https://doi.org/10.21105/joss.09436
+   (Both Synthesizer papers [2]_ [3]_ must be cited together.)
 """
 
 from __future__ import annotations
@@ -475,7 +480,11 @@ def compute_blr_sed_synthesizer(
 
     References
     ----------
-    .. [1] C. C. Lovell et al., "Synthesizer," MNRAS (2025), arXiv:2004.07283.
+    .. [1] C. C. Lovell et al. 2025, Open Journal of Astrophysics, 8,
+           https://doi.org/10.33232/001c.145766
+    .. [2] W. J. Roper et al. 2026, Journal of Open Source Software, 11, 9436,
+           https://doi.org/10.21105/joss.09436
+           (Both Synthesizer papers must be cited together.)
     """
     if grid_path is None:
         raise ValueError(
@@ -569,7 +578,7 @@ def compute_nlr_sed_synthesizer_spectra(
     L_bol * f_cov``, verified against Synthesizer's UnifiedAGN ``nlr`` component
     (~2 % on amplitude, shape correlation 0.97 on the test grid; exact-node
     smoothing is the C²-interpolation caveat). Ported to match Synthesizer
-    (Lovell et al. 2025).
+    (Lovell et al. 2025; Roper et al. 2026).
     """
     if grid_path is None:
         raise ValueError(

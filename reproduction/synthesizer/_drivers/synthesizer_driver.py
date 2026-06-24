@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Thin wrappers around Synthesizer's forward model for the notebook.
 
-Synthesizer (Roper, Lovell, Wilkins et al. 2025) builds galaxy SEDs by
+Synthesizer (Lovell et al. 2025; Roper et al. 2026 — cite both) builds galaxy SEDs by
 extracting from pre-computed HDF5 grids and walking an ``EmissionModel`` tree.
 This module drives that machinery one physics block at a time — single stellar
 populations, a parametric delayed-:math:`\tau` SFH, the Calzetti / power-law
@@ -20,9 +20,9 @@ CLI (flags ``--stellar-test-grids``, ``--agn-test-grids``, ``--dust-grid``).
 
 References
 ----------
-.. [1] Roper, W.J., Lovell, C.C., Vijayan, A.P., Wilkins, S.M., et al. (2025).
-       Synthesizer: a Software Package for Synthetic Astronomical Observables.
-       The Open Journal of Astrophysics. arXiv:2508.03888.
+.. [1] Synthesizer (cite BOTH papers):
+       Lovell, C.C., et al. (2025), Open J. Astrophys. 8, doi:10.33232/001c.145766;
+       Roper, W.J., et al. (2026), JOSS 11, 9436, doi:10.21105/joss.09436.
 .. [2] Nenkova, M., et al. (2008). ApJ, 685, 160 — clumpy torus.
 .. [3] Kubota, A., Done, C. (2018). MNRAS, 480, 1247 — qsosed disc.
 """

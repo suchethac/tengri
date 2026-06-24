@@ -37,12 +37,6 @@ The notebooks share a layout, plotting style, and a `## Summary` /
   stellar mass formed, Charlot & Fall attenuation, Dale 2014 IR, the
   `emissionLines` nebular model, the SKIRTOR AGN torus, a radio continuum,
   and the Inoue 2014 IGM.
-- **{doc}`synthesizer`** — Synthesizer (Roper, Lovell, Wilkins et al.
-  2025). Focused on the Unified AGN model: accretion disc, narrow- and
-  broad-line regions, dusty torus, and the inclination geometry — with
-  tengri reading the same Synthesizer Cloudy AGN grids for the line
-  regions. Stellar, dust, and IGM blocks round out the series.
-
 ```{toctree}
 :maxdepth: 1
 
@@ -51,7 +45,6 @@ bagpipes
 prospector
 agnfitter
 prospect_r
-synthesizer
 ```
 
 Comparisons with MAGPHYS, x-cigale, and GRAHSP will land as their
