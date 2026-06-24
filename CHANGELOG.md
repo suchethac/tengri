@@ -31,8 +31,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- **Breaking — British → American spelling of public API identifiers**
-  (no deprecation aliases; #819). Update imports and call sites:
+- British → American spelling of public API identifiers, renamed in place
+  without deprecation aliases (tengri is pre-1.0 — the public API is not yet
+  stable, so renames ship directly; #819). Update imports and call sites:
   - `cue_full_catalogue` kwarg and the `neb={'type': 'cue', …}` builder
     short-key `full_catalogue` → `cue_full_catalog` / `full_catalog`.
   - `rest_frame_colour()` → `rest_frame_color()`
