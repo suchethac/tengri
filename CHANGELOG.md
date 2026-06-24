@@ -31,6 +31,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Breaking — British → American spelling of public API identifiers**
+  (no deprecation aliases; #819). Update imports and call sites:
+  - `cue_full_catalogue` kwarg and the `neb={'type': 'cue', …}` builder
+    short-key `full_catalogue` → `cue_full_catalog` / `full_catalog`.
+  - `rest_frame_colour()` → `rest_frame_color()`
+    (`tengri.analysis.diagnostics`).
+  - `CalibrationMarginalisedLikelihood`, `ELineMarginalisedLikelihood`,
+    `CloudyELineMarginalisedLikelihood`,
+    `CalibrationELineMarginalisedLikelihood` → `…MarginalizedLikelihood`;
+    module `tengri.inference.likelihoods.marginalised` → `…marginalized`.
+  - `normalised_excess_variance()` → `normalized_excess_variance()`
+    (`tengri.components.agn.grahsp.variability`).
+  - `rank_normalise()` / `rank_normalised_rhat()` → `rank_normalize()` /
+    `rank_normalized_rhat()` (`tengri.analysis.diagnostics.autocorrelation`).
+  - `finalise()` → `finalize()` (`tengri.inference.backends.nested.utils`).
+  - `SSP_CATALOGUE_URL` → `SSP_CATALOG_URL` (`tengri.data`).
+
+  Prose across docs, gallery examples, notebooks, and docstrings was
+  likewise converted to American English. The HDF5 grid dataset keys
+  `ionisation_parameter` and `log10_specific_ionising_luminosity` retain
+  their upstream British spelling — they index a third-party Synthesizer
+  data file, so the Python strings must match the keys on disk.
 - Default AGN model for `AGNSEDComponentConfig` changed from `"simple"`
   to `"multicolor_agn"` (the Kubota & Done 2018 outer-zone disc + 2-T
   torus). Existing fits that explicitly set `agn_model="simple"` will

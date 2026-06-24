@@ -4,6 +4,9 @@
 
 Physics-model audit, new models, and cross-validation.
 
+### Breaking Changes
+- **British → American spelling of public API identifiers** (no deprecation aliases; #819). Rename in your code: `cue_full_catalogue` / builder key `full_catalogue` → `cue_full_catalog` / `full_catalog`; `rest_frame_colour` → `rest_frame_color`; the four `*MarginalisedLikelihood` classes (and module `inference.likelihoods.marginalised`) → `*MarginalizedLikelihood` / `…marginalized`; `normalised_excess_variance` → `normalized_excess_variance`; `rank_normalise` / `rank_normalised_rhat` → `rank_normalize` / `rank_normalized_rhat`; `finalise` → `finalize`; `SSP_CATALOGUE_URL` → `SSP_CATALOG_URL`. Docs, examples, notebooks, and docstrings were converted to American English throughout (the HDF5 Synthesizer-grid keys `ionisation_parameter` / `log10_specific_ionising_luminosity` keep their upstream British spelling).
+
 ### New Physics Models
 - **Dust**: SMC/LMC extinction curves (Pei 1992 Drude profiles), Witt & Gordon (2000) RT-based dust geometries (shell, cloudy, dusty), Casey (2012) MBB + mid-IR power law emission, Narayanan+2018 z-dependent attenuation priors
 - **AGN**: Full Kubota & Done (2018) 3-zone accretion disc (outer disc + warm Comptonization + hot corona), Fe II pseudo-continuum in BLR (Tsuzuki+2006), polar dust reddening for Type 1 AGN (SMC law), spin-dependent Novikov-Thorne radiative efficiency
