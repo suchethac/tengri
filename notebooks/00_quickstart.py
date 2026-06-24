@@ -228,26 +228,43 @@ print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 # %% [markdown]
 # ## Fit
 #
-# MAP (ADAM) for the point estimate; NUTS with four parallel chains via
+# MAP (L-BFGS) for the point estimate; NUTS with four parallel chains via
 # `jax.vmap` for the full posterior. Both calls reuse the prewarmed
 # adaptation cache.
+#
+# *Note*: the MAP uses the quasi-Newton **L-BFGS** optimiser rather than a
+# fixed number of ADAM steps. Under the standardized prior (an N(0,1) latent
+# mapped to a *genuinely uniform* physical prior), a random init can start far
+# from the truth in flux space; L-BFGS converges robustly in tens of iterations
+# where a short ADAM run would stall. NUTS is then initialised from this MAP
+# point.
 
 # %%
 t = time.perf_counter()
-map_result = fitter.run(method="map", key=key_fit, n_steps=200)
+map_result = fitter.run(method="map", key=key_fit, optimizer="lbfgs")
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
 posterior = fitter.run(
     method="mcmc_nuts",
     key=key_fit,
-    n_warmup=400,
+    init_from=map_result,  # seed all chains at the MAP — see note below
+    n_warmup=1000,
     n_samples=400,
     n_chains=4,
     n_burnin=0,
 )
 print(f"  NUTS wall (4 chains × 400 = 1600 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
+
+# %% [markdown]
+# *Why `init_from=map_result`*: the standardized prior maps an N(0,1) latent to
+# a **genuinely uniform** physical prior, so independent chains seeded from prior
+# draws start scattered across the whole box and would need a long warm-up to
+# meet. Seeding every chain at the MAP point (and warming up there) gives clean
+# convergence — `r_hat ≈ 1.00` — in a short run. Well-constrained parameters
+# (mass, dust, metallicity) land on the truth; the SFH *shape* parameters stay
+# broad, honestly reflecting how little 14 broadband points constrain them.
 
 # %% [markdown]
 # Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
