@@ -283,20 +283,30 @@ def _run_map_multistart(
     inits = jax.vmap(lambda k: context.initial_params(k, init_from=None))(keys)
     opt, opt_name = _build_optax_optimizer(optimizer, learning_rate)
 
-    def _optimize_one(p0):
+    # Both the restart inits (parameters) and ``data_args`` (the data) are
+    # threaded as runtime arguments — never closure-captured — so the compiled
+    # kernel is reused across galaxies/datasets instead of baking the data in as
+    # a constant (which would recompile per dataset). ``in_axes=(0, None)`` maps
+    # over the restart axis while broadcasting the shared data.
+    def _optimize_one(p0, d_args):
         ostate = opt.init(p0)
 
         def _step(carry, _):
             params, ostate = carry
-            loss, grads = jax.value_and_grad(lambda p: loss_fn(p, data_args))(params)
+            loss, grads = jax.value_and_grad(lambda p: loss_fn(p, d_args))(params)
             updates, ostate = opt.update(grads, ostate, params)
             return (optax.apply_updates(params, updates), ostate), loss
 
         (params, _), losses = jax.lax.scan(_step, (p0, ostate), None, length=n_steps)
         return params, losses
 
+    _run_restarts = jax.jit(
+        lambda batched_inits, d_args: jax.vmap(_optimize_one, in_axes=(0, None))(
+            batched_inits, d_args
+        )
+    )
     t0 = time.time()
-    params_b, losses_b = jax.jit(jax.vmap(_optimize_one))(inits)
+    params_b, losses_b = _run_restarts(inits, data_args)
     jax.block_until_ready(losses_b)
     final_losses = losses_b[:, -1]
     best = int(jnp.argmin(final_losses))
