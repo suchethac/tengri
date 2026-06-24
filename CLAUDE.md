@@ -63,6 +63,8 @@ micro-compiles), 0.05 (current). See
 Canonical names: `SEDModel`, `Parameters`, `Spectroscopy`, `NoiseModel`, `LineList`, `PopulationFitter`.
 Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyConfig`, `NoiseConfig`, `LineCatalog`, `HierarchicalFitter`.
 
+**Spelling (NAMING_CONTRACT §10):** all identifiers and prose use **American English** (`color`, `normalize`, `catalog`, `center`, `finalize`, `marginalized` — never `colour`, `normalise`, `catalogue`, …). Exception: external data-contract keys keep their upstream spelling (e.g. the Synthesizer HDF5 keys `ionisation_parameter`, `log10_specific_ionising_luminosity`).
+
 ## Code style
 
 - **Ruff** linting + formatting, config in `pyproject.toml` — zero violations required
