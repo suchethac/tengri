@@ -49,7 +49,7 @@ def blr_synthesizer_spectra_block(
     agn_blr_cf : float
             BLR covering fraction.
     neb_logU, neb_logn, neb_logZ_gas : float
-            Photoionisation knobs forwarded to the grid adapter (log Z absolute).
+            Photoionization knobs forwarded to the grid adapter (log Z absolute).
 
     Returns
     -------

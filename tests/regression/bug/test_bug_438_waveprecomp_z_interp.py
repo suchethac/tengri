@@ -12,7 +12,7 @@ SKIRTOR grids). It is C²-continuous and converges monotonically as
 the grid is refined.
 
 The remaining residual at off-grid z (~1-2%) is the intrinsic
-Charlot-and-Fall dust × per-age factorisation approximation in
+Charlot-and-Fall dust × per-age factorization approximation in
 ``Observation.predict_via_precomp`` and is independent of n_z.
 """
 
@@ -26,7 +26,7 @@ def test_waveprecomp_error_bounded_at_high_n_z():
 
     With the triweight z-kernel the original ~3% spike at n_z=200 / z=1.0
     no longer dominates; what remains (~1-2% off-grid) is the intrinsic
-    Charlot-and-Fall dust × per-age factorisation approximation in
+    Charlot-and-Fall dust × per-age factorization approximation in
     ``Observation.predict_via_precomp`` and is independent of n_z.
     """
     import jax

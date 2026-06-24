@@ -423,7 +423,7 @@ def dust_demo() -> dict:
         )
     """
     # Metallicity is not a parse_groups key; its default Gaussian(-0.3, 0.2)
-    # prior centres at the value we want, so we leave it FREE — sweep_parameter
+    # prior centers at the value we want, so we leave it FREE — sweep_parameter
     # uses the prior median (= -0.3) for every iteration anyway.
     return dict(
         sfh=builders.sfh.tsnorm(
@@ -467,7 +467,7 @@ def unified_agn() -> dict:
     - **Disc**: Kubota & Done accretion disc (free)
     - **NLR**: Synthesizer Cloudy photoionization grid (free)
     - **BLR**: Synthesizer Cloudy photoionization grid (free)
-    - **Torus**: Simple greybody (fixed)
+    - **Torus**: Simple graybody (fixed)
     - **SFH**: Delayed exponential (fixed)
     - **Dust**: Two-component Calzetti (both optical depths fixed to 0)
     - **Redshift**: Fixed at z=0.0

@@ -12,14 +12,14 @@ Available modules
 - ``nss``: Nested Slice Sampling top-level API.
 - ``integrator``: NSIntegrator for evidence tracking.
 - ``slice_sampling``: Hit-and-Run Slice Sampling (from blackjax.mcmc.ss).
-- ``utils``: Post-processing (finalise, sample, ess, log_weights).
+- ``utils``: Post-processing (finalize, sample, ess, log_weights).
 - ``from_mcmc``: Build NS from MCMC kernels.
 - ``particles``: Particle statistics (covariance, etc.).
 
 Usage
 -----
 >>> from tengri.inference.backends.nested.nss import as_top_level_api
->>> from tengri.inference.backends.nested.utils import finalise, sample, ess
+>>> from tengri.inference.backends.nested.utils import finalize, sample, ess
 >>> algo = as_top_level_api(logprior_fn, loglik_fn, num_inner_steps=D)
 >>> state = algo.init(particles)
 >>> state, info = algo.step(key, state)

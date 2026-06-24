@@ -1,9 +1,9 @@
 """
-AGN corona: bolometric luminosity sets normalisation, not shape
+AGN corona: bolometric luminosity sets normalization, not shape
 ================================================================
 
 The AGN X-ray corona produces a cut-off power-law (photon index Gamma
-roughly 1.8, E_cut around 300 keV) normalised through the
+roughly 1.8, E_cut around 300 keV) normalized through the
 alpha_OX-L_2500 relation (Lusso & Risaliti 2016). At fixed Gamma and
 alpha_OX, increasing bolometric luminosity shifts the whole spectrum
 upward but leaves the spectral *shape* nearly intact — the

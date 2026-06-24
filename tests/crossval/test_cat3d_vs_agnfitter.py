@@ -15,10 +15,10 @@ reproduces them.
 Interpolation note: the runtime uses node-exact monotone-cubic (PCHIP)
 interpolation (``interp_nd_pchip``), so at a grid node it reproduces the stored
 AGNfitter template to floating-point precision. This replaced the C²-smooth
-triweight *smoother*, which averaged neighbours and smeared this torus's mid-IR
+triweight *smoother*, which averaged neighbors and smeared this torus's mid-IR
 peak by ~30% median (the same peak-smear that moved slone_netzer to node-exact
 interpolation). Monotone cubic keeps C¹-continuous gradients for HMC/geoVI
-without overshooting on the nearest-neighbour-filled grid.
+without overshooting on the nearest-neighbor-filled grid.
 
 References
 ----------

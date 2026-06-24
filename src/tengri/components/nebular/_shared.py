@@ -46,7 +46,7 @@ def place_line_profiles(
     Parameters
     ----------
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame line centres in Å (vacuum wavelength). [Å]
+        Rest-frame line centers in Å (vacuum wavelength). [Å]
     line_luminosities : array, shape (n_lines,)
         Line luminosities in consistent units [erg/s] or [erg/s/Msun].
     obs_wavelengths : array, shape (n_wave,)
@@ -73,25 +73,25 @@ def place_line_profiles(
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives and are
-    vectorised over lines and wavelengths.
+    vectorized over lines and wavelengths.
 
     **Velocity triweight mode** (``line_sigma_kms > 0``):
         Each line is the compact-support triweight kernel
         :math:`K(u) = \tfrac{35}{32}(1-u^2)^3` for :math:`|u|<1`, with
         :math:`u=(\lambda-\lambda_i)/h_i` and half-width :math:`h_i = 3\sigma_{\lambda,i}`
         (the triweight kernel has variance :math:`h^2/9`, so :math:`h=3\sigma`).
-        The profile is normalised to unit area in frequency, so the integrated
+        The profile is normalized to unit area in frequency, so the integrated
         line flux equals ``line_luminosity``. Preferred over a Gaussian: it is a
         polynomial (no ``exp``), has finite support, and is C²-continuous —
         gradient-safe for a fitted ``line_sigma_kms``.
 
     **Fixed-Å Gaussian mode** (``line_sigma_aa > 0``):
         Converts σ_λ to σ_ν via :math:`\sigma_\nu = \sigma_\lambda\,c/\lambda^2`
-        and normalises each line to unit flux.
+        and normalizes each line to unit flux.
 
     **Delta function mode** (both widths <= 0):
         Places each line in the nearest wavelength pixel by scatter-add,
-        normalised by the local frequency spacing Δν. Fast but aliases on a
+        normalized by the local frequency spacing Δν. Fast but aliases on a
         coarse grid.
 
     **Upstream**: line-placement approach adapted from Prospector
@@ -100,7 +100,7 @@ def place_line_profiles(
     """
     n_wave = obs_wavelengths.shape[0]
 
-    # NOTE: ``line_sigma_kms`` here is only honoured for *concrete* values — the
+    # NOTE: ``line_sigma_kms`` here is only honored for *concrete* values — the
     # ``if`` below is a Python branch. The forward model, where the velocity
     # width is a fittable (traced) parameter, must call
     # :func:`place_line_profiles_velocity` directly to stay JIT-safe.
@@ -109,7 +109,7 @@ def place_line_profiles(
             line_wavelengths, line_luminosities, obs_wavelengths, line_sigma_kms
         )
     elif line_sigma_aa > 0:
-        # Vectorised Gaussian profiles: broadcast (n_wave, 1) × (n_lines,)
+        # Vectorized Gaussian profiles: broadcast (n_wave, 1) × (n_lines,)
         # σ_ν = σ_λ[cm] × c / λ[cm]²
         sigma_nu = line_sigma_aa * 1e-8 * _C_CGS / (line_wavelengths * 1e-8) ** 2  # (n_lines,)
         dwave = obs_wavelengths[:, None] - line_wavelengths[None, :]  # (n_wave, n_lines)
@@ -117,7 +117,7 @@ def place_line_profiles(
         profiles = profiles / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu[None, :])
         sed = jnp.sum(line_luminosities[None, :] * profiles, axis=1)  # (n_wave,)
     else:
-        # Vectorised delta functions: nearest-pixel placement via scatter-add.
+        # Vectorized delta functions: nearest-pixel placement via scatter-add.
         # (n_wave, n_lines) distance matrix → argmin per line
         indices = jnp.argmin(
             jnp.abs(obs_wavelengths[:, None] - line_wavelengths[None, :]), axis=0
@@ -145,7 +145,7 @@ def place_line_profiles_velocity(
     with wavelength, :math:`\sigma_\lambda=(\sigma_v/c)\,\lambda`, so every line
     shares the same velocity dispersion — the intrinsic nebular line width, as in
     Prospector's ``eline_sigma`` treatment (Johnson et al. 2021 [1]_). Each
-    profile is normalised to unit area in frequency, conserving the integrated
+    profile is normalized to unit area in frequency, conserving the integrated
     line flux.
 
     Unlike :func:`place_line_profiles`, this function has **no Python branch on
@@ -157,7 +157,7 @@ def place_line_profiles_velocity(
     Parameters
     ----------
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame line centres in Å (vacuum). [Å]
+        Rest-frame line centers in Å (vacuum). [Å]
     line_luminosities : array, shape (n_lines,)
         Integrated line luminosities [erg/s] or [erg/s/Msun].
     obs_wavelengths : array, shape (n_wave,)
@@ -551,7 +551,7 @@ def compute_analytic_nebular_continuum(
     .. [4] B. T. Draine, "Physics of the Interstellar and Intergalactic Medium"
        (Princeton University Press, 2011). Section 10.4: Gaunt factors.
     .. [5] V. Luridiana, C. Morisset, and R. A. Shaw, "PyNeb: A Python Package
-       for Analysing Emission Lines from Ionised Nebulae," A&A, 573, A42 (2015).
+       for Analyzing Emission Lines from Ionized Nebulae," A&A, 573, A42 (2015).
        arXiv:1412.6345. https://doi.org/10.1051/0004-6361/201323152
 
     """
@@ -602,7 +602,7 @@ class NebularContinuumFallback:
     """Wrapper that adds nebular continuum to line-only nebular backends.
 
     Many nebular backends (CB19, MAPPINGS, Shock) produce emission lines only.
-    This wrapper provides missing continuum via a prioritised fallback chain:
+    This wrapper provides missing continuum via a prioritized fallback chain:
     (1) secondary physics backend, (2) analytic free-free + two-photon, (3) error
     or warning.
 
@@ -615,7 +615,7 @@ class NebularContinuumFallback:
         Continuum-capable backend (CueBackend, CloudyGridBackend) for Tier 1
         fallback. Default: None.
     fallback_mode : str, optional
-        Fallback behaviour if neither backend nor analytical continuum is
+        Fallback behavior if neither backend nor analytical continuum is
         available. One of "error" (raise NebularContinuumUnavailableError) or
         "warn" (emit warning, return lines only). Default: "error".
 

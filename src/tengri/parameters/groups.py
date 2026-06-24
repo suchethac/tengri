@@ -132,7 +132,7 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
         return _CANONICAL_FIXED_DEFAULTS[param_name]
     if registry_default.default is not None:
         return float(registry_default.default)
-    # Defence-in-depth: the contract test
+    # Defense-in-depth: the contract test
     # ``tests/contract/test_param_defaults.py`` enforces every declared
     # parameter carries an explicit ``default=``. If we get here it means
     # something slipped through (or the user constructed a Distribution by
@@ -196,7 +196,7 @@ _DUST_EMISSION_PARAM_NAMES = frozenset(_resolve_lazy_bucket("_DUST_EMISSION_PARA
 #: ionizing-spectrum shape (``ionspec_index1..4``, ``ionspec_logLratio1..3``).
 #: They carry ``None`` priors in the registry (registered only when the user
 #: supplies them), so they are absent from a structural ``Parameters`` and the
-#: partition. The nested-dict builder recognises them as ``neb`` keys (when
+#: partition. The nested-dict builder recognizes them as ``neb`` keys (when
 #: ``type='cue'``) and forwards user-provided values to the flat constructor,
 #: which registers them on demand (#653).
 _OPTIONAL_NEB_PARAM_NAMES = frozenset(
@@ -434,7 +434,7 @@ _AGN_PARTITION = {
     "agn_fritz_psy": "agn.torus",
     # Narrow-line region
     "agn_nlr_cf": "agn.nlr",
-    "agn_alpha_ion": "agn.nlr",  # NLR photoionisation knob
+    "agn_alpha_ion": "agn.nlr",  # NLR photoionization knob
     "agn_feltre_cf": "agn.nlr",  # Feltre calibration for NLR
     "neb_xid": "agn.nlr",  # Nebular ionization for NLR
     # Broad-line region
@@ -537,7 +537,7 @@ def parse_groups(**kwargs) -> Parameters:
     # ``"stellar"`` when the user opted into the new top-level slot
     # (issue #311); otherwise it stays in ``"sfh"`` so the legacy
     # ``sfh={'*': FIXED}`` wildcard keeps cascading over met_* params
-    # — preserves pre-#311 behaviour for every fixture/recipe that didn't
+    # — preserves pre-#311 behavior for every fixture/recipe that didn't
     # pass a ``stellar={}`` block.
     dust_emission_active = structural_params.dust_emission is not None
     has_stellar_block = isinstance(kwargs.get("stellar"), dict)
@@ -703,12 +703,12 @@ def parse_groups(**kwargs) -> Parameters:
                 resolved_kwargs[pname] = Fixed(val)
                 provenance[pname] = "user_fixed"
 
-    # ── Validate every key the user supplied was recognised ───────────
+    # ── Validate every key the user supplied was recognized ───────────
     # The resolution loop above silently uses the registry default when
     # a parameter override is not found, so typos like
     # ``dust={'tau_qpah': 5}`` (instead of ``dust_qpah``) used to vanish
     # without trace. Walk the user's dicts now and raise a friendly
-    # "Did you mean ...?" error on any unrecognised key.
+    # "Did you mean ...?" error on any unrecognized key.
     _validate_user_keys(kwargs, structural_params, param_partition)
 
     # ── Construct final Parameters ────────────────────────────────────
@@ -1067,11 +1067,11 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular_ssp"] = True
     elif neb_type == "cue":
         result["nebular_cue"] = True
-        # #303: opt into the full Cue catalogue (~271 species) instead
+        # #303: opt into the full Cue catalog (~271 species) instead
         # of the default 128 CLOUDY/FSPS subset so users can read
         # HeII 1640, HeI 10830, etc. via pred.lines.get(wavelength).
-        if neb_dict.get("full_catalogue", False):
-            result["cue_full_catalogue"] = True
+        if neb_dict.get("full_catalog", False):
+            result["cue_full_catalog"] = True
     elif neb_type == "cloudy":
         result["nebular"] = True
     elif neb_type == "cb19":
@@ -1096,7 +1096,7 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         # madau, inoue14, meiksin06 -> apply_igm=True
         result["apply_igm"] = True
         # Propagate the model choice. _init_igm speaks 'inoue'/'madau'/
-        # 'meiksin06'; 'inoue14' is the grammar-level name — normalise to
+        # 'meiksin06'; 'inoue14' is the grammar-level name — normalize to
         # the canonical form here so the user's selection isn't silently
         # dropped (#344, #440).
         result["igm_model"] = _IGM_TYPE_ALIASES[igm_type]
@@ -1280,7 +1280,7 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
     result["xray"] = xray_type != "none"
 
 
-#: AGN sub-block keys recognised by the nested-dict grammar. Used when
+#: AGN sub-block keys recognized by the nested-dict grammar. Used when
 #: walking a user's top-level ``agn`` dict to tell sub-block dicts apart
 #: from per-parameter overrides. The new split includes independent ``nlr``
 #: and ``blr`` categories; ``lines`` is deprecated (expanded to an (nlr, blr)
@@ -1325,7 +1325,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
-    "neb": frozenset({"type", "*", "full_catalogue"}),
+    "neb": frozenset({"type", "*", "full_catalog"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),
     "radio": frozenset({"type", "*", "sf", "agn"}),
@@ -1349,7 +1349,7 @@ def _short_names_for_group(group: str, param_partition: dict[str, str]) -> set[s
     """Return the set of short and full names every declared param exposes
     under ``group`` (e.g. ``"agn.torus"`` → ``{"tau_skirtor", "agn_tau_skirtor", ...}``).
 
-    Used by :func:`_validate_user_keys` to recognise per-parameter overrides
+    Used by :func:`_validate_user_keys` to recognize per-parameter overrides
     when walking a user's group dict.
     """
     out: set[str] = set()
@@ -1397,7 +1397,7 @@ def _validate_user_keys(
     structural_params: Parameters,
     param_partition: dict[str, str],
 ) -> None:
-    """Validate that every key the user supplied is recognised.
+    """Validate that every key the user supplied is recognized.
 
     Walks each group dict (and any sub-block dicts) and checks each key
     against the union of:
@@ -1525,7 +1525,7 @@ def _check_dict_keys(
     allowed: set,
     param_partition: dict[str, str],
 ) -> None:
-    """Raise ``ValueError`` on any unrecognised key in ``user_dict``."""
+    """Raise ``ValueError`` on any unrecognized key in ``user_dict``."""
     for key in user_dict:
         if key in allowed:
             continue
@@ -1668,7 +1668,7 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     A top-level ``'type'`` key picks a non-composable monolithic AGN model
     registered in :data:`tengri.components.agn.AGN_MODELS` (e.g.
     ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``). When
-    ``type='composable'`` (or absent), the sub-block selectors are honoured.
+    ``type='composable'`` (or absent), the sub-block selectors are honored.
     Mixing a non-composable ``type`` with sub-blocks is an error.
 
     The deprecated ``lines`` sub-block (which combined NLR and BLR) is
@@ -1825,7 +1825,7 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
         result[block_to_kwarg[block_name]] = block_type
 
-    # Cross-block normalisation policy (#556). ``agn={'norm': 'cigale_joint' |
+    # Cross-block normalization policy (#556). ``agn={'norm': 'cigale_joint' |
     # 'independent'}`` selects how disc/torus/polar share a luminosity
     # reference. Default (unset) leaves AGNConfig.agn_norm at "cigale_joint".
     if "norm" in agn_dict:

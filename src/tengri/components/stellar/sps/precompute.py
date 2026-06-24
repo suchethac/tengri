@@ -776,7 +776,7 @@ def interpolate_ztable_smooth(
     discontinuous first derivatives at grid nodes, which manifests as kinks
     in the log-likelihood landscape that slow gradient-based optimizers.
     The triweight kernel integrates the CDF between bin edges (Hearin+2023),
-    spreading weight smoothly across neighbouring nodes and giving C²-continuous
+    spreading weight smoothly across neighboring nodes and giving C²-continuous
     ``d(flux)/dz`` gradients throughout.
 
     Parameters
@@ -795,7 +795,7 @@ def interpolate_ztable_smooth(
         Triweight kernel bandwidth (same units as z_grid).
         Recommended: ``0.5 * dz`` where ``dz`` is the grid spacing —
         gives < 0.05% interpolation error with C²-continuous gradients.
-        Larger values spread more weight to neighbours (smoother gradients,
+        Larger values spread more weight to neighbors (smoother gradients,
         lower accuracy); smaller values concentrate on the nearest node.
 
     Returns

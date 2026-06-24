@@ -7,7 +7,7 @@ ported from CIGALE's ``skirtor2016.py`` module (Boquien et al. 2019).
 All functions return dimensionless normalized disc spectra (integrated to
 unit area under a linear wavelength grid), ready for luminosity scaling
 and convolution with dust extinction. Wavelength inputs and breakpoints
-are in **nanometre** (CIGALE's native SED convention); convert from
+are in **nanometer** (CIGALE's native SED convention); convert from
 Angstrom at the call site if needed.
 
 References
@@ -40,7 +40,7 @@ def piecewise_powerlaw_disk(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in nanometre (CIGALE convention).
+        Wavelength grid in nanometer (CIGALE convention).
     limits : array_like, shape (n_segment + 1,)
         Wavelength breakpoints in the same unit as ``wavelength`` (nm).
         Must be strictly increasing.
@@ -112,7 +112,7 @@ def skirtor_disk_spectrum(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in nanometre (CIGALE convention).
+        Wavelength grid in nanometer (CIGALE convention).
     delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
         Higher delta → steeper mid-IR falloff. This parameter shifts the
@@ -131,7 +131,7 @@ def skirtor_disk_spectrum(
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
        torus around AGN: the influence of clumping," MNRAS, 420, 2756 (2012).
        arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
     .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
@@ -156,7 +156,7 @@ def schartmann2005_disk_spectrum(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in nanometre (CIGALE convention).
+        Wavelength grid in nanometer (CIGALE convention).
     delta : float
         Slope modulation parameter. Range: [-1.0, 1.0]. Default: 0.0.
         Higher delta → steeper mid-IR falloff.
@@ -202,7 +202,7 @@ def adaf_disk_spectrum(
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-        Wavelength grid in nanometre (CIGALE convention).
+        Wavelength grid in nanometer (CIGALE convention).
     delta : float
         Blend parameter. Range: [0.0, 1.0]. Default: 0.0.
         delta=0 → pure ADAF. delta=1 → pure thin disc.
@@ -226,7 +226,7 @@ def adaf_disk_spectrum(
 
     References
     ----------
-    .. [1] I. E. Lopez et al., "Modelling the X-ray emission of AGN in CIGALE
+    .. [1] I. E. Lopez et al., "Modeling the X-ray emission of AGN in CIGALE
        and application to eROSITA," A&A, 691, A163 (2024). arXiv:2407.16182.
        https://doi.org/10.1051/0004-6361/202449801
     .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy

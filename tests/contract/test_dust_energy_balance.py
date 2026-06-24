@@ -9,7 +9,7 @@ than a few percent across a tau sweep:
     ~  int (L_intrinsic - L_attenuated) dnu  (912 A - 3 um)
 
 Issue #437 reported a ~10x energy gap (ratio ~0.1) with the
-``dl07`` alias, suggesting the IR normalisation was decoupled
+``dl07`` alias, suggesting the IR normalization was decoupled
 from the UV-absorbed energy. The fix has since landed in the
 component chain; this test pins the invariant so we cannot
 regress.

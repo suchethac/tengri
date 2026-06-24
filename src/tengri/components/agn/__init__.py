@@ -42,7 +42,7 @@ References
 
 # Importing ``blocks`` side-effects all @register_agn_block calls plus
 # AGN_MODELS["composable"]. Must come after grahsp import so GRAHSP
-# blocks see the GRAHSP package fully initialised.
+# blocks see the GRAHSP package fully initialized.
 from tengri.components.agn import blocks
 from tengri.components.agn._phys import planck_lnu
 from tengri.components.agn.blocks import (

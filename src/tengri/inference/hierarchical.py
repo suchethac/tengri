@@ -1007,7 +1007,7 @@ class PopulationFitter:
                 return _predict(params)
 
             # memory_mode="low" wraps per-galaxy forward in jax.checkpoint so
-            # the reverse-mode tape inside jvp/vjp does not materialise
+            # the reverse-mode tape inside jvp/vjp does not materialize
             # activations for all n_gal galaxies simultaneously. Trades a
             # recomputation for a 2–3x peak-memory reduction during CG.
             #
@@ -1170,7 +1170,7 @@ class PopulationFitter:
         # O(chunk · d_total) instead of O(n_posterior_samples · d_total).
         # The JIT cache is shared across chunks of equal size, so the extra
         # dispatches are ~free. posterior_chunk_size=None preserves the
-        # original fully-vmapped behaviour.
+        # original fully-vmapped behavior.
         if verbose:
             print(f"  Drawing {n_posterior_samples} posterior samples...")
 
@@ -1730,9 +1730,9 @@ class PopulationFitter:
         likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
-        # Batched initialisation: one (n_gal,) draw per param instead of a
+        # Batched initialization: one (n_gal,) draw per param instead of a
         # Python loop over N galaxies. Same statistics as before (N(0, 0.1)
-        # per galaxy), just vectorised.
+        # per galaxy), just vectorized.
         init = {}
         init["psd_sigma_u"] = jnp.array(0.0)
         init["psd_tau_u"] = jnp.array(0.0)

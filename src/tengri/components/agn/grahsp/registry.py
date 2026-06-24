@@ -8,7 +8,7 @@ entry follows the same signature contract as
 
     fn(wavelength, agn_log_lbol, agn_frac, **agn_grahsp_*) -> L_nu
 
-This file is the analogue of the ``@register_agn_model("qsogen")`` block
+This file is the analog of the ``@register_agn_model("qsogen")`` block
 at the bottom of :mod:`tengri.components.agn.qsogen`.
 """
 

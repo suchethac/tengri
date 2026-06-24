@@ -316,7 +316,7 @@ class TestZTableSmoothInterpolation:
 
         Linear interpolation has discontinuous first derivative at every grid node —
         each boundary appears as a sudden jump in d(flux)/dz. The triweight kernel
-        spreads weight smoothly across neighbours (C²), so the gradient signal
+        spreads weight smoothly across neighbors (C²), so the gradient signal
         should be much quieter (lower std of consecutive differences).
         """
         fw, ft = filters
@@ -360,7 +360,7 @@ class TestZTableSmoothInterpolation:
     def test_accuracy_within_tolerance(self, ssp_data, filters):
         """Smooth interpolation stays within a reasonable error bound.
 
-        The triweight kernel deliberately spreads weight across ~3 neighbouring
+        The triweight kernel deliberately spreads weight across ~3 neighboring
         grid nodes (scatter = 1.5 × dz) to achieve C²-continuous gradients.
         This blurring trades some pointwise accuracy for gradient smoothness.
         With n_z=200 and scatter=1.5*dz, the max error is typically < 30%.

@@ -85,7 +85,7 @@ selector strings differ between them — the call site is identical.
 ![per-stage block decomposition](../auto_examples/agn/images/sphx_glr_plot_composable_block_toggles_001.png)
 *Cumulative per-block contribution: disc → + lines → + FeII → + torus →
 + attenuation. Each panel adds one pipeline stage to the SED; the dashed
-grey curve is the all-blocks-on reference.
+gray curve is the all-blocks-on reference.
 ([gallery entry](../auto_examples/agn/plot_composable_block_toggles.html))*
 
 ### Exact
@@ -211,7 +211,7 @@ A practical decision tree:
    Precompute. The compile cost dominates; you want minimal trace size.
 3. **Fitting a single galaxy with HMC/VI, > 10 minutes wall-clock?** →
    Either works. Precompute is safer if you have template-heavy blocks.
-4. **Fitting a catalog with `vmap`?** → JIT-composable. The compile amortises
+4. **Fitting a catalog with `vmap`?** → JIT-composable. The compile amortizes
    over thousands of galaxies; precompute's triweight error compounds across
    the population.
 5. **Posterior-predictive plotting at thousands of posterior draws?** →

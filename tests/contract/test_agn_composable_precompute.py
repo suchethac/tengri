@@ -7,7 +7,7 @@ Covers:
   from it; when ``None``, the lru_cache fallback works.
 - ``composable_precompute.precompute()`` returns the documented dict keys.
 - Auto-collapse of Fixed axes.
-- Parity: precomputed lookup ≈ runtime-composed photometry at grid centres,
+- Parity: precomputed lookup ≈ runtime-composed photometry at grid centers,
   to triweight-interp tolerance.
 - JIT smoke + compile-tree timing sanity.
 """
@@ -203,8 +203,8 @@ def test_auto_collapse_fixed_axis():
 
 
 @requires_grahsp
-def test_parity_at_grid_centre():
-    """Lookup at an exact grid-centre point matches the runtime evaluation
+def test_parity_at_grid_center():
+    """Lookup at an exact grid-center point matches the runtime evaluation
     integrated through the same filter to triweight-interp precision."""
     fw, ft = _toy_filter()
     recipe = Recipe.from_selectors(
@@ -227,7 +227,7 @@ def test_parity_at_grid_centre():
     )
     fn = composable_precompute.build_lookup(out)
 
-    # Pick a grid-centre value
+    # Pick a grid-center value
     l5100_value = float(axis_grid[2])
     photo_lookup = float(fn(jnp.array(1.0), jnp.array(l5100_value))[0])
 
@@ -257,7 +257,7 @@ def test_parity_at_grid_centre():
         (trans_interp / nu)[order], nu[order]
     )
 
-    # Triweight-interp precision: ~few % at grid centres.
+    # Triweight-interp precision: ~few % at grid centers.
     np.testing.assert_allclose(photo_lookup, photo_ref, rtol=5e-2)
 
 

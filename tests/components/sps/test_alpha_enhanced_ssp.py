@@ -76,7 +76,7 @@ def synthetic_4d_ssp():
 def synthetic_3d_at_alpha_zero(synthetic_4d_ssp):
     """3D slice of the same grid at the α=0 node, for the 4D-vs-3D invariant."""
     ssp_4d = synthetic_4d_ssp
-    # α axis is centred at 0 by construction
+    # α axis is centered at 0 by construction
     ia0 = int(jnp.argmin(jnp.abs(ssp_4d.ssp_alpha_fe)).item())
     return SSPData(
         ssp_wave=ssp_4d.ssp_wave,
@@ -142,7 +142,7 @@ def test_4d_alpha_fe_sweeps_change_sed(synthetic_4d_ssp):
         afe: _rest_sed(synthetic_4d_ssp, alpha_fe_value=float(afe))
         for afe in (-0.2, 0.0, 0.2, 0.4)
     }
-    # Per-α SED sums across the wave grid, normalised to α=0
+    # Per-α SED sums across the wave grid, normalized to α=0
     sums = {a: float(s.sum()) for a, s in seds.items()}
     rel_spread = (max(sums.values()) - min(sums.values())) / sums[0.0]
     assert rel_spread > 0.05, (

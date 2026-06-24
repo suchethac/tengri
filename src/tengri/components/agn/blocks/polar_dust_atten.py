@@ -95,11 +95,11 @@ def polar_dust_reemission_lnu(
     agn_polar_law: str = "smc",
     **_params,
 ) -> Array:
-    r"""Compute polar-dust greybody reemission in L_ν units.
+    r"""Compute polar-dust graybody reemission in L_ν units.
 
     Takes the pre-attenuation SED (in L_λ, erg/s/Å), computes the total
     absorbed luminosity from the polar dust extinction cross-section, and
-    returns the greybody reemission spectrum in observer-frame L_ν
+    returns the graybody reemission spectrum in observer-frame L_ν
     (erg/s/Hz).
 
     The absorbed luminosity is geometry-independent (Yang+2020 §2.2.2),
@@ -128,13 +128,13 @@ def polar_dust_reemission_lnu(
     Returns
     -------
     l_nu_reemit : ndarray, shape (n_wave,)
-        Reemitted greybody :math:`L_\nu` [erg/s/Hz].
+        Reemitted graybody :math:`L_\nu` [erg/s/Hz].
 
     Notes
     -----
     This function computes the geometry-independent absorbed luminosity from
     :func:`polar_dust_extinction`, integrates it, and passes it to
-    :func:`polar_dust_emission` to compute the FIR greybody. The result is
+    :func:`polar_dust_emission` to compute the FIR graybody. The result is
     valid for all inclinations and should be added to the attenuated disc SED.
 
     **JIT-compatible**: yes — uses JAX primitives throughout.
@@ -165,7 +165,7 @@ def polar_dust_reemission_lnu(
     idx_w = jnp.argsort(wave_aa)
     l_absorbed_total = jnp.trapezoid(l_absorbed_per_bin[idx_w], wave_aa[idx_w])
 
-    # Step 3: compute the greybody reemission (returns L_ν in erg/s/Hz).
+    # Step 3: compute the graybody reemission (returns L_ν in erg/s/Hz).
     l_nu_reemit = polar_dust_emission(
         l_absorbed_total,
         wave_aa,

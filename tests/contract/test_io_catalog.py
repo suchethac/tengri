@@ -41,7 +41,7 @@ def test_csv_round_trip(small_csv: Path) -> None:
 
 
 def test_alternate_err_convention(tmp_path: Path) -> None:
-    """Recognise band-suffixed error columns: <band>_err."""
+    """Recognize band-suffixed error columns: <band>_err."""
     p = tmp_path / "alt.csv"
     p.write_text("id,z,flux_jwst_f200w,jwst_f200w_err\n1,3.5,12.3,0.6\n2,4.0,9.1,0.5\n")
     cat = load_catalog(p)

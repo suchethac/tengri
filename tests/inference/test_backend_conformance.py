@@ -12,7 +12,7 @@ Iterates ``_BACKENDS`` and verifies each entry satisfies the
 - ``legacy_fitter`` defaults to ``True`` (out-of-tree backends keep
   working); every in-tree entry sets it ``False``.
 
-Because the suite is parametrised over the live registry, adding a
+Because the suite is parametrized over the live registry, adding a
 new backend in ``_registration.py`` makes it appear here automatically
 — no test-file edits required.
 
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.contract
 from tengri.inference._backend_registry import _BACKENDS, BackendEntry, all_backends
 from tengri.inference._strategy import BackendStatus, resolve_status
 
-# Build the parametrisation list at import time so test IDs are
+# Build the parametrization list at import time so test IDs are
 # stable (``mcmc_nuts``, ``vi_nonlinear_fast``, ...).
 _REGISTERED_NAMES = sorted(_BACKENDS)
 _UNIQUE_ENTRIES = all_backends()

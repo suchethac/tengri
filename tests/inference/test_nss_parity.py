@@ -26,7 +26,7 @@ jax.config.update("jax_enable_x64", True)
 # Skip all tests in this module if the handley fork is not installed
 try:
     from blackjax.ns.nss import as_top_level_api as bj_as_top_level_api
-    from blackjax.ns.utils import ess as bj_ess, finalise as bj_finalise, sample as bj_sample
+    from blackjax.ns.utils import ess as bj_ess, finalize as bj_finalize, sample as bj_sample
 
     HAS_HANDLEY_FORK = True
 except (ImportError, ModuleNotFoundError):
@@ -192,11 +192,11 @@ class TestNSSParity:
         np.testing.assert_allclose(bj_logZ, tengri_logZ, atol=1e-12)
 
     def test_identical_post_processing(self):
-        """finalise + sample + ess produce identical results."""
+        """finalize + sample + ess produce identical results."""
         from tengri.inference.backends.nested.nss import as_top_level_api as tengri_api
         from tengri.inference.backends.nested.utils import (
             ess as tengri_ess,
-            finalise as tengri_finalise,
+            finalize as tengri_finalize,
             sample as tengri_sample,
         )
 
@@ -224,9 +224,9 @@ class TestNSSParity:
             bj_dead.append(bj_info)
             tengri_dead.append(tengri_info)
 
-        # Finalise
-        bj_run = bj_finalise(bj_state, bj_dead)
-        tengri_run = tengri_finalise(tengri_state, tengri_dead)
+        # Finalize
+        bj_run = bj_finalize(bj_state, bj_dead)
+        tengri_run = tengri_finalize(tengri_state, tengri_dead)
 
         np.testing.assert_array_equal(
             np.array(bj_run.particles.loglikelihood),

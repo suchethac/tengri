@@ -12,7 +12,7 @@ The AGN radio component is selected via
 :attr:`RadioSEDComponentConfig.agn_radio_model`:
 
 - ``"powerlaw"`` (default) — single power-law (:func:`radio_total`).
-  Backwards-compatible default; behaviour bit-identical to pre-aging
+  Backwards-compatible default; behavior bit-identical to pre-aging
   releases.
 - ``"dpl"`` — AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
@@ -102,7 +102,7 @@ class RadioSEDComponentConfig(SEDComponentConfig):
         AGN radio sub-model. One of :data:`AGN_RADIO_MODELS` —
         ``{"none", "powerlaw", "dpl"}``. The ``"none"`` mode disables
         the AGN radio component (SF synchrotron + optional free-free only).
-        Default ``"powerlaw"`` preserves the pre-aging-cutoff behaviour
+        Default ``"powerlaw"`` preserves the pre-aging-cutoff behavior
         bit-identically. Physical-aging kernels ``"JP"``, ``"KP"``,
         ``"tribble"`` are reserved names rejected at construction with a
         :class:`ValueError`; the physics lands in a follow-up PR.
@@ -137,7 +137,7 @@ class RadioSEDComponent:
     **JIT-compatible**: yes for every model in :data:`AGN_RADIO_MODELS`.
 
     **Additive**: writes ``sed_intrinsic = sed_intrinsic + L_radio(λ)``.
-    Initialises ``sed_intrinsic`` from zeros if upstream did not.
+    Initializes ``sed_intrinsic`` from zeros if upstream did not.
     """
 
     config: RadioSEDComponentConfig = field(default_factory=RadioSEDComponentConfig)
@@ -265,7 +265,7 @@ class RadioSEDComponent:
         ----------
         state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
-            ``None`` it is initialised to zeros of the same shape.
+            ``None`` it is initialized to zeros of the same shape.
         params : mapping
             Receives ``radio_*`` keys plus the bare ``redshift`` from
             the allowlist. Cross-component scalars (``L_ir``,

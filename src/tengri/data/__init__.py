@@ -11,7 +11,7 @@ nebular emission) — without one they raise
 ``SEDModel.build(...)``.
 
 This module exposes a tiny helper to list and fetch the SSP files hosted
-at the canonical catalogue::
+at the canonical catalog::
 
     from tengri.data import list_remote_ssps, download_ssp
 
@@ -36,41 +36,41 @@ from collections.abc import Iterable
 from pathlib import Path
 
 __all__ = [
-    "SSP_CATALOGUE_URL",
+    "SSP_CATALOG_URL",
     "download_ssp",
     "list_remote_ssps",
     "local_ssp_path",
 ]
 
-#: Canonical hosted catalogue of tengri-compatible SSP files. Indexes a
+#: Canonical hosted catalog of tengri-compatible SSP files. Indexes a
 #: directory of bare-stellar SSP HDF5 files keyed by ``<isochrone>_<lib>_<imf>.h5``
 #: (e.g. ``fsps_prsc_miles_chabrier.h5``). The wNE (with-Nebular-Emission)
 #: variants used by the BakedIn nebular backend are *not* shipped from
 #: here; obtain those from your DSPS / FSPS install or generate via the
 #: scripts under ``tools/``.
-SSP_CATALOGUE_URL: str = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
+SSP_CATALOG_URL: str = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
 
 def list_remote_ssps() -> list[str]:
-    """Return the list of SSP filenames available at :data:`SSP_CATALOGUE_URL`.
+    """Return the list of SSP filenames available at :data:`SSP_CATALOG_URL`.
 
     Returns
     -------
     list[str]
-        Filenames in the catalogue (e.g. ``"fsps_prsc_miles_chabrier.h5"``),
+        Filenames in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``),
         in the order the server returned them, with duplicates removed.
 
     Raises
     ------
     urllib.error.URLError
-        If the catalogue is unreachable.
+        If the catalog is unreachable.
 
     Notes
     -----
     This parses the Apache autoindex page with a single regex — it does
     not validate that every linked file is a usable SSP grid.
     """
-    with urllib.request.urlopen(SSP_CATALOGUE_URL, timeout=30) as resp:
+    with urllib.request.urlopen(SSP_CATALOG_URL, timeout=30) as resp:
         html = resp.read().decode("utf-8", errors="replace")
     seen: set[str] = set()
     out: list[str] = []
@@ -102,12 +102,12 @@ def download_ssp(
     overwrite: bool = False,
     progress: bool = True,
 ) -> Path:
-    """Download a single SSP file from :data:`SSP_CATALOGUE_URL`.
+    """Download a single SSP file from :data:`SSP_CATALOG_URL`.
 
     Parameters
     ----------
     name : str
-        Filename in the catalogue (e.g. ``"fsps_prsc_miles_chabrier.h5"``).
+        Filename in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``).
         Use :func:`list_remote_ssps` to discover valid names.
     dest_dir : str or os.PathLike, optional
         Directory to write into. Created if missing. Default: ``"data"``
@@ -128,7 +128,7 @@ def download_ssp(
     Raises
     ------
     urllib.error.URLError
-        If the catalogue or specific file is unreachable.
+        If the catalog or specific file is unreachable.
     ValueError
         If ``name`` contains a path separator (defensive against
         accidental traversal).
@@ -153,7 +153,7 @@ def download_ssp(
     if target.exists() and not overwrite:
         return target
 
-    url = SSP_CATALOGUE_URL.rstrip("/") + "/" + name
+    url = SSP_CATALOG_URL.rstrip("/") + "/" + name
     tmp = target.with_suffix(target.suffix + ".part")
     with urllib.request.urlopen(url, timeout=60) as resp:
         total = int(resp.headers.get("Content-Length", 0))

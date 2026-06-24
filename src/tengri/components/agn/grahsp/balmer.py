@@ -70,7 +70,7 @@ def balmer_continuum(
 
     Notes
     -----
-    The BC shape is dimensionless (relative to the Balmer edge normalisation).
+    The BC shape is dimensionless (relative to the Balmer edge normalization).
     The absolute scale is set by:
 
     .. math::
@@ -109,7 +109,7 @@ def balmer_continuum(
     # Clamp wavelengths to (1, 1e6) nm.
     wave_safe = jnp.clip(wave_nm, 1.0, 1e6)
 
-    # Black-body numerator and normalisation at the Balmer edge.
+    # Black-body numerator and normalization at the Balmer edge.
     black_body = (wave_safe ** (-5.0)) / jnp.expm1(
         _H_C_PER_K_B_NM_K / (_BC_TEMPERATURE_K * wave_safe)
     )
@@ -148,7 +148,7 @@ def balmer_continuum(
     # Select convolved or non-convolved based on wavelength.
     truncation_applied = jnp.where(wave_safe > _BC_CONVOLUTION_THRESHOLD_NM, convolved, truncation)
 
-    # Normalised BC shape.
+    # Normalized BC shape.
     bc_shape = (black_body / black_body_edge) * (truncation_applied / truncation_edge)
 
     # Scale by luminosity.

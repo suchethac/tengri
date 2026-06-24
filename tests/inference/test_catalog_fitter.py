@@ -3,7 +3,7 @@
 
 Uses a stub SEDModel and stub Fitter so SSP data is not required.  The tests
 verify:
-  - CatalogPosterior container behaviour (index, iter, len, repr)
+  - CatalogPosterior container behavior (index, iter, len, repr)
   - CatalogFitter.run() routes native vs sequential methods correctly
   - forward_chunk_size warning for non-native methods
   - _validate_uniform_data raises on mismatched galaxy sizes

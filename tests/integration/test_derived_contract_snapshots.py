@@ -9,10 +9,10 @@ fixture file at ``tests/integration/_snapshots/derived_contract_v1.json``:
    :func:`tengri.forward.component_factory.build_components`, then
    collect the full ``(component_class, role, key_name, units)`` tuple
    set across every component's ``publishes`` / ``requires`` /
-   ``requires_optional`` annotation. The set is canonicalised and
+   ``requires_optional`` annotation. The set is canonicalized and
    hashed. Catches a future PR that silently changes an annotation key
    string, units string, or which component owns which key — even when
-   the runtime behaviour cannot be exercised locally (no SSP data).
+   the runtime behavior cannot be exercised locally (no SSP data).
 
 2. **SED-output snapshot** (skips when SSP not available). For each
    ``(recipe-equivalent configuration, fixed PRNG key)`` pair, build
@@ -77,7 +77,7 @@ _CONFIGS: dict[str, dict] = {
         "sfh_model": "tsnorm",
         "nebular_backend": "baked_in",
         "use_dust": True,
-        # NOTE: "one_component" is not a recognised dust_model — it silently
+        # NOTE: "one_component" is not a recognized dust_model — it silently
         # falls through to the two-component path. The single-screen
         # DustAttenuationSEDComponent (now declaring optional_inputs(
         # 'sed_nebular')) is exercised directly by
@@ -104,7 +104,7 @@ def _save_snapshot(data: dict) -> None:
 
 
 def _contract_graph(components) -> list[tuple[str, str, str, str]]:
-    """Canonicalised tuple list of every declared cross-component edge.
+    """Canonicalized tuple list of every declared cross-component edge.
 
     Each entry is ``(component_class, role, key_name, units)`` where
     ``role`` is one of ``"outputs"``, ``"inputs"``, ``"optional_inputs"``.

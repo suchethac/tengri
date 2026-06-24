@@ -72,7 +72,7 @@ FIG_DIR.mkdir(exist_ok=True)
 tengri.summary()
 
 # %% [markdown]
-# ## SSP catalogues
+# ## SSP catalogs
 #
 # Bare-stellar grids (e.g. `fsps_prsc_miles_chabrier`) pair with the Cue
 # nebular emulator; "wNE" grids carry baked-in nebular emission and pair

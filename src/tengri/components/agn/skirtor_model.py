@@ -10,7 +10,7 @@ support SKIRTOR through the unified AGN registry.
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
@@ -116,7 +116,7 @@ class SKIRTORTorus(SEDModelComponent):
     polar_ebv : Uniform
         Polar dust E(B-V) (Type-1 sightline only). [mag, 0–0.5]
     polar_temperature : Uniform
-        Polar dust greybody temperature. [K, 50–200]
+        Polar dust graybody temperature. [K, 50–200]
     polar_beta : Uniform
         Polar dust emissivity index (Casey 2012 modified blackbody).
         [dimensionless, 1–2.5]
@@ -136,7 +136,7 @@ class SKIRTORTorus(SEDModelComponent):
     L_agn_polar_dust : erg/s
         Bolometric luminosity from polar dust reemission (Type 1 only).
     L_2500_30deg : erg/s/Hz
-        Specific luminosity at 2500 Å, θ=30°; feeds X-ray normalisation.
+        Specific luminosity at 2500 Å, θ=30°; feeds X-ray normalization.
     L_6um : erg/s/Hz
         Specific luminosity at 6 μm for mid-IR diagnostics.
     L_12um : erg/s/Hz
@@ -244,7 +244,7 @@ class SKIRTORTorus(SEDModelComponent):
     polar_temperature = Uniform(
         50.0,
         200.0,
-        description="Polar dust greybody temperature",
+        description="Polar dust graybody temperature",
         units="K",
         default=100.0,
     )
@@ -265,9 +265,9 @@ class SKIRTORTorus(SEDModelComponent):
         default=0.0,
     )
     # NOTE: CIGALE's ``lambda_fracAGN`` (band over which the AGN fraction is
-    # normalised) is intentionally NOT exposed here. tengri normalises frac_agn
+    # normalized) is intentionally NOT exposed here. tengri normalizes frac_agn
     # bolometrically, which is exactly CIGALE's default ("0/0"). A band-restricted
-    # normalisation is a documented follow-up (umbrella audit issue) rather than a
+    # normalization is a documented follow-up (umbrella audit issue) rather than a
     # dead Fixed knob.
 
     # Cross-component outputs
@@ -333,7 +333,7 @@ class SKIRTORTorus(SEDModelComponent):
             - frac_agn: AGN luminosity fraction
             - delta: disc spectral slope modulation (-1.0 to 1.0)
             - polar_ebv: polar dust E(B-V)
-            - polar_temperature: polar dust greybody temperature (K)
+            - polar_temperature: polar dust graybody temperature (K)
             - polar_beta: polar dust emissivity index
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz.
@@ -361,7 +361,7 @@ class SKIRTORTorus(SEDModelComponent):
 
         **Polar dust model**: The X-CIGALE polar dust model (Yang et al. 2020,
         §2.2.2) applies a Type-1/Type-2 mask to the observer-frame disc attenuation.
-        However, the absorbed luminosity driving the greybody FIR reemission is
+        However, the absorbed luminosity driving the graybody FIR reemission is
         viewing-angle-independent (bi-conical geometry). This means both Type 1
         (face-on) and Type 2 (edge-on) sightlines see the FIR bump in the combined SED.
         """
@@ -441,7 +441,7 @@ class SKIRTORTorus(SEDModelComponent):
                 f"(ADAF/Lopez24); got {disk_type!r}."
             )
         shape_ref = skirtor_disk_spectrum(wave_nm, delta=0.0)
-        # Re-tilt factor (unit-area / lambda-vs-nu normalisations cancel in the
+        # Re-tilt factor (unit-area / lambda-vs-nu normalizations cancel in the
         # ratio). Floor the denominator to stay finite where the disc is ~0.
         retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
         sed_disc = sed_disc_template * retilt

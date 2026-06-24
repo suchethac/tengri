@@ -52,7 +52,7 @@ class TestBalmerDecrementPhysics:
         delta_k = k_hb - k_ha
         predicted_ratio = 2.86 * 10 ** (0.4 * a_v * delta_k)
 
-        # Should be ~3.5-4.2 depending on exact curve normalisation
+        # Should be ~3.5-4.2 depending on exact curve normalization
         assert 3.0 < predicted_ratio < 5.0, (
             f"Balmer decrement at A_V=1 = {predicted_ratio:.2f}, expected 3.0-5.0"
         )
@@ -295,18 +295,18 @@ class TestRadioFIRCorrelation:
 class TestDustAttenuationAnalyticValues:
     """Dust curves must match published analytic formulae."""
 
-    def test_calzetti_vband_normalisation(self):
-        """Calzetti k(5500A) ~ 1.0 (normalised at V-band)."""
+    def test_calzetti_vband_normalization(self):
+        """Calzetti k(5500A) ~ 1.0 (normalized at V-band)."""
         from tengri.components.dust.attenuation import calzetti
 
         k_v = float(calzetti(jnp.array([5500.0]))[0])
         np.testing.assert_allclose(k_v, 1.0, atol=0.05)
 
     def test_calzetti_uv_value(self):
-        """Calzetti k(1500A) ~ 2.55 (normalised A(lambda)/A(V)).
+        """Calzetti k(1500A) ~ 2.55 (normalized A(lambda)/A(V)).
 
         The Calzetti function returns k(lambda) = (k'(lambda)+R_V)/R_V,
-        normalised so k(V) ~ 1. At 1500A this gives ~2.5-2.6.
+        normalized so k(V) ~ 1. At 1500A this gives ~2.5-2.6.
         """
         from tengri.components.dust.attenuation import calzetti
 

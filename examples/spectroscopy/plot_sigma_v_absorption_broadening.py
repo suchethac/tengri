@@ -6,7 +6,7 @@ The Mg b 5170 Å region of an old stellar population observed at
 spectral resolution R = 3000, convolved with increasing stellar
 velocity dispersion ``σ_v`` from 50 to 400 km/s. The classic kinematic
 diagnostic — line core depth tracks σ_v, asymmetric wings appear with
-rotational broadening (not modelled here, sigma only).
+rotational broadening (not modeled here, sigma only).
 """
 
 import os
@@ -74,7 +74,7 @@ ax.set(
     xlim=(5050, 5300),
     ylim=(0.78, 1.10),
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$  (normalised at 5200-5230 Å)",
+    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$  (normalized at 5200-5230 Å)",
 )
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")

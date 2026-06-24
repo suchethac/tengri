@@ -13,7 +13,7 @@ import numpy as np
 
 
 def _toy_filter():
-    """A single Gaussian-ish filter centred at 5500 Å (rest), useful for tests."""
+    """A single Gaussian-ish filter centered at 5500 Å (rest), useful for tests."""
     wave = np.linspace(4500.0, 6500.0, 200)
     trans = np.exp(-0.5 * ((wave - 5500.0) / 300.0) ** 2)
     return wave, trans
@@ -79,7 +79,7 @@ def test_runtime_lookup_returns_finite_photometry():
         redshift=0.0,
     )
     fn = build_lookup(pre)
-    # Default lookup: (scale, *grid_params). GRAHSP normalises internally so
+    # Default lookup: (scale, *grid_params). GRAHSP normalizes internally so
     # the natural scale is 1.0; the grid points are (plslope, ebv).
     out = fn(jnp.array(1.0), jnp.array(-1.7), jnp.array(0.1))
     chex.assert_tree_all_finite(out)

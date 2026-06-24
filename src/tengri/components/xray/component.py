@@ -78,7 +78,7 @@ class XRaySEDComponent:
     -----
     **JIT-compatible**: yes — :meth:`apply` is pure JAX.
     **Additive**: writes ``sed_intrinsic = sed_intrinsic + L_xray(λ)``.
-    Initialises ``sed_intrinsic`` from zeros if upstream did not.
+    Initializes ``sed_intrinsic`` from zeros if upstream did not.
 
     The physics covers two channels combined inside :func:`xray_total`:
 
@@ -183,7 +183,7 @@ class XRaySEDComponent:
         ----------
         state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
-            ``None`` it is initialised to zeros of the same shape.
+            ``None`` it is initialized to zeros of the same shape.
         params : mapping
             Receives ``xray_*`` keys plus the bare ``redshift`` from
             the allowlist. Cross-component scalars (``sfr``,

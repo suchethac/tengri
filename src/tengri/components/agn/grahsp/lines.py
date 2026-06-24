@@ -9,7 +9,7 @@ integrated luminosity is :math:`L_{\\rm line} = r_i \\cdot L_{\\rm Hb}` where
 strength relative to H-beta from Mor & Netzer 2012 (Table in
 ``data/grahsp/grahsp_templates.h5``).
 
-The line profile uses upstream's slightly unusual normalisation
+The line profile uses upstream's slightly unusual normalization
 :math:`N = 510 / \\sqrt{\\pi\\sigma^2}` rather than the textbook
 :math:`1/\\sqrt{2\\pi\\sigma^2}`. This is because :math:`\\mathrm{l5100}`
 is :math:`\\lambda L_\\lambda` (W or erg/s) while the SED is in
@@ -63,7 +63,7 @@ def _add_gaussians(
 ) -> Array:
     """Sum of Gaussian line profiles on a shared wave grid.
 
-    Vectorised over both ``line_wave_nm`` (lines) and ``wave_nm`` (samples)
+    Vectorized over both ``line_wave_nm`` (lines) and ``wave_nm`` (samples)
     so the result is JIT/vmap/grad-compatible.
     """
     # Per-line widths in nm.

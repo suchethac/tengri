@@ -41,7 +41,7 @@ _NU_2500 = 1.199e15  # Hz
 _BC_2500 = 5.15
 
 # Gilfanov 2004 / Yang+22-Lehmer+14 assume an old (10 Gyr) stellar population
-# for LMXB normalisation. Set explicitly so tests don't drift if the default
+# for LMXB normalization. Set explicitly so tests don't drift if the default
 # ever changes.
 _LMXB_AGE_GYR = 10.0
 

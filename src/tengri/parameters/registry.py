@@ -5,7 +5,7 @@ Walks every per-component ``_params.py`` module under :mod:`tengri.components`,
 :mod:`tengri.observation`, and :mod:`tengri.parameters._shared`, then exposes
 a single, queryable view of every :class:`~tengri.protocols.component.ParamDeclaration`
 the codebase declares. The underlying data ownership is unchanged — each
-component/module still owns its own ``_params.py`` (the decentralisation that
+component/module still owns its own ``_params.py`` (the decentralization that
 landed pre-ADR-0005). This module just gives users a single API to ask:
 
 - **What parameters exist?** ``tengri.list_parameters()``

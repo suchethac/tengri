@@ -73,7 +73,7 @@ def test_cosmo_from_astropy_rejects_non_flat():
 
 def test_cosmo_from_astropy_accepts_planck18_with_neutrinos():
     """Planck18's flatness includes a small Onu0; the adapter must
-    recognise this as flat (Ok0 = 0) and not be confused by
+    recognize this as flat (Ok0 = 0) and not be confused by
     ``Ode0 + Om0 ≈ 0.9985`` (which would falsely trip a naïve
     flatness check)."""
     astropy_cosmo = pytest.importorskip("astropy.cosmology")

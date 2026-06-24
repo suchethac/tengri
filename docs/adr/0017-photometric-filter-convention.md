@@ -34,12 +34,12 @@ Through 2026-05, tengri's kernel weighted `F_ν` by **`λ`** (`compute_flux_dens
 its docstring falsely claimed "matches DSPS." That weight matches *neither*
 convention: it is an f_λ→f_ν units transplant — the energy formula `∫ T L_λ dλ`
 (correct in f_λ) rewritten onto an `L_ν` SED as `∫ F_ν T λ dλ`, but
-`L_λ = L_ν c/λ²`, not `L_ν λ` (error = two factors of λ). This biased colours,
+`L_λ = L_ν c/λ²`, not `L_ν λ` (error = two factors of λ). This biased colors,
 hence photo-z / stellar mass / dust inference. Issue #436 (closed via #446) had
 papered over a related symptom by routing `predict_magnitudes` and
 `predict_photometry` through the *same* (wrong) kernel; issues #443/#515 tracked
 the deeper convention question but framed it as "three valid conventions"
-(photon-Tokunaga / photon-Bessell / energy) — an over-generalisation: tengri's
+(photon-Tokunaga / photon-Bessell / energy) — an over-generalization: tengri's
 `λ` weight is a bug, not a third convention.
 
 The decision is also entangled with **ADR-0015** (CIGALE-faithfulness for the
@@ -50,7 +50,7 @@ requires that convention to be available.
 
 1. **Default to the photon-counting (Bessell) convention, `w(λ) = 1/λ`.** It is
    the physically correct mean for photon-counting detectors (every optical/NIR
-   CCD) and how the AB system is realised by surveys
+   CCD) and how the AB system is realized by surveys
    (Oke 1983; Hogg+2002 Eq. 5; Fukugita+1996 Eq. 7), and it matches tengri's own
    SSP engine, DSPS (Hearin+2023, with `T` = photon transmission probability).
    This eliminates the prior λ-weighting bug and the internal mag↔phot
@@ -73,13 +73,13 @@ requires that convention to be available.
 
 5. **DSPS is the reference of record.** `bessell` is pinned bit-faithful to
    `dsps.photometry` by `tests/crossval/test_filter_convention_parity.py`
-   (≤1e-6 on the band-mean L_ν; ≤1e-4 mag on `calc_obs_mag` colours); `energy`
+   (≤1e-6 on the band-mean L_ν; ≤1e-4 mag on `calc_obs_mag` colors); `energy`
    is pinned to an independent analytic reference.
 
 ## Consequences
 
 - Default photometry values shift (the λ→1/λ fix); kernel snapshot fixtures
-  regenerate. Colours move toward FSPS/DSPS.
+  regenerate. Colors move toward FSPS/DSPS.
 - New public surface: `tengri.FilterConvention`, `tengri.list_filter_conventions()`;
   `compute_flux_density(..., convention=)`, `preintegrate_grid(..., convention=)`.
 - Touched paths: `observation/photometry.py`, `utils/grid_interp.py`,

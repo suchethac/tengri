@@ -55,7 +55,7 @@ def test_sbpl_matches_upstream(fixture):
         np.testing.assert_allclose(out, expected[i], rtol=1e-9, atol=0.0, err_msg=f"case {i}")
 
 
-def test_sbpl_normalisation_at_5100A():
+def test_sbpl_normalization_at_5100A():
     """At lambda = 510 nm = 5100 Å, the SBPL must equal l5100 / 510 (in W/nm)."""
     from tengri.components.agn.grahsp.bbb import sbpl_bbb
 

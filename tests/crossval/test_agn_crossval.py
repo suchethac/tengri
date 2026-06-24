@@ -926,7 +926,7 @@ class TestPolarDustCrossval:
             )
 
     def test_greybody_peak_wavelength(self):
-        """At T=100K, greybody peak should be near Wien peak ~ 29 um."""
+        """At T=100K, graybody peak should be near Wien peak ~ 29 um."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 
         wavelength = jnp.geomspace(1e4, 1e7, 3000)  # 1 um to 1 mm in Angstrom
@@ -943,7 +943,7 @@ class TestPolarDustCrossval:
         # Modified blackbody (1-exp(-(lambda0/lambda)^beta)) shifts peak
         # redward to ~50 um for beta=1.6, lambda0=200um. Allow [20, 70] um.
         assert 20.0 < peak_um < 70.0, (
-            f"Greybody peak at {peak_um:.1f} um, expected [20, 70] um at T=100K"
+            f"Graybody peak at {peak_um:.1f} um, expected [20, 70] um at T=100K"
         )
 
 

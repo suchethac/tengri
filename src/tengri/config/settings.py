@@ -48,7 +48,7 @@ class AGNConfig:
     disc : str
         AGN accretion disc model.
         ``"powerlaw"`` — simple power-law SED.
-        ``"multicolor"`` — multi-colour blackbody disc (default).
+        ``"multicolor"`` — multi-color blackbody disc (default).
         ``"kubota_done"`` — Kubota & Done (2018) 3-zone model.
         ``"adaf"`` — ADAF (low-luminosity AGN).
     torus : str

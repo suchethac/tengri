@@ -407,7 +407,7 @@ class TestUnifiedAgn:
         assert recipe_dict["agn"]["disc"]["type"] == "kubota_done"
 
     def test_unified_agn_has_simple_torus(self):
-        """Recipe uses simple greybody torus."""
+        """Recipe uses simple graybody torus."""
         recipe_dict = recipes.unified_agn()
         assert recipe_dict["agn"]["torus"]["type"] == "simple"
 

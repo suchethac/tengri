@@ -2,7 +2,7 @@
 """Radio disc loudness coupling: ``L_4400_intrinsic`` publication and consumption.
 
 The composable AGN now publishes ``L_4400_intrinsic`` — the un-reddened,
-``agn_log_lbol``-normalised disc monochromatic luminosity at 4400 Å
+``agn_log_lbol``-normalized disc monochromatic luminosity at 4400 Å
 (B-band) — captured in the runner *before* polar reddening. Radio consumes
 it so the AGN radio loudness now reflects the disc shape, with an L_bol
 bolometric correction fallback for monolithic AGN models.

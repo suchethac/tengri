@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression test for radio.py redundant *_LSUN/_LSUN removed bug.
 
-Bug: radio.py:113 — L_B = L_agn_bol * _LSUN / (...) / _LSUN; *_LSUN/_LSUN cancelled.
+Bug: radio.py:113 — L_B = L_agn_bol * _LSUN / (...) / _LSUN; *_LSUN/_LSUN canceled.
 """
 
 import chex

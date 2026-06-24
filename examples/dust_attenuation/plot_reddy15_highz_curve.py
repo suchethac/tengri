@@ -10,7 +10,7 @@ combination relevant when fitting rest-UV/optical SEDs of high-z galaxies.
 FSPS exposes this curve; tengri provides it as the ``reddy15`` dust law.
 
 This figure overlays ``reddy15`` against three reference curves on a common
-``k(λ)`` normalisation (``k(5500 Å) = 1``), using the public
+``k(λ)`` normalization (``k(5500 Å) = 1``), using the public
 ``tengri.dust.resolve_dust_law`` accessor — no stellar population or SSP file
 is required to inspect an attenuation curve.
 

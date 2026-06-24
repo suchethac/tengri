@@ -4,7 +4,7 @@
 
 **Goal:** Land the outer `ForwardModel` shell, a `Population` dataclass, and a `SubModel` Protocol as a thin, purely additive layer over the existing `SEDModel`. End state: a user calls `ForwardModel.build(sed=existing_sed_model, observation=existing_obs).predict(params)` and gets back a prediction dict suitable for inference, with the same numerical result as today and with the per-population orchestration structure (§9.1 of the architecture spec) in place — even though there is only one population in this slice.
 
-**Architecture:** Additive shell. No existing class is renamed, deleted, or restructured. The new `ForwardModel` wraps existing objects via a `SubModel`-conforming adapter around `SEDModel`. The persistent JIT cache rule (§9.2 closure minimisation) is audited by an integration test that exercises the new shell under `@jax.jit`. `SpatialModel`, `SpatialSEDModel`, multi-population, and the parameter-namespace prefix all land in subsequent plans.
+**Architecture:** Additive shell. No existing class is renamed, deleted, or restructured. The new `ForwardModel` wraps existing objects via a `SubModel`-conforming adapter around `SEDModel`. The persistent JIT cache rule (§9.2 closure minimization) is audited by an integration test that exercises the new shell under `@jax.jit`. `SpatialModel`, `SpatialSEDModel`, multi-population, and the parameter-namespace prefix all land in subsequent plans.
 
 **Tech Stack:** Python 3.12, JAX ≥0.4.20, pytest, ruff (lint+format), numpydoc docstrings. Project conventions in `CLAUDE.md`.
 
@@ -38,7 +38,7 @@ Both should pass. If not, fix or surface to the user before starting Task 1.
 | `src/tengri/forward/_sed_submodel_adapter.py` | Create | `_LegacySEDSubModel` — wraps existing `SEDModel` to satisfy `SubModel` Protocol. Underscore-prefix: an explicit migration shim, not public API. |
 | `src/tengri/__init__.py` | Modify | Public re-exports of `ForwardModel`, `Population`. |
 | `tests/unit/protocols/test_submodel_protocol.py` | Create | Protocol shape + runtime-checkable assertions. |
-| `tests/unit/forward/test_population.py` | Create | `Population` dataclass behaviour. |
+| `tests/unit/forward/test_population.py` | Create | `Population` dataclass behavior. |
 | `tests/unit/forward/test_forward_model.py` | Create | `ForwardModel.build` kwargs convenience + `.predict` dict shape + per-population structure. |
 | `tests/integration/test_forward_model_jit.py` | Create | End-to-end JIT works through the shell + closure audit (§9.2). |
 | `docs/dev/where-things-live.md` | Modify | New entry for `ForwardModel` under "Forward model". |
@@ -1077,7 +1077,7 @@ Edit `docs/dev/where-things-live.md`. Find the section that lists `forward/` sym
 
 - [ ] **Step 2: Update CHANGELOG**
 
-Edit `CHANGELOG.md`. Under the `## Unreleased` section, add (alphabetised under the right subhead):
+Edit `CHANGELOG.md`. Under the `## Unreleased` section, add (alphabetized under the right subhead):
 
 ```markdown
 ### Added
@@ -1206,7 +1206,7 @@ End-to-end `@jax.jit` works transparently through the shell
 - [ ] `tests/unit/forward/test_sed_submodel_adapter.py` — legacy adapter contract.
 - [ ] `tests/unit/forward/test_forward_model.py` — build + predict.
 - [ ] `tests/integration/test_forward_model_jit.py` — end-to-end JIT + closure audit.
-- [ ] `pytest tests/ -q` — full regression suite passes (no behaviour change for the existing forward path).
+- [ ] `pytest tests/ -q` — full regression suite passes (no behavior change for the existing forward path).
 EOF
 )"
 ```

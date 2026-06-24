@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Analytically-marginalised :class:`Likelihood` adapters.
+"""Analytically-marginalized :class:`Likelihood` adapters.
 
 Wraps two existing math primitives:
 
-- :class:`CalibrationMarginalisedLikelihood` —
+- :class:`CalibrationMarginalizedLikelihood` —
   :func:`tengri.observation.calibration.marginalize_calibration`
   (Chebyshev polynomial calibration integrated out analytically).
-- :class:`ELineMarginalisedLikelihood` —
+- :class:`ELineMarginalizedLikelihood` —
   :func:`tengri.observation.eline_marginalization.marginalize_emission_lines`
   (linear emission-line amplitudes integrated out analytically).
 
-Both are diagonal Gaussian under the hood; the marginalisation is
+Both are diagonal Gaussian under the hood; the marginalization is
 analytic via standard Gaussian-conjugate algebra. They differ from
 the simple :class:`GaussianLikelihood` only in that they integrate
 out a nuisance vector before scoring the residuals, so they are
@@ -33,20 +33,20 @@ from tengri.observation.eline_marginalization import (
 )
 
 __all__ = [
-    "CalibrationMarginalisedLikelihood",
-    "CloudyELineMarginalisedLikelihood",
+    "CalibrationMarginalizedLikelihood",
+    "CloudyELineMarginalizedLikelihood",
     "ELineFittedLikelihood",
-    "ELineMarginalisedLikelihood",
+    "ELineMarginalizedLikelihood",
 ]
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Calibration polynomial — Chebyshev marginalisation
+# Calibration polynomial — Chebyshev marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class CalibrationMarginalisedLikelihood:
+class CalibrationMarginalizedLikelihood:
     r"""Spectroscopy likelihood with the calibration polynomial
     integrated out analytically.
 
@@ -81,7 +81,7 @@ class CalibrationMarginalisedLikelihood:
     underlying primitive.
 
     Returns the *positive* marginal log-likelihood (data term only;
-    the analytic Gaussian normalisation in
+    the analytic Gaussian normalization in
     :func:`marginalize_calibration` is included in its return value
     by construction). Sign matches the rest of the
     :class:`Likelihood` cohort (higher = better fit).
@@ -94,7 +94,7 @@ class CalibrationMarginalisedLikelihood:
     n_poly: int = 3
     prior_sigma: float = 1.0
     channel: str = "spec_fnu"
-    name: str = "calibration_marginalised"
+    name: str = "calibration_marginalized"
 
     def log_prob(
         self,
@@ -117,17 +117,17 @@ class CalibrationMarginalisedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — analytic marginalisation
+# Emission-line amplitudes — analytic marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class ELineMarginalisedLikelihood:
+class ELineMarginalizedLikelihood:
     r"""Spectroscopy likelihood with linear emission-line amplitudes
     integrated out analytically.
 
     Each emission line contributes a known *shape* (Gaussian profile
-    centred at the rest-frame line wavelength) but with an *unknown
+    centered at the rest-frame line wavelength) but with an *unknown
     amplitude*. The amplitudes form a linear nuisance vector under a
     Gaussian prior; the marginal likelihood is computed in closed form
     by Gaussian conjugacy.
@@ -166,7 +166,7 @@ class ELineMarginalisedLikelihood:
     design_matrix_builder: Callable[[Mapping[str, jnp.ndarray]], jnp.ndarray] | None = None
     prior_variance: jnp.ndarray | None = None
     channel: str = "spec_fnu"
-    name: str = "eline_marginalised"
+    name: str = "eline_marginalized"
 
     def __post_init__(self) -> None:
         # Exactly one of (static design matrix) | (per-call builder)
@@ -175,7 +175,7 @@ class ELineMarginalisedLikelihood:
         has_builder = self.design_matrix_builder is not None
         if has_static == has_builder:
             raise ValueError(
-                "ELineMarginalisedLikelihood: provide exactly one of "
+                "ELineMarginalizedLikelihood: provide exactly one of "
                 "`design_matrix` (static) or `design_matrix_builder` "
                 "(per-call). Got "
                 f"design_matrix={'set' if has_static else 'None'}, "
@@ -210,16 +210,16 @@ class ELineMarginalisedLikelihood:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# Emission-line amplitudes — Cloudy-prior marginalisation
+# Emission-line amplitudes — Cloudy-prior marginalization
 # ─────────────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True)
-class CloudyELineMarginalisedLikelihood:
-    r"""E-line marginalisation with a Cloudy-photoionisation prior.
+class CloudyELineMarginalizedLikelihood:
+    r"""E-line marginalization with a Cloudy-photoionization prior.
 
-    Same conjugate-Gaussian marginalisation as
-    :class:`ELineMarginalisedLikelihood`, but the per-line prior
+    Same conjugate-Gaussian marginalization as
+    :class:`ELineMarginalizedLikelihood`, but the per-line prior
     means come from a Cloudy grid evaluated at the current
     ``(log_z, neb_logU)`` — both read from ``params`` at log-prob
     time, so the prior shifts with the sampler. ``prior_width_dex``
@@ -258,7 +258,7 @@ class CloudyELineMarginalisedLikelihood:
     line_wavelengths: jnp.ndarray
     prior_width_dex: float = 0.5
     channel: str = "spec_fnu"
-    name: str = "eline_marginalised_cloudy"
+    name: str = "eline_marginalized_cloudy"
 
     def log_prob(
         self,
@@ -296,7 +296,7 @@ class CloudyELineMarginalisedLikelihood:
 class ELineFittedLikelihood:
     r"""Spectroscopy likelihood with explicit per-line amplitude params.
 
-    Counterpart to :class:`ELineMarginalisedLikelihood`: instead of
+    Counterpart to :class:`ELineMarginalizedLikelihood`: instead of
     integrating the line amplitudes out analytically, they are
     explicit free parameters that the inference engine samples.
     Reads ``params[name]`` for each ``name`` in ``amplitude_names``,
@@ -309,7 +309,7 @@ class ELineFittedLikelihood:
         Observed spectrum and 1-σ uncertainties [erg/s/cm²/Hz].
     design_matrix_builder : callable, keyword-only
         Per-call closure (same shape as
-        :class:`CloudyELineMarginalisedLikelihood.design_matrix_builder`).
+        :class:`CloudyELineMarginalizedLikelihood.design_matrix_builder`).
     amplitude_names : tuple of str, keyword-only
         Param keys to read for each line amplitude. Order must match
         the columns of the design matrix.
@@ -352,12 +352,12 @@ class ELineFittedLikelihood:
 
 
 @dataclass(frozen=True)
-class CalibrationELineMarginalisedLikelihood:
+class CalibrationELineMarginalizedLikelihood:
     r"""Spectroscopy likelihood with BOTH the calibration polynomial AND
-    emission-line amplitudes marginalised analytically.
+    emission-line amplitudes marginalized analytically.
 
     Covers the most common galaxy spectroscopy configuration
-    (Prospector-style joint cal-poly + line marginalisation). Sequential
+    (Prospector-style joint cal-poly + line marginalization). Sequential
     composition:
 
     1. Build the line design matrix ``G`` via ``design_matrix_builder``.
@@ -367,7 +367,7 @@ class CalibrationELineMarginalisedLikelihood:
        because the cal-marg step in (4) needs the line-augmented
        prediction.
     3. Augment the model: ``m'(λ) = m(λ) + G â``.
-    4. Run cal-poly marginalisation on ``m'`` against the observed
+    4. Run cal-poly marginalization on ``m'`` against the observed
        spectrum, returning the marginal log-likelihood.
 
     Both flat and Cloudy line-amplitude priors are supported via
@@ -382,7 +382,7 @@ class CalibrationELineMarginalisedLikelihood:
     design_matrix_builder : callable, keyword-only
         Per-call closure rebuilding the line design matrix. Required —
         line wavelengths shift with redshift. See
-        :class:`ELineMarginalisedLikelihood`.
+        :class:`ELineMarginalizedLikelihood`.
     n_poly, prior_sigma : keyword-only
         Calibration polynomial: order and per-coefficient prior σ.
     eline_prior_type : str, keyword-only
@@ -421,7 +421,7 @@ class CalibrationELineMarginalisedLikelihood:
     eline_line_wavelengths: jnp.ndarray | None = None
     eline_prior_width_dex: float = 0.5
     channel: str = "spec_fnu"
-    name: str = "calibration_eline_marginalised"
+    name: str = "calibration_eline_marginalized"
 
     def log_prob(
         self,

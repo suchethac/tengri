@@ -33,7 +33,7 @@ def nlr_synthesizer_block(
     r"""NLR lines from the Synthesizer Cloudy grid (grid-backed nlr block).
 
     Routes the composable pipeline to :func:`compute_nlr_sed_synthesizer`, so a
-    unified AGN built through ``SEDModel.build`` uses the *same* photoionisation
+    unified AGN built through ``SEDModel.build`` uses the *same* photoionization
     grid as the direct adapter (the grids the §9c reproduction panel reads). The
     grid path is resolved from ``$TENGRI_SYNTHESIZER_AGN_GRID_DIR`` /
     ``data/synthesizer_grids/`` (closes the builder-accessibility gap, #588).
@@ -49,7 +49,7 @@ def nlr_synthesizer_block(
     agn_nlr_cf, agn_nlr_fwhm_kms : float
             Covering fraction and narrow-line FWHM [km/s].
     neb_logU, neb_logZ_gas : float
-            Photoionisation knobs forwarded to the grid adapter.
+            Photoionization knobs forwarded to the grid adapter.
 
     Returns
     -------
@@ -60,7 +60,7 @@ def nlr_synthesizer_block(
     -----
     Like the analytic :func:`nlr_analytic_block`, the NLR is illuminated by the
     **intrinsic** bolometric luminosity (``10**agn_log_lbol * L_sun``) and is
-    therefore inclination-independent (isotropic). Backend initialisation reads
+    therefore inclination-independent (isotropic). Backend initialization reads
     HDF5 (Python-level, not JIT-traceable); call once eagerly before any
     ``jax.jit`` over the forward model so the cached backend's interpolation
     stays JIT-safe.

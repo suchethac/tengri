@@ -127,7 +127,7 @@ def lines_to_sed(
     Parameters
     ----------
     line_wavelengths : array, shape (n_lines,)
-        Rest-frame line centre wavelengths [Ångström].
+        Rest-frame line center wavelengths [Ångström].
     line_luminosities : array, shape (n_lines,)
         Per-line luminosities [Lsun].
     wave_obs : array, shape (n_wave,)
@@ -140,7 +140,7 @@ def lines_to_sed(
     array, shape (n_wave,)
         L_nu on ``wave_obs`` grid [erg s^-1 Hz^-1].
     """
-    # σ = FWHM / (2√(2 ln 2)) in Ångström at each line centre
+    # σ = FWHM / (2√(2 ln 2)) in Ångström at each line center
     fwhm_aa = line_wavelengths * fwhm_kms / 2.99792458e5  # c in km/s
     sigma_aa = fwhm_aa / 2.3548200450309493  # 2*sqrt(2*ln2)
 
@@ -148,7 +148,7 @@ def lines_to_sed(
     dwave = wave_obs[:, None] - line_wavelengths[None, :]
     profiles = jnp.exp(-0.5 * (dwave / sigma_aa[None, :]) ** 2)
 
-    # Normalise each profile to unit integrated flux (∫ profile dλ = 1)
+    # Normalize each profile to unit integrated flux (∫ profile dλ = 1)
     norm = sigma_aa * jnp.sqrt(2.0 * jnp.pi)  # (n_lines,)
     profiles = profiles / norm[None, :]  # (n_wave, n_lines)
 
@@ -1040,7 +1040,7 @@ class AGNConfig:
     disc : str
         AGN accretion disc model.
         ``"powerlaw"``     — simple power-law SED.
-        ``"multicolor"``   — multi-colour blackbody disc (Shakura-Sunyaev).
+        ``"multicolor"``   — multi-color blackbody disc (Shakura-Sunyaev).
         ``"kubota_done"``  — Kubota & Done (2018) 3-zone model (default).
         ``"adaf"``         — ADAF (low-luminosity AGN).
     torus : str
@@ -1223,7 +1223,7 @@ class TestLinesToSed:
         assert jnp.all(jnp.isfinite(result))
         assert jnp.any(result > 0.0)
 
-    def test_lines_to_sed_peaks_near_line_centres(self):
+    def test_lines_to_sed_peaks_near_line_centers(self):
         from tengri.components.agn._phys import lines_to_sed
 
         wave_obs = jnp.linspace(6400.0, 6700.0, 1000)

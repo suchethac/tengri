@@ -399,7 +399,7 @@ def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
     """AGN torus emission from Nenkova et al. (2008) CLUMPY templates.
 
     Interpolates the CLUMPY radiative-transfer torus library in equatorial
-    optical depth ``agn_tau`` with a pure-JAX triweight kernel, then normalises
+    optical depth ``agn_tau`` with a pure-JAX triweight kernel, then normalizes
     to ``agn_torus_frac * L_bol``. This is the production-quality torus
     matching FSPS / Prospector (Johnson et al. 2021 [2]_); for silicate-feature
     accuracy the SKIRTOR templates in ``tengri.components.agn.skirtor`` may be
@@ -434,7 +434,7 @@ def nenkova_torus(*args, **kwargs) -> jnp.ndarray:
     **JIT-compatible**: yes — loads the vendored grid
     (``data/nenkova08_torus_grid.h5``) once via a cached closure, then
     interpolates with pure JAX. **Gradient-safe**: yes — ``agn_tau`` is a
-    differentiable, traceable parameter (it can be freely sampled/optimised by
+    differentiable, traceable parameter (it can be freely sampled/optimized by
     MAP, NUTS, and VI).
 
     Data source: the same CLUMPY templates shipped with FSPS

@@ -78,7 +78,7 @@ def test_xray_delta_alpha_ox_offset_hardening(wave_xray_rest, l_2500_fixed):
         f"Hardening offset should change spectrum; mean rel diff = {mean_rel_diff}"
     )
 
-    # alpha_ox sets the X-ray/UV NORMALISATION (the spectral slope is gamma).
+    # alpha_ox sets the X-ray/UV NORMALIZATION (the spectral slope is gamma).
     # A more negative alpha_ox (delta < 0) steepens the UV->X-ray slope, i.e.
     # LESS X-ray per unit UV: L_2keV = L_2500 * 10**(alpha_ox / 0.3838) drops,
     # so the whole corona scales DOWN. The negative-offset corona is fainter.

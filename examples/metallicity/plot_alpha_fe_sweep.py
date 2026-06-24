@@ -71,7 +71,7 @@ ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 
 # Mark iron-dominated regions
 for wl, _label in [(4000, "4000 Å break"), (5200, r"Mg $b$"), (8662, r"Ca II triplet")]:
-    ax.axvline(wl, color="grey", ls=":", lw=0.6, alpha=0.3)
+    ax.axvline(wl, color="gray", ls=":", lw=0.6, alpha=0.3)
 
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cbar.set_label(r"[$\alpha$/Fe]")

@@ -1132,7 +1132,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
         """Nonlinearly curve a linear residual (geoVI).
 
         Port of NIFTy ``nonlinearly_update_residual`` (evi.py:136-217).
-        Finds x* minimising phi(x) = 0.5||m_s - g(x)||^2 via Newton-CG,
+        Finds x* minimizing phi(x) = 0.5||m_s - g(x)||^2 via Newton-CG,
         then returns x* - m as the curved residual.
         """
         x0 = m + r_linear
@@ -1173,7 +1173,7 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
         Uses ``lax.map`` (not ``vmap``) over both ``draw_linear_residual`` and
         ``curve_pair`` so that the compiled XLA graph is O(1) in n_samp.
-        ``vmap`` over functions containing ``while_loop`` materialises O(n_samp)
+        ``vmap`` over functions containing ``while_loop`` materializes O(n_samp)
         graph copies; ``lax.map`` compiles one body and sequences over the batch.
         """
         linear_residuals = jax.lax.map(lambda sk: draw_linear_residual(m, sk), subkeys)
@@ -1285,7 +1285,7 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
     these Python closures, so the traced values become XLA graph nodes — making the
     returned callables fully vmappable across different galaxies.
 
-    The Fisher metric at position :math:`\\xi` in the linearised approximation is
+    The Fisher metric at position :math:`\\xi` in the linearized approximation is
 
     .. math::
 
@@ -1456,7 +1456,7 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
     -----
     Implements the geometric Variational Inference (geoVI) algorithm, which uses a
     non-linear coordinate transformation to account for posterior curvature.  The
-    transformation :math:`T(\\xi)` maps the standardised parameter space to the
+    transformation :math:`T(\\xi)` maps the standardized parameter space to the
     likelihood-weighted data space:
 
     .. math::

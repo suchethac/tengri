@@ -74,7 +74,7 @@ class AGNSEDComponentConfig(SEDComponentConfig):
         AGN models receive harmless no-op selectors that the underlying
         registry function absorbs via ``**kwargs``.
     agn_norm : str
-        Cross-block normalisation policy (#556). ``"cigale_joint"``
+        Cross-block normalization policy (#556). ``"cigale_joint"``
         (default) ties the disc, torus and polar to CIGALE's single
         ``agn_power`` reference via the fixed SKIRTOR template ratios
         (energy-conserving; only active for ``agn_torus_block="skirtor"`` +
@@ -253,7 +253,7 @@ class AGNSEDComponent:
         ----------
         state : ForwardState
             Must carry rest-frame ``wave`` (Å). If ``sed_intrinsic`` is
-            ``None`` it is initialised to zeros of the same shape.
+            ``None`` it is initialized to zeros of the same shape.
         params : mapping
             Receives ``agn_*`` keys plus the bare ``redshift``.
         template_data : dict | None
@@ -282,7 +282,7 @@ class AGNSEDComponent:
         # stellar dust-absorbed luminosity via
         # ``agn_power = L_absorbed × fracAGN / (1 − fracAGN)``
         # (skirtor2016.py:498). Below we OVERRIDE ``agn_torus_frac`` so
-        # the existing block normalisation ``l_scale = L_bol × frac``
+        # the existing block normalization ``l_scale = L_bol × frac``
         # produces ``l_scale = agn_power``. This way the torus block
         # API stays unchanged while the higher-level driver matches
         # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's

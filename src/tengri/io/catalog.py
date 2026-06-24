@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Photometric catalog reader (CSV / VOTable / FITS table).
 
-Loads a row-per-galaxy catalogue and tries to auto-detect the columns
+Loads a row-per-galaxy catalog and tries to auto-detect the columns
 that matter for SED fitting:
 
 - a redshift column (``z``, ``redshift``, ``z_phot``, ``z_spec``, ...)
@@ -49,7 +49,7 @@ _REDSHIFT_NAMES = (
 
 
 def _norm(s: str) -> str:
-    """Normalise a column name for comparison: lowercase, no punctuation."""
+    """Normalize a column name for comparison: lowercase, no punctuation."""
     return re.sub(r"[^a-z0-9]+", "_", s.strip().lower()).strip("_")
 
 
@@ -64,7 +64,7 @@ def _detect_redshift_column(columns: list[str]) -> str | None:
 def _detect_flux_columns(columns: list[str]) -> dict[str, dict[str, str]]:
     """Pair each ``flux_<band>`` column with its matching error column.
 
-    Recognises three error-column conventions: ``flux_err_<band>``,
+    Recognizes three error-column conventions: ``flux_err_<band>``,
     ``ferr_<band>``, and ``<band>_err`` (case-insensitive).
     """
     norm_to_orig = {_norm(c): c for c in columns}
@@ -119,7 +119,7 @@ def _read_table(path: Path) -> tuple[list[str], list[Any]]:
         return list(table.colnames), [np.asarray(table[c]) for c in table.colnames]
 
     raise ValueError(
-        f"Unsupported catalogue format {suffix!r}. "
+        f"Unsupported catalog format {suffix!r}. "
         f"Expected one of: .csv, .tsv, .txt, .vot, .xml, .fits, .fit, .fts."
     )
 
@@ -128,12 +128,12 @@ def load_catalog(
     path: str | Path,
     redshift_col: str | None = None,
 ) -> dict[str, Any]:
-    """Load a photometric catalogue with auto-detected flux/error columns.
+    """Load a photometric catalog with auto-detected flux/error columns.
 
     Parameters
     ----------
     path : str or Path
-        Catalogue file. Format is detected from the suffix:
+        Catalog file. Format is detected from the suffix:
         ``.csv`` / ``.tsv`` / ``.txt`` (pandas), ``.vot`` / ``.xml``
         (astropy VOTable), ``.fits`` / ``.fit`` / ``.fts`` (astropy
         Table).
@@ -163,14 +163,14 @@ def load_catalog(
     FileNotFoundError
         If ``path`` does not exist.
     ValueError
-        If the file suffix is not recognised, or if no ``flux_*`` /
+        If the file suffix is not recognized, or if no ``flux_*`` /
         error-column pairs are found.
     KeyError
         If ``redshift_col`` is given explicitly but not present.
 
     Notes
     -----
-    Recognised flux / error column conventions (case-insensitive,
+    Recognized flux / error column conventions (case-insensitive,
     underscores collapsed):
 
     - ``flux_<band>`` paired with ``flux_err_<band>``
@@ -180,7 +180,7 @@ def load_catalog(
 
     Bands without a matching error column are silently dropped — this
     is by design, since SED fitting needs (flux, err) pairs. If a
-    catalogue uses a different convention, rename columns before
+    catalog uses a different convention, rename columns before
     calling.
 
     Examples
@@ -206,7 +206,7 @@ def load_catalog(
     z_col = redshift_col if redshift_col is not None else _detect_redshift_column(columns)
     if z_col is not None:
         if z_col not in by_name:
-            raise KeyError(f"redshift_col {z_col!r} not in catalogue columns")
+            raise KeyError(f"redshift_col {z_col!r} not in catalog columns")
         out["redshift"] = np.asarray(by_name[z_col], dtype=float)
         out["redshift_col"] = z_col
 

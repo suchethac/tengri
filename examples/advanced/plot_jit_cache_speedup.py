@@ -8,7 +8,7 @@ opt out with ``TENGRI_DISABLE_JAX_CACHE=1``). The cache survives Python
 restarts: notebook re-runs, slurm tasks, and benchmark workers all skip
 the expensive first compile.
 
-Within one Python process JAX already memoises every JIT, so a second call
+Within one Python process JAX already memoizes every JIT, so a second call
 to the same function is free regardless of the on-disk cache. The cache
 only matters when a *new process* is spawned. To measure honestly we
 launch four fresh subprocesses against an empty cache directory:
@@ -80,7 +80,7 @@ CHILD_SOURCE = textwrap.dedent(
     mock = sed_model.mock(truth, snr=20.0, key=jax.random.PRNGKey(1))
 
     # MAP fit. Heavier than a single predict_photometry — compiles
-    # forward + gradient + optimiser step. This is what fills the cache.
+    # forward + gradient + optimizer step. This is what fills the cache.
     forward = tengri.ForwardModel.build(sed=sed_model, observation=obs)
     t0 = time.perf_counter()
     forward.fit(
@@ -135,7 +135,7 @@ labels = ["Run 1\n(cold cache)"] + [f"Run {i + 2}\n(warm cache)" for i in range(
 x = np.arange(N_RUNS)
 
 # Stack: import, build (model construction), MAP fit (forward + grad
-# + optimiser compile, the dominant JIT cost). Anything not accounted
+# + optimizer compile, the dominant JIT cost). Anything not accounted
 # for goes into a thin "process overhead" sliver.
 remainder = walls - (imports + builds + maps)
 remainder = np.clip(remainder, 0.0, None)
@@ -147,7 +147,7 @@ ax.bar(
     maps,
     bottom=imports + builds,
     color="C1",
-    label="MAP fit (forward + grad + optimiser compile)",
+    label="MAP fit (forward + grad + optimizer compile)",
 )
 ax.bar(x, remainder, bottom=imports + builds + maps, color="0.7", label="process overhead")
 

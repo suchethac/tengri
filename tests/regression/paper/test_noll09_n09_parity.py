@@ -4,7 +4,7 @@
 tengri's ``noll09`` attenuation curve is a port of the N09 model from the
 ``dust_attenuation`` package (Noll et al. 2009): a Calzetti+Leitherer base,
 a 2175 Å Drude bump of amplitude ``E_b``, and a power-law slope ``delta``,
-combined as ``(base + bump) * (lambda / 5500 A)**delta`` and normalised by a
+combined as ``(base + bump) * (lambda / 5500 A)**delta`` and normalized by a
 fixed ``R_V = 4.05``.
 
 This pins the parity so the bump amplitude / slope conventions cannot drift.
@@ -38,7 +38,7 @@ _PARAM_CASES = [(1.0, 0.0), (3.0, -0.3), (2.0, 0.2)]
 def test_noll09_matches_dust_attenuation_n09(bump_strength, delta):
     """tengri noll09 == dust_attenuation N09 to <1% over its valid range.
 
-    Both curves are normalised to A_V at 5500 Å, so the test isolates the
+    Both curves are normalized to A_V at 5500 Å, so the test isolates the
     *shape* (bump + slope), independent of the overall A_V scaling.
     """
     n09_shapes = pytest.importorskip("dust_attenuation.shapes")

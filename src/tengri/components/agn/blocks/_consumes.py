@@ -12,7 +12,7 @@ nuisance dimensions in a fit.
 This module records, per block and per monolithic model, the parameters that
 *actually* move the AGN SED when that block/model is active.
 :func:`agn_active_param_set` unions the consumed sets of the active block
-selection (plus the always-active normalisation knobs in
+selection (plus the always-active normalization knobs in
 :data:`AGN_SHARED_PARAMS`); the builder grammar uses it to scope a group
 wildcard to exactly those parameters.
 
@@ -44,7 +44,7 @@ from tengri.components.agn._params import PARAMS
 #: All declared AGN parameter names (the full superset).
 ALL_AGN_PARAMS: frozenset[str] = frozenset(pd.name for pd in PARAMS)
 
-#: Normalisation knobs active whenever any AGN model/block is on.
+#: Normalization knobs active whenever any AGN model/block is on.
 AGN_SHARED_PARAMS: frozenset[str] = frozenset({"agn_frac", "agn_log_lbol"})
 
 #: Composable block -> the agn_* params that block itself consumes.
@@ -103,7 +103,7 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_grahsp_si",
         }
     ),
-    # The grey Type-1/2 visibility mask (runner Stage 4.5) applies to the
+    # The gray Type-1/2 visibility mask (runner Stage 4.5) applies to the
     # physical-decomposition tori, so agn_cos_inc + agn_theta_torus move predict
     # for them (empirically ~7e-3 and ~8e-3 on a multicolor+<torus>+nlr_blr
     # config) and must be freeable under agn={'*': FREE}.

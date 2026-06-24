@@ -232,7 +232,7 @@ Standard documentation updates.
 
 ### Task 9: Multi-population demo notebook
 
-`notebooks/20_multi_population_decomposition.py`: AGN + bulge + disc decomposition, joint MAP fit (or just aperture-fraction demo if SSP data unavailable), comparison to single-pop fit. Shows the recovered bulge and disc stellar masses are degenerate when the spatial profile is ignored but separable when it's modelled.
+`notebooks/20_multi_population_decomposition.py`: AGN + bulge + disc decomposition, joint MAP fit (or just aperture-fraction demo if SSP data unavailable), comparison to single-pop fit. Shows the recovered bulge and disc stellar masses are degenerate when the spatial profile is ignored but separable when it's modeled.
 
 ### Task 10: Self-review + push + PR
 

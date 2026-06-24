@@ -53,7 +53,7 @@ Notes
 [1] CUE (Tacchella+2022) was trained with L_sun = 3.839e33 erg/s (the older
     Bahcall & Soneira 1980 / Allen's Astrophysical Quantities value), not the
     IAU 2015 value 3.828e33.  All CUE outputs are implicitly in that convention,
-    so the un-normalisation step in cue.py must use 3.839e33 to reproduce the
+    so the un-normalization step in cue.py must use 3.839e33 to reproduce the
     correct line fluxes.  Changing it to the IAU value would introduce a 0.3%
     systematic offset in all CUE-predicted line luminosities.
 """

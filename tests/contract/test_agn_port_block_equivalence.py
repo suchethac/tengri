@@ -13,7 +13,7 @@ duplicate works" guarantee for the wire-up/co-locate consolidation (#738) — we
 consolidate nothing until the equivalence is proven and we delete nothing.
 
 Skirtor and the disc/nlr blocks add documented extras on top of the shared
-primitive (polar-dust energy coupling, Type-1/2 masking, l5100 normalisation);
+primitive (polar-dust energy coupling, Type-1/2 masking, l5100 normalization);
 their CIGALE/AGNfitter fidelity is covered by the dedicated parity tests, so
 they are not pure-conversion cases and are excluded here.
 """

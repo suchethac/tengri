@@ -26,7 +26,7 @@ def _bucket_from_declarations(
     4-tuple bucket dict consumed by :func:`_build_param_registry` and by
     :mod:`tengri.parameters.translate`.
 
-    A ``bound_check`` of ``None`` is normalised to ``lambda lo, hi: True``
+    A ``bound_check`` of ``None`` is normalized to ``lambda lo, hi: True``
     so the downstream code that always calls the check stays branch-free.
     """
     return {
@@ -64,7 +64,7 @@ _AGN_EXTRAS: dict = {
 # here to avoid circular imports: ``tengri.components/__init__.py`` eagerly
 # loads every component subpackage, and some transitively re-enter
 # :mod:`tengri.parameters`. Resolving on first access defers the import until
-# this module has finished initialising.
+# this module has finished initializing.
 #
 # Maps legacy bucket name → (component module path, attribute name on that module).
 

@@ -35,7 +35,7 @@ Two notes that matter for getting realistic IR SEDs:
    stellar+dust pipeline and is attenuated by :mod:`tengri.components.dust`.
    This component's ``agn_grahsp_ebv`` is therefore the **AGN baseline
    line-of-sight extinction**, not the galaxy's. To reproduce upstream
-   behaviour, configure ``dust_*`` with the same E(B-V) and an SMC-like
+   behavior, configure ``dust_*`` with the same E(B-V) and an SMC-like
    law (see :func:`tengri.components.dust.attenuation.prevot_smc`).
 2. **The AGN side does not need an explicit re-emission loop.** GRAHSP's
    torus parameters (``fcov``, cool/hot log-Gaussians) already empirically
@@ -194,7 +194,7 @@ class GRAHSPSEDComponent:
     -----
     **JIT-compatible**: yes (``agn_type`` and component toggles are static).
     **Additive**: writes ``sed_intrinsic = sed_intrinsic + L_nu_grahsp``,
-    initialising from zeros if upstream did not.
+    initializing from zeros if upstream did not.
     **Wavelength convention**: tengri uses Å rest-frame; GRAHSP uses nm. The
     adapter performs the unit conversion internally.
     **Output convention**: tengri's ``sed_intrinsic`` is :math:`L_\nu`

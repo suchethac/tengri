@@ -266,7 +266,7 @@ if self._dust_model != "single_component" and (
 Force-precomputing `dust_age_weights` whenever IR re-emission is on
 keeps `_dust_exact=True` for the energy-balance branch, which means
 `dust_age_w` is always defined → `build_hybrid_photometry` no longer
-raises → hybrid kernel is used → SSP flux is summarised to the
+raises → hybrid kernel is used → SSP flux is summarized to the
 200-wave coarse grid (2.1 MB) rather than baked in at 11149 waves
 (114.5 MB).
 
@@ -292,7 +292,7 @@ when `dust_emission="draine_li2007"`. These were *masked* by the
 silent compositional fallback before; my fix exposes them. Dale 2014
 and THEMIS pass cleanly; only DL07 has the discrepancy. Tracking as
 a separate numerical-accuracy issue — unrelated to compile-time
-behaviour.
+behavior.
 
 ### Phase II-2 fix (focused, landed 2026-05-03)
 

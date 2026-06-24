@@ -40,7 +40,7 @@ already running Claude Code, browsers, and other JAX processes.
 
 ```bash
 ps -axo pid,rss,user,command | grep -i 'python' | grep -v ipykernel | sort -k2 -nr | head
-# Kill anything you don't recognise:
+# Kill anything you don't recognize:
 kill -9 <pid>
 ```
 
@@ -56,7 +56,7 @@ much longer to compile, third fit either OOMs or thrashes swap.
 **Cause.** NUTS warmup compiles a dense-mass-matrix vmap that pulls
 the entire `predict_photometry` (and `predict_spectrum`) graph into a
 nested `vmap(vmap(...))`. The peak compile-time RSS for one fit on
-the dale2014 + nebular pipeline is ~4 GB. The JIT cache amortises the
+the dale2014 + nebular pipeline is ~4 GB. The JIT cache amortizes the
 *next* call but not the next *trace*: a different `Observation` object
 or different `n_warmup` invalidates the cache, so each fit re-pays
 the compile cost.

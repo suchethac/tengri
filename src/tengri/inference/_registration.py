@@ -19,7 +19,7 @@ Adding a new backend
 2. Add an entry below: ``register_backend("X", tier="experimental",
    short_doc=..., legacy_fitter=False)(run_X)``.
 3. Add a conformance smoke in ``tests/unit/inference/`` (the
-   parametrised suite in ``test_backend_conformance.py`` will pick it
+   parametrized suite in ``test_backend_conformance.py`` will pick it
    up automatically).
 
 See ADR-0010 for the full Protocol contract.

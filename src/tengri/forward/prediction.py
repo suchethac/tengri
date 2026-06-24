@@ -257,13 +257,13 @@ class SEDQuantities(NamedTuple):
 
 
 class EmissionLines(NamedTuple):
-    """Emission line luminosities — headline survey lines plus the full backend catalogue.
+    """Emission line luminosities — headline survey lines plus the full backend catalog.
 
     NaN for the headline fields and empty arrays for ``all_*`` when no
     nebular model is active. For doublets ([O II], C IV) the headline
     fields sum both components.
 
-    The full ~271-line Cue catalogue (and equivalent grids for CloudyGrid)
+    The full ~271-line Cue catalog (and equivalent grids for CloudyGrid)
     is exposed via :attr:`all_waves` / :attr:`all_lums` so users can read
     species the headline NamedTuple does not name explicitly (HeII 1640,
     HeI 10830, NIII] 1750, [O III] 4363, etc.). See :meth:`get` for the
@@ -296,7 +296,7 @@ class EmissionLines(NamedTuple):
     all_waves : jnp.ndarray, shape ``(n_lines,)``
         Vacuum rest-frame wavelengths of every species published by the
         active nebular backend [Angstrom]. Empty when the backend does
-        not expose a discrete catalogue (BakedIn, shock).
+        not expose a discrete catalog (BakedIn, shock).
     all_lums : jnp.ndarray, shape ``(n_lines,)``
         Luminosities at ``all_waves``, in the same dust regime as the
         headline fields (i.e. attenuated by the active dust model when
@@ -326,7 +326,7 @@ class EmissionLines(NamedTuple):
         # BPT diagram
         bpt_x = float(lines.nii_6584 / lines.halpha)
         bpt_y = float(lines.oiii_5007 / lines.hbeta)
-        # Access lines outside the headline catalogue via nearest-wavelength
+        # Access lines outside the headline catalog via nearest-wavelength
         heii_1640 = lines.get(1640.42)  # closest match in ``all_waves``
     """
 
@@ -352,7 +352,7 @@ class EmissionLines(NamedTuple):
         wavelength : float
             Rest-frame vacuum wavelength to look up [Angstrom].
         tol_aa : float, optional
-            Acceptable distance to the nearest catalogued line [Angstrom].
+            Acceptable distance to the nearest cataloged line [Angstrom].
             Returns ``nan`` if the nearest line is further than this. Default 2.0.
 
         Returns
@@ -360,7 +360,7 @@ class EmissionLines(NamedTuple):
         jnp.ndarray
             Luminosity at the matched line [Lsun], or ``nan`` if no line
             is within ``tol_aa``. Returns ``nan`` if the active backend
-            did not publish a discrete catalogue.
+            did not publish a discrete catalog.
         """
         if self.all_waves.size == 0:
             return jnp.asarray(jnp.nan)
@@ -1832,14 +1832,14 @@ class Prediction:
     def _ensure_lines(self):
         """Compute and cache nebular emission line luminosities.
 
-        Reads the discrete catalogue published by
+        Reads the discrete catalog published by
         :class:`~tengri.components.nebular.component.NebularSEDComponent`
         (``state.derived["line_waves"]`` / ``["line_lums"]``). Matches
         legacy-path luminosities within numerical tolerance for both
         Cue and CloudyGrid backends.
 
         Issues a one-time :class:`UserWarning` when the active backend
-        doesn't expose a per-line luminosity catalogue (BakedIn / Shock).
+        doesn't expose a per-line luminosity catalog (BakedIn / Shock).
         Without the warning, ``pred.lines.halpha`` etc. silently return
         NaN — see #361.
         """
@@ -1855,7 +1855,7 @@ class Prediction:
             backend_name = type(backend).__name__ if backend is not None else "None"
             warnings.warn(
                 f"Nebular backend {backend_name!r} does not publish a "
-                "per-line luminosity catalogue, so pred.lines.halpha, "
+                "per-line luminosity catalog, so pred.lines.halpha, "
                 ".hbeta, .bpt_nii, etc. will return NaN. To get discrete "
                 "line luminosities, rebuild the model with neb={'type': "
                 "'cue'}, 'cloudy', or 'cb19' (each requires a "
@@ -1869,10 +1869,10 @@ class Prediction:
             self._cache["q_h_total"] = jnp.array(jnp.nan)
             return
 
-        # Pull the catalogue from the orchestrator's NebularSEDComponent
+        # Pull the catalog from the orchestrator's NebularSEDComponent
         # publication. BakedIn / Shock backends won't publish it; fall
-        # back to all-NaN for those (matches the legacy "no catalogue"
-        # behaviour without raising).
+        # back to all-NaN for those (matches the legacy "no catalog"
+        # behavior without raising).
         state = model.predict_state(self._params)
         derived = state.derived
         if "line_waves" in derived and "line_lums" in derived:
@@ -1901,7 +1901,7 @@ class Prediction:
             young_weights = jnp.asarray(weights_orch)[young_idx]
 
             def _qh_one_bin(log_age_i, w_i):
-                """Ionising photon production rate for one age bin."""
+                """Ionizing photon production rate for one age bin."""
                 return w_i * backend._get_qh_at(log_z, log_age_i)
 
             import jax

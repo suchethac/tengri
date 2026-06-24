@@ -112,8 +112,8 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
 )
 def test_dust_ir_optical_reddest_band_not_inflated(filters):
     """Second #622 bug: an *all-optical* filter set has no far-IR band to anchor
-    the IR-template normalisation, so the original ``_em_fn(filter_eff, L_ir)``
-    call renormalised L_ir over a handful of optical pivots and inflated the
+    the IR-template normalization, so the original ``_em_fn(filter_eff, L_ir)``
+    call renormalized L_ir over a handful of optical pivots and inflated the
     reddest band by ~4× (293% on ``sdss_z``). The failure was order-dependent —
     fine when the red band was alone or first, broken when it followed another —
     because a single pivot integrates to 0 (silently zeroing the band) while two
@@ -121,7 +121,7 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
 
     Dust IR re-emission is negligible (≈0) across an optical bandpass, so every
     band must match the exact path. The fix samples the dense, correctly
-    normalised ``sed_ir`` at the pivots via ``jnp.interp`` instead.
+    normalized ``sed_ir`` at the pivots via ``jnp.interp`` instead.
     """
     import warnings
 
@@ -151,7 +151,7 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
     pe = np.asarray(m_exact.predict_photometry({}))
     pl = np.asarray(m_lut.predict_photometry({}))
     rel = np.abs(pl - pe) / np.maximum(np.abs(pe), 1e-30)
-    # 5% generously covers the known blue effective-wavelength dust-factorisation
+    # 5% generously covers the known blue effective-wavelength dust-factorization
     # residual (worst case u-band ≈ 2.4% at tau_diff=0.5) while still catching the
     # regression by 60× — the inflated reddest band was 290%+.
     assert rel.max() < 0.05, (

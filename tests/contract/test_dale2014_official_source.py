@@ -26,11 +26,11 @@ pytestmark = pytest.mark.contract
 
 TEMPLATE_PATH = pathlib.Path(__file__).parents[2] / "data" / "dale2014_templates.h5"
 
-# Reference values are the L_ν templates after normalisation to ∫dν=1,
+# Reference values are the L_ν templates after normalization to ∫dν=1,
 # read off the regenerated file at the listed (α=2.0, λ) points. They
 # correspond directly to ``10**col / ν`` from spectra.0.00AGN.dat / ∫dν,
 # so the figures below are paper-traceable up to the per-template
-# bolometric normalisation.
+# bolometric normalization.
 _ALPHA_2P0_REFERENCE: tuple[tuple[float, float], ...] = (
     (1.0000e05, 2.003867e-15),  # 10 μm, MIR PAH region
     (9.0000e05, 1.586395e-13),  # 90 μm, near the FIR peak

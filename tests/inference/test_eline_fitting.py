@@ -415,13 +415,13 @@ class TestFittedMode:
         better (lower chi2) than Fitter with zero amplitudes when an Hα feature
         is present in the spectrum.
 
-        Uses a fine wavelength grid centred on Hα (0.3 Å/pix) so the line
+        Uses a fine wavelength grid centered on Hα (0.3 Å/pix) so the line
         profile is well-sampled even at R=2000 (σ≈1.4 Å).
         """
         from tengri.inference.fitter import Fitter
         from tengri.utils.transforms import to_unbounded
 
-        # Fine grid centred on Hα: 0.3 Å/pix → line well-sampled at R=2000
+        # Fine grid centered on Hα: 0.3 Å/pix → line well-sampled at R=2000
         wave = jnp.linspace(6500.0, 6630.0, 440)
         cat = LineList.default_13()
         cfg = Spectroscopy(

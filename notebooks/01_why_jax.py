@@ -126,7 +126,7 @@ def neg_log_post(log_sfr, tau):
     return 0.5 * chi2  # uniform priors → χ²/2 = -ln posterior up to const
 
 
-# Sequentialise: vmap-of-vmap of the orchestrator state pytree
+# Sequentialize: vmap-of-vmap of the orchestrator state pytree
 # explodes memory (n_age × n_wave × n_grid). Plain JIT'd scalar
 # calls reuse one set of buffers and stay well under a GB.
 neg_log_post_jit = jax.jit(neg_log_post)

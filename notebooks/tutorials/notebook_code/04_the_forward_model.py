@@ -99,9 +99,9 @@ for i, (aidx, label) in enumerate(zip(ages_idx, age_labels)):
 # Annotate features
 for feat_name, feat_wave in SPECTRAL_FEATURES.items():
     if 1000 < feat_wave < 10000:
-        ax.axvline(feat_wave, color="grey", ls=":", lw=0.3, alpha=0.5)
+        ax.axvline(feat_wave, color="gray", ls=":", lw=0.3, alpha=0.5)
         ax.text(feat_wave, ax.get_ylim()[1] * 0.9, feat_name,
-                fontsize=5, ha="center", rotation=90, color="grey")
+                fontsize=5, ha="center", rotation=90, color="gray")
 
 ax.set_xlabel("Rest-frame wavelength [Å]")
 ax.set_ylabel("Normalized flux")
@@ -214,7 +214,7 @@ ages_myr = 10**ages_log_dust / 1e6
 # Sigmoid transition: w(t) = 1 / (1 + exp((log10(t) - 7) / 0.3))
 w = 1.0 / (1.0 + np.exp((ages_log_dust - 7.0) / 0.3))
 ax_trans.plot(ages_myr, w, color=COLORS["sfh_mean"], lw=1.5)
-ax_trans.axvline(10, color="grey", ls="--", lw=0.8, label="10 Myr")
+ax_trans.axvline(10, color="gray", ls="--", lw=0.8, label="10 Myr")
 ax_trans.set_xlabel("Age [Myr]")
 ax_trans.set_ylabel("Birth cloud weight w(t)")
 ax_trans.set_xscale("log")

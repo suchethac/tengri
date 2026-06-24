@@ -174,7 +174,7 @@ Three rules baked into the Protocol docstring (`context.py:9-24`):
   is no longer mixed with `Fitter` class methods.
 - Adding a backend is one file (the adapter) + one entry in
   `_registration.py`. No edit to `fitter.py`.
-- The parametrised conformance suite
+- The parametrized conformance suite
   (`tests/unit/inference/test_backend_conformance.py`) iterates every
   registered backend automatically — new entries are tested without
   test-file edits.
@@ -214,13 +214,13 @@ Three rules baked into the Protocol docstring (`context.py:9-24`):
 - `src/tengri/inference/backends/{evidence,map_dispatch,mcmc/*,vi/*}.py`
   — the migrated adapters. Canonical reference for new backends:
   `backends/map_dispatch.py` (smallest, simplest).
-- `tests/unit/inference/test_backend_conformance.py` — parametrised
+- `tests/unit/inference/test_backend_conformance.py` — parametrized
   contract suite.
 
 ## References
 
 - ADR-0004 (`0004-kernel-strategy-module.md`) — the forward-model
-  analogue this design copies, including the "build failures
+  analog this design copies, including the "build failures
   surface explicitly" rule and the Python-only orchestration
   constraint.
 - `docs/dev/api_migration_v0.x.md` — user-facing migration notes

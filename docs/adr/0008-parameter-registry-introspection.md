@@ -1,4 +1,4 @@
-# ADR-0008: Parameter registry — introspection over de-facto decentralisation
+# ADR-0008: Parameter registry — introspection over de-facto decentralization
 
 > Originally numbered ADR-0005 when authored on 2026-05-18 in PR #34;
 > renumbered to 0008 by PR #40 (`docs(adr): renumber to restore
@@ -13,8 +13,8 @@
 ## Context
 
 Free-parameter declarations are scattered across the codebase in a way
-that has, by accident or design, *already* decentralised most of what
-the original planner brief asked us to centralise. Specifically:
+that has, by accident or design, *already* decentralized most of what
+the original planner brief asked us to centralize. Specifically:
 
 - Every physics module under `tengri/components/` ships its own
   `_params.py` exporting one or more
@@ -32,8 +32,8 @@ the original planner brief asked us to centralise. Specifically:
 
 The original ADR-0005 plan (in `~/.claude/plans/witty-singing-garden.md`,
 Appendix #1) recommended "promote `_param_defs.py` to *the* registry."
-That framing is stale: the decentralisation it asked us to set up has
-already happened, and re-centralising would be a regression. What's
+That framing is stale: the decentralization it asked us to set up has
+already happened, and re-centralizing would be a regression. What's
 *actually* missing is a programmatic way to introspect the existing
 distributed registry — exactly what
 `feedback_self_describing_apis` (the user's "expose menus as callable
@@ -138,16 +138,16 @@ contract layers.
 3. **Recipe-level introspection.** "What params does
    `star_forming_photometry()` use?" still requires
    instantiating the model. A future enhancement could
-   parametrise the registry over a recipe / SEDModel config,
+   parametrize the registry over a recipe / SEDModel config,
    answering "which subset of the flat registry would land?"
    without instantiating SSP-data-bound objects.
 
 ## Alternatives considered
 
-- **Re-centralise to `_param_defs.py`.** The original brief.
+- **Re-centralize to `_param_defs.py`.** The original brief.
   Rejected because it would reverse a substantial completed
   refactor and offer no real benefit — parameters are already
-  "centralised" via the aggregator's existing role.
+  "centralized" via the aggregator's existing role.
 - **Generate a `REGISTRY.md` file at build time.** Rejected
   per `feedback_self_describing_apis`: hand-or-build-time
   documentation rots; callable Python doesn't.

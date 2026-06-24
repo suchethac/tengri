@@ -100,7 +100,7 @@ model = SEDModel.build(
 ### Positive
 
 - **Closes three open issues without touching `SEDModelComponent`** — the screen subclass is purely additive.
-- **The composability gap is named and locked.** Future "law applied to upstream SED" requests (e.g. patchy IGM at high-z, polarisation screens) inherit the slot grammar.
+- **The composability gap is named and locked.** Future "law applied to upstream SED" requests (e.g. patchy IGM at high-z, polarization screens) inherit the slot grammar.
 - **Self-describing** — `list_screens()` / `describe_screen("tbabs")` fits the same introspection surface as #310 proposes for AGN models and recipes.
 
 ### Negative
@@ -113,7 +113,7 @@ model = SEDModel.build(
 
 - `MilkyWay` and `MWExtinction` dust-model variants stay as deprecated aliases, with `DeprecationWarning` pointing at `foreground={'type': 'mw', ...}`.
 - `XRayAird` gets a new optional `screen={}` slot; existing models without it are unchanged.
-- AGN composer gains a `torus_screens_disc` flag, default `False` (preserves current behaviour).
+- AGN composer gains a `torus_screens_disc` flag, default `False` (preserves current behavior).
 
 ## Implementation phasing
 

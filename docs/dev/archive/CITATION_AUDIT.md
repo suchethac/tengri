@@ -56,7 +56,7 @@ These 40 references appear in tengri's docstrings with DOI or arXiv identifiers 
 | P. Behroozi, "The Ray Tracing Sampler," arXiv:2504.20029 (20... | 2504.20029 | fitter.py | needs_lookup |
 | A. K. Inoue et al., "An updated analytic model for attenuati... | 10.1093/mnras/stu936 | sed_model.py | needs_lookup |
 | A. K. Inoue, I. Shimizu, I. Iwata, and M. Tanaka, "An update... | 10.1093/mnras/stu936 | igm.py | needs_lookup |
-| M. Stalevski et al., "3D radiative transfer modelling of the... | 10.1111/j.1365-2966.2011.19775.x | skirtor.py | needs_lookup |
+| M. Stalevski et al., "3D radiative transfer modeling of the... | 10.1111/j.1365-2966.2011.19775.x | skirtor.py | needs_lookup |
 | M. Stalevski et al., "The dust covering factor in AGN — comb... | 1602.01954 | skirtor.py | needs_lookup |
 | M. Stalevski et al., "The dust covering factor in AGN," MNRA... | 1602.01954 | skirtor.py | needs_lookup |
 | M. A. Vanden Berk et al., "The SDSS Quasar Catalog," AJ, 122... | 10.1086/321167 | blr.py | needs_lookup |
@@ -246,7 +246,7 @@ These 23 references appear in tengri's code without sufficient metadata to verif
    → BibTeX key: `A_2019`  
    → File: polar_dust.py
 
-34. **I. E. Lopez et al., "Modelling the X-ray emission of AGN in CIGALE and applicati**  
+34. **I. E. Lopez et al., "Modeling the X-ray emission of AGN in CIGALE and applicati**  
    → BibTeX key: `Li_2024`  
    → File: disc_cigale.py
 
@@ -350,7 +350,7 @@ These 23 references appear in tengri's code without sufficient metadata to verif
    → BibTeX key: `Allen_2008`  
    → File: shock.py
 
-60. **R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modelling of AGN Heati**  
+60. **R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modeling of AGN Heati**  
    → BibTeX key: `Sutherland_2017`  
    → File: shock.py
 
@@ -512,7 +512,7 @@ These 23 references appear in tengri's code without sufficient metadata to verif
    → Hint: DOI:10.1093/mnras/stu936  
    → File: igm.py
 
-4. **M. Stalevski et al., "3D radiative transfer modelling of the dusty torus around **  
+4. **M. Stalevski et al., "3D radiative transfer modeling of the dusty torus around **  
    → Hint: DOI:10.1111/j.1365-2966.2011.19775.x  
    → File: skirtor.py
 
@@ -652,7 +652,7 @@ These 23 references appear in tengri's code without sufficient metadata to verif
    → Hint: arXiv:2601.07912  
    → File: psd_models.py
 
-39. **N. Caplar and S. Tacchella, "Stochastic modelling of star-formation histories I:**  
+39. **N. Caplar and S. Tacchella, "Stochastic modeling of star-formation histories I:**  
    → Hint: arXiv:1901.07556 | DOI:10.1093/mnras/stz1449  
    → File: psd_models.py
 

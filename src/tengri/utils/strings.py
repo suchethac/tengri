@@ -4,7 +4,7 @@
 The Levenshtein primitive here is the standard dynamic-programming edit
 distance — used to power "Did you mean: <closest>?" suggestions in
 ``forward/orchestrator.py`` and ``parameters/registry.py``. Keep both
-suggestion sites pointed at this single primitive so their behaviour
+suggestion sites pointed at this single primitive so their behavior
 stays in lockstep.
 """
 

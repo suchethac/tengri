@@ -3,7 +3,7 @@
 
 Models the mixing of ionizing photon-powered emission from two gas components:
 dense HII regions and diffuse ionized gas (DIG). DIG is low-density ionized gas
-between HII regions, characterised by lower ionization parameter (log U ~ −4 vs
+between HII regions, characterized by lower ionization parameter (log U ~ −4 vs
 −2.5 in HII regions). This produces a distinct emission-line signature: enhanced
 low-ionization diagnostics ([NII]/Hα, [SII]/Hα, [OI]/Hα).
 
@@ -88,7 +88,7 @@ def mix_dig_emission(
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives, but note
     that when neb_dig_frac is a traced JAX value, both HII and DIG forward
-    passes execute (no short-circuit optimisation).
+    passes execute (no short-circuit optimization).
 
     **Mixing model** (Haffner et al. 2009, Tacchella et al. 2022):
         The diffuse ionized gas (DIG) has a lower ionization parameter than
@@ -105,10 +105,10 @@ def mix_dig_emission(
         same metallicity, escape fraction, and stellar population weights.
 
     **Physical picture**:
-        - **HII regions**: dense, photoionised by young (< 1 Myr) OB stars.
+        - **HII regions**: dense, photoionized by young (< 1 Myr) OB stars.
           Log U ~ −2.5 to −3. Dominated by recombination lines ([OIII], [SIII],
           etc.).
-        - **DIG**: diffuse, warm (~8000 K), ionised by stellar radiation and
+        - **DIG**: diffuse, warm (~8000 K), ionized by stellar radiation and
           shocks. Log U ~ −3 to −4. Dominated by forbidden lines ([NII], [SII],
           [OI]).
 

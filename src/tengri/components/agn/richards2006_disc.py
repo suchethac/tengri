@@ -4,11 +4,11 @@ r"""Richards+2006 mean Type-1 quasar SED template.
 Empirical big blue bump (BBB) from 259 Type-1 SDSS quasars
 (Richards et al. 2006, ApJ 166, 470). The template covers
 ~30 Å (soft X-ray) through ~30 cm (radio); tengri loads it
-without normalisation and rescales at the bolometric anchor.
+without normalization and rescales at the bolometric anchor.
 
 This is an alternative empirical disc choice alongside
 ``qsogen`` (Temple+2021, narrower wavelength range, different
-power-law parameterisation) and the physical multicolor /
+power-law parameterization) and the physical multicolor /
 Kubota-Done 2018 discs.
 
 References
@@ -49,12 +49,12 @@ RICHARDS2006_WAVE_AA, RICHARDS2006_NU_FNU = _load_template()
 
 # Pre-compute L_nu shape: nu·F_nu / nu = F_nu, then proportional to L_nu.
 # We treat the shipped column as nu·F_nu (arbitrary scale) and divide by nu
-# to get the F_nu shape, since SED-fitting outputs are normalised at the
+# to get the F_nu shape, since SED-fitting outputs are normalized at the
 # bolometric anchor downstream.
 _C_AA_PER_S = 2.99792458e18
 _RICHARDS2006_NU_HZ = _C_AA_PER_S / RICHARDS2006_WAVE_AA
 _RICHARDS2006_LNU_SHAPE = RICHARDS2006_NU_FNU / _RICHARDS2006_NU_HZ
-# Integrate L_nu shape over frequency for bolometric normalisation
+# Integrate L_nu shape over frequency for bolometric normalization
 _idx_sort = jnp.argsort(_RICHARDS2006_NU_HZ)
 _RICHARDS2006_BOL_INTEGRAL = float(
     jnp.trapezoid(

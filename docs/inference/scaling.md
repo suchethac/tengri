@@ -3,7 +3,7 @@
 How `PopulationFitter`'s pure-JAX variational engines —
 `native_vi_linear` (MGVI) and `native_vi_nonlinear` (geoVI) — scale in
 **wall time**, **peak memory**, **convergence**, and **hyperparameter
-recovery** as the catalogue size $N$ and the forward-chunk size $K$ change.
+recovery** as the catalog size $N$ and the forward-chunk size $K$ change.
 
 The data is produced once by
 

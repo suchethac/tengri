@@ -2,9 +2,9 @@
 Non-Parametric Continuity Prior: 200 Sample Draws
 ===================================================
 
-The continuity prior (Leja+2019) penalises sharp transitions in adjacent-bin
+The continuity prior (Leja+2019) penalizes sharp transitions in adjacent-bin
 log-SFR ratios with a Student-t distribution (mu=0, sigma=0.3, df=2). This
-visualisation shows 200 independent draws from the registry default prior,
+visualization shows 200 independent draws from the registry default prior,
 displayed as percentile bands (5th, 25th, 50th, 75th, 95th) versus lookback
 time.
 

@@ -7,7 +7,7 @@
 The refactor in #398.e factored ``compute_flux_density`` into two
 canonical pieces: filter-integration of rest-frame L_ν, and the
 ``lnu_to_fnu`` flux conversion. The identity test pins that
-composition so future "optimisations" don't silently break
+composition so future "optimizations" don't silently break
 ``_phot_lnu_precomp`` consumers (AGN, nebular, stellar precomputes).
 """
 

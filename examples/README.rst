@@ -6,9 +6,9 @@ workflows, and end-to-end use cases. Each card below links to a per-script
 page with the rendered figure, the full source, and a downloadable Jupyter
 notebook.
 
-**Browse by category.** Cards are organised into sections — quickstart and
+**Browse by category.** Cards are organized into sections — quickstart and
 workflows for end-to-end recipes, physics components for one-knob sweeps,
-inference for fitter behaviour, and use cases for paper-style figures.
+inference for fitter behavior, and use cases for paper-style figures.
 
 How to run an example locally
 -----------------------------

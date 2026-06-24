@@ -4,7 +4,7 @@
 Guards that ``dust={'slope_bc': ...}`` (and friends) actually reach the forward
 model — i.e. the builder -> spec -> SEDModel -> factory -> DustSEDComponent
 chain is not a silent no-op — and that defaults reproduce the original
-single-slope Charlot & Fall behaviour. Also checks the symmetric law-inheritance
+single-slope Charlot & Fall behavior. Also checks the symmetric law-inheritance
 rule (set one law -> both components share it).
 
 Uses the synthetic SSP + top-hat fixtures so it runs in default CI.

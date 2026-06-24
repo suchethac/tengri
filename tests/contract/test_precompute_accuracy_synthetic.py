@@ -74,7 +74,7 @@ def synthetic_ssp():
 
 
 def _tophat(center_aa: float, frac_width: float = 0.18, n: int = 48):
-    """A synthetic top-hat filter (FilterCurve) centred at ``center_aa`` [Å]."""
+    """A synthetic top-hat filter (FilterCurve) centered at ``center_aa`` [Å]."""
     from tengri.observation.photometry import FilterCurve
 
     lo, hi = center_aa * (1.0 - frac_width), center_aa * (1.0 + frac_width)
@@ -137,7 +137,7 @@ def test_waveprecomp_matches_exact_with_dust_emission(synthetic_ssp, centers):
     """#629: with dust IR emission active, every optical band must match the
     exact path. Pre-fix the reddest band in a sorted set was ~4× too high
     (additive emission sampled at the effective wavelength, where the
-    self-normalising model blew up). Now it is filter-integrated → exact."""
+    self-normalizing model blew up). Now it is filter-integrated → exact."""
     filters = [_tophat(c) for c in centers]
     m_exact = _build(synthetic_ssp, filters, None, emission="modified_blackbody")
     m_lut = _build(synthetic_ssp, filters, _WP(), emission="modified_blackbody")

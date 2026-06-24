@@ -555,7 +555,7 @@ class TestSfh2Exp:
         # Reconstruct the burst mass fraction by differencing against f_burst=0.
         sfr_f = self._sfr(f_burst=0.25)
         sfr_0 = self._sfr(f_burst=0.0)
-        # The excess mass over the no-burst case, normalised, approximates the
+        # The excess mass over the no-burst case, normalized, approximates the
         # burst fraction to within grid resolution.
         excess = float(jnp.trapezoid(jnp.maximum(sfr_f - sfr_0, 0.0), t)) / total
         assert 0.1 < excess < 0.4  # ~0.25, broadened for grid + overlap

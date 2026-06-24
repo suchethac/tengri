@@ -3,7 +3,7 @@
 
 A dusty torus obscures the AGN central engine (disc + broad/narrow lines +
 FeII) along edge-on (Type-2) sightlines, while its own IR emission is not
-re-extinguished by that screen. These tests pin the screen's behaviour:
+re-extinguished by that screen. These tests pin the screen's behavior:
 
 * face-on (Type-1) sightlines see ~unit transmission — so a default-inclination
   model is unchanged (the screen is opt-in via inclination, never a silent

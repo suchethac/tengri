@@ -13,7 +13,7 @@ pytestmark = pytest.mark.regression_bug
 class TestBug29MstarSurvivingMass:
     """sed_pipeline.py:753 — XRB must use surviving stellar mass, not formed mass.
 
-    Lehmer+2010 / Mineo+2012 XRB calibrations are normalised to surviving
+    Lehmer+2010 / Mineo+2012 XRB calibrations are normalized to surviving
     stellar mass (living stars + remnants). Using total formed mass overestimates
     XRB L_X by ~30-50% for old stellar populations.
 

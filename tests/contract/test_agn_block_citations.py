@@ -31,8 +31,8 @@ class TestAGNBlockCitations:
         # Explicitly allowed blocks with no canonical reference
         _GENERIC_NO_CITATION = {
             ("disc", "powerlaw"),  # Phenomenological single-slope power-law
-            ("torus", "simple"),  # Phenomenological single-temperature greybody
-            ("torus", "two_temperature"),  # Phenomenological two-temperature greybody
+            ("torus", "simple"),  # Phenomenological single-temperature graybody
+            ("torus", "two_temperature"),  # Phenomenological two-temperature graybody
         }
 
         missing_citations = []

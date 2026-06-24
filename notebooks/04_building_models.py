@@ -934,7 +934,7 @@ ax_balance.bar(
     linewidth=0.6,
 )
 ax_balance.axhline(y=1.0, color=C_DATA, ls="--", lw=1.0, label="energy balance (=1)", zorder=3)
-ax_balance.set_ylabel(r"$L_{\rm IR}$  (normalised)")
+ax_balance.set_ylabel(r"$L_{\rm IR}$  (normalized)")
 ax_balance.set_xticks(range(len(dust_emissions)))
 ax_balance.set_xticklabels(dust_emissions, rotation=20, ha="right", fontsize=8)
 ax_balance.set_ylim(0.8, 1.2)

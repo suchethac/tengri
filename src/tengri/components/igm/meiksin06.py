@@ -46,7 +46,7 @@ _N_TRANS_MAX = 31
 
 _LAMBDA_LIMIT_AA = 912.0  # Lyman limit in Angstrom (CIGALE uses 91.2 nm)
 _GAMMA = 0.2788  # incomplete gamma(0.5, 1) -- the Meiksin paper's Gamma(2-beta, 1)
-_N0 = 0.25  # LLS normalisation
+_N0 = 0.25  # LLS normalization
 
 
 def _term2() -> float:
@@ -84,7 +84,7 @@ def igm_transmission_meiksin06(
     -----
     **JIT-compatible**: yes -- pure ``jnp`` operations, no Python
     control flow except the ``z <= 4`` vs ``z > 4`` branch on the
-    Lyman-alpha normalisation (kept as a ``jnp.where`` so the function
+    Lyman-alpha normalization (kept as a ``jnp.where`` so the function
     is also vmap/grad safe).
 
     **Convention**: ``wave_obs`` is **observed-frame** wavelength,
@@ -113,7 +113,7 @@ def igm_transmission_meiksin06(
 
     References
     ----------
-    .. [1] A. Meiksin, "Colour corrections for high-redshift objects
+    .. [1] A. Meiksin, "Color corrections for high-redshift objects
        due to intergalactic absorption," MNRAS, 365, 807 (2006).
        https://doi.org/10.1111/j.1365-2966.2005.09663.x
     """
@@ -197,7 +197,7 @@ def igm_transmission_meiksin06(
     )
 
     # ── 4. Short-wavelength tail (z_l < 0): damped by (z_l + 1)^2.75 ─
-    # Normalise at z_l = 0 (boundary).
+    # Normalize at z_l = 0 (boundary).
     boundary = wavelength_nm > 0  # placeholder mask; we evaluate the
     # boundary value of the LLS/IGM continuum at z_l = 0, i.e.
     # wave_obs = lambda_limit Angstrom.

@@ -34,7 +34,7 @@ class _RegistryTable(list):
     """A `list[dict]` that prints as a column-aligned table.
 
     Behaves identically to a list otherwise — indexing, iteration,
-    JSON serialisation, etc. all work as usual.
+    JSON serialization, etc. all work as usual.
     """
 
     _PREFERRED_COLS = (
@@ -192,7 +192,7 @@ class _RegistryTable(list):
 
 
 class _DescribeRecord(dict):
-    """A `dict` that prints as a labelled block. Plain dict otherwise."""
+    """A `dict` that prints as a labeled block. Plain dict otherwise."""
 
     def __repr__(self) -> str:
         if not self:
@@ -239,7 +239,7 @@ class _DescribeRecord(dict):
 
 
 # ──────────────────────────────────────────────────────────────────
-# Internal entry-normalisation
+# Internal entry-normalization
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -1042,7 +1042,7 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
         Narrow to one survey/instrument family (case-insensitive).  Smart
         about the SVO-vs-astronomer-speak mismatch: ``survey="SDSS"``
         finds the ``SLOAN_SDSS_*`` rows even though SDSS is technically
-        the *instrument* in SVO's filename schema.  Other recognised
+        the *instrument* in SVO's filename schema.  Other recognized
         astronomer aliases: ``DES``/``DECam`` → CTIO/DECam,
         ``VISTA`` → Paranal/VISTA, ``HSC`` → Subaru/HSC,
         ``UKIDSS`` → UKIRT/UKIDSS, ``PS1`` → PAN-STARRS/PS1.
@@ -1207,7 +1207,7 @@ def describe(name: str) -> _DescribeRecord:
     Returns
     -------
     _DescribeRecord
-        Metadata dict; prints as a labelled block.
+        Metadata dict; prints as a labeled block.
 
     Raises
     ------
@@ -1326,7 +1326,7 @@ def describe_recipe(name: str) -> _DescribeRecord:
         known = sorted(_recipes.__all__)
         raise KeyError(f"Unknown recipe '{name}'. Known recipes: {known}")
     doc = inspect.getdoc(fn) or ""
-    # Materialise the recipe dict so users can see the actual selectors.
+    # Materialize the recipe dict so users can see the actual selectors.
     try:
         recipe_dict = fn()
         component_keys = sorted(k for k in recipe_dict if not k.startswith("_"))
@@ -1822,7 +1822,7 @@ def help(topic: str | None = None) -> None:
     Parameters
     ----------
     topic : str, optional
-        If given, narrow the cheatsheet to one menu. Recognised topics:
+        If given, narrow the cheatsheet to one menu. Recognized topics:
         ``"agn"``, ``"dust"``, ``"sfh"``, ``"nebular"``, ``"components"``,
         ``"inference"``, ``"filters"``. Without a topic the full
         cheatsheet is printed.

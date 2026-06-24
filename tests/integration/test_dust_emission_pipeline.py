@@ -137,7 +137,7 @@ def test_closed_loop_chain_runs():
 def test_emitted_luminosity_integral_matches_l_ir():
     """∫ sed_dust_ir dν ≈ L_ir to within 1%.
 
-    The modified-blackbody normalisation is a JAX trapezoid in
+    The modified-blackbody normalization is a JAX trapezoid in
     frequency; our attenuation L_ir uses the same trapezoid scheme.
     They should agree to numerical-integration precision.
     """

@@ -28,7 +28,7 @@ class Likelihood(Protocol):
     Concrete implementations:
 
     - ``GaussianLikelihood`` — independent Gaussian errors
-      (chi-squared + log-normalisation).
+      (chi-squared + log-normalization).
     - ``StudentTLikelihood`` — heavy-tailed alternative for outlier
       tolerance.
     - ``GPLikelihood`` — Gaussian-process correlated noise on
@@ -49,7 +49,7 @@ class Likelihood(Protocol):
     log_prob(prediction, data, noise_params) -> scalar
         Pure JAX. Returns the log-likelihood. Sign convention: a
         higher number means a better fit. Inference backends typically
-        minimise the negative.
+        minimize the negative.
 
     declared_parameters() -> list[str]
         Parameter name strings the likelihood owns (noise floors,

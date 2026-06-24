@@ -368,7 +368,7 @@ Frequency grid convention: `16.685 ≈ log10(nu)` marks the 200 eV boundary
 above which X-ray power-law replaces the BBB continuum; `4.83598e17 Hz` is
 2 keV; X-ray cutoff at `7.254e19 Hz` (~300 keV) is hard-coded.
 
-### Finding 3 — Component sum and normalisation
+### Finding 3 — Component sum and normalization
 
 AGNfitter's predicted total, per `PARAMETERSPACE_AGNfitter.ymodel`:
 
@@ -380,17 +380,17 @@ L_nu_total(nu, z) = 10^GA · GALAXY_reddened(nu, E(B-V)_gal)
                   + 10^RAD · AGN_RAD(nu)    (optional)
 ```
 
-`GA, SB, BB, TO, RAD` are log-space multiplicative normalisation free
+`GA, SB, BB, TO, RAD` are log-space multiplicative normalization free
 parameters with hardcoded uniform priors on **[-10, +10]** (clamped to
 `-9.8` when `turn_on_AGN=False`). The per-component template
-re-normalisation factors in `renorm_template` (`TO /= 1e-40`, `BB /= 1e60`,
+re-normalization factors in `renorm_template` (`TO /= 1e-40`, `BB /= 1e60`,
 `GA /= 1e18`, `SB /= 1e20`, `AGN_RAD *= 1e-30`) are **numerical conditioning
 for emcee**, not physics — they are absorbed by the norm free params.
 Takeaway: for tengri the Silva+04 / CAT3D grid values should be divided
 by these conditioners at build time so the downstream `agn_torus_frac` /
-`agn_log_lbol` normalisation semantics match what AGNfitter fitters report.
+`agn_log_lbol` normalization semantics match what AGNfitter fitters report.
 
-### Finding 4 — Grid lookup is nearest-neighbour, not interpolated
+### Finding 4 — Grid lookup is nearest-neighbor, not interpolated
 
 In `DICTIONARIES_AGNfitter.get_model.pick_nD`, every `par_type == 'grid'`
 parameter picks the closest grid value via `np.abs(grid - mcmc_value).argmin()`.
@@ -470,7 +470,7 @@ Prevot for the AGN disc is a small gap** — worth adding a Prevot branch to
 - KD18 / SN12 / SKIRTOR / NK08 discs and tori — tengri has differentiable
   analytic or precomputed equivalents.
 - emcee / ultranest inference — tengri's HMC / NUTS / geoVI stack is
-  gradient-based and does not admit nearest-neighbour grid lookup.
+  gradient-based and does not admit nearest-neighbor grid lookup.
 - BC03 galaxy templates, DH02/CE01 starburst — tengri uses DSPS + DL07.
 - `corner.py`, `triangle.py`, `PLOTandWRITE_AGNfitter.py` — tengri has
   its own plotting stack.
@@ -488,7 +488,7 @@ same exponential aging). AGNfitter hand-tunes grids of (`alpha1`, `alpha2`,
 `nu_t`, `E_cutoff`); tengri exposes these continuously and
 differentiably. **Status: verified parity; tengri is a continuous
 superset.** The single-PL (`nRADdata==1`) and blazar-cutoff (`SPL`)
-branches reduce to specialisations of `radio_agn` / `radio_agn_dpl` with
+branches reduce to specializations of `radio_agn` / `radio_agn_dpl` with
 defaults pinned. No port needed.
 
 **qsogen (Temple+21) vs `BBB/THB21.pickle`:**
@@ -502,13 +502,13 @@ Temple+21 parametric model — 7 continuous parameters (``plslp1``,
 Baldwin effect (`slope = 0.183`) and 4 emission-line templates
 (median / peaky / windy / narrow). **Status: tengri is a strict superset
 of AGNfitter's THB21.** No port needed; the Phase-4 audit envisaged in the
-original plan is closed in tengri's favour.
+original plan is closed in tengri's favor.
 
 **KD18 disc (`BBB/KD18.pickle` vs `components/agn/disc.py::kubota_done_disc`):**
 AGNfitter stores a pre-tabulated AGNSED run on a (`logBHmass`, `logEddra`)
-grid and does nearest-neighbour lookup (see Finding 4). Tengri integrates
+grid and does nearest-neighbor lookup (see Finding 4). Tengri integrates
 the 3-zone Kubota & Done (2018) disc analytically from SS73 + GR ISCO +
-warm Comptonisation on every forward call. Both compute the same physical
+warm Comptonization on every forward call. Both compute the same physical
 model; numerical agreement depends on shared assumptions about the hard-
 corona Γ, `kt_warm`, `kt_hot`, and `r_warm_ratio`. **Status: same model,
 different numerics.** A real cross-validation would fit a tengri SEDModel
@@ -532,12 +532,12 @@ averaged over the same axes AGNfitter averaged out, recover the
 
 **Gaps confirmed as real (all are Phase-2+ port targets):**
 
-- **Silva+04 smooth torus** — no tengri analogue. **Ported in Phase 2**
+- **Silva+04 smooth torus** — no tengri analog. **Ported in Phase 2**
   (`components/agn/silva04.py` + `data/silva04_torus_grid.h5` via
   `scripts/build_silva04_grid.py`). Verified via
   `tests/unit/components/agn/test_silva04.py` (8/8 pass).
-- **CAT3D-Wind torus** — no tengri analogue. Phase 3 target.
-- **Nenkova+08 CLUMPY torus** (`NK0_mean_*P.pickle`) — no tengri analogue
+- **CAT3D-Wind torus** — no tengri analog. Phase 3 target.
+- **Nenkova+08 CLUMPY torus** (`NK0_mean_*P.pickle`) — no tengri analog
   by design (non-differentiable template stack). Do not port unless the
   user explicitly revises the design philosophy.
 - **SN12 α-disc** — tengri's SS73 `standard` disc covers the same physics

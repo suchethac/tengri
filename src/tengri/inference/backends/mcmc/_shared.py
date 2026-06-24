@@ -383,7 +383,7 @@ def _dynamic_hmc_full_scan(
     """Outer JIT: HMC warmup + dynamic HMC init + sampling chain.
 
     Uses HMC window adaptation to tune step size and mass matrix, then
-    initialises a dynamic HMC state inside the same JIT so the kernel is
+    initializes a dynamic HMC state inside the same JIT so the kernel is
     compiled once. Burnin discard is done by the caller Python-side, so
     changing ``n_burnin`` while keeping ``n_chain`` constant does not
     trigger recompilation.
@@ -524,7 +524,7 @@ def _ghmc_full_scan(
     warmup_key : PRNGKey
         Random key for HMC window adaptation.
     ghmc_init_key : PRNGKey (traced)
-        Random key for ``ghmc.init`` momentum initialisation.
+        Random key for ``ghmc.init`` momentum initialization.
     chain_keys : ndarray, shape (n_chain, 2)
         Pre-split keys; caller slices ``[n_burnin:]`` Python-side.
     logdensity_fn_2arg : callable (static)

@@ -2,11 +2,11 @@
 """Pin the absolute amplitude of AGN disc reddening.
 
 Regression test for the convention introduced when prevot_smc was
-normalised to k(V)=1 (commit 7de0cef). The legacy formula
+normalized to k(V)=1 (commit 7de0cef). The legacy formula
 ``10^(-0.4 * k * agn_ebv_disc)`` worked correctly when prevot_smc
-returned the unnormalised k(λ) = A(λ)/E(B-V) (so k(V) ≈ 2.475).
+returned the unnormalized k(λ) = A(λ)/E(B-V) (so k(V) ≈ 2.475).
 
-After normalisation to k(V) = 1, the same formula instead treats
+After normalization to k(V) = 1, the same formula instead treats
 ``agn_ebv_disc`` as A(V), not E(B-V). The user-facing parameter is
 named ``agn_ebv_disc`` and documented as E(B-V), so the formula
 must restore the R_V multiplier to keep the parameter's semantics.

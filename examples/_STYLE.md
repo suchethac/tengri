@@ -24,7 +24,7 @@ style**: one knob varied per figure, one physical effect made obvious, no chrome
 ## Figure recipe (sweep scripts — the majority)
 
 A sweep script varies **one** physical parameter across a small grid (5–9 values)
-and shows the resulting SEDs on a single axis, coloured by the swept value.
+and shows the resulting SEDs on a single axis, colored by the swept value.
 
 ```
 fig, ax = plt.subplots(figsize=(6.5, 4.2))
@@ -46,7 +46,7 @@ Defaults to enforce:
 - `loglog` for full-spectrum sweeps; `semilogy` for narrow ranges.
 - Colorbar label includes units in brackets, e.g. `r"$\tau_V$ [mag]"`,
   `r"$\alpha_{\rm IR}$"`, `r"$\log U$"`.
-- `lw=1.4`, `viridis` (sequential) or `coolwarm` (signed/centred), nothing else.
+- `lw=1.4`, `viridis` (sequential) or `coolwarm` (signed/centered), nothing else.
 - One legend OR one colorbar — never both.
 
 ## Figure recipe (fit / workflow scripts)

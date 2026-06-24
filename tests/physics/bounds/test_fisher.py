@@ -3,7 +3,7 @@
 
 Tests cover the pure-math functions (no forward model required):
 - fisher_parameter_errors: marginal uncertainties from FIM inverse
-- fisher_correlation_matrix: normalised covariance in [-1, 1]
+- fisher_correlation_matrix: normalized covariance in [-1, 1]
 
 compute_jacobian and compute_fisher_matrix require a forward-model instance and
 are not tested here (integration-level concern).

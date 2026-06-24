@@ -2,7 +2,7 @@
 """Single-screen dust components redden the nebular continuum.
 
 The two-component :class:`DustSEDComponent` was fixed in #668/#690 to redden the
-photoionised ``sed_nebular`` continuum with the young-limit birth-cloud + diffuse
+photoionized ``sed_nebular`` continuum with the young-limit birth-cloud + diffuse
 screen. The two *single-screen* siblings —
 :class:`~tengri.components.dust.component.DustAttenuationSEDComponent`
 (``dust_model="single_component"``) and

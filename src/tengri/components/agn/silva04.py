@@ -14,7 +14,7 @@ Templates are ported from AGNfitter (Calistro Rivera et al. 2016) — see
 ascending-wavelength [Å] and common-grid, then emits ``silva04_torus_grid.h5``.
 This runtime module only consumes the HDF5, not the pickle.
 
-Runtime normalisation
+Runtime normalization
 ---------------------
 The stored template is *shape-only*.  At runtime, :func:`create_silva04_from_grid`
 divides by the trapezoidal integral over frequency and multiplies by
@@ -116,7 +116,7 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     # (e.g. via ``@functools.cache`` on ``_load_silva04_default``) and we
     # convert to JAX here, any ``jnp`` ops on those arrays — including
     # ``edges_for_grid`` — produce Tracers that the returned closure
-    # captures. The cache then immortalises a poisoned closure, leaking
+    # captures. The cache then immortalizes a poisoned closure, leaking
     # tracers as ``UnexpectedTracerError`` on subsequent out-of-trace
     # calls. ``jnp.asarray`` of a numpy array inside the closure body is
     # safe in either context: a DeviceArray when called eagerly, a JIT

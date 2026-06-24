@@ -75,7 +75,7 @@ End-to-end tests exercising all components with numerical assertions:
 ### 7. New crossval tests (`test_numerical_sed_crossval.py`, 11 tests)
 
 Absolute numerical validation against published values:
-- SSP normalisation: V-band L_nu/M* in physical range, quenched dimmer than star-forming
+- SSP normalization: V-band L_nu/M* in physical range, quenched dimmer than star-forming
 - Metal-poor bluer than solar (UV/V ratio)
 - Dust: A_V = 1.09 mag at tau_diff=1.0, UV attenuation >> NIR
 - Kennicutt UV-SFR calibration: SFR from L_UV within factor 2

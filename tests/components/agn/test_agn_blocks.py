@@ -153,7 +153,7 @@ def _grahsp_params():
 
     - ``compute_grahsp_sed`` (monolithic): rescales l5100 so the total
       AGN-side bolometric integral matches ``10**agn_log_lbol * L_sun``.
-    - ``composable_agn_l_nu`` (block runner): each block self-normalises
+    - ``composable_agn_l_nu`` (block runner): each block self-normalizes
       from its own params, with no post-hoc bolometric coupling.
 
     Setting ``agn_grahsp_l5100`` directly bypasses both the monolithic
@@ -217,7 +217,7 @@ def test_all_grahsp_recipe_matches_compute_grahsp_sed():
 
 
 def test_mix_grahsp_disc_with_simple_torus():
-    """GRAHSP BBB + simple greybody torus + SMC atten — runs and is finite."""
+    """GRAHSP BBB + simple graybody torus + SMC atten — runs and is finite."""
     wave_aa = jnp.logspace(2, 6, 400)
     out = composable_agn_l_nu(
         wave_aa,

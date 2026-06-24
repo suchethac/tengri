@@ -34,7 +34,7 @@ def _cigale_disc_lambda(
         One of :func:`skirtor_disk_spectrum`,
         :func:`schartmann2005_disk_spectrum`, or
         :func:`adaf_disk_spectrum`. Takes ``(wave_nm, delta)`` and returns
-        a dimensionless spectrum normalised so its integral over the
+        a dimensionless spectrum normalized so its integral over the
         nm axis equals one.
     delta : float
         CIGALE ``delta`` slope/blend modulator.
@@ -46,9 +46,9 @@ def _cigale_disc_lambda(
     """
     wave_aa = jnp.asarray(wavelength_aa)
     wave_nm = wave_aa / 10.0
-    # Unit-normalised spectrum on the nm grid (integral over nm = 1).
+    # Unit-normalized spectrum on the nm grid (integral over nm = 1).
     s_per_nm = spectrum_per_nm_fn(wave_nm, delta=delta)
-    # Convert to a unit-normalised density on the Å grid (÷10).
+    # Convert to a unit-normalized density on the Å grid (÷10).
     s_per_aa = s_per_nm / 10.0
     L_bol_erg = (10.0**agn_log_lbol) * _L_SUN_ERG
     return s_per_aa * L_bol_erg

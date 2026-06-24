@@ -21,7 +21,7 @@
 # nebular gas turns Lyman photons into lines and a Balmer continuum;
 # birth clouds and the diffuse ISM attenuate the UV and re-radiate in
 # the infrared; AGN add a disc + torus + narrow-line region; thermal
-# free-free and synchrotron close out the radio; corona Comptonisation
+# free-free and synchrotron close out the radio; corona Comptonization
 # produces the X-ray power-law; and the IGM eats the FUV at high z.
 #
 # Tengri composes all of this from one nested-dict specification. The
@@ -130,7 +130,7 @@ obs = Observation(photometry=Photometry.from_names(filters))
 # ## The kitchen-sink model
 #
 # DPL star-formation history; two-component Calzetti attenuation; Dale
-# 2014 dust IR emission; Cue nebular continuum + lines; multicolour disc
+# 2014 dust IR emission; Cue nebular continuum + lines; multicolor disc
 # + SKIRTOR torus + narrow-line region AGN; radio (free-free +
 # synchrotron, with the SFR–L_1.4GHz scaling); X-ray (Lusso & Risaliti
 # 2017 from L_2500); Inoue 2014 IGM at z = 2. Every parameter pinned at
@@ -313,7 +313,7 @@ def predict_rest(m, p):
 fig, axes = plt.subplots(2, 2, figsize=(11, 7.4), constrained_layout=True)
 
 
-# (a) SFH shape — three canonical SFHs, mass-normalised
+# (a) SFH shape — three canonical SFHs, mass-normalized
 ax = axes[0, 0]
 for label, sfh_dict, color in [
     ("exponential", builders.sfh.exp(defaults=FIXED), "#d97a3a"),
@@ -354,7 +354,7 @@ ax.set_title("Birth-cloud optical depth")
 ax.legend(frameon=False, fontsize=9, ncol=2)
 
 # (c) AGN bolometric luminosity sweep
-# Lightweight AGN (multicolour disc + Nenkova torus): five rebuilds of
+# Lightweight AGN (multicolor disc + Nenkova torus): five rebuilds of
 # the kitchen-sink model with SKIRTOR is far too heavy. The Nenkova
 # torus is a cheap analytic stand-in for the visual story.
 # ``log_lbol`` is log10(L_bol / Lsun), so 10–11 spans a Seyfert to a
@@ -428,15 +428,15 @@ print(model_edited.summary())
 #   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`.
 # - **Dust emission.** Dale 2014 / Draine–Li / THEMIS templates
 #   re-radiate `L_ir` from 8 to 1000 µm.
-# - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionised
-#   continuum + 128 emission lines from `nion` and ionisation conditions.
-# - **AGN.** Disc (multicolour / Kubota–Done / ADAF / power-law) +
+# - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionized
+#   continuum + 128 emission lines from `nion` and ionization conditions.
+# - **AGN.** Disc (multicolor / Kubota–Done / ADAF / power-law) +
 #   torus (SKIRTOR / Nenkova / CAT3D / Silva04 / toy) + NLR (Cue) +
 #   BLR (qsogen).
 # - **Radio.** Free-free + synchrotron from the IR–radio correlation
 #   plus an AGN power-law if a disc is present.
 # - **X-ray.** Lusso & Risaliti 2017 L_2500 → L_2keV with optional
-#   ADAF / Comptonisation refinements.
+#   ADAF / Comptonization refinements.
 # - **IGM.** Inoue 2014 Lyman-alpha forest opacity at z > 0.
 
 # %% [markdown]
@@ -538,7 +538,7 @@ sed_xray_obsc = np.asarray(
     xray_total(wave_aa, sfr=_sfr, stellar_mass=_mstar, l_2500_30deg=_l2500, log_nh=23.0)
 )
 
-# (sed, label, colour, linestyle, linewidth) — drawn back-to-front.
+# (sed, label, color, linestyle, linewidth) — drawn back-to-front.
 CURVES = [
     (sed_stars, "Stars (intrinsic, no dust)", "0.55", "--", 1.1),
     (_comp("sed_nebular"), "Nebular (Cue: continuum + lines)", "#19b3c4", "-", 1.0),

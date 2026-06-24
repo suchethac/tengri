@@ -5,7 +5,7 @@ Dust geometry shapes the extinction: screen vs mixed vs clumpy
 Three dust geometries—foreground screen (power-law), mixed slab (Calzetti),
 and clumpy two-phase (SMC)—proxy different physical arrangements via their
 attenuation laws. At fixed τ_V = 1, geometry controls the spectral shape:
-screens are reddest, clumpy geometries are greyest. Transmission curves show
+screens are reddest, clumpy geometries are grayest. Transmission curves show
 how each law transforms a stellar continuum.
 
 Reference: Witt & Gordon 2000, ApJ, 528, 799 (dust geometry classification).
@@ -43,7 +43,7 @@ for (label, k), color in zip(geometries.items(), colors):
     ax.plot(wave / 1e4, np.exp(-tau_v * np.array(k)), lw=1.4, color=color, label=label)
 
 ax.axhline(1.0, ls="--", color="black", lw=0.8, alpha=0.3)
-ax.axvline(0.55, ls=":", color="grey", lw=0.8, alpha=0.5)
+ax.axvline(0.55, ls=":", color="gray", lw=0.8, alpha=0.5)
 
 ax.set_xlim(0.08, 1.0)
 ax.set_ylim(0, 1.1)

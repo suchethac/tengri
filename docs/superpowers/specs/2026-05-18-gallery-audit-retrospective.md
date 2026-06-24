@@ -110,7 +110,7 @@ instead of the 30-line setup it used to carry.
 
 Pre-audit total was ~17 800 lines (roll-up of the per-PR diffs). Net
 reduction ≈ **2.6 k lines, 13 %**, while expanding `dust/` into two
-better-organised sections (`dust_attenuation`, `dust_emission`) and
+better-organized sections (`dust_attenuation`, `dust_emission`) and
 adding the four library helpers.
 
 ## Drift from the original plan

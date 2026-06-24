@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for the introspection registry over per-component ``_params.py``.
 
-Covers the shape of :class:`ParameterRecord`, the cache behaviour of
+Covers the shape of :class:`ParameterRecord`, the cache behavior of
 :func:`registry`, the filtering of :func:`list_parameters`, and the
 "Did you mean" hint of :func:`describe_parameter`.
 

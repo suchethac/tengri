@@ -4,7 +4,7 @@
 """Shared helpers for building config-dict factory callables.
 
 Each ``tengri.builders.<component>`` module uses :func:`make_factory` to
-synthesise one callable per variant. The helpers here keep the per-module
+synthesize one callable per variant. The helpers here keep the per-module
 files focused on *what* varies (variant list, prefix, short-name rule);
 signature and docstring attachment lives here.
 
@@ -140,7 +140,7 @@ def make_factory(
     lines.append(
         "    Wildcard policy for parameters not explicitly named. ``FREE`` "
         "makes them fit; ``FIXED`` (default) pins them to their registry "
-        "centre. Mirrors the ``'*'`` key in the dict grammar."
+        "center. Mirrors the ``'*'`` key in the dict grammar."
     )
     for flag in bool_flags:
         lines.append(f"{flag} : bool, optional")

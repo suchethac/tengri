@@ -5,7 +5,7 @@ The Prévot (1984) SMC law is applied to the disc-component of every
 registered disc+torus AGN model via :func:`tengri.components.agn.unified._redden_disc`.
 These tests verify:
 
-* ``agn_ebv_disc=0.0`` is a no-op (previous behaviour preserved).
+* ``agn_ebv_disc=0.0`` is a no-op (previous behavior preserved).
 * Positive ``agn_ebv_disc`` reduces UV flux relative to IR flux (the
   Prévot law vanishes in the IR).
 * Gradients flow through the new parameter.

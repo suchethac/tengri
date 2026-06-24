@@ -17,7 +17,7 @@ screen is C¹ in ``cos_inc`` (gradient-safe for inference); face-on (Type 1)
 sightlines get unit transmission, so a default-inclination model is unchanged.
 
 The wavelength dependence uses the torus equatorial V-band optical depth
-``tau_v`` and an SMC (default) or Calzetti reddening curve, normalised at V
+``tau_v`` and an SMC (default) or Calzetti reddening curve, normalized at V
 (5500 Å): :math:`\tau(\lambda) = \tau_V\,k(\lambda)/k(V)`.
 """
 

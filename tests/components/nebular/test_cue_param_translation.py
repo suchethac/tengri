@@ -37,7 +37,7 @@ class TestIdentityMapPropagation:
 
     def _make_spec_stub(self):
         """Minimal spec stub with get_distribution always raising KeyError so the
-        free-param fallback isn't exercised; we only test recognised pass-through."""
+        free-param fallback isn't exercised; we only test recognized pass-through."""
 
         class _Stub:
             def get_distribution(self, name):
@@ -49,7 +49,7 @@ class TestIdentityMapPropagation:
         pm = _identity_pm(["gas_logno"])
         params = {"gas_logno": 0.7}
         with warnings.catch_warnings():
-            warnings.simplefilter("error")  # unrecognised-name warning would fail here
+            warnings.simplefilter("error")  # unrecognized-name warning would fail here
             internal = get_internal_params(params, pm, self._make_spec_stub(), has_field=False)
         assert internal["gas_logno"] == pytest.approx(0.7)
 

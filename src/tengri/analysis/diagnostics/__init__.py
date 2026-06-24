@@ -45,7 +45,7 @@ from tengri.analysis.diagnostics.saliency import (
 from tengri.analysis.diagnostics.spectral import (
     dn4000,
     irx,
-    rest_frame_colour,
+    rest_frame_color,
     rest_frame_luminosity,
     uv_slope_beta,
 )
@@ -72,7 +72,7 @@ __all__ = [
     "fisher_parameter_errors",
     "integrate_lnu_over_band",
     "irx",
-    "rest_frame_colour",
+    "rest_frame_color",
     "rest_frame_luminosity",
     "uv_slope_beta",
 ]

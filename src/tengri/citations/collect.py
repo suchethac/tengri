@@ -235,7 +235,7 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
 
     # SSP provenance: SPS code + isochrone + spectral library + IMF, inferred
     # from the grid filename tokens (warns if the library/atmosphere is
-    # unrecognisable).
+    # unrecognizable).
     ssp = getattr(obj, "ssp_data", None) or getattr(getattr(obj, "model", None), "ssp_data", None)
     if ssp is not None:
         keys.extend(_ssp_provenance_keys(ssp))

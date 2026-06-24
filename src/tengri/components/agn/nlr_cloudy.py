@@ -91,7 +91,7 @@ def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
     Returns
     -------
     FeltreNLRBackend
-        Initialised backend, ready for ``predict_agn_nlr_lines`` calls.
+        Initialized backend, ready for ``predict_agn_nlr_lines`` calls.
 
     Raises
     ------
@@ -121,7 +121,7 @@ def get_synthesizer_nlr_backend(grid_path: str) -> SynthesizerNLRBackend:
     Returns
     -------
     SynthesizerNLRBackend
-        Initialised backend.
+        Initialized backend.
     """
     global _SYNTHESIZER_BACKEND
     if _SYNTHESIZER_BACKEND is None or _SYNTHESIZER_BACKEND.grid_path != grid_path:
@@ -145,7 +145,7 @@ def get_synthesizer_blr_backend(grid_path: str) -> SynthesizerBLRBackend:
     Returns
     -------
     SynthesizerBLRBackend
-        Initialised backend.
+        Initialized backend.
     """
     global _SYNTHESIZER_BLR_BACKEND
     if _SYNTHESIZER_BLR_BACKEND is None or _SYNTHESIZER_BLR_BACKEND.grid_path != grid_path:
@@ -162,7 +162,7 @@ def _lines_to_lnu(
     r"""Convolve discrete line luminosities into a continuous :math:`L_\nu`.
 
     Each line contributes ``line_lum × gaussian_line_profile(wave, λ_c,
-    fwhm_kms)``, where the Gaussian is per-Hz-normalised so the spectral
+    fwhm_kms)``, where the Gaussian is per-Hz-normalized so the spectral
     integral over frequency returns ``line_lum`` in erg/s.
 
     Parameters
@@ -218,25 +218,25 @@ def compute_nlr_sed_feltre(
     l_disc_bol_erg : float
         AGN disc bolometric luminosity [erg/s]. The Feltre grid is
         driven by Q_H, derived from ``covering_fraction × l_disc_bol_erg``
-        via the ionising-spectrum mean photon energy.
+        via the ionizing-spectrum mean photon energy.
     covering_fraction : float, optional
         NLR covering factor. Default 0.1.
     fwhm_kms : float, optional
         NLR line FWHM [km/s]. Default 500.
     alpha_pl : float, optional
-        AGN ionising power-law slope :math:`f_\nu \propto \nu^{\alpha}`.
-        Feltre grid discretises α ∈ {−2.0, −1.7, −1.4, −1.2}; the backend
+        AGN ionizing power-law slope :math:`f_\nu \propto \nu^{\alpha}`.
+        Feltre grid discretizes α ∈ {−2.0, −1.7, −1.4, −1.2}; the backend
         snaps to the nearest grid point. Default −1.7.
     neb_logU : float, optional
-        :math:`\log_{10}(U)` gas ionisation parameter. Default −2.0.
+        :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
     neb_logn : float, optional
         :math:`\log_{10}(n_H/\mathrm{cm}^{-3})` gas density. Feltre grid
-        discretises log n_H ∈ {2, 3, 4}. Default 3.0 (typical NLR).
+        discretizes log n_H ∈ {2, 3, 4}. Default 3.0 (typical NLR).
     neb_logZ_gas : float, optional
         :math:`\log_{10}(Z_{\rm gas})` absolute gas metallicity. Default
         −1.8477 = :math:`\log_{10}(Z_\odot)`.
     xi_d : float, optional
-        Dust-to-metal ratio. Feltre discretises ξ_d ∈ {0.1, 0.3, 0.5};
+        Dust-to-metal ratio. Feltre discretizes ξ_d ∈ {0.1, 0.3, 0.5};
         snaps to nearest. Default 0.3.
     grid_path : str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses tengri's default
@@ -253,13 +253,13 @@ def compute_nlr_sed_feltre(
 
     Notes
     -----
-    **Not JIT-compatible at the closure level**: backend initialisation
+    **Not JIT-compatible at the closure level**: backend initialization
     loads HDF5. The numerical core (``predict_agn_nlr_lines`` + Gaussian
     convolution) IS JIT-safe — call it inside a wrapping ``jax.jit`` and
     the backend object stays as a Python-level closure.
 
     The Feltre+2016 grid covers narrow-line emission only (n_H ≤ 10⁴
-    cm⁻³). For BLR-density photoionisation use the analytic BLR template
+    cm⁻³). For BLR-density photoionization use the analytic BLR template
     in :mod:`tengri.components.agn.blr` — there is no Feltre BLR grid.
 
     References
@@ -268,7 +268,7 @@ def compute_nlr_sed_feltre(
     """
     backend = get_feltre_backend(grid_path)
 
-    # Intercepted accretion luminosity → log10(Q_H ionising photon rate)
+    # Intercepted accretion luminosity → log10(Q_H ionizing photon rate)
     l_acc_erg = covering_fraction * l_disc_bol_erg
     log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl)
 
@@ -309,9 +309,9 @@ def compute_nlr_sed_synthesizer(
 ) -> jnp.ndarray:
     r"""Synthesizer CLOUDY-grid AGN NLR adapter for ``unified_nlr_blr``.
 
-    The Synthesizer NLR grid uses the unified-AGN parametrisation
+    The Synthesizer NLR grid uses the unified-AGN parametrization
     (BH mass, Eddington ratio, inclination) plus the standard
-    photoionisation knobs (log U, log Z). Grids are produced by the
+    photoionization knobs (log U, log Z). Grids are produced by the
     Synthesizer ``grid-generation`` repo running CLOUDY c23.01.
 
     Parameters
@@ -319,7 +319,7 @@ def compute_nlr_sed_synthesizer(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
     l_disc_bol_erg : float
-        Disc bolometric luminosity [erg/s]. Used only for Q_H normalisation
+        Disc bolometric luminosity [erg/s]. Used only for Q_H normalization
         via the Synthesizer backend's internal accounting.
     covering_fraction : float, optional
         NLR covering factor. Default 0.1.
@@ -333,7 +333,7 @@ def compute_nlr_sed_synthesizer(
         Synthesizer-specific physical drivers (see
         :class:`SynthesizerNLRBackend.predict_agn_nlr_lines` for details).
     neb_logU, neb_logZ_gas : float
-        Standard photoionisation parameters. Defaults reflect typical
+        Standard photoionization parameters. Defaults reflect typical
         NLR conditions.
     **_kwargs
         Ignored — for ``unified_nlr_blr`` signature compatibility.
@@ -363,7 +363,7 @@ def compute_nlr_sed_synthesizer(
         neb_logU,
         neb_logn,
     )
-    # Map the photoionisation knobs onto the backend's parameter names
+    # Map the photoionization knobs onto the backend's parameter names
     # (log_ionU / log_metallicity / log_nH) — passing the ``neb_*`` aliases lets
     # them fall into ``**_kwargs`` and silently revert to grid defaults.
     line_wave_aa, line_lum_lsun = backend.predict_agn_nlr_lines(
@@ -377,7 +377,7 @@ def compute_nlr_sed_synthesizer(
     )
 
     # Covering fraction scales the observed reprocessed lines (separate from Q_H,
-    # which is the disc's intrinsic ionising output).
+    # which is the disc's intrinsic ionizing output).
     line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S * covering_fraction
     return _lines_to_lnu(
         wavelength,
@@ -398,12 +398,12 @@ def _resolve_log_qh(
     neb_logU,
     neb_logn,
 ):
-    r"""Return log10(Q_H [photons/s]) for the line-luminosity normalisation.
+    r"""Return log10(Q_H [photons/s]) for the line-luminosity normalization.
 
-    With ``use_grid_qh`` (default) the grid's own specific ionising luminosity is
+    With ``use_grid_qh`` (default) the grid's own specific ionizing luminosity is
     used — ``log10(Q_H) = log10(Q_H/L_bol)_grid + log10(L_bol[erg/s]) - 7`` (the
     −7 converts erg/s to W) — so tengri reproduces Synthesizer's own disc-model
-    :math:`Q_H` rather than assuming an ionising-spectrum slope. The legacy path
+    :math:`Q_H` rather than assuming an ionizing-spectrum slope. The legacy path
     derives :math:`Q_H` from the accretion luminosity and an assumed slope.
     """
     if use_grid_qh and getattr(backend.grid, "log_qh_specific", None) is not None:
@@ -444,7 +444,7 @@ def compute_blr_sed_synthesizer(
     wavelength : array, shape (n_wave,)
         Rest-frame wavelength grid [Å].
     l_disc_bol_erg : float
-        Disc bolometric luminosity [erg/s] (used for :math:`Q_H` normalisation
+        Disc bolometric luminosity [erg/s] (used for :math:`Q_H` normalization
         via the backend's internal accounting).
     covering_fraction : float, optional
         BLR covering factor. Default 0.1.
@@ -458,7 +458,7 @@ def compute_blr_sed_synthesizer(
         Synthesizer-specific physical drivers (see
         :meth:`SynthesizerBLRBackend.predict_agn_blr_lines`).
     neb_logU, neb_logZ_gas : float
-        Photoionisation parameters. Defaults reflect denser, more ionised BLR
+        Photoionization parameters. Defaults reflect denser, more ionized BLR
         conditions (``neb_logU = -1`` vs the NLR's ``-2``).
     **_kwargs
         Ignored — for ``unified_nlr_blr`` signature compatibility.
@@ -486,7 +486,7 @@ def compute_blr_sed_synthesizer(
         )
 
     backend = get_synthesizer_blr_backend(grid_path)
-    # Use the grid's own Q_H normalisation (see compute_nlr_sed_synthesizer); the
+    # Use the grid's own Q_H normalization (see compute_nlr_sed_synthesizer); the
     # covering fraction scales the observed lines separately.
     log_qh = _resolve_log_qh(
         backend,
@@ -554,7 +554,7 @@ def compute_nlr_sed_synthesizer_spectra(
     log_bh_mass, log_eddington : float
         Grid drivers (``cosine_inclination`` is held at 0.5 internally).
     neb_logU, neb_logn, neb_logZ_gas : float
-        Photoionisation knobs (log U, log n_H, log Z absolute).
+        Photoionization knobs (log U, log n_H, log Z absolute).
     region : {"nlr", "blr"}, optional
         Which grid (and backend) to read. Default ``"nlr"``.
 

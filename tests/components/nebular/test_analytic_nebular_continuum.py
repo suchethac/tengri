@@ -84,7 +84,7 @@ class TestAnalyticNebularContinuumPhysics:
         The 2s→1s two-photon transition produces pairs of photons that together
         have the energy of one Lyα photon.  Each individual photon therefore has
         LESS than the Lyα energy, meaning λ > 1216 Å.  The spectrum is
-        parameterised as y = ν/ν_Lyα = λ_Lyα/λ ∈ (0, 1), valid only for λ > λ_Lyα.
+        parameterized as y = ν/ν_Lyα = λ_Lyα/λ ∈ (0, 1), valid only for λ > λ_Lyα.
 
         Physical check (Nussbaumer & Schmutz 1984 / OF06 §4.5):
           • At λ < 1216 Å (y > 1): two-photon = 0; only free-free contributes.

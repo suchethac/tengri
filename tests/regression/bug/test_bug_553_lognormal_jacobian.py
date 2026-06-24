@@ -35,7 +35,7 @@ class TestLognormalJacobianFix:
         width = 0.3  # dex
         log_total_mass = 10.0
 
-        # The kernel is a Gaussian in ln(T) centred at mu = ln(peak) + sigma^2
+        # The kernel is a Gaussian in ln(T) centered at mu = ln(peak) + sigma^2
         # (the code's convention places the *mode* at ``peak``), multiplied by
         # the 1/T Jacobian. Sample two points placed symmetrically about mu in
         # ln-space: there the Gaussian weights are equal, so the ONLY thing

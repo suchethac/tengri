@@ -27,7 +27,7 @@ References
 - Nandra & Pounds 1994, MNRAS, 268, 405 (power-law slopes)
 - Done et al. 2012, MNRAS, 420, 1848 (QSOSED)
 - Mahadevan 1997, ApJ, 477, 585 (ADAF spectra)
-- Nemmen et al. 2014, MNRAS, 438, 2804 (ADAF modelling)
+- Nemmen et al. 2014, MNRAS, 438, 2804 (ADAF modeling)
 - Lopez et al. 2024 (ADAF + truncated disc for LLAGN)
 - Beloborodov 1999, ApJ, 510, L123 (self-consistent Gamma_hot)
 """
@@ -371,10 +371,10 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
     where lambda_Edd = L_bol / L_Edd is the Eddington ratio and
     alpha is the Shakura-Sunyaev viscosity parameter (default 0.1).
 
-    The mass normalisation is 10^9 M_sun, matching the canonical qsosed
+    The mass normalization is 10^9 M_sun, matching the canonical qsosed
     implementation (Quera-Bofarull, ``Sed.gravity_radius``):
     ``r_sg = 2150 * mass^{-2/9} * mdot^{4/9} * alpha^{2/9}`` with
-    ``mass = M_BH / 10^9 M_sun``. A prior version normalised by 10^8 M_sun,
+    ``mass = M_BH / 10^9 M_sun``. A prior version normalized by 10^8 M_sun,
     which made r_sg a factor 10^{2/9} ~ 1.67 too small at every mass and
     truncated the coolest outer annuli (deficient near-IR disc tail vs the
     AGNfitter-rX KD18 reference).
@@ -646,10 +646,10 @@ def _hot_corona_lnu(
     kt_hot_erg: float,
     nu_seed_hz: float = 0.0,
 ) -> jnp.ndarray:
-    r"""Hot corona emission: thermal-Comptonisation power law with two cutoffs.
+    r"""Hot corona emission: thermal-Comptonization power law with two cutoffs.
 
     The optically thin, hot corona produces hard X-ray emission via thermal
-    Comptonisation of seed photons. The spectrum is a power law bounded by a
+    Comptonization of seed photons. The spectrum is a power law bounded by a
     high-energy cutoff at the electron temperature *and* a low-energy rollover
     at the seed-photon energy:
 
@@ -669,12 +669,12 @@ def _hot_corona_lnu(
     tail rises monotonically toward low frequency for :math:`\Gamma > 1`, so
     the corona leaks unphysically into the infrared and radio.
 
-    A thermal-Comptonisation spectrum is only defined *between* its seed-photon
-    energy and the electron temperature; there are no Comptonised photons below
+    A thermal-Comptonization spectrum is only defined *between* its seed-photon
+    energy and the electron temperature; there are no Comptonized photons below
     the seed energy (Kubota & Done 2018 [1]_, Section 2.2).
 
-    Normalised so that the frequency-integrated luminosity equals
-    ``l_hot_erg``. The normalisation integral is computed on a fixed internal
+    Normalized so that the frequency-integrated luminosity equals
+    ``l_hot_erg``. The normalization integral is computed on a fixed internal
     frequency grid matching RELAGN's default [1e-4, 1e4] keV, making the result
     independent of the caller's wavelength grid (fixing an earlier bug where
     the corona's optical contribution varied by 2-4x with grid extent).
@@ -711,15 +711,15 @@ def _hot_corona_lnu(
        of AGN and its implications for the UV/X relation and optical
        variability," MNRAS, 480, 1247 (2018). arXiv:1804.00171.
        DOI:10.1093/mnras/sty1890. Section 2.2 (seed photons of the hot flow).
-    .. [2] RELAGN (scotthgn/RELAGN) ``do_nonrelHotCompSpec``: normalises on a
+    .. [2] RELAGN (scotthgn/RELAGN) ``do_nonrelHotCompSpec``: normalizes on a
        fixed [1e-4, 1e4] keV grid.
     """
     kt_safe = jnp.maximum(kt_hot_erg, 1e-30)
 
     def _comp_shape(freq):
-        """Band-limited Comptonisation shape: seed rollover x power law x cutoff.
+        """Band-limited Comptonization shape: seed rollover x power law x cutoff.
 
-        Computed once and reused for both the output grid and the normalisation
+        Computed once and reused for both the output grid and the normalization
         grid so the two can never drift apart.
         """
         freq_safe = jnp.maximum(freq, 1e-30)
@@ -1018,11 +1018,11 @@ def _compute_zone_luminosities(
     gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
 
     # Seed-photon frequency for the hot flow (K&D 2018, Section 2.2): the seed
-    # photons come from the inner edge of the warm Comptonisation region at
+    # photons come from the inner edge of the warm Comptonization region at
     # R_hot, boosted by the warm Compton y-parameter,
     #   kT_seed,hot = k T_NT(R_hot) * exp(y_warm),
     # with y_warm recovered from Gamma_warm via the standard non-relativistic
-    # thermal-Comptonisation relation Gamma = sqrt(9/4 + 4/y) - 1/2
+    # thermal-Comptonization relation Gamma = sqrt(9/4 + 4/y) - 1/2
     # (Sunyaev & Titarchuk 1980), i.e. y_warm = 4 / [(Gamma_warm + 1/2)^2 - 9/4].
     # This sets the low-energy rollover so the corona cannot leak into the IR/radio.
     t_seed_nt = t_warm[0]  # T_NT(R_hot): first (innermost) warm-zone annulus
@@ -1302,7 +1302,7 @@ def kubota_done_disc(
     warm Comptonization is computed via interpolation in precomputed nthcomp
     Kompaneets templates (see ``scripts/build_nthcomp_templates.py``).
     These templates span (Γ_warm, kT_e) parameter space and return
-    (Γ_warm, kT_e, normalisation)-dependent SED at each radius.
+    (Γ_warm, kT_e, normalization)-dependent SED at each radius.
     If templates are unavailable, a simplified modified-blackbody proxy is used,
     which has ~5–10% shape error but allows offline computation.
 

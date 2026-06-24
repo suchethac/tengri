@@ -12,7 +12,7 @@ Available Diagnostics
 - **dn4000**: Balogh et al. (1999) 4000-Å break index
 - **irx**: Infrared excess from dust and FUV luminosity
 - **rest_frame_luminosity**: Synthetic photometry through a filter
-- **rest_frame_colour**: Magnitude difference through two filters
+- **rest_frame_color**: Magnitude difference through two filters
 
 References
 ----------
@@ -398,7 +398,7 @@ def rest_frame_luminosity(
 # ── Rest-frame Color ───────────────────────────────────────────────
 
 
-def rest_frame_colour(
+def rest_frame_color(
     wavelength_aa: jnp.ndarray,
     l_nu: jnp.ndarray,
     filter1_wave_aa: jnp.ndarray,
@@ -406,9 +406,9 @@ def rest_frame_colour(
     filter2_wave_aa: jnp.ndarray,
     filter2_trans: jnp.ndarray,
 ) -> float:
-    r"""Rest-frame colour from two filters (magnitude difference).
+    r"""Rest-frame color from two filters (magnitude difference).
 
-    Computes rest-frame photometric colour as m1 - m2.
+    Computes rest-frame photometric color as m1 - m2.
 
     Parameters
     ----------
@@ -428,13 +428,13 @@ def rest_frame_colour(
     Returns
     -------
     float
-        Colour m1 - m2 (in AB magnitudes). [mag]
+        Color m1 - m2 (in AB magnitudes). [mag]
 
     Notes
     -----
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
-    The colour is computed from the flux ratio:
+    The color is computed from the flux ratio:
 
     .. math::
 
@@ -443,7 +443,7 @@ def rest_frame_colour(
     where f1, f2 are synthetic fluxes through the two filters.
 
     If either flux is zero or negative (due to interpolation artifacts),
-    the colour is set to 0.
+    the color is set to 0.
     """
     l1 = rest_frame_luminosity(wavelength_aa, l_nu, filter1_wave_aa, filter1_trans)
     l2 = rest_frame_luminosity(wavelength_aa, l_nu, filter2_wave_aa, filter2_trans)
@@ -451,10 +451,10 @@ def rest_frame_colour(
     l1_safe = jnp.maximum(l1, 1e-40)
     l2_safe = jnp.maximum(l2, 1e-40)
 
-    colour = -2.5 * jnp.log10(l1_safe / l2_safe)
+    color = -2.5 * jnp.log10(l1_safe / l2_safe)
 
     return jnp.where(
         (l1 > 0.0) & (l2 > 0.0),
-        colour,
+        color,
         0.0,
     )

@@ -56,17 +56,17 @@ AXIS_PARAMS: dict[str, tuple[str, ...]] = {
 }
 
 # Per-model flag: pass ``energy_normalize=True`` to ``preintegrate_grid`` only
-# for templates that are NOT pre-normalised by ∫L_ν dν=1 at load time. The
+# for templates that are NOT pre-normalized by ∫L_ν dν=1 at load time. The
 # four models marked ``False`` already enforce ∫L_ν dν=1 in their loaders
 # (see ``components/dust/emission_templates.py``: load_dale2014_templates ~L612,
 # load_astrodust_templates ~L847, load_bosa_templates ~L1202,
-# load_themis_templates ~L1442) — re-normalising in precompute is an
-# unnecessary round-trip. DL14 has no load-time normalisation and relies on
+# load_themis_templates ~L1442) — re-normalizing in precompute is an
+# unnecessary round-trip. DL14 has no load-time normalization and relies on
 # the precompute-time divide.
 _GENERIC_ENERGY_NORMALIZE: dict[str, bool] = {
     # ``load_dale2014_templates`` returns raw L_λ — the runtime path
-    # ``create_dale2014_from_grid`` normalises per-template at factory
-    # time. The hybrid path normalises in ``preintegrate_grid`` instead.
+    # ``create_dale2014_from_grid`` normalizes per-template at factory
+    # time. The hybrid path normalizes in ``preintegrate_grid`` instead.
     "dale2014": True,
     "draine_li2014": True,
     "astrodust": False,
@@ -131,7 +131,7 @@ def precompute_dl07_photometry(
 
     # Convert templates from L_lambda to L_nu (rest frame). The universal
     # ``preintegrate_grid(energy_normalize=True)`` branch then divides each
-    # template by ∫ L_ν dν, mirroring the exact-path renormalisation in
+    # template by ∫ L_ν dν, mirroring the exact-path renormalization in
     # :func:`tengri.components.dust.emission_templates.create_dl07_from_grid`.
     wave_cm = np.asarray(tmpl_wave) * _AA_TO_CM
     lnu_single_u = np.asarray(single_u) * (wave_cm**2) / _C_CGS
@@ -269,7 +269,7 @@ def build_dl07_photometry_lookup(precomp: dict, grid_arrays: tuple | None = None
 #
 # The Astrodust+PAH (Hensley & Draine 2023) and THEMIS (Jones+2017) loaders
 # return ``single_u`` and ``powerlaw`` arrays of shape (n_q, n_umin, n_wave),
-# pre-normalised to ``∫L_ν dν = 1`` per template at load time. The runtime
+# pre-normalized to ``∫L_ν dν = 1`` per template at load time. The runtime
 # exact path mixes the two via ``j_ν = (1-γ)·single_u + γ·powerlaw`` then
 # scales by ``L_absorbed`` (CMB contrast applied at the wavelength level is
 # omitted from the hybrid path — same approximation as DL07).
@@ -300,16 +300,16 @@ def _precompute_dl07_like_photometry(
     """Shared precompute for DL07-shape models (Astrodust, THEMIS).
 
     The exact runtime path forms ``mix = (1-γ)·single_u + γ·W·powerlaw`` and then
-    renormalises it to ``L_absorbed`` by its own frequency integral. By linearity
+    renormalizes it to ``L_absorbed`` by its own frequency integral. By linearity
     the filter photometry is therefore
     ``L_abs·[(1-γ)·single_phot + γ·power_phot] / [(1-γ)·single_bol + γ·power_bol]``,
-    so we store *both* the (un-normalised) filter photometry and the per-node
+    so we store *both* the (un-normalized) filter photometry and the per-node
     bolometric integral of each component, and bake the PDR luminosity weight
     ``W(U_min)`` into the power-law template here. THEMIS carries its real
     ∫powerlaw/∫single_u ratio in the template itself (``W = 1``); Astrodust /
     DL14 use the analytic DL07 Eq. 33 ``R`` (passed via ``powerlaw_weight``).
 
-    ``energy_normalize`` is intentionally **off** — normalising each template to
+    ``energy_normalize`` is intentionally **off** — normalizing each template to
     unit integral would discard the relative single_u↔powerlaw luminosity that
     the energy balance depends on (the #571/#572/#574 PDR-weight family).
 
@@ -441,7 +441,7 @@ def precompute_astrodust_photometry(
     """Pre-integrate Astrodust+PAH templates (Hensley & Draine 2023).
 
     See :func:`_precompute_dl07_like_photometry`. Free param at runtime is
-    ``dust_qpah``. The power-law (PDR) template is unit-normalised at load time,
+    ``dust_qpah``. The power-law (PDR) template is unit-normalized at load time,
     so its DL07 Eq. 33 luminosity weight ``R(U_min, U_max, α=2)`` is baked in
     here per ``U_min`` (matching the exact runtime path).
     """
@@ -648,8 +648,8 @@ def precompute_dl14_photometry(
 
     DL14 stores ``single_u`` of shape (n_qpah, n_umin, n_wave) and
     ``powerlaw`` of shape (n_qpah, n_umin, n_alpha, n_wave). The runtime
-    exact path renormalises the mixed template by ``∫L_ν dν`` per call;
-    here we pre-normalise each grid point at precompute time.
+    exact path renormalizes the mixed template by ``∫L_ν dν`` per call;
+    here we pre-normalize each grid point at precompute time.
 
     Free params at runtime: ``dust_umin``, ``dust_gamma_dl``, ``dust_qpah``,
     ``dust_alpha_dl14``.
@@ -821,7 +821,7 @@ def precompute_bosa_photometry(
     BOSA's grid is indexed by (log L_TIR, log sSFR) where both axes affect
     template *shape*. Runtime: ``log_ltir = log10(L_absorbed)`` selects the
     L_TIR slice (so it's a derived axis, not free), ``dust_log_ssfr`` is
-    the free parameter, and the resulting normalised template is multiplied
+    the free parameter, and the resulting normalized template is multiplied
     by ``L_absorbed`` for absolute scaling.
     """
     spectra = np.asarray(templates["spectra"])  # (n_ltir, n_ssfr, n_wave)
@@ -898,7 +898,7 @@ def precompute_dale2014_photometry(
 ) -> dict:
     """Pre-integrate Dale+2014 templates through filter curves.
 
-    Dale templates are L_ν, pre-normalised at load (∫L_ν dν=1) per the h5
+    Dale templates are L_ν, pre-normalized at load (∫L_ν dν=1) per the h5
     ``spectra_unit`` attribute. Free param at runtime is ``dust_alpha_dale``.
     """
     spectra = np.asarray(templates["spectra"])  # (n_alpha, n_wave)

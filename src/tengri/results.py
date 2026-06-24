@@ -563,7 +563,7 @@ class FitResult:
 
 
 def posteriors_to_dataframe(results: list, params: list[str] | None = None):
-    """Summarise a list of Posteriors into a pandas DataFrame.
+    """Summarize a list of Posteriors into a pandas DataFrame.
 
     Requires ``pandas`` (``pip install pandas``).
 

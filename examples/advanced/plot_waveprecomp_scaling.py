@@ -14,7 +14,7 @@ We sweep the filter count from 3 to 25 — covering everything from an SDSS
 wall clock for both paths. WavePrecomp is roughly 30× faster across the
 whole range, and the gap is monotone in filter count.
 
-The amortisation panel sums the build + compile cost with the per-call
+The amortization panel sums the build + compile cost with the per-call
 cost across 1 → 10⁴ calls at 12 filters. The LUT path wins on every
 horizon: there is no break-even point at which the exact path is the
 better choice for production use.
@@ -188,7 +188,7 @@ ax_amort.set_xlabel(r"Number of $\mathtt{predict\_photometry}$ calls  ($n_\mathr
 ax_amort.set_ylabel("Total wall time  [s]")
 # Crossover only matters if WavePrecomp's larger build cost is being paid
 # off by faster per-call. If WP is cheaper from the first call there's
-# nothing to amortise — just call it out.
+# nothing to amortize — just call it out.
 if (total_wp < total_exact).all():
     headline = "WavePrecomp wins from the first call"
 else:

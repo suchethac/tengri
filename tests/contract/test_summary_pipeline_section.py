@@ -3,7 +3,7 @@
 
 These tests cover the two new module-level helpers
 (``_safe_call``, ``_component_config_summary``) and the defensive
-behaviour of the Pipeline section when the component chain is
+behavior of the Pipeline section when the component chain is
 unavailable. They use ``unittest.mock`` so they run with no SSP data
 and no JAX compilation cost.
 """
@@ -87,7 +87,7 @@ def test_config_summary_empty_when_no_config():
     assert _component_config_summary(SimpleNamespace()) == ""
 
 
-# ── summary() defensive behaviour ────────────────────────────────────
+# ── summary() defensive behavior ────────────────────────────────────
 
 
 def _minimal_model(*, chain_raises: bool = False, chain=None):

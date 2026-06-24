@@ -823,7 +823,7 @@ class Observation:
         # "component ran on the wave grid but didn't publish a per-filter
         # precompute". They were correct in spirit but broke under
         # ``jax.jit`` tracing (float concretization on traced arrays). The
-        # checks are dropped in favour of trusting the build-time wiring:
+        # checks are dropped in favor of trusting the build-time wiring:
         # when ``approx=WavePrecomp(...)`` is set, the stellar component
         # publishes ``filter_eff_waves`` which downstream dust / nebular
         # components see and use to publish their own precomps. The top-
@@ -847,7 +847,7 @@ class Observation:
         unattenuated_phi = total_phi - dust_attenuable_phi
 
         # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
-        # Factorisation: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
+        # Factorization: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
         # At the filter level, with per-age stellar LUT
         # ``stellar_phot_lnu_per_age_precomp[a, b]``:
         #

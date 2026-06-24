@@ -242,7 +242,7 @@ def _load_mappings_grids() -> dict | None:
             combinations have MAPPINGS V model outputs.  Positions without models
             are stored as NaN in the rectangular HDF5 array.  Replacing NaN with
             0.0 here ensures that triweight interpolation smoothly returns zero
-            emission in unphysical/unmodelled regions rather than propagating NaN.
+            emission in unphysical/unmodeled regions rather than propagating NaN.
             """
             raw = np.asarray(arr[:], dtype=np.float32)
             raw = np.where(np.isnan(raw), 0.0, raw)
@@ -328,7 +328,7 @@ def shock_line_ratios(
     ----------
     .. [1] D. A. Allen et al., "The Distance and Metallicity of the Galaxy M33,"
        ApJS, 178, 20 (2008). https://doi.org/10.1086/589652
-    .. [2] R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modelling
+    .. [2] R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modeling
        of AGN Heating in Starburst and Post-Starburst Galaxies," ApJS, 229, 34
        (2017). https://doi.org/10.3847/1538-4365/aa6541
     .. [3] D. Alarie and C. Morisset, "Synthetic Narrow-Line Emission from a
@@ -462,7 +462,7 @@ def _shock_line_arrays(
     # Halpha key in PyNeb format
     ha_key = "HA_6563A"
     r_ha = ratios.get(ha_key, jnp.array(3.0))
-    # Guard against zero Hα (e.g. query in unmodelled sparse-grid region): when r_ha=0,
+    # Guard against zero Hα (e.g. query in unmodeled sparse-grid region): when r_ha=0,
     # all other ratios are also 0, so dividing by 1.0 still gives zero luminosities.
     r_ha_safe = jnp.where(r_ha > 0.0, r_ha, jnp.ones_like(r_ha))
 

@@ -2,7 +2,7 @@
 Radial metallicity gradients and integrated-light SED
 ======================================================
 
-Spiral galaxies exhibit radial metallicity gradients: metal-rich centres
+Spiral galaxies exhibit radial metallicity gradients: metal-rich centers
 and metal-poor discs (e.g. NGC 891, Searle 1971). three common gradient scenarios—steep positive, flat, and inverted
 depletion—reshape the integrated SED when weighted by disc area.
 
@@ -11,7 +11,7 @@ Right panel: integrated nu*L_nu for each scenario, computed by summing
 SEDs from annular zones weighted by 2*pi*R*dR (exponential disc).
 
 Each annulus uses an identical SFH, varying only stellar metallicity per
-the gradient. The colour shift between gradients illustrates how central
+the gradient. The color shift between gradients illustrates how central
 metal enrichment (stellar line blanketing) affects the integrated UV-optical.
 
 Reference: Searle, L. 1971, ApJ, 168, 327 (radial gradients in galaxies);

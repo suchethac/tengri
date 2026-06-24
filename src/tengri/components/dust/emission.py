@@ -83,7 +83,7 @@ def _find_data_file(filename: str) -> str | None:
     return None
 
 
-# ── Dust emission model catalogue ──────────────────────────────────
+# ── Dust emission model catalog ──────────────────────────────────
 
 DUST_EMISSION_MODELS: dict[str, Callable] = {}
 
@@ -723,7 +723,7 @@ def casey2012(
         dust** (T ≳ 60 K).  For typical cold ISM dust (T = 25–60 K) the Wien
         cutoff exp(-hν/kT) kills the power-law component at 8–40 μm (x ≈ 10–51
         at those wavelengths), so the model produces *less* 8–40 μm flux than a
-        pure MBB normalised to the same L_absorbed.  The 8–40 μm advantage
+        pure MBB normalized to the same L_absorbed.  The 8–40 μm advantage
         described in Casey (2012) applies to warmer starburst / AGN-heated dust
         components where T ≳ 80–100 K.
 
@@ -738,7 +738,7 @@ def casey2012(
 
     Note: Casey (2012, MNRAS 425 3094) Eq. 2 defines the carrier function differently;
     the code's convention has f→1 at short λ (mid-IR) and 1-f→1 at long λ (FIR).
-    The shapes produced are equivalent; only the labelling of f vs (1-f) differs.
+    The shapes produced are equivalent; only the labeling of f vs (1-f) differs.
 
     The empirical turnover wavelength is (Eq. 3, with errata)::
 

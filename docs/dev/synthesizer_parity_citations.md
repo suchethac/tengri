@@ -106,7 +106,7 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 
 ---
 
-## B-NEB — Nebular / photoionisation
+## B-NEB — Nebular / photoionization
 
 | Model | Bibkey | Notes |
 |-------|--------|-------|

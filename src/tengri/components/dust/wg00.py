@@ -9,7 +9,7 @@ differentiable, JIT/vmap-safe *fitted* parameter — matching the SKIRTOR /
 Nenkova / Silva+04 paths.
 
 Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, WG00's curve *shape* depends on
-``τ_V`` (high-τ sightlines self-shield → greyer effective attenuation), so the
+``τ_V`` (high-τ sightlines self-shield → grayer effective attenuation), so the
 full ``A(λ; τ_V)`` table is interpolated directly and applied as ``exp(-A)``.
 
 Data source: Witt & Gordon 2000 (ApJ 528, 799), as reformatted and distributed

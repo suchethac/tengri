@@ -2,7 +2,7 @@
 """Shock nebular emission — SEDModelComponent port.
 
 MAPPINGS V (3MdBs) shock + precursor emission lines on an arbitrary
-wavelength grid. Used to model the line emission from shock-ionised
+wavelength grid. Used to model the line emission from shock-ionized
 gas (AGN narrow-line regions, supernova remnants, galactic outflows).
 """
 
@@ -24,13 +24,13 @@ class ShockNebular(SEDModelComponent):
 
     Places shock + precursor emission lines on the rest-frame wavelength
     grid using the 3MdBs MAPPINGS V grids (Alarie & Morisset 2019).
-    The normalisation is the total Hα luminosity (``l_shock_halpha``),
+    The normalization is the total Hα luminosity (``l_shock_halpha``),
     a flexible free parameter that maps directly to the inferred shock
     energetics.
 
     Cross-component contract
     ------------------------
-    Reads: nothing — shock emission is parameterised directly by its
+    Reads: nothing — shock emission is parameterized directly by its
     own free parameters; SFH coupling (if desired) is left to the user
     via a fixed prior anchored to upstream quantities.
     Publishes: ``L_shock`` — total shock luminosity (erg/s).
@@ -43,7 +43,7 @@ class ShockNebular(SEDModelComponent):
 
     **Component selector**. Set the class-level ``COMPONENT`` constant
     to one of ``"shock"`` (post-shock only), ``"precursor"`` (pre-shock
-    photo-ionisation), or ``"combined"`` (sum). Default is ``"combined"``.
+    photo-ionization), or ``"combined"`` (sum). Default is ``"combined"``.
 
     References
     ----------

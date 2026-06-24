@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-r"""Grey geometric Type-1/Type-2 visibility mask for the composable AGN runner.
+r"""Gray geometric Type-1/Type-2 visibility mask for the composable AGN runner.
 
 A dusty torus hides the accretion disc and broad-line region (the compact
 "central engine") along edge-on sightlines while the spatially-extended
 narrow-line region stays visible at all inclinations. This module provides the
-**grey** (wavelength-independent) visibility mask used by the composable runner
+**gray** (wavelength-independent) visibility mask used by the composable runner
 for torus blocks that do not carry their own wavelength-dependent dusty screen
 (see :mod:`tengri.components.agn.blocks.torus_screen` for that complementary,
 λ-dependent model).
@@ -23,7 +23,7 @@ __all__ = ["sigmoid_visibility_mask", "split_lines_result"]
 
 
 def split_lines_result(result: Array | tuple[Array, Array]) -> tuple[Array, Array]:
-    """Normalise an NLR/BLR block return to ``(anisotropic, isotropic)`` L_lambda.
+    """Normalize an NLR/BLR block return to ``(anisotropic, isotropic)`` L_lambda.
 
     An NLR or BLR block may return either a single ``L_lambda`` array (treated as
     fully anisotropic / maskable — the back-compatible default) or a

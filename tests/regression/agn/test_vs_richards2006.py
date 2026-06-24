@@ -3,7 +3,7 @@
 
 Verifies that ``richards2006_disc`` reproduces the Richards+2006 SDSS
 composite as tabulated upstream by AGNfitter
-(`models/BBB/R06.pickle`), correctly normalises to the user's L_bol
+(`models/BBB/R06.pickle`), correctly normalizes to the user's L_bol
 anchor, and registers in ``AGN_MODELS``.
 
 References
@@ -46,7 +46,7 @@ def test_richards2006_template_wavelength_range():
 
 
 @pytest.mark.regression_paper
-def test_richards2006_bolometric_normalisation():
+def test_richards2006_bolometric_normalization():
     """L_nu integrated over the template's ν range recovers 10^log_lbol · L_sun."""
     from tengri.components.agn.richards2006_disc import richards2006_disc
 

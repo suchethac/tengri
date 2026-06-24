@@ -144,7 +144,7 @@ more, surface that requirement on ``SEDModelState`` first.
   ``{kernel: status}`` instead of silent ``None``.
 - Adding a fourth kernel is one adapter file plus an entry in
   ``ALL_ADAPTERS``. No edits to ``sed_model.py``.
-- ``LOW_MEMORY`` is now a real, observable behaviour change, not an
+- ``LOW_MEMORY`` is now a real, observable behavior change, not an
   aspirational comment.
 
 **Negative.**

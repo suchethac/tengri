@@ -8,7 +8,7 @@ single-temperature blackbody torus, register it with
 ``tengri.list_agn_models`` and ``tengri.describe``, then evaluate it on
 the public ``SEDModel.build`` path and plot it next to the production
 SKIRTOR torus at the same bolometric luminosity. The toy curve is a
-greybody; the SKIRTOR curve carries the silicate 9.7 micron feature
+graybody; the SKIRTOR curve carries the silicate 9.7 micron feature
 and the inclination-dependent geometry the toy elides.
 
 The same pattern (registration + introspection + ``SEDModel.build``)
@@ -43,7 +43,7 @@ LSUN_ERG = 3.828e33
     "demo_greybody_torus",
     citation="gallery demo (replace with your reference)",
     status="experimental",
-    short_doc="Single-T greybody torus — demonstration only",
+    short_doc="Single-T graybody torus — demonstration only",
 )
 def demo_greybody_torus(
     wavelength: jnp.ndarray,
@@ -53,7 +53,7 @@ def demo_greybody_torus(
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Greybody torus emission at a single dust temperature.
+    """Graybody torus emission at a single dust temperature.
 
     Parameters
     ----------
@@ -87,7 +87,7 @@ assert "demo_greybody_torus" in registered, "Registration failed"
 
 # Negligible host SFH: total mass ~1e-10 Msun, completely subdominant
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
-# ``const`` SFH parametrises by total mass over [start_gyr, end_gyr].
+# ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
 SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 LOG_LBOL = 12.0
@@ -125,7 +125,7 @@ nu_lnu_toy = C_AA_PER_S / np.asarray(out_skirtor.wavelength) * L_nu_toy
 
 fig, ax = plt.subplots(figsize=(7.5, 4.6))
 ax.loglog(wave_um, nu_lnu_skirtor, color="C0", lw=1.6, label="SKIRTOR (production)")
-ax.loglog(wave_um, nu_lnu_toy, color="C3", lw=1.6, label="demo greybody (T=300 K)")
+ax.loglog(wave_um, nu_lnu_toy, color="C3", lw=1.6, label="demo graybody (T=300 K)")
 ax.set(
     xlim=(0.1, 1.0e3),
     ylim=(1.0e41, 1.0e47),

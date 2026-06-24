@@ -94,7 +94,7 @@ def _run_register_a_model() -> None:
 
     print(
         ">>> @register_agn_model('demo_torus', citation='Tutorial demo', "
-        "status='experimental', short_doc='Tutorial — single-T greybody')"
+        "status='experimental', short_doc='Tutorial — single-T graybody')"
     )
     print(">>> def demo_torus(wavelength, agn_log_lbol, **_kwargs): ...")
     print()
@@ -103,7 +103,7 @@ def _run_register_a_model() -> None:
         "demo_torus",
         citation="Tutorial demo",
         status="experimental",
-        short_doc="Tutorial — single-T greybody",
+        short_doc="Tutorial — single-T graybody",
     )
     def _demo_torus(wavelength, agn_log_lbol=10.0, **_kwargs):
         # Trivial body — the point is registration, not physics.
@@ -570,7 +570,7 @@ _USE_CASES = _Tutorial(
                                    calibration_marginalize=True,
                                    eline_marginalize=True)
 
-        Use case 3  ──  CATALOGUE of N galaxies, independent fits
+        Use case 3  ──  CATALOG of N galaxies, independent fits
         ─────────────────────────────────────────────────────────
         vmap'd across galaxies — one compile, N posteriors.
 

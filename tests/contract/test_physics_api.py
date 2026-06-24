@@ -79,7 +79,7 @@ class TestLinesToSed:
         chex.assert_tree_all_finite(result)
         assert jnp.any(result > 0.0)
 
-    def test_lines_to_sed_peaks_near_line_centres(self):
+    def test_lines_to_sed_peaks_near_line_centers(self):
         from tengri.components.agn._phys import lines_to_sed
 
         wave_obs = jnp.linspace(6400.0, 6700.0, 1000)

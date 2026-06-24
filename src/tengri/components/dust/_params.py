@@ -39,14 +39,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_T",
         Fixed(35.0),
-        "Dust temperature (K) for greybody/Casey emission",
+        "Dust temperature (K) for graybody/Casey emission",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
     ParamDeclaration(
         "dust_beta_ir",
         Fixed(1.6),
-        "IR emissivity index for greybody/Casey emission",
+        "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),

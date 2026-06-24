@@ -6,17 +6,17 @@ distinctive shape parameters declared in the block functions but NOT threaded
 through ``SEDModel.build`` (missing the 5-layer wiring), so setting them via the
 composable-AGN grammar was a silent no-op. skirtor_agnfitter additionally was
 not registered as a torus block, and its exact-runtime SED skipped the
-``L_SUN x integral`` normalisation (emitting ~1e-18, negligible in a composite).
+``L_SUN x integral`` normalization (emitting ~1e-18, negligible in a composite).
 
 This test pins both failure modes:
 
 1. **No-op guard** — every torus shape parameter must change ``predict()`` when
    set through the builder (the user's "verify a param is not a no-op" rule).
-2. **Normalisation guard** — the skirtor_agnfitter torus must emit at a physical
+2. **Normalization guard** — the skirtor_agnfitter torus must emit at a physical
    magnitude (comparable to the disc it reprocesses), not the ~1e-18 the
-   un-normalised port produced.
+   un-normalized port produced.
 
-Shape-only crossvals cannot catch either: a peak-normalised comparison is blind
+Shape-only crossvals cannot catch either: a peak-normalized comparison is blind
 to absolute scale and to dead parameters.
 """
 
@@ -88,8 +88,8 @@ def test_torus_param_is_not_a_noop(ssp, torus_type, key, v1, v2):
 def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     """The skirtor_agnfitter torus must reprocess a sizeable fraction of L_bol.
 
-    Guards the normalisation bug where the exact runtime emitted ~1e-18 erg/s/Hz
-    (no L_SUN x integral normalisation) and was invisible in the composite.
+    Guards the normalization bug where the exact runtime emitted ~1e-18 erg/s/Hz
+    (no L_SUN x integral normalization) and was invisible in the composite.
     """
     base = tengri.SEDModel.build(
         ssp,
@@ -112,15 +112,15 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     total_max = float(np.abs(total).max())
     assert total_max > 0.1 * disc_max, (
         f"skirtor_agnfitter torus emits negligibly (max {total_max:.2e} vs disc "
-        f"{disc_max:.2e}) — normalisation regression."
+        f"{disc_max:.2e}) — normalization regression."
     )
 
 
-def test_skirtor_agnfitter_runtime_normalised():
+def test_skirtor_agnfitter_runtime_normalized():
     """The bundled-grid skirtor_agnfitter SED peaks at a physical L_nu, not ~1e-18.
 
     Uses only the committed torus grid (no SSP data), so it runs in CI and guards
-    the normalisation regression even where SSP-gated tests skip.
+    the normalization regression even where SSP-gated tests skip.
     """
     from tengri.components.agn.skirtor_agnfitter import skirtor_agnfitter_sed
 

@@ -2,7 +2,7 @@
 """Tests for the standard Fitter path on hierarchical fits.
 
 After PRs #241-#245 the legacy ``_maybe_population_delegate`` was
-removed. These tests pin the standard NUTS/MAP/VI path's behaviour
+removed. These tests pin the standard NUTS/MAP/VI path's behavior
 on hierarchical (PopulationSEDModel) fits — the single information-
 Hamiltonian path the tengri paper §2 describes.
 
@@ -115,9 +115,9 @@ def test_fitter_run_map_on_hierarchical(synthetic_ssp, simple_observation) -> No
     """``Fitter(forward).run('map')`` completes on a hierarchical fit.
 
     The standard inference path drives MAP via :func:`jaxopt.LBFGS`
-    minimisation of ``neg_log_posterior_fn``. With #244's batched ξ
+    minimization of ``neg_log_posterior_fn``. With #244's batched ξ
     init and scalar prior penalty, the loss surface is well-defined.
-    This probe verifies the optimiser actually converges to a finite
+    This probe verifies the optimizer actually converges to a finite
     point and surfaces what coupling remains beyond the loss-fn level.
     """
     import jax

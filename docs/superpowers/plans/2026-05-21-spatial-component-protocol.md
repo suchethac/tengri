@@ -29,7 +29,7 @@
 | `src/tengri/components/spatial/exponential.py` | Create | `Exponential` concrete profile. |
 | `src/tengri/components/spatial/flat_slab.py` | Create | `FlatSlab` concrete profile. |
 | `tests/unit/protocols/test_spatial_protocol.py` | Create | Protocol shape checks. |
-| `tests/unit/components/spatial/test_spatial_model_component.py` | Create | Base class behaviour (param discovery, default apply). |
+| `tests/unit/components/spatial/test_spatial_model_component.py` | Create | Base class behavior (param discovery, default apply). |
 | `tests/unit/components/spatial/test_sersic.py` | Create | Sersic numeric smoke test. |
 | `tests/unit/components/spatial/test_exponential.py` | Create | Exponential numeric smoke test. |
 | `tests/unit/components/spatial/test_flat_slab.py` | Create | FlatSlab numeric smoke test. |
@@ -275,7 +275,7 @@ class SpatialModelComponent:
         (dict of name → units) for the cross-component contract
       * A ``predict(p, profile_in, grid_kpc, **reads_kwargs)`` method
 
-    Mirror of :class:`SEDModelComponent`. Behaviour is identical except:
+    Mirror of :class:`SEDModelComponent`. Behavior is identical except:
       * Default :attr:`parameter_prefix` is ``"spatial_"`` (not ``"sed_"``)
       * The default :meth:`apply` updates
         ``state.derived["spatial_profile_2d"]`` (not ``state.sed_intrinsic``)
@@ -442,7 +442,7 @@ class SpatialModelComponent:
 `tests/unit/components/spatial/test_spatial_model_component.py`:
 
 ```python
-"""Tests for SpatialModelComponent base class behaviour."""
+"""Tests for SpatialModelComponent base class behavior."""
 
 from __future__ import annotations
 
@@ -538,7 +538,7 @@ Surface-brightness profile of the form
 
 where ``r_e`` is the effective (half-light) radius, ``n`` is the
 Sérsic index (n=1 ↔ exponential disk, n=4 ↔ de Vaucouleurs bulge),
-and ``b_n`` is the Sérsic normalisation that makes ``r_e`` enclose
+and ``b_n`` is the Sérsic normalization that makes ``r_e`` enclose
 half the total flux (Sérsic 1968).
 
 References
@@ -560,7 +560,7 @@ __all__ = ["Sersic"]
 
 
 def _b_n(n: jnp.ndarray) -> jnp.ndarray:
-    """Sérsic normalisation b_n via the Ciotti & Bertin (1999) expansion.
+    """Sérsic normalization b_n via the Ciotti & Bertin (1999) expansion.
 
     Valid for n > 0.36; the analytic expansion is accurate to 10^-3 over
     the n ∈ [0.5, 10] range encountered in galaxy fits. See Ciotti &

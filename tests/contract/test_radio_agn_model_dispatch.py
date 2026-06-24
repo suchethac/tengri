@@ -4,7 +4,7 @@
 Covers the four-way dispatch added when AGN-radio gained selectable
 sub-models:
 
-- ``"powerlaw"`` (default, current behaviour) — :func:`radio_total`.
+- ``"powerlaw"`` (default, current behavior) — :func:`radio_total`.
 - ``"dpl"`` — AGNfitter-rx broken double power-law,
   :func:`radio_total_dpl`.
 - ``"JP"``, ``"KP"``, ``"tribble"`` — reserved physical aging kernels;

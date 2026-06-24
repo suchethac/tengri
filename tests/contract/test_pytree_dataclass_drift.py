@@ -26,7 +26,7 @@ Two failure modes this file guards against:
    knows to register the subclass explicitly.
 
 These tests sit in ``tests/contract/`` because they encode a contract about
-the JAX-pytree representation of public types — not a physics behaviour.
+the JAX-pytree representation of public types — not a physics behavior.
 """
 
 from __future__ import annotations
@@ -201,7 +201,7 @@ def test_unregistered_subclasses_carry_only_static_fields():
     :func:`jax.tree_util.register_dataclass` for itself — otherwise JAX
     flattens the parent type and silently drops the new field from the
     trace, which is the worst kind of regression (no error, just wrong
-    behaviour under JIT / grad / vmap).
+    behavior under JIT / grad / vmap).
 
     The classes / fields listed in ``_KNOWN_STATIC_ARRAY_FIELDS`` are the
     snapshot of cases at the time of writing — all verified to be held as

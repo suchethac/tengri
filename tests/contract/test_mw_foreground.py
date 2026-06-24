@@ -6,7 +6,7 @@ Before this PR, tengri's :class:`MilkyWay` dust component lived in
 sharing the ``dust_`` parameter prefix with the host-galaxy
 ``two_component`` block. Only one of the two could be active at once;
 users with sources at ``b_gal < 30°`` had to pre-correct fluxes
-externally or give up host-galaxy dust modelling.
+externally or give up host-galaxy dust modeling.
 
 This PR adds a separate ``foreground={'ebmv_mw': ..., 'law': '...',
 'rv': ...}`` kwarg on :meth:`SEDModel.build`. The screen is applied at

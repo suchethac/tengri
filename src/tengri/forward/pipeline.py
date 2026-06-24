@@ -113,7 +113,7 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
     1. Grid resolution: ``n_grid=64`` regardless of ``spec.stochastic``
        (legacy uses 256 for non-stochastic). For stochastic SFHs the
        legacy ``sfr`` already lives on a 64-pt grid with the GP draw
-       baked in, so reuse it directly to preserve the realisation.
+       baked in, so reuse it directly to preserve the realization.
     2. Linear lookback-time interpolation to SSP ages (NOT legacy's
        log10-age interpolation).
     3. NaN-safe cosmic-time prep: a strictly-monotonic ramp + SFR-
@@ -179,7 +179,7 @@ def _closure_a_sfh_prep(model, p, sfr, t_obs_gyr_for_weights):
     # The SSP grid is linear-spaced at 1 Myr cadence (13700 bins), so
     # SF-onset cutoffs land on grid points instead of being smeared across
     # the coarser log-spaced lookback grid by ``jnp.interp``. The closed
-    # form also self-normalises through ``_renormalize_to_mass``, so total
+    # form also self-normalizes through ``_renormalize_to_mass``, so total
     # mass = 10**log_total_mass exactly. See suchethac/tengri#385.
     #
     # Stochastic / GP-field SFHs keep the log-grid + interp path: the GP

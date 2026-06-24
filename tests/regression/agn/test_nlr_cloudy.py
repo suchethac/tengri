@@ -41,7 +41,7 @@ def test_feltre_nlr_line_ratios_seyfert2():
 
     At α=-1.7, log U=-2, log n_H=3, Z=Z_sun, ξ_d=0.3 the Feltre+2016
     grid should produce [O III]/Hβ in the range 10–15 (paper Fig. 6,
-    high-ionisation Seyfert 2 regime) and Hα/Hβ >= 2.86 (Case B floor
+    high-ionization Seyfert 2 regime) and Hα/Hβ >= 2.86 (Case B floor
     plus collisional excitation).
     """
     from tengri.components.agn.nlr_cloudy import compute_nlr_sed_feltre

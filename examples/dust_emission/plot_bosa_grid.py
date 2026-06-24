@@ -2,7 +2,7 @@ r"""
 BOSA library: PAH features and FIR peak depend on both sSFR and L_TIR
 =====================================================================
 
-The BOSA infrared template library is parametrised jointly by total
+The BOSA infrared template library is parametrized jointly by total
 infrared luminosity log L_TIR and specific star formation rate log sSFR.
 Neither axis alone tells the full story: at fixed sSFR the FIR peak
 migrates with L_TIR (dust temperature), while at fixed L_TIR the PAH

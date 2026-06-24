@@ -120,7 +120,7 @@ class WavePrecomp:
         treated as a runtime input to the JIT-compiled forward pass, so
         a single :class:`SEDModel` instance handles a catalog of
         per-galaxy ``Fixed(redshift)`` values **with one compile**
-        instead of one compile per row. Compile time amortises across
+        instead of one compile per row. Compile time amortizes across
         the catalog; runtime cost per fit is the ztable interpolation
         (~µs).
 
@@ -159,7 +159,7 @@ class SpectrumPrecomp:
 
     Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
     LUT precomputation. The SSP × dust × IGM stack is precomputed at
-    spectrum pixel centres (effective wavelengths in the galaxy rest frame)
+    spectrum pixel centers (effective wavelengths in the galaxy rest frame)
     and cached per redshift. This is analogous to the photometric LUT path
     (Phase 3b/3c) but for spectroscopy.
 
@@ -182,7 +182,7 @@ class SpectrumPrecomp:
     Emission lines are not representable by the per-pixel effective-wavelength
     LUT (they are delta-like). When a line-publishing nebular backend (Cue,
     CloudyGrid, CB19, MAPPINGS, Cue-NLR) is present, its discrete line
-    luminosities are rasterised onto the pixel grid separately at projection
+    luminosities are rasterized onto the pixel grid separately at projection
     time (design-doc option A); the smooth continuum still uses the LUT.
 
     Examples
@@ -1044,7 +1044,7 @@ class SEDModel:
         -------
         type
             A :class:`typing.NamedTuple` subclass whose fields match the
-            configured observation sub-blocks. Synthesised at construction
+            configured observation sub-blocks. Synthesized at construction
             time by :func:`build_observables_class`.
 
         Raises
@@ -1123,7 +1123,7 @@ class SEDModel:
             self._csp_age_dt = csp_age_dt(self.ssp_ages_yr, csp_integration)
             self._csp_matrix = None
 
-        # Honour the user-set ``n_grid`` for every SFH type, not just
+        # Honor the user-set ``n_grid`` for every SFH type, not just
         # stochastic. ``spec.n_grid`` defaults to 256, so the parametric default
         # is unchanged; setting it (``SEDModel.build(..., n_grid=N)``) now takes
         # effect for parametric SFHs too. The parametric stellar SED is in fact
@@ -1431,7 +1431,7 @@ class SEDModel:
         if spec.nebular_mode == "cue":
             from tengri.components.nebular import CueBackend
 
-            # Cue-specific abundance + ionising-spectrum free params. These
+            # Cue-specific abundance + ionizing-spectrum free params. These
             # are validated by Parameters but were silently stripped by
             # translate.get_internal_params before being registered here.
             # See MISSING_FEATURES.md #16. Register only the ones the user
@@ -2705,7 +2705,7 @@ class SEDModel:
         # leak into the second model's predict_photometry({}) call. See
         # https://github.com/<repo>/issues/<n> for the starburst-vs-quenched
         # color-leak symptom (the second-built model returned the first
-        # model's u-g colour at z=0.05).
+        # model's u-g color at z=0.05).
         def _fixed_value_id(name: str):
             dist = self.spec.get_distribution(name)
             val = dist.bounds[0] if dist.bounds is not None else getattr(dist, "value", None)
@@ -2970,7 +2970,7 @@ class SEDModel:
 
         # No explicit grid: a configured spectroscopy channel routes through the
         # orchestrator — the JIT/grad/LUT-friendly cached path the Fitter relies
-        # on (honours the SpectrumPrecomp LUT, LSF and any calibration). This is
+        # on (honors the SpectrumPrecomp LUT, LSF and any calibration). This is
         # the inference hot path and must stay on predict_observables.
         if (
             self.observation is not None
@@ -3130,9 +3130,9 @@ class SEDModel:
             If None, returns all lines from the nebular backend.
         tolerance_aa : float or None, default 5.0
             Maximum allowed wavelength delta [Angstrom] between a requested
-            target and the matched catalogue line. Raises ``ValueError`` on
+            target and the matched catalog line. Raises ``ValueError`` on
             any miss, listing the offending targets. Pass ``None`` to disable
-            (recovers legacy nearest-line-no-matter-what behaviour).
+            (recovers legacy nearest-line-no-matter-what behavior).
 
         Returns
         -------
@@ -3164,7 +3164,7 @@ class SEDModel:
                 "No nebular backend with line prediction configured. Cannot compute line fluxes."
             )
 
-        # Read the discrete line catalogue published by
+        # Read the discrete line catalog published by
         # NebularSEDComponent. The orchestrator's nebular adapter calls
         # ``predict_nebular_line_luminosities`` with SSP-derived
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
@@ -3173,7 +3173,7 @@ class SEDModel:
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete "
-                "line catalogue to state.derived (expected keys "
+                "line catalog to state.derived (expected keys "
                 "'line_waves' and 'line_lums'). The BakedIn backend bakes "
                 "lines into the SSP grid; ShockBackend publishes a "
                 "continuous line SED instead. Switch to Cue or CloudyGrid."
@@ -3186,10 +3186,10 @@ class SEDModel:
             deltas = jnp.abs(all_waves[None, :] - target_wavelengths[:, None])
             indices = jnp.argmin(deltas, axis=1)
             min_deltas = deltas[jnp.arange(target_wavelengths.shape[0]), indices]
-            # Tolerance check: if a target has no nearby line in the catalogue,
+            # Tolerance check: if a target has no nearby line in the catalog,
             # argmin silently returns whatever is closest. Catch that here so
             # callers don't accidentally read wrong-line fluxes (e.g. asking
-            # for vacuum 5008.24 when the catalogue is in air at 5006.84 is
+            # for vacuum 5008.24 when the catalog is in air at 5006.84 is
             # within 1.4 Aa and OK; asking for a missing 6300 [OI] line could
             # match Halpha 264 Aa away). ``tolerance_aa=None`` disables.
             if tolerance_aa is not None:
@@ -3225,7 +3225,7 @@ class SEDModel:
         Computes the model flux ratio ``F(numerator) / F(denominator)`` for
         each requested pair, in the same space (linear or log10) as the data.
         Runs the forward chain **once** and selects both the numerator and
-        denominator lines from the published catalogue — so the likelihood
+        denominator lines from the published catalog — so the likelihood
         loop pays a single chain evaluation per step, not two.
 
         Works identically on the exact and SpectrumPrecomp paths: line
@@ -3247,7 +3247,7 @@ class SEDModel:
         Raises
         ------
         ValueError
-            If no nebular backend publishes a discrete line catalogue.
+            If no nebular backend publishes a discrete line catalog.
 
         Notes
         -----
@@ -3260,7 +3260,7 @@ class SEDModel:
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete line "
-                "catalogue ('line_waves'/'line_lums'). Use Cue or CloudyGrid; "
+                "catalog ('line_waves'/'line_lums'). Use Cue or CloudyGrid; "
                 "BakedIn bakes lines into the SSP and cannot report ratios."
             )
         all_waves = jnp.asarray(state.derived["line_waves"])
@@ -3974,7 +3974,7 @@ class SEDModel:
         EmissionLines
             11 headline survey-diagnostic lines (``lya``, ``civ_1549``,
             ``oii``, ``hbeta``, ``oiii_4959/5007``, ``nii_6548/6584``,
-            ``halpha``, ``sii_6717/6731``) plus the full backend catalogue
+            ``halpha``, ``sii_6717/6731``) plus the full backend catalog
             via ``all_waves`` / ``all_lums``. See
             :meth:`EmissionLines.get` for nearest-wavelength access to
             species the headline NamedTuple does not name (HeII 1640,
@@ -3984,7 +3984,7 @@ class SEDModel:
         ------
         NotImplementedError
             When the active nebular backend does not publish a discrete
-            line catalogue (BakedIn or shock). Switch to ``neb={'type':
+            line catalog (BakedIn or shock). Switch to ``neb={'type':
             'cue', ...}`` or ``neb={'type': 'cloudy_grid', ...}`` for
             discrete line predictions, or read the continuous nebular
             SED from ``model.predict_rest_sed(params).sed`` directly.
@@ -4010,8 +4010,8 @@ class SEDModel:
             raise NotImplementedError(
                 "predict_emission_lines is not supported for the BakedIn "
                 "nebular backend: emission is baked into the SSP grid and "
-                "no discrete line catalogue is published. To predict line "
-                "luminosities, build the model with a photoionisation "
+                "no discrete line catalog is published. To predict line "
+                "luminosities, build the model with a photoionization "
                 "backend, e.g. neb={'type': 'cue', '*': FIXED} (requires "
                 "a bare-stellar SSP) or neb={'type': 'cloudy_grid', ...}. "
                 "For a quick narrow-band measurement on the BakedIn SED, "
@@ -4024,7 +4024,7 @@ class SEDModel:
         state = self.predict_state(params)
         lines = state_to_emission_lines(state)
         if lines.all_waves.size == 0:
-            # No discrete catalogue; nothing to attenuate.
+            # No discrete catalog; nothing to attenuate.
             return lines
 
         # Apply dust attenuation at line wavelengths in the same regime
@@ -4050,7 +4050,7 @@ class SEDModel:
             **dust_kw,
         )
 
-        # Re-extract the headline scalars from the attenuated catalogue
+        # Re-extract the headline scalars from the attenuated catalog
         # so EmissionLines.halpha / .hbeta / etc. reflect dust.
         from tengri.forward.prediction import EmissionLines
         from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
@@ -4210,7 +4210,7 @@ class SEDModel:
             cached = self._build_component_chain()
             self._cached_component_chain = cached
         chain = cached
-        # Initialise the chain on the panchromatic-extended grid when
+        # Initialize the chain on the panchromatic-extended grid when
         # radio/xray is configured. RadioSEDComponent / XRaySEDComponent
         # populate ``state.derived["sed_radio"]`` / ``["sed_xray"]``
         # over the full ``state.wave`` range; downstream consumers
@@ -4272,7 +4272,7 @@ class SEDModel:
         :func:`jax.jit` for hot loops, or call
         :meth:`predict_observables_jit` for the pre-cached version.
 
-        **Phase 2 of forward-projection unification.** Synthesised per-model
+        **Phase 2 of forward-projection unification.** Synthesized per-model
         at :meth:`__init__` from observation contents; missing channels
         raise ``AttributeError`` on access.
         """
@@ -4287,9 +4287,9 @@ class SEDModel:
         # implementation, so the two are bit-identical by construction (the old
         # dual implementation was how the spectrum LUT silently diverged). Use
         # this for one-off / interactive evaluation where the ~7–12 s JIT
-        # trace+compile isn't worth amortising; use :meth:`predict_observables_jit`
+        # trace+compile isn't worth amortizing; use :meth:`predict_observables_jit`
         # (what the Fitter calls) for repeated/inference evaluation, where the
-        # fused kernel is structurally + persistently cached. Both honour the
+        # fused kernel is structurally + persistently cached. Both honor the
         # build-time ``approx=`` (exact / WavePrecomp / SpectrumPrecomp / joint).
         from tengri.inference._model_cache import _default_owner
 
@@ -4332,7 +4332,7 @@ class SEDModel:
 
         For per-galaxy fixed redshifts, build with
         ``approx=WavePrecomp(z_min=catalog_z_min, z_max=catalog_z_max)`` so
-        the ztable covers the catalogue range; runtime ``params['redshift']``
+        the ztable covers the catalog range; runtime ``params['redshift']``
         is then a fast interpolation lookup.
 
         See Also
@@ -4614,7 +4614,7 @@ class SEDModel:
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
-            cue_full_catalogue=bool(getattr(self.spec, "cue_full_catalogue", False)),
+            cue_full_catalog=bool(getattr(self.spec, "cue_full_catalog", False)),
             agn_model=getattr(self, "_agn_model", None),
             agn_disc_block=getattr(self, "_agn_disc_block", "none"),
             agn_nlr_block=getattr(self, "_agn_nlr_block", "none"),
@@ -4751,7 +4751,7 @@ class SEDModel:
                         break
 
         # Phase 5: SpectrumPrecomp — pre-rebin the SSP grid to the spectrum
-        # pixel centres. Only the stellar component needs a build-time LUT;
+        # pixel centers. Only the stellar component needs a build-time LUT;
         # downstream SEDModelComponents (dust / AGN / IGM / nebular continuum)
         # route through their ``_apply_spec_precomp`` branch at runtime once
         # the stellar component publishes ``spec_eff_waves``.
@@ -5063,7 +5063,7 @@ class SEDModel:
         Returns
         -------
         SEDModel
-            Fully initialised model, identical to one built via
+            Fully initialized model, identical to one built via
             ``SEDModel(parse_groups(**groups), ssp_data, ...)``.
 
         See Also

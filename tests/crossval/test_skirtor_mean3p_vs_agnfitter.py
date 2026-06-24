@@ -18,7 +18,7 @@ Interpolation note: the runtime uses node-exact monotone-cubic (PCHIP)
 interpolation (``interp_nd_pchip``, shared with the cat3d / slone_netzer ports),
 so at a grid node it reproduces the stored AGNfitter template to floating-point
 precision while keeping C¹-continuous gradients for HMC/geoVI. This replaced the
-C²-smooth triweight *smoother*, which mixed in neighbours (~10% peak-normalised
+C²-smooth triweight *smoother*, which mixed in neighbors (~10% peak-normalized
 shape residual).
 
 References

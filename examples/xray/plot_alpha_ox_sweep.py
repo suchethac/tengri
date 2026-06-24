@@ -1,5 +1,5 @@
 """
-AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalisation
+AGN UV-to-X-ray power-law slope alpha_OX controls X-ray normalization
 ======================================================================
 
 The UV-to-X-ray spectral slope alpha_OX (defined as log F_X minus

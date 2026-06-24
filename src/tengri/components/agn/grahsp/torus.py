@@ -7,7 +7,7 @@ two log-quadratic ("log-Gaussian") components in :math:`L_\\lambda` —
 a cool dust peak at :math:`\\lambda_{\\rm COOL}` and a hot dust peak at
 :math:`\\lambda_{\\rm HOT}`, each with log-width :math:`W` (dex). The hot
 component is scaled by :math:`f_{\\rm hot}` (Eq. fhot in the paper) relative
-to the cool peak in :math:`\\lambda L_\\lambda`. Normalisation at 12 um is
+to the cool peak in :math:`\\lambda L_\\lambda`. Normalization at 12 um is
 set by the covering factor :math:`f_{\\rm cov}` via Eq. fcov:
 
 .. math::
@@ -84,7 +84,7 @@ def torus_dust_continuum(
     l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s].
     fcov : float
-        Covering factor :math:`f_{\rm cov}`. Sets normalisation via
+        Covering factor :math:`f_{\rm cov}`. Sets normalization via
         :math:`\lambda L_\lambda(12\,\mu m) = 2.5 \cdot \mathrm{l5100} \cdot f_{\rm cov}`.
     cool_lam_um : float
         Cool component peak wavelength :math:`\lambda_{\rm COOL}` [um].
@@ -117,7 +117,7 @@ def torus_dust_continuum(
     spectrum = _log_gaussian_pair(
         log_wave_um, log_cool_um, cool_width, log_hot_um, hot_width, hot_fcov
     )
-    # Normalise so that the SED at 12 um (closest grid point in upstream)
+    # Normalize so that the SED at 12 um (closest grid point in upstream)
     # equals 2.5 * l5100 * fcov / 12000 nm. We use exact 12 um here, not
     # the grid's nearest point, since this is the analytic constraint.
     # For numerical agreement with upstream's `argmin(abs(10**log_wave - 12))`
@@ -177,7 +177,7 @@ si_abs_width_nm
         Si feature contribution :math:`L_\lambda` [erg/s/nm]. May be
         negative (absorption) — caller should clip the total torus
         :math:`L_\lambda` to non-negative values, mirroring upstream's
-        ``mask_negative`` behaviour.
+        ``mask_negative`` behavior.
 
     Notes
     -----
@@ -231,7 +231,7 @@ def torus_mn12_continuum(
 
     The templates (:math:`\langle L_\lambda \rangle`, :math:`L_{\rm lo}`,
     :math:`L_{\rm hi}`) are provided on a native grid (typically 239 points)
-    and normalised to 1 at 12 µm. This function interpolates the result onto
+    and normalized to 1 at 12 µm. This function interpolates the result onto
     an arbitrary output grid using linear interpolation with zero padding.
 
     Parameters
@@ -250,11 +250,11 @@ def torus_mn12_continuum(
     mn12_wave_nm : array_like, shape (n_mn12,)
         Native template grid wavelengths [nm].
     mn12_avg : array_like, shape (n_mn12,)
-        Mean :math:`L_\lambda` template, normalised to 1 at 12 µm.
+        Mean :math:`L_\lambda` template, normalized to 1 at 12 µm.
     mn12_lo : array_like, shape (n_mn12,)
-        25th-percentile :math:`L_\lambda` template (cool), normalised to 1 at 12 µm.
+        25th-percentile :math:`L_\lambda` template (cool), normalized to 1 at 12 µm.
     mn12_hi : array_like, shape (n_mn12,)
-        75th-percentile :math:`L_\lambda` template (warm), normalised to 1 at 12 µm.
+        75th-percentile :math:`L_\lambda` template (warm), normalized to 1 at 12 µm.
 
     Returns
     -------
@@ -267,13 +267,13 @@ def torus_mn12_continuum(
     JIT/grad/vmap-compatible. Uses :func:`jnp.where` for the temperature branch
     to maintain differentiability.
 
-    **Normalisation convention (GRAHSP-faithful):** reproduced verbatim from
+    **Normalization convention (GRAHSP-faithful):** reproduced verbatim from
     upstream ``activatetorus``: ``l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510``
     and ``torus_spectrum = l_torus * (avg + dev) * cutoff`` — there is **no**
     division by 12000 nm. This differs from the empirical log-Gaussian path
     (:func:`torus_dust_continuum`, from ``activategtorus``), which uses
     ``l_torus = 2.5 * l5100 * fcov`` then ``/ 12000``. The two GRAHSP modules
-    therefore carry different absolute 12 µm normalisations for the same
+    therefore carry different absolute 12 µm normalizations for the same
     ``(l5100, fcov)``; this is GRAHSP's own convention and is preserved here.
     Since ``fcov`` is a free fit parameter, each module remains internally
     self-consistent when fitted.
@@ -304,7 +304,7 @@ def torus_mn12_continuum(
     # Apply the templates and short-wavelength cutoff on the native grid.
     spectrum_native = (mn12_avg_arr + torus_deviation) * cutoff
 
-    # Normalisation, verbatim from upstream ``activatetorus.process`` (line 83):
+    # Normalization, verbatim from upstream ``activatetorus.process`` (line 83):
     #   l_torus = 2.5 * l_agn * fcov / 12.0 * 0.510
     # Upstream then forms ``torus_spectrum = l_torus * (avg + dev) * cutoff``
     # directly — note there is NO division by 12000 nm here (unlike the
@@ -333,7 +333,7 @@ def torus_mn12_si(
     r"""Mor & Netzer 2012 silicate feature (Mullaney+ 2011 template).
 
     Difference-of-Gaussians silicate feature template. The template is
-    normalised by the 12 µm continuum luminosity.
+    normalized by the 12 µm continuum luminosity.
 
     .. math::
 
@@ -355,7 +355,7 @@ def torus_mn12_si(
     si_wave_nm : array_like, shape (n_si,)
         Native silicate template wavelengths [nm].
     si_lumin : array_like, shape (n_si,)
-        Silicate template, normalised by the 12 µm continuum.
+        Silicate template, normalized by the 12 µm continuum.
 
     Returns
     -------
@@ -363,7 +363,7 @@ def torus_mn12_si(
         Silicate feature contribution :math:`L_\lambda` [erg/s/nm], interpolated
         onto ``wave_nm`` grid. May be negative (absorption) — caller should
         ensure the total torus :math:`L_\lambda` (continuum + feature) is
-        non-negative, mirroring upstream's ``mask_negative`` behaviour.
+        non-negative, mirroring upstream's ``mask_negative`` behavior.
 
     Notes
     -----
@@ -383,7 +383,7 @@ def torus_mn12_si(
     # Verbatim from upstream ``activatetorus.process`` (line 96):
     #   si_spectrum = l_torus * self.si.lumin * Si
     # Same l_torus as the continuum, and again NO /12000 — the silicate must
-    # follow the same normalisation convention as its own continuum.
+    # follow the same normalization convention as its own continuum.
     l_torus = 2.5 * l5100 * fcov / 12.0 * 0.510
     spectrum_native = l_torus * si_lumin_arr * si
 

@@ -95,7 +95,7 @@ def test_energy_convention_changes_predict_photometry(ssp):
 
 @_skip
 def test_string_convention_accepted(ssp):
-    """Photometry accepts a plain string convention and normalises it."""
+    """Photometry accepts a plain string convention and normalizes it."""
     from tengri.observation.photometry import FilterConvention
 
     phot = Photometry.from_names(_NAMES, convention="energy")

@@ -207,7 +207,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
     **Interpolation kernel**: node-exact monotone cubic (PCHIP), matching the
     exact-wave-grid path (:mod:`tengri.components.agn.cat3d_wind`) so the
     WavePrecomp photometry does not diverge from the exact SED. The C²-smooth
-    triweight smoother previously used here averaged neighbours, smearing the
+    triweight smoother previously used here averaged neighbors, smearing the
     torus mid-IR peak; PCHIP reproduces every AGNfitter node exactly while
     keeping continuous gradients for inference.
     """

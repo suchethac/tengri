@@ -118,7 +118,7 @@ ax.loglog(
     wave[mask], nu_l_nu[mask], color="0.15", lw=1.4, label="Full SED (attenuated + dust + radio)"
 )
 
-# Overplot intrinsic stellar for reference (fainter grey)
+# Overplot intrinsic stellar for reference (fainter gray)
 mask_int = np.asarray(out_intrinsic.sed) > 0
 ax.loglog(
     wave_int[mask_int],

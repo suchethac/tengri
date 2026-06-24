@@ -38,7 +38,7 @@ def nenkova_torus_block(
     wavelength : array_like, shape (n_wave,)
     agn_log_lbol : float
     l5100_disc : array
-        Ignored (kept for protocol compatibility — this block normalises
+        Ignored (kept for protocol compatibility — this block normalizes
         from ``agn_log_lbol``).
     agn_tau : float, optional
         Equatorial optical depth (5-150). Default ``30``.

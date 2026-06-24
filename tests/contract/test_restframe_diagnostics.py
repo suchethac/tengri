@@ -8,7 +8,7 @@ import pytest
 from tengri.analysis.diagnostics.spectral import (
     dn4000,
     irx,
-    rest_frame_colour,
+    rest_frame_color,
     rest_frame_luminosity,
     uv_slope_beta,
 )
@@ -238,7 +238,7 @@ class TestRestFrameLuminosity:
 
 
 class TestRestFrameColour:
-    """Test suite for rest-frame photometric colour."""
+    """Test suite for rest-frame photometric color."""
 
     @pytest.fixture
     def wavelength_sed(self):
@@ -259,67 +259,61 @@ class TestRestFrameColour:
         filter_trans = jnp.where((filter_wave >= 6250.0) & (filter_wave <= 6750.0), 1.0, 0.0)
         return filter_wave, filter_trans
 
-    def test_same_filter_twice_gives_zero_colour(self, wavelength_sed, blue_filter):
-        """Test that comparing identical filters gives colour = 0."""
+    def test_same_filter_twice_gives_zero_color(self, wavelength_sed, blue_filter):
+        """Test that comparing identical filters gives color = 0."""
         l_nu = jnp.ones_like(wavelength_sed)
 
         filter_wave, filter_trans = blue_filter
-        colour = rest_frame_colour(
+        color = rest_frame_color(
             wavelength_sed, l_nu, filter_wave, filter_trans, filter_wave, filter_trans
         )
 
-        np.testing.assert_allclose(colour, 0.0, atol=1e-5)
+        np.testing.assert_allclose(color, 0.0, atol=1e-5)
 
     def test_flat_spectrum_through_different_filters(
         self, wavelength_sed, blue_filter, red_filter
     ):
-        """Test colour of flat spectrum through different filters."""
+        """Test color of flat spectrum through different filters."""
         l_nu = jnp.ones_like(wavelength_sed)
 
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        colour = rest_frame_colour(
-            wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans
-        )
+        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
 
         # For flat spectrum, blue and red fluxes should be similar
-        # so colour should be close to 0
-        assert jnp.abs(colour) < 0.5
+        # so color should be close to 0
+        assert jnp.abs(color) < 0.5
 
-    def test_red_biased_spectrum_gives_positive_colour(
+    def test_red_biased_spectrum_gives_positive_color(
         self, wavelength_sed, blue_filter, red_filter
     ):
-        """Test that red-biased spectrum gives positive (red) colour."""
+        """Test that red-biased spectrum gives positive (red) color."""
         # L_ν ∝ λ (red-biased)
         l_nu = wavelength_sed
 
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        colour = rest_frame_colour(
-            wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans
-        )
+        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
 
         # Red filter should have more flux, so m_blue - m_red = -2.5*log(f_blue/f_red) > 0
-        assert colour > 0.0
+        assert color > 0.0
 
-    def test_blue_biased_spectrum_gives_negative_colour(
+    def test_blue_biased_spectrum_gives_negative_color(
         self, wavelength_sed, blue_filter, red_filter
     ):
-        """Test that blue-biased spectrum gives negative (blue) colour."""
+        """Test that blue-biased spectrum gives negative (blue) color."""
         # L_ν ∝ 1/λ (blue-biased)
         l_nu = 1.0 / wavelength_sed
 
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        colour = rest_frame_colour(
-            wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans
-        )
+        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
 
         # Blue filter should have more flux, so m_blue - m_red = -2.5*log(f_blue/f_red) < 0
-        assert colour < 0.0
+        assert color < 0.0
 
     def test_output_is_scalar(self, wavelength_sed, blue_filter, red_filter):
         """Test that output is a scalar."""
@@ -328,8 +322,6 @@ class TestRestFrameColour:
         blue_wave, blue_trans = blue_filter
         red_wave, red_trans = red_filter
 
-        colour = rest_frame_colour(
-            wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans
-        )
+        color = rest_frame_color(wavelength_sed, l_nu, blue_wave, blue_trans, red_wave, red_trans)
 
-        assert jnp.ndim(colour) == 0
+        assert jnp.ndim(color) == 0

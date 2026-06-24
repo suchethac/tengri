@@ -8,7 +8,7 @@ import pytest
 
 Validates that ``Fitter(model, data, noise)`` automatically constructs
 the matching :class:`Likelihood` Protocol object when no legacy-only
-features (calibration marginalisation, e-line marginalisation,
+features (calibration marginalization, e-line marginalization,
 Student-t / variable noise, spec covariance, censored data, line
 fluxes, spectral indices) are configured.
 
@@ -159,8 +159,8 @@ def test_joint_auto_builds_composite_with_data_split():
 
 @pytest.mark.unit
 def test_calibration_marginalize_auto_builds_calibration_likelihood():
-    """Phase II-1 final wiring: cal-marg → CalibrationMarginalisedLikelihood."""
-    from tengri.inference.likelihoods import CalibrationMarginalisedLikelihood
+    """Phase II-1 final wiring: cal-marg → CalibrationMarginalizedLikelihood."""
+    from tengri.inference.likelihoods import CalibrationMarginalizedLikelihood
 
     fitter = _make_proxy(
         data=[1.0, 2.0],
@@ -170,16 +170,16 @@ def test_calibration_marginalize_auto_builds_calibration_likelihood():
     )
     fitter.model.wave_obs = jnp.array([5000.0, 6000.0])
     lk = Fitter._maybe_build_default_likelihood(fitter)
-    assert isinstance(lk, CalibrationMarginalisedLikelihood)
+    assert isinstance(lk, CalibrationMarginalizedLikelihood)
     assert lk.n_poly == 3
     assert lk.channel == "spec_fnu"
 
 
 @pytest.mark.unit
 def test_eline_marginalize_auto_builds_eline_likelihood_with_builder():
-    """Flat-prior e-line marg → ELineMarginalisedLikelihood with a
+    """Flat-prior e-line marg → ELineMarginalizedLikelihood with a
     per-call design_matrix_builder closure."""
-    from tengri.inference.likelihoods import ELineMarginalisedLikelihood
+    from tengri.inference.likelihoods import ELineMarginalizedLikelihood
 
     fitter = _make_proxy(
         data=[1.0, 2.0, 3.0],
@@ -192,16 +192,16 @@ def test_eline_marginalize_auto_builds_eline_likelihood_with_builder():
     fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
-    assert isinstance(lk, ELineMarginalisedLikelihood)
+    assert isinstance(lk, ELineMarginalizedLikelihood)
     assert lk.design_matrix_builder is not None
 
 
 @pytest.mark.unit
 def test_eline_cloudy_prior_auto_builds_cloudy_likelihood():
-    """Cloudy-prior e-line marg → CloudyELineMarginalisedLikelihood
+    """Cloudy-prior e-line marg → CloudyELineMarginalizedLikelihood
     (was previously a legacy fall-back; now covered by the adapter
     cohort post Phase II-2.2 migration)."""
-    from tengri.inference.likelihoods import CloudyELineMarginalisedLikelihood
+    from tengri.inference.likelihoods import CloudyELineMarginalizedLikelihood
 
     fitter = _make_proxy(
         data=[1.0, 2.0, 3.0],
@@ -217,7 +217,7 @@ def test_eline_cloudy_prior_auto_builds_cloudy_likelihood():
     fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
-    assert isinstance(lk, CloudyELineMarginalisedLikelihood)
+    assert isinstance(lk, CloudyELineMarginalizedLikelihood)
     assert lk.channel == "spec_fnu"
 
 
@@ -366,10 +366,10 @@ def test_joint_without_n_data_phot_raises_assertion():
 
 @pytest.mark.unit
 def test_cal_marg_plus_eline_marg_auto_builds_combined_adapter():
-    """Combined calibration + eline marginalisation → single adapter
+    """Combined calibration + eline marginalization → single adapter
     (Prospector-style galaxy spectroscopy fitting). Was a legacy
     fall-through pre-II-2.3."""
-    from tengri.inference.likelihoods import CalibrationELineMarginalisedLikelihood
+    from tengri.inference.likelihoods import CalibrationELineMarginalizedLikelihood
 
     fitter = _make_proxy(
         data=[1.0, 2.0, 3.0],
@@ -386,7 +386,7 @@ def test_cal_marg_plus_eline_marg_auto_builds_combined_adapter():
     fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
-    assert isinstance(lk, CalibrationELineMarginalisedLikelihood)
+    assert isinstance(lk, CalibrationELineMarginalizedLikelihood)
     assert lk.eline_prior_type == "flat"
     assert lk.channel == "spec_fnu"
 
@@ -394,7 +394,7 @@ def test_cal_marg_plus_eline_marg_auto_builds_combined_adapter():
 @pytest.mark.unit
 def test_cal_marg_plus_eline_cloudy_auto_builds_combined_adapter_cloudy():
     """Cloudy variant of the combined cal + eline adapter."""
-    from tengri.inference.likelihoods import CalibrationELineMarginalisedLikelihood
+    from tengri.inference.likelihoods import CalibrationELineMarginalizedLikelihood
 
     fitter = _make_proxy(
         data=[1.0, 2.0, 3.0],
@@ -412,7 +412,7 @@ def test_cal_marg_plus_eline_cloudy_auto_builds_combined_adapter_cloudy():
     fitter.model.wave_obs = jnp.linspace(4000.0, 8000.0, 3)
     fitter.model._spectral_resolution = 2000.0
     lk = Fitter._maybe_build_default_likelihood(fitter)
-    assert isinstance(lk, CalibrationELineMarginalisedLikelihood)
+    assert isinstance(lk, CalibrationELineMarginalizedLikelihood)
     assert lk.eline_prior_type == "cloudy"
 
 

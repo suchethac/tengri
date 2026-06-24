@@ -65,7 +65,7 @@ def test_si_feature_matches_upstream(fixture):
         np.testing.assert_allclose(out, expected[i], rtol=1e-10, atol=0.0, err_msg=f"case {i}")
 
 
-def test_torus_normalisation_at_12um(fixture):
+def test_torus_normalization_at_12um(fixture):
     """Cool+hot peak at 12 um must equal lambda*L_lambda(12um) = 2.5 * lum5100A * fcov / 12 um."""
     from tengri.components.agn.grahsp.torus import torus_dust_continuum
 

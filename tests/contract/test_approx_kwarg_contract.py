@@ -218,7 +218,7 @@ def test_wave_precomp_z_bounds_clip_the_grid(free_z_spec, ssp, obs):
 def test_free_z_model_with_wave_precomp_handles_off_grid_redshifts(free_z_spec, ssp, obs):
     """When ``redshift`` is free, ``WavePrecomp()`` must publish a ztable
     so the model evaluates at arbitrary redshift in the prior — not just
-    at the grid points. This is the behavioural check that ``ztable``
+    at the grid points. This is the behavioral check that ``ztable``
     auto-enabled internally.
     """
     model = _silent_build(free_z_spec, ssp, obs, approx=WavePrecomp(n_z=50))

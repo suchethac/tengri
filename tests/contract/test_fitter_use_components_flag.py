@@ -10,7 +10,7 @@ pytestmark = pytest.mark.contract
 fused kernel.
 
 Smoke-tests only — full numerical-equivalence sweep is part of the eventual
-Phase B cutover. Here we verify (1) the flag is honoured, (2) wiring picks
+Phase B cutover. Here we verify (1) the flag is honored, (2) wiring picks
 the orchestrator bridge in :func:`_build_prediction`, and (3) the
 non-photometry guard rejects the unsupported configuration loudly.
 """

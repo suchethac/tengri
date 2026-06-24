@@ -98,9 +98,9 @@ def test_bessell_matches_dsps_obs_flux(center, width, z):
 
 
 def test_bessell_matches_dsps_calc_obs_mag_colors():
-    """tengri BESSELL colours (Δmag between bands) == DSPS calc_obs_mag colours.
+    """tengri BESSELL colors (Δmag between bands) == DSPS calc_obs_mag colors.
 
-    Colours cancel cosmology and the AB zero-point, so this compares the two
+    Colors cancel cosmology and the AB zero-point, so this compares the two
     kernels' magnitude responses directly to <1e-4 mag.
     """
     wave = np.linspace(1000.0, 30000.0, 6000)
@@ -111,7 +111,7 @@ def test_bessell_matches_dsps_calc_obs_mag_colors():
     bands = [_tophat(c, w) for c, w in _FILTERS]
 
     # tengri AB mag from band-mean L_nu: m = -2.5 log10(mean_Lnu / AB0)  (+ common
-    # cosmology terms that cancel in a colour).
+    # cosmology terms that cancel in a color).
     def _tengri_ab_mag(fw, ft):
         mean = _tengri_band_mean_lnu(lnu, wave, fw, ft, z, FilterConvention.BESSELL)
         return -2.5 * np.log10(mean / _AB0)
@@ -136,9 +136,9 @@ def test_bessell_matches_dsps_calc_obs_mag_colors():
         ]
     )
 
-    tengri_colours = np.diff(tengri_mag)
-    dsps_colours = np.diff(dsps_mag)
-    np.testing.assert_allclose(tengri_colours, dsps_colours, atol=1e-4, rtol=0.0)
+    tengri_colors = np.diff(tengri_mag)
+    dsps_colors = np.diff(dsps_mag)
+    np.testing.assert_allclose(tengri_colors, dsps_colors, atol=1e-4, rtol=0.0)
 
 
 @pytest.mark.parametrize("center,width", _FILTERS)

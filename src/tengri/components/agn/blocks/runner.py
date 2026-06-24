@@ -70,7 +70,7 @@ from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
 from tengri.utils.physics_constants import L_SUN
 
-#: Torus selectors that do NOT receive the grey Type-1/2 visibility mask:
+#: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
 #: ``none`` (no torus) and the self-contained empirical quasar templates
 #: (``qsogen``, ``grahsp``), which already encode an inclination-averaged SED —
 #: masking them would be double-counting. The dusty-screen tori (skirtor/fritz)
@@ -101,9 +101,9 @@ class RecipeWarning(UserWarning):
 # validator runs at composition time. Adding a new rule = one line here.
 #
 # Disc impls known to produce a sensible UV/optical continuum at 5100Å
-# (i.e. compatible with GRAHSP-style downstream blocks that normalise to
+# (i.e. compatible with GRAHSP-style downstream blocks that normalize to
 # λL_λ(5100Å)). Block impls outside this set may emit zero or NaN at
-# 5100Å, breaking the downstream normalisation silently.
+# 5100Å, breaking the downstream normalization silently.
 _DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset(
     {
         "grahsp_sbpl",
@@ -139,7 +139,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
 C_AA_PER_S: float = 2.99792458e18
 
-#: Selector keys recognised by the runner. Match the canonical pipeline order.
+#: Selector keys recognized by the runner. Match the canonical pipeline order.
 BLOCK_SELECTOR_KEYS: tuple[str, ...] = (
     "agn_disc_block",
     "agn_nlr_block",
@@ -268,7 +268,7 @@ agn_torus_block, agn_attenuation_block : str
         _emit(
             f"Composable AGN: agn_disc_block='none' but downstream "
             f"blocks are active ({', '.join(active)}). These blocks "
-            f"normalise to lambda*L_lambda(5100A) of the disc, which "
+            f"normalize to lambda*L_lambda(5100A) of the disc, which "
             f"is zero — the active blocks will emit zero. Pick a disc "
             f"impl (e.g. 'grahsp_sbpl' or 'powerlaw')."
         )
@@ -282,7 +282,7 @@ agn_torus_block, agn_attenuation_block : str
         ):
             _emit(
                 f"Composable AGN: {category}_block={selectors[category]!r} "
-                f"normalises to the disc's lambda*L_lambda(5100A), but "
+                f"normalizes to the disc's lambda*L_lambda(5100A), but "
                 f"disc_block={selectors['disc']!r} is not in the set of "
                 f"impls known to produce a meaningful UV/optical continuum "
                 f"at 5100A: {sorted(_DISCS_WITH_5100A_CONTINUUM)}. "
@@ -327,7 +327,7 @@ def compose_l_nu(
         L_ν       = L_λ_atten × λ²/c
 
     The disc stage runs first so its 5100Å luminosity can scale the NLR /
-    BLR / FeII / torus normalisations (matching upstream GRAHSP convention).
+    BLR / FeII / torus normalizations (matching upstream GRAHSP convention).
 
     Parameters
     ----------
@@ -352,7 +352,7 @@ agn_torus_block, agn_attenuation_block : str
         compatibility with existing single-return callers. Default: False.
     **params
         Per-impl free parameters. Each block consumes the keys it
-        recognises and ignores the rest.
+        recognizes and ignores the rest.
 
     Returns
     -------
@@ -384,7 +384,7 @@ agn_torus_block, agn_attenuation_block : str
     """
     wave = jnp.asarray(wavelength)
     # If templates are pre-loaded, forward them under a stable kwarg name
-    # blocks recognise (``templates``). When None, blocks fall back to their
+    # blocks recognize (``templates``). When None, blocks fall back to their
     # own lru_cache load. We strip the kwarg afterwards so blocks that don't
     # take it never see it.
     grahsp_templates = template_state.get("grahsp") if template_state is not None else None
@@ -406,7 +406,7 @@ agn_torus_block, agn_attenuation_block : str
     # disc viewing inclination stays free and shapes the observed SED
     # (foreshortening, Type-1/2 mask), but the *intrinsic* accretion luminosity
     # that anchors alpha_ox / radio-loudness must be inclination-INDEPENDENT, or a
-    # fit would let the viewing angle spuriously drive the X-ray/radio normalisation.
+    # fit would let the viewing angle spuriously drive the X-ray/radio normalization.
     # Re-evaluate the disc block at cos(30 deg) (block-agnostic: each disc models
     # its own inclination law). Cheap relative to the full pipeline.
     _COS_30DEG = 0.86602540378443864
@@ -422,7 +422,7 @@ agn_torus_block, agn_attenuation_block : str
     # Disc extinction (CIGALE skirtor2016.py:341-348). For Type-1 viewing
     # (i <= 90 - oa, i.e. cos_inc >= sin(oa)) the line-of-sight disc is
     # reddened: ``disk *= ext_fac``. The energy the reddening removes is
-    # routed to the polar greybody (the SKIRTOR torus block normalises
+    # routed to the polar graybody (the SKIRTOR torus block normalizes
     # disc+torus+polar jointly to agn_power — see below). Gated on
     # ``agn_polar_ebv > 0`` → models without polar dust are untouched.
     _polar_ebv = jnp.asarray(params.get("agn_polar_ebv", 0.0))
@@ -432,15 +432,15 @@ agn_torus_block, agn_attenuation_block : str
     _disc_ext = jnp.exp(-0.921 * _polar_ebv * _RV_SMC * smc_extinction_curve(wave))
     _disc_ext = jnp.where(_is_type1 & (_polar_ebv > 0.0), _disc_ext, 1.0)
 
-    # CIGALE single-reference disc normalisation (#556). In fracAGN-coupled
+    # CIGALE single-reference disc normalization (#556). In fracAGN-coupled
     # mode with the SKIRTOR torus, CIGALE ties the disc to the SAME
     # ``agn_power`` as the dust via the fixed template ratio
     # ``R = lumin_disk/lumin_dust`` (skirtor2016.py ``norm = 1/∫dust``), so
     # disc, torus and polar all scale together and the disc-reddening
-    # absorbed power is conserved into the polar greybody. ``R`` carries the
+    # absorbed power is conserved into the polar graybody. ``R`` carries the
     # anisotropy factor ``η(i) = cos(i)(1+2cos(i))/3``. We capture R from the
-    # *un-reddened* disc shape here (CIGALE normalises before reddening) and
-    # apply the disc renormalisation after the torus block fixes agn_power.
+    # *un-reddened* disc shape here (CIGALE normalizes before reddening) and
+    # apply the disc renormalization after the torus block fixes agn_power.
     # Static dispatch on the torus name (JIT-safe); the fracAGN>0 gate is
     # applied branchlessly after the torus block (below).
     _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
@@ -468,7 +468,7 @@ agn_torus_block, agn_attenuation_block : str
         # agn_power-tied face-on disc ``agn_power·R/η`` (not the legacy
         # ``18/7·10^agn_log_lbol`` which assumes agn_log_lbol = intrinsic 4π
         # power, over-estimating l_ext ~2× → FIR +15%). ``agn_power`` here is
-        # the L_absorbed-coupled value the torus block normalises to
+        # the L_absorbed-coupled value the torus block normalizes to
         # (``agn_torus_frac × L_bol``), available *before* the torus runs so
         # there is no circular dependency on ∫torus. Branchless: fall back to
         # the legacy proxy where ``agn_fracAGN == 0``.
@@ -488,7 +488,7 @@ agn_torus_block, agn_attenuation_block : str
 
     L_lambda_disc = L_lambda_disc * _disc_ext
 
-    # Compute lambda*L_lambda(5100Å) for downstream block normalisations.
+    # Compute lambda*L_lambda(5100Å) for downstream block normalizations.
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
 
@@ -537,7 +537,7 @@ agn_torus_block, agn_attenuation_block : str
         **params,
     )
 
-    # CIGALE single-reference disc normalisation (#556), part 2. The SKIRTOR
+    # CIGALE single-reference disc normalization (#556), part 2. The SKIRTOR
     # torus block fixes ``agn_power = ∫L_lambda_torus`` (disc+torus+polar
     # share this budget). Tie the disc bolometric to ``agn_power × R`` so
     # the disc scales with the same reference as the dust — energy conserved,
@@ -548,7 +548,7 @@ agn_torus_block, agn_attenuation_block : str
         _agn_power = jnp.trapezoid(L_lambda_torus, wave)
         # Apply the wavelength-dependent ``disk(i)/disk(0)`` inclination
         # attenuation to the disc *shape* (CIGALE ``SKIRTOR.disk(i)/AGN1.disk(0)``)
-        # so the disc spectrum is inclination-correct, then renormalise the
+        # so the disc spectrum is inclination-correct, then renormalize the
         # reweighted shape to the agn_power-tied bolometric ``agn_power × R``.
         _disc_reweighted = L_lambda_disc * _disc_incl
         _disc_int = jnp.maximum(jnp.trapezoid(_disc_reweighted, wave), 1e-30)
@@ -559,7 +559,7 @@ agn_torus_block, agn_attenuation_block : str
     # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays
     # visible at all inclinations. Each torus carries ONE obscuration model (no
     # double-counting): dusty-screen tori (fritz/skirtor, #294) apply a
-    # wavelength-dependent screen; every other non-"none" torus applies the grey
+    # wavelength-dependent screen; every other non-"none" torus applies the gray
     # geometric visibility mask — the same one the monolithic ``unified_nlr_blr``
     # uses — so a composable disc+torus+NLR+BLR reproduces its Type-1/2 geometry.
     # Defaults (i=30, theta_torus=30 -> inc_crit=60 > i) give mask ~ 1, so
@@ -595,7 +595,7 @@ agn_torus_block, agn_attenuation_block : str
 
     # Stage 6 (conditional): polar-dust reemission.
     # When polar_dust attenuation is selected, the absorbed photons are re-emitted
-    # as a geometry-independent FIR greybody. Compute and add this to the SED.
+    # as a geometry-independent FIR graybody. Compute and add this to the SED.
     # Static dispatch on agn_attenuation_block (a Python string) is JIT-safe.
     if agn_attenuation_block == "polar_dust":
         # Compute reemission in L_nu from the pre-attenuation SED (torus-screened

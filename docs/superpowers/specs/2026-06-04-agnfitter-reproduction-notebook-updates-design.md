@@ -10,12 +10,12 @@ notebooks are provably unaffected — see §4).
 Three things merged across PRs #656 / #677 that touch the *AGNfitter-rX*
 torus surface:
 
-1. **`skirtor_agnfitter` is now a registered, correctly-normalised torus
+1. **`skirtor_agnfitter` is now a registered, correctly-normalized torus
    block** (`register_agn_block("torus", "skirtor_agnfitter")`,
    `torus_blocks.py:292`). It is the bit-faithful port of AGNfitter-rX's
    parameter-collapsed `SKIRTOR_mean_3p.pickle`, distinct from the
    full-grid X-CIGALE `skirtor` block. Its exact runtime path now applies
-   the `L_SUN × ∫dν` normalisation it previously skipped (was emitting
+   the `L_SUN × ∫dν` normalization it previously skipped (was emitting
    ~1e-18; now physical).
 
 2. **Five torus shape parameters are now wired through `SEDModel.build`**

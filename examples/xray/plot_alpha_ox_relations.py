@@ -2,9 +2,9 @@
 Three empirical alpha_OX-L_2500 prescriptions diverge at the quasar peak
 ==========================================================================
 
-The CIGALE-faithful corona derives the X-ray normalisation from
+The CIGALE-faithful corona derives the X-ray normalization from
 ``L_2500`` via the empirical alpha_OX-L_2500 correlation. tengri ships
-three published parametrisations:
+three published parametrizations:
 
 - ``just2007`` (Just et al. 2007 Eq. 3, the X-CIGALE default)
 - ``lusso_risaliti_2016`` (refit on 2685 SDSS+XMM quasars)

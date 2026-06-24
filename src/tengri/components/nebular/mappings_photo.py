@@ -650,7 +650,7 @@ class MappingsPhotoStellarBackend:
 
         1. Converting absolute log10(Z) → ζ_O for the grid, then collapsing the
            logn axis to the caller-supplied default (HII region by default).
-        2. Relabelling axis 0 from ζ_O (solar-relative) to absolute log10(Z) so
+        2. Relabeling axis 0 from ζ_O (solar-relative) to absolute log10(Z) so
            the kernel's ``_gas_z`` lands on correct coordinates.
         3. Filling ``_preint_continuum.phot`` with zeros — MAPPINGS V provides
            only line emission, no nebular continuum.

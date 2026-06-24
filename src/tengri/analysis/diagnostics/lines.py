@@ -34,7 +34,7 @@ def compute_line_fluxes(
     r"""Integrated Gaussian emission line fluxes from amplitude parameters.
 
     Converts per-line Gaussian amplitudes into integrated fluxes by
-    multiplying by the Gaussian normalisation :math:`\sqrt{2\pi}\,\sigma_{\rm ang}`,
+    multiplying by the Gaussian normalization :math:`\sqrt{2\pi}\,\sigma_{\rm ang}`,
     where :math:`\sigma_{\rm ang}` combines intrinsic velocity broadening and
     the instrumental line-spread function (LSF) in quadrature.
 

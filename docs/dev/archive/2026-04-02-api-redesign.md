@@ -945,7 +945,7 @@ class PriorPredictive:
         n_show : int
             Number of SED draws to show. Default 50.
         color_by : str or None
-            Parameter name to use for colour-coding draws (e.g. ``"sfh_field_psd_sigma"``).
+            Parameter name to use for color-coding draws (e.g. ``"sfh_field_psd_sigma"``).
         ax : matplotlib Axes, optional
 
         Returns
@@ -982,15 +982,15 @@ class PriorPredictive:
         return ax
 
     def plot_colors(self, color_x: str, color_y: str, ax=None):
-        """Plot a colour–colour diagram of prior predictive draws.
+        """Plot a color–color diagram of prior predictive draws.
 
         Parameters
         ----------
         color_x : str
-            Colour index for x-axis, e.g. ``"sdss_g-sdss_r"``.
+            Color index for x-axis, e.g. ``"sdss_g-sdss_r"``.
             Must match filter names passed to ``Model.from_config()``.
         color_y : str
-            Colour index for y-axis.
+            Color index for y-axis.
         ax : matplotlib Axes, optional
 
         Returns
@@ -1001,7 +1001,7 @@ class PriorPredictive:
 
         raise NotImplementedError(
             "plot_colors() requires filter name resolution — not yet implemented. "
-            "Use ppc.flux directly to compute colour indices."
+            "Use ppc.flux directly to compute color indices."
         )
 ```
 
@@ -1151,7 +1151,7 @@ Add this method immediately after `fit()`:
         from tengri.distributions import Fixed
         from tengri.inference.fitter import Fitter
 
-        # Normalise catalog to list of dicts
+        # Normalize catalog to list of dicts
         rows: list[dict] = []
         try:
             import pandas as pd
@@ -1363,7 +1363,7 @@ Add this method to `Model` in `model.py`, immediately after `fit_catalog()`:
         """
         from tengri.inference.hierarchical import HierarchicalFitter
 
-        # Normalise observations_list to list of dicts
+        # Normalize observations_list to list of dicts
         galaxies = []
         for obs in observations_list:
             if isinstance(obs, (list, tuple)) and len(obs) == 2:
@@ -1454,7 +1454,7 @@ First add the function definition. Add it as a top-level function at the end of 
 
 ```python
 def posteriors_to_dataframe(results: list, params: list[str] | None = None):
-    """Summarise a list of Posteriors into a pandas DataFrame.
+    """Summarize a list of Posteriors into a pandas DataFrame.
 
     Requires ``pandas`` (``pip install pandas``).
 

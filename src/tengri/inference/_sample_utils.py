@@ -2,8 +2,8 @@
 """Shared post-processing utilities for all inference backends.
 
 Every sampler needs the same three operations after collecting samples:
-convert flat unbounded positions → physical dicts, summarise with a
-point estimate, and optionally warm-start from a MAP.  Centralising
+convert flat unbounded positions → physical dicts, summarize with a
+point estimate, and optionally warm-start from a MAP.  Centralizing
 them here removes ~50 duplicated blocks across the backends.
 """
 
@@ -97,7 +97,7 @@ def _maybe_map_init(
     1. Explicit ``init_from`` from caller — converted to unbounded.
     2. Cached MAP point on the model (populated by a previous fit or by
        :meth:`Fitter.load_cache`) — used directly, no fresh MAP run.
-    3. Run a short MAP optimisation to find a good starting point.
+    3. Run a short MAP optimization to find a good starting point.
        Caches the result so subsequent calls / sessions can skip step 3.
     """
     if init_from is not None:
@@ -138,14 +138,14 @@ def _maybe_map_init(
 
 
 def _prewarm_forward(fitter: Any) -> None:
-    """Run one eager forward pass to materialise lazy unbounded→physical state.
+    """Run one eager forward pass to materialize lazy unbounded→physical state.
 
     Hit by issue #262: when ``Fitter`` is constructed against externally
     sourced data (e.g. ``np.load(npz)``) and the model has never had a
     Python-side forward pass on it, the first JIT trace through
     ``Uniform.unstandardize`` keeps a traced array escaping into
     ``float()``. Calling ``predict_photometry`` once eagerly before
-    JIT tracing materialises the relevant arrays and resolves the
+    JIT tracing materializes the relevant arrays and resolves the
     leak. Best-effort: if the call fails for any other reason, swallow
     silently and let the real path raise.
     """

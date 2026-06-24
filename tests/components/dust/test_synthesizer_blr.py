@@ -108,7 +108,7 @@ def test_requires_grid_path():
 
 
 def test_jit_core(blr_grid_path):
-    """The numerical core is JIT-safe once the backend is materialised."""
+    """The numerical core is JIT-safe once the backend is materialized."""
     backend = get_synthesizer_blr_backend(blr_grid_path)
 
     @jax.jit

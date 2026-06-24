@@ -13,7 +13,7 @@ range is the documented physical or library-grid extent, and a
 ``default=`` equal to the historical fixed value. The two work together:
 
 * ``'*': FIXED`` (and the grammar's implicit default) collapses each param
-  to ``Fixed(default)`` — i.e. the exact pre-existing value, so behaviour
+  to ``Fixed(default)`` — i.e. the exact pre-existing value, so behavior
   is unchanged for any model that did not opt a parameter free.
 * ``'*': FREE`` / ``defaults=FREE`` / a bare per-param ``FREE`` now expands
   to the prior instead of silently resolving to a fixed scalar. Before this
@@ -233,7 +233,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "agn_theta_torus",
         # Torus half-opening angle. Sets the Type-1/2 critical inclination
-        # inc_crit = 90 - theta_torus for the composable grey visibility mask
+        # inc_crit = 90 - theta_torus for the composable gray visibility mask
         # (matches the monolithic unified_nlr_blr geometry). Default 30 deg with
         # the default cos_inc (i=30) gives inc_crit=60 > i -> mask ~ 1, so
         # default-inclination models are unchanged.
@@ -316,7 +316,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "must be in [0, 1]",
     ),
     # Full Kubota & Done (2018) 3-zone disc parameters (kubota_done_full only).
-    # Corona/Comptonisation ranges follow the K&D18 fiducial intervals.
+    # Corona/Comptonization ranges follow the K&D18 fiducial intervals.
     ParamDeclaration(
         "agn_f_hard",
         Uniform(0.0, 0.1, default=0.02),
@@ -371,7 +371,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
     ),
-    # Polar dust greybody re-emission (CIGALE skirtor2016 convention,
+    # Polar dust graybody re-emission (CIGALE skirtor2016 convention,
     # Casey 2012 modified blackbody added on top of SKIRTOR thermal dust)
     ParamDeclaration(
         "agn_polar_T",
@@ -460,7 +460,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "agn_grahsp_l5100",
         LogUniform(1.0e42, 1.0e47, default=1.0e44),
         "GRAHSP lambda*L_lambda(5100Å) [erg/s] (paper L_AGN). "
-        "Sets the AGN normalisation; typical 1e42-1e47 for Sy1 to QSO.",
+        "Sets the AGN normalization; typical 1e42-1e47 for Sy1 to QSO.",
         lambda lo, hi: lo > 0,
         "must be > 0",
     ),
@@ -570,7 +570,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(0.0, 1.0, default=0.0),
         "GRAHSP baseline E(B-V) [mag] applied to the AGN bi-attenuation "
         "(paper E(B-V)). In the upstream CIGALE pipeline this is also the "
-        "galaxy E(B-V); in tengri it parameterises only the AGN-side "
+        "galaxy E(B-V); in tengri it parameterizes only the AGN-side "
         "attenuation — galaxy attenuation is handled by the standard "
         "tengri ``dust_*`` component (configure them consistently).",
         lambda lo, hi: lo >= 0,

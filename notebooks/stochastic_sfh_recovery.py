@@ -130,7 +130,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # ## Section 1: Library, joint observation, precompute
 #
 # A **wNE** SSP grid bakes nebular emission in, so the Balmer/forbidden lines
-# that trace recent star formation are modelled for free. The observation is
+# that trace recent star formation are modeled for free. The observation is
 # **joint**: 10 broadband filters (GALEX UV → 2MASS NIR) plus an 800-pixel
 # R≈2000 optical spectrum. `approx=SpectrumPrecomp()` precomputes the SSP ×
 # wavelength integrals once.
@@ -187,7 +187,7 @@ print(f"Joint observation: {phot.n_filters} photometry bands + {N_PIX} spectral 
 # field. Metallicity is held fixed (an independent prior); the 128-D field
 # would otherwise soak up the age-sensitive features and reopen the age/Z/dust
 # degeneracy. We build a joint model for the fit, plus photometry-only and
-# spectroscopy-only models to synthesise the matched mock.
+# spectroscopy-only models to synthesize the matched mock.
 
 
 # %%
@@ -225,7 +225,7 @@ print(f"Free parameters: {spec.free_params}")
 # bursty GP field ($\sigma_{\mathrm{PSD}}=0.3$ dex, $\tau_{\mathrm{PSD}}=200$ Myr
 # — the molecular-cloud decorrelation time of Tacchella, Forbes & Caplar 2020)
 # modulating that mean; near-solar metallicity, modest dust. The same truth
-# synthesises both the photometry and the spectrum.
+# synthesizes both the photometry and the spectrum.
 
 # %%
 truth = spec.sample(jax.random.PRNGKey(2026))
@@ -531,7 +531,7 @@ print(f"chi2 / N (joint best fit) = {chi2_n:.2f}")
 # %% [markdown]
 # ## Section 7: Posteriors for the non-SFH parameters
 #
-# The SFH is summarised by the recovery figure (Section 5); here the joint
+# The SFH is summarized by the recovery figure (Section 5); here the joint
 # posterior over the **non-SFH** parameters — the two dust optical depths —
 # with truth markers in red. Adding the GALEX UV tightens the diffuse-screen
 # optical depth, but the **birth-cloud** component ($\tau_{\rm BC}$) remains

@@ -5,7 +5,7 @@ Each tuple in this module is the canonical source for one legacy
 bucket in ``tengri.parameters._param_defs``:
 
 - :data:`PARAMS` → ``_NEBULAR_PARAMS`` (standard CLOUDY / Cue / CB_19
-  ionisation knobs registered when ``nebular in {cloudy, cue, cb19}``).
+  ionization knobs registered when ``nebular in {cloudy, cue, cb19}``).
 - :data:`CB19_PARAMS` → ``_CB19_PARAMS`` (CB_19 grid-only continuous
   axes: density, C/O, ΔN/O, HbFrac).
 - :data:`ELINE_PARAMS` → ``_ELINE_PARAMS`` (line velocity dispersion +
@@ -13,7 +13,7 @@ bucket in ``tengri.parameters._param_defs``:
 - :data:`ELINE_BROAD_PARAMS` → ``_ELINE_BROAD_PARAMS`` (AGN broad-line
   component velocity dispersion).
 - :data:`CUE_IONSPEC_PARAMS` → ``_CUE_IONSPEC_PARAMS`` (Cue's
-  broken-power-law ionising spectrum: 4 slopes + 3 ratios).
+  broken-power-law ionizing spectrum: 4 slopes + 3 ratios).
 - :data:`CUE_GAS_EXTRA_PARAMS` → ``_CUE_GAS_EXTRA_PARAMS`` (Cue gas
   density + N/O + C/O knobs beyond logU/logZ).
 - :data:`SHOCK_PARAMS` → ``_SHOCK_PARAMS`` (MAPPINGS shock-emission

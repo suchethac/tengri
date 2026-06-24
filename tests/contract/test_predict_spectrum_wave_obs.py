@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``predict_spectrum(wave_obs=...)`` honours the grid on any model (#707).
+"""``predict_spectrum(wave_obs=...)`` honors the grid on any model (#707).
 
 Two defects are guarded here:
 

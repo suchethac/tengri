@@ -47,7 +47,7 @@ def test_sersic_publishes_profile_with_central_peak(sersic, state_with_grid) -> 
 def test_sersic_n_4_has_higher_central_peak_than_n_1(sersic, state_with_grid) -> None:
     """n=4 (de Vaucouleurs) has a much sharper central peak than n=1 (exponential).
 
-    The Sersic profile is normalised so that ``r_e`` encloses half the
+    The Sersic profile is normalized so that ``r_e`` encloses half the
     light; the surface brightness at r=0 is ``exp(b_n)``, which is
     ~2147 for n=4 vs ~5.4 for n=1 — a factor of ~400 difference.
     """
@@ -62,7 +62,7 @@ def test_sersic_n_4_has_higher_central_peak_than_n_1(sersic, state_with_grid) ->
     profile_dv = sersic.apply(state_with_grid, p_dv).derived["spatial_profile_2d"]
     profile_exp = sersic.apply(state_with_grid, p_exp).derived["spatial_profile_2d"]
 
-    # Near the centre (pixel 10 of 20 on a [-5, 5] grid → r ≈ 0.37 kpc),
+    # Near the center (pixel 10 of 20 on a [-5, 5] grid → r ≈ 0.37 kpc),
     # the de Vaucouleurs profile sits well above the exponential.
     assert profile_dv[10, 10] > profile_exp[10, 10]
 

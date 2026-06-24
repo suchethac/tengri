@@ -82,7 +82,7 @@ class DerivedState:
     sfr_10myr: jnp.ndarray | None = None
     sfr_100myr: jnp.ndarray | None = None
 
-    # Stellar — age-resolved tensors and ionising rate
+    # Stellar — age-resolved tensors and ionizing rate
     L_age: jnp.ndarray | None = None
     lnu_age: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
@@ -109,7 +109,7 @@ class DerivedState:
     stellar_phot_moment_precomp: jnp.ndarray | None = None
     # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a). Shape
     # ``(n_age, n_filter)``, units erg/s/Hz. The age axis is NOT
-    # marginalised. Sum over the age axis equals
+    # marginalized. Sum over the age axis equals
     # ``stellar_phot_lnu_precomp``. Published only when
     # ``approx=WavePrecomp()`` is set. Consumed by the two-
     # component dust LUT path (Phase 3c-3c-iv-c) to apply per-age
@@ -134,7 +134,7 @@ class DerivedState:
     dust_attenuation_slope_precomp: jnp.ndarray | None = None
     # Two-component dust (Phase 3c-3c-iv-b). Birth-cloud and diffuse
     # attenuation factors per filter pivot, plus their wavelength
-    # slopes. Two-component dust factorises as
+    # slopes. Two-component dust factorizes as
     # ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)`` — the per-age dependence
     # comes from the young indicator ``y(a)`` below. Used by
     # Phase 3c-3c-iv-c to apply per-age expansion in predict_via_precomp.
@@ -215,7 +215,7 @@ class DerivedState:
 
     # Spectrum LUT (Phase 5, published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component
-    # at spectrum pixel centres (effective wavelengths).
+    # at spectrum pixel centers (effective wavelengths).
     # Shape ``(n_spec_pixel,)``, units erg/s/Hz.
     stellar_spec_lnu_precomp: jnp.ndarray | None = None
     nebular_spec_lnu_precomp: jnp.ndarray | None = None
@@ -233,7 +233,7 @@ class DerivedState:
     # erg/s/Hz — needed for two-component (Charlot & Fall) dust on the
     # spectrum LUT path (sum over age == stellar_spec_lnu_precomp).
     stellar_spec_lnu_per_age_precomp: jnp.ndarray | None = None
-    # Dust transmission at spectrum pixel centres (dimensionless, in [0, 1]).
+    # Dust transmission at spectrum pixel centers (dimensionless, in [0, 1]).
     # Unlike photometry, no Taylor moment is needed — a pixel is a single
     # wavelength, so A(λ_pix) is exact. ``dust_spec_transmission_precomp`` is
     # the single-component / diffuse transmission; the two-component split
@@ -400,7 +400,7 @@ class DerivedState:
         """Return a plain dict — the inverse of :meth:`from_dict`.
 
         Non-None typed fields are included; ``_extras`` is merged in.
-        Useful for serialisation, debugging, and gradual migration.
+        Useful for serialization, debugging, and gradual migration.
         """
         out: dict[str, Any] = {
             n: getattr(self, n) for n in self.field_names() if getattr(self, n) is not None

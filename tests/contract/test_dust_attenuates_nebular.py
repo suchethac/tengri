@@ -3,7 +3,7 @@
 
 Nebular emission from HII regions is attenuated by the same birth-cloud +
 diffuse dust as the youngest stars (Charlot & Fall 2000), as in
-bagpipes / FSPS / CIGALE. tengri previously added the photoionised
+bagpipes / FSPS / CIGALE. tengri previously added the photoionized
 ``sed_nebular`` continuum *after* dust ran (the topological sort placed dust
 first), so it escaped attenuation — a UV/u-band excess of ~0.17 mag vs bagpipes
 in the reproduction notebooks (``bagpipes_13b_photometry_no_neb``: with-nebular

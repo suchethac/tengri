@@ -303,7 +303,7 @@ def test_cue_grad_logu(cue_backend, mock_ssp):
 
     The mock SSP has near-zero ionizing flux, which correctly triggers a
     CueWNESSPWarning at backend construction (the mock mimics a wNE-type SSP).
-    We suppress that warning here — it is expected behaviour for mock data and
+    We suppress that warning here — it is expected behavior for mock data and
     is tested separately in test_nebular_warnings.py.
     """
     backend = cue_backend

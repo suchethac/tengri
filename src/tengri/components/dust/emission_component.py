@@ -12,7 +12,7 @@ Currently supported templates
   (``dust_T``, ``dust_beta_ir``) with optional CMB-heating / CMB-
   contrast correction (da Cunha et al. 2013).
 - ``"draine2021_pah"`` — Draine, Li, Hensley et al. 2021 PAHspec
-  template grid (arXiv:2011.07046), parameterised by continuous
+  template grid (arXiv:2011.07046), parameterized by continuous
   ``dust_lgU`` and three categorical config knobs (``starlight``,
   ``ionization``, ``size_distribution``, ``slab``).
 
@@ -108,7 +108,7 @@ class DustEmissionSEDComponentConfig(SEDComponentConfig):
         (``"draine2021_pah"`` only.) Starlight spectrum selector.
         One of the 13 PAHspec choices (e.g. ``"mMMP"``,
         ``"BPASS_Z0.02_3Myr"``, ``"m31bulge"``), or the special
-        token ``"auto"`` to nearest-neighbour-select from the
+        token ``"auto"`` to nearest-neighbor-select from the
         upstream stellar parameters (``pahspec_auto_*`` fields).
         Default ``"mMMP"``.
     pahspec_auto_age_myr : float or None
@@ -117,7 +117,7 @@ class DustEmissionSEDComponentConfig(SEDComponentConfig):
         ``pahspec_starlight="auto"``.
     pahspec_auto_log_z_solar : float or None
         (``pahspec_starlight="auto"`` only.)
-        :math:`\log_{10}(Z/Z_\odot)` for the ionising stellar
+        :math:`\log_{10}(Z/Z_\odot)` for the ionizing stellar
         population.  Required when ``pahspec_starlight="auto"``.
     pahspec_auto_sps_family : {"BC03", "BPASS", None} or other str
         (``pahspec_starlight="auto"`` only.)  SPS family used by the
@@ -175,11 +175,11 @@ class DustEmissionSEDComponentState(SEDComponentState):
         :math:`L_\nu` per H atom on the pipeline rest-frame Å grid,
         sliced to the chosen ``(starlight, ion, size, slab)``.  Empty
         for non-PAHspec templates.  Units [erg/s/Hz/H]; absolute
-        normalisation is irrelevant — only the spectrum *shape*
+        normalization is irrelevant — only the spectrum *shape*
         survives the energy-balance rescale in :meth:`apply`.
     pahspec_norm_per_lgU : jnp.ndarray, shape ``(15,)``
         :math:`\int L_\nu \, d\nu` per ``lgU`` slice.  Used by
-        :meth:`apply` to renormalise against ``state.derived["L_ir"]``
+        :meth:`apply` to renormalize against ``state.derived["L_ir"]``
         without re-integrating in the JIT hot path.
     """
 
@@ -733,7 +733,7 @@ def _apply_astrodust(
         :math:`L_\nu` [erg/s/Hz] with
         :math:`\int L_\nu \, d\nu = L_{\rm ir}` for the thermal
         component.  Spinning dust, when included, adds on top
-        without renormalisation (its bolometric power is small).
+        without renormalization (its bolometric power is small).
     """
     lgU_grid = precomputed.astrodust_lgU_grid
     lnu_template = precomputed.astrodust_lnu_template

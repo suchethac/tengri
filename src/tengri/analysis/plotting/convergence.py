@@ -446,7 +446,7 @@ def plot_autocorrelation(result, params=None, max_lag=None, figsize=None):
         else:
             ax.set_title(name, fontsize=9)
 
-        ax.axhline(0, color="grey", ls="-", lw=0.5, alpha=0.5)
+        ax.axhline(0, color="gray", ls="-", lw=0.5, alpha=0.5)
         ax.set_xlabel("Lag")
         ax.set_ylabel("ACF")
         ax.legend(fontsize=10)

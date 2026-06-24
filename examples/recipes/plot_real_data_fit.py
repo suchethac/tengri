@@ -4,14 +4,14 @@ From a CSV row to a MAP SED fit, end to end
 
 The astronomer's-eye-view of the tengri ingest path. Starting from a
 single CSV row of SDSS *ugriz* fluxes and per-band errors (the same
-shape pandas would hand you from a survey catalogue), we parse the
+shape pandas would hand you from a survey catalog), we parse the
 row, build the photometric ``Observation`` from the column names,
 fit with MAP, and overlay the recovered SED on the observed bands
-with normalised residuals.
+with normalized residuals.
 
 Companion to ``plot_recipe_load_real_csv.py`` (bulk-fit three mock
 galaxies); this script focuses on the *parsing* and *single-row*
-workflow that catalogue work begins with.
+workflow that catalog work begins with.
 """
 
 import os
@@ -30,7 +30,7 @@ from tengri.analysis.plotting import setup_style
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# Inline CSV — same shape as a pandas row from a real catalogue.
+# Inline CSV — same shape as a pandas row from a real catalog.
 # Columns: name, redshift, then (band, band_err) pairs in erg s-1 cm-2 Hz-1.
 CSV = (
     "name,redshift,sdss_u,sdss_u_err,sdss_g,sdss_g_err,"

@@ -34,10 +34,10 @@ from pathlib import Path
 __all__ = ["BENCHMARK_SCRIPTS", "run"]
 
 
-# ── Catalogue of consolidated bench scripts ───────────────────────
+# ── Catalog of consolidated bench scripts ───────────────────────
 #
 # Maps short name -> (script_filename, one-line description). The full
-# scripts live under ``scripts/`` at the repo root; this catalogue is
+# scripts live under ``scripts/`` at the repo root; this catalog is
 # the public list of what's available, surfaced via ``bench list``.
 
 BENCHMARK_SCRIPTS: dict[str, tuple[str, str]] = {
@@ -273,7 +273,7 @@ def _health_check() -> int:
 
 
 def _list_benchmarks() -> int:
-    """Print the catalogue of available bench scripts."""
+    """Print the catalog of available bench scripts."""
     name_w = max(len(n) for n in BENCHMARK_SCRIPTS) + 2
     print("Available benchmarks:")
     print()

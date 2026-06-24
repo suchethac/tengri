@@ -12,13 +12,13 @@ most often.
 
 | Quantity | Unit | Where it shows up |
 |---|---|---|
-| Wavelength | Å, vacuum | `wave_obs`, `wave_rest`, filter curves, line catalogues |
+| Wavelength | Å, vacuum | `wave_obs`, `wave_rest`, filter curves, line catalogs |
 | Spectral flux density `F_ν` | erg s⁻¹ cm⁻² Hz⁻¹ | observed photometry / spectroscopy |
 | Spectral luminosity `L_ν` | erg s⁻¹ Hz⁻¹ | every `SEDComponent.apply` output |
 | Bolometric luminosity | erg s⁻¹ (preferred) or `L_sun` | AGN `agn_log_lbol = log10(L_bol/L_sun)` |
 | Time / age | yr (internal), Myr / Gyr (user-facing) | SFH age grids, PSD timescales |
 | SFR | M_sun yr⁻¹ | SFH outputs, `predict_sfh` |
-| Stellar mass | M_sun | mass normalisations |
+| Stellar mass | M_sun | mass normalizations |
 | Metallicity (SSP grid) | `log10(Z)` absolute | DSPS grid axis |
 | Metallicity (user API) | `log10(Z/Z_sun)` | `met_logzsol`, with `LOG10_ZSUN = -1.848` offset |
 | Magnitudes | AB system | photometry helpers default to AB |
@@ -47,7 +47,7 @@ fixed:
    in the unit declared by the `Observation` — F_ν cgs by default.
 3. **Observation → user analysis.** Use the conversions below to take
    F_ν cgs to Jy, AB mag, maggies, etc., for plotting or comparison
-   with catalogue data.
+   with catalog data.
 
 ## Conversion helpers
 
@@ -123,8 +123,8 @@ the fit and tag the outputs after.
   Do not reproduce this constant by hand.
 - **Emission lines** are vacuum throughout. `H_alpha = 6564.61 Å`,
   not 6562.8 Å (which is air).
-- **All SED components return `erg/s/Hz`** (standardised
-  2026-04-08). If you're porting an external component, normalise to
+- **All SED components return `erg/s/Hz`** (standardized
+  2026-04-08). If you're porting an external component, normalize to
   this unit before returning.
 - **Per-band photometry units.** `predict_photometry` returns one F_ν
   value per filter band, in cgs — the bandpass-averaged F_ν. The exact
@@ -163,20 +163,20 @@ equivalently the AB zero point enters as `AB₀ = 1.13492×10⁻¹³ L_⊙/Hz`
 
 - **`bessell`** is the photon-counting AB convention — the physically
   correct mean for photon-counting detectors (every optical/NIR CCD) and
-  how the AB system is realised by surveys. `∫ F_ν T dλ/λ ÷ ∫ T dλ/λ`.
+  how the AB system is realized by surveys. `∫ F_ν T dλ/λ ÷ ∫ T dλ/λ`.
   This is the **default** and matches tengri's own SSP engine (DSPS).
 - **`energy`** is the flat-in-frequency mean, `∫ F_ν T dν ÷ ∫ T dν =
   ∫ F_ν T dλ/λ² ÷ ∫ T dλ/λ²`. Use it to reproduce CIGALE/bagpipes.
 
 The two agree exactly for a flat-`F_ν` source (the AB reference) and
 diverge by **5–40 mmag**, band- and SED-slope-dependent, for real SEDs.
-Pick the convention the observed catalogue's fluxes were synthesised
+Pick the convention the observed catalog's fluxes were synthesized
 with: optical/NIR broadband → `bessell`; CIGALE-reduced products →
 `energy`.
 
 > **History / correctness note.** Through 2026-05, tengri weighted `F_ν`
 > by `λ` (not `1/λ`) — an f_λ→f_ν units transplant that matched neither
-> convention and biased colours. It is fixed; `bessell` is now bit-faithful
+> convention and biased colors. It is fixed; `bessell` is now bit-faithful
 > to DSPS (pinned by `tests/crossval/test_filter_convention_parity.py`).
 
 ### Choosing and introspecting

@@ -4,7 +4,7 @@
 Tests verify:
 - preintegrate_for_photometry sets flags and attributes correctly
 - Continuum shape and zeros (MAPPINGS V has no nebular continuum)
-- Axis 0 relabelling from ζ_O (solar-relative) to absolute log10(Z)
+- Axis 0 relabeling from ζ_O (solar-relative) to absolute log10(Z)
 - Line luminosity shape and units (erg/photon × ratio)
 - Fixed-axis collapse (CLOUDY-shape indices: 0=Z, 1=age, 2=U)
 - Numerical equivalence at grid points

@@ -194,9 +194,9 @@ def test_lut_publishes_for_metallicity_mode(
     assert jnp.all(lut > 0), f"non-positive LUT for {metallicity_model}: {lut}"
 
 
-def test_per_age_lut_sums_to_marginalised_lut(stellar_only_model):
+def test_per_age_lut_sums_to_marginalized_lut(stellar_only_model):
     """Phase 3c-3c-iv-a: age-resolved per-filter LUT sums (over age axis) to the
-    existing marginalised stellar_phot_lnu_precomp.
+    existing marginalized stellar_phot_lnu_precomp.
 
     The age-resolved LUT is the input to two-component dust attenuation
     (Phase 3c-3c-iv-c); summing it over the age axis must recover the
@@ -205,26 +205,26 @@ def test_per_age_lut_sums_to_marginalised_lut(stellar_only_model):
     m = stellar_only_model
     state = m.predict_state(_PARAMS)
     per_age = state.derived["stellar_phot_lnu_per_age_precomp"]
-    marginalised = state.derived["stellar_phot_lnu_precomp"]
+    marginalized = state.derived["stellar_phot_lnu_precomp"]
     assert per_age.ndim == 2, f"per_age should be 2D (n_age, n_filter): {per_age.shape}"
-    assert per_age.shape[1] == marginalised.shape[0], (
-        f"filter axes mismatch: per_age={per_age.shape}, marginalised={marginalised.shape}"
+    assert per_age.shape[1] == marginalized.shape[0], (
+        f"filter axes mismatch: per_age={per_age.shape}, marginalized={marginalized.shape}"
     )
     reconstructed = jnp.sum(per_age, axis=0)
-    rel_err = jnp.abs(reconstructed - marginalised) / jnp.abs(marginalised)
+    rel_err = jnp.abs(reconstructed - marginalized) / jnp.abs(marginalized)
     assert float(jnp.max(rel_err)) < 1e-10, (
-        f"per_age sum diverges from marginalised LUT: max rel err = {float(jnp.max(rel_err)):.2e}"
+        f"per_age sum diverges from marginalized LUT: max rel err = {float(jnp.max(rel_err)):.2e}"
     )
 
 
-def test_per_age_moment_lut_sums_to_marginalised_moment(stellar_only_model):
+def test_per_age_moment_lut_sums_to_marginalized_moment(stellar_only_model):
     """Same invariant for the Taylor moment Ψ."""
     m = stellar_only_model
     state = m.predict_state(_PARAMS)
     per_age = state.derived["stellar_phot_moment_per_age_precomp"]
-    marginalised = state.derived["stellar_phot_moment_precomp"]
+    marginalized = state.derived["stellar_phot_moment_precomp"]
     reconstructed = jnp.sum(per_age, axis=0)
-    rel_err = jnp.abs(reconstructed - marginalised) / jnp.maximum(jnp.abs(marginalised), 1e-30)
+    rel_err = jnp.abs(reconstructed - marginalized) / jnp.maximum(jnp.abs(marginalized), 1e-30)
     assert float(jnp.max(rel_err)) < 1e-10, (
         f"per_age moment sum diverges: max rel err = {float(jnp.max(rel_err)):.2e}"
     )
@@ -427,7 +427,7 @@ def test_predict_via_precomp_two_component_dust_matches_predict(ssp, synthetic_t
     The expansion is ``flux_b = Σ_a per_age[a, b] × A_diff(b) × A_bc(b)^y(a)``,
     where ``y(a)`` is the smooth young indicator. Compared against the
     default ``predict`` which integrates the attenuated SED through filters
-    directly. The two should agree within Zacharegkas+2025's factorisation
+    directly. The two should agree within Zacharegkas+2025's factorization
     tolerance on a stellar+Charlot-Fall model.
     """
     spec = Parameters(

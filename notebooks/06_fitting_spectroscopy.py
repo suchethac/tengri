@@ -24,7 +24,7 @@
 # the quickstart (`SEDModel.build`, validated HMC) and shows what it does and
 # does not constrain: metallicity and age tighten sharply, but the **absolute
 # dust optical depth stays loose** — a spectrum sets the continuum *shape*, not
-# its normalisation. Adding photometry closes that gap in
+# its normalization. Adding photometry closes that gap in
 # [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
@@ -84,7 +84,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # 3620–8760 Å at z = 0.05: the 4000 Å break, Hβ, Mgb, the Fe blends, Hα, and
 # the Ca II triplet), sampled at 260 pixels to keep the demo fast. Same FSPS
 # bare-stellar model as notebooks 05 and 07:
-# truncated-skew-normal SFH (normalisation + two timescales free; skew/trunc
+# truncated-skew-normal SFH (normalization + two timescales free; skew/trunc
 # fixed), free metallicity and two dust optical depths.
 
 # %%
@@ -98,10 +98,10 @@ Z_GAL = 0.05
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # SDSS spectral coverage
 obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 
-# approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centres and
+# approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centers and
 # projects every forward pass through that lookup table — within ~0.03% of the
 # exact wave-grid spectrum but ~30x faster per evaluation, so a converged HMC
-# fit takes seconds rather than minutes. It is the spectroscopic analogue of
+# fit takes seconds rather than minutes. It is the spectroscopic analog of
 # WavePrecomp; valid for low-to-medium resolution (R ≲ a few thousand), where
 # the continuum is smooth across a pixel.
 sed_model = SEDModel.build(
@@ -122,7 +122,7 @@ print(f"Free parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.fre
 # %% [markdown]
 # ## Mock spectrum
 #
-# Truth with an interior metallicity; one noisy realisation at SNR = 30 per
+# Truth with an interior metallicity; one noisy realization at SNR = 30 per
 # pixel.
 
 # %%
@@ -167,7 +167,7 @@ print(f"HMC: {time.perf_counter() - t0:.0f}s   "
 # Metallicity, stellar mass, and the SFH timescales recover tightly. The
 # diffuse dust optical depth is constrained (it shapes the continuum slope) but
 # the birth-cloud component `tau_bc` stays broad — a spectrum fixes the
-# continuum shape, not the overall dust normalisation.
+# continuum shape, not the overall dust normalization.
 
 # %%
 params = sed_model.spec.free_params
@@ -240,6 +240,6 @@ plt.show()
 # ## Summary
 #
 # A converged spectroscopy-only fit (R̂ < 1.05) pins stellar age, metallicity,
-# and mass from the absorption features, but leaves the dust normalisation
+# and mass from the absorption features, but leaves the dust normalization
 # loose. [`07_joint_photo_spec`](07_joint_photo_spec.py) adds broadband
-# photometry, which fixes the dust normalisation and tightens the rest.
+# photometry, which fixes the dust normalization and tightens the rest.

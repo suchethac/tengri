@@ -119,7 +119,7 @@ def _precompute_lookup(torus_model):
         torus_model=torus_model,
     )
     fn = build_lookup(pre)
-    # Default GRAHSP normalisation scale is 1.0; grid axes are (plslope, ebv).
+    # Default GRAHSP normalization scale is 1.0; grid axes are (plslope, ebv).
     return np.asarray(fn(jnp.array(1.0), jnp.array(-1.7), jnp.array(0.0)))
 
 

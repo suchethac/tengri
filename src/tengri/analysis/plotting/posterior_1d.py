@@ -47,7 +47,7 @@ def plot_1d_posterior(
     bins : int, optional
         Number of histogram bins. Default ``40``.
     color : str, optional
-        Histogram colour. Defaults to the project's primary colour.
+        Histogram color. Defaults to the project's primary color.
     prior : bool, optional
         If ``True`` and ``posterior`` exposes a ``.model.spec.distributions``
         registry for this parameter, sample the prior 10000× and overlay
@@ -97,8 +97,8 @@ def plot_1d_posterior(
 
             prior_draws = np.asarray(dist.sample(jr.PRNGKey(0), shape=(10_000,)))
             counts, edges = np.histogram(prior_draws, bins=bins, density=True)
-            centres = 0.5 * (edges[:-1] + edges[1:])
-            ax.plot(centres, counts, "k--", linewidth=1.0, label="prior")
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            ax.plot(centers, counts, "k--", linewidth=1.0, label="prior")
 
     if show_summary:
         ax.text(
@@ -143,7 +143,7 @@ def plot_calibration(
         ``posterior.observation.spectroscopy.wave_obs`` if available,
         otherwise raises.
     color : str, optional
-        Line/band colour.
+        Line/band color.
     ci_levels : tuple of float, optional
         Percentiles for the filled credible band. Default ``(16, 84)``.
     show_median : bool, optional

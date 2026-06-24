@@ -128,7 +128,7 @@ class TestCrossSection:
         assert 5e-3 < _K_LYA < 8e-3
 
     def test_wings_decay(self):
-        """σ should decrease away from line centre."""
+        """σ should decrease away from line center."""
         x = jnp.array([0.0, 5.0, 10.0, 50.0])
         sigma = _sigma_lya(x, temp=1e4, b_turb_kms=0.0)
         for i in range(len(x) - 1):
@@ -147,11 +147,11 @@ class TestDLATransmission:
     def test_high_column_deep_trough(self, wave_rest):
         """N_HI = 10^21 cm^-2 should produce deep absorption."""
         trans = dla_transmission(wave_rest, log_n_hi=21.0)
-        # At Ly-alpha centre, transmission should be ~0
+        # At Ly-alpha center, transmission should be ~0
         lya_idx = jnp.argmin(jnp.abs(wave_rest - _WL_LYA))
         assert trans[lya_idx] < 1e-10
 
-    def test_absorption_centred_on_lya(self, wave_rest):
+    def test_absorption_centered_on_lya(self, wave_rest):
         """Minimum transmission should be near Ly-alpha."""
         trans = dla_transmission(wave_rest, log_n_hi=20.5)
         min_idx = jnp.argmin(trans)
@@ -200,13 +200,13 @@ class TestDLATransmission:
 
 class TestDLATransmissionObs:
     def test_redshifted_absorption(self):
-        """Absorption should be centred at (1+z) × 1215.67 Å."""
+        """Absorption should be centered at (1+z) × 1215.67 Å."""
         z = 2.0
         wave_obs = jnp.linspace(3000.0, 4500.0, 2000)
         trans = dla_transmission_obs(wave_obs, z_dla=z, log_n_hi=21.0)
         min_idx = jnp.argmin(trans)
-        expected_centre = _WL_LYA * (1.0 + z)
-        assert abs(float(wave_obs[min_idx]) - expected_centre) < 5.0
+        expected_center = _WL_LYA * (1.0 + z)
+        assert abs(float(wave_obs[min_idx]) - expected_center) < 5.0
 
     def test_consistent_with_rest_frame(self):
         """dla_transmission_obs should match dla_transmission after deredshift."""

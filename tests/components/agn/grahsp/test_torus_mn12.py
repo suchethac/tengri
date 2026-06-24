@@ -127,7 +127,7 @@ def test_torus_mn12_si_interpolation(fixture):
 
 
 def test_normalization_at_12um(fixture):
-    """Verify normalisation at 12 µm matches formula l_torus = 2.5*l5100*fcov/12*0.510."""
+    """Verify normalization at 12 µm matches formula l_torus = 2.5*l5100*fcov/12*0.510."""
     from tengri.components.agn.grahsp.torus import torus_mn12_continuum
 
     wave_nm = fixture["wave_mn12_nm"]

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Physical and astrophysical constants for nebular emission module.
 
-This module centralises constant definitions used across nebular backends.
+This module centralizes constant definitions used across nebular backends.
 Fundamental constants (h, c, L_sun) are re-exported from
 :mod:`tengri.utils.physics_constants` (SI→CGS conversions documented there;
 sources: CODATA 2018, IAU 2015). Nebular-specific constants are defined here.

@@ -205,8 +205,8 @@ def preintegrate_grid(
         ``L_absorbed * lookup(...)`` produces correctly scaled photometry.
         Inputs MUST be ``L_ν`` [erg/s/Hz] — historically this branch
         divided by ``∫ L_ν dλ`` (frequency–wavelength mismatch), which
-        caused a wavelength-shape-dependent normalisation error. Pass
-        ``False`` if templates are already normalised at load time
+        caused a wavelength-shape-dependent normalization error. Pass
+        ``False`` if templates are already normalized at load time
         (Dale2014/Astrodust/BOSA/THEMIS) — the divide is then an
         unnecessary round-trip. Default False.
     convention : FilterConvention
@@ -252,7 +252,7 @@ def preintegrate_grid(
 
     # Compute filter effective wavelengths and integrals under weight w(λ).
     # denom = ∫ T w dλ ;  λ_eff = ∫ λ T w dλ / ∫ T w dλ  (weight first moment,
-    # the self-consistent Taylor expansion centre).
+    # the self-consistent Taylor expansion center).
     eff_waves_obs = np.zeros(n_filters)
     filter_denoms = np.zeros(n_filters)
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
@@ -589,13 +589,13 @@ def interp_nd_pchip(
     *interpolant*: it passes exactly through the tabulated nodes while keeping
     C¹-continuous gradients. The per-axis tangents use the Fritsch & Carlson
     (1980) shape-preserving (monotone) rule, so the cubic never overshoots —
-    safe even on sparse, nearest-neighbour-filled grids where a natural cubic
+    safe even on sparse, nearest-neighbor-filled grids where a natural cubic
     spline would ring. Applied separably as a tensor product, one axis at a
     time.
 
     Use this for tabulated libraries whose feature position (e.g. an SED peak
     wavelength) shifts sharply across the grid, where the triweight kernel's
-    neighbour-averaging would smear the feature. The cost relative to triweight
+    neighbor-averaging would smear the feature. The cost relative to triweight
     is that gradients are only C¹ (not C²).
 
     Parameters

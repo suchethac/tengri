@@ -88,7 +88,7 @@ ax.set(
     xlim=(6480, 6680),
     yscale="log",
     xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalised at 6600-6650 Å)",
+    ylabel=r"$F_\lambda\,/\,F_{\rm cont}$ (normalized at 6600-6650 Å)",
 )
 cb = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax, pad=0.01)
 cb.set_label(r"$\sigma_v$  [km s$^{-1}$]")

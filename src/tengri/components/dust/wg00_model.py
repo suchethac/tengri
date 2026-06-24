@@ -2,13 +2,13 @@
 """WG00AttenuationSEDComponent: Witt & Gordon (2000) screen attenuation (``dust_type=3``).
 
 The live-pipeline SEDComponent for the WG00 Monte-Carlo radiative-transfer
-attenuation curves (FSPS ``dust_type=3``). It is the WG00 analogue of
+attenuation curves (FSPS ``dust_type=3``). It is the WG00 analog of
 :class:`tengri.components.dust.component.DustAttenuationSEDComponent`: a
 single-screen transform that reads ``sed_intrinsic`` and writes
 ``sed_attenuated = sed_intrinsic * exp(-A(λ; τ_V))``.
 
 Unlike a fixed ``k(λ)`` law scaled by ``τ_V``, the WG00 *curve shape* depends on
-``τ_V`` (high-τ sightlines self-shield → greyer attenuation), so the full
+``τ_V`` (high-τ sightlines self-shield → grayer attenuation), so the full
 ``A(λ; τ_V)`` table is interpolated (triweight in ``τ_V``) and applied directly.
 The structural choices — dust grain population (MW/SMC), large-scale geometry
 (shell/cloudy/dusty), and local density (homogeneous/clumpy) — are static
@@ -148,7 +148,7 @@ class WG00AttenuationSEDComponent:
         continuum (folded into ``sed_intrinsic`` by the nebular component)
         together with the stellar light — matching bagpipes/FSPS/CIGALE.
         Without it the stable sort left dust *before* nebular, leaving the
-        continuum unattenuated (the single-screen analogue of the
+        continuum unattenuated (the single-screen analog of the
         two-component bug fixed in #668). BakedIn backends publish zeros, so
         this is a no-op there; the screen acts on the summed
         ``sed_intrinsic`` and does not read the key directly.

@@ -36,7 +36,7 @@ def kubota_done_disc_block(
 ) -> Array:
     r"""Kubota & Done (2018) three-zone disc + corona block.
 
-    Three radial zones: cool outer SS thin disc, warm Comptonising region,
+    Three radial zones: cool outer SS thin disc, warm Comptonizing region,
     hot inner corona. Designed for intermediate-to-high accretion rates.
 
     Parameters
@@ -48,9 +48,9 @@ def kubota_done_disc_block(
     agn_f_hard : float, optional
         Coronal luminosity fraction. Default ``0.02``.
     agn_gamma_warm, agn_kt_warm : float, optional
-        Warm Comptonisation photon index and electron temperature [keV].
+        Warm Comptonization photon index and electron temperature [keV].
     agn_gamma_hard, agn_kt_hot : float, optional
-        Hot Comptonisation photon index and electron temperature [keV].
+        Hot Comptonization photon index and electron temperature [keV].
     agn_r_warm_ratio : float, optional
         :math:`R_{\rm warm}/R_{\rm hot}`. Default ``2.0``.
 

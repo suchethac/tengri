@@ -87,7 +87,7 @@ class TestShockBPTPhysics:
         Allen+2008: [NII] is strongest at low-to-intermediate shock
         velocities where the post-shock gas temperature is optimal for
         N+ collisional excitation (~1-3e4 K). At higher velocities the
-        gas is too hot and nitrogen is further ionised.
+        gas is too hot and nitrogen is further ionized.
         """
         from tengri.components.nebular.shock import shock_line_ratios
 
@@ -253,7 +253,7 @@ class TestPatchyIGMQuantitative:
         """Damping wing extends redward of Lya (diagnostic of neutral IGM).
 
         The red damping wing is the key observational signature that
-        distinguishes a partially neutral IGM from a fully ionised one.
+        distinguishes a partially neutral IGM from a fully ionized one.
         """
         from tengri.components.igm import igm_transmission_patchy
 
@@ -264,19 +264,19 @@ class TestPatchyIGMQuantitative:
         wave_red = jnp.linspace(lya_obs + 50, lya_obs + 500, 100)
 
         # x_HI = 0: no damping wing (Inoue only)
-        t_ionised = np.asarray(igm_transmission_patchy(wave_red, z, x_HI=0.0))
+        t_ionized = np.asarray(igm_transmission_patchy(wave_red, z, x_HI=0.0))
 
         # x_HI = 0.5: damping wing should reduce transmission
         t_neutral = np.asarray(igm_transmission_patchy(wave_red, z, x_HI=0.5, R_bubble=1.0))
 
         # Damping wing reduces transmission redward of Lya
-        assert np.mean(t_neutral) < np.mean(t_ionised), (
+        assert np.mean(t_neutral) < np.mean(t_ionized), (
             f"Damping wing not detected: T(x_HI=0.5)={np.mean(t_neutral):.3f} "
-            f">= T(x_HI=0)={np.mean(t_ionised):.3f}"
+            f">= T(x_HI=0)={np.mean(t_ionized):.3f}"
         )
 
     def test_larger_bubble_more_transmission(self):
-        """Larger ionised bubble → more transmission near Lya."""
+        """Larger ionized bubble → more transmission near Lya."""
         from tengri.components.igm import igm_transmission_patchy
 
         z = 7.0
@@ -652,7 +652,7 @@ class TestLi08AttenuationPhysics:
         assert mostly_decreasing, "SMC-like (c4=0) should be mostly monotonic in UV"
 
     def test_calzetti_preset_greyer(self):
-        """Calzetti-like preset is greyer than MW-like (smaller k_1500 / k_5500)."""
+        """Calzetti-like preset is grayer than MW-like (smaller k_1500 / k_5500)."""
         from tengri.components.dust.attenuation import li08
 
         wave = jnp.array([1500.0, 5500.0])
@@ -661,7 +661,7 @@ class TestLi08AttenuationPhysics:
         mw_ratio = float(k_mw[0] / k_mw[1])
         calz_ratio = float(k_calz[0] / k_calz[1])
         assert calz_ratio < mw_ratio, (
-            f"Calzetti-like should be greyer: MW={mw_ratio:.3f}, Calz={calz_ratio:.3f}"
+            f"Calzetti-like should be grayer: MW={mw_ratio:.3f}, Calz={calz_ratio:.3f}"
         )
 
     def test_positive_everywhere(self):

@@ -132,12 +132,12 @@ print()
 print(f"Ratio (flat-slab / Sérsic): {frac_flat / frac_sersic:.2f}")
 
 # %% [markdown]
-# **What this means for SED fitting.** When the same flux normalisation
+# **What this means for SED fitting.** When the same flux normalization
 # is used for both spectrum and photometry, a flat-slab assumption
 # implies the fiber captures `frac_flat` of the total. The physical
 # Sérsic profile says it actually captures `frac_sersic`. If you fit
 # both jointly with the wrong aperture model, you push the inferred
-# total-flux normalisation up or down to compensate — biasing
+# total-flux normalization up or down to compensate — biasing
 # **stellar mass**, **star-formation rate**, and **dust attenuation**.
 #
 # Sérsic n=1 (this notebook): the bias is modest. Try `n=4`
@@ -190,7 +190,7 @@ print(
 # masses, and read off the bias the flat-slab approximation would
 # introduce on this dataset.
 #
-# The same machinery generalises to imaging (resolved 2-D maps via a
+# The same machinery generalizes to imaging (resolved 2-D maps via a
 # future `ImagingObservation`) and to IFU spectroscopy — the spatial
 # sub-model is the common substrate.
 
@@ -198,7 +198,7 @@ print(
 # ## Further reading
 #
 # - Architecture spec: `docs/dev/forward-model-architecture.md` §2 (the
-#   motivating story), §3.3 (B-path keys reserved for colour gradients).
+#   motivating story), §3.3 (B-path keys reserved for color gradients).
 # - Spatial profiles: `tengri.components.spatial.{Sersic, Exponential, FlatSlab}`.
 # - Aperture math: `tengri.observation.fiber_aperture`.
 # - Composer: `tengri.observation.joint_observation.JointObservation`.

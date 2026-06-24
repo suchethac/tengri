@@ -11,7 +11,7 @@ Predicts X-ray emission (0.1–10 keV, λ < 124 Å) from three physical componen
 All functions are pure JAX, JIT-compatible, fully differentiable.
 
 **Self-consistent disc-corona**: The function xray_agn_corona_from_disc computes
-the X-ray photon index and normalisation from disc UV luminosity using empirical
+the X-ray photon index and normalization from disc UV luminosity using empirical
 α_ox–L_2500 correlations (Just et al. 2007; Yang et al. 2022). This enforces
 physical consistency between UV and X-ray SED components during inference.
 
@@ -384,8 +384,8 @@ def pexrav_reflection(
     g_kn = jnp.maximum(1.0 - 2.0 * x + (5.0 / 3.0) * x**2, 0.0)
     g_kn = jnp.where(x > 0.5, 0.0, g_kn)
 
-    # Angle factor: (2μ+1)/3 normalises to ~ 0.67 at the default
-    # cos_inc = 0.5, matching MZ95 Fig. 1's 60° normalisation.
+    # Angle factor: (2μ+1)/3 normalizes to ~ 0.67 at the default
+    # cos_inc = 0.5, matching MZ95 Fig. 1's 60° normalization.
     mu_factor = (2.0 * cos_inc + 1.0) / 3.0
 
     # n_h_disc is the cold disc surface column — currently absorbed
@@ -416,7 +416,7 @@ def xray_xrb(
     Computes the combined X-ray emission from high-mass (HMXB) and low-mass
     (LMXB) X-ray binary populations. HMXB luminosity scales with SFR and
     metallicity (Lehmer et al. 2016). LMXB luminosity scales with stellar
-    mass and age (Lehmer et al. 2016). Both are modelled as power-laws
+    mass and age (Lehmer et al. 2016). Both are modeled as power-laws
     with exponential cutoff.
 
     Parameters
@@ -480,7 +480,7 @@ def xray_xrb(
         At t=1 Gyr, this yields ≈ 8.3×10^28 erg/s per M_sun, consistent with
         Gilfanov 2004.
 
-    **Spectral shape**: Both HMXB and LMXB are modelled as power-laws with
+    **Spectral shape**: Both HMXB and LMXB are modeled as power-laws with
     a high-energy exponential cutoff (photoelectric absorption, or intrinsic
     accretion torque limits):
 
@@ -530,7 +530,7 @@ def xray_xrb(
     L_hmxb_ref = 10.0**log_l_hmxb_per_sfr * sfr * 10.0**log_L_hmxb_offset
 
     # Lehmer+2014 / Yang+22 age quartic for LMXB (yang20.py:216–224).
-    # Yang+22 normalises *per 1e10 M_sun*, not per M_sun:
+    # Yang+22 normalizes *per 1e10 M_sun*, not per M_sun:
     #   log( L_LMXB(2-10) / (M_star/1e10 Msun) ) [W]
     #       = 33.276 - 1.503·logT - 0.423·logT² + 0.425·logT³ + 0.136·logT⁴
     # So in erg/s per Msun:
@@ -546,7 +546,7 @@ def xray_xrb(
     L_lmxb_ref = 10.0**log_l_lmxb_per_1e10 * (stellar_mass / 1.0e10) * 10.0**log_L_lmxb_offset
 
     # Power-law with exponential cutoff: L_nu ∝ (E/E_ref)^{-Γ+1} * exp(-E/E_cut)
-    # Normalise by integrating the spectral shape over the 2-10 keV reference band
+    # Normalize by integrating the spectral shape over the 2-10 keV reference band
     # (not by a single-point bandwidth, which gives ~2-3x error in absolute luminosity).
     E_ref = 5.0  # keV (reference for spectral shape evaluation)
 
@@ -666,7 +666,7 @@ def xray_hotgas(
 
     Computes thermal X-ray emission from optically-thin hot plasma in the
     interstellar medium (ISM) and circumgalactic medium (CGM). The emission
-    scales with SFR and is modelled as thermal bremsstrahlung.
+    scales with SFR and is modeled as thermal bremsstrahlung.
 
     Parameters
     ----------
@@ -701,7 +701,7 @@ def xray_hotgas(
 
         This gives L_X^{hot gas} ≈ 7.94×10^38 erg/s per M_sun/yr SFR.
 
-    **Spectral shape**: Hot gas is modelled as thermal bremsstrahlung from
+    **Spectral shape**: Hot gas is modeled as thermal bremsstrahlung from
     optically-thin plasma (Γ = 1; free-free and free-bound emission):
 
         .. math::
@@ -738,7 +738,7 @@ def xray_hotgas(
     E_ref = 1.0  # keV (characteristic hot-gas energy)
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalise by integrating spectral shape over 0.5-2 keV
+    # Normalize by integrating spectral shape over 0.5-2 keV
     E_fine = jnp.linspace(0.5, 2.0, 200)  # keV
     nu_fine = E_fine * _KEV_TO_HZ
     spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
@@ -782,7 +782,7 @@ def xray_anisotropy(
     **JIT-compatible**: yes — pure JAX function.
 
     **Empirical correction** (Yang et al. 2022 [1]_): polynomial in
-    :math:`\mu \equiv \cos\theta`, normalised so the bolometric
+    :math:`\mu \equiv \cos\theta`, normalized so the bolometric
     corona luminosity at θ=0° (face-on, :math:`\mu = 1`) is recovered.
 
     The anisotropic luminosity is computed as (yang20.py:231–235):
@@ -889,7 +889,7 @@ def xray_agn_corona_from_disc(
     E_ref = 2.0  # keV
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalise at 2 keV. ``l_2kev_erg_hz`` is already L_nu(2 keV) in erg/s/Hz
+    # Normalize at 2 keV. ``l_2kev_erg_hz`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
     # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
     l_nu = l_2kev_erg_hz * spec
@@ -1115,7 +1115,7 @@ def _xray_agn_corona_bolometric(
     E_ref = 2.0  # keV
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalise at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
+    # Normalize at 2 keV. ``L_2keV`` is already L_nu(2 keV) in erg/s/Hz
     # (alpha_ox is defined on monochromatic L_nu values, Tananbaum+1979), so
     # multiplying by the dimensionless ``spec`` (=1 at E=E_ref) gives L_nu(E).
     L_intr = L_2keV * spec
@@ -1525,7 +1525,7 @@ def xray_total_lopez24(
 # ── Deprecation shims ──
 
 
-# Deprecated: old bolometric-normalisation path for xray_agn_corona
+# Deprecated: old bolometric-normalization path for xray_agn_corona
 # Use xray_agn_corona_from_disc (which takes l_2500_30deg) instead
 xray_agn_corona_bolometric = deprecated_alias(
     _xray_agn_corona_bolometric,

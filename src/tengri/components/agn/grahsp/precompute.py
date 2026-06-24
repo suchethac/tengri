@@ -22,7 +22,7 @@ parameter exploration. Auto-collapse of ``Fixed`` axes is supported
 
 References
 ----------
-Buchner, J. et al. 2024, arXiv:2405.19297, §2.2 (computational optimisations).
+Buchner, J. et al. 2024, arXiv:2405.19297, §2.2 (computational optimizations).
 """
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ def _build_grid_grahsp(
         axes=(plslope_grid, ebv_grid),
         redshift=redshift,
         dl_cm=1.0,
-        energy_normalize=False,  # GRAHSP normalises to l5100; do not double-normalise
+        energy_normalize=False,  # GRAHSP normalizes to l5100; do not double-normalize
         units="llam",
     )
 

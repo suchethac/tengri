@@ -106,7 +106,7 @@ class TestContextAccessors:
         assert ctx.data_type == fitter.data_type
         assert ctx.has_spectroscopy == fitter._has_spectroscopy
         assert ctx.fixed_values is fitter._fixed_values
-        # Calibration marginalisation config
+        # Calibration marginalization config
         assert ctx.calibration_marginalize == fitter._calibration_marginalize
         assert ctx.cal_n_poly == fitter._cal_n_poly
         assert ctx.cal_prior_sigma == fitter._cal_prior_sigma
@@ -268,7 +268,7 @@ class TestDispatchSwitch:
         assert target.fitter is fitter
 
     def test_register_backend_decorator_defaults_to_legacy(self):
-        """Existing @register_backend(...) call sites should not change behaviour."""
+        """Existing @register_backend(...) call sites should not change behavior."""
 
         @register_backend("_default_probe")
         def runner(target, *, key, init_from=None, **kw):

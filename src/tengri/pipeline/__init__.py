@@ -60,12 +60,12 @@ from tengri.forward.orchestrator import (
     slice_params_for_component,
 )
 from tengri.inference.composite_likelihood import CompositeLikelihood
-from tengri.inference.likelihoods.marginalised import (
-    CalibrationELineMarginalisedLikelihood,
-    CalibrationMarginalisedLikelihood,
-    CloudyELineMarginalisedLikelihood,
+from tengri.inference.likelihoods.marginalized import (
+    CalibrationELineMarginalizedLikelihood,
+    CalibrationMarginalizedLikelihood,
+    CloudyELineMarginalizedLikelihood,
     ELineFittedLikelihood,
-    ELineMarginalisedLikelihood,
+    ELineMarginalizedLikelihood,
 )
 from tengri.inference.likelihoods.protocol import (
     CensoredLikelihood,
@@ -89,15 +89,15 @@ from tengri.protocols import (
 
 __all__ = [
     "BARE_NAME_ALLOWLIST",
-    "CalibrationELineMarginalisedLikelihood",
-    "CalibrationMarginalisedLikelihood",
+    "CalibrationELineMarginalizedLikelihood",
+    "CalibrationMarginalizedLikelihood",
     "CensoredLikelihood",
-    "CloudyELineMarginalisedLikelihood",
+    "CloudyELineMarginalizedLikelihood",
     "CompositeLikelihood",
     "DustAttenuationSEDComponent",
     "DustEmissionSEDComponent",
     "ELineFittedLikelihood",
-    "ELineMarginalisedLikelihood",
+    "ELineMarginalizedLikelihood",
     "ForwardState",
     "GaussianLikelihood",
     "IGMSEDComponent",

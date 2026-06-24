@@ -10,7 +10,7 @@ The reference SED is read from the committed HDF5 ``data/agnfitter_bbb_reference
 (converted once from THB21.pickle by ``scripts/build_agnfitter_bbb_reference.py``) —
 no pickle at test time, so this runs in CI rather than skipping (#613).
 
-Measured agreement (UV–optical–NIR, 1200 Å–1.5 µm, peak-normalised): the QSOgen and
+Measured agreement (UV–optical–NIR, 1200 Å–1.5 µm, peak-normalized): the QSOgen and
 THB21 peaks coincide at the Hα bump (6539 Å) and max|log10(qsogen/THB21)| = 0.31 dex
 (median 0.03 dex). The test asserts peak coincidence and < 0.5 dex shape agreement.
 

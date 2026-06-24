@@ -229,7 +229,7 @@ def _build_dsps_sfh_table(age_yr, sfr, t_obs_gyr, add_young_knot=False):
     sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
     if add_young_knot:
         # Exclude the young-boundary knot's [0, age0] segment (the last ascending
-        # element, at t_cosmic = t_obs) from the normalisation: the knot
+        # element, at t_cosmic = t_obs) from the normalization: the knot
         # REDISTRIBUTES mass into the youngest SSP bin via DSPS's (sum-to-one)
         # weights, it must not inflate the total. Trapezoid over all-but-the-knot
         # is exactly the as-given SFH mass, so ``sum(age_weights) ==
@@ -255,7 +255,7 @@ __all__ = [
     "StellarSEDComponentState",
 ]
 
-# Lyman limit — wavelengths below this contribute to the ionising
+# Lyman limit — wavelengths below this contribute to the ionizing
 # photon rate (matches :mod:`tengri.components.nebular.ionizing_spectrum`).
 _HI_LIMIT_AA: float = 911.76
 
@@ -329,14 +329,14 @@ class StellarSEDComponentState(SEDComponentState):
     or ztable (free-z). When ``approx=SpectrumPrecomp()`` is set, it instead
     carries the pre-rebinned SSP×pixel LUT (``ssp_spec_lut``, fixed-z) or
     its redshift table (``ssp_spec_ztable``, free-z) — the spectroscopic
-    analogue of the photometric LUT.
+    analog of the photometric LUT.
     """
 
     name: str = "stellar"
     ssp_phot_lut: Any | None = None
     ssp_phot_ztable: Any | None = None
     # Phase 5 (SpectrumPrecomp): SSP flux pre-rebinned to spectrum pixel
-    # centres in the galaxy rest frame. ``ssp_spec_lut`` is a
+    # centers in the galaxy rest frame. ``ssp_spec_lut`` is a
     # :class:`SpectroscopicPrecomputation` (fixed-z); ``ssp_spec_ztable``
     # is a :class:`SpectroscopicZTable` (free-z).
     ssp_spec_lut: Any | None = None
@@ -390,7 +390,7 @@ class StellarSEDComponent:
       SSP age bin (∫ L_ν dν).
     - ``lnu_age`` (ndarray, shape ``(n_age, n_wave)``, erg/s/Hz) —
       per-age L_nu cube. Memory cost ~3 MB for n_age=140, n_wave=2700.
-    - ``nion`` (scalar, photons/s) — ionising photon production rate
+    - ``nion`` (scalar, photons/s) — ionizing photon production rate
       (∫_{λ<911.76 Å} L_ν / (hν) dν, total over all ages).
     - ``sfh_grid_lbt_yr`` (ndarray, shape ``(n_grid,)``, yr) — SFH
       lookback-time grid (log-spaced, 1e5 yr → AGEMAX_YR).
@@ -500,7 +500,7 @@ class StellarSEDComponent:
         ``spectrum_precomp`` (with ``spec_wave_obs``), calls
         :func:`precompute_spectroscopy` (fixed-z) or
         :func:`precompute_spectroscopy_ztable` (free-z), pre-rebinning the
-        SSP grid to the spectrum pixel centres in the galaxy rest frame
+        SSP grid to the spectrum pixel centers in the galaxy rest frame
         (Phase 5). Otherwise returns an empty state marker.
 
         Parameters
@@ -529,7 +529,7 @@ class StellarSEDComponent:
 
         state = StellarSEDComponentState(name=self.name)
 
-        # Phase 5: SpectrumPrecomp — pre-rebin SSP to spectrum pixel centres.
+        # Phase 5: SpectrumPrecomp — pre-rebin SSP to spectrum pixel centers.
         # Part A (joint): build the spectrum LUT *alongside* the photometry LUT
         # below (not an early return) so a joint photometry+spectroscopy model
         # carries BOTH families in one state. ``_precompute_spectrum`` populates
@@ -605,11 +605,11 @@ class StellarSEDComponent:
     ) -> StellarSEDComponentState:
         """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()`` (Phase 5).
 
-        Pre-rebins the SSP flux cube to the spectrum pixel centres in the
+        Pre-rebins the SSP flux cube to the spectrum pixel centers in the
         galaxy rest frame. Unlike the photometric LUT, **no Taylor moment
         is needed**: a spectrum pixel is a single wavelength, so dust
-        attenuation ``A(λ_pix)`` evaluated at the pixel centre is exact —
-        there is no wide-kernel integral to factorise.
+        attenuation ``A(λ_pix)`` evaluated at the pixel center is exact —
+        there is no wide-kernel integral to factorize.
 
         Fixed-z builds a single :class:`SpectroscopicPrecomputation`; free-z
         builds a :class:`SpectroscopicZTable` so the rest-frame pixel grid
@@ -818,7 +818,7 @@ class StellarSEDComponent:
         # at 1 Myr cadence (13700 bins over 1 Myr → 13.7 Gyr), so SF-onset
         # cutoffs at ``t_lookback = age`` land on grid points instead of
         # being smeared across the coarser ~3 % log-spaced bins of
-        # ``sfh_lbt_grid``. The closed form also self-normalises through
+        # ``sfh_lbt_grid``. The closed form also self-normalizes through
         # ``_renormalize_to_mass``, so total mass formed = ``10**log_total_mass``
         # exactly. See suchethac/tengri#385.
         #
@@ -845,7 +845,7 @@ class StellarSEDComponent:
         # consistently. Mirrors legacy sed_model.py:3578-3592.
         # 4D α-enhanced SSPs: collapse the [α/Fe] axis to a single
         # plane once, here, then pass the resulting 3D ssp_flux to the
-        # downstream DSPS kernel (closes #226). The Z marginalisation
+        # downstream DSPS kernel (closes #226). The Z marginalization
         # remains the standard lognormal MDF for every met_mode, so the
         # 4D and 3D paths share the same Z bookkeeping — only the
         # ``ssp_flux`` that DSPS sees differs.
@@ -1091,7 +1091,7 @@ class StellarSEDComponent:
         # build a strictly-monotonic ramp at the invalid end and zero
         # the SFR there so those bins contribute nothing.
         ssp_age_gyr = ssp_ages_yr / 1e9
-        # Coarse (per-SSP-age) total formed mass — the conserved normalisation
+        # Coarse (per-SSP-age) total formed mass — the conserved normalization
         # basis (without the young-boundary knot) shared by every DSPS path
         # below. Each path rebuilds its own (t, SFR) table: the non-parametric
         # delta path with a dense integrand (#758), and both the parametric
@@ -1209,7 +1209,7 @@ class StellarSEDComponent:
         # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
         ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
         # Per-age "mass" for downstream per-age operations (dust BC mask).
-        # This is the marginalised age distribution × total_mass.
+        # This is the marginalized age distribution × total_mass.
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
 
         # ── 7. Stellar SED in erg/s/Hz ──────────────────────────────────
@@ -1219,7 +1219,7 @@ class StellarSEDComponent:
         # ``weights``; they differ ONLY by the formed-mass scalar:
         # ``mstar_obs`` is DSPS's cumulative-SFH quadrature on its internal
         # log-time ``T_TABLE``, whereas ``total_mass`` is the trapezoid
-        # integral on the SSP-age grid. The post-2026-05-25 SFH normalisation
+        # integral on the SSP-age grid. The post-2026-05-25 SFH normalization
         # contract defines formed mass as ``trapezoid(sfr, t) = 10**log_total_mass``
         # (see ``_renormalize_to_mass`` and ``predict_surviving_mass``), so
         # ``total_mass`` is canonical and ``mstar_obs`` deviates by up to ~6.6%
@@ -1228,7 +1228,7 @@ class StellarSEDComponent:
         # contract for the SED at low z and disagreed with every precompute LUT
         # (which already use ``total_mass``). Reconstructing here makes the
         # exact SED, the photometry/spectrum LUTs, ``lnu_age``, ``L_age``,
-        # ``age_weights``, and ``pred.stellar_mass`` all honour the one
+        # ``age_weights``, and ``pred.stellar_mass`` all honor the one
         # contract mass. ``ssp_flux_at_age`` (line above) is the per-met-summed
         # joint-weighted SSP flux per Msun formed; summing over age and scaling
         # by ``total_mass`` is exactly ``Σ_age lnu_age``. (Reverses #394.)
@@ -1258,7 +1258,7 @@ class StellarSEDComponent:
         nu_jac = C_AA / (wave**2)
         L_age = jnp.trapezoid(lnu_age * nu_jac[None, :], wave, axis=1)
 
-        # ── 11. Ionising photon production rate (λ < 911.76 Å) ──────────
+        # ── 11. Ionizing photon production rate (λ < 911.76 Å) ──────────
         # photons/s = ∫_{ν > c/λ_HI} L_ν / (hν) dν, summed over all ages.
         # Mirrors components/nebular/ionizing_spectrum.py:299.
         #
@@ -1267,11 +1267,11 @@ class StellarSEDComponent:
         # the bracketing points), a hard ``wave < 911.76`` mask drops
         # the 905 → 911.76 portion of the boundary bin entirely. SSP
         # spectra have a near-discontinuous Lyman drop at 911.76 Å:
-        # ionising flux is well-defined right up to the limit, then
+        # ionizing flux is well-defined right up to the limit, then
         # drops to zero. Linear interpolation between 905 and 915 Å
         # would under-estimate the boundary value (a half-value of the
-        # ionising side); the correct partial-bin contribution treats
-        # ``L_ν`` as constant from the last ionising grid point up to
+        # ionizing side); the correct partial-bin contribution treats
+        # ``L_ν`` as constant from the last ionizing grid point up to
         # 911.76 Å — a rectangle, not a trapezium. This matches the
         # physical Lyman discontinuity and produces a Q_H consistent
         # with CIGALE's tabulated ``stellar.n_ly`` to within numerical
@@ -1281,8 +1281,8 @@ class StellarSEDComponent:
         integrand = sed_intrinsic / (H_PLANCK * nu)
         ionizing_mask = wave < _HI_LIMIT_AA
         integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-        # Find the last ionising grid point (wave_below < 911.76) and the
-        # first non-ionising one (wave_above ≥ 911.76).
+        # Find the last ionizing grid point (wave_below < 911.76) and the
+        # first non-ionizing one (wave_above ≥ 911.76).
         idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(len(wave)), -1))
         idx_above = idx_below + 1
         nu_below = nu[idx_below]
@@ -1343,7 +1343,7 @@ class StellarSEDComponent:
             # over the metallicity axis. Published so downstream
             # nebular backends (Cue, CloudyGrid) can call their
             # high-level ``predict_nebular_*(ssp_weights=...)``
-            # entry points and derive Q_H + ionising spectrum
+            # entry points and derive Q_H + ionizing spectrum
             # from the SSP, matching legacy parity.
             age_weights=age_weights,
             nion=nion,
@@ -1366,9 +1366,9 @@ class StellarSEDComponent:
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Phase 3c-3c-iv-a: age-resolved per-filter LUT for two-component
-            # dust attenuation. Marginalise over metallicity only; preserve
+            # dust attenuation. Marginalize over metallicity only; preserve
             # the age axis. Shape (n_age, n_filter). Sum over age == the
-            # marginalised stellar_phot_lnu_precomp above.
+            # marginalized stellar_phot_lnu_precomp above.
             stellar_phot_lnu_per_age = (
                 total_mass * jnp.einsum("ma,maf->af", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
@@ -1412,7 +1412,7 @@ class StellarSEDComponent:
             # The triweight kernel (Hearin et al. 2023) is the canonical
             # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
             # and SKIRTOR grids — C²-continuous, kernel-supported on the
-            # 3-bandwidth neighbourhood. See issue #438.
+            # 3-bandwidth neighborhood. See issue #438.
             from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
             ztable = self._state.ssp_phot_ztable
@@ -1420,7 +1420,7 @@ class StellarSEDComponent:
             z_grid = ztable.z_grid
             z_edges = edges_for_grid(z_grid)
             # Match grid-cell width for the kernel bandwidth (Hearin 2023
-            # convention): smooth across one neighbour on each side.
+            # convention): smooth across one neighbor on each side.
             z_scatter = 0.5 * (z_grid[1] - z_grid[0])
             w_z = compute_grid_weights(z, z_grid, scatter=z_scatter, edges=z_edges)
 
@@ -1430,7 +1430,7 @@ class StellarSEDComponent:
 
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
             ssp_phot_at_z = _interp(ztable.ssp_phot_table)
-            # Marginalised + age-resolved LUTs (Phase 3c-3c-iv-a parity).
+            # Marginalized + age-resolved LUTs (Phase 3c-3c-iv-a parity).
             stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
             )
@@ -1442,7 +1442,7 @@ class StellarSEDComponent:
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Phase 3c-3c-v: Taylor moment Ψ at runtime z. Interpolate the
-            # moment table the same way and publish marginalised + per-age.
+            # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:
                 ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
                 stellar_phot_moment_precomp = (
@@ -1469,7 +1469,7 @@ class StellarSEDComponent:
 
         # ── 12c. Stellar spectrum LUT (Phase 5; SpectrumPrecomp) ────────
         # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
-        # centres in the galaxy rest frame. Publishes:
+        # centers in the galaxy rest frame. Publishes:
         #   - ``stellar_spec_lnu_precomp`` (n_pix,) — rest-frame Lν [erg/s/Hz]
         #   - ``spec_eff_waves`` (n_pix,) — rest-frame pixel wavelengths [Å]
         # The latter routes downstream SEDModelComponents (dust / AGN / IGM /
@@ -1482,7 +1482,7 @@ class StellarSEDComponent:
             )
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
             # Age-resolved per-pixel LUT for two-component (Charlot & Fall)
-            # dust attenuation at the pixel grid (sum over age == marginalised).
+            # dust attenuation at the pixel grid (sum over age == marginalized).
             stellar_spec_lnu_per_age = (
                 total_mass
                 * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels)

@@ -226,7 +226,7 @@ def build_lookup(preint: dict, **kwargs: Any) -> dict:
         """
         # sigma_blr_kms is a runtime knob retained in the signature for
         # gradient-flow consistency; the band-projection matrix uses
-        # delta-function line centres (narrow vs filter width).
+        # delta-function line centers (narrow vs filter width).
         _ = sigma_blr_kms
 
         # Compose total line luminosity (emission lines + Fe II pseudo-continuum)

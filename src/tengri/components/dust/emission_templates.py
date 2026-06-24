@@ -168,7 +168,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         where ``R = U_max ln(U_max/U_min) / (U_max - U_min)`` is the DL07
         Eq. 33 relative luminosity of the power-law (PDR) component (alpha=2,
         U_max=1e6). The single-U and power-law templates are each
-        shape-normalised to unit wavelength integral; ``R`` restores the PDR
+        shape-normalized to unit wavelength integral; ``R`` restores the PDR
         component's higher luminosity per unit dust mass, converting the
         mass-fraction ``gamma`` into the correct luminosity weighting.
 
@@ -224,7 +224,7 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
         # Mix single-U (diffuse) and power-law (PDR) components.
         #
         # ``dust_gamma_dl`` is the *dust-mass* fraction in the power-law-heated
-        # PDR, but the templates are each shape-normalised (unit integral), which
+        # PDR, but the templates are each shape-normalized (unit integral), which
         # discards the PDR component's higher luminosity per unit mass. PDR dust
         # is heated by U from U_min to U_max, so it emits a factor
         #   R = <U>_pl / U_min = U_max * ln(U_max/U_min) / (U_max - U_min)
@@ -637,9 +637,9 @@ def dale2014_emission_lnu(
 
     :math:`L_{\rm abs}` is the dust-absorbed luminosity [erg/s], :math:`f_{\rm
     AGN}` the AGN heating fraction, :math:`T_{\rm SF}(\alpha)` the SF template
-    linearly interpolated in :math:`\alpha` and unit-normalised
+    linearly interpolated in :math:`\alpha` and unit-normalized
     (:math:`\int T\,d\nu = 1`), and :math:`T_{\rm QSO}` the AGN template carrying
-    CIGALE's full-grid normalisation (its integral over the dust grid is ~0.54,
+    CIGALE's full-grid normalization (its integral over the dust grid is ~0.54,
     ~0.42 redward of 1 um).
 
     Parameters
@@ -653,9 +653,9 @@ def dale2014_emission_lnu(
     alpha_grid : ndarray, shape (n_alpha,)
         Radiation-field slope grid [dimensionless].
     templates_sf : ndarray, shape (n_alpha, n_tmpl)
-        Unit-normalised SF templates [L_nu].
+        Unit-normalized SF templates [L_nu].
     templates_qso : ndarray, shape (n_tmpl,) or None
-        AGN template [L_nu], CIGALE full-grid normalisation. ``None`` if absent.
+        AGN template [L_nu], CIGALE full-grid normalization. ``None`` if absent.
     has_qso : bool
         Whether ``templates_qso`` is available (static branch selector).
     dust_alpha_dale : float
@@ -696,14 +696,14 @@ def dale2014_emission_lnu(
 
 
 def load_dale2014_lnu_grid(grid_path: str) -> dict:
-    r"""Load + normalise a Dale+2014 template grid into L_nu jnp arrays.
+    r"""Load + normalize a Dale+2014 template grid into L_nu jnp arrays.
 
-    Single source of truth for Dale2014 template loading + normalisation, used by
+    Single source of truth for Dale2014 template loading + normalization, used by
     the ``dale2014`` engine model via :func:`create_dale2014_from_grid`
     (#717 consolidation).
 
-    SF templates are unit-normalised (:math:`\int L_\nu\,d\nu = 1`). The QSO
-    template is unit-normalised then rescaled by the fraction of a unit quasar
+    SF templates are unit-normalized (:math:`\int L_\nu\,d\nu = 1`). The QSO
+    template is unit-normalized then rescaled by the fraction of a unit quasar
     that lives on the (truncated) dust grid (~0.54), preserving CIGALE's energy
     partition so the ``dust_frac_agn`` mixing matches CIGALE (#717).
 
@@ -782,7 +782,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 
         templates_lnu = templates_raw * (wave_cm**2)[None, :] / _C_CGS
 
-        # Unit-normalise each SF template so integral(L_nu, dnu) = 1.
+        # Unit-normalize each SF template so integral(L_nu, dnu) = 1.
         # nu is descending, so negate for positive integral.
         for i in range(templates_lnu.shape[0]):
             integral = -np.trapezoid(templates_lnu[i], nu)
@@ -805,7 +805,7 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
         # fraction: dividing by the L_nu integral fixes the unit scale,
         # multiplying by ``qso_frac`` restores the 1 : ~0.54 SF:QSO ratio that
         # matches CIGALE's energy partition. Forcing the QSO to unit (the old
-        # behaviour) over-weighted its IR share to ~0.78 and made the
+        # behavior) over-weighted its IR share to ~0.78 and made the
         # ``dust_frac_agn`` mid-IR mixing grow too bright with fracAGN
         # (#717: ran 1.43x at f=0.6 vs CIGALE).
         templates_qso_np = None
@@ -830,10 +830,10 @@ def load_dale2014_lnu_grid(grid_path: str) -> dict:
 def create_dale2014_from_grid(grid_path: str) -> Callable:
     r"""Create a Dale+2014 emission model backed by tabulated templates.
 
-    Thin registry-closure wrapper: loads + normalises the grid via
+    Thin registry-closure wrapper: loads + normalizes the grid via
     :func:`load_dale2014_lnu_grid` and returns a function that delegates to the
     shared :func:`dale2014_emission_lnu` mixing — identical physics and
-    normalisation across every consumer of the ``dale2014`` engine model
+    normalization across every consumer of the ``dale2014`` engine model
     (#717 consolidation).
 
     Parameters
@@ -951,7 +951,7 @@ def create_schreiber2018_from_grid(grid_path: str) -> Callable:
     ``scripts/build_schreiber2018_grid.py``) stores dust and PAH templates as
     *native* relative ``L_nu`` over a shared dust-temperature axis. At runtime
     the model linearly interpolates both in ``dust_T``, forms AGNfitter-rX's
-    native mixture ``(1 - f_PAH)·dust + f_PAH·PAH``, and renormalises the
+    native mixture ``(1 - f_PAH)·dust + f_PAH·PAH``, and renormalizes the
     frequency integral to ``L_absorbed``.
 
     Parameters
@@ -1035,14 +1035,14 @@ def create_schreiber2018_from_grid(grid_path: str) -> Callable:
         pah_T_template = (1.0 - ft) * pah_templates[i] + ft * pah_templates[i + 1]
 
         # Resample both onto the requested grid, then mix natively (AGNfitter-rX
-        # mixes the unnormalised dust/PAH L_nu, so the relative amplitude — and
+        # mixes the unnormalized dust/PAH L_nu, so the relative amplitude — and
         # hence the physical meaning of f_PAH — is preserved).
         dust_on_grid = jnp.interp(wavelength_aa, tmpl_wave, dust_T_template, left=0.0, right=0.0)
         pah_on_grid = jnp.interp(wavelength_aa, tmpl_wave, pah_T_template, left=0.0, right=0.0)
         f_pah = jnp.clip(dust_f_pah, 0.0, 1.0)
         mixed = (1.0 - f_pah) * dust_on_grid + f_pah * pah_on_grid
 
-        # Renormalise the frequency integral to L_absorbed (nu descending for
+        # Renormalize the frequency integral to L_absorbed (nu descending for
         # ascending wavelength, so negate for a positive integral).
         wave_cm = wavelength_aa * _AA_TO_CM
         nu = _C_CGS / wave_cm
@@ -1286,7 +1286,7 @@ def load_astrodust_templates(filepath: str) -> dict:
                 qpah_grid = np.array([qpah_fiducial, qpah_fiducial + 1.0])
                 umin_grid = 10.0 ** np.asarray(lgU, dtype=np.float64)
                 # Per-H L_nu values are O(1e-30); the legacy registry
-                # expects per-template ∫L_ν dν = 1.  Normalise each
+                # expects per-template ∫L_ν dν = 1.  Normalize each
                 # lgU slice; the energy-balance rescale to L_absorbed
                 # happens downstream.
                 wave_cm_aa = wavs_aa * _AA_TO_CM
@@ -1297,13 +1297,13 @@ def load_astrodust_templates(filepath: str) -> dict:
                     norms[i] = integral if integral > 0 else 1.0
                 L_nu_normed = L_nu_total / norms[:, None]
                 # Single-U component: the per-U spectrum at U = U_min, shape-
-                # normalised. Power-law (PDR) component: dust mass distributed
+                # normalized. Power-law (PDR) component: dust mass distributed
                 # as dM/dU ∝ U^-alpha from U_min to U_max (= max grid U). Each
                 # mass element at field U' emits the per-U spectrum
                 # L_nu_total[U'] (per H ∝ per mass), so integrate the *raw*
                 # per-U spectra over the lgU grid weighted by U'^(1-alpha)
                 # (dU' = U' ln10 dlgU on a uniform-lgU grid), then shape-
-                # normalise. The forward applies the DL07 Eq. 33 relative-power
+                # normalize. The forward applies the DL07 Eq. 33 relative-power
                 # weight R. Without this the PDR was a copy of single_u and
                 # ``gamma`` was a no-op (see #571).
                 alpha_pdr = 2.0  # DL07-standard slope for the H&D 2023 grid
@@ -1316,7 +1316,7 @@ def load_astrodust_templates(filepath: str) -> dict:
                     powerlaw_1d[iu] = pdr / integ if integ > 0 else pdr
                 single_u = np.broadcast_to(L_nu_normed[None, :, :], (2, *L_nu_normed.shape)).copy()
                 powerlaw = np.broadcast_to(powerlaw_1d[None, :, :], (2, *powerlaw_1d.shape)).copy()
-                already_lnu = True  # we normalised explicitly above
+                already_lnu = True  # we normalized explicitly above
             elif "wavelength_aa" in f:
                 # Standardized HDF5 (already Angstrom + L_nu normalized)
                 wavs_aa = np.array(f["wavelength_aa"][:])
@@ -1598,7 +1598,7 @@ def create_astrodust_from_grid(
         ) * _bilinear(powerlaw)
 
         # Energy balance: the R weighting makes the mixed template integrate to
-        # 1 + gamma*(R-1), so renormalise to unit frequency integral on the
+        # 1 + gamma*(R-1), so renormalize to unit frequency integral on the
         # (full) template grid before scaling by L_absorbed below.
         nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
         t_integral = -jnp.trapezoid(template, nu_tmpl)
@@ -1956,7 +1956,7 @@ def load_themis_templates(filepath: str) -> dict:
                     # Compact storage: reconstruct the 4-D PDR grid from the
                     # FSPS power-law and a (n_umin, n_alpha, n_wave) reshaping
                     # ratio (scripts/build_themis_alpha_axis.py). Uses the RAW
-                    # power-law (before the L_nu normalisation below).
+                    # power-law (before the L_nu normalization below).
                     _ratio = np.array(f["powerlaw_alpha_ratio"][:], dtype=np.float64)
                     powerlaw_alpha = powerlaw[:, :, None, :] * _ratio[None, :, :, :]
             elif "grid" in f:
@@ -2190,7 +2190,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
         template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + dust_gamma_dl * pdr_template
 
         # Energy balance: the mix integrates to (1-gamma) + gamma*ratio, so
-        # renormalise to unit frequency integral on the (full) template grid
+        # renormalize to unit frequency integral on the (full) template grid
         # before scaling by L_absorbed.
         nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
         t_integral = -jnp.trapezoid(template, nu_tmpl)

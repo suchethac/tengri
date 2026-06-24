@@ -25,7 +25,7 @@ forward model.
 | Extra | Adds | When you need it |
 |---|---|---|
 | `[nuts]` | BlackJAX | NUTS / HMC sampling |
-| `[optax]` | optax | MAP optimisation |
+| `[optax]` | optax | MAP optimization |
 | `[gpu]`  | jax with CUDA wheels | NVIDIA GPU fits |
 | `[all]`  | all of the above | recommended for new users |
 | `[dev]`  | pytest, ruff, jupytext, sphinx | development |
@@ -72,7 +72,7 @@ Or via shell:
 bash scripts/setup_ssp.sh
 ```
 
-The full catalogue of pre-formatted grids (BC03, BPASS, FSPS,
+The full catalog of pre-formatted grids (BC03, BPASS, FSPS,
 ProGeny; 46 templates) lives at the
 [public mirror](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
 

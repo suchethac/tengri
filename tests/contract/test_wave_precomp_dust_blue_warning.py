@@ -23,7 +23,7 @@ pytestmark = pytest.mark.contract
 
 _MATCH = "first-order Taylor projection"
 
-# Observed-frame centres: at z=1, 1500 Å -> rest 750 Å (deep UV, flagged);
+# Observed-frame centers: at z=1, 1500 Å -> rest 750 Å (deep UV, flagged);
 # 6000 Å -> rest 3000 Å and 8000 Å -> rest 4000 Å (optical/NIR, not flagged).
 _UV = (1500.0, "uv")
 _OPT = (6000.0, "opt")

@@ -62,7 +62,7 @@ def compute_uv_slope(
         Then fit log(L_λ) = log(L_0) + β log(λ) to get the slope β.
 
     **Least-squares regression**:
-        Minimises χ² = Σ [log(L_λ) − log(L_0) − β log(λ)]² in log-log space.
+        Minimizes χ² = Σ [log(L_λ) − log(L_0) − β log(λ)]² in log-log space.
         Equivalent to fitting L_λ ∝ λ^β linearly in log space.
 
     **Masking**:

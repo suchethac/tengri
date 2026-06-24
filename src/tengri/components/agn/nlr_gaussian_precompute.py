@@ -10,8 +10,8 @@ emitter is fundamentally *runtime-Gaussian*: line widths and the bolometric
 disc luminosity feeding the NLR are tunable on every gradient step.  The only
 work that can be moved to model build time is the filter projection — i.e. the
 ``(n_lines, n_filt)`` matrix obtained by evaluating each filter transmission
-curve at the redshifted line centre.  Runtime then weighs lines by the
-Richardson+2014 ``a42`` flux template (normalised to H-beta = 1) and rescales
+curve at the redshifted line center.  Runtime then weighs lines by the
+Richardson+2014 ``a42`` flux template (normalized to H-beta = 1) and rescales
 by ``covering_fraction × line_efficiency × L_disc``.
 
 References
@@ -119,7 +119,7 @@ def build_lookup(preint: dict, **kwargs: Any):
     callable
         JIT-compiled closure returning ``(n_filt,)`` band fluxes [erg/s/Hz].
         Wavelength integral is replaced by the precomputed projection
-        matrix at line centres (delta-function approximation; runtime
+        matrix at line centers (delta-function approximation; runtime
         Gaussian widths affect only the spectral shape, not the band
         integrals to first order — exact for narrow lines whose FWHM
         is much smaller than the filter width).

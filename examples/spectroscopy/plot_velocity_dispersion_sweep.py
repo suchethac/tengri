@@ -99,14 +99,14 @@ for sigma_v, color in zip(sigma_v_vals, colors):
 
 # Mark Mg b center (vacuum)
 mgb_center = 5172.68
-ax.axvline(mgb_center, ls=":", lw=1.0, color="grey", alpha=0.5)
+ax.axvline(mgb_center, ls=":", lw=1.0, color="gray", alpha=0.5)
 ax.text(
     mgb_center,
     0.95,
     "Mg b",
     fontsize=9,
     ha="center",
-    color="grey",
+    color="gray",
     transform=ax.get_xaxis_transform(),
 )
 

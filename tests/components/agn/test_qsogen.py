@@ -510,7 +510,7 @@ class TestBrokenPowerlawEuvBranch:
     def test_euv_slope_matches_sl3(self):
         """Below plbrk3, measured log-log slope equals sl1 - plstep = -(plslp1+plstep).
         The normalization is designed so that f_nu is continuous at plbrk3, which
-        means higher plstep pumps up the EUV normalisation constant. The absolute
+        means higher plstep pumps up the EUV normalization constant. The absolute
         flux at λ < plbrk3 is therefore *higher* with larger plstep, but the
         *slope* of log(f) vs log(λ) equals sl3 = -(plslp1 + plstep).
         """

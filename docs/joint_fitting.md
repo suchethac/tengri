@@ -2,7 +2,7 @@
 
 Fitting broadband photometry and a spectrum together breaks degeneracies that
 neither can break alone: photometry anchors the overall SED shape and
-normalisation, while absorption-line spectroscopy pins stellar age and
+normalization, while absorption-line spectroscopy pins stellar age and
 metallicity. [Notebook 07](spine/07_joint_photo_spec) walks through the full
 workflow with figures; this page is the reference for the API.
 

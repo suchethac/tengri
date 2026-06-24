@@ -5,11 +5,11 @@ Guards that ``dust={'lyman_cutoff': True}`` actually reaches the forward model
 — the builder -> spec -> SEDModel -> factory -> DustSEDComponent chain is not a
 silent no-op — and reproduces the intended physics: with the clip enabled the
 attenuation curve is zeroed below 912 Å, so far-UV starlight is transmitted
-unattenuated (CIGALE ``dustatt_modified_starburst`` behaviour) instead of being
+unattenuated (CIGALE ``dustatt_modified_starburst`` behavior) instead of being
 suppressed by tengri's default FUV polynomial extrapolation.
 
 Also covers the unit-level helper, the JIT/grad safety of the clip, the static
-``compile_signature`` distinctness (no kernel-cache colour-leak), the
+``compile_signature`` distinctness (no kernel-cache color-leak), the
 single/wg00 guard, and the grammar round-trip.
 
 Uses the synthetic SSP (spans ~100 Å – 1 mm, so it has FUV grid points below
@@ -127,7 +127,7 @@ class TestForwardWiring:
         sig_on = _build(
             synthetic_ssp_wide, synthetic_tophat_obs, lyman_cutoff=True
         ).compile_signature()
-        assert sig_off != sig_on, "clip must enter compile_signature (colour-leak guard)"
+        assert sig_off != sig_on, "clip must enter compile_signature (color-leak guard)"
 
 
 class TestGrammar:

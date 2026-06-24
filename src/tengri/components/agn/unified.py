@@ -15,7 +15,7 @@ by the ``UnifiedAGN`` class in the Synthesizer package
 Synthesizer's model defines:
 
 - An accretion disc whose inclination-dependent emission is extracted from
-  precomputed photoionisation **grids** (CLOUDY-based).
+  precomputed photoionization **grids** (CLOUDY-based).
 - NLR emission as grid-extracted nebular spectra, *not* masked by the torus
   (isotropic: always visible at all inclinations).
 - BLR emission as grid-extracted nebular spectra, masked by the torus using a
@@ -31,16 +31,16 @@ for compatibility with gradient-based inference (VI, HMC):
 
 1. **Analytic disc models, not grids**: disc emission uses the closed-form
    multicolor/Shakura-Sunyaev or power-law models from ``disc.py`` rather
-   than a photoionisation grid. This makes the disc JIT/grad-compatible.
+   than a photoionization grid. This makes the disc JIT/grad-compatible.
 
 2. **Analytic NLR/BLR templates, not grids**: NLR and BLR use empirically
    calibrated Gaussian line templates (Vanden Berk et al. 2001; Groves et al.
-   2004) rather than CLOUDY-generated photoionisation grids. Grids would
+   2004) rather than CLOUDY-generated photoionization grids. Grids would
    require non-differentiable table look-ups over (U, n_H) axes.
 
 3. **Smooth sigmoid geometric mask, not a hard binary**: Synthesizer zeros
    the disc/BLR whenever ``inclination + theta_torus > 90°``. tengri replaces
-   this with a smooth sigmoid centred at the critical angle (see
+   this with a smooth sigmoid centered at the critical angle (see
    ``_sigmoid_mask``). The sigmoid preserves the gradient through the
    inclination parameter, which would otherwise be zero almost everywhere
    under the hard mask.
@@ -164,7 +164,7 @@ def _redden_disc(
     l_disc : ndarray, shape (n_wave,)
         Unreddened disc SED. [erg/s/Hz]
     agn_ebv_disc : float
-        Colour excess :math:`E(B-V)` applied to the disc. [mag]
+        Color excess :math:`E(B-V)` applied to the disc. [mag]
 
     Returns
     -------
@@ -650,7 +650,7 @@ def kubota_done_full_agn(
     agn_torus_frac : float, optional
         Torus covering factor [dimensionless]. Default 0.5.
     agn_ebv_disc : float, optional
-        SMC-law colour excess on disc [mag]. Default 0.0.
+        SMC-law color excess on disc [mag]. Default 0.0.
 
     Returns
     -------
@@ -800,7 +800,7 @@ def skirtor_stalevski_agn(
     bolometric luminosity. Unlike the ``skirtor`` model (power-law disc) and the
     composable ``disc.skirtor`` block (CIGALE's analytic disc + ``norm=1/∫dust``
     energy balance), this applies **no analytic-disc substitution and no
-    re-normalisation** — it is the faithful SKIRTOR template, matching codes that
+    re-normalization** — it is the faithful SKIRTOR template, matching codes that
     read SKIRTOR directly (e.g. ProSpect's ``SKIRTOR_interp``) rather than CIGALE's
     reconstruction.
 
@@ -1054,7 +1054,7 @@ def adaf_agn(
     agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
     agn_ebv_disc : float, optional
-        SMC-law colour excess on disc [mag]. Default 0.0.
+        SMC-law color excess on disc [mag]. Default 0.0.
 
     Returns
     -------
@@ -1139,7 +1139,7 @@ def relagn_agn(
     agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
     agn_ebv_disc : float, optional
-        SMC-law colour excess applied to disc [mag]. Default 0.0.
+        SMC-law color excess applied to disc [mag]. Default 0.0.
 
     Returns
     -------
@@ -1328,7 +1328,7 @@ def unified_nlr_blr(
     .. rubric:: Deliberate differences from Synthesizer
 
     1. **Analytic disc, not a grid**: Synthesizer extracts disc emission from
-       precomputed CLOUDY photoionisation grids. tengri uses the closed-form
+       precomputed CLOUDY photoionization grids. tengri uses the closed-form
        ``multicolor_disc`` (Shakura-Sunyaev / Novikov-Thorne) from
        ``disc.py``. Rationale: grid look-ups are not JAX-jittable under
        gradient tape; analytic models are differentiable by construction.
@@ -1341,7 +1341,7 @@ def unified_nlr_blr(
     3. **Smooth sigmoid mask, not a hard binary**: Synthesizer zeros the disc
        and BLR when ``inclination + theta_torus > 90°`` — a hard step
        function. tengri replaces this with a smooth sigmoid (see
-       ``_sigmoid_mask``) centred at the same critical angle with a ~2°
+       ``_sigmoid_mask``) centered at the same critical angle with a ~2°
        transition width. Rationale: the hard mask has zero gradient with
        respect to inclination almost everywhere, making gradient-based VI
        and HMC blind to inclination information near the critical angle.
@@ -1376,7 +1376,7 @@ def unified_nlr_blr(
     (1 = visible, 0 = obscured), :math:`A_{\\rm pol,eff}(\\lambda) = 1 + \\sigma(i, \\theta_t) \\,
     (A_{\\rm pol}(\\lambda) - 1)` is the visibility-weighted SMC polar dust transmission
     (SMC law; only reddens when disc is visible to the observer), :math:`f_{\\rm NLR/BLR}`
-    are the covering fractions, :math:`\\eta_{\\rm NLR/BLR}` are the normalised
+    are the covering fractions, :math:`\\eta_{\\rm NLR/BLR}` are the normalized
     line templates, and :math:`\\mathbb{1}_{\\rm X-ray/radio}` are indicator functions
     controlling whether X-ray and radio components are included.
 
@@ -1486,7 +1486,7 @@ def unified_nlr_blr(
 
     **X-ray and radio components** (when included):
 
-    - X-ray: Power-law corona emission normalised via the alpha_OX relation
+    - X-ray: Power-law corona emission normalized via the alpha_OX relation
       (Tananbaum+1979). Wavelength range: λ < 124 Å (E > ~100 eV). Computed
       via :func:`~tengri.components.xray.xray_agn_corona` [4]_.
     - Radio: Synchrotron + optional free-free + AGN jet emission. Wavelength
@@ -1494,7 +1494,7 @@ def unified_nlr_blr(
       :func:`~tengri.components.radio.radio_total` [5]_.
 
     When both ``include_xray=False`` and ``include_radio=False``, the function
-    returns the UV-optical-FIR unified AGN SED (original behaviour). The new
+    returns the UV-optical-FIR unified AGN SED (original behavior). The new
     components are additive and do not affect existing parameters or output
     ranges.
 
@@ -1531,7 +1531,7 @@ def unified_nlr_blr(
 
     # Derive torus covering factor from opening angle for consistency:
     # covering_factor ~ cos(theta_torus). If agn_torus_frac is at default
-    # (0.5), use the geometric value; otherwise honour the explicit setting.
+    # (0.5), use the geometric value; otherwise honor the explicit setting.
     geom_cf = jnp.cos(jnp.radians(jnp.clip(agn_theta_torus, 0.0, 90.0)))
     # When agn_torus_frac is a free parameter, use it directly.
     # The jnp.where(|x-0.5| < 1e-6, geom_cf, x) creates a likelihood discontinuity
@@ -1667,7 +1667,7 @@ def make_cue_nlr_fn(
 
     Returns a closure that uses the Cue neural-net emulator (Li et al. 2024
     [1]_) to predict NLR emission lines and continuum as a function of
-    ionising spectrum shape and gas properties. The closure matches the
+    ionizing spectrum shape and gas properties. The closure matches the
     standard NLR backend interface expected by :func:`unified_nlr_blr`.
 
     The Cue weights are closed over as static pytree leaves, so the returned
@@ -1687,13 +1687,13 @@ def make_cue_nlr_fn(
     gas_xi_d : float
         Dust-to-metal ratio. Default 0.3.
     ionspec_index1..4 : float
-        Power-law indices of the ionising spectrum piecewise approximation.
+        Power-law indices of the ionizing spectrum piecewise approximation.
         Defaults correspond to a typical Seyfert 1 AGN spectrum.
     ionspec_logLratio1..3 : float
         log10(L) ratios between power-law segments. Default 0.0.
     gas_logqion : float
-        log10(Q_H) — total ionising photon rate [photons/s]. Used for
-        normalisation. Default 49.1 (typical AGN at log L_bol ~ 44).
+        log10(Q_H) — total ionizing photon rate [photons/s]. Used for
+        normalization. Default 49.1 (typical AGN at log L_bol ~ 44).
 
     Returns
     -------
@@ -1713,7 +1713,7 @@ def make_cue_nlr_fn(
 
     The Cue emulator was trained for AGN-illuminated gas (not stellar HII
     regions). It is appropriate for NLR emission; it does NOT model the BLR
-    (which requires a separate, denser photoionisation model with
+    (which requires a separate, denser photoionization model with
     n_H ~ 10^10 cm^-3 and no dust).
 
     References

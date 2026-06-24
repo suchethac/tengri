@@ -39,8 +39,8 @@ Available Attenuation Curves
 Dust Geometries (Witt & Gordon 2000)
 -------------------------------------
 - **wg00_shell**: Foreground screen — standard exp(-tau*k)
-- **wg00_cloudy**: Homogeneous dust-star mix (slab) — greyer than screen
-- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984) — greyest
+- **wg00_cloudy**: Homogeneous dust-star mix (slab) — grayer than screen
+- **wg00_dusty**: Clumpy two-phase medium (Natta & Panagia 1984) — grayest
 
 References
 ----------
@@ -73,7 +73,7 @@ import numpy as np
 
 from tengri.utils.physics_constants import V_BAND_ANGSTROM
 
-# ── Attenuation law catalogue ─────────────────────────────────────
+# ── Attenuation law catalog ─────────────────────────────────────
 
 
 @dataclass(frozen=True)
@@ -553,7 +553,7 @@ def calzetti(
     k_prime = jnp.where(wave_um >= 0.63, k_ir, k_uv)
     # Polynomial is extrapolated through the FUV (< 1200 Å) to keep the
     # dust attenuation defined across the full SED range — users
-    # modelling galaxies where Lyman-continuum dust attenuation matters
+    # modeling galaxies where Lyman-continuum dust attenuation matters
     # need the curve there. (CIGALE's ``a_vs_ebv`` clips at 912 Å on
     # the assumption that H ionization handles those photons separately;
     # tengri leaves the choice to the user.)
@@ -669,7 +669,7 @@ def kriek_conroy(
     -----
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
-    Following FSPS ``attn_curve.f90`` (``dust_type=4``), the unnormalised
+    Following FSPS ``attn_curve.f90`` (``dust_type=4``), the unnormalized
     curve is:
 
     .. math::
@@ -681,7 +681,7 @@ def kriek_conroy(
 
     with :math:`R_V = 4.05`, :math:`k_{\rm Calz}` the Calzetti et al.
     (2000) curve, and :math:`D` the unit-peak Drude profile. The result
-    is renormalised to :math:`k(5500\,\text{\AA}) = 1`. The
+    is renormalized to :math:`k(5500\,\text{\AA}) = 1`. The
     ``dust_bump_strength`` multiplier scales :math:`E_b`.
 
     **Upstream**: ports the FSPS ``dust_type=4`` branch (Conroy, Gunn &
@@ -825,7 +825,7 @@ def smc(
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
     From Pei (1992) Table 4: Small Magellanic Cloud Bar parameters,
-    6 Drude components with R_V = 2.93 (relatively grey).
+    6 Drude components with R_V = 2.93 (relatively gray).
 
     References
     ----------
@@ -886,7 +886,7 @@ def prevot_smc(
     Analytic SMC extinction curve from the UV to near-infrared, used in
     AGNfitter for AGN disc reddening. The published Prevot+1984 form
     gives :math:`k_{\rm raw}(\lambda) = A(\lambda)/E(B-V)` with
-    :math:`R_V = 2.72`; this function returns the V-band-normalised
+    :math:`R_V = 2.72`; this function returns the V-band-normalized
     curve :math:`k(\lambda) = A(\lambda)/A(V) = k_{\rm raw}(\lambda)/k_{\rm raw}(V)`,
     matching the convention used by ``cardelli`` and the rest of the
     ``components.dust.attenuation`` registry (k(V)=1).
@@ -899,7 +899,7 @@ def prevot_smc(
     Returns
     -------
     ndarray, shape (n_wave,)
-        Extinction curve :math:`k(\lambda) = A(\lambda)/A(V)` normalised
+        Extinction curve :math:`k(\lambda) = A(\lambda)/A(V)` normalized
         to ``k(5500 A) = 1``. [dimensionless]
 
     Notes
@@ -912,7 +912,7 @@ def prevot_smc(
         \qquad
         k(\lambda) = k_{\rm raw}(\lambda) / k_{\rm raw}(0.55\,\mu m)
 
-    where :math:`\lambda_{\mu m}` is wavelength in micrometres and
+    where :math:`\lambda_{\mu m}` is wavelength in micrometers and
     :math:`k_{\rm raw}(0.55) \approx 2.468`.
 
     For wavelengths below 62 Å, reddening is ramped to zero using a smooth
@@ -940,7 +940,7 @@ def prevot_smc(
     # range gets no attenuation rather than negative attenuation, in
     # keeping with how Synthesizer extrapolates the Calzetti grid.
     k_raw = jnp.maximum(1.39 * jnp.power(wavelength_um, -1.2) - 0.38, 0.0)
-    # Normalise to k(V) = 1 (V band = 5500 Å = 0.55 μm) so that
+    # Normalize to k(V) = 1 (V band = 5500 Å = 0.55 μm) so that
     # the result is A(lambda)/A(V), matching tengri's dust-law convention.
     k_v_raw = 1.39 * (0.55) ** (-1.2) - 0.38  # ≈ 2.4683
     k_norm = k_raw / k_v_raw
@@ -1755,11 +1755,11 @@ def apply_lyman_cutoff(
 
     Sets :math:`k(\lambda) = 0` for :math:`\lambda < \lambda_{\rm cut}`, leaving
     the curve untouched elsewhere. The standard choice is the hydrogen Lyman
-    limit (912 Å): far-UV photons are absorbed by H ionisation before reaching
+    limit (912 Å): far-UV photons are absorbed by H ionization before reaching
     dust grains, so CIGALE's ``dustatt_modified_starburst`` zeros its curve
     there (``a_vs_ebv`` clips at 91.2 nm). tengri's ``calzetti`` / ``leitherer02``
     polynomials instead *extrapolate* through the FUV by default; this helper
-    is the opt-in that reproduces the CIGALE behaviour.
+    is the opt-in that reproduces the CIGALE behavior.
 
     Parameters
     ----------
@@ -2219,8 +2219,8 @@ def single_component_dust_fast(
 # EFFECTIVE attenuation depends strongly on the spatial distribution of
 # dust relative to stars.  A uniform foreground screen (SHELL) produces
 # the steepest wavelength dependence; a homogeneous mix (CLOUDY) is
-# greyer because high-tau sightlines are self-shielded; a clumpy medium
-# (DUSTY) is greyest because photons preferentially escape through
+# grayer because high-tau sightlines are self-shielded; a clumpy medium
+# (DUSTY) is grayest because photons preferentially escape through
 # low-tau channels.
 #
 # All functions are pure JAX and JIT-compatible.
@@ -2288,7 +2288,7 @@ def wg00_cloudy(
 
     Stars and dust are uniformly mixed throughout a slab of total V-band optical depth.
     The analytic solution integrates radiative transfer, producing a wavelength-dependent
-    transmission that is greyer (less wavelength-dependent) than a foreground screen.
+    transmission that is grayer (less wavelength-dependent) than a foreground screen.
     Realistic for galaxies with well-mixed ISM (e.g., starburst regions).
 
     Parameters
@@ -2325,9 +2325,9 @@ def wg00_cloudy(
     of radiative transfer in a uniform dust-star slab (Natta & Panagia 1984, Section 3.1;
     Calzetti et al. 1994).
 
-    **Limiting behaviour**: At low optical depth (:math:`\tau_V k \ll 1`), :math:`T \to 1`
+    **Limiting behavior**: At low optical depth (:math:`\tau_V k \ll 1`), :math:`T \to 1`
     (transparent). At high optical depth, :math:`T \approx 1/(\tau_V k)`, producing
-    a greyer (less wavelength-dependent) effective attenuation than the foreground screen
+    a grayer (less wavelength-dependent) effective attenuation than the foreground screen
     because stars near the observer-facing side suffer less extinction.
 
     **Numerical stability**: Uses a Taylor expansion (correct to order :math:`\tau^3`)
@@ -2335,7 +2335,7 @@ def wg00_cloudy(
 
     **Approximation**: The analytic solution assumes pure absorption (zero scattering).
     Witt & Gordon (2000) Monte Carlo simulations including scattering find the effective
-    attenuation is slightly greyer still. The analytic form captures the dominant geometric
+    attenuation is slightly grayer still. The analytic form captures the dominant geometric
     effect and is widely used in SED fitting codes (e.g., Synthesizer, CIGALE).
 
     References
@@ -2375,7 +2375,7 @@ def wg00_dusty(
 ) -> jnp.ndarray:
     r"""Witt & Gordon (2000) DUSTY geometry — clumpy two-phase medium.
 
-    The ISM is modelled as ``n_clumps`` identical clumps, each with
+    The ISM is modeled as ``n_clumps`` identical clumps, each with
     optical depth ``tau_clump = tau_V / n_clumps``, distributed along
     random sightlines (Natta & Panagia 1984; Hobson & Padman 1993).
     The probability of a photon traversing N clumps follows a Poisson
@@ -2414,11 +2414,11 @@ def wg00_dusty(
 
     where :math:`\tau_{\rm clump} = \tau_V / n_{\rm clumps}`.
 
-    This produces the *greyest* (least wavelength-dependent) effective attenuation
+    This produces the *grayest* (least wavelength-dependent) effective attenuation
     of the three WG00 geometries because photons preferentially escape through
     low-column channels between clumps.
 
-    **Limiting behaviour:**
+    **Limiting behavior:**
     - :math:`n_{\rm clumps} \to \infty` (fixed :math:`\tau_V`): recovers the homogeneous slab.
     - :math:`n_{\rm clumps} = 1`: single clump with Poisson averaging.
     - :math:`\tau_V = 0`: T = 1 (transparent), regardless of n_clumps.

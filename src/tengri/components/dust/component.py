@@ -7,7 +7,7 @@ adding to it: reads ``sed_intrinsic``, writes ``sed_attenuated``.
 Scope (intentionally small)
 ---------------------------
 Wraps a *single-component screen* attenuation law — picked at construction
-time from the catalogue in :mod:`tengri.components.dust.attenuation`
+time from the catalog in :mod:`tengri.components.dust.attenuation`
 (default: Calzetti+2000). For two-component (birth-cloud + diffuse ISM)
 attenuation that needs the per-age stellar luminosity grid, see the
 sibling :class:`DustSEDComponent` in
@@ -73,7 +73,7 @@ class DustAttenuationSEDComponentState(SEDComponentState):
     Attributes
     ----------
     k_lambda : jnp.ndarray, shape (n_wave,) | None
-        Pre-evaluated normalised attenuation curve k(λ) (with k(5500 Å) = 1).
+        Pre-evaluated normalized attenuation curve k(λ) (with k(5500 Å) = 1).
         ``None`` until :meth:`DustAttenuationSEDComponent.precompute` runs.
     """
 
@@ -152,7 +152,7 @@ class DustAttenuationSEDComponent:
         attenuates HII-region emission by the same curve as the stars,
         matching bagpipes/FSPS/CIGALE. Without this declaration the stable
         sort kept dust *before* nebular, leaving the continuum unattenuated
-        (the single-screen analogue of the two-component bug fixed in #668).
+        (the single-screen analog of the two-component bug fixed in #668).
 
         BakedIn backends publish ``sed_nebular`` as zeros (emission is
         already in the SSP grid), so this is a no-op there. The screen does

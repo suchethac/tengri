@@ -331,7 +331,7 @@ for galaxy_type, model, params in [("SF", model_sf, params_sf),
 # %%
 fig, ax = plt.subplots(figsize=(8.6, 4.0))
 
-# Normalise each spectrum by its line-free continuum (median of 6440-6480 Å
+# Normalize each spectrum by its line-free continuum (median of 6440-6480 Å
 # rest-frame, blueward of [NII]+Hα). The three galaxies have very different
 # stellar masses; the pedagogical comparison is line/continuum *contrast*,
 # not amplitude.
@@ -369,7 +369,7 @@ for lam, label in lines_annotate:
 
 ax.set_xlim(6450 * (1 + z_ref_display), 6850 * (1 + z_ref_display))
 ax.set_xlabel(rf"observed wavelength  [$\mathrm{{\AA}}$]   (z = {z_ref_display:.1f})")
-ax.set_ylabel(r"$F_\nu / F_\nu^{\rm cont}$  (normalised at 6460 Å rest)")
+ax.set_ylabel(r"$F_\nu / F_\nu^{\rm cont}$  (normalized at 6460 Å rest)")
 ax.legend(loc="upper left", frameon=False, fontsize=9)
 ax.text(0.99, 0.96, r"H$\alpha$ + [NII] + [SII] complex",
         transform=ax.transAxes, ha="right", va="top",

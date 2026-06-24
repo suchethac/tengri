@@ -176,7 +176,7 @@ class TestBug361B_silent_nan_warning:
             warnings.simplefilter("always")
             _ = float(pred.lines.halpha)
 
-        hits = [str(x.message) for x in w if "per-line luminosity catalogue" in str(x.message)]
+        hits = [str(x.message) for x in w if "per-line luminosity catalog" in str(x.message)]
         assert hits, "#361 Bug B: BakedInBackend line access produced no UserWarning"
         # The warning names the offending backend and suggests alternatives.
         assert "BakedInBackend" in hits[0]

@@ -360,7 +360,7 @@ def lines_to_sed(
     dwave = wave_obs[:, None] - line_wavelengths[None, :]
     profiles = jnp.exp(-0.5 * (dwave / sigma_aa[None, :]) ** 2)
 
-    # Normalise each profile to unit integrated flux
+    # Normalize each profile to unit integrated flux
     norm = sigma_aa * jnp.sqrt(2.0 * jnp.pi)  # (n_lines,)
     profiles = profiles / norm[None, :]  # (n_wave, n_lines)
 

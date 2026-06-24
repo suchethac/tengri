@@ -13,7 +13,7 @@ the KD18 accretion-disc *shape* in the disc-dominated optical-UV window
 NOT compared: the two codes treat the Compton hot-corona and seed-photon rollover
 differently, a documented difference, not a parity failure.
 
-Measured agreement (peak-normalised, 1000 Å–1 µm window): max|log10(tengri/AGNfitter)|
+Measured agreement (peak-normalized, 1000 Å–1 µm window): max|log10(tengri/AGNfitter)|
 = 0.08 / 0.19 / 0.31 dex at logBHmass = 6.0 / 7.4 / 8.0 (worst at the coolest,
 high-mass/low-Eddington node), with disc peaks tracking to within ~20%. The test
 asserts < 0.4 dex and peak agreement within 30% — it PASSES on this genuine

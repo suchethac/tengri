@@ -73,7 +73,7 @@ colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
 labels = [f"$Z_{{\\rm gas}}/Z_\\odot = 10^{{{z:.1f}}}$" for z in logz_values]
 
 # Compute SEDs at each metallicity AND a reference baseline (lowest Z) so we
-# can visualise the *nebular* response — the stellar continuum dominates by
+# can visualize the *nebular* response — the stellar continuum dominates by
 # factors of 10–100 at these wavelengths, so plotting νLν directly hides
 # everything. We show the fractional residual against the lowest-Z model.
 seds = []

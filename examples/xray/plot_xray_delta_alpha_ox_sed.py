@@ -7,7 +7,7 @@ accretion-disc UV continuum through the α_OX–L_2500 relation. A galaxy-by-gal
 *deviation* ``Δα_OX`` lets the intrinsic X-ray-to-UV ratio float around that
 mean relation: a more positive Δα_OX lifts the X-ray power law relative to the
 (fixed) disc, a more negative one suppresses it. Because the disc anchors the
-normalisation, all curves pivot at the EUV/soft-X-ray join and overlap redward
+normalization, all curves pivot at the EUV/soft-X-ray join and overlap redward
 of it; only the observable hard-X-ray side fans out.
 
 This sweeps ``delta_alpha_ox`` over [−0.3, +0.3] at fixed disc luminosity,

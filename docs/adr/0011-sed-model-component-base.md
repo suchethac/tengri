@@ -150,7 +150,7 @@ as efficient as a hand-written adapter.
   is correct and value is high for the rare component that doesn't fit the
   `predict()` shape. Start with a convenience base, leave the Protocol alone.
 
-- **Centralised registry in a new module.** Rejected. `__init_subclass__` is
+- **Centralized registry in a new module.** Rejected. `__init_subclass__` is
   the Pythonic solution; it scales to multiple inheritance, auto-discovers at
   import time, and avoids a separate registry file. Trade-off: registry is
   module-local but that's intentional — it prevents name collisions across
@@ -212,7 +212,7 @@ as efficient as a hand-written adapter.
   distributions.Prior))`. This works because `Uniform`, `Gaussian`, `Fixed`
   are all instances of the base `Prior` class.
 - `declared_parameters()` returns a list of `ParamDeclaration` objects
-  synthesised from the class-level prior objects. Units are embedded in the
+  synthesized from the class-level prior objects. Units are embedded in the
   `Prior` instance, so there's a single source of truth.
 - Type-safe `inputs` lookup: The base class's `apply()` inspects the
   `optional_inputs()` method (which reflects the `inputs` dict). Missing keys

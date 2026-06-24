@@ -307,7 +307,7 @@ class TestCB19BackendMocked:
         from tengri.components.nebular._constants import _LSUN_ERG
 
         backend = backend_with_fake_grid
-        # Wavelength grid centred on Hα (6564.61 Å) with line_sigma_aa > 0
+        # Wavelength grid centered on Hα (6564.61 Å) with line_sigma_aa > 0
         n_wave = 200
         ssp_wave = jnp.linspace(5000.0, 8000.0, n_wave)
         # A single line at 6564.61 Å with luminosity 1.0 Lsun
@@ -470,7 +470,7 @@ class TestPreintegrateForPhotometry:
 
     def test_axis0_relabelled_to_absolute_logz(self, backend_for_preint, synthetic_filters):
         """Axis 0 of the preint surface must be absolute log10(Z), not log10(O/H).
-        The kernel queries with ``_gas_z`` (absolute log10(Z)); the relabelling
+        The kernel queries with ``_gas_z`` (absolute log10(Z)); the relabeling
         makes ``log_OH_grid - _LOG_OH_OFFSET`` land on the right coordinate.
         """
         from tengri.components.nebular._constants import _LOG_OH_OFFSET
@@ -526,7 +526,7 @@ class TestPreintegrateForPhotometry:
         would compute with the same gas conditions and a unit Q_H input.
         At an exact grid point, triweight interpolation reduces to the on-grid
         value, so any disagreement here would indicate a bookkeeping bug in the
-        units/relabelling rather than an interp-method difference.
+        units/relabeling rather than an interp-method difference.
         """
         from tengri.utils.grid_interp import interp_nd_triweight
 
@@ -541,7 +541,7 @@ class TestPreintegrateForPhotometry:
         from tengri.components.nebular._constants import _LOG_OH_OFFSET
 
         log_z_abs = log_oh - _LOG_OH_OFFSET
-        # Preint path: interp the relabelled grid at the absolute-Z coordinate.
+        # Preint path: interp the relabeled grid at the absolute-Z coordinate.
         log_lum_per_qh_preint = interp_nd_triweight(
             b._line_lum_collapsed,
             b._preint_lines.axes,

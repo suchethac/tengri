@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression: SKIRTOR WavePrecomp LUT carries L_ν dimensionality (issue #459).
 
-The #459 fix corrected ``skirtor.py:_interpolate_and_normalize`` to normalise the
+The #459 fix corrected ``skirtor.py:_interpolate_and_normalize`` to normalize the
 bolometric integral in the *wavelength* variable and convert L_λ → L_ν = L_λ·λ²/c
 at the end (SKIRTOR v3 templates are stored L_λ-like). The WavePrecomp path in
 ``skirtor_precompute.py`` was missed and kept integrating against frequency and
@@ -22,10 +22,10 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 
-def _tophat(centre_aa: float, width_frac: float = 0.1, n: int = 64):
-    """A narrow top-hat filter (wave [Å], transmission) around ``centre_aa``."""
-    half = centre_aa * width_frac / 2.0
-    wave = np.linspace(centre_aa - half, centre_aa + half, n)
+def _tophat(center_aa: float, width_frac: float = 0.1, n: int = 64):
+    """A narrow top-hat filter (wave [Å], transmission) around ``center_aa``."""
+    half = center_aa * width_frac / 2.0
+    wave = np.linspace(center_aa - half, center_aa + half, n)
     trans = np.ones_like(wave)
     return wave, trans
 
@@ -41,9 +41,9 @@ def test_precompute_matches_runtime_midir_to_farir_ratio():
         pytest.skip("SKIRTOR template grid not available")
 
     # Two narrow filters straddling the torus bump and its FIR tail.
-    mid_centre, far_centre = 1.2e5, 6.0e5  # 12 µm and 60 µm
-    fw_mid, ft_mid = _tophat(mid_centre)
-    fw_far, ft_far = _tophat(far_centre)
+    mid_center, far_center = 1.2e5, 6.0e5  # 12 µm and 60 µm
+    fw_mid, ft_mid = _tophat(mid_center)
+    fw_far, ft_far = _tophat(far_center)
 
     precomp = precompute_mod.precompute_skirtor_photometry(
         grid_path,
@@ -73,8 +73,8 @@ def test_precompute_matches_runtime_midir_to_farir_ratio():
     wave = np.logspace(np.log10(91.0), np.log10(1.0e7), 4000)
     lnu = np.asarray(fn(jnp.asarray(wave), agn_log_lbol=0.0, agn_torus_frac=1.0, **pt))
     assert np.isfinite(lnu).all(), "runtime SKIRTOR L_ν is non-finite"
-    lnu_mid = float(np.interp(mid_centre, wave, lnu))
-    lnu_far = float(np.interp(far_centre, wave, lnu))
+    lnu_mid = float(np.interp(mid_center, wave, lnu))
+    lnu_far = float(np.interp(far_center, wave, lnu))
     exact_ratio = lnu_mid / lnu_far
 
     # The two paths should agree on the spectral shape (ratio) to ~15 %.

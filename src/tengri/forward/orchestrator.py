@@ -159,7 +159,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
     # Spectrum LUT (Phase 5; published when approx=SpectrumPrecomp() is set).
-    # Per-pixel rest-frame Lν at spectrum pixel centres.
+    # Per-pixel rest-frame Lν at spectrum pixel centers.
     "spec_eff_waves": "Angstrom",
     "stellar_spec_lnu_precomp": "erg/s/Hz",
     "nebular_spec_lnu_precomp": "erg/s/Hz",
@@ -412,7 +412,7 @@ def topological_sort(components: Iterable[SEDComponent]) -> list[SEDComponent]:
     requirement *also* establishes ordering when the publisher is
     present: the consumer reads from ``state.derived`` with a fallback,
     so it can only read meaningful data if the publisher has already
-    written. The validator enforces strict-before for both flavours
+    written. The validator enforces strict-before for both flavors
     (ADR-0004 Phase B); the sort must too, else
     :func:`validate_pipeline` would reject sort output.
 
@@ -488,7 +488,7 @@ def slice_params_for_component(
     """
     prefix = component.parameter_prefix
     # ``parameter_prefix`` may be a single str or a tuple of strings (e.g.
-    # StellarSEDComponent owns ("sfh_", "met_", "chem_")). Normalise to
+    # StellarSEDComponent owns ("sfh_", "met_", "chem_")). Normalize to
     # tuple so downstream logic handles one shape only.
     prefixes = (prefix,) if isinstance(prefix, str) else tuple(prefix)
     if "" in prefixes or len(prefixes) == 0:

@@ -6,9 +6,9 @@ parameter family:
 
 - :data:`PARAMS` — CGM damping-wing knobs (``igm_z_mid``, ``igm_dz``,
   ``igm_log_nhi``) declared by :class:`IGMSEDComponent`. Not registered
-  by the flat ``Parameters(...)`` builder — these always travelled the
+  by the flat ``Parameters(...)`` builder — these always traveled the
   SEDComponent path.
-- :data:`PATCHY_PARAMS` — patchy reionisation extras (``igm_x_HI``,
+- :data:`PATCHY_PARAMS` — patchy reionization extras (``igm_x_HI``,
   ``igm_bubble_mpc``). Registered when ``igm_patchy=True``. Backs
   ``_IGM_PATCHY_PARAMS`` in ``_param_defs``.
 - :data:`DLA_PARAMS` — Damped Lyman-α absorber knobs

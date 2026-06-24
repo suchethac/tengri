@@ -148,7 +148,7 @@ class TestCoronaFilterTable:
     def test_corona_seed_rollover_suppresses_optical(self):
         """A higher seed temperature shifts the rollover blueward, removing optical flux.
 
-        The hot corona is a thermal-Comptonisation spectrum bounded below by its
+        The hot corona is a thermal-Comptonization spectrum bounded below by its
         seed-photon energy (K&D 2018, Section 2.2). Raising the seed temperature
         moves the low-energy rollover toward the UV, so the optical r-band — now
         below the knee — must lose flux relative to a low (IR-knee) seed.

@@ -6,7 +6,7 @@ Optical broadband photometry constrains metallicity weakly, so the
 prior carries real information. We mock a star-forming galaxy at
 log Z/Zsun = -0.5 in five SDSS bands at S/N=20, then fit it twice
 under the same model — once with a uniform Z prior, once with a
-Gaussian prior centred on 0 with sigma=0.3. The posteriors shift by
+Gaussian prior centered on 0 with sigma=0.3. The posteriors shift by
 ~0.3 dex toward each prior's preferred region, illustrating how
 informative external priors propagate through a tengri inference.
 

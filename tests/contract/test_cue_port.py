@@ -26,11 +26,11 @@ def test_cue_predict_all_lines_clip_bounded_at_50dex():
     The ±100-dex bound shipped with the original Cue port was wide enough
     that the +51-dex ``gas_logq = logU`` bug (#477) produced saturated-but-
     near-physical line luminosities instead of obviously-broken output. ±50
-    dex is the discipline: any normalisation slip ≥ 50 dex now hits the
+    dex is the discipline: any normalization slip ≥ 50 dex now hits the
     ceiling/floor uniformly and is visible in inspection.
 
     Source-pinning regression: re-loosening the clip would silently undo
-    that defence. We grep the source rather than calling the function so
+    that defense. We grep the source rather than calling the function so
     the assertion fails immediately on any future widening.
     """
     import inspect
@@ -40,7 +40,7 @@ def test_cue_predict_all_lines_clip_bounded_at_50dex():
     source = inspect.getsource(cue.predict_all_lines)
     assert "jnp.clip(exponent, -50.0, 50.0)" in source, (
         "predict_all_lines clip widened from ±50 dex; see #477 follow-up for "
-        "why ±100 silently masked the gas_logq normalisation bug."
+        "why ±100 silently masked the gas_logq normalization bug."
     )
 
     cont_source = inspect.getsource(cue.predict_continuum)
@@ -67,9 +67,9 @@ def test_cue_predict_all_lines_clip_saturates_on_synthetic_bug():
     weights = load_cue_weights(str(_DEFAULT_CUE_WEIGHTS_PATH))
 
     # NN-ready 12-vector (the function broadcasts internally over the 16
-    # batched sub-emulators). Values centred in their training ranges; the
+    # batched sub-emulators). Values centered in their training ranges; the
     # test isn't about absolute luminosities, only about how the clip
-    # responds to a synthetic normalisation error.
+    # responds to a synthetic normalization error.
     nn_params = jnp.array(
         [19.7, 5.3, 1.6, 0.6, 3.9, 0.01, 0.2, 48.5, 2.0, 0.0, 0.0, 0.0],
         dtype=jnp.float32,
@@ -113,7 +113,7 @@ def test_cue_predict_all_lines_clip_saturates_on_synthetic_bug():
     assert saturated_frac > 0.9, (
         f"buggy +51-dex gas_logq should saturate the bulk of lines at the "
         f"+50 clip ceiling; only {saturated_frac:.1%} reached it. The clip "
-        f"may be too loose to catch this class of normalisation bug."
+        f"may be too loose to catch this class of normalization bug."
     )
     # And the median is right at the ceiling — the bug signature is a
     # degenerate distribution at the clip value.

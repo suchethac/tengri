@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Ionizing spectrum fitting for the Cue neural emulator.
 
-This module fits piecewise power-law parameterisations of the hydrogen-ionizing
+This module fits piecewise power-law parameterizations of the hydrogen-ionizing
 portion (λ < 912 Å) of stellar population synthesis spectra. These 7-parameter
 descriptions (4 power-law slopes + 3 flux ratios across ionization edges) serve
 as inputs to the Cue neural network emulator for fast, differentiable nebular
@@ -197,7 +197,7 @@ def _fit_segment(
 
     Notes
     -----
-    Uses scipy SLSQP with an analytical gradient to minimise:
+    Uses scipy SLSQP with an analytical gradient to minimize:
 
     .. math::
 
@@ -207,7 +207,7 @@ def _fit_segment(
     The analytical gradient mirrors :func:`yi-jia-li/cue/utils.py
     :gradient_func_loglinear_analytical` — passing it explicitly to scipy
     avoids finite-difference Jacobian evaluations (~3× more objective calls
-    per iteration) and matches Cue's upstream optimisation strategy.
+    per iteration) and matches Cue's upstream optimization strategy.
 
     """
     from scipy.optimize import minimize
@@ -421,7 +421,7 @@ def fit_ionizing_spectrum(
             \log L_{\mathrm{ratio}, k} = \log_{10}\left(\frac{L_{k+1}}{L_k}\right)
 
         These 3 ratios encode the relative ionizing flux in adjacent segments,
-        independent of absolute normalisation.
+        independent of absolute normalization.
 
     **Error handling**:
         Returns sensible defaults (zero slope, −∞ norm) for segments with
@@ -651,7 +651,7 @@ def interpolate_ionizing_params(
     Parameters
     ----------
     ionspec_table : array, shape (n_met, n_age, 7)
-        Precomputed ionising spectrum parameters (ionspec_index1..4, logLratio1..3).
+        Precomputed ionizing spectrum parameters (ionspec_index1..4, logLratio1..3).
     logqion_table : array, shape (n_met, n_age)
         Ionizing photon rates Q_H. [log10(photons/s)]
     ssp_lgmet : array, shape (n_met,)
@@ -679,7 +679,7 @@ def interpolate_ionizing_params(
     **Clipping**: Target (log_z, log_age_yr) are clipped to grid bounds
     before interpolation to prevent extrapolation artifacts.
 
-    **Bilinear interpolation**: Uses 2×2 neighbourhood of grid points,
+    **Bilinear interpolation**: Uses 2×2 neighborhood of grid points,
     with fractional weights (fz, fa) computed from target position within
     the bracketing cell.
 

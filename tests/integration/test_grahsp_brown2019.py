@@ -132,7 +132,7 @@ def test_brown2019_sed_finite_and_physical(source):
 
 
 @pytest.mark.parametrize("source", list(BROWN2019_TABLE4.keys()))
-def test_brown2019_torus_normalisation(source):
+def test_brown2019_torus_normalization(source):
     """At 12 um, lambda*L_lambda should equal 2.5 * lum5100A * fcov (Eq. fcov)."""
     params = GRAHSPParams(**BROWN2019_TABLE4[source])
     wave_nm = jnp.array([12000.0])

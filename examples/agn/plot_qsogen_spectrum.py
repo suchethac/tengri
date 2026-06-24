@@ -8,7 +8,7 @@ to 13.5 (in L_sun units) at fixed redshift to show that the template's
 spectral *shape* is approximately self-similar across the quasar
 luminosity function — the only knob that moves features (the
 Baldwin-effect drop in C IV/Ly-alpha equivalent width) is the
-bolometric normalisation.
+bolometric normalization.
 
 Reference: Temple, Hewett & Banerji 2021, MNRAS, 508, 737.
 """

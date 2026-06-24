@@ -46,6 +46,6 @@ def test_build_n_grid_does_not_raise_typeerror(synthetic_ssp, simple_observation
 
 
 def test_build_n_grid_distinct_values(synthetic_ssp, simple_observation):
-    """Each n_grid value is honoured independently (not silently clamped)."""
+    """Each n_grid value is honored independently (not silently clamped)."""
     for n in (16, 64, 128):
         assert _build(synthetic_ssp, simple_observation, n_grid=n).spec.n_grid == n

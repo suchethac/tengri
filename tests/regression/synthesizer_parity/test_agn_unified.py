@@ -133,7 +133,7 @@ def test_line_emission_scales_with_covering_fraction(wave_uv_to_fir, physical_lo
     Mirrors:
     synthesizer/tests/test_unified_agn.py::test_covering_fraction_edge_case_sum_to_unity
     Pitfall: P-1 — guards against sub/super-linear scaling that would indicate
-    a missing factor of L_bol or a misapplied normalisation.
+    a missing factor of L_bol or a misapplied normalization.
     """
     sed_baseline = unified_nlr_blr(
         wave_uv_to_fir,
@@ -202,7 +202,7 @@ def test_log_lbol_scaling_is_logarithmic(wave_uv_to_fir):
     ratio = float(sed_b[idx] / sed_a[idx])
     assert 95.0 < ratio < 105.0, (
         f"SED at 1000 Å scales as {ratio:.2f} for +2 dex in log_lbol; "
-        "expected ≈ 100. Possible normalisation bug."
+        "expected ≈ 100. Possible normalization bug."
     )
 
 

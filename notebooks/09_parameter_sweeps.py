@@ -132,7 +132,7 @@ plt.show()
 # ## A prior fan via `sample_sfh_prior`
 #
 # Sometimes the question isn't "what does this knob do?" but "what range
-# of behaviour does my prior actually allow?". `sample_sfh_prior` draws
+# of behavior does my prior actually allow?". `sample_sfh_prior` draws
 # from a registered SFH family's default prior block and returns the SFR
 # curves directly; one line, no `Parameters` boilerplate.
 
@@ -195,7 +195,7 @@ for inst_factory in (Instrument.SDSS, Instrument.JWST_NIRCam, Instrument.WISE):
 # For sweeps over more than one axis the right tool is `model.predict_photometry_batch`,
 # which is a `jax.vmap` of the per-galaxy predictor. We sweep `met_logzsol`
 # against `dust_tau_diff` for an SDSS-band model and look at how the
-# *colour* `g - r` moves across the grid.
+# *color* `g - r` moves across the grid.
 
 # %%
 spec_grid = Parameters(
@@ -256,7 +256,7 @@ plt.show()
 
 # %% [markdown]
 # 256 forward evaluations, one compiled `vmap` call. Both axes contribute
-# to redder colours; the partial degeneracy between metallicity and dust
+# to redder colors; the partial degeneracy between metallicity and dust
 # is the canonical reason photometric SED fitting needs spectroscopy
 # (see [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py) and
 # [`07_joint_photo_spec`](07_joint_photo_spec.py)).
@@ -307,7 +307,7 @@ for i, (law_name, label) in enumerate(DUST_LAW_LABELS.items()):
 ax.set_xscale("log")
 ax.set_xlim(1000, 10000)
 ax.set_xlabel(r"Rest wavelength [$\mathrm{\AA}$]")
-ax.set_ylabel(r"$\lambda F_\lambda$ (normalised at 5500 Å)")
+ax.set_ylabel(r"$\lambda F_\lambda$ (normalized at 5500 Å)")
 ax.set_title(r"Diffuse-ISM dust law at fixed $\tau_{\rm diff} = 0.7$")
 ax.legend(fontsize=9, ncol=2)
 fig.tight_layout()
@@ -322,7 +322,7 @@ plt.show()
 # ## Photometric tracks across redshift
 #
 # The same galaxy at five redshifts gives five photometric points in any
-# colour-colour diagram — together they trace a curve that high-z
+# color-color diagram — together they trace a curve that high-z
 # selection cuts (Lyman-break, BzK, dropouts) actually live on. Here we
 # vmap a single SFH/dust truth across `z ∈ [0.5, 8]` through JWST
 # NIRCam and plot F150W − F277W vs F277W − F444W.
@@ -363,14 +363,14 @@ ax.plot(np.asarray(c2), np.asarray(c1), color="0.6", lw=0.8, alpha=0.7, zorder=0
 fig.colorbar(sc, ax=ax, label="redshift z")
 ax.set_xlabel(r"F277W $-$ F444W")
 ax.set_ylabel(r"F150W $-$ F277W")
-ax.set_title("JWST NIRCam colour–colour track for one galaxy across z = 0.5–8")
+ax.set_title("JWST NIRCam color–color track for one galaxy across z = 0.5–8")
 fig.tight_layout()
 plt.show()
 
 # %% [markdown]
 # The kink at z ≈ 6 is the Lyman break exiting F150W. The same vmap
 # pattern scales straight to a population: replace the broadcast values
-# with full per-galaxy parameter arrays and you get a colour-colour
+# with full per-galaxy parameter arrays and you get a color-color
 # scatter for thousands of mock galaxies in one compiled call.
 
 # %% [markdown]
@@ -427,7 +427,7 @@ plt.show()
 # between fast spiky variability (small `τ`) and slow drift (large `τ`).
 #
 # We sample the latent xi vector from `N(0, I)` for each draw and
-# realise the GP modulator on the canonical log-age grid.
+# realize the GP modulator on the canonical log-age grid.
 
 # %%
 from tengri.components.stellar.sfh import compute_field_gp
@@ -471,7 +471,7 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# Each panel shows six independent realisations from the same prior.
+# Each panel shows six independent realizations from the same prior.
 # Short `τ` produces ~10-Myr ringing; long `τ` produces smooth drift
 # from a couple of `e`-folds below the mean to a couple above. This is
 # the prior the geoVI fit in [`05_fitting_photometry`](05_fitting_photometry.py)
@@ -533,7 +533,7 @@ print(f"  speedup: {speedup:5.1f}×")
 #   things are cheap to try in a sweep.
 # - Sanity-check that the registered defaults span the regime you care
 #   about. If your prior fan looks wrong, the fit will be wrong.
-# - Pick informative bands: a 2-D photometric grid plus a colour cut tells
+# - Pick informative bands: a 2-D photometric grid plus a color cut tells
 #   you which filter pairs actually constrain a parameter you care about.
 # - Trace photometric tracks for high-redshift selection cuts before
 #   committing to a survey strategy.

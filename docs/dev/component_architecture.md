@@ -150,7 +150,7 @@ state = run_components(
 `run_components` JIT-compiles cleanly: wrap it in `jax.jit` and the
 chain produces bit-exact identical results to the eager path. See
 [`tests/integration/test_orchestrator_jit.py`](../../tests/integration/test_orchestrator_jit.py)
-for parametrised verification.
+for parametrized verification.
 
 ## Gotchas
 

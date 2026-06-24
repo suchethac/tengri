@@ -764,7 +764,7 @@ def predict_all_lines(
     wav_sorted = weights.nn_line_wav[weights.batched_sort_idx]
 
     # Stay in Lsun internally to avoid 10^x overflow; predict_nebular_sed
-    # converts to erg/s at the boundary. The clip is the only defence against
+    # converts to erg/s at the boundary. The clip is the only defense against
     # NaN/inf poisoning a JAX gradient if gas_logq / gas_logqion go pathological
     # (e.g. inf from a float32 SSP overflow in fit_ionizing_spectrum, cf. #469).
     # ±50 dex is intentionally tight: physical line luminosities sit within
@@ -862,7 +862,7 @@ class CueWNESSPWarning(UserWarning):
 class CueWNESSPError(ValueError):
     """Raised when CueBackend is constructed with a wNE (with-Nebular-Emission) SSP.
 
-    SSP grids labelled 'wNE' have nebular emission baked in: the ionizing
+    SSP grids labeled 'wNE' have nebular emission baked in: the ionizing
     photons have already been absorbed by an internal nebular layer, so the
     SSP spectrum reports ``log10(Q_H) ~ 0`` instead of the physical 47–50.
     Feeding such an SSP to Cue produces line luminosities that are
@@ -881,7 +881,7 @@ class CueWNESSPError(ValueError):
 
     1. **Use a bare-stellar SSP** (no baked-in nebular). Examples in
        ``data/``: ``fsps_prsc_miles_chabrier.h5``, ``fsps_mist_c3k_a_chabrier.h5``.
-       The hosted catalogue at https://halos.as.arizona.edu/suchethacooray/
+       The hosted catalog at https://halos.as.arizona.edu/suchethacooray/
        ssp-spectra/ ships only bare-stellar SSPs.
     2. **Pass ssp_data=None** to ``CueBackend`` and provide Q_H externally.
        Suitable when you have your own ionizing-spectrum source.
@@ -1022,7 +1022,7 @@ class CueBackend:
                     "         from tengri.data import download_ssp\n"
                     "         path = download_ssp('fsps_prsc_miles_chabrier.h5')\n"
                     "     then  load_ssp_data(str(path)). See\n"
-                    "     tengri.data.list_remote_ssps() for the full catalogue.\n"
+                    "     tengri.data.list_remote_ssps() for the full catalog.\n"
                     "  2. Pass ssp_data=None to CueBackend and provide Q_H\n"
                     "     externally.\n"
                     "  3. Bypass for testing: set TENGRI_ALLOW_WNE_CUE=1\n"

@@ -413,8 +413,8 @@ def test_fritz_in_seds_model_build(
     without the gitignored real SSP grids (#613)."""
     from tengri import SEDModel
 
-    # A disc must be active for the composable runner's normalisation chain to
-    # be physically meaningful; the Fritz torus itself self-normalises off
+    # A disc must be active for the composable runner's normalization chain to
+    # be physically meaningful; the Fritz torus itself self-normalizes off
     # agn_log_lbol × agn_torus_frac.
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,

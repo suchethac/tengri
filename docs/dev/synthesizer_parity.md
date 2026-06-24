@@ -66,7 +66,7 @@ Each parameter below can be passed to `Parameters(sfh_dpl_alpha=...)` or set via
 | `agn_log_lbol` | `bolometric_luminosity` (erg/s) | **log10(L/L_sun)**, ~[10, 14] | declared in registry | AGN bolometric luminosity. Synthesizer expresses L_bol in erg/s; tengri uses L_sun. Add `LOG10(L_SUN_ERG) ≈ 33.58` when porting (test: `test_log_lbol_unit_convention_is_l_sun`). The `unified_nlr_blr(...)` function default (`agn_log_lbol=44.0`) is **unphysical** under the L_sun convention (implies L_bol ≈ 4×10^77 erg/s) — see TODO at `unified.py:1243`. P-2. |
 | `agn_log_mbh` | `black_hole_mass` | log10(M/M_sun), ~[6, 10] | registry | BH mass; used to compute Eddington luminosity. |
 | `agn_log_ledd` | (derived: L_bol / L_Edd in synthesizer) | log10(eddington ratio) | registry | Stored as log Eddington ratio. P-2: convert L_bol and L_Edd to same units before division. |
-| `agn_cos_inc` | `cos(inclination)` | [0, 1], 1 = face-on | registry | Tengri parameterises by **cos(inclination)** (synthesizer uses `inclination` in degrees). Convert via `cos(deg2rad(i))`. |
+| `agn_cos_inc` | `cos(inclination)` | [0, 1], 1 = face-on | registry | Tengri parameterizes by **cos(inclination)** (synthesizer uses `inclination` in degrees). Convert via `cos(deg2rad(i))`. |
 | `agn_theta_torus` | `theta_torus` (deg) | [0, 90] degrees | kwarg only (not in `_param_defs.py`) | Half-opening angle of torus (kwarg of `unified_nlr_blr`). |
 | `agn_oa_skirtor` | `theta_torus` (SKIRTOR axis) | [10, 80] degrees | registry | SKIRTOR-grid torus opening angle. |
 | `agn_torus_frac` | `torus_fraction = theta_torus/90°` (derived in synth) | [0, 1] | registry | **Decoupled** from `theta_torus` in tengri (avoids gradient discontinuity, see `unified.py:47-53`). |

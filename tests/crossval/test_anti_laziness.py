@@ -256,7 +256,7 @@ class TestSFHParameterSensitivity:
         """DPL: alpha, beta, tau, log_total_mass all must matter."""
         from tengri.components.stellar.sfh import dpl
 
-        # log_total_mass=10.0 (mass normalisation, not peak SFR): keeps SFR
+        # log_total_mass=10.0 (mass normalization, not peak SFR): keeps SFR
         # amplitudes ~1 Msun/yr, well above jnp.allclose's default atol=1e-8.
         sfr_default = dpl(
             self._T, alpha=2.0, beta=1.0, tau=5e9, age=_AGE_UNIV_YR, log_total_mass=10.0

@@ -119,7 +119,7 @@ def _interpolate_and_normalize(
     Parameters
     ----------
     grid_jax : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
-        Template grid [erg/s/Hz, per-L_sun normalised at runtime].
+        Template grid [erg/s/Hz, per-L_sun normalized at runtime].
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray

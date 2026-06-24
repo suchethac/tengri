@@ -2,7 +2,7 @@
 """Issue #722: ``L_2500_intrinsic`` publication + disc-shape-dependent X-ray.
 
 The composable AGN now publishes ``L_2500_intrinsic`` — the un-reddened,
-``agn_log_lbol``-normalised disc monochromatic luminosity at 2500 Å — captured
+``agn_log_lbol``-normalized disc monochromatic luminosity at 2500 Å — captured
 in the runner *before* polar reddening. X-ray consumes it (fallback chain:
 ``L_2500_intrinsic`` → ``L_2500_30deg`` → L_bol bolometric correction) so the
 AGN corona's :math:`\\alpha_{\\rm ox}` (Just+2007) now reflects the disc shape.

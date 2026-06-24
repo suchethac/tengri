@@ -39,7 +39,7 @@ def adaf_disc_block(
 
        The ADAF inner flow does **not** produce a meaningful 5100 Å
        continuum; pairing this disc with GRAHSP-style downstream blocks
-       (which normalise to :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`)
+       (which normalize to :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`)
        will trigger :class:`RecipeWarning`. Use only when a UV/optical
        contribution is genuinely absent from the source.
 

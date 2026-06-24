@@ -460,7 +460,7 @@ def fit_batch(
     from tengri.inference.posterior import Posterior
     from tengri.parameters.priors import Fixed
 
-    # Normalise catalog to list of dicts
+    # Normalize catalog to list of dicts
     rows: list[dict] = []
     try:
         import pandas as pd
@@ -729,7 +729,7 @@ def fit_population(
     from tengri.inference.hierarchical import PopulationFitter
     from tengri.parameters.priors import Fixed
 
-    # Normalise input
+    # Normalize input
     galaxies = []
     for obs in observations_list:
         if isinstance(obs, (list, tuple)) and len(obs) == 2:

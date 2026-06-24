@@ -53,7 +53,7 @@ def standard_spectrum():
 def test_total_ir_matches_file_header(standard_spectrum):
     """int(nu*P_nu) over ln(nu) must equal the 'total TIR power' header
     value embedded in the original ASCII files (stored on the grid as
-    ``tir_total``).  Tolerance is the trapezoid discretisation error."""
+    ``tir_total``).  Tolerance is the trapezoid discretization error."""
     from tengri.analysis.feature_strengths import total_ir_power
 
     wave_um, nu_pnu, tpl, idx = standard_spectrum

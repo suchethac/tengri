@@ -20,7 +20,7 @@ Axis semantics
     Polar-wind mass fraction (``fwd``); the rest is in the mid-plane
     clumpy disc.
 
-Runtime normalisation
+Runtime normalization
 ---------------------
 Template is shape-only.  At runtime the module divides by the trapezoidal
 integral over frequency and multiplies by ``L_bol * agn_torus_frac``,
@@ -31,7 +31,7 @@ Grid completeness
 -----------------
 AGNfitter-rX's library is not a full Cartesian product of the three
 axes; ``scripts/build_cat3d_wind_grid.py`` fills the missing cells with
-their nearest-neighbour populated value at build time so the interpolant
+their nearest-neighbor populated value at build time so the interpolant
 has support over the full grid box.
 
 Interpolation
@@ -39,11 +39,11 @@ Interpolation
 Node-exact monotone cubic (PCHIP, :func:`tengri.utils.grid_interp.interp_nd_pchip`):
 it reproduces every tabulated AGNfitter template at the grid nodes while
 keeping C¹-continuous gradients. The C²-smooth triweight *smoother* used
-elsewhere averages neighbouring nodes, which smeared this torus's mid-IR
+elsewhere averages neighboring nodes, which smeared this torus's mid-IR
 peak by tens of percent (median ~30%) — the same peak-smear that moved
 :mod:`tengri.components.agn.slone_netzer` to node-exact interpolation.
 Monotone cubic is shape-preserving, so it does not overshoot on the
-nearest-neighbour-filled grid.
+nearest-neighbor-filled grid.
 
 References
 ----------
@@ -124,7 +124,7 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
     raw = _load_cat3d_arrays(grid_path)
 
     # Convert native inclination axis (degrees, ascending) to cos(incl),
-    # which is tengri's canonical inclination parameterisation.  The
+    # which is tengri's canonical inclination parameterization.  The
     # template's leading axis must follow suit, which means reversing it
     # because cos(incl) is *descending* as incl ascends.
     incl_deg = raw["incl_axis"]

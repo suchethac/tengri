@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reduce structural debt in tengri by renaming mis-named types, splitting god files, fixing science correctness bugs, and adding gradient test infrastructure — without changing any public behaviour.
+**Goal:** Reduce structural debt in tengri by renaming mis-named types, splitting god files, fixing science correctness bugs, and adding gradient test infrastructure — without changing any public behavior.
 
 **Architecture:** Seven independent subagent scopes (A–F can run in parallel in Wave 1; G depends on C completing first in Wave 2). Each scope is a self-contained refactor that leaves all 1764 tests passing. Zero behavior changes in Scopes A–C.
 
@@ -1222,7 +1222,7 @@ Motivation: needed for quiescent black holes below the AGN threshold.
 
 ### MAGPHYS-style Dust
 Energy-balance dust model from da Cunha+2008.
-Motivation: alternative to DL07 for high-z submillimetre-selected sources.
+Motivation: alternative to DL07 for high-z submillimeter-selected sources.
 
 ### THEMIS Dust
 Jones+2017 dust grain size distribution with amorphous carbon.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """AGN narrow-line region (NLR) emission — SEDModelComponent port.
 
-The NLR is photoionised gas illuminated by the AGN accretion disc.
+The NLR is photoionized gas illuminated by the AGN accretion disc.
 It produces nebular-like emission: a power-law continuum plus
 forbidden-line emission at key wavelengths. Distinct from the
 star-formation-driven nebular component (Cue, CloudyGrid, …); the
@@ -35,7 +35,7 @@ def _trapz_freq(L_lambda: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 class AGNNebular(SEDModelComponent):
     r"""AGN narrow-line region — line + power-law continuum emission.
 
-    Photoionised by the AGN disc; the covering fraction sets what
+    Photoionized by the AGN disc; the covering fraction sets what
     fraction of the disc luminosity reaches the NLR, and small line +
     continuum re-emission efficiencies determine what fraction comes
     out at each wavelength.
