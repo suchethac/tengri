@@ -2617,8 +2617,10 @@ def wd01_smcbar(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     .. [1] J. C. Weingartner & B. T. Draine, "Dust Grain-Size Distributions
        and Extinction in the Milky Way, LMC, and SMC," ApJ, 548, 296 (2001).
        arXiv:astro-ph/0008146. https://doi.org/10.1086/318651
-    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
-       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    .. [2] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
+       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
+       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
+       doi:10.21105/joss.09436 (cite both Synthesizer papers).
     """
     if not _GRAIN_MODELS_AVAILABLE:
         return _grain_law_unavailable(wavelength)
@@ -2659,8 +2661,10 @@ def wd01_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     .. [1] J. C. Weingartner & B. T. Draine, "Dust Grain-Size Distributions
        and Extinction in the Milky Way, LMC, and SMC," ApJ, 548, 296 (2001).
        arXiv:astro-ph/0008146. https://doi.org/10.1086/318651
-    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
-       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    .. [2] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
+       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
+       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
+       doi:10.21105/joss.09436 (cite both Synthesizer papers).
     """
     if not _GRAIN_MODELS_AVAILABLE:
         return _grain_law_unavailable(wavelength)
@@ -2700,8 +2704,10 @@ def d03_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     ----------
     .. [1] B. T. Draine, "Interstellar Dust Grains," ARA&A, 41, 241 (2003).
        arXiv:astro-ph/0304489. https://doi.org/10.1146/annurev.astro.41.011802.094840
-    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
-       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    .. [2] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
+       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
+       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
+       doi:10.21105/joss.09436 (cite both Synthesizer papers).
     """
     if not _GRAIN_MODELS_AVAILABLE:
         return _grain_law_unavailable(wavelength)
@@ -2742,8 +2748,10 @@ def hd23_mwrv31(wavelength: jnp.ndarray, **_kwargs) -> jnp.ndarray:
     .. [1] B. S. Hensley & B. T. Draine, "The Astrodust+PAH Model: A Unified
        Description of the Dust of the Diffuse Milky Way," ApJ, 948, 55 (2023).
        arXiv:2208.12365. https://doi.org/10.3847/1538-4357/acc4c2
-    .. [2] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
-       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    .. [2] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
+       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
+       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
+       doi:10.21105/joss.09436 (cite both Synthesizer papers).
     """
     if not _GRAIN_MODELS_AVAILABLE:
         return _grain_law_unavailable(wavelength)

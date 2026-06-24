@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Unit adapters: Synthesizer ``unyt`` spectra ↔ tengri erg/s/Hz.
 
-Synthesizer (Roper, Lovell, Wilkins et al. 2025) attaches physical units to
+Synthesizer (Lovell et al. 2025; Roper et al. 2026 — cite both) attaches physical units to
 every array through ``unyt``. Its :class:`synthesizer.emissions.Sed` already
 reports the spectral luminosity :math:`L_\nu` in ``erg/(Hz*s)`` on a
 rest-frame Angstrom grid — the same convention tengri uses internally — so the
@@ -13,9 +13,9 @@ trips here at import time rather than silently misshaping a figure.
 
 References
 ----------
-.. [1] Roper, W.J., Lovell, C.C., Vijayan, A.P., Wilkins, S.M., et al. (2025).
-       Synthesizer: a Software Package for Synthetic Astronomical Observables.
-       The Open Journal of Astrophysics. arXiv:2508.03888.
+.. [1] Synthesizer (cite BOTH papers):
+       Lovell, C.C., et al. (2025), Open J. Astrophys. 8, doi:10.33232/001c.145766;
+       Roper, W.J., et al. (2026), JOSS 11, 9436, doi:10.21105/joss.09436.
 """
 
 from __future__ import annotations

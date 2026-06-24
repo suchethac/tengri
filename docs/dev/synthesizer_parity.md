@@ -325,8 +325,9 @@ All citations resolved via `docs/dev/synthesizer_parity_citations.md`. See that 
 - Draine & Li (2014) — Dust emission templates
 - Inoue et al. (2014) — IGM absorption (Lyman forest + Lyman continuum)
 - Asada et al. (2025) — High-z IGM + CGM absorption
-- Lovell et al. (2025) — Synthesizer UnifiedAGN architecture (arXiv:2508.03888)
-- Roper et al. (2025) — Synthesizer geometric masking (arXiv:2506.15811)
+- Lovell et al. (2025) — Synthesizer, Open J. Astrophys. 8 (doi:10.33232/001c.145766)
+- Roper et al. (2026) — Synthesizer, JOSS 11, 9436 (doi:10.21105/joss.09436)
+  - Both Synthesizer papers must be cited together (upstream citation policy).
 
 **Pitfall references:**
 - See `docs/dev/synthesizer-pitfall-catalog.md` for detailed diagnosis of P-1 through P-25

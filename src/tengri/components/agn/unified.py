@@ -9,8 +9,10 @@ Architecture overview
 ---------------------
 The component tree and geometric masking design in this module is inspired
 by the ``UnifiedAGN`` class in the Synthesizer package
-(Lovell et al. 2025, Open J. Astrophys., arXiv:2508.03888;
- Roper et al. 2025, arXiv:2506.15811; https://github.com/synthesizer-project/synthesizer).
+(Lovell et al. 2025, Open J. Astrophys. 8, doi:10.33232/001c.145766;
+ Roper et al. 2026, JOSS 11, 9436, doi:10.21105/joss.09436;
+ https://github.com/synthesizer-project/synthesizer).
+Per the Synthesizer citation policy, BOTH papers must be cited together.
 
 Synthesizer's model defines:
 
@@ -109,12 +111,13 @@ Usage::
 
 References
 ----------
-.. [1] Lovell C. C. et al. 2025, Open Journal of Astrophysics,
+.. [1] Lovell C. C. et al. 2025, Open Journal of Astrophysics, 8,
        "Synthesizer: a Software Package for Synthetic Astronomical Observables",
-       arXiv:2508.03888, https://doi.org/10.48550/arXiv.2508.03888
-.. [2] Roper W. J. et al. 2025, arXiv:2506.15811,
-       "Synthesizer: Synthetic Observables For Modern Astronomy",
-       https://doi.org/10.48550/arXiv.2506.15811
+       https://doi.org/10.33232/001c.145766
+.. [2] Roper W. J. et al. 2026, Journal of Open Source Software, 11, 9436,
+       "Synthesizer: Synthetic Observables for Modern Astronomy",
+       https://doi.org/10.21105/joss.09436
+       (Both Synthesizer papers [1]_ [2]_ must be cited together.)
 .. [3] synthesizer source: https://github.com/synthesizer-project/synthesizer
        (src/synthesizer/emission_models/agn/unified_agn.py)
 """
@@ -1266,7 +1269,7 @@ def _sigmoid_mask(
 
 @register_agn_model(
     "unified_nlr_blr",
-    citation="Lovell et al. 2025; Roper et al. 2025 (Synthesizer); Hönig & Kishimoto 2017",
+    citation="Lovell et al. 2025 + Roper et al. 2026 (Synthesizer); Hönig & Kishimoto 2017",
     status="deprecated",
     short_doc="Unified AGN + NLR/BLR decomposition + geometric masking",
 )
@@ -1302,7 +1305,7 @@ def unified_nlr_blr(
     """Unified AGN SED with NLR/BLR decomposition and geometric masking.
 
     Implements the same conceptual decomposition as the ``UnifiedAGN`` class
-    in Synthesizer (Lovell et al. 2025 [1]_, Roper et al. 2025 [2]_):
+    in Synthesizer (Lovell et al. 2025 [1]_, Roper et al. 2026 [2]_):
     an accretion disc, dusty torus, narrow line region (NLR), and broad line
     region (BLR), combined with inclination-dependent geometric masking.
     Polar dust reddening (SMC law) is additionally adapted from CIGALE's
@@ -1500,12 +1503,13 @@ def unified_nlr_blr(
 
     References
     ----------
-    .. [1] Lovell C. C. et al. 2025, Open Journal of Astrophysics,
+    .. [1] Lovell C. C. et al. 2025, Open Journal of Astrophysics, 8,
            "Synthesizer: a Software Package for Synthetic Astronomical Observables",
-           arXiv:2508.03888, https://doi.org/10.48550/arXiv.2508.03888
-    .. [2] Roper W. J. et al. 2025, arXiv:2506.15811,
-           "Synthesizer: Synthetic Observables For Modern Astronomy",
-           https://doi.org/10.48550/arXiv.2506.15811
+           https://doi.org/10.33232/001c.145766
+    .. [2] Roper W. J. et al. 2026, Journal of Open Source Software, 11, 9436,
+           "Synthesizer: Synthetic Observables for Modern Astronomy",
+           https://doi.org/10.21105/joss.09436
+           (Both Synthesizer papers [1]_ [2]_ must be cited together.)
     .. [3] G. Yang et al. 2020, MNRAS, 491, 740, "X-CIGALE: Fitting AGN/galaxy
            SEDs from X-ray to infrared" (skirtor2016 module),
            https://doi.org/10.1093/mnras/stz3001

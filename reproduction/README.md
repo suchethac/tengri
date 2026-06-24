@@ -10,7 +10,7 @@ reproduction/
 ├── bagpipes/                   # Carnall et al. 2018, MNRAS 480, 4379
 ├── prospector/                 # Johnson et al. 2021, ApJS 254, 22
 ├── agnfitter/                  # Martínez-Ramírez et al. 2024, A&A 688, A46
-└── synthesizer/                # Roper, Lovell, Wilkins et al. 2025, arXiv:2508.03888
+└── synthesizer/                # Lovell et al. 2025 (OJA) + Roper et al. 2026 (JOSS) — cite both
 ```
 
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent

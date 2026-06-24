@@ -159,9 +159,33 @@ AGN_TORUS_CITATIONS: dict[str, list[str]] = {
     None: [],
 }
 
+# Synthesizer (Lovell et al. 2025 + Roper et al. 2026). BOTH papers MUST be
+# cited whenever any Synthesizer-derived grid is used — the upstream authors'
+# citation policy is strict on this. Keep these two keys together everywhere.
+# https://synthesizer-project.github.io/synthesizer/#citation-acknowledgement
+SYNTHESIZER_CITATIONS: list[str] = ["synthesizer", "synthesizer_joss"]
+
+# AGN narrow-line-region blocks (Parameters.agn_nlr_block). The Synthesizer
+# Cloudy grid variants cite both Synthesizer papers.
+AGN_NLR_CITATIONS: dict[str, list[str]] = {
+    "synthesizer": SYNTHESIZER_CITATIONS,
+    "synthesizer_spectra": SYNTHESIZER_CITATIONS,
+    "grahsp": ["buchner2024"],
+    "analytic": [],
+    "none": [],
+    None: [],
+}
+
+# AGN broad-line-region blocks (Parameters.agn_blr_block).
 AGN_BLR_CITATIONS: dict[str, list[str]] = {
-    "temple": ["temple2021_qsogen"],
+    "synthesizer": SYNTHESIZER_CITATIONS,
+    "synthesizer_spectra": SYNTHESIZER_CITATIONS,
     "qsogen": ["temple2021_qsogen"],
+    "grahsp": ["buchner2024"],
+    "analytic": [],
+    "none": [],
+    # Legacy / alternative selector values retained for back-compat.
+    "temple": ["temple2021_qsogen"],
     "vanden_berk": ["vandenberk2001"],  # SDSS composite (ADS-verified)
     "sdss_composite": ["vandenberk2001"],
     None: [],
@@ -265,6 +289,10 @@ def register_function_citations(qualname: str, keys: list[str]) -> None:
 
 
 __all__ = [
+    "AGN_BLR_CITATIONS",
+    "AGN_DISC_CITATIONS",
+    "AGN_NLR_CITATIONS",
+    "AGN_TORUS_CITATIONS",
     "BACKEND_CITATIONS",
     "CORE_CITATIONS",
     "DUST_LAW_CITATIONS",
@@ -277,6 +305,7 @@ __all__ = [
     "SSP_CODE_CITATIONS",
     "SSP_ISOCHRONE_CITATIONS",
     "SSP_LIBRARY_CITATIONS",
+    "SYNTHESIZER_CITATIONS",
     "cites",
     "register_function_citations",
 ]

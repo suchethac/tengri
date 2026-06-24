@@ -25,7 +25,8 @@ References
 - Johnson+2021: Prospector implementation.
 - Tacchella et al. 2022, ApJ, 926, 134 (arXiv:2102.11954): Bursty continuity.
 - Wang et al. 2024 (arXiv:2401.12198): Prospector-β agebins scheme.
-- Wilkins et al. 2025, arXiv:2508.03888: Synthesizer (ContinuityFlex upstream reference).
+- Synthesizer (ContinuityFlex upstream ref) — cite both: Lovell et al. 2025
+  (OJA) + Roper et al. 2026 (JOSS).
 """
 
 from __future__ import annotations
@@ -652,8 +653,10 @@ def continuity_flex(
     .. [2] B. D. Johnson et al., "Stellar Population Inference from the
        Spectral Energy Distributions of Billions of Galaxies," ApJS, 254, 22
        (2021). arXiv:2012.01426. https://doi.org/10.3847/1538-4295/abef67
-    .. [3] S. C. Wilkins et al., "Synthesizer: A Python Package for Generating
-       Synthetic Galaxy Observables," arXiv:2508.03888 (2025).
+    .. [3] C. C. Lovell et al. 2025, Open J. Astrophys. 8,
+       "Synthesizer: a Software Package for Synthetic Astronomical Observables,"
+       doi:10.33232/001c.145766; W. J. Roper et al. 2026, JOSS 11, 9436,
+       doi:10.21105/joss.09436 (cite both Synthesizer papers).
 
     Examples
     --------

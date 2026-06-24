@@ -92,7 +92,8 @@ def sigmoid_visibility_mask(
     References
     ----------
     .. [1] Synthesizer ``torus_edgeon_condition`` (Lovell et al. 2025,
-           arXiv:2508.03888; Roper et al. 2025, arXiv:2506.15811):
+           OJA 8, doi:10.33232/001c.145766; Roper et al. 2026, JOSS 11, 9436,
+           doi:10.21105/joss.09436 — cite both):
            https://github.com/synthesizer-project/synthesizer/blob/main/src/synthesizer/emission_models/agn/unified_agn.py
     """
     inc_deg = jnp.degrees(jnp.arccos(jnp.clip(cos_inc, 0.0, 1.0)))

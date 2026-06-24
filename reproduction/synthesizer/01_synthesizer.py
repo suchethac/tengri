@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Reproducing Synthesizer with tengri
 #
-# Synthesizer (Roper, Lovell, Wilkins et al. 2025) is a modular forward-modelling
+# Synthesizer (Lovell et al. 2025, OJA; Roper et al. 2026, JOSS — cite both) is a modular forward-modelling
 # package for synthetic galaxy observables. It builds spectra by extracting from
 # pre-computed HDF5 grids and walking an `EmissionModel` tree — stellar SSPs, a
 # parametric star formation history, attenuation and dust-emission laws, the
@@ -1365,7 +1365,9 @@ plt.show()
 # %% [markdown]
 # ## References
 #
-# * Roper, Lovell, Vijayan, Wilkins et al. 2025 — Synthesizer (arXiv:2508.03888)
+# * Lovell et al. 2025, Open J. Astrophys. 8 — Synthesizer (doi:10.33232/001c.145766)
+# * Roper et al. 2026, JOSS 11, 9436 — Synthesizer (doi:10.21105/joss.09436)
+#   (Both Synthesizer papers must be cited together, per the project's citation policy.)
 # * Kubota & Done 2018, MNRAS 480, 1247 — qsosed accretion disc
 # * Feltre et al. 2016, MNRAS 456, 3354 — AGN narrow-line-region grids
 # * Nenkova et al. 2008, ApJ 685, 160 — clumpy torus

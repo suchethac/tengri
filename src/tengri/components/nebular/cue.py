@@ -71,7 +71,7 @@ Cue differs in the following ways:
 
 Relation to Synthesizer grids
 ------------------------------
-The Synthesizer (Lovell et al. 2025) AGN grids (CLOUDY c23.01, 215 lines,
+The Synthesizer (Lovell et al. 2025; Roper et al. 2026) AGN grids (CLOUDY c23.01, 215 lines,
 6 axes: BH mass, Eddington ratio, cos(inclination), metallicity, log U, n_H)
 are structurally the closest published counterpart to the grids on which Cue
 was trained.  Key similarities: c17+ CLOUDY physics, broad line coverage, and

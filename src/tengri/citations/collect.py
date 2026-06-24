@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from tengri.citations.associations import (
+    AGN_BLR_CITATIONS,
+    AGN_NLR_CITATIONS,
     BACKEND_CITATIONS,
     CORE_CITATIONS,
     DUST_LAW_CITATIONS,
@@ -376,6 +378,17 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
             _push(s)
 
     _push(getattr(spec, "agn_model", None))
+
+    # Composable AGN NLR/BLR blocks map to a LIST of keys (the Synthesizer
+    # variants cite BOTH Synthesizer papers — Lovell 2025 + Roper 2026).
+    for attr, table in (
+        ("agn_nlr_block", AGN_NLR_CITATIONS),
+        ("agn_blr_block", AGN_BLR_CITATIONS),
+    ):
+        block = getattr(spec, attr, None)
+        if block:
+            out.extend(table.get(str(block).lower(), []))
+
     _push(getattr(spec, "dust_model", None))  # e.g. wg00 → witt_gordon2000
     _push(getattr(spec, "dust_emission", None))
     _push(getattr(spec, "dust_law", None))

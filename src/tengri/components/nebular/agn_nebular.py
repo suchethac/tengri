@@ -95,7 +95,7 @@ Cue vs Feltre+2016 comparison:
 Grid data: ``data/neogal/AGN_NLR_nebular_feltre16/`` (raw ASCII from NEOGAL).
 Build the HDF5 grid with ``python scripts/build_feltre_grid.py``.
 
-Comparison with Synthesizer (Lovell et al. 2025)
+Comparison with Synthesizer (Lovell et al. 2025; Roper et al. 2026)
 -------------------------------------------------
 Synthesizer (https://github.com/synthesizer-project/synthesizer) ships
 separate AGN NLR and BLR CLOUDY grids run with CLOUDY c23.01, a decade
@@ -139,7 +139,7 @@ References
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Li et al. 2024, ApJ, 969, 28 (Cue v1)
 - Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
-- Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+- Lovell et al. 2025 (doi:10.33232/001c.145766) + Roper et al. 2026 (doi:10.21105/joss.09436)
 
 """
 
@@ -633,7 +633,7 @@ class SynthesizerNLRBackend:
     """Synthesizer CLOUDY c23.01 AGN NLR photoionization backend.
 
     Computes AGN narrow-line region emission by interpolating the
-    CLOUDY c23.01 photoionization grids from Synthesizer (Lovell et al. 2025).
+    CLOUDY c23.01 photoionization grids from Synthesizer (Lovell et al. 2025; Roper et al. 2026).
     The grid covers AGN-ionized gas parameterized by BH mass, accretion rate
     (Eddington ratio), inclination angle, metallicity, ionization parameter,
     and hydrogen density.
@@ -671,7 +671,7 @@ class SynthesizerNLRBackend:
 
     References
     ----------
-    Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+    Lovell et al. 2025 (doi:10.33232/001c.145766) + Roper et al. 2026 (doi:10.21105/joss.09436)
 
     """
 
@@ -925,7 +925,7 @@ class SynthesizerNLRBackend:
         component to ~2 %). Requires a grid carrying ``/spectra/nebular``; raises
         otherwise. Reproduces ``UnifiedAGN`` faithfully where re-broadening the
         scrambled ``/lines`` table cannot (issue #694). Ported to match
-        Synthesizer (Lovell et al. 2025).
+        Synthesizer (Lovell et al. 2025; Roper et al. 2026).
         """
         from tengri.utils.grid_interp import interp_nd_triweight
 
@@ -999,7 +999,7 @@ class SynthesizerBLRBackend(SynthesizerNLRBackend):
 
     References
     ----------
-    Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283)
+    Lovell et al. 2025 (doi:10.33232/001c.145766) + Roper et al. 2026 (doi:10.21105/joss.09436)
     """
 
     name = "synthesizer_blr"
@@ -1388,7 +1388,8 @@ def agn_nlr_emission(
     .. [2] A. Feltre, S. Charlot, and J. Gutkin, "Updated photoionization
        models of the CLOUDY c13.03 code," MNRAS, 456, 3354 (2016).
        arXiv:1511.08217. https://doi.org/10.1093/mnras/stw2180
-    .. [3] Lovell et al. 2025, MNRAS (Synthesizer; arXiv:2004.07283).
+    .. [3] Lovell et al. 2025 (doi:10.33232/001c.145766);
+           Roper et al. 2026 (doi:10.21105/joss.09436). Cite both (Synthesizer).
 
     Notes
     -----

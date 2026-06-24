@@ -1,7 +1,8 @@
 # Reproducing Synthesizer with tengri
 
-This folder places Synthesizer (Roper, Lovell, Vijayan, Wilkins et al. 2025,
-arXiv:2508.03888) next to tengri component by component — same parameters, same
+This folder places Synthesizer (Lovell et al. 2025, OJA, doi:10.33232/001c.145766;
+Roper et al. 2026, JOSS, doi:10.21105/joss.09436 — **cite both**) next to tengri
+component by component — same parameters, same
 units, one figure per physics block — with a focus on the **Unified AGN** model
 (§9). tengri and Synthesizer are **independent codes**; this is a peer-to-peer
 comparison, exactly like the CIGALE, Prospector, and BAGPIPES notebooks.
