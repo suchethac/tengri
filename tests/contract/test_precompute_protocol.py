@@ -116,6 +116,12 @@ class TestRegistryCompleteness:
             # composable_precompute: recipe-builder helper, invoked directly by
             # SEDModel.agn_model='composable', not a registered named component.
             "tengri.components.agn.blocks.composable_precompute",
+            # energy_balance_precompute: build-time (tau_bc, tau_diff) bolometric
+            # LUT for the two-component dust energy balance (L_ir). Consumed
+            # directly by DustSEDComponent.apply via SEDModel's eager construction
+            # path (threaded as template_data), not a registry-routed kernel
+            # adapter. See ``components/dust/energy_balance_precompute.py``.
+            "tengri.components.dust.energy_balance_precompute",
         }
     )
 

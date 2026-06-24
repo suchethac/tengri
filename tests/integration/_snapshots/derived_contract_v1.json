@@ -3,7 +3,7 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "f103c506121d5ea551560c967e96327143bdcb7fb9587c5a0d50756154272738",
+    "digest": "c5476994c2ced28ca8dd5c2ee2b1a3b0525f5f704e0afed71b38b76e4567fe3d",
     "rows": [
       [
         "DustSEDComponent",
@@ -98,6 +98,12 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "joint_weights",
+        ""
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
@@ -164,6 +170,12 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "stellar_mass_scale",
+        "erg/s/Hz"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "stellar_phot_lnu_precomp",
         "erg/s/Hz"
       ],
@@ -206,7 +218,7 @@
     ]
   },
   "contract_graph::minimal_phot": {
-    "digest": "45963e198d68f440a123fcdc31ae192b88552ea29ed6395af98908952c914649",
+    "digest": "f2ca920def15a88e059d7d28f27129257e6c4ca3962545778a30699384e38856",
     "rows": [
       [
         "DustSEDComponent",
@@ -265,6 +277,12 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "joint_weights",
+        ""
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
@@ -331,13 +349,19 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "stellar_mass_scale",
+        "erg/s/Hz"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "stellar_phot_lnu_precomp",
         "erg/s/Hz"
       ]
     ]
   },
   "contract_graph::single_component_dust": {
-    "digest": "581e7c10e35ba3d649252d37887a1f42102763e8826ff18c517f75e3a9e3d7a8",
+    "digest": "6bb46c9b0562e09fc1daa253bd87cc1dff7a0f2fdd00056178794aaa3f2c4b2e",
     "rows": [
       [
         "DustSEDComponent",
@@ -426,6 +450,12 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "joint_weights",
+        ""
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
@@ -492,18 +522,24 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "stellar_mass_scale",
+        "erg/s/Hz"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "stellar_phot_lnu_precomp",
         "erg/s/Hz"
       ]
     ]
   },
   "sed_intrinsic::full_panchromatic": {
-    "digest": "5f6065f290f5542bc3ec5fc511ab452a5ee0549bc4e8ebe4432e4e8fe71e87c4"
+    "digest": "9eb03dbd9c2b667545421dbac4f238b85da81dca613e660fc1151cb33b69e0e9"
   },
   "sed_intrinsic::minimal_phot": {
-    "digest": "d1183e5db0e25241740bee56725a7c4e723249c88db8cf258387d206e187c0bb"
+    "digest": "9eb03dbd9c2b667545421dbac4f238b85da81dca613e660fc1151cb33b69e0e9"
   },
   "sed_intrinsic::single_component_dust": {
-    "digest": "6a2bac263c8c27e633ebac62b6ec18c45a8edbb4aa98ea4638511eb34f010a42"
+    "digest": "9eb03dbd9c2b667545421dbac4f238b85da81dca613e660fc1151cb33b69e0e9"
   }
 }

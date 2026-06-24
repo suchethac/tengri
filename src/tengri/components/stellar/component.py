@@ -469,6 +469,16 @@ class StellarSEDComponent:
             DerivedKey("sfr_100myr", "Msun/yr", "Time-weighted SFR over last 100 Myr"),
             DerivedKey("L_age", "erg/s", "Bolometric L per SSP age bin"),
             DerivedKey("lnu_age", "erg/s/Hz", "Per-age L_nu cube, shape (n_age, n_wave)"),
+            DerivedKey(
+                "joint_weights",
+                "",
+                "DSPS joint (metallicity, age) weights, shape (n_met, n_age)",
+            ),
+            DerivedKey(
+                "stellar_mass_scale",
+                "erg/s/Hz",
+                "total_mass x L_sun: scales SSP per-Msun luminosities to erg/s/Hz",
+            ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
             DerivedKey("nion", "photons/s", "Ionizing photon rate (lambda < 911.76 A)"),
@@ -1339,6 +1349,12 @@ class StellarSEDComponent:
             sfr_100myr=sfr_100myr,
             L_age=L_age,
             lnu_age=lnu_age,
+            # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
+            # published so DustSEDComponent can evaluate the energy-balance
+            # L_ir from a precomputed bolometric (tau_bc, tau_diff) LUT instead
+            # of the full-wavelength stellar cube (WavePrecomp speed path).
+            joint_weights=joint_weights,
+            stellar_mass_scale=total_mass * LSUN_ERG_PER_S,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream
             # nebular backends (Cue, CloudyGrid) can call their
