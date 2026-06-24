@@ -284,7 +284,7 @@ def test_state_to_emission_lines_balmer_decrement(state_with_cue):
     assert 2.0 < ratio < 4.0, f"Halpha/Hbeta = {ratio} (expected ~2.85)"
 
 
-def test_state_to_emission_lines_no_catalogue_returns_nan(state):
+def test_state_to_emission_lines_no_catalog_returns_nan(state):
     """Chain without nebular catalog (no Cue/Cloudy) → NaN headlines + empty all_*."""
     from tengri.forward import state_to_emission_lines
 

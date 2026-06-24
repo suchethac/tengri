@@ -370,7 +370,7 @@ class TestYang2020PolarDust:
             "SMC attenuation should be roughly monotonic (no 2175A bump)"
         )
 
-    def test_greybody_energy_conservation(self):
+    def test_graybody_energy_conservation(self):
         """Reemitted graybody should integrate to L_absorbed."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 
@@ -388,7 +388,7 @@ class TestYang2020PolarDust:
             f"Graybody L_bol={l_bol:.2e} should equal L_absorbed={l_absorbed:.2e}"
         )
 
-    def test_greybody_peaks_in_fir(self):
+    def test_graybody_peaks_in_fir(self):
         """T=100K graybody peaks near 30-100 μm."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 

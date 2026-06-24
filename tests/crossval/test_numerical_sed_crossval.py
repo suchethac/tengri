@@ -63,7 +63,7 @@ def _band_avg(wave, flux, center, half_width=100.0):
 # ── 1. Absolute SED normalization for simple stellar populations ──
 
 
-class TestSSPAbsoluteNormalisation:
+class TestSSPAbsoluteNormalization:
     """Compare L_nu(V-band) per solar mass for simple cases against FSPS.
 
     A constant SFH of 1 Msun/yr for 1 Gyr forms 1e9 Msun.

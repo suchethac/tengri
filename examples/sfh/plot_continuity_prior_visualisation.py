@@ -10,8 +10,8 @@ time.
 
 .. sphx-glr-precomputed-img:
 
-.. image:: images/sphx_glr_plot_continuity_prior_visualisation_001.png
-   :alt: plot_continuity_prior_visualisation
+.. image:: images/sphx_glr_plot_continuity_prior_visualization_001.png
+   :alt: plot_continuity_prior_visualization
    :class: sphx-glr-single-img
 
 """
@@ -114,4 +114,4 @@ ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("plot_continuity_prior_visualisation.png", dpi=150, bbox_inches="tight")
+plt.savefig("plot_continuity_prior_visualization.png", dpi=150, bbox_inches="tight")

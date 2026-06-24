@@ -925,7 +925,7 @@ class TestPolarDustCrossval:
                 ),
             )
 
-    def test_greybody_peak_wavelength(self):
+    def test_graybody_peak_wavelength(self):
         """At T=100K, graybody peak should be near Wien peak ~ 29 um."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 

@@ -384,3 +384,4 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/known_bugs.md` — bug tracking (all currently fixed)
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
+- `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite

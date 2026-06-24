@@ -53,7 +53,7 @@ def test_emission_lines_namedtuple_has_full_catalog_fields():
     assert hasattr(EmissionLines, "get")
 
 
-def test_emission_lines_get_handles_empty_catalogue():
+def test_emission_lines_get_handles_empty_catalog():
     """#303: .get() returns NaN when the active backend has no catalog."""
     empty = jnp.asarray([], dtype=jnp.float64)
     nan_scalar = jnp.asarray(jnp.nan)

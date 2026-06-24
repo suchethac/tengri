@@ -111,7 +111,7 @@ def test_tengri_data_module_exposes_helpers():
         assert hasattr(data, name), f"tengri.data missing {name}"
 
 
-def test_ssp_catalogue_url_looks_sane():
+def test_ssp_catalog_url_looks_sane():
     """The catalog URL must be the canonical https hostname and end in
     a directory path. Guards against typos in future edits."""
     from tengri.data import SSP_CATALOG_URL

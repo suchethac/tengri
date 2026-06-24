@@ -45,7 +45,7 @@ def test_provenance_tokens_map_to_citations(source, expected):
     assert expected <= keys, f"missing {expected - keys} for {source!r}"
 
 
-def test_unrecognised_filename_warns():
+def test_unrecognized_filename_warns():
     """A filename that doesn't match <code>_<isochrone>_<library>_<imf> warns."""
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -53,7 +53,7 @@ def test_unrecognised_filename_warns():
     assert any("infer" in str(w.message).lower() for w in caught)
 
 
-def test_recognised_filename_does_not_warn():
+def test_recognized_filename_does_not_warn():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         _ssp_provenance_keys(_ssp("fsps_prsc_miles_chabrier"))

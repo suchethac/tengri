@@ -78,7 +78,7 @@ class TestGrammarPlumbing:
         )
         np.testing.assert_array_equal(spec.bin_edges_gyr, edges_z2)
 
-    def test_bin_edges_gyr_is_recognised_neb_key(self, edges_z2):
+    def test_bin_edges_gyr_is_recognized_neb_key(self, edges_z2):
         """No raise = key is accepted by the unknown-key validator."""
         parse_groups(
             sfh={"type": _SFH, "*": tengri.FIXED, "bin_edges_gyr": edges_z2},

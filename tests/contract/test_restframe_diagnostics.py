@@ -237,7 +237,7 @@ class TestRestFrameLuminosity:
         np.testing.assert_allclose(l_phot2, 2.0 * l_phot1, rtol=0.01)
 
 
-class TestRestFrameColour:
+class TestRestFrameColor:
     """Test suite for rest-frame photometric color."""
 
     @pytest.fixture

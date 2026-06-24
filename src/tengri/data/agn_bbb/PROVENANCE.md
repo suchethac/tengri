@@ -16,7 +16,7 @@ mean SED of 259 Type-1 quasars from SDSS, spanning radio to X-rays.
 the AGNfitter source (`functions/MODEL_AGNfitter.py:553`, variable name
 `bbb_nu`). Converted to wavelength in Å via `λ = c/ν` (c = 2.99792458e18
 Å/s) and sorted ascending. The ordinate is `ν F_ν` in AGNfitter's
-arbitrary internal normalisation — tengri renormalises at the bolometric
+arbitrary internal normalization — tengri renormalizes at the bolometric
 anchor point at runtime, so the absolute scale does not matter.
 
 **Output file**: `richards2006.dat`, plain text two-column, sha256

@@ -160,7 +160,7 @@ class WavePrecomp:
     (CIGALE ``dl2014`` style): the exact ``L_ir × R`` projection is then used
     automatically — fastest *and* exact, no flag needed. This flag only bites when
     that constant ``R`` cannot be formed (free emission shape / redshift, or
-    structured templates): ``True`` then samples the self-normalising template at
+    structured templates): ``True`` then samples the self-normalizing template at
     the filter effective wavelength instead of integrating it through each
     bandpass — much cheaper than the exact per-band integral (#622), at a
     band-shape approximation (smooth on a modified blackbody; up to a few percent
@@ -780,7 +780,7 @@ class SEDModel:
             self._cached_component_chain = self._build_component_chain()
 
         # Pre-build the dust energy-balance LUT at construction (eager, no JIT
-        # trace active) so it is memoised as concrete arrays. Building it lazily
+        # trace active) so it is memoized as concrete arrays. Building it lazily
         # inside ``_template_data_for_jit`` would run the jnp integrals *during*
         # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
         # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
@@ -4597,7 +4597,7 @@ class SEDModel:
                 result["agn"] = agn_templates
             break
 
-        # ── Dust energy-balance LUT (build-time, memoised) ──
+        # ── Dust energy-balance LUT (build-time, memoized) ──
         # When the attenuation-curve shape is fixed (only tau_bc/tau_diff vary),
         # the bolometric absorbed luminosity that feeds L_ir is a smooth
         # function of (tau_bc, tau_diff); precompute it so the per-call
@@ -4643,7 +4643,7 @@ class SEDModel:
     _EB_ATTEN_FREE_OK = frozenset({"dust_tau_bc", "dust_tau_diff", "dust_eta_balance"})
 
     def _energy_balance_lut(self, chain):
-        """Build (and memoise) the two-component energy-balance LUT, or ``None``.
+        """Build (and memoize) the two-component energy-balance LUT, or ``None``.
 
         Returns ``None`` unless the model uses ``approx=WavePrecomp()`` with a
         two-component :class:`DustSEDComponent` that re-emits IR, the SSP needs
@@ -4715,7 +4715,7 @@ class SEDModel:
     def _dust_emission_band_response(self, chain):
         """Build-time filter-integrated dust-IR response per unit ``L_ir``.
 
-        CIGALE's ``dl2014``/``dale2014`` normalise the IR template to unit
+        CIGALE's ``dl2014``/``dale2014`` normalize the IR template to unit
         luminosity and scale by ``dust.luminosity`` (emission = ``L_dust ×
         template``); the band fluxes are therefore ``L_ir × R`` with ``R`` the
         template's per-filter integral. When the emission *shape* (``dust_T``,

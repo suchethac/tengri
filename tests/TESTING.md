@@ -106,7 +106,7 @@ def test_calzetti2000_attenuation_eq3():
     Tolerance: 1% (analytical formula, no fit residual).
     """
     from tengri.dust import calzetti_k
-    # k(0.55 µm) = 4.05 by construction (Eq. 4 normalisation)
+    # k(0.55 µm) = 4.05 by construction (Eq. 4 normalization)
     assert abs(calzetti_k(5500.0) - 4.05) < 0.05
 ```
 

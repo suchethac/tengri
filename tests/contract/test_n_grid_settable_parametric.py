@@ -31,7 +31,7 @@ def _build(ssp, obs, **extra):
     )
 
 
-def test_n_grid_honoured_for_parametric_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
+def test_n_grid_honored_for_parametric_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
     """build(n_grid=N) now sets the SFH grid for a parametric SFH (was forced 256)."""
     assert _build(synthetic_ssp_wide, synthetic_tophat_obs).n_grid == 256  # default
     assert _build(synthetic_ssp_wide, synthetic_tophat_obs, n_grid=512).n_grid == 512

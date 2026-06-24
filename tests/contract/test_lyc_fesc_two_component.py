@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Stellar Lyman continuum is absorbed (not leaked / negated) under two-component dust.
 
-Regression for #824. With a photoionised nebular backend and ``neb_fesc < 1``,
+Regression for #824. With a photoionized nebular backend and ``neb_fesc < 1``,
 the stellar Lyman continuum (λ < 912 Å) is absorbed by the same gas that powers
 the nebular emission; only the escaping fraction ``neb_fesc`` survives. CIGALE
 removes ``stellar_LyC × (1 − fesc)`` below the Lyman break
@@ -38,7 +38,7 @@ _LYC = np.asarray(_WAVE) < 912.0
 
 
 def _state(fesc: float, *, publish_lyc: bool) -> ForwardState:
-    """Mimic the photoionised-nebular output at a given escape fraction.
+    """Mimic the photoionized-nebular output at a given escape fraction.
 
     Stellar light lives in the old bin of ``lnu_age`` (unmasked). The nebular
     component masks the summed ``sed_intrinsic`` LyC by ``fesc`` and (after the

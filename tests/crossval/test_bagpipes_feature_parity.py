@@ -608,10 +608,10 @@ class TestSpectralIndexPhysics:
 # ── 9. CATALOG BATCH FITTING — checkpoint/resume ────────────────
 
 
-class TestCatalogueBatchPhysics:
+class TestCatalogBatchPhysics:
     """Catalog batch fitting infrastructure.
 
-    Bagpipes: fit_catalogue — MPI, checkpoint, auto-catalog.
+    Bagpipes: fit_catalog — MPI, checkpoint, auto-catalog.
     Tengri: fit_batch + catalog_summary + Posterior save/load.
     """
 
