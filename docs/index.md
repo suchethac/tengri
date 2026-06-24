@@ -10,14 +10,14 @@
 Tengri is a panchromatic galaxy SED inference library, written in
 JAX. The same forward model covers stellar populations, dust,
 nebular emission, AGN, and the IGM, from X-rays out to the radio.
-Inference is modular too: the `Fitter` interface borrows optimisers
+Inference is modular too: the `Fitter` interface borrows optimizers
 from `optax`, samplers from `BlackJAX`, and variational inference
 from `NIFTy.re`. Gradients are available everywhere, and they are
 exact.
 
 Tengri is pre-1.0 and developed as a community effort. The public
 API is still moving in places, and the repository will move to the
-`tengri-project` GitHub organisation shortly, where collaborative
+`tengri-project` GitHub organization shortly, where collaborative
 development and issue tracking will live going forward.
 
 ---

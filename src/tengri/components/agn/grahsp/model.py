@@ -12,7 +12,7 @@ Two entry points are provided:
   per-component :class:`GRAHSPSED` bundle (:math:`L_\\lambda` in erg/s/nm).
 - :func:`compute_grahsp_sed` — registered AGN model entry point: takes Å
   wavelengths and the standard ``agn_grahsp_*`` keyword arguments, and
-  returns :math:`L_\\nu` in erg/s/Hz, normalised so the integrated
+  returns :math:`L_\\nu` in erg/s/Hz, normalized so the integrated
   intrinsic SED equals ``agn_log_lbol``.
 
 The galaxy energy-balance loop (Dale+ 2014 dust re-emission) is **not**
@@ -341,7 +341,7 @@ def evaluate_grahsp_agn(
             si=params.si,
         )
     # Si may go negative; clip so total torus stays non-negative
-    # (upstream ``mask_negative`` behaviour).
+    # (upstream ``mask_negative`` behavior).
     si = jnp.maximum(si, -torus)
 
     _, factor_agn = attenuation_factors(
@@ -464,7 +464,7 @@ agn_grahsp_hot_fcov
     Notes
     -----
     JIT-compatible (with ``agn_type`` and ``templates`` as static / closure
-    captures). The Buchner+ 2024 paper natively parameterises in
+    captures). The Buchner+ 2024 paper natively parameterizes in
     :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`, not bolometric L; this
     wrapper performs the rescaling so users can swap GRAHSP into a
     standard tengri ``agn_log_lbol``-driven pipeline.
@@ -512,7 +512,7 @@ agn_grahsp_hot_fcov
     sed_unit = evaluate_grahsp_agn(wave_nm, unit_params, templates)
     # Total bolometric luminosity at l5100 = 1.
     if agn_grahsp_l5100 is not None:
-        # Honour the explicit l5100 override (matches composable runner
+        # Honor the explicit l5100 override (matches composable runner
         # semantics; see :mod:`tengri.components.agn.blocks`).
         l5100 = agn_grahsp_l5100
     else:
@@ -521,7 +521,7 @@ agn_grahsp_hot_fcov
         l5100 = target_l_bol / l_bol_unit
 
     # Re-scale: GRAHSP outputs are linear in l5100, so a single multiply
-    # gives the correctly-normalised SED without a second evaluation.
+    # gives the correctly-normalized SED without a second evaluation.
     L_lambda_nm = (sed_unit.bbb_attenuated + sed_unit.torus_attenuated) * l5100
     # Convert L_lambda [erg/s/nm] -> L_nu [erg/s/Hz]: L_nu = L_lambda * lambda^2 / c.
     return L_lambda_nm * wave_nm**2 / _C_NM_PER_S

@@ -14,13 +14,13 @@ Tengri is a panchromatic galaxy SED inference library written in
 covers stellar populations, dust attenuation and emission, nebular
 gas, AGN, the IGM, radio, and X-ray, all driven by one shared set of
 physical parameters. Inference is also modular: the `Fitter`
-interface delegates to optimisers from `optax`, samplers from
+interface delegates to optimizers from `optax`, samplers from
 `BlackJAX`, and variational inference from `NIFTy.re`, so adopting a
 new backend is a registration, not a port.
 
 Contributions are welcome (new SFH families, dust laws, AGN
 templates, observation modes, samplers) through the issue tracker
-on the `tengri-project` GitHub organisation, which the repository
+on the `tengri-project` GitHub organization, which the repository
 will move to shortly.
 
 ## Philosophy
@@ -44,7 +44,7 @@ no edits to anything else.
 | Nebular | `baked_in`, `cue` (emulator), `cloudy_grid`, `cb19` |
 | AGN | accretion disc, SKIRTOR torus, BLR/NLR through Cue, optional X-ray and radio |
 | IGM | Madau, Inoue |
-| Inference | optimisers from `optax`, samplers from `BlackJAX`, variational inference from `NIFTy.re`, plus hierarchical / population extensions on top |
+| Inference | optimizers from `optax`, samplers from `BlackJAX`, variational inference from `NIFTy.re`, plus hierarchical / population extensions on top |
 
 `tengri.summary()` prints the live count for every registry, and
 new components register themselves; nothing in this table is updated
@@ -130,7 +130,7 @@ chain. They are thin: an `SEDModel` is a list of SED components plus
 the validator that checks the `reads`/`publishes` graph is closed; a
 `SpatialModel` is the same on the spatial side. A `SpatialSEDModel`
 just runs both in sequence, with the SED chain first so that spatial
-components can read mass, age, or colour state if they need it.
+components can read mass, age, or color state if they need it.
 There is no special-casing for stellar atmospheres, hierarchical
 SFHs, or per-age morphology. Those are all components or
 sub-models, slotted in through the same interface.
@@ -194,7 +194,7 @@ on top of a Cue nebular emulator, hand-derived gradients stop being
 maintainable; autodiff is what keeps the math honest.
 
 JIT compilation makes the forward model competitive with hand-written
-C, and `vmap` vectorises across a galaxy sample without writing the
+C, and `vmap` vectorizes across a galaxy sample without writing the
 loop yourself. The same source file runs on CPU, GPU, and TPU, which
 is the only reason hierarchical population fits over thousands of
 galaxies are practically affordable.

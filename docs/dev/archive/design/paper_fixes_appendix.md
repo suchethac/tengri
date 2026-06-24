@@ -34,7 +34,7 @@ where `\sigma(x) = 1/(1+e^{-x})` is the logistic sigmoid, and the total optical 
 
 > "Following Charlot \& Fall (2000), young stellar populations experience additional
 > attenuation from their birth clouds. We implement this as a differentiable sigmoid
-> transition centred at $10^7$~yr with a width of 0.3~dex in $\log_{10}(t_{\rm age})$,
+> transition centered at $10^7$~yr with a width of 0.3~dex in $\log_{10}(t_{\rm age})$,
 > enabling exact gradient computation via automatic differentiation. The transition
 > spans approximately 5--20~Myr, consistent with the typical timescale for molecular
 > cloud dispersal (Chevance et al.~2020)."

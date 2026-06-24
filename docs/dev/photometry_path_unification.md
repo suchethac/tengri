@@ -21,7 +21,7 @@ deferred; per-galaxy ``Fixed(redshift)`` catalogs still get N compiles
 **Status (historical):** Draft for review — revision 2 (2026-05-19)
 **Supersedes:** `docs/dev/predict_consolidation_design.md` (delete before review) and revision 1 of this file.
 **Builds on:**
-- [`three_evaluation_modes.md`](three_evaluation_modes.md) — the three-mode contract (one physics, three execution modes), today realised at the **component layer**.
+- [`three_evaluation_modes.md`](three_evaluation_modes.md) — the three-mode contract (one physics, three execution modes), today realized at the **component layer**.
 - [`optimization-architecture.md`](optimization-architecture.md) — today's per-observable benchmark numbers.
 - ADR-0004 (kernel-strategy-module) — the strategy/adapter pattern.
 - ADR-0009 (typed-pipeline-contract) — `publishes` / `requires` and `validate_pipeline`.
@@ -32,7 +32,7 @@ Today tengri has **five public predict methods** (`predict_photometry`, `predict
 
 **The redesign:**
 
-1. **`Observation.predict(state, params) → Observables`** is the single projection seam. `Observables` is a **NamedTuple synthesised per model** at construction time, with attribute access (no dicts).
+1. **`Observation.predict(state, params) → Observables`** is the single projection seam. `Observables` is a **NamedTuple synthesized per model** at construction time, with attribute access (no dicts).
 2. **Two orthogonal build-time knobs** replace the `mode=` kwarg:
    - `compile=` controls **JIT wrapping** (`per_component` / `fused`).
    - `approx=` controls **which approximate component variants enter the chain** (a dict — `{"wave_precomp": True, "ztable": True, …}` — extensible to future approximations).
@@ -90,7 +90,7 @@ There is no fused joint kernel. Joint inference today pays two forward-pass cost
 
 ## The new architecture
 
-### The container — `Observables` NamedTuple, synthesised per model
+### The container — `Observables` NamedTuple, synthesized per model
 
 `Observables` is the dual of `Observation`. Built once at `SEDModel.__init__`:
 
@@ -265,13 +265,13 @@ Four phases, each independently shippable. Phase 1 is **done** (PR #112).
 
 What landed:
 
-- `Observables` NamedTuple synthesised in `SEDModel.__init__` from `observation` contents (`src/tengri/observation/observables.py:build_observables_class`). Fields exist iff the observation carries the corresponding sub-block — `AttributeError` on missing channels, not silent zeros. `mag_apparent` / `mag_absolute` `@property`s compute AB mags from `phot_fnu` and `phot_rest_fnu`. Pytree-registered.
+- `Observables` NamedTuple synthesized in `SEDModel.__init__` from `observation` contents (`src/tengri/observation/observables.py:build_observables_class`). Fields exist iff the observation carries the corresponding sub-block — `AttributeError` on missing channels, not silent zeros. `mag_apparent` / `mag_absolute` `@property`s compute AB mags from `phot_fnu` and `phot_rest_fnu`. Pytree-registered.
 - `Observation.predict(state, params, *, observables_type=None)` — returns `Observables` instance when type provided; falls back to the Phase 1 dict otherwise (backward compat for callers that haven't migrated).
 - `phot_rest_fnu` computed by re-projection at `z=0, d_L=10 pc` through the same filters (no K-correction debate).
 - `compile=` build-time kwarg with values `"per_component"` (default) / `"fused"` / `"auto"` (stub, resolves to `per_component`).
 - `approx=` validation + auto-resolution per the dependency table.
 - `compile_signature()` includes resolved `compile=` and `approx=` so cache slots stay distinct.
-- `SEDModel.Observables` property exposes the synthesised type for advanced users.
+- `SEDModel.Observables` property exposes the synthesized type for advanced users.
 
 What is **NOT** in Phase 2:
 
@@ -309,7 +309,7 @@ The sub-phasing that actually landed (~3× longer than originally estimated beca
 
 These need to land before Phase 3d can remove `forward/_kernels/_adapters.py`:
 
-- **3c-3c-iv-full** — Two-component (Charlot & Fall) dust LUT. Age-dependent attenuation requires per-age `dust` tensor; the simple per-filter `A(λ_eff)` factorisation doesn't capture young vs. old stellar populations seeing different attenuation. Hybrid kernel handles this with `einsum("i,if,if->f", weights, dust, ssp_at_z)`.
+- **3c-3c-iv-full** — Two-component (Charlot & Fall) dust LUT. Age-dependent attenuation requires per-age `dust` tensor; the simple per-filter `A(λ_eff)` factorization doesn't capture young vs. old stellar populations seeing different attenuation. Hybrid kernel handles this with `einsum("i,if,if->f", weights, dust, ssp_at_z)`.
 - **3c-3c-v-full** — Free-z ztable carries Taylor moment + IGM transmission. Requires extending `precompute_photometry_ztable` to compute `ssp_phot_moment_table: (n_z, n_met, n_age, n_filters)` and `dust_atten_ztable: (n_z, n_filters)`.
 - **3c-3d** — AGN LUT contribution. AGN SED depends on parameters that vary per evaluation; the LUT pattern works if AGN publishes its filter-projected contribution at apply time. Conceptually simpler than dust because AGN is additive.
 - **3c-3e** — Default `observation.predict` flips to `predict_via_precomp` when `wave_precomp=True` and a model configuration is supported. Currently `predict_via_precomp` is opt-in.
@@ -362,11 +362,11 @@ Everything that dies:
 
 ## Open questions
 
-1. **Phase 2 tie-breaker — if `compile="fused"` ≠ `compile="per_component"` (bit-level)?** Default: **`per_component` wins** (it's the canonical orchestrator path that `validate_pipeline` enforces). Any per-component-specific optimisations get re-introduced as graph transformations on the unified chain.
+1. **Phase 2 tie-breaker — if `compile="fused"` ≠ `compile="per_component"` (bit-level)?** Default: **`per_component` wins** (it's the canonical orchestrator path that `validate_pipeline` enforces). Any per-component-specific optimizations get re-introduced as graph transformations on the unified chain.
 2. **Joint forward-pass guarantee.** Phase 2 fuses joint photometry+spectrum into one trace. Inference benchmarks need to confirm this doesn't regress vs today's two-pass approach. Snapshot performance test before/after.
 3. **`approx` validation policy.** Resolved 2026-05-19. `ztable` requires `wave_precomp`; raise if violated. `wave_precomp` with free redshift auto-enables `ztable` with a log line; raise on unknown flag names. See the dependency table above.
 4. **`mag_absolute` rest-frame filter choice.** Re-projection at z=0 uses the same filter curves as the apparent mag. For high-z sources this means the "absolute mag" is in the rest-frame equivalent of the observed-frame filter — astrophysically meaningful only when the user understands which rest-frame band that corresponds to. Should we ship a parallel set of `rest_filters=` at build time for explicit rest-frame band choice?
-5. **Effort vs Paper II priorities.** Phase 2 + 3 + 4 is ~3 weeks of refactor work with no new physics. Is now the right time, or does it wait until after Paper I notebook series stabilises?
+5. **Effort vs Paper II priorities.** Phase 2 + 3 + 4 is ~3 weeks of refactor work with no new physics. Is now the right time, or does it wait until after Paper I notebook series stabilizes?
 
 ## Decision needed before any code
 

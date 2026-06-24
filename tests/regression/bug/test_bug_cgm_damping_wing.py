@@ -43,7 +43,7 @@ class TestBug502CGMDampingWing:
         lya_obs = 1215.67 * (1.0 + z)
         wave_obs = jnp.array([lya_obs + 5.0, lya_obs + 50.0])
         tau = np.asarray(_cgm_damping_wing_tau(wave_obs, z))  # paper sigmoid
-        # Saturated near line centre, dropping to O(0.1–1) at ~50 Å red.
+        # Saturated near line center, dropping to O(0.1–1) at ~50 Å red.
         assert tau[0] > 1.0
         assert 0.1 < tau[1] < 10.0
 

@@ -34,7 +34,7 @@ For the remaining two:
 - **ProSpect (LGPL-3)** is *linking-permissive* — calling ProSpect from
   BSD-3 code is fine, but *copying* its source into a BSD-3 codebase still
   triggers LGPL on the copied portion. The current "Ported from ProSpect"
-  notes need to be scrutinised: if they are reimplementations from the
+  notes need to be scrutinized: if they are reimplementations from the
   published ProSpect / massfunc papers, that is clean; if they are
   R-to-JAX transliterations of ProSpect functions, LGPL applies.
 

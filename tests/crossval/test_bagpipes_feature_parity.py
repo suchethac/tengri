@@ -605,13 +605,13 @@ class TestSpectralIndexPhysics:
         assert float(result) > 1.0
 
 
-# ── 9. CATALOGUE BATCH FITTING — checkpoint/resume ────────────────
+# ── 9. CATALOG BATCH FITTING — checkpoint/resume ────────────────
 
 
 class TestCatalogueBatchPhysics:
     """Catalog batch fitting infrastructure.
 
-    Bagpipes: fit_catalogue — MPI, checkpoint, auto-catalogue.
+    Bagpipes: fit_catalogue — MPI, checkpoint, auto-catalog.
     Tengri: fit_batch + catalog_summary + Posterior save/load.
     """
 

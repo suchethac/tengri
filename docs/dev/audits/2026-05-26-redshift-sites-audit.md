@@ -15,14 +15,14 @@ This document inventories every site in `src/tengri/` that touches a rest↔obse
 | `forward/filter_preintegrate.py:124` | wave grid | rest→obs | `wave_obs = ssp_wave * (1.0 + z)` | Filter preintegration; flux scale applied downstream. |
 | `utils/grid_interp.py:239` | wave grid | rest→obs | `wave_obs = wave_rest * (1.0 + redshift)` | Generic template preintegration. |
 | `utils/grid_interp.py:252` | effective wave | obs→rest | `eff_waves_rest = eff_waves_obs / (1.0 + redshift)` | Derives rest-frame effective wavelengths. |
-| `utils/grid_interp.py:348` | line λ centres | rest→obs | `line_wavelengths_obs = line_wavelengths * (1.0 + redshift)` | Emission-line preintegration. |
+| `utils/grid_interp.py:348` | line λ centers | rest→obs | `line_wavelengths_obs = line_wavelengths * (1.0 + redshift)` | Emission-line preintegration. |
 | `analysis/simulate.py:277` | wave grid | rest→obs | `wave_obs = wave * (1.0 + redshift)` | Forward-model SED. |
 | `analysis/simulate.py:355` | wave grid | rest→obs | `wave_obs_full = wave * (1.0 + redshift)` | Forward-model spectrum path. |
 | `observation/photometry.py:142` | wave grid | rest→obs | `wave_obs = wave_rest * (1.0 + redshift)` | Filter convolution; redshifts rest SED for filter interp. |
 | `observation/photometry.py:276` | wave grid | rest→obs | (same formula) | Padded filter variant. |
 | `observation/spectrum.py:447` | wave grid | obs→rest | `wave_rest_query = wave_obs / (1.0 + redshift)` | Spectrum forward model; obs pixels → rest for SED interp. |
 
-### Canonical flux-scale converters (already centralised — these are the target API for migrations)
+### Canonical flux-scale converters (already centralized — these are the target API for migrations)
 
 | File:line | What | Convention |
 |---|---|---|

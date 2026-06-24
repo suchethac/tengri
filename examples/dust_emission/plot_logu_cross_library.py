@@ -2,7 +2,7 @@ r"""
 Two PAH libraries respond to log U with the same FIR-peak migration
 ====================================================================
 
-The mid-infrared ionisation-parameter sensitivity is library-specific, but
+The mid-infrared ionization-parameter sensitivity is library-specific, but
 the FIR-peak migration with rising log U is a universal prediction. We
 overlay the Hensley & Draine 2023 (Astrodust+PAH) and the Draine+2021
 PAHspec libraries at the same three log U values to surface where the two

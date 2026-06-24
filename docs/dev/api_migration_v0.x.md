@@ -186,7 +186,7 @@ to compliant `sfh_field_*` public names in `parameters/translate.py`,
 so the public API is already compliant.
 
 `tests/unit/test_param_prefix_guard.py` covers the guard plus a
-parameterised compliance test for all 6 presets. To run manually:
+parameterized compliance test for all 6 presets. To run manually:
 
 ```bash
 .venv/bin/python tools/check_param_prefixes.py
@@ -287,7 +287,7 @@ land — the canonical source is the frozen `EXPECTED_ALL` set in
 The slim is enforced by `tests/unit/test_public_api_surface.py`, which
 partitions names into `ALLOWED_TOP_LEVEL` (advertised) and
 `DEMOTED_BUT_IMPORTABLE` (still resolves; not advertised), plus
-`tests/unit/test_public_surface.py`, which parametrises over the
+`tests/unit/test_public_surface.py`, which parametrizes over the
 relocation table to assert (a) every old name still resolves and warns,
 (b) every canonical path resolves cleanly. Adding a new top-level symbol
 or relocating an existing one requires editing this document, both
@@ -380,8 +380,8 @@ previously, so the move is purely additive — no shim is required.
 | `tengri.persistent`          | `tengri.inference._cache`    | Opt back into engine reuse for repeated same-shape fits    |
 | `tengri.clear_shared_caches` | `tengri.inference._cache`    | Drop module-level loss/grad/logdens caches + jax caches    |
 | `tengri.gc`                  | `tengri.inference._cache`    | One-shot user-facing garbage-collect verb                  |
-| `tengri.list_known_ssps`     | `tengri.utils.data_setup`    | Public SSP catalogue mapping (slug → filename)             |
-| `tengri.download_ssp`        | `tengri.utils.data_setup`    | Auto-fetch a missing SSP from the public catalogue         |
+| `tengri.list_known_ssps`     | `tengri.utils.data_setup`    | Public SSP catalog mapping (slug → filename)             |
+| `tengri.download_ssp`        | `tengri.utils.data_setup`    | Auto-fetch a missing SSP from the public catalog         |
 
 `ALLOWED_TOP_LEVEL` and `EXPECTED_ALL` in
 `tests/unit/test_public_api_surface.py` and

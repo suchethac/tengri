@@ -56,7 +56,7 @@ def test_three_sfh_variants_fit_in_one_process():
             approx=tengri.WavePrecomp(n_z=20),
         )
         forward = tengri.ForwardModel.build(sed=model, observation=obs)
-        # 10 steps is enough to traverse the JIT trace + a few optimiser
+        # 10 steps is enough to traverse the JIT trace + a few optimizer
         # iterations. We only assert the run finishes; no parameter
         # recovery claim is made.
         forward.fit(

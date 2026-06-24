@@ -11,7 +11,7 @@ the analytic (and CIGALE) SFH->SSP convolution -- n_ly drops 3+ dex past
 The fix prepends a lookback-0 knot to the DSPS SFH table (holding SFR constant
 from the youngest sample), so DSPS integrates the youngest bin down to the
 observation time. The knot REDISTRIBUTES mass into the youngest bin -- it does
-not inflate the total (its [0, age0] segment is excluded from the normalisation)
+not inflate the total (its [0, age0] segment is excluded from the normalization)
 -- so ``sum(age_weights) == 10**log_total_mass`` is preserved.
 
 These tests pin (1) the mechanism at the DSPS-table seam and (2) mass
@@ -89,7 +89,7 @@ def test_young_knot_redistributes_into_youngest_bin():
         f"young-boundary knot should raise the youngest-bin weight "
         f"(off={w0_off:.4e}, on={w0_on:.4e}); the recent-SF mass is being dropped"
     )
-    # DSPS weights are probabilities -> both normalisations sum to one.
+    # DSPS weights are probabilities -> both normalizations sum to one.
     assert abs(tot_off - 1.0) < 1e-4 and abs(tot_on - 1.0) < 1e-4
 
 

@@ -20,12 +20,12 @@ DSPS canonical kernel.
 
 | Decision | Implementation | Result |
 |---|---|---|
-| Z marginalisation: bilinear → DSPS lognormal MDF triweight | ``pipeline.py::compute_sed_components`` (no-α and α-fallback paths) | ✅ Landed in commits ``5cd64cf`` + ``492d68c`` |
+| Z marginalization: bilinear → DSPS lognormal MDF triweight | ``pipeline.py::compute_sed_components`` (no-α and α-fallback paths) | ✅ Landed in commits ``5cd64cf`` + ``492d68c`` |
 | α=0 path bit-exact reduction to non-α path | ``interp_met_alpha_dispatch`` fallback uses DSPS triweight on ``effective_metallicity(log_z, alpha_fe)`` | ✅ ``rtol=1e-12`` parity in ``test_alpha_zero_matches_no_alpha`` |
 | ``compute_dsps_native_weights`` NaN safety for SSP grids past ``t_obs`` | Invalid bins masked with ``T_TABLE_MIN`` ramp + zero SFR | ✅ Landed in ``c224e29`` |
 | ``compute_dsps_age_weights`` SFH-only helper | New function in ``dsps_wrapper.py`` | ✅ Landed in ``3e9a21b``; used standalone, not yet wired into legacy CSP |
 | Orchestrator-vs-legacy SFH variant equivalence pinning | 16 of 19 registered parametric SFH variants pinned at ``rtol ≤ 1e-1`` | ✅ Landed in commits ``ca2c3af`` + ``fb454db`` + ``5c2a552`` |
-| **SFH integration: legacy lookback rectangle → DSPS canonical trapezoidal in cosmic time** | **❌ Not landed.** Attempted in this session; reverted because it breaks 16 mode-comparison tests that pin the four JIT-compiled CSP paths against each other (Tier 2 fused, Tier 2 unfused, Tier 3, hybrid spec) | Tracked as the **CSP-canonicalisation-closure PR** (focused future work) |
+| **SFH integration: legacy lookback rectangle → DSPS canonical trapezoidal in cosmic time** | **❌ Not landed.** Attempted in this session; reverted because it breaks 16 mode-comparison tests that pin the four JIT-compiled CSP paths against each other (Tier 2 fused, Tier 2 unfused, Tier 3, hybrid spec) | Tracked as the **CSP-canonicalization-closure PR** (focused future work) |
 
 The strict bit-exact ``rtol=1e-6`` gating xfail (``test_orchestrator_rest_sed_bit_exact_to_legacy``) currently sits at ~0.097% per-wavelength residual from the SFH-integration mismatch, plus a smaller residual (~10⁻⁵) from the SFH-evaluation interpolation (legacy log-space vs orchestrator linear-space ``jnp.interp``).
 
@@ -74,7 +74,7 @@ This blocks the Phase II-2 monolith-deletion gate (`tests/integration/test_orche
 
 ## Rationale
 
-1. **DSPS endorsement.** Hearin+ 2021 (arXiv:2112.06830) Eq. 8 is `L_CSP = Σ_{m,a} L_SSP × P_SSP(t_a, Z_m)` with the joint distribution. Eq. 11 is the special case for an age-independent lognormal MDF. The DSPS public API `calc_rest_sed_sfh_table_lognormal_mdf` and `calc_rest_sed_sfh_table_met_table` both produce the joint `(n_met, n_age)` weight tensor and marginalise via `einsum("ma,maw->w", weights, ssp_flux)`.
+1. **DSPS endorsement.** Hearin+ 2021 (arXiv:2112.06830) Eq. 8 is `L_CSP = Σ_{m,a} L_SSP × P_SSP(t_a, Z_m)` with the joint distribution. Eq. 11 is the special case for an age-independent lognormal MDF. The DSPS public API `calc_rest_sed_sfh_table_lognormal_mdf` and `calc_rest_sed_sfh_table_met_table` both produce the joint `(n_met, n_age)` weight tensor and marginalize via `einsum("ma,maw->w", weights, ssp_flux)`.
 
 2. **σ_MDF is physical.** Real galaxies have intrinsic metallicity scatter (chemical-evolution mixing, multi-zone enrichment). Setting σ_MDF = 0, as the legacy bilinear-interp implicitly does, throws away a real degree of freedom. The DSPS default `gal_lgmet_scatter = 0.2 dex` matches observational MDFs.
 
@@ -168,7 +168,7 @@ The two paths produce different numbers today. Existing tests with golden-value 
 - **Snapshot tests** (`tests/integration/`) that pin SED values to legacy output. These need their snapshots regenerated with the new path.
 - **Cross-validation tests** (`tests/crossval/`) that compare against bagpipes/FSPS. These codes use σ_MDF = 0; expect 1-2% disagreement at line-feature wavelengths after migration. May need wider tolerances or an explicit `gal_lgmet_scatter` parameter exposed for back-compat.
 
-We will not lower `gal_lgmet_scatter` to 0 by default, because that would silently undo the migration's physical content. If users need the legacy behaviour, they can pass `lgmet_scatter=0.05` (effectively delta-function MDF on a discretised grid).
+We will not lower `gal_lgmet_scatter` to 0 by default, because that would silently undo the migration's physical content. If users need the legacy behavior, they can pass `lgmet_scatter=0.05` (effectively delta-function MDF on a discretized grid).
 
 ## Plan
 

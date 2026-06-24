@@ -58,7 +58,7 @@ def run_hmc(
         Posterior samples per chain to collect.
     n_chains : int, default 1
         Number of independent HMC chains run in parallel via ``jax.vmap``,
-        sharing the cached step size and mass matrix. Only honoured when
+        sharing the cached step size and mass matrix. Only honored when
         the warmup is already cached (i.e. a previous ``run_hmc`` call
         populated the cache). Final posterior has ``n_chains * n_samples``
         samples; wall ≈ one chain's worth on CPU SIMD.

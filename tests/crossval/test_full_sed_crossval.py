@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Cross-validate tengri absolute SED normalisation against bagpipes, FSPS, and CIGALE.
+"""Cross-validate tengri absolute SED normalization against bagpipes, FSPS, and CIGALE.
 
 This test suite checks whether tengri produces the *correct absolute luminosity*
 (erg/s/Hz per Msun_formed) — not just the right spectral shape. It catches bugs in:
 
   - CSP trapezoidal integration weights (tengri vs FSPS, same SSP library)
   - Unit conversion pipeline (erg/s/Hz per Msun)
-  - SFH parameterisation (wrong total mass formed)
+  - SFH parameterization (wrong total mass formed)
   - Dust attenuation implementation (CF00 tau_bc / tau_diff mapping)
   - Metallicity convention (log10 absolute Z vs log10 Z/Zsun)
 
@@ -24,7 +24,7 @@ Tolerance rationale:
     - Same underlying SSP grid; differences from trapezoidal quadrature and
       metallicity interpolation scheme (FSPS zcontinuous vs tengri linear-in-logZ).
   tengri vs bagpipes (BC03 vs MILES SSPs): factor of 2 at V-band
-    - Different SSP libraries dominate; colour trends should still agree.
+    - Different SSP libraries dominate; color trends should still agree.
   tengri vs CIGALE (BC03 vs MILES SSPs): factor of 2 at V-band
     - Same reasoning as bagpipes; CIGALE also uses a different dust treatment.
 """
@@ -215,7 +215,7 @@ class TestStarforming:
             f"V-band L_nu/Msun ratio tengri/bagpipes = {ratio:.3f} (expect 0.5–2.0). "
             f"tengri={l_tengri:.3e}, bagpipes={l_bagpipes:.3e} erg/s/Hz/Msun. "
             "SSP library difference (MILES vs BC03) accounts for ~50%; "
-            "larger deviations indicate a normalisation bug."
+            "larger deviations indicate a normalization bug."
         )
 
     def test_tengri_vs_cigale_vband_within_factor2(self, tengri, ref, ref_wave):
@@ -365,7 +365,7 @@ class TestDustySFG:
 
         CF00 has a steeper attenuation law in the UV, so the UV/V ratio should
         decrease when dust is added. If UV attenuation is *less* than optical,
-        the dust law slope or normalisation is implemented backwards.
+        the dust law slope or normalization is implemented backwards.
         """
         wave = np.asarray(ssp_data.ssp_wave)
 
@@ -440,19 +440,19 @@ class TestDustySFG:
 
         ratio = color_tengri / color_fsps
         assert 0.65 <= ratio <= 1.35, (
-            f"NUV/V colour ratio tengri/FSPS = {ratio:.3f}. "
+            f"NUV/V color ratio tengri/FSPS = {ratio:.3f}. "
             f"tengri NUV/V={color_tengri:.3f}, FSPS NUV/V={color_fsps:.3f}. "
             "Known discrepancy up to ~29% from tau_bc=1.0→dust1=1.086 mapping "
             "(see CROSSVAL-01 in docs/known_bugs.md). If >35%, check power_law "
-            "k(2700 Å)=1.365 normalisation in attenuation.py."
+            "k(2700 Å)=1.365 normalization in attenuation.py."
         )
 
 
-# ── Cross-case sanity: colour trends ──────────────────────────────
+# ── Cross-case sanity: color trends ──────────────────────────────
 
 
 class TestColourTrends:
-    """Cross-case SED shapes must obey physically expected colour trends."""
+    """Cross-case SED shapes must obey physically expected color trends."""
 
     def test_starforming_is_bluer_than_quenched(self, ssp_data):
         """UV/V ratio must be higher for star-forming than quenched galaxy.
@@ -497,7 +497,7 @@ class TestColourTrends:
             "CF00 dust is not reducing UV more than V-band — direction bug."
         )
 
-    def test_all_codes_agree_on_colour_trend(self, ref, ref_wave):
+    def test_all_codes_agree_on_color_trend(self, ref, ref_wave):
         """bagpipes, FSPS, and CIGALE should all show starforming is bluer than quenched."""
         for code in ("bagpipes", "fsps", "cigale"):
             sf_key = f"{code}_stellar_starforming"
@@ -519,7 +519,7 @@ class TestColourTrends:
             )
 
 
-# ── SFR / stellar mass normalisation ──────────────────────────────
+# ── SFR / stellar mass normalization ──────────────────────────────
 
 
 def _build_tengri_sed_raw(
@@ -532,7 +532,7 @@ def _build_tengri_sed_raw(
     dust_slope: float = -0.7,
     dust_law_bc: str = "power_law",
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build tengri SED in absolute erg/s/Hz (not normalised by M_formed).
+    """Build tengri SED in absolute erg/s/Hz (not normalized by M_formed).
 
     sfh_params: dict of fully-prefixed Parameters kwargs for the given sfh_type.
     dust_law_bc: attenuation curve for the birth cloud (and diffuse ISM by default).
@@ -565,7 +565,7 @@ class TestSFRNormalisation:
     """Verify that SED scales linearly with SFR and stellar mass.
 
     If SFR doubles, the SED should double at every wavelength (linear scaling
-    from the CSP integral). This is a fundamental check of the normalisation
+    from the CSP integral). This is a fundamental check of the normalization
     pipeline and M_formed accounting.
     """
 
@@ -573,7 +573,7 @@ class TestSFRNormalisation:
         """10x higher SFR (const SFH) should give 10x higher SED at all wavelengths.
 
         Uses M_star = 10^10 Msun scenario: log_sfr=1 (10 Msun/yr), duration 1 Gyr.
-        Linear SFR scaling tests that tengri does not renormalise the SED
+        Linear SFR scaling tests that tengri does not renormalize the SED
         to unity at any wavelength or apply a nonlinear mass dependence.
         """
         wave1, sed1 = _build_tengri_sed_raw(
@@ -604,7 +604,7 @@ class TestSFRNormalisation:
         assert abs(mean_ratio - 10.0) < 0.1, (
             f"SFR 10x scaling: median SED ratio = {mean_ratio:.4f} (expect 10.0). "
             "SED must scale linearly with SFR. If this fails, the CSP integral "
-            "is applying a nonlinear normalisation or renormalising by M_formed."
+            "is applying a nonlinear normalization or renormalizing by M_formed."
         )
 
     def test_mass_1e10_v_band_absolute(self, ssp_data):
@@ -658,7 +658,7 @@ class TestSFRNormalisation:
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
 
         # Note: ages differ (tengri=1 Gyr vs FSPS ref=3 Gyr), so we allow wider tolerance
-        # The key check is that per-Msun normalisation does not have a factor-of-M bug.
+        # The key check is that per-Msun normalization does not have a factor-of-M bug.
         ratio = l_tengri / l_fsps
         assert 0.3 <= ratio <= 3.0, (
             f"SFR=10 per-Msun V-band ratio tengri/FSPS = {ratio:.3f} "
@@ -671,14 +671,14 @@ class TestSFRNormalisation:
 
 
 class TestDelayedTauSFH:
-    """Cross-validate the delayed-exponential (dexp) SFH against FSPS and colour checks.
+    """Cross-validate the delayed-exponential (dexp) SFH against FSPS and color checks.
 
     tengri dexp: SFR(t_lb) ∝ (dt/tau) × exp(-dt/tau + 1) where dt = t_lb - start.
     Peak at dt = tau (i.e. t_lb = start + tau).
     FSPS sfh=4 (delayed tau): SFR(t_cosmic) ∝ t × exp(-t/tau).
     Peak at t_cosmic = tau after formation.
 
-    These parameterisations are equivalent when:
+    These parameterizations are equivalent when:
       tengri start = 0 (SF starts now, lookback 0)
       tengri end = large (SF extends far into the past)
       tengri tau = tau_fsps
@@ -735,7 +735,7 @@ class TestDelayedTauSFH:
         assert 0.3 <= ratio <= 3.0, (
             f"dexp V-band per-Msun ratio tengri/FSPS = {ratio:.3f} (expect 0.3–3.0). "
             f"tengri={l_tengri:.3e}, fsps={l_fsps:.3e} erg/s/Hz/Msun. "
-            "DPL peaks differ from FSPS const SFH; factor > 3× → normalisation error."
+            "DPL peaks differ from FSPS const SFH; factor > 3× → normalization error."
         )
 
     def test_dexp_bluer_than_dexp_old(self, ssp_data):
@@ -832,7 +832,7 @@ class TestDPLSFH:
             f"DPL V-band per-Msun ratio tengri/FSPS = {ratio:.3f} (expect 0.05–20). "
             f"tengri={l_tengri:.3e}, fsps={l_fsps:.3e} erg/s/Hz/Msun. "
             "DPL SFH shape differs from const SFH; wider tolerance reflects SFH mismatch. "
-            "Larger deviations indicate a DPL normalisation or M_formed accounting bug."
+            "Larger deviations indicate a DPL normalization or M_formed accounting bug."
         )
 
     def test_dpl_steep_fall_is_redder_than_rising(self, ssp_data):
@@ -880,7 +880,7 @@ class TestExpSFH:
     """Cross-validate exponential declining SFH between bagpipes and FSPS.
 
     Both codes natively support tau-model SFH. Discrepancies here indicate
-    a difference in how total mass is normalised vs how SFR integrates over time.
+    a difference in how total mass is normalized vs how SFR integrates over time.
     """
 
     def test_fsps_seds_finite_and_positive(self, ref, ref_wave):
@@ -998,7 +998,7 @@ def _build_tengri_tau_sed(
     tau_bc: float = 0.0,
     tau_diff: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build tengri SED for declining-tau model, normalised by M_formed.
+    """Build tengri SED for declining-tau model, normalized by M_formed.
 
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
     Time conversion: FSPS/bagpipes T_cosmic ↔ tengri t_lb via t_lb = age - T_cosmic.
@@ -1074,18 +1074,18 @@ class TestTauSFHCrossVal:
 
     Why NOT compare absolute luminosities:
     tengri uses MILES SSPs, FSPS uses FSPS/MILES SSPs, bagpipes uses BC03 SSPs.
-    These libraries differ in overall L_nu normalisation by ~20–40%.  Comparing
+    These libraries differ in overall L_nu normalization by ~20–40%.  Comparing
     absolute V-band luminosities conflates SFH-convention correctness with SSP-library
     systematics and produces meaningless tolerances.
 
     Apples-to-apples strategy:
-    1. Shape-normalised color SED(2800)/SED(5500): SSP normalisation cancels,
+    1. Shape-normalized color SED(2800)/SED(5500): SSP normalization cancels,
        leaving only the SFH-driven UV excess. Tested within 20–25%.
     2. Delta-color Δ(UV/V) = color(τ=5) − color(τ=1): the residual SSP color
        offset cancels too, leaving only the SFH time-convention effect.
        Tested to agree in direction and within a factor of 2 in magnitude.
     3. External comparisons use 'table' SFH mode (same SFR array passed to tengri)
-       so any SFH-parametrisation difference is also eliminated.
+       so any SFH-parametrization difference is also eliminated.
     4. Internal tests (tengri only) verify sign conventions and integration accuracy.
     """
 
@@ -1093,7 +1093,7 @@ class TestTauSFHCrossVal:
         """tau=1 Gyr, age=5 Gyr: tengri UV/V color (2800/5500) within 20% of FSPS.
 
         Uses table SFH mode so tengri ingests the same SFR(T) grid as FSPS.
-        Shape normalisation removes SSP-library amplitude differences.
+        Shape normalization removes SSP-library amplitude differences.
         """
         key = "fsps_expsfh_tau1gyr"
         if key not in ref:
@@ -1126,8 +1126,8 @@ class TestTauSFHCrossVal:
     def test_tau_delta_color_vs_fsps(self, ssp_data, ref, ref_wave):
         """Δ(UV/V) between tau=5 Gyr and tau=1 Gyr agrees in direction and magnitude vs FSPS.
 
-        Delta-color cancels SSP-library colour offsets entirely: both codes start
-        from the same SSP colour at fixed age, so Δ(UV/V) is driven purely by the
+        Delta-color cancels SSP-library color offsets entirely: both codes start
+        from the same SSP color at fixed age, so Δ(UV/V) is driven purely by the
         SFH time convention.  Magnitude must agree within a factor of 2.
         """
         k1 = "fsps_expsfh_tau1gyr"
@@ -1293,7 +1293,7 @@ class TestTauSFHCrossVal:
 
         V-band (5500 Å) is less affected by dust (A_V << A_UV) so even with
         CF00 vs Calzetti differences the V-band ratio should be < 2×.
-        A larger deviation flags a dust-normalisation or unit-conversion bug.
+        A larger deviation flags a dust-normalization or unit-conversion bug.
         """
         key = "fsps_expsfh_tau0p5gyr_dusty"
         if key not in ref:
@@ -1392,9 +1392,9 @@ class TestNebularEmission:
             assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
 
     def test_higher_logu_means_more_uv_emission(self, ref, ref_wave):
-        """Higher ionisation parameter (logU=-2 vs -3.5) should produce more UV/optical emission.
+        """Higher ionization parameter (logU=-2 vs -3.5) should produce more UV/optical emission.
 
-        logU controls the ionisation state — higher logU = harder radiation field
+        logU controls the ionization state — higher logU = harder radiation field
         = stronger line emission across UV and optical.
         """
         for code in ("bagpipes", "fsps"):
@@ -1405,7 +1405,7 @@ class TestNebularEmission:
             # Hα at ~6565 Å (strongest optical line) should be stronger at higher logU
             ha_u2 = _band_avg(ref_wave, ref[ku2], 6563.0, half_width=30.0)
             ha_u35 = _band_avg(ref_wave, ref[ku35], 6563.0, half_width=30.0)
-            # Hα is a recombination line set by total ionising photon count,
+            # Hα is a recombination line set by total ionizing photon count,
             # not logU directly. Allow ±1% as the sign can vary slightly.
             assert ha_u2 >= ha_u35 * 0.99, (
                 f"[{code}] logU=-2 Hα ({ha_u2:.3e}) is >1% below logU=-3.5 ({ha_u35:.3e}). "
@@ -1526,14 +1526,14 @@ class TestNebularTengri:
         ratio = ha / hb
         assert 1.5 <= ratio <= 12.0, (
             f"Hα/Hβ = {ratio:.3f} (expect 1.5–12.0, case B ≈ 2.86). "
-            "Out-of-range ratio suggests a line-flux normalisation or unit bug."
+            "Out-of-range ratio suggests a line-flux normalization or unit bug."
         )
 
     def test_tengri_nebular_logu_trend_ha(self, ssp_data):
         """logU=-2 Hα peak >= logU=-3.5 Hα peak (or within 1% for grid edge effects).
 
-        Higher ionisation (logU=-2) should produce at least as much Hα as
-        lower ionisation (logU=-3.5).  The CLOUDY pdva grid covers this range;
+        Higher ionization (logU=-2) should produce at least as much Hα as
+        lower ionization (logU=-3.5).  The CLOUDY pdva grid covers this range;
         a reversal would indicate the logU axis is inverted in the interpolation.
         """
         _, sed_u2 = _build_tengri_nebular_sed(ssp_data, age_gyr=0.1, logU=-2.0)
@@ -1551,7 +1551,7 @@ class TestNebularTengri:
         Both produce a young (0.1 Gyr) star-forming SED with logU=-2, solar Z.
         Wider tolerance (35%) because tengri uses CLOUDY pdva grid and MILES SSPs
         while FSPS uses its own nebular tables and BaSeL SSPs.
-        Shape normalisation removes SSP amplitude differences.
+        Shape normalization removes SSP amplitude differences.
         """
         key = "fsps_nebular_neb_young_u2"
         if key not in ref:
@@ -1586,7 +1586,7 @@ class TestNebularTengri:
         assert 0.33 <= ratio <= 3.0, (
             f"Hα per Msun tengri/FSPS = {ratio:.3f} (expect 0.33–3.0). "
             f"tengri={ha_tengri:.3e}, FSPS={ha_fsps:.3e} erg/s/Hz/Msun. "
-            "Factor > 3 indicates a nebular grid normalisation or unit bug."
+            "Factor > 3 indicates a nebular grid normalization or unit bug."
         )
 
     def test_tengri_nebular_vband_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
@@ -1720,7 +1720,7 @@ class TestCalzettiDust:
         assert 0.85 <= ratio <= 1.15, (
             f"tengri calzetti V-band ratio vs FSPS = {ratio:.3f} (expect 0.85–1.15). "
             f"tengri={l_tengri:.3e}, fsps={l_fsps:.3e} erg/s/Hz/Msun. "
-            "Same law, same E(B-V)=0.40: 15% residual → Calzetti R_V or k(λ) normalisation bug."
+            "Same law, same E(B-V)=0.40: 15% residual → Calzetti R_V or k(λ) normalization bug."
         )
 
     def test_tengri_calzetti_uv_attenuation_vs_fsps(self, ssp_data, ref, ref_wave):
@@ -1841,7 +1841,7 @@ class TestTabularSFH:
     """Cross-validate step-function non-parametric SFH from FSPS sfh=3.
 
     FSPS tabular SFH is the reference for tengri's continuity_sfh / dirichlet_sfh.
-    Tests verify: SEDs sensible, physically expected colour trends hold.
+    Tests verify: SEDs sensible, physically expected color trends hold.
     """
 
     _CASES = ("step_rising", "step_quenching", "step_bursty")
@@ -1898,7 +1898,7 @@ class TestTabularSFH:
             f"({color_rising:.3f}). Higher recent burst (sfr=8 vs 5 Msun/yr) should be bluer."
         )
 
-    def test_tengri_nonparametric_colour_trend(self, ssp_data):
+    def test_tengri_nonparametric_color_trend(self, ssp_data):
         """tengri continuity_sfh: rising SFH should be bluer than quenching SFH.
 
         This checks the tengri implementation independently of FSPS.
@@ -2185,17 +2185,17 @@ class TestCIGALECalzetti:
     """Cross-validate tengri Calzetti attenuation against pCIGALE (BC03/Chabrier).
 
     pCIGALE keys: cigale_calzetti_{name}
-    FSPS keys:    fsps_calzetti_{name}  (BC03 vs MILES → factor-of-2 normalisation offset;
-                  E(B-V) direction and UV/V colour trend should agree).
+    FSPS keys:    fsps_calzetti_{name}  (BC03 vs MILES → factor-of-2 normalization offset;
+                  E(B-V) direction and UV/V color trend should agree).
 
     Tolerance rationale
     -------------------
-    tengri vs pCIGALE UV/V colour shape: 15%
+    tengri vs pCIGALE UV/V color shape: 15%
       Same Calzetti law applied to different SSP libraries (MILES vs BC03).
-      Absolute normalisation differences ~factor 2; colour ratios should converge.
+      Absolute normalization differences ~factor 2; color ratios should converge.
     pCIGALE vs FSPS UV/V ratio: 15%
       Both use Calzetti law; SSP differences (BC03 vs MILES) enter only in intrinsic
-      colour, which is small compared with the dust-induced reddening at high E(B-V).
+      color, which is small compared with the dust-induced reddening at high E(B-V).
     """
 
     _CASES = ("calzetti_ebv015", "calzetti_ebv040", "calzetti_ebv080")
@@ -2221,14 +2221,14 @@ class TestCIGALECalzetti:
         color_hi = ref[k_hi][uv_idx] / max(ref[k_hi][v_idx], 1e-40)
         assert color_lo > color_hi, (
             f"Low E(B-V) UV/V ({color_lo:.3f}) not > high E(B-V) UV/V ({color_hi:.3f}). "
-            "Higher dust column should redden the UV/V colour."
+            "Higher dust column should redden the UV/V color."
         )
 
     def test_cigale_vs_fsps_uv_v_ratio(self, ref, ref_wave):
-        """pCIGALE and FSPS UV/V colour should agree within 15% for same Calzetti E(B-V).
+        """pCIGALE and FSPS UV/V color should agree within 15% for same Calzetti E(B-V).
 
         Both codes apply the Calzetti law analytically; the SSP difference shifts
-        the intrinsic colour but the ratio of attenuation factors should agree.
+        the intrinsic color but the ratio of attenuation factors should agree.
         """
         uv_idx = np.argmin(np.abs(ref_wave - 2800.0))
         v_idx = np.argmin(np.abs(ref_wave - 5500.0))
@@ -2424,7 +2424,7 @@ class TestCIGALESKIRTOR:
 
         Both use the same template library. Differences arise from: (a) how the
         templates are interpolated in parameter space, (b) how the AGN fraction is
-        defined (bolometric vs IR), (c) host galaxy normalisation. We compare the
+        defined (bolometric vs IR), (c) host galaxy normalization. We compare the
         NIR-to-V ratio rather than absolute luminosity to factor out host-galaxy offsets.
         """
         k_cig = "cigale_agn_skirtor_type1"
@@ -2460,7 +2460,7 @@ class TestCIGALESKIRTOR:
                 i=30,
                 fracAGN=0.30,
             )
-            # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalise to NIR/V
+            # skirtor_analytic returns L_nu in Lsun/Hz (or similar) — normalize to NIR/V
             tengri_sed = np.asarray(skirtor_result)
             nir_t_mask = (wave_aa > 10000.0) & (wave_aa < 30000.0)
             v_t_mask = (wave_aa > 5400.0) & (wave_aa < 5600.0)
@@ -2574,7 +2574,7 @@ class TestMetallicityGrid:
         assert 0.50 <= ratio <= 2.00, (
             f"tengri/bagpipes V-band per Msun at solar Z: ratio = {ratio:.3f} (expect 0.50–2.00). "
             f"tengri={l_tengri:.3e}, bp={l_bp:.3e} erg/s/Hz/Msun. "
-            "MILES vs BC03 explains up to ~1.5× offset; outside 2× → normalisation bug."
+            "MILES vs BC03 explains up to ~1.5× offset; outside 2× → normalization bug."
         )
 
     def test_tengri_vs_bagpipes_vband_z_neg1(self, ssp_data, ref, ref_wave):
@@ -2656,7 +2656,7 @@ class TestHighZPassive:
             f"ratio = {ratio:.3f} (expect 0.80–1.25). "
             f"tengri={l_tengri:.3e}, fsps={l_fsps:.3e} erg/s/Hz/Msun. "
             "Both use MILES+Chabrier, rest-frame comparison. "
-            "Failure → CSP normalisation or Z-mapping bug."
+            "Failure → CSP normalization or Z-mapping bug."
         )
 
     def test_tengri_vs_fsps_passive_vband_z1(self, ssp_data, ref, ref_wave):
@@ -2719,7 +2719,7 @@ class TestHighZPassive:
     def test_tengri_vs_bagpipes_passive_vband_z0p5(self, ssp_data, ref, ref_wave):
         """tengri vs bagpipes: V-band L_nu/Msun, 5 Gyr const SFH, solar Z (z=0.5 case).
 
-        bagpipes uses BC03 SSPs at z=0.01 (D_L normalisation); factor-2 tolerance
+        bagpipes uses BC03 SSPs at z=0.01 (D_L normalization); factor-2 tolerance
         covers known MILES vs BC03 differences.
         """
         key = "bagpipes_highz_highz_nodust_z0p5"
@@ -2734,7 +2734,7 @@ class TestHighZPassive:
             f"tengri/bagpipes V-band per Msun (5 Gyr, solar Z, z=0.5): "
             f"ratio = {ratio:.3f} (expect 0.50–2.00). "
             f"tengri={l_tengri:.3e}, bp={l_bp:.3e} erg/s/Hz/Msun. "
-            "MILES vs BC03 explains up to ~1.5×; outside 2× → normalisation bug."
+            "MILES vs BC03 explains up to ~1.5×; outside 2× → normalization bug."
         )
 
     def test_tengri_4000a_break_present(self, ssp_data):
@@ -2790,7 +2790,7 @@ class TestIMFComparison:
         assert l_chab > l_salp * 1.2, (
             f"FSPS: Chabrier L_V ({l_chab:.3e}) must exceed Salpeter ({l_salp:.3e}) by ≥20%. "
             "Salpeter locks more mass in dim stars → lower L/Msun_formed. "
-            "If gap < 20%, IMF normalisation convention may be by number not mass."
+            "If gap < 20%, IMF normalization convention may be by number not mass."
         )
 
     def test_fsps_kroupa_close_to_chabrier(self, ref, ref_wave):
@@ -2819,7 +2819,7 @@ class TestIMFComparison:
         """IMF UV ordering: Chabrier ≥ Salpeter in NUV per Msun_formed.
 
         The UV is dominated by high-mass stars; all three IMFs have the same
-        Salpeter-like slope above ~1 Msun but differ in low-mass normalisation.
+        Salpeter-like slope above ~1 Msun but differ in low-mass normalization.
         UV difference is smaller than optical difference because the low-mass
         stars contribute minimally to UV, so the ratio should be closer to 1.
         """
@@ -2834,7 +2834,7 @@ class TestIMFComparison:
         assert l_chab > l_salp * 1.2, (
             f"FSPS: Chabrier L_V ({l_chab:.3e}) must exceed Salpeter ({l_salp:.3e}) by ≥20%. "
             "Salpeter locks more mass in dim stars → lower L/Msun_formed. "
-            "If gap < 20%, IMF normalisation convention may be by number not mass."
+            "If gap < 20%, IMF normalization convention may be by number not mass."
         )
 
     def test_tengri_vs_fsps_chabrier_vband(self, ssp_data, ref, ref_wave):
@@ -2854,7 +2854,7 @@ class TestIMFComparison:
         assert 0.80 <= ratio <= 1.25, (
             f"tengri/FSPS Chabrier V-band per Msun: ratio = {ratio:.3f} (expect 0.80–1.25). "
             f"tengri={l_tengri:.3e}, fsps={l_fsps:.3e} erg/s/Hz/Msun. "
-            "Same IMF and SSP library; >25% gap → CSP weights or M_formed normalisation bug."
+            "Same IMF and SSP library; >25% gap → CSP weights or M_formed normalization bug."
         )
 
     def test_tengri_vs_fsps_chabrier_nuv(self, ssp_data, ref, ref_wave):
@@ -2882,7 +2882,7 @@ class TestIMFComparison:
 
         Salpeter has more mass locked in dim low-mass stars → lower L_V per Msun_formed
         than Chabrier. tengri/FSPS_Salpeter ratio must exceed 1.15 (the IMF offset).
-        Upper bound 2.0 catches runaway CSP normalisation bugs.
+        Upper bound 2.0 catches runaway CSP normalization bugs.
         """
         key = "fsps_imf_imf_salpeter"
         if key not in ref:
@@ -2927,7 +2927,7 @@ class TestSynthesizerSEDs:
         assert 0.33 <= ratio <= 3.0, (
             f"tengri/synthesizer V-band per Msun (3 Gyr const): ratio = {ratio:.3f} "
             f"(expect 0.33–3.0). tengri={l_tengri:.3e}, synth={l_synth:.3e} erg/s/Hz/Msun. "
-            "Factor > 3 → normalisation or SSP-mass-to-light convention mismatch."
+            "Factor > 3 → normalization or SSP-mass-to-light convention mismatch."
         )
 
     def test_tengri_vs_synth_starforming_nuv(self, ssp_data, ref, ref_wave):
@@ -2947,7 +2947,7 @@ class TestSynthesizerSEDs:
         assert 0.20 <= ratio <= 5.0, (
             f"tengri/synthesizer NUV per Msun (3 Gyr const): ratio = {ratio:.3f} "
             f"(expect 0.20–5.0). tengri={l_tengri:.3e}, synth={l_synth:.3e} erg/s/Hz/Msun. "
-            "BPASS binaries enhance NUV; outside factor 5 → mass normalisation bug."
+            "BPASS binaries enhance NUV; outside factor 5 → mass normalization bug."
         )
 
     def test_tengri_vs_synth_old_quenched_vband(self, ssp_data, ref, ref_wave):
@@ -3001,7 +3001,7 @@ class TestSynthesizerSEDs:
             f"tengri(dexp τ=1Gyr)/synthesizer(exp τ=1Gyr) V-band per Msun: "
             f"ratio = {ratio:.3f} (expect 0.20–5.0). "
             f"tengri={l_tengri:.3e}, synth={l_synth:.3e} erg/s/Hz/Msun. "
-            "SSP-library difference may contribute; outside factor 5 → normalisation bug."
+            "SSP-library difference may contribute; outside factor 5 → normalization bug."
         )
 
     def test_synth_vs_fsps_v_band_order_of_magnitude(self, ref, ref_wave):
@@ -3022,7 +3022,7 @@ class TestSynthesizerSEDs:
         assert 0.2 <= ratio <= 5.0, (
             f"synthesizer/FSPS V-band per Msun ratio = {ratio:.3f} (expect 0.2–5.0). "
             f"synth={l_synth:.3e}, fsps={l_fsps:.3e} erg/s/Hz/Msun. "
-            "Factor > 5 → synthesizer reference normalisation or units bug."
+            "Factor > 5 → synthesizer reference normalization or units bug."
         )
 
 
@@ -3185,7 +3185,7 @@ class TestSMCLMCDustLaw:
     def test_tengri_smc_curve_steeper_than_power_law_in_uv(self, ssp_data):
         """tengri SMC extinction curve is steeper in NUV than power-law at same Av.
 
-        The tengri `smc()` attenuation function returns normalised k(λ)/k(V).
+        The tengri `smc()` attenuation function returns normalized k(λ)/k(V).
         At 2800 Å, SMC k/k_V should be significantly larger than power-law
         (slope ~-0.7) would predict, reflecting the steep FUV rise.
         """
@@ -3199,7 +3199,7 @@ class TestSMCLMCDustLaw:
         smc_curve = np.asarray(smc(wave_jax))
         pl_curve = np.asarray(power_law(wave_jax, n_slope=-0.7))
 
-        # Normalise both to 1 at V (5500 Å)
+        # Normalize both to 1 at V (5500 Å)
         v_idx = np.argmin(np.abs(wave - 5500.0))
         smc_norm = smc_curve / max(smc_curve[v_idx], 1e-40)
         pl_norm = pl_curve / max(pl_curve[v_idx], 1e-40)
@@ -3305,7 +3305,7 @@ class TestLognormSFH:
         assert 0.20 <= ratio <= 5.00, (
             f"tengri dexp / FSPS lognorm_early V-band per Msun ratio = {ratio:.3f} "
             f"(expect 0.20–5.00). tengri={l_tengri:.3e}, fsps={l_ref:.3e}. "
-            "Both peaked ~8 Gyr ago. Factor > 5 → normalisation or SFH age mismatch."
+            "Both peaked ~8 Gyr ago. Factor > 5 → normalization or SFH age mismatch."
         )
 
     def test_tengri_vs_fsps_lognorm_early_nuv(self, ssp_data, ref, ref_wave):
@@ -3373,7 +3373,7 @@ class TestLognormSFH:
         assert 0.20 <= ratio <= 5.00, (
             f"tengri dexp / bagpipes lognorm_early V-band ratio = {ratio:.3f} "
             f"(expect 0.20–5.00). tengri={l_tengri:.3e}, bagpipes={l_ref:.3e}. "
-            "Both peaked ~8 Gyr ago; factor > 5 indicates SSP library or normalisation mismatch."
+            "Both peaked ~8 Gyr ago; factor > 5 indicates SSP library or normalization mismatch."
         )
 
     def test_tengri_dexp_vs_lognorm_consistent_scale(self, ssp_data, ref, ref_wave):
@@ -3381,8 +3381,8 @@ class TestLognormSFH:
 
         Both SFH types peaked ~8 Gyr ago (FSPS: tmax=2 Gyr, tage=10 Gyr;
         tengri: start=7, tau=1 Gyr → peak at 8 Gyr lookback). This establishes
-        that tengri's dexp normalisation is consistent with FSPS's sfh=5 log-normal
-        normalisation for matched intermediate-to-old stellar populations.
+        that tengri's dexp normalization is consistent with FSPS's sfh=5 log-normal
+        normalization for matched intermediate-to-old stellar populations.
         """
         key = "fsps_lognorm_lognorm_early"
         if key not in ref:
@@ -3408,7 +3408,7 @@ class TestLognormSFH:
         assert 0.20 <= ratio <= 5.0, (
             f"tengri dexp / FSPS lognorm V-band per Msun ratio = {ratio:.3f} (expect 0.20–5.0). "
             f"tengri={l_tengri:.3e}, fsps={l_fsps:.3e}. "
-            "Both peaked ~8 Gyr ago; factor > 5 indicates a normalisation mismatch."
+            "Both peaked ~8 Gyr ago; factor > 5 indicates a normalization mismatch."
         )
 
 
@@ -3479,7 +3479,7 @@ class TestTabularSFHTengri:
     tengri's table mode accepts a cosmic-time SFR grid; _build_tengri_step_sed
     converts between the two conventions.
 
-    Apples-to-apples strategy: same as TestTauSFHCrossVal — shape-normalised
+    Apples-to-apples strategy: same as TestTauSFHCrossVal — shape-normalized
     UV/V color (SSP amplitude cancels) + amplitude within factor 2.
 
     Reference keys:
@@ -3516,7 +3516,7 @@ class TestTabularSFHTengri:
         """Rising step-function SFH: tengri UV/V color within 25% of FSPS.
 
         Uses the same bin edges and SFR values as the FSPS reference.
-        Shape normalisation removes SSP-library amplitude differences.
+        Shape normalization removes SSP-library amplitude differences.
         """
         key = "fsps_tabsfh_step_rising"
         if key not in ref:
@@ -3549,7 +3549,7 @@ class TestTabularSFHTengri:
     def test_tengri_table_delta_color_rising_vs_quenching_vs_fsps(self, ssp_data, ref, ref_wave):
         """Delta UV/V (rising − quenching) agrees in sign and magnitude vs FSPS.
 
-        SSP-library colour offsets cancel in the delta.  Both codes must agree
+        SSP-library color offsets cancel in the delta.  Both codes must agree
         that rising > quenching (sign) and that the difference is within 2× in
         magnitude.  A larger deviation flags time-axis or bin-assignment errors.
         """

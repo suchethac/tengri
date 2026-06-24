@@ -25,7 +25,7 @@ Design rules — these are non-negotiable:
    context methods, after which the escape hatch is removed.
 
 See ``docs/adr/0004-kernel-strategy-module.md`` for the forward-model
-analogue this design copies.
+analog this design copies.
 """
 
 from __future__ import annotations
@@ -101,8 +101,8 @@ class InferenceContext:
     def neg_log_posterior_fn(self) -> Callable:
         """JIT-compiled negative-log-posterior callable.
 
-        This is the quantity samplers / optimisers minimise: it is the
-        negative of the (unnormalised) Bayesian posterior
+        This is the quantity samplers / optimizers minimize: it is the
+        negative of the (unnormalized) Bayesian posterior
 
         .. math::
 
@@ -110,8 +110,8 @@ class InferenceContext:
                 -\\log p(d \\mid \\theta) - \\log p(\\theta) + \\text{const.}
 
         i.e. the sum of the negative log-likelihood and the negative log-prior.
-        Astronomers familiar with χ²-minimisation can think of this as a
-        prior-regularised χ² (up to a constant). Cached on the Fitter; safe
+        Astronomers familiar with χ²-minimization can think of this as a
+        prior-regularized χ² (up to a constant). Cached on the Fitter; safe
         to call repeatedly. The compiled callable takes parameters in
         **unbounded** space and closes over ``data_args`` and the
         parameter spec.
@@ -190,7 +190,7 @@ class InferenceContext:
         In the standardized latent space (paper §2 'Standardized
         Inference'), the prior is :math:`\\mathcal{N}(0, I)` for every
         free parameter — see ``_unstandardize_parameters`` in
-        :mod:`tengri.inference.loss_functions`. The (unnormalised)
+        :mod:`tengri.inference.loss_functions`. The (unnormalized)
         log-prior is therefore:
 
         .. math::
@@ -305,7 +305,7 @@ class InferenceContext:
     # ── Likelihood-shape configuration ───────────────────────────────────
     @property
     def calibration_marginalize(self) -> bool:
-        """Whether to marginalise an additive calibration polynomial."""
+        """Whether to marginalize an additive calibration polynomial."""
         return self.fitter._calibration_marginalize
 
     @property
@@ -320,7 +320,7 @@ class InferenceContext:
 
     @property
     def eline_marginalize(self) -> bool:
-        """Whether to analytically marginalise emission-line amplitudes."""
+        """Whether to analytically marginalize emission-line amplitudes."""
         return self.fitter._eline_marginalize
 
     @property

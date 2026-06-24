@@ -132,11 +132,11 @@ class TestWG00Cloudy:
             assert jnp.all(result <= 1.0 + 1e-10), f"T > 1 at tau={tau}"
 
     def test_greyer_than_shell(self, wavelength):
-        """Cloudy geometry gives higher mean transmission (greyer) than shell."""
+        """Cloudy geometry gives higher mean transmission (grayer) than shell."""
         tau_v = 2.0
         t_shell = wg00_shell(wavelength, tau_v=tau_v)
         t_cloudy = wg00_cloudy(wavelength, tau_v=tau_v)
-        # Cloudy should be greyer: higher mean transmission at same tau
+        # Cloudy should be grayer: higher mean transmission at same tau
         assert float(jnp.mean(t_cloudy)) > float(jnp.mean(t_shell))
 
     def test_slab_formula_directly(self):
@@ -211,25 +211,25 @@ class TestWG00Dusty:
             assert jnp.all(result <= 1.0 + 1e-10), f"T > 1 at tau={tau}"
 
     def test_greyer_than_shell(self, wavelength):
-        """Clumpy geometry gives higher mean transmission (greyer) than shell."""
+        """Clumpy geometry gives higher mean transmission (grayer) than shell."""
         tau_v = 2.0
         t_shell = wg00_shell(wavelength, tau_v=tau_v)
         t_dusty = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=10.0)
         assert float(jnp.mean(t_dusty)) > float(jnp.mean(t_shell))
 
     def test_fewer_clumps_greyer_than_many(self, wavelength):
-        """With fewer clumps (same tau), attenuation is greyer."""
+        """With fewer clumps (same tau), attenuation is grayer."""
         tau_v = 4.0
         t_few = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=3.0)
         t_many = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=30.0)
         assert float(jnp.mean(t_few)) > float(jnp.mean(t_many))
 
     def test_many_clumps_greyer_than_few(self, wavelength):
-        """More clumps (same total tau) gives less grey attenuation."""
+        """More clumps (same total tau) gives less gray attenuation."""
         tau_v = 2.0
         t_100 = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=100.0)
         t_1000 = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=1000.0)
-        # More clumps = less grey = lower mean transmission
+        # More clumps = less gray = lower mean transmission
         assert float(jnp.mean(t_1000)) < float(jnp.mean(t_100))
 
     def test_clumpy_formula_at_v_band(self):
@@ -258,7 +258,7 @@ class TestWG00Dusty:
         assert float(jnp.mean(t_high)) < float(jnp.mean(t_low))
 
     def test_fewer_clumps_greyer(self, wavelength):
-        """Fewer clumps (same total tau) gives greyer attenuation."""
+        """Fewer clumps (same total tau) gives grayer attenuation."""
         tau_v = 4.0
         t_few = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=3.0)
         t_many = wg00_dusty(wavelength, tau_v=tau_v, n_clumps=30.0)
@@ -314,7 +314,7 @@ class TestGeometryOrdering:
     in terms of mean transmission (for moderate tau and n_clumps)."""
 
     def test_ordering_moderate_tau(self, wavelength):
-        """SHELL most absorbed, CLOUDY greyer than shell."""
+        """SHELL most absorbed, CLOUDY grayer than shell."""
         tau_v = 2.0
         t_shell = float(jnp.mean(wg00_shell(wavelength, tau_v=tau_v)))
         t_cloudy = float(jnp.mean(wg00_cloudy(wavelength, tau_v=tau_v)))

@@ -28,7 +28,7 @@ class _StubObservation:
 
 @pytest.fixture
 def state_with_profile():
-    """ForwardState with a small Gaussian-like spatial profile centred on origin."""
+    """ForwardState with a small Gaussian-like spatial profile centered on origin."""
     axis = jnp.linspace(-2.0, 2.0, 32)
     xx, yy = jnp.meshgrid(axis, axis)
     profile = jnp.exp(-jnp.sqrt(xx**2 + yy**2) / 1.0)  # exp disk, scale 1 kpc

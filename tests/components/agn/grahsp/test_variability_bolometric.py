@@ -12,25 +12,25 @@ pytestmark = pytest.mark.bounds
 
 # ---- NEV ----
 def test_nev_low_lum_capped_at_0p1():
-    from tengri.components.agn.grahsp.variability import normalised_excess_variance
+    from tengri.components.agn.grahsp.variability import normalized_excess_variance
 
-    out = float(normalised_excess_variance(1.0e40))
+    out = float(normalized_excess_variance(1.0e40))
     assert out == pytest.approx(0.1)
 
 
 def test_nev_at_l45_eq_1_matches_paper():
     """At L_bol = 1e45, NEV = 10^-1.43 = 0.0372 (Buchner+ 2024 Eq. NEV)."""
-    from tengri.components.agn.grahsp.variability import normalised_excess_variance
+    from tengri.components.agn.grahsp.variability import normalized_excess_variance
 
-    out = float(normalised_excess_variance(1.0e45))
+    out = float(normalized_excess_variance(1.0e45))
     assert out == pytest.approx(10.0**-1.43, rel=1e-12)
 
 
 def test_nev_decreases_with_luminosity():
-    from tengri.components.agn.grahsp.variability import normalised_excess_variance
+    from tengri.components.agn.grahsp.variability import normalized_excess_variance
 
     L = jnp.array([1.0e44, 1.0e45, 1.0e46, 1.0e47])
-    out = np.asarray(normalised_excess_variance(L))
+    out = np.asarray(normalized_excess_variance(L))
     # Strictly decreasing in the unsaturated regime.
     assert np.all(np.diff(out) < 0)
 
@@ -38,9 +38,9 @@ def test_nev_decreases_with_luminosity():
 def test_nev_jit():
     import jax
 
-    from tengri.components.agn.grahsp.variability import normalised_excess_variance
+    from tengri.components.agn.grahsp.variability import normalized_excess_variance
 
-    fn = jax.jit(normalised_excess_variance)
+    fn = jax.jit(normalized_excess_variance)
     assert float(fn(1.0e45)) == pytest.approx(10.0**-1.43, rel=1e-12)
 
 

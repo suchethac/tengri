@@ -22,11 +22,11 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
-__all__ = ["normalised_excess_variance"]
+__all__ = ["normalized_excess_variance"]
 
 
-def normalised_excess_variance(L_bol_BBB: Array | float) -> Array:
-    r"""Pan-STARRS1-calibrated AGN normalised excess variance.
+def normalized_excess_variance(L_bol_BBB: Array | float) -> Array:
+    r"""Pan-STARRS1-calibrated AGN normalized excess variance.
 
     Parameters
     ----------
@@ -49,11 +49,11 @@ def normalised_excess_variance(L_bol_BBB: Array | float) -> Array:
     Examples
     --------
     >>> from tengri.components.agn.grahsp.variability import (
-    ...     normalised_excess_variance,
+    ...     normalized_excess_variance,
     ... )
-    >>> float(normalised_excess_variance(1.0e45))
+    >>> float(normalized_excess_variance(1.0e45))
     0.0371...
-    >>> float(normalised_excess_variance(1.0e40))  # capped
+    >>> float(normalized_excess_variance(1.0e40))  # capped
     0.1
     """
     L = jnp.asarray(L_bol_BBB)

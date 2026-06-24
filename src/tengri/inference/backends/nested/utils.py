@@ -31,7 +31,7 @@ from tengri.inference.backends.nested.base import NSInfo, NSState
 __all__ = [
     "compute_num_live",
     "ess",
-    "finalise",
+    "finalize",
     "log1mexp",
     "logX",
     "log_weights",
@@ -144,7 +144,7 @@ def log_weights(rng_key: PRNGKey, dead_info: NSInfo, shape: int = 100, beta: flo
     return log_w[unsort_indices]
 
 
-def finalise(live: NSState, dead: list[NSInfo], update_info: bool = True) -> NSInfo:
+def finalize(live: NSState, dead: list[NSInfo], update_info: bool = True) -> NSInfo:
     """Combine dead particle history with final live points.
 
     Parameters
@@ -182,7 +182,7 @@ def ess(rng_key: PRNGKey, dead: NSInfo) -> Array:
     rng_key
         A JAX PRNG key.
     dead
-        NSInfo with all dead (and final live) particles (from ``finalise``).
+        NSInfo with all dead (and final live) particles (from ``finalize``).
 
     Returns
     -------

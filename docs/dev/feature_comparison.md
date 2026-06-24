@@ -119,9 +119,9 @@
 | Hierarchical population inference | ~ | N | Y | Y | N |
 | **Photometric redshift** | | | | | |
 | Redshift as free parameter | Y | Y | Y | Y | N |
-| p(z) marginalisation output | N | N | ~ | Y | N |
+| p(z) marginalization output | N | N | ~ | Y | N |
 | EAZY-style template fitting | N | N | N | N | N |
-| Galaxy type marginalisation | N | N | N | N | N |
+| Galaxy type marginalization | N | N | N | N | N |
 | **Observation modeling** | | | | | |
 | Joint photometry + spectroscopy | Y | N | Y | N | N |
 | Upper limit photometry | N | Y | ~ | Y | N |
@@ -137,7 +137,7 @@
 
 These are tengri's distinctive capabilities not found in the external codes surveyed:
 
-1. **IFT correlated field SFH** — models bursty SFHs as Gaussian Process draws with a parameterised PSD. No other SED fitting code models the SFH as a stochastic field with an inferred PSD.
+1. **IFT correlated field SFH** — models bursty SFHs as Gaussian Process draws with a parameterized PSD. No other SED fitting code models the SFH as a stochastic field with an inferred PSD.
 
 2. **Fully differentiable forward model (pure JAX)** — enables gradient-based inference (HMC, variational inference) for all parameters simultaneously, including PSD hyperparameters and 130+ dimensional latent fields.
 
@@ -147,7 +147,7 @@ These are tengri's distinctive capabilities not found in the external codes surv
 
 5. **CUE nebular emission** (deep neural network, Liner et al. 2024) — covers wider parameter space than CLOUDY grids alone.
 
-6. **Analytic calibration polynomial marginalisation** — Chebyshev polynomial flux calibration uncertainty marginalised analytically (Johnson+2021/Prospector approach, but implemented in JAX).
+6. **Analytic calibration polynomial marginalization** — Chebyshev polynomial flux calibration uncertainty marginalized analytically (Johnson+2021/Prospector approach, but implemented in JAX).
 
 7. **XRB non-AGN X-ray** — scaling relation from Fragos+2013, no other open SED code includes this.
 

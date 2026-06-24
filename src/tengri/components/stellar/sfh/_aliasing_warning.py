@@ -146,7 +146,7 @@ def maybe_warn_burst_aliasing(spec, ssp_ages_yr) -> None:
                 f"{peak_name}={peak_gyr:.3g} Gyr. Predictions will show a "
                 f"non-physical staircase as the burst peak crosses SSP grid "
                 f"boundaries (#299). Widen the burst to at least "
-                f"width_gyr ≳ {spacing_gyr:.3g} for smooth behaviour.",
+                f"width_gyr ≳ {spacing_gyr:.3g} for smooth behavior.",
                 SFHBurstAliasingWarning,
                 stacklevel=3,
             )

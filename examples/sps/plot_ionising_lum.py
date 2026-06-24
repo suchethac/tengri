@@ -1,8 +1,8 @@
 """
-Ionising-photon production rate vs SSP age
+Ionizing-photon production rate vs SSP age
 ============================================
 
-The hydrogen-ionising photon production rate ``Q_H`` of a simple
+The hydrogen-ionizing photon production rate ``Q_H`` of a simple
 stellar population drops by ~5 dex from 1 Myr to 100 Myr as O stars
 die. Different SSP libraries predict different ``Q_H(t)`` because
 they differ in upper-IMF treatment, stellar rotation, and (most

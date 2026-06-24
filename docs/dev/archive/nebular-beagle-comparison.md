@@ -149,7 +149,7 @@ Downloaded via `synthesizer-download --agn-test-grids`. These are test (2-point)
 grids; production grids available at the Sussex Box repository.
 
 Grid axes (6D): BH mass, accretion rate (Eddington), cos(inclination),
-metallicity, ionisation parameter, hydrogen density.
+metallicity, ionization parameter, hydrogen density.
 
 | Axis | Notes |
 |------|-------|
@@ -165,7 +165,7 @@ atomic data of any grid available.
 
 **Key structural difference from tengri:** Synthesizer uses BH mass + Eddington
 ratio as primary axes. tengri uses L_bol directly (`agn_log_lbol`). Both
-parameterise the same physics, but L_bol is more directly observable and has
+parameterize the same physics, but L_bol is more directly observable and has
 fewer degeneracies in SED fitting.
 
 ---
@@ -182,7 +182,7 @@ fewer degeneracies in SED fitting.
 | n_H axis | 2 points | 3 points | included | included | 3 points |
 | C/O axis | 9 points | — | included | included | — |
 | N/O axis | — | — | included | included | — |
-| Ionising SED | BC03 (fixed) | power-law α | CB19 | arbitrary | power-law α |
+| Ionizing SED | BC03 (fixed) | power-law α | CB19 | arbitrary | power-law α |
 | JAX / JIT | no | no | yes | yes | yes |
 | VI/HMC compatible | no | no | yes | yes | yes |
 | Differentiable | no | no | yes (triweight) | yes (NN) | yes (triweight) |

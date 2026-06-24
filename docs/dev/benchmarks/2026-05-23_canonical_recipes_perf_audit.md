@@ -71,7 +71,7 @@ gallery code and can stay exact for clarity.
 
 For users that need to fit a catalog at a fixed redshift grid, the
 `WavePrecomp(catalog_z_range=(z_min, z_max), n_z=200)` form gives further
-amortisation across galaxies — surfacing this in the recipes' docstrings
+amortization across galaxies — surfacing this in the recipes' docstrings
 would be high-leverage.
 
 ## Bugs that block canonical use
@@ -151,7 +151,7 @@ user how to obtain a bare-stellar SSP. Options:
 * Add a `tengri.data.download_bare_stellar()` helper.
 * Provide a Cue-free fallback nebular block as a recipe variant.
 
-## Memory / tracer behaviour
+## Memory / tracer behavior
 
 * First recipe build: ~1.2 GB RSS jump (JAX warm + SSP load). Subsequent
   recipe builds add 30–60 MiB.

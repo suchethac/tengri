@@ -51,7 +51,7 @@ PAHSPEC_PATH_ENV = "TENGRI_PAHSPEC_PATH"
 DRAINE2021_PAH_DEFAULT_PATH = "data/pahspec_draine2021.h5"
 
 # ─────────────────────────────────────────────────────────────────────
-# Starlight metadata for nearest-neighbour selection
+# Starlight metadata for nearest-neighbor selection
 # ─────────────────────────────────────────────────────────────────────
 
 # Each entry: (kind, sps_family, age_myr, log_z_solar)
@@ -258,13 +258,13 @@ def load_pahspec_draine2021(template_path: str | None = None) -> Draine2021PAHTe
 # ─────────────────────────────────────────────────────────────────────
 
 
-# Score weights (relative units only — minimisation).  Calibrated so that
+# Score weights (relative units only — minimization).  Calibrated so that
 # (i) within an SSP family, the nearest (age, log Z) wins;
 # (ii) without a family, mMMP wins for moderate ages (~1 Gyr-ish ambient
 #      Galactic ISM) and m31bulge wins only for genuinely old populations
 #      (≥ ~5 Gyr) where the SSP grid's 1 Gyr template is too blue.
 _AUTO_LOG_Z_WEIGHT = 4.0  # metallicity dominates over age within an SSP family
-_AUTO_AMBIENT_REF_LOG_AGE = 3.0  # mMMP centred on log10(1 Gyr / Myr) = 3.0
+_AUTO_AMBIENT_REF_LOG_AGE = 3.0  # mMMP centered on log10(1 Gyr / Myr) = 3.0
 _AUTO_AMBIENT_AGE_WEIGHT = 0.5  # weak age penalty for mMMP (it's ambient)
 _AUTO_OLD_AGE_THRESHOLD_LOG = 3.7  # log10(5 Gyr / Myr); m31bulge becomes free above this
 _AUTO_AMBIENT_FLOOR = 0.5  # baseline penalty for fallback to mMMP
@@ -282,7 +282,7 @@ def select_pahspec_starlight_auto(
     Searches the 13 published PAHspec starlight choices (see
     :data:`STARLIGHT_PROPERTIES`) for the best match given the
     stellar population that the SED-fit upstream is using.  This is
-    nearest-neighbour selection in :math:`(\log_{10} {\rm age},
+    nearest-neighbor selection in :math:`(\log_{10} {\rm age},
     \log_{10} Z/Z_\odot)` space within the chosen SPS family, with
     fallbacks to the two non-SSP starlights (``"mMMP"`` for diffuse
     ISM, ``"m31bulge"`` for old quiescent populations).
@@ -330,7 +330,7 @@ def select_pahspec_starlight_auto(
         100-300 Myr for older star-forming galaxies, >5000 Myr for
         quiescent / bulge-dominated systems. [Myr]
     log_z_solar : float
-        :math:`\log_{10}(Z/Z_\odot)` for the ionising stellar
+        :math:`\log_{10}(Z/Z_\odot)` for the ionizing stellar
         population. [dimensionless]
 
     Returns
@@ -379,7 +379,7 @@ def select_pahspec_starlight_auto(
             scores.append((_AUTO_AMBIENT_FLOOR + _AUTO_AMBIENT_AGE_WEIGHT * d_age * d_age, name))
         elif kind == "bulge":
             # m31bulge represents a genuinely old (>5 Gyr) integrated
-            # population.  Penalise heavily for younger ages; zero
+            # population.  Penalize heavily for younger ages; zero
             # penalty above the 5 Gyr threshold.
             d_age = max(0.0, _AUTO_OLD_AGE_THRESHOLD_LOG - log_age_fit)
             scores.append((_AUTO_BULGE_FLOOR + d_age * d_age, name))
@@ -481,7 +481,7 @@ def resample_lnu_on_aa_grid(
     nu_pnu_um : array_like, shape ``(..., n_wave_um)``
         :math:`\nu P_\nu` cubes on the template's native wavelength
         grid (microns).  Per-H units [erg/s/H]; the absolute
-        normalisation does not survive the energy-balance rescale.
+        normalization does not survive the energy-balance rescale.
     wave_um : array_like, shape ``(n_wave_um,)``
         Template wavelengths in microns; strictly increasing.
     wave_aa : array_like, shape ``(n_wave_aa,)``
@@ -522,7 +522,7 @@ def integrate_lnu_over_nu(
     Uses the identity
     :math:`\int L_\nu \, d\nu = \int (\nu L_\nu)\, d\ln\nu` and the
     transformation :math:`d\ln\nu = -d\ln\lambda`, with the two sign
-    flips cancelling for an increasing-:math:`\lambda` grid:
+    flips canceling for an increasing-:math:`\lambda` grid:
 
     .. math::
 

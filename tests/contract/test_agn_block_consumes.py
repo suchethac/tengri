@@ -228,10 +228,10 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
 def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
     """Composable unified AGN: disc+BLR obscured edge-on, NLR stays isotropic.
 
-    The grey Type-1/2 visibility mask (runner Stage 4.5) obscures the anisotropic
+    The gray Type-1/2 visibility mask (runner Stage 4.5) obscures the anisotropic
     central engine (disc + BLR) as the sightline grazes the torus, while the
     spatially-extended NLR — illuminated by the intrinsic bolometric — is
-    inclination-independent. This is the physics-correct behaviour, reproduced
+    inclination-independent. This is the physics-correct behavior, reproduced
     through the composable grammar with independent nlr and blr slots.
     """
 

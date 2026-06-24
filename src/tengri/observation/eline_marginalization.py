@@ -80,7 +80,7 @@ def build_eline_design_matrix(
 ) -> jnp.ndarray:
     """Build the (n_pix, n_lines) Gaussian design matrix.
 
-    Each column *j* is a normalized Gaussian profile centred at the
+    Each column *j* is a normalized Gaussian profile centered at the
     redshifted line wavelength::
 
         G_j(lambda) = exp(-0.5 * ((lambda - lam_j*(1+z)) / sig_j)^2)

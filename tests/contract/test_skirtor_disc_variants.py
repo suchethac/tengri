@@ -36,7 +36,7 @@ class TestDiscSpectrumFunctions:
         """SKIRTOR disc spectrum is JIT-compatible."""
         from tengri.components.agn.disc_cigale import skirtor_disk_spectrum
 
-        # Convert to nanometres for the function
+        # Convert to nanometers for the function
         wave_nm = wave_grid / 10.0
         delta = 0.0
 
@@ -89,7 +89,7 @@ class TestDeltaParameterEffect:
 
         The SKIRTOR disc mid-IR slope is alpha = -1.5 + delta. A larger delta
         makes the (negative) slope shallower, so more flux is redistributed to
-        the mid-IR (the unit-area-normalised spectrum rises there).
+        the mid-IR (the unit-area-normalized spectrum rises there).
         """
         from tengri.components.agn.disc_cigale import skirtor_disk_spectrum
 

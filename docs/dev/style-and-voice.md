@@ -172,7 +172,7 @@ def get_or_build_cached(cache, lock, key, builder):
     ...
 ```
 
-Three near-identical wrappers is the threshold: collapse them into one parameterised
+Three near-identical wrappers is the threshold: collapse them into one parameterized
 function.
 
 ---

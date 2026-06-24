@@ -53,7 +53,7 @@ def test_node_exact_nd():
 def test_no_overshoot_on_step():
     """Monotone (shape-preserving): a step in the data is not overshot."""
     x = jnp.asarray([0.0, 1.0, 2.0, 3.0, 4.0])
-    y = jnp.asarray([0.0, 0.0, 1.0, 1.0, 1.0])  # nearest-neighbour-style step
+    y = jnp.asarray([0.0, 0.0, 1.0, 1.0, 1.0])  # nearest-neighbor-style step
     lo, hi = float(y.min()), float(y.max())
     for xq in np.linspace(0.0, 4.0, 101):
         v = float(interp_nd_pchip(y[:, None], (x,), (float(xq),))[0])

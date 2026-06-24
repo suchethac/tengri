@@ -5,7 +5,7 @@ The monolithic :func:`tengri.components.agn.qsogen.compute_qsogen_sed`
 recipe is internally restructured around :func:`_qsogen_components`, which
 returns each spectral piece (continuum, hot dust, emission lines, Balmer
 continuum, SMC factor) under a shared joint cont+BB bolometric
-normalisation. These block adapters expose those pieces under the standard
+normalization. These block adapters expose those pieces under the standard
 block-protocol signature so users can mix qsogen continuum with e.g. a
 SKIRTOR torus, or pair the qsogen SMC reddening with GRAHSP's BBB.
 
@@ -18,7 +18,7 @@ Block names registered::
     disc           → "qsogen"          (broken power-law continuum)
     blr            → "qsogen"          (Vanden Berk + Baldwin scaling)
     feii           → "qsogen_balmer"   (Balmer continuum; conceptually the
-                                        feii-stage analogue)
+                                        feii-stage analog)
     torus          → "qsogen"          (single-temperature hot-dust BB)
     attenuation    → "qsogen_smc"      (SMC reddening factor)
 
@@ -101,7 +101,7 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
     r"""QSOgen broken power-law continuum block.
 
     The continuum is the *blue + red* power-law (split at ``agn_plbrk``)
-    used by Temple+ 2021. Joint cont+BB bolometric normalisation is
+    used by Temple+ 2021. Joint cont+BB bolometric normalization is
     re-derived inside :func:`_qsogen_components` so the disc-only output
     here is bit-for-bit identical to the disc piece of the monolithic
     ``compute_qsogen_sed``.
@@ -115,7 +115,7 @@ def qsogen_continuum_block(wavelength: Array, agn_log_lbol: float, **params) -> 
     **params
         ``agn_plslp1``, ``agn_plslp2``, ``agn_plbrk``, ``agn_tbb``,
         ``agn_bbnorm``, ``agn_emline_scale``, ``agn_ebv``,
-        ``agn_bcnorm``. Unrecognised keys are absorbed silently.
+        ``agn_bcnorm``. Unrecognized keys are absorbed silently.
     """
     wave_aa = jnp.asarray(wavelength)
     comps = _qsogen_components(wave_aa, **_resolve_qsogen_kwargs(params, agn_log_lbol))
@@ -139,7 +139,7 @@ def qsogen_hot_dust_block(
 ) -> Array:
     r"""QSOgen hot-dust blackbody block.
 
-    Single-temperature greybody anchored at 2 µm to ``agn_bbnorm × cont(2µm)``.
+    Single-temperature graybody anchored at 2 µm to ``agn_bbnorm × cont(2µm)``.
     Effective torus temperature ``agn_tbb`` (default ``1240 K``).
 
     Parameters
@@ -185,7 +185,7 @@ def qsogen_blr_block(wavelength: Array, agn_log_lbol: float, l5100_disc: Array, 
         log10(L_bol / L_sun) of the AGN.
     l5100_disc : array
         Ignored — qsogen lines anchor on the internally-computed
-        normalised continuum at line wavelengths, not on a single 5100 Å
+        normalized continuum at line wavelengths, not on a single 5100 Å
         scalar.
     **params
         QSOgen kwargs.
@@ -220,7 +220,7 @@ def qsogen_balmer_block(
     r"""QSOgen Balmer continuum block.
 
     Hydrogen recombination continuum below the Balmer edge at 3646 Å,
-    scaled by ``agn_bcnorm`` (default 0 = disabled). Categorised as
+    scaled by ``agn_bcnorm`` (default 0 = disabled). Categorized as
     ``feii`` because the Balmer continuum is, like FeII, a pseudo-continuum
     pile-up of unresolved transitions on top of the disc.
 
@@ -258,7 +258,7 @@ def qsogen_smc_block(wavelength: Array, **params) -> Array:
     :math:`A_\lambda = E(B-V)\,R_V^{\rm SMC}\,k(\lambda)` and
     :math:`R_V^{\rm SMC} = 2.93`. Distinct from
     :func:`smc_prevot_block` because the qsogen curve uses a slightly
-    different parameterisation (Pei 1992 + Temple+ 2021 normalisation).
+    different parameterization (Pei 1992 + Temple+ 2021 normalization).
 
     Parameters
     ----------

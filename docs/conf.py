@@ -67,7 +67,7 @@ _skip_alt = "|".join(_DO_NOT_EXECUTE) or "__never_match_anything__"
 # execute *only* those scripts on the next ``make html``. Used after a library
 # change that alters a handful of figures, so the heavy NUTS/VI scripts (and
 # everything else) are left as-is instead of re-running. Empty/unset keeps the
-# default disk-driven behaviour.
+# default disk-driven behavior.
 import re as _re
 
 _only = os.environ.get("TENGRI_GALLERY_ONLY", "").strip()

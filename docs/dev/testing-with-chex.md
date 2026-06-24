@@ -2,7 +2,7 @@
 
 `chex` is DeepMind's JAX-native testing toolkit. We use it for three things:
 
-1. **Shape assertions** that work on traced arrays without forcing concretisation.
+1. **Shape assertions** that work on traced arrays without forcing concretization.
 2. **Finiteness checks** over PyTrees in one call, instead of per-leaf loops.
 3. **Tree-allclose comparisons** for whole `PipelineState.derived` dicts and per-component outputs.
 
@@ -100,7 +100,7 @@ functions and the parametrize form composes cleanly with our session fixtures.
 
 - Scalar comparisons — `np.testing.assert_allclose(x, expected, rtol=...)`
   stays exactly as it is.
-- Physics-content assertions (line ratios, integrals, normalisation) — these
+- Physics-content assertions (line ratios, integrals, normalization) — these
   are domain checks, not infrastructure checks.
 - Compile-time regressions. `chex.assert_max_traces` exists but is flaky
   under our shared JIT cache; not in use today.

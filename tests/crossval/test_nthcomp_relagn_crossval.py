@@ -110,7 +110,7 @@ def test_template_fnu_agrees_with_relagn(gamma, kTe_keV, kTbb_keV):
     """nthcomp_lnu_interp F_nu shape must agree with RELAGN within per-case tolerance.
 
     tengri's template table is built by calling RELAGN at grid points and
-    normalising.  Tolerance per parameter set is documented in _TOLERANCE_MAX
+    normalizing.  Tolerance per parameter set is documented in _TOLERANCE_MAX
     and _TOLERANCE_P95.  Most cases pass at 5% max / 4% p95.  The extreme
     (γ=1.7, kTe=0.1, kTbb=0.001) case allows 20% max / 10% p95 because
     the Wien seed-BB cutoff and Comptonization cutoff simultaneously fall

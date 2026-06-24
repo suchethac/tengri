@@ -494,8 +494,8 @@ class SynthesizerGridData:
     line_wavelengths_aa: jnp.ndarray
     log_line_per_qh: jnp.ndarray
     # log10(Q_H / L_bol) on the six-axis grid [log10(photons/s per W)], i.e. the
-    # disc model's specific ionising luminosity. Lets a caller recover the grid's
-    # own Q_H normalisation instead of assuming an ionising-spectrum slope.
+    # disc model's specific ionizing luminosity. Lets a caller recover the grid's
+    # own Q_H normalization instead of assuming an ionizing-spectrum slope.
     log_qh_specific: jnp.ndarray | None = None
     # Discrete grid line luminosities per unit bolometric, log10(L_line / L_bol),
     # on the six-axis grid + line axis. Used by the line-ratio parity test.
@@ -824,12 +824,12 @@ class SynthesizerNLRBackend:
         log_ionU: float = -1.5,
         log_nH: float = 4.0,
     ) -> jnp.ndarray:
-        r"""Interpolate the grid's own specific ionising luminosity log10(Q_H / L_bol).
+        r"""Interpolate the grid's own specific ionizing luminosity log10(Q_H / L_bol).
 
-        This is the disc model's ionising output baked into the grid (Q_H per unit
+        This is the disc model's ionizing output baked into the grid (Q_H per unit
         bolometric luminosity, in photons/s per W). Recovering it lets a caller use
-        the grid's own :math:`Q_H` normalisation — the value Synthesizer itself
-        uses — rather than assuming an ionising-spectrum slope. The absolute
+        the grid's own :math:`Q_H` normalization — the value Synthesizer itself
+        uses — rather than assuming an ionizing-spectrum slope. The absolute
         :math:`\log_{10} Q_H` for a source of bolometric luminosity ``L_bol`` [erg/s]
         is ``interp_log_qh_specific(...) + log10(L_bol) - 7`` (the −7 converts
         erg/s to W).
@@ -988,9 +988,9 @@ class SynthesizerBLRBackend(SynthesizerNLRBackend):
 
     The Synthesizer BLR grid shares the NLR grid's structure exactly — the same
     six axes (BH mass, Eddington ratio, cosine inclination, metallicity,
-    ionisation parameter, hydrogen density) and the same per-:math:`Q_H` line
+    ionization parameter, hydrogen density) and the same per-:math:`Q_H` line
     storage — differing only in the tabulated line luminosities (broad permitted
-    lines from dense, high-ionisation gas). So this backend reuses the NLR
+    lines from dense, high-ionization gas). So this backend reuses the NLR
     loader and interpolation wholesale; only the grid *file* and the line set
     differ. ``predict_agn_blr_lines`` is an alias of the inherited interpolation.
 

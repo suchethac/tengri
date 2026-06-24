@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Phenomenological metallicity history models (Bagpipes-compatible).
 
-Provides time-varying metallicity Z(t) functions modelled after the
+Provides time-varying metallicity Z(t) functions modeled after the
 ``chemical_enrichment_history`` module in Bagpipes (Carnall et al. 2018).
 Each function returns a ``log10(Z)`` *absolute* array on the SSP age grid,
 ready for ``interp_metallicity_evolving`` or DSPS ``compute_dsps_met_table_weights``.

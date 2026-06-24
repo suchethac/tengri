@@ -8,7 +8,7 @@ The smooth bending power-law (SBPL) is a flexible phenomenological model for
 the AGN UV-to-optical continuum with a soft transition between a UV slope
 :math:`\\alpha_1` and an optical slope :math:`\\alpha_2` at a break wavelength
 :math:`\\lambda_{\\mathrm{break}}`. The bend width is controlled by the
-parameter :math:`\\Lambda`. The continuum is normalised at
+parameter :math:`\\Lambda`. The continuum is normalized at
 :math:`\\lambda_0 = 5100\\,\\mathrm{\\AA}` by the parameter
 :math:`\\lambda L_\\lambda(5100\\,\\mathrm{\\AA})` (``l5100``).
 
@@ -18,7 +18,7 @@ References
        Population (GRAHSP)", arXiv:2405.19297, Eq. 1.
 .. [2] Ryde, F. 1999, ApJ, 511, 692,
        https://ui.adsabs.harvard.edu/abs/1999ApJ...511..692R.
-       Smooth bending power-law parameterisation.
+       Smooth bending power-law parameterization.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ def sbpl_bbb(
     ----------
     wave_nm : array_like, shape (n_wave,)
         Rest-frame wavelength grid [nm]. Note: GRAHSP / CIGALE use **nm**, not
-        Å; the conversion factor of 510 is baked into the normalisation.
+        Å; the conversion factor of 510 is baked into the normalization.
     l5100 : float
         :math:`\lambda L_\lambda` at 5100 Å [erg/s]. Upstream parameter name
         in the paper is ``L_AGN`` / ``lum5100A``.

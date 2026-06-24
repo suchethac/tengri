@@ -365,7 +365,7 @@ class Fitter:
         # When non-None, replaces the built-in χ² dispatch. The user
         # owns the entire data-term math and is responsible for
         # tracking their own observed arrays. Calibration / e-line
-        # marginalisation are NOT applied automatically — wrap them
+        # marginalization are NOT applied automatically — wrap them
         # into the user likelihood if needed.
         self._user_likelihood = likelihood
         self._auto_protocol_likelihood = auto_protocol_likelihood
@@ -375,7 +375,7 @@ class Fitter:
         # :meth:`SEDModel.predict_state` (the SEDComponent
         # chain) instead of the legacy fused ``predict_photometry`` /
         # ``predict_spectrum`` kernels. Default ``False`` preserves
-        # existing inference behaviour bit-for-bit. Spectroscopy has no
+        # existing inference behavior bit-for-bit. Spectroscopy has no
         # orchestrator bridge yet, so combining ``use_components=True``
         # with non-photometric data_type is rejected at construction.
         self.use_components = bool(use_components)
@@ -486,16 +486,16 @@ class Fitter:
         - Student-t (variable noise) → ``StudentTLikelihood``
         - censored data → ``CensoredLikelihood``
         - spec covariance → ``MultivariateGaussianLikelihood``
-        - calibration marginalisation → ``CalibrationMarginalisedLikelihood``
-        - flat-prior e-line marginalisation → ``ELineMarginalisedLikelihood``
+        - calibration marginalization → ``CalibrationMarginalizedLikelihood``
+        - flat-prior e-line marginalization → ``ELineMarginalizedLikelihood``
           (with a per-call design-matrix builder closure)
         - line fluxes / spectral indices → composed onto the base
           via ``CompositeLikelihood``
 
         Returns ``None`` only for cases the Protocol path does not yet
-        cover — currently the Cloudy-prior e-line marginalisation
+        cover — currently the Cloudy-prior e-line marginalization
         (uses a different math primitive) and the e-line *fitted*
-        amplitudes (line amplitudes are fit, not marginalised).
+        amplitudes (line amplitudes are fit, not marginalized).
         """
         from tengri.inference.composite_likelihood import CompositeLikelihood
         from tengri.inference.context import InferenceContext
@@ -1727,7 +1727,7 @@ class Fitter:
         Pass ``key=jax.random.PRNGKey(seed)`` to control randomness across runs.
         ``key=None`` defaults to ``PRNGKey(42)`` for reproducibility.
 
-        **Compile-cache behaviour (smart lean, 2026-05):**
+        **Compile-cache behavior (smart lean, 2026-05):**
 
         ``run`` accepts a ``lean`` kwarg (default inferred from
         ``tengri.lean()`` / ``tengri.persistent()`` context). With
@@ -2225,7 +2225,7 @@ class Fitter:
         #      recomputed forwards simultaneously — negating most
         #      of the memory saving. Chunking keeps that to
         #      O(64 · activations) regardless of n_samples.)
-        #   4. otherwise unchunked (preserves prior behaviour)
+        #   4. otherwise unchunked (preserves prior behavior)
         if posterior_chunk_size is None:
             posterior_chunk_size = getattr(self, "_posterior_chunk_size", None)
         if posterior_chunk_size is None and getattr(self, "_memory_mode", "fast") == "low":

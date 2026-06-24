@@ -682,7 +682,7 @@ class TestCueOptionalKnobExposure:
 
 
 class TestElineModeExposure:
-    """#653: eline_mode is a recognised top-level builder setting, so the
+    """#653: eline_mode is a recognized top-level builder setting, so the
     line-velocity params register through the nested-dict path (previously
     only the flat Parameters(eline_mode=...) constructor saw them)."""
 

@@ -15,13 +15,13 @@ parameters the active disc / torus / lines blocks actually consume, not the
 full declared superset — so you never get unconstrained no-op nuisance
 dimensions for parameters belonging to inactive blocks.
 
-This example builds one composable AGN (multicolour disc + Nenkova clumpy torus
+This example builds one composable AGN (multicolor disc + Nenkova clumpy torus
 + NLR lines), prints the now-non-empty free-parameter set, and sweeps three of
 those parameters across their priors. Each panel shows the parameter visibly
 reshaping the SED — the visual form of the "no silent no-ops" contract checked
 by ``tests/contract/test_agn_block_consumes.py``.
 
-References: Nenkova et al. 2008 (CLUMPY torus); Kubota & Done 2018 (multicolour
+References: Nenkova et al. 2008 (CLUMPY torus); Kubota & Done 2018 (multicolor
 disc); Feltre et al. 2016 (NLR grid).
 """
 

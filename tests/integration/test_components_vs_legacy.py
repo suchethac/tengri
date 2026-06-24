@@ -411,7 +411,7 @@ def test_dirichlet_orchestrator_rest_sed_close_to_legacy(stellar_dirichlet_model
     agrees with legacy at ``rtol=5e-2`` — slightly looser than the
     ``rtol=1e-2`` tsnorm/dpl bar because piecewise-constant SFHs
     amplify the SFH-integration mismatch from the unrelated CSP
-    canonicalisation work tracked in
+    canonicalization work tracked in
     ``docs/dev/20260504-csp-integral-canonicalization.md``.
 
     Both paths dispatch through ``SFH_REGISTRY["dirichlet"].fn``
@@ -701,7 +701,7 @@ def test_field_orchestrator_rest_sed_close_to_legacy(stellar_field_model):
 def _stellar_only_spec(sfh_name: str, sfh_params: dict):
     """Build a stellar-only Parameters spec for the given SFH variant.
 
-    All free SFH params get ``Uniform`` priors centred on the test
+    All free SFH params get ``Uniform`` priors centered on the test
     values; metallicity and dust are fixed to their off-state.
     """
     free_priors = {}
@@ -838,7 +838,7 @@ def test_orchestrator_norm_close_to_legacy(ssp):
 # diverge by ≥ 13% per-wavelength because the legacy log-space SFR
 # interpolation and the orchestrator's linear-space interpolation
 # resolve the cutoff differently. They are pinned by the SFH-side
-# CSP-canonicalisation work (tracked in
+# CSP-canonicalization work (tracked in
 # ``docs/dev/20260504-csp-integral-canonicalization.md``), not here.
 # ``psb``, ``delayed_bq``, ``dense_basis_pure`` have prior-bound
 # constraints (``[0,1]`` fractions, etc.) that the test fixture's
@@ -1028,7 +1028,7 @@ def test_orchestrator_periodic_close_to_legacy(ssp):
 
 
 def test_orchestrator_buat08_close_to_legacy(ssp):
-    """``buat08`` (Buat+ 2008 velocity-parameterised SFH) — rtol=5e-2."""
+    """``buat08`` (Buat+ 2008 velocity-parameterized SFH) — rtol=5e-2."""
     priors = {
         "sfh_buat08_log_total_mass": Uniform(8.0, 12.0),
         "sfh_buat08_velocity_km_s": Uniform(80.0, 360.0),

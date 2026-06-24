@@ -9,7 +9,7 @@ fixed rest-frame filter. We compute K(z) for the SDSS r-band across
 four galaxy types — young star-forming, old star-forming, red-sequence
 elliptical, and post-starburst — from z = 0.01 to z = 2.0. This
 illustrates why stellar mass measurements require careful K-corrections
-at high redshift and why colour-matched template sets dominate
+at high redshift and why color-matched template sets dominate
 photometric redshift algorithms.
 
 Reference: Hogg (1999) on K-correction formalism; Blanton & Roweis (2007)

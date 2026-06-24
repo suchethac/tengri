@@ -294,11 +294,11 @@ class TestNSSEvidence:
 
 
 class TestNSSPostProcessing:
-    """Test finalise, sample, ess utilities."""
+    """Test finalize, sample, ess utilities."""
 
-    def test_finalise_and_sample(self):
-        """finalise + sample produce resampled particles."""
-        from tengri.inference.backends.nested.utils import finalise, sample
+    def test_finalize_and_sample(self):
+        """finalize + sample produce resampled particles."""
+        from tengri.inference.backends.nested.utils import finalize, sample
 
         D = 2
         n_live = 100
@@ -308,7 +308,7 @@ class TestNSSPostProcessing:
         key = jax.random.PRNGKey(42)
         _, _, live, dead_points = _run_nss_to_convergence(algo, names, w, n_live, num_delete, key)
 
-        ns_run = finalise(live, dead_points)
+        ns_run = finalize(live, dead_points)
         key, sample_key = jax.random.split(key)
         resampled = sample(sample_key, ns_run, 500)
 
@@ -323,7 +323,7 @@ class TestNSSPostProcessing:
 
     def test_ess_positive(self):
         """ESS is positive."""
-        from tengri.inference.backends.nested.utils import ess, finalise
+        from tengri.inference.backends.nested.utils import ess, finalize
 
         D = 2
         n_live = 100
@@ -333,7 +333,7 @@ class TestNSSPostProcessing:
         key = jax.random.PRNGKey(42)
         _, _, live, dead_points = _run_nss_to_convergence(algo, names, w, n_live, num_delete, key)
 
-        ns_run = finalise(live, dead_points)
+        ns_run = finalize(live, dead_points)
         key, ess_key = jax.random.split(key)
         ess_val = float(ess(ess_key, ns_run))
         assert ess_val > 0

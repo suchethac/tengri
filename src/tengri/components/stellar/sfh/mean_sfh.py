@@ -1293,7 +1293,7 @@ def periodic(
     """
     tau = tau_bursts_yr
 
-    # Vectorised: burst_starts shape (n_bursts, 1), t shape (1, n_time)
+    # Vectorized: burst_starts shape (n_bursts, 1), t shape (1, n_time)
     n_bursts = 100
     burst_starts = jnp.arange(n_bursts) * delta_bursts_yr  # (n_bursts,)
     dt = t_lookback[None, :] - burst_starts[:, None]  # (n_bursts, n_time)
@@ -1420,7 +1420,7 @@ def sfh2exp(
     t_fwd_burst = jnp.where(in_burst, burst_age_yr - t_lookback, 0.0)
     burst = jnp.where(in_burst, jnp.exp(-t_fwd_burst / tau_burst_yr), 0.0)
 
-    # Normalise each component to unit mass over the grid, then weight so the
+    # Normalize each component to unit mass over the grid, then weight so the
     # burst holds exactly f_burst of the total stellar mass (CIGALE convention).
     m_main = jnp.trapezoid(main, t_lookback)
     m_burst = jnp.trapezoid(burst, t_lookback)

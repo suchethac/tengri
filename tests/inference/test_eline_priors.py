@@ -270,7 +270,7 @@ class TestMarginalizeEmissionLinesCloudy:
     def test_l_hbeta_scaling(self, mock_spectral_data):
         """Scaling l_hbeta should scale the prior means linearly.
 
-        To test prior-dominated behaviour we need uninformative data (large
+        To test prior-dominated behavior we need uninformative data (large
         noise), so we override the fixture noise here.  With noise >> signal,
         the posterior mean converges to the prior mean which scales linearly
         with l_hbeta.

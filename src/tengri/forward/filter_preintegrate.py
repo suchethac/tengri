@@ -36,7 +36,7 @@ Usage today
     # ssp_phot.shape == (n_met, n_age, n_filters)
     # Multiply by joint weights and broadcast: total_mass × einsum("ma,maf->f", joint, ssp_phot)
     # gives photometry directly in erg/s/cm²/Hz × 4π dl² / (1+z) (i.e. the SSP photometric
-    # normalisation; convert to apparent flux by dividing by 4π dl² and multiplying by (1+z)).
+    # normalization; convert to apparent flux by dividing by 4π dl² and multiplying by (1+z)).
 
 Once the photometry-mode component cohort is built, it will consume
 this output via the same einsum pattern but with ``f`` (n_filters,
@@ -140,7 +140,7 @@ def preintegrate_ssp_filter_grid(
             [_per_filter(fw, ft) for fw, ft in zip(filter_waves, filter_trans, strict=False)]
         )
 
-    # Vectorise over the (n_met, n_age) leading dims via vmap.
+    # Vectorize over the (n_met, n_age) leading dims via vmap.
     n_met, n_age, _ = ssp_flux.shape
     flat = ssp_flux.reshape(n_met * n_age, -1)
     phot_flat = jax.vmap(_single_ssp_phot)(flat)

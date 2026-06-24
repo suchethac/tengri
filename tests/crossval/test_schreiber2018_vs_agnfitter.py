@@ -9,7 +9,7 @@ forms the cold-dust SED as the native mixture
 
 This test reads the original FITS tables directly, reconstructs AGNfitter-rX's
 mixture at several (T_dust, f_PAH) nodes, and verifies tengri's
-``schreiber2018`` reproduces the same *shape* (normalised L_nu) to a tight
+``schreiber2018`` reproduces the same *shape* (normalized L_nu) to a tight
 tolerance after regridding to a common wavelength axis.
 """
 

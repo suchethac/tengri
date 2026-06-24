@@ -1,6 +1,6 @@
 # JIT compile cost in population inference
 
-How XLA compile time scales (and **does not** scale) with catalogue size `N`
+How XLA compile time scales (and **does not** scale) with catalog size `N`
 in tengri's population inference engines, what changed in the `lax.map`
 refactor, and where the actual N-scaling cost lives.
 

@@ -6,7 +6,7 @@ Verifies the CIGALE ``yang20`` upgrade:
 * ``regression_paper`` — HMXB and LMXB integrated 2–10 keV luminosities
   match the Lehmer+19 / Lehmer+14 polynomial fits at canonical (Z, age).
 * ``regression_paper`` — diffuse hot-gas 0.5–2 keV integral matches
-  Mineo+2012 / Yang+22 normalisation ``8.3 × 10³⁸ · SFR`` erg/s.
+  Mineo+2012 / Yang+22 normalization ``8.3 × 10³⁸ · SFR`` erg/s.
 * ``regression_bug`` — ``xray_anisotropy`` denominator is now present
   (CIGALE ``yang20.py`` lines 231–234; previously absent, biasing
   face-on flux by ~ 7 %).
@@ -97,7 +97,7 @@ def test_lmxb_band_integral_matches_lehmer14_age10gyr() -> None:
 
 @pytest.mark.bounds
 def test_hmxb_metallicity_dependence_positive_everywhere() -> None:
-    """HMXB normalisation stays > 0 across the Z = 0 → 0.05 range.
+    """HMXB normalization stays > 0 across the Z = 0 → 0.05 range.
 
     Physical bound: a luminosity per SFR can't be negative; the quartic
     is empirical and must stay in the physically meaningful regime
@@ -114,7 +114,7 @@ def test_hmxb_smooth_in_metallicity() -> None:
     """d L_HMXB / dZ finite and well-behaved at Z = Z_sun.
 
     Lehmer+19 quartic is C∞ in Z; ensures upstream stellar metallicity
-    can be optimised against X-ray data without gradient pathologies.
+    can be optimized against X-ray data without gradient pathologies.
     """
     wave = jnp.array([4.0])
 
@@ -166,12 +166,12 @@ def test_hotgas_cut_off_above_10kev() -> None:
 
 # ---------------------------------------------------------------- anisotropy
 @pytest.mark.regression_bug
-def test_anisotropy_normalised_to_30deg() -> None:
+def test_anisotropy_normalized_to_30deg() -> None:
     """Anisotropy factor returns 1 at θ = 30° (yang20.py:231–234).
 
-    Reason: L_2500 (which sets the X-ray normalisation via α_ox) is
+    Reason: L_2500 (which sets the X-ray normalization via α_ox) is
     a θ = 30° quantity in SKIRTOR. The denominator
-    1 − 0.13397 a1 − 0.25 a2 normalises so f(cos 30°) = 1.
+    1 − 0.13397 a1 − 0.25 a2 normalizes so f(cos 30°) = 1.
     Previously the denominator was absent and face-on flux was biased
     high by ~ 7 %.
     """

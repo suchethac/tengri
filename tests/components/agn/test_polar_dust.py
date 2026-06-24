@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for polar dust extinction and greybody reemission."""
+"""Tests for polar dust extinction and graybody reemission."""
 
 import chex
 import pytest
@@ -125,7 +125,7 @@ class TestPolarDustEmission:
         peak_idx = jnp.argmax(l_reemit)
         peak_wave = WAVELENGTH[peak_idx]
         # Wien's law for modified blackbody: peak ~ 29 um for T=100K
-        # Allow factor-of-3 tolerance due to greybody modification
+        # Allow factor-of-3 tolerance due to graybody modification
         assert 1e5 < peak_wave < 1e6, f"Peak at {peak_wave:.0f} A, expected ~3e5 A"
 
     def test_reemission_shape_is_greybody(self):
@@ -253,7 +253,7 @@ class TestSKIRTORPolarDustIntegration:
         Test the SKIRTORTorus SEDModelComponent with polar dust parameters
         as free variables. Type 2 (edge-on, cos_inc=0.0) sightline should
         show increased FIR luminosity when polar_ebv=0.3 vs 0.0, due to
-        greybody reemission of absorbed UV/optical photons.
+        graybody reemission of absorbed UV/optical photons.
 
         This validates Yang+2020 §2.2.2: isotropic absorption geometry
         for polar dust, regardless of viewing angle.
@@ -333,7 +333,7 @@ class TestSKIRTORPolarDustIntegration:
         with polar_ebv in {0.0, 0.3}.
 
         FIR luminosity should increase strictly by >5% when polar_ebv=0.3
-        vs polar_ebv=0.0, due to isotropic greybody reemission.
+        vs polar_ebv=0.0, due to isotropic graybody reemission.
 
         References
         ----------

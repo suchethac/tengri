@@ -3,7 +3,7 @@
 
 Computes transmission through a DLA system with known neutral hydrogen
 column density N_HI, temperature T, and turbulent broadening b_turb.
-The absorption profile is a Voigt function centred on Ly-alpha at the
+The absorption profile is a Voigt function centered on Ly-alpha at the
 absorber redshift.
 
 This is distinct from the *statistical* DLA contribution in ``igm.py``

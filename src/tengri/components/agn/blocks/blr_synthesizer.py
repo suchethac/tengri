@@ -51,7 +51,7 @@ def blr_synthesizer_block(
     agn_blr_cf, agn_blr_fwhm_kms, agn_blr_f_bol : float
             Covering fraction, broad-line FWHM [km/s], and bolometric correction.
     neb_logU, neb_logZ_gas : float
-            Photoionisation knobs forwarded to the grid adapter.
+            Photoionization knobs forwarded to the grid adapter.
 
     Returns
     -------

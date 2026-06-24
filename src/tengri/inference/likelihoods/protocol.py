@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Channel-parameterised :class:`Likelihood` Protocol adapters.
+"""Channel-parameterized :class:`Likelihood` Protocol adapters.
 
 Design rule
 -----------
-**One class per *math type*, parameterised by which prediction channel
+**One class per *math type*, parameterized by which prediction channel
 to read.** Don't duplicate the same Gaussian χ² for each observation
 type — pin a different ``channel`` string instead.
 
@@ -116,7 +116,7 @@ class GaussianLikelihood:
 class StudentTLikelihood:
     r"""Student-t over any single prediction channel.
 
-    Use when outliers (cosmic rays, unmodelled features, calibration
+    Use when outliers (cosmic rays, unmodeled features, calibration
     glitches) would over-weight a Gaussian fit.
 
     Parameters
@@ -261,7 +261,7 @@ class MultivariateGaussianLikelihood:
     -----
     **JIT-compatible**: yes — pure JAX.
 
-    Drops the normalisation constant
+    Drops the normalization constant
     :math:`-\tfrac{1}{2}\log\det(2\pi\Sigma)`. Add it back if you need
     a true log-evidence.
 

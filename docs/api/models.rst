@@ -2,7 +2,7 @@ Physics Models
 ==============
 
 The building blocks of tengri's forward model: star formation history
-parameterisations, power spectral density functions, dust attenuation,
+parameterizations, power spectral density functions, dust attenuation,
 stellar population synthesis, and filter handling.
 
 Star Formation History
@@ -59,7 +59,7 @@ formation histories via Gaussian process priors.
 GP Generation
 -------------
 
-Functions for generating Gaussian process realisations from PSD parameters
+Functions for generating Gaussian process realizations from PSD parameters
 and a latent vector.
 
 .. autofunction:: tengri.compute_field_gp

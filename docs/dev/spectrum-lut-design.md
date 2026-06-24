@@ -82,7 +82,7 @@ is approximately constant across the support of the projection kernel."
 |----------------------|--------------------------------|------------------------|
 | Broadband photometry | filter FWHM ~ 1000 Å           | 0.5% on magnitudes     |
 | Low-R spectroscopy   | pixel resolution ~ 5–50 Å      | comparable to filters  |
-| Medium-R (R ~ 2000)  | resolution ~ 2–5 Å             | depends on physics — dust/AGN smooth, nebular line centres NOT |
+| Medium-R (R ~ 2000)  | resolution ~ 2–5 Å             | depends on physics — dust/AGN smooth, nebular line centers NOT |
 | High-R (R > 10000)   | resolution < 1 Å               | the approximation breaks for any non-smooth feature |
 
 The honest answer: **a per-pixel-effective-wavelength LUT works for
@@ -95,7 +95,7 @@ at construction) or fall back to the exact path automatically.
 ```python
 @dataclass(frozen=True)
 class SpectrumPrecomp:
-    """Opt-in: precompute SSP × dust × IGM at spectrum pixel centres."""
+    """Opt-in: precompute SSP × dust × IGM at spectrum pixel centers."""
     # No tuning knobs in the first cut; the pixel grid comes from
     # Observation.spectroscopy.wave_obs and z from spec/params.
 ```
@@ -145,7 +145,7 @@ than the full rest-frame grid.
    (line broadening from velocity dispersion is the main one — see
    below).
 5. **Compile-time validation**:
-   - If `spec_eff_waves` would have neighbouring pixels closer than a
+   - If `spec_eff_waves` would have neighboring pixels closer than a
      known emission-line width (depends on `line_sigma_aa`), refuse to
      opt in or warn loudly.
    - If `Spectroscopy.resolution` is set and exceeds a threshold (say
@@ -154,7 +154,7 @@ than the full rest-frame grid.
    - **A.** Subtract the emission-line component from the LUT-path and
      evaluate it separately on the exact grid. Lines are a known
      publishable derived (`line_waves`, `line_lums`); the framework
-     can rasterise them at observation time onto the pixel grid.
+     can rasterize them at observation time onto the pixel grid.
    - **B.** Refuse `SpectrumPrecomp` when a `cue`/`cloudy_grid` nebular
      backend is in the chain. Simpler v0 default; A is the follow-up.
 7. **Velocity dispersion / line broadening**: today's spec path
@@ -177,8 +177,8 @@ than the full rest-frame grid.
 ## Out of scope for Phase 5
 
 * High-R spectra (refuse opt-in, document).
-* Joint spec + phot LUT path optimisation. The first cut runs both LUTs
-  independently and sums; a future optimisation can share the
+* Joint spec + phot LUT path optimization. The first cut runs both LUTs
+  independently and sums; a future optimization can share the
   per-component primitive evaluation.
 * The IFU / per-spaxel case. Same Protocol, but the spectroscopy slot
   becomes a higher-dimensional array — handled separately under the

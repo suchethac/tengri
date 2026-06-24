@@ -132,7 +132,7 @@ class IonizingQuantities(NamedTuple):
 
     Fields:
 
-    - ``q_h`` (photons/s) — total ionising photon production rate;
+    - ``q_h`` (photons/s) — total ionizing photon production rate;
       sourced directly from ``state.derived["nion"]``.
     - ``xi_ion`` (Hz/erg) — production efficiency q_h / νLν(1500 Å).
     """
@@ -154,9 +154,9 @@ def build_components(
     nebular_backend: str | None = "baked_in",
     nebular_backend_instance: Any | None = None,
     # When ``True`` and ``nebular_backend == "cue"``, the orchestrator
-    # asks the Cue backend for the full ~271-species line catalogue
+    # asks the Cue backend for the full ~271-species line catalog
     # instead of the default 128 CLOUDY/FSPS subset. See #303.
-    cue_full_catalogue: bool = False,
+    cue_full_catalog: bool = False,
     # AGN
     agn_model: str | None = None,
     # Composable-AGN block selectors (only consulted when agn_model="composable").
@@ -369,7 +369,7 @@ def build_components(
             NebularSEDComponent(
                 config=NebularSEDComponentConfig(
                     backend=nebular_backend,
-                    cue_full_catalogue=cue_full_catalogue,
+                    cue_full_catalog=cue_full_catalog,
                 ),
                 backend=nebular_backend_instance,
             )
@@ -460,7 +460,7 @@ def chain_summary(components: Sequence[SEDComponent]) -> str:
 # from a fresh :class:`ForwardState`. Lets users with code that
 # expects the legacy types swap in the orchestrator path without
 # rewriting downstream call sites. Full :class:`Prediction` parity
-# (lines, radio, X-ray, ionising-photon properties) is follow-up.
+# (lines, radio, X-ray, ionizing-photon properties) is follow-up.
 
 
 def state_to_sfh_quantities(state: Any):
@@ -754,7 +754,7 @@ def state_to_xray_quantities(state: Any) -> XRayQuantities:
 def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
     """Convert :class:`ForwardState` → :class:`IonizingQuantities`.
 
-    Reads ``state.derived["nion"]`` (ionising photon rate, photons/s)
+    Reads ``state.derived["nion"]`` (ionizing photon rate, photons/s)
     and computes ``xi_ion`` = q_h / νLν(1500 Å).
 
     Returns
@@ -784,13 +784,13 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
 def state_to_emission_lines(state: Any):
     """Convert :class:`ForwardState` → :class:`EmissionLines`.
 
-    Reads the discrete line catalogue
+    Reads the discrete line catalog
     ``state.derived["line_waves"]`` / ``state.derived["line_lums"]``
     published by :class:`NebularSEDComponent` (when the active backend is
     Cue or CloudyGrid) and extracts the 11 headline survey-diagnostic
     lines via the legacy nearest-wavelength matcher
     :func:`tengri.utils.sed_quantities.extract_line_luminosity`. The full
-    backend catalogue (typically ~138–271 species) is also exposed via
+    backend catalog (typically ~138–271 species) is also exposed via
     ``all_waves`` / ``all_lums`` for downstream lookups of species the
     headline NamedTuple does not name explicitly (HeII 1640, HeI 10830,
     [O III] 4363, ...).
@@ -812,7 +812,7 @@ def state_to_emission_lines(state: Any):
     Notes
     -----
     Returns all-NaN headlines and empty ``all_*`` arrays when the
-    chain's nebular backend did not publish a line catalogue (BakedIn —
+    chain's nebular backend did not publish a line catalog (BakedIn —
     emission baked into SSP grid; shock — publishes a continuous line
     SED, not a discrete list). For those cases callers should query
     ``state.derived["sed_nebular"]`` and perform their own narrow-band
@@ -825,7 +825,7 @@ def state_to_emission_lines(state: Any):
     nan_scalar = jnp.asarray(jnp.nan)
     empty = jnp.asarray([], dtype=jnp.float64)
     if "line_waves" not in derived or "line_lums" not in derived:
-        # No discrete catalogue published. Return all-NaN + empty all_*.
+        # No discrete catalog published. Return all-NaN + empty all_*.
         kw = {k: nan_scalar for k in EmissionLines._fields if k not in ("all_waves", "all_lums")}
         return EmissionLines(all_waves=empty, all_lums=empty, **kw)
 

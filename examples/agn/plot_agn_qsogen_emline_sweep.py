@@ -5,7 +5,7 @@ QSOgen lines: emission-line contributions vary with luminosity
 The QSOgen model includes a UV/optical emission-line forest and broad
 Balmer continuum on top of the underlying disc. The relative strength
 of these line features with respect to the continuum controls the slope
-and colour of the UV–optical SED.
+and color of the UV–optical SED.
 """
 
 import warnings

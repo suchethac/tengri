@@ -10,7 +10,7 @@ know whether emission lines need adding separately or are already
 present in the stellar templates.
 
 CueBackend and CloudyGridBackend become free-parameter components: they
-read ``state.derived["nion"]`` (the ionising photon production rate
+read ``state.derived["nion"]`` (the ionizing photon production rate
 from the stellar block) and add the resulting line + continuum SED to
 ``sed_intrinsic``.
 """
@@ -57,13 +57,13 @@ class NebularSEDComponentConfig(SEDComponentConfig):
         Whether to silence the ``BakedInNebularWarning`` emitted when
         :class:`BakedInBackend` is constructed. Default ``True`` for
         adapter use.
-    cue_full_catalogue : bool
+    cue_full_catalog : bool
         For the ``"cue"`` backend only. When ``True``, expose the full
-        Cue-trained line catalogue (~271 species) via ``state.derived
+        Cue-trained line catalog (~271 species) via ``state.derived
         ["line_waves"]`` / ``["line_lums"]`` so users can query HeII
         1640, HeI 10830 and other high-z diagnostics via
         :meth:`tengri.forward.prediction.EmissionLines.get`. Default
-        ``False`` matches the pre-#303 behaviour (128 CLOUDY/FSPS
+        ``False`` matches the pre-#303 behavior (128 CLOUDY/FSPS
         lines) and avoids surprising users who iterate over
         ``all_waves`` / ``all_lums``. No effect on the headline
         Hα/Hβ/etc. named accessors, which always work.
@@ -72,7 +72,7 @@ class NebularSEDComponentConfig(SEDComponentConfig):
     name: str = "nebular"
     backend: str = "baked_in"
     suppress_baked_in_warning: bool = True
-    cue_full_catalogue: bool = False
+    cue_full_catalog: bool = False
 
 
 @dataclass(frozen=True)
@@ -115,7 +115,7 @@ class NebularSEDComponent:
     name: str = "nebular"
     _state: NebularSEDComponentState | None = None
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
-    # photoionisation backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
+    # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
     # ignore keys they don't consume — passing ``shock_*`` to Cue is
     # harmless, and vice versa.
@@ -135,7 +135,7 @@ class NebularSEDComponent:
         - ``baked_in``: zero parameters (SSP grid is fixed).
         - ``cloudy_grid``: standard nebular knobs ``neb_logU``,
           ``neb_logZ_gas``, ``neb_fesc``, ``neb_fesc_lya``.
-        - ``cue``: 4 standard knobs **plus** the 7 Cue ionising-spectrum
+        - ``cue``: 4 standard knobs **plus** the 7 Cue ionizing-spectrum
           shape parameters (``ionspec_index1..4``,
           ``ionspec_logLratio1..3``) **plus** 3 gas-property knobs
           beyond logU/logZ (``gas_logn``, ``gas_logno``, ``gas_logco``).
@@ -149,12 +149,12 @@ class NebularSEDComponent:
         if self.config.backend == "baked_in":
             return []
 
-        # Standard knobs all photoionisation backends share.
+        # Standard knobs all photoionization backends share.
         std_knobs = [
             ParamDeclaration(
                 "neb_logU",
                 Uniform(-5.0, 0.0),
-                "log10 ionisation parameter U [dimensionless]",
+                "log10 ionization parameter U [dimensionless]",
             ),
             ParamDeclaration(
                 "neb_logZ_gas",
@@ -184,7 +184,7 @@ class NebularSEDComponent:
             return std_knobs
 
         if self.config.backend == "cue":
-            # 7 ionising-spectrum shape parameters (Cue's broken
+            # 7 ionizing-spectrum shape parameters (Cue's broken
             # power-law segments) — priors taken from the legacy
             # _CUE_IONSPEC_PARAMS bounds in
             # tengri.parameters._param_defs.
@@ -192,22 +192,22 @@ class NebularSEDComponent:
                 ParamDeclaration(
                     "ionspec_index1",
                     Uniform(0.0, 50.0),
-                    "Cue ionising slope segment 1 (HeII, 1-228 Å) [dimensionless]",
+                    "Cue ionizing slope segment 1 (HeII, 1-228 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_index2",
                     Uniform(-1.0, 35.0),
-                    "Cue ionising slope segment 2 (OII, 228-353 Å) [dimensionless]",
+                    "Cue ionizing slope segment 2 (OII, 228-353 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_index3",
                     Uniform(-2.0, 20.0),
-                    "Cue ionising slope segment 3 (HeI, 353-504 Å) [dimensionless]",
+                    "Cue ionizing slope segment 3 (HeI, 353-504 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_index4",
                     Uniform(-2.0, 10.0),
-                    "Cue ionising slope segment 4 (HI, 504-912 Å) [dimensionless]",
+                    "Cue ionizing slope segment 4 (HI, 504-912 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_logLratio1",
@@ -269,7 +269,7 @@ class NebularSEDComponent:
                     "shock_log_lhalpha",
                     Fixed(40.0),
                     "log10(L_Halpha [erg/s]) — MAPPINGS shock luminosity "
-                    "normalisation. If Fixed, sourced from "
+                    "normalization. If Fixed, sourced from "
                     "state.derived['shock_log_lhalpha'] when present, "
                     "otherwise the param's Fixed value.",
                 ),
@@ -300,7 +300,7 @@ class NebularSEDComponent:
         - ``"baked_in"`` (Sanders+2024 grid) reads nothing from
           ``state.derived`` — the backend operates on the SED in-place
           and ignores stellar-age-resolved tensors. Returns ``()``.
-        - All other photoionisation backends (``"cue"``,
+        - All other photoionization backends (``"cue"``,
           ``"cloudy_grid"``) and the MAPPINGS shock backend
           (``"shock"``) require the age-resolved stellar outputs to
           weight per-age ionizing rates. Returns ``lnu_age`` +
@@ -418,7 +418,7 @@ class NebularSEDComponent:
         # Always publish both ``sed_nebular`` and ``sed_shock`` so
         # downstream consumers (e.g. ``Posterior.sed_components``) can
         # read them uniformly without conditioning on the active backend.
-        # Photoionised backends fill ``sed_nebular`` and leave
+        # Photoionized backends fill ``sed_nebular`` and leave
         # ``sed_shock`` as zeros; the shock backend does the opposite.
         # ``baked_in`` returns zeros for both because emission is already
         # in the SSP grid.
@@ -438,7 +438,7 @@ class NebularSEDComponent:
 
         # ── MAPPINGS V shock backend (different parameter set) ────────
         if self.config.backend == "shock":
-            # Source the Halpha luminosity normalisation: prefer the
+            # Source the Halpha luminosity normalization: prefer the
             # state.derived publication (e.g. from a future stellar
             # extension) over the param's Fixed default.
             log_lha = state.derived.get("shock_log_lhalpha", params.get("shock_log_lhalpha", 40.0))
@@ -452,14 +452,14 @@ class NebularSEDComponent:
                 line_sigma_kms=jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
             )
             # Shock backend: shock contribution is logically separate
-            # from photoionised continuum. Publish under ``sed_shock``
+            # from photoionized continuum. Publish under ``sed_shock``
             # and zero out ``sed_nebular`` so the legacy Posterior dict
-            # decomposition matches: photoionised vs shock are distinct.
+            # decomposition matches: photoionized vs shock are distinct.
             return state.add_intrinsic(nebular_sed).with_(
                 derived=state.derived.with_(sed_shock=nebular_sed, sed_nebular=zeros),
             )
 
-        # ── Photoionisation backends (Cue + CloudyGrid) ───────────────
+        # ── Photoionization backends (Cue + CloudyGrid) ───────────────
         # Cue / CloudyGrid both expect ``neb_logZ_gas`` in **absolute**
         # log10(Z), matching the convention used by ``log_z``. Public
         # params carry it in Z/Zsun, so apply the LOG10_ZSUN offset
@@ -482,8 +482,8 @@ class NebularSEDComponent:
             # profile width (Prospector-style). Default 100 km/s.
             "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
         }
-        # ── Diffuse-ionised-gas (DIG) mixing (issue #259) ─────────────
-        # The DIG component is a second photoionisation regime with a
+        # ── Diffuse-ionized-gas (DIG) mixing (issue #259) ─────────────
+        # The DIG component is a second photoionization regime with a
         # lower ionization parameter (log U_DIG = log U_HII + Δlog U,
         # where Δlog U < 0). Linear mass-fraction mix of the two
         # backend evaluations. Python-literal short-circuit on
@@ -499,10 +499,10 @@ class NebularSEDComponent:
 
         if self.config.backend == "cue":
             # Forward Cue's full 12-parameter surface. Backend signature
-            # accepts ``**neb_params`` so unrecognised keys are ignored
+            # accepts ``**neb_params`` so unrecognized keys are ignored
             # safely; we forward every ``ionspec_*`` and ``gas_*`` we
             # find in ``params`` so users who declared them get a fully
-            # parameterised Cue prediction.
+            # parameterized Cue prediction.
             cue_extras = {}
             for key in (
                 "ionspec_index1",
@@ -519,7 +519,7 @@ class NebularSEDComponent:
                 if key in params:
                     cue_extras[key] = jnp.asarray(params[key])
             # Prefer Cue's high-level path (``ssp_weights`` +
-            # ``ssp_log_ages_yr``) so the ionising-spectrum shape and
+            # ``ssp_log_ages_yr``) so the ionizing-spectrum shape and
             # Q_H are both SSP-derived — matches legacy
             # ``predict_line_fluxes`` parity. Fall back to the explicit
             # ``gas_logqion`` shortcut only if upstream did not publish
@@ -572,17 +572,17 @@ class NebularSEDComponent:
                 _f = jnp.asarray(_dig_frac)
                 nebular_sed = (1.0 - _f) * nebular_sed + _f * nebular_sed_dig
 
-        # Publish the discrete line catalogue (``line_waves`` /
+        # Publish the discrete line catalog (``line_waves`` /
         # ``line_lums``) when the backend supports it. This is what the
         # legacy ``state_to_emission_lines`` bridge consumes.
         if hasattr(self.backend, "predict_nebular_line_luminosities"):
             try:
                 if self.config.backend == "cue":
-                    # #303: opt into the full Cue catalogue (~271 species)
+                    # #303: opt into the full Cue catalog (~271 species)
                     # instead of the default 128 CLOUDY/FSPS subset, so
                     # users can read HeII 1640, HeI 10830, [OIII] 4363,
                     # etc. via pred.lines.get(wavelength).
-                    cue_cloudyfsps_only = not self.config.cue_full_catalogue
+                    cue_cloudyfsps_only = not self.config.cue_full_catalog
                     line_waves, line_lums = self.backend.predict_nebular_line_luminosities(
                         **common_kwargs,
                         **cue_extras,
@@ -627,7 +627,7 @@ class NebularSEDComponent:
                 # ``data/cue_weights.npz`` is built from the .npy because
                 # network indexing requires it. We translate at this
                 # boundary so internal indexing stays upstream-faithful
-                # while user-facing labels honour tengri's vacuum contract.
+                # while user-facing labels honor tengri's vacuum contract.
                 #
                 # Idempotency: probe the Balmer series. Vacuum and air
                 # wavelengths differ by ~1.3-1.8 Å in the optical, so a
@@ -681,7 +681,7 @@ class NebularSEDComponent:
         # optional input, so the topological sort runs it AFTER this component
         # and reddens the published ``sed_nebular`` with the young-limit screen.
 
-        # Photoionised path: ``sed_nebular`` carries continuum + lines;
+        # Photoionized path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).
         # Phase 3c-3d-neb: filter-integrate nebular SED and publish
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
@@ -731,7 +731,7 @@ class NebularSEDComponent:
         # code already scales the nebular continuum (Cue cue.py:1656) and
         # lines (cue.py:1214) by (1 - fesc), but the stellar LyC below
         # 912 Å was passed through untouched — overestimating the
-        # observed ionising continuum at fesc < 1 and breaking energy
+        # observed ionizing continuum at fesc < 1 and breaking energy
         # balance against the nebular emission. Attenuate stellar LyC by
         # ``fesc`` here so the SED reflects "stellar LyC × fesc + nebular
         # ∝ (1 − fesc)" globally.

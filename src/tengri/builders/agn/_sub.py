@@ -10,7 +10,7 @@ of valid variant strings (the parser's
 partition: all variants within an axis share the same parameter set
 (the variant string selects the physics).
 
-This helper centralises the introspection + factory generation so
+This helper centralizes the introspection + factory generation so
 each ``tengri.builders.agn.<axis>`` submodule is a thin two-liner.
 """
 

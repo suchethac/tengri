@@ -6,7 +6,7 @@ Predicts radio emission (mm–cm wavelengths) from three physical components:
 1. **Star-forming synchrotron** (supernova remnants): scaled via FIR–radio
    correlation (FIRRC) with optional mass and redshift evolution
 2. **Thermal free-free** (HII regions): bremsstrahlung, temperature-dependent
-3. **AGN radio** (jets/lobes): parameterised by radio-loudness R
+3. **AGN radio** (jets/lobes): parameterized by radio-loudness R
 
 All functions are pure JAX, JIT-compatible, and fully differentiable.
 
@@ -91,7 +91,7 @@ def _synchrotron_suppression(L_ref: jnp.ndarray) -> jnp.ndarray:
 
     **Application**: Correction is applied at the reference frequency before
     power-law spectral extrapolation, so the spectral shape (α_1.4GHz) is
-    preserved; only the normalisation is adjusted.
+    preserved; only the normalization is adjusted.
     """
     L_safe = jnp.where(L_ref > 0.0, L_ref, 1.0e-40)
     n = jnp.where(

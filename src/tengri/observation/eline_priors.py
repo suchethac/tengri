@@ -325,7 +325,7 @@ def cloudy_grid_line_priors(
     1. Clamps (log_z, neb_logU, log_age_yr) to grid bounds
     2. Performs trilinear interpolation across the 3 axes in log10 space
     3. Exponentiates: ``10**interpolated`` to get linear luminosities
-    4. Normalises relative to Hbeta (detected by wavelength ~4861 Å)
+    4. Normalizes relative to Hbeta (detected by wavelength ~4861 Å)
     5. Applies dex scatter: ``sigma = mean * (10**width - 1)``
 
     This function is preferred over ``cloudy_line_priors()`` when a full

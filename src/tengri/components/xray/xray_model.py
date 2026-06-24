@@ -87,7 +87,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
       ``T_phabs(E, N_H) × T_cabs(N_H) × intrinsic + 0.01 × intrinsic``
       (Ricci+2017; Matsumoto+2026 Eq. B6). T_phabs uses
       Morrison & McCammon (1983) wabs cross-sections; T_cabs is
-      Thomson down-scattering. Galactic absorption is not modelled
+      Thomson down-scattering. Galactic absorption is not modeled
       (assume user provides intrinsic-frame fluxes).
     - xray_det_hmxb: HMXB luminosity offset (deviation from expected
       SFR relation in log-space; positive = brighter X-ray)

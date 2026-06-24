@@ -38,7 +38,7 @@ def my_toy_torus(
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
-    """Single-temperature greybody torus — placeholder physics for the worked example.
+    """Single-temperature graybody torus — placeholder physics for the worked example.
 
     This is a toy model for demonstration. Replace the body with your own
     torus physics (e.g., Mullaney et al. 2011, Ciesla et al. 2015, etc.).

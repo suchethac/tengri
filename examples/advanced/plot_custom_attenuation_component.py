@@ -13,7 +13,7 @@ To show the workflow end-to-end without dragging in the full
 explicit 2175 Å UV bump (Noll+2009 Eq. 4), invoke ``predict`` directly
 on a flat input spectrum, and plot the resulting attenuation curve
 alongside the bare Calzetti and the Cardelli+1989 MW shape. The bump
-is parametrised by amplitude :math:`E_b` and FWHM :math:`\gamma`;
+is parametrized by amplitude :math:`E_b` and FWHM :math:`\gamma`;
 setting :math:`E_b=0` recovers Calzetti exactly.
 
 See ``docs/dev/sed-model-components.md`` for the full integration path

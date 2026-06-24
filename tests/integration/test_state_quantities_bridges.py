@@ -8,7 +8,7 @@ The :func:`tengri.forward.state_to_*_quantities` helpers and their
 new :class:`RadioQuantities` / :class:`XRayQuantities` /
 :class:`IonizingQuantities` mirrors).
 
-This module pins their behaviour with a fixed parameter set so future
+This module pins their behavior with a fixed parameter set so future
 changes to the bridges or the underlying components surface as test
 failures rather than silent drift.
 """
@@ -194,7 +194,7 @@ def test_state_to_sed_quantities_jit_compatible(state):
 
 @pytest.fixture(scope="module")
 def state_with_cue(ssp):
-    """A chain with Cue nebular backend so line catalogue is published."""
+    """A chain with Cue nebular backend so line catalog is published."""
     from tengri.components.nebular.component import (
         NebularSEDComponent,
         NebularSEDComponentConfig,
@@ -238,10 +238,10 @@ def state_with_cue(ssp):
 
 
 def test_emission_lines_published_by_cue(state_with_cue):
-    """Cue backend should populate state.derived line catalogue."""
+    """Cue backend should populate state.derived line catalog."""
     assert "line_waves" in state_with_cue.derived
     assert "line_lums" in state_with_cue.derived
-    # Cue's output is a many-line catalogue (~100+).
+    # Cue's output is a many-line catalog (~100+).
     assert state_with_cue.derived["line_waves"].shape[0] > 50
 
 
@@ -249,7 +249,7 @@ def test_state_to_emission_lines_all_finite(state_with_cue):
     """All 11 headline bridge-extracted lines should be finite for Cue.
 
     ``all_waves``/``all_lums`` are arrays (skipped here — see
-    ``test_state_to_emission_lines_publishes_full_catalogue``).
+    ``test_state_to_emission_lines_publishes_full_catalog``).
     """
     from tengri.forward import state_to_emission_lines
 
@@ -259,8 +259,8 @@ def test_state_to_emission_lines_all_finite(state_with_cue):
     assert nans == [], f"Lines with NaN: {nans}"
 
 
-def test_state_to_emission_lines_publishes_full_catalogue(state_with_cue):
-    """Cue exposes the full ~138-line catalogue via all_waves/all_lums (#303)."""
+def test_state_to_emission_lines_publishes_full_catalog(state_with_cue):
+    """Cue exposes the full ~138-line catalog via all_waves/all_lums (#303)."""
     from tengri.forward import state_to_emission_lines
 
     lines = state_to_emission_lines(state_with_cue)
@@ -270,7 +270,7 @@ def test_state_to_emission_lines_publishes_full_catalogue(state_with_cue):
     assert lines.all_waves.shape == lines.all_lums.shape
     # HeII 1640 was a canonical example in the issue: must be queryable.
     heii = float(lines.get(1640.4, tol_aa=5.0))
-    assert jnp.isfinite(heii), "HeII 1640 should be in the catalogue"
+    assert jnp.isfinite(heii), "HeII 1640 should be in the catalog"
 
 
 def test_state_to_emission_lines_balmer_decrement(state_with_cue):
@@ -285,7 +285,7 @@ def test_state_to_emission_lines_balmer_decrement(state_with_cue):
 
 
 def test_state_to_emission_lines_no_catalogue_returns_nan(state):
-    """Chain without nebular catalogue (no Cue/Cloudy) → NaN headlines + empty all_*."""
+    """Chain without nebular catalog (no Cue/Cloudy) → NaN headlines + empty all_*."""
     from tengri.forward import state_to_emission_lines
 
     # The ``state`` fixture has no nebular component → no line_waves.
@@ -294,7 +294,7 @@ def test_state_to_emission_lines_no_catalogue_returns_nan(state):
     scalar_fields = [f for f in lines._fields if f not in ("all_waves", "all_lums")]
     for f in scalar_fields:
         assert not bool(jnp.isfinite(getattr(lines, f))), (
-            f"Lines.{f} should be NaN when no catalogue published"
+            f"Lines.{f} should be NaN when no catalog published"
         )
     assert lines.all_waves.size == 0
     assert lines.all_lums.size == 0

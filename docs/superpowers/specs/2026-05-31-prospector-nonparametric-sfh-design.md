@@ -25,7 +25,7 @@ Add, after the existing parametric `§2`:
 | §2e | IFT stochastic field | — (no Prospector counterpart) | `field` |
 
 §2e is a tengri-only flourish showing a stochastic draw the binned families
-cannot represent. Clearly labelled as having no Prospector counterpart.
+cannot represent. Clearly labeled as having no Prospector counterpart.
 
 ## The matched-parameter contract (verified)
 

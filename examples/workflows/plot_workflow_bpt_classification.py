@@ -4,7 +4,7 @@ BPT diagram: emission lines from the baked-in nebular SSP
 
 Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
 directly from the model's rest-frame SED via continuum-subtracted
-boxcar integration around each line centre, swept across a stellar
+boxcar integration around each line center, swept across a stellar
 metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation
 lines are overlaid for context.
 
@@ -43,11 +43,11 @@ CONT_OFFSET = 30.0
 CONT_HALF_WIDTH = 8.0
 
 
-def boxcar_line_flux(wave, sed, line_centre):
+def boxcar_line_flux(wave, sed, line_center):
     """Continuum-subtracted boxcar flux around a single line."""
-    line_mask = np.abs(wave - line_centre) < LINE_HALF_WIDTH
-    blue_mask = np.abs(wave - (line_centre - CONT_OFFSET)) < CONT_HALF_WIDTH
-    red_mask = np.abs(wave - (line_centre + CONT_OFFSET)) < CONT_HALF_WIDTH
+    line_mask = np.abs(wave - line_center) < LINE_HALF_WIDTH
+    blue_mask = np.abs(wave - (line_center - CONT_OFFSET)) < CONT_HALF_WIDTH
+    red_mask = np.abs(wave - (line_center + CONT_OFFSET)) < CONT_HALF_WIDTH
     cont = 0.5 * (sed[blue_mask].mean() + sed[red_mask].mean())
     return float(np.trapezoid(sed[line_mask] - cont, wave[line_mask]))
 

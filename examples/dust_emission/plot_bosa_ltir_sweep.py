@@ -4,7 +4,7 @@ BOSA: log L_TIR sweep at fixed log sSFR
 
 Sweep infrared luminosity across the BOSA grid at fixed specific star
 formation rate. Increasing L_TIR heats dust, shifting FIR peak blueward
-and enhancing PAH relative to continuum. Library is normalised by
+and enhancing PAH relative to continuum. Library is normalized by
 ∫Lν dν=1; shape variation with L_TIR is intentionally small.
 """
 
@@ -48,7 +48,7 @@ ax.set(
     xscale="log",
     yscale="log",
     xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
-    ylabel=r"$\nu L_\nu\ [\mathrm{normalised}\ \int L_\nu d\nu = 1]$",
+    ylabel=r"$\nu L_\nu\ [\mathrm{normalized}\ \int L_\nu d\nu = 1]$",
     xlim=(50.0, 200.0),
     ylim=(1.0e-3, 2.0e0),
 )

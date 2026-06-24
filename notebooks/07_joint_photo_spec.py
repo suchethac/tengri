@@ -119,7 +119,7 @@ def build(obs, approx=None):
         ssp_data=ssp,
         observation=obs,
         approx=approx,
-        # Free the SFH normalisation + the two timescale parameters; fix the
+        # Free the SFH normalization + the two timescale parameters; fix the
         # skew/truncation shape nuisances (neither photometry nor a continuum
         # spectrum constrains them, and free they mix poorly under HMC).
         sfh=builders.sfh.tsnorm(
@@ -151,7 +151,7 @@ print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec
 # ## Mock data
 #
 # A single truth (metallicity chosen in the interior of the prior, away from
-# the edge), and one self-consistent realisation of both channels generated
+# the edge), and one self-consistent realization of both channels generated
 # from the *joint* model so the photometry and spectrum agree by construction.
 
 # %%
@@ -218,7 +218,7 @@ post_joint = run(model_joint, data_joint, noise_joint, "joint", "joint")
 # %% [markdown]
 # ## Constraint widths: joint vs single-modality
 #
-# The 68% credible width of each free parameter, normalised so the photometry-
+# The 68% credible width of each free parameter, normalized so the photometry-
 # only width is 1. Bars below 1 mean the joint fit tightened that parameter.
 # The largest gains are in metallicity and the dust split.
 
@@ -284,7 +284,7 @@ print(f"\n68% coverage: {n_cov}/{len(params)}")
 # %% [markdown]
 # ## Both datasets on one SED
 #
-# Observed photometry (labelled by band) and the optical spectrum on a single
+# Observed photometry (labeled by band) and the optical spectrum on a single
 # F_ν axis, joint posterior model SED behind them. The shaded band marks the
 # spectral window, expanded in the inset. A single posterior explains the
 # broadband points and the spectrum at the same time.
@@ -352,7 +352,7 @@ plt.show()
 # ## Corner — joint posterior
 #
 # Free parameters with truth dashed. The metallicity and dust columns are now
-# tight and centred on the truth — neither dataset managed that on its own.
+# tight and centered on the truth — neither dataset managed that on its own.
 
 # %%
 fig_corner = post_joint.plot_corner(truths=truth_full, color=C_POST)

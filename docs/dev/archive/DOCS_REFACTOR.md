@@ -576,7 +576,7 @@ and "What's Next" markdown with links to tutorials/02–05 and demonstrations/.
 **Source material**: `notebooks/theory/notebook_code/02_forward_model.py` (strip prose, keep
 component decomp code), `notebooks/models/notebook_code/07_multiwavelength.py` (radio/X-ray SED code)
 **Opening sentence**: "This notebook is a map. Every feature in a galaxy SED has a physical
-cause — here you'll see each one labelled."
+cause — here you'll see each one labeled."
 **First figure appears by cell 2.**
 
 **Cell 1 — imports + fiducial model** (15 lines):
@@ -730,7 +730,7 @@ All `plt.savefig(...)` calls are commented out:
 | Figure | Description |
 |--------|-------------|
 | `18_continuity_sfh.png` | 7-bin continuity model (Leja+2019) — SFR in each bin + prior draws |
-| `18_dirichlet_sfh.png` | Dirichlet stick-breaking model (Leja+2017) — normalised mass fractions |
+| `18_dirichlet_sfh.png` | Dirichlet stick-breaking model (Leja+2017) — normalized mass fractions |
 
 Uses `continuity_sfh` and `dirichlet_sfh` from `tengri.components.sfh.nonparametric`.
 
@@ -742,7 +742,7 @@ Uses `continuity_sfh` and `dirichlet_sfh` from `tengri.components.sfh.nonparamet
 
 | Figure | Description |
 |--------|-------------|
-| `18_gp_sfh_demo.png` | 5 random DRW GP realisations on the shared time grid |
+| `18_gp_sfh_demo.png` | 5 random DRW GP realizations on the shared time grid |
 | `18_drw_psd_vary.png` | DRW PSD parameter grid: σ × τ sweep |
 | `18_extended_regulator.png` | Extended Regulator PSD (Tacchella+2020) |
 | `18_matern_psd.png` | Matern PSD comparison |
@@ -893,7 +893,7 @@ Shell (foreground screen), cloudy (homogeneous mix), dusty (clumpy medium) from 
 | Figure | Description |
 |--------|-------------|
 | `15_wg00_geometries.png` | 3-panel (τ_V = 1, 2, 4): shell/cloudy/dusty transmission curves |
-| `15_greying_effect.png` | At τ_V=3: left=transmission, right=effective k_eff showing greying |
+| `15_greying_effect.png` | At τ_V=3: left=transmission, right=effective k_eff showing graying |
 
 ---
 
@@ -1060,7 +1060,7 @@ Uses `_pah_template`, `_drude_profile`, `_PAH_CENTER_UM`, `_PAH_FWHM_UM`, `_PAH_
 
 **Section 3a — Draine & Li (2007)**
 
-Three-panel sweep: left = qPAH [0.5, 1.5, 2.5, 3.5, 4.5 %], centre = U_min [0.1, 0.3, 1.0, 3.0, 10.0], right = γ (fraction in PDR) [0.001, 0.01, 0.05, 0.1, 0.3].
+Three-panel sweep: left = qPAH [0.5, 1.5, 2.5, 3.5, 4.5 %], center = U_min [0.1, 0.3, 1.0, 3.0, 10.0], right = γ (fraction in PDR) [0.001, 0.01, 0.05, 0.1, 0.3].
 Falls back to `_draine_li2007_analytic_fallback` if `data/dl07_templates.npz` is absent.
 
 | Figure | Description |

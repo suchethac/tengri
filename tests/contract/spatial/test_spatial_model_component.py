@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for SpatialModelComponent base class behaviour."""
+"""Tests for SpatialModelComponent base class behavior."""
 
 from __future__ import annotations
 

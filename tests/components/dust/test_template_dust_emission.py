@@ -135,7 +135,7 @@ class TestDL07Tabulated:
         mass than the diffuse component (Draine & Li 2007, Eq. 33; alpha=2,
         U_max=1e6 → R ≈ 13.8 at U_min=1). So a 5 % *mass* fraction puts ~42 % of
         the *luminosity* in the warm component and shifts the FIR peak markedly
-        bluer. A prior bug normalised the single-U and power-law templates each
+        bluer. A prior bug normalized the single-U and power-law templates each
         to unit integral, discarding ``R`` and leaving the PDR emission ~14×
         too weak (the IR came out spuriously cold). This pins the corrected
         warm shift against FSPS / BAGPIPES (both land at a ~93 µm centroid).
@@ -483,7 +483,7 @@ class TestDL14ExtendedRange:
 
         As for DL07, ``gamma`` is a dust-*mass* fraction and the power-law
         (PDR) dust emits ``R(U_min, U_max=1e7, alpha)`` times more per unit
-        mass (Draine et al. 2014). A bug normalised the single-U and power-law
+        mass (Draine et al. 2014). A bug normalized the single-U and power-law
         templates each to unit integral, dropping ``R`` and leaving the warm
         PDR emission far too weak. This pins the corrected warm shift and its
         ordering in the (variable) slope ``alpha``: shallower slopes (more
@@ -641,7 +641,7 @@ class TestAstrodustPDR:
 
         The H&D 2023 file ships only a single-U grid; the loader builds the PDR
         component by integrating the per-U spectra over dM/dU ∝ U^-2, and the
-        forward applies the DL07 Eq. 33 luminosity weight R + renormalises to
+        forward applies the DL07 Eq. 33 luminosity weight R + renormalizes to
         L_absorbed. Before this, ``powerlaw`` was a copy of ``single_u`` and
         gamma was a no-op (#571). Astrodust is a DL07-family model, so its
         gamma warming should track DL07 (centroid ~117->93 µm there); here we

@@ -22,7 +22,7 @@ import jax.numpy as jnp
 
 @jax.jit
 def tw_cuml_kern(x: float, m: float, h: float) -> float:
-    """Triweight kernel complementary CDF at *m* for a kernel centred at *x*.
+    """Triweight kernel complementary CDF at *m* for a kernel centered at *x*.
 
     Evaluates the CDF of the triweight kernel (support |z| < 3) using
     Horner's method for numerical stability.
@@ -33,7 +33,7 @@ def tw_cuml_kern(x: float, m: float, h: float) -> float:
     Parameters
     ----------
     x : float
-        Query point (kernel centre).
+        Query point (kernel center).
     m : float or array
         Location(s) at which to evaluate the CDF.
     h : float

@@ -60,7 +60,7 @@ def cigale_skirtor_disc_block(
     References
     ----------
     .. [S12] Stalevski, M. et al. 2012, MNRAS, 420, 2756. 3D radiative
-       transfer modelling of the dusty torus around AGN: the influence
+       transfer modeling of the dusty torus around AGN: the influence
        of clumping. arXiv:1109.1286.
        https://doi.org/10.1111/j.1365-2966.2011.19775.x
     .. [S16] Stalevski, M. et al. 2016, MNRAS, 458, 2288. The dust

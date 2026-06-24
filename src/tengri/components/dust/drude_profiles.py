@@ -2,7 +2,7 @@
 """PAH Drude-profile decomposition (Smith+2007).
 
 This module provides a public interface for Polycyclic Aromatic Hydrocarbon
-(PAH) feature modelling using Drude profiles, following Smith et al. (2007,
+(PAH) feature modeling using Drude profiles, following Smith et al. (2007,
 ApJ 656 770).  It also exposes a least-squares fitter that recovers per-feature
 strengths from an observed mid-IR SED.
 
@@ -159,7 +159,7 @@ def compute_pah_template(
     lam = jnp.asarray(wave_um)
     s = _DEFAULT_STRENGTHS if strengths is None else jnp.asarray(strengths)
 
-    # Vectorised broadcast: (n_wave, 1) × (1, n_feat)
+    # Vectorized broadcast: (n_wave, 1) × (1, n_feat)
     lam2d = lam[:, None]
     lam0 = _CENTERS_UM[None, :]
     g_over_l0 = (_FWHMS_UM / _CENTERS_UM)[None, :]  # (1, n_feat)
@@ -183,7 +183,7 @@ def decompose_pah(
 
         min_s  ‖ (sed - continuum) - A @ s ‖²
 
-    where ``A`` is the ``(n_wave, 18)`` design matrix of peak-normalised
+    where ``A`` is the ``(n_wave, 18)`` design matrix of peak-normalized
     Drude profiles.  The solution is computed via the normal equations and
     is fully JAX-differentiable — pass the returned ``strengths`` directly
     into the tengri fitter or use them as a warm-start for ``pah_template``.

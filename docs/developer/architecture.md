@@ -230,11 +230,11 @@ _kernels/*.py                ← fused JIT orchestrators (private)
 **Energy conservation:** `L_absorbed = L_absorbed_stellar + L_absorbed_nebular`.
 The `apply_dust_attenuation()` helper returns the absorbed luminosity as a side
 output, which feeds into the dust IR energy balance. The absorbed integral
-excludes Lyman-continuum photons (λ < 912 Å — they ionise gas, not heat dust),
+excludes Lyman-continuum photons (λ < 912 Å — they ionize gas, not heat dust),
 matching CIGALE's `dustatt_modified_starburst`. Every full-SED IR model
 (`dale2014`, `draine_li2007/2014`, `themis`, `astrodust`, `bosa`,
 `schreiber2018`, `modified_blackbody`, `casey2012`, `energy_balance_split`)
-renormalises so `∫ L_ν,emit dν ≡ L_IR` to floating point. (`pah_drude` is the
+renormalizes so `∫ L_ν,emit dν ≡ L_IR` to floating point. (`pah_drude` is the
 one exception: a PAH-only building block, not a standalone balanced emitter.)
 
 **Strict by default, relaxable on demand.** The default is strict balance

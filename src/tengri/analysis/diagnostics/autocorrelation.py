@@ -33,7 +33,7 @@ __all__ = [
     "autocorrelation_time",
     "check_chain_length",
     "effective_sample_size",
-    "rank_normalised_rhat",
+    "rank_normalized_rhat",
     "rhat",
     "split_rhat",
 ]
@@ -330,7 +330,7 @@ def split_rhat(chain: np.ndarray) -> float:
     variance until the chains have mixed; :math:`W` under-estimates it.
     Their ratio approaches 1 from above as mixing improves.
 
-    This is the **classical** split-:math:`\hat R`. The rank-normalised
+    This is the **classical** split-:math:`\hat R`. The rank-normalized
     folded variant of Vehtari et al. 2021 is more robust to heavy tails
     but adds rank/folding pre-processing steps; consider that variant
     for production diagnostics on heavy-tailed posteriors.
@@ -407,11 +407,11 @@ def rhat(
     return result
 
 
-# ── Vehtari+2021 rank-normalised folded split-Rhat ─────────────────────
+# ── Vehtari+2021 rank-normalized folded split-Rhat ─────────────────────
 
 
-def _rank_normalise(values: np.ndarray) -> np.ndarray:
-    r"""Rank-normalise a flat array via the standard-normal inverse-CDF.
+def _rank_normalize(values: np.ndarray) -> np.ndarray:
+    r"""Rank-normalize a flat array via the standard-normal inverse-CDF.
 
     Replaces each value with :math:`\Phi^{-1}((r - 0.5)/N)` where
     :math:`r` is its average rank (ties resolved by averaging) and
@@ -448,12 +448,12 @@ def _rank_normalise(values: np.ndarray) -> np.ndarray:
     return z.reshape(values.shape)
 
 
-def rank_normalised_rhat(chain: np.ndarray) -> float:
-    r"""Vehtari+2021 rank-normalised folded split-:math:`\hat R`.
+def rank_normalized_rhat(chain: np.ndarray) -> float:
+    r"""Vehtari+2021 rank-normalized folded split-:math:`\hat R`.
 
     More robust than the classical Gelman-Rubin diagnostic to heavy
     tails and to chains that mix in mean but not in scale. Computes the
-    classical split-:math:`\hat R` after **rank-normalising** the
+    classical split-:math:`\hat R` after **rank-normalizing** the
     samples (so the underlying distribution is Gaussian by
     construction), and additionally on the **folded** samples
     :math:`|x - \mathrm{median}(x)|` to detect scale drift. Returns the
@@ -501,16 +501,16 @@ def rank_normalised_rhat(chain: np.ndarray) -> float:
         if chains.shape[1] < 2 or chains.shape[0] < 2:
             return float("nan")
     else:
-        raise ValueError(f"rank_normalised_rhat expects 1-D or 2-D array, got ndim={arr.ndim}")
+        raise ValueError(f"rank_normalized_rhat expects 1-D or 2-D array, got ndim={arr.ndim}")
     if not np.isfinite(np.var(chains)) or np.var(chains) < 1e-30:
         return float("nan")
 
-    # Standard rank-normalisation across the pooled sample.
-    z = _rank_normalise(chains)
+    # Standard rank-normalization across the pooled sample.
+    z = _rank_normalize(chains)
     r_basic = split_rhat(z)
-    # Folded: rank-normalise |x - pooled_median|.
+    # Folded: rank-normalize |x - pooled_median|.
     folded = np.abs(chains - np.median(chains))
-    z_fold = _rank_normalise(folded)
+    z_fold = _rank_normalize(folded)
     r_fold = split_rhat(z_fold)
     if not (np.isfinite(r_basic) and np.isfinite(r_fold)):
         return float("nan")

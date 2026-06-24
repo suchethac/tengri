@@ -20,7 +20,7 @@
 # > explores experimental features and may use APIs that change between
 # > releases; it sits outside the supported tutorial sequence.
 #
-# Any SED fit is conditioned on a set of modelling choices — the SFH family, the
+# Any SED fit is conditioned on a set of modeling choices — the SFH family, the
 # stellar library, the dust law — that the photometry alone does not pin down. A
 # single fit gives the posterior for one such choice but says nothing about how
 # much that choice contributes to the error budget. Here we fit each galaxy under
@@ -67,7 +67,7 @@
 # Z_k \;=\; \int \mathcal{L}(d\mid\theta, M_k)\,\pi(\theta\mid M_k)\,\mathrm{d}\theta ,
 # $$
 #
-# where $Z_k$ is the marginal likelihood of model $M_k$. The evidence penalises
+# where $Z_k$ is the marginal likelihood of model $M_k$. The evidence penalizes
 # model complexity (the Occam factor): a more flexible model wins only if the
 # extra freedom is justified by the data. We therefore fit with nested sampling
 # (`"nss"`), which returns a calibrated $\log Z$; variational inference and MCMC
@@ -145,7 +145,7 @@ print(f"SSP grids : {DATA_DIR}")
 print(f"CANDELS   : {CANDELS_DIR}")
 
 # %% [markdown]
-# ## 1. Parse the CANDELS GOODS-South catalogue
+# ## 1. Parse the CANDELS GOODS-South catalog
 #
 # AB magnitudes in 17 bands (HST/ACS + WFC3 + ground-based NIR + *Spitzer*
 # IRAC). We map a subset onto tengri filter names.
@@ -171,7 +171,7 @@ FILTER_MAP = {
 
 
 def parse_candels_catalog(filepath):
-    """Parse the CANDELS workshop catalogue (AB magnitudes).
+    """Parse the CANDELS workshop catalog (AB magnitudes).
 
     Returns ``(ids, redshifts, mags, mag_errs, flg1, filter_names,
     catalog_names)`` where ``mags``/``mag_errs`` have shape
@@ -208,7 +208,7 @@ if flags_file.exists():
             if len(parts) >= 2:
                 flagged_ids.add(int(parts[0]))
 
-print(f"Catalogue: {len(ids)} galaxies, {len(filter_names)} mapped filters")
+print(f"Catalog: {len(ids)} galaxies, {len(filter_names)} mapped filters")
 print(f"Flagged  : {len(flagged_ids)}")
 
 # %% [markdown]
@@ -220,7 +220,7 @@ print(f"Flagged  : {len(flagged_ids)}")
 # fits.
 
 # %%
-NON_DETECT = 90.0  # mag > 90 ⇒ non-detection in this catalogue
+NON_DETECT = 90.0  # mag > 90 ⇒ non-detection in this catalog
 
 
 def mag_to_fnu(mags, mag_errs):
@@ -275,7 +275,7 @@ def extract_photometry(gal_idx):
 # %% [markdown]
 # ## 3. Load the four SSP libraries
 #
-# Each configuration uses a different stellar library — part of the modelling
+# Each configuration uses a different stellar library — part of the modeling
 # assumption space we want to average over.
 
 # %%
@@ -323,7 +323,7 @@ DIR_SFH = {
 }
 DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
-# Display metadata (colours/labels match the published proposal figure)
+# Display metadata (colors/labels match the published proposal figure)
 CONFIG_ORDER = ["A", "B", "C", "D"]
 SSP_FOR = {"A": "mist", "B": "padova", "C": "pdva", "D": "basti"}
 COLORS = {"A": "#1b9e77", "B": "#d95f02", "C": "#7570b3", "D": "#e7298a"}
@@ -395,10 +395,10 @@ def build_configs(z, obs):
 # %% [markdown]
 # ## 5. Fit every (galaxy × config) with nested sampling
 #
-# We run nested slice sampling (`"nss"`) with `n_live=250`, using the catalogue
+# We run nested slice sampling (`"nss"`) with `n_live=250`, using the catalog
 # flux uncertainties directly, and time the model build (which includes the
 # precompute publish and first compile) and the fit separately. With the small
-# catalogue errors each configuration is tightly constrained, so the per-model
+# catalog errors each configuration is tightly constrained, so the per-model
 # posteriors separate cleanly and the evidence decides how to weight them.
 #
 # Each fit is seeded deterministically (see `stable_seed`), so the figures
@@ -421,7 +421,7 @@ def stable_seed(*parts):
 
     Python's built-in ``hash`` is salted per process (``PYTHONHASHSEED``), so a
     key derived from ``hash((gal_id, cfg))`` changes every run and the nested
-    sampling draws a different realisation each time. Hashing the parts with
+    sampling draws a different realization each time. Hashing the parts with
     ``hashlib`` instead makes every fit reproducible across sessions.
     """
     digest = hashlib.sha256("_".join(map(str, parts)).encode()).hexdigest()
@@ -521,7 +521,7 @@ WAVE_SPEC = np.logspace(np.log10(3000), np.log10(1e5), 300)  # observed-frame Å
 rng = np.random.default_rng(0)
 
 
-# Effective wavelengths + half-widths [Å] of the catalogue bands, computed from
+# Effective wavelengths + half-widths [Å] of the catalog bands, computed from
 # the *actual* filter transmission curves (single source of truth — not
 # hardcoded): mean effective wavelength and rectangular-equivalent half-width
 # W/2 = (1/2) ∫T dλ / max(T), used for the photometry x error bars.
@@ -542,7 +542,7 @@ WAVE_EFF, FILTER_HALFWIDTH = _filter_eff_and_halfwidth(filter_names)
 
 
 def bma_weights(posteriors):
-    """Evidence-weighted, normalised model probabilities (flat model prior)."""
+    """Evidence-weighted, normalized model probabilities (flat model prior)."""
     logz = np.array([posteriors[c].log_evidence for c in CONFIG_ORDER])
     w = np.exp(logz - logz.max())
     return w / w.sum()
@@ -958,10 +958,10 @@ show_timings(13097)
 # ## 9. Model averaging with an error floor
 #
 # Every galaxy above collapses onto a single configuration: with the raw
-# catalogue errors (~1-2% at this S/N) the evidence is decisive, so the BMA is
+# catalog errors (~1-2% at this S/N) the evidence is decisive, so the BMA is
 # the single best model. This is correct, but it does not show what BMA is for.
 #
-# Catalogue errors are statistical only. They omit systematics (zero-points,
+# Catalog errors are statistical only. They omit systematics (zero-points,
 # aperture matching, filter curves) and, more importantly for model comparison,
 # template imperfection: the SPS models are accurate to only a few percent. The
 # standard remedy (EAZY/FAST template errors plus a ~5% systematic, Prospector
@@ -1028,7 +1028,7 @@ plot_galaxy(17418, source=galaxies_floor, tag="_floor")
 #   `SEDModel.build(...)`, the speed path is `approx=WavePrecomp()`, and inference
 #   is `Fitter(model, data, noise).run("nss", ...)`, whose `log_evidence`
 #   supplies the averaging weights.
-# - The error budget decides whether averaging matters. With raw catalogue errors
+# - The error budget decides whether averaging matters. With raw catalog errors
 #   the evidence collapses onto one model; a realistic ~10% floor (§9) makes the
 #   evidences comparable and the BMA averages. Whether to average or to trust the
 #   single best model depends on how well the photometry and templates are known,

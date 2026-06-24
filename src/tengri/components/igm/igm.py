@@ -433,7 +433,7 @@ def _cgm_damping_wing_tau(
     sigma_dw = prefactor * numerator / denominator
 
     # Damping wing is redward of Lyα-at-source and only matters at z > 5
-    # (below this the CGM is essentially ionised).
+    # (below this the CGM is essentially ionized).
     tau = n_hi * sigma_dw
     tau = jnp.where(wave_obs > lya_obs, tau, 0.0)
     tau = jnp.where(z_source > 5.0, tau, 0.0)
@@ -935,7 +935,7 @@ def resolve_igm_model(name: str) -> object:
     Parameters
     ----------
     name : str
-        Registry key (e.g. ``"inoue14"``, ``"madau"``) or a recognised
+        Registry key (e.g. ``"inoue14"``, ``"madau"``) or a recognized
         alias (e.g. ``"inoue"``).
 
     Returns

@@ -200,10 +200,10 @@ are *named now* in the contract so that:
   validator catches a missing producer at build time.
 - Observation models can opt into the richer profile if available
   (`ImagingObservation` prefers per-age if present, falls back to
-  uniform-colour 2D if not).
+  uniform-color 2D if not).
 
 This is purely a contract-shape decision today. No code is written
-against the B keys until colour gradients are needed.
+against the B keys until color gradients are needed.
 
 ## 4. Sub-model layer
 
@@ -589,7 +589,7 @@ abstractions:
 
 Spatial in this architecture is what unlocks **joint spec-phot done
 physically**, the simplest case being a Sérsic plus a fiber aperture
-(§2). IFU is the natural generalisation, not the primary use case.
+(§2). IFU is the natural generalization, not the primary use case.
 
 When the resolved / IFU case lands (post-v1), the new pieces are:
 

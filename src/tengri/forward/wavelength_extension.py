@@ -10,7 +10,7 @@ static (computed once, JIT-stable) and captures the full wavelength coverage
 of every attached template without per-component wiring.
 
 The semantics mirror CIGALE's ``sed.add_contribution(name, wavelength, ...)``
-behaviour: each module's native grid extends the master grid; analytic
+behavior: each module's native grid extends the master grid; analytic
 components (modified blackbody, Casey 2012 single-T MBB, IGM transmission)
 contribute nothing because they evaluate exactly on whatever grid they're
 handed.
@@ -18,11 +18,11 @@ handed.
 Schemas vary across template files — wavelengths may live under
 ``wavelength_aa``, ``wavelength`` (assumed Å for SED templates), or
 ``wavelength_um`` (×1e4 to convert), and may be nested inside an HDF5 group
-matching the model name. The lookup helpers normalise all of this to
+matching the model name. The lookup helpers normalize all of this to
 sorted ``ndarray`` values in Å.
 
 Adding a new template-backed component: append an entry to the relevant
-catalogue dict (``_DUST_EMISSION_TEMPLATES`` etc.); no orchestrator change is
+catalog dict (``_DUST_EMISSION_TEMPLATES`` etc.); no orchestrator change is
 required.
 """
 
@@ -65,7 +65,7 @@ def _find_data_file(filename: str) -> str | None:
 
 # Dust emission templates ----------------------------------------------------
 # Each list of candidate filenames is tried in order; the first that exists
-# wins (matches the v2-preferred behaviour in dust/emission.py).
+# wins (matches the v2-preferred behavior in dust/emission.py).
 _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
     "dale2014": (
         ("dale2014_templates_v2.h5", "wavelength_aa", 1.0),
@@ -90,7 +90,7 @@ _DUST_EMISSION_TEMPLATES: dict[str, tuple[tuple[str, str, float], ...]] = {
 }
 
 # Analytic dust-emission models — no template grid to declare. Listing them
-# explicitly so that an unrecognised name raises rather than silently
+# explicitly so that an unrecognized name raises rather than silently
 # returning ``None``.
 _ANALYTIC_DUST_EMISSION = frozenset(
     {

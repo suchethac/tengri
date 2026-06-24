@@ -4,7 +4,7 @@
 Locks that ``collect_citations`` surfaces the full ingredient provenance from
 an SSP grid's filename tokens (SPS code / isochrone / spectral library / IMF),
 that the WavePrecomp precomputation method cites Zacharegkas+2025, and that an
-unrecognisable filename fires a provenance warning (per user request).
+unrecognizable filename fires a provenance warning (per user request).
 """
 
 from __future__ import annotations

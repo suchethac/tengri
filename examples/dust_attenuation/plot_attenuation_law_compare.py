@@ -49,7 +49,7 @@ laws = list_laws()
 for label, fn in laws.items():
     ax_lin.plot(wave_linear / 1e4, fn(wave_linear), label=label, lw=1.4)
 
-ax_lin.axvline(0.55, ls=":", color="grey", lw=0.8, alpha=0.5)
+ax_lin.axvline(0.55, ls=":", color="gray", lw=0.8, alpha=0.5)
 ax_lin.axvline(0.2175, ls=":", color="red", lw=0.8, alpha=0.5)
 ax_lin.set_xlim(0.08, 1.0)
 ax_lin.set_ylim(0, 3.5)

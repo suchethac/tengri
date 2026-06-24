@@ -36,7 +36,7 @@ L_IR = 1e11
 L_AGN_BOL = 1e44
 
 l_xrb = tengri.xray.xray_xrb(wavelength, sfr=SFR, stellar_mass=STELLAR_MASS)
-# AGN corona X-rays are normalised to the disc's 2500 A monochromatic
+# AGN corona X-rays are normalized to the disc's 2500 A monochromatic
 # luminosity (alpha_ox relation), so derive L_2500 from a multicolor disc.
 _disc_wave = jnp.logspace(2.5, 4.5, 500)  # 316 A - 31600 A, covers 2500 A
 _disc_lnu = tengri.agn.multicolor_disc(
@@ -85,8 +85,8 @@ ax.set_ylim(1e20, 1e32)
 ax.legend(frameon=False, fontsize=10, ncol=2)
 
 for x, label in [(1.24e-4, "X-ray"), (3e4, "Radio")]:
-    ax.axvline(x, color="grey", ls=":", lw=0.7, alpha=0.5)
-    ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="grey")
+    ax.axvline(x, color="gray", ls=":", lw=0.7, alpha=0.5)
+    ax.text(x * 1.3, ax.get_ylim()[1] * 0.3, label, fontsize=10, color="gray")
 
 fig.tight_layout()
 plt.savefig("plot_radio_xray.png", dpi=150, bbox_inches="tight")

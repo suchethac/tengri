@@ -84,7 +84,7 @@ class TestSpectrumLUTAccuracy:
 
     def test_spectrum_lut_vs_exact_fixed_z(self):
         # The per-pixel effective-wavelength LUT is a smooth-CONTINUUM
-        # approximation: it samples the continuum at each pixel centre and
+        # approximation: it samples the continuum at each pixel center and
         # cannot represent delta-like emission lines baked into a wNE SSP.
         # Validate continuum accuracy on a BARE-stellar SSP (matches the
         # documented validity domain); line handling is covered by

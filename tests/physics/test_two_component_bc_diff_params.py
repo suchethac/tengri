@@ -34,7 +34,7 @@ def _tau_from_trans(trans: np.ndarray) -> np.ndarray:
 
 
 class TestDefaultsUnchanged:
-    """No bc/diff overlay -> identical to the shared-``law_params`` behaviour."""
+    """No bc/diff overlay -> identical to the shared-``law_params`` behavior."""
 
     def test_shared_n_slope_default(self) -> None:
         ref = two_component_dust(_WAVE, _YOUNG, tau_v1=1.0, tau_v2=0.3, n_slope=-0.7)

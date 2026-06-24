@@ -45,7 +45,7 @@ templates = load_grahsp_templates()
 A_BC = [0.0, 0.5, 1.0, 2.0]
 colors = plt.cm.viridis(np.linspace(0.15, 0.85, len(A_BC)))
 
-# Precompute both panels so each can be normalised to O(1) (these are in
+# Precompute both panels so each can be normalized to O(1) (these are in
 # arbitrary units; only the relative strengths are physical).
 totals, balmers = [], []
 for a_bc in A_BC:
@@ -84,7 +84,7 @@ for ax in (ax1, ax2):
     ax.axvline(3646.0 / 1e4, color="0.5", ls=":", lw=1.0)
     ax.set_xlabel(r"rest wavelength [$\mu$m]")
 ax1.text(3646.0 / 1e4, ax1.get_ylim()[1] * 0.9, " Balmer\n edge", fontsize=8, color="0.4")
-ax1.set_ylabel(r"$\lambda L_\lambda$ [normalised]")
+ax1.set_ylabel(r"$\lambda L_\lambda$ [normalized]")
 ax1.set_title("Bending power-law + Balmer continuum")
 ax1.legend(frameon=False, fontsize=9)
 ax2.set_title("Balmer continuum contribution (isolated)")

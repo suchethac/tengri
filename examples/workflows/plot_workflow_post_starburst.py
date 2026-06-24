@@ -158,8 +158,8 @@ ax.plot(
     label="DPL fit (wrong model)",
 )
 
-ax.axvline(0.5, color="grey", ls=":", lw=1, alpha=0.5)
-ax.text(0.5, ax.get_ylim()[1] * 0.9, "Quench epoch", fontsize=9, color="grey")
+ax.axvline(0.5, color="gray", ls=":", lw=1, alpha=0.5)
+ax.text(0.5, ax.get_ylim()[1] * 0.9, "Quench epoch", fontsize=9, color="gray")
 
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"SFR [M$_\odot$ yr$^{-1}$]")

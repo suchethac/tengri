@@ -7,7 +7,7 @@ resolution registries used throughout the observation layer:
 - Photometry status flags: ``DETECTED``, ``UPPER_LIMIT``, ``LOWER_LIMIT``
 - Default emission-line catalog: ``DEFAULT_LINE_NAMES`` /
   ``DEFAULT_LINE_WAVELENGTHS`` (the 13-line set used by the
-  marginalised e-line likelihood when no line list is given).
+  marginalized e-line likelihood when no line list is given).
 - Cloudy-grid line catalog: ``CLOUDY_LINE_NAMES`` /
   ``CLOUDY_LINE_WAVELENGTHS``.
 - Standard spectral-index definitions: ``STANDARD_INDICES``.

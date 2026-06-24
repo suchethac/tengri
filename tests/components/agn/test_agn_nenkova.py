@@ -10,7 +10,7 @@ parameter.
 Regression guard (``regression_bug``): the historical implementation called
 ``scipy.interpolate.interp1d`` and ``float(agn_tau)`` on every call, raising
 ``ConcretizationTypeError`` whenever ``agn_tau`` was traced — i.e. it could
-never be sampled/optimised by MAP, NUTS, or VI. These tests freeze the fix.
+never be sampled/optimized by MAP, NUTS, or VI. These tests freeze the fix.
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def test_on_grid_reproduces_clumpy_template(torus_fn) -> None:
     wave = jnp.asarray(raw["wavelength"])
     sed = np.asarray(torus_fn(wave, agn_log_lbol=44.0, agn_tau=30.0))
     # Triweight is a smoothing kernel (not exact at nodes), so compare the
-    # normalised spectral shape rather than asserting bit-exact node recovery.
+    # normalized spectral shape rather than asserting bit-exact node recovery.
     corr = float(np.corrcoef(sed, ref)[0, 1])
     assert corr > 0.999, f"on-grid shape correlation {corr:.6f} too low"
 

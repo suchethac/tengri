@@ -135,7 +135,7 @@ class TestCasey2012CmbCorrection:
     """CMB heating correction (da Cunha+2013) raises the effective dust temperature
     at high redshift, shifting the SED peak blueward relative to z=0.
 
-    This is the same physical test synthesizer applies to its Greybody model.
+    This is the same physical test synthesizer applies to its Graybody model.
     """
 
     def test_cmb_heating_raises_temperature(self):

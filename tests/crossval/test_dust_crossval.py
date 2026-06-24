@@ -302,13 +302,13 @@ class TestCardelliReference:
     def test_cardelli_rv_dependence(self) -> None:
         """Increasing R_V should flatten the UV-optical slope.
 
-        Higher R_V means larger grains, greyer extinction.
+        Higher R_V means larger grains, grayer extinction.
         At 2500 A (UV): A/A_V should decrease with increasing R_V.
         """
         wave = jnp.array([2500.0])
         k_31 = float(cardelli(wave, dust_Rv=3.1)[0])
         k_50 = float(cardelli(wave, dust_Rv=5.0)[0])
-        assert k_50 < k_31, "Higher R_V should give greyer (lower UV) extinction"
+        assert k_50 < k_31, "Higher R_V should give grayer (lower UV) extinction"
 
     def test_cardelli_2175_bump(self) -> None:
         """MW curve must show the 2175 A bump (local maximum)."""
@@ -626,7 +626,7 @@ class TestWG00GeometriesReference:
         """Shell < Cloudy < Dusty transmission at same tau (WG00 Fig. 3).
 
         The shell (foreground screen) gives the steepest attenuation.
-        The cloudy (mixed slab) is greyer. The dusty (clumpy) is greyest.
+        The cloudy (mixed slab) is grayer. The dusty (clumpy) is grayest.
         """
         wave = jnp.array([2000.0])  # UV to amplify differences
         tau_v = 2.0

@@ -38,7 +38,7 @@ because it absorbs three currently-separate concerns:
    ...)
 
 It is also the *upstream* of every other adapter. Dust attenuation
-needs per-age luminosities; nebular needs ionising photon production;
+needs per-age luminosities; nebular needs ionizing photon production;
 radio/X-ray need SFR + M_*. So the stellar component is what unblocks
 richer versions of every downstream adapter.
 
@@ -94,14 +94,14 @@ fixed, changing it requires bumping a major version.
 
 | Slot | Type | Units | Meaning |
 |---|---|---|---|
-| `state.sed_intrinsic` | `jnp.ndarray, shape (n_wave,)` | erg/s/Hz (rest-frame L_nu) | The pre-attenuation, pre-emission stellar SED, normalised to a stellar mass of `10**log_mstar` |
+| `state.sed_intrinsic` | `jnp.ndarray, shape (n_wave,)` | erg/s/Hz (rest-frame L_nu) | The pre-attenuation, pre-emission stellar SED, normalized to a stellar mass of `10**log_mstar` |
 | `state.derived["log_mstar"]` | scalar `jnp.ndarray` | log10(M_⊙) | Stellar mass formed (or surviving — see "open question" below) |
 | `state.derived["sfr"]` | scalar `jnp.ndarray` | M_⊙/yr | Current-time star-formation rate (i.e. SFH evaluated at lookback time = 0) |
 | `state.derived["sfr_10myr"]` | scalar `jnp.ndarray` | M_⊙/yr | SFR averaged over the last 10 Myr (radio + X-ray prefer this over the instantaneous value) |
 | `state.derived["sfr_100myr"]` | scalar `jnp.ndarray` | M_⊙/yr | SFR averaged over the last 100 Myr |
 | `state.derived["L_age"]` | `jnp.ndarray, shape (n_age,)` | erg/s | Age-resolved bolometric luminosity, on the SSP age grid; consumed by two-component dust attenuation |
 | `state.derived["lnu_age"]` | `jnp.ndarray, shape (n_age, n_wave)` | erg/s/Hz | Age-resolved L_nu *before* CSP weighting, retained for dust components that need per-age attenuation |
-| `state.derived["nion"]` | scalar `jnp.ndarray` | photons/s | Ionising photon production rate (λ < 912 Å), consumed by nebular |
+| `state.derived["nion"]` | scalar `jnp.ndarray` | photons/s | Ionizing photon production rate (λ < 912 Å), consumed by nebular |
 | `state.derived["sfh_grid_lbt_yr"]` | `jnp.ndarray, shape (n_grid,)` | yr (lookback time) | The SFH evaluation grid — useful for diagnostics and for components doing time-resolved analysis |
 | `state.derived["sfr_history"]` | `jnp.ndarray, shape (n_grid,)` | M_⊙/yr | The realized SFH on `sfh_grid_lbt_yr` |
 | `state.derived["log_metallicity_history"]` | `jnp.ndarray, shape (n_grid,)` | log10(Z) absolute | Per-time-bin metallicity, for diagnostics + chem_evol mode |
@@ -121,10 +121,10 @@ Validated against the four adapters already migrated:
 
 - **DustAttenuationSEDComponent (single-screen)** — needs `state.sed_intrinsic`. ✓
 - **DustTwoComponentSEDComponent** (not yet built) — needs `state.derived["lnu_age"]` and `state.derived["sfh_grid_lbt_yr"]` to compute the birth-cloud mask in age space.
-- **NebularSEDComponent (Cue)** — needs `state.derived["nion"]` (or equivalent ionising-photon production), `state.derived["sfr"]` (for the current-time U parameter), `params["met_logzsol"]` directly via prefix slicing.
+- **NebularSEDComponent (Cue)** — needs `state.derived["nion"]` (or equivalent ionizing-photon production), `state.derived["sfr"]` (for the current-time U parameter), `params["met_logzsol"]` directly via prefix slicing.
 - **AGNSEDComponent** — independent of stellar at the SED level (publishes `L_agn_bol` itself), but its host-related radio/X-ray pieces need `state.derived["log_mstar"]`. ✓
 - **RadioSEDComponent** — already reads `state.derived["log_mstar"]`. ✓
-- **XRaySEDComponent** — already reads `state.derived["sfr"]` and `state.derived["stellar_mass"]`. (Note: today XRay reads `stellar_mass` not `log_mstar` — Phase II-2 should standardise on `log_mstar` everywhere and have XRay convert via `10 ** log_mstar`.)
+- **XRaySEDComponent** — already reads `state.derived["sfr"]` and `state.derived["stellar_mass"]`. (Note: today XRay reads `stellar_mass` not `log_mstar` — Phase II-2 should standardize on `log_mstar` everywhere and have XRay convert via `10 ** log_mstar`.)
 - **IGMSEDComponent** — independent. ✓
 
 **Action item from this audit:** rename `state.derived["stellar_mass"]` (used by XRaySEDComponent) → `state.derived["log_mstar"]` (with a `10 **` exponentiation inside the X-ray adapter). One-liner change; do it before Phase II-2 starts so the contract is consistent.
@@ -133,7 +133,7 @@ Validated against the four adapters already migrated:
 
 | PR | Scope | Lines moved | Tests |
 |---|---|---|---|
-| **II-2.0** ✅ | Standardise on `log_mstar` in XRay. **Verified done 2026-05-03**: `components/xray/component.py:171` already reads `state.derived.get("log_mstar", 10.0)`. No code change needed. | 0 | XRay integration tests already cover both |
+| **II-2.0** ✅ | Standardize on `log_mstar` in XRay. **Verified done 2026-05-03**: `components/xray/component.py:171` already reads `state.derived.get("log_mstar", 10.0)`. No code change needed. | 0 | XRay integration tests already cover both |
 | **II-2.1** ✅ | New `src/tengri/components/stellar/` package. Move (not rewrite) `sfh/` and `sps/` into it. Re-export shims keep `tengri.components.sfh.*` and `tengri.components.sps.*` working with `DeprecationWarning`. **Implemented 2026-05-03** via `sys.modules` aliasing in two shim `__init__.py` files; all 26 internal `src/tengri/` importers updated to canonical paths. | ~3500 (move) | full unit + integration suite still passes |
 | **II-2.2** ✅ | `StellarSEDComponent` adapter for the most common case: `tsnorm` SFH + `delta` metallicity + `dsps` backend. Hardcoded `field=False` for now. Lives alongside the existing `sed_model.py` tier-dispatch — does NOT replace it. **Implemented 2026-05-03**: full 11-key contract published, lints clean, smoke-tested at z=0 on PRSC-MILES SSP. Architectural decision: `ssp_data` is a constructor field on the component (consistent with Radio/IGM/XRay holding their config); `precompute()` stays a no-op marker. Deferred: bit-exact rtol=1e-8 equivalence test vs legacy + JIT compatibility (PipelineState needs pytree registration; orthogonal). | ~400 | smoke test asserts all 11 derived keys finite + sensible magnitudes |
 | **II-2.3** ✅ | Field branch (PSD-governed GP). Implemented in component.py:313-341 + closed at rtol=3.3e-3 by aligning the orchestrator's SFH grid with the legacy `make_log_age_grid` (commits `702de0c`, `ae99d14`, 2026-05-05). | ~400 | parametric test over `(field=False, field=True)` ✅ |
@@ -195,7 +195,7 @@ After II-2.6 ships, Phase II-3 (Dust two-component + Nebular) can begin.
    `n_age=140, n_wave=2700`. Reason: simpler contract; downstream
    adapters (dust two-component, nebular Cue) need it predictably; the
    memory cost is irrelevant at typical sample counts. A "request"
-   channel was rejected as premature optimisation.
+   channel was rejected as premature optimization.
 
 3. **`StellarSEDComponent.parameter_prefix` is a tuple** —
    `("sfh_", "met_", "chem_")` — and the orchestrator's prefix-slicer

@@ -44,7 +44,7 @@ jax.config.update("jax_enable_x64", True)
 def test_xray_xrb_hmxb_offset_zero_is_baseline() -> None:
     """HMXB offset = 0 reproduces baseline XRB spectrum.
 
-    Ensures default behaviour (backward compatibility): when both offsets
+    Ensures default behavior (backward compatibility): when both offsets
     are 0.0, xray_xrb should produce the identical spectrum as before
     the offsets were added.
     """
@@ -226,7 +226,7 @@ def test_xray_xrb_offsets_independent() -> None:
 def test_xray_xrb_gradient_finite_in_hmxb_offset() -> None:
     """∂L/∂(log_L_hmxb_offset) is finite at offset=0.
 
-    Ensures xray_xrb can be optimised w.r.t. the HMXB offset parameter.
+    Ensures xray_xrb can be optimized w.r.t. the HMXB offset parameter.
     """
     wave = jnp.array([4.0])
 
@@ -252,7 +252,7 @@ def test_xray_xrb_gradient_finite_in_hmxb_offset() -> None:
 def test_xray_xrb_gradient_finite_in_lmxb_offset() -> None:
     """∂L/∂(log_L_lmxb_offset) is finite at offset=0.
 
-    Ensures xray_xrb can be optimised w.r.t. the LMXB offset parameter.
+    Ensures xray_xrb can be optimized w.r.t. the LMXB offset parameter.
     """
     wave = jnp.array([4.0])
 

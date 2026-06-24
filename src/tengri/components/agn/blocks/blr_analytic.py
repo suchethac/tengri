@@ -38,7 +38,7 @@ def blr_analytic_block(
             Rest-frame wavelength [Å].
     agn_log_lbol : float
             Ignored (kept for protocol compatibility — ``l5100_disc`` provides
-            the normalisation).
+            the normalization).
     l5100_disc : array, scalar
             :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
     agn_blr_cf : float, optional
@@ -66,7 +66,7 @@ def blr_analytic_block(
     possible for line-of-sight inclination effects; see Section 2 of
     :mod:`tengri.components.agn.unified` for the mask convention.
     """
-    del agn_log_lbol  # normalisation comes from l5100_disc
+    del agn_log_lbol  # normalization comes from l5100_disc
     wave_aa = jnp.asarray(wavelength)
     l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_blr_f_bol
     L_nu = compute_blr_sed(

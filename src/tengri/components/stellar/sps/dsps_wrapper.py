@@ -124,7 +124,7 @@ jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten
 
 _LOAD_SSP_PRESETS: dict[str, str] = {
     # Short alias → full filename. Bare-stellar entries come from
-    # ``_KNOWN_SSPS`` (the auto-fetch catalogue); wNE entries are produced
+    # ``_KNOWN_SSPS`` (the auto-fetch catalog); wNE entries are produced
     # locally and recorded here so demo scripts can ``load_ssp("…wNE")``
     # without spelling out the gas-grid suffix.
     "prsc_miles_chabrier_wNE": "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5",
@@ -248,12 +248,12 @@ def load_ssp_data(filepath: str) -> SSPData:
 
     fp = Path(filepath)
     if not fp.exists() and not os.environ.get("TENGRI_DISABLE_SSP_AUTODOWNLOAD"):
-        # Auto-fetch from the public catalogue if the basename is known.
+        # Auto-fetch from the public catalog if the basename is known.
         from tengri._data_setup import _KNOWN_SSPS, KNOWN_SSP_FILENAMES, download_ssp
 
         if fp.name in KNOWN_SSP_FILENAMES:
             short = next(k for k, v in _KNOWN_SSPS.items() if v == fp.name)
-            print(f"[tengri] {fp} not found — fetching '{short}' from public catalogue...")
+            print(f"[tengri] {fp} not found — fetching '{short}' from public catalog...")
             download_ssp(short, dest=fp.parent if fp.parent != Path("") else "data")
 
     with h5py.File(filepath, "r") as f:
@@ -264,7 +264,7 @@ def load_ssp_data(filepath: str) -> SSPData:
         # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
         # plots can introspect the assumed IMF without grepping the
         # filename. Resolved before ``ssp_mass_remaining`` so the
-        # surviving-mass synthesiser can pick the right DSPS calibration.
+        # surviving-mass synthesizer can pick the right DSPS calibration.
         imf = _detect_imf(f, fp.name)
 
         if "ssp_mass_remaining" in f:
@@ -290,7 +290,7 @@ def load_ssp_data(filepath: str) -> SSPData:
         )
 
 
-#: IMFs that ship in the public SSP catalogue. Parsed out of HDF5 metadata
+#: IMFs that ship in the public SSP catalog. Parsed out of HDF5 metadata
 #: or filename tails. Extend when a new IMF lands in ``_data_setup._KNOWN_SSPS``.
 _KNOWN_IMFS: tuple[str, ...] = ("chabrier", "kroupa", "salpeter")
 
@@ -377,7 +377,7 @@ def _synthesize_mass_remaining(
     if imf not in _IMF_PARAMS:
         warnings.warn(
             f"SSP file {filepath!s} has no 'ssp_mass_remaining' table and "
-            f"IMF could not be resolved (got {imf!r}); synthesising "
+            f"IMF could not be resolved (got {imf!r}); synthesizing "
             "surviving-mass fractions from dsps.imf.surviving_mstar with "
             "the Chabrier-fit-to-FSPS parameters. Set the 'imf' HDF5 "
             "attribute or use a filename suffix matching _detect_imf's "
@@ -810,7 +810,7 @@ def compute_dsps_age_weights(
 
     Produces the SFH→age weight tensor (Hearin+ 2021 Eq. 9) on the
     SSP age grid in absolute mass units (Msun per age bin), without
-    doing the metallicity marginalisation. Useful when the caller
+    doing the metallicity marginalization. Useful when the caller
     runs an independent metallicity dispatch (bilinear on a 4D
     α-grid, ramp, chem-evol, etc.) and only needs DSPS-canonical
     SFH integration.
@@ -1247,7 +1247,7 @@ def interpolate_alpha_only(
 
     Collapses the [α/Fe] dimension of a 4D SSP grid at a single target
     value, leaving the metallicity axis intact. The result feeds the
-    standard 3D DSPS lognormal-MDF kernel, so the Z marginalisation
+    standard 3D DSPS lognormal-MDF kernel, so the Z marginalization
     behaves identically to a no-α-grid run with the same met scatter.
 
     Parameters
@@ -1272,7 +1272,7 @@ def interpolate_alpha_only(
 
     Complements :func:`interpolate_met_alpha`, which collapses both
     axes to a single (Z, [α/Fe]) point. Samplers that want lognormal
-    MDF marginalisation over metallicity should use this α-only path
+    MDF marginalization over metallicity should use this α-only path
     so the 4D and 3D code paths share the same Z kernel.
     """
     afe = jnp.clip(alpha_fe, ssp_alpha_fe[0], ssp_alpha_fe[-1])

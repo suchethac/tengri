@@ -11,7 +11,7 @@ diverge by up to ~6.6% at low z (large ``t_obs``). Using ``rest_sed`` silently
 broke that contract for the exact SED at low z and disagreed with every
 precompute LUT (which use ``total_mass``). Reconstructing from ``total_mass``
 makes the exact SED, the photometry/spectrum LUTs, ``lnu_age``, ``L_age``,
-``age_weights``, and ``pred.stellar_mass`` all honour the one contract mass.
+``age_weights``, and ``pred.stellar_mass`` all honor the one contract mass.
 See issues #616 (DSPS quadrature) and #617 (birth-cloud dust LUT residual).
 
 The tests below pin that:
@@ -51,7 +51,7 @@ def _build_tau_fiducial():
     # Delayed-tau-like: SFR rises toward present.
     sfr = np.exp(-(t_obs_gyr - t_grid) / tau_gyr)
     total = np.trapezoid(sfr, t_grid * 1e9)
-    sfr = sfr / total  # normalise to 1 Msun total
+    sfr = sfr / total  # normalize to 1 Msun total
 
     log_z_sun_absolute = -1.848  # LOG10_ZSUN in tengri
     return ssp, jnp.asarray(t_grid), jnp.asarray(sfr), log_z_sun_absolute, t_obs_gyr

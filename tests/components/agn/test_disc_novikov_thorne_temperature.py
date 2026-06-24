@@ -16,7 +16,7 @@ with the Novikov-Thorne radiative efficiency :math:`\\eta = 1 - \\sqrt{1 - 2/(3 
 
 This pins tengri's ``multicolor_disc`` (Shakura-Sunyaev) and ``kubota_done``
 (Kubota & Done 2018) discs to that analytic prediction, so a regression in the
-efficiency, inner radius, or temperature normalisation cannot slip through. It
+efficiency, inner radius, or temperature normalization cannot slip through. It
 also documents why the Synthesizer-reproduction §9a disc peak differs: that
 reference is Synthesizer's bundled *test* AGN grid, whose incident disc is ~2.4×
 cooler than Novikov-Thorne theory — tengri is the faithful side (#695).
@@ -85,7 +85,7 @@ def test_multicolor_disc_peak_matches_novikov_thorne():
     got = _nu_lnu_peak(multicolor_disc, 8.0, 12.215)
     assert 0.8 < got / pred < 1.4, (
         f"multicolor disc νLν peak {got:.0f} Å vs Novikov-Thorne {pred:.0f} Å "
-        f"(ratio {got / pred:.2f}) — disc temperature normalisation has drifted"
+        f"(ratio {got / pred:.2f}) — disc temperature normalization has drifted"
     )
 
 
@@ -93,14 +93,14 @@ def test_kubota_done_disc_peak_matches_novikov_thorne():
     """K&D three-zone disc thermal peak is consistent with NT theory.
 
     Slightly redder than the bare multicolor disc because the inner annuli are
-    re-assigned to the warm/hot Comptonising zones — a physical, not numerical,
+    re-assigned to the warm/hot Comptonizing zones — a physical, not numerical,
     shift — so the upper bound is a touch wider.
     """
     pred = _analytic_nu_lnu_peak_aa(log_mbh=8.0, log_lbol=12.215)
     got = _nu_lnu_peak(kubota_done_disc, 8.0, 12.215)
     assert 0.8 < got / pred < 1.6, (
         f"kubota_done disc νLν peak {got:.0f} Å vs Novikov-Thorne {pred:.0f} Å "
-        f"(ratio {got / pred:.2f}) — disc temperature normalisation has drifted"
+        f"(ratio {got / pred:.2f}) — disc temperature normalization has drifted"
     )
 
 

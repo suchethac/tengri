@@ -73,7 +73,7 @@ from tengri.parameters.priors import Distribution
 # $$ L_\nu(\lambda, T, \beta) = N(T, \beta, L_{\rm absorbed})\,\nu^\beta\,B_\nu(T) $$
 #
 # where $L_{\rm absorbed}$ comes from the upstream dust attenuation
-# component and $N$ is the normalisation that makes the frequency
+# component and $N$ is the normalization that makes the frequency
 # integral equal $L_{\rm absorbed}$.
 
 # %%
@@ -87,7 +87,7 @@ def _trapz_freq(L_lambda, wave_aa):
 
 
 def _planck_nu(wave_aa, T):
-    """B_nu in arbitrary units — normalisation cancels later."""
+    """B_nu in arbitrary units — normalization cancels later."""
     h = 6.62607015e-27  # erg·s
     kB = 1.380649e-16  # erg/K
     nu = _c / wave_aa
@@ -120,9 +120,9 @@ class MyModifiedBlackbody(SEDModelComponent):
     # as the default (no atlas to load).
 
     def predict(self, p, sed_in, wave, *, L_absorbed):
-        # Modified-blackbody shape, un-normalised
+        # Modified-blackbody shape, un-normalized
         shape = wave ** (-p["beta"]) * _planck_nu(wave, p["T"])
-        # Normalise so the frequency integral equals L_absorbed
+        # Normalize so the frequency integral equals L_absorbed
         norm = L_absorbed / _trapz_freq(shape, wave)
         addition = norm * shape
         L_ir = _trapz_freq(addition, wave)

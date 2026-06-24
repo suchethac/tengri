@@ -90,7 +90,7 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
         "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
-        "registry-default centre. Mirrors the ``'*'`` key in the dict grammar."
+        "registry-default center. Mirrors the ``'*'`` key in the dict grammar."
     )
     for short, pdef in param_records:
         default_repr = repr(pdef.default) if pdef.default is not None else "registry default"

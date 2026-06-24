@@ -8,7 +8,7 @@ packages the equivalent factor as a magnitude-space dimming term.
 Both paths must agree at the AB-magnitude level.
 
 These tests are the load-bearing artifact that locks the convention:
-a future "optimisation" that silently re-introduces a per-case (1+z)
+a future "optimization" that silently re-introduces a per-case (1+z)
 factor will fail here.
 """
 

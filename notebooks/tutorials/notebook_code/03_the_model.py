@@ -209,7 +209,7 @@ sfr_full = np.array(mean_sfr) * np.exp(gp_np - variance / 2)
 fig, axes = plt.subplots(1, 4, figsize=(16, 3.5))
 
 # (1) White noise ξ
-axes[0].bar(range(N_GRID), np.array(xi), width=1, color="grey", alpha=0.5)
+axes[0].bar(range(N_GRID), np.array(xi), width=1, color="gray", alpha=0.5)
 axes[0].set_xlabel("Index")
 axes[0].set_ylabel("ξ")
 axes[0].set_title("(1) White noise ξ ~ N(0,I)")
@@ -419,7 +419,7 @@ for sigma in sig_range:
 
 fig, ax = plt.subplots(figsize=(6, 4))
 ax.plot(sig_range, sfr_scatter_100, "o-", color=COLORS["vi"], lw=1.5)
-ax.axhline(0.3, color="grey", ls="--", lw=0.8, label="Speagle+2014 MS scatter")
+ax.axhline(0.3, color="gray", ls="--", lw=0.8, label="Speagle+2014 MS scatter")
 ax.set_xlabel(r"$\sigma_{\rm PS}$")
 ax.set_ylabel(r"$\sigma(\log_{10}$ SFR$_{100\rm Myr})$ [dex]")
 ax.legend(fontsize=8)

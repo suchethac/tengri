@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Observables — the dual of :class:`Observation` for predicted quantities.
 
-An :class:`Observables` NamedTuple is synthesised per-model at
+An :class:`Observables` NamedTuple is synthesized per-model at
 :class:`SEDModel` construction time from the ``Observation`` contents:
 which sub-blocks the observation carries determines which fields exist
 on the prediction. Missing channels are absent attributes (``AttributeError``
@@ -20,7 +20,7 @@ import jax.numpy as jnp
 
 
 def build_observables_class(observation) -> type:
-    """Synthesise the per-model :class:`Observables` NamedTuple subclass.
+    """Synthesize the per-model :class:`Observables` NamedTuple subclass.
 
     The returned class is a :class:`typing.NamedTuple` subclass whose
     fields mirror the observation's configured sub-blocks. Magnitude

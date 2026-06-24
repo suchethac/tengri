@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Polar dust extinction and greybody reemission for AGN.
+"""Polar dust extinction and graybody reemission for AGN.
 
 Implements the X-CIGALE polar dust model (Yang et al. 2020, Section 2.2.2):
 bi-conical polar dust with viewing-angle-independent absorption and
-energy-conserving greybody FIR reemission. SMC extinction curve applied
+energy-conserving graybody FIR reemission. SMC extinction curve applied
 to observer-frame disc attenuation (Type 1 sightlines only); absorption
 is geometry-independent (Yang+2020 §2.2.2).
 
@@ -233,7 +233,7 @@ def polar_dust_extinction(
     opening_angle_deg : float
         Torus half-opening angle in degrees (from equator). [degrees]
     ebv : float
-        Colour excess E(B-V) for the polar dust. 0 = no extinction.
+        Color excess E(B-V) for the polar dust. 0 = no extinction.
         [dimensionless, mag]
     law : str
         Extinction law name: ``"smc"`` (Pei 1992), ``"calzetti"`` (Calzetti
@@ -257,7 +257,7 @@ def polar_dust_extinction(
     **Absorption vs. Attenuation:**
     - ``l_absorbed`` (geometry-independent) is the disc photon fraction intercepted
       by the bi-conical polar dust (Yang+2020 §2.2.2). This drives the
-      greybody FIR reemission and is viewed isotropically.
+      graybody FIR reemission and is viewed isotropically.
     - ``l_nu_attenuated`` (Type-1-masked) is the observer-frame disc after
       passing through the near-cone geometry. Only face-on sightlines see
       attenuation; edge-on sightlines (Type 2) have the disc already screened
@@ -311,7 +311,7 @@ def polar_dust_emission(
     beta: float = 1.6,
     lambda_0: float = 2e6,
 ) -> jnp.ndarray:
-    """Greybody reemission from polar dust.
+    """Graybody reemission from polar dust.
 
     Energy-conserving: the integral of the reemitted spectrum equals the
     total absorbed luminosity.
@@ -342,7 +342,7 @@ def polar_dust_emission(
 
     **Gradient-safe**: yes — fully differentiable.
     """
-    # Greybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
+    # Graybody: L_nu proportional to (1 - exp(-(lambda_0/lambda)^beta)) * B_nu(T)
     opacity_factor = 1.0 - jnp.exp(-((lambda_0 / wavelength) ** beta))
     b_nu = planck_lnu(wavelength_to_nu(wavelength), temperature)
     unnormalized = opacity_factor * b_nu
@@ -428,7 +428,7 @@ def anisotropic_polar_luminosity(
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
        torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
        arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
     .. [2] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy
@@ -470,7 +470,7 @@ def polar_dust_total(
     law: str = "smc",
     sharpness: float = _SIGMOID_SHARPNESS,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """Apply polar dust extinction and compute greybody reemission.
+    """Apply polar dust extinction and compute graybody reemission.
 
     Convenience function combining :func:`polar_dust_extinction` and
     :func:`polar_dust_emission`.
@@ -487,7 +487,7 @@ def polar_dust_total(
     opening_angle_deg : float
         Torus half-opening angle in degrees.
     ebv : float
-        Colour excess E(B-V).
+        Color excess E(B-V).
     temperature : float
         Polar dust temperature in Kelvin.
     beta : float
@@ -504,7 +504,7 @@ def polar_dust_total(
     l_nu_attenuated : array, shape (n_wave,)
         Attenuated disc luminosity (same units as input).
     l_nu_reemit : array, shape (n_wave,)
-        Greybody reemission from polar dust (same units as input).
+        Graybody reemission from polar dust (same units as input).
     """
     l_nu_attenuated, l_absorbed = polar_dust_extinction(
         l_nu_disc, wavelength, cos_inc, opening_angle_deg, ebv, law, sharpness

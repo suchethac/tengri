@@ -82,7 +82,7 @@ def _mock_galaxies(template, n, key):
 def test_canonical_native_vi_produces_shared_psd_samples(template, spec_obs, backend):
     """#711 acceptance: shared PSD hyper-params + per-galaxy samples.
 
-    Parametrised over both native VI backends — the canonical population path
+    Parametrized over both native VI backends — the canonical population path
     must be topology-agnostic across backends, not just the linear one. The
     geoVI (``native_vi_nonlinear``) engine has its own residual-draw and
     data-space inner products that previously assumed a flat 1-D data vector and

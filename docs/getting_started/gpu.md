@@ -7,7 +7,7 @@ your install picks up the GPU and what to expect once it does.
 ```{warning}
 Benchmark numbers in [Performance](../performance/index.md) are CPU
 only. GPU performance is functionally tested but **not yet
-characterised** with published wall-clocks. If you can run the bench
+characterized** with published wall-clocks. If you can run the bench
 suite on an A100 / H100 / 4090, please contribute results — see
 [`bench/RERUN.md`](https://github.com/suchethac/tengri/blob/main/bench/RERUN.md).
 ```
@@ -72,7 +72,7 @@ Things to be aware of:
   headroom for cuDNN.
 - **`predict_*_batch` is where the GPU wins.** Single-galaxy
   evaluations are usually CPU-bound on Python overhead. The
-  `predict_photometry_batch` path (used by `Fitter` for catalogue fits
+  `predict_photometry_batch` path (used by `Fitter` for catalog fits
   and by `nb09` for parameter sweeps) is what fills the GPU.
 
 ## Apple Metal (experimental — not supported for benchmarks)
@@ -100,10 +100,10 @@ no NumPy in the forward graph). If you try it, reports welcome.
 
 `predict_photometry_batch` is `vmap`-based and stays on one device.
 Multi-GPU sharding via `jax.pmap` or the newer `shard_map` is **not
-yet wired up** — large catalogue fits currently run sequentially on
+yet wired up** — large catalog fits currently run sequentially on
 one GPU per Python process. If you need to fan out across devices,
 the cheapest pattern today is one Python process per device, each
-fitting a slice of the catalogue.
+fitting a slice of the catalog.
 
 ## See also
 

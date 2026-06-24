@@ -3,7 +3,7 @@
 ## The CSP integral
 
 The composite stellar population (CSP) SED is a weighted sum over SSP
-templates, discretised on a grid of ages and metallicities:
+templates, discretized on a grid of ages and metallicities:
 
 $$L_\text{CSP}(\lambda) = \sum_{i=1}^{n_\text{age}} \sum_{m=1}^{n_\text{met}} w_i(t) \; \phi_m(Z) \; \text{SSP}(\lambda,\, Z_m,\, t_i)$$
 
@@ -72,7 +72,7 @@ Used by: DSPS, tengri (table SFH path)
 
 ### Analytic piecewise integration (FSPS)
 
-For piecewise-linear or piecewise-exponential SFH parametrisations, FSPS
+For piecewise-linear or piecewise-exponential SFH parametrizations, FSPS
 integrates analytically within each age bin. Exact for the assumed
 functional form.
 
@@ -114,13 +114,13 @@ $$f = \frac{Z - Z_k}{Z_{k+1} - Z_k}$$
 Since SSP spectra vary more linearly in log(Z) than linear Z, this
 introduces a small systematic bias. Typically <5% for ΔlogZ ≤ 0.25.
 
-### 3. Nearest-neighbour — CIGALE
+### 3. Nearest-neighbor — CIGALE
 
 $$\text{SSP}_\text{interp}(\lambda) = \text{SSP}_{k^*}(\lambda), \quad k^* = \text{argmin}_k |\log Z - \log Z_k|$$
 
 Zero gradient everywhere; step-function discontinuities at bin midpoints.
 Acceptable for CIGALE's grid-based Bayesian analysis where Z is itself
-discretised.
+discretized.
 
 ### 4. Triweight kernel — DSPS, tengri (default)
 
@@ -133,14 +133,14 @@ where z = (x − μ)/σ, with support |z| < 3. Each bin weight is:
 
 $$w_m = F\!\left(\frac{Z_\text{target} - Z_{\text{lo},m}}{\sigma}\right) - F\!\left(\frac{Z_\text{target} - Z_{\text{hi},m}}{\sigma}\right)$$
 
-Normalised: $\hat{w}_m = w_m / \sum_j w_j$. The interpolated SSP:
+Normalized: $\hat{w}_m = w_m / \sum_j w_j$. The interpolated SSP:
 
 $$\text{SSP}_\text{interp}(\lambda) = \sum_{m=1}^{n_\text{met}} \hat{w}_m \cdot \text{SSP}_m(\lambda)$$
 
 **Properties:**
 - C² continuous — smooth second derivative, no kinks
 - Physically motivated: σ represents intrinsic metallicity scatter
-- At σ → 0, converges to nearest-neighbour
+- At σ → 0, converges to nearest-neighbor
 - At σ = 0.1 dex (default), 3--4 bins contribute
 
 ### 5. Lognormal MDF — DSPS (full 2D mode)
@@ -159,7 +159,7 @@ lognormal scatter at each epoch. tengri supports this via
 | **FSPS** | analytic piecewise | 2-point linear | log(Z) | 2 | Kinks |
 | **Prospector** | → FSPS | → FSPS | log(Z) | 2 | Kinks |
 | **Bagpipes** | fine-grid histogram | 2-point linear | linear Z | 2 | Kinks |
-| **CIGALE** | grid-based | nearest-neighbour | — | 1 | Step function |
+| **CIGALE** | grid-based | nearest-neighbor | — | 1 | Step function |
 | **DSPS** | cumulative mass | triweight CDF | log(Z) | 3--5 | C² smooth |
 | **tengri** | cumulative (table) / midpoint (parametric) | triweight CDF (default) or 2-point linear | log(Z) | 3--5 or 2 | C² smooth or kinks |
 
@@ -225,7 +225,7 @@ Context for spectroscopic S/N:
 
 The interpolation method difference is below noise for any individual
 galaxy spectrum. It could in principle matter for very high-S/N stacked
-spectra, but at that level other systematics (continuum normalisation,
+spectra, but at that level other systematics (continuum normalization,
 flux calibration, sky subtraction residuals) dominate.
 
 ### Where the difference IS detectable
@@ -233,11 +233,11 @@ flux calibration, sky subtraction residuals) dominate.
 The largest spectral differences (~7--8%) occur in the **extreme UV below
 ~110 Å** — a regime that is:
 - Completely unobservable (absorbed by the ISM/IGM)
-- Physically dominated by the ionising spectrum (relevant only for
-  nebular emission modelling via Q_H)
+- Physically dominated by the ionizing spectrum (relevant only for
+  nebular emission modeling via Q_H)
 
 For the Q_H computation, the 2-point vs triweight difference propagates
-to a ~1--2% change in the ionising photon rate, which translates to
+to a ~1--2% change in the ionizing photon rate, which translates to
 <1% change in emission line luminosities. Negligible.
 
 ---
@@ -246,7 +246,7 @@ to a ~1--2% change in the ionising photon rate, which translates to
 
 The primary advantage of the triweight kernel is **gradient smoothness**,
 not SED accuracy. Both methods produce indistinguishable SEDs, but the
-optimisation landscape differs:
+optimization landscape differs:
 
 | Metric | 2-point linear | Triweight smooth |
 |---|---|---|
@@ -307,7 +307,7 @@ metallicity (~2--3×). The hierarchy of importance:
 
 1. **SFH shape** — the dominant source of SED variation (by far)
 2. **Age integration method** — midpoint vs cumulative can differ by 5--15%
-   in total mass, directly scaling the SED normalisation
+   in total mass, directly scaling the SED normalization
 3. **Dust model** — changes SED shape by factors of 2--10 in the UV
 4. **Metallicity interpolation** — changes SED by <1% (colors by <0.01 mag)
 5. **Other physics** (nebular, IGM, AGN) — wavelength-dependent,
@@ -344,7 +344,7 @@ The `lgmet_scatter` parameter controls the triweight bandwidth:
 
 | Value | Bins active | Use case |
 |---|---|---|
-| 0.001 | 1 | Effectively nearest-neighbour |
+| 0.001 | 1 | Effectively nearest-neighbor |
 | 0.05 | 2--3 | Mild smoothing, conservative |
 | **0.1** | **3--4** | **DSPS default, recommended** |
 | 0.2 | 4--6 | Broad smoothing |

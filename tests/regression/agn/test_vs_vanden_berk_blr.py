@@ -65,7 +65,7 @@ def test_blr_vanden_berk_line_ratios():
     # disc luminosity. The test verifies that the computed spectrum produces
     # these ratios (after convolution and integration).
     # VB01 Table 2 relative fluxes (column 4, in units of 100 * F/F_Lyα),
-    # divided by the Hβ flux value (8.649) to give the H-β-normalised
+    # divided by the Hβ flux value (8.649) to give the H-β-normalized
     # strengths now in `_BLR_LINES`. See PR #329 commit dcc5e5be / 73ccdca5.
     expected_strengths = {
         "lya": 11.5660,  # Lyα 1215.7 (VB01 rel flux 100.0 / Hβ 8.649)

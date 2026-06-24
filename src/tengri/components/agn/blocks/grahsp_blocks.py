@@ -64,7 +64,7 @@ def grahsp_sbpl_disc_block(
 ) -> Array:
     r"""GRAHSP smooth bending power-law BBB as a disc-stage block.
 
-    If ``agn_grahsp_l5100`` is unset (``None``), normalise so the BBB-only
+    If ``agn_grahsp_l5100`` is unset (``None``), normalize so the BBB-only
     bolometric integral matches ``10**agn_log_lbol * L_sun``. Otherwise use
     the explicit ``λL_λ(5100Å)`` value (matches upstream's parametric mode).
 
@@ -76,7 +76,7 @@ def grahsp_sbpl_disc_block(
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
     agn_grahsp_l5100 : float, optional
         :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` in erg/s. ``None``
-        triggers automatic normalisation from ``agn_log_lbol``.
+        triggers automatic normalization from ``agn_log_lbol``.
     agn_grahsp_uvslope, agn_grahsp_plslope, agn_grahsp_plbendloc_nm, \
 agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
         SBPL shape parameters; see :func:`sbpl_bbb`.
@@ -100,7 +100,7 @@ agn_grahsp_plbendwidth, agn_grahsp_cutoff_nm
         cutoff_nm=agn_grahsp_cutoff_nm,
     )
     if agn_grahsp_l5100 is None:
-        # Normalise by the requested bolometric luminosity above the Lyman limit.
+        # Normalize by the requested bolometric luminosity above the Lyman limit.
         from tengri.components.agn.grahsp.bolometric import (
             bolometric_luminosity_bbb,
         )
@@ -142,7 +142,7 @@ def grahsp_nlr_block(
     r"""GRAHSP narrow emission-line Gaussians as an nlr-stage block.
 
     Uses the disc's :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` as the
-    line-luminosity normalisation reference (matching upstream §2.1.2).
+    line-luminosity normalization reference (matching upstream §2.1.2).
     Returns the narrow-line component on the isotropic channel.
 
     Parameters
@@ -198,7 +198,7 @@ def grahsp_blr_block(
     r"""GRAHSP broad emission-line Gaussians as a blr-stage block.
 
     Uses the disc's :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` as the
-    line-luminosity normalisation reference (matching upstream §2.1.2).
+    line-luminosity normalization reference (matching upstream §2.1.2).
     Returns the broad-line component as a bare maskable array.
 
     Parameters

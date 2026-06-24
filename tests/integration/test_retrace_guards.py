@@ -193,7 +193,7 @@ def test_component_jit_matches_eager(name, cls, params_fixture, synth_wave, requ
 
     Tighter than the SEDModel-level parity in test_variant_parity.py because
     here we isolate a single component — if this fails, the regression is
-    localised to that adapter, not the orchestrator."""
+    localized to that adapter, not the orchestrator."""
     params = request.getfixturevalue(params_fixture)
     component = cls()
     state0 = _state0(synth_wave)

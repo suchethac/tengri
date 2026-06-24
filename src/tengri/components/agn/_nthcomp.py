@@ -193,7 +193,7 @@ def nthcomp_lnu_interp(
     kTe_keV: jnp.ndarray,
     kTbb_keV: jnp.ndarray,
 ) -> jnp.ndarray:
-    """Return the normalised nthcomp L_nu shape via trilinear interpolation.
+    """Return the normalized nthcomp L_nu shape via trilinear interpolation.
 
     Requires templates to have been loaded (``_TABLE_AVAILABLE`` is True).
     Extrapolation beyond grid bounds is clamped to boundary values.

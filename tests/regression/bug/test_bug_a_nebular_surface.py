@@ -10,7 +10,7 @@ Three related fixes on the predict_emission_lines + nebular pipeline:
 - **#303**: EmissionLines NamedTuple exposed only 11 hardcoded
   species. The Cue backend trains ~138 lines and CloudyGrid more.
   Fix: add ``all_waves`` / ``all_lums`` arrays + ``.get(wavelength)``
-  helper exposing the full catalogue.
+  helper exposing the full catalog.
 - **#301**: neb_fesc scaled the nebular continuum and lines but left
   the stellar LyC continuum untouched, breaking the "stellar LyC ×
   fesc + nebular ∝ (1 − fesc)" energy balance.
@@ -46,7 +46,7 @@ def ssp_bare():
     return tengri.load_ssp_data(str(_BARE_STELLAR_SSP))
 
 
-def test_emission_lines_namedtuple_has_full_catalogue_fields():
+def test_emission_lines_namedtuple_has_full_catalog_fields():
     """#303: EmissionLines exposes all_waves / all_lums + .get(wavelength)."""
     assert "all_waves" in EmissionLines._fields
     assert "all_lums" in EmissionLines._fields
@@ -54,7 +54,7 @@ def test_emission_lines_namedtuple_has_full_catalogue_fields():
 
 
 def test_emission_lines_get_handles_empty_catalogue():
-    """#303: .get() returns NaN when the active backend has no catalogue."""
+    """#303: .get() returns NaN when the active backend has no catalog."""
     empty = jnp.asarray([], dtype=jnp.float64)
     nan_scalar = jnp.asarray(jnp.nan)
     lines = EmissionLines(
@@ -131,7 +131,7 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
 
 
 def test_cue_exposes_more_than_thirteen_species(ssp_bare):
-    """#303: Cue's all_waves should expose ≫13 lines (full catalogue)."""
+    """#303: Cue's all_waves should expose ≫13 lines (full catalog)."""
     m = tengri.SEDModel.build(
         ssp_bare,
         sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""User-set ``n_grid`` is honoured for parametric (non-stochastic) SFHs.
+"""User-set ``n_grid`` is honored for parametric (non-stochastic) SFHs.
 
 Previously ``SEDModel`` forced ``n_grid = 256`` for any non-stochastic SFH
 (``spec.n_grid if spec.stochastic else 256``), silently ignoring the user's
@@ -39,7 +39,7 @@ def test_n_grid_honoured_for_parametric_sfh(synthetic_ssp_wide, synthetic_tophat
 
 
 def test_parametric_sed_is_n_grid_invariant(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Honouring n_grid must not change the parametric default result."""
+    """Honoring n_grid must not change the parametric default result."""
     m256 = _build(synthetic_ssp_wide, synthetic_tophat_obs)
     m512 = _build(synthetic_ssp_wide, synthetic_tophat_obs, n_grid=512)
     p = {}

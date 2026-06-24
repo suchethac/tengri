@@ -8,11 +8,11 @@ how different star formation timescales and outflow efficiencies η alter the
 enrichment history relative to a closed box (zero outflow). Top-left: closed-box
 enrichment timescale dependence. Top-right: impact of variable outflow rates.
 Bottom-left: closed vs leaky enrichment under constant SFR. Bottom-right:
-age-metallicity relation analogue — how different assembly epochs lead to
+age-metallicity relation analog — how different assembly epochs lead to
 different final metal content.
 
 Reference: Maeder 1992, A&A, 264, 105 (chemical evolution); Schmidt 1959 (solar
-neighbourhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
+neighborhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 """
 
 import os
@@ -119,7 +119,7 @@ ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 13)
 ax.set_ylim(0, 0.6)
 
-# Panel 4: Assembly-metallicity analogue
+# Panel 4: Assembly-metallicity analog
 ax = axes[1, 1]
 t_assembly = np.array([1.0, 3.0, 7.0, 10.0])  # Lookback time of assembly (Gyr)
 z_assembly = []

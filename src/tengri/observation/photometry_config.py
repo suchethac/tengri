@@ -108,7 +108,7 @@ class Photometry:
         if len(self.filters) == 0:
             raise ValueError("Photometry requires at least one filter.")
 
-        # Normalise a string convention (e.g. "energy") to the enum so the
+        # Normalize a string convention (e.g. "energy") to the enum so the
         # JIT static-argument cache key is stable.
         if not isinstance(self.convention, FilterConvention):
             object.__setattr__(self, "convention", FilterConvention(self.convention))
@@ -121,7 +121,7 @@ class Photometry:
                 tuple(f.name for f in self.filters),
             )
 
-        # Materialise wave/trans arrays for direct NumPy-level access
+        # Materialize wave/trans arrays for direct NumPy-level access
         object.__setattr__(
             self,
             "filter_waves",

@@ -8,7 +8,7 @@ Metallicity:
     Internal: log_z_abs       = log10(Z) (absolute)
     Offset:   LOG10_ZSUN = -1.8477 (Asplund 2009, Zsun = 0.0142)
 
-    Tengri uses **Asplund 2009 Zsun = 0.0142** as the single normalising
+    Tengri uses **Asplund 2009 Zsun = 0.0142** as the single normalizing
     constant for the public ``met_logzsol`` axis. This matches the MIST
     isochrone family. Other SSP libraries adopt different "solar"
     references:
@@ -22,7 +22,7 @@ Metallicity:
     BASTI      0.0200   -1.6990
     =========  =======  =======================================
 
-    Practical note: when working entirely in solar-normalised
+    Practical note: when working entirely in solar-normalized
     ``met_logzsol`` units **and** the SSP file's tabulated Z grid was
     generated against the *same* Zsun, the round-trip is self-consistent.
     When comparing against a code that uses a different Zsun (e.g. CIGALE
@@ -69,7 +69,7 @@ from tengri.parameters._builders import _resolve_lazy_bucket
 # i.e. LOG10_ZSUN = log10(0.0142) = -1.8477. This matches the MIST isochrone
 # family. SSP libraries built on Padova (BC03, default CIGALE), PARSEC, or
 # BASTI use different Zsun — see module docstring for the table. Reason in
-# absolute ``log_z_abs`` (not solar-normalised) for cross-code comparisons.
+# absolute ``log_z_abs`` (not solar-normalized) for cross-code comparisons.
 LOG10_ZSUN = -1.8477116556169435
 
 # Per-SSP-library solar Z values (kept as a reference dict so downstream

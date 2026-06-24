@@ -159,7 +159,7 @@ tracks which scripts are due for a re-run.
 If `python -m tengri.bench` shows a much slower 1-galaxy timing than
 the table above:
 
-1. Confirm `x64: True` (some downstream behaviour assumes 64-bit).
+1. Confirm `x64: True` (some downstream behavior assumes 64-bit).
 2. Confirm `default device: cpu` — Metal sometimes silently picks
    itself up and slows things down. Force CPU with `JAX_PLATFORMS=cpu`.
 3. Check the cache size — if it's in the GB range with hundreds of

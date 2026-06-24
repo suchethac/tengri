@@ -7,7 +7,7 @@ The IGM grammar accepts a ``type`` selecting the transmission curve
 (``none`` / ``madau`` / ``inoue14``) plus two optional boolean sub-flags
 that activate additional free parameters:
 
-- ``patchy=True`` enables a patchy-reionisation parameterisation, adding
+- ``patchy=True`` enables a patchy-reionization parameterization, adding
   ``igm_bubble_mpc`` and ``igm_x_HI``.
 - ``dla=True`` enables a damped-Lyman-α absorber, adding the
   ``dla_log_n_hi``, ``dla_z``, ``dla_b_turb``, ``dla_temp`` params.
@@ -25,7 +25,7 @@ Examples
 >>> # Plain Inoue+14 (no extras)
 >>> builders.igm.inoue14()
 {'type': 'inoue14', '*': FIXED}
->>> # Toggle patchy reionisation, override the bubble size prior
+>>> # Toggle patchy reionization, override the bubble size prior
 >>> builders.igm.inoue14(defaults=FREE, patchy=True, bubble_mpc=Uniform(5, 50))  # doctest: +SKIP
 {'type': 'inoue14', '*': FREE, 'patchy': True, 'bubble_mpc': Uniform(...)}
 """
@@ -52,7 +52,7 @@ def _discover_params(variant: str) -> tuple[list[str], dict[str, str]]:
 
     Runs :func:`recipe_parameters` once with both flags enabled to
     surface every potentially-activated parameter. The factory's runtime
-    behaviour then auto-enables the right flag when the user provides
+    behavior then auto-enables the right flag when the user provides
     one of the conditional params.
     """
     if variant == "none":

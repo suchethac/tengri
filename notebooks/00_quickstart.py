@@ -145,7 +145,7 @@ citations.print_citations(sed_model)
 #
 # One draw from the prior is the truth. `generate_mock` returns the
 # noiseless model fluxes, Gaussian uncertainties at the requested SNR,
-# and a noisy realisation.
+# and a noisy realization.
 
 # %%
 key = jax.random.PRNGKey(7)

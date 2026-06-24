@@ -2,21 +2,21 @@
 """Tests for tengri.builders.{igm,radio,xray} — simple single-axis components.
 
 These three modules share the design — variant-string selectors with a
-component-wide param set — so the tests are parametrised across them.
+component-wide param set — so the tests are parametrized across them.
 
 What we pin down here:
 
 1. Every variant in the parser's ``_VALID_*_TYPES`` enum surfaces as a
    factory.
 2. Factory output is shape-correct: ``{'type': <variant>, '*': FIXED}``
-   on a default call, with per-param overrides honoured.
+   on a default call, with per-param overrides honored.
 3. Per-param :class:`Distribution` overrides round-trip through the
    parser — the factory dict is byte-equivalent to a hand-written one.
 4. Validation rejects typos with a helpful list of valid names.
 5. The IGM-specific boolean flags (``patchy`` / ``dla``) and the
-   auto-enable behaviour when a flag-conditional param is supplied.
+   auto-enable behavior when a flag-conditional param is supplied.
 
-Wildcard (``*=FREE``) behaviour is intentionally **not** tested for
+Wildcard (``*=FREE``) behavior is intentionally **not** tested for
 round-trip activation: the parser does not flip these components'
 params via the wildcard. That's a parser-side limitation; the factory
 faithfully emits the wildcard, and a hand-written dict behaves

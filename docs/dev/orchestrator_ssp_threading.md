@@ -128,7 +128,7 @@ Concrete changes:
    ``fn(params, self.spec.get_fixed_values())``.
 
 Two contract tests (in ``tests/unit/test_approx_kwarg_contract.py``)
-pin the behaviour: same compile_signature across galaxies, correct
+pin the behavior: same compile_signature across galaxies, correct
 per-galaxy result, agreement with the non-JIT path.
 
 **What this does NOT solve** (still open, the rest of this doc):
@@ -136,7 +136,7 @@ per-galaxy result, agreement with the non-JIT path.
 - Per-galaxy ``Fixed(redshift)`` catalogs — the stellar LUT is built
   at the spec's fixed z, so each galaxy has a structurally different
   chain. The workaround is to build with ``approx=WavePrecomp(z_min, z_max)``
-  covering the catalogue range and pass the per-galaxy z via ``params``
+  covering the catalog range and pass the per-galaxy z via ``params``
   on a *free-redshift* spec.
 - SSP-as-HLO-constant: the 114 MB SSP grid is still closure-captured
   via ``self.ssp_data`` inside the chain's components.

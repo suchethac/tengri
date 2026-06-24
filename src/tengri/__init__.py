@@ -304,7 +304,7 @@ from tengri import io
 sys.modules["tengri.io"] = io
 
 # New namespace hierarchy (Phase 1+2, see docs/dev/api_migration_v0.x.md)
-# These are pure re-exports: no behavioural change, just clearer locations.
+# These are pure re-exports: no behavioral change, just clearer locations.
 #   tengri.cosmology — Planck18 + distance/age helpers
 #   tengri.units     — F_nu/L_nu/AB-mag conversions
 #   tengri.plot      — plotting helpers

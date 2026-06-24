@@ -8,7 +8,7 @@ the ``KernelStrategy`` module introduced in PR1–PR3. See ADR-0004.
 ## What changed
 
 - PR1: Added ``Kernel`` Protocol, seven adapter dataclasses, and
-  ``KernelStrategy`` (no behaviour change).
+  ``KernelStrategy`` (no behavior change).
 - PR2: Replaced six ``contextlib.suppress(Exception)`` blocks in
   ``_build_compositional_kernels``, ``_build_hybrid_kernels``,
   ``precompute_spectroscopy``, ``precompute_ztable`` with
@@ -113,7 +113,7 @@ configurations to within run-to-run noise. No regression observed.
 
 A future PR (PR4) can fully migrate the predict path to call
 ``adapter.build()`` directly, dropping the ``_compositional`` /
-``_hybrid`` slot containers in favour of a unified
+``_hybrid`` slot containers in favor of a unified
 ``self._built_kernels: dict[str, callable]``. That removes the
 remaining indirection but is not load-bearing — ``LOW_MEMORY``,
 visibility, and adding new kernels already work.

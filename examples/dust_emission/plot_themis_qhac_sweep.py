@@ -52,7 +52,7 @@ ax.set(
     xscale="log",
     yscale="log",
     xlabel=r"$\lambda\ [\mu\mathrm{m}]$",
-    ylabel=r"$\nu L_\nu\ [\mathrm{arbitrary,\ normalised}]$",
+    ylabel=r"$\nu L_\nu\ [\mathrm{arbitrary,\ normalized}]$",
     xlim=(2.0, 1.0e3),
     ylim=(1.0e-26, 1.0e-23),
 )

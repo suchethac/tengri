@@ -55,7 +55,7 @@ The aperture-fraction scales the SED: `fiber_spec ∝ aperture_fraction × full_
 Two new classes are required for a credible joint spec-phot demo:
 
 - **`FiberSpectroscopyObservation`** — wraps `Spectroscopy` + a circular fiber aperture (arcsec). `predict(state, params)` reads `spatial_profile_2d`, computes the aperture-fraction integral, scales the spectroscopy.
-- **`TotalPhotometryObservation`** — the existing `Photometry`/`PhotometryObservationModel` but explicitly labelled "total flux" so the joint composer can distinguish per-channel.
+- **`TotalPhotometryObservation`** — the existing `Photometry`/`PhotometryObservationModel` but explicitly labeled "total flux" so the joint composer can distinguish per-channel.
 
 Both follow the same `predict(state, params) → dict` shape (Protocol exists already).
 
@@ -138,7 +138,7 @@ If the existing `Observation` class already handles photometry+spec jointly, thi
 ## Out of scope
 
 - IFU resolved spectroscopy (the spatial profile is convolved with a PSF + sampled per-spaxel). Architecture supports it; the demo notebook doesn't.
-- Per-age spatial profiles (B path) — `PerAgeSersic` component lands when colour-gradient fits become a real ask.
+- Per-age spatial profiles (B path) — `PerAgeSersic` component lands when color-gradient fits become a real ask.
 - `BulgeDisk` composer profile (`Sersic` + `Exponential` summed).
 - Multi-population (item #3 / ADR-0012).
 

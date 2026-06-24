@@ -1,11 +1,11 @@
 """
-QSO continuum: polar-dust reddening tunes UV to optical colour
+QSO continuum: polar-dust reddening tunes UV to optical color
 ==============================================================
 
 Dust-free quasar spectra are intrinsically blue in the UV and optical.
 Adding a polar-dust attenuation component reddens the accretion-disc
 continuum: increasing the polar-dust reddening ``agn_polar_ebv`` (E(B−V),
-[mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colours to
+[mag]) from 0 to 0.4 walks the SED from unobscured type-1 QSO colors to
 a moderately dust-reddened continuum, while the absorbed UV energy is
 re-radiated as a polar-dust infrared bump.
 

@@ -168,7 +168,7 @@ class TestProspectorBetaRegistration:
         """Without an explicit bin_edges_gyr override, prospector_beta uses the
         same DEFAULT_BIN_EDGES_GYR as `continuity` — the recipe is responsible
         for calling make_agebins_from_zred when z != fiducial."""
-        # This is a behavioural assertion on the shape function, not the registry:
+        # This is a behavioral assertion on the shape function, not the registry:
         # the composer passes bin_edges_gyr via functools.partial when supplied,
         # else `continuity`'s default kicks in.
         assert DEFAULT_BIN_EDGES_GYR.shape == (8,)

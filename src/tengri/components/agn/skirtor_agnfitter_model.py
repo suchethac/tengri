@@ -12,7 +12,7 @@ fidelity target (see issue #614, #592, and #633 for motivation).
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
@@ -120,7 +120,7 @@ class SKIRTORAgnfitterTorus(SEDModelComponent):
     are unavailable.
 
     **AGNfitter parity**: This component reproduces AGNfitter-rX's
-    SKIRTOR_mean_3p template selection exactly (nearest-neighbour in
+    SKIRTOR_mean_3p template selection exactly (nearest-neighbor in
     3D parameter space, then per-L_sun normalization).  The upstream
     full-grid SKIRTOR differs in parameter space (5D vs 3D), peak
     wavelength (Stalevski +40µm vs AGNfitter +25µm at matched geometry),

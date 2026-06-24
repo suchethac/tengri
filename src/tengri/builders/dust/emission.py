@@ -120,7 +120,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
 
     Returns an emission sub-block that frees the energy-balance factor
     ``dust_eta_balance`` (``L_IR = eta * L_absorbed``) under a soft
-    ``LogNormal(mu=0, sigma)`` prior centred on strict balance (median
+    ``LogNormal(mu=0, sigma)`` prior centered on strict balance (median
     ``eta = 1``). Use it for galaxies whose UV/optical and FIR are spatially
     decoupled and so violate strict energy balance (e.g. high-z sources) — the
     way AGNfitter offers an *optional* energy-balance prior, in contrast to

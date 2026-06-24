@@ -52,7 +52,7 @@ warrant it (chi-squared still poor).
 If WISE W1/W2 data are available, the hot dust BB becomes strongly
 constraining and ``agn_bbnorm`` could be freed.
 
-Diagnostic colours for AGN contamination:
+Diagnostic colors for AGN contamination:
 
 - **W1-W2 > 0.8** (Stern+12) -- hot dust makes W2 brighter than W1
 - **u-g bluer than expected** -- UV power-law excess
@@ -590,7 +590,7 @@ def _qsogen_components(
         sum_l_nu = continuum + hot_dust + emission_lines + balmer_continuum
         result = sum_l_nu * smc_factor
 
-    All components share the joint cont+BB bolometric normalisation so the
+    All components share the joint cont+BB bolometric normalization so the
     sum bit-for-bit reproduces :func:`compute_qsogen_sed` (rtol < 1e-12).
 
     Notes
@@ -614,7 +614,7 @@ def _qsogen_components(
     continuum = continuum_unscaled * norm_factor
     hot_dust = hot_dust_unscaled * norm_factor
 
-    # Emission lines anchor on the normalised continuum-only L_nu (matches
+    # Emission lines anchor on the normalized continuum-only L_nu (matches
     # upstream order: lines added before BC, BC sees lines).
     m_i = _lbol_to_m_i(agn_log_lbol)
     emission_lines = _empirical_emission_lines(

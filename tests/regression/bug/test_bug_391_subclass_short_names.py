@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression: per-group key validator recognises short names declared by
+"""Regression: per-group key validator recognizes short names declared by
 user-registered :class:`SEDModelComponent` subclasses (issue #391).
 
 Before this fix, ``SEDModel.build(dust={'emission': {'type': 'my_model',

@@ -5,7 +5,7 @@ GRAHSP Fig. 1 reproduction: panchromatic AGN + host overview
 Reproduction of Fig. 1 of Buchner et al. (2024, GRAHSP): how the individual
 model components sum to the total emission (black). The AGN side is the
 GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red),
-and the dusty torus (yellow dashed), normalised so the disk has
+and the dusty torus (yellow dashed), normalized so the disk has
 :math:`L_{5100\\,\\mathrm{\\AA}}^{\\rm AGN}=10^{44}\\,\\mathrm{erg\\,s^{-1}}
 =10^{37}\\,\\mathrm{W}` (blue square); the torus is anchored at 12 µm (yellow
 diamond). The host is a stellar population (purple) and its reprocessed dust
@@ -41,14 +41,14 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 C_AA_HZ = 2.99792458e18  # c in Angstrom/s (st.wave is in Angstrom)
 ERG_TO_W = 1e-7
-L5100_ERG = 1.0e44  # disk normalisation: lambda*L_lambda(5100 A) (paper: = 1e37 W)
+L5100_ERG = 1.0e44  # disk normalization: lambda*L_lambda(5100 A) (paper: = 1e37 W)
 
 # No-arg load_ssp() auto-discovers the bundled PARSEC/MILES/Chabrier wNE grid
 # regardless of the working directory (sphinx-gallery executes from elsewhere).
 ssp = tengri.load_ssp()
 # Host galaxy only (stellar + dust energy balance is independent of the AGN);
 # the AGN is overlaid below from a matched GRAHSP evaluation so the disk is
-# pinned to the paper's L5100 normalisation.
+# pinned to the paper's L5100 normalization.
 model = SEDModel.build(
     ssp_data=ssp,
     sfh={"type": "dpl", "*": FIXED, "log_total_mass": 12.3},
@@ -104,7 +104,7 @@ ax.plot(wave_um, stellar, color="#7b2fbe", lw=1.8, label="Stellar attenuated", z
 ax.plot(wave_um, dust_ir, color="#3a8a3a", lw=1.8, label="Dust", zorder=3)
 ax.plot(wave_um, total, color="k", lw=1.8, label="Total", zorder=5)
 
-# Normalisation markers.
+# Normalization markers.
 i5100 = int(np.argmin(np.abs(wave_um - 0.510)))
 ax.plot([0.510], [disk[i5100]], "s", color="#1f9fe0", ms=9, zorder=6)
 i12 = int(np.argmin(np.abs(wave_um - 12.0)))

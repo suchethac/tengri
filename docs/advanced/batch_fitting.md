@@ -1,7 +1,7 @@
 # Batch Fitting
 
-Fitting catalogues of galaxies: `fit_batch` (independent fits) and
-`fit_population` (hierarchical, shared hyperparameters), mock catalogue
+Fitting catalogs of galaxies: `fit_batch` (independent fits) and
+`fit_population` (hierarchical, shared hyperparameters), mock catalog
 generation, result aggregation, and practical considerations for real survey data.
 
 :::{important}
@@ -12,7 +12,7 @@ generation, result aggregation, and practical considerations for real survey dat
 | N independent galaxy fits, no shared parameters | `model.fit_batch(observations)` | `list[Posterior]` |
 | N galaxies jointly, shared PSD / dust prior | `model.fit_population(observations)` | `PopulationPosterior` |
 
-`fit_batch` is fast and parallelisable. `fit_population` learns the population-level
+`fit_batch` is fast and parallelizable. `fit_population` learns the population-level
 burstiness prior from data — use it when you want to constrain the PSD hyperparameters
 rather than assuming them.
 :::

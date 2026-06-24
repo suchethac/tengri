@@ -56,7 +56,7 @@ agn_torus_block, agn_attenuation_block : str, optional
         user **must** opt in by name, and a warning is emitted if the
         recipe is degenerate).
     agn_norm : {"cigale_joint", "independent"}, optional
-        Cross-block normalisation policy (#556). ``"cigale_joint"``
+        Cross-block normalization policy (#556). ``"cigale_joint"``
         (default) ties the disc, torus, and polar dust to a *single*
         ``agn_power`` reference via the fixed SKIRTOR template ratios —
         bit-faithful to X-CIGALE's energy balance (Stalevski+2016).

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for ``select_pahspec_starlight_auto``.
 
-Nearest-neighbour selection of the best Draine+2021 PAHspec starlight
+Nearest-neighbor selection of the best Draine+2021 PAHspec starlight
 template from upstream stellar-population parameters
 (SPS family, characteristic age, log Z / Z_sun).
 """

@@ -116,7 +116,7 @@ def test_precompute_state_shape(precomputed):
 
 
 def test_apply_energy_balance(component, precomputed):
-    """int L_nu d nu == L_ir within trapezoid discretisation tolerance."""
+    """int L_nu d nu == L_ir within trapezoid discretization tolerance."""
     from tengri.protocols.component import ForwardState
 
     state, wave_aa = precomputed

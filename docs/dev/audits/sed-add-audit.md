@@ -55,7 +55,7 @@ state = state.with_(sed_intrinsic=new_sed, ...)
 ```
 **Status**: MIGRATE. One-liner ternary form; logically identical to if-else block above.
 
-### 6. `src/tengri/components/nebular/component.py` line 556 (photoionised backend)
+### 6. `src/tengri/components/nebular/component.py` line 556 (photoionized backend)
 ```python
 if state.sed_intrinsic is None:
     new_sed = nebular_sed

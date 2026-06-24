@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for the ``defaults=`` / legacy ``_=`` kwarg behaviour.
+"""Tests for the ``defaults=`` / legacy ``_=`` kwarg behavior.
 
 The canonical wildcard kwarg is ``defaults=`` (greppable, autocomplete-friendly,
 self-describing). The historical ``_=`` alias continues to work for one

@@ -18,7 +18,7 @@ All functions are pure JAX and JIT-compilable.
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
@@ -178,20 +178,20 @@ def _interpolate_and_normalize(
     r"""Interpolate a template grid and normalize to physical L_ν.
 
     SKIRTOR v3 templates are stored as L_λ-like (the download script does
-    ``disk /= wl`` and normalises by ``trapezoid(dust, wl)`` — issue #459).
+    ``disk /= wl`` and normalizes by ``trapezoid(dust, wl)`` — issue #459).
     The original implementation integrated the L_λ array against the
     frequency grid and treated the output as L_ν, leaving the returned
     array with L_λ shape — so νL_ν (the visible torus IR bump) peaked at
     ~5 µm instead of the SKIRTOR 30–50 µm thermal bump.
 
-    Fix: normalise the bolometric integral in the wavelength variable
+    Fix: normalize the bolometric integral in the wavelength variable
     (matching the convention used at template-build time) and convert
     L_λ → L_ν at the end via L_ν = L_λ × λ²/c.
 
     Parameters
     ----------
     grid_jax : ndarray, shape (n_tau, n_p, n_q, n_oa, n_inc, n_wave)
-        L_λ-like template grid [erg/s/Å, normalised per unit bolometric].
+        L_λ-like template grid [erg/s/Å, normalized per unit bolometric].
     wave_grid : ndarray, shape (n_wave_grid,)
         Grid wavelength array [Angstrom].
     axes : tuple of ndarray
@@ -220,8 +220,8 @@ def _interpolate_and_normalize(
     template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
-    # over-normalise on truncated grids; trapezoid in λ matches the
-    # download script's normalisation convention.
+    # over-normalize on truncated grids; trapezoid in λ matches the
+    # download script's normalization convention.
     #
     # ``wave_grid`` is monotonically ascending (set at load time in
     # ``_load_grid_arrays``), so trapezoid integrates correctly without
@@ -338,7 +338,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
        torus around AGN," MNRAS, 420, 2756 (2012). arXiv:1109.1286.
        https://doi.org/10.1111/j.1365-2966.2011.19775.x
     .. [2] M. Stalevski et al., "The dust covering factor in AGN," MNRAS, 458,
@@ -354,14 +354,14 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
     with jax.ensure_compile_time_eval():
         # Prefer the dust-only grid when the v3 HDF5 layout provides it.
         # The legacy v2 layout only stores ``total = disk + dust``, which
-        # smears the disc UV-optical into the IR normalisation; v3
+        # smears the disc UV-optical into the IR normalization; v3
         # separates ``disk_emission`` and ``dust_emission`` (see
         # ``scripts/download_skirtor_templates.py``). For the torus block
         # we want IR-only — pairing with a separate disc block (e.g.
         # ``disc/schartmann2005``) avoids the double-counting that
         # biased the §9 FIR-tail audit (Option D in the #487/#503 audit
         # threads). For v2 grids we fall back to ``total`` and the user
-        # gets the legacy disc-mixed-in behaviour.
+        # gets the legacy disc-mixed-in behavior.
         _grid_key = "dust" if "dust" in raw else "total"
         grid_jax = jnp.array(raw[_grid_key])
         wave_grid = jnp.array(raw["wave"])
@@ -579,7 +579,7 @@ def skirtor_disc_dust_ratio(
 
     Replicates CIGALE ``skirtor2016.py`` so the composable AGN can tie the
     disc to the single ``agn_power`` reference (energy-conserving). The
-    analytic disc shape is renormalised to the **face-on** SKIRTOR disc
+    analytic disc shape is renormalized to the **face-on** SKIRTOR disc
     integral ``∫disk(i=0)``, reweighted by the inclination ratio
     ``disk(i)/disk(0)``, reddened, and the **anisotropy factor**
     ``η(i) = cos(i)(1+2cos(i))/3`` (= 0.789 at i=30°) applied — then divided
@@ -598,7 +598,7 @@ def skirtor_disc_dust_ratio(
     wave : ndarray, shape (n_wave,)
         Rest-frame wavelength grid [Å].
     disc_lambda_unreddened : ndarray, shape (n_wave,)
-        Analytic disc spectrum *before* reddening, any normalisation
+        Analytic disc spectrum *before* reddening, any normalization
         (shape only is used). [erg/s/Å]
     disc_ext_fac : ndarray, shape (n_wave,)
         Line-of-sight reddening factor ``10^(-0.4·k·E(B-V))`` (1.0 = no
@@ -642,7 +642,7 @@ def skirtor_disc_dust_ratio(
             jnp.asarray(cos_inc),
         )
         # RAW interpolated L_λ template on the NATIVE grid — NO per-component
-        # normalisation (preserves the disk/dust ratio) and NO wave resampling
+        # normalization (preserves the disk/dust ratio) and NO wave resampling
         # (CIGALE integrates lumin_disk/lumin_dust on the SKIRTOR template grid;
         # resampling onto the user grid distorts the integrals → R ~10% off).
         # PCHIP (node-EXACT) not triweight (a smoother): the triweight kernel
@@ -685,7 +685,7 @@ def skirtor_disc_dust_ratio(
 
 @functools.cache
 def _load_raw_disk_dust_grid():
-    """Load raw (un-normalised) SKIRTOR disk/dust template grids for R.
+    """Load raw (un-normalized) SKIRTOR disk/dust template grids for R.
 
     Returns ``(disk_jax, dust_jax, wave_grid, axes)`` or ``None`` if the v3
     grid (separate disk/dust components) is unavailable. Any descending axis

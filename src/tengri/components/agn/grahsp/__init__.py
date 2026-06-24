@@ -25,7 +25,7 @@ Building blocks (also public, for component-level testing)
     Mid-IR torus components.
 :func:`smc_attenuation_curve`, :func:`attenuation_factors`
     SMC-like bi-attenuation (Prevot 1984 / Buchner+ 2024).
-:func:`normalised_excess_variance`
+:func:`normalized_excess_variance`
     Pan-STARRS1 NEV (Simm+ 2016).
 :func:`bolometric_luminosity_bbb`, :func:`bolometric_luminosity_torus`,
 :func:`agn_fraction_dale`
@@ -84,7 +84,7 @@ from tengri.components.agn.grahsp.torus import (
     si_feature,
     torus_dust_continuum,
 )
-from tengri.components.agn.grahsp.variability import normalised_excess_variance
+from tengri.components.agn.grahsp.variability import normalized_excess_variance
 
 __all__ = [
     "AGN_TYPE_BL",
@@ -111,7 +111,7 @@ __all__ = [
     "gaussian_lines",
     "grahsp",
     "load_grahsp_templates",
-    "normalised_excess_variance",
+    "normalized_excess_variance",
     "sbpl_bbb",
     "si_feature",
     "smc_attenuation_curve",

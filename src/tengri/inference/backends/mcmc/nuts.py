@@ -156,7 +156,7 @@ def run_nuts(
     n_chains : int, default 1
         Number of independent NUTS chains to run in parallel via
         ``jax.vmap`` over chain seeds. Each chain shares the cached
-        warmup adaptation (so this is only honoured on the second
+        warmup adaptation (so this is only honored on the second
         ``run_nuts(...)`` call against the same model — the first call
         populates the cache). Final posterior has ``n_chains * n_samples``
         total samples. Wall ≈ one chain's worth up to the arithmetic
@@ -194,7 +194,7 @@ def run_nuts(
           with `dense_basis` SFH reported in issue #319).
 
         Pass ``True`` or ``False`` explicitly to override. Explicit
-        ``True`` at D >= 8 emits a memory warning but is honoured.
+        ``True`` at D >= 8 emits a memory warning but is honored.
     pathfinder_warmstart : bool, default False
         Use ``blackjax.pathfinder_adaptation`` (L-BFGS mode-finding +
         Hessian-derived inverse mass matrix + short step-size refinement)
@@ -252,7 +252,7 @@ def run_nuts(
     n_dim = len(init_flat)
 
     # Resolve auto-policy (default since #319). Explicit True/False
-    # from the caller is honoured as-is.
+    # from the caller is honored as-is.
     user_passed_explicit = dense_mass_matrix is not None
     dense_mass_matrix = _resolve_dense_mass_matrix(dense_mass_matrix, n_dim)
     if verbose and not user_passed_explicit:

@@ -71,7 +71,7 @@ If you find evidence the feature shipped, **update this file** (move the item to
 - **Original claim:** no GP-correlated noise / per-pixel jitter.
 - **Verified state (2026-05-03):** `src/tengri/observation/noise.py` already provides `gp_noise_covariance`, `exp_squared_kernel`, and `matern32_kernel` for wavelength-correlated GP noise on spectroscopy. Per-pixel jitter is structurally the same as the new `apply_zp_floor` utility (added 2026-05-03 commit 16c8131) — apply it to a spectrum's per-pixel noise. Audit closed without further code changes.
 
-### 5. Additional SFH parameterisations (audit was stale)
+### 5. Additional SFH parameterizations (audit was stale)
 - **Original claim:** missing constant, rising, piecewise (continuity), composite (quiescent + post-quench).
 - **Verified state (2026-05-03):** all four are present in `src/tengri/components/sfh/mean_sfh.py` and `nonparametric.py`: `constant` (line 486), `delayed_exponential` / `constant_then_exponential_sfh` (line 667), `continuity` (in `nonparametric.py:43`), `psb_wild2020` (post-starburst composite at line 816). Audit closed without code changes.
 

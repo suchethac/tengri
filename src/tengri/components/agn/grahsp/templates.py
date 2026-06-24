@@ -46,19 +46,19 @@ class GRAHSPTemplates:
         Mor & Netzer 2012 template-torus continuum grid [nm].
     torus_mn12_avg, torus_mn12_lo, torus_mn12_hi : ndarray, shape (n_mn12,)
         Mean / 25th-percentile / 75th-percentile :math:`L_\\lambda` torus
-        templates, normalised to 1 at 12 µm (from upstream ``activatetorus``).
+        templates, normalized to 1 at 12 µm (from upstream ``activatetorus``).
     torus_mn12_si_wave_nm : ndarray, shape (n_si,)
         Mullaney+2011 silicate-feature grid [nm].
     torus_mn12_si_lumin : ndarray, shape (n_si,)
-        Silicate difference spectrum, normalised by the 12 µm continuum.
+        Silicate difference spectrum, normalized by the 12 µm continuum.
     feii_vc04_wave_nm : ndarray, shape (n_vc04,)
         Veron-Cetty+2004 FeII template wavelengths [nm] (rest frame).
     feii_vc04_lumin : ndarray, shape (n_vc04,)
-        Veron-Cetty+2004 FeII :math:`L_\\lambda`, normalised at rest 4575 Å.
+        Veron-Cetty+2004 FeII :math:`L_\\lambda`, normalized at rest 4575 Å.
     disc_wave_nm : ndarray, shape (n_disc_wave,)
         Netzer accretion-disc grid [nm].
     disc_lumin : ndarray, shape (16, n_disc_wave)
-        Netzer disc :math:`L_\\lambda` per (M, a, Mdot) model, normalised to 1
+        Netzer disc :math:`L_\\lambda` per (M, a, Mdot) model, normalized to 1
         at 510 nm (inc=0).
     disc_m, disc_a, disc_mdot : tuple[str, ...], shape (16,)
         Disc grid labels: log10 M_BH/Msun, spin a, Eddington ratio Mdot.

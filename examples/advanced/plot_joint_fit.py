@@ -113,7 +113,7 @@ wave_plot = np.array(wave_obs) / 1e4
 n_phot = 5
 spec_obs = np.array(flux_obs[n_phot:])
 spec_fit = np.array(model.predict_spectrum(fit_params, wave_obs))
-ax.plot(wave_plot, spec_obs, color="grey", lw=0.5, alpha=0.7, label="Observed")
+ax.plot(wave_plot, spec_obs, color="gray", lw=0.5, alpha=0.7, label="Observed")
 ax.plot(wave_plot, spec_fit, color="C3", lw=1.5, label="MAP")
 ax.set_xlabel(r"Wavelength [$\mu$m]")
 ax.set_ylabel(r"Flux density [$\mu$Jy]")

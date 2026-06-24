@@ -50,7 +50,7 @@ class TestSSPDataIMF:
         assert ssp.imf == "chabrier"
 
     def test_unknown_fallback(self):
-        """Filenames without a recognised IMF token resolve to ``"unknown"``."""
+        """Filenames without a recognized IMF token resolve to ``"unknown"``."""
         from types import SimpleNamespace
 
         from tengri.components.stellar.sps.dsps_wrapper import _detect_imf
@@ -114,7 +114,7 @@ class TestListAvailableSSPs:
                 assert by_name[name]["imf"] == imf
 
     def test_fsps_mist_c3k_a_family_has_three_imfs(self):
-        """Sanity: the catalogue does carry the canonical multi-IMF family."""
+        """Sanity: the catalog does carry the canonical multi-IMF family."""
         rows = tengri.list_available_ssps()
         fam_imfs = {r["imf"] for r in rows if r["family"] == "fsps_mist_c3k_a"}
         assert {"chabrier", "kroupa", "salpeter"} <= fam_imfs

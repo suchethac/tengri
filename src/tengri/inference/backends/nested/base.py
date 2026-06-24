@@ -80,7 +80,7 @@ def init_state_strategy(
     loglikelihood_birth: float = jnp.nan,
     data_args: dict | None = None,
 ) -> StateWithLogLikelihood:
-    """Default initialisation strategy for each state.
+    """Default initialization strategy for each state.
 
     Parameters
     ----------

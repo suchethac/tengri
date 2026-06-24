@@ -1,6 +1,6 @@
 # Extending tengri
 
-How to plug in custom SFH parametrisations, dust laws, nebular models, and AGN
+How to plug in custom SFH parametrizations, dust laws, nebular models, and AGN
 templates.
 
 :::{note}

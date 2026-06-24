@@ -46,13 +46,13 @@ glued them together.
 
 **Inference and probabilistic programming**
 
-- [JAX](https://github.com/google/jax): autodiff, JIT, vectorisation.
+- [JAX](https://github.com/google/jax): autodiff, JIT, vectorization.
 - [NIFTy.re](https://gitlab.mpcdf.mpg.de/ift/nifty): information
   field theory, geoVI / MGVI. Edenhofer et al. (2024),
   [arXiv:2402.16683](https://arxiv.org/abs/2402.16683).
 - [BlackJAX](https://github.com/blackjax-devs/blackjax): NUTS, HMC,
   MCLMC and friends.
-- [optax](https://github.com/google-deepmind/optax): MAP optimisers.
+- [optax](https://github.com/google-deepmind/optax): MAP optimizers.
 - Ray Tracing sampler: Behroozi (2025),
   [arXiv:2504.20029](https://arxiv.org/abs/2504.20029).
 - Pathfinder: Zhang et al. (2022),

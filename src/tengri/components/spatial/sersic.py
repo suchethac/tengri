@@ -9,7 +9,7 @@ Surface-brightness profile of the form
 
 where :math:`r_e` is the effective (half-light) radius, :math:`n` is the
 Sérsic index (n=1 ↔ exponential disk, n=4 ↔ de Vaucouleurs bulge),
-and :math:`b_n` is the Sérsic normalisation that makes :math:`r_e`
+and :math:`b_n` is the Sérsic normalization that makes :math:`r_e`
 enclose half the total flux.
 
 References
@@ -34,7 +34,7 @@ __all__ = ["Sersic"]
 
 
 def _b_n(n: jnp.ndarray) -> jnp.ndarray:
-    """Sérsic normalisation b_n via the Ciotti & Bertin (1999) expansion.
+    """Sérsic normalization b_n via the Ciotti & Bertin (1999) expansion.
 
     Valid for n > 0.36; the analytic expansion is accurate to 10^-3 over
     the n ∈ [0.5, 10] range encountered in galaxy fits. See [Ciotti1999]_

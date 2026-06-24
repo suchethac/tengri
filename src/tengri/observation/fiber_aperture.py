@@ -19,13 +19,13 @@ This module provides:
 - :func:`circular_aperture_mask` — build a 0/1 mask on the spatial
   grid, optionally with a small sigmoidal edge softening for
   differentiability.
-- :func:`aperture_fraction` — the fraction of an unnormalised 2D
+- :func:`aperture_fraction` — the fraction of an unnormalized 2D
   profile that lies inside a given (kpc) radius from the origin.
 
 All functions are pure JAX. The aperture-fraction integral uses a
 sigmoid-softened mask by default so the result is differentiable in
 the aperture radius — useful when the aperture is a calibration
-parameter, or when the user wants to marginalise over fiber-placement
+parameter, or when the user wants to marginalize over fiber-placement
 uncertainty.
 
 This module is for *forward-model* aperture fractions (Sérsic ×
@@ -99,7 +99,7 @@ def circular_aperture_mask(
     radius_kpc : float or ndarray
         Aperture radius in kpc.
     center_kpc : tuple of (float, float), default (0.0, 0.0)
-        Aperture centre in kpc — useful when the fiber is offset
+        Aperture center in kpc — useful when the fiber is offset
         from the galaxy nucleus.
     softness : float, default 0.01
         Sigmoidal edge softening as a fraction of ``radius_kpc``.
@@ -134,7 +134,7 @@ def aperture_fraction(
     center_kpc: tuple[float, float] = (0.0, 0.0),
     softness: float = 0.01,
 ) -> jnp.ndarray:
-    """Fraction of an unnormalised 2D profile inside a circular aperture.
+    """Fraction of an unnormalized 2D profile inside a circular aperture.
 
     .. math::
 
@@ -147,14 +147,14 @@ def aperture_fraction(
     Parameters
     ----------
     profile_2d : ndarray, shape (ny, nx)
-        Unnormalised surface-brightness profile (e.g.
+        Unnormalized surface-brightness profile (e.g.
         ``state.derived["spatial_profile_2d"]``).
     grid_kpc : tuple of (ndarray, ndarray), each shape (ny, nx)
         Physical-coordinate grids.
     radius_kpc : float or ndarray
         Aperture radius in kpc.
     center_kpc : tuple of (float, float), default (0.0, 0.0)
-        Aperture centre.
+        Aperture center.
     softness : float, default 0.01
         See :func:`circular_aperture_mask`.
 

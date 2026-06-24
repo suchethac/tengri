@@ -64,7 +64,7 @@ def test_interp_matches_table_at_interior_nodes():
 
 @pytest.mark.bounds
 def test_geometry_greying_ordering():
-    """WG00 greying: at fixed τ_V the shell screen attenuates most, cloudy least."""
+    """WG00 graying: at fixed τ_V the shell screen attenuates most, cloudy least."""
     w, tau = jnp.array([1500.0]), 3.0
     a = {
         g: float(
@@ -132,7 +132,7 @@ def test_wg00_attenuates_forward_sed(synthetic_ssp_wide):
 
 @pytest.mark.bounds
 def test_wg00_geometry_changes_forward_curve(synthetic_ssp_wide):
-    """Switching geometry (shell→cloudy) changes the attenuated SED (greying)."""
+    """Switching geometry (shell→cloudy) changes the attenuated SED (graying)."""
     from tengri import Fixed, SEDModel
 
     def build(geom):

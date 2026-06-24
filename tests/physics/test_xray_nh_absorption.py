@@ -38,7 +38,7 @@ jax.config.update("jax_enable_x64", True)
 
 # Morrison & McCammon (1983) Table 2 reference: σ(E)·E³ values
 # (units 10⁻²⁴ cm² · keV³). Computed from the published coefficients
-# at the centre of representative bins. These numbers are the contract
+# at the center of representative bins. These numbers are the contract
 # the JAX implementation must reproduce to numerical tolerance.
 _MM83_REFERENCE = [
     # (E_keV, sigma_in_1e_24_cm2), bin chosen to match the M&M83 edges
@@ -70,7 +70,7 @@ def test_tbabs_matches_morrison_mccammon(E_keV: float, sigma_ref_1e24: float) ->
 
 @pytest.mark.limit
 def test_unabsorbed_limit_matches_intrinsic_power_law() -> None:
-    """N_H → 0 limit recovers the intrinsic α_ox-normalised power-law.
+    """N_H → 0 limit recovers the intrinsic α_ox-normalized power-law.
 
     Physical limit: τ_phabs, τ_cabs → 0 ⇒ both transmissions → 1,
     and the scattered term 0.01·L is added once via the +0.01·L

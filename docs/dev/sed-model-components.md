@@ -60,7 +60,7 @@ or neural-net emulator.
 
 ---
 
-## Three flavours of model, one signature
+## Three flavors of model, one signature
 
 ### Closed-form (most common)
 

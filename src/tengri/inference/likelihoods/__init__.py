@@ -14,12 +14,12 @@ from tengri.inference.likelihoods.gaussian import (
     diag_gaussian_chi2,
     diag_gaussian_log_prob,
 )
-from tengri.inference.likelihoods.marginalised import (
-    CalibrationELineMarginalisedLikelihood,
-    CalibrationMarginalisedLikelihood,
-    CloudyELineMarginalisedLikelihood,
+from tengri.inference.likelihoods.marginalized import (
+    CalibrationELineMarginalizedLikelihood,
+    CalibrationMarginalizedLikelihood,
+    CloudyELineMarginalizedLikelihood,
     ELineFittedLikelihood,
-    ELineMarginalisedLikelihood,
+    ELineMarginalizedLikelihood,
 )
 from tengri.inference.likelihoods.protocol import (
     CensoredLikelihood,
@@ -29,12 +29,12 @@ from tengri.inference.likelihoods.protocol import (
 )
 
 __all__ = [
-    "CalibrationELineMarginalisedLikelihood",
-    "CalibrationMarginalisedLikelihood",
+    "CalibrationELineMarginalizedLikelihood",
+    "CalibrationMarginalizedLikelihood",
     "CensoredLikelihood",
-    "CloudyELineMarginalisedLikelihood",
+    "CloudyELineMarginalizedLikelihood",
     "ELineFittedLikelihood",
-    "ELineMarginalisedLikelihood",
+    "ELineMarginalizedLikelihood",
     "GaussianLikelihood",
     "MultivariateGaussianLikelihood",
     "StudentTLikelihood",

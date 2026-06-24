@@ -17,7 +17,7 @@ pytestmark = pytest.mark.bounds
 
 
 class TestDustAttenuation:
-    """All attenuation curves are normalised so k(5500 Å) = 1."""
+    """All attenuation curves are normalized so k(5500 Å) = 1."""
 
     WL = jnp.array([5500.0, 2175.0, 1500.0, 8000.0])  # V, UV bump, FUV, I-band
 
@@ -37,7 +37,7 @@ class TestDustAttenuation:
 
         k = np.array(cardelli(self.WL, dust_Rv=3.1))
         assert 3.0 < k[1] < 3.4, f"MW UV bump k(2175)={k[1]:.2f}, expected 3.2"
-        # Bump must exceed linear interpolation between neighbour wavelengths
+        # Bump must exceed linear interpolation between neighbor wavelengths
         wl2 = jnp.array([1900.0, 2175.0, 2450.0])
         k2 = np.array(cardelli(wl2, dust_Rv=3.1))
         baseline = 0.5 * (k2[0] + k2[2])
@@ -100,7 +100,7 @@ class TestDustLawCombinations:
         ],
     )
     def test_dust_law_normalized_at_V_band(self, name):
-        """All registered laws (except prevot_smc) normalise to k(V)=1 within 5%."""
+        """All registered laws (except prevot_smc) normalize to k(V)=1 within 5%."""
         from tengri.components.dust.attenuation import resolve_dust_law
 
         fn = resolve_dust_law(name)
@@ -144,8 +144,8 @@ class TestKriekConroyMatchesFSPS:
         drude = eb*(lam*dlam)**2 / ((lam**2 - lamuvb**2)**2 + (lam*dlam)**2)
         attn  = tauv*(cal00 + drude/4.05)*(lam/lamv)**dust_index
 
-    These tests pin tengri's curve to that reference, normalised to
-    k(5500 Å) = 1, so a regression in the bump normalisation or the
+    These tests pin tengri's curve to that reference, normalized to
+    k(5500 Å) = 1, so a regression in the bump normalization or the
     slope-bump coupling trips here.
     """
 

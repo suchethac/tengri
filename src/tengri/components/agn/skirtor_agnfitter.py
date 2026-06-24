@@ -30,7 +30,7 @@ Axis semantics
     Equatorial optical depth at 9.7 µm (τ_9.7). Range: 3–11.
     Controls the torus optical thickness.
 
-Runtime normalisation
+Runtime normalization
 ---------------------
 Template is shape-only.  At runtime the module divides by the trapezoidal
 integral over frequency and multiplies by ``L_bol * agn_torus_frac``,
@@ -39,7 +39,7 @@ mirroring :mod:`tengri.components.agn.skirtor` and
 
 References
 ----------
-.. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+.. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
    arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
@@ -204,7 +204,7 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
             (agn_oa_skirtor, agn_incl_skirtor, agn_tv_skirtor),
         )
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
-        # Template is shape-only: renormalise by the frequency integral and scale
+        # Template is shape-only: renormalize by the frequency integral and scale
         # by L_bol * torus_frac, exactly as the cat3d_wind / silva04 torus blocks
         # and the skirtor_agnfitter precompute path do (lnu = L_SUN * T / int T dnu).
         nu = _wavelength_to_nu(wavelength)

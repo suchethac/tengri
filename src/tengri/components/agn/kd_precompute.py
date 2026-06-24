@@ -72,7 +72,7 @@ class KDPreintegratedData:
         Shape (n_kTbb,). Seed blackbody temperature grid [keV].
     corona_table : jnp.ndarray
         Shape (n_Gamma, n_kT, n_kTbb, n_filters). Filter-integrated
-        thermal-Comptonisation shape [erg/s/cm^3] for the hot corona, with
+        thermal-Comptonization shape [erg/s/cm^3] for the hot corona, with
         both the electron-temperature cutoff and the seed-photon rollover.
     corona_Gamma_grid : jnp.ndarray
         Shape (n_Gamma,). Hard X-ray photon index grid [dimensionless].
@@ -308,7 +308,7 @@ def _build_corona_filter_table(
     filter_trans: list[np.ndarray],
     redshift: float,
 ) -> np.ndarray:
-    r"""Precompute the thermal-Comptonisation corona shape integrated through filters.
+    r"""Precompute the thermal-Comptonization corona shape integrated through filters.
 
     The corona spectrum is bounded by a high-energy cutoff at the electron
     temperature and a low-energy rollover at the seed-photon energy:
@@ -319,12 +319,12 @@ def _build_corona_filter_table(
                            \, \exp(-h\nu / kT_e)
                            \, \exp(-\nu_{\rm seed} / \nu)
 
-    normalised so :math:`\int {\rm shape}\, d\nu = 1` on the fixed RELAGN grid.
+    normalized so :math:`\int {\rm shape}\, d\nu = 1` on the fixed RELAGN grid.
     This matches ``_hot_corona_lnu`` in ``disc.py`` term for term (including the
     seed-photon rollover, Kubota & Done 2018 Section 2.2), keeping the
     preintegrated photometry consistent with the full-wavelength path.
 
-    The normalisation uses the same fixed [1e-4, 1e4] keV grid as
+    The normalization uses the same fixed [1e-4, 1e4] keV grid as
     ``_hot_corona_lnu``, making the result independent of the caller's grid.
 
     Parameters

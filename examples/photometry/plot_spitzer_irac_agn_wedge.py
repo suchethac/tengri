@@ -92,7 +92,7 @@ def sample_sf_galaxy(ssp, key, redshift):
 
 
 # --- Helper: composite (host + AGN) photometry at varying AGN fraction.
-# IRAC colours are *shape* quantities, so varying the AGN bolometric
+# IRAC colors are *shape* quantities, so varying the AGN bolometric
 # luminosity alone leaves them unchanged. What actually moves a galaxy
 # across the wedge is the relative AGN-to-host contribution in the
 # mid-IR — that is what we sweep here.
@@ -198,7 +198,7 @@ if len(sf_color_x) > 0:
         zorder=3,
     )
 
-# Composite host+AGN track, coloured by AGN fraction
+# Composite host+AGN track, colored by AGN fraction
 scatter_agn = ax.scatter(
     agn_color_x,
     agn_color_y,

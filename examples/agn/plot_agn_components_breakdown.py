@@ -10,7 +10,7 @@ add up to the full SED.
 
 This is the diagnostic figure for "where does the AGN signal in my
 data come from?" — broad-line decompositions need ``blr``, NLR
-fitters need ``nlr``, NIR/MIR colour fitters need ``torus`` (and
+fitters need ``nlr``, NIR/MIR color fitters need ``torus`` (and
 disc choice barely matters longward of 1 μm), etc.
 """
 

@@ -5,9 +5,9 @@ These pin the claims the §9c/§9d reproduction panels rest on:
 
 1. The NLR and BLR grids carry the *same* Cloudy line list (ids + wavelengths) —
    the basis for "tengri reads the same lines Synthesizer does".
-2. The grid's own specific ionising luminosity (Q_H / L_bol) loads faithfully and
-   interpolates within the grid envelope — the normalisation the adapters use with
-   ``use_grid_qh=True`` rather than an assumed ionising-spectrum slope.
+2. The grid's own specific ionizing luminosity (Q_H / L_bol) loads faithfully and
+   interpolates within the grid envelope — the normalization the adapters use with
+   ``use_grid_qh=True`` rather than an assumed ionizing-spectrum slope.
 3. tengri's smooth (triweight) interpolation reproduces the grid's per-node line
    *ratios* only to within a documented tolerance — it deliberately smooths the
    coarse 2-node test grid for differentiability, so exact node parity is not
@@ -55,7 +55,7 @@ def test_nlr_blr_share_line_list(backends):
 
 
 def test_grid_qh_loaded_and_finite(backends):
-    """The grid's specific ionising luminosity loads with the right shape and is finite."""
+    """The grid's specific ionizing luminosity loads with the right shape and is finite."""
     nlr, _ = backends
     qh = np.asarray(nlr.grid.log_qh_specific)
     assert qh.ndim == 6  # mass, edd, inc, met, ionU, nH
@@ -139,7 +139,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
 
     The composable ``nlr`` and ``blr`` blocks expose ``synthesizer``
     selectors that route to the Synthesizer Cloudy grids, so a unified AGN built
-    through the high-level API uses the same photoionisation grids as the direct
+    through the high-level API uses the same photoionization grids as the direct
     adapters — not just the analytic templates.
     """
     if not _NLR.exists():

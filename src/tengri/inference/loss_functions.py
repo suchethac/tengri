@@ -314,9 +314,9 @@ def build_loss_fn(fitter):
     :meth:`Fitter._maybe_build_default_likelihood`). Each physically
     distinct configuration — diagonal Gaussian, Student-t / variable
     noise, censored photometry, multivariate Gaussian, calibration
-    marginalisation, emission-line marginalisation (flat or Cloudy
+    marginalization, emission-line marginalization (flat or Cloudy
     prior), explicitly-fitted line amplitudes, and the combined
-    calibration + e-line marginalisation — is handled by a dedicated
+    calibration + e-line marginalization — is handled by a dedicated
     adapter, not by branches in this builder.
 
     **Data as explicit arguments**: Observed data, noise, and noise models are
@@ -471,7 +471,7 @@ def build_loglikelihood_fn(fitter):
     fixed values, resolves mirrored parameters, then negates the data
     term to return ``+log p(d|params)``. Dispatch over likelihood
     variants (Gaussian, Student-t, censored, multivariate Gaussian,
-    calibration / e-line marginalisation, fitted line amplitudes) is
+    calibration / e-line marginalization, fitted line amplitudes) is
     handled by the auto-built :class:`Likelihood` adapter cohort in
     :meth:`Fitter._maybe_build_default_likelihood`, not by branches
     here.

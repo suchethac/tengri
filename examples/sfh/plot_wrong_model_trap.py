@@ -72,7 +72,7 @@ truth_model = tengri.SEDModel.build(
     redshift=tengri.Fixed(Z),
 )
 
-# Seed picked so the GP realisation has a recent (<~100 Myr) excursion —
+# Seed picked so the GP realization has a recent (<~100 Myr) excursion —
 # without a recent feature there is no trap to diagnose.
 key_truth = jax.random.PRNGKey(7)
 truth = dict(truth_model.spec.sample(key_truth))
@@ -159,10 +159,10 @@ ax_sed.set_ylabel(r"$F_\nu$  [erg s$^{-1}$ cm$^{-2}$ Hz$^{-1}$]")
 ax_sed.legend(frameon=False, fontsize=8, loc="lower right")
 
 residual = (flux_fit - flux_obs) / noise
-band_colour = ["C0" if w < 4e3 else "0.3" for w in wave_eff]
+band_color = ["C0" if w < 4e3 else "0.3" for w in wave_eff]
 ax_res.axhspan(-1, 1, color="0.85", alpha=0.5, zorder=0)
 ax_res.axhline(0.0, color="0.4", lw=0.6)
-for w, r, c in zip(wave_eff, residual, band_colour):
+for w, r, c in zip(wave_eff, residual, band_color):
     ax_res.plot(w, r, "o", color=c, ms=6)
 ax_res.set_xscale("log")
 ax_res.set_xlabel(r"Observed wavelength  [$\mathrm{\AA}$]")

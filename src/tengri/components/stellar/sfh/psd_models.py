@@ -286,7 +286,7 @@ def psd_extended_regulator(
     .. [1] S. Tacchella et al., "A Redshift-independent Efficiency Model: Star
        Formation and Stellar Masses in Dark Matter Halos at z >= 4," ApJ, 868,
        92 (2018). arXiv:1806.03299. https://doi.org/10.3847/1538-4357/aae8e0
-    .. [2] N. Caplar and S. Tacchella, "Stochastic modelling of star-formation
+    .. [2] N. Caplar and S. Tacchella, "Stochastic modeling of star-formation
        histories I: the scatter of the star-forming main sequence," MNRAS, 487,
        3845 (2019). arXiv:1901.07556. https://doi.org/10.1093/mnras/stz1449
     """

@@ -148,9 +148,9 @@ ha_rest = 6562.80
 nii_6549_rest = 6548.05
 nii_6585_rest = 6583.46
 
-ax_prism.axvline(ha_rest * rest_to_obs, ls=":", lw=1.5, color="grey", alpha=0.6)
-ax_prism.axvline(nii_6549_rest * rest_to_obs, ls=":", lw=1.0, color="grey", alpha=0.4)
-ax_prism.axvline(nii_6585_rest * rest_to_obs, ls=":", lw=1.0, color="grey", alpha=0.4)
+ax_prism.axvline(ha_rest * rest_to_obs, ls=":", lw=1.5, color="gray", alpha=0.6)
+ax_prism.axvline(nii_6549_rest * rest_to_obs, ls=":", lw=1.0, color="gray", alpha=0.4)
+ax_prism.axvline(nii_6585_rest * rest_to_obs, ls=":", lw=1.0, color="gray", alpha=0.4)
 
 ax_prism.text(
     ha_rest * rest_to_obs,
@@ -158,7 +158,7 @@ ax_prism.text(
     r"H$\alpha$",
     fontsize=9,
     ha="center",
-    color="grey",
+    color="gray",
     transform=ax_prism.get_xaxis_transform(),
 )
 
@@ -182,7 +182,7 @@ ax_grating.plot(
 ax_grating.fill_between(wave_obs_ha, sed_grating, alpha=0.3, color="C1")
 
 # Emission line markers and labels
-colors_lines = ["C2", "grey", "C2"]
+colors_lines = ["C2", "gray", "C2"]
 line_rest = [nii_6549_rest, ha_rest, nii_6585_rest]
 line_names = [r"[N\,II]", r"H$\alpha$", r"[N\,II]"]
 

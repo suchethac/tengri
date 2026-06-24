@@ -10,7 +10,7 @@ hot continuum) and in the NIR (treatment of TP-AGB).
 
 At a fixed lookback age of 1 Gyr (single 50 Myr-wide burst) we
 overlay the rest-frame ``νL_ν`` for each bundled SSP grid, all
-normalised at 5500 Å so the chromatic differences read cleanly.
+normalized at 5500 Å so the chromatic differences read cleanly.
 
 The bundled SSPs include both ``wNE`` ("with nebular emission" baked
 into the grid at fixed ``log U``) and bare-stellar variants; we use

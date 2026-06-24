@@ -47,7 +47,7 @@ HbFrac and matter-bounded nebulae
 HbFrac = L_Hβ(matter-bounded) / L_Hβ(radiation-bounded).
 HbFrac = 1.0 → radiation-bounded (default); HbFrac < 1 → matter-bounded,
 with ionizing photon escape fraction ≈ 1 − HbFrac. The HbFrac axis is treated
-as discrete (nearest-neighbour snap at init time via ``hbfrac`` argument).
+as discrete (nearest-neighbor snap at init time via ``hbfrac`` argument).
 
 Comparison with BEAGLE (Gutkin+2016)
 -------------------------------------
@@ -573,7 +573,7 @@ class CB19Backend:
         2. Triweight-collapsing axes 3 (log_nH), 4 (log_CO), 5 (dNO) at the
            caller-supplied default values (defaults: HII region, near-solar
            C/O, ΔN/O = 0).
-        3. Relabelling axis 0 from log10(O/H) on the CLOUDY c17.01 scale to
+        3. Relabeling axis 0 from log10(O/H) on the CLOUDY c17.01 scale to
            absolute log10(Z) by subtracting ``_LOG_OH_OFFSET`` so the
            kernel's ``_gas_z`` (absolute log10(Z)) lands on the correct
            coordinates.
@@ -639,7 +639,7 @@ class CB19Backend:
             log_lum_per_qh = jnp.tensordot(w, log_lum_per_qh, axes=([0], [axis_idx]))
         # log_lum_per_qh now: (N_OH, N_age, N_U, N_lines)
 
-        # 3. Build CLOUDY-shape surface axes (axis 0 relabelled to absolute log10(Z)).
+        # 3. Build CLOUDY-shape surface axes (axis 0 relabeled to absolute log10(Z)).
         log_met_abs_axis = jnp.asarray(grid.log_OH_grid) - _LOG_OH_OFFSET
         log_age_axis = jnp.asarray(grid.log_age_grid)
         log_U_axis = jnp.asarray(grid.log_U_grid)
@@ -722,7 +722,7 @@ class CB19Backend:
     def _get_qh_at(self, log_z: float, log_age_yr: float) -> float:
         """Bilinear interpolation of the precomputed Q_H table."""
         if self._qh_table is None:
-            return 1.0  # fallback: normalise to 1
+            return 1.0  # fallback: normalize to 1
 
         from .cloudy_grid import _interp_index_weight  # shared helper
 

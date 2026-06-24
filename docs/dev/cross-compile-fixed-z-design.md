@@ -78,7 +78,7 @@ posterior = model.fit(data=row.fluxes, overrides={"redshift": row.z})
 When `Fixed(redshift)` is set in `spec`, the resolver routes it
 through the ztable (today's `WavePrecomp(z_min, z_max)` path) anyway,
 with `z_min = z_max = Fixed.value`. That doesn't help the catalog
-use case but normalises the path.
+use case but normalizes the path.
 
 Then add an opt-in `WavePrecomp(catalog_z_range=(z_min, z_max))` so
 the astronomer says "I'll iterate over a catalog spanning this z
@@ -90,7 +90,7 @@ adding a constructor knob and a small router change.
 
 ### Approach B — full: any Fixed(*) param overridable at call time
 
-Generalise to "any `Fixed(x)` parameter can be lifted to a runtime
+Generalize to "any `Fixed(x)` parameter can be lifted to a runtime
 input via an explicit override." `model.fit(data, overrides={"x":
 new_value})` re-uses the JIT trace because the compile signature for
 `x` is "runtime parameter slot", not "baked constant".
@@ -119,7 +119,7 @@ Ship **Approach A first.**
 
 1. It maps directly onto the existing ztable infrastructure.
 2. The catalog-fit case (the main motivator) is satisfied.
-3. Approach B is the generalisation — defer until a second use case
+3. Approach B is the generalization — defer until a second use case
    (e.g. per-galaxy `Fixed(distance_modulus)`) demands it.
 
 ## File-by-file changes for Approach A
@@ -127,7 +127,7 @@ Ship **Approach A first.**
 | Path                                                | Change                                                |
 |-----------------------------------------------------|--------------------------------------------------------|
 | `src/tengri/forward/sed_model.py:WavePrecomp`       | Add optional `catalog_z_range: tuple[float, float] | None = None` |
-| `src/tengri/forward/sed_model.py` resolver          | When `catalog_z_range` is set, build the ztable; when `Fixed(z)` is set on spec, route through the ztable with `z_min = z_max = z` (no behaviour change for the simple case) |
+| `src/tengri/forward/sed_model.py` resolver          | When `catalog_z_range` is set, build the ztable; when `Fixed(z)` is set on spec, route through the ztable with `z_min = z_max = z` (no behavior change for the simple case) |
 | `src/tengri/components/stellar/component.py`        | Already supports ztable — confirm nothing breaks      |
 | `src/tengri/observation/predict_via_precomp.py`     | Confirm cosmology + IGM read z at runtime, not from compile signature |
 | `tests/contract/test_cross_compile_catalog_fit.py`  | NEW — same model fit at three different z values produces three results with **one** JIT compile |

@@ -102,7 +102,7 @@ class TestKubotaDoneFullAgn:
 class TestHotCoronaSeedRollover:
     """Regression: the K&D hot corona must not leak into the infrared/radio.
 
-    The optically-thin hot corona is a thermal-Comptonisation spectrum,
+    The optically-thin hot corona is a thermal-Comptonization spectrum,
     L_nu ~ nu^(1-Gamma) * exp(-h*nu/kT_e) * exp(-nu_seed/nu), defined only
     between its seed-photon energy and the electron temperature (Kubota & Done
     2018, MNRAS 480, 1247, Section 2.2). Without the low-energy seed rollover
@@ -165,9 +165,9 @@ class TestHotCoronaSeedRollover:
         )
 
         # A narrow UV bandpass near the seed-rollover knee (~2500 A).
-        centre = 2500.0
-        fw = [np.linspace(centre - 200.0, centre + 200.0, 64)]
-        ft = [np.exp(-0.5 * ((fw[0] - centre) / 80.0) ** 2)]
+        center = 2500.0
+        fw = [np.linspace(center - 200.0, center + 200.0, 64)]
+        ft = [np.exp(-0.5 * ((fw[0] - center) / 80.0) ** 2)]
         z = 0.0
         kd = preintegrate_kd_components(fw, ft, redshift=z)
 
@@ -194,7 +194,7 @@ class TestHotCoronaSeedRollover:
 
 @pytest.mark.regression_bug
 class TestSelfGravityRadiusQsosedConvention:
-    """The outer disc radius must follow the canonical qsosed normalisation.
+    """The outer disc radius must follow the canonical qsosed normalization.
 
     The Laor & Netzer (1989) self-gravity radius in qsosed (Quera-Bofarull,
     ``Sed.gravity_radius``) is
@@ -202,7 +202,7 @@ class TestSelfGravityRadiusQsosedConvention:
         r_sg / R_g = 2150 * (M_BH / 10^9 M_sun)^{-2/9}
                           * mdot^{4/9} * (alpha/0.1)^{2/9},
 
-    with the mass normalised to 10^9 M_sun. A prior tengri version normalised
+    with the mass normalized to 10^9 M_sun. A prior tengri version normalized
     by 10^8 M_sun, making r_sg a factor 10^{2/9} ~ 1.67 too small at every
     mass: it truncated the coolest outer annuli and produced a near-IR disc
     tail ~30% below the AGNfitter-rX KD18 reference. This pins the convention.
@@ -230,8 +230,8 @@ class TestSelfGravityRadiusQsosedConvention:
                 f"got {got:.4f} R_g, expected {expected:.4f} R_g"
             )
 
-    def test_not_the_buggy_1e8_normalisation(self):
-        """Guard against regressing to the 10^8-M_sun normalisation."""
+    def test_not_the_buggy_1e8_normalization(self):
+        """Guard against regressing to the 10^8-M_sun normalization."""
         import numpy as np
 
         from tengri.components.agn.disc import _self_gravity_radius

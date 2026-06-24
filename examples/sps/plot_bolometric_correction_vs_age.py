@@ -11,7 +11,7 @@ ages the UV dominates so ``BC_UV`` is small and ``BC_K`` is large
 correction inverts — ``BC_K`` shrinks while ``BC_UV`` blows up.
 
 We integrate the FSPS Chabrier SSP spectrum to get ``L_bol`` and
-mock-photometer it through five rectangular bands centred on
+mock-photometer it through five rectangular bands centered on
 GALEX FUV/NUV and SDSS g, r, K to keep the demo independent of
 the full filter machinery.
 

@@ -28,7 +28,7 @@ def slone_netzer_disc_block(
     r"""Slone & Netzer (2012) alpha-disc block.
 
     Interpolates the SN12 template library over ``(log M_BH, log Mdot/Mdot_Edd)``
-    and normalises to ``agn_log_lbol``. This is AGNfitter-rX's fourth
+    and normalizes to ``agn_log_lbol``. This is AGNfitter-rX's fourth
     accretion-disk library (see :mod:`tengri.components.agn.slone_netzer`).
 
     Parameters

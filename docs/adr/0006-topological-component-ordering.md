@@ -70,7 +70,7 @@ requirement *also* establishes ordering when the publisher is present:
 the consumer reads `state.derived` with a fallback, so it can only see
 meaningful data if the publisher has already written. The ADR-0004
 Phase B amendment makes `validate_pipeline` enforce strict-before for
-both flavours — the sort must too, else `validate_pipeline` would
+both flavors — the sort must too, else `validate_pipeline` would
 reject sort output.
 
 ## Consequences
@@ -127,7 +127,7 @@ reject sort output.
 - The three `_publishes` / `_requires` / `_requires_optional`
   accessors that `validate_pipeline` was using inside its function
   body are now module-scope helpers in `orchestrator.py`, shared
-  with `topological_sort`. Pure refactor — no behaviour change.
+  with `topological_sort`. Pure refactor — no behavior change.
 - The wrap-in-snapshot is precisely the regression guarantee. If a
   future PR breaks the stable-sort invariant, the contract-graph and
   SED-output snapshot tests fail with a clear message pointing at

@@ -12,7 +12,7 @@ accretion disc model in pure JAX. The three radial zones are:
 
 1. **Outer standard disc** (Shakura–Sunyaev): thermal blackbody emission
    from each annulus, producing the UV "big blue bump"
-2. **Warm Comptonisation region**: a warm, optically thick corona
+2. **Warm Comptonization region**: a warm, optically thick corona
    ($kT_e \sim 0.2$ keV, $\tau \sim 10$–20) that bridges UV and soft X-rays
 3. **Hot inner corona**: an optically thin plasma ($kT_e \sim 100$ keV,
    $\tau \sim 1$) producing hard X-rays via inverse Compton scattering
@@ -35,7 +35,7 @@ integral. This is exact to machine precision ($10^{-12}$) and matches
 the reference `qsosed` implementation. Bisection is used instead of
 root-finding because the luminosity integral is monotonic in $R_{\rm hot}$.
 
-### Warm Comptonisation Spectrum
+### Warm Comptonization Spectrum
 
 Instead of the XSPEC `nthcomp` model (which is not differentiable), we use
 an analytic approximation:

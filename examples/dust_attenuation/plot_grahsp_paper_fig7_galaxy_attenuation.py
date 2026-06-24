@@ -4,7 +4,7 @@ GRAHSP Fig. 7 reproduction: attenuation of the galaxy model
 
 Reproduction of Fig. 7 of Buchner et al. (2024, GRAHSP): a star-forming
 galaxy SED from intrinsic (dark blue) to strongly attenuated (dark red) as the
-diffuse colour excess E(B-V) is swept from 0.01 to 10. Energy balance routes
+diffuse color excess E(B-V) is swept from 0.01 to 10. Energy balance routes
 the attenuated UV/optical light into the far-IR dust bump (Dale 2014), so the
 curves pivot about the FIR peak while the UV is progressively suppressed.
 
@@ -81,7 +81,7 @@ model = SEDModel.build(
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FIXED,
-        "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilises the FIR peak)
+        "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
         "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
         "emission": {"type": "dale2014", "*": FIXED},
     },
@@ -97,7 +97,7 @@ for ebv in ebv_grid:
     lnu = np.asarray(rest[1] if np.ndim(rest) == 2 else rest)
     lflam = nu_Lnu(lnu)
     if norm_ref is None:
-        # Normalise so the FIR dust peak sits near ~5 (paper scaling).
+        # Normalize so the FIR dust peak sits near ~5 (paper scaling).
         fir = (wave_um > 30) & (wave_um < 300)
         norm_ref = lflam[fir].max() / 5.0
     ax.plot(wave_um, lflam / norm_ref, color=cmap(norm(ebv)), lw=1.4, zorder=3)

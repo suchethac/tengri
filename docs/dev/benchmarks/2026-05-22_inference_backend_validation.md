@@ -229,7 +229,7 @@ The DPL self-fits miss `Δlog SFR₁₀₀` by 0.7-0.8 dex because the DPL
 prior **midpoint** corresponds to a `log10(SFR_100Myr) = -2.61`
 (quenched) galaxy — fractional error on a tiny absolute SFR. This is
 a "pathological truth" not a backend bug; with a star-forming truth
-the same DPL recovers SFR. The other four SFH parametrisations pick
+the same DPL recovers SFR. The other four SFH parametrizations pick
 midpoints near typical star-forming SFRs and recover both quantities
 within 0.5 dex.
 
@@ -249,7 +249,7 @@ stays inside 0.5 dex; the cases where truth has a near-zero SFR
 hit the log floor, and wrong dust law propagates into SFR. The
 inference is doing the right thing; the science conclusion is that
 broad-band photometry alone constrains M⁎ but not SFR₁₀₀ once the
-SFH parametrisation is wrong.
+SFH parametrization is wrong.
 
 ## Bug discovered: HMC MAP-init tracing pathology (#262)
 

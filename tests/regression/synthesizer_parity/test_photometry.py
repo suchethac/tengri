@@ -126,10 +126,10 @@ def test_compute_flux_density_unit_consistency_across_filters():
     z = 1.0
     dl_cm = _luminosity_distance_cm_z(z)
 
-    def gauss_filter(centre: float, fwhm: float) -> tuple:
+    def gauss_filter(center: float, fwhm: float) -> tuple:
         sigma = fwhm / 2.355
-        fw = jnp.linspace(centre - 3 * fwhm, centre + 3 * fwhm, 80)
-        ft = jnp.exp(-(((fw - centre) / sigma) ** 2))
+        fw = jnp.linspace(center - 3 * fwhm, center + 3 * fwhm, 80)
+        ft = jnp.exp(-(((fw - center) / sigma) ** 2))
         return fw, ft
 
     f_uv = compute_flux_density(sed, wave_rest, *gauss_filter(2000.0, 400.0), z, dl_cm)

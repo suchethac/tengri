@@ -226,7 +226,7 @@ def test_total_equals_components_to_published_precision(hdf5):
 
 def test_extinction_at_V_band_equals_R_V_3p1_value(hdf5):
     r"""For a MW R_V = 3.1 sightline, A_V/N_H is well-measured.  The
-    paper's eq. for tau_V/N_H follows from the chosen normalisation
+    paper's eq. for tau_V/N_H follows from the chosen normalization
     Lenz, Hensley & Doré (2017): ``N_H/E(B-V) = 8.8e21 cm^-2 mag^-1``
     and ``A_V/E(B-V) = 3.1`` ⇒ ``A_V/N_H = 3.5e-22 cm^2/H``.
     Optical depth :math:`\tau_V = A_V \ln(10) / 2.5` ⇒
@@ -241,14 +241,14 @@ def test_extinction_at_V_band_equals_R_V_3p1_value(hdf5):
 
     iV = int(np.argmin(np.abs(wave - 0.55)))
     tau_V_per_H = tau_total[iV]
-    # Expected from MW R_V=3.1 normalisation: ~3.2e-22 cm^2/H.
+    # Expected from MW R_V=3.1 normalization: ~3.2e-22 cm^2/H.
     np.testing.assert_allclose(tau_V_per_H, 3.2e-22, rtol=0.20)
 
 
 def test_extinction_3p4_micron_aliphatic_feature_present(hdf5):
     """Aliphatic-hydrocarbon C-H stretch feature at 3.4 μm shows up
     as a small bump in tau_PAH(λ).  Just check tau_PAH at 3.4 μm
-    exceeds the smooth interpolation of its neighbours, confirming
+    exceeds the smooth interpolation of its neighbors, confirming
     the feature is in our HDF5."""
     ext = hdf5["ext"]
     wave = ext[:, 0]

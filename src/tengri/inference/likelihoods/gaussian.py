@@ -79,7 +79,7 @@ def diag_gaussian_log_prob(
 ) -> jnp.ndarray:
     r"""Data-term log-probability of a diagonal Gaussian: :math:`-\tfrac12 \chi^2`.
 
-    The Gaussian normalisation constant
+    The Gaussian normalization constant
     :math:`-\tfrac{1}{2} n \log(2\pi) - \sum_i \log\sigma_i` is dropped
     — most inference engines treat it as an additive constant. Add it
     back explicitly if you need a true log-evidence term.

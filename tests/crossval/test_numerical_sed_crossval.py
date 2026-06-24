@@ -60,7 +60,7 @@ def _band_avg(wave, flux, center, half_width=100.0):
     return float(np.nanmean(flux[mask]))
 
 
-# ── 1. Absolute SED normalisation for simple stellar populations ──
+# ── 1. Absolute SED normalization for simple stellar populations ──
 
 
 class TestSSPAbsoluteNormalisation:

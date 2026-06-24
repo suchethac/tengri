@@ -57,7 +57,7 @@ def cigale_adaf_disc_block(
 
     References
     ----------
-    .. [Lop24] Lopez, I. E. et al. 2024, A&A, 691, A163. Modelling the
+    .. [Lop24] Lopez, I. E. et al. 2024, A&A, 691, A163. Modeling the
        X-ray emission of AGN in CIGALE and application to eROSITA.
        arXiv:2407.16182. https://doi.org/10.1051/0004-6361/202449801
     .. [B19] Boquien, M. et al. 2019, A&A, 622, A103. CIGALE: a Python

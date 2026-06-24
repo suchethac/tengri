@@ -185,10 +185,10 @@ ax.plot(
 for feat_name, feat_wave in SPECTRAL_FEATURES.items():
     wave_obs_feat = feat_wave * (1 + 0.1)  # z = 0.1
     if 3800 < wave_obs_feat < 9200:
-        ax.axvline(wave_obs_feat, color="grey", ls=":", lw=0.5, alpha=0.5)
+        ax.axvline(wave_obs_feat, color="gray", ls=":", lw=0.5, alpha=0.5)
         ax.text(
             wave_obs_feat, ax.get_ylim()[1] * 0.95, feat_name,
-            fontsize=6, ha="center", va="top", rotation=90, color="grey",
+            fontsize=6, ha="center", va="top", rotation=90, color="gray",
         )
 ax.set_xlabel("Observed wavelength [Å]")
 ax.set_ylabel("Flux density")
@@ -276,8 +276,8 @@ ax_fit.set_ylabel("Flux density")
 residuals = (obs_np - spec_median) / noise_np
 ax_res.scatter(wave_np, residuals, s=2, c=COLORS["data"], alpha=0.5)
 ax_res.axhline(0, color="k", lw=0.5)
-ax_res.axhspan(-1, 1, alpha=0.1, color="grey")
-ax_res.axhspan(-2, 2, alpha=0.05, color="grey")
+ax_res.axhspan(-1, 1, alpha=0.1, color="gray")
+ax_res.axhspan(-2, 2, alpha=0.05, color="gray")
 ax_res.set_ylabel(r"$(f_{\rm obs} - f_{\rm model}) / \sigma$")
 ax_res.set_xlabel("Observed wavelength [Å]")
 ax_res.set_ylim(-4, 4)
@@ -621,8 +621,8 @@ ax_fit.set_ylabel("Flux density")
 residuals_s = (obs_s - spec_median_s) / noise_s
 ax_res.scatter(wave_np, residuals_s, s=2, c=COLORS["data"], alpha=0.5)
 ax_res.axhline(0, color="k", lw=0.5)
-ax_res.axhspan(-1, 1, alpha=0.1, color="grey")
-ax_res.axhspan(-2, 2, alpha=0.05, color="grey")
+ax_res.axhspan(-1, 1, alpha=0.1, color="gray")
+ax_res.axhspan(-2, 2, alpha=0.05, color="gray")
 ax_res.set_ylabel(r"$(f_{\rm obs} - f_{\rm model}) / \sigma$")
 ax_res.set_xlabel("Observed wavelength [Å]")
 ax_res.set_ylim(-4, 4)

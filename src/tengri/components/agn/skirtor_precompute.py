@@ -50,8 +50,8 @@ def precompute_skirtor_photometry(
     filter-integrated photometry.  Returns a dict with ``grid_phot``
     and ``axes``.
 
-    Templates are wavelength-normalised and converted L_λ → L_ν (matching the
-    runtime normalisation in ``skirtor.py`` after issue #459) so that
+    Templates are wavelength-normalized and converted L_λ → L_ν (matching the
+    runtime normalization in ``skirtor.py`` after issue #459) so that
     ``build_skirtor_photometry_lookup`` returns L_ν [erg/s/Hz] per L_sun of
     bolometric luminosity, consistent with the full-wavelength ``agn_emission``
     path.
@@ -81,7 +81,7 @@ def precompute_skirtor_photometry(
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
            torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
     .. [2] M. Stalevski et al., "The dust covering factor in AGN — combining the
@@ -125,7 +125,7 @@ def precompute_skirtor_photometry(
 
     # Convert raw L_λ-like templates to L_ν [erg/s/Hz per L_sun of L_bol].
     # SKIRTOR v3 templates are stored as L_λ-like (issue #459), so the
-    # bolometric normalisation must be taken in the *wavelength* variable and
+    # bolometric normalization must be taken in the *wavelength* variable and
     # the result converted L_λ → L_ν = L_λ × λ²/c at the end — exactly as the
     # runtime path in ``skirtor.py:_interpolate_and_normalize`` does. The
     # previous frequency-integral here treated the L_λ array as L_ν and left
@@ -203,7 +203,7 @@ def build_skirtor_photometry_lookup(precomp: dict, grid_arrays_traced: tuple | N
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
            torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 
@@ -345,7 +345,7 @@ def precompute(
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
            torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 
@@ -407,7 +407,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     References
     ----------
-    .. [1] M. Stalevski et al., "3D radiative transfer modelling of the dusty
+    .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
            torus around AGN — the influence of clumping," MNRAS, 420, 2756 (2012).
            arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
 

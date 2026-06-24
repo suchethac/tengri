@@ -162,7 +162,7 @@ def _type1_mask(cos_inc, opening_angle_deg, ...):
 
 **Upstream source:** Casey 2012, MNRAS 425, 3094 (arxiv 1208.5483) + X-CIGALE implementation (Yang et al. 2020)
 
-**Casey+2012 greybody formula:**
+**Casey+2012 graybody formula:**
 ```
 L_ν ∝ (1 − exp(−(λ₀/λ)^β)) · B_ν(T)
 where T = dust temperature, β = emissivity index, λ₀ = reference wavelength
@@ -192,7 +192,7 @@ sed_polar_reemit = polar_dust_emission(
 
 **Verdict:** ✅ match
 
-**Detail:** Formula is Casey+2012 greybody. Defaults are conservative/reasonable: T=100 K (cold polar dust, typical for obscured AGN), β=1.6 (dust-like emissivity, between graphite ≈1.5 and silicate ≈2), λ₀=2 µm (reference at 200 µm, longer than FIR peak). These are **not cited in the code** but are physically sensible. CIGALE's X-CIGALE uses similar values (T ≈ 200–250 K for hotter torus dust, but polar dust is cooler). No major discrepancy, but the choice of T=100 K is arbitrary and should be documented or parameterized.
+**Detail:** Formula is Casey+2012 graybody. Defaults are conservative/reasonable: T=100 K (cold polar dust, typical for obscured AGN), β=1.6 (dust-like emissivity, between graphite ≈1.5 and silicate ≈2), λ₀=2 µm (reference at 200 µm, longer than FIR peak). These are **not cited in the code** but are physically sensible. CIGALE's X-CIGALE uses similar values (T ≈ 200–250 K for hotter torus dust, but polar dust is cooler). No major discrepancy, but the choice of T=100 K is arbitrary and should be documented or parameterized.
 
 ---
 

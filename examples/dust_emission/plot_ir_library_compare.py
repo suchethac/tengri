@@ -165,7 +165,7 @@ for (lib, label), color in zip(LIBS, COLORS):
     out = model.predict_rest_sed(p)
     wave = np.asarray(out.wavelength)
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.sed)
-    # Normalise on integrated L_IR(8-1000 μm).
+    # Normalize on integrated L_IR(8-1000 μm).
     ir = (wave > 8e4) & (wave < 1e7)
     if ir.sum() < 5:
         continue

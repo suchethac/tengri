@@ -138,7 +138,7 @@ register_nebular_model(
 register_nebular_model(
     "cloudy",
     citation="Byler+2017 / Cloudy grids",
-    short_doc="Trilinear interp on Cloudy photoionisation grid (CloudyGridBackend)",
+    short_doc="Trilinear interp on Cloudy photoionization grid (CloudyGridBackend)",
 )(CloudyGridBackend)
 register_nebular_model(
     "cb19",

@@ -99,7 +99,7 @@ def powerlaw_disc_block(
     "simple",
     citation="",
     status="production",
-    short_doc="Single-temperature greybody torus",
+    short_doc="Single-temperature graybody torus",
 )
 def simple_torus_block(
     wavelength: Array,
@@ -110,9 +110,9 @@ def simple_torus_block(
     agn_torus_frac: float = 0.5,
     **_params,
 ) -> Array:
-    r"""tengri ``simple_torus`` (single-temperature greybody) block.
+    r"""tengri ``simple_torus`` (single-temperature graybody) block.
 
-    The torus is normalised by ``agn_torus_frac × 10^agn_log_lbol`` —
+    The torus is normalized by ``agn_torus_frac × 10^agn_log_lbol`` —
     *not* by ``l5100_disc`` — so this block ignores the disc 5100Å
     luminosity. That choice matches upstream :func:`unified_agn`.
 
@@ -123,11 +123,11 @@ def simple_torus_block(
     l5100_disc : array_like, scalar
         Ignored (kept for protocol compatibility).
     agn_T_torus : float, optional
-        Greybody temperature [K]. Default ``1000``.
+        Graybody temperature [K]. Default ``1000``.
     agn_torus_frac : float, optional
         Fraction of :math:`L_{\rm bol}` re-emitted by torus. Default ``0.5``.
     """
-    del l5100_disc  # unused: simple torus normalises off agn_log_lbol directly.
+    del l5100_disc  # unused: simple torus normalizes off agn_log_lbol directly.
     wave_aa = jnp.asarray(wavelength)
     L_nu = simple_torus(
         wave_aa,
@@ -143,7 +143,7 @@ def simple_torus_block(
     "two_temperature",
     citation="",
     status="production",
-    short_doc="Two-temperature (hot + warm) greybody torus",
+    short_doc="Two-temperature (hot + warm) graybody torus",
 )
 def two_temperature_torus_block(
     wavelength: Array,
@@ -158,8 +158,8 @@ def two_temperature_torus_block(
 ) -> Array:
     r"""tengri ``two_temperature_torus`` block.
 
-    Hot + warm dust greybody. As with :func:`simple_torus_block`, the
-    normalisation comes from ``agn_log_lbol``, not the disc 5100Å
+    Hot + warm dust graybody. As with :func:`simple_torus_block`, the
+    normalization comes from ``agn_log_lbol``, not the disc 5100Å
     luminosity.
     """
     del l5100_disc

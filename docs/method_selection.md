@@ -18,7 +18,7 @@ The table below is a decision aid; when it disagrees with
 
 | Situation | Method | Why |
 |-----------|--------|-----|
-| Quick point estimate / initialisation | `map` | Adam optimiser, seconds. Use to warm-start a sampler via `init_from=`. |
+| Quick point estimate / initialization | `map` | Adam optimizer, seconds. Use to warm-start a sampler via `init_from=`. |
 | Fast posterior approximation | `laplace` | Gaussian around the MAP from the Hessian. Cold ~5–9 s, warm ~1–2 s. Good when the posterior is roughly Gaussian. |
 | Exact posterior, low-D (D ≲ 6) photometry | `mcmc_nuts` | No-U-Turn Sampler. Gold standard for small parametric models. Cold ~90 s at D=6 DPL. |
 | D ≈ 7–8, or NUTS warmup too slow | `mcmc_hmc` | Fixed-length HMC keeps the compile graph bounded. **Validated only with `dense_mass_matrix=True`, `n_warmup ≥ 1000`, `n_leapfrog_steps ≥ 20`** — do not lower the warmup for science. |

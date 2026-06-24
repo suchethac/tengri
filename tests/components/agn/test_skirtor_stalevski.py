@@ -5,7 +5,7 @@ The monolithic ``skirtor`` model pairs the SKIRTOR torus with a *power-law* disc
 under-representing the UV/optical disc (~0.28x ProSpect's SKIRTOR_interp at
 2000 A). ``skirtor_stalevski`` instead returns the raw Stalevski (2016)
 radiative-transfer SED (``create_skirtor_components.total``) — the disc + torus
-as published, with no analytic-disc substitution or re-normalisation — which
+as published, with no analytic-disc substitution or re-normalization — which
 reproduces codes that read SKIRTOR directly (~0.96x ProSpect). These tests pin:
 
 1. the model is registered and swappable;

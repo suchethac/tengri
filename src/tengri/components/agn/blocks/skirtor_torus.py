@@ -75,7 +75,7 @@ def skirtor_torus_block(
     agn_polar_ebv : float, optional
         Polar dust E(B-V) [mag] (SMC law). Default ``0.03`` (CIGALE
         ``skirtor2016`` default). Set ``0`` to disable the polar-dust
-        greybody.
+        graybody.
     agn_polar_T : float, optional
         Polar dust temperature [K]. Default ``100`` (CIGALE default).
     agn_polar_beta : float, optional
@@ -90,9 +90,9 @@ def skirtor_torus_block(
     :math:`10^{\rm agn\_log\_lbol}\,L_\odot` (matches CIGALE
     ``skirtor2016 disk_type=1`` default) and the anisotropy factor is
     :math:`\langle f_{\rm aniso}\rangle = 7/18 - \sin^2(\Phi)/6 -
-    2\sin^3(\Phi)/9` for half-opening angle :math:`\Phi`. The greybody
+    2\sin^3(\Phi)/9` for half-opening angle :math:`\Phi`. The graybody
     re-emission integrates to :math:`L_{\rm ext}` over frequency,
-    matching CIGALE's normalisation in ``skirtor2016.py:386``.
+    matching CIGALE's normalization in ``skirtor2016.py:386``.
 
     References
     ----------
@@ -108,14 +108,14 @@ def skirtor_torus_block(
 
     # CIGALE-faithful polar dust integration (closes #487/#503 audit
     # discrepancy "(b)"): the Casey-2012 modified blackbody is added
-    # to the SKIRTOR thermal dust BEFORE the shape is normalised to
+    # to the SKIRTOR thermal dust BEFORE the shape is normalized to
     # ``L_bol × agn_torus_frac``. This matches CIGALE
     # ``skirtor2016.py:389-393`` where ``norm = 1/∫(SKIRTOR.dust +
     # polar_BB) dλ`` includes both contributions. The previous
-    # implementation summed independently-normalised thermal and polar
+    # implementation summed independently-normalized thermal and polar
     # contributions, double-counting energy by ~l_ext/agn_power.
 
-    # 1) SKIRTOR thermal-dust template (unit-normalised in download
+    # 1) SKIRTOR thermal-dust template (unit-normalized in download
     # script). ``skirtor_sed`` returns L_ν scaled to
     # ``L_bol × agn_torus_frac``; for the CIGALE structure we need the
     # SHAPE not the scale, so divide back out and re-apply at the end.
@@ -132,7 +132,7 @@ def skirtor_torus_block(
     )
     L_lambda_thermal = L_nu_skirtor_scaled * _C_AA_PER_S / wave_aa**2
 
-    # 2) Polar-dust greybody: Casey 2012 modified BB shape, normalised
+    # 2) Polar-dust graybody: Casey 2012 modified BB shape, normalized
     # so its integrated luminosity equals the disc-absorbed power
     # ``l_ext`` (CIGALE ``skirtor2016.py:368``).
     k_lambda = smc_extinction_curve(wave_aa)
@@ -153,7 +153,7 @@ def skirtor_torus_block(
         # CIGALE single-reference mode (#556): the runner passes the
         # agn_power-tied FACE-ON disc luminosity ``log10(agn_power·R/η / L☉)``
         # so the polar ``l_ext`` tracks the SAME disc the output is tied to.
-        # Normalise the Schartmann shape to that bolometric.
+        # Normalize the Schartmann shape to that bolometric.
         L_disc_lambda = (
             _sch_shape
             / jnp.maximum(jnp.trapezoid(_sch_shape, wave_aa), 1e-30)
@@ -170,13 +170,13 @@ def skirtor_torus_block(
     # Anisotropic-geometry-weighted absorbed disc luminosity [erg/s].
     l_ext = anisotropic_polar_luminosity(L_disc_nu, wave_aa, agn_oa_skirtor, extinction_factor)
 
-    # Polar BB normalised so ∫polar_L_λ dλ = l_ext.
+    # Polar BB normalized so ∫polar_L_λ dλ = l_ext.
     polar_L_nu = polar_dust_emission(
         l_ext, wave_aa, temperature=agn_polar_T, beta=agn_polar_beta, lambda_0=2.0e6
     )
     polar_L_lambda = polar_L_nu * _C_AA_PER_S / wave_aa**2
 
-    # 3) Combine shapes and re-normalise to total l_scale = L_bol×frac
+    # 3) Combine shapes and re-normalize to total l_scale = L_bol×frac
     # (CIGALE convention: the sum dust+polar carries the agn_power
     # total). The thermal portion already integrates to l_scale; the
     # polar adds l_ext on top, so we rescale by l_scale/(l_scale+l_ext)

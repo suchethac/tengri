@@ -5,7 +5,7 @@ Implements the ``activatedisk`` module from upstream
 ``JohannesBuchner/GRAHSP`` (CeCILL-v2). The accretion-disc continuum is a
 pre-computed template grid spanning black-hole mass :math:`M_{\\rm BH}`,
 spin parameter :math:`a`, and Eddington accretion rate :math:`\\dot{M}`.
-Each template :math:`T(\\lambda)` is normalised to 1 at 510 nm (rest-frame
+Each template :math:`T(\\lambda)` is normalized to 1 at 510 nm (rest-frame
 5100 Å) and scaled by the bolometric luminosity via:
 
 .. math::
@@ -59,7 +59,7 @@ def netzer_disc(
         ``data/grahsp/grahsp_templates.h5`` group ``netzer_disc``).
     disc_lumin_model : array_like, shape (n_disc_wave,)
         Disc template :math:`L_\lambda` per (M, a, Mdot) model,
-        normalised to 1 at 510 nm.
+        normalized to 1 at 510 nm.
 
     Returns
     -------

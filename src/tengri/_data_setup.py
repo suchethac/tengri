@@ -59,7 +59,7 @@ def data_path(filename: str) -> Path:
 
 SSP_BASE_URL = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
-# Short alias → filename, matches the live public catalogue. The catalogue
+# Short alias → filename, matches the live public catalog. The catalog
 # only ships *bare-stellar* SSPs; the ``_wNE_*`` variants in local ``data/``
 # trees are post-processed (FSPS+nebular). Cue / CloudyGrid backends require
 # bare SSPs and will silently under-predict if fed wNE.
@@ -89,7 +89,7 @@ _KNOWN_SSPS = {
 }
 
 # Reverse lookup used by ``load_ssp_data`` to auto-fetch a missing local
-# file when the basename matches a known catalogue entry.
+# file when the basename matches a known catalog entry.
 KNOWN_SSP_FILENAMES = frozenset(_KNOWN_SSPS.values())
 
 
@@ -113,7 +113,7 @@ def list_known_ssps() -> dict[str, str]:
 
 
 def list_available_ssps() -> list[dict]:
-    """Structured view of the SSP catalogue grouped by family and IMF (#307).
+    """Structured view of the SSP catalog grouped by family and IMF (#307).
 
     Returns
     -------
@@ -276,7 +276,7 @@ def download_ssp(
     return filepath
 
 
-# Pre-converted component templates (HDF5) live alongside the SSP catalogue on
+# Pre-converted component templates (HDF5) live alongside the SSP catalog on
 # the public host. These are tengri-native conversions of upstream libraries
 # whose raw form is awkward to redistribute — e.g. the Fritz 2006 torus grid,
 # which upstream ships only as ~24k pcigale-pickled objects (un-loadable

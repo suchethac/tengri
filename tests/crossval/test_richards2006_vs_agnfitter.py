@@ -52,8 +52,8 @@ def _log_nu_to_wavelength_angstrom(log_nu_hz: np.ndarray) -> np.ndarray:
     return C_AA / nu_hz
 
 
-def _normalise_lnu_by_integral(lnu: np.ndarray, nu_hz: np.ndarray) -> np.ndarray:
-    """Normalise L_nu by its integral over frequency.
+def _normalize_lnu_by_integral(lnu: np.ndarray, nu_hz: np.ndarray) -> np.ndarray:
+    """Normalize L_nu by its integral over frequency.
 
     Parameters
     ----------
@@ -65,7 +65,7 @@ def _normalise_lnu_by_integral(lnu: np.ndarray, nu_hz: np.ndarray) -> np.ndarray
     Returns
     -------
     ndarray
-        Normalised L_nu (integral over nu = 1).
+        Normalized L_nu (integral over nu = 1).
     """
     # Trapzoidal integration over frequency (not log frequency)
     integral = np.sum((lnu[:-1] + lnu[1:]) / 2.0 * np.diff(nu_hz))
@@ -146,8 +146,8 @@ class TestRichards2006Convention:
             err_msg="Peak wavelengths diverge between AGNfitter and tengri",
         )
 
-    def test_normalised_sed_shapes_match(self, agnfitter_r06, richards2006_runtime):
-        """Normalised SED shapes should match after regridding to a common wavelength grid.
+    def test_normalized_sed_shapes_match(self, agnfitter_r06, richards2006_runtime):
+        """Normalized SED shapes should match after regridding to a common wavelength grid.
 
         This test compares the peak-normalized L_nu templates on a common wavelength grid.
         Shape agreement within ~0.5% (interpolation error) indicates no convention divergence.
@@ -166,20 +166,20 @@ class TestRichards2006Convention:
         agn_wave_sorted = agn_wave[agn_sort_idx]
         agn_lnu_sorted = agn_lnu[agn_sort_idx]
 
-        # Normalise by peak value (shape comparison only)
+        # Normalize by peak value (shape comparison only)
         agn_lnu_norm = agn_lnu_sorted / np.max(agn_lnu_sorted)
 
         # Tengri template (already on wavelength grid, ascending)
         tengri_wave = richards2006_runtime["wave_aa"]
         tengri_lnu_shape = richards2006_runtime["lnu_shape"]
 
-        # Normalise tengri's template by peak value
+        # Normalize tengri's template by peak value
         tengri_lnu_norm = tengri_lnu_shape / np.max(tengri_lnu_shape)
 
         # Regrid AGNfitter to tengri's common wavelength grid
         agn_regridded = np.interp(tengri_wave, agn_wave_sorted, agn_lnu_norm, left=0.0, right=0.0)
 
-        # Compare normalised templates. Tolerance ~2%: the vendored reference HDF5
+        # Compare normalized templates. Tolerance ~2%: the vendored reference HDF5
         # is a compact (1024-point, float32) regrid of the 438-point R06 template,
         # so sub-percent interpolation/rounding differences are expected — far below
         # the 4-20x (#592 A2) divergence this test rules out (#647 confirmed correct).
@@ -188,7 +188,7 @@ class TestRichards2006Convention:
             agn_regridded,
             rtol=0.02,
             atol=2e-3,
-            err_msg="Normalised SED shapes diverge between AGNfitter and tengri",
+            err_msg="Normalized SED shapes diverge between AGNfitter and tengri",
         )
 
     def test_log_ratio_at_key_wavelengths(self, agnfitter_r06, richards2006_runtime):
@@ -205,13 +205,13 @@ class TestRichards2006Convention:
         agn_wave = C_AA / agn_nu_hz
         agn_lnu = agn_sed / agn_nu_hz
 
-        # Normalise by peak value (shape comparison only)
+        # Normalize by peak value (shape comparison only)
         agn_sort_idx = np.argsort(agn_wave)
         agn_wave_sorted = agn_wave[agn_sort_idx]
         agn_lnu_sorted = agn_lnu[agn_sort_idx]
         agn_lnu_norm = agn_lnu_sorted / np.max(agn_lnu_sorted)
 
-        # Tengri template (normalise for comparison)
+        # Tengri template (normalize for comparison)
         tengri_wave = richards2006_runtime["wave_aa"]
         tengri_lnu_shape = richards2006_runtime["lnu_shape"]
         tengri_lnu_norm = tengri_lnu_shape / np.max(tengri_lnu_shape)

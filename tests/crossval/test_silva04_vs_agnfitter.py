@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Cross-validate tengri's Silva+04 torus against the AGNfitter grid.
 
-The Silva et al. 2004 obscured-torus templates (parameterised by hydrogen
+The Silva et al. 2004 obscured-torus templates (parameterized by hydrogen
 column density ``N_H``) are shipped inside AGNfitter as
 ``models/TORUS/S04.pickle``. They were converted ONCE to the committed HDF5
 ``data/silva04_torus_grid.h5`` by ``scripts/build_silva04_grid.py`` (run
@@ -12,7 +12,7 @@ AGNfitter reference; the test checks that the runtime component reproduces them.
 
 Tolerance note: the runtime uses the project-standard C²-smooth triweight kernel
 (``interp_nd_triweight``) over the single ``log N_H`` axis for gradient-safe HMC.
-At a grid node that kernel mixes in neighbours, giving a peak-normalised shape
+At a grid node that kernel mixes in neighbors, giving a peak-normalized shape
 residual inherent to the kernel, not a port error.
 
 References

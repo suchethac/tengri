@@ -314,7 +314,7 @@ class SEDModelComponent:
 
         # Citations: read class attribute (tuple of bib keys), store on class.
         # Subclasses declare ``citations = ("calzetti2000", ...)``; the
-        # citations() method synthesised below returns the tuple. Default ().
+        # citations() method synthesized below returns the tuple. Default ().
         citations_attr = vars(cls).get("citations", ())
         if not isinstance(citations_attr, tuple):
             citations_attr = tuple(citations_attr)
@@ -633,7 +633,7 @@ class SEDModelComponent:
         spec_eff_waves: jnp.ndarray,
         **inputs: Any,
     ) -> Mapping[str, jnp.ndarray]:
-        """Compute spectrum LUT at pixel centres (Phase 5).
+        """Compute spectrum LUT at pixel centers (Phase 5).
 
         Called by :meth:`apply` when approx=SpectrumPrecomp() is active.
         Evaluates :meth:`predict` at spectrum pixel effective wavelengths
@@ -662,7 +662,7 @@ class SEDModelComponent:
             ``SpectrumPrecomp``, so ``predict_line_fluxes``, line ratios,
             and the ``pred.lines.*`` diagnostics keep working.
         """
-        # Evaluate predict at spectrum pixel centres. ``published`` carries
+        # Evaluate predict at spectrum pixel centers. ``published`` carries
         # grid-independent derived quantities (e.g. nebular line_waves /
         # line_lums) that must reach state.derived exactly as on the
         # full-grid path.

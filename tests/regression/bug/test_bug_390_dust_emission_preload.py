@@ -67,7 +67,7 @@ def test_sedmodel_preloads_dale2014_at_construction():
         # path may not complete, but the preload guard still ran — the
         # `contextlib.suppress(Exception)` wrapper around the preload
         # call prevents that failure from breaking model build. Skip
-        # in that case to stay focused on the preload behaviour itself.
+        # in that case to stay focused on the preload behavior itself.
         pytest.skip(f"dale2014 fixture unavailable: {exc}")
 
     # If the build path reached this line without raising, the preload

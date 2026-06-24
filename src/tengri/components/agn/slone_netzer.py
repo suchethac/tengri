@@ -17,7 +17,7 @@ Eddington axis
 The SN12 SED stores 12 accretion-rate columns; AGNfitter-rX labels them with
 ``logEddra-values[:12]`` ∈ ``[-4.0, -1.96]`` (the build script reproduces this
 exactly). The grid therefore spans the sub-Eddington regime; the template is
-shape-only and renormalised to ``agn_log_lbol`` at runtime.
+shape-only and renormalized to ``agn_log_lbol`` at runtime.
 
 References
 ----------
@@ -139,14 +139,14 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
                                    \,\mathrm{d}\nu}
 
         with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot`. The
-        template is shape-only; ``agn_log_lbol`` sets the normalisation.
+        template is shape-only; ``agn_log_lbol`` sets the normalization.
 
         **JIT-compatible**: yes.
         """
         # Node-exact bilinear interpolation over (log_mbh, log_edd). The SN12
         # templates' peak wavelength varies strongly with accretion rate, so a
         # smooth triweight kernel (which is not node-exact) smears the peak
-        # across neighbouring nodes by 30-50%; bilinear reproduces the library
+        # across neighboring nodes by 30-50%; bilinear reproduces the library
         # templates at grid nodes exactly (cf. the DL14 WavePrecomp fix #583).
         m = jnp.clip(agn_log_mbh, mbh_ax[0], mbh_ax[-1])
         e = jnp.clip(agn_log_ledd, edd_ax[0], edd_ax[-1])

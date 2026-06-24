@@ -14,7 +14,7 @@ reprocessed-dust SEDs binned by line-of-sight hydrogen column density
 
 The left panel shows the full reprocessed SED; the right panel zooms on the
 mid-IR so the silicate feature's evolution with column density is visible.
-Column density is encoded by colour.
+Column density is encoded by color.
 
 References
 ----------
@@ -54,7 +54,7 @@ DUST = {"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0
 # Silva+04 grid: log N_H in [22, 25]. Sweep the full obscuration range.
 LOG_NH_VALUES = np.linspace(22.0, 25.0, 7)
 
-# A torus block normalises to the disc luminosity, so a disc must be present;
+# A torus block normalizes to the disc luminosity, so a disc must be present;
 # the torus contribution is then isolated by subtracting the disc-only SED.
 BASE_AGN = {
     "disc": {"type": "multicolor", "*": tengri.FIXED},

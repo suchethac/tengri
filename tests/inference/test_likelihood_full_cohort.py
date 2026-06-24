@@ -7,16 +7,16 @@ pytestmark = pytest.mark.contract
 # SPDX-License-Identifier: BSD-3-Clause
 """Full cohort of :class:`Likelihood` Protocol adapters.
 
-Validates the channel-parameterised redesign:
+Validates the channel-parameterized redesign:
 
 - `GaussianLikelihood` is the workhorse — pinning ``channel`` lets
   it cover photometry, spectroscopy, line fluxes, spectral indices,
   EWs, etc.
 - `StudentTLikelihood`, `CensoredLikelihood`,
   `MultivariateGaussianLikelihood` are *distinct math types* — each
-  channel-parameterised the same way.
-- `CalibrationMarginalisedLikelihood` and
-  `ELineMarginalisedLikelihood` are *additional math types* with
+  channel-parameterized the same way.
+- `CalibrationMarginalizedLikelihood` and
+  `ELineMarginalizedLikelihood` are *additional math types* with
   analytic nuisance integration.
 
 For each adapter:
@@ -32,9 +32,9 @@ import pytest
 
 from tengri.inference.composite_likelihood import CompositeLikelihood
 from tengri.inference.likelihoods import (
-    CalibrationMarginalisedLikelihood,
+    CalibrationMarginalizedLikelihood,
     CensoredLikelihood,
-    ELineMarginalisedLikelihood,
+    ELineMarginalizedLikelihood,
     GaussianLikelihood,
     MultivariateGaussianLikelihood,
     StudentTLikelihood,
@@ -49,7 +49,7 @@ from tengri.observation.noise import (
 from tengri.protocols import Likelihood
 
 # ─────────────────────────────────────────────────────────────────────
-# Channel-parameterised GaussianLikelihood
+# Channel-parameterized GaussianLikelihood
 # ─────────────────────────────────────────────────────────────────────
 
 
@@ -116,7 +116,7 @@ def test_student_t_outliers_get_smaller_penalty_than_gaussian():
 
     g_lp = float(gauss.log_prob({"phot_fnu": pred}))
     t_lp = float(studt.log_prob({"phot_fnu": pred}))
-    # Student-t is much less penalised on the outlier-heavy fit.
+    # Student-t is much less penalized on the outlier-heavy fit.
     assert t_lp > g_lp
 
 
@@ -161,7 +161,7 @@ def test_censored_upper_limit_well_below_data_is_a_good_fit():
 @pytest.mark.unit
 def test_mvn_recovers_diagonal_gaussian_when_cov_is_diagonal():
     """MVN with diagonal cov_inv == diag-Gaussian (modulo the dropped
-    normalisation constant)."""
+    normalization constant)."""
     obs = jnp.array([1.0, 2.0, 3.0])
     err = jnp.array([0.1, 0.2, 0.15])
     pred = jnp.array([1.1, 1.95, 3.05])
@@ -197,18 +197,18 @@ def test_mvn_off_diagonal_changes_result():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# CalibrationMarginalisedLikelihood
+# CalibrationMarginalizedLikelihood
 # ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.unit
-def test_calibration_marginalised_matches_legacy_primitive():
+def test_calibration_marginalized_matches_legacy_primitive():
     wave = jnp.linspace(4000.0, 7000.0, 64)
     obs = jnp.exp(-((wave - 5500.0) ** 2) / (2 * 1000.0**2))
     err = jnp.ones_like(obs) * 0.05
     model = obs * 1.05  # constant 5% miscalibration the polynomial absorbs
 
-    lk = CalibrationMarginalisedLikelihood(
+    lk = CalibrationMarginalizedLikelihood(
         fnu_obs=obs, fnu_err=err, wavelength=wave, n_poly=3, prior_sigma=1.0
     )
     expected_log_lik, _, _ = marginalize_calibration(
@@ -224,29 +224,29 @@ def test_calibration_marginalised_matches_legacy_primitive():
 
 
 # ─────────────────────────────────────────────────────────────────────
-# ELineMarginalisedLikelihood
+# ELineMarginalizedLikelihood
 # ─────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.unit
-def test_eline_marginalised_matches_legacy_primitive():
+def test_eline_marginalized_matches_legacy_primitive():
     n_pix, n_lines = 32, 3
     obs = jnp.linspace(1.0, 2.0, n_pix)
     err = jnp.ones(n_pix) * 0.05
     model = obs - 0.1  # continuum slightly below
     # Mock 3-line Gaussian design matrix.
-    centres = jnp.array([5, 16, 25])
+    centers = jnp.array([5, 16, 25])
     sigmas = jnp.array([2.0, 2.5, 1.5])
     pixel_idx = jnp.arange(n_pix).astype(float)
     G = jnp.stack(
         [
             jnp.exp(-0.5 * ((pixel_idx - c) / s) ** 2)
-            for c, s in zip(centres, sigmas, strict=False)
+            for c, s in zip(centers, sigmas, strict=False)
         ],
         axis=1,
     )
 
-    lk = ELineMarginalisedLikelihood(
+    lk = ELineMarginalizedLikelihood(
         fnu_obs=obs,
         fnu_err=err,
         design_matrix=G,
@@ -310,8 +310,8 @@ def test_full_cohort_composes_in_one_composite():
 
 
 @pytest.mark.unit
-def test_calibration_eline_marginalised_matches_deleted_legacy_sequential():
-    """``CalibrationELineMarginalisedLikelihood.log_prob(...)`` must match
+def test_calibration_eline_marginalized_matches_deleted_legacy_sequential():
+    """``CalibrationELineMarginalizedLikelihood.log_prob(...)`` must match
     the deleted legacy sequential composition bit-for-bit:
 
         marginalize_emission_lines → augment prediction → marginalize_calibration
@@ -321,8 +321,8 @@ def test_calibration_eline_marginalised_matches_deleted_legacy_sequential():
     """
     import jax.numpy as jnp
 
-    from tengri.inference.likelihoods.marginalised import (
-        CalibrationELineMarginalisedLikelihood,
+    from tengri.inference.likelihoods.marginalized import (
+        CalibrationELineMarginalizedLikelihood,
     )
     from tengri.observation.calibration import marginalize_calibration
     from tengri.observation.eline_marginalization import marginalize_emission_lines
@@ -334,10 +334,10 @@ def test_calibration_eline_marginalised_matches_deleted_legacy_sequential():
     wavelength = jnp.linspace(4500.0, 6700.0, 8)
     model_spec = 1.0 + 0.05 * rng  # smooth model continuum (no lines)
     # Two narrow lines: design matrix columns are Gaussian profiles.
-    line_centres = jnp.array([5000.0, 6500.0])
+    line_centers = jnp.array([5000.0, 6500.0])
     sigma = 30.0
     design_matrix = jnp.stack(
-        [jnp.exp(-0.5 * ((wavelength - lc) / sigma) ** 2) for lc in line_centres],
+        [jnp.exp(-0.5 * ((wavelength - lc) / sigma) ** 2) for lc in line_centers],
         axis=1,
     )
     prior_sigma_eline = 0.5  # per-line amplitude prior σ
@@ -359,7 +359,7 @@ def test_calibration_eline_marginalised_matches_deleted_legacy_sequential():
     )
 
     # ── Path B: new adapter ──
-    adapter = CalibrationELineMarginalisedLikelihood(
+    adapter = CalibrationELineMarginalizedLikelihood(
         fnu_obs=fnu_obs,
         fnu_err=fnu_err,
         wavelength=wavelength,

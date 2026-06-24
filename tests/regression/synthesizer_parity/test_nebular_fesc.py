@@ -226,7 +226,7 @@ def test_fesc_gradient_matches_kfactor_wiring(cue_backend, cue_default_params):
         _, lum = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=fesc_traced)
         return jnp.sum(lum)
 
-    # Reference: continuum sum at the linearisation point, evaluated directly.
+    # Reference: continuum sum at the linearization point, evaluated directly.
     _, lum_ref = cue_backend.predict_nebular_continuum(**cue_default_params, neb_fesc=0.0)
     sum_ref = float(jnp.sum(lum_ref))
 

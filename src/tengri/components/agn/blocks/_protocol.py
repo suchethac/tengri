@@ -31,7 +31,7 @@ on its category::
     # disc — produces the AGN UV/optical continuum.
     disc(wavelength, agn_log_lbol, **params) -> L_lambda  [erg/s/Å]
 
-    # nlr / blr / feii / torus — additive contributions, normalised to the
+    # nlr / blr / feii / torus — additive contributions, normalized to the
     # disc-side λL_λ(5100Å) already computed by the disc block.
     nlr (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda or (L_maskable, L_isotropic)
     blr (wavelength, agn_log_lbol, l5100_disc, **params) -> L_lambda or (L_maskable, L_isotropic)
@@ -47,7 +47,7 @@ GRAHSP, qsogen, and Mullaney models all live there); converting once at
 the runner output (``L_ν = L_λ λ²/c``) is cheaper and less error-prone
 than per-block conversions.
 
-Why ``l5100_disc`` shared state? The lines / feii / torus normalisations
+Why ``l5100_disc`` shared state? The lines / feii / torus normalizations
 in upstream GRAHSP are tied to :math:`\\lambda L_\\lambda(5100\\,\\mathrm{\\AA})`
 of the disc; extracting it once and threading it through is more efficient
 than each block recomputing.

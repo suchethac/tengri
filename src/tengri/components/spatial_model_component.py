@@ -51,7 +51,7 @@ class SpatialModelComponent:
         (dict of name -> units) for the cross-component contract
       * A ``predict(p, profile_in, grid_kpc, **reads_kwargs)`` method
 
-    Mirror of :class:`SEDModelComponent`. Behaviour is identical except:
+    Mirror of :class:`SEDModelComponent`. Behavior is identical except:
       * Default :attr:`parameter_prefix` is ``"spatial_"``
       * The default :meth:`apply` updates
         ``state.derived["spatial_profile_2d"]`` (not ``state.sed_intrinsic``)

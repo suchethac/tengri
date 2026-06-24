@@ -125,7 +125,7 @@ class TestDale2014FracAGN:
 
     def test_qso_template_keeps_cigale_full_grid_norm(self):
         """Regression (#717): the QSO template carries CIGALE's *full-grid*
-        unit normalisation, so its L_nu integral over the (truncated) dust grid
+        unit normalization, so its L_nu integral over the (truncated) dust grid
         is ~0.54 — NOT 1.0. ~46% of a unit quasar is the UV/optical disc
         continuum below the dust grid's blue edge (~360 nm). Forcing it to unit
         over the truncated grid (the old bug) inflated its IR share to ~0.78.
@@ -141,14 +141,14 @@ class TestDale2014FracAGN:
         assert 0.4 < integ < 0.7, (
             f"QSO L_nu integral = {integ:.3f}; expected ~0.54 (CIGALE full-grid "
             "norm, truncated to the dust grid). A value near 1.0 means the "
-            "truncate-then-renormalise-to-unit bug returned (#717)."
+            "truncate-then-renormalize-to-unit bug returned (#717)."
         )
 
     def test_fracagn_energy_partition_matches_cigale(self):
         """Regression (#717): with the QSO carrying ~0.42 of its energy in the
         IR (per unit L_AGN), the total IR grows as ``1 + 0.42 f/(1-f)`` — the
         f=0.6/f=0 IR ratio is ~1.63, matching CIGALE's ``L*model_sb +
-        L_AGN*model_quasar``. The old truncate-then-renormalise bug put ~0.78
+        L_AGN*model_quasar``. The old truncate-then-renormalize bug put ~0.78
         in the IR, so the ratio jumped to ~2.2 (tengri ran 1.43x high vs
         CIGALE at f=0.6 in the §6 reproduction knobs panel).
         """
@@ -158,7 +158,7 @@ class TestDale2014FracAGN:
         ratio = l6 / l0
         assert 1.45 < ratio < 1.85, (
             f"fracAGN energy partition off (f=0.6/f=0 IR = {ratio:.3f}; CIGALE "
-            "~1.63). A value near 2.2 means the QSO normalisation bug returned "
+            "~1.63). A value near 2.2 means the QSO normalization bug returned "
             "(#717)."
         )
 

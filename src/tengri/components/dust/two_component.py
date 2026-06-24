@@ -84,7 +84,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
         screen. ``None`` (default) inherits ``law_bc`` — the nebular
         continuum is then reddened by exactly the same young-limit screen
         as the youngest stars (Charlot & Fall 2000; bagpipes/FSPS/CIGALE
-        behaviour). Set it to give HII-region emission a *different*
+        behavior). Set it to give HII-region emission a *different*
         birth-cloud law from the stars while still sharing the diffuse ISM
         screen (``law_diff``). See ``neb_law_overrides`` for the matching
         per-parameter knob.
@@ -97,7 +97,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
         — the component then publishes ``sed_dust_ir`` as zeros and
         omits the energy-balance accumulation.
     t_birth_yr : float
-        Birth-cloud dispersal age (sigmoid centre, yr).
+        Birth-cloud dispersal age (sigmoid center, yr).
         Default 1e7 (10 Myr) per Charlot & Fall (2000).
     transition_width_dex : float
         Sigmoid width (dex) for the BC→diffuse age transition.
@@ -128,7 +128,7 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: below this wavelength [Å]. ``0.0`` -> disabled: the ``calzetti`` /
     #: ``leitherer02`` polynomials extrapolate through the FUV. Set to ``912.0``
     #: (the H Lyman limit) to reproduce CIGALE's ``dustatt_modified_starburst``,
-    #: which clips its curve there on the assumption that LyC photons ionise H
+    #: which clips its curve there on the assumption that LyC photons ionize H
     #: rather than heat dust. Static, non-fittable; enters ``compile_signature``.
     lyman_cutoff_aa: float = 0.0
 
@@ -173,7 +173,7 @@ class DustSEDComponent:
         return ("charlot_fall2000",)
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
-        """Nebular continuum read, if a photoionised backend published one.
+        """Nebular continuum read, if a photoionized backend published one.
 
         Declaring ``sed_nebular`` as an optional input makes the pipeline
         topological sort (ADR-0006) place the nebular component *before* dust,
@@ -424,7 +424,7 @@ class DustSEDComponent:
         # Resolve per-component (birth-cloud vs diffuse) law parameters: the
         # shared ``dust_<x>`` params, with any per-component overrides from the
         # config layered on top. Empty overrides reproduce the original
-        # single-slope Charlot & Fall (2000) behaviour exactly.
+        # single-slope Charlot & Fall (2000) behavior exactly.
         bc_law_params, diff_law_params = resolve_bc_diff_law_params(
             params,
             dict(self.config.bc_law_overrides),
@@ -452,7 +452,7 @@ class DustSEDComponent:
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
-        # youngest stars (Charlot & Fall 2000). Photoionised backends (Cue,
+        # youngest stars (Charlot & Fall 2000). Photoionized backends (Cue,
         # CloudyGrid) publish a separate ``sed_nebular`` and, via this
         # component's ``optional_inputs``, run *before* dust; their continuum is
         # reddened here with the young-limit transmission (sigmoid weight -> 1,
@@ -498,7 +498,7 @@ class DustSEDComponent:
         # Mirrors forward/pipeline.py:815.
         #
         # Lyman-continuum exclusion: photons at λ < 912 Å are absorbed by
-        # H ionisation (→ nebular emission), not by dust grains — they
+        # H ionization (→ nebular emission), not by dust grains — they
         # don't contribute to the dust IR re-emission pool. Matches
         # CIGALE ``dustatt_modified_starburst`` (a_vs_ebv clips at 91.2
         # nm, so its energy-balance ∫ stops at 912 Å) without forcing
@@ -520,7 +520,7 @@ class DustSEDComponent:
         # ── 4. IR emission template ────────────────────────────────────
         # When emission_model is None, the user opted out of IR re-emission
         # entirely (`dust_emission=None`). Skip the template call and
-        # publish zero — preserves the no-emission behaviour.
+        # publish zero — preserves the no-emission behavior.
         if self.config.emission_model is None:
             sed_ir = jnp.zeros_like(wave)
         else:
@@ -578,7 +578,7 @@ class DustSEDComponent:
         sed_total = non_stellar_other + sed_neb_attenuated + sed_attenuated + sed_ir
 
         # Phase 3c-3c-iv-b: per-filter LUTs for two-component attenuation.
-        # T(a, λ) factorises as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
+        # T(a, λ) factorizes as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
         # path we publish A_diff = exp(-τ_diff·k_diff(λ_eff)) and
         # A_bc = exp(-τ_bc·k_bc(λ_eff)) at each filter pivot, plus their
         # wavelength derivatives via central finite difference. The young
@@ -650,7 +650,7 @@ class DustSEDComponent:
                 # and structured dust emission (MIR/PAH). The dense ``sed_ir`` is
                 # built on the rest-frame ``wave`` grid above; ``predict_via_precomp``
                 # applies cosmology to the summed L_ν. (Sampling the
-                # self-normalising emission model at the sparse pivots was the
+                # self-normalizing emission model at the sparse pivots was the
                 # #622 regression that inflated the reddest band ~4×.)
                 fw_pad = state.derived.get("phot_filter_waves_padded")
                 ft_pad = state.derived.get("phot_filter_trans_padded")
@@ -664,7 +664,7 @@ class DustSEDComponent:
                     )
                 else:
                     # Fallback (padded curves not published): effective-wavelength
-                    # sample of the dense, correctly normalised template.
+                    # sample of the dense, correctly normalized template.
                     derived_overrides["dust_emission_phot_lnu_precomp"] = jnp.interp(
                         filter_eff, wave, sed_ir
                     )
@@ -703,9 +703,9 @@ class DustSEDComponent:
             # the optical but correct for spectra extending into the IR.
             if self.config.emission_model is not None:
                 # Same fix as the filter branch (#622): sample the dense,
-                # correctly normalised ``sed_ir`` at the spectral pivots rather
-                # than re-evaluating the self-normalising emission model on the
-                # sparse ``spec_eff`` grid (which renormalises L_ir over the
+                # correctly normalized ``sed_ir`` at the spectral pivots rather
+                # than re-evaluating the self-normalizing emission model on the
+                # sparse ``spec_eff`` grid (which renormalizes L_ir over the
                 # optical window and corrupts the result).
                 derived_overrides["dust_emission_spec_lnu_precomp"] = jnp.interp(
                     spec_eff, wave, sed_ir

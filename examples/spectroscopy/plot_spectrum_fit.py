@@ -88,10 +88,10 @@ ax.loglog(
 )
 
 # Feature annotations
-ax.axvline(4102, color="grey", ls=":", lw=0.8, alpha=0.5)
-ax.text(4102, 2.0, r"H$\delta$", fontsize=9, ha="center", color="grey")
-ax.axvline(6563, color="grey", ls=":", lw=0.8, alpha=0.5)
-ax.text(6563, 2.0, r"H$\alpha$", fontsize=9, ha="center", color="grey")
+ax.axvline(4102, color="gray", ls=":", lw=0.8, alpha=0.5)
+ax.text(4102, 2.0, r"H$\delta$", fontsize=9, ha="center", color="gray")
+ax.axvline(6563, color="gray", ls=":", lw=0.8, alpha=0.5)
+ax.text(6563, 2.0, r"H$\alpha$", fontsize=9, ha="center", color="gray")
 
 ax.set_xlabel(r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]")
 ax.set_ylabel(r"Normalized $f_\lambda$")

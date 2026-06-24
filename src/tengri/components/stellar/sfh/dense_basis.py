@@ -580,7 +580,7 @@ def dense_basis(
     # Prepend zero for the Big Bang bin (matching dense_basis line 168)
     sfr = jnp.concatenate([jnp.array([0.0]), sfr])
 
-    # --- Mass renormalisation (dense_basis lines 170-180) ---
+    # --- Mass renormalization (dense_basis lines 170-180) ---
     # The GP+diff path can leave a small residual mismatch with the target
     # mass 10^logM (GP smoothing pulls the endpoints slightly off 0/1).
     # The original code splits the SFR into "recent" (last ~10 Myr) and
@@ -607,7 +607,7 @@ def dense_basis(
     # ``log_sfr_inst``. That conditional creates a non-differentiable step at
     # the threshold, which breaks gradient-based inference. Since the whole
     # point of having ``log_sfr_inst`` as an explicit free parameter is to
-    # honour it during fitting, we override unconditionally — equivalent to
+    # honor it during fitting, we override unconditionally — equivalent to
     # ``sfr_tolerance = 0``. This is smooth in both ``log_sfr_inst`` and
     # ``log_total_mass`` (the override bins are independent of the latter).
     sfr_override_value = 10.0**log_sfr_inst

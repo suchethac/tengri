@@ -142,7 +142,7 @@ class TestIonizingParamsTable:
         ions_mod._IONSPEC_TABLE_CACHE.clear()
         monkeypatch.setattr(ions_mod, "_ionspec_disk_cache_dir", lambda: tmp_path)
 
-        # Use slice indices known to contain ionising-bright young bins.
+        # Use slice indices known to contain ionizing-bright young bins.
         # FSPS prsc-miles fixture: lgmet[0] ≈ −4, ages[0:10] cover 0.3–1 Myr,
         # well within the regime where (flux × L_sun / (h × nu)) is ~ 1e30+
         # and the trapezoid integration overflows float32 if not cast.
@@ -366,7 +366,7 @@ class TestCueMultiBuildBudget:
     calls share one process — the pattern the CIGALE-reproduction notebook
     (``reproduction/cigale/01_cigale.py``) exercises.
 
-    Issue #416 reported ~6 s per build; #418 memoised
+    Issue #416 reported ~6 s per build; #418 memoized
     :func:`precompute_ionizing_params_table` so the second-and-later builds
     re-use the cached scipy fit. Issue #423 alleged the fix only worked
     for the scipy step (with Cue still re-tracing per build). We could not
@@ -410,7 +410,7 @@ class TestCueMultiBuildBudget:
         _build_one()
         cold = time.time() - t0
 
-        # Five warm builds back-to-back. With the #418 memoisation and the
+        # Five warm builds back-to-back. With the #418 memoization and the
         # structural-kernel cache both hitting, each should be << 1 s.
         warm_times = []
         for _ in range(5):
@@ -424,7 +424,7 @@ class TestCueMultiBuildBudget:
         assert warm_total < 5.0, (
             f"Five warm Cue builds should complete in << 5 s (cold={cold:.2f}s "
             f"warm_total={warm_total:.2f}s individual={warm_times}). "
-            f"Likely cause: either precompute_ionizing_params_table memoisation "
+            f"Likely cause: either precompute_ionizing_params_table memoization "
             f"(issue #416 / PR #418) regressed, or the structural-kernel cache "
             f"stopped hitting on same-physics builds."
         )

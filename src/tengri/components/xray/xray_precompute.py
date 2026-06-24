@@ -21,7 +21,7 @@ Fixed axes via ``slice_fixed_axes``.
    The current X-ray models are closed-form power-law-with-cutoff spectra,
    so the runtime path is already cheap. These precompute adapters exist to
    establish the ``(scale, *axes) -> photometry`` contract that tabulated
-   future models (e.g. Comptonization tables, reflection grids, ionised
+   future models (e.g. Comptonization tables, reflection grids, ionized
    absorber transmission cubes) will need; benchmark before assuming a
    speedup over the analytic runtime path.  See
    ``scripts/benchmark_precompute_analytic.py``.

@@ -11,7 +11,7 @@ at Harvard Dataverse (doi:10.7910/DVN/3B6E6S):
       grid for this model.
 
 Three emission components are stored separately: ``astrodust``,
-``pah``, and their sum (``total``).  Per-H normalisation; downstream
+``pah``, and their sum (``total``).  Per-H normalization; downstream
 energy-balance rescaling against ``L_ir`` is handled by
 :class:`tengri.components.dust.emission_component.DustEmissionSEDComponent`.
 
@@ -250,7 +250,7 @@ def load_astrodust_hd23(template_path: str | None = None) -> AstrodustHD23Templa
 
     Public entry point for the bundled Astrodust+PAH templates — emission
     (:math:`L_\nu` per H for total / astrodust / PAH / spinning-dust
-    components), extinction / scattering / polarisation per H, and the
+    components), extinction / scattering / polarization per H, and the
     fiducial grain ``size_distribution``. Use it instead of opening
     ``data/astrodust_templates.h5`` by hand.
 

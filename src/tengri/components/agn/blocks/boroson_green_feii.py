@@ -55,7 +55,7 @@ def boroson_green_feii_block(
 ) -> Array:
     r"""FeII pseudo-continuum block using Boroson & Green (1992) templates.
 
-    Boroson & Green (1992) catalogued Fe II multiplet strengths in optical
+    Boroson & Green (1992) cataloged Fe II multiplet strengths in optical
     quasar spectra. This block delivers an Fe II pseudo-continuum (summed
     multiplets) interpolated to the input wavelength grid, broadened by
     the BLR velocity width, and normalized to H-beta luminosity. The H-beta
@@ -110,7 +110,7 @@ def boroson_green_feii_block(
     .. [3] Temple, M. J., Hewett, P. C., & Banerji, M. 2021, MNRAS, 508,
        737. PyQSOFit: A Python-based spectral fitting code for quasars.
     """
-    del agn_log_lbol  # normalisation comes from l5100_disc
+    del agn_log_lbol  # normalization comes from l5100_disc
     wave_aa = jnp.asarray(wavelength)
     l_disc_bol_erg = jnp.asarray(l5100_disc) * agn_blr_f_bol
 

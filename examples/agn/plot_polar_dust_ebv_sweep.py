@@ -4,7 +4,7 @@ Polar-dust E(B-V) sweep for Type 1 and Type 2 AGN sightlines (X-CIGALE)
 
 Reproduces Figure 1 of Yang et al. 2020 (the X-CIGALE polar-dust
 introduction): SMC-law attenuation of the AGN disc by dust above the
-torus, plus an energy-conserving mid-IR greybody re-emission. Two
+torus, plus an energy-conserving mid-IR graybody re-emission. Two
 panels at cos_inc = 0.95 (Type-1, face-on into the polar cone) and
 cos_inc = 0.10 (Type-2, edge-on view of the torus) for opening angle
 40°. We sweep ``agn_polar_ebv`` from 0.00 to 0.30 — covering the
@@ -48,7 +48,7 @@ log_lam_nm = np.log10(np.asarray(wavelength_aa) / 10.0)
 
 
 def predict_with_polar(cos_inc: float, ebv: float) -> np.ndarray:
-    """Multicolour disc + polar-dust attenuation + greybody re-emission."""
+    """Multicolor disc + polar-dust attenuation + graybody re-emission."""
     l_disc = multicolor_disc(
         wavelength_aa,
         agn_log_lbol=LOG_LBOL,
@@ -67,7 +67,7 @@ def predict_with_polar(cos_inc: float, ebv: float) -> np.ndarray:
     return np.asarray(l_atten + l_reemit)
 
 
-# Normalise each curve by its maximum (X-CIGALE style — "normed")
+# Normalize each curve by its maximum (X-CIGALE style — "normed")
 def _norm(l_nu: np.ndarray) -> np.ndarray:
     return l_nu / np.max(l_nu)
 

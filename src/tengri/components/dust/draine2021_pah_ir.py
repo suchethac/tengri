@@ -70,7 +70,7 @@ class Draine2021PAHIRConfig(SEDComponentConfig):
         young population in Myr. Required when ``starlight="auto"``.
     auto_log_z_solar : float, optional
         (``starlight="auto"`` only.) :math:`\\log_{10}(Z/Z_\\odot)` for the
-        ionising stellar population. Required when ``starlight="auto"``.
+        ionizing stellar population. Required when ``starlight="auto"``.
     auto_sps_family : str, optional
         (``starlight="auto"`` only.) SPS family (``"BC03"``, ``"BPASS"``, or ``None``
         for non-SSP ambient spectra). Default ``None``.

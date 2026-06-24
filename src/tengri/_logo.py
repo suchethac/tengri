@@ -134,7 +134,7 @@ LOGO_BANNER = "tengri"
 def _resolve(size: str) -> str:
     """Map a ``size`` keyword to a logo constant.
 
-    Recognised values:
+    Recognized values:
         "default", "large"    → LOGO (37-line solid blocks)
         "stipple", "textured" → LOGO_STIPPLE (37-line ``}[)`` stipple)
         "small"               → LOGO_SMALL (21-line compact)

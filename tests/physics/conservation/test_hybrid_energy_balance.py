@@ -206,7 +206,7 @@ class TestTHEMISNonRegression:
         """THEMIS hybrid error < 5% per band (non-regression guard).
 
         See note on TestDale2014NonRegression — same triweight-vs-bilinear
-        architectural cost. Smooth gradients prioritised over byte-equivalent
+        architectural cost. Smooth gradients prioritized over byte-equivalent
         agreement; interpolation bias is below template systematic uncertainty.
         """
         err = _photometry_error(themis_model, themis_params)

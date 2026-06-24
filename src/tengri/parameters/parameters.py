@@ -298,7 +298,7 @@ class Parameters:
     **Dust emission** (``dust_emission != None``):
 
     ========================== ================= =======================================
-    dust_T                     Fixed(35)         Dust temperature (K) for greybody
+    dust_T                     Fixed(35)         Dust temperature (K) for graybody
     dust_beta_ir               Fixed(1.6)        Emissivity index
     dust_alpha_mir             Fixed(2.0)        MIR slope (Casey 2012)
     dust_alpha_dale            Fixed(2.0)        Dale+2014 alpha
@@ -469,7 +469,7 @@ class Parameters:
         self.agn_feii_block = kwargs.pop("agn_feii_block", "none")
         self.agn_torus_block = kwargs.pop("agn_torus_block", "none")
         self.agn_attenuation_block = kwargs.pop("agn_attenuation_block", "none")
-        # Cross-block normalisation policy (#556): static selector, not a
+        # Cross-block normalization policy (#556): static selector, not a
         # fittable param. "cigale_joint" (default) ties disc/torus/polar to
         # the single agn_power reference; "independent" keeps legacy scaling.
         self.agn_norm = kwargs.pop("agn_norm", "cigale_joint")
@@ -666,10 +666,10 @@ class Parameters:
         self.cloudy_grid_path = kwargs.pop("cloudy_grid_path", None)
         self.cue_weights_path = kwargs.pop("cue_weights_path", None)
         # When True, the Cue orchestrator path publishes the full
-        # ~271-species line catalogue instead of the default 128
+        # ~271-species line catalog instead of the default 128
         # CLOUDY/FSPS subset, so HeII 1640, HeI 10830, etc. can be
         # read via ``pred.lines.get(wavelength)``. See #303.
-        self.cue_full_catalogue = kwargs.pop("cue_full_catalogue", False)
+        self.cue_full_catalog = kwargs.pop("cue_full_catalog", False)
         self.neb_ionization = kwargs.pop("neb_ionization", "ssp")
 
         self._nebular_cb19 = False
@@ -1688,7 +1688,7 @@ class Parameters:
         if agn:
             if agn == "composable":
                 # Surface the composable block selectors + cross-block
-                # normalisation policy so the energy-balance choice is visible
+                # normalization policy so the energy-balance choice is visible
                 # in the model description (not buried in source).
                 _blocks = [
                     f"disc={getattr(self, 'agn_disc_block', 'none')}",

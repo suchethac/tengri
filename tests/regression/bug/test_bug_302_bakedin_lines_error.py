@@ -3,7 +3,7 @@
 
 `SEDModel.predict_emission_lines` on a BakedInBackend nebular returned
 all-NaN silently — the backend bakes emission into the SSP grid and
-doesn't publish a discrete line catalogue. Fix raises NotImplementedError
+doesn't publish a discrete line catalog. Fix raises NotImplementedError
 with an actionable migration message.
 
 See PR #306.

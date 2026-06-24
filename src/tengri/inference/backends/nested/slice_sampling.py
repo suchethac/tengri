@@ -165,7 +165,7 @@ def horizontal_slice(
 ) -> tuple[SliceState, SliceInfo]:
     """Propose a new sample using stepping-out and shrinking procedures.
 
-    First expands an interval [l, r] along a 1D parameterisation until both
+    First expands an interval [l, r] along a 1D parameterization until both
     ends are outside the slice (stepping-out), then samples uniformly and
     shrinks until an acceptable point is found.
 

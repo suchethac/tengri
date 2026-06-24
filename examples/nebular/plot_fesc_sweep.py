@@ -2,10 +2,10 @@
 Escape fraction reshapes the SED from the Lyman continuum to optical lines
 ==========================================================================
 
-We sweep the ionising-photon escape fraction f_esc from 0 to 1.0 at
+We sweep the ionizing-photon escape fraction f_esc from 0 to 1.0 at
 fixed log U and metallicity, showing both the broadband SED response
 and a zoomed view of the critical Lyman-continuum (912 A) region.
-The Lyman edge deepens as ionising photons escape the ISM unabsorbed,
+The Lyman edge deepens as ionizing photons escape the ISM unabsorbed,
 suppressing optical line ratios simultaneously.
 
 The main plot shows the full SED (800–30000 Å rest), with an inset

@@ -69,14 +69,14 @@ def smc_attenuation_curve(
         Power-law index :math:`\gamma_{\mathrm{NIR}}` for
         :math:`\lambda \geq \lambda_b`. Default ``-3.0``.
     norm : float, optional
-        Normalisation :math:`N` at the break. Default ``1.2``.
+        Normalization :math:`N` at the break. Default ``1.2``.
     lam_break_nm : float, optional
         Break wavelength :math:`\lambda_b` [nm]. Default ``1100`` nm.
 
     Returns
     -------
     A : ndarray, shape (n_wave,)
-        Dimensionless attenuation curve, normalised so that
+        Dimensionless attenuation curve, normalized so that
         :math:`A(\lambda_b) = N`.
 
     Notes

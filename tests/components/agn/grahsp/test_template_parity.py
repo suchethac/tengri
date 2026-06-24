@@ -37,7 +37,7 @@ def _upstream_feii():
     norm_idx = np.argmin(np.abs(wave - 4575.0))
     norm = Llam[norm_idx]
     Llam = Llam / norm
-    return wave * 0.1, Llam  # nm, normalised L_lambda
+    return wave * 0.1, Llam  # nm, normalized L_lambda
 
 
 def _upstream_lines():

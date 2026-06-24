@@ -14,7 +14,7 @@ Three adapters under test:
 - :class:`CompositeLikelihood` — sum of constituents.
 
 Each is checked for: contract conformance, numerical correctness vs the
-shared :func:`diag_gaussian_log_prob` helper, ``sigma_floor`` behaviour,
+shared :func:`diag_gaussian_log_prob` helper, ``sigma_floor`` behavior,
 and (for the composite) commutativity, no-side-effect summation, and
 duplicate-parameter detection.
 """

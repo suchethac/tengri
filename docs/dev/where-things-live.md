@@ -73,8 +73,8 @@ Each component owns its own `_params.py` (see the list above and the
 |---|---|
 | Photometry + spectroscopy data containers | `observation/` |
 | Filter curves and filter management | `observation/filters/` |
-| Noise models (Gaussian, Student-t, GP, calibration marginalisation) | `observation/noise.py`, `observation/calibration.py` |
-| Emission-line marginalisation | `observation/eline_marginalization.py` |
+| Noise models (Gaussian, Student-t, GP, calibration marginalization) | `observation/noise.py`, `observation/calibration.py` |
+| Emission-line marginalization | `observation/eline_marginalization.py` |
 | The `Fitter` class and JIT-cached engines | `inference/fitter.py`, `inference/jit_engine.py` |
 | MCMC / VI / Pathfinder backends | `inference/backends/` |
 | Likelihood implementations | `inference/likelihoods/` |

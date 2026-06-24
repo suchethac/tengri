@@ -10,7 +10,7 @@
   inline ``(1+z)/(4π d_L²)`` that returns a Python float when inputs are
   concrete and a JAX scalar when traced.
 * **B5** — the user-facing SSP fetch helpers in ``tengri.data`` exist and
-  expose the canonical hosted catalogue URL.
+  expose the canonical hosted catalog URL.
 
 B3 is covered by PR #291 (multi-chain via vmap across all 7 MCMC
 backends); B4 is the rewritten ``bench/scripts/benchmark_forward_model.py``
@@ -98,27 +98,27 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
 
 
 # ---------------------------------------------------------------------------
-# B5: tengri.data fetch helpers exist and surface the catalogue URL
+# B5: tengri.data fetch helpers exist and surface the catalog URL
 # ---------------------------------------------------------------------------
 
 
 def test_tengri_data_module_exposes_helpers():
     """``tengri.data`` must expose ``download_ssp`` / ``list_remote_ssps`` /
-    ``SSP_CATALOGUE_URL`` / ``local_ssp_path``."""
+    ``SSP_CATALOG_URL`` / ``local_ssp_path``."""
     from tengri import data
 
-    for name in ("SSP_CATALOGUE_URL", "download_ssp", "list_remote_ssps", "local_ssp_path"):
+    for name in ("SSP_CATALOG_URL", "download_ssp", "list_remote_ssps", "local_ssp_path"):
         assert hasattr(data, name), f"tengri.data missing {name}"
 
 
 def test_ssp_catalogue_url_looks_sane():
-    """The catalogue URL must be the canonical https hostname and end in
+    """The catalog URL must be the canonical https hostname and end in
     a directory path. Guards against typos in future edits."""
-    from tengri.data import SSP_CATALOGUE_URL
+    from tengri.data import SSP_CATALOG_URL
 
-    assert SSP_CATALOGUE_URL.startswith("https://")
-    assert SSP_CATALOGUE_URL.endswith("/")
-    assert "halos.as.arizona.edu" in SSP_CATALOGUE_URL
+    assert SSP_CATALOG_URL.startswith("https://")
+    assert SSP_CATALOG_URL.endswith("/")
+    assert "halos.as.arizona.edu" in SSP_CATALOG_URL
 
 
 def test_download_ssp_rejects_path_traversal(tmp_path):
@@ -151,7 +151,7 @@ def test_cue_error_message_points_to_download_ssp():
     discover it from the error they actually hit."""
     from tengri.components.nebular.cue import CueWNESSPError
 
-    # The class docstring also still mentions the catalogue URL; the
+    # The class docstring also still mentions the catalog URL; the
     # check below is on the runtime message, which is the surface a user
     # facing the error sees.
     src = tengri.components.nebular.cue

@@ -134,14 +134,14 @@ forward = ForwardModel.build(population=pop, observation=obs)
 
 # Inference is the same as for a single galaxy: one Hamiltonian path,
 # Fitter sees a (N_gal, n_filters)-shaped batched prediction and
-# minimises chi^2 + xi^T xi over the joint latent space.
+# minimizes chi^2 + xi^T xi over the joint latent space.
 fitter = Fitter(forward)          # auto-extracts (data, noise) from pop.galaxies
 posterior = fitter.run('vi')
 ```
 
 The PSD priors live on the ``PopulationSEDModel`` construction — not on a
 separate ``HierarchicalFitter`` — so there is one place that
-parameterises the hierarchy.
+parameterizes the hierarchy.
 
 Inference routes through the standard
 :class:`tengri.Fitter` machinery natively (PRs #241–#246, 2026-05).

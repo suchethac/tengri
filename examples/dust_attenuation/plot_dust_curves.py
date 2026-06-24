@@ -31,8 +31,8 @@ fig, ax = plt.subplots(figsize=(6.5, 4.2))
 for label, fn in list_laws().items():
     ax.plot(wave / 1e4, fn(wave), label=label, lw=1.4)
 
-ax.axvline(0.55, ls=":", color="grey", lw=0.5, alpha=0.5)
-ax.axvline(0.2175, ls=":", color="grey", lw=0.5, alpha=0.5)
+ax.axvline(0.55, ls=":", color="gray", lw=0.5, alpha=0.5)
+ax.axvline(0.2175, ls=":", color="gray", lw=0.5, alpha=0.5)
 
 ax.set_xlim(0.08, 3.0)
 ax.set_ylim(0, None)

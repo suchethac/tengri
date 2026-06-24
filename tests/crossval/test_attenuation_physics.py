@@ -404,7 +404,7 @@ class TestWG00GeometryPhysics:
         """Geometries produce different transmission for same tau_v.
 
         Shell (foreground screen) gives exp(-tau*k). Cloudy and dusty
-        are greyer due to mixed dust-star geometry.
+        are grayer due to mixed dust-star geometry.
         """
         from tengri.components.dust.attenuation import wg00_cloudy, wg00_dusty, wg00_shell
 

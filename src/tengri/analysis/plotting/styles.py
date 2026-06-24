@@ -14,7 +14,7 @@ import numpy as np
 
 COLORS = {
     # Sampler colors (consistent across all notebooks)
-    "map": "#888888",  # grey — point estimate
+    "map": "#888888",  # gray — point estimate
     "rt": "#1f77b4",  # blue — Ray Tracing (exact MCMC)
     # Canonical names
     "vi": "#ff7f0e",  # orange — geoVI (variational)
@@ -26,7 +26,7 @@ COLORS = {
     "mgvi": "#9467bd",  # MGVI (old method name)
     # Data colors
     "truth": "#1a1a1a",  # near-black — ground truth
-    "data": "#333333",  # dark grey — observed data
+    "data": "#333333",  # dark gray — observed data
     "model": "#d62728",  # red — model prediction
     # SFH components
     "sfh_mean": "#1f77b4",  # blue — mean SFH backbone

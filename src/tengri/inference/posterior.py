@@ -565,8 +565,8 @@ class Posterior:
         from the published ``lnu_age`` cube via ``sum(lnu_age, axis=0)``.
 
         For Posterior draws this is still a Python loop (one
-        orchestrator pass per sample); JIT vectorisation across draws
-        is a separate optimisation.
+        orchestrator pass per sample); JIT vectorization across draws
+        is a separate optimization.
 
         Examples
         --------
@@ -766,7 +766,7 @@ class Posterior:
         -----
         The continuum is estimated locally per line from the model-predicted
         rest-frame SED, *not* from a precomputed continuum-only grid. The
-        sideband choice therefore must avoid contamination from neighbouring
+        sideband choice therefore must avoid contamination from neighboring
         emission lines; defaults are tuned for optical BPT lines.
 
         Examples
@@ -1179,7 +1179,7 @@ class Posterior:
 
         Pushes posterior draws (or the MAP point estimate) through the
         attached forward model's ``predict_photometry`` and reports
-        per-draw predictions, standardised residuals, and a chi^2
+        per-draw predictions, standardized residuals, and a chi^2
         distribution against the supplied data + noise.
 
         Parameters
@@ -1219,7 +1219,7 @@ class Posterior:
         Notes
         -----
         This is a deterministic posterior predictive (no extra noise
-        realisation per draw). For replicated PPCs that draw observation
+        realization per draw). For replicated PPCs that draw observation
         noise per sample, layer ``noise * jax.random.normal`` on top of
         ``predictions``.
         """

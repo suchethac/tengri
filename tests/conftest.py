@@ -14,7 +14,7 @@ import pytest
 # ─────────────────────────────────────────────────────────────────────
 # Skip-tally hook: surface how many parity-sweep ports actually ran
 # vs. skipped due to missing data. Without this, the test report says
-# "X passed, Y skipped" without itemising whether the skipped ones
+# "X passed, Y skipped" without itemizing whether the skipped ones
 # were ports the session was supposed to verify.
 # ─────────────────────────────────────────────────────────────────────
 
@@ -101,10 +101,10 @@ def ssp_data_fsps():
 def ssp_data_bc03():
     """Bare-stellar BC03 SSP for Cue / CloudyGrid backends.
 
-    Cue's NN ionising-spectrum fit requires *bare-stellar* SSPs: it predicts
+    Cue's NN ionizing-spectrum fit requires *bare-stellar* SSPs: it predicts
     line luminosities by reading max log10(Q_H) ≳ 45 for ages < 10 Myr from
     the template. wNE (post-nebular) SSPs have log10(Q_H) ≲ 43 because the
-    ionising photons were already absorbed during the original Cloudy run.
+    ionizing photons were already absorbed during the original Cloudy run.
     Feeding wNE to Cue under-predicts line fluxes by 4-7 dex.
 
     BC03 PARSEC + STELIB Chabrier is the canonical bare-stellar SSP shipped
@@ -375,11 +375,11 @@ def _create_cb19_fixture_if_missing(cb19_path: Path) -> None:
 
 
 def _create_silva04_fixture_if_missing(silva04_path: Path) -> None:
-    """Synthesise a minimal Silva+04 cold-torus grid if absent.
+    """Synthesize a minimal Silva+04 cold-torus grid if absent.
 
     The Silva+04 loader raises FileNotFoundError when its HDF5 grid is
     missing, breaking ~ 20 test modules at import time in CI. We
-    synthesise a minimal grid with a zero template so the orchestration
+    synthesize a minimal grid with a zero template so the orchestration
     code path runs; real physics tests can guard themselves with
     ``@pytest.mark.skipif`` against the actual grid file.
 
@@ -412,7 +412,7 @@ def _create_silva04_fixture_if_missing(silva04_path: Path) -> None:
 
 
 def _create_synthetic_ssp_if_missing(ssp_path: Path) -> None:
-    """Synthesise a schema-faithful SSP HDF5 grid at the default path if absent.
+    """Synthesize a schema-faithful SSP HDF5 grid at the default path if absent.
 
     Purpose (#613): CI ships no real ``data/ssp_*.h5`` grids, so every
     ``skipif(not _SSP_FILE_WNE.is_file())`` contract test silently skips — the
@@ -424,7 +424,7 @@ def _create_synthetic_ssp_if_missing(ssp_path: Path) -> None:
     ``_create_silva04_fixture_if_missing``.
 
     The grid is smooth and broad (91 Å – 1 mm) so it drives the full forward
-    chain: ionising photons below the Lyman limit (nebular), UV/optical
+    chain: ionizing photons below the Lyman limit (nebular), UV/optical
     luminosity for dust energy balance, and a far-IR tail for dust re-emission.
     It is **not** physically calibrated — physics-value tests (``regression_paper``,
     ``crossval``) must guard on the real grid via the ``real_ssp_only`` fixture.
@@ -439,7 +439,7 @@ def _create_synthetic_ssp_if_missing(ssp_path: Path) -> None:
     ssp_path.parent.mkdir(parents=True, exist_ok=True)
 
     n_met, n_age, n_wave = 5, 22, 1200
-    # 91 Å (Lyman limit) – 1 mm (1e7 Å): spans ionising → far-IR.
+    # 91 Å (Lyman limit) – 1 mm (1e7 Å): spans ionizing → far-IR.
     wave = np.logspace(np.log10(91.0), np.log10(1.0e7), n_wave).astype(np.float64)
     # log10(age/Gyr): ~0.3 Myr – 13.8 Gyr.
     lg_age_gyr = np.linspace(-3.5, 1.14, n_age).astype(np.float64)

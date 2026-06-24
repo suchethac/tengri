@@ -17,10 +17,10 @@ The composable `lines` slot is single-valued and the runner's masking stage
 (`compose_l_nu` Stage 4.5) masks the whole central engine (disc + lines + FeII)
 *uniformly*. With the new combined `nlr_blr` block (PR #661) summing NLR+BLR into
 one array, that uniform screen would wrongly obscure the NLR. `unified_nlr_blr`
-(reference) instead applies a grey `_sigmoid_mask(cos_inc, theta_torus)` to
+(reference) instead applies a gray `_sigmoid_mask(cos_inc, theta_torus)` to
 disc + BLR only, leaving NLR and torus unmasked.
 
-## Design (Approach A — back-compatible lines split + per-torus grey mask)
+## Design (Approach A — back-compatible lines split + per-torus gray mask)
 
 ### 1. Lines-block isotropic split (back-compatible contract extension)
 
@@ -41,7 +41,7 @@ Runner helper `_split_lines(result) -> (aniso, iso)`: tuple → unpack; array �
 `(array, zeros_like)`. **Back-compat:** a block returning a bare array behaves
 exactly as today.
 
-### 2. Grey visibility mask in the runner (per-torus, no double-counting)
+### 2. Gray visibility mask in the runner (per-torus, no double-counting)
 
 Reuse `_sigmoid_mask(agn_cos_inc, agn_theta_torus)` (move/import from
 `unified.py` into a shared masking module). The masking stage applies to the
@@ -50,7 +50,7 @@ Reuse `_sigmoid_mask(agn_cos_inc, agn_theta_torus)` (move/import from
 ```
 L_aniso = L_disc + L_lines_aniso + L_feii
 screen  = torus_screen_transmission(...)        if torus in TORUS_SCREEN_PARAMS  # dusty, λ-dependent (fritz/skirtor)
-        = sigmoid_visibility_mask(cos_inc, θ_t) elif torus != "none"             # grey geometric (unified)
+        = sigmoid_visibility_mask(cos_inc, θ_t) elif torus != "none"             # gray geometric (unified)
         = 1.0                                    else
 L_central = L_aniso * screen + L_lines_iso        # NLR bypasses the screen
 L_total   = (L_central + L_torus) * atten_factor  # host/foreground screen still hits NLR
@@ -58,11 +58,11 @@ L_total   = (L_central + L_torus) * atten_factor  # host/foreground screen still
 
 **One obscuration model per torus** avoids double-counting: dusty-screen tori
 (`skirtor`, `fritz`) keep their wavelength-dependent screen; every other non-`none`
-torus gets the grey geometric mask.
+torus gets the gray geometric mask.
 
 ### 3. New declared param `agn_theta_torus`
 
-Torus half-opening angle [deg], `Uniform(0, 90, default=30.0)`. Drives the grey
+Torus half-opening angle [deg], `Uniform(0, 90, default=30.0)`. Drives the gray
 mask's critical angle `inc_crit = 90° − theta_torus`. Default `theta_torus=30°`
 with default `agn_cos_inc=0.866` (30°) gives vis ≈ 1 → **existing models
 unchanged**.
@@ -70,7 +70,7 @@ unchanged**.
 ### 4. `recipes.unified_agn()`
 
 Turnkey composable config reproducing `unified_nlr_blr`'s component set:
-disc=`multicolor`, torus=`simple` (1000 K greybody) or `silva04`, lines=`nlr_blr`
+disc=`multicolor`, torus=`simple` (1000 K graybody) or `silva04`, lines=`nlr_blr`
 (analytic) / `nlr_blr_synthesizer` (grid), with `agn_cos_inc` + `agn_theta_torus`
 free. Docstring states the SSP requirement and that it is the composable
 equivalent of the monolithic `unified_nlr_blr`.
@@ -78,7 +78,7 @@ equivalent of the monolithic `unified_nlr_blr`.
 ### 5. CONSUMES updates
 
 `agn_theta_torus` (and `agn_cos_inc` where absent) added to the consumed sets of
-the grey-mask torus blocks (`simple`, `silva04`, `nenkova`, `two_temperature`,
+the gray-mask torus blocks (`simple`, `silva04`, `nenkova`, `two_temperature`,
 `cat3d_wind`, …) so `agn={'*': FREE}` frees the masking knobs for a unified config.
 
 ## Testing
@@ -89,7 +89,7 @@ the grey-mask torus blocks (`simple`, `silva04`, `nenkova`, `two_temperature`,
   `agn_cos_inc` for a unified config; the disc + BLR continuum drops past
   `inc_crit` while the NLR line flux stays flat (ratio ~1).
 - **Parity vs `unified_nlr_blr`:** the composable `unified_agn()` config matches
-  the monolithic model's inclination behaviour (sign + transition angle) to a
+  the monolithic model's inclination behavior (sign + transition angle) to a
   documented tolerance; not bit-exact (composable energy-couples disc→torus).
 - **Back-compat:** default-inclination existing AGN configs unchanged
   (predict equal pre/post within 1e-6).

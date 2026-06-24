@@ -114,7 +114,7 @@ class Distribution:
         """Validate ``default`` against this distribution's bounds and store it.
 
         Called by every concrete subclass ``__init__`` after ``bounds`` is set.
-        Centralising the validation here keeps the per-subclass boilerplate to
+        Centralizing the validation here keeps the per-subclass boilerplate to
         a single line.
 
         Parameters
@@ -1073,7 +1073,7 @@ class StudentT(Distribution):
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
     The probability density follows a Student's t distribution with the
-    standard normalisation. For finite df, it has heavier tails than a
+    standard normalization. For finite df, it has heavier tails than a
     Gaussian.
 
     **Standardization**: Uses a Gaussian approximation with variance scaling:

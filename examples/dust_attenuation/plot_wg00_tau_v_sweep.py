@@ -12,12 +12,12 @@ therefore a function of ``tau_V`` — which is exactly why tengri ships WG00 as 
 radiative-transfer table (FSPS ``dust_type=3``), interpolated in ``tau_V``,
 rather than a fixed-shape law.
 
-The left panel overlays the V-normalised curves ``A(lambda) / A_V`` for the
+The left panel overlays the V-normalized curves ``A(lambda) / A_V`` for the
 homogeneous *cloudy* (mixed) geometry at five optical depths: the UV bump and
 slope visibly flatten as ``tau_V`` climbs. The right panel tracks the
 far-UV-to-V ratio ``A(1500 A) / A_V`` against ``tau_V`` for all three WG00
 geometries — the *shell* screen stays flat (fixed shape) while the *cloudy* and
-*dusty* geometries grey strongly. Everything goes through the public
+*dusty* geometries gray strongly. Everything goes through the public
 ``tengri.dust.wg00_attenuation`` accessor; no SSP file is required to inspect an
 attenuation curve.
 
@@ -47,7 +47,7 @@ colors = plt.cm.viridis(np.linspace(0.05, 0.85, len(TAUS)))
 
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10.4, 4.3))
 
-# --- Left: V-normalised shape for the mixed (cloudy) geometry ---------------
+# --- Left: V-normalized shape for the mixed (cloudy) geometry ---------------
 for tau, c in zip(TAUS, colors):
     a = np.asarray(wg00_attenuation(wave, tau, dust_curve="mw", geometry="cloudy"))
     a_v = float(wg00_attenuation(jnp.array([V]), tau, dust_curve="mw", geometry="cloudy")[0])
@@ -65,7 +65,7 @@ ax1.set(
 )
 ax1.legend(frameon=False, fontsize=9, title="optical depth")
 
-# --- Right: far-UV/V greying vs tau_V for the three geometries --------------
+# --- Right: far-UV/V graying vs tau_V for the three geometries --------------
 taus = np.linspace(0.25, 10.0, 40)
 GEOM = [
     ("shell", "Shell (foreground screen)", "#1f77b4"),
@@ -83,7 +83,7 @@ for geom, label, color in GEOM:
 ax2.set(
     xlabel=r"V-band optical depth $\tau_V$",
     ylabel=r"$A(1500\,\mathrm{\AA})\,/\,A_V$  (UV steepness)",
-    title="Screen stays fixed; mixed/clumpy grey",
+    title="Screen stays fixed; mixed/clumpy gray",
     xlim=(0, 10),
     ylim=(1.0, 2.7),
 )

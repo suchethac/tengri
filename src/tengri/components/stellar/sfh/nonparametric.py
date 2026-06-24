@@ -214,7 +214,7 @@ def bursty_continuity_prior_logp(
     degrees of freedom, :math:`t_{i+1}` is ``bin_edges_gyr[i+1]``, and
     :math:`\\sigma_{\\rm young} = 1.0`, :math:`\\sigma_{\\rm old} = 0.3` by default.
 
-    Follows the prior parameterisation in Tacchella et al. 2022 [1]_.
+    Follows the prior parameterization in Tacchella et al. 2022 [1]_.
 
     References
     ----------

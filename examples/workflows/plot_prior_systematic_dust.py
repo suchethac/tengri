@@ -100,7 +100,7 @@ for ax, snr in zip(axes, [5.0, 50.0]):
     ax.text(0.05, 0.93, rf"S/N = {snr:.0f}", transform=ax.transAxes, fontsize=10)
     ax.set(xlabel=r"$\tau_{\rm diff}$ (V-band)", ylim=(0, 1.1), xlim=(0, 1.5))
     if ax is axes[0]:
-        ax.set_ylabel(r"posterior density (peak-normalised)")
+        ax.set_ylabel(r"posterior density (peak-normalized)")
     ax.legend(frameon=False, fontsize=9, loc="upper right")
 
 fig.tight_layout()

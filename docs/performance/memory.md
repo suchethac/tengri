@@ -33,7 +33,7 @@ compile, the third fit OOMs or thrashes swap.
 **Cause.** Each NUTS warmup compiles a dense-mass-matrix `vmap(vmap(...))`
 that pulls the entire `predict_photometry` (and `predict_spectrum`)
 graph into one program. Peak compile-time RSS is ~4 GB per fit on a
-typical pipeline; the JIT cache amortises the *next call*, not the
+typical pipeline; the JIT cache amortizes the *next call*, not the
 next *trace*. A different `Observation` or `n_warmup` invalidates the
 cache key, so each fit re-pays the compile cost.
 

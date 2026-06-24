@@ -4,7 +4,7 @@
 """Callable factories that emit config dicts for :meth:`tengri.SEDModel.build`.
 
 The :meth:`SEDModel.build` nested-dict grammar is concise and
-JSON-serialisable, but the inner-key namespace is opaque to IDEs:
+JSON-serializable, but the inner-key namespace is opaque to IDEs:
 typing ``{'type': 'dpl', 'beat': Uniform(1, 3)}`` (note the typo) only
 fails at construction time. This subpackage layers per-variant
 callables on top that:

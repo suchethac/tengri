@@ -15,7 +15,7 @@ References
 ----------
 .. [1] D. A. Allen et al., "The Distance and Metallicity of the Galaxy M33,"
        ApJS, 178, 20 (2008). https://doi.org/10.1086/589652
-.. [2] R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modelling
+.. [2] R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modeling
        of AGN Heating in Starburst and Post-Starburst Galaxies," ApJS, 229,
        34 (2017). https://doi.org/10.3847/1538-4365/aa6541
 .. [3] D. Alarie and C. Morisset, "Synthetic Narrow-Line Emission from a

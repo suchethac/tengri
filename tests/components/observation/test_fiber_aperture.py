@@ -46,7 +46,7 @@ def test_circular_aperture_mask_inside_and_outside(grid_2kpc) -> None:
     """Mask is ~1 inside, ~0 outside the aperture."""
     mask = circular_aperture_mask(grid_2kpc, radius_kpc=1.0)
     assert mask.shape == (64, 64)
-    # Centre (x=0, y=0) is well inside
+    # Center (x=0, y=0) is well inside
     assert float(mask[32, 32]) > 0.9
     # Corner (x≈-2, y≈-2; r≈2.83) is well outside r=1
     assert float(mask[0, 0]) < 0.01

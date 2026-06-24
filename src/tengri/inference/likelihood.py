@@ -36,8 +36,8 @@ def build_base_likelihood(context: InferenceContext):
     - Student-t (variable noise) → ``StudentTLikelihood``
     - censored data → ``CensoredLikelihood``
     - spec covariance → ``MultivariateGaussianLikelihood``
-    - calibration marginalisation → ``CalibrationMarginalisedLikelihood``
-    - flat-prior e-line marginalisation → ``ELineMarginalisedLikelihood``
+    - calibration marginalization → ``CalibrationMarginalizedLikelihood``
+    - flat-prior e-line marginalization → ``ELineMarginalizedLikelihood``
       (with a per-call design-matrix builder closure)
 
     Parameters
@@ -51,16 +51,16 @@ def build_base_likelihood(context: InferenceContext):
     Likelihood or None
         A Likelihood adapter object, or None if the configuration cannot be
         expressed via the protocol (currently: Cloudy-prior e-line
-        marginalisation or e-line fitted amplitudes).
+        marginalization or e-line fitted amplitudes).
     """
     from tengri.inference.composite_likelihood import CompositeLikelihood
     from tengri.inference.likelihoods import (
-        CalibrationELineMarginalisedLikelihood,
-        CalibrationMarginalisedLikelihood,
+        CalibrationELineMarginalizedLikelihood,
+        CalibrationMarginalizedLikelihood,
         CensoredLikelihood,
-        CloudyELineMarginalisedLikelihood,
+        CloudyELineMarginalizedLikelihood,
         ELineFittedLikelihood,
-        ELineMarginalisedLikelihood,
+        ELineMarginalizedLikelihood,
         MultivariateGaussianLikelihood,
         StudentTLikelihood,
     )
@@ -155,16 +155,16 @@ def build_base_likelihood(context: InferenceContext):
                 ),
             )
 
-    # ── Combined calibration polynomial + eline marginalisation ──
+    # ── Combined calibration polynomial + eline marginalization ──
     # Most common galaxy spectroscopy configuration (Prospector-style).
-    # Sequential composition: marginalise lines → add MAP amplitudes
+    # Sequential composition: marginalize lines → add MAP amplitudes
     # to the prediction → run cal-marg on the line-augmented model.
     # Supports both flat and Cloudy eline priors via the same adapter.
     # eline_fitted + cal_marg is not yet expressible (would need a
-    # mixed marginalised/fitted variant); legacy switch covers it.
+    # mixed marginalized/fitted variant); legacy switch covers it.
     if context.calibration_marginalize and context.eline_fitted:
         raise NotImplementedError(
-            "Combined calibration marginalisation + fitted (non-marginalised) "
+            "Combined calibration marginalization + fitted (non-marginalized) "
             "emission-line amplitudes is not currently supported. "
             "Use eline_marginalize=True (with optional eline_prior_type) for "
             "the standard Prospector-style configuration, or disable "
@@ -174,13 +174,13 @@ def build_base_likelihood(context: InferenceContext):
         wavelength = getattr(context.model, "wave_obs", None)
         if wavelength is None:
             raise ValueError(
-                "Calibration marginalisation requires a configured spectroscopy "
+                "Calibration marginalization requires a configured spectroscopy "
                 "wavelength grid (model.wave_obs)."
             )
         builder = _make_eline_design_builder(context)
         if builder is None:
             raise ValueError(
-                "Emission-line marginalisation requires _eline_wavelengths and "
+                "Emission-line marginalization requires _eline_wavelengths and "
                 "_eline_constraint_matrix to be set on the fitter."
             )
         if context.data_type == "spectroscopy":
@@ -189,7 +189,7 @@ def build_base_likelihood(context: InferenceContext):
             n_phot = _n_phot_split(context)
             spec_obs = context.data[n_phot:]
             spec_err = context.noise[n_phot:]
-        cal_eline_lk = CalibrationELineMarginalisedLikelihood(
+        cal_eline_lk = CalibrationELineMarginalizedLikelihood(
             fnu_obs=spec_obs,
             fnu_err=spec_err,
             wavelength=wavelength,
@@ -214,10 +214,10 @@ def build_base_likelihood(context: InferenceContext):
         wavelength = getattr(context.model, "wave_obs", None)
         if wavelength is None:
             raise ValueError(
-                "Calibration marginalisation requires a configured spectroscopy "
+                "Calibration marginalization requires a configured spectroscopy "
                 "wavelength grid (model.wave_obs)."
             )
-        cal_lk = CalibrationMarginalisedLikelihood(
+        cal_lk = CalibrationMarginalizedLikelihood(
             fnu_obs=context.data
             if context.data_type == "spectroscopy"
             else context.data[_n_phot_split(context) :],
@@ -237,7 +237,7 @@ def build_base_likelihood(context: InferenceContext):
             cal_lk,
         )
 
-    # ── E-line: marginalised (flat / cloudy prior) OR fitted ────
+    # ── E-line: marginalized (flat / cloudy prior) OR fitted ────
     if context.eline_marginalize or context.eline_fitted:
         if context.data_type == "spectroscopy":
             spec_obs = context.data
@@ -248,7 +248,7 @@ def build_base_likelihood(context: InferenceContext):
             spec_err = context.noise[n_phot:]
         else:
             raise NotImplementedError(
-                "Emission-line marginalisation / fitting requires spectroscopy "
+                "Emission-line marginalization / fitting requires spectroscopy "
                 "or joint data; got data_type='photometry'. Either disable "
                 "the eline flag or use spectroscopy."
             )
@@ -268,7 +268,7 @@ def build_base_likelihood(context: InferenceContext):
                 channel="spec_fnu",
             )
         elif context.eline_prior_type == "cloudy":
-            eline_lk = CloudyELineMarginalisedLikelihood(
+            eline_lk = CloudyELineMarginalizedLikelihood(
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 design_matrix_builder=builder,
@@ -277,7 +277,7 @@ def build_base_likelihood(context: InferenceContext):
                 channel="spec_fnu",
             )
         else:
-            eline_lk = ELineMarginalisedLikelihood(
+            eline_lk = ELineMarginalizedLikelihood(
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
                 design_matrix_builder=builder,

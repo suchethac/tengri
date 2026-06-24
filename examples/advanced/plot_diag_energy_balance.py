@@ -101,7 +101,7 @@ fig, (ax_l, ax_r) = plt.subplots(1, 2, figsize=(11, 4.5))
 ax_l.errorbar(
     tau_diffs, ratios, fmt="o", markersize=8, lw=2, color="C0", label="L_emit / L_absorb"
 )
-ax_l.axhline(1.0, ls="--", color="grey", lw=1, alpha=0.7, label="Expected")
+ax_l.axhline(1.0, ls="--", color="gray", lw=1, alpha=0.7, label="Expected")
 ax_l.set_xlabel(r"$\tau_{\rm diff}$"), ax_l.set_ylabel("Ratio")
 ax_l.legend(frameon=False, fontsize=9), ax_l.grid(True, alpha=0.3)
 x_pos = np.arange(len(tau_diffs))

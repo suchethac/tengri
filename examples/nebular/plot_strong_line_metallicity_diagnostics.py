@@ -12,7 +12,7 @@ and [S II]/[O II] is a low-ion proxy.
 This is the diagnostic family every observer chooses between when
 converting line ratios to a 12 + log(O/H) on a sample. The plot spans
 12 + log(O/H) from ~7 to ~9, illustrating saturation at high metallicity
-(Kewley & Dopita 2002) and the famous double-valued R23 behaviour.
+(Kewley & Dopita 2002) and the famous double-valued R23 behavior.
 
 References:
 - Pagel et al. 1979, MNRAS, 189, 95 (R23 ratio)

@@ -10,7 +10,7 @@ New models tested:
 2. Just+2007 alpha_ox–L_2500 relation
 3. Yang+2022 X-ray anisotropy
 4. Martinez-Ramirez+2024 double power-law AGN radio
-5. Yang+2020 polar dust extinction & greybody reemission
+5. Yang+2020 polar dust extinction & graybody reemission
 6. K&D disc self-consistent gamma coupling
 7. compute_l2500 monochromatic extraction
 8. AGN NLR ionizing spectrum conversion
@@ -295,13 +295,13 @@ class TestMartinezRamirez2024:
         assert float(l_nu[0]) > 0, "L_nu at 5 GHz should be positive"
 
 
-# ── 5. YANG+2020 — polar dust extinction + greybody emission ──────
+# ── 5. YANG+2020 — polar dust extinction + graybody emission ──────
 
 
 class TestYang2020PolarDust:
     """Yang et al. 2020, MNRAS, 491, 740, Sec. 2.2.2.
 
-    SMC extinction for Type 1 sightlines, greybody FIR reemission.
+    SMC extinction for Type 1 sightlines, graybody FIR reemission.
     """
 
     def test_type1_gets_extincted(self):
@@ -371,7 +371,7 @@ class TestYang2020PolarDust:
         )
 
     def test_greybody_energy_conservation(self):
-        """Reemitted greybody should integrate to L_absorbed."""
+        """Reemitted graybody should integrate to L_absorbed."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 
         wave = jnp.geomspace(1e4, 1e8, 5000)
@@ -385,11 +385,11 @@ class TestYang2020PolarDust:
         l_bol = float(jnp.trapezoid(l_reemit[sort_idx], nu[sort_idx]))
         # Energy conservation: L_bol_reemit ≈ L_absorbed (within 20%)
         assert abs(l_bol / l_absorbed - 1.0) < 0.30, (
-            f"Greybody L_bol={l_bol:.2e} should equal L_absorbed={l_absorbed:.2e}"
+            f"Graybody L_bol={l_bol:.2e} should equal L_absorbed={l_absorbed:.2e}"
         )
 
     def test_greybody_peaks_in_fir(self):
-        """T=100K greybody peaks near 30-100 μm."""
+        """T=100K graybody peaks near 30-100 μm."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 
         wave = jnp.geomspace(1e4, 1e8, 2000)
@@ -399,7 +399,7 @@ class TestYang2020PolarDust:
         # Wien's law for MBB: peak ~ 29 μm * (100K/T) at β=0
         # With β=1.6, peak shifts to ~50-100 μm = 5e5-1e6 A
         assert 2e5 < peak_wave < 2e6, (
-            f"T=100K greybody peak at {peak_wave:.0e} A, expected ~5e5-1e6 A"
+            f"T=100K graybody peak at {peak_wave:.0e} A, expected ~5e5-1e6 A"
         )
 
 
@@ -633,12 +633,12 @@ class TestNewModelsParameterSensitivity:
         assert not jnp.allclose(l1, l2, rtol=0.01), "E(B-V) is IGNORED"
 
     def test_polar_dust_temperature_matters(self):
-        """Greybody temperature must change the emission."""
+        """Graybody temperature must change the emission."""
         from tengri.components.agn.polar_dust import polar_dust_emission
 
         wave = jnp.geomspace(1e4, 1e8, 200)
         l1 = polar_dust_emission(1e10, wave, temperature=50.0)
         l2 = polar_dust_emission(1e10, wave, temperature=200.0)
         assert not jnp.allclose(l1 / jnp.sum(l1), l2 / jnp.sum(l2), rtol=0.05), (
-            "Greybody temperature is IGNORED"
+            "Graybody temperature is IGNORED"
         )

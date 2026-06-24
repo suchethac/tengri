@@ -68,7 +68,7 @@ class FiberSpectroscopyObservation:
         Fiber radius in arcseconds (e.g. 1.0 for an SDSS-like
         2-arcsec-diameter fiber).
     fiber_center_arcsec : tuple of (float, float), default (0.0, 0.0)
-        Fiber centre offset in arcsec (x, y) from the galaxy nucleus.
+        Fiber center offset in arcsec (x, y) from the galaxy nucleus.
     softness : float, default 0.01
         Sigmoidal edge softening (fraction of aperture radius). Set
         to 0 for a hard top-hat (non-differentiable at the edge).
@@ -84,7 +84,7 @@ class FiberSpectroscopyObservation:
     When the state has no ``spatial_profile_2d`` key (i.e. the user
     didn't wire up a spatial sub-model), the wrapped predict is
     returned unchanged. This degenerates gracefully to the flat-slab
-    behaviour the classical codes use.
+    behavior the classical codes use.
     """
 
     observation: Any

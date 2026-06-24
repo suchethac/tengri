@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Standardized forward model — the canonical inference path.
 
-This module implements the **standardized parameterisation** (ξ ~ N(0, I))
+This module implements the **standardized parameterization** (ξ ~ N(0, I))
 that every backend in :mod:`tengri.inference` ultimately consumes. It is
 the principled formulation of single-Hamiltonian inference: priors live
 inside per-parameter coordinate transforms so the loss collapses to

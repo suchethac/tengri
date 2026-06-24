@@ -5,10 +5,10 @@ Raw SKIRTOR (Stalevski 2016): the published radiative-transfer template
 ``agn={"type": "skirtor_stalevski"}`` returns the SKIRTOR 2016 SED **exactly as
 Stalevski's radiative transfer computed it** — accretion disc + clumpy torus +
 scattered light, read straight from the full-coverage grid with *no* analytic-disc
-substitution and *no* re-normalisation. This is the faithful template that codes
+substitution and *no* re-normalization. This is the faithful template that codes
 reading SKIRTOR directly (e.g. ProSpect's ``SKIRTOR_interp``) reproduce.
 
-It is deliberately distinct from the other two SKIRTOR flavours tengri ships:
+It is deliberately distinct from the other two SKIRTOR flavors tengri ships:
 
 - the composable ``disc.skirtor`` + ``torus.skirtor`` blocks pair CIGALE's
   *analytic* disc with the torus under ``norm="cigale_joint"`` energy balance —
@@ -17,14 +17,14 @@ It is deliberately distinct from the other two SKIRTOR flavours tengri ships:
   disc.
 
 All three are swappable — see ``tengri.list_agn_models()``. This example shows the
-**raw** template's two defining behaviours: the inclination-dependent anisotropy
+**raw** template's two defining behaviors: the inclination-dependent anisotropy
 of the unified model, and the silicate 9.7 / 18 μm features that flip from
 emission to absorption as the optical depth and viewing angle increase.
 
 **References:**
 
 .. [1] Stalevski, M., Fritz, J., Baes, M., et al. (2012).
-   3D radiative-transfer modelling of the dusty torus around AGN.
+   3D radiative-transfer modeling of the dusty torus around AGN.
    MNRAS, 420, 2756. arXiv:1109.1286.
 
 .. [2] Stalevski, M., Ricci, C., Ueda, Y., et al. (2016).

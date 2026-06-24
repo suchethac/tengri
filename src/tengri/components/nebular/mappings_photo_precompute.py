@@ -16,7 +16,7 @@ References
 ----------
 .. [1] S. R. Flury et al., "The MAPPINGS V Survey: Expanding the reach of
        photoionization models to 3D nebular grids," arXiv:2412.06763 (2024).
-.. [2] R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modelling
+.. [2] R. J. R. Sutherland and M. A. Dopita, "Spectral Synthesis Modeling
        of AGN Heating in Starburst and Post-Starburst Galaxies," ApJS, 229,
        34 (2017). https://doi.org/10.3847/1538-4365/aa6541
 

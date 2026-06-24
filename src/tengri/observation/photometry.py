@@ -163,7 +163,7 @@ def lnu_filter_integral_batch(
 ) -> jnp.ndarray:
     r"""Exact rest-frame filter-weighted L_ν of one SED through many filters.
 
-    Vectorised, zero-padding-safe form of :func:`lnu_filter_integral` over a
+    Vectorized, zero-padding-safe form of :func:`lnu_filter_integral` over a
     stack of filters ``(n_filters, max_len)``. This is the *exact* per-band
     projection — the identical interpolate-onto-filter-grid-and-integrate the
     exact photometry path uses (:func:`compute_flux_density_batch`), minus the

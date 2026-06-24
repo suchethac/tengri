@@ -12,7 +12,7 @@ energy across the dust absorption / re-emission step:
 
 Useful for sanity-checking a fit's posterior predictions and for
 spotting bugs in the dust attenuation / emission split. The check is
-agnostic of the underlying dust law and the SED-modelling code that
+agnostic of the underlying dust law and the SED-modeling code that
 produced the inputs.
 
 References

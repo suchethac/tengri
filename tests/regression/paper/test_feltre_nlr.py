@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for FeltreNLRBackend and agn_nlr_emission dispatcher.
 
-These tests exercise the backend's behaviour without the actual grid data:
+These tests exercise the backend's behavior without the actual grid data:
   - FileNotFoundError when the grid file is absent
   - FeltreGridData dataclass structure
   - _nearest_idx returns correct index
