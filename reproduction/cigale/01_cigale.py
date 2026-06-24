@@ -374,7 +374,7 @@ t_c, sfr_c = C.sfh_curve(
 # rise-and-decay. That grid is what every fit downstream sees, so
 # plotting it honestly is the test: if the area under this curve doesn't
 # integrate to 1 M☉ formed (= log_total_mass = 0.0), tengri's SFH
-# normalisation is broken regardless of how clean the analytic shape
+# normalization is broken regardless of how clean the analytic shape
 # looks.
 tau_gyr, age_gyr = 1.0, 5.0
 _m_sfh = SEDModel.build(
@@ -397,7 +397,7 @@ _sfr_history = np.asarray(_state_sfh.derived["sfr_history"])
 # CIGALE x-axis above): t_cosmic = age_gyr - lbt
 t_t = (age_gyr - _lbt_yr / 1e9) * 1e9  # yr
 sfr_t = _sfr_history
-# Verify normalisation: trapezoid of SFR over cosmic-age axis should be
+# Verify normalization: trapezoid of SFR over cosmic-age axis should be
 # 10**log_total_mass = 1.0 M☉ within numerical accuracy of the n_grid pipeline.
 # tengri's pipeline carries sfh_grid in decreasing lookback time, so
 # integrate against the increasing-time order.
@@ -513,7 +513,7 @@ save_fig("cigale_02_sfh2exp.png")
 # ## §3 Integrated stellar SED
 #
 # Convolve the τ-delayed SFH with the BC03 SSPs. No dust, no nebular.
-# Both panels show L_ν vs λ_rest; CIGALE is normalised to 1 M☉ formed
+# Both panels show L_ν vs λ_rest; CIGALE is normalized to 1 M☉ formed
 # by construction, tengri's stellar mass formed is reported in the
 # annotation.
 
@@ -590,7 +590,7 @@ save_fig("cigale_03_stellar_sed.png")
 # their CIGALE counterparts (`dustatt_calzleit`,
 # `dustatt_modified_starburst`, `dustatt_modified_CF00`). Both sides
 # evaluate the analytic law directly (tengri via `tengri.dust.list_laws`),
-# normalised to `A(λ)/A_V` at 5500 Å — curve against curve, no
+# normalized to `A(λ)/A_V` at 5500 Å — curve against curve, no
 # SSP-convolution noise. CIGALE's default laws carry no 2175 Å bump (it is
 # opt-in via `uv_bump_amplitude`); tengri's `noll09` reproduces the
 # Noll+2009 Drude bump, pinned against `dust_attenuation` in the test suite.
@@ -611,7 +611,7 @@ wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
 def _norm_AV(wave, A):
-    """A(λ) normalised to A_V at 5500 Å."""
+    """A(λ) normalized to A_V at 5500 Å."""
     return A / A[np.argmin(np.abs(wave - 5500.0))]
 
 
@@ -774,14 +774,14 @@ plt.show()
 # native grid, so the dust SED extends through the FIR peak (100 µm)
 # and down the Rayleigh-Jeans tail.
 #
-# **Long-wavelength behaviour.** Past ~10 mm the panels diverge — and
+# **Long-wavelength behavior.** Past ~10 mm the panels diverge — and
 # the cause is the template port, not the integrator. tengri's
 # `data/dale2014_templates.h5` is built directly from the published
 # Dale et al. (2014) release (`spectra/spectra.0.00AGN.dat`, the
 # full 1496-wavelength × 64-α grid) and carries non-zero luminosity
 # densities out to 225 mm — the longest wavelength in the original
 # publication. CIGALE bundles a separate version of those templates
-# that zeros out everything past ~10 mm. Both codes renormalise to
+# that zeros out everything past ~10 mm. Both codes renormalize to
 # `L_absorbed` at runtime, so the FIR peak matches by energy balance
 # regardless. The tengri νL_ν tail at 10–200 mm sits about three
 # orders of magnitude below the FIR peak; physically negligible for
@@ -845,7 +845,7 @@ m_ir = SEDModel.build(
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
         # Lyman-limit clip (CIGALE parity) — see §5. The dust IR is energy-balance
-        # normalised to L_absorbed, whose integral already excludes λ < 912 Å, so
+        # normalized to L_absorbed, whose integral already excludes λ < 912 Å, so
         # this only changes the emergent FUV continuum, not the IR budget.
         "lyman_cutoff": True,
         "*": FIXED,
@@ -900,7 +900,7 @@ plt.show()
 # every other panel — **tengri solid, pcigale dotted**.
 #
 # **The attenuation must match for the IR to match.** The dust IR is
-# energy-balance-normalised to the *absorbed* starlight, so reproducing CIGALE
+# energy-balance-normalized to the *absorbed* starlight, so reproducing CIGALE
 # requires reproducing its `dustatt_modified_starburst`, which is a **single
 # Calzetti screen** on the stellar continuum (A_V = R_V x E(B-V)_cont =
 # 4.05 x 0.132 = 0.535 mag). It has no Charlot & Fall birth cloud. Using
@@ -918,7 +918,7 @@ plt.show()
 # (`SED = L\,T_{\rm SF}(\alpha) + L_{\rm AGN}\,T_{\rm QSO}`, `dale2014.py`).
 # tengri tracks CIGALE to **~1.5 % across the whole sweep** ($f_{\rm AGN}=0,
 # 0.3, 0.6$), the same BC03->DSPS floor — there is no fracAGN-dependent drift.
-# The subtlety that makes this work: CIGALE normalises ``model_quasar`` to unit
+# The subtlety that makes this work: CIGALE normalizes ``model_quasar`` to unit
 # luminosity over its *full* native grid (~60 nm onward), where ~46 % of the
 # quasar energy is the UV/optical accretion-disc continuum below the dust
 # grid's blue edge. Only its ~0.42 IR share enters the dust mixing; tengri
@@ -961,7 +961,7 @@ def _knob_model(emission_type, **emkw):
     i.e. ``tau_diff = TAU_DIFF_FIDUCIAL``). It has no Charlot & Fall birth-cloud
     component, so we set ``tau_bc = 0``: adding the extra birth-cloud screen
     (the two-component default elsewhere in this notebook) over-absorbs the
-    starlight by ~9 %, and since the Dale/THEMIS IR is normalised to the
+    starlight by ~9 %, and since the Dale/THEMIS IR is normalized to the
     absorbed energy that inflates the whole IR. With the single screen the
     absorbed *fraction* matches CIGALE to 0.2 %; the residual ~1.4 % is the
     BC03-to-DSPS conversion (tengri's intrinsic stellar Lbol is 1.4 % lower).
@@ -1051,7 +1051,7 @@ plt.show()
 # issue.** *Long-wavelength tail (λ > 10⁷ Å):* the tengri side carries a
 # small rising νL_ν tail from 10 to 200 mm where CIGALE's reads zero.
 # This is the published-Dale-vs-CIGALE-truncated-Dale template
-# difference documented in §6, normalised away by energy balance.
+# difference documented in §6, normalized away by energy balance.
 
 # %%
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))
@@ -1108,7 +1108,7 @@ plt.show()
 # Cue was trained on Cloudy 17 (Li et al. 2025) while CIGALE bundles
 # Cloudy 13.x grids, and Cue's bare-stellar SSP path differs from
 # CIGALE's wNE-SSP convolution. Nebular continuum shape and
-# emission-line ratios reproduce well; the absolute line normalisation
+# emission-line ratios reproduce well; the absolute line normalization
 # carries a Cloudy-version offset. The residual is quantified below with
 # the **integrated** line luminosity (continuum-subtracted,
 # width-independent) — *not* a single-bin peak ratio, which would
@@ -1325,7 +1325,7 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # composable; set `Fixed(0.0)` to disable) — lifts the FIR tail
 # (~100 µm) by a factor of a few.
 #
-# **Energy-balance normalisation.** CIGALE ties disc, torus, and polar
+# **Energy-balance normalization.** CIGALE ties disc, torus, and polar
 # dust to a single `agn_power` reference via the fixed SKIRTOR template
 # ratios (`skirtor2016.py`, `norm = 1/∫dust`), ensuring energy
 # conservation across all AGN components. tengri's default `norm='cigale_joint'`
@@ -1454,7 +1454,7 @@ m_agn = SEDModel.build(
     # All other tengri AGN defaults already match CIGALE skirtor2016
     # defaults (oa=40, tau=7, p=q=1, i=30, EBV=0.03, T=100, β=1.6,
     # disk_type=1 → ``disc.schartmann2005``). The polar-dust greybody
-    # is integrated into the SKIRTOR thermal-dust normalisation
+    # is integrated into the SKIRTOR thermal-dust normalization
     # (CIGALE skirtor2016.py:389 adds polar BB before the ``norm =
     # 1/∫dust`` step). The differentiable multicolor disc remains
     # available — ``disc={"type": "multicolor", ...}``.
@@ -1670,7 +1670,7 @@ save_fig("cigale_09b_disc_skirtor.png")
 # same defaults (Γ_AGN = 1.8, E_cut = 300 keV, Γ_HMXB = 2.0,
 # Γ_LMXB = 1.6).
 #
-# **α_ox consistent via the public API.** The corona normalisation is
+# **α_ox consistent via the public API.** The corona normalization is
 # `L_2keV = L_2500 · 10^(α_ox/0.3838)`. CIGALE's `yang20` leaves α_ox a
 # free parameter (its default is a fixed −1.4); tengri instead derives it
 # from the disc luminosity through the Just+2007 relation
@@ -1708,7 +1708,7 @@ from tengri.xray import alpha_ox_from_l2500
 # the disc through Just+2007. To compare like with like we put both on the
 # Just+2007 relation via the public ``alpha_ox_from_l2500``.
 #
-# Caveat — the §10 disc is normalised to the 1 M☉ fiducial, so its intrinsic
+# Caveat — the §10 disc is normalized to the 1 M☉ fiducial, so its intrinsic
 # L_2500 (~1e17 erg/s/Hz) is far below the L_2500 ≳ 1e27 range where Just+2007
 # is calibrated; evaluating the relation there extrapolates to an unphysical
 # α_ox ≳ 0 (X-ray brighter than the disc). We therefore anchor α_ox to a

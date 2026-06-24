@@ -46,7 +46,7 @@ def multicolor_disc_block(
     agn_cos_inc : float, optional
         Cosine of viewing inclination. Default ``0.5``.
     euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
-        EUV / soft-X-ray behaviour below the Lyman limit. ``"powerlaw"``
+        EUV / soft-X-ray behavior below the Lyman limit. ``"powerlaw"``
         (default) gives the disc a CIGALE-like power-law tail below ~100 Å;
         ``"wien"`` / ``None`` recovers the bare Shakura-Sunyaev Wien cutoff;
         a float sets a user-defined slope (:math:`L_\nu \propto \nu^s`). See

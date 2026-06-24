@@ -430,9 +430,9 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     nu : ndarray, shape (n_wave,)
         Matching frequency grid. [Hz]
     l_nu_wien : ndarray, shape (n_wave,)
-        The Wien-limited multi-colour blackbody disc spectrum. [erg/s/Hz]
+        The Wien-limited multi-color blackbody disc spectrum. [erg/s/Hz]
     euv_tail : None or str or float
-        EUV behaviour over :math:`\lambda \in [30, 912]` A:
+        EUV behavior over :math:`\lambda \in [30, 912]` A:
 
         * ``None`` / ``"wien"`` — no tail; pure Wien cutoff (bare thin disc).
         * ``"powerlaw"`` / ``"both"`` — blend a power-law tail at the default
@@ -528,7 +528,7 @@ def multicolor_disc(
     n_radii : int, optional
         Number of radial bins for numerical integration. Default: 50.
     euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
-        EUV / soft-X-ray behaviour below the Lyman limit (912 A).
+        EUV / soft-X-ray behavior below the Lyman limit (912 A).
 
         * ``"powerlaw"`` (default) / ``"both"`` — blend a CIGALE-like power-law
           tail onto the Wien core so the disc carries flux below ~100 A.
