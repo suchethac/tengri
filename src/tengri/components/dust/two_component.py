@@ -181,12 +181,23 @@ class DustSEDComponent:
         diffuse screen as the youngest stars (Charlot & Fall 2000; matches the
         emission-line treatment). Backends that bake nebular into the SSP
         (BakedIn) publish ``sed_nebular`` as zeros, so this is a no-op there.
+
+        Also reads ``lyc_transmission`` — the stellar Lyman-continuum survival
+        fraction ``where(λ<912, neb_fesc, 1)`` published by a photoionised
+        backend. Applied to the per-age stellar reconstruction so the fesc
+        absorption is honoured on the ``lnu_age`` path (see :meth:`apply` §2a
+        and #824). Absent for BakedIn -> LyC passes through unchanged.
         """
         return (
             DerivedKey(
                 "sed_nebular",
                 "erg/s/Hz",
                 "Nebular continuum to attenuate (Cue/CloudyGrid); zeros for BakedIn",
+            ),
+            DerivedKey(
+                "lyc_transmission",
+                "",
+                "Stellar LyC survival fraction where(λ<912, neb_fesc, 1); absent for BakedIn",
             ),
         )
 
@@ -449,6 +460,25 @@ class DustSEDComponent:
         lnu_age_attenuated = lnu_age * transmission
         sed_attenuated = jnp.sum(lnu_age_attenuated, axis=0)
         sed_intrinsic_stellar = jnp.sum(lnu_age, axis=0)
+
+        # ── 2a. Lyman-continuum escape (neb_fesc) ──────────────────────
+        # Stellar LyC (λ < 912 Å) is absorbed by the same gas that powers the
+        # nebular emission; only the escaping fraction ``neb_fesc`` survives.
+        # A photoionised nebular backend publishes
+        # ``lyc_transmission = where(λ<912, neb_fesc, 1)``; apply it to BOTH the
+        # attenuated and the intrinsic stellar reconstruction. This path rebuilds
+        # the stellar SED from the *unmasked* per-age ``lnu_age`` cube, so without
+        # it the nebular component's fesc mask on ``state.sed_intrinsic`` is
+        # bypassed — the LyC leaks into ``sed_dust_attenuated`` and reappears as a
+        # phantom ``-stellar_LyC`` in ``non_stellar_other`` below, giving negative
+        # flux at fesc < 1. Matches CIGALE (pcigale ``nebular``: stellar below the
+        # Lyman break × (1 − fesc) is removed). Absent (no photoionised nebular,
+        # or BakedIn) -> no factor, LyC passes through unchanged. See #824.
+        _lyc_t = state.derived.get("lyc_transmission")
+        if _lyc_t is not None:
+            _lyc_t = jnp.asarray(_lyc_t)
+            sed_attenuated = sed_attenuated * _lyc_t
+            sed_intrinsic_stellar = sed_intrinsic_stellar * _lyc_t
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the
