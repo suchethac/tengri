@@ -26,6 +26,7 @@ def multicolor_disc_block(
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
     agn_cos_inc: float = 0.86602540378443864,
+    euv_tail: str | float | None = "powerlaw",
     **_params,
 ) -> Array:
     r"""Shakura-Sunyaev multi-color thin-disc block.
@@ -44,6 +45,12 @@ def multicolor_disc_block(
         BH spin parameter. Default ``0.0``.
     agn_cos_inc : float, optional
         Cosine of viewing inclination. Default ``0.5``.
+    euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
+        EUV / soft-X-ray behaviour below the Lyman limit. ``"powerlaw"``
+        (default) gives the disc a CIGALE-like power-law tail below ~100 Å;
+        ``"wien"`` / ``None`` recovers the bare Shakura-Sunyaev Wien cutoff;
+        a float sets a user-defined slope (:math:`L_\nu \propto \nu^s`). See
+        :func:`tengri.components.agn.multicolor_disc`.
 
     Returns
     -------
@@ -63,5 +70,6 @@ def multicolor_disc_block(
         agn_log_ledd=agn_log_ledd,
         agn_a_spin=agn_a_spin,
         agn_cos_inc=agn_cos_inc,
+        euv_tail=euv_tail,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2

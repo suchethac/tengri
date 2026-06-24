@@ -1667,8 +1667,23 @@ save_fig("cigale_09b_disc_skirtor.png")
 # power law tied to L_2500, plus an HMXB / LMXB contribution scaled by
 # stellar mass and SFR, with a high-energy exponential cutoff at
 # E_cut ≈ 300 keV. tengri ships the matching `xray.yang20` with the
-# same defaults (Γ_AGN = 1.8, E_cut = 300 keV, α_ox = -1.4,
-# Γ_HMXB = 2.0, Γ_LMXB = 1.6).
+# same defaults (Γ_AGN = 1.8, E_cut = 300 keV, Γ_HMXB = 2.0,
+# Γ_LMXB = 1.6).
+#
+# **α_ox consistent via the public API.** The corona normalisation is
+# `L_2keV = L_2500 · 10^(α_ox/0.3838)`. CIGALE's `yang20` leaves α_ox a
+# free parameter (its default is a fixed −1.4); tengri instead derives it
+# from the disc luminosity through the Just+2007 relation
+# (`α_ox = −0.137·log₁₀ L_2500 + 2.638`). To compare like with like, this
+# cell sets the **same** Just+2007 α_ox on both sides via the public
+# `tengri.xray.alpha_ox_from_l2500` — CIGALE through `yang20`'s `alpha_ox`,
+# tengri through the public `xray_delta_alpha_ox` offset. The 1 M☉ fiducial
+# disc is far below the L_2500 ≳ 10²⁷ erg/s/Hz range where Just+2007 is
+# calibrated (extrapolating there gives an unphysical α_ox ≳ 0), so we
+# evaluate the relation at a representative Seyfert `L_2500 = 10²⁸` and apply
+# that one α_ox to both coronae. Both then share one convention; pinning
+# CIGALE at its fixed −1.4 instead would make the soft band ~2× discrepant
+# purely from the α_ox choice (see `validate_moneyshot.py`).
 #
 # **AGN strength matched to §9.** Both panels use `agn_log_lbol ≈ −0.68`
 # (CIGALE via `fracAGN = 0.3` on 1 M☉ formed, tengri explicit) — the
@@ -1686,6 +1701,81 @@ save_fig("cigale_09b_disc_skirtor.png")
 # 50–100 keV before the cutoff takes over.
 
 # %%
+from tengri.xray import alpha_ox_from_l2500
+
+# α_ox via the public Just+2007 relation, set CONSISTENTLY on both sides.
+# CIGALE's ``yang20`` leaves α_ox free (default -1.4); tengri derives it from
+# the disc through Just+2007. To compare like with like we put both on the
+# Just+2007 relation via the public ``alpha_ox_from_l2500``.
+#
+# Caveat — the §10 disc is normalised to the 1 M☉ fiducial, so its intrinsic
+# L_2500 (~1e17 erg/s/Hz) is far below the L_2500 ≳ 1e27 range where Just+2007
+# is calibrated; evaluating the relation there extrapolates to an unphysical
+# α_ox ≳ 0 (X-ray brighter than the disc). We therefore anchor α_ox to a
+# representative Seyfert L_2500 and apply that single value to both codes —
+# tengri via the public ``xray_delta_alpha_ox`` offset (which shifts the
+# L_2500-derived α_ox), CIGALE via ``yang20``'s ``alpha_ox``.
+_L2500_REF = 1.0e28  # [erg/s/Hz] representative Seyfert disc (Just+2007 regime)
+alpha_ox_just = float(alpha_ox_from_l2500(_L2500_REF, "just2007"))
+
+
+def _xray_agn_build(xray_block):
+    """§10 fiducial galaxy + weak-Seyfert AGN; ``xray_block`` selects the corona."""
+    return SEDModel.build(
+        ssp_data=ssp,
+        stellar=STELLAR_FIDUCIAL,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={
+            "type": "two_component",
+            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+            "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+            "*": FIXED,
+        },
+        # ``agn_log_lbol = -0.42`` matches CIGALE's
+        # ``sed.info["agn.accretion_power"]`` (intrinsic 4π disc bolometric) at
+        # the same Seyfert-weak fracAGN=0.3 setup as §9. §10 CIGALE chain uses
+        # i=40 (not i=30 like §9); pin tengri to match.
+        agn={
+            "type": "composable",
+            "disc": {"type": "schartmann2005", "*": FIXED},
+            "torus": {"type": "skirtor", "*": FIXED},
+            "agn_log_lbol": Fixed(-0.42),
+            "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
+            "agn_fracAGN": Fixed(0.3),  # CIGALE-coupled torus power (see §9)
+            "*": FIXED,
+        },
+        xray=xray_block,
+        redshift=Fixed(0.0),
+    )
+
+
+# Probe build (default α_ox) to read the sub-luminous intrinsic L_2500, then
+# solve the public offset that lands tengri's corona on ``alpha_ox_just``.
+_l_2500_t = float(
+    np.asarray(
+        _xray_agn_build({"type": "yang20", "*": FIXED})
+        .predict_state({})
+        .derived["L_2500_intrinsic"]
+    )
+)
+_delta_aox = alpha_ox_just - float(alpha_ox_from_l2500(max(_l_2500_t, 1.0), "just2007"))
+
+m_x = _xray_agn_build(
+    {"type": "yang20", "xray_delta_alpha_ox": Fixed(_delta_aox), "*": FIXED}
+)
+state_x = m_x.predict_state({})
+print(
+    f"§10 α_ox (Just+2007 via public alpha_ox_from_l2500 @ L_2500={_L2500_REF:.0e}): "
+    f"α_ox = {alpha_ox_just:.3f} applied to BOTH tengri (Δα_ox={_delta_aox:+.3f}) "
+    f"and CIGALE yang20"
+)
+
 sed_x = C.run_chain(
     [
         (
@@ -1725,7 +1815,9 @@ sed_x = C.run_chain(
             dict(
                 gam=1.8,
                 E_cut=300.0,
-                alpha_ox=-1.4,
+                # Just+2007 α_ox(L_2500) from tengri's disc (public API),
+                # not CIGALE's fixed -1.4 — consistent convention on both sides.
+                alpha_ox=alpha_ox_just,
                 max_dev_alpha_ox=0.2,
                 angle_coef="0.5 & 0",
                 det_lmxb=0.0,
@@ -1738,42 +1830,6 @@ w_x, L_x = C.to_lnu(sed_x)
 e_kev_c = 12.398 / w_x
 m_c = (e_kev_c >= 0.3) & (e_kev_c <= 300) & (L_x > 0)
 
-m_x = SEDModel.build(
-    ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
-    sfh={
-        "type": "delayed",
-        "tau_gyr": Fixed(1.0),
-        "age_gyr": Fixed(5.0),
-        "log_total_mass": Fixed(0.0),
-        "*": FIXED,
-    },
-    dust={
-        "type": "two_component",
-        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
-        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "*": FIXED,
-    },
-    # ``agn_log_lbol = -0.620`` matches CIGALE's
-    # ``sed.info["agn.accretion_power"] = 0.240 L☉`` (intrinsic 4π
-    # disc bolometric) at the same Seyfert-weak fracAGN=0.3 setup as
-    # §9 — using a quasar-strength tengri AGN here while CIGALE has a
-    # Seyfert-weak one would compare X-ray spectra at ~12 orders of
-    # magnitude apart. §10 CIGALE chain uses i=40 (not i=30 like §9);
-    # pin tengri to match.
-    agn={
-        "type": "composable",
-        "disc": {"type": "schartmann2005", "*": FIXED},
-        "torus": {"type": "skirtor", "*": FIXED},
-        "agn_log_lbol": Fixed(-0.42),
-        "agn_cos_inc": Fixed(float(np.cos(np.radians(40.0)))),
-        "agn_fracAGN": Fixed(0.3),  # CIGALE-coupled torus power (see §9)
-        "*": FIXED,
-    },
-    xray={"type": "yang20", "*": FIXED},
-    redshift=Fixed(0.0),
-)
-state_x = m_x.predict_state({})
 w_t = np.asarray(state_x.wave)
 sed_t = np.asarray(state_x.derived.get("sed_xray", state_x.sed_intrinsic))
 e_kev_t = 12.398 / w_t
