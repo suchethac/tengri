@@ -262,6 +262,82 @@ def _run_map_scipy(
     )
 
 
+def _run_map_multistart(
+    context, *, key, n_restarts, n_steps, learning_rate, optimizer, verbose
+):
+    """Run ``n_restarts`` independent ADAM optimisations in parallel; keep the best.
+
+    Each restart starts from its own prior-sampled init (``key`` split
+    ``n_restarts`` ways) and runs ``n_steps`` optax updates inside a single
+    ``jax.lax.scan``; ``jax.vmap`` batches the restarts. The restart with the
+    lowest final loss wins. Returns a MAP :class:`Posterior` identical in shape
+    to the single-start path (its ``loss_history`` is the winning restart's).
+    """
+    import optax
+
+    from tengri.inference.posterior import Posterior
+
+    loss_fn = context.neg_log_posterior_fn
+    data_args = context.data_args
+    keys = jax.random.split(key, n_restarts)
+    inits = jax.vmap(lambda k: context.initial_params(k, init_from=None))(keys)
+    opt, opt_name = _build_optax_optimizer(optimizer, learning_rate)
+
+    # Both the restart inits (parameters) and ``data_args`` (the data) are
+    # threaded as runtime arguments — never closure-captured — so the compiled
+    # kernel is reused across galaxies/datasets instead of baking the data in as
+    # a constant (which would recompile per dataset). ``in_axes=(0, None)`` maps
+    # over the restart axis while broadcasting the shared data.
+    def _optimize_one(p0, d_args):
+        ostate = opt.init(p0)
+
+        def _step(carry, _):
+            params, ostate = carry
+            loss, grads = jax.value_and_grad(lambda p: loss_fn(p, d_args))(params)
+            updates, ostate = opt.update(grads, ostate, params)
+            return (optax.apply_updates(params, updates), ostate), loss
+
+        (params, _), losses = jax.lax.scan(_step, (p0, ostate), None, length=n_steps)
+        return params, losses
+
+    _run_restarts = jax.jit(
+        lambda batched_inits, d_args: jax.vmap(_optimize_one, in_axes=(0, None))(
+            batched_inits, d_args
+        )
+    )
+    t0 = time.time()
+    params_b, losses_b = _run_restarts(inits, data_args)
+    jax.block_until_ready(losses_b)
+    final_losses = losses_b[:, -1]
+    best = int(jnp.argmin(final_losses))
+    best_params = jax.tree.map(lambda x: x[best], params_b)
+    best_losses = losses_b[best]
+    wall_time = time.time() - t0
+    final_loss = float(best_losses[-1])
+
+    if verbose:
+        print(
+            f"  MAP ({opt_name} x{n_restarts} restarts) complete in {wall_time:.1f}s, "
+            f"best loss={final_loss:.4f} "
+            f"(restart {best}; worst={float(jnp.max(final_losses)):.1f})"
+        )
+
+    return Posterior(
+        samples=None,
+        params=context.to_physical(best_params),
+        method=f"MAP ({opt_name}, {n_restarts} restarts)",
+        wall_time_s=wall_time,
+        diagnostics={
+            "n_steps": int(n_steps),
+            "final_loss": final_loss,
+            "optimizer": opt_name,
+            "n_restarts": int(n_restarts),
+        },
+        loss_history=best_losses,
+        _model=context.model,
+    )
+
+
 def run_map(
     context,
     *,
@@ -270,6 +346,7 @@ def run_map(
     n_steps=500,
     learning_rate=0.02,
     optimizer="adam",
+    n_restarts=1,
     early_stopping=True,
     patience=100,
     rtol=1e-5,
@@ -314,6 +391,31 @@ def run_map(
     context = InferenceContext.from_target(context)
     loss_fn = context.neg_log_posterior_fn
     data_args = context.data_args
+
+    # ── multi-start ADAM (vmap'd restarts, keep the lowest-loss) ──
+    # Under the standardized prior an N(0,1) latent maps to a genuinely uniform
+    # physical prior, so a single random init can land in a poor basin and a
+    # single ADAM run stalls there. Running ``n_restarts`` independent inits
+    # (seeded from splits of ``key``) in parallel via ``jax.vmap`` and keeping
+    # the best-loss restart recovers robustness while staying fully JAX-native
+    # (jittable, vmappable, scales to high-D). Only for the optax path and only
+    # when no explicit ``init_from`` is given (an explicit start is honoured).
+    if (
+        n_restarts > 1
+        and init_from is None
+        and isinstance(optimizer, str)
+        and optimizer not in _SCIPY_OPTIMIZERS
+    ):
+        return _run_map_multistart(
+            context,
+            key=key,
+            n_restarts=n_restarts,
+            n_steps=n_steps,
+            learning_rate=learning_rate,
+            optimizer=optimizer,
+            verbose=verbose,
+        )
+
     init_params = context.initial_params(key, init_from=init_from)
 
     # ── scipy quasi-Newton path (optimizer="lbfgs_scipy") ──

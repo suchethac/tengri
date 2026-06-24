@@ -16,15 +16,16 @@
 # %% [markdown]
 # # Quickstart: fit a mock galaxy
 #
-# A star-forming galaxy with 14 broadband fluxes from GALEX, SDSS, 2MASS,
-# and WISE (UV through mid-IR), fitted with NUTS on a differentiable JAX
+# A star-forming galaxy with 12 broadband fluxes from GALEX, SDSS, 2MASS,
+# and WISE (UV through near-IR), fitted with NUTS on a differentiable JAX
 # forward model.
 #
-# Truncated-skew-normal SFH, two-component Calzetti dust with modified-
-# blackbody IR re-emission, nebular off, redshift fixed at 0.05. Seven free
+# Deliberately minimal — the point is to show how *fast* the JIT-compiled
+# forward model and gradients are. Truncated-skew-normal SFH, two-component
+# Calzetti dust attenuation, nebular off, redshift fixed at 0.05. Seven free
 # parameters. See `04_building_models.py` for the recipe grammar and
-# `02_sed_anatomy.py` for a panchromatic model with nebular, AGN, and
-# IGM enabled.
+# `02_sed_anatomy.py` for a panchromatic model with dust IR re-emission,
+# nebular, AGN, and IGM enabled.
 
 # %%
 import os
@@ -105,20 +106,17 @@ FILTERS = [
     "2mass_ks",
     "wise_w1",
     "wise_w2",
-    "wise_w3",
-    "wise_w4",
 ]
 obs = Observation(photometry=Photometry.from_names(FILTERS))
 
 # %% [markdown]
 # ## Build the model
 #
-# A truncated skew-normal SFH, two-component Calzetti dust with a
-# modified-blackbody IR re-emission (so the WISE mid-IR bands carry signal),
-# nebular emission off, redshift fixed at z = 0.05. Seven free
-# parameters. `model.summary()` prints the assembled pipeline;
-# `citations.print_citations` pulls the bibliography straight from the
-# registry — enough for a methods section.
+# A truncated skew-normal SFH and two-component Calzetti dust attenuation,
+# nebular off, redshift fixed at z = 0.05. Seven free parameters. Kept minimal
+# on purpose — dust IR re-emission, nebular, and AGN are shown in
+# `02_sed_anatomy.py`. `model.summary()` prints the assembled pipeline;
+# `citations.print_citations` pulls the bibliography straight from the registry.
 
 # %%
 sed_model = SEDModel.build(
@@ -130,7 +128,6 @@ sed_model = SEDModel.build(
         defaults=FIXED,
         law_bc="calzetti",
         tau_bc=Uniform(0.0, 1.0),
-        emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
     ),
     neb=builders.neb.none(),
     redshift=Fixed(0.05),
@@ -228,9 +225,11 @@ print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 # %% [markdown]
 # ## Fit
 #
-# MAP (ADAM) for the point estimate; NUTS with four parallel chains via
-# `jax.vmap` for the full posterior. Both calls reuse the prewarmed
-# adaptation cache.
+# MAP (ADAM) for a fast point estimate, then NUTS with four parallel chains via
+# `jax.vmap` for the full posterior. Both stacks are compiled once by
+# `fitter.prewarm` above; the data and parameters are threaded through the
+# compiled kernels as runtime arguments (never baked in), so the same compile is
+# reused — this is where the speed comes from.
 
 # %%
 t = time.perf_counter()
@@ -241,13 +240,22 @@ t = time.perf_counter()
 posterior = fitter.run(
     method="mcmc_nuts",
     key=key_fit,
-    n_warmup=400,
+    n_warmup=600,
     n_samples=400,
     n_chains=4,
     n_burnin=0,
 )
 print(f"  NUTS wall (4 chains × 400 = 1600 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
+
+# %% [markdown]
+# The 200-step ADAM MAP is a *fast* point estimate (the optax loop is a single
+# JIT-compiled `lax.scan`). For the posterior, NUTS auto-seeds its chains from a
+# short multi-start ADAM run — under the genuinely-uniform standardized prior a
+# single init can start far from the truth, so seeding from the best of several
+# parallel restarts gives well-behaved chains. Well-constrained parameters
+# (mass, dust, metallicity) recover the truth; the SFH *shape* parameters stay
+# broad, honestly reflecting how little a dozen broadband points constrain them.
 
 # %% [markdown]
 # Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
@@ -290,7 +298,7 @@ for k in DERIVED_KEYS:
 # posterior median below.
 
 # %%
-WAVE_OBS = np.geomspace(1300.0, 3e5, 1200)  # 0.13–30 μm covers GALEX → WISE W4
+WAVE_OBS = np.geomspace(1300.0, 6e4, 1200)  # 0.13–6 μm covers GALEX → WISE W2
 z_truth = float(truth_full["redshift"])
 dl_cm = cosmology.luminosity_distance(z_truth)
 

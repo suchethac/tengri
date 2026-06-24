@@ -20,7 +20,12 @@ import jax.numpy as jnp
 if TYPE_CHECKING:
     from jax import Array
 
-_MAP_INIT_STEPS = 200
+_MAP_INIT_STEPS = 1000
+#: Number of vmap'd ADAM restarts for the MCMC MAP-init seed. The standardized
+#: prior is genuinely uniform, so a single random init can land in a poor basin;
+#: a handful of parallel restarts (keep-best) seeds all chains at a good point so
+#: NUTS/HMC converge in a short warm-up. Kept modest so the seed stays ~1 s.
+_MAP_INIT_RESTARTS = 8
 
 # Bound the cache so a long session iterating over many fitters does not
 # accumulate compiled vmaps unboundedly. LRU-evict on insert.
@@ -128,7 +133,9 @@ def _maybe_map_init(
     if verbose:
         print(f"  MAP initialization ({n_map_steps} steps)...")
     key, map_key = jax.random.split(key)
-    map_result = fitter._run_map(key=map_key, n_steps=n_map_steps, verbose=False)
+    map_result = fitter._run_map(
+        key=map_key, n_steps=n_map_steps, n_restarts=_MAP_INIT_RESTARTS, verbose=False
+    )
     # Cache the physical MAP params so future runs/sessions skip MAP.
     mc["map_params_physical"] = {k: jnp.asarray(v) for k, v in map_result.params.items()}
     init_params = fitter._unbounded_from_posterior(map_result)
