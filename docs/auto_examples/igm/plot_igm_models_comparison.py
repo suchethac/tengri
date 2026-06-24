@@ -42,7 +42,7 @@ import numpy as np
 
 import tengri
 from tengri.analysis.plotting import setup_style
-from tengri.components.igm import igm_transmission, igm_transmission_madau
+from tengri import igm_transmission, igm_transmission_madau
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

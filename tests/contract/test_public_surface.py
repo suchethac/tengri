@@ -124,6 +124,7 @@ EXPECTED_ALL = frozenset(
         "load_pahspec_draine2021",
         # Component helpers (closes #497 / #498)
         "igm_transmission",
+        "igm_transmission_madau",
         "velocity_broaden",
         "apply_lsf",
         # GP-noise kernels + spectral-index helpers (closes #511)

@@ -580,8 +580,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.igm",
-   "module_short": "tengri.components.igm",
+   "module": "tengri",
+   "module_short": "tengri",
    "name": "igm_transmission"
   }
  ],
@@ -596,8 +596,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.igm",
-   "module_short": "tengri.components.igm",
+   "module": "tengri",
+   "module_short": "tengri",
    "name": "igm_transmission_madau"
   }
  ],

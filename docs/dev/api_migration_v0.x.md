@@ -816,6 +816,16 @@ setting `dust_frac_agn=0` when using real AGN. See
 
 ---
 
+## Madau IGM transmission re-export (2026-06, #687)
+
+`tengri.igm_transmission` (Inoue 2014) was already top-level; the Madau (1995)
+variant was reachable only via the `tengri.igm` sub-namespace. Re-export it at
+the top level too, for parity.
+
+| Old path                                          | New path                          | Status (v0.x)        |
+| ------------------------------------------------- | --------------------------------- | -------------------- |
+| `tengri.components.igm.igm_transmission_madau`    | `tengri.igm_transmission_madau`   | Both work (also `tengri.igm.igm_transmission_madau`) |
+
 ## Dust-emission template loaders + single-filter loader (2026-06, #802 / #803)
 
 Public entry points for the bundled dust-emission template grids and a single

@@ -98,6 +98,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # callable access to these — tying them to a full SEDModel
         # build for a curve-only check is unnecessary friction.
         "igm_transmission",
+        "igm_transmission_madau",
         "velocity_broaden",
         "apply_lsf",
         # ── GP-noise kernels + spectral indices (closes #511) ───────
