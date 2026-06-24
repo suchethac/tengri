@@ -85,6 +85,11 @@ class DerivedState:
     # Stellar — age-resolved tensors and ionizing rate
     L_age: jnp.ndarray | None = None
     lnu_age: jnp.ndarray | None = None
+    # DSPS joint (metallicity, age) weights and the total_mass x L_sun scaling,
+    # published so DustSEDComponent can evaluate L_ir from a precomputed
+    # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
+    joint_weights: jnp.ndarray | None = None
+    stellar_mass_scale: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
     nion: jnp.ndarray | None = None

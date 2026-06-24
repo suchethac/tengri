@@ -152,6 +152,21 @@ class WavePrecomp:
     ~0.8–1.5% on the birth-cloud layer, but well below typical SSP/dust template
     systematics, and slightly cheaper (the Ψ tensor is not built)."""
 
+    fast_dust_emission: bool = False
+    """Approximate the dust IR re-emission *band projection* when its exact, fast
+    form is unavailable. For a ``modified_blackbody`` with fixed shape (``dust_T``,
+    ``dust_beta_ir``, ``dust_epsilon_mbb``) and fixed ``redshift``, the template is
+    linear in ``L_ir`` and its per-band integral ``R`` is precomputed once
+    (CIGALE ``dl2014`` style): the exact ``L_ir × R`` projection is then used
+    automatically — fastest *and* exact, no flag needed. This flag only bites when
+    that constant ``R`` cannot be formed (free emission shape / redshift, or
+    structured templates): ``True`` then samples the self-normalising template at
+    the filter effective wavelength instead of integrating it through each
+    bandpass — much cheaper than the exact per-band integral (#622), at a
+    band-shape approximation (smooth on a modified blackbody; up to a few percent
+    on a band crossing a steep IR rise or a PAH complex). The energy balance is
+    unaffected either way."""
+
 
 @dataclasses.dataclass(frozen=True)
 class SpectrumPrecomp:
@@ -432,6 +447,7 @@ class SEDModel:
         "spectrum_precomp": False,
         "igm": True,
         "taylor_correction": True,
+        "fast_dust_emission": False,
     }
 
     #: Maximum spectral resolution R = λ/Δλ for which the SpectrumPrecomp
@@ -609,6 +625,9 @@ class SEDModel:
             self._approx["taylor_correction"] = getattr(
                 self._approx_config, "taylor_correction", True
             )
+            self._approx["fast_dust_emission"] = getattr(
+                self._approx_config, "fast_dust_emission", False
+            )
 
         # Part A (joint precompute): on a joint photometry+spectroscopy
         # observation, any precompute opt-in builds BOTH LUT families. The
@@ -759,6 +778,23 @@ class SEDModel:
         # predict_state, so it pre-warms the chain cache here instead.
         if self._approx.get("spectrum_precomp"):
             self._cached_component_chain = self._build_component_chain()
+
+        # Pre-build the dust energy-balance LUT at construction (eager, no JIT
+        # trace active) so it is memoised as concrete arrays. Building it lazily
+        # inside ``_template_data_for_jit`` would run the jnp integrals *during*
+        # a user ``jax.jit(predict_photometry)`` trace, leaking tracers and
+        # baking the LUT in as a constant (XLA constant-folds → ~100× slower).
+        if self._approx.get("wave_precomp"):
+            try:
+                chain = self._build_component_chain()
+                self._cached_component_chain = chain
+                self._energy_balance_lut(chain)
+                self._dust_emission_band_response(chain)
+            except Exception:
+                # Any build-time failure leaves the LUT disabled — the exact
+                # full-wave energy-balance path is the correct fallback.
+                self._energy_balance_lut_cache = None
+                self._dust_band_response_cache = None
 
         # Build-time accuracy guard (#617): the photometry LUT bakes the
         # SSP×filter integral at zero dust and re-applies attenuation as a
@@ -4561,7 +4597,181 @@ class SEDModel:
                 result["agn"] = agn_templates
             break
 
+        # ── Dust energy-balance LUT (build-time, memoised) ──
+        # When the attenuation-curve shape is fixed (only tau_bc/tau_diff vary),
+        # the bolometric absorbed luminosity that feeds L_ir is a smooth
+        # function of (tau_bc, tau_diff); precompute it so the per-call
+        # full-wavelength stellar cube is no longer needed for dust IR emission.
+        eb_lut = self._energy_balance_lut(cached)
+        if eb_lut is not None:
+            result.setdefault("dust_ir", {})["energy_balance_lut"] = eb_lut
+
+        band_response = self._dust_emission_band_response(cached)
+        if band_response is not None:
+            result.setdefault("dust_ir", {})["emission_band_response"] = band_response
+
         return result if result else None
+
+    #: dust_* params that change the *emission* template only (not the
+    #: attenuation curve), so they may be free without invalidating the
+    #: energy-balance (tau_bc, tau_diff) LUT.
+    _EB_EMISSION_PARAMS = frozenset(
+        {
+            "dust_T",
+            "dust_beta_ir",
+            "dust_alpha_dale",
+            "dust_umin",
+            "dust_qpah",
+            "dust_gamma_dl",
+            "dust_alpha_dl14",
+            "dust_alpha_mir",
+            "dust_qhac",
+            "dust_alpha",
+            "dust_frac_agn",
+            "dust_tdust",
+            "dust_fpah",
+            "dust_epsilon_mbb",
+            "dust_f_cold",
+            "dust_L_agn_ir",
+            "dust_T_warm",
+            "dust_T_cold",
+            "dust_beta_warm",
+            "dust_beta_cold",
+        }
+    )
+    #: dust attenuation params that may be free (tau axes + linear eta scaling).
+    _EB_ATTEN_FREE_OK = frozenset({"dust_tau_bc", "dust_tau_diff", "dust_eta_balance"})
+
+    def _energy_balance_lut(self, chain):
+        """Build (and memoise) the two-component energy-balance LUT, or ``None``.
+
+        Returns ``None`` unless the model uses ``approx=WavePrecomp()`` with a
+        two-component :class:`DustSEDComponent` that re-emits IR, the SSP needs
+        no per-call alpha interpolation, and every *free* ``dust_*`` parameter
+        is either an optical depth / eta scaling or an emission-shape knob — so
+        the attenuation *curve* is fixed and the absorbed luminosity is a smooth
+        function of ``(tau_bc, tau_diff)`` alone.
+        """
+        cached = getattr(self, "_energy_balance_lut_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.dust.attenuation import resolve_bc_diff_law_params
+        from tengri.components.dust.energy_balance_precompute import (
+            build_energy_balance_lut,
+        )
+        from tengri.components.dust.two_component import DustSEDComponent
+
+        lut = None
+        dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+        free = set(self.spec.free_params)
+        unsafe_free = {
+            p
+            for p in free
+            if p.startswith("dust_")
+            and p not in self._EB_ATTEN_FREE_OK
+            and p not in self._EB_EMISSION_PARAMS
+        }
+        if (
+            dust is not None
+            and getattr(dust.config, "emission_model", None) is not None
+            and self._approx.get("wave_precomp")
+            and not bool(getattr(self.spec, "alpha_fe_evolving", False))
+            and not unsafe_free
+            and self.ssp_data is not None
+        ):
+            fixed = self.spec.get_fixed_values()
+            bc_params, diff_params = resolve_bc_diff_law_params(
+                fixed, dict(dust.config.bc_law_overrides), dict(dust.config.diff_law_overrides)
+            )
+            ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
+
+            def _grid(name):
+                if name in free:
+                    dist = self.spec.get_distribution(name)
+                    lo, hi = float(dist.bounds[0]), float(dist.bounds[1])
+                    return jnp.linspace(lo, hi, 24)
+                return jnp.asarray([float(fixed.get(name, 0.0))])
+
+            lut = build_energy_balance_lut(
+                jnp.asarray(self.ssp_data.ssp_flux),
+                jnp.asarray(self.ssp_data.ssp_wave),
+                jnp.asarray(ssp_ages_yr),
+                law_bc=dust.config.law_bc,
+                law_diff=dust.config.law_diff,
+                f_obscuration=float(fixed.get("dust_f_obscuration", 0.0)),
+                t_birth_yr=dust.config.t_birth_yr,
+                transition_width_dex=dust.config.transition_width_dex,
+                bc_params={k: float(v) for k, v in bc_params.items()},
+                diff_params={k: float(v) for k, v in diff_params.items()},
+                lyman_cutoff_aa=dust.config.lyman_cutoff_aa,
+                tau_bc_grid=_grid("dust_tau_bc"),
+                tau_diff_grid=_grid("dust_tau_diff"),
+            )
+
+        self._energy_balance_lut_cache = lut
+        return lut
+
+    def _dust_emission_band_response(self, chain):
+        """Build-time filter-integrated dust-IR response per unit ``L_ir``.
+
+        CIGALE's ``dl2014``/``dale2014`` normalise the IR template to unit
+        luminosity and scale by ``dust.luminosity`` (emission = ``L_dust ×
+        template``); the band fluxes are therefore ``L_ir × R`` with ``R`` the
+        template's per-filter integral. When the emission *shape* (``dust_T``,
+        ``dust_beta_ir``, ``dust_epsilon_mbb``) and ``redshift`` are fixed, ``R``
+        is a build-time constant — returned here (shape ``(n_filter,)``) so
+        :meth:`DustSEDComponent.apply` replaces the per-call dense filter
+        integral (#622) with the exact ``L_ir × R``. Returns ``None`` otherwise
+        (free shape/z → keep the per-call integral, or ``fast_dust_emission``).
+        """
+        cached = getattr(self, "_dust_band_response_cache", "unset")
+        if cached != "unset":
+            return cached
+
+        from tengri.components.dust.two_component import DustSEDComponent
+
+        response = None
+        dust = next(
+            (
+                c
+                for c in chain
+                if isinstance(c, DustSEDComponent)
+                and getattr(c.config, "emission_model", None) == "modified_blackbody"
+            ),
+            None,
+        )
+        free = set(self.spec.free_params)
+        shape_params = ("dust_T", "dust_beta_ir", "dust_epsilon_mbb", "redshift")
+        stellar = next((c for c in chain if c.name == "stellar"), None)
+        st = getattr(stellar, "_state", None)
+        fw_pad = getattr(st, "phot_fw_padded", None)
+        ft_pad = getattr(st, "phot_ft_padded", None)
+        if (
+            dust is not None
+            and self._approx.get("wave_precomp")
+            and not (free & set(shape_params))
+            and fw_pad is not None
+            and ft_pad is not None
+        ):
+            from tengri.components.dust.emission import modified_blackbody
+            from tengri.observation.photometry import lnu_filter_integral_batch
+
+            fixed = self.spec.get_fixed_values()
+            wave = self._rest_wavelength
+            z = jnp.asarray(fixed.get("redshift", 0.0))
+            unit_sed_ir = modified_blackbody(
+                wave,
+                L_absorbed=1.0,
+                dust_T=jnp.asarray(fixed.get("dust_T", 35.0)),
+                dust_beta_ir=jnp.asarray(fixed.get("dust_beta_ir", 1.6)),
+                redshift=z,
+                dust_epsilon_mbb=jnp.asarray(fixed.get("dust_epsilon_mbb", 1.0)),
+            )
+            response = lnu_filter_integral_batch(unit_sed_ir, wave, fw_pad, ft_pad, z)
+
+        self._dust_band_response_cache = response
+        return response
 
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
@@ -4823,6 +5033,18 @@ class SEDModel:
                 else:
                     merged = spec_state
                 chain[0] = replace(stellar, _state=merged)
+
+        # Bake the fast-dust-emission routing flag onto the dust component so
+        # ``apply`` can branch on it statically (structural, not a runtime arg).
+        if self._approx.get("fast_dust_emission"):
+            from dataclasses import replace as _replace
+
+            from tengri.components.dust.two_component import DustSEDComponent
+
+            for _i, _c in enumerate(chain):
+                if isinstance(_c, DustSEDComponent):
+                    chain[_i] = _replace(_c, fast_emission=True)
+                    break
 
         return chain
 

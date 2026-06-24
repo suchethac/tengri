@@ -3,7 +3,7 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "9f48673e89899cc44abe0d3e918506948290740f259c0ff37ae902646d9ba5e5",
+    "digest": "9207855b529e1429842f08676142cb5643713ac5a03bb201e7017b2ca03c00ee",
     "rows": [
       [
         "DustSEDComponent",
@@ -44,6 +44,12 @@
       [
         "RadioSEDComponent",
         "optional_inputs",
+        "L_4400_intrinsic",
+        "erg/s/Hz"
+      ],
+      [
+        "RadioSEDComponent",
+        "optional_inputs",
         "L_agn_bol",
         "erg/s"
       ],
@@ -76,6 +82,12 @@
         "outputs",
         "age_weights",
         "Msun"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
+        "joint_weights",
+        ""
       ],
       [
         "StellarSEDComponent",
@@ -146,7 +158,25 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "stellar_mass_scale",
+        "erg/s/Hz"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "stellar_phot_lnu_precomp",
+        "erg/s/Hz"
+      ],
+      [
+        "XRaySEDComponent",
+        "optional_inputs",
+        "L_2500_30deg",
+        "erg/s/Hz"
+      ],
+      [
+        "XRaySEDComponent",
+        "optional_inputs",
+        "L_2500_intrinsic",
         "erg/s/Hz"
       ],
       [
@@ -176,7 +206,7 @@
     ]
   },
   "contract_graph::minimal_phot": {
-    "digest": "ccda2050e6c71ea5cea7c2d300b6addcfc2e891c60556ff1ff909737bb060e12",
+    "digest": "64921b95c8e3a721313d34f8d8acd8cf2856d9d2a5931d8b8e2bab606e851320",
     "rows": [
       [
         "DustSEDComponent",
@@ -219,6 +249,12 @@
         "outputs",
         "age_weights",
         "Msun"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
+        "joint_weights",
+        ""
       ],
       [
         "StellarSEDComponent",
@@ -289,13 +325,19 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "stellar_mass_scale",
+        "erg/s/Hz"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "stellar_phot_lnu_precomp",
         "erg/s/Hz"
       ]
     ]
   },
   "contract_graph::single_component_dust": {
-    "digest": "0e9ccc182b181663a258ea48abf2f68d45b17cd0d706f59b699faf741d3dc690",
+    "digest": "e25159676079533441c03edbe663bfd045c7c30d87d419d067b5c0902af13402",
     "rows": [
       [
         "DustSEDComponent",
@@ -325,6 +367,12 @@
         "NebularSEDComponent",
         "outputs",
         "sed_shock",
+        "erg/s/Hz"
+      ],
+      [
+        "RadioSEDComponent",
+        "optional_inputs",
+        "L_4400_intrinsic",
         "erg/s/Hz"
       ],
       [
@@ -366,6 +414,12 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "joint_weights",
+        ""
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "lnu_age",
         "erg/s/Hz"
       ],
@@ -432,18 +486,24 @@
       [
         "StellarSEDComponent",
         "outputs",
+        "stellar_mass_scale",
+        "erg/s/Hz"
+      ],
+      [
+        "StellarSEDComponent",
+        "outputs",
         "stellar_phot_lnu_precomp",
         "erg/s/Hz"
       ]
     ]
   },
   "sed_intrinsic::full_panchromatic": {
-    "digest": "5f6065f290f5542bc3ec5fc511ab452a5ee0549bc4e8ebe4432e4e8fe71e87c4"
+    "digest": "9eb03dbd9c2b667545421dbac4f238b85da81dca613e660fc1151cb33b69e0e9"
   },
   "sed_intrinsic::minimal_phot": {
-    "digest": "d1183e5db0e25241740bee56725a7c4e723249c88db8cf258387d206e187c0bb"
+    "digest": "9eb03dbd9c2b667545421dbac4f238b85da81dca613e660fc1151cb33b69e0e9"
   },
   "sed_intrinsic::single_component_dust": {
-    "digest": "6a2bac263c8c27e633ebac62b6ec18c45a8edbb4aa98ea4638511eb34f010a42"
+    "digest": "9eb03dbd9c2b667545421dbac4f238b85da81dca613e660fc1151cb33b69e0e9"
   }
 }

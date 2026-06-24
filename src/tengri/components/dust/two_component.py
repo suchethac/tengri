@@ -165,6 +165,10 @@ class DustSEDComponent:
     config: DustSEDComponentConfig = field(default_factory=DustSEDComponentConfig)
     name: str = "dust"
     parameter_prefix: str = "dust_"
+    #: When set (via ``approx=WavePrecomp(fast_dust_emission=True)``), project IR
+    #: re-emission at the filter effective wavelength rather than integrating the
+    #: dense template through each bandpass — much cheaper, slightly approximate.
+    fast_emission: bool = False
 
     def citations(self) -> tuple[str, ...]:
         """Structurally implements Charlot & Fall (2000) two-component dust;
@@ -510,10 +514,39 @@ class DustSEDComponent:
         # Stellar + nebular absorbed light both feed the dust IR re-emission
         # pool (energy balance): the nebular continuum reddened in step 2b is
         # absorbed by the same grains.
-        absorbed_lnu = (sed_intrinsic_stellar - sed_attenuated) + (sed_neb - sed_neb_attenuated)
-        # Mask LyC photons out of the L_absorbed integral.
-        absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
-        L_absorbed = jnp.abs(jnp.trapezoid(absorbed_lnu, nu))
+        eb_lut = None
+        if isinstance(template_data, dict):
+            _dir = template_data.get("dust_ir")
+            if isinstance(_dir, dict):
+                eb_lut = _dir.get("energy_balance_lut")
+        jw = state.derived.get("joint_weights")
+        mass_scale = state.derived.get("stellar_mass_scale")
+        if eb_lut is not None and jw is not None and mass_scale is not None:
+            # Fast path (WavePrecomp): the stellar bolometric absorption comes
+            # from a precomputed (tau_bc, tau_diff) LUT contracted with the
+            # runtime DSPS weights — no full-wavelength stellar cube. The
+            # nebular term is a single-SED integral (cheap), kept exact. Same
+            # signed ∫(L_intrinsic - L_attenuated) dν, then abs(); when the
+            # full cube is not otherwise needed XLA dead-code-eliminates it.
+            from tengri.components.dust.energy_balance_precompute import lut_l_absorbed_stellar
+
+            stellar_absorbed = lut_l_absorbed_stellar(
+                eb_lut,
+                jnp.asarray(jw),
+                jnp.asarray(mass_scale),
+                jnp.asarray(params["dust_tau_bc"]),
+                jnp.asarray(params["dust_tau_diff"]),
+            )
+            neb_absorbed_lnu = jnp.where(wave >= 912.0, sed_neb - sed_neb_attenuated, 0.0)
+            neb_absorbed = jnp.trapezoid(neb_absorbed_lnu, nu)
+            L_absorbed = jnp.abs(stellar_absorbed + neb_absorbed)
+        else:
+            absorbed_lnu = (sed_intrinsic_stellar - sed_attenuated) + (
+                sed_neb - sed_neb_attenuated
+            )
+            # Mask LyC photons out of the L_absorbed integral.
+            absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
+            L_absorbed = jnp.abs(jnp.trapezoid(absorbed_lnu, nu))
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
 
@@ -652,9 +685,30 @@ class DustSEDComponent:
                 # applies cosmology to the summed L_ν. (Sampling the
                 # self-normalizing emission model at the sparse pivots was the
                 # #622 regression that inflated the reddest band ~4×.)
+                band_response = None
+                if isinstance(template_data, dict):
+                    _dir = template_data.get("dust_ir")
+                    if isinstance(_dir, dict):
+                        band_response = _dir.get("emission_band_response")
                 fw_pad = state.derived.get("phot_filter_waves_padded")
                 ft_pad = state.derived.get("phot_filter_trans_padded")
-                if fw_pad is not None:
+                if band_response is not None:
+                    # Exact fast path (CIGALE dl2014-style): the template is
+                    # linear in L_ir, so its filter integral is ``L_ir × R`` with
+                    # R a build-time constant (fixed emission shape + z).
+                    # Identical arithmetic to the dense per-band integral,
+                    # evaluated once — and ``sed_ir`` then drops out of the
+                    # photometry channel entirely (XLA DCEs it). Fastest + exact.
+                    derived_overrides["dust_emission_phot_lnu_precomp"] = L_ir * band_response
+                elif getattr(self, "fast_emission", False):
+                    # Approximate path for free-shape / structured templates where
+                    # R is not constant: sample the self-normalising template at
+                    # the filter effective wavelength (drops the ~310 us/eval
+                    # dense integral). See WavePrecomp(fast_dust_emission=...).
+                    derived_overrides["dust_emission_phot_lnu_precomp"] = jnp.interp(
+                        filter_eff, wave, sed_ir
+                    )
+                elif fw_pad is not None:
                     from tengri.observation.photometry import lnu_filter_integral_batch
 
                     derived_overrides["dust_emission_phot_lnu_precomp"] = (
