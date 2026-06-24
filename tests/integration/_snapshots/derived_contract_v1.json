@@ -3,8 +3,14 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "9f48673e89899cc44abe0d3e918506948290740f259c0ff37ae902646d9ba5e5",
+    "digest": "f103c506121d5ea551560c967e96327143bdcb7fb9587c5a0d50756154272738",
     "rows": [
+      [
+        "DustSEDComponent",
+        "optional_inputs",
+        "lyc_transmission",
+        ""
+      ],
       [
         "DustSEDComponent",
         "optional_inputs",
@@ -32,6 +38,12 @@
       [
         "NebularSEDComponent",
         "outputs",
+        "lyc_transmission",
+        ""
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
         "sed_nebular",
         "erg/s/Hz"
       ],
@@ -39,6 +51,12 @@
         "NebularSEDComponent",
         "outputs",
         "sed_shock",
+        "erg/s/Hz"
+      ],
+      [
+        "RadioSEDComponent",
+        "optional_inputs",
+        "L_4400_intrinsic",
         "erg/s/Hz"
       ],
       [
@@ -152,6 +170,18 @@
       [
         "XRaySEDComponent",
         "optional_inputs",
+        "L_2500_30deg",
+        "erg/s/Hz"
+      ],
+      [
+        "XRaySEDComponent",
+        "optional_inputs",
+        "L_2500_intrinsic",
+        "erg/s/Hz"
+      ],
+      [
+        "XRaySEDComponent",
+        "optional_inputs",
         "L_agn_bol",
         "erg/s"
       ],
@@ -176,8 +206,14 @@
     ]
   },
   "contract_graph::minimal_phot": {
-    "digest": "ccda2050e6c71ea5cea7c2d300b6addcfc2e891c60556ff1ff909737bb060e12",
+    "digest": "45963e198d68f440a123fcdc31ae192b88552ea29ed6395af98908952c914649",
     "rows": [
+      [
+        "DustSEDComponent",
+        "optional_inputs",
+        "lyc_transmission",
+        ""
+      ],
       [
         "DustSEDComponent",
         "optional_inputs",
@@ -195,6 +231,12 @@
         "outputs",
         "line_waves",
         "Angstrom"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "lyc_transmission",
+        ""
       ],
       [
         "NebularSEDComponent",
@@ -295,8 +337,14 @@
     ]
   },
   "contract_graph::single_component_dust": {
-    "digest": "0e9ccc182b181663a258ea48abf2f68d45b17cd0d706f59b699faf741d3dc690",
+    "digest": "581e7c10e35ba3d649252d37887a1f42102763e8826ff18c517f75e3a9e3d7a8",
     "rows": [
+      [
+        "DustSEDComponent",
+        "optional_inputs",
+        "lyc_transmission",
+        ""
+      ],
       [
         "DustSEDComponent",
         "optional_inputs",
@@ -318,6 +366,12 @@
       [
         "NebularSEDComponent",
         "outputs",
+        "lyc_transmission",
+        ""
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
         "sed_nebular",
         "erg/s/Hz"
       ],
@@ -325,6 +379,12 @@
         "NebularSEDComponent",
         "outputs",
         "sed_shock",
+        "erg/s/Hz"
+      ],
+      [
+        "RadioSEDComponent",
+        "optional_inputs",
+        "L_4400_intrinsic",
         "erg/s/Hz"
       ],
       [

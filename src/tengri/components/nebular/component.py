@@ -290,6 +290,11 @@ class NebularSEDComponent:
             DerivedKey("sed_shock", "erg/s/Hz", "MAPPINGS shock (zeros for photoion-only)"),
             DerivedKey("line_waves", "Angstrom", "Line vacuum wavelengths"),
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
+            DerivedKey(
+                "lyc_transmission",
+                "",
+                "Stellar LyC survival fraction where(λ<912, neb_fesc, 1)",
+            ),
         )
 
     def inputs(self) -> tuple[DerivedKey, ...]:
@@ -736,9 +741,20 @@ class NebularSEDComponent:
         # ``fesc`` here so the SED reflects "stellar LyC × fesc + nebular
         # ∝ (1 − fesc)" globally.
         neb_fesc = jnp.asarray(params.get("neb_fesc", 0.0))
+        lyc_mask = state.wave < 912.0
+        # Publish the stellar-LyC survival fraction so the two-component dust
+        # component — which rebuilds the stellar SED from the *unmasked* per-age
+        # ``lnu_age`` cube — can apply the same fesc absorption. Masking only
+        # ``sed_intrinsic`` here is enough for the single-screen path (it
+        # attenuates ``sed_intrinsic`` directly) but is bypassed by the
+        # two-component path, which previously leaked / negated the LyC below
+        # 912 Å (#824). ``where(λ<912, fesc, 1)`` -> at fesc=0 the stellar LyC is
+        # fully absorbed, matching CIGALE / FSPS / bagpipes.
+        lyc_transmission = jnp.where(lyc_mask, neb_fesc, jnp.ones_like(state.wave))
+        derived_overrides["lyc_transmission"] = lyc_transmission
+
         sed_intrinsic = state.sed_intrinsic
         if sed_intrinsic is not None:
-            lyc_mask = state.wave < 912.0
             sed_intrinsic = jnp.where(lyc_mask, sed_intrinsic * neb_fesc, sed_intrinsic)
 
         return state.with_(
