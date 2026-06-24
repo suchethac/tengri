@@ -1698,8 +1698,11 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 # overlaid on BAGPIPES' own panchromatic output at matched parameters (the
 # §11 configuration). The top panel is the overlay; the bottom is the
 # fractional residual `tengri / BAGPIPES − 1` with the ±25 % band shaded.
-# Optical agreement is reported as a normalization ratio and its 16–84 %
-# spread; the nebular emission lines (§9) drive the spread.
+# Optical agreement is reported as a normalization ratio and its *robust*
+# 16–84 % spread — which tracks the stellar continuum. The emission lines
+# and the sub-912 Å region are sparse points the percentile rejects as
+# outliers (the spikes in the residual panel); the broadband line gap is
+# quantified instead in §13.
 
 # %%
 import chex
@@ -1723,11 +1726,17 @@ resid = np.full(w_ext.shape, np.nan, dtype=float)
 resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
 # Headline numbers: the optical normalization ratio tengri/BAGPIPES and
-# its 16–84% spread. With the §7 dust applied as a single screen, the
-# continuum normalization sits at the bottom of the spread (P16 ≈ 1.0×);
-# the median and upper end are pulled up by the Cue-vs-Cloudy nebular
-# emission lines (§9). Reporting the ratio + spread keeps that line-driven
-# scatter distinct from the continuum match.
+# its robust 16–84% spread. The spread is a *continuum* metric — at ≈
+# 1.00–1.03× the stellar continuum matches BAGPIPES to a couple of percent.
+# The emission **lines are not in this band**: they are sparse points the
+# 16–84 percentile rejects as outliers, and the residual panel shows them
+# spiking to ±50–100 % — the Cue-vs-Cloudy line-strength difference (§9),
+# integrated into the SDSS bands in the §13 broadband gap, plus line
+# center/width mismatches. Below 912 Å both codes absorb the stellar Lyman
+# continuum at `neb_fesc = 0` (the gas reprocesses the ionising photons into
+# nebular emission), so the region falls to zero on both sides — tengri now
+# applies the same fesc absorption on its two-component dust path (#825),
+# matching BAGPIPES.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))

@@ -1314,9 +1314,11 @@ print(
 # overlaid on FSPS's own panchromatic output at matched parameters (the §7
 # configuration). The top panel is the overlay; the bottom is the
 # fractional residual `tengri / FSPS − 1` with the ±25 % band shaded.
-# Optical agreement is reported as a normalization ratio and its 16–84 %
-# spread; with the dust applied as a single screen (§5) the whole optical
-# lands at ≈ 1.0× with a percent-level spread.
+# Optical agreement is reported as a normalization ratio and its *robust*
+# 16–84 % spread — which tracks the stellar continuum. The emission lines
+# and the sub-912 Å region are sparse points the percentile rejects as
+# outliers (the spikes in the residual panel), so the spread is a
+# continuum metric, not a line-agreement one.
 
 # %%
 import chex
@@ -1340,11 +1342,18 @@ resid = np.full(w_ext.shape, np.nan, dtype=float)
 resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 
 # Headline numbers: the optical normalization ratio tengri/FSPS and its
-# 16–84% spread. With the §5 dust applied as a single screen matching
-# FSPS `dust_type=2` (`dust1 = 0`), the whole optical lands at ≈ 1.0× with
-# a tight spread — FSPS and tengri agree to a couple of percent across
-# the band, lines included. Reporting the ratio + spread makes that match
-# explicit.
+# robust 16–84% spread. With the §5 dust as a single screen matching FSPS
+# `dust_type=2` (`dust1 = 0`), the spread sits at ≈ 1.01–1.01× — the
+# *stellar continuum* matches FSPS to ~1%. The emission **lines are not in
+# this band**: they are sparse points the 16–84 percentile rejects as
+# outliers, and the residual panel shows them spiking to ±50–100 % — the
+# Cue-vs-Byler+2017 line-strength difference (§8: Hα 0.88×, [O III] 0.81×,
+# Hβ 0.95×) plus line center/width mismatches. So the tight spread is a
+# clean continuum match, not evidence that the lines agree. Below 912 Å both
+# codes absorb the stellar Lyman continuum at `neb_fesc = 0` (the gas
+# reprocesses the ionising photons into nebular emission), so the region
+# falls to zero on both sides — tengri now applies the same fesc absorption
+# on its two-component dust path (#825), matching FSPS.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))

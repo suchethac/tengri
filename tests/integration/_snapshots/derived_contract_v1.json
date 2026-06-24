@@ -3,8 +3,14 @@
     "regenerated_by": "TENGRI_REGENERATE_SNAPSHOTS=1"
   },
   "contract_graph::full_panchromatic": {
-    "digest": "9207855b529e1429842f08676142cb5643713ac5a03bb201e7017b2ca03c00ee",
+    "digest": "c5476994c2ced28ca8dd5c2ee2b1a3b0525f5f704e0afed71b38b76e4567fe3d",
     "rows": [
+      [
+        "DustSEDComponent",
+        "optional_inputs",
+        "lyc_transmission",
+        ""
+      ],
       [
         "DustSEDComponent",
         "optional_inputs",
@@ -28,6 +34,12 @@
         "outputs",
         "line_waves",
         "Angstrom"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "lyc_transmission",
+        ""
       ],
       [
         "NebularSEDComponent",
@@ -206,8 +218,14 @@
     ]
   },
   "contract_graph::minimal_phot": {
-    "digest": "64921b95c8e3a721313d34f8d8acd8cf2856d9d2a5931d8b8e2bab606e851320",
+    "digest": "f2ca920def15a88e059d7d28f27129257e6c4ca3962545778a30699384e38856",
     "rows": [
+      [
+        "DustSEDComponent",
+        "optional_inputs",
+        "lyc_transmission",
+        ""
+      ],
       [
         "DustSEDComponent",
         "optional_inputs",
@@ -225,6 +243,12 @@
         "outputs",
         "line_waves",
         "Angstrom"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "lyc_transmission",
+        ""
       ],
       [
         "NebularSEDComponent",
@@ -337,8 +361,14 @@
     ]
   },
   "contract_graph::single_component_dust": {
-    "digest": "e25159676079533441c03edbe663bfd045c7c30d87d419d067b5c0902af13402",
+    "digest": "6bb46c9b0562e09fc1daa253bd87cc1dff7a0f2fdd00056178794aaa3f2c4b2e",
     "rows": [
+      [
+        "DustSEDComponent",
+        "optional_inputs",
+        "lyc_transmission",
+        ""
+      ],
       [
         "DustSEDComponent",
         "optional_inputs",
@@ -356,6 +386,12 @@
         "outputs",
         "line_waves",
         "Angstrom"
+      ],
+      [
+        "NebularSEDComponent",
+        "outputs",
+        "lyc_transmission",
+        ""
       ],
       [
         "NebularSEDComponent",

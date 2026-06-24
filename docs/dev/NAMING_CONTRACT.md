@@ -3,7 +3,7 @@
 > **Authority:** This is the single source of truth for naming conventions.
 > All new code, renames, and refactors MUST comply. Referenced by CLAUDE.md.
 >
-> **Last updated:** 2026-04-05
+> **Last updated:** 2026-06-24
 > **Current version:** v0.1-dev
 > **Derived from:** `docs/dev/sessions/2026-04-03-api-naming-design.md`, `docs/dev/REFACTOR.md`
 
@@ -274,3 +274,50 @@ def compute_sed(params, ssp_grid):
 ```
 
 Adopt `jaxtyping` annotations where practical for static checking.
+
+---
+
+## 10. Spelling Convention (American English)
+
+**Rule:** All identifiers (classes, functions, parameters, kwargs, constants,
+registry keys, module filenames) and all prose (docstrings, comments, docs,
+notebooks, example scripts) use **American English** spelling. British spellings
+must never appear in new code.
+
+| British (forbidden) | American (canonical) |
+|---------------------|----------------------|
+| `colour`, `behaviour`, `favour`, `neighbour` | `color`, `behavior`, `favor`, `neighbor` |
+| `normalise`/`normalisation`, `marginalise`, `optimise`, `initialise`, `finalise` | `normalize`/`normalization`, `marginalize`, `optimize`, `initialize`, `finalize` |
+| `catalogue`/`catalogued`, `analogue` | `catalog`/`cataloged`, `analog` |
+| `centre`, `metre`, `fibre` | `center`, `meter`, `fiber` |
+| `modelling`/`modelled`, `labelled` | `modeling`/`modeled`, `labeled` |
+| `grey`, `analyse` (verb) | `gray`, `analyze` |
+
+**Exception — external data contracts.** Strings that index a third-party file
+or upstream API keep that source's spelling, because the literal must match the
+bytes on disk. The known cases are the Synthesizer grid HDF5 dataset keys
+`ionisation_parameter` and `log10_specific_ionising_luminosity`
+(`components/nebular/agn_nebular.py`). Document any such exception inline.
+
+**Note on American-invariant words:** do not "correct" words that are already
+American or invariant — `noise`, `raise`, `exercise`, `precise`, `surprise`,
+`revise`, `analyses` (plural noun of *analysis*), the `-wise` suffix
+(`piecewise`, `otherwise`), and the matplotlib `Greys`/`Greens` colormap tokens.
+
+### Renames applied (#819, no deprecation alias)
+
+These were **hard-renamed** (no alias) under the pre-v1.0 policy of §0 — old
+British spellings are gone, not deprecated. Per §2's file-path stability rule the
+`marginalised.py` module was renamed in the same change.
+
+| Old | Canonical | Module |
+|-----|-----------|--------|
+| `cue_full_catalogue` / builder key `full_catalogue` | `cue_full_catalog` / `full_catalog` | `parameters/`, `forward/`, `components/nebular/` |
+| `rest_frame_colour()` | `rest_frame_color()` | `analysis/diagnostics/spectral.py` |
+| `CalibrationMarginalisedLikelihood` (+ `ELine`, `CloudyELine`, `CalibrationELine`) | `…MarginalizedLikelihood` | `inference/likelihoods/marginalized.py` |
+| `normalised_excess_variance()` | `normalized_excess_variance()` | `components/agn/grahsp/variability.py` |
+| `rank_normalise()` / `rank_normalised_rhat()` | `rank_normalize()` / `rank_normalized_rhat()` | `analysis/diagnostics/autocorrelation.py` |
+| `finalise()` | `finalize()` | `inference/backends/nested/utils.py` |
+| `SSP_CATALOGUE_URL` | `SSP_CATALOG_URL` | `data/__init__.py` |
+
+See `CHANGELOG.md` for the full record.
