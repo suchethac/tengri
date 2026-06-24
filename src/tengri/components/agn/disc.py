@@ -408,6 +408,83 @@ def _self_gravity_radius(log_mbh: float, l_edd_ratio: float, alpha_visc: float =
     )
 
 
+# ── EUV / soft-X-ray power-law tail for the thin disc ─────────────────
+# A bare Shakura-Sunyaev disc Wien-cuts off in the EUV (< ~150 A), so its
+# emission below 100 A is negligible. Empirical AGN disc templates (e.g.
+# CIGALE's SKIRTOR piecewise power law) instead carry a rising power-law
+# tail into the EUV / soft X-ray. ``multicolor_disc`` can optionally blend
+# such a tail onto the Wien core (the ``euv_tail`` argument).
+_EUV_TAIL_LAMBDA_BREAK_AA = 912.0  # [A] Lyman limit — onset of the EUV tail
+_EUV_TAIL_LAMBDA_CUT_AA = 30.0  # [A] short-wavelength floor (~0.41 keV)
+_EUV_TAIL_DEFAULT_SLOPE = 1.0  # L_nu ~ nu^slope (CIGALE-skirtor-like rise)
+_EUV_TAIL_FRAC = 0.02  # tail bolometric budget as a fraction of L_disc
+
+
+def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
+    r"""Blend an EUV / soft-X-ray power-law tail onto a Wien-cutoff thin disc.
+
+    Parameters
+    ----------
+    wavelength : ndarray, shape (n_wave,)
+        Rest-frame wavelength grid. [Angstrom]
+    nu : ndarray, shape (n_wave,)
+        Matching frequency grid. [Hz]
+    l_nu_wien : ndarray, shape (n_wave,)
+        The Wien-limited multi-color blackbody disc spectrum. [erg/s/Hz]
+    euv_tail : None or str or float
+        EUV behavior over :math:`\lambda \in [30, 912]` A:
+
+        * ``None`` / ``"wien"`` — no tail; pure Wien cutoff (bare thin disc).
+        * ``"powerlaw"`` / ``"both"`` — blend a power-law tail at the default
+          slope ``_EUV_TAIL_DEFAULT_SLOPE``. ``"both"`` is a synonym; the Wien
+          core is always preserved (the tail only fills where it exceeds Wien).
+        * float — user-defined slope :math:`s` with :math:`L_\nu \propto \nu^s`.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Disc spectrum with the EUV tail blended in (pre-normalization). [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``euv_tail`` is resolved to a static slope and a
+    static on/off flag at trace time (it is not a traced array), so the
+    branch is a Python-level decision and the math is pure ``jnp``.
+
+    The tail has the **shape** :math:`L_\nu \propto \nu^s` over
+    :math:`\lambda \in [30, 912]` A but its **amplitude** is fixed by
+    normalizing its bolometric content to a small fraction
+    (``_EUV_TAIL_FRAC``, default 2 %) of the disc's pre-tail bolometric
+    luminosity — a bounded "soft-excess"-like budget. (A bare power law
+    anchored to the disc peak would diverge in energy and swamp the optical.)
+    It is blended via ``maximum`` so the UV/optical/Wien-peak region is
+    untouched: the tail only contributes where the Wien spectrum has already
+    fallen below it. The caller renormalizes the blended spectrum back to
+    :math:`L_{\rm bol}`, so total energy is conserved and the optical is
+    reduced only by the ~2 % moved into the EUV.
+    """
+    if euv_tail is None or euv_tail == "wien":
+        return l_nu_wien
+    if euv_tail in ("powerlaw", "both"):
+        slope = _EUV_TAIL_DEFAULT_SLOPE
+    else:
+        slope = float(euv_tail)
+
+    nu_break = _wavelength_to_nu(jnp.asarray(_EUV_TAIL_LAMBDA_BREAK_AA))
+    in_euv = (wavelength <= _EUV_TAIL_LAMBDA_BREAK_AA) & (wavelength >= _EUV_TAIL_LAMBDA_CUT_AA)
+    # Power-law SHAPE on the EUV band only (zero elsewhere).
+    shape = jnp.where(in_euv, (nu / nu_break) ** slope, 0.0)
+
+    # Normalize the tail to a fixed fraction of the disc bolometric so the
+    # EUV budget is bounded regardless of slope. Integrate over frequency
+    # (sort ascending; nu descends as wavelength ascends).
+    sort_idx = jnp.argsort(nu)
+    disc_bol = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx], nu[sort_idx]))
+    shape_bol = jnp.maximum(jnp.abs(jnp.trapezoid(shape[sort_idx], nu[sort_idx])), 1e-100)
+    tail = shape * (_EUV_TAIL_FRAC * disc_bol / shape_bol)
+    return jnp.maximum(l_nu_wien, tail)
+
+
 def multicolor_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -417,6 +494,7 @@ def multicolor_disc(
     agn_a_spin: float = 0.0,
     agn_cos_inc: float = 0.5,
     n_radii: int = 50,
+    euv_tail: str | float | None = "powerlaw",
     **_kwargs,
 ) -> jnp.ndarray:
     """Shakura-Sunyaev thin accretion disc with multi-color blackbody emission.
@@ -449,6 +527,20 @@ def multicolor_disc(
         Default: 0.5 (60°). [dimensionless]
     n_radii : int, optional
         Number of radial bins for numerical integration. Default: 50.
+    euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
+        EUV / soft-X-ray behavior below the Lyman limit (912 A).
+
+        * ``"powerlaw"`` (default) / ``"both"`` — blend a CIGALE-like power-law
+          tail onto the Wien core so the disc carries flux below ~100 A.
+        * ``"wien"`` / ``None`` — pure Shakura-Sunyaev Wien cutoff (the bare
+          thin disc; emission below ~150 A is negligible and the EUV / soft
+          X-ray is supplied by the corona instead).
+        * float — user-defined slope :math:`s` with :math:`L_\\nu \\propto \\nu^s`.
+
+        Default: ``"powerlaw"``. The tail only fills the EUV where the Wien
+        spectrum has already dropped below it, so the UV/optical is unchanged
+        to sub-percent after the bolometric renormalization. See
+        :func:`_apply_euv_tail`.
 
     Returns
     -------
@@ -458,6 +550,7 @@ def multicolor_disc(
     Notes
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives and ``jax.vmap``.
+    ``euv_tail`` is a static (trace-time) selector, not a traced argument.
 
     The temperature profile follows the Novikov-Thorne (1974) emissivity for
     a thin, radiatively efficient disc:
@@ -563,6 +656,12 @@ def multicolor_disc(
 
     ring_contributions = jax.vmap(_ring_lnu)(r_grid, t_profile, dr)  # (n_radii, n_wave)
     l_nu_intrinsic = jnp.sum(ring_contributions, axis=0)  # (n_wave,) [erg s^-1 Hz^-1]
+
+    # Optionally blend an EUV / soft-X-ray power-law tail onto the Wien core
+    # before renormalizing, so the tail's energy is taken out of L_bol rather
+    # than added on top (energy-conserving). Default "powerlaw" gives the disc
+    # a CIGALE-like rise below ~100 A; "wien" recovers the bare thin disc.
+    l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
     # Renormalize to requested L_bol * agn_frac
     l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_frac
