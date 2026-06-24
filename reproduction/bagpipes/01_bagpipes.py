@@ -1732,9 +1732,11 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 # 16–84 percentile rejects as outliers, and the residual panel shows them
 # spiking to ±50–100 % — the Cue-vs-Cloudy line-strength difference (§9),
 # integrated into the SDSS bands in the §13 broadband gap, plus line
-# center/width mismatches. Below 912 Å, tengri's reconstruction carries
-# attenuated stellar Lyman continuum that BAGPIPES (f_esc = 0) absorbs — a
-# known tengri LyC-handling issue, not a continuum disagreement.
+# center/width mismatches. Below 912 Å both codes absorb the stellar Lyman
+# continuum at `neb_fesc = 0` (the gas reprocesses the ionising photons into
+# nebular emission), so the region falls to zero on both sides — tengri now
+# applies the same fesc absorption on its two-component dust path (#825),
+# matching BAGPIPES.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))

@@ -1349,10 +1349,11 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 # outliers, and the residual panel shows them spiking to ±50–100 % — the
 # Cue-vs-Byler+2017 line-strength difference (§8: Hα 0.88×, [O III] 0.81×,
 # Hβ 0.95×) plus line center/width mismatches. So the tight spread is a
-# clean continuum match, not evidence that the lines agree. Below 912 Å,
-# tengri's reconstruction carries attenuated stellar Lyman continuum that
-# FSPS (f_esc = 0) absorbs — a known tengri LyC-handling issue, not a
-# continuum disagreement.
+# clean continuum match, not evidence that the lines agree. Below 912 Å both
+# codes absorb the stellar Lyman continuum at `neb_fesc = 0` (the gas
+# reprocesses the ionising photons into nebular emission), so the region
+# falls to zero on both sides — tengri now applies the same fesc absorption
+# on its two-component dust path (#825), matching FSPS.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)
 ratio_opt = L_t_on_ext[opt] / L_ext[opt]
 norm = float(np.median(ratio_opt))
