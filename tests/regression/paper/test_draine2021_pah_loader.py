@@ -21,7 +21,13 @@ from pathlib import Path
 
 import numpy as np
 
-FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "pahspec_smoke.h5"
+# parents[2] == tests/ (this file lives in tests/regression/paper/); the smoke
+# fixture is committed at tests/fixtures/pahspec_smoke.h5. The previous
+# parents[1] pointed at the non-existent tests/regression/fixtures/, so all six
+# tests errored at setup and silently stopped guarding the loader (the file was
+# rehomed one level deeper than the tests/integration/ copies without updating
+# the depth).
+FIXTURE = Path(__file__).resolve().parents[2] / "fixtures" / "pahspec_smoke.h5"
 
 
 @pytest.fixture(scope="module")
