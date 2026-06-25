@@ -134,6 +134,70 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
     return 10.0 ** jnp.linspace(log_lo, log_hi, (n - 1) * factor + 1)
 
 
+def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
+    r"""Per-age weight multiplier extending the youngest physical SSP bin to lookback 0 (#821).
+
+    DSPS derives its age-bin edges as log-midpoints of ``ssp_lg_age_gyr``, so the
+    youngest *physical* (finite-age) bin spans lookback :math:`[e_{lo}, e_{hi}]`
+    with :math:`e_{lo} = 10^{\,lg_0 - \Delta lg/2} > 0`. The :math:`[0, e_{lo}]`
+    sliver holds the most ionizing stars (``n_ly`` drops ~300x by 10 Myr), so
+    dropping it biases the ionizing-photon rate Q_H low vs the exact SFH->SSP
+    convolution — measured ~4% on FSPS/MILES grids and up to ~31% for BPASS
+    (binary stars sustain ionizing output to later ages). The #809 lookback-0
+    table knot feeds the SFH down to the observation time, but DSPS still clips
+    the *bin* at :math:`e_{lo}`.
+
+    SFR is constant to <0.1% over the ~0.1 Myr sliver, so the youngest bin's mass
+    is
+
+    .. math::
+
+        M[0, e_{hi}] = \frac{e_{hi}}{e_{hi} - e_{lo}} \, M[e_{lo}, e_{hi}],
+
+    a grid-only factor :math:`f = e_{hi}/(e_{hi} - e_{lo})`. Scaling the youngest
+    weight column by ``f`` and renormalizing recovers the true age PDF
+    :math:`M[0, e_{hi}] / M[0, e_{top}]` exactly (the boost numerator becomes
+    :math:`M[0, e_{hi}]`, the renormalization divides by :math:`M[0, e_{top}]`),
+    while leaving ``total_mass`` unchanged — so mass conservation holds.
+
+    A leading ``age = 0`` template (``lg = -inf``, e.g. BC03 stelib) already
+    collapses the youngest physical bin's lower edge to lookback 0 inside DSPS,
+    giving :math:`e_{lo} = 0` and ``f = 1`` — a correct no-op.
+
+    Parameters
+    ----------
+    ssp_lg_age_gyr : array_like, shape (n_age,)
+        log10(SSP template age / Gyr), ascending. A leading ``-inf`` flags an
+        ``age = 0`` template.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Per-age multiplier: :math:`f` at the youngest finite-age bin, ``1.0``
+        elsewhere.
+
+    Notes
+    -----
+    Pure JAX (no host-side branching or static indexing), so the correction is
+    JIT/grad/vmap-safe even when the SSP grid is threaded as a *traced* argument
+    (the Phase-4b SSP-as-JIT-parameter path). The factor depends only on the SSP
+    age grid, never on a fitted parameter, so no gradient flows through it. The
+    double ``where`` is the standard JAX safe-divide guard for the ``-inf`` edge
+    of an ``age = 0`` template (avoids ``0/0`` in that unused entry).
+    """
+    lg = jnp.asarray(ssp_lg_age_gyr)
+    mid = 0.5 * (lg[:-1] + lg[1:])  # interior log-midpoint edges
+    lo = jnp.concatenate([lg[:1] - 0.5 * (lg[1:2] - lg[:1]), mid])  # per-bin lower edge
+    hi = jnp.concatenate([mid, lg[-1:] + 0.5 * (lg[-1:] - lg[-2:-1])])  # per-bin upper edge
+    e_lo = 10.0**lo  # -> 0 where lo = -inf (the age=0 neighbour)
+    e_hi = 10.0**hi
+    denom = e_hi - e_lo
+    boost = jnp.where(denom > 0.0, e_hi / jnp.where(denom > 0.0, denom, 1.0), 1.0)
+    finite = jnp.isfinite(lg)
+    is_youngest = finite & (jnp.cumsum(finite.astype(jnp.int32)) == 1)  # one-hot at j0
+    return jnp.where(is_youngest, boost, 1.0)
+
+
 def _inject_edge_knots(fine_age_yr, edges_yr, lo_yr, hi_yr):
     """Add SFH bin edges as exact knots to a dense lookback-age integrand (#765).
 
@@ -1216,6 +1280,18 @@ class StellarSEDComponent:
         # bookkeeping internally before storing weights against the
         # SSP grid.
         joint_weights = dsps_result.weights  # (n_met, n_age)
+        # Youngest-bin edge-clip correction (#821): DSPS's log-midpoint age-bin
+        # edges put the youngest physical bin's lower edge at lookback e_lo > 0,
+        # clipping the most ionizing recent stars and biasing Q_H low (~4% on
+        # FSPS/MILES grids, up to ~31% for BPASS). Scale that weight column by
+        # the grid-only factor e_hi/(e_hi - e_lo) and renormalize: this extends
+        # the bin to lookback 0, recovering the true age PDF exactly while
+        # leaving ``total_mass`` (and thus mass conservation) untouched. A no-op
+        # on grids with an age=0 template (BC03). See
+        # :func:`_youngest_bin_lookback_multiplier` for the derivation.
+        _young_mult = _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)
+        joint_weights = joint_weights * _young_mult[None, :]
+        joint_weights = joint_weights / joint_weights.sum()
         # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
         ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
         # Per-age "mass" for downstream per-age operations (dust BC mask).
