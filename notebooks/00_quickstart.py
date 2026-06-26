@@ -145,7 +145,7 @@ citations.print_citations(sed_model)
 # and a noisy realization.
 
 # %%
-key = jax.random.PRNGKey(7)
+key = jax.random.PRNGKey(9)
 key_truth, key_mock, key_fit = jax.random.split(key, 3)
 
 truth = sed_model.spec.sample(key_truth)
@@ -197,13 +197,11 @@ jax.tree.map(lambda x: x.block_until_ready(), grad_fn(p0))
 print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %% [markdown]
-# ## Pre-warm
+# ## Build the fitter
 #
-# `Fitter.prewarm` compiles the loss / sampler stack and runs the NUTS
-# window adaptation once. After this call the model carries a cached
-# step size, mass matrix, and MAP point estimate. Subsequent `.run()`
-# calls skip both the XLA compile and the warmup; only the actual
-# sampling work remains.
+# `Fitter` wraps the model + data. Each `.run(...)` JIT-compiles its loss /
+# sampler stack on first use and persists it to the on-disk cache
+# (`~/.cache/tengri_jax_cache`), so a fresh session reuses the compile.
 #
 # *Note*: routing through `Fitter(sed_model, ...)` instead of
 # `forward.fit(...)` is a temporary workaround for issue #281
@@ -214,9 +212,6 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 from tengri.inference.fitter import Fitter
 
 fitter = Fitter(sed_model, flux_obs, noise, data_type="photometry")
-t = time.perf_counter()
-fitter.prewarm(method="mcmc_nuts", n_chains=4)
-print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 
 # Optional: persist the cache to disk. A fresh notebook session can then
 # `fitter.load_cache(...)` and skip warmup + MAP init entirely.
@@ -225,37 +220,43 @@ print(f"  prewarm wall: {time.perf_counter() - t:6.2f} s")
 # %% [markdown]
 # ## Fit
 #
-# MAP (ADAM) for a fast point estimate, then NUTS with four parallel chains via
-# `jax.vmap` for the full posterior. Both stacks are compiled once by
-# `fitter.prewarm` above; the data and parameters are threaded through the
-# compiled kernels as runtime arguments (never baked in), so the same compile is
-# reused — this is where the speed comes from.
+# Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
+# chains via `jax.vmap` for the full posterior. Each stack JIT-compiles on first
+# use; the data and parameters are threaded through the compiled kernels as
+# runtime arguments (never baked in), so the compile is reused across calls.
+#
+# *Note*: the standardized prior maps an N(0,1) latent to a *genuinely uniform*
+# physical prior, so a single random init can land in a poor basin and stall a
+# lone ADAM run. `n_restarts=8` runs eight inits in parallel (`jax.vmap`, seeded
+# from the run key) and keeps the lowest-loss one; NUTS is then seeded from that
+# MAP point (`init_from=map_result`). Fully JAX-native, and it converges cleanly
+# (`r_hat ≈ 1.0`).
 
 # %%
 t = time.perf_counter()
-map_result = fitter.run(method="map", key=key_fit, n_steps=200)
+map_result = fitter.run(method="map", key=key_fit, n_restarts=8, n_steps=5000)
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
 posterior = fitter.run(
     method="mcmc_nuts",
     key=key_fit,
-    n_warmup=600,
-    n_samples=400,
+    init_from=map_result,  # seed all chains at the MAP point
+    n_warmup=1500,
+    n_samples=600,
     n_chains=4,
     n_burnin=0,
+    dense_mass_matrix=False,  # diagonal mass matrix — D=7 fits fine, far less RAM
 )
-print(f"  NUTS wall (4 chains × 400 = 1600 samples): {time.perf_counter() - t:6.2f} s")
+print(f"  NUTS wall (4 chains × 600 = 2400 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # %% [markdown]
-# The 200-step ADAM MAP is a *fast* point estimate (the optax loop is a single
-# JIT-compiled `lax.scan`). For the posterior, NUTS auto-seeds its chains from a
-# short multi-start ADAM run — under the genuinely-uniform standardized prior a
-# single init can start far from the truth, so seeding from the best of several
-# parallel restarts gives well-behaved chains. Well-constrained parameters
-# (mass, dust, metallicity) recover the truth; the SFH *shape* parameters stay
-# broad, honestly reflecting how little a dozen broadband points constrain them.
+# The fit recovers the mock truth: well-constrained parameters (stellar mass,
+# dust, metallicity) land on the input values, and even the SFH *shape*
+# parameters are sensibly constrained for this star-forming galaxy — the
+# posteriors are unimodal and well-mixed (`r_hat ≈ 1.0`), without piling up
+# against the prior bounds.
 
 # %% [markdown]
 # Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
@@ -312,7 +313,17 @@ spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 spec_truth = obs_fnu(truth_full)
 
-phot_draws = np.asarray(jax.vmap(lambda p: forward.predict_observables(p)["phot_fnu"])(draws))
+# Chunk the vmap: ``forward.predict_observables`` bypasses the WavePrecomp LUT
+# (#281), so each call builds the full-resolution cube — vmapping all draws at
+# once would materialize hundreds of them simultaneously (multi-GB). Batches of
+# 25 keep peak memory flat while still using the fused kernel.
+_predict_phot = jax.jit(lambda p: forward.predict_observables(p)["phot_fnu"])
+phot_draws = np.concatenate(
+    [
+        np.asarray(jax.vmap(_predict_phot)(jax.tree.map(lambda a, lo=i: a[lo : lo + 25], draws)))
+        for i in range(0, N_DRAWS, 25)
+    ]
+)
 phot_med = np.median(phot_draws, axis=0)
 
 fig = plt.figure(figsize=(8.6, 5.4))
