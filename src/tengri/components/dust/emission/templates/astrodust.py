@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.sed_model_component import SEDModelComponent
+from tengri.components.dust.emission._port_base import EmissionPort
 from tengri.parameters.priors import Fixed
 
 __all__ = ["AstrodustIRSEDComponent"]
 
 
-class AstrodustIRSEDComponent(SEDModelComponent):
+class AstrodustIRSEDComponent(EmissionPort):
     """Hensley & Draine (2023) Astrodust+PAH dust IR emission template.
 
     Wraps the pure closure from the tabulated Astrodust+PAH template library,
@@ -46,16 +46,11 @@ class AstrodustIRSEDComponent(SEDModelComponent):
     """
 
     name: str = "astrodust"
-    parameter_prefix: str = "dust_"
 
     # Free parameters (user-facing names, prefix-stripped)
     umin = Fixed(1.0)
     gamma_dl = Fixed(0.01)
     qpah = Fixed(3.0)
-
-    # Cross-component contract
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
-    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("hensley_draine2023",)
 

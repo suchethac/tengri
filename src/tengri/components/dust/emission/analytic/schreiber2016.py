@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.sed_model_component import SEDModelComponent
+from tengri.components.dust.emission._port_base import EmissionPort
 from tengri.parameters.priors import Fixed
 
 __all__ = ["Schreiber2016AnalyticIRSEDComponent"]
 
 
-class Schreiber2016AnalyticIRSEDComponent(SEDModelComponent):
+class Schreiber2016AnalyticIRSEDComponent(EmissionPort):
     r"""Schreiber et al. (2016) 2-parameter dust emission model (analytic).
 
     Wraps the pure closure :func:`~tengri.components.dust.emission.schreiber2016`,
@@ -76,16 +76,11 @@ class Schreiber2016AnalyticIRSEDComponent(SEDModelComponent):
     """
 
     name: str = "schreiber2016"
-    parameter_prefix: str = "dust_"
 
     # Free parameters (user-facing names, prefix-stripped)
     # Note: user-facing param is "fpah", closure arg is "f_pah"
     T = Fixed(30.0)
     fpah = Fixed(0.05)
-
-    # Cross-component contract
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
-    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "schreiber2016",

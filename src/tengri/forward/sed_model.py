@@ -4672,9 +4672,17 @@ class SEDModel:
             and p not in self._EB_ATTEN_FREE_OK
             and p not in self._EB_EMISSION_PARAMS
         }
+        # Detect dust emission: either old path (DustSEDComponent.emission_model)
+        # or new path (separate dust emission port in the pipeline).
+        # After the switchover, dust_emission_model is set from the spec even
+        # when using separate ports, so we check that or the old emission_model path.
+        has_dust_emission = (
+            (dust is not None and getattr(dust.config, "emission_model", None) is not None)
+            or self._dust_emission_model is not None
+        )
         if (
-            dust is not None
-            and getattr(dust.config, "emission_model", None) is not None
+            has_dust_emission
+            and dust is not None
             and self._approx.get("wave_precomp")
             and not bool(getattr(self.spec, "alpha_fe_evolving", False))
             and not unsafe_free

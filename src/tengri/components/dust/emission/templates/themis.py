@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.sed_model_component import SEDModelComponent
+from tengri.components.dust.emission._port_base import EmissionPort
 from tengri.parameters.priors import Fixed
 
 __all__ = ["ThemisIRSEDComponent"]
 
 
-class ThemisIRSEDComponent(SEDModelComponent):
+class ThemisIRSEDComponent(EmissionPort):
     """Jones et al. (2017) THEMIS/DustEM dust IR emission template.
 
     Wraps the pure closure from the tabulated THEMIS/DustEM template library.
@@ -48,17 +48,12 @@ class ThemisIRSEDComponent(SEDModelComponent):
     """
 
     name: str = "themis"
-    parameter_prefix: str = "dust_"
 
     # Free parameters (user-facing names, prefix-stripped)
     umin = Fixed(1.0)
     gamma_dl = Fixed(0.01)
     qhac = Fixed(0.17)
     alpha = Fixed(2.0)
-
-    # Cross-component contract
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
-    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("jones2017",)
 

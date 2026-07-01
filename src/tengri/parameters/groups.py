@@ -259,17 +259,31 @@ _LAZY_DUST_EMISSION_TYPES = frozenset(
 def _valid_dust_emission_types() -> frozenset[str]:
     """Return accepted ``dust.emission.type`` values, derived from the registry.
 
-    Union of (i) every name currently in ``DUST_EMISSION_MODELS`` (populated
-    at import time by ``@register_emission_model`` decorators plus the
-    lazy-loader wrappers in ``components/dust/emission.py``) and (ii) the
-    closed set of names that only appear after an explicit
-    ``register_*_tabulated`` call. Together these cover both the
-    eager-registered and lazy-registered branches without the drift footgun
-    a hand-maintained allowlist creates (see ADR-0005 / ADR-0008).
-    """
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+    Reads the ``_REGISTRY`` (populated by SEDModelComponent.__init_subclass__
+    at import time) and returns names of all ports whose ``outputs`` include
+    ``"sed_dust_ir"``. This automatically picks up all dust emission ports
+    (modified_blackbody, dale2014, draine_li2007, etc.) without manual
+    maintenance. Union with the alias map keys (e.g., draine2021_pah →
+    draine2021_pah_ir) so grammar type names resolve correctly.
 
-    return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
+    Excludes energy_balance_split (a helper, not a port with sed_dust_ir output).
+    Also includes _LAZY_DUST_EMISSION_TYPES for backward compatibility with
+    lazy registration wrappers (see ADR-0005 / ADR-0008).
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+
+    # Collect all registry names whose outputs include "sed_dust_ir"
+    dust_ir_ports = frozenset(
+        name
+        for name, cls in _REGISTRY.items()
+        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+    )
+
+    # Add alias keys (grammar names that map to registry names)
+    alias_keys = frozenset(_EMISSION_TYPE_ALIASES.keys())
+
+    return dust_ir_ports | alias_keys | _LAZY_DUST_EMISSION_TYPES
 
 
 def _valid_nebular_types() -> frozenset[str]:

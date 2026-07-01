@@ -47,7 +47,6 @@ from tengri.components.dust.attenuation import (
     resolve_bc_diff_law_params,
     two_component_dust,
 )
-from tengri.components.dust.emission import resolve_emission_model
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
@@ -88,14 +87,6 @@ class DustSEDComponentConfig(SEDComponentConfig):
         birth-cloud law from the stars while still sharing the diffuse ISM
         screen (``law_diff``). See ``neb_law_overrides`` for the matching
         per-parameter knob.
-    emission_model : str or None
-        IR emission template registry key. One of
-        ``"modified_blackbody"``, ``"casey2012"``, ``"dale2014"``,
-        ``"draine_li2007"``, ``"draine_li2014"``. Default
-        ``"modified_blackbody"`` because it has no template-grid
-        dependency. Pass ``None`` to disable IR re-emission entirely
-        — the component then publishes ``sed_dust_ir`` as zeros and
-        omits the energy-balance accumulation.
     t_birth_yr : float
         Birth-cloud dispersal age (sigmoid center, yr).
         Default 1e7 (10 Myr) per Charlot & Fall (2000).
@@ -107,7 +98,6 @@ class DustSEDComponentConfig(SEDComponentConfig):
     law_bc: str = "power_law"
     law_diff: str = "power_law"
     law_neb: str | None = None
-    emission_model: str | None = "modified_blackbody"
     t_birth_yr: float = 1e7
     transition_width_dex: float = 0.3
     #: Per-component law-parameter overrides (birth cloud / diffuse ISM), as a
@@ -176,6 +166,24 @@ class DustSEDComponent:
         :data:`tengri.citations.associations.DUST_LAW_CITATIONS`."""
         return ("charlot_fall2000",)
 
+    def outputs(self) -> tuple[DerivedKey, ...]:
+        """Dust attenuation-derived quantities: absorbed luminosity and spectra.
+
+        Publishes:
+        - L_ir: total absorbed UV/optical/NIR luminosity (erg/s), enabling
+          downstream dust emission ports to re-radiate.
+        - L_absorbed: alias for L_ir (deprecated, use L_ir).
+        - sed_dust_attenuated: stellar SED after two-component attenuation.
+        - sed_nebular: re-published after dust reddening (same name as nebular,
+          not declared to avoid duplicate-publisher conflict; consumed by
+          implementations that apply dust-reddened nebular).
+        """
+        return (
+            DerivedKey("L_ir", "erg/s", "Total absorbed UV/optical/NIR luminosity"),
+            DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (deprecated)"),
+            DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
+        )
+
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
         """Nebular continuum read, if a photoionized backend published one.
 
@@ -206,11 +214,15 @@ class DustSEDComponent:
         )
 
     def declared_parameters(self) -> list[ParamDeclaration]:
-        """Free parameters this component owns.
+        """Free parameters this component owns (attenuation-only).
 
-        Mirrors the canonical ``dust_*`` priors in
+        Mirrors the canonical ``dust_*`` attenuation priors in
         :mod:`tengri.parameters._param_defs`. Users may override any
         entry as :class:`Fixed` to drop it from the prior.
+
+        Emission-specific parameters (dust_T, dust_beta_ir, dust_alpha_dale,
+        dust_umin, etc.) are now owned by the dust emission port components
+        (modified_blackbody, dale2014, etc.) and are no longer declared here.
         """
         return [
             ParamDeclaration(
@@ -232,79 +244,6 @@ class DustSEDComponent:
                 "dust_eta_balance",
                 Fixed(1.0),
                 "Energy-balance relaxation factor (1.0 = strict balance) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "dust_T",
-                Fixed(35.0),
-                "Cold-dust temperature for MBB / Casey 2012 [K]",
-            ),
-            ParamDeclaration(
-                "dust_beta_ir",
-                Fixed(1.6),
-                "Cold-dust emissivity index for MBB / Casey 2012 [dimensionless]",
-            ),
-            ParamDeclaration(
-                "dust_alpha_dale",
-                Fixed(2.0),
-                "Dale 2014 template-family alpha [dimensionless, in 0.0625-4.0]",
-            ),
-            ParamDeclaration(
-                "dust_umin",
-                Fixed(1.0),
-                "DL07/DL14 minimum radiation field U_min [Habing]",
-            ),
-            ParamDeclaration(
-                "dust_qpah",
-                Fixed(2.5),
-                "DL07/DL14 PAH mass fraction [%]",
-            ),
-            ParamDeclaration(
-                "dust_gamma_dl",
-                Fixed(0.01),
-                "DL07/DL14 photon-dominated mass fraction [dimensionless]",
-            ),
-            ParamDeclaration(
-                "dust_alpha_dl14",
-                Fixed(2.0),
-                "DL14 power-law slope [dimensionless, in 1.0-3.0]",
-            ),
-            ParamDeclaration(
-                "dust_alpha_mir",
-                Fixed(2.0),
-                "Casey 2012 mid-IR power-law slope [dimensionless]",
-            ),
-            # CIGALE-parity emission knobs (2026-06). Static superset; each
-            # emission template uses only the ones it needs.
-            ParamDeclaration(
-                "dust_qhac",
-                Fixed(0.17),
-                "THEMIS small-hydrocarbon grain fraction (Jones+2017) [dimensionless]",
-            ),
-            ParamDeclaration(
-                "dust_alpha",
-                Fixed(2.0),
-                "THEMIS radiation-field slope dU/dM~U^-alpha "
-                "[dimensionless, in 1.0-3.0; 2.0 = FSPS anchor]",
-            ),
-            ParamDeclaration(
-                "dust_frac_agn",
-                Fixed(0.0),
-                "Dale 2014 AGN fraction (additive AGN-heated dust) [dimensionless, in [0, 1)]",
-            ),
-            ParamDeclaration(
-                "dust_tdust",
-                Fixed(25.0),
-                "Schreiber 2016 tabulated dust temperature [K]",
-            ),
-            ParamDeclaration(
-                "dust_fpah",
-                Fixed(0.05),
-                "Schreiber 2016 PAH mass fraction [dimensionless, in [0, 1]]",
-            ),
-            ParamDeclaration(
-                "dust_epsilon_mbb",
-                Fixed(1.0),
-                "Fraction of L_dust carried by the modified blackbody [dimensionless]",
             ),
             ParamDeclaration(
                 "dust_f_obscuration",
@@ -335,11 +274,11 @@ class DustSEDComponent:
         approx: dict[str, bool] | None = None,
         filters: tuple[tuple[jnp.ndarray, jnp.ndarray], ...] | None = None,
     ) -> DustSEDComponentState:
-        r"""Optionally pre-load dust IR emission templates for JIT threading.
+        r"""Return an empty state (emission is now handled by separate ports).
 
-        When ``approx=WavePrecomp()``, loads the dust IR emission
-        template grids into a JAX pytree so they become JIT ``Parameter``
-        ops rather than baked-in ``Constant`` ops.
+        This component is attenuation-only; IR emission is now handled by
+        dedicated dust emission port components in the pipeline. This method
+        accepts arguments for Protocol uniformity but does not load any state.
 
         Parameters
         ----------
@@ -348,53 +287,18 @@ class DustSEDComponent:
         wave_grid : ndarray | None
             Unused; accepted for Protocol uniformity.
         approx : dict[str, bool] | None
-            Approximation flags. When ``approx.get('wave_precomp')`` is
-            ``True``, load templates.
+            Unused; accepted for Protocol uniformity.
         filters : tuple of (wave, trans) pairs | None
             Unused; accepted for Protocol uniformity.
 
         Returns
         -------
         DustSEDComponentState
-            State with optionally-populated ``dust_emission_templates``.
+            Empty state marker.
         """
-        del ssp_data, wave_grid, filters
-        approx = approx or {}
+        del ssp_data, wave_grid, approx, filters
 
-        dust_templates = None
-        if approx.get("wave_precomp") and self.config.emission_model is not None:
-            # Load the emission template grids for JIT threading
-            emission_models_with_templates = {
-                "dale2014",
-                "draine_li2007",
-                "draine_li2014",
-                "astrodust",
-                "bosa",
-            }
-            if self.config.emission_model in emission_models_with_templates:
-                from tengri.components.dust.emission import (
-                    DUST_EMISSION_MODELS,
-                    resolve_emission_model,
-                )
-
-                try:
-                    # Trigger template loading by calling the emission function
-                    # with dummy inputs. This populates DUST_EMISSION_MODELS
-                    # with the actual template arrays.
-                    resolve_emission_model(self.config.emission_model)
-                    emission_fn = DUST_EMISSION_MODELS.get(self.config.emission_model)
-                    if emission_fn is not None:
-                        # Store a reference to the resolved function for apply()
-                        dust_templates = emission_fn
-                except Exception:
-                    # If template loading fails (file not found), gracefully
-                    # continue without threading.
-                    pass
-
-        return DustSEDComponentState(
-            name=self.name,
-            dust_emission_templates=dust_templates,
-        )
+        return DustSEDComponentState(name=self.name)
 
     def apply(
         self,
@@ -580,49 +484,7 @@ class DustSEDComponent:
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
 
-        # ── 4. IR emission template ────────────────────────────────────
-        # When emission_model is None, the user opted out of IR re-emission
-        # entirely (`dust_emission=None`). Skip the template call and
-        # publish zero — preserves the no-emission behavior.
-        if self.config.emission_model is None:
-            sed_ir = jnp.zeros_like(wave)
-        else:
-            emission_fn = resolve_emission_model(self.config.emission_model)
-            z = jnp.asarray(params.get("redshift", 0.0))
-            sed_ir = emission_fn(
-                wave,
-                L_ir,
-                dust_T=jnp.asarray(params.get("dust_T", 35.0)),
-                dust_beta_ir=jnp.asarray(params.get("dust_beta_ir", 1.6)),
-                dust_alpha_dale=jnp.asarray(params.get("dust_alpha_dale", 2.0)),
-                dust_umin=jnp.asarray(params.get("dust_umin", 1.0)),
-                dust_qpah=jnp.asarray(params.get("dust_qpah", 2.5)),
-                dust_gamma_dl=jnp.asarray(params.get("dust_gamma_dl", 0.01)),
-                dust_alpha_dl14=jnp.asarray(params.get("dust_alpha_dl14", 2.0)),
-                dust_alpha_mir=jnp.asarray(params.get("dust_alpha_mir", 2.0)),
-                # CIGALE-parity knobs (2026-06): THEMIS qhac + alpha, Dale AGN
-                # fraction, Schreiber tabulated tdust/fpah, MBB epsilon. Each
-                # emission fn absorbs the irrelevant ones via **_kwargs.
-                dust_qhac=jnp.asarray(params.get("dust_qhac", 0.17)),
-                dust_alpha=jnp.asarray(params.get("dust_alpha", 2.0)),
-                dust_frac_agn=jnp.asarray(params.get("dust_frac_agn", 0.0)),
-                dust_tdust=jnp.asarray(params.get("dust_tdust", 25.0)),
-                dust_fpah=jnp.asarray(params.get("dust_fpah", 0.05)),
-                dust_epsilon_mbb=jnp.asarray(params.get("dust_epsilon_mbb", 1.0)),
-                # Two-temperature ``energy_balance_split`` knobs. ``L_ir`` is
-                # already η-scaled above, so ``eta_balance`` stays at the
-                # function default (1.0) here — η is applied once. ``L_agn_ir``
-                # adds AGN-heated IR on top (breaks strict balance by design).
-                f_cold=jnp.asarray(params.get("dust_f_cold", 0.5)),
-                L_agn_ir=jnp.asarray(params.get("dust_L_agn_ir", 0.0)),
-                dust_T_warm=jnp.asarray(params.get("dust_T_warm", 45.0)),
-                dust_T_cold=jnp.asarray(params.get("dust_T_cold", 20.0)),
-                dust_beta_warm=jnp.asarray(params.get("dust_beta_warm", 1.5)),
-                dust_beta_cold=jnp.asarray(params.get("dust_beta_cold", 2.0)),
-                redshift=z,
-            )
-
-        # ── 5. Combine and publish ─────────────────────────────────────
+        # ── 4. Combine stellar + nebular SEDs (emission handled by ports) ───
         # Preserve any non-stellar contribution that may have been added
         # to ``sed_intrinsic`` by an upstream component (e.g. AGN,
         # Nebular). The stellar contribution at this point equals
@@ -630,6 +492,12 @@ class DustSEDComponent:
         # of ``lnu_age``), so ``state.sed_intrinsic - sed_intrinsic_stellar``
         # isolates the non-stellar portion. Stellar dust does not attenuate
         # AGN/nebular/radio/xray.
+        #
+        # IR re-emission is now handled by separate dust emission port
+        # components in the pipeline (modified_blackbody, dale2014, etc.),
+        # not by this attenuation component. Those ports read L_ir from
+        # state.derived and produce sed_dust_ir, which is summed into the
+        # total SED via the orchestrator.
         if state.sed_intrinsic is None:
             non_stellar_pre_dust = jnp.zeros_like(wave)
         else:
@@ -638,7 +506,7 @@ class DustSEDComponent:
         # reddened by HII-region dust (step 2b). AGN/radio/xray stay unattenuated
         # by stellar dust. Swap the bare nebular for its attenuated form.
         non_stellar_other = non_stellar_pre_dust - sed_neb
-        sed_total = non_stellar_other + sed_neb_attenuated + sed_attenuated + sed_ir
+        sed_total = non_stellar_other + sed_neb_attenuated + sed_attenuated
 
         # Phase 3c-3c-iv-b: per-filter LUTs for two-component attenuation.
         # T(a, λ) factorizes as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
@@ -650,7 +518,6 @@ class DustSEDComponent:
             L_ir=L_ir,
             L_absorbed=L_absorbed,
             sed_dust_attenuated=sed_attenuated,
-            sed_dust_ir=sed_ir,
             # Re-publish the nebular continuum as its dust-reddened (observed)
             # form, consistent with ``sed_dust_attenuated`` being the observed
             # stellar SED. Consumers that sum the published per-component SEDs
@@ -698,60 +565,10 @@ class DustSEDComponent:
             derived_overrides["dust_bc_log_attenuation_slope_precomp"] = -tau_bc * k_bc_slope
             derived_overrides["dust_diff_log_attenuation_slope_precomp"] = -tau_diff * k_diff_slope
 
-            # IR re-emission on the photometry LUT (#622). The dust IR template
-            # is re-emitted (not attenuated), so we publish a rest-frame Lν per
-            # filter — ``predict_via_precomp`` sums all ``*_phot_lnu_precomp``
-            # families and treats this one as the unattenuated bucket. ``L_ir``
-            # is computed on the full SSP grid above (energy balance is exact;
-            # only the template's *projection* uses the effective wavelength).
-            # Without this the far-IR was ~100% wrong under WavePrecomp.
-            if self.config.emission_model is not None:
-                # IR re-emission is additive and unattenuated, so it is projected
-                # through the *true* filter transmission (the same integral the
-                # exact path uses) rather than sampled at the effective
-                # wavelength — exact in bands carrying both the stellar continuum
-                # and structured dust emission (MIR/PAH). The dense ``sed_ir`` is
-                # built on the rest-frame ``wave`` grid above; ``predict_via_precomp``
-                # applies cosmology to the summed L_ν. (Sampling the
-                # self-normalizing emission model at the sparse pivots was the
-                # #622 regression that inflated the reddest band ~4×.)
-                band_response = None
-                if isinstance(template_data, dict):
-                    _dir = template_data.get("dust_ir")
-                    if isinstance(_dir, dict):
-                        band_response = _dir.get("emission_band_response")
-                fw_pad = state.derived.get("phot_filter_waves_padded")
-                ft_pad = state.derived.get("phot_filter_trans_padded")
-                if band_response is not None:
-                    # Exact fast path (CIGALE dl2014-style): the template is
-                    # linear in L_ir, so its filter integral is ``L_ir × R`` with
-                    # R a build-time constant (fixed emission shape + z).
-                    # Identical arithmetic to the dense per-band integral,
-                    # evaluated once — and ``sed_ir`` then drops out of the
-                    # photometry channel entirely (XLA DCEs it). Fastest + exact.
-                    derived_overrides["dust_emission_phot_lnu_precomp"] = L_ir * band_response
-                elif getattr(self, "fast_emission", False):
-                    # Approximate path for free-shape / structured templates where
-                    # R is not constant: sample the self-normalizing template at
-                    # the filter effective wavelength (drops the ~310 us/eval
-                    # dense integral). See WavePrecomp(fast_dust_emission=...).
-                    derived_overrides["dust_emission_phot_lnu_precomp"] = jnp.interp(
-                        filter_eff, wave, sed_ir
-                    )
-                elif fw_pad is not None:
-                    from tengri.observation.photometry import lnu_filter_integral_batch
-
-                    derived_overrides["dust_emission_phot_lnu_precomp"] = (
-                        lnu_filter_integral_batch(
-                            sed_ir, wave, fw_pad, ft_pad, jnp.asarray(params.get("redshift", 0.0))
-                        )
-                    )
-                else:
-                    # Fallback (padded curves not published): effective-wavelength
-                    # sample of the dense, correctly normalized template.
-                    derived_overrides["dust_emission_phot_lnu_precomp"] = jnp.interp(
-                        filter_eff, wave, sed_ir
-                    )
+            # IR re-emission is now handled by separate dust emission ports.
+            # This component no longer computes or publishes photometric
+            # dust emission — the emission ports handle that via their own
+            # precompute paths.
 
             # Young-star indicator on the SSP age grid: smooth sigmoid
             # transition around t_birth (matches two_component_dust).
@@ -782,18 +599,7 @@ class DustSEDComponent:
             derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
             derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
 
-            # IR re-emission on the spectrum LUT (#622) — additive, unattenuated,
-            # summed by ``predict_spectrum_via_precomp``. Usually negligible in
-            # the optical but correct for spectra extending into the IR.
-            if self.config.emission_model is not None:
-                # Same fix as the filter branch (#622): sample the dense,
-                # correctly normalized ``sed_ir`` at the spectral pivots rather
-                # than re-evaluating the self-normalizing emission model on the
-                # sparse ``spec_eff`` grid (which renormalizes L_ir over the
-                # optical window and corrupts the result).
-                derived_overrides["dust_emission_spec_lnu_precomp"] = jnp.interp(
-                    spec_eff, wave, sed_ir
-                )
+            # IR re-emission is now handled by separate dust emission ports.
 
             # Young-star indicator y(a) on the SSP age grid (same sigmoid as
             # the filter branch) — published even when only the spectrum LUT

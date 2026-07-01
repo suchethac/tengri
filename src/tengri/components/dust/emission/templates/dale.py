@@ -10,13 +10,13 @@ from typing import ClassVar
 
 import jax.numpy as jnp
 
-from tengri.components.sed_model_component import SEDModelComponent
+from tengri.components.dust.emission._port_base import EmissionPort
 from tengri.parameters.priors import Fixed
 
 __all__ = ["Dale2014CigaleIRSEDComponent", "Dale2014IRSEDComponent"]
 
 
-class Dale2014IRSEDComponent(SEDModelComponent):
+class Dale2014IRSEDComponent(EmissionPort):
     """Dale et al. (2014) dust IR emission template.
 
     Wraps the pure closure from the tabulated Dale et al. (2014) template
@@ -46,15 +46,10 @@ class Dale2014IRSEDComponent(SEDModelComponent):
     """
 
     name: str = "dale2014"
-    parameter_prefix: str = "dust_"
 
     # Free parameters (user-facing names, prefix-stripped)
     alpha_dale = Fixed(2.0)
     frac_agn = Fixed(0.0)
-
-    # Cross-component contract
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
-    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("dale2014",)
 
@@ -98,7 +93,7 @@ class Dale2014IRSEDComponent(SEDModelComponent):
         return sed_in + sed, {"sed_dust_ir": sed}
 
 
-class Dale2014CigaleIRSEDComponent(SEDModelComponent):
+class Dale2014CigaleIRSEDComponent(EmissionPort):
     """Dale et al. (2014) dust IR emission template (CIGALE variant).
 
     Wraps the pure closure from the tabulated Dale et al. (2014) template
@@ -129,15 +124,10 @@ class Dale2014CigaleIRSEDComponent(SEDModelComponent):
     """
 
     name: str = "dale2014_cigale"
-    parameter_prefix: str = "dust_"
 
     # Free parameters (user-facing names, prefix-stripped)
     alpha_dale = Fixed(2.0)
     frac_agn = Fixed(0.0)
-
-    # Cross-component contract
-    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
-    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("dale2014",)
 

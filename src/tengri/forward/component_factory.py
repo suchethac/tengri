@@ -40,11 +40,6 @@ from tengri.components.dust.component import (
     DustAttenuationSEDComponent,
     DustAttenuationSEDComponentConfig,
 )
-from tengri.components.dust.emission_component import (
-    _SUPPORTED_TEMPLATES,
-    DustEmissionSEDComponent,
-    DustEmissionSEDComponentConfig,
-)
 from tengri.components.dust.two_component import (
     DustSEDComponent,
     DustSEDComponentConfig,
@@ -55,6 +50,7 @@ from tengri.components.nebular.component import (
     NebularSEDComponentConfig,
 )
 from tengri.components.radio.component import RadioSEDComponent
+from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
 from tengri.components.xray.component import XRaySEDComponent
@@ -81,6 +77,83 @@ __all__ = [
 # photons/s encountered in SED fitting, well above the float64
 # underflow boundary, and well below double-precision rounding noise.
 _TINY = 1e-30
+
+
+# Alias map: grammar types -> _REGISTRY keys
+_EMISSION_TYPE_ALIASES = {
+    "dl07": "draine_li2007",
+    "dl07_tabulated": "draine_li2007",
+    "dl14": "draine_li2014",
+    "mbb": "modified_blackbody",
+    "draine2021_pah": "draine2021_pah_ir",
+}
+
+
+def _resolve_registry_component(
+    domain: str,
+    type_str: str,
+    *,
+    config: Any = None,
+    **config_kwargs: Any,
+) -> SEDModelComponent:
+    """Resolve and construct a SEDModelComponent from the registry.
+
+    Parameters
+    ----------
+    domain : str
+        Component domain (e.g., "dust_emission"). Used for error messages.
+    type_str : str
+        Grammar type name, resolved via ``_EMISSION_TYPE_ALIASES`` to a
+        registry key.
+    config : SEDComponentConfig, optional
+        Pre-constructed config object (not typically used for ports).
+    **config_kwargs
+        Construction-time keyword arguments forwarded to the component's
+        ``__init__``. For analytic/grid ports, typically empty; some may
+        accept data-path or backend overrides.
+
+    Returns
+    -------
+    SEDModelComponent
+        Instantiated component ready to thread into the orchestrator chain.
+
+    Raises
+    ------
+    ValueError
+        If ``type_str`` (after aliasing) is not found in ``_REGISTRY``.
+        The error message lists available names for that domain.
+
+    Notes
+    -----
+    This seam is construction-time only, never traced through JAX. Template
+    HDF5 loading (for grid ports) happens on first ``apply()`` invocation.
+    """
+    # Resolve grammar type → registry key via alias map
+    registry_key = _EMISSION_TYPE_ALIASES.get(type_str, type_str)
+
+    if registry_key not in _REGISTRY:
+        # Collect available ports and format a helpful error
+        available = sorted(_REGISTRY.keys())
+        raise ValueError(
+            f"Dust emission template {registry_key!r} (resolved from grammar type "
+            f"{type_str!r}) not found in registry. Available names: {available}"
+        )
+
+    # Instantiate the registered component class
+    component_cls = _REGISTRY[registry_key]
+    if config is not None:
+        component = component_cls(config=config, **config_kwargs)
+    else:
+        component = component_cls(**config_kwargs)
+
+    # Dust emission ports (modified_blackbody, dale2014, etc.) publish to a
+    # unified "dust_emission" key so they map to the canonical DerivedState
+    # field. Override the instance name so _apply_precomp publishes to
+    # "dust_emission_phot_lnu_precomp" instead of template-specific keys.
+    if domain == "dust_emission":
+        component.name = "dust_emission"
+
+    return component
 
 
 class RadioQuantities(NamedTuple):
@@ -323,29 +396,14 @@ def build_components(
             # absorbed UV/optical/NIR luminosity); without a downstream emission
             # component that L_ir is computed but never re-radiated, silently
             # dropping the dust IR (#565). The two_component path re-emits inside
-            # DustSEDComponent; the single-screen path must append the Protocol-
-            # native DustEmissionSEDComponent explicitly. Only the analytic
-            # 'modified_blackbody' (needs no structural config — just dust_T /
-            # dust_beta_ir params) and the template-grid models DustEmissionSEDComponent
-            # natively supports (draine2021_pah, astrodust) are wired here. Other
-            # libraries (dale2014, dl07, draine_li2007, themis, bosa) route through
-            # the bundled DustSEDComponent on the two_component path — fail loud.
+            # DustSEDComponent; the single-screen path must append a dust
+            # emission port via the registry seam. Route through
+            # _resolve_registry_component so all emission types resolve from
+            # a single dispatch path.
             if dust_emission_model is not None:
-                if dust_emission_model in _SUPPORTED_TEMPLATES:
-                    components.append(
-                        DustEmissionSEDComponent(
-                            config=DustEmissionSEDComponentConfig(template=dust_emission_model)
-                        )
-                    )
-                else:
-                    raise ValueError(
-                        f"dust emission {dust_emission_model!r} is not supported with "
-                        "dust={'type': 'single_component'}: the single-screen geometry "
-                        "re-emits via the Protocol-native DustEmissionSEDComponent, which "
-                        f"supports only {_SUPPORTED_TEMPLATES}. For other IR libraries "
-                        "(dale2014, dl07, draine_li2007, themis, bosa) use "
-                        "dust={'type': 'two_component', ...}."
-                    )
+                components.append(
+                    _resolve_registry_component("dust_emission", dust_emission_model)
+                )
         else:
             _overrides = dust_law_overrides or {}
             components.append(
@@ -358,10 +416,20 @@ def build_components(
                         diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                         neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                         lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                        emission_model=dust_emission_model,
                     )
                 )
             )
+            # Route dust emission through the registry seam. The two-component
+            # attenuation component (DustSEDComponent above) computes L_ir
+            # (absorbed luminosity) and publishes it to state.derived; the
+            # emission port reads L_ir as an optional input and produces sed_dust_ir.
+            # Topological sort (via optional_inputs declaration) places emission
+            # after attenuation. If dust_emission_model is None, skip emission
+            # entirely (no IR re-emission).
+            if dust_emission_model is not None:
+                components.append(
+                    _resolve_registry_component("dust_emission", dust_emission_model)
+                )
 
     # 3. Nebular (optional)
     if nebular_backend is not None:

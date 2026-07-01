@@ -581,6 +581,9 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
 
     out = []
     for name in DUST_EMISSION_MODELS:
+        # energy_balance_split is an energy-balance helper, not a selectable emission model
+        if name == "energy_balance_split":
+            continue
         meta = _DUST_EMISSION_METADATA.get(
             name,
             {"status": "production", "citation": "", "short_doc": ""},
