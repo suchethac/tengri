@@ -105,6 +105,10 @@ _CANONICAL_FIXED_DEFAULTS: dict[str, float] = {
     "met_logzsol_old": 0.0,
     "met_logzsol_young": 0.0,
     "met_logzsol_burst": 0.0,
+    # Lognormal metallicity-scatter sigma [dex] (#506). Pinned to the historical
+    # fixed ``config.lgmet_scatter`` (0.1) so ``*: FIXED`` delta models are
+    # byte-unchanged; free it to fit the MDF width.
+    "met_logzsol_scatter": 0.1,
 }
 
 

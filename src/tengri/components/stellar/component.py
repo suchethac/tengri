@@ -1206,6 +1206,17 @@ class StellarSEDComponent:
                     stacklevel=2,
                 )
 
+        # Lognormal metallicity-distribution-function width (Carnall+2018 §3.2,
+        # #506): DSPS's ``*_lognormal_mdf`` / ``*_met_table`` kernels already
+        # spread the SSP weights as a Gaussian in log10(Z) of this width about
+        # the (per-age) mean metallicity. It is fittable via the optional public
+        # ``met_logzsol_scatter`` parameter — read here with the build-time
+        # ``config.lgmet_scatter`` as the fallback (so models that do not free it
+        # are byte-unchanged). The sigma -> 0 limit recovers the delta-in-Z SSP
+        # weighting. Threaded into both the delta and per-age-metallicity DSPS
+        # calls below so the two paths stay consistent.
+        lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
+
         if self.config.metallicity_model == "delta":
             # #758: ONLY non-parametric (binned) SFHs need the dense integrand —
             # their piecewise bin edges are what the coarse per-SSP-age table
@@ -1245,7 +1256,7 @@ class StellarSEDComponent:
                 gal_t_table=gal_t_table,
                 gal_sfr_table=gal_sfr_table,
                 gal_lgmet=log_z_abs_scalar,
-                gal_lgmet_scatter=self.config.lgmet_scatter,
+                gal_lgmet_scatter=lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
                 ssp_flux=ssp_flux_for_csp,
@@ -1266,7 +1277,7 @@ class StellarSEDComponent:
                 gal_t_table=_t_k,
                 gal_sfr_table=_sfr_k,
                 gal_lgmet_table=_lgmet_k,
-                gal_lgmet_scatter=self.config.lgmet_scatter,
+                gal_lgmet_scatter=lgmet_scatter,
                 ssp_lgmet=ssp.ssp_lgmet,
                 ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
                 ssp_flux=ssp_flux_for_csp,
