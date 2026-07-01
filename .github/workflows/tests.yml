@@ -195,13 +195,24 @@ jobs:
   # Skip on regular push/PR to keep fast feedback under 15 min.
   slow:
     runs-on: ubuntu-latest
-    # Own concurrency group: do NOT inherit the workflow-level
+    # Split the ~1,270-test tier across two parallel runners (one per suite):
+    # run serially, the combined tier overran the 40-min step timeout (~55 %
+    # done), so it never completed and its failure summary was never printed.
+    # A single suite finishes well under the budget. Kept serial (no `-n`):
+    # the sampler-heavy inference tests (NUTS/VI warmups) peak at several GB
+    # each, so xdist workers would risk OOM on the 16 GB runner. `fail-fast:
+    # false` so one suite's failure still lets the other report.
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [inference, integration]
+    # Own concurrency group per suite: do NOT inherit the workflow-level
     # `cancel-in-progress: true` (which kills slow whenever main moves).
     # `cancel-in-progress: false` means newer slow triggers queue behind
     # an existing one — slow always runs to completion, never aborted by
     # an unrelated main push. See issue #160.
     concurrency:
-      group: tests-slow-${{ github.ref }}
+      group: tests-slow-${{ matrix.suite }}-${{ github.ref }}
       cancel-in-progress: false
     if: |
       github.event_name == 'schedule'
@@ -216,5 +227,5 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      - run: pytest tests/inference tests/integration -q --ignore=tests/crossval
+      - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval
         timeout-minutes: 40
