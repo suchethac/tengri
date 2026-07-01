@@ -131,6 +131,16 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: which clips its curve there on the assumption that LyC photons ionize H
     #: rather than heat dust. Static, non-fittable; enters ``compile_signature``.
     lyman_cutoff_aa: float = 0.0
+    #: Which stellar populations have their Lyman continuum (λ < 912 Å) absorbed
+    #: by ``neb_fesc``. ``False`` (default) — **young/birth-cloud only**: only
+    #: stars inside birth clouds (weighted by the young indicator) have their LyC
+    #: reprocessed, so the old/diffuse stellar LyC passes through (matches
+    #: bagpipes ``model_galaxy``, which zeros only ``spectrum_bc[<912]``, and is
+    #: consistent with ``neb_fesc`` being a birth-cloud escape fraction).
+    #: ``True`` — **all** stellar LyC absorbed (old + young), matching FSPS
+    #: (``frac_obrun`` on the whole spectrum) and CIGALE (absorbed_old +
+    #: absorbed_young). Static, non-fittable; enters ``compile_signature``.
+    lyc_absorb_all: bool = False
 
 
 @dataclass(frozen=True)
@@ -466,23 +476,44 @@ class DustSEDComponent:
         sed_intrinsic_stellar = jnp.sum(lnu_age, axis=0)
 
         # ── 2a. Lyman-continuum escape (neb_fesc) ──────────────────────
-        # Stellar LyC (λ < 912 Å) is absorbed by the same gas that powers the
-        # nebular emission; only the escaping fraction ``neb_fesc`` survives.
-        # A photoionized nebular backend publishes
-        # ``lyc_transmission = where(λ<912, neb_fesc, 1)``; apply it to BOTH the
-        # attenuated and the intrinsic stellar reconstruction. This path rebuilds
-        # the stellar SED from the *unmasked* per-age ``lnu_age`` cube, so without
-        # it the nebular component's fesc mask on ``state.sed_intrinsic`` is
-        # bypassed — the LyC leaks into ``sed_dust_attenuated`` and reappears as a
-        # phantom ``-stellar_LyC`` in ``non_stellar_other`` below, giving negative
-        # flux at fesc < 1. Matches CIGALE (pcigale ``nebular``: stellar below the
-        # Lyman break × (1 − fesc) is removed). Absent (no photoionized nebular,
-        # or BakedIn) -> no factor, LyC passes through unchanged. See #824.
+        # Stellar LyC (λ < 912 Å) is absorbed by the gas that powers the nebular
+        # emission; only the escaping fraction ``neb_fesc`` survives. A
+        # photoionised backend publishes ``lyc_transmission = where(λ<912,
+        # neb_fesc, 1)``. This path rebuilds the stellar SED from the *unmasked*
+        # per-age ``lnu_age`` cube, so without applying the mask here the nebular
+        # component's fesc mask on ``state.sed_intrinsic`` is bypassed — the LyC
+        # leaks into ``sed_dust_attenuated`` and reappears as a phantom
+        # ``-stellar_LyC`` in ``non_stellar_other`` (negative flux at fesc<1;
+        # #824). Absent (BakedIn / no photoionised nebular) -> no factor.
+        #
+        # ``sed_intrinsic_stellar`` mirrors the nebular component's *uniform*
+        # mask on ``state.sed_intrinsic`` (all ages × neb_fesc below 912) so the
+        # ``non_stellar_other`` bookkeeping below stays clean; the below-912
+        # region is excluded from the energy-balance integral, so this uniform
+        # bookkeeping value never feeds L_ir.
+        #
+        # ``sed_attenuated`` (the actual stellar output) uses the physical rule:
+        #   * default (``lyc_absorb_all=False``) — **young/birth-cloud only**.
+        #     ``neb_fesc`` is a birth-cloud escape fraction, so only stars inside
+        #     birth clouds (young indicator ``y(a)``) have their LyC reprocessed;
+        #     the old/diffuse stellar LyC passes through. Matches bagpipes.
+        #     Per-age factor ``1 - y(a)·(1 - lyc_t(λ))`` -> young→neb_fesc,
+        #     old→1 below 912; both →1 above 912.
+        #   * ``lyc_absorb_all=True`` — all stellar LyC absorbed (FSPS/CIGALE).
         _lyc_t = state.derived.get("lyc_transmission")
         if _lyc_t is not None:
             _lyc_t = jnp.asarray(_lyc_t)
-            sed_attenuated = sed_attenuated * _lyc_t
             sed_intrinsic_stellar = sed_intrinsic_stellar * _lyc_t
+            if self.config.lyc_absorb_all:
+                sed_attenuated = sed_attenuated * _lyc_t
+            else:
+                log_t = jnp.log10(ssp_ages_yr)
+                log_t_birth = jnp.log10(self.config.t_birth_yr)
+                y_age = 1.0 / (
+                    1.0 + 10.0 ** ((log_t - log_t_birth) / self.config.transition_width_dex)
+                )
+                lyc_factor = 1.0 - y_age[:, None] * (1.0 - _lyc_t[None, :])  # (n_age, n_wave)
+                sed_attenuated = jnp.sum(lnu_age_attenuated * lyc_factor, axis=0)
 
         # ── 2b. Nebular continuum attenuation (birth-cloud + diffuse) ──────
         # Nebular emission from HII regions is reddened by the same dust as the

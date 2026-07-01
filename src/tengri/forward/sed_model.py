@@ -1367,6 +1367,9 @@ class SEDModel:
         # Lyman-limit clip [Å]: zero the attenuation curve below this wavelength
         # (0.0 -> off; 912.0 -> CIGALE parity). Static, non-fittable.
         self._dust_lyman_cutoff_aa = float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0)
+        # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) vs the
+        # default young/birth-cloud-only (bagpipes). See DustSEDComponent.
+        self._dust_lyc_absorb_all = bool(getattr(spec, "dust_lyc_absorb_all", False))
         from tengri.components.dust.attenuation import resolve_dust_law
 
         self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
@@ -2617,6 +2620,9 @@ class SEDModel:
         # signatures or the kernel cache leaks one's FUV attenuation into the
         # other (color-leak), exactly like ``dust_law_overrides_sig`` above.
         dust_lyman_cutoff_sig = float(getattr(self, "_dust_lyman_cutoff_aa", 0.0))
+        # Young-only vs absorb-all stellar LyC changes the baked below-912 chain
+        # output but not its graph shape -> must enter the signature (color-leak).
+        dust_lyc_absorb_all_sig = bool(getattr(self, "_dust_lyc_absorb_all", False))
 
         # Nebular backend (by class name)
         nebular_backend_name = (
@@ -2785,6 +2791,7 @@ class SEDModel:
             wg00_selectors,
             dust_law_overrides_sig,
             dust_lyman_cutoff_sig,
+            dust_lyc_absorb_all_sig,
             nebular_backend_name,
             uses_igm,
             igm_model,
@@ -4838,6 +4845,7 @@ class SEDModel:
             dust_law_neb=getattr(self, "_dust_law_neb", None),
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
+            dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
             dust_model=getattr(self, "_dust_model", "two_component"),

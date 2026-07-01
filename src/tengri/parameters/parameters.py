@@ -814,6 +814,9 @@ class Parameters:
         # Lyman-limit clip [Å]: zero the attenuation curve below this wavelength
         # (0.0 -> off). Static config, set by the builder from ``lyman_cutoff``.
         self.dust_lyman_cutoff_aa = float(kwargs.pop("dust_lyman_cutoff_aa", 0.0) or 0.0)
+        # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young/birth-cloud
+        # only (default; bagpipes). See DustSEDComponent.lyc_absorb_all.
+        self.dust_lyc_absorb_all = bool(kwargs.pop("dust_lyc_absorb_all", False))
 
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
