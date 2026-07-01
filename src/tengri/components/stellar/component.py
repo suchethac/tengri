@@ -882,7 +882,13 @@ class StellarSEDComponent:
             # recomputes the step from static ``n_grid`` and module constants.
             d_log_age = log_age_grid_step(n_grid)
             gp_x, k0_half = compute_field_gp(
-                xi, psd_sigma, psd_tau_yr, n_grid, d_log_age, field_model="drw"
+                xi,
+                psd_sigma,
+                psd_tau_yr,
+                n_grid,
+                d_log_age,
+                field_model="drw",
+                log_age_grid=log_age_grid,
             )
             sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
 

@@ -17,16 +17,17 @@ What this suite pins (verified numerically, #865):
 
 1. **PSD form parity** — CIGALE ``PSD(f; alpha=2)`` and tengri ``psd_drw`` are the
    same Lorentzian, identified by ``f_break = 1 / (2π τ)``.
-2. **Amplitude convention** — both reach a target dex variability: CIGALE's
-   ``sigma`` *is* the std of log10(SFR) (post-hoc normalized); tengri's dex std is
-   linear in ``psd_sigma``.
+2. **Amplitude convention** — both use the same meaning of ``sigma``: after the
+   #865 linear-time fix, tengri's ``psd_sigma`` *is* the std of log10(SFR) in dex,
+   identical to CIGALE's ``sigma`` (post-hoc normalized).
 3. **CIGALE timescale convention** — the 1/e decorrelation of a CIGALE light
    curve is ``tau_break / (2π)`` (corner-frequency convention), NOT ``tau_break``.
-4. **Attributed difference (the key finding)** — tengri's field is a DRW in
-   **log-age** (``u = log10 t``: scale-free, correlation length grows with age),
-   while CIGALE's is a DRW in **linear time** (one fixed decorrelation timescale).
-   They agree in dex variance but their autocorrelation structures differ by
-   construction — a genuine methodological distinction, not a bug.
+4. **Agreement (the key result)** — tengri's field is now a DRW stationary in
+   **linear (physical) time**, the same as CIGALE: its decorrelation is a fixed
+   number of Myr at every age (where the log grid resolves it), not a fixed
+   number of dex. Before #865 tengri applied the DRW in log-age (scale-free,
+   correlation length growing with age); that was corrected so the two codes'
+   burstiness prescriptions now match in both amplitude and autocorrelation.
 
 Skipped unless ``pcigale`` is installed (``pytest -m crossval``).
 
@@ -82,12 +83,15 @@ def _tengri_ensemble(psd_sigma, tau_yr, n=_N_REALIZATIONS, n_grid=_N_GRID):
                     tau_yr,
                     n_grid,
                     d_log,
+                    log_age_grid=grid,
                 )[0]
             )
             for i in range(n)
         ]
     )
-    return gp, d_log  # gp is the natural-log modulation on the log-age grid
+    # gp is the natural-log modulation on the log-age grid; the process is now a
+    # DRW stationary in LINEAR time, so return the physical times too.
+    return gp, grid, 10.0**grid
 
 
 # ── CIGALE Carvajal ensemble (DRW in linear time) ────────────────────
@@ -137,16 +141,17 @@ def test_psd_form_is_the_same_drw_lorentzian():
     assert np.allclose(r_t, r_c, rtol=5e-3), "DRW PSD shapes should match at f_break=1/(2 pi tau)"
 
 
-def test_amplitude_reaches_target_dex_variance_on_both_sides():
-    """Both codes can be configured to a common dex variability of log10(SFR)."""
+def test_amplitude_is_dex_directly_on_both_sides():
+    """psd_sigma is now the dex std of log10(SFR) directly — matching CIGALE.
+
+    After #865's linear-time fix the field GP's natural-log variance is exactly
+    (psd_sigma * ln10)^2, so tengri's ``psd_sigma`` == std of log10(SFR) in dex,
+    the same meaning as CIGALE's ``sigma``.
+    """
     pytest.importorskip("pcigale")
     target_dex = 0.30
 
-    # tengri: dex std is linear in psd_sigma; solve for the psd_sigma that hits target.
-    gp1, _ = _tengri_ensemble(1.0, 150e6)
-    dex_per_unit = gp1.std() / _LN10
-    psd_sigma = target_dex / dex_per_unit
-    gp, _ = _tengri_ensemble(psd_sigma, 150e6)
+    gp, _, _ = _tengri_ensemble(target_dex, 150e6)
     tengri_dex = gp.std() / _LN10
     assert tengri_dex == pytest.approx(target_dex, rel=0.1)
 
@@ -169,31 +174,31 @@ def test_cigale_tau_break_is_corner_frequency_convention():
     assert decorr_myr == pytest.approx(tau_break / (2.0 * np.pi), rel=0.25)
 
 
-def test_coordinate_difference_is_log_age_vs_linear_time():
-    """The attributed difference: tengri decorrelates in log-age, CIGALE in linear time.
+def test_tengri_decorrelation_is_fixed_in_linear_time_like_cigale():
+    """tengri's field now decorrelates at a FIXED physical timescale, matching CIGALE.
 
-    tengri's log-age decorrelation (in dex) is set by ``psd_tau_yr`` and is the
-    SAME dex lag regardless of where in cosmic time it sits — i.e. its linear-time
-    correlation length scales with the age at which it is evaluated (scale-free).
-    CIGALE's decorrelation is a fixed number of Myr independent of age. This test
-    documents that distinction rather than asserting the two are identical.
+    After #865's linear-time fix, the field GP is a DRW stationary in cosmic time,
+    so its 1/e decorrelation is ~the same number of Myr at young and old ages
+    (where the log grid resolves it) — NOT a fixed number of dex that stretches
+    with age. This is the parity confirmation: both codes are linear-time DRWs.
     """
     pytest.importorskip("pcigale")
-    # tengri: decorrelation in dex depends on psd_tau but NOT on absolute age.
-    gp_short, d_log = _tengri_ensemble(1.0, 50e6)
-    gp_long, _ = _tengri_ensemble(1.0, 500e6)
-    acf_short = np.mean([_acf(g) for g in gp_short], axis=0)
-    acf_long = np.mean([_acf(g) for g in gp_long], axis=0)
-    dec_short_dex = _decorrelation_lag(acf_short, d_log)
-    dec_long_dex = _decorrelation_lag(acf_long, d_log)
-    # Longer PSD timescale -> longer log-age decorrelation (monotone), and both
-    # are expressed in dex (log-age), the scale-free coordinate.
-    assert dec_long_dex > dec_short_dex
-    assert 0.0 < dec_short_dex < 1.0 and 0.0 < dec_long_dex < 1.5
+    tau_myr = 150.0
+    gp, _grid, t = _tengri_ensemble(0.3, tau_myr * 1e6)
+    mod = gp - gp.mean(axis=0)
 
-    # A fixed 0.3-dex decorrelation spans a DIFFERENT linear-time interval at
-    # different reference ages (the hallmark of the log-age coordinate): the span
-    # t_ref * (10**0.3 - 1) grows linearly with t_ref, unlike CIGALE's fixed Myr.
-    span_100myr = 100.0 * (10.0**0.3 - 1.0)
-    span_1gyr = 1000.0 * (10.0**0.3 - 1.0)
-    assert span_1gyr == pytest.approx(10.0 * span_100myr, rel=1e-6)
+    def phys_decorr_myr(t0):
+        i0 = int(np.argmin(np.abs(t - t0)))
+        corr = np.array([np.corrcoef(mod[:, i0], mod[:, j])[0, 1] for j in range(i0, len(t))])
+        below = np.nonzero(corr < 1.0 / np.e)[0]
+        return (t[i0 + below[0]] - t[i0]) / 1e6 if below.size else np.nan
+
+    dec_young = phys_decorr_myr(30e6)  # 30 Myr — grid step << tau, well resolved
+    dec_mid = phys_decorr_myr(300e6)  # 300 Myr — still resolved
+    # Fixed in LINEAR time: young and mid decorrelations agree within a factor ~2
+    # (residual is grid resolution, not the age-stretch of the old log-age model,
+    # which drifted by ~10x). Both are of order the physical tau, not << or >>.
+    assert 0.3 * tau_myr < dec_young < 3.0 * tau_myr
+    assert 0.3 * tau_myr < dec_mid < 3.0 * tau_myr
+    # must not scale ~10x with age (the old log-age behavior)
+    assert dec_mid / dec_young < 3.0
