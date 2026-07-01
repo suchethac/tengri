@@ -102,3 +102,6 @@ examples/*/data/filters/
 examples/*/data/
 arxiv_library/
 _galrun/
+
+# Superpowers subagent-driven-development scratch ledger (session-local)
+.superpowers/
