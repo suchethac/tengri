@@ -90,24 +90,30 @@ Each phase ships independently green with a CI invariant that flips green and st
        T    = Uniform(20.0, 80.0, "temperature",    units="K")
        beta = Uniform( 1.0,  3.0, "emissivity index", units="")
    
-       # Cross-component contract (from ADR-0009)
-       inputs  = {"L_absorbed": "erg/s"}      # what this component reads
-       outputs = {"L_ir": "erg/s"}            # what this component publishes
-       # If no inputs/outputs, omit or set to {}
+       # Cross-component coupling (ADR-0009). Dust emission re-radiates the
+       # absorbed luminosity the attenuator published as ``L_ir``. Declare it as
+       # an OPTIONAL input (authoritative contract: the existing
+       # DustEmissionSEDComponent.optional_inputs()), so a pipeline with no
+       # attenuator still validates and predict() receives L_ir=0.0 (a no-op).
+       optional_inputs = {"L_ir": "erg/s"}    # what this component reads
+       outputs = {}                           # publish diagnostics via the return dict
+       # Pure closed-form models omit inputs/optional_inputs/outputs entirely.
    
        def load(self, wave):
            # Optional: precompute data at construction time (eager, JIT-free)
            # Return a dataclass or None. Stored as self.data.
            return None
    
-       def predict(self, p, sed_in, wave, *, L_absorbed):
+       def predict(self, p, sed_in, wave, *, L_ir):
            # p: parameter dict with prefix stripped (p["T"], not p["my_T"])
            # sed_in: rest-frame L_ν from upstream (erg/s/Hz)
            # wave: rest-frame grid in Å
-           # **reads: values from inputs (e.g., L_absorbed=state.derived["L_absorbed"])
-           sed = my_emission_formula(wave, L_absorbed, p["T"], p["beta"])
-           L_ir = trapz_freq(sed, wave)
-           return sed_in + sed, {"L_ir": L_ir}
+           # L_ir: absorbed luminosity to re-radiate (erg/s), from optional_inputs;
+           #       0.0 when no upstream attenuator ran (graceful no-op).
+           # redshift (e.g. for the CMB correction) is available as p["redshift"]
+           #       via BARE_NAME_ALLOWLIST — it is NOT stripped by the prefix.
+           sed = my_emission_formula(wave, L_ir, p["T"], p["beta"])
+           return sed_in + sed, {}  # publish diagnostics here if declared in outputs
    ```
 
 3. **Declare free parameters only as class attributes.** The framework auto-discovers them via reflection. No separate `_param_defs.py` entries.
