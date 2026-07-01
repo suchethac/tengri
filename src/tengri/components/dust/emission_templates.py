@@ -582,7 +582,7 @@ def register_dl14_tabulated(grid_path: str, name: str = "dl14_tabulated") -> Non
     r"""Load and register the tabulated DL14 model in the emission registry.
 
     After calling this, the model is available via
-    ``resolve_emission_model("dl14_tabulated")`` and can be used as the
+    ``DUST_EMISSION_MODELS["dl14_tabulated"]`` and can be used as the
     ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
@@ -627,7 +627,7 @@ def dale2014_emission_lnu(
     Single source of truth for the Dale2014 ``fracAGN`` mixing, shared by the
     ``dale2014`` engine emission model (:func:`create_dale2014_from_grid` registry
     closure, resolved via
-    :func:`~tengri.components.dust.emission.resolve_emission_model`) so the
+    the ``DUST_EMISSION_MODELS`` loader cache) so the
     template-loading and mixing paths cannot diverge (#717 consolidation).
 
     .. math::
@@ -1159,7 +1159,7 @@ def register_dale2014_tabulated(grid_path: str, name: str = "dale2014_tabulated"
     r"""Load and register the tabulated Dale+2014 model in the emission registry.
 
     After calling this, the model is available via
-    ``resolve_emission_model("dale2014_tabulated")`` and can be used as the
+    ``DUST_EMISSION_MODELS["dale2014_tabulated"]`` and can be used as the
     ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters
@@ -1188,7 +1188,7 @@ def register_dl07_tabulated(grid_path: str, name: str = "dl07_tabulated") -> Non
     r"""Load and register the tabulated DL07 model in the emission registry.
 
     After calling this, the model is available via
-    ``resolve_emission_model("dl07_tabulated")`` and can be used as the
+    ``DUST_EMISSION_MODELS["dl07_tabulated"]`` and can be used as the
     ``dust_emission_model`` in ``SEDModel()``.
 
     Parameters

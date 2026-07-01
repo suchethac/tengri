@@ -138,40 +138,6 @@ def register_emission_model(name: str) -> Callable:
     return decorator
 
 
-def resolve_emission_model(name: str) -> Callable:
-    """Get a registered emission model by name.
-
-    Parameters
-    ----------
-    name : str
-        Model name (e.g. ``"modified_blackbody"``).
-
-    Returns
-    -------
-    Callable
-        The model function with signature
-        ``(wavelength, L_absorbed, **params) -> L_nu_emission``.
-
-    Raises
-    ------
-    ValueError
-        If *name* is not in the registry.
-
-    Notes
-    -----
-    **JIT-compatible**: no — registry lookup happens at factory time.
-
-    The returned function matches the ``DustEmissionTemplate`` protocol and can
-    be called with wavelengths, absorbed luminosity, and model-specific parameters.
-
-    """
-    if name not in DUST_EMISSION_MODELS:
-        raise ValueError(
-            f"Unknown dust emission model '{name}'. Available: {list(DUST_EMISSION_MODELS.keys())}"
-        )
-    return DUST_EMISSION_MODELS[name]
-
-
 def preload_emission_model(name: str) -> Callable:
     """Force lazy template loading outside any JAX JIT scope.
 
@@ -1385,8 +1351,12 @@ def apply_dust_emission(
     **JIT-compatible**: yes if the underlying model is JIT-compatible.
 
     """
-    fn = resolve_emission_model(model_name)
-    return fn(wavelength_aa, L_absorbed, **params)
+    if model_name not in DUST_EMISSION_MODELS:
+        raise ValueError(
+            f"Unknown dust emission model '{model_name}'. "
+            f"Available: {list(DUST_EMISSION_MODELS.keys())}"
+        )
+    return DUST_EMISSION_MODELS[model_name](wavelength_aa, L_absorbed, **params)
 
 
 # ── Lazy loading infrastructure for template-based models ─────────

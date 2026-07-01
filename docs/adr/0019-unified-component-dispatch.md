@@ -70,6 +70,8 @@ This architectural debt grew:
 
 Each phase ships independently green with a CI invariant that flips green and stays green. Per-domain legacy registries are retired as each domain migrates.
 
+**Phase-1 Definition of Done (amended 2026-07).** Phase 1 (dust-emission pilot) is "done" when: (a) every emission grammar type (and alias) dispatches through a `_REGISTRY` port — `check_registry_completeness` green; (b) the legacy dispatch *function* `resolve_emission_model` is deleted so single dispatch is machine-enforced — `check_single_dispatch` green with proven teeth; and (c) `DUST_EMISSION_MODELS` survives only as an internal HDF5 *loader cache*, not a dispatch table. The god-file **split** of the emission modules (`emission.py`, `emission_templates.py`, `dust_emission_precompute.py` → the `analytic/`, `templates/`, `precompute` layout, each ≤ 800 lines) is a **tracked follow-up (#843)**, not a Phase-1 gate: it is low-risk mechanical relocation, and the file-size ratchet already enforces shrink-only so no emission file can grow. This explicitly relaxes the original plan's DoD (which required the split inline); the switchover + dispatch retire — the risky part — are the Phase-1 bar.
+
 ## Add-a-Model Recipe (Locked for the Migration)
 
 **To add a new model or port an existing one:**

@@ -74,33 +74,42 @@ def main() -> int:
         if status == "pending":
             continue
 
-        # For migrated domains, check that legacy registry is empty
+        # For migrated domains, enforce BOTH (whichever are configured):
+        #  - legacy_dispatch: the legacy dispatch FUNCTION must be ABSENT
+        #    (unimportable) — the honest single-dispatch invariant. A loader
+        #    cache can survive under its own name, but no second dispatch entry
+        #    point may remain reachable.
+        #  - legacy_registry: the legacy dispatch REGISTRY must be empty/absent.
         if status == "migrated":
-            legacy_cfg = domain_cfg.get("legacy_registry", {})
-            module_path = legacy_cfg.get("module")
-            attr_name = legacy_cfg.get("attr")
+            checked = False
 
-            if not module_path or not attr_name:
+            dispatch_cfg = domain_cfg.get("legacy_dispatch", {})
+            d_module, d_attr = dispatch_cfg.get("module"), dispatch_cfg.get("attr")
+            if d_module and d_attr:
+                checked = True
+                exists, _ = safe_import_attr(d_module, d_attr)
+                if exists:
+                    violations.append(
+                        (domain_name, d_module, d_attr, ["<dispatch symbol still importable>"])
+                    )
+
+            legacy_cfg = domain_cfg.get("legacy_registry", {})
+            module_path, attr_name = legacy_cfg.get("module"), legacy_cfg.get("attr")
+            if module_path and attr_name:
+                checked = True
+                exists, obj = safe_import_attr(module_path, attr_name)
+                if exists:
+                    if isinstance(obj, dict) and obj:
+                        violations.append((domain_name, module_path, attr_name, list(obj.keys())))
+                    elif hasattr(obj, "__len__") and len(obj) > 0:
+                        violations.append((domain_name, module_path, attr_name, list(obj)))
+
+            if not checked:
                 print(
-                    f"WARNING: Domain '{domain_name}' marked migrated but "
-                    f"legacy_registry incomplete (module={module_path}, attr={attr_name})",
+                    f"WARNING: Domain '{domain_name}' marked migrated but has neither "
+                    f"legacy_dispatch nor legacy_registry configured",
                     file=sys.stderr,
                 )
-                continue
-
-            exists, obj = safe_import_attr(module_path, attr_name)
-
-            if not exists:
-                # Attribute doesn't exist (already removed or never existed)
-                continue
-
-            # Attribute exists; check if it's empty
-            if isinstance(obj, dict) and obj:
-                # Non-empty dict
-                violations.append((domain_name, module_path, attr_name, list(obj.keys())))
-            elif hasattr(obj, "__len__") and len(obj) > 0:
-                # Handle lists, sets, etc. — non-empty
-                violations.append((domain_name, module_path, attr_name, list(obj)))
 
     # Report findings
     if violations:

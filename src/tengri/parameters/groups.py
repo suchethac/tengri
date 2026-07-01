@@ -1052,7 +1052,7 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             emission_type = emission_dict.get("type", None)
             if emission_type is not None:
                 # Dust IR emission types are engine names (modified_blackbody, dale2014,
-                # dl07, dl14, astrodust, etc.) resolved by resolve_emission_model.
+                # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.
                 valid_emission_types = _valid_dust_emission_types()
                 if emission_type not in valid_emission_types:
                     suggestions = difflib.get_close_matches(

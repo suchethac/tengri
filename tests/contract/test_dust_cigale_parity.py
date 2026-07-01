@@ -236,9 +236,9 @@ class TestModifiedBlackbodyEpsilon:
     """
 
     def _sed(self, epsilon):
-        from tengri.components.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
-        return resolve_emission_model("modified_blackbody")(
+        return DUST_EMISSION_MODELS["modified_blackbody"](
             WAVE,
             1.0,
             dust_T=35.0,
