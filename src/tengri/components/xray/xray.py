@@ -586,6 +586,16 @@ ALPHA_OX_RELATIONS: tuple[str, ...] = (
   High-z quasar sample, used by AGNfitter-rx.
 """
 
+_ALPHA_OX_CALIB_RANGE: dict[str, tuple[float, float]] = {
+    # Fitted log10(L_2500 / erg s^-1 Hz^-1) range for each α_OX correlation.
+    # α_OX is clamped to these bounds (#861) so the anti-correlation is never
+    # extrapolated into the unphysical regime where α_OX > 0 (L_2keV > L_2500).
+    "just2007": (28.0, 33.0),  # Just+2007 optically-bright AGN
+    "lusso_risaliti_2016": (27.0, 32.0),  # 2685 SDSS+XMM quasars
+    "lusso_risaliti_2017": (27.0, 32.0),  # high-z quasar sample
+}
+"""Calibration ranges of the α_OX(L_2500) relations, log10(erg/s/Hz) (#861)."""
+
 
 def alpha_ox_from_l2500(
     l_2500_erg_hz: float,
@@ -640,13 +650,26 @@ def alpha_ox_from_l2500(
     ~0.05 at the median quasar L_2500 ≈ 10^30 erg/s/Hz and diverge by up
     to ~0.15 at the extremes.
 
+    **Calibration-range clamp (#861).** The relations are anti-correlations, so
+    :math:`\alpha_{\mathrm{ox}}` rises without bound as :math:`L_{2500}` falls
+    and turns **positive** below :math:`\log_{10} L_{2500} \approx 19` — i.e.
+    :math:`L_{2\,\mathrm{keV}} > L_{2500}`, an X-ray corona brighter than the
+    disc that produced it, which pushes the total X-ray past :math:`L_{\rm bol}`.
+    To avoid this unphysical extrapolation, :math:`\log_{10} L_{2500}` is clamped
+    to each relation's fitted range (:data:`_ALPHA_OX_CALIB_RANGE`) before the
+    slope is applied — below the range the boundary (faintest-calibrated)
+    :math:`\alpha_{\mathrm{ox}}` is held, matching pcigale, which never
+    extrapolates the relation (it takes a fixed ``alpha_ox`` bounded by
+    ``max_dev_alpha_ox``).
+
     References
     ----------
     .. [1] Just, D. W. et al., 2007, ApJ, 665, 1004, Eq. 3.
     .. [2] Lusso, E. & Risaliti, G., 2016, ApJ, 819, 154, Eq. 3.
     .. [3] Lusso, E. & Risaliti, G., 2017, A&A, 602, A79, Eq. 2.
     """
-    log_l = jnp.log10(l_2500_erg_hz)
+    lo, hi = _ALPHA_OX_CALIB_RANGE.get(relation, (28.0, 33.0))
+    log_l = jnp.clip(jnp.log10(l_2500_erg_hz), lo, hi)
     if relation == "just2007":
         return -0.137 * log_l + 2.638
     if relation == "lusso_risaliti_2016":

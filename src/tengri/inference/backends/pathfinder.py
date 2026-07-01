@@ -79,9 +79,16 @@ def run_pathfinder(
 
     key, approx_key, sample_key = jax.random.split(key, 3)
 
-    pathfinder = blackjax.pathfinder(log_posterior_flat)
-    state, _info = pathfinder.approximate(
+    # Use the module-level ``approximate`` / ``sample`` functions (they take
+    # ``logdensity_fn`` explicitly) rather than the instance form
+    # ``blackjax.pathfinder(logdensity).approximate(...)``. blackjax 1.4+ made
+    # ``blackjax.pathfinder(logdensity)`` return a ``VIAlgorithm`` that no longer
+    # carries ``.approximate`` (AttributeError), whereas the module functions
+    # have kept a stable signature across ≥1.3 — so this works on old and new
+    # blackjax without pinning.
+    state, _info = blackjax.pathfinder.approximate(
         approx_key,
+        log_posterior_flat,
         init_flat,
         maxiter=maxiter,
         maxcor=maxcor,
@@ -91,7 +98,7 @@ def run_pathfinder(
         t_approx = time.time() - t0
         print(f"  Approximation complete ({t_approx:.1f}s)")
 
-    samples_flat, log_q = pathfinder.sample(sample_key, state, n_samples)
+    samples_flat, log_q = blackjax.pathfinder.sample(sample_key, state, n_samples)
 
     if verbose:
         print(f"  Drew {n_samples} samples (mean log q = {float(jnp.mean(log_q)):.2f})")
