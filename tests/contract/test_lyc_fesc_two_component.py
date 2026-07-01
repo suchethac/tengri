@@ -59,9 +59,7 @@ def _state(fesc: float, *, publish_lyc: bool) -> ForwardState:
 
 
 def _apply(state):
-    comp = DustSEDComponent(
-        config=DustSEDComponentConfig(law_bc="calzetti", law_diff="calzetti")
-    )
+    comp = DustSEDComponent(config=DustSEDComponentConfig(law_bc="calzetti", law_diff="calzetti"))
     return comp.apply(state, {"dust_tau_bc": 0.0, "dust_tau_diff": 1.0})
 
 

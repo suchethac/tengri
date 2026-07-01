@@ -4677,9 +4677,8 @@ class SEDModel:
         # After the switchover, dust_emission_model is set from the spec even
         # when using separate ports, so we check that or the old emission_model path.
         has_dust_emission = (
-            (dust is not None and getattr(dust.config, "emission_model", None) is not None)
-            or self._dust_emission_model is not None
-        )
+            dust is not None and getattr(dust.config, "emission_model", None) is not None
+        ) or self._dust_emission_model is not None
         if (
             has_dust_emission
             and dust is not None
