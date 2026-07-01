@@ -94,7 +94,9 @@ class TestRegistryUtilities:
 
     def test_find_data_file_present(self, tmp_path, monkeypatch):
         """_find_data_file returns the path when file exists in data/."""
-        from tengri.components.dust import emission as em
+        # Patch the impl module where _DATA_CANDIDATES / _find_data_file live
+        # (emission is now a package; the module holds the mutable global).
+        from tengri.components.dust.emission import emission as em
 
         # Temporarily add tmp_path to search candidates
         original = em._DATA_CANDIDATES[:]
