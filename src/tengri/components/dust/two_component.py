@@ -478,13 +478,13 @@ class DustSEDComponent:
         # ── 2a. Lyman-continuum escape (neb_fesc) ──────────────────────
         # Stellar LyC (λ < 912 Å) is absorbed by the gas that powers the nebular
         # emission; only the escaping fraction ``neb_fesc`` survives. A
-        # photoionised backend publishes ``lyc_transmission = where(λ<912,
+        # photoionized backend publishes ``lyc_transmission = where(λ<912,
         # neb_fesc, 1)``. This path rebuilds the stellar SED from the *unmasked*
         # per-age ``lnu_age`` cube, so without applying the mask here the nebular
         # component's fesc mask on ``state.sed_intrinsic`` is bypassed — the LyC
         # leaks into ``sed_dust_attenuated`` and reappears as a phantom
         # ``-stellar_LyC`` in ``non_stellar_other`` (negative flux at fesc<1;
-        # #824). Absent (BakedIn / no photoionised nebular) -> no factor.
+        # #824). Absent (BakedIn / no photoionized nebular) -> no factor.
         #
         # ``sed_intrinsic_stellar`` mirrors the nebular component's *uniform*
         # mask on ``state.sed_intrinsic`` (all ages × neb_fesc below 912) so the
