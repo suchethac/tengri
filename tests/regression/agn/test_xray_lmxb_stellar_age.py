@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression: X-ray LMXB scaling must use the galaxy's mass-weighted age.
 
 Building the CIGALE panchromatic head-to-head

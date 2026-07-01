@@ -39,7 +39,7 @@ _YOUNG, _OLD = 0, 2
 
 
 def _state(fesc: float, *, young: float, old: float, publish_lyc: bool = True) -> ForwardState:
-    """Photoionised-nebular output: stellar in the young and/or old age bin.
+    """Photoionized-nebular output: stellar in the young and/or old age bin.
 
     The nebular component masks the summed ``sed_intrinsic`` LyC uniformly by
     ``fesc`` and publishes ``lyc_transmission``.
