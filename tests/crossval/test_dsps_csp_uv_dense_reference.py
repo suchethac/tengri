@@ -1,23 +1,24 @@
-"""Cross-validation: DSPS CSP integration accuracy in the rest-UV (#858).
+"""Cross-validation: DSPS CSP rest-UV vs a native-age reference (#858, #538).
 
-Building the CIGALE panchromatic head-to-head surfaced a systematic
-rest-UV offset: tengri's intrinsic stellar SED is a few percent too blue vs
-CIGALE on **identical** BC03 templates. Traced to the DSPS composite-population
-age-weighting (the SFH -> SSP-age mass mapping), not the flux interpolation and
-not an SFH-parametrisation convention:
+The CIGALE panchromatic head-to-head shows tengri's intrinsic stellar SED a few
+percent brighter than CIGALE in the rest-UV on identical BC03 templates. This
+was first suspected to be a DSPS integration bug (#858) but is **working as
+intended**: it is the continuum flip-side of the #538 young-boundary knot, which
+captures the ``[0, age0 ~1 Myr]`` recent star formation into the youngest SSP
+bin. A native-age integration (bins starting at 1 Myr) — like CIGALE, and like a
+naive dense trapezoid — *misses* that recent SF, so it comes out fainter in the
+rest-UV **and** lower in Q_H. The knot moves Q_H toward the analytic (continuous)
+SFH->SSP convolution, so tengri is the more physically complete side.
 
-* tengri ``sed_intrinsic`` reproduces its own ``age_weights x ssp_flux`` to
-  <0.1% (the flux sum is faithful) -- guarded by
-  :func:`test_dsps_flux_sum_is_faithful`.
-* but a **dense** trapezoidal re-integration of tengri's own published
-  ``sfr_history`` over the SSP's native ages gives a rest-UV ~4% fainter, and
-  that dense value matches CIGALE's ``bc03`` module exactly (UV/opt 1500/5000 A:
-  tengri 0.1953, dense reference 0.1872, CIGALE 0.1872). tengri over-weights the
-  young UV-bright stars.
+This module pins two facts:
 
-This module pins both facts. The dense-reference agreement is expected to
-**fail until #858 is fixed** (marked ``xfail``); when the age-weighting is
-corrected the UV ratio converges to the dense reference and the marker flips.
+* :func:`test_dsps_flux_sum_is_faithful` — ``sed_intrinsic`` == the DSPS
+  ``age_weights x ssp_flux`` to <0.1% (the flux sum is exact; any UV difference
+  lives in the age-weighting, not flux handling).
+* :func:`test_young_knot_brightens_uv_vs_native_binning` — tengri's rest-UV is
+  *brighter* than a native-age re-integration of its own SFH, by the young-knot
+  recent-SF contribution. This documents the intended #538 behaviour (removing
+  the knot to match CIGALE's rest-UV would regress Q_H) and guards its sign.
 
 Data-gated on ``reproduction/cigale/_drivers/data/bc03_from_cigale.h5`` (the
 CIGALE BC03 grid with a dense 13700-age axis); skipped when absent.
@@ -87,7 +88,8 @@ def _raw_ssp_lnu():
 def test_dsps_flux_sum_is_faithful():
     """``sed_intrinsic`` == sum(age_weights x ssp_flux): the flux sum is exact.
 
-    Isolates the #858 offset to the age-weighting rather than flux handling.
+    Confirms any rest-UV difference lives in the age-weighting (the #538 young
+    knot), not in flux handling.
     """
     state = _build_state()
     wave = np.asarray(state.wave)
@@ -99,38 +101,38 @@ def test_dsps_flux_sum_is_faithful():
 
 
 @pytest.mark.skipif(not _HAS_BC03, reason="bc03_from_cigale.h5 (reproduction data) not present")
-@pytest.mark.xfail(
-    strict=True,
-    reason="#858: DSPS age-weighting over-weights young stars -> rest-UV ~4% too bright "
-    "vs a dense re-integration of the same SFH (which matches CIGALE).",
-)
-def test_dsps_csp_matches_dense_reintegration_uv():
-    """tengri's rest-UV must match a dense re-integration of its OWN SFH.
+def test_young_knot_brightens_uv_vs_native_binning():
+    """tengri's rest-UV exceeds a native-age re-integration by the recent-SF capture.
 
-    Convention-free: uses tengri's published ``sfr_history`` re-integrated over
-    the SSP's native ages. Currently the ratio is ~0.96 (tengri too blue); the
-    dense reference equals CIGALE. Flips to pass when #858 is fixed.
+    Intended #538 behaviour, not a bug (#858 closed): the young-boundary knot
+    captures the [0, ~1 Myr] recent SF that a native-age integration (bins
+    starting at 1 Myr, like CIGALE) misses. So tengri is *brighter* in the
+    rest-UV -- the continuum flip-side of the knot's Q_H fix. This guards the
+    sign and rough magnitude; a regression that removed the knot (to match
+    CIGALE's fainter rest-UV) would also drop Q_H and trip this test.
     """
     state = _build_state()
     wave = np.asarray(state.wave)
     sed = np.asarray(state.sed_intrinsic)
     ssp_lnu, ssp_wave, age_yr = _raw_ssp_lnu()
 
+    # Native-age re-integration of tengri's OWN SFH -- misses the [0, age0]
+    # recent SF (no young-boundary extension), matching CIGALE's convention.
     sfr_history = np.asarray(state.derived["sfr_history"])
     lookback_yr = np.asarray(state.derived["sfh_grid_lbt_yr"])
     order = np.argsort(lookback_yr)
     sfr_on_ssp = np.interp(age_yr, lookback_yr[order], sfr_history[order], left=0.0, right=0.0)
-    reference = ((sfr_on_ssp * np.gradient(age_yr))[:, None] * ssp_lnu).sum(axis=0)
+    native = ((sfr_on_ssp * np.gradient(age_yr))[:, None] * ssp_lnu).sum(axis=0)
 
     r_tengri = _uv_opt(wave, sed)
-    r_reference = _uv_opt(ssp_wave, reference)
-    np.testing.assert_allclose(
-        r_tengri,
-        r_reference,
-        rtol=1e-2,
-        err_msg=(
-            f"rest-UV/opt: tengri={r_tengri:.4f} vs dense re-integration="
-            f"{r_reference:.4f} ({r_tengri / r_reference:.3f}x); DSPS over-weights "
-            f"the young UV (#858)"
-        ),
+    r_native = _uv_opt(ssp_wave, native)
+    # tengri captures the recent SF the native binning drops -> brighter rest-UV.
+    assert r_tengri > r_native, (
+        f"rest-UV/opt: tengri={r_tengri:.4f} should exceed the native-age "
+        f"reference={r_native:.4f} (young-knot recent-SF capture, #538)"
+    )
+    # ... by a few percent (not a runaway); guards the magnitude.
+    assert 1.01 < r_tengri / r_native < 1.10, (
+        f"rest-UV excess {r_tengri / r_native:.3f}x outside the expected "
+        f"~1.01-1.10 young-knot band (#538/#858)"
     )
