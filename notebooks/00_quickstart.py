@@ -251,6 +251,14 @@ posterior = fitter.run(
 print(f"  NUTS wall (4 chains × 600 = 2400 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
+# Convergence check: split-R̂ should sit below ~1.01 with few divergences,
+# otherwise the credible intervals are not trustworthy.
+rhat = posterior.rhat()
+print(
+    f"\n  max split-R̂ = {max(float(v) for v in rhat.values()):.4f}"
+    f"    divergences = {posterior.diagnostics.get('n_divergent', 'n/a')}"
+)
+
 # %% [markdown]
 # The fit recovers the mock truth: well-constrained parameters (stellar mass,
 # dust, metallicity) land on the input values, and even the SFH *shape*
