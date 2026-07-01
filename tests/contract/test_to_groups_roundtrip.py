@@ -274,7 +274,10 @@ class TestToGroupsWildcardCollapse:
         # ``age_gyr`` (formation anchor, #514) joined the dpl param set; it
         # round-trips with its registry default even when left unspecified.
         dpl_keys = {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
-        met_keys = {"logzsol", "alpha_fe"}
+        # ``logzsol_scatter`` (lognormal MDF width, #506) is a delta-mode
+        # metallicity param, so like ``logzsol``/``alpha_fe`` it round-trips in
+        # the sfh group until a non-delta chemical-evolution mode is selected.
+        met_keys = {"logzsol", "alpha_fe", "logzsol_scatter"}
         expected_keys = {"type"} | dpl_keys | met_keys
         assert set(sfh_dict.keys()) == expected_keys
 

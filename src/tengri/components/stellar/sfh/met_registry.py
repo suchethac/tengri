@@ -142,10 +142,27 @@ _register(
                 # see tengri.parameters.translate.LOG10_ZSUN_BY_LIBRARY.
                 Uniform(-2.0, 0.2),
             ),
+            "met_logzsol_scatter": MetParamDef(
+                "Lognormal metallicity scatter sigma [dex] — Gaussian-in-log10(Z) "
+                "MDF width about the mean (Carnall+2018 §3.2). sigma -> 0 recovers "
+                "a single-Z (delta) population.",
+                _always_true,
+                "",
+                # Default pinned to the historical fixed ``config.lgmet_scatter``
+                # (0.1) so delta models that do not free it are byte-unchanged;
+                # the wildcard-FIXED resolver reads this default from
+                # ``_WILDCARD_FIXED_DEFAULTS`` in ``parameters/groups.py``. Free
+                # it (e.g. ``Uniform(0.0, 0.5)``) to fit the MDF width like
+                # Bagpipes' ``lognorm`` chemical-enrichment mode.
+                Fixed(0.1),
+            ),
         },
         settings={},
         internal_param_map={
             "met_logzsol": ("log_z_abs", 1.0, LOG10_ZSUN),
+            # Identity map: the stellar component reads the public
+            # ``met_logzsol_scatter`` name directly (a width, no Zsun offset).
+            "met_logzsol_scatter": ("met_logzsol_scatter", 1.0, 0.0),
         },
     )
 )
