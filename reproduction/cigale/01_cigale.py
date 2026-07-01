@@ -2014,31 +2014,116 @@ save_fig("cigale_12_igm_transmission.png")
 
 
 # %% [markdown]
-# ## tengri in CIGALE-mode — full-SED head-to-head
+# ## tengri in CIGALE-mode — the full X-ray → radio party SED
 #
-# Every section above swept one physics block. This is the configured
-# chain at once: tengri set up to emulate CIGALE end to end — the shared
-# BC03 SSP, the fiducial τ-delayed SFH, the modified-starburst
-# (Leitherer+02) attenuation law, and Dale+2014 IR re-emission — overlaid
-# on CIGALE's own panchromatic output at matched parameters (the §6/§7
-# chain). The top panel is the overlay; the bottom is the fractional
-# residual `tengri / CIGALE − 1` with the ±25 % band shaded. Optical
+# Every section above swept one physics block. This is the whole chain at
+# once: tengri set up to emulate CIGALE end to end — shared BC03 SSP,
+# fiducial τ-delayed SFH, modified-starburst (Leitherer+02) attenuation,
+# Dale+2014 IR re-emission, plus the §10 **X-ray** (Yang+2020: XRB + hot
+# gas; this galaxy-only chain has no AGN, so the corona is zero) and the
+# §11 **radio** (Condon 1992 SF synchrotron, `q_IR = 2.5`) — overlaid on
+# CIGALE's own X-ray→radio output at matched parameters. The top panel is
+# the overlay; the bottom is the fractional residual `tengri / CIGALE − 1`
+# with the ±25 % band shaded.
+#
+# **The stellar-to-FIR core reproduces to a few percent.** Optical
 # agreement is reported as a normalization ratio and its 16–84 % spread.
-# With the single-screen dust mapping (`tau_bc = 0`; see Setup section),
-# the residual sits inside ±25 % across the whole panchromatic range — including
-# the far-UV, which the earlier `tau_bc + tau_diff` split over-attenuated by
-# ~2×. The small residual that remains shortward of ~912 Å is the
-# Lyman-continuum extrapolation difference; the mm-tail offset is the
-# Dale-template cutoff (§6), not a disagreement in the dust energy budget.
+# With the single-screen dust mapping (`tau_bc = 0`; see Setup) the residual
+# sits inside ±25 % from the far-UV through the FIR; the sub-912 Å excursion
+# is the Lyman-continuum extrapolation and the mm-tail offset is the Dale
+# template cutoff (§6) — not the dust energy budget.
+#
+# Extending the comparison past the FIR into the X-ray and radio wings both
+# now reproduce CIGALE — and getting there caught a real tengri bug:
+#
+# - **Radio.** The Condon-1992 SF synchrotron matches CIGALE's `radio` module
+#   to ~5 % across the band (1.4 GHz ≈ 1.05×, 150 MHz ≈ 1.02×) once
+#   `q_IR = 2.5` is pinned on both sides (§11).
+# - **X-ray.** With no AGN corona the X-ray is pure XRB + hot gas; tengri now
+#   matches CIGALE to ~3 % (1 keV ≈ 0.97×, 5 keV ≈ 0.96×). Building this
+#   panchromatic overlay exposed a wiring bug: the X-ray component was calling
+#   the Lehmer+2016 **LMXB** scaling with its 1 Gyr *default* age instead of
+#   the galaxy's mass-weighted age (the `logT` polynomial is steep, so a
+#   ~3 Gyr population came out ~3–4× too luminous — LMXB dominates the galaxy
+#   X-ray). The component now threads the SSP mass-weighted age (matching
+#   CIGALE's `stellar.age_m_star`) into `xray_total`, collapsing the wing from
+#   ~3.4× to ~0.97×.
 
 # %%
 import chex
 
-# Reuse the §6/§7 panchromatic full SED: tengri's CIGALE-mode model and
-# CIGALE's own output, both at the fiducial galaxy (stellar + dust + IR).
-w_ext, L_ext = np.asarray(w_c_ir), np.asarray(L_c_ir)
-wave_t = np.asarray(s_ir.wave)
-L_t = np.asarray(s_ir.sed_intrinsic)
+# The full X-ray -> radio party SED: the §6/§7 galaxy (stellar + dust + Dale
+# IR) now with the §10 X-ray (Yang+2020 XRB + hot gas — no AGN corona in this
+# galaxy-only chain) and §11 radio (Condon 1992 SF synchrotron, q_IR = 2.5)
+# bolted on, so the master grid spans ~0.01 Å (hard X-ray) to ~1 m (radio).
+sed_c_full = C.run_chain(
+    [
+        (
+            "sfhdelayed",
+            dict(
+                tau_main=1000,
+                age_main=5000,
+                tau_burst=50,
+                age_burst=20,
+                f_burst=0.0,
+                sfr_A=1.0,
+                normalise=True,
+            ),
+        ),
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("dale2014", dict(alpha=2.0)),
+        (
+            "yang20",
+            dict(
+                gam=1.8,
+                E_cut=300.0,
+                alpha_ox=-1.4,  # no AGN disc here -> corona is zero; XRB + hot gas only
+                max_dev_alpha_ox=0.2,
+                angle_coef="0.5 & 0",
+                det_lmxb=0.0,
+                det_hmxb=0.0,
+            ),
+        ),
+        ("radio", dict(qir_sf=2.5, alpha_sf=0.8, R_agn=0.0, alpha_agn=0.7)),
+        ("redshifting", dict(redshift=0.0)),
+    ]
+)
+_w_full, _L_full = C.to_lnu(sed_c_full)
+w_ext, L_ext = np.asarray(_w_full), np.asarray(_L_full)
+
+m_full = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "leitherer02",
+        "law_diff": "leitherer02",
+        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        "lyman_cutoff": True,
+        "*": FIXED,
+        "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "*": FIXED},
+    },
+    xray={"type": "yang20", "*": FIXED},
+    radio={
+        "type": "condon92",
+        "radio_q_ir": Fixed(2.5),
+        "radio_alpha_sf": Fixed(0.8),
+        "*": FIXED,
+    },
+    redshift=Fixed(0.0),
+)
+s_full = m_full.predict_state({})
+wave_t = np.asarray(s_full.wave)
+L_t = np.asarray(s_full.sed_intrinsic)
 
 # Put tengri on CIGALE's wavelength grid so the two compare point for point.
 L_t_on_ext = U.regrid(wave_t, L_t, w_ext)
@@ -2062,6 +2147,25 @@ print(
     f"full-SED head-to-head tengri/CIGALE optical (1000–10000 Å): "
     f"normalization {norm:.2f}×, 16–84% spread {p16:.2f}–{p84:.2f}×"
 )
+
+
+def _ratio_at(target_aa: float) -> float:
+    """tengri/CIGALE L_ν ratio at the CIGALE grid point nearest ``target_aa``."""
+    j = int(np.argmin(np.abs(w_ext - target_aa)))
+    return float(L_t_on_ext[j] / L_ext[j]) if L_ext[j] > 0 else float("nan")
+
+
+_C_AA_HZ = 2.998e18  # Å/s
+print(
+    "  X-ray  1 keV = {:.2f}×, 5 keV = {:.2f}×  (XRB + hot gas; no AGN corona)".format(
+        _ratio_at(12.398 / 1.0), _ratio_at(12.398 / 5.0)
+    )
+)
+print(
+    "  radio  1.4 GHz = {:.2f}×, 150 MHz = {:.2f}×  (SF synchrotron, q_IR = 2.5)".format(
+        _ratio_at(_C_AA_HZ / 1.4e9), _ratio_at(_C_AA_HZ / 0.15e9)
+    )
+)
 _assert_comparable(L_ext, L_t, name="full-SED head-to-head")
 
 fig, (ax, ax_r) = plt.subplots(
@@ -2071,11 +2175,11 @@ ax.plot(w_ext, L_ext, "C0-", linewidth=1.5, label="CIGALE")
 ax.plot(w_ext, L_t_on_ext, "C1--", linewidth=1.5, label="tengri (CIGALE-mode)")
 ax.set_xscale("log")
 ax.set_yscale("log")
-ax.set_xlim(1e2, 1e8)
+ax.set_xlim(1e-1, 1e12)  # hard X-ray -> radio
 # Peak-anchored y-limit: both SEDs cliff to ~0 at the grid edges, so the log
 # axis would otherwise autoscale across ~170 decades and flatten the SED.
 _ymax_h = float(max(np.nanmax(L_ext), np.nanmax(L_t_on_ext)))
-ax.set_ylim(_ymax_h * 1e-6, _ymax_h * 2.0)
+ax.set_ylim(_ymax_h * 1e-9, _ymax_h * 2.0)
 ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
 ax.set_title("tengri in CIGALE-mode vs CIGALE — full panchromatic SED")
 ax.legend(fontsize=10)
@@ -2095,7 +2199,7 @@ ax_r.axhline(0.0, color="0.5", linewidth=0.8)
 ax_r.axhline(norm - 1.0, color="C1", linestyle=":", linewidth=0.9)
 ax_r.plot(w_ext, resid, "C1-", linewidth=1.0)
 ax_r.set_xscale("log")
-ax_r.set_xlim(1e2, 1e8)
+ax_r.set_xlim(1e-1, 1e12)
 ax_r.set_ylim(-1.0, 1.0)
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"tengri/CIGALE $-1$")
