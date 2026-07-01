@@ -1,0 +1,13 @@
+{
+  "_comment": "Phase-0 CI ratchet guards enforce architecture migration. Each domain tracks legacy registry status and expected types. Guards (check_file_size.py, check_single_dispatch.py, check_registry_completeness.py) use this manifest to gate commits. Domains with status='pending' are not yet enforced (pass); status='migrated' requires empty legacy registries and complete type coverage.",
+  "domains": {
+    "dust_emission": {
+      "status": "pending",
+      "legacy_registry": {
+        "module": "tengri.components.dust.emission",
+        "attr": "DUST_EMISSION_MODELS"
+      },
+      "expected_types": []
+    }
+  }
+}
