@@ -93,6 +93,7 @@ import jax.numpy as jnp
 
 from tengri.parameters.priors import Distribution
 from tengri.protocols.component import (
+    BARE_NAME_ALLOWLIST,
     DerivedKey,
     ForwardState,
     ParamDeclaration,
@@ -475,6 +476,10 @@ class SEDModelComponent:
         :attr:`state.sed_intrinsic` with the returned SED and publishes
         returned keys to :attr:`state.derived`.
 
+        Bare-name allowlist parameters (e.g., ``redshift``) are passed through
+        unstripped to :meth:`predict` and precomp paths to enable cross-component
+        access.
+
         When WavePrecomp is active (``filter_eff_waves`` in state.derived),
         automatically routes through the LUT path via :meth:`predict_precomp`
         to compute effective-wavelength contributions, optionally with Taylor
@@ -497,6 +502,13 @@ class SEDModelComponent:
         p_sliced = {
             k[prefix_len:]: v for k, v in params.items() if k.startswith(self.parameter_prefix)
         }
+
+        # Bare-name allowlist params (e.g. redshift) have no domain prefix; the
+        # orchestrator threads them to every component (protocols.component.BARE_NAME_ALLOWLIST).
+        # Expose them to predict()/LUT paths unstripped, honoring the documented contract.
+        for _bare in BARE_NAME_ALLOWLIST:
+            if _bare in params:
+                p_sliced[_bare] = params[_bare]
 
         # Look up required inputs from derived
         input_kwargs = {}
