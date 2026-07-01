@@ -586,6 +586,15 @@ ALPHA_OX_RELATIONS: tuple[str, ...] = (
   High-z quasar sample, used by AGNfitter-rx.
 """
 
+# Validity window of the empirical alpha_ox-L_2500 correlations, in
+# log10(L_2500 / erg s^-1 Hz^-1). Just+2007 Eq. 3 is fitted over
+# 28 <~ log10(L_2500) <~ 33; the Lusso-Risaliti refits extend to slightly
+# higher L but share the same low-luminosity floor. alpha_ox_from_l2500()
+# clamps to this window so the corona never extrapolates to an unphysical
+# (positive) alpha_ox below the fitted range. See issue #861.
+LOG_L2500_CALIB_MIN: float = 28.0
+LOG_L2500_CALIB_MAX: float = 33.0
+
 
 def alpha_ox_from_l2500(
     l_2500_erg_hz: float,
@@ -613,6 +622,13 @@ def alpha_ox_from_l2500(
     -----
     **JIT-compatible**: yes — pure JAX function. The string ``relation``
     argument is a Python-level dispatch (not traced); pass it statically.
+
+    ``log10(L_2500)`` is clamped to ``[LOG_L2500_CALIB_MIN,
+    LOG_L2500_CALIB_MAX]`` before the fit is applied. The empirical
+    correlations turn over to an unphysical *positive* alpha_ox below the
+    fitted range (for just2007, at :math:`\log_{10} L_{2500} < 19.3`), which
+    would make the corona brighter than the disc UV; clamping keeps the
+    corona X-ray-quiet outside the calibration window (issue #861).
 
     **Just+2007 [1]_ (Eq. 3):** derived from optically-bright AGN; valid for
     :math:`28 \lesssim \log_{10}(L_{2500}) \lesssim 33`.
@@ -646,7 +662,15 @@ def alpha_ox_from_l2500(
     .. [2] Lusso, E. & Risaliti, G., 2016, ApJ, 819, 154, Eq. 3.
     .. [3] Lusso, E. & Risaliti, G., 2017, A&A, 602, A79, Eq. 2.
     """
-    log_l = jnp.log10(l_2500_erg_hz)
+    # The empirical alpha_ox-L_2500 correlations are calibrated on optically
+    # bright AGN over 28 <~ log10(L_2500) <~ 33 (Just+2007 Eq. 3). Below this
+    # window the linear fit extrapolates to a *positive* alpha_ox (for
+    # just2007, at log10(L_2500) < 2.638/0.137 = 19.3), which is unphysical:
+    # it makes the 2 keV corona brighter than the 2500 A disc and pushes the
+    # total X-ray luminosity above L_bol at sub-AGN luminosities (issue #861).
+    # Clamp log10(L_2500) to the calibration window so the corona stays
+    # X-ray-quiet outside the fitted range, matching pcigale's behaviour.
+    log_l = jnp.clip(jnp.log10(l_2500_erg_hz), LOG_L2500_CALIB_MIN, LOG_L2500_CALIB_MAX)
     if relation == "just2007":
         return -0.137 * log_l + 2.638
     if relation == "lusso_risaliti_2016":
