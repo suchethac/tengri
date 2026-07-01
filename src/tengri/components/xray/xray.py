@@ -669,7 +669,7 @@ def alpha_ox_from_l2500(
     # it makes the 2 keV corona brighter than the 2500 A disc and pushes the
     # total X-ray luminosity above L_bol at sub-AGN luminosities (issue #861).
     # Clamp log10(L_2500) to the calibration window so the corona stays
-    # X-ray-quiet outside the fitted range, matching pcigale's behaviour.
+    # X-ray-quiet outside the fitted range, matching pcigale's behavior.
     log_l = jnp.clip(jnp.log10(l_2500_erg_hz), LOG_L2500_CALIB_MIN, LOG_L2500_CALIB_MAX)
     if relation == "just2007":
         return -0.137 * log_l + 2.638
