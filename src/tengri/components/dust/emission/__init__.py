@@ -11,10 +11,12 @@ unchanged (the closures, registries, and template loaders).
 
 # Re-export the entire public surface of the implementation module so callers
 # that did `from tengri.components.dust.emission import <name>` are unaffected.
-# Import the analytic ports so their SEDModelComponent subclasses register in
-# _REGISTRY at ``import tengri`` time (registration is a __init_subclass__ side
-# effect; the port modules import their closures lazily, so no import cycle).
+# Import the analytic and template ports so their SEDModelComponent subclasses
+# register in _REGISTRY at ``import tengri`` time (registration is a
+# __init_subclass__ side effect; the port modules import their closures lazily,
+# so no import cycle).
 from tengri.components.dust.emission import analytic as _analytic
+from tengri.components.dust.emission import templates as _templates  # noqa: F401
 from tengri.components.dust.emission.emission import *  # noqa: F403
 
 # Private module-level symbols that existing call sites and tests import by name.

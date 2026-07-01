@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Boquien & Salim BOSA dust emission template as SEDModelComponent.
+
+Wraps the pure closure from :mod:`tengri.components.dust.emission`.
+"""
+
+from __future__ import annotations
+
+from typing import ClassVar
+
+import jax.numpy as jnp
+
+from tengri.components.sed_model_component import SEDModelComponent
+from tengri.parameters.priors import Fixed
+
+__all__ = ["BosaIRSEDComponent"]
+
+
+class BosaIRSEDComponent(SEDModelComponent):
+    """Boquien & Salim (2021) BOSA dust IR emission template.
+
+    Wraps the pure closure from the tabulated BOSA template library,
+    parameterized by specific star-formation rate (sSFR) instead of
+    radiation field parameters.
+
+    The model interpolates in (log L_TIR, log sSFR) space, where L_TIR
+    is derived from the absorbed luminosity via energy balance. The free
+    parameter is just log sSFR; L_TIR is computed internally.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+
+    **Template auto-loading**: the closure lazy-loads HDF5 templates on
+    first call (at trace time). After lazy loading, all subsequent calls
+    are pure JAX.
+
+    References
+    ----------
+    .. [1] Boquien, M. & Salim, S., 2021, "A new approach to estimate
+       dust temperatures, masses, and emissivities from far-infrared SED",
+       A&A, 653, A149. https://doi.org/10.1051/0004-6361/202140810
+
+    """
+
+    name: str = "bosa"
+    parameter_prefix: str = "dust_"
+
+    # Free parameters (user-facing names, prefix-stripped)
+    log_ssfr = Fixed(-10.0)
+
+    # Cross-component contract
+    optional_inputs: ClassVar[dict[str, str]] = {"L_ir": "erg/s"}
+    outputs: ClassVar[dict[str, str]] = {"sed_dust_ir": "erg/s/Hz"}
+
+    _citations_tuple: ClassVar[tuple[str, ...]] = ("boquien_salim2021",)
+
+    def predict(
+        self,
+        p: dict[str, jnp.ndarray],
+        sed_in: jnp.ndarray,
+        wave: jnp.ndarray,
+        *,
+        L_ir: float,
+    ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
+        """Compute BOSA dust emission.
+
+        Parameters
+        ----------
+        p : dict
+            Parameters with prefix stripped: key is "log_ssfr" (or subset if Fixed).
+        sed_in : ndarray, shape (n_wave,)
+            Input SED in erg/s/Hz (typically zeros for a dust emission component).
+        wave : ndarray, shape (n_wave,)
+            Rest-frame wavelength grid in Angstrom.
+        L_ir : float
+            Total absorbed luminosity in erg/s.
+
+        Returns
+        -------
+        tuple[ndarray, dict]
+            (sed_out, published) where sed_out is the updated SED and published
+            contains {"sed_dust_ir": emission SED in erg/s/Hz}.
+
+        """
+        from tengri.components.dust.emission import bosa as bosa_fn
+
+        sed = bosa_fn(
+            wave,
+            L_ir,
+            dust_log_ssfr=p["log_ssfr"],
+        )
+        return sed_in + sed, {"sed_dust_ir": sed}
