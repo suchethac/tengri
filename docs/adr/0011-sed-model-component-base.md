@@ -1,6 +1,6 @@
 # ADR-0011: `SEDModelComponent` base class for simplified physics authoring
 
-**Status:** Accepted (2026-05-21)
+**Status:** Accepted (2026-05-21); in progress, being completed by ADR-0019
 
 **Stakeholders:** Suchetha; future contributors adding physics blocks
 
