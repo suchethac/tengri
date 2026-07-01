@@ -15,27 +15,26 @@ Run:
 
 Needs ``pcigale`` (2025.1) in the venv. Saves a figure to ``_figs/``.
 
-FINDING -- same PSD family, different time coordinate
------------------------------------------------------
-The two methods use the SAME DRW/bending-power-law PSD, and they agree in dex
-variance, but they apply it in DIFFERENT time coordinates:
+FINDING -- same PSD family AND same time coordinate (after #865)
+----------------------------------------------------------------
+The two methods use the SAME DRW/bending-power-law PSD and, after the #865
+linear-time fix, apply it in the SAME time coordinate:
 
-  * tengri ``field``:  DRW in LOG-AGE  (u = log10 t)  -> scale-free burstiness;
-    the correlation length in linear time GROWS with the age at which it sits.
-  * CIGALE Carvajal:   DRW in LINEAR TIME (Myr)        -> one fixed decorrelation
-    timescale, independent of age.
+  * tengri ``field``:  DRW stationary in LINEAR (physical) time, sampled on the
+    log-age grid -> fixed decorrelation in Myr at every age.
+  * CIGALE Carvajal:   DRW stationary in LINEAR time (Myr) -> fixed decorrelation.
 
-So a "matched" pair agrees in the amplitude sense but their autocorrelation
-structures differ by construction -- a genuine methodological distinction, not a
-bug. Two convention factors must be handled to compare them at all:
+They now agree in BOTH dex variance and autocorrelation. (Before #865 tengri
+applied the DRW in log-age, giving a scale-free correlation length that grew
+with age -- that was the corrected deficiency.) Two convention factors remain to
+line the parameters up:
 
-  amplitude:  CIGALE ``sigma`` IS std(log10 SFR) (post-hoc normalized);
-              tengri dex std is LINEAR in ``psd_sigma`` (~0.30 * psd_sigma at
-              tau=150 Myr on the default log-age grid) -- set psd_sigma to hit
-              the target dex.
+  amplitude:  CIGALE ``sigma`` IS std(log10 SFR) (post-hoc normalized); tengri's
+              ``psd_sigma`` is now ALSO the dex std directly (natural-log variance
+              (sigma*ln10)^2), so sigma <-> psd_sigma one-to-one.
   timescale:  CIGALE's 1/e decorrelation is ``tau_break / (2*pi)`` (corner-
-              frequency convention), NOT ``tau_break``; tengri's is expressed in
-              dex (log-age) and set by ``psd_tau_yr``.
+              frequency convention), NOT ``tau_break``; tengri's ``psd_tau_yr`` is
+              the physical decorrelation timescale directly.
 
 The frozen assertions live in
 ``tests/crossval/test_carvajal2025_stochastic_sfh_crossval.py``.
@@ -80,7 +79,7 @@ def tengri_ensemble(psd_sigma, tau_yr):
     gp = np.array([
         np.asarray(compute_field_gp(
             jax.random.normal(jax.random.PRNGKey(i), (N_GRID,)),
-            psd_sigma, tau_yr, N_GRID, d_log)[0])
+            psd_sigma, tau_yr, N_GRID, d_log, log_age_grid=grid)[0])
         for i in range(N)
     ])
     return grid, d_log, gp
@@ -112,60 +111,64 @@ def main():
     print(f"\n[1] PSD form   max|tengri-CIGALE| (normalized) = {np.max(np.abs(p_t - p_c)):.2e}"
           f"   -> same Lorentzian at f_break=1/(2 pi tau)")
 
-    # 2. amplitude: reach a common target dex variance
+    # 2. amplitude: psd_sigma is now the dex std directly (one-to-one with sigma)
     target = 0.30
-    _, _, gp1 = tengri_ensemble(1.0, tau_yr)
-    psd_sigma = target / (gp1.std() / LN10)
-    grid, d_log, gp = tengri_ensemble(psd_sigma, tau_yr)
+    grid, d_log, gp = tengri_ensemble(target, tau_yr)
     t_dex = gp.std() / LN10
     t_myr, lcs = cigale_ensemble(150.0, target)
     c_dex = lcs.std()
-    print(f"[2] amplitude  tengri psd_sigma={psd_sigma:.3f} -> {t_dex:.3f} dex ;"
-          f" CIGALE sigma={target} -> {c_dex:.3f} dex   (both hit target {target})")
+    print(f"[2] amplitude  tengri psd_sigma={target} -> {t_dex:.3f} dex ;"
+          f" CIGALE sigma={target} -> {c_dex:.3f} dex   (psd_sigma == sigma, one-to-one)")
 
     # 3. CIGALE timescale convention
     for tb in (50.0, 150.0):
-        _, l = cigale_ensemble(tb, 0.3)
-        a = np.mean([acf(x) for x in l], axis=0)
+        _, lc = cigale_ensemble(tb, 0.3)
+        a = np.mean([acf(x) for x in lc], axis=0)
         print(f"[3] timescale  CIGALE tau_break={tb:.0f} Myr -> 1/e decorr"
               f" {decorr_lag(a, 1.0):.1f} Myr   (tau_break/2pi={tb / 2 / np.pi:.1f})")
 
-    # 4. coordinate difference (the finding)
-    at = np.mean([acf(g) for g in gp], axis=0)
-    ac = np.mean([acf(x) for x in lcs], axis=0)
-    tdec = decorr_lag(at, d_log)
-    print(f"[4] coordinate tengri decorr = {tdec:.3f} dex (LOG-AGE, scale-free) ;"
-          f" CIGALE decorr = {decorr_lag(ac, 1.0):.1f} Myr (LINEAR-TIME, fixed)")
-    print(f"    a {tdec:.2f}-dex lag spans {100 * (10**tdec - 1):.0f} Myr at age 100 Myr"
-          f" but {1000 * (10**tdec - 1):.0f} Myr at age 1 Gyr (age-dependent).")
+    # 4. tengri now decorrelates in LINEAR time too -> matches CIGALE
+    t_phys = 10.0**grid
+    mod = gp - gp.mean(0)
 
-    # figure
+    def tdecorr_myr(t0):
+        i0 = int(np.argmin(np.abs(t_phys - t0)))
+        c = np.array([np.corrcoef(mod[:, i0], mod[:, j])[0, 1] for j in range(i0, len(t_phys))])
+        b = np.where(c < 1.0 / np.e)[0]
+        return (t_phys[i0 + b[0]] - t_phys[i0]) / 1e6 if b.size else np.nan
+
+    cdec = decorr_lag(np.mean([acf(x) for x in lcs], axis=0), 1.0)
+    print(f"[4] linear-time decorr  tengri @30Myr={tdecorr_myr(30e6):.0f} @300Myr="
+          f"{tdecorr_myr(300e6):.0f} Myr ; CIGALE={cdec:.0f} Myr"
+          f"   -> both FIXED in Myr (no age-stretch), agree")
+
+    # figure: both are linear-time DRWs now
     fig, ax = plt.subplots(1, 3, figsize=(15, 4.2))
     for g in gp[:30]:
-        ax[0].plot(grid, g / LN10, color="C0", alpha=0.15, lw=0.6)
-    ax[0].set(title="tengri field: log-age DRW", xlabel="log10(age/yr)",
-              ylabel="log10 SFR modulation [dex]")
+        ax[0].plot(t_phys / 1e6, g / LN10, color="C0", alpha=0.15, lw=0.6)
+    ax[0].set(title="tengri field: linear-time DRW (#865)", xlabel="lookback [Myr]",
+              ylabel="log10 SFR modulation [dex]", xscale="log")
     for x in lcs[:30]:
         ax[1].plot(t_myr, x, color="C1", alpha=0.15, lw=0.6)
     ax[1].set(title="CIGALE Carvajal: linear-time DRW", xlabel="lookback [Myr]",
               ylabel="log10 SFR modulation [dex]")
-    # ACF shapes on each code's own lag index (visual comparison only -- the
-    # x-axes are DIFFERENT coordinates: dex for tengri, Myr for CIGALE).
-    nlag = 60
-    ax[2].plot(np.arange(nlag), at[:nlag], "C0", label="tengri (lag in dex)")
-    ax[2].plot(np.arange(nlag), ac[:nlag], "C1", label="CIGALE (lag in Myr)", alpha=0.7)
+    at_myr = np.array([np.corrcoef(mod[:, 0], mod[:, j])[0, 1] for j in range(len(t_phys))])
+    ac = np.mean([acf(x) for x in lcs], axis=0)
+    ax[2].plot((t_phys - t_phys[0]) / 1e6, at_myr, "C0", label="tengri")
+    ax[2].plot(np.arange(len(ac)), ac, "C1", label="CIGALE", alpha=0.7)
     ax[2].axhline(1 / np.e, ls=":", c="k", lw=1)
-    ax[2].set(title="autocorrelation (native coords)", xlabel="lag [grid steps]",
-              ylabel="ACF"); ax[2].legend()
+    ax[2].set(title="autocorrelation vs linear-time lag", xlabel="lag [Myr]",
+              ylabel="ACF", xlim=(0, 600)); ax[2].legend()
     fig.tight_layout()
     out = os.path.join(os.path.dirname(__file__), "_figs",
                        "cigale_carvajal2025_stochastic_sfh.png")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     fig.savefig(out, dpi=110)
     print(f"\nfigure -> {out}")
-    print("\nConclusion: same DRW PSD family + matched dex variance, but tengri applies")
-    print("it in log-age (scale-free) and CIGALE in linear time (fixed) -- attributed,")
-    print("not a bug. Frozen in tests/crossval/test_carvajal2025_stochastic_sfh_crossval.py.")
+    print("\nConclusion (post-#865): same DRW PSD family, same linear-time coordinate,")
+    print("matched dex variance and fixed-Myr decorrelation -- tengri's field burstiness")
+    print("now agrees with CIGALE sfhstochastic_carvajal2025 in amplitude AND autocorrelation.")
+    print("Frozen in tests/crossval/test_carvajal2025_stochastic_sfh_crossval.py.")
 
 
 if __name__ == "__main__":

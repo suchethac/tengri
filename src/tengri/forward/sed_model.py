@@ -2003,6 +2003,7 @@ class SEDModel:
                 n_grid=self._n_grid,
                 d_log_age=float(self.d_log_age),
                 field_model=self._gp_kernel,
+                log_age_grid=self.log_age_grid,
             )
             kw["gp_x"] = gp_x
             kw["k0_half"] = k0_half
@@ -2036,6 +2037,7 @@ class SEDModel:
                 n_grid=self._n_grid,
                 d_log_age=float(self.d_log_age),
                 field_model=self._gp_kernel,
+                log_age_grid=self.log_age_grid,
             )
             kw["gp_x"] = gp_x
             kw["k0_half"] = k0_half
