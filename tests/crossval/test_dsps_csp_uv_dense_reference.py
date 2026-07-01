@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Cross-validation: DSPS CSP rest-UV vs a native-age reference (#858, #538).
 
 The CIGALE panchromatic head-to-head shows tengri's intrinsic stellar SED a few
