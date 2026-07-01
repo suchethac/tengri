@@ -266,9 +266,9 @@ def _valid_dust_emission_types() -> frozenset[str]:
     maintenance. Union with the alias map keys (e.g., draine2021_pah →
     draine2021_pah_ir) so grammar type names resolve correctly.
 
-    Excludes energy_balance_split (a helper, not a port with sed_dust_ir output).
-    Also includes _LAZY_DUST_EMISSION_TYPES for backward compatibility with
-    lazy registration wrappers (see ADR-0005 / ADR-0008).
+    Includes ``energy_balance_split`` (a registered two-temperature + AGN-IR
+    port publishing ``sed_dust_ir``, Kokorev+2021 — a real model, not a helper).
+    Also includes ``_LAZY_DUST_EMISSION_TYPES`` (ADR-0005 / ADR-0008).
     """
     from tengri.components.sed_model_component import _REGISTRY
     from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES

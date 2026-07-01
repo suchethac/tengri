@@ -570,10 +570,11 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
     **attenuation** laws, see :func:`list_dust_laws`.
 
-    The set of returned names is derived from the live
-    :data:`DUST_EMISSION_MODELS` registry (which the
-    :meth:`SEDModel.build` validator also consults), so the listing and
-    the validator can never drift apart. Closes #495.
+    The returned names are the user-facing grammar model catalog, taken from
+    the ``DUST_EMISSION_MODELS`` loader cache (whose keys are the grammar type
+    names). Dispatch itself is single via ``_REGISTRY`` ports; every name here
+    is a registered emission port and is accepted by the ``SEDModel.build``
+    grammar validator (``_valid_dust_emission_types``). Closes #495.
     """
     # Importing the module triggers the ``@register_emission_model`` decorators
     # plus the lazy-loader bindings at the bottom of ``emission.py``.
@@ -581,9 +582,6 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
 
     out = []
     for name in DUST_EMISSION_MODELS:
-        # energy_balance_split is an energy-balance helper, not a selectable emission model
-        if name == "energy_balance_split":
-            continue
         meta = _DUST_EMISSION_METADATA.get(
             name,
             {"status": "production", "citation": "", "short_doc": ""},
