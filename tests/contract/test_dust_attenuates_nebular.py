@@ -69,7 +69,7 @@ def test_nebular_continuum_is_attenuated():
     """sed_nebular is reddened by the birth-cloud + diffuse young-limit screen."""
     sed_neb = jnp.full(_WAVE.shape, 1.0e28)
     params = {"dust_tau_bc": 1.0, "dust_tau_diff": 0.5, "dust_slope": -0.7}
-    comp = DustSEDComponent(config=DustSEDComponentConfig(emission_model=None))
+    comp = DustSEDComponent(config=DustSEDComponentConfig())
 
     out = comp.apply(_state_with_nebular(sed_neb), params)
 
@@ -98,7 +98,7 @@ def test_nebular_continuum_is_attenuated():
 def test_zero_nebular_is_noop():
     """No published nebular (BakedIn zeros) leaves the stellar result unchanged."""
     params = {"dust_tau_bc": 1.0, "dust_tau_diff": 0.5, "dust_slope": -0.7}
-    comp = DustSEDComponent(config=DustSEDComponentConfig(emission_model=None))
+    comp = DustSEDComponent(config=DustSEDComponentConfig())
 
     with_zeros = comp.apply(_state_with_nebular(jnp.zeros(_WAVE.shape)), params)
     # Stellar-only state (no sed_nebular key at all).

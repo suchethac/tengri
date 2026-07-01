@@ -25,8 +25,10 @@ class _BareNameTestComponent(SEDModelComponent):
     name = "bare_name_test"
     parameter_prefix = "test_"
 
-    # One free parameter to satisfy component contract
-    x = Uniform(0.0, 10.0, description="Test parameter", units="")
+    # One free parameter to satisfy component contract. Needs default= because
+    # this component registers globally in _REGISTRY, and the test_param_defaults
+    # contract iterates every registered component (no default → pollutes it).
+    x = Uniform(0.0, 10.0, description="Test parameter", units="", default=5.0)
 
     def __init__(self):
         """Initialize tracking state."""

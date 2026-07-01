@@ -82,8 +82,11 @@ class Schreiber2018IRSEDComponent(EmissionPort):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import schreiber2018 as schreiber_fn
+        # schreiber2018 has no top-level closure wrapper (only a lazy-loader entry),
+        # so resolve it via the loader dict — same pattern as dale2014_cigale.
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
+        schreiber_fn = DUST_EMISSION_MODELS["schreiber2018"]
         sed = schreiber_fn(
             wave,
             L_ir,

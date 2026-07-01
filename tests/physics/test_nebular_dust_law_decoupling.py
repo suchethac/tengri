@@ -56,8 +56,7 @@ def test_default_nebular_inherits_birth_cloud_law():
     params = {"dust_tau_bc": 1.0, "dust_tau_diff": 0.5, "dust_slope": -0.7}
     comp = DustSEDComponent(
         config=DustSEDComponentConfig(
-            law_bc="power_law", law_diff="power_law", emission_model=None
-        )
+            law_bc="power_law", law_diff="power_law"        )
     )
     neb = _recover_nebular(comp.apply(_state_with_nebular(sed_neb), params))
 
@@ -72,8 +71,7 @@ def test_law_neb_decouples_only_the_birth_cloud():
     params = {"dust_tau_bc": 1.0, "dust_tau_diff": 0.5, "dust_slope": -0.7}
     comp = DustSEDComponent(
         config=DustSEDComponentConfig(
-            law_bc="power_law", law_diff="power_law", law_neb="calzetti", emission_model=None
-        )
+            law_bc="power_law", law_diff="power_law", law_neb="calzetti"        )
     )
     neb = _recover_nebular(comp.apply(_state_with_nebular(sed_neb), params))
 
@@ -89,8 +87,7 @@ def test_law_neb_decouples_only_the_birth_cloud():
     inherited = _recover_nebular(
         DustSEDComponent(
             config=DustSEDComponentConfig(
-                law_bc="power_law", law_diff="power_law", emission_model=None
-            )
+                law_bc="power_law", law_diff="power_law"            )
         ).apply(_state_with_nebular(sed_neb), params)
     )
     assert not np.allclose(neb, inherited, rtol=1e-3)
@@ -105,7 +102,6 @@ def test_neb_law_overrides_shift_only_nebular():
             law_bc="power_law",
             law_diff="power_law",
             neb_law_overrides=(("n_slope", -1.3),),
-            emission_model=None,
         )
     )
     out = comp.apply(_state_with_nebular(sed_neb), params)
