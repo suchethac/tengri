@@ -18,7 +18,7 @@ This module pins two facts:
   lives in the age-weighting, not flux handling).
 * :func:`test_young_knot_brightens_uv_vs_native_binning` — tengri's rest-UV is
   *brighter* than a native-age re-integration of its own SFH, by the young-knot
-  recent-SF contribution. This documents the intended #538 behaviour (removing
+  recent-SF contribution. This documents the intended #538 behavior (removing
   the knot to match CIGALE's rest-UV would regress Q_H) and guards its sign.
 
 Data-gated on ``reproduction/cigale/_drivers/data/bc03_from_cigale.h5`` (the
@@ -52,7 +52,7 @@ _MET_002 = float(np.log10(0.02) - _LOG10_ZSUN)  # met_logzsol for Z_abs = 0.02
 
 
 def _uv_opt(wave: np.ndarray, lnu: np.ndarray) -> float:
-    """Rest-UV/optical L_nu ratio, 1500 A / 5000 A (normalisation-independent)."""
+    """Rest-UV/optical L_nu ratio, 1500 A / 5000 A (normalization-independent)."""
     return float(lnu[np.argmin(np.abs(wave - 1500.0))] / lnu[np.argmin(np.abs(wave - 5000.0))])
 
 
@@ -105,7 +105,7 @@ def test_dsps_flux_sum_is_faithful():
 def test_young_knot_brightens_uv_vs_native_binning():
     """tengri's rest-UV exceeds a native-age re-integration by the recent-SF capture.
 
-    Intended #538 behaviour, not a bug (#858 closed): the young-boundary knot
+    Intended #538 behavior, not a bug (#858 closed): the young-boundary knot
     captures the [0, ~1 Myr] recent SF that a native-age integration (bins
     starting at 1 Myr, like CIGALE) misses. So tengri is *brighter* in the
     rest-UV -- the continuum flip-side of the knot's Q_H fix. This guards the
