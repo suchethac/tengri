@@ -1,7 +1,7 @@
 {
   "src/tengri/forward/sed_model.py": 5939,
   "src/tengri/inference/fitter.py": 3191,
-  "src/tengri/components/dust/attenuation.py": 2758,
+  "src/tengri/components/dust/attenuation.py": 1874,
   "src/tengri/parameters/groups.py": 2483,
   "src/tengri/components/dust/emission_templates.py": 2419,
   "src/tengri/inference/posterior.py": 2335,
