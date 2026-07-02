@@ -35,6 +35,39 @@
         "single_component",
         "wg00"
       ]
+    },
+    "radio": {
+      "_comment": "RadioSEDComponent registers in _REGISTRY from its own module; build_components resolves it via _resolve_registry_component (single dispatch, #845), so it no longer imports the class (only RadioSEDComponentConfig at the call site). Construction-only convergence — apply() and its cross-component reads (L_ir/L_agn_bol/log_mstar) are byte-identical. Sentinel = RadioSEDComponent absent from component_factory.",
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.forward.component_factory",
+        "attr": "RadioSEDComponent"
+      },
+      "expected_types": [
+        "radio"
+      ]
+    },
+    "xray": {
+      "_comment": "XRaySEDComponent dispatches via the _REGISTRY seam (#845). Construction-only; apply() cross-component reads (sfr/log_mstar/L_agn_bol/L_2500) unchanged. Sentinel = XRaySEDComponent absent from component_factory.",
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.forward.component_factory",
+        "attr": "XRaySEDComponent"
+      },
+      "expected_types": [
+        "xray"
+      ]
+    },
+    "igm": {
+      "_comment": "IGMSEDComponent (observer-frame transmission screen) dispatches via the _REGISTRY seam (#845). Construction-only; apply() unchanged. Sentinel = IGMSEDComponent absent from component_factory.",
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.forward.component_factory",
+        "attr": "IGMSEDComponent"
+      },
+      "expected_types": [
+        "igm"
+      ]
     }
   }
 }

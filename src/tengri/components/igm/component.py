@@ -172,3 +172,11 @@ class IGMSEDComponent:
             sed_observed=state.sed_observed * T,
             derived=state.derived.with_(igm_transmission=T),
         )
+
+
+# Register in the unified component dispatch table so build_components resolves
+# the IGM component via _resolve_registry_component (single dispatch, #845)
+# instead of importing the class directly.
+from tengri.components.sed_model_component import _REGISTRY
+
+_REGISTRY["igm"] = IGMSEDComponent

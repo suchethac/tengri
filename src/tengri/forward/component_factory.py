@@ -48,16 +48,18 @@ from tengri.components.dust.two_component import (
 from tengri.components.dust.wg00_model import (
     WG00AttenuationSEDComponentConfig,
 )
-from tengri.components.igm.component import IGMSEDComponent
+
+# radio/xray/igm component CLASSES are resolved from _REGISTRY via the dispatch
+# seam (single dispatch, #845) — only radio's config dataclass is imported (at
+# its call site). nebular stays a direct import pending its default-hygiene
+# backlog (14 missing defaults) + shock dual-path (#851).
 from tengri.components.nebular.component import (
     NebularSEDComponent,
     NebularSEDComponentConfig,
 )
-from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
-from tengri.components.xray.component import XRaySEDComponent
 from tengri.protocols.component import SEDComponent
 
 __all__ = [
@@ -466,17 +468,19 @@ def build_components(
         from tengri.components.radio.component import RadioSEDComponentConfig
 
         components.append(
-            RadioSEDComponent(
+            _resolve_registry_component(
+                "radio",
+                "radio",
                 config=RadioSEDComponentConfig(
                     sfr_mode=radio_sfr_mode,
                     agn_radio_model=radio_agn_model,
-                )
+                ),
             )
         )
     if use_xray:
-        components.append(XRaySEDComponent())
+        components.append(_resolve_registry_component("xray", "xray"))
     if use_igm:
-        components.append(IGMSEDComponent())
+        components.append(_resolve_registry_component("igm", "igm"))
 
     from tengri.forward.orchestrator import topological_sort, validate_pipeline
 
