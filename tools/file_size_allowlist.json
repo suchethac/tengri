@@ -10,7 +10,7 @@
   "src/tengri/inference/hierarchical.py": 2076,
   "src/tengri/components/stellar/sps/dsps_wrapper.py": 2039,
   "src/tengri/components/stellar/sfh/mean_sfh.py": 2036,
-  "src/tengri/registry.py": 1983,
+  "src/tengri/registry.py": 1999,
   "src/tengri/components/nebular/cue.py": 1966,
   "src/tengri/components/stellar/sfh/registry.py": 1831,
   "src/tengri/parameters/parameters.py": 1802,
