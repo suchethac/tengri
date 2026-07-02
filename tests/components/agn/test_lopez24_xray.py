@@ -84,7 +84,9 @@ class TestLopez24Corona:
             l_12um_erg_hz=1e30,
             alpha_irx=0.6,
         )
-        assert jnp.sum(high) > jnp.sum(low)
+        # α_IRX = log10(νLν(12µm) / L_X): higher α_IRX -> fainter X-ray
+        # (L_X = νLν / 10**α_IRX), matching CIGALE lopez24 / Asmus+2015.
+        assert jnp.sum(high) < jnp.sum(low)
 
     def test_l12um_scaling(self, xray_wavelength):
         low = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e28)
@@ -167,7 +169,8 @@ class TestLopez24Corona:
 
         grad = jax.grad(loss)(0.3)
         assert jnp.isfinite(grad)
-        assert grad > 0.0
+        # L_X = νLν / 10**α_IRX decreases with α_IRX -> negative gradient.
+        assert grad < 0.0
 
     def test_gradient_wrt_l12um(self, xray_wavelength):
         def loss(l12):
