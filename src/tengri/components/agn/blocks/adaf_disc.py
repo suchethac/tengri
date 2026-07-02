@@ -15,8 +15,8 @@ from tengri.components.agn.disc import adaf_disc
     "disc",
     "adaf",
     citation="Mahadevan 1997, ApJ, 477, 585",
-    status="production",
-    short_doc="ADAF inner flow with truncated outer thin disc",
+    status="deprecated",
+    short_doc="ADAF inner flow (DEPRECATED: misapplies Mahadevan Eq. 49; use kubota_done) — #898",
 )
 def adaf_disc_block(
     wavelength: Array,
