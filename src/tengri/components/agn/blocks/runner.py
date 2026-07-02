@@ -119,7 +119,7 @@ _DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset(
 _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
     "nlr": frozenset({"analytic", "grahsp"}),
     "blr": frozenset({"analytic", "grahsp"}),
-    "feii": frozenset({"grahsp"}),
+    "feii": frozenset({"grahsp", "boroson_green"}),
     "torus": frozenset({"grahsp"}),
 }
 

@@ -226,6 +226,21 @@ def test_validate_polar_dust_nonzero_ebv_clean():
     assert not any("agn_polar_ebv=0" in str(x.message) for x in w)
 
 
+def test_validate_boroson_green_feii_needs_5100A_disc():
+    """boroson_green FeII normalizes to l5100_disc, so pairing it with a disc
+    that lacks a 5100Å continuum (e.g. adaf) must warn (rule 4). It was missing
+    from ``_DOWNSTREAM_NEEDS_L5100['feii']`` so the no-op went unflagged."""
+    with pytest.warns(RecipeWarning, match=r"lambda\*L_lambda\(5100A\)"):
+        validate_block_recipe(
+            agn_disc_block="adaf",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="boroson_green",
+            agn_torus_block="none",
+            agn_attenuation_block="none",
+        )
+
+
 # ──────────────────────────────────────────────────────────────────────
 # Selector typo via Parameters round-trip
 # ──────────────────────────────────────────────────────────────────────
