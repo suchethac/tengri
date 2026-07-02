@@ -156,6 +156,81 @@ def gp_from_xi(xi: jnp.ndarray, sqrt_power: jnp.ndarray, n_points: int) -> jnp.n
     return jnp.fft.irfft(coeffs, n=n_points)
 
 
+# Relative Cholesky jitter for the linear-time DRW covariance. The young-age
+# block (grid steps << tau) is near-rank-deficient (rows nearly identical), so a
+# small diagonal loading keeps it positive-definite. Scaled by the covariance
+# variance so it is amplitude-independent.
+_DRW_CHOLESKY_JITTER: float = 1e-6
+
+
+def drw_linear_gp_from_xi(xi, psd_sigma_dex, psd_tau_yr, log_age_grid):
+    r"""DRW Gaussian-process realization stationary in LINEAR (physical) time.
+
+    Builds the damped-random-walk covariance directly in cosmic time and samples
+    it on the (log-spaced) SFH age grid:
+
+    .. math::
+
+        K_{ij} = (\sigma \ln 10)^2 \, \exp(-|t_i - t_j| / \tau),
+        \qquad t_i = 10^{u_i},
+
+    where :math:`u_i` is the log10-age grid, :math:`\sigma` is the modulation
+    amplitude in **dex**, and :math:`\tau` the physical decorrelation timescale
+    [yr]. The realization is ``gp_x = L \xi`` with ``K = L L^T`` (Cholesky) and
+    ``xi ~ N(0, I)`` — the same standardized latent the samplers explore.
+
+    Unlike the Fourier/log-age construction (:func:`gp_from_xi` +
+    :func:`compute_sqrt_power_drw`), the correlation length is a **fixed number
+    of years at every age** — gas-cycling burstiness is a physical-time process,
+    not a fixed number of dex; the log grid is only the sampling. The natural-log
+    variance is stationary at :math:`(\sigma \ln 10)^2`, so the modulation std is
+    exactly :math:`\sigma` dex and the log-normal bias correction is
+    :math:`K(0)/2 = (\sigma \ln 10)^2 / 2`.
+
+    Parameters
+    ----------
+    xi : array_like, shape (n,)
+        Standardized latent vector, :math:`\xi \sim \mathcal{N}(0, I)`.
+    psd_sigma_dex : float
+        Modulation amplitude [dex] = std of :math:`\log_{10}(\mathrm{SFR})`.
+    psd_tau_yr : float
+        Physical DRW decorrelation timescale [yr].
+    log_age_grid : array_like, shape (n,)
+        ``log10(age/yr)`` grid the SFH is represented on.
+
+    Returns
+    -------
+    gp_x : ndarray, shape (n,)
+        Natural-log SFH modulation (applied as ``exp(gp_x - k0_half)``).
+    k0_half : ndarray, scalar
+        Log-normal bias correction :math:`(\sigma \ln 10)^2 / 2`.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: dense Cholesky of an ``(n, n)`` matrix via
+    ``jnp.linalg.cholesky`` (:math:`O(n^3)`; ``n ~ 256`` is sub-ms on CPU and
+    differentiable). A relative jitter keeps the near-rank-deficient young-age
+    block positive-definite. At old ages where the grid step exceeds
+    :math:`\tau`, the covariance is effectively diagonal — burstiness below the
+    local grid resolution is unrepresentable there (and physically averages out).
+
+    References
+    ----------
+    .. [1] K. G. Iyer et al., "The star formation history and variability of
+       galaxies," MNRAS, 498, 430 (2020). [physical decorrelation timescale]
+    .. [2] N. Caplar & S. Tacchella, MNRAS, 487, 3845 (2019). [PSD amplitude, dex]
+    """
+    ln10 = jnp.log(10.0)
+    t = 10.0 ** jnp.asarray(log_age_grid)
+    var = (jnp.asarray(psd_sigma_dex) * ln10) ** 2
+    dt = jnp.abs(t[:, None] - t[None, :])
+    cov = var * jnp.exp(-dt / jnp.asarray(psd_tau_yr))
+    n = t.shape[0]
+    cov = cov + _DRW_CHOLESKY_JITTER * var * jnp.eye(n)
+    gp_x = jnp.linalg.cholesky(cov) @ jnp.asarray(xi)
+    return gp_x, 0.5 * var
+
+
 def generate_gp_fourier(key: jax.Array, sqrt_power: jnp.ndarray, n_points: int) -> jnp.ndarray:
     """Stochastic GP realization for mock galaxy generation.
 

@@ -39,7 +39,12 @@ from typing import Any, NamedTuple
 import jax.numpy as jnp
 
 from tengri.components.stellar.sfh.dense_basis import dense_basis, dense_basis_pure
-from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw, gp_from_xi
+from tengri.components.stellar.sfh.gp_sfh import (
+    compute_sqrt_power_drw,
+    drw_linear_gp_from_xi,
+    gp_from_xi,
+    make_log_age_grid,
+)
 from tengri.components.stellar.sfh.mean_sfh import (
     AGEMAX_YR,
     buat08,
@@ -1748,6 +1753,7 @@ def compute_field_gp(
     n_grid: int,
     d_log_age: float,
     field_model: str = "drw",
+    log_age_grid: jnp.ndarray | None = None,
 ) -> tuple[jnp.ndarray, float]:
     """Compute GP realization and lognormal correction for the field component.
 
@@ -1766,23 +1772,30 @@ def compute_field_gp(
     field_model : str
         PSD model name. Default "drw".
 
+    log_age_grid : array, shape (n_grid,), optional
+        ``log10(age/yr)`` grid the SFH is sampled on. Required by the ``drw``
+        (linear-time) path to place the covariance in physical time; if omitted
+        it is reconstructed with :func:`make_log_age_grid`.
+
     Returns
     -------
     gp_x : array, shape (n_grid,)
-        GP realization on the log-age grid.
+        GP realization sampled on the log-age grid.
     k0_half : float
-        Lognormal correction: K(0)/2 = sigma_PS^2 / 4.
+        Lognormal bias correction K(0)/2 so ``exp(gp_x - k0_half)`` is
+        mean-preserving. For ``drw`` this is ``(psd_sigma * ln10)^2 / 2``.
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``gp_from_xi`` and PSD model functions
-    from the field model registry.
+    **JIT-compatible**: yes.
 
-    The Gaussian process realization models burstiness via a correlated
-    random field in log-space. The PSD model (e.g., "drw" for Damped
-    Random Walk) controls temporal correlations. The lognormal correction
-    ``k0_half`` accounts for the bias introduced when exponentiation is
-    applied to the Gaussian latents.
+    ``field_model="drw"`` builds a damped random walk stationary in **linear
+    (physical) time** — the covariance ``(sigma ln10)^2 exp(-|t_i-t_j|/tau)`` at
+    physical times ``t_i = 10**u_i``, realized via Cholesky (#865). ``psd_sigma``
+    is then the modulation std in dex and ``psd_tau_yr`` the physical
+    decorrelation timescale. Other PSD models keep the Fourier/log-age
+    construction (:func:`gp_from_xi`). See
+    :func:`tengri.components.stellar.sfh.gp_sfh.drw_linear_gp_from_xi`.
 
     Examples
     --------
@@ -1797,6 +1810,20 @@ def compute_field_gp(
     (64,)
 
     """
+    if field_model == "drw":
+        # Damped random walk stationary in LINEAR (physical) time: the DRW
+        # covariance is built directly in cosmic time and sampled on the
+        # log-age grid (#865). ``psd_sigma`` is the modulation std in dex and
+        # ``psd_tau_yr`` the physical decorrelation timescale — both mean exactly
+        # what the ``field`` priors document (Caplar & Tacchella 2019 amplitude;
+        # Iyer+2020 timescale). Replaces the former Fourier/log-age construction,
+        # whose correlation length was fixed in dex (scale-free) and only matched
+        # the physical timescale near a single reference age.
+        if log_age_grid is None:
+            log_age_grid = make_log_age_grid(n_grid)
+        return drw_linear_gp_from_xi(xi, psd_sigma, psd_tau_yr, log_age_grid)
+
+    # Other PSD models (e.g. flex-PSD) keep the Fourier/log-age construction.
     sqrt_power_fn = FIELD_MODEL_REGISTRY[field_model]
     sqrt_power = sqrt_power_fn(n_grid, d_log_age, psd_sigma, psd_tau_yr)
     gp_x = gp_from_xi(xi, sqrt_power, n_grid)

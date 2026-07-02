@@ -189,7 +189,7 @@ def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
     mid = 0.5 * (lg[:-1] + lg[1:])  # interior log-midpoint edges
     lo = jnp.concatenate([lg[:1] - 0.5 * (lg[1:2] - lg[:1]), mid])  # per-bin lower edge
     hi = jnp.concatenate([mid, lg[-1:] + 0.5 * (lg[-1:] - lg[-2:-1])])  # per-bin upper edge
-    e_lo = 10.0**lo  # -> 0 where lo = -inf (the age=0 neighbour)
+    e_lo = 10.0**lo  # -> 0 where lo = -inf (the age=0 neighbor)
     e_hi = 10.0**hi
     denom = e_hi - e_lo
     boost = jnp.where(denom > 0.0, e_hi / jnp.where(denom > 0.0, denom, 1.0), 1.0)
@@ -882,7 +882,13 @@ class StellarSEDComponent:
             # recomputes the step from static ``n_grid`` and module constants.
             d_log_age = log_age_grid_step(n_grid)
             gp_x, k0_half = compute_field_gp(
-                xi, psd_sigma, psd_tau_yr, n_grid, d_log_age, field_model="drw"
+                xi,
+                psd_sigma,
+                psd_tau_yr,
+                n_grid,
+                d_log_age,
+                field_model="drw",
+                log_age_grid=log_age_grid,
             )
             sfr_history = sfr_history * jnp.exp(gp_x - k0_half)
 

@@ -157,6 +157,16 @@ class XRaySEDComponent:
                 "erg/s/Hz",
                 "Fallback when L_2500_intrinsic unavailable (e.g. SKIRTOR monolithic path)",
             ),
+            DerivedKey(
+                "age_weights",
+                "Msun",
+                "SSP mass weights (stellar) — mass-weighted age drives the LMXB scaling",
+            ),
+            DerivedKey(
+                "ssp_ages_yr",
+                "yr",
+                "SSP age grid (stellar); with age_weights gives the LMXB stellar age",
+            ),
         )
 
     def precompute(
@@ -205,6 +215,22 @@ class XRaySEDComponent:
         stellar_mass = 10.0**log_mstar
         L_agn_bol = jnp.asarray(state.derived.get("L_agn_bol", 0.0))
 
+        # LMXB scaling (Lehmer+2016) is a steep polynomial in the stellar-
+        # population age, so it must see the galaxy's actual age — not the
+        # 1 Gyr default. Compute the SSP mass-weighted age from the stellar
+        # component's published age weights (matches CIGALE's
+        # ``stellar.age_m_star``). Without this the LMXB — which dominates the
+        # galaxy X-ray — over-predicts by ~3x for an evolved (~3 Gyr)
+        # population. Falls back to 1 Gyr only if the weights are absent.
+        age_weights = jnp.asarray(state.derived.get("age_weights", 0.0))
+        ssp_ages_yr = jnp.asarray(state.derived.get("ssp_ages_yr", 0.0))
+        _w_sum = jnp.sum(age_weights)
+        stellar_age_gyr = jnp.where(
+            _w_sum > 0.0,
+            jnp.sum(age_weights * ssp_ages_yr) / jnp.maximum(_w_sum, 1e-30) / 1.0e9,
+            1.0,
+        )
+
         # Compute l_2500_30deg with fallback chain:
         # 1. L_2500_intrinsic from composable AGN (un-reddened disc shape)
         # 2. L_2500_30deg from SKIRTOR or other torus models
@@ -230,6 +256,7 @@ class XRaySEDComponent:
                 w,
                 sfr=sfr,
                 stellar_mass=stellar_mass,
+                stellar_age_gyr=stellar_age_gyr,
                 l_2500_30deg=l_2500,
                 gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
                 gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),

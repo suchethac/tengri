@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -74,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -95,7 +95,7 @@ jobs:
     timeout-minutes: 5
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -113,7 +113,7 @@ jobs:
     needs: smoke
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -163,7 +163,7 @@ jobs:
     needs: smoke
     if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -184,7 +184,7 @@ jobs:
             --ignore=tests/regression/synthesizer_parity/test_nebular_fesc.py
         timeout-minutes: 35
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
@@ -198,26 +198,45 @@ jobs:
   # Skip on regular push/PR to keep fast feedback under 15 min.
   slow:
     runs-on: ubuntu-latest
-    # Own concurrency group: do NOT inherit the workflow-level
+    # Split the ~1,270-test tier across two parallel runners (one per suite):
+    # run serially, the combined tier overran the 40-min step timeout (~55 %
+    # done), so it never completed and its failure summary was never printed.
+    # A single suite finishes well under the budget. Kept serial (no `-n`):
+    # the sampler-heavy inference tests (NUTS/VI warmups) peak at several GB
+    # each, so xdist workers would risk OOM on the 16 GB runner. `fail-fast:
+    # false` so one suite's failure still lets the other report.
+    strategy:
+      fail-fast: false
+      matrix:
+        # Per-suite step budgets sized to the measured serial runtimes:
+        # inference ≈ 45 min, integration ≈ 93 min (the heavy end-to-end fits).
+        # Kept serial (no xdist) for OOM safety, so each suite needs a budget
+        # above its own runtime rather than a shared 40-min cap.
+        include:
+          - suite: inference
+            timeout: 60
+          - suite: integration
+            timeout: 120
+    # Own concurrency group per suite: do NOT inherit the workflow-level
     # `cancel-in-progress: true` (which kills slow whenever main moves).
     # `cancel-in-progress: false` means newer slow triggers queue behind
     # an existing one — slow always runs to completion, never aborted by
     # an unrelated main push. See issue #160.
     concurrency:
-      group: tests-slow-${{ github.ref }}
+      group: tests-slow-${{ matrix.suite }}-${{ github.ref }}
       cancel-in-progress: false
     if: |
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-slow-tests'))
-    timeout-minutes: 45
+    timeout-minutes: 125
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      - run: pytest tests/inference tests/integration -q --ignore=tests/crossval
-        timeout-minutes: 40
+      - run: pytest tests/${{ matrix.suite }} -q --ignore=tests/crossval
+        timeout-minutes: ${{ matrix.timeout }}

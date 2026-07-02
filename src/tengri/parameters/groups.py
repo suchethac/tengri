@@ -1045,6 +1045,11 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     if dust_dict.get("lyman_cutoff"):
         result["dust_lyman_cutoff_aa"] = 912.0
 
+    # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) or only the
+    # young/birth-cloud population (default; bagpipes). See DustSEDComponent.
+    if "lyc_absorb_all" in dust_dict:
+        result["dust_lyc_absorb_all"] = bool(dust_dict["lyc_absorb_all"])
+
     # Extract dust emission sub-block
     if "emission" in dust_dict:
         emission_dict = dust_dict["emission"]
@@ -1340,6 +1345,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # Lyman-limit clip: zero the attenuation curve below 912 Å (CIGALE
             # parity). Two-component only; routed to dust_lyman_cutoff_aa.
             "lyman_cutoff",
+            # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young-only
+            # (default; bagpipes). Two-component only.
+            "lyc_absorb_all",
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
@@ -2006,6 +2014,8 @@ def _resolve_value(
             "Rv_bc",
             "Rv_diff",
             "Rv_neb",
+            "lyman_cutoff",
+            "lyc_absorb_all",
         }
         if override_key in structural_keys:
             # These are structural keys, not parameters
@@ -2375,6 +2385,9 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # Round-trip the Lyman-limit clip back to its boolean grammar form.
         if float(getattr(spec, "dust_lyman_cutoff_aa", 0.0) or 0.0) > 0.0:
             group_output["lyman_cutoff"] = True
+        # Round-trip the absorb-all LyC toggle (only emit when non-default).
+        if bool(getattr(spec, "dust_lyc_absorb_all", False)):
+            group_output["lyc_absorb_all"] = True
     elif group_name == "stellar":
         # Emit met_mode whenever it's non-default (default = 'delta').
         # Always-emit would force a stellar={} entry on every round-trip, which

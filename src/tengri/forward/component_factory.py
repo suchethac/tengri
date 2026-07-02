@@ -250,6 +250,7 @@ def build_components(
     dust_law_neb: str | None = None,
     dust_law_overrides: dict | None = None,
     dust_lyman_cutoff_aa: float = 0.0,
+    dust_lyc_absorb_all: bool = False,
     dust_emission_model: str = "modified_blackbody",
     use_dust: bool = True,
     # Single-component dust (Calzetti-style screen). Picks
@@ -416,6 +417,7 @@ def build_components(
                         diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                         neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
                         lyman_cutoff_aa=dust_lyman_cutoff_aa,
+                        lyc_absorb_all=dust_lyc_absorb_all,
                     )
                 )
             )
