@@ -812,7 +812,7 @@ def run_raytrace(
             step_size = 0.03 * jnp.sqrt(float(D))
         else:
             step_size = 0.01
-        # Initialising from a point estimate (e.g. MAP) starts the chain at the
+        # Initializing from a point estimate (e.g. MAP) starts the chain at the
         # posterior mode — the highest-curvature region. The standard step then
         # overshoots and every leapfrog trajectory diverges, collapsing the
         # acceptance rate to ~0. Take a smaller step when starting from the mode.
