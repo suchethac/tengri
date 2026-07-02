@@ -121,34 +121,34 @@ def synth_wave():
     return jnp.logspace(0.0, 8.0, 64)  # 1 Å to 10⁸ Å
 
 
+def _component_default_params(component, **bare):
+    """Build a full param dict from a component's ``declared_parameters()``
+    defaults, plus any bare (non-prefixed) params supplied explicitly.
+
+    Deriving from the declared set — rather than a hand-maintained dict — keeps
+    the guard from drifting when a component adds a parameter: the earlier
+    hand-written ``xray_params`` was missing the declared ``xray_log_nh``, so
+    ``apply`` KeyError'd (#870, #768). Any newly declared param is now picked up
+    automatically at its physically-motivated default.
+    """
+    params = {d.name: jnp.asarray(d.prior.default) for d in component.declared_parameters()}
+    params.update({k: jnp.asarray(v) for k, v in bare.items()})
+    return params
+
+
 @pytest.fixture(scope="module")
 def radio_params():
-    return {
-        "radio_q_ir": jnp.asarray(2.64),
-        "radio_alpha_sf": jnp.asarray(0.8),
-        "radio_loudness": jnp.asarray(0.0),
-        "radio_alpha_agn": jnp.asarray(0.7),
-        "radio_T_e": jnp.asarray(1e4),
-        "radio_alpha_ff": jnp.asarray(-0.1),
-        "redshift": jnp.asarray(0.1),
-    }
+    return _component_default_params(RadioSEDComponent(), redshift=0.1)
 
 
 @pytest.fixture(scope="module")
 def xray_params():
-    return {
-        "xray_gamma_hmxb": jnp.asarray(2.0),
-        "xray_gamma_lmxb": jnp.asarray(1.6),
-        "xray_gamma_agn": jnp.asarray(1.8),
-        "xray_E_cut": jnp.asarray(300.0),
-        "xray_delta_alpha_ox": jnp.asarray(-1.4),
-        "redshift": jnp.asarray(0.1),
-    }
+    return _component_default_params(XRaySEDComponent(), redshift=0.1)
 
 
 @pytest.fixture(scope="module")
 def igm_params():
-    return {"redshift": jnp.asarray(3.0)}
+    return _component_default_params(IGMSEDComponent(), redshift=3.0)
 
 
 COMPONENT_CASES = [
