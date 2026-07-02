@@ -145,6 +145,17 @@ def grahsp_nlr_block(
     line-luminosity normalization reference (matching upstream §2.1.2).
     Returns the narrow-line component on the isotropic channel.
 
+    Convention note (intentional block-specific deviation from ADR-0018 §3):
+    ADR-0018 §3 states the *generic* NLR contract as isotropic normalization to
+    the bolometric ``agn_log_lbol`` (followed by the ``analytic`` and
+    ``synthesizer`` NLR blocks). This GRAHSP block instead normalizes to
+    ``l5100_disc`` **by design**, to reproduce GRAHSP verbatim: upstream
+    ``activatelines.py`` sets ``l_agn = agn.lum5100A / 510`` and
+    ``l_broadlines = 0.02 * l_agn * Alines`` (narrow lines ``0.002 * l_agn``).
+    Changing it to isotropic ``L_bol`` would break GRAHSP parity — NLR
+    normalization is legitimately per-block (see the composable-AGN physics
+    audit and ADR-0018 §3 clarification).
+
     Parameters
     ----------
     templates : GRAHSPTemplates, optional

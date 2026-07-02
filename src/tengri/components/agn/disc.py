@@ -1723,11 +1723,9 @@ def _adaf_truncated_disc_spectrum(
     return jnp.sum(ring_contributions, axis=0)
 
 
-# ADAF disc model (Mahadevan 1997; Yuan & Narayan 2014). The current implementation
-# misapplies Mahadevan (1997) Eq. 49 (radiative luminosity scaled by L_bol instead of
-# L_Edd) and is scheduled for a full rewrite; do not use for publication-grade fits.
-# The composable "adaf" disc block is marked status="deprecated" and warns at build.
-# Tracking: #898.
+# ADAF disc model (Mahadevan 1997; Yuan & Narayan 2014). Misapplies Mahadevan
+# Eq. 49 (radiative luminosity scaled by L_bol not L_Edd); block deprecated +
+# warns at build; scheduled for rewrite — not for publication fits. Tracking: #898.
 def adaf_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
