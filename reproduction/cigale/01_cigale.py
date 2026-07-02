@@ -553,32 +553,40 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="pcigale  sfhdelayed + bc03", label_r="tengri  sfh.delayed + bc03")
-ax_l.plot(w_c, L_c, "C0-", linewidth=1.5)
-ax_l.text(
+# Shared-axis overplot + tengri/CIGALE ratio (both normalized to 1 M_sun formed).
+_w_c3 = np.asarray(w_c)
+_Lt3 = U.regrid(np.asarray(s_stellar.wave), np.asarray(s_stellar.sed_intrinsic), _w_c3)
+_r3 = _Lt3 / np.maximum(np.asarray(L_c), 1e-50)
+_m3 = (_w_c3 >= 1e2) & (_w_c3 <= 1e6)
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(_w_c3, np.asarray(L_c), "C0-", linewidth=1.5, label="pcigale  sfhdelayed + bc03")
+ax.plot(_w_c3, _Lt3, "C1--", linewidth=1.3, label="tengri  sfh.delayed + bc03")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(1e2, 1e6)
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+_mstar = 10.0 ** float(s_stellar.derived["log_mstar"])
+ax.text(
     0.05,
     0.95,
-    r"$M_\star = 1\,M_\odot$ (norm)",
-    transform=ax_l.transAxes,
-    fontsize=10,
+    rf"$M_\star$: CIGALE norm $1\,M_\odot$; tengri surviving ${_mstar:.2f}\,M_\odot$ (formed $1\,M_\odot$)",
+    transform=ax.transAxes,
+    fontsize=9,
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
-m_star = 10.0 ** float(s_stellar.derived["log_mstar"])
-ax_r.text(
-    0.05,
-    0.95,
-    rf"$M_\star = {m_star:.2e}\,M_\odot$",
-    transform=ax_r.transAxes,
-    fontsize=10,
-    va="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.plot(_w_c3[_m3], _r3[_m3], "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_ylim(0.5, 1.5)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_03_stellar_sed.png")
 
@@ -859,35 +867,43 @@ L_emit = float(s_ir.derived.get("L_ir", 0.0))
 residual = abs(L_abs - L_emit) / max(L_abs, 1e-30)
 _assert_comparable(L_c_ir, s_ir.sed_intrinsic, name="§6 IR")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="pcigale  + Dale+2014 (α = 2)",
-    label_r="tengri  + dust.emission.dale2014 (α = 2)",
+# Shared-axis overplot + tengri/CIGALE ratio.
+_w_c6 = np.asarray(w_c_ir)
+_Lc6 = np.asarray(L_c_ir)
+_Lt6 = U.regrid(np.asarray(s_ir.wave), np.asarray(s_ir.sed_intrinsic), _w_c6)
+_r6 = _Lt6 / np.maximum(_Lc6, 1e-50)
+_ymax_d = float(max(np.nanmax(_Lc6), np.nanmax(_Lt6)))
+_m6 = (_Lc6 > _ymax_d * 1e-4) & (_Lt6 > _ymax_d * 1e-4)  # ratio only where both have flux
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
 )
-ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
-ax_r.text(
+ax.plot(_w_c6, _Lc6, "C0-", linewidth=1.5, label="pcigale  + Dale+2014 (α = 2)")
+ax.plot(_w_c6, _Lt6, "C1--", linewidth=1.3, label="tengri  + dust.emission.dale2014 (α = 2)")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlim(float(_w_c6.min()), float(_w_c6.max()))
+ax.set_ylim(_ymax_d * 1e-6, _ymax_d * 2.0)
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.text(
     0.98,
     0.05,
     rf"$|L_{{\rm IR}} - L_{{\rm abs}}|/L_{{\rm abs}} = {residual:.1e}$",
-    transform=ax_r.transAxes,
+    transform=ax.transAxes,
     fontsize=9,
     ha="right",
     va="bottom",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7),
 )
-# Match x-range so the FIR peak is visible on both panels.
-_xmin = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
-_xmax = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
-# Peak-anchored y-limit: the SED cliffs to ~0 at the grid edges, so without
-# this the shared log axis autoscales across ~170 decades and flattens the SED.
-_ymax_d = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(_xmin, _xmax)
-    ax.set_ylim(_ymax_d * 1e-6, _ymax_d * 2.0)
-    ax.grid(True, alpha=0.3)
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax_r.axhspan(0.9, 1.1, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.plot(_w_c6[_m6], _r6[_m6], "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_ylim(0.5, 1.5)
+ax_r.set_xlabel(r"$\lambda$ [Å]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -1853,94 +1869,85 @@ save_fig("cigale_10_xray_nh_sweep.png")
 # `dust.emission.dale2014` and CIGALE's `dale2014` module.
 # Star-forming only, 100 MHz to 100 GHz.
 #
-# Both sides include the Murphy+2011 thermal free-free term (on by
-# default), which flattens the steep synchrotron power law toward high
-# frequency. The two agree across the band — within ~5 % out to 10 GHz
-# and ~10–30 % by 100 GHz — with tengri's 10–100 GHz slope (−0.62)
-# marginally flatter than CIGALE's (−0.70), i.e. a touch more free-free.
-# The flattening is gentle, so neither curve shows a dramatic upturn.
+# Both include the Murphy+2011 thermal free-free term, which flattens the
+# steep synchrotron toward high frequency. The two agree to ~5-10 % out to
+# ~10 GHz (1.4 GHz: 1.05x; 150 MHz: 1.02x). Above that they diverge: CIGALE's
+# free-free is strong enough to turn the spectrum back up (minimum near
+# ~80 GHz, rising steeply beyond), whereas tengri's condon92 free-free is
+# weaker and the spectrum keeps declining to 300 GHz. So tengri
+# under-represents the thermal component at nu >~ 30 GHz -- a real
+# high-frequency limitation (#863), though well outside the ~1.4 GHz band
+# where the FIR-radio correlation is anchored. The ratio panel shows the
+# growing departure; the shared-axis view (extended to 300 GHz) makes both
+# the low-frequency agreement and the high-frequency free-free gap visible.
 
 # %%
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax in (ax_l, ax_r):
-    ax.set_xlabel(r"$\nu$ [GHz]")
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.grid(True, alpha=0.3)
-ax_l.set_title(r"pcigale.sed_modules.radio  ($q_{IR}=2.5$)")
-ax_r.set_title("tengri  radio.condon92")
+# Both SF radio spectra on shared axes + ratio; both normalized to the 1 M_sun
+# fiducial (SF radio shape is luminosity-independent). Extended to 300 GHz so
+# the synchrotron->free-free crossover is visible on both.
+sed_r = C.run_chain(
+    [
+        (
+            "sfhdelayed",
+            dict(tau_main=1000, age_main=5000, tau_burst=50, age_burst=20,
+                 f_burst=0.0, sfr_A=1.0, normalise=True),
+        ),
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("dale2014", dict(alpha=2.0)),
+        ("radio", dict(qir_sf=2.5, alpha_sf=0.8, R_agn=0.0, alpha_agn=0.7)),
+    ]
+)
+w_r, L_r = C.to_lnu(sed_r)
+_nu_c = 2.998e18 / w_r / 1e9
 
-try:
-    sed_r = C.run_chain(
-        [
-            (
-                "sfhdelayed",
-                dict(
-                    tau_main=1000,
-                    age_main=5000,
-                    tau_burst=50,
-                    age_burst=20,
-                    f_burst=0.0,
-                    sfr_A=1.0,
-                    normalise=True,
-                ),
-            ),
-            ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-            ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
-            ("dale2014", dict(alpha=2.0)),
-            ("radio", dict(qir_sf=2.5, alpha_sf=0.8, R_agn=0.0, alpha_agn=0.7)),
-        ]
-    )
-    w_r, L_r = C.to_lnu(sed_r)
-    nu = 2.998e18 / w_r / 1e9
-    mr = (nu >= 0.1) & (nu <= 100)
-    ax_l.plot(nu[mr], L_r[mr], "C0-", linewidth=1.4, label=r"SF synchrotron ($q_{IR}=2.5$)")
-    ax_l.legend(fontsize=9)
-except Exception:
-    pass
+m_r = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
+         "log_total_mass": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+          "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "*": FIXED,
+          "emission": {"type": "dale2014", "*": FIXED}},
+    # q_IR pinned to CIGALE's qir_sf=2.5 (tengri's bucket default is 2.64);
+    # same alpha_sf=0.8.
+    radio={"type": "condon92", "radio_q_ir": Fixed(2.5),
+           "radio_alpha_sf": Fixed(0.8), "*": FIXED},
+    redshift=Fixed(0.0),
+)
+state_r = m_r.predict_state({})
+w_t = np.asarray(state_r.wave)
+sed_t = np.asarray(state_r.derived["sed_radio"])
+_nu_t = 2.998e18 / w_t / 1e9
 
-try:
-    m_r = SEDModel.build(
-        ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
-        sfh={
-            "type": "delayed",
-            "tau_gyr": Fixed(1.0),
-            "age_gyr": Fixed(5.0),
-            "log_total_mass": Fixed(0.0),
-            "*": FIXED,
-        },
-        dust={
-            "type": "two_component",
-            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
-            "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-            "*": FIXED,
-            "emission": {"type": "dale2014", "*": FIXED},
-        },
-        # Pin q_IR to CIGALE's `qir_sf = 2.5` (CIGALE's default for the
-        # SF synchrotron). tengri's bucket default is `Fixed(2.64)`
-        # (Bell 2003 z=0 anchor); the 0.14 dex difference is exactly the
-        # ~1.4× ratio that otherwise shows up between the panels at
-        # 1.4 GHz. Same `alpha_sf = 0.8`.
-        radio={
-            "type": "condon92",
-            "radio_q_ir": Fixed(2.5),
-            "radio_alpha_sf": Fixed(0.8),
-            "*": FIXED,
-        },
-        redshift=Fixed(0.0),
-    )
-    state_r = m_r.predict_state({})
-    w_t = np.asarray(state_r.wave)
-    sed_t = np.asarray(state_r.derived.get("sed_radio", state_r.sed_intrinsic))
-    nu_t = 2.998e18 / w_t / 1e9
-    mt = (nu_t >= 0.1) & (nu_t <= 100) & (sed_t > 0)
-    ax_r.plot(nu_t[mt], sed_t[mt], "C1-", linewidth=1.4, label="radio.condon92")
-    ax_r.legend(fontsize=9)
-except Exception:
-    pass
+_band = (_nu_c >= 0.1) & (_nu_c <= 300) & (L_r > 0)
+_o = np.argsort(_nu_c[_band])
+_nu = _nu_c[_band][_o]
+_Lc = L_r[_band][_o]
+_si = np.argsort(_nu_t)
+_Lt = np.interp(_nu, _nu_t[_si], sed_t[_si])
+_ratio = _Lt / np.maximum(_Lc, 1e-300)
 
+fig, (ax, ax_r) = plt.subplots(
+    2, 1, figsize=(10, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+)
+ax.plot(_nu, _Lc, "C0-", linewidth=1.5, label=r"CIGALE  radio ($q_{IR}=2.5$)")
+ax.plot(_nu, _Lt, "C1--", linewidth=1.3, label="tengri  radio.condon92")
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
+ax.set_title(r"SF radio: synchrotron + Murphy+2011 free-free (1 $M_\odot$ fiducial)")
+ax.legend(fontsize=10)
+ax.grid(True, alpha=0.3)
+ax_r.axhspan(0.8, 1.25, color="0.85", zorder=0)
+ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+ax_r.plot(_nu, _ratio, "C1-", linewidth=1.0)
+ax_r.set_xscale("log")
+ax_r.set_yscale("log")
+ax_r.set_ylim(0.5, 2.0)
+ax_r.set_xlabel(r"$\nu$ [GHz]")
+ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
 
