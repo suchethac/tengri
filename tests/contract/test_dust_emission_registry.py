@@ -25,7 +25,12 @@ class TestRegistration:
     """The eagerly- and lazily-registered emission models are in the cache."""
 
     def test_analytic_models_registered(self):
-        for name in ("modified_blackbody", "casey2012", "energy_balance_split"):
+        # energy_balance_split is intentionally NOT here: its port
+        # (EnergyBalanceSplitIRSEDComponent) calls the closure with a
+        # non-default eta_balance=1.0, so a loader-cache entry would be a
+        # divergent second dispatch path — removed for single dispatch (#850).
+        # See test_dust_emission_single_dispatch.py for the port-side assertion.
+        for name in ("modified_blackbody", "casey2012"):
             assert name in DUST_EMISSION_MODELS
             assert callable(DUST_EMISSION_MODELS[name])
 

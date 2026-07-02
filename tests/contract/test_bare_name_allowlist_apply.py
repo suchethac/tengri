@@ -116,3 +116,77 @@ class TestBareNameAllowlistApply:
         # Verify redshift=0.0 is available (not dropped)
         assert comp.last_p_had_redshift, "redshift=0.0 should be in predict's params"
         assert comp.last_redshift_value == 0.0, "redshift value should be 0.0"
+
+
+@pytest.mark.contract
+class TestEmissionPortBareNameAllowlist:
+    """EmissionPort.apply() — the SECOND prefix-slicing path — honors BARE_NAME_ALLOWLIST.
+
+    The base :class:`SEDModelComponent.apply` (covered above) is not the only
+    method that slices params by prefix: dust IR emission ports override
+    ``apply`` with a bespoke three-branch implementation
+    (:class:`~tengri.components.dust.emission._port_base.EmissionPort`). That
+    override strips the ``dust_`` prefix too, so it must re-inject the bare-name
+    allowlist independently. This is the path that (before the base
+    ``__init_subclass__`` shadowing fix) made dust emission a TOTAL no-op, and
+    it is where CMB-at-high-z heating reads ``redshift``.
+
+    Audit note (#853): these two are the ONLY ``apply()`` implementations that
+    slice by prefix. Every bare-Protocol component (igm/agn/radio/xray/nebular)
+    reads ``redshift`` from the full params dict by full key, so none can drop it.
+
+    Uses a real registered port (``modified_blackbody``) rather than a bespoke
+    subclass to avoid polluting ``_REGISTRY`` / the emission menu, and to
+    exercise the exact production code path.
+    """
+
+    @staticmethod
+    def _mbb_port_with_spy():
+        """Return an mbb emission port whose ``predict`` records the seen redshift.
+
+        The spy records what ``apply()`` threads into ``predict`` and returns a
+        passthrough SED — it does NOT run the real mbb physics (that would
+        require the full ``dust_*`` param set, which is irrelevant to whether
+        the bare-name ``redshift`` survived the prefix-slice).
+        """
+        from tengri.components.sed_model_component import _REGISTRY
+
+        port = _REGISTRY["modified_blackbody"]()
+        seen: dict[str, object] = {"redshift": "unset"}
+
+        def _spy(p, sed_in, wave, **inputs):
+            seen["redshift"] = float(p["redshift"]) if "redshift" in p else None
+            return sed_in, {}
+
+        port.predict = _spy  # instance-level shadow; apply() calls self.predict
+        return port, seen
+
+    def test_redshift_threads_into_predict_exact_path(self):
+        """Exact full-wave branch: redshift reaches the port's predict()."""
+        port, seen = self._mbb_port_with_spy()
+        wave = jnp.linspace(1e4, 1e7, 200)
+        state = ForwardState(wave=wave, sed_intrinsic=None, derived={"L_ir": jnp.asarray(1e44)})
+
+        port.apply(state, {"dust_T": 40.0, "dust_beta_ir": 1.6, "redshift": 3.0})
+
+        assert seen["redshift"] == 3.0, (
+            "EmissionPort.apply() (exact path) dropped the bare-name redshift"
+        )
+
+    def test_redshift_threads_into_predict_photometry_precomp(self):
+        """Photometry-LUT branch: redshift reaches predict() there too (CMB-at-z)."""
+        port, seen = self._mbb_port_with_spy()
+        wave = jnp.linspace(1e4, 1e7, 200)
+        # filter_eff_waves present -> apply() takes the photometry-precomp branch,
+        # which itself calls predict() (line 180 of _port_base.py).
+        state = ForwardState(
+            wave=wave,
+            sed_intrinsic=None,
+            derived={"L_ir": jnp.asarray(1e44), "filter_eff_waves": jnp.array([1e5, 1e6])},
+        )
+
+        port.apply(state, {"dust_T": 40.0, "dust_beta_ir": 1.6, "redshift": 4.0})
+
+        assert seen["redshift"] == 4.0, (
+            "EmissionPort.apply() (photometry-precomp path) dropped the bare-name redshift"
+        )

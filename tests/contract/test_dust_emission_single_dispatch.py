@@ -91,3 +91,25 @@ def test_no_legacy_dispatch_symbol_importable():
     assert not hasattr(em, "resolve_emission_model"), (
         "resolve_emission_model must be deleted — dispatch is single via _REGISTRY"
     )
+
+
+def test_energy_balance_split_not_in_load_only_dict():
+    """#850: ``energy_balance_split`` has a single dispatch path (the port).
+
+    It must NOT also live in ``DUST_EMISSION_MODELS`` (the load-only loader
+    cache). A duplicate entry there resurrects a divergent second path
+    (``apply_dust_emission("energy_balance_split")`` -> raw closure with the
+    default ``eta_balance``), which the port's ``eta_balance=1.0`` convention
+    would silently disagree with. Its canonical dispatch is the
+    ``EnergyBalanceSplitIRSEDComponent`` port in ``_REGISTRY``.
+    """
+    from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+    from tengri.components.sed_model_component import _REGISTRY
+
+    assert "energy_balance_split" not in DUST_EMISSION_MODELS, (
+        "energy_balance_split must NOT be registered in DUST_EMISSION_MODELS — "
+        "its only dispatch is the _REGISTRY port (single-dispatch, #850)"
+    )
+    assert "energy_balance_split" in _REGISTRY, (
+        "energy_balance_split must remain dispatchable via its _REGISTRY port"
+    )
