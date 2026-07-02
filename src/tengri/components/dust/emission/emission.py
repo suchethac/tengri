@@ -1492,8 +1492,13 @@ from tengri.components.dust.emission_templates import (
     register_themis_tabulated as register_themis_tabulated,
 )
 
-# Register models at module load time
-DUST_EMISSION_MODELS["energy_balance_split"] = energy_balance_split
+# NOTE: ``energy_balance_split`` is NOT registered in ``DUST_EMISSION_MODELS``.
+# Its canonical dispatch is the ``EnergyBalanceSplitIRSEDComponent`` port in
+# ``_REGISTRY`` (analytic/energy_balance_split.py), which calls the pure
+# :func:`energy_balance_split` closure directly with ``eta_balance=1.0``.
+# A second registration here would create a divergent dispatch path
+# (``apply_dust_emission("energy_balance_split")`` -> closure with the raw
+# ``eta_balance`` default), defeating the single-dispatch invariant (#850).
 
 # Register lazy loaders at module load time
 # These will auto-load templates on first call
