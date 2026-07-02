@@ -517,8 +517,11 @@ def multicolor_disc(
     agn_log_mbh : float, optional
         Black hole mass. Default: 8.0. [log10(M_sun)]
     agn_log_ledd : float, optional
-        Eddington ratio (accretion rate relative to Eddington luminosity).
-        Typical range: -3 to 0. Default: -1.0. [log10(L / L_Edd)]
+        **DEPRECATED / IGNORED (#846).** The Eddington ratio is now DERIVED from
+        ``agn_log_lbol`` and ``agn_log_mbh`` (lambda_Edd = L_bol / L_Edd), so the
+        disc shape is self-consistent with the requested L_bol. This parameter
+        is retained for backward compatibility but has no effect; setting or
+        freeing it emits a build-time warning. Default: -1.0.
     agn_a_spin : float, optional
         Dimensionless black hole spin parameter (prograde).
         Range: [0, 0.998]. Default: 0.0 (Schwarzschild). [dimensionless]
@@ -615,13 +618,20 @@ def multicolor_disc(
     # For a=0.998 (maximal spin): r_isco~1.24, eta~0.32
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco))
     l_edd = _eddington_luminosity(agn_log_mbh)
-    l_bol_erg = jnp.minimum(10.0**agn_log_ledd, 1.0) * l_edd
+    # E fix (#846): agn_log_lbol is THE luminosity knob; the Eddington ratio is
+    # DERIVED from it (lambda_Edd = L_bol / L_Edd, matching RELAGN's
+    # mdot = L_bol/L_edd, relagn.py:288,330), so the disc shape (T_in, r_out) is
+    # self-consistent with the requested L_bol. Previously the shape was built
+    # from agn_log_ledd and then rescaled to agn_log_lbol — a decoupling that
+    # left T_in / r_out corresponding to the wrong luminosity. agn_log_ledd is
+    # now ignored here (a build-time warning fires if a user sets/frees it).
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
 
     # Outer disc radius: Laor & Netzer (1989) self-gravity (Toomre) radius.
     # Beyond r_sg the disc fragments rather than accretes; this is the
     # physically motivated outer boundary used by qsosed (Quera-Bofarull).
     # r_sg ~ 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9} * (M/1e8)^{-2/9} R_g.
-    l_edd_ratio = jnp.minimum(10.0**agn_log_ledd, 1.0)
+    l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)  # derived: lambda_Edd
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
     r_out = jnp.maximum(r_sg_rg, r_isco * 10.0) * r_g  # at least 10 r_isco
     mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
@@ -837,7 +847,7 @@ def _hot_corona_lnu(
 
 def _compute_bh_params(
     agn_log_mbh: float,
-    agn_log_ledd: float,
+    agn_log_lbol: float,
     agn_a_spin: float,
 ) -> tuple:
     """Compute black hole parameters: radius, ISCO, efficiency, and accretion rate.
@@ -850,8 +860,8 @@ def _compute_bh_params(
     ----------
     agn_log_mbh : float
         Black hole mass. [log10(M_sun)]
-    agn_log_ledd : float
-        Eddington ratio. [log10(L / L_Edd)]
+    agn_log_lbol : float
+        Bolometric luminosity. [log10(L_bol / L_sun)]
     agn_a_spin : float
         Dimensionless black hole spin (Kerr, prograde). [dimensionless, 0–0.998]
 
@@ -885,8 +895,11 @@ def _compute_bh_params(
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
 
     l_edd = _eddington_luminosity(agn_log_mbh)
-    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
-    l_bol_erg = l_edd_ratio * l_edd
+    # E fix (#846): derive the accretion rate from the requested L_bol
+    # (agn_log_lbol) instead of the now-derived Eddington ratio, so the zone
+    # structure (T_in, radii) is self-consistent with L_bol. lambda_Edd is
+    # recovered downstream as L_bol / L_Edd (see _compute_zone_radii).
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
     return r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot
@@ -898,7 +911,7 @@ def _compute_zone_radii(
     r_isco_cm: float,
     t_in: float,
     agn_log_mbh: float,
-    agn_log_ledd: float,
+    agn_log_lbol: float,
     agn_f_hard: float,
     agn_r_warm_ratio: float,
     l_edd: float,
@@ -923,8 +936,8 @@ def _compute_zone_radii(
         Inner disc temperature [K].
     agn_log_mbh : float
         Black hole mass. [log10(M_sun)]
-    agn_log_ledd : float
-        Eddington ratio. [log10(L / L_Edd)]
+    agn_log_lbol : float
+        Bolometric luminosity. [log10(L_bol / L_sun)]
     agn_f_hard : float
         Fraction of Eddington luminosity in the hot corona. [dimensionless, 0–0.5]
     agn_r_warm_ratio : float
@@ -965,7 +978,9 @@ def _compute_zone_radii(
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
 
-    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
+    # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
+    # agn_log_lbol (not the now-derived agn_log_ledd).
+    l_edd_ratio = jnp.clip(10.0**agn_log_lbol * _LSUN_ERG / l_edd, 1e-10, 1.0)
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
     r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
 
@@ -1312,9 +1327,12 @@ def kubota_done_disc(
         Black hole mass. Determines the Eddington luminosity and temperature
         scaling. Default: 8.0. [log10(M_sun)]
     agn_log_ledd : float, optional
-        Eddington ratio. Controls the inner temperature, radiative efficiency,
-        and zone locations. Typical range: -3 to 0. Default: -1.0.
-        [log10(L / L_Edd)]
+        **DEPRECATED / IGNORED (#846).** The Eddington ratio — and hence the
+        inner temperature, accretion rate, and zone radii — is now DERIVED from
+        ``agn_log_lbol`` and ``agn_log_mbh`` (lambda_Edd = L_bol / L_Edd), so the
+        3-zone structure is self-consistent with the requested L_bol. Retained
+        for backward compatibility but has no effect; setting or freeing it
+        emits a build-time warning. Default: -1.0.
     agn_a_spin : float, optional
         Dimensionless black hole spin parameter (Kerr, prograde).
         Range: [0, 0.998]. Higher spin → smaller R_ISCO, higher η.
@@ -1435,7 +1453,7 @@ def kubota_done_disc(
     nu = _wavelength_to_nu(wavelength)
 
     r_g, r_isco_rg, r_isco_cm, _eta, l_edd, mdot = _compute_bh_params(
-        agn_log_mbh, agn_log_ledd, agn_a_spin
+        agn_log_mbh, agn_log_lbol, agn_a_spin
     )
 
     # Novikov-Thorne inner-disc temperature.
@@ -1454,7 +1472,7 @@ def kubota_done_disc(
         r_isco_cm,
         t_in,
         agn_log_mbh,
-        agn_log_ledd,
+        agn_log_lbol,
         agn_f_hard,
         agn_r_warm_ratio,
         l_edd,

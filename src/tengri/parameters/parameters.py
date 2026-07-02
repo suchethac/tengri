@@ -655,6 +655,35 @@ class Parameters:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
 
+        # E fix (#846): the physical disc blocks (multicolor, kubota_done) now
+        # DERIVE the Eddington ratio from agn_log_lbol + agn_log_mbh, so
+        # agn_log_ledd has no effect on them. Warn at construction (Python-side,
+        # jit-safe) if a user explicitly sets or frees it, so it is never a
+        # silent no-op. Gated on _user_provided; agn_log_ledd is no longer in
+        # those blocks' AGN_BLOCK_CONSUMES, so a scoped '*': FREE will not free
+        # it — only an explicit override triggers this.
+        if (
+            self.agn_model == "composable"
+            and getattr(self, "agn_disc_block", "none") in ("multicolor", "kubota_done")
+            and "agn_log_ledd" in self._user_provided
+        ):
+            _ledd_dist = self._distributions.get("agn_log_ledd")
+            _ledd_active = _ledd_dist is not None and (
+                not _ledd_dist.is_fixed or abs(float(_ledd_dist.value) - (-1.0)) > 1e-9
+            )
+            if _ledd_active:
+                import warnings
+
+                warnings.warn(
+                    f"agn_log_ledd has no effect on the "
+                    f"'{self.agn_disc_block}' disc: the Eddington ratio is now "
+                    "derived from agn_log_lbol and agn_log_mbh "
+                    "(lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity "
+                    "via agn_log_lbol and remove agn_log_ledd.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         # --- Validate physical bounds ---
         self._validate_bounds()
 
