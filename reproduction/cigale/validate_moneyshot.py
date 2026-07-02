@@ -258,6 +258,23 @@ def main():
     print("    q_IR       tengri 2.64 (Bell03 default) vs CIGALE 2.50 -> radio ×0.72 (convention)")
     print("    AGN radio  tengri jets ON (disc-driven) vs CIGALE R_agn=0 -> radio band excess")
     print("    => radio ≈ L_ir × AGN-jets × q_IR; FIR ≈ L_ir; X-ray ≈ α_ox + XRB. No model bug.")
+    # The tengri curve steps down near ~2.25e5 µm (#883). That is the edge of the
+    # shared Dale+2014 template grid (`data/dale2014_templates_cigale.h5`, which
+    # runs 0.36 µm – 2.25e5 µm): CIGALE's Dale2014 templates carry a built-in
+    # radio-synchrotron tail (the FIR–radio correlation), so `dust.emission.
+    # dale2014` and the separate `radio.condon92` component BOTH contribute in
+    # the radio — a double count that is a CIGALE convention, not tengri-specific.
+    # tengri shows the step because its Dale-template radio tail (~L_ir-scaled)
+    # is comparable to condon92; past the template edge the interpolation zeroes
+    # (`right=0.0`) so only condon92 remains. CIGALE rises smoothly there only
+    # because its radio module dominates its own (identically-truncated) Dale
+    # tail. The radio band beyond ~1 cm is therefore not a clean single-component
+    # comparison; the physically clean fix (truncate the Dale template to
+    # dust-only and let condon92 own the radio) is tracked in #883 and would make
+    # tengri MORE correct than the CIGALE double count, so it is deliberately not
+    # applied in this reproduction figure.
+    print("    radio step ~2.25e5 µm = Dale2014 template radio-tail edge (double-counts condon92;")
+    print("               shared CIGALE convention, #883). Radio band >1 cm is not single-component.")
 
     # Figure
     fig, (ax, axr) = plt.subplots(
@@ -270,6 +287,11 @@ def main():
     ax.set_ylim(ymax * 1e-9, ymax * 30)
     ax.set_ylabel(r"$\nu L_\nu$  [$L_\odot$]  (CIGALE norm. to tengri optical)")
     ax.set_title("Money-shot SED — tengri vs CIGALE (internal validation)")
+    # Flag the Dale2014 template radio-tail edge (the #883 step): both codes'
+    # dale2014 carries a built-in radio synchrotron that double-counts condon92.
+    ax.axvline(2.25e5, color="0.6", ls=":", lw=1.0)
+    ax.text(2.25e5, ymax * 5, "Dale radio-tail edge\n(#883)", fontsize=7,
+            color="0.4", ha="right", va="top", rotation=90)
     ax.legend(fontsize=10)
     ax.grid(True, alpha=0.3)
 
@@ -279,6 +301,7 @@ def main():
     axr.axhspan(-0.25, 0.25, color="0.85")
     axr.axhline(0.0, color="0.5", lw=0.8)
     axr.plot(um, resid, "C1-", lw=1.0)
+    axr.axvline(2.25e5, color="0.6", ls=":", lw=1.0)  # Dale radio-tail edge (#883)
     axr.set_xscale("log")
     axr.set_ylim(-1, 1)
     axr.set_xlabel(r"Rest-frame wavelength $\lambda$  [$\mu$m]")
