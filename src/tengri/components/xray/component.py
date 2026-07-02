@@ -293,3 +293,11 @@ class XRaySEDComponent:
         return state.add_intrinsic(L_xray).with_(
             derived=state.derived.with_(**derived_overrides),
         )
+
+
+# Register in the unified component dispatch table so build_components resolves
+# the X-ray component via _resolve_registry_component (single dispatch, #845)
+# instead of importing the class directly.
+from tengri.components.sed_model_component import _REGISTRY
+
+_REGISTRY["xray"] = XRaySEDComponent
