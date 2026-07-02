@@ -510,6 +510,7 @@ class Parameters:
         self.radio_sfr_mode = kwargs.pop("radio_sfr_mode", "bell2003")
         self.radio_agn_model = kwargs.pop("radio_agn_model", "powerlaw")
         self.xray = kwargs.pop("xray", False)
+        self.xray_model = kwargs.pop("xray_model", "yang20")
         self.shock = kwargs.pop("shock", False)
 
         # ── Metallicity ───────────────────────────────────────────

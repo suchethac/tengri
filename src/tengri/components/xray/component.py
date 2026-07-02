@@ -38,7 +38,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
-from tengri.components.xray.xray import xray_total
+from tengri.components.xray.xray import xray_total, xray_total_lopez24
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -58,9 +58,14 @@ class XRaySEDComponentConfig(SEDComponentConfig):
     ----------
     name : str
         Diagnostic identifier. Default ``"xray"``.
+    model : str
+        X-ray corona prescription. ``"yang20"``/``"simple"`` (default) ties the
+        corona to the disc ``L_2500`` via the α_ox relation; ``"lopez24"`` ties
+        it to the AGN 12 µm luminosity via the α_IRX relation (Lopez+2024).
     """
 
     name: str = "xray"
+    model: str = "yang20"
 
 
 @dataclass(frozen=True)
@@ -158,6 +163,11 @@ class XRaySEDComponent:
                 "Fallback when L_2500_intrinsic unavailable (e.g. SKIRTOR monolithic path)",
             ),
             DerivedKey(
+                "L_12um",
+                "erg/s/Hz",
+                "AGN 12 µm luminosity; drives the lopez24 alpha_IRX corona",
+            ),
+            DerivedKey(
                 "age_weights",
                 "Msun",
                 "SSP mass weights (stellar) — mass-weighted age drives the LMXB scaling",
@@ -244,8 +254,34 @@ class XRaySEDComponent:
             L_2500,
             jnp.where(L_2500_skirtor > 0.0, L_2500_skirtor, L_2500_fallback),
         )
+        # Lopez+2024 (lopez24) ties the corona to the AGN 12 µm luminosity
+        # instead of L_2500. Prefer the AGN-published ``L_12um`` [erg/s/Hz]; fall
+        # back to a bolometric correction from L_agn_bol when the composable AGN
+        # does not publish a monochromatic 12 µm luminosity: νLν(12µm) = f_12·L_bol
+        # (Gandhi+2009 f_12 ≈ 0.07), so Lν(12µm) = f_12·L_bol / ν_12µm.
+        _nu_12um = 2.998e18 / 1.2e5  # 12 µm = 120000 Å
+        _l_12um_pub = jnp.asarray(state.derived.get("L_12um", 0.0))
+        _l_12um_bc = 0.07 * L_agn_bol / _nu_12um
+        l_12um = jnp.where(_l_12um_pub > 0.0, _l_12um_pub, _l_12um_bc)
+        use_lopez24 = self.config.model == "lopez24"
 
         def _emit(w):
+            if use_lopez24:
+                # α_IRX corona (Lopez+2024): L_X(2-10 keV) = νLν(12µm) / 10^α_IRX,
+                # shared Lehmer+2016 XRBs (age-aware LMXB, #854) + hot gas.
+                return xray_total_lopez24(
+                    w,
+                    sfr=sfr,
+                    stellar_mass=stellar_mass,
+                    stellar_age_gyr=stellar_age_gyr,
+                    l_12um_erg_hz=l_12um,
+                    alpha_irx=jnp.asarray(params["xray_alpha_irx"]),
+                    gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
+                    gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
+                    gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
+                    E_cut=jnp.asarray(params["xray_E_cut"]),
+                    log_nh=jnp.asarray(params["xray_log_nh"]),
+                )
             # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
             # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
             # the X-ray corona). ``xray_delta_alpha_ox`` is now a live *offset* knob
