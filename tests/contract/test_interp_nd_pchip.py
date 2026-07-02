@@ -72,3 +72,31 @@ def test_gradient_finite_and_continuous():
     g = jax.jit(jax.grad(f))
     for xq in (0.0, 0.5, 1.0, 1.999, 2.0, 2.5, 3.0):
         assert jnp.isfinite(g(xq)), f"non-finite gradient at xq={xq}"
+
+
+@pytest.mark.regression_bug
+def test_gradient_finite_on_symmetric_peak_node_values():
+    """Gradient w.r.t. node values is finite for non-monotonic (symmetric-peak)
+    data (#892).
+
+    ``_pchip_slopes`` takes a weighted harmonic mean of the two bracketing
+    secants, used only where they share a sign. For a symmetric peak the
+    secants are equal and opposite, so the harmonic denominator
+    ``w1/d_left + w2/d_right`` passes through 0 and the (discarded) harmonic
+    value diverges — the outer ``where`` then forms ``0 * inf = NaN`` in the
+    VJP. This is exactly the trap that made the SKIRTOR torus grid-axis params
+    (``agn_p/q/tau_skirtor``, whose dust template is non-monotonic in λ)
+    non-differentiable inside ``skirtor_disc_dust_ratio``. The forward value is
+    unaffected — only the reverse pass was poisoned.
+    """
+    x = jnp.asarray([0.0, 1.0, 2.0, 3.0])
+
+    def f(y):
+        return jnp.sum(interp_nd_pchip(y[:, None], (x,), (1.4,)))
+
+    for y in (
+        jnp.asarray([0.0, 1.0, 0.0, 1.0]),  # symmetric peak: secants +1, -1
+        jnp.asarray([1.0, 2.0, 1.0, 2.0]),
+    ):
+        grad = jax.grad(f)(y)
+        assert jnp.all(jnp.isfinite(grad)), f"non-finite VJP on non-monotonic data: {grad}"
