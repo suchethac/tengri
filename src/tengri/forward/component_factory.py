@@ -414,7 +414,7 @@ def build_components(
         # silently dropping the dust IR (#565). The emission port reads L_ir as
         # an optional input and produces sed_dust_ir; the topological sort places
         # it after attenuation. Route through the same single dispatch seam. WG00
-        # keeps its historical behaviour of appending no separate emission port.
+        # keeps its historical behavior of appending no separate emission port.
         if atten_type != "wg00" and dust_emission_model is not None:
             components.append(_resolve_registry_component("dust_emission", dust_emission_model))
 
