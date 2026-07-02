@@ -76,8 +76,8 @@ def test_ebv_zero_is_noop(model_name, extra_kwargs, available, why, wavelength):
     from tengri.components.agn.unified import resolve_agn_model
 
     fn = resolve_agn_model(model_name)
-    base = fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1, **extra_kwargs)
-    with_zero = fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.0, **extra_kwargs)
+    base = fn(wavelength, agn_log_lbol=12.0, agn_frac=0.1, **extra_kwargs)
+    with_zero = fn(wavelength, agn_log_lbol=12.0, agn_frac=0.1, agn_ebv_disc=0.0, **extra_kwargs)
     # Finite-precision tolerance: the helper multiplies by 10**0 which is
     # numerically 1.0, so we expect bit-for-bit or near-bit-for-bit equality.
     assert jnp.allclose(base, with_zero, rtol=1e-12, atol=0.0), (
@@ -92,8 +92,8 @@ def test_ebv_positive_suppresses_uv(model_name, extra_kwargs, available, why, wa
     from tengri.components.agn.unified import resolve_agn_model
 
     fn = resolve_agn_model(model_name)
-    unreddened = fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.0, **extra_kwargs)
-    reddened = fn(wavelength, agn_log_lbol=44.0, agn_frac=0.1, agn_ebv_disc=0.3, **extra_kwargs)
+    unreddened = fn(wavelength, agn_log_lbol=12.0, agn_frac=0.1, agn_ebv_disc=0.0, **extra_kwargs)
+    reddened = fn(wavelength, agn_log_lbol=12.0, agn_frac=0.1, agn_ebv_disc=0.3, **extra_kwargs)
     uv_mask = wavelength < 3000.0
     u_sum = float(unreddened[uv_mask].sum())
     r_sum = float(reddened[uv_mask].sum())
@@ -116,7 +116,7 @@ def test_grad_flows_through_ebv(model_name, extra_kwargs, available, why, wavele
     def loss(ebv: float) -> float:
         sed = fn(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=12.0,
             agn_frac=0.1,
             agn_ebv_disc=ebv,
             **extra_kwargs,

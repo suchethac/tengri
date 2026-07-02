@@ -71,11 +71,16 @@ class TestMulticolorAgn:
         from tengri.components.agn.unified import multicolor_agn
 
         far_uv = (optical_wavelength > 300.0) & (optical_wavelength < 500.0)
+        # Physical, sub-Eddington L_bol (log10 L_sun): under the luminosity-first
+        # parameterization (ADR-0020) the shape is driven by L_bol + M_BH + spin,
+        # and agn_log_lbol=44 would clip at the Eddington limit and wash out the
+        # spin effect. At a sub-Eddington L_bol the far-UV (300-500 A) sits on the
+        # Wien tail, where the hotter (smaller-ISCO) high-spin disc clearly wins.
         l_nospin = multicolor_agn(
-            optical_wavelength, agn_log_lbol=44.0, agn_a_spin=0.0, agn_torus_frac=0.0
+            optical_wavelength, agn_log_lbol=12.0, agn_a_spin=0.0, agn_torus_frac=0.0
         )
         l_spin = multicolor_agn(
-            optical_wavelength, agn_log_lbol=44.0, agn_a_spin=0.99, agn_torus_frac=0.0
+            optical_wavelength, agn_log_lbol=12.0, agn_a_spin=0.99, agn_torus_frac=0.0
         )
         assert jnp.any(far_uv), "No wavelengths in far-UV window"
         assert float(jnp.sum(l_spin[far_uv])) > float(jnp.sum(l_nospin[far_uv]))
