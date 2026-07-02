@@ -543,12 +543,22 @@ def _pchip_slopes(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
     w1 = _bcast_axis0(2.0 * h_next + h_prev, y.ndim)
     w2 = _bcast_axis0(h_next + 2.0 * h_prev, y.ndim)
 
-    # Weighted harmonic mean of the bracketing secants. Guard the divisions so
-    # the unused branch of the where() carries no NaN into the VJP.
-    d_left_safe = jnp.where(d_left == 0.0, 1.0, d_left)
-    d_right_safe = jnp.where(d_right == 0.0, 1.0, d_right)
+    # Weighted harmonic mean of the bracketing secants, used only where the two
+    # secants share a sign (monotonic). Gate the division INPUTS on that SAME
+    # condition (double-where), not merely on d==0: for non-monotonic data the
+    # secants have opposite signs, so w1/d_left + w2/d_right can pass through 0,
+    # sending harmonic->inf. The outer where() discards that value, but its VJP
+    # then forms 0*inf = NaN (poisoning the gradient of any param the grid
+    # values depend on — e.g. the SKIRTOR dust-template pchip in
+    # skirtor_disc_dust_ratio, #892). Replacing d_left/d_right with 1.0 wherever
+    # the harmonic is unused keeps the denominator = w1+w2 > 0, so the reverse
+    # pass stays finite. Forward is unchanged: interior is 0 in exactly the same
+    # places (d_left*d_right <= 0).
+    mono = d_left * d_right > 0.0
+    d_left_safe = jnp.where(mono, d_left, 1.0)
+    d_right_safe = jnp.where(mono, d_right, 1.0)
     harmonic = (w1 + w2) / (w1 / d_left_safe + w2 / d_right_safe)
-    interior = jnp.where(d_left * d_right > 0.0, harmonic, 0.0)  # (n-2, *rest)
+    interior = jnp.where(mono, harmonic, 0.0)  # (n-2, *rest)
 
     first = _pchip_edge_slope(h[0], h[1], delta[0], delta[1])
     last = _pchip_edge_slope(h[-1], h[-2], delta[-1], delta[-2])
