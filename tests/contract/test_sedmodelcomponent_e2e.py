@@ -130,7 +130,7 @@ def test_dust_ir_emission_e2e(ssp, obs, emission_type):
     """Each dust IR emission model builds + predicts on the canonical engine.
 
     Emission models are config sub-selectors of the two-component engine
-    (``emission={'type': ...}``, resolved by ``resolve_emission_model``) —
+    (``emission={'type': ...}``, resolved via ``_REGISTRY``) —
     paired here with a Calzetti birth-cloud screen. Template-backed models
     skip when their HDF5 grid is absent.
     """

@@ -25,7 +25,7 @@ def audit(path):
         runpy.run_path(path, run_name="__main__")
     except SystemExit:
         pass
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         return f"ERROR {type(e).__name__}: {str(e)[:80]}"
     verdict = []
     for num in plt.get_fignums():

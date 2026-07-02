@@ -61,6 +61,7 @@ jobs:
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
+      - run: python tools/check_file_size.py
       # Gallery freshness — warn-only (#805): reports examples whose committed
       # docs/auto_examples render has drifted from the source. Informational
       # until the heavy-fit examples (#612) are handled; promote to --strict then.
@@ -103,6 +104,8 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_test_markers.py
+      - run: python tools/check_single_dispatch.py
+      - run: python tools/check_registry_completeness.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
 
   test:

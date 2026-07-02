@@ -1,6 +1,6 @@
 # ADR-0013: `ScreenComponent` — composable transmission screens
 
-**Status:** Proposed (2026-05-24)
+**Status:** Superseded by ADR-0019 (2026-07-01)
 
 **Stakeholders:** Suchetha; users fitting Milky-Way foreground, obscured AGN, edge-on Seyferts.
 

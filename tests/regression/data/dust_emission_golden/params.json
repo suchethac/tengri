@@ -1,0 +1,136 @@
+{
+  "wave_spec": {
+    "min_aa": 1000.0,
+    "max_aa": 10000000.0,
+    "n_wave": 512
+  },
+  "L_ir_erg_s": 1e+44,
+  "templates": {
+    "astrodust": {
+      "params": {
+        "dust_umin": 1.0,
+        "dust_gamma_dl": 0.01,
+        "dust_qpah": 3.0
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
+    "bosa": {
+      "params": {
+        "dust_log_ssfr": -10.0
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
+    "casey2012": {
+      "params": {
+        "dust_T": 35.0,
+        "dust_beta_ir": 1.8,
+        "dust_alpha_mir": 2.0,
+        "optically_thin": false,
+        "redshift": 0.0
+      },
+      "call_path": "closure",
+      "output_shape": [
+        512
+      ]
+    },
+    "dale2014": {
+      "params": {
+        "dust_alpha_dale": 2.0,
+        "dust_frac_agn": 0.0
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
+    "dale2014_cigale": {
+      "params": {
+        "dust_alpha_dale": 2.0,
+        "dust_frac_agn": 0.0
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
+    "draine_li2007": {
+      "params": {
+        "dust_umin": 1.0,
+        "dust_gamma_dl": 0.01,
+        "dust_qpah": 2.5
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
+    "draine_li2014": {
+      "params": {
+        "dust_umin": 1.0,
+        "dust_gamma_dl": 0.01,
+        "dust_qpah": 2.5,
+        "dust_alpha_dl14": 2.0
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    },
+    "modified_blackbody": {
+      "params": {
+        "dust_T": 30.0,
+        "dust_beta_ir": 1.8,
+        "dust_epsilon_mbb": 1.0,
+        "redshift": 0.0
+      },
+      "call_path": "closure",
+      "output_shape": [
+        512
+      ]
+    },
+    "pah_drude": {
+      "params": {
+        "redshift": 0.0
+      },
+      "call_path": "closure",
+      "output_shape": [
+        512
+      ]
+    },
+    "schreiber2016": {
+      "params": {
+        "dust_T": 30.0,
+        "dust_f_pah": 0.05,
+        "redshift": 0.0
+      },
+      "call_path": "closure",
+      "output_shape": [
+        512
+      ]
+    },
+    "themis": {
+      "params": {
+        "dust_umin": 1.0,
+        "dust_gamma_dl": 0.01,
+        "dust_qhac": 0.17,
+        "dust_alpha": 2.0
+      },
+      "call_path": "lazy_loader",
+      "output_shape": [
+        512
+      ]
+    }
+  },
+  "skipped": {
+    "schreiber2018": {
+      "reason": "RuntimeError",
+      "error": "'schreiber2018' lazy loader is in an inconsistent state \u2014 the first resolution did not replace the registry entry. Check schreiber2018_templates.h5 or use the modern SEDComponent path."
+    }
+  }
+}

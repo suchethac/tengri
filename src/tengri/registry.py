@@ -545,6 +545,16 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
         "citation": "Casey 2012 (MNRAS 425, 3094)",
         "short_doc": "Modified blackbody + mid-IR power law (analytic)",
     },
+    "dale2014_cigale": {
+        "status": "production",
+        "citation": "Dale et al. 2014 (ApJ 784, 83)",
+        "short_doc": "Dale+2014 IR templates, CIGALE alpha_sf + fracAGN parameterization",
+    },
+    "schreiber2018": {
+        "status": "experimental",
+        "citation": "Schreiber et al. 2018 (A&A 609, A30)",
+        "short_doc": "Tabulated IR template library (T_dust, f_PAH)",
+    },
     "schreiber2016": {
         "status": "production",
         "citation": "Schreiber et al. 2016 (A&A 589, A35)",
@@ -557,8 +567,8 @@ _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
     },
     "energy_balance_split": {
         "status": "experimental",
-        "citation": "tengri internal",
-        "short_doc": "Energy-balance redistribution helper (utility)",
+        "citation": "Kokorev et al. 2021 (ApJ 921, 40)",
+        "short_doc": "Two-temperature (warm+cold) + AGN-IR emission; f_cold, L_agn_ir",
     },
 }
 
@@ -570,17 +580,26 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     dust (DL07, DL14, Dale+2014, THEMIS, MBB, …). For UV/optical
     **attenuation** laws, see :func:`list_dust_laws`.
 
-    The set of returned names is derived from the live
-    :data:`DUST_EMISSION_MODELS` registry (which the
-    :meth:`SEDModel.build` validator also consults), so the listing and
-    the validator can never drift apart. Closes #495.
+    Derived from the SAME source as the ``SEDModel.build`` grammar validator
+    (:func:`tengri.parameters.groups._valid_dust_emission_types`): the
+    ``_REGISTRY`` emission ports (those publishing ``sed_dust_ir``) plus the
+    canonical grammar alias map. The ``DUST_EMISSION_MODELS`` loader cache is
+    **not** consulted — it is load-only — so the menu and the validator can
+    never drift (closes #495).
     """
-    # Importing the module triggers the ``@register_emission_model`` decorators
-    # plus the lazy-loader bindings at the bottom of ``emission.py``.
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+    # Import triggers port registration into _REGISTRY + the alias map.
+    import tengri.components.dust.emission  # noqa: F401
+    from tengri.components.sed_model_component import _REGISTRY
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+
+    names = {
+        name
+        for name, cls in _REGISTRY.items()
+        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+    } | set(_EMISSION_TYPE_ALIASES)
 
     out = []
-    for name in DUST_EMISSION_MODELS:
+    for name in names:
         meta = _DUST_EMISSION_METADATA.get(
             name,
             {"status": "production", "citation": "", "short_doc": ""},

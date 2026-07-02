@@ -53,13 +53,10 @@ def test_gated_sfh_raises_clear_error_at_build(synthetic_ssp_wide, sfh_type):
 
 def test_draine2021_pah_resolves_to_pah_drude():
     """The deprecated 'draine2021_pah' emission name resolves (to pah_drude)."""
-    from tengri.components.dust.emission import (
-        DUST_EMISSION_MODELS,
-        resolve_emission_model,
-    )
+    from tengri.components.dust.emission import DUST_EMISSION_MODELS
 
     assert "draine2021_pah" in DUST_EMISSION_MODELS
-    assert resolve_emission_model("draine2021_pah") is resolve_emission_model("pah_drude")
+    assert DUST_EMISSION_MODELS["draine2021_pah"] is DUST_EMISSION_MODELS["pah_drude"]
 
 
 def test_draine2021_pah_builds_and_emits(synthetic_ssp_wide):

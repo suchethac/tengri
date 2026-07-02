@@ -1,0 +1,27 @@
+{
+  "_comment": "Phase-0 CI ratchet guards enforce architecture migration. Each domain tracks legacy dispatch status and expected types. Guards (check_file_size.py, check_single_dispatch.py, check_registry_completeness.py) use this manifest to gate commits. Domains with status='pending' are not yet enforced (pass); status='migrated' requires the legacy dispatch function to be absent (legacy_dispatch) and/or the legacy dispatch registry to be empty (legacy_registry), plus complete type coverage (expected_types resolve to _REGISTRY ports). NOTE: DUST_EMISSION_MODELS survives as an internal HDF5 loader cache (not a dispatch table); the honest single-dispatch invariant is the ABSENCE of the resolve_emission_model dispatch function, so dust_emission uses legacy_dispatch, not legacy_registry.",
+  "domains": {
+    "dust_emission": {
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.components.dust.emission",
+        "attr": "resolve_emission_model"
+      },
+      "expected_types": [
+        "modified_blackbody",
+        "casey2012",
+        "pah_drude",
+        "schreiber2016",
+        "schreiber2018",
+        "dale2014",
+        "dale2014_cigale",
+        "draine_li2007",
+        "draine_li2014",
+        "astrodust",
+        "bosa",
+        "themis",
+        "energy_balance_split"
+      ]
+    }
+  }
+}

@@ -58,7 +58,7 @@ def _state(fesc: float, *, young: float, old: float, publish_lyc: bool = True) -
 def _apply(state, *, absorb_all=False):
     comp = DustSEDComponent(
         config=DustSEDComponentConfig(
-            law_bc="calzetti", law_diff="calzetti", emission_model=None, lyc_absorb_all=absorb_all
+            law_bc="calzetti", law_diff="calzetti", lyc_absorb_all=absorb_all
         )
     )
     # tau_bc=0 -> young and old both see only the diffuse screen (age-independent

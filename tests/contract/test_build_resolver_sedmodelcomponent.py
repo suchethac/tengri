@@ -48,7 +48,7 @@ class TestBuildResolverDustAttenuation:
 
 class TestBuildResolverDustEmission:
     """Dust IR emission models are engine sub-selectors of the two-component
-    engine (resolved by ``resolve_emission_model``), not standalone ``_REGISTRY``
+    engine (resolved via ``_REGISTRY``), not standalone ``_REGISTRY``
     ports. The ``*_ir`` SEDModelComponent classes are unused parity mirrors — the
     grammar surface is the engine name (#738).
     """

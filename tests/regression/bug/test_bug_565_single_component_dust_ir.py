@@ -151,12 +151,15 @@ def test_single_component_publishes_nonzero_l_ir():
 
 
 @pytest.mark.skipif(tengri is None, reason="tengri not installed")
-def test_single_component_unsupported_emission_raises():
-    """Template-grid IR libraries are not wired on the single-screen path.
+def test_single_component_grid_emission_reradiates():
+    """Grid IR libraries now work on the single-screen path too (was #565).
 
-    They must fail loud (ValueError directing to two_component), not silently
-    emit nothing. The chain is built inside ``predict_state``, so the error
-    surfaces there.
+    Pre-migration, ``single_component`` + a grid IR template (dale2014) raised —
+    the fused-kernel single-screen path never wired grid IR. The unified
+    SEDModelComponent dispatch (ADR-0019) wires every emission port uniformly:
+    the attenuator publishes ``L_ir`` and the port re-radiates it regardless of
+    single- vs two-component screen. So the grid template now re-radiates the
+    absorbed energy instead of failing loud.
     """
     try:
         tengri.load_ssp()
@@ -165,7 +168,7 @@ def test_single_component_unsupported_emission_raises():
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        model = _build(
+        with_em = _build(
             {
                 "type": "single_component",
                 "*": tengri.FIXED,
@@ -173,5 +176,12 @@ def test_single_component_unsupported_emission_raises():
                 "emission": {"type": "dale2014", "*": tengri.FIXED},
             }
         )
-        with pytest.raises(ValueError, match=r"single_component|two_component"):
-            model.predict_state({})
+        no_em = _build({"type": "single_component", "*": tengri.FIXED, "tau_v": tengri.Fixed(2.0)})
+
+    ratio = _far_ir_sum(with_em.predict_state({})) / max(
+        _far_ir_sum(no_em.predict_state({})), 1e-50
+    )
+    assert ratio > 50, (
+        f"single_component + grid dale2014 far-IR ratio = {ratio:.1f}, expected >> 1: "
+        "the unified port dispatch must re-radiate grid IR on the single-screen path (#565)."
+    )

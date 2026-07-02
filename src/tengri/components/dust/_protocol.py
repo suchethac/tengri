@@ -117,9 +117,9 @@ class DustEmissionTemplate(Protocol):
 
     Using it::
 
-        from tengri.components.dust.emission import resolve_emission_model
+        from tengri.components.dust.emission import the DUST_EMISSION_MODELS loader cache
 
-        model = resolve_emission_model("my_mbb")
+        model = DUST_EMISSION_MODELS["my_mbb"]
         l_nu = model(wavelengths, L_absorbed=1e10, T_dust=30.0)
 
     """
