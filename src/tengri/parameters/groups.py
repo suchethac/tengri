@@ -273,11 +273,11 @@ def _valid_dust_emission_types() -> frozenset[str]:
     from tengri.components.sed_model_component import _REGISTRY
     from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
 
-    # Collect all registry names whose outputs include "sed_dust_ir"
+    # Registry names whose outputs include "sed_dust_ir" (getattr skips non-emission entries, #844)
     dust_ir_ports = frozenset(
         name
         for name, cls in _REGISTRY.items()
-        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+        if "sed_dust_ir" in {o.name for o in getattr(cls, "_outputs_tuple", ())}
     )
 
     # Add alias keys (grammar names that map to registry names)

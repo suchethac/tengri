@@ -36,13 +36,17 @@ from typing import Any, NamedTuple
 import jax.numpy as jnp
 
 from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConfig
+
+# Attenuator component CLASSES are resolved from _REGISTRY via the dispatch
+# seam (single dispatch, #844) — only their config dataclasses are imported here.
 from tengri.components.dust.component import (
-    DustAttenuationSEDComponent,
     DustAttenuationSEDComponentConfig,
 )
 from tengri.components.dust.two_component import (
-    DustSEDComponent,
     DustSEDComponentConfig,
+)
+from tengri.components.dust.wg00_model import (
+    WG00AttenuationSEDComponentConfig,
 )
 from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import (
@@ -135,7 +139,7 @@ def _resolve_registry_component(
         # Collect available ports and format a helpful error
         available = sorted(_REGISTRY.keys())
         raise ValueError(
-            f"Dust emission template {registry_key!r} (resolved from grammar type "
+            f"{domain} component {registry_key!r} (resolved from grammar type "
             f"{type_str!r}) not found in registry. Available names: {available}"
         )
 
@@ -371,67 +375,48 @@ def build_components(
     # AGN/radio/xray SEDs are still passed through unattenuated by stellar
     # dust (they are added after dust runs).
     if use_dust:
+        # Build the per-model attenuator config (parameterization). Class
+        # SELECTION is single-dispatch: _resolve_registry_component looks the
+        # attenuator up in _REGISTRY (registered in each attenuator module), so
+        # build_components no longer hardcodes the component classes (#844).
         if dust_model == "wg00":
-            from tengri.components.dust.wg00_model import (
-                WG00AttenuationSEDComponent,
-                WG00AttenuationSEDComponentConfig,
-            )
-
-            components.append(
-                WG00AttenuationSEDComponent(
-                    config=WG00AttenuationSEDComponentConfig(
-                        dust_curve=wg00_dust_curve,
-                        geometry=wg00_geometry,
-                        structure=wg00_structure,
-                    )
-                )
+            atten_type = "wg00"
+            atten_config = WG00AttenuationSEDComponentConfig(
+                dust_curve=wg00_dust_curve,
+                geometry=wg00_geometry,
+                structure=wg00_structure,
             )
         elif dust_model == "single_component":
-            components.append(
-                DustAttenuationSEDComponent(
-                    config=DustAttenuationSEDComponentConfig(law=dust_law_diff)
-                )
-            )
-            # Energy-balanced IR re-emission for the single-screen geometry.
-            # DustAttenuationSEDComponent publishes state.derived["L_ir"] (the
-            # absorbed UV/optical/NIR luminosity); without a downstream emission
-            # component that L_ir is computed but never re-radiated, silently
-            # dropping the dust IR (#565). The two_component path re-emits inside
-            # DustSEDComponent; the single-screen path must append a dust
-            # emission port via the registry seam. Route through
-            # _resolve_registry_component so all emission types resolve from
-            # a single dispatch path.
-            if dust_emission_model is not None:
-                components.append(
-                    _resolve_registry_component("dust_emission", dust_emission_model)
-                )
+            atten_type = "single_component"
+            atten_config = DustAttenuationSEDComponentConfig(law=dust_law_diff)
         else:
+            atten_type = "two_component"
             _overrides = dust_law_overrides or {}
-            components.append(
-                DustSEDComponent(
-                    config=DustSEDComponentConfig(
-                        law_bc=dust_law_bc,
-                        law_diff=dust_law_diff,
-                        law_neb=dust_law_neb,
-                        bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
-                        diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
-                        neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
-                        lyman_cutoff_aa=dust_lyman_cutoff_aa,
-                        lyc_absorb_all=dust_lyc_absorb_all,
-                    )
-                )
+            atten_config = DustSEDComponentConfig(
+                law_bc=dust_law_bc,
+                law_diff=dust_law_diff,
+                law_neb=dust_law_neb,
+                bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
+                diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
+                neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
+                lyman_cutoff_aa=dust_lyman_cutoff_aa,
+                lyc_absorb_all=dust_lyc_absorb_all,
             )
-            # Route dust emission through the registry seam. The two-component
-            # attenuation component (DustSEDComponent above) computes L_ir
-            # (absorbed luminosity) and publishes it to state.derived; the
-            # emission port reads L_ir as an optional input and produces sed_dust_ir.
-            # Topological sort (via optional_inputs declaration) places emission
-            # after attenuation. If dust_emission_model is None, skip emission
-            # entirely (no IR re-emission).
-            if dust_emission_model is not None:
-                components.append(
-                    _resolve_registry_component("dust_emission", dust_emission_model)
-                )
+
+        components.append(
+            _resolve_registry_component("dust_attenuation", atten_type, config=atten_config)
+        )
+
+        # Energy-balanced IR re-emission. The two-component attenuator re-emits
+        # inside its own apply(); the single-screen path publishes L_ir (absorbed
+        # UV/optical/NIR luminosity) and relies on a downstream emission port to
+        # re-radiate it — without one, L_ir is computed but never re-emitted,
+        # silently dropping the dust IR (#565). The emission port reads L_ir as
+        # an optional input and produces sed_dust_ir; the topological sort places
+        # it after attenuation. Route through the same single dispatch seam. WG00
+        # keeps its historical behavior of appending no separate emission port.
+        if atten_type != "wg00" and dust_emission_model is not None:
+            components.append(_resolve_registry_component("dust_emission", dust_emission_model))
 
     # 3. Nebular (optional)
     if nebular_backend is not None:

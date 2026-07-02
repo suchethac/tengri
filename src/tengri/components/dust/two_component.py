@@ -237,12 +237,17 @@ class DustSEDComponent:
         return [
             ParamDeclaration(
                 "dust_tau_bc",
-                Uniform(0.0, 4.0),
+                # default 1.0: Charlot & Fall (2000) canonical birth-cloud tau_V
+                # (Prospector dust1 ~ 1). Explicit default so '*': FIXED does not
+                # silently fall back to the prior midpoint (#478 / surfaced by #844).
+                Uniform(0.0, 4.0, default=1.0),
                 "Birth-cloud V-band optical depth [dimensionless]",
             ),
             ParamDeclaration(
                 "dust_tau_diff",
-                Uniform(0.0, 3.0),
+                # default 0.3: Charlot & Fall (2000) canonical diffuse-ISM tau_V
+                # (Prospector dust2 ~ 0.3).
+                Uniform(0.0, 3.0, default=0.3),
                 "Diffuse ISM V-band optical depth [dimensionless]",
             ),
             ParamDeclaration(
@@ -647,3 +652,11 @@ class DustSEDComponent:
             sed_intrinsic=sed_total,
             derived=state.derived.with_(**derived_overrides),
         )
+
+
+# Register in the unified component dispatch table so the grammar type
+# ``dust={'type': 'two_component'}`` resolves via _resolve_registry_component
+# (the single dispatch seam), not a hardcoded class in build_components (#844).
+from tengri.components.sed_model_component import _REGISTRY
+
+_REGISTRY["two_component"] = DustSEDComponent
