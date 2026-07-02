@@ -18,7 +18,6 @@
   "src/tengri/inference/backends/vi/native.py": 1717,
   "src/tengri/components/stellar/component.py": 1684,
   "src/tengri/inference/jit_engine.py": 1644,
-  "src/tengri/components/dust/emission/emission.py": 1610,
   "src/tengri/components/xray/xray.py": 1558,
   "src/tengri/components/nebular/agn_nebular.py": 1456,
   "src/tengri/parameters/priors.py": 1446,
