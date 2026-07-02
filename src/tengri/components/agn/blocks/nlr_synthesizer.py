@@ -43,9 +43,15 @@ def nlr_synthesizer_block(
     wavelength : array_like, shape (n_wave,)
             Rest-frame wavelength [Å].
     agn_log_lbol : float
-            Ignored (bolometric is taken from ``l5100_disc``).
+            :math:`\log_{10}` of the intrinsic AGN bolometric luminosity
+            [:math:`L_\odot`]. The NLR is illuminated isotropically by
+            :math:`10^{\mathrm agn\_log\_lbol}\,L_\odot` (ADR-0018 §3), so this
+            drives the line normalization.
     l5100_disc : array, scalar
-            :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
+            Ignored. The NLR normalizes to the isotropic bolometric
+            ``agn_log_lbol``, not the disc :math:`\lambda L_\lambda(5100\,
+            \mathrm{\AA})` (ADR-0018 §3: NLR is isotropic, illuminated by
+            :math:`L_{\rm bol}`).
     agn_nlr_cf, agn_nlr_fwhm_kms : float
             Covering fraction and narrow-line FWHM [km/s].
     neb_logU, neb_logZ_gas : float

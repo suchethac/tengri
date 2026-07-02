@@ -119,7 +119,7 @@ _DISCS_WITH_5100A_CONTINUUM: frozenset[str] = frozenset(
 _DOWNSTREAM_NEEDS_L5100: dict[str, frozenset[str]] = {
     "nlr": frozenset({"analytic", "grahsp"}),
     "blr": frozenset({"analytic", "grahsp"}),
-    "feii": frozenset({"grahsp"}),
+    "feii": frozenset({"grahsp", "boroson_green"}),
     "torus": frozenset({"grahsp"}),
 }
 
@@ -306,6 +306,18 @@ agn_torus_block, agn_attenuation_block : str
                 "agn_polar_ebv=0 (no extinction applied). Either set "
                 "agn_polar_ebv > 0 or pick agn_attenuation_block='none'."
             )
+
+    # Rule 8: the ADAF disc block misapplies Mahadevan 1997 Eq. 49 (scales the
+    # radiative luminosity by L_bol instead of L_Edd) and is not suitable for
+    # science fits (deprecated pending the #898 rewrite). Steer users to a
+    # physically-consistent disc.
+    if selectors["disc"] == "adaf":
+        _emit(
+            "Composable AGN: agn_disc_block='adaf' is DEPRECATED — the ADAF "
+            "disc misapplies Mahadevan 1997 Eq. 49 (radiative luminosity scaled "
+            "by L_bol, not L_Edd) and is not suitable for science fits (#898). "
+            "Use agn_disc_block='kubota_done' (or 'multicolor') instead."
+        )
 
     return issues
 
