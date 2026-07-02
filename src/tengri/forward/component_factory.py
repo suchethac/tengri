@@ -49,14 +49,12 @@ from tengri.components.dust.wg00_model import (
     WG00AttenuationSEDComponentConfig,
 )
 
-# radio/xray/igm component CLASSES are resolved from _REGISTRY via the dispatch
-# seam (single dispatch, #845) — only radio's config dataclass is imported (at
-# its call site). nebular stays a direct import pending its default-hygiene
-# backlog (14 missing defaults) + shock dual-path (#851).
-from tengri.components.nebular.component import (
-    NebularSEDComponent,
-    NebularSEDComponentConfig,
-)
+# Non-stellar component CLASSES (nebular/dust/radio/xray/igm/agn) are resolved
+# from _REGISTRY via the dispatch seam (single dispatch, #844/#845) — only their
+# config dataclasses are imported. Stellar stays a direct import (the permanent
+# exception: rich SFH+SSP orchestrator, never registry-dispatched); AGN is
+# hardcoded pending Phase 4 (#846).
+from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.component import StellarSEDComponentConfig
@@ -423,7 +421,9 @@ def build_components(
     # 3. Nebular (optional)
     if nebular_backend is not None:
         components.append(
-            NebularSEDComponent(
+            _resolve_registry_component(
+                "nebular",
+                "nebular",
                 config=NebularSEDComponentConfig(
                     backend=nebular_backend,
                     cue_full_catalog=cue_full_catalog,

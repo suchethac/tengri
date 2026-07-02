@@ -68,6 +68,17 @@
       "expected_types": [
         "igm"
       ]
+    },
+    "nebular": {
+      "_comment": "NebularSEDComponent dispatches via the _REGISTRY seam (#845). Construction-only; the per-backend apply() (baked_in/cloudy_grid/cue/shock) and its cross-component reads (nion) are unchanged. Registering it surfaced (and this PR fixed) a default-hygiene backlog: the cue/cloudy/shock backends' free params (neb_logU, gas_logn, ionspec_index1..4, ionspec_logLratio1..3, shock_velocity, ...) now carry physical defaults (ionspec = 1-Myr solar-Z BPASS fit). Sentinel = NebularSEDComponent absent from component_factory.",
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.forward.component_factory",
+        "attr": "NebularSEDComponent"
+      },
+      "expected_types": [
+        "nebular"
+      ]
     }
   }
 }

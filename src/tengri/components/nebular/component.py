@@ -153,12 +153,16 @@ class NebularSEDComponent:
         std_knobs = [
             ParamDeclaration(
                 "neb_logU",
-                Uniform(-5.0, 0.0),
+                # default -2.5: representative HII-region ionization parameter
+                # (Cue/CLOUDY grids span logU ~ -3..-2). Explicit so '*': FIXED
+                # does not silently use the prior midpoint (#477 / #478 / #845).
+                Uniform(-5.0, 0.0, default=-2.5),
                 "log10 ionization parameter U [dimensionless]",
             ),
             ParamDeclaration(
                 "neb_logZ_gas",
-                Uniform(-2.0, 0.5),
+                # default 0.0: solar gas-phase metallicity.
+                Uniform(-2.0, 0.5, default=0.0),
                 "log10(Z_gas/Zsun) [dimensionless]; if Fixed, falls back to "
                 "stellar log_z at apply time",
             ),
@@ -188,58 +192,68 @@ class NebularSEDComponent:
             # power-law segments) — priors taken from the legacy
             # _CUE_IONSPEC_PARAMS bounds in
             # tengri.parameters._param_defs.
+            #
+            # Defaults = a fiducial young-starburst ionizing spectrum: the
+            # 1-Myr, solar-metallicity BPASS SSP (bpss_stars_c3k_a_chabrier)
+            # fit with fit_ionizing_spectrum (the same 4-segment power-law
+            # decomposition Cue consumes). Self-consistent (a single physical
+            # SED), so '*': FIXED yields a sensible nebular spectrum instead of
+            # the prior midpoint, which for these correlated params would be an
+            # unphysical ionizing SED (#477 / #478 / #845).
             ionspec = [
                 ParamDeclaration(
                     "ionspec_index1",
-                    Uniform(0.0, 50.0),
+                    Uniform(0.0, 50.0, default=22.21),
                     "Cue ionizing slope segment 1 (HeII, 1-228 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_index2",
-                    Uniform(-1.0, 35.0),
+                    Uniform(-1.0, 35.0, default=10.52),
                     "Cue ionizing slope segment 2 (OII, 228-353 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_index3",
-                    Uniform(-2.0, 20.0),
+                    Uniform(-2.0, 20.0, default=5.69),
                     "Cue ionizing slope segment 3 (HeI, 353-504 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_index4",
-                    Uniform(-2.0, 10.0),
+                    Uniform(-2.0, 10.0, default=2.15),
                     "Cue ionizing slope segment 4 (HI, 504-912 Å) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_logLratio1",
-                    Uniform(-1.0, 12.0),
+                    Uniform(-1.0, 12.0, default=2.78),
                     "Cue log luminosity ratio seg2/seg1 [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_logLratio2",
-                    Uniform(-1.0, 3.0),
+                    Uniform(-1.0, 3.0, default=0.47),
                     "Cue log luminosity ratio seg3/seg2 [dimensionless]",
                 ),
                 ParamDeclaration(
                     "ionspec_logLratio3",
-                    Uniform(-1.0, 3.0),
+                    Uniform(-1.0, 3.0, default=0.56),
                     "Cue log luminosity ratio seg4/seg3 [dimensionless]",
                 ),
             ]
-            # 3 extra gas-property knobs beyond logU / logZ_gas
+            # 3 extra gas-property knobs beyond logU / logZ_gas.
+            # Defaults: n_H = 100 cm^-3 (typical HII region), solar [N/O] and
+            # [C/O] (log ratios = 0.0).
             gas_extra = [
                 ParamDeclaration(
                     "gas_logn",
-                    Uniform(0.0, 5.0),
+                    Uniform(0.0, 5.0, default=2.0),
                     "Cue gas density log10(n_H/cm^-3) [dimensionless]",
                 ),
                 ParamDeclaration(
                     "gas_logno",
-                    Uniform(-2.0, 2.0),
+                    Uniform(-2.0, 2.0, default=0.0),
                     "Cue [N/O] abundance ratio [dex]",
                 ),
                 ParamDeclaration(
                     "gas_logco",
-                    Uniform(-2.0, 2.0),
+                    Uniform(-2.0, 2.0, default=0.0),
                     "Cue [C/O] abundance ratio [dex]",
                 ),
             ]
@@ -252,7 +266,8 @@ class NebularSEDComponent:
             return [
                 ParamDeclaration(
                     "shock_velocity",
-                    Uniform(100.0, 1000.0),
+                    # default 250 km/s: representative MAPPINGS shock velocity.
+                    Uniform(100.0, 1000.0, default=250.0),
                     "Shock velocity [km/s]",
                 ),
                 ParamDeclaration(
@@ -763,3 +778,11 @@ class NebularSEDComponent:
             else nebular_sed,
             derived=state.derived.with_(**derived_overrides),
         )
+
+
+# Register in the unified component dispatch table so build_components resolves
+# the nebular component via _resolve_registry_component (single dispatch, #845)
+# instead of importing the class directly.
+from tengri.components.sed_model_component import _REGISTRY
+
+_REGISTRY["nebular"] = NebularSEDComponent
