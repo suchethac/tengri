@@ -427,6 +427,19 @@ agn_torus_block, agn_attenuation_block : str
     # fit would let the viewing angle spuriously drive the X-ray/radio normalization.
     # Re-evaluate the disc block at cos(30 deg) (block-agnostic: each disc models
     # its own inclination law). Cheap relative to the full pipeline.
+    #
+    # Convention note (composable-AGN physics audit): each disc block applies
+    # its OWN inclination law here, NOT CIGALE's SKIRTOR-template anisotropy
+    # factor eta(i) = cos i (1 + 2 cos i)/3 (skirtor2016.py:405-406). CIGALE's
+    # eta(30 deg) = 0.789 is specific to the SKIRTOR intrinsic-disc TEMPLATE
+    # (``AGN1.disk``); it is NOT a universal correction for the analytic /
+    # physical disc models used here (multicolor, kubota_done, richards2006,
+    # ...), which already carry their own foreshortening. Comparing this
+    # L_2500_intrinsic to CIGALE's ``intrin_Lnu_2500A_30deg`` therefore shows an
+    # ~eta(30 deg) (~27%) offset for a non-SKIRTOR disc — that is a convention
+    # difference between disc models, not a bug. Do NOT blindly multiply by
+    # eta(30 deg) here (it would double-count inclination for discs that model
+    # their own, and be wrong for isotropic ones).
     _COS_30DEG = 0.86602540378443864
     L_lambda_disc_30deg = disc_fn(
         wave,
