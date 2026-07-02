@@ -161,6 +161,8 @@ ignore = [
 "notebooks/**" = ["F401", "F841", "E402", "E501", "E702", "I001"]  # notebooks: exploratory, jax.config between imports
 # Numpydoc math blocks contain unavoidably long LaTeX equations (.. math:: directives)
 "src/tengri/components/dust/attenuation.py" = ["E501"]
+"src/tengri/components/dust/_apply.py" = ["E501"]  # split from attenuation.py (#843)
+"src/tengri/components/dust/laws/**" = ["E501"]  # split from attenuation.py (#843)
 "src/tengri/components/igm/igm.py" = ["E501"]
 "src/tengri/components/nebular/_shared.py" = ["E501"]
 "src/tengri/components/sfh/mean_sfh.py" = ["E501"]
