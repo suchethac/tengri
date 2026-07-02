@@ -93,6 +93,7 @@ import jax.numpy as jnp
 
 from tengri.parameters.priors import Distribution
 from tengri.protocols.component import (
+    BARE_NAME_ALLOWLIST,
     DerivedKey,
     ForwardState,
     ParamDeclaration,
@@ -288,10 +289,23 @@ class SEDModelComponent:
         # Store on the class
         cls._priors = priors
 
-        # Extract and parse inputs / outputs / optional_inputs dicts
-        inputs_dict = vars(cls).get("inputs", {})
-        outputs_dict = vars(cls).get("outputs", {})
-        optional_inputs_dict = vars(cls).get("optional_inputs", {})
+        # Extract and parse inputs / outputs / optional_inputs dicts.
+        # Build DerivedKey tuples from the full inheritance chain.
+        inputs_dict = {}
+        outputs_dict = {}
+        optional_inputs_dict = {}
+
+        # Collect dicts from this class and inherited classes (traverse MRO).
+        for base in cls.__mro__[::-1]:  # Start from most distant base
+            base_inputs = vars(base).get("inputs")
+            if isinstance(base_inputs, dict):
+                inputs_dict.update(base_inputs)
+            base_outputs = vars(base).get("outputs")
+            if isinstance(base_outputs, dict):
+                outputs_dict.update(base_outputs)
+            base_opt_inputs = vars(base).get("optional_inputs")
+            if isinstance(base_opt_inputs, dict):
+                optional_inputs_dict.update(base_opt_inputs)
 
         # Build DerivedKey tuples
         inputs_tuple = tuple(DerivedKey(name, units, "") for name, units in inputs_dict.items())
@@ -304,13 +318,23 @@ class SEDModelComponent:
         cls._outputs_tuple = outputs_tuple
         cls._optional_inputs_tuple = optional_inputs_tuple
 
-        # Delete the dicts so method resolution finds the base methods
-        if "inputs" in vars(cls):
-            delattr(cls, "inputs")
-        if "outputs" in vars(cls):
-            delattr(cls, "outputs")
-        if "optional_inputs" in vars(cls):
-            delattr(cls, "optional_inputs")
+        # Delete the dicts so method resolution finds the base methods.
+        # BUT: only delete if this is a concrete class (has a 'name' attribute
+        # defined in its own vars()). For abstract base classes like EmissionPort,
+        # keep the dicts so subclasses can inherit and process them.
+        is_concrete = "name" in vars(cls)
+        if is_concrete:
+            # The declared inputs/outputs/optional_inputs dicts must not shadow the
+            # same-named accessor methods once the tuples are collected. Two cases:
+            #  (a) the dict is on THIS concrete class -> delete it so the base method resolves;
+            #  (b) the dict is inherited from an intermediate ABSTRACT base (e.g. EmissionPort,
+            #      which shares the emission I/O contract) -> that dict shadows the method for
+            #      this subclass, so rebind the base accessor method onto the concrete class.
+            for _attr in ("inputs", "outputs", "optional_inputs"):
+                if isinstance(vars(cls).get(_attr), dict):
+                    delattr(cls, _attr)
+                elif isinstance(getattr(cls, _attr, None), dict):
+                    setattr(cls, _attr, getattr(SEDModelComponent, _attr))
 
         # Citations: read class attribute (tuple of bib keys), store on class.
         # Subclasses declare ``citations = ("calzetti2000", ...)``; the
@@ -323,16 +347,19 @@ class SEDModelComponent:
         if "citations" in vars(cls):
             delattr(cls, "citations")
 
-        # Register by name
-        component_name = vars(cls).get("name", "component")
-        if component_name in _REGISTRY and _REGISTRY[component_name] is not cls:
-            existing_cls = _REGISTRY[component_name]
-            raise ValueError(
-                f"Component name {component_name!r} already registered by "
-                f"{existing_cls.__module__}.{existing_cls.__qualname__} — "
-                f"collision with {cls.__module__}.{cls.__qualname__}"
-            )
-        _REGISTRY[component_name] = cls
+        # Register by name — ONLY concrete classes that define their OWN ``name``.
+        # Abstract authoring bases (e.g. EmissionPort) inherit the default name and
+        # must NOT register: they are scaffolds, not dispatchable components.
+        if "name" in vars(cls):
+            component_name = vars(cls)["name"]
+            if component_name in _REGISTRY and _REGISTRY[component_name] is not cls:
+                existing_cls = _REGISTRY[component_name]
+                raise ValueError(
+                    f"Component name {component_name!r} already registered by "
+                    f"{existing_cls.__module__}.{existing_cls.__qualname__} — "
+                    f"collision with {cls.__module__}.{cls.__qualname__}"
+                )
+            _REGISTRY[component_name] = cls
 
     def load(self, wave: jnp.ndarray | None = None) -> Any | None:
         """Optional precomputation hook. Override to cache static tensors.
@@ -467,6 +494,8 @@ class SEDModelComponent:
         self,
         state: ForwardState,
         params: Mapping[str, jnp.ndarray],
+        ssp_data: Any | None = None,
+        template_data: Mapping[str, Any] | None = None,
     ) -> ForwardState:
         """Default orchestration: slice params, look up inputs, call predict.
 
@@ -474,6 +503,10 @@ class SEDModelComponent:
         inputs from :attr:`state.derived`, and calls :meth:`predict`. Updates
         :attr:`state.sed_intrinsic` with the returned SED and publishes
         returned keys to :attr:`state.derived`.
+
+        Bare-name allowlist parameters (e.g., ``redshift``) are passed through
+        unstripped to :meth:`predict` and precomp paths to enable cross-component
+        access.
 
         When WavePrecomp is active (``filter_eff_waves`` in state.derived),
         automatically routes through the LUT path via :meth:`predict_precomp`
@@ -486,6 +519,12 @@ class SEDModelComponent:
             Current state with wave, sed_intrinsic, and derived keys.
         params : mapping
             Full parameter dict (this method slices by prefix).
+        ssp_data : object, optional
+            SSP data (ignored for dust emission components; available for
+            subclasses that need it).
+        template_data : mapping, optional
+            Cached template grids and precomputed data (e.g., dust_ir LUTs).
+            Currently unused; reserved for future optimization threading.
 
         Returns
         -------
@@ -497,6 +536,13 @@ class SEDModelComponent:
         p_sliced = {
             k[prefix_len:]: v for k, v in params.items() if k.startswith(self.parameter_prefix)
         }
+
+        # Bare-name allowlist params (e.g. redshift) have no domain prefix; the
+        # orchestrator threads them to every component (protocols.component.BARE_NAME_ALLOWLIST).
+        # Expose them to predict()/LUT paths unstripped, honoring the documented contract.
+        for _bare in BARE_NAME_ALLOWLIST:
+            if _bare in params:
+                p_sliced[_bare] = params[_bare]
 
         # Look up required inputs from derived
         input_kwargs = {}

@@ -138,40 +138,6 @@ def register_emission_model(name: str) -> Callable:
     return decorator
 
 
-def resolve_emission_model(name: str) -> Callable:
-    """Get a registered emission model by name.
-
-    Parameters
-    ----------
-    name : str
-        Model name (e.g. ``"modified_blackbody"``).
-
-    Returns
-    -------
-    Callable
-        The model function with signature
-        ``(wavelength, L_absorbed, **params) -> L_nu_emission``.
-
-    Raises
-    ------
-    ValueError
-        If *name* is not in the registry.
-
-    Notes
-    -----
-    **JIT-compatible**: no — registry lookup happens at factory time.
-
-    The returned function matches the ``DustEmissionTemplate`` protocol and can
-    be called with wavelengths, absorbed luminosity, and model-specific parameters.
-
-    """
-    if name not in DUST_EMISSION_MODELS:
-        raise ValueError(
-            f"Unknown dust emission model '{name}'. Available: {list(DUST_EMISSION_MODELS.keys())}"
-        )
-    return DUST_EMISSION_MODELS[name]
-
-
 def preload_emission_model(name: str) -> Callable:
     """Force lazy template loading outside any JAX JIT scope.
 
@@ -1385,8 +1351,12 @@ def apply_dust_emission(
     **JIT-compatible**: yes if the underlying model is JIT-compatible.
 
     """
-    fn = resolve_emission_model(model_name)
-    return fn(wavelength_aa, L_absorbed, **params)
+    if model_name not in DUST_EMISSION_MODELS:
+        raise ValueError(
+            f"Unknown dust emission model '{model_name}'. "
+            f"Available: {list(DUST_EMISSION_MODELS.keys())}"
+        )
+    return DUST_EMISSION_MODELS[model_name](wavelength_aa, L_absorbed, **params)
 
 
 # ── Lazy loading infrastructure for template-based models ─────────
@@ -1480,7 +1450,7 @@ def _dl07_lazy_wrapper(*args, **kwargs):
         _resolved.add("draine_li2007")
         path = _find_dl07_templates()
         if path is not None:
-            from .emission_templates import create_dl07_from_grid
+            from tengri.components.dust.emission_templates import create_dl07_from_grid
 
             tabulated = create_dl07_from_grid(path)
             DUST_EMISSION_MODELS["draine_li2007"] = tabulated
@@ -1499,7 +1469,7 @@ def _dl07_lazy_wrapper(*args, **kwargs):
 
 # ── Import emission template functions ───────────────────────────
 
-from .emission_templates import (
+from tengri.components.dust.emission_templates import (
     create_astrodust_from_grid as create_astrodust_from_grid,
     create_bosa_from_grid as create_bosa_from_grid,
     create_dale2014_from_grid as create_dale2014_from_grid,
@@ -1560,7 +1530,7 @@ DUST_EMISSION_MODELS["schreiber2018"] = _make_lazy_loader(
 @functools.cache
 def _load_dl14_fn():
     """Load DL14 template grid from file."""
-    from .emission_templates import create_dl14_from_grid
+    from tengri.components.dust.emission_templates import create_dl14_from_grid
 
     for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
         path = _find_data_file(fname)

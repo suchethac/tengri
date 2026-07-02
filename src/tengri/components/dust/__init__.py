@@ -98,7 +98,6 @@ from tengri.components.dust.emission import (
     register_dl14_tabulated,
     register_emission_model,
     register_themis_tabulated,
-    resolve_emission_model,
     themis,
 )
 from tengri.components.dust.emission_component import (
@@ -192,7 +191,6 @@ _CURATED_DIR = (
     "register_dust_law",
     "resolve_dust_law",
     "register_emission_model",
-    "resolve_emission_model",
     "register_astrodust_tabulated",
     "register_bosa_tabulated",
     "register_dale2014_tabulated",

@@ -10,7 +10,11 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 import tengri.components.agn.skirtor as _skirtor_mod
-import tengri.components.dust.emission as _emission_mod
+
+# The impl module (emission/emission.py), NOT the package: this test reaches into
+# private lazy-loader internals (_load_dl14_fn, _dl07_lazy_wrapper, _make_lazy_loader,
+# _resolved, _find_*) and monkeypatches them, which must target where the code runs.
+import tengri.components.dust.emission.emission as _emission_mod
 
 
 # ── Helpers: clear module-level caches between tests so each test starts fresh

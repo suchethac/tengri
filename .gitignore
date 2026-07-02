@@ -29,6 +29,7 @@ Thumbs.db
 *.h5
 # Snapshot regression baselines are checked in (small, deterministic).
 !tests/_data/kernel_snapshots/*.npy
+!tests/regression/data/dust_emission_golden/*.npy
 
 # Jupyter
 .ipynb_checkpoints/
@@ -101,3 +102,6 @@ examples/*/data/filters/
 examples/*/data/
 arxiv_library/
 _galrun/
+
+# Superpowers subagent-driven-development scratch ledger (session-local)
+.superpowers/

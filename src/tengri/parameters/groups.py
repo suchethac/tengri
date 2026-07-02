@@ -259,17 +259,31 @@ _LAZY_DUST_EMISSION_TYPES = frozenset(
 def _valid_dust_emission_types() -> frozenset[str]:
     """Return accepted ``dust.emission.type`` values, derived from the registry.
 
-    Union of (i) every name currently in ``DUST_EMISSION_MODELS`` (populated
-    at import time by ``@register_emission_model`` decorators plus the
-    lazy-loader wrappers in ``components/dust/emission.py``) and (ii) the
-    closed set of names that only appear after an explicit
-    ``register_*_tabulated`` call. Together these cover both the
-    eager-registered and lazy-registered branches without the drift footgun
-    a hand-maintained allowlist creates (see ADR-0005 / ADR-0008).
-    """
-    from tengri.components.dust.emission import DUST_EMISSION_MODELS
+    Reads the ``_REGISTRY`` (populated by SEDModelComponent.__init_subclass__
+    at import time) and returns names of all ports whose ``outputs`` include
+    ``"sed_dust_ir"``. This automatically picks up all dust emission ports
+    (modified_blackbody, dale2014, draine_li2007, etc.) without manual
+    maintenance. Union with the alias map keys (e.g., draine2021_pah →
+    draine2021_pah_ir) so grammar type names resolve correctly.
 
-    return frozenset(DUST_EMISSION_MODELS.keys()) | _LAZY_DUST_EMISSION_TYPES
+    Includes ``energy_balance_split`` (a registered two-temperature + AGN-IR
+    port publishing ``sed_dust_ir``, Kokorev+2021 — a real model, not a helper).
+    Also includes ``_LAZY_DUST_EMISSION_TYPES`` (ADR-0005 / ADR-0008).
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES
+
+    # Collect all registry names whose outputs include "sed_dust_ir"
+    dust_ir_ports = frozenset(
+        name
+        for name, cls in _REGISTRY.items()
+        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+    )
+
+    # Add alias keys (grammar names that map to registry names)
+    alias_keys = frozenset(_EMISSION_TYPE_ALIASES.keys())
+
+    return dust_ir_ports | alias_keys | _LAZY_DUST_EMISSION_TYPES
 
 
 def _valid_nebular_types() -> frozenset[str]:
@@ -1043,7 +1057,7 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             emission_type = emission_dict.get("type", None)
             if emission_type is not None:
                 # Dust IR emission types are engine names (modified_blackbody, dale2014,
-                # dl07, dl14, astrodust, etc.) resolved by resolve_emission_model.
+                # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.
                 valid_emission_types = _valid_dust_emission_types()
                 if emission_type not in valid_emission_types:
                     suggestions = difflib.get_close_matches(

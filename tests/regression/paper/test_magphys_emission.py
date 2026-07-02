@@ -252,10 +252,10 @@ class TestMagphysRegistry:
 
         assert "magphys" in DUST_EMISSION_MODELS
 
-    def test_resolve_emission_model(self):
-        from tengri.components.dust.emission import resolve_emission_model
+    def test_magphys_in_loader_cache(self):
+        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
-        fn = resolve_emission_model("magphys")
+        fn = DUST_EMISSION_MODELS["magphys"]
         assert fn is magphys_dc08
 
     def test_apply_dust_emission(self):

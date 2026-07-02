@@ -26,6 +26,36 @@ def test_list_dust_emission_models_subset_of_validator():
     )
 
 
+def test_every_emission_port_is_both_valid_and_advertised():
+    """Reverse-direction guard: every registered port that publishes
+    ``sed_dust_ir`` is a genuine selectable model and MUST appear in BOTH the
+    grammar validator AND the advertised menu.
+
+    The subset test above only guards ``listed ⊆ valid``, so it cannot catch a
+    port-model that is *selectable but hidden* (or advertised-but-rejected) —
+    exactly the ``energy_balance_split`` drift, where the port was grammar-valid
+    yet skipped by the menu. Aliases (dl07/mbb/…) and lazy names are
+    validator-only by design and are not required to appear in the menu.
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+
+    dust_ir_ports = {
+        name
+        for name, cls in _REGISTRY.items()
+        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+    }
+    valid = _valid_dust_emission_types()
+    listed = {row["name"] for row in tengri.list_dust_emission_models()}
+
+    assert dust_ir_ports <= valid, (
+        f"sed_dust_ir port-models rejected by the validator: {sorted(dust_ir_ports - valid)}"
+    )
+    assert dust_ir_ports <= listed, (
+        "sed_dust_ir port-models selectable but NOT advertised in the menu "
+        f"(hidden-model drift): {sorted(dust_ir_ports - listed)}"
+    )
+
+
 @pytest.mark.parametrize("alias", ["dl07", "dl14", "mbb"])
 def test_friendly_aliases_resolvable(alias):
     """The short names surfaced by the menu must resolve in the registry."""
