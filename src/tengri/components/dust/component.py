@@ -320,3 +320,11 @@ class DustAttenuationSEDComponent:
             sed_attenuated=attenuated,
             derived=state.derived.with_(**derived_overrides),
         )
+
+
+# Register in the unified component dispatch table so the grammar type
+# ``dust={'type': 'single_component'}`` resolves via _resolve_registry_component
+# (the single dispatch seam), not a hardcoded class in build_components (#844).
+from tengri.components.sed_model_component import _REGISTRY
+
+_REGISTRY["single_component"] = DustAttenuationSEDComponent

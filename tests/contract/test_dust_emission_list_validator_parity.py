@@ -42,7 +42,9 @@ def test_every_emission_port_is_both_valid_and_advertised():
     dust_ir_ports = {
         name
         for name, cls in _REGISTRY.items()
-        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+        # getattr default skips non-emission registry entries (dust-attenuation
+        # screens registered for dispatch in #844 lack _outputs_tuple).
+        if "sed_dust_ir" in {o.name for o in getattr(cls, "_outputs_tuple", ())}
     }
     valid = _valid_dust_emission_types()
     listed = {row["name"] for row in tengri.list_dust_emission_models()}

@@ -595,7 +595,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     names = {
         name
         for name, cls in _REGISTRY.items()
-        if "sed_dust_ir" in {o.name for o in cls._outputs_tuple}
+        if "sed_dust_ir" in {o.name for o in getattr(cls, "_outputs_tuple", ())}
     } | set(_EMISSION_TYPE_ALIASES)
 
     out = []

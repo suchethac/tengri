@@ -22,6 +22,19 @@
         "themis",
         "energy_balance_split"
       ]
+    },
+    "dust_attenuation": {
+      "_comment": "Dust attenuation dispatches via the _REGISTRY seam (#844). The attenuator screens (DustSEDComponent/DustAttenuationSEDComponent/WG00AttenuationSEDComponent) register in _REGISTRY from their own modules; build_components selects the class via _resolve_registry_component, so it no longer imports the attenuator CLASSES (only their config dataclasses). The single-dispatch invariant is the ABSENCE of a directly-imported attenuator class in component_factory — DustSEDComponent is the representative sentinel; the behavioral contract test (test_dust_attenuation_single_dispatch) covers all three types.",
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.forward.component_factory",
+        "attr": "DustSEDComponent"
+      },
+      "expected_types": [
+        "two_component",
+        "single_component",
+        "wg00"
+      ]
     }
   }
 }
