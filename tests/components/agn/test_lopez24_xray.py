@@ -192,8 +192,11 @@ class TestTotalLopez24:
         result = xray_total_lopez24(xray_wavelength)
         chex.assert_equal_shape([result, xray_wavelength])
 
-    def test_xrb_only_when_no_agn(self, xray_wavelength):
-        from tengri.components.xray.xray import xray_xrb
+    def test_galaxy_only_when_no_agn(self, xray_wavelength):
+        # With no AGN (l_12um = 0) the corona vanishes, leaving the galaxy
+        # channels: XRBs + hot gas (CIGALE lopez24 includes the 8.3e31·SFR
+        # hot-gas term, shared with yang20).
+        from tengri.components.xray.xray import xray_hotgas, xray_xrb
 
         total = xray_total_lopez24(
             xray_wavelength,
@@ -202,7 +205,8 @@ class TestTotalLopez24:
             l_12um_erg_hz=0.0,
         )
         xrb = xray_xrb(xray_wavelength, sfr=1.0, stellar_mass=1e10, E_cut=300.0)
-        assert jnp.allclose(total, xrb, atol=1e-50)
+        hotgas = xray_hotgas(xray_wavelength, 1.0, gamma=1.0, E_cut=1.0)
+        assert jnp.allclose(total, xrb + hotgas, atol=1e-50)
 
     def test_agn_adds_flux(self, xray_wavelength):
         no_agn = xray_total_lopez24(

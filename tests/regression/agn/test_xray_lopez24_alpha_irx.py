@@ -59,3 +59,43 @@ def test_lopez24_scales_inversely_with_alpha_irx(alpha):
     nu_lnu_12um = 1.0e44
     lx = _integrated_lx_2to10(nu_lnu_12um, alpha)
     np.testing.assert_allclose(lx, nu_lnu_12um / 10.0**alpha, rtol=0.02)
+
+
+def test_lopez24_registered_and_dispatches():
+    """`lopez24` is a selectable xray model wired to `xray_total_lopez24`."""
+    from tengri import list_xray_models
+    from tengri.components.xray import XRAY_MODELS
+    from tengri.components.xray.xray import xray_total_lopez24
+
+    assert "lopez24" in {m["name"] for m in list_xray_models()}
+    assert XRAY_MODELS["lopez24"].callable is xray_total_lopez24
+
+
+def test_xray_component_dispatches_to_lopez24():
+    """XRaySEDComponent(model='lopez24') routes its corona through α_IRX·L_12µm.
+
+    Applies the component to a minimal state carrying an AGN L_agn_bol (no
+    published L_12µm, so the bolometric-correction fallback is exercised) and
+    checks the emitted corona weakens as α_IRX rises.
+    """
+    import jax.numpy as jnp
+
+    from tengri.components.xray.component import XRaySEDComponent, XRaySEDComponentConfig
+    from tengri.protocols.component import ForwardState
+
+    comp = XRaySEDComponent(config=XRaySEDComponentConfig(model="lopez24"))
+    wave = jnp.logspace(0.0, 3.0, 200)  # 1-1000 Å (soft X-ray to UV)
+    base = {d.name: jnp.asarray(d.prior.default) for d in comp.declared_parameters()}
+    state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave)).with_(
+        derived={
+            "sfr": jnp.asarray(1.0),
+            "log_mstar": jnp.asarray(10.5),
+            "L_agn_bol": jnp.asarray(1e45),
+        }
+    )
+
+    def _sum(alpha):
+        params = {**base, "xray_alpha_irx": jnp.asarray(alpha), "redshift": jnp.asarray(0.0)}
+        return float(jnp.sum(comp.apply(state, params).derived["sed_xray"]))
+
+    assert _sum(0.6) < _sum(0.0), "lopez24 corona must weaken as α_IRX rises"

@@ -1301,6 +1301,10 @@ def _translate_xray(xray_dict: dict, result: dict) -> None:
         raise ValueError(f"Unknown X-ray type '{xray_type}'.{suggest_str}")
 
     result["xray"] = xray_type != "none"
+    # Thread the corona prescription (yang20 / simple / lopez24) to the
+    # component so it can dispatch; "simple" is the yang20 alias.
+    if xray_type != "none":
+        result["xray_model"] = xray_type
 
 
 #: AGN sub-block keys recognized by the nested-dict grammar. Used when

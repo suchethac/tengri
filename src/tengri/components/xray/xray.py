@@ -1481,6 +1481,7 @@ def xray_total_lopez24(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
+    stellar_age_gyr: float = 1.0,
     l_12um_erg_hz: float = 0.0,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
@@ -1534,10 +1535,13 @@ def xray_total_lopez24(
         wavelength,
         sfr=sfr,
         stellar_mass=stellar_mass,
+        stellar_age_gyr=stellar_age_gyr,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
         E_cut=E_cut,
     )
+    # Hot gas (CIGALE lopez24: 8.3e31 × SFR), shared with the yang20 path.
+    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
     agn = xray_agn_corona_lopez24(
         wavelength,
         l_12um_erg_hz,
@@ -1547,7 +1551,7 @@ def xray_total_lopez24(
         apply_anisotropy=False,
         log_nh=log_nh,
     )
-    return xrb + agn
+    return xrb + hotgas + agn
 
 
 # ── Deprecation shims ──
