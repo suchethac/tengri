@@ -553,32 +553,33 @@ m_stellar = SEDModel.build(
 s_stellar = m_stellar.predict_state({})
 _assert_comparable(L_c, s_stellar.sed_intrinsic, name="§3 stellar")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(ax_l, ax_r, label_l="pcigale  sfhdelayed + bc03", label_r="tengri  sfh.delayed + bc03")
-ax_l.plot(w_c, L_c, "C0-", linewidth=1.5)
-ax_l.text(
-    0.05,
-    0.95,
-    r"$M_\star = 1\,M_\odot$ (norm)",
-    transform=ax_l.transAxes,
-    fontsize=10,
-    va="top",
-    bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
-)
-ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
+# Shared-axis overlay + tengri/CIGALE ratio panel (#864): a single scale makes
+# any normalization offset visible at a glance. Both codes form 1 M_sun; the
+# tengri box reports its *surviving* stellar mass, so the ratio panel shows
+# whether the M_star = 1.0 vs 0.558 label difference is a real SED offset (it is
+# not — formed-vs-surviving-mass convention) or a genuine ~1.8x mismatch.
 m_star = 10.0 ** float(s_stellar.derived["log_mstar"])
-ax_r.text(
+fig, ax, ax_r, ratio = U.overlay_ratio_fig(
+    w_c,
+    L_c,
+    np.asarray(s_stellar.wave),
+    np.asarray(s_stellar.sed_intrinsic),
+    title="§3 stellar SED — CIGALE sfhdelayed+bc03 vs tengri (both 1 M$_\\odot$ formed)",
+    label_c="CIGALE  sfhdelayed + bc03",
+    label_t="tengri  sfh.delayed + bc03",
+    xlim=(1e2, 1e6),
+)
+ax.text(
     0.05,
     0.95,
-    rf"$M_\star = {m_star:.2e}\,M_\odot$",
-    transform=ax_r.transAxes,
-    fontsize=10,
+    rf"formed $M_\star = 1\,M_\odot$ both; tengri surviving $M_\star = {m_star:.3f}\,M_\odot$",
+    transform=ax.transAxes,
+    fontsize=9,
     va="top",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5),
 )
-for ax in (ax_l, ax_r):
-    ax.set_xlim(1e2, 1e6)
-    ax.grid(True, alpha=0.3)
+_opt = (w_c >= 1e3) & (w_c <= 1e4) & (L_c > 0)
+print(f"§3 stellar tengri/CIGALE median (0.1–1 µm): {float(np.median(ratio[_opt])):.3f}×")
 fig.tight_layout()
 save_fig("cigale_03_stellar_sed.png")
 
@@ -859,35 +860,31 @@ L_emit = float(s_ir.derived.get("L_ir", 0.0))
 residual = abs(L_abs - L_emit) / max(L_abs, 1e-30)
 _assert_comparable(L_c_ir, s_ir.sed_intrinsic, name="§6 IR")
 
-fig, ax_l, ax_r = U.two_panel_fig()
-U.panel(
-    ax_l,
-    ax_r,
-    label_l="pcigale  + Dale+2014 (α = 2)",
-    label_r="tengri  + dust.emission.dale2014 (α = 2)",
+# Shared-axis overlay + ratio panel (#864): the FIR-peak partition difference
+# (~1.0-1.15, Dale2014 stellar-heated) is only readable on one scale.
+fig, ax, ax_r, ratio = U.overlay_ratio_fig(
+    w_c_ir,
+    L_c_ir,
+    np.asarray(s_ir.wave),
+    np.asarray(s_ir.sed_intrinsic),
+    title="§6 stellar + Dale+2014 dust IR — CIGALE vs tengri",
+    label_c="CIGALE  + Dale+2014 (α = 2)",
+    label_t="tengri  + dust.emission.dale2014 (α = 2)",
+    xlim=(1e3, 5e6),
+    dyn_range=1e-4,
 )
-ax_l.plot(w_c_ir, L_c_ir, "C0-", linewidth=1.5)
-ax_r.plot(s_ir.wave, s_ir.sed_intrinsic, "C1-", linewidth=1.5)
-ax_r.text(
+ax.text(
     0.98,
     0.05,
-    rf"$|L_{{\rm IR}} - L_{{\rm abs}}|/L_{{\rm abs}} = {residual:.1e}$",
-    transform=ax_r.transAxes,
+    rf"tengri $|L_{{\rm IR}} - L_{{\rm abs}}|/L_{{\rm abs}} = {residual:.1e}$",
+    transform=ax.transAxes,
     fontsize=9,
     ha="right",
     va="bottom",
     bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.7),
 )
-# Match x-range so the FIR peak is visible on both panels.
-_xmin = float(min(w_c_ir.min(), float(np.asarray(s_ir.wave).min())))
-_xmax = float(max(w_c_ir.max(), float(np.asarray(s_ir.wave).max())))
-# Peak-anchored y-limit: the SED cliffs to ~0 at the grid edges, so without
-# this the shared log axis autoscales across ~170 decades and flattens the SED.
-_ymax_d = float(max(np.nanmax(L_c_ir), np.nanmax(np.asarray(s_ir.sed_intrinsic))))
-for ax in (ax_l, ax_r):
-    ax.set_xlim(_xmin, _xmax)
-    ax.set_ylim(_ymax_d * 1e-6, _ymax_d * 2.0)
-    ax.grid(True, alpha=0.3)
+_fir = (w_c_ir >= 1e5) & (w_c_ir <= 1e6) & (L_c_ir > 0)
+print(f"§6 dust IR tengri/CIGALE median (10–100 µm): {float(np.median(ratio[_fir])):.3f}×")
 fig.tight_layout()
 fig.savefig(str(figs_dir / "cigale_06_dust_ir_dale2014.png"), dpi=150, bbox_inches="tight")
 plt.show()
@@ -1723,12 +1720,12 @@ sed_x = C.run_chain(
                 oa=40,
                 R=20,
                 Mcl=0.97,
-                i=40,
+                i=30,  # match tengri's inclination
                 disk_type=1,
                 delta=-0.36,
                 fracAGN=0.3,
                 law=0,
-                EBV=0.03,
+                EBV=0.0,
                 temperature=100,
                 emissivity=1.6,
             ),
@@ -1835,112 +1832,111 @@ save_fig("cigale_10_xray_nh_sweep.png")
 # %% [markdown]
 # ## §11 Radio
 #
-# CIGALE's `radio` module gives a star-forming synchrotron component
-# tied to the IR-to-radio correlation (q_IR; CIGALE default `qir_sf = 2.5`,
-# Helou+1985 anchor) plus thermal free-free (Murphy+2011 Eq. 11) plus
-# an AGN power-law via radio loudness. tengri's `radio.condon92` ships
-# the same composite — the registry-name "condon92" anchors to the
-# Condon 1992 framework (ARA&A 30, 575) but the *calibrations* are
-# Bell 2003 (q_IR), Murphy 2011 (free-free), Yang 2020 (AGN).
+# CIGALE's `radio` module (pcigale 2025.1) is a **pure star-forming
+# synchrotron power law** tied to the IR-to-radio correlation (q_IR; CIGALE
+# default `qir_sf = 2.5`) plus an optional AGN power law via radio loudness. Its
+# only knobs are `qir_sf`, `alpha_sf`, `R_agn`, `alpha_agn` — there is **no
+# thermal free-free term** (verified against the source and the live spectrum:
+# CIGALE's SF slope is a constant α ≈ 0.8 across 0.1–100 GHz, with no high-ν
+# flattening). tengri's `radio.condon92` ships the fuller composite: Bell 2003
+# (q_IR synchrotron) **plus** the Murphy 2011 thermal free-free (Eq. 11) **plus**
+# Yang 2020 (AGN).
 #
-# To match CIGALE the tengri build below pins `radio_q_ir = 2.5` and
-# `radio_alpha_sf = 0.8`. tengri's bucket default is `radio_q_ir = 2.64`
-# (Bell 2003 z = 0 anchor); without that override the panels disagree
-# by `10^(2.64 − 2.5) ≈ 1.38×` at 1.4 GHz — exactly q_IR convention,
-# not a physics gap. With the override the residual is **1.5 % at
-# 1.4 GHz** (tengri 1.672e+18 vs CIGALE 1.697e+18 erg/s/Hz), traceable
-# to small differences in the L_IR integration window between
-# `dust.emission.dale2014` and CIGALE's `dale2014` module.
-# Star-forming only, 100 MHz to 100 GHz.
+# To match the synchrotron normalization the tengri build below pins
+# `radio_q_ir = 2.5` and `radio_alpha_sf = 0.8` (its bucket default is 2.64,
+# Bell 2003 z = 0; the 0.14 dex is the ~1.4× q_IR offset that would otherwise
+# dominate). Comparing radio-to-radio (CIGALE's isolated `radio.sf_nonthermal`
+# vs tengri's `sed_radio`) the low-ν synchrotron normalizations agree to
+# **~12 %** — a residual q_IR→1.4 GHz anchor-convention difference between Bell
+# 2003 and CIGALE's `S21cm` normalization at the same nominal q_IR. (An earlier
+# draft quoted ~1.5 %, but that compared tengri's radio to CIGALE's *full* SED at
+# 1.4 GHz, where CIGALE's dust Rayleigh–Jeans tail happens to add ~15 % and
+# mask the true synchrotron-to-synchrotron offset — the shared-axis panel here
+# removes that confusion.)
 #
-# Both sides include the Murphy+2011 thermal free-free term (on by
-# default), which flattens the steep synchrotron power law toward high
-# frequency. The two agree across the band — within ~5 % out to 10 GHz
-# and ~10–30 % by 100 GHz — with tengri's 10–100 GHz slope (−0.62)
-# marginally flatter than CIGALE's (−0.70), i.e. a touch more free-free.
-# The flattening is gentle, so neither curve shows a dramatic upturn.
+# **tengri is the more complete model (#863).** On top of the ~12 % anchor
+# offset, tengri adds the Murphy+2011 free-free that CIGALE's module omits, so
+# its spectrum **flattens toward high frequency** (α drops from ~0.8 to ~0.57 by
+# 100 GHz) while CIGALE stays on the pure α ≈ 0.8 synchrotron line. The ratio
+# panel therefore climbs from ~1.12 at 0.1 GHz to ~1.9 by 100 GHz — the rise is
+# the free-free CIGALE lacks, not a tengri excess. tengri's free-free amplitude
+# is Murphy 2011 Eq. 11 exact (L_ff(1.4 GHz) matches to <1 %). Star-forming
+# only, 100 MHz to 100 GHz.
 
 # %%
-fig, ax_l, ax_r = U.two_panel_fig()
-for ax in (ax_l, ax_r):
-    ax.set_xlabel(r"$\nu$ [GHz]")
-    ax.set_ylabel(r"$L_\nu$ [erg s$^{-1}$ Hz$^{-1}$]")
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.grid(True, alpha=0.3)
-ax_l.set_title(r"pcigale.sed_modules.radio  ($q_{IR}=2.5$)")
-ax_r.set_title("tengri  radio.condon92")
-
-try:
-    sed_r = C.run_chain(
-        [
-            (
-                "sfhdelayed",
-                dict(
-                    tau_main=1000,
-                    age_main=5000,
-                    tau_burst=50,
-                    age_burst=20,
-                    f_burst=0.0,
-                    sfr_A=1.0,
-                    normalise=True,
-                ),
+sed_r = C.run_chain(
+    [
+        (
+            "sfhdelayed",
+            dict(
+                tau_main=1000,
+                age_main=5000,
+                tau_burst=50,
+                age_burst=20,
+                f_burst=0.0,
+                sfr_A=1.0,
+                normalise=True,
             ),
-            ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
-            ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
-            ("dale2014", dict(alpha=2.0)),
-            ("radio", dict(qir_sf=2.5, alpha_sf=0.8, R_agn=0.0, alpha_agn=0.7)),
-        ]
-    )
-    w_r, L_r = C.to_lnu(sed_r)
-    nu = 2.998e18 / w_r / 1e9
-    mr = (nu >= 0.1) & (nu <= 100)
-    ax_l.plot(nu[mr], L_r[mr], "C0-", linewidth=1.4, label=r"SF synchrotron ($q_{IR}=2.5$)")
-    ax_l.legend(fontsize=9)
-except Exception:
-    pass
+        ),
+        ("bc03", dict(imf=1, metallicity=0.02, separation_age=10)),
+        ("dustatt_modified_starburst", dict(E_BV_lines=0.3)),
+        ("dale2014", dict(alpha=2.0)),
+        ("radio", dict(qir_sf=2.5, alpha_sf=0.8, R_agn=0.0, alpha_agn=0.7)),
+    ]
+)
+# CIGALE's SF radio is a single synchrotron component — isolate it.
+w_r, L_r = U.wnm_to_erg_per_hz_per_aa(
+    np.asarray(sed_r.wavelength_grid), np.asarray(sed_r.luminosities["radio.sf_nonthermal"])
+)
 
-try:
-    m_r = SEDModel.build(
-        ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
-        sfh={
-            "type": "delayed",
-            "tau_gyr": Fixed(1.0),
-            "age_gyr": Fixed(5.0),
-            "log_total_mass": Fixed(0.0),
-            "*": FIXED,
-        },
-        dust={
-            "type": "two_component",
-            "tau_bc": Fixed(TAU_BC_FIDUCIAL),
-            "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-            "*": FIXED,
-            "emission": {"type": "dale2014", "*": FIXED},
-        },
-        # Pin q_IR to CIGALE's `qir_sf = 2.5` (CIGALE's default for the
-        # SF synchrotron). tengri's bucket default is `Fixed(2.64)`
-        # (Bell 2003 z=0 anchor); the 0.14 dex difference is exactly the
-        # ~1.4× ratio that otherwise shows up between the panels at
-        # 1.4 GHz. Same `alpha_sf = 0.8`.
-        radio={
-            "type": "condon92",
-            "radio_q_ir": Fixed(2.5),
-            "radio_alpha_sf": Fixed(0.8),
-            "*": FIXED,
-        },
-        redshift=Fixed(0.0),
-    )
-    state_r = m_r.predict_state({})
-    w_t = np.asarray(state_r.wave)
-    sed_t = np.asarray(state_r.derived.get("sed_radio", state_r.sed_intrinsic))
-    nu_t = 2.998e18 / w_t / 1e9
-    mt = (nu_t >= 0.1) & (nu_t <= 100) & (sed_t > 0)
-    ax_r.plot(nu_t[mt], sed_t[mt], "C1-", linewidth=1.4, label="radio.condon92")
-    ax_r.legend(fontsize=9)
-except Exception:
-    pass
+m_r = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "tau_bc": Fixed(TAU_BC_FIDUCIAL),
+        "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+        "*": FIXED,
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
+    # q_IR pinned to CIGALE's qir_sf = 2.5 (tengri bucket default 2.64).
+    radio={
+        "type": "condon92",
+        "radio_q_ir": Fixed(2.5),
+        "radio_alpha_sf": Fixed(0.8),
+        "*": FIXED,
+    },
+    redshift=Fixed(0.0),
+)
+state_r = m_r.predict_state({})
+w_t = np.asarray(state_r.wave)
+sed_t = np.asarray(state_r.derived["sed_radio"])  # synchrotron + Murphy free-free
 
+# Shared-axis overlay + ratio panel (#864): the ratio rising above unity toward
+# high ν is tengri's free-free that CIGALE's synchrotron-only module lacks (#863).
+fig, ax, ax_r, ratio = U.overlay_ratio_fig(
+    w_r,
+    L_r,
+    w_t,
+    sed_t,
+    x_of_wave=lambda w: 2.998e18 / w / 1e9,
+    xlabel=r"$\nu$ [GHz]",
+    title="§11 SF radio — CIGALE synchrotron vs tengri synchrotron + free-free",
+    label_c="CIGALE  radio.sf_nonthermal (synchrotron only)",
+    label_t="tengri  radio.condon92 (synchrotron + free-free)",
+    xlim=(0.1, 100.0),
+    ratio_ylim=(0.5, 2.0),
+)
+_nu_r = 2.998e18 / w_r / 1e9
+_g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
+print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
 fig.tight_layout()
 save_fig("cigale_11_radio_synchrotron.png")
 
