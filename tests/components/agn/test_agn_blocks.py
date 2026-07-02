@@ -289,6 +289,66 @@ def test_runner_jit_compatible():
     chex.assert_tree_all_finite(out)
 
 
+def test_composable_polar_dust_jit_and_grad():
+    """Regression (#846): composable AGN with polar_dust must be jittable and
+    differentiable in ``agn_polar_ebv``.
+
+    Before the fix, :func:`composable_agn_l_nu` called
+    :func:`validate_block_recipe` from inside the jitted forward pass; that
+    validator's Rule 7 did ``float(agn_polar_ebv)``, which raised
+    ``ConcretizationTypeError`` on the tracer — so composing polar dust for an
+    actual fit crashed. Recipe validation now runs only at construction time.
+    Uses the analytic ``powerlaw`` disc + ``polar_dust`` atten (no HDF5) so the
+    guard runs in CI without gridded template data.
+    """
+    wave_aa = jnp.logspace(2, 6, 200)
+
+    @jax.jit
+    def fwd(ebv):
+        return composable_agn_l_nu(
+            wave_aa,
+            agn_log_lbol=44.5,
+            agn_disc_block="multicolor",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="none",
+            agn_attenuation_block="polar_dust",
+            agn_cos_inc=0.95,  # face-on → Type-1 screen active
+            agn_polar_ebv=ebv,
+        )
+
+    out = fwd(jnp.array(0.2))  # raised ConcretizationTypeError pre-fix
+    chex.assert_equal_shape([out, wave_aa])
+    chex.assert_tree_all_finite(out)
+
+    grad = jax.grad(lambda e: jnp.sum(fwd(e)))(jnp.array(0.2))
+    chex.assert_tree_all_finite(grad)
+
+
+def test_validate_polar_dust_guard_ignores_nonconcrete_ebv():
+    """The Rule 7 concreteness guard must not crash (or warn) when
+    ``agn_polar_ebv`` cannot be read as a concrete float — mimicking a JAX
+    tracer, whose ``__float__`` raises a TypeError subclass."""
+
+    class _Tracerish:
+        def __float__(self):
+            raise TypeError("Abstract tracer value encountered")
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RecipeWarning)  # would raise if it warned
+        issues = validate_block_recipe(
+            agn_disc_block="multicolor",
+            agn_nlr_block="none",
+            agn_blr_block="none",
+            agn_feii_block="none",
+            agn_torus_block="none",
+            agn_attenuation_block="polar_dust",
+            params={"agn_polar_ebv": _Tracerish()},
+        )
+    assert issues == []
+
+
 def test_resolve_via_agn_models_registry():
     """Going through resolve_agn_model('composable') must match direct call."""
     fn_via_registry = resolve_agn_model("composable")

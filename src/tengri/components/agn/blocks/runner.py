@@ -289,17 +289,23 @@ agn_torus_block, agn_attenuation_block : str
                 f"Verify your disc impl emits sensible flux at 5100A."
             )
 
-    # Rule 7: polar dust selected but E(B-V) defaults to 0 (no-op).
-    if (
-        selectors["attenuation"] == "polar_dust"
-        and params is not None
-        and float(params.get("agn_polar_ebv", 0.0)) == 0.0
-    ):
-        _emit(
-            "Composable AGN: agn_attenuation_block='polar_dust' but "
-            "agn_polar_ebv=0 (no extinction applied). Either set "
-            "agn_polar_ebv > 0 or pick agn_attenuation_block='none'."
-        )
+    # Rule 7: polar dust selected but E(B-V) is 0 (no-op). The value is only
+    # inspectable when concrete (build-time / a Fixed param); a traced (fitted)
+    # agn_polar_ebv raises on float() — ConcretizationTypeError is a TypeError
+    # subclass — and needs no no-op warning, since the user is explicitly
+    # fitting it. The concreteness guard keeps this public validator safe for
+    # any caller even though the forward pass no longer invokes it.
+    if selectors["attenuation"] == "polar_dust" and params is not None:
+        try:
+            ebv_is_zero = float(params.get("agn_polar_ebv", 0.0)) == 0.0
+        except (TypeError, ValueError):
+            ebv_is_zero = False
+        if ebv_is_zero:
+            _emit(
+                "Composable AGN: agn_attenuation_block='polar_dust' but "
+                "agn_polar_ebv=0 (no extinction applied). Either set "
+                "agn_polar_ebv > 0 or pick agn_attenuation_block='none'."
+            )
 
     return issues
 
@@ -680,15 +686,13 @@ agn_torus_block, agn_attenuation_block : str, optional
     components (e.g. X-ray, radio) to scale the monochromatic luminosities
     independently.
     """
-    validate_block_recipe(
-        agn_disc_block=agn_disc_block,
-        agn_nlr_block=agn_nlr_block,
-        agn_blr_block=agn_blr_block,
-        agn_feii_block=agn_feii_block,
-        agn_torus_block=agn_torus_block,
-        agn_attenuation_block=agn_attenuation_block,
-        params=params,
-    )
+    # Recipe validation runs at *construction* time (Parameters.__init__ and
+    # Recipe.__post_init__), where selectors and params are concrete Python
+    # values. It must NOT run here: composable_agn_l_nu is called inside the
+    # jitted forward pass, so any param-value inspection (Rule 7 reads
+    # agn_polar_ebv) would hit a JAX tracer and raise ConcretizationTypeError.
+    # See validate_block_recipe's docstring ("runs at composition time, not
+    # under JIT").
     result = compose_l_nu(
         wavelength,
         agn_log_lbol=agn_log_lbol,
