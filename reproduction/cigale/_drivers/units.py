@@ -195,6 +195,90 @@ def two_panel_fig(figsize: tuple[float, float] = (12, 4.5)):
     return fig, ax_left, ax_right
 
 
+def overlay_ratio_fig(
+    wave_c: np.ndarray,
+    L_c: np.ndarray,
+    wave_t: np.ndarray,
+    L_t: np.ndarray,
+    *,
+    x_of_wave=None,
+    xlabel: str = r"$\lambda$ [Å]",
+    title: str = "",
+    label_c: str = "CIGALE",
+    label_t: str = "tengri (regridded)",
+    xlim: tuple[float, float] | None = None,
+    ratio_ylim: tuple[float, float] = (0.5, 1.5),
+    band: tuple[float, float] = (0.9, 1.1),
+    dyn_range: float = 1e-5,
+    figsize: tuple[float, float] = (10, 7),
+):
+    """Overlay CIGALE + tengri on ONE shared axis with a tengri/CIGALE ratio panel.
+
+    Replaces the side-by-side independent-y-axis layout (which hides
+    normalization discrepancies, #864) with the §9c format: both codes on a
+    single log-log axis, tengri regridded onto CIGALE's grid via :func:`regrid`,
+    plus a lower ratio panel with a tolerance band. The x-axis can be
+    transformed away from wavelength (e.g. photon energy for X-ray, frequency
+    for radio) via ``x_of_wave``.
+
+    Parameters
+    ----------
+    wave_c, L_c : ndarray
+        CIGALE wavelength grid [Å] and L_nu [erg/s/Hz].
+    wave_t, L_t : ndarray
+        tengri wavelength grid [Å] and L_nu [erg/s/Hz]; regridded onto ``wave_c``.
+    x_of_wave : callable, optional
+        Maps the Å grid to the plotted abscissa (e.g. ``lambda w: 12.398/w`` for
+        keV). Identity (wavelength) when ``None``.
+    xlabel, title, label_c, label_t : str
+        Axis label, panel title, and legend labels.
+    xlim : tuple, optional
+        x-limits in the plotted abscissa units.
+    ratio_ylim, band : tuple
+        Ratio-panel y-limits and shaded tolerance band (default ±10%).
+    dyn_range : float
+        Top-panel y floor as a fraction of the peak.
+
+    Returns
+    -------
+    fig, ax, ax_ratio, ratio : the figure, main axis, ratio axis, and the
+        tengri/CIGALE ratio array on ``wave_c``.
+    """
+    L_t_on_c = regrid(wave_t, L_t, wave_c)
+    ratio = L_t_on_c / np.maximum(L_c, 1e-50)
+    x = wave_c if x_of_wave is None else x_of_wave(wave_c)
+
+    fig, (ax, ax_r) = plt.subplots(
+        2, 1, figsize=figsize, sharex=True, gridspec_kw={"height_ratios": [3, 1]}
+    )
+    pos = L_c > 0
+    ax.plot(x[pos], L_c[pos], "C0-", linewidth=1.6, label=label_c)
+    post = L_t_on_c > 0
+    ax.plot(x[post], L_t_on_c[post], "C1--", linewidth=1.4, label=label_t)
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    _ymx_c = float(np.nanmax(L_c[pos])) if pos.any() else 1.0
+    _ymx_t = float(np.nanmax(L_t_on_c[post])) if post.any() else 1.0
+    ymx = max(_ymx_c, _ymx_t)
+    ax.set_ylim(ymx * dyn_range, ymx * 2.0)
+    ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]")
+    ax.set_title(title)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+
+    ax_r.axhspan(*band, color="0.85", zorder=0)
+    ax_r.axhline(1.0, color="0.5", linewidth=0.8)
+    ax_r.plot(x[pos], ratio[pos], "C1-", linewidth=1.0)
+    ax_r.set_xscale("log")
+    ax_r.set_ylim(*ratio_ylim)
+    ax_r.set_xlabel(xlabel)
+    ax_r.set_ylabel("tengri / CIGALE", fontsize=9)
+    ax_r.grid(True, alpha=0.3)
+    return fig, ax, ax_r, ratio
+
+
 def line_lum(wave, L_nu, centre, half=12.0):
     """Integrated emission-line luminosity [erg/s] within +/- ``half`` Å of ``centre``.
 
