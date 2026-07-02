@@ -270,6 +270,7 @@ def build_components(
     use_radio: bool = False,
     radio_sfr_mode: str = "bell2003",
     radio_agn_model: str = "powerlaw",
+    xray_model: str = "yang20",
     use_xray: bool = False,
     use_igm: bool = False,
 ) -> list[SEDComponent]:
@@ -478,7 +479,15 @@ def build_components(
             )
         )
     if use_xray:
-        components.append(_resolve_registry_component("xray", "xray"))
+        from tengri.components.xray.component import XRaySEDComponentConfig
+
+        components.append(
+            _resolve_registry_component(
+                "xray",
+                "xray",
+                config=XRaySEDComponentConfig(model=xray_model),
+            )
+        )
     if use_igm:
         components.append(_resolve_registry_component("igm", "igm"))
 

@@ -58,6 +58,13 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: 0 <= lo <= 26,
         "must be in [0, 26]",
     ),
+    ParamDeclaration(
+        "xray_alpha_irx",
+        Fixed(0.3),
+        "alpha_IRX = log10(nu*Lnu(12um) / Lx(2-10 keV)) for the lopez24 corona "
+        "(Asmus+2015 / Lopez+2024). Higher -> fainter X-ray. Ignored by yang20. "
+        "Typical range 0.0-0.6.",
+    ),
 )
 
 __all__ = ["PARAMS"]

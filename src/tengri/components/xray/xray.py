@@ -1366,9 +1366,10 @@ def xray_agn_corona_lopez24(
     l_12um_erg_hz : float
         Nuclear monochromatic luminosity density at 12 μm. [erg/s/Hz]
     alpha_irx : float
-        Log ratio of 2–10 keV to 12μm luminosity:
-        α_IRX = log₁₀(L_X(2–10 keV) / L_12μm). [dimensionless]
-        Default: 0.3. Typical range: 0.0–0.6.
+        Log ratio of νL_ν(12μm) to 2–10 keV luminosity (Asmus+2015 convention,
+        matching CIGALE ``lopez24``):
+        α_IRX = log₁₀(νL_ν(12μm) / L_X(2–10 keV)). [dimensionless]
+        Default: 0.3 (X-ray ≈ 0.5·νL_ν(12μm)). Typical range: 0.0–0.6.
     gamma : float
         X-ray photon index (Γ, where F_ν ∝ ν^{1−Γ}). [dimensionless]
         Default: 1.8. Typical range: 1.4–3.5.
@@ -1397,18 +1398,19 @@ def xray_agn_corona_lopez24(
     -----
     **JIT-compatible**: yes — uses ``jnp`` primitives.
 
-    The α_IRX parameter connects the X-ray and mid-IR luminosities via
-    the Gandhi et al. (2009) L_X–L_12μm relation:
+    The α_IRX parameter connects the mid-IR and X-ray luminosities via
+    the Asmus et al. (2015) / Gandhi et al. (2009) L_X–L_12μm relation:
 
     .. math::
 
-        \alpha_{\rm IRX} = \log_{10}\left(\frac{L_X^{2\text{--}10\,\rm keV}}{L_{12\mu\rm m}}\right)
+        \alpha_{\rm IRX} = \log_{10}\!\left(
+            \frac{\nu L_\nu(12\mu\rm m)}{L_X^{2\text{--}10\,\rm keV}}\right)
 
     The intrinsic 2–10 keV luminosity is:
 
     .. math::
 
-        L_X^{2\text{--}10\,\rm keV} = 10^{\alpha_{\rm IRX}} \times L_{12\mu\rm m}
+        L_X^{2\text{--}10\,\rm keV} = \frac{\nu L_\nu(12\mu\rm m)}{10^{\alpha_{\rm IRX}}}
 
     The advantage over α_ox: 12μm emission is dominated by the torus and
     is relatively unaffected by obscuration (scatter ≈ 0.33 dex vs UV
@@ -1436,11 +1438,14 @@ def xray_agn_corona_lopez24(
     nu = _C_AA / wavelength
     E_keV = _H_PLANCK * nu / 1.6022e-9
 
-    # Derive L_X(2-10 keV) from α_IRX and L_12μm
-    # L_12μm in erg/s: convert from erg/s/Hz using ν_12μm bandwidth
+    # Derive L_X(2-10 keV) from α_IRX and νL_ν(12μm).
+    # L_12μm as νL_ν in erg/s: convert from erg/s/Hz via the 12 μm frequency.
+    # Asmus+2015 / Lopez+2024 (matching CIGALE lopez24.py:200): α_IRX =
+    # log10(νL_ν(12μm) / L_X(2-10 keV)), i.e. the X-ray sits *below* the 12 μm
+    # (L_X = 0.5·νL_ν at the α_IRX = 0.3 default), so L_X = νL_ν(12μm) / 10^α_IRX.
     nu_12um = _C_AA / 1.2e5  # 12 μm = 120000 Å
     l_12um_erg = l_12um_erg_hz * nu_12um
-    l_x_2_10 = 10.0**alpha_irx * l_12um_erg
+    l_x_2_10 = l_12um_erg / 10.0**alpha_irx
 
     # Build power-law spectrum with exponential cutoff
     E_ref = 5.0  # keV (mid-band reference)
@@ -1476,6 +1481,7 @@ def xray_total_lopez24(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
+    stellar_age_gyr: float = 1.0,
     l_12um_erg_hz: float = 0.0,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
@@ -1529,10 +1535,13 @@ def xray_total_lopez24(
         wavelength,
         sfr=sfr,
         stellar_mass=stellar_mass,
+        stellar_age_gyr=stellar_age_gyr,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
         E_cut=E_cut,
     )
+    # Hot gas (CIGALE lopez24: 8.3e31 × SFR), shared with the yang20 path.
+    hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
     agn = xray_agn_corona_lopez24(
         wavelength,
         l_12um_erg_hz,
@@ -1542,7 +1551,7 @@ def xray_total_lopez24(
         apply_anisotropy=False,
         log_nh=log_nh,
     )
-    return xrb + agn
+    return xrb + hotgas + agn
 
 
 # ── Deprecation shims ──

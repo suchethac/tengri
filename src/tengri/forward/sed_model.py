@@ -1599,6 +1599,7 @@ class SEDModel:
             self._radio_agn_model = getattr(spec, "radio_agn_model", "powerlaw")
 
         self._uses_xray = getattr(spec, "xray", False)
+        self._xray_model = getattr(spec, "xray_model", "yang20")
 
         # ── Master rest-wavelength grid (issue #463) ─────────────────
         #
@@ -4865,6 +4866,7 @@ class SEDModel:
             radio_sfr_mode=getattr(self, "_radio_sfr_mode", "bell2003"),
             radio_agn_model=getattr(self, "_radio_agn_model", "powerlaw"),
             use_xray=bool(getattr(self, "_uses_xray", False)),
+            xray_model=getattr(self, "_xray_model", "yang20"),
             use_igm=bool(getattr(self, "_uses_igm", False)),
         )
 
