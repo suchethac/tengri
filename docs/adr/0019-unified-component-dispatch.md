@@ -162,27 +162,34 @@ green, and the canonical narrative is
 | 1 | Dust emission: 13 ports on `_REGISTRY`; `DUST_EMISSION_MODELS` demoted to loader-cache; god-file split | ✅ #876/#880/#881 |
 | 2 | Dust attenuation: 3 attenuators on `_REGISTRY`; `attenuation.py` split | ✅ #882/#884 |
 | 3 | Nebular / radio / x-ray on `_REGISTRY`; **shock** dual-path reconciled onto the canonical composable `ShockNebular` (silent no-op fixed) | ✅ #886/#851 |
-| 4 | AGN | ✅ **converged at ADR-0018** (see below) |
+| 4 | AGN: top-level dispatch through the `_REGISTRY` seam + manifest guard (#846/#907); composite grammar via ADR-0018 | ✅ (internal `AGN_MODELS`/`AGN_BLOCKS` table collapse deferred — see below) |
 | 5 | Spine god-object splits | ❌ won't-do (#847) — maintainer prefers long files; the file-size ratchet still prevents *silent* growth |
 | 6 | Docs: canonical `model-construction.md`; stale-ref cleanup | ✅ #848 |
 
-**Phase 4 — AGN convergence.** AGN is a *composite*, not a single-type
-dispatch, so its convergence target differs from dust/nebular. It is already at
-the "one composite over one block registry" end-state via
-[ADR-0018](0018-composable-agn-grammar.md): `AGN_BLOCKS` is the single canonical
-composable block registry, and `AGNSEDComponent` branches
-`model=="composable"` → `AGN_BLOCKS`, else → `AGN_MODELS`. `AGN_MODELS` is the
+**Phase 4 — AGN convergence.** AGN's **top-level dispatch** now runs through
+the same `_resolve_registry_component` seam as every other domain: `AGNSEDComponent`
+is registered as `_REGISTRY["agn"]` and `build_components` resolves it via the
+seam (not a direct constructor), with an `agn` entry in `migration_manifest.json`
+so `check_single_dispatch` / `check_registry_completeness` cover it (#846/#907).
+It is a *composite* — one component whose config selects the six sub-block
+categories (disc/torus/nlr/blr/feii/atten) from `AGN_BLOCKS` at trace-build time
+([ADR-0018](0018-composable-agn-grammar.md)) — exactly like the other composite
+domain, nebular (one component branching internally, seam-routed all the same).
+
+`AGN_BLOCKS` (composable) is the canonical block registry; `AGN_MODELS` is the
 **deprecated monolithic fallback** kept for back-compat (it emits deprecation
-warnings routing to the composable equivalents); grahsp is one of its entries,
-not a separate table. No separate `_resolve_registry_component` seam is forced
-onto AGN — the composite is authored via the block registry, and the six
-sub-block categories (disc/torus/nlr/blr/feii/atten) are the growing surface.
+warnings routing to the composable equivalents; grahsp is one of its entries,
+not a separate table). These are the composite's **internal** structure, not
+top-level dispatch. Collapsing `AGN_MODELS` into `AGN_BLOCKS` (retiring the
+monolithic fallback) is a **deliberately deferred** refinement — it is breaking
+and low-value once the deprecation path is in place — tracked on #846, not
+required for the "one `_REGISTRY`, one dispatch, machine-enforced" outcome.
 
 **Tracked post-epic follow-ups** (not blocking the "one component path"
 outcome): #897 (dedup the AGN NLR implementations), #849 (dust-emission
 param-name unification — breaking), #852 (bit-exact goldens for
-draine2021_pah/schreiber2018 — data-gated), and full retirement of the
-deprecated `AGN_MODELS` monolithic presets (breaking).
+draine2021_pah/schreiber2018 — data-gated), and the `AGN_MODELS` monolithic
+retirement above (breaking).
 
 ## References
 
