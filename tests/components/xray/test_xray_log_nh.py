@@ -99,10 +99,17 @@ class TestXrayLogNh:
         from tengri import FIXED, Fixed, SEDModel
 
         def _soft_xray_luminosity(log_nh: float) -> float:
+            # Cool, sub-Eddington disc (log_lbol=10.5, log10 L_sun) so the disc's
+            # own Wien tail does NOT reach the 0.2-2 keV band — leaving that band
+            # dominated by the AGN corona, the component xray_log_nh absorbs.
+            # (Under the luminosity-first disc, ADR-0020, a *hot* disc emits soft
+            # X-rays into the band that are not attenuated by the corona column,
+            # which would dilute the suppression; a cool disc isolates the corona
+            # so N_H attenuation reads cleanly.)
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED, "log_total_mass": 10.0},
-                agn={"type": "multicolor_agn", "*": FIXED, "log_lbol": Fixed(12.0)},
+                agn={"type": "multicolor_agn", "*": FIXED, "log_lbol": Fixed(10.5)},
                 xray={"type": "yang20", "*": FIXED, "log_nh": Fixed(log_nh)},
                 redshift=Fixed(0.05),
             )

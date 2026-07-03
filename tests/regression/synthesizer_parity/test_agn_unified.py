@@ -171,37 +171,31 @@ def test_line_emission_scales_with_covering_fraction(wave_uv_to_fir, physical_lo
     )
 
 
-def test_log_lbol_scaling_is_logarithmic(wave_uv_to_fir):
-    """SED amplitude scales as 10^(log_lbol) under linear superposition.
+def test_log_lbol_scaling_is_logarithmic():
+    """The AGN BOLOMETRIC luminosity scales as 10^(log_lbol).
 
-    Pitfall: P-1, P-2 — guards against silent log-vs-linear unit confusion or
-    a missing power-of-ten factor.
+    Pitfall: P-1, P-2 — guards against silent log-vs-linear unit confusion or a
+    missing power-of-ten factor.
+
+    Under the luminosity-first parameterization (ADR-0020) the physical disc
+    SHAPE shifts with L_bol (higher L_bol -> higher lambda_Edd -> bluer), so a
+    fixed wavelength does NOT scale linearly with L_bol. The invariant that still
+    catches a log-vs-linear bug is the BOLOMETRIC integral, evaluated on an
+    X-ray-inclusive grid so the disc's EUV/X-ray peak is captured.
     """
     log_lbol_a = 11.0
-    log_lbol_b = 13.0  # +2 dex => SED should be ×100 (or close, modulo
-    #                  reprocessing nonlinearity from polar dust / sigmoid mask
-    #                  which here are at default values).
+    log_lbol_b = 13.0  # +2 dex => bolometric x100
+    wave = jnp.geomspace(0.1, 5.0e6, 12000)  # hard X-ray to far-IR
 
-    sed_a = unified_nlr_blr(
-        wave_uv_to_fir,
-        agn_log_lbol=log_lbol_a,
-        agn_nlr_cf=0.0,
-        agn_blr_cf=0.0,
-    )
-    sed_b = unified_nlr_blr(
-        wave_uv_to_fir,
-        agn_log_lbol=log_lbol_b,
-        agn_nlr_cf=0.0,
-        agn_blr_cf=0.0,
-    )
+    def bolometric(log_lbol):
+        sed = unified_nlr_blr(wave, agn_log_lbol=log_lbol, agn_nlr_cf=0.0, agn_blr_cf=0.0)
+        nu = 2.99792458e18 / wave  # Hz
+        order = jnp.argsort(nu)
+        return float(jnp.trapezoid(sed[order], nu[order]))
 
-    # Pick a wavelength where the disc dominates (~1000 Å) to avoid the
-    # blackbody-temperature regime of the torus, which is parameter-dependent
-    # rather than purely L_bol-scaled.
-    idx = int(jnp.argmin(jnp.abs(wave_uv_to_fir - 1000.0)))
-    ratio = float(sed_b[idx] / sed_a[idx])
+    ratio = bolometric(log_lbol_b) / bolometric(log_lbol_a)
     assert 95.0 < ratio < 105.0, (
-        f"SED at 1000 Å scales as {ratio:.2f} for +2 dex in log_lbol; "
+        f"AGN bolometric scales as {ratio:.2f} for +2 dex in log_lbol; "
         "expected ≈ 100. Possible normalization bug."
     )
 
