@@ -91,3 +91,60 @@ def test_no_legacy_class_in_component_factory():
         assert not hasattr(cf, cls_name), (
             f"component_factory must not directly reference {cls_name} (#845)"
         )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# AGN — the composite domain — is dispatched through the SAME seam (#846).
+# It is ``agn_model``-gated (a string selector) rather than a boolean flag,
+# and it is a composite whose config selects the disc/torus/nlr/blr/feii/atten
+# sub-blocks, but its TOP-LEVEL dispatch is a single registered component,
+# exactly like the other composite domain (nebular).
+# ─────────────────────────────────────────────────────────────────────
+
+
+def test_agn_registered_and_seam_routed():
+    from tengri.components.sed_model_component import _REGISTRY
+
+    assert "agn" in _REGISTRY
+    assert _REGISTRY["agn"].__name__ == "AGNSEDComponent"
+
+    comps = _build_agn()
+    matches = [c for c in comps if type(c) is _REGISTRY["agn"]]
+    assert len(matches) == 1, (
+        "agn_model set must build exactly one AGNSEDComponent from _REGISTRY; "
+        f"chain = {[type(c).__name__ for c in comps]}"
+    )
+
+
+def test_agn_seam_construction_is_bit_identical_to_direct():
+    """Physics-equivalence gate: the seam builds the SAME AGN component the old
+    hardcoded path did (frozen-dataclass equality => apply() bit-identical)."""
+    from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConfig
+    from tengri.forward.component_factory import _resolve_registry_component
+
+    cfg = AGNSEDComponentConfig(model="composable", agn_disc_block="skirtor")
+    assert _resolve_registry_component("agn", "agn", config=cfg) == AGNSEDComponent(config=cfg)
+
+
+def test_agn_not_directly_imported_in_component_factory():
+    """component_factory resolves AGN from _REGISTRY, not by importing the
+    class (mirrors the manifest ``agn`` sentinel, #846)."""
+    import tengri.forward.component_factory as cf
+
+    assert not hasattr(cf, "AGNSEDComponent"), (
+        "component_factory must not directly reference AGNSEDComponent (#846) — "
+        "only AGNSEDComponentConfig at the call site"
+    )
+
+
+def _build_agn():
+    from tengri.forward.component_factory import build_components
+
+    return build_components(
+        ssp_data=_MockSSP(),
+        dust_model="two_component",
+        dust_emission_model=None,
+        use_dust=False,
+        nebular_backend=None,
+        agn_model="composable",
+    )

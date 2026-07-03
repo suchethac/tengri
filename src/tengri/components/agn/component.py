@@ -426,3 +426,14 @@ class AGNSEDComponent:
         return state.add_intrinsic(L_agn).with_(
             derived=state.derived.with_(**derived_overrides),
         )
+
+
+# Register in the unified component dispatch table so build_components resolves
+# the AGN component via _resolve_registry_component (single dispatch, #846)
+# instead of importing the class directly. AGN is a composite — its config
+# selects the disc/torus/nlr/blr/feii/atten sub-blocks (ADR-0018) — but its
+# top-level dispatch is a single registered component, exactly like the other
+# composite domain (nebular).
+from tengri.components.sed_model_component import _REGISTRY
+
+_REGISTRY["agn"] = AGNSEDComponent
