@@ -2336,7 +2336,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
             group_output[short_name] = distribution
 
     # Also add groups that have no params but have a configured type (e.g., neb='none')
-    _all_possible_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    _all_possible_groups = {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
     for group_name in sorted(_all_possible_groups):
         if group_name not in result:
             type_value = _extract_group_type(group_name, spec)
@@ -2393,6 +2393,10 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         # ``"none"``. Map at the boundary so to_groups() / parse_groups()
         # round-trip cleanly.
         return "none" if spec.nebular_mode == "off" else spec.nebular_mode
+    elif group_name == "shock":
+        # ``shock`` is a boolean toggle on Parameters; the grammar type is
+        # ``"mappings"`` when active and ``"none"`` when off (#851).
+        return "mappings" if getattr(spec, "shock", False) else "none"
     elif group_name == "igm":
         return spec.igm_model if hasattr(spec, "igm_model") else None
     elif group_name == "radio":
@@ -2449,6 +2453,15 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # noisily breaks existing diff-against-from_groups call sites.
         if getattr(spec, "met_mode", "delta") != "delta":
             group_output["met_mode"] = spec.met_mode
+    elif group_name == "shock":
+        # Round-trip the shock normalization + categorical knobs (only when
+        # non-default), mirroring the neb/dust structural round-trip (#851).
+        if getattr(spec, "shock_norm", "frac") != "frac":
+            group_output["norm"] = spec.shock_norm
+        if getattr(spec, "shock_abundance", "solar") != "solar":
+            group_output["abundance"] = spec.shock_abundance
+        if getattr(spec, "shock_component", "combined") != "combined":
+            group_output["component"] = spec.shock_component
 
 
 def _analyze_wildcard_intent(

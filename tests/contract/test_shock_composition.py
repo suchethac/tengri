@@ -190,6 +190,34 @@ def test_invalid_norm_raises(synthetic_ssp_wide, synthetic_tophat_obs):
         )
 
 
+def test_shock_group_round_trips(synthetic_ssp_wide, synthetic_tophat_obs):
+    """``to_groups()`` emits the shock group (type + norm + priors) and rebuilds
+    to the same active shock config."""
+    m = _build(
+        synthetic_ssp_wide,
+        synthetic_tophat_obs,
+        shock={
+            "norm": "lhalpha",
+            "*": tengri.FIXED,
+            "log_lhalpha": tengri.Uniform(38.0, 44.0),
+            "velocity": tengri.Fixed(350.0),
+        },
+    )
+    groups = m.spec.to_groups()
+    assert groups["shock"]["type"] == "mappings"
+    assert groups["shock"]["norm"] == "lhalpha"
+
+    rebuilt = tengri.SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        **{k: v for k, v in groups.items() if k != "redshift"},
+        redshift=tengri.Fixed(0.1),
+    )
+    assert rebuilt.spec.shock is True
+    assert rebuilt.spec.shock_norm == "lhalpha"
+    assert "shock_log_lhalpha" in rebuilt.spec.free_params
+
+
 # ─────────────────────────────────────────────────────────────────────
 # Composition through the live forward model (synthetic SSP + shock fallback)
 # ─────────────────────────────────────────────────────────────────────
