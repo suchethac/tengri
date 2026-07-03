@@ -281,16 +281,10 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
         "snapped to nearest grid point",
     ),
-    ParamDeclaration(
-        "shock_abundance",
-        Fixed("solar"),
-        "Abundance set: solar | 2xsolar | dopita2005 | lmc | smc",
-    ),
-    ParamDeclaration(
-        "shock_component",
-        Fixed("combined"),
-        "Emission component: shock | precursor | combined",
-    ),
+    # NOTE: the categorical ``shock_abundance`` / ``shock_component`` knobs are
+    # NOT free parameters — they are static structural config on Parameters
+    # (``shock_abundance`` / ``shock_component``, like ``radio_sfr_mode``),
+    # surfaced via the ``shock={...}`` grammar group (#851).
 )
 
 __all__ = [
