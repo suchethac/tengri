@@ -35,7 +35,7 @@ from typing import Any, NamedTuple
 
 import jax.numpy as jnp
 
-from tengri.components.agn.component import AGNSEDComponent, AGNSEDComponentConfig
+from tengri.components.agn.component import AGNSEDComponentConfig
 
 # Attenuator component CLASSES are resolved from _REGISTRY via the dispatch
 # seam (single dispatch, #844) — only their config dataclasses are imported here.
@@ -478,8 +478,16 @@ def build_components(
         # spec is available: it warns only when both surfaces are positive-active
         # (FREE, or Fixed > 0), emitting a filterable ``AGNDustDoubleCountWarning``
         # (ADR-0018 §5).
+        # Dispatch through the single ``_REGISTRY`` seam, like every other
+        # domain (nebular/radio/xray/dust). AGN is a *composite* — one
+        # component whose config selects the disc/torus/nlr/blr/feii/atten
+        # sub-blocks (ADR-0018) — but its top-level dispatch is still a single
+        # registered component (``_REGISTRY["agn"] = AGNSEDComponent``), so it
+        # is routed and manifest-guarded uniformly (#846).
         components.append(
-            AGNSEDComponent(
+            _resolve_registry_component(
+                "agn",
+                "agn",
                 config=AGNSEDComponentConfig(
                     model=agn_model,
                     agn_disc_block=agn_disc_block,

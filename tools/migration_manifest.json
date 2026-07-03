@@ -79,6 +79,17 @@
       "expected_types": [
         "nebular"
       ]
+    },
+    "agn": {
+      "_comment": "AGNSEDComponent dispatches via the _REGISTRY seam (#846), mirroring the other composite domain (nebular). AGN is a composite — one component whose config selects the disc/torus/nlr/blr/feii/atten sub-blocks (ADR-0018, resolved from AGN_BLOCKS at trace-build time) — but its TOP-LEVEL dispatch is a single registered component (_REGISTRY['agn'] = AGNSEDComponent). Construction-only; apply() (the composable/monolithic branch, block runner, and cross-component reads L_absorbed/agn_fracAGN) is unchanged. Sentinel = AGNSEDComponent absent from component_factory (only AGNSEDComponentConfig imported at the call site). NOTE: the INTERNAL AGN_MODELS (deprecated monolithic fallback) + AGN_BLOCKS (composable) tables are the composite's own structure, NOT top-level dispatch; collapsing them is a separate deferred item (#846 body).",
+      "status": "migrated",
+      "legacy_dispatch": {
+        "module": "tengri.forward.component_factory",
+        "attr": "AGNSEDComponent"
+      },
+      "expected_types": [
+        "agn"
+      ]
     }
   }
 }

@@ -38,7 +38,7 @@
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
   "src/tengri/inference/backends/vi/nifty.py": 904,
   "src/tengri/components/stellar/sfh/nonparametric.py": 859,
-  "src/tengri/forward/component_factory.py": 946,
+  "src/tengri/forward/component_factory.py": 954,
   "src/tengri/observation/line_list.py": 841,
   "src/tengri/utils/sed_quantities.py": 837,
   "src/tengri/components/agn/qsogen.py": 826,
