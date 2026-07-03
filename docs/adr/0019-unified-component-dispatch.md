@@ -148,6 +148,42 @@ Each phase ships independently green with a CI invariant that flips green and st
 - Stellar (orchestrator, 9 derived publishes, age-weighting): remains `SEDComponent` Protocol.
 - IGM (frame transformation): remains `SEDComponent` Protocol.
 
+## Migration status — complete (2026-07-03)
+
+The migration tracked by #738 has landed. Dispatch runs through the single
+`_REGISTRY` seam (`forward/component_factory.py:_resolve_registry_component`)
+for every domain that has a single-type dispatch, the CI ratchet guards are
+green, and the canonical narrative is
+[`docs/dev/model-construction.md`](../dev/model-construction.md).
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 0 | Rails: `_resolve_registry_component` seam + 3 CI ratchet guards (`check_file_size`, `check_single_dispatch`, `check_registry_completeness`) driven by `migration_manifest.json` | ✅ #876 |
+| 1 | Dust emission: 13 ports on `_REGISTRY`; `DUST_EMISSION_MODELS` demoted to loader-cache; god-file split | ✅ #876/#880/#881 |
+| 2 | Dust attenuation: 3 attenuators on `_REGISTRY`; `attenuation.py` split | ✅ #882/#884 |
+| 3 | Nebular / radio / x-ray on `_REGISTRY`; **shock** dual-path reconciled onto the canonical composable `ShockNebular` (silent no-op fixed) | ✅ #886/#851 |
+| 4 | AGN | ✅ **converged at ADR-0018** (see below) |
+| 5 | Spine god-object splits | ❌ won't-do (#847) — maintainer prefers long files; the file-size ratchet still prevents *silent* growth |
+| 6 | Docs: canonical `model-construction.md`; stale-ref cleanup | ✅ #848 |
+
+**Phase 4 — AGN convergence.** AGN is a *composite*, not a single-type
+dispatch, so its convergence target differs from dust/nebular. It is already at
+the "one composite over one block registry" end-state via
+[ADR-0018](0018-composable-agn-grammar.md): `AGN_BLOCKS` is the single canonical
+composable block registry, and `AGNSEDComponent` branches
+`model=="composable"` → `AGN_BLOCKS`, else → `AGN_MODELS`. `AGN_MODELS` is the
+**deprecated monolithic fallback** kept for back-compat (it emits deprecation
+warnings routing to the composable equivalents); grahsp is one of its entries,
+not a separate table. No separate `_resolve_registry_component` seam is forced
+onto AGN — the composite is authored via the block registry, and the six
+sub-block categories (disc/torus/nlr/blr/feii/atten) are the growing surface.
+
+**Tracked post-epic follow-ups** (not blocking the "one component path"
+outcome): #897 (dedup the AGN NLR implementations), #849 (dust-emission
+param-name unification — breaking), #852 (bit-exact goldens for
+draine2021_pah/schreiber2018 — data-gated), and full retirement of the
+deprecated `AGN_MODELS` monolithic presets (breaking).
+
 ## References
 
 - **ADR-0009** (`0009-typed-pipeline-contract.md`) — Component input/output contract and validation; `SEDModelComponent` integrates with this protocol.
