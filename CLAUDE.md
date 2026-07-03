@@ -161,6 +161,17 @@ model = SEDModel.build(
 - Sub-blocks: `dust.emission`, plus the five AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`, `agn.atten`. Each nests as
   a dict with its own `'type'`, `'*'`, and per-param keys.
+- Composable shock (#851): the top-level `shock={...}` group adds MAPPINGS V
+  shock emission as a **separate additive** component that composes with any
+  photoionized `neb` backend (both on at once). `shock={'norm': 'frac' |
+  'lhalpha', 'abundance': ..., 'component': ..., 'frac'/'log_lhalpha'/
+  'velocity'/...: prior}`. `'frac'` (default) scales the galaxy Hα (bit-exact
+  with the legacy `shock_emission`); `'lhalpha'` sets an absolute
+  `shock_log_lhalpha` (decoupled from the SFR — for AGN NLR/outflow shocks).
+  `shock={'type':'none'}` disables. Like radio, `'*':FREE` is a no-op for the
+  Fixed-default shock bucket — use explicit priors (`shock={'frac':
+  Uniform(0,1)}`). Canonical component: `ShockNebular` (`_REGISTRY['shock']`);
+  the older `mappings` port is a superseded no-op.
 - AGN cross-block normalisation policy: `agn={'type': 'composable', ...,
   'norm': 'cigale_joint' | 'independent'}` (#556). `'cigale_joint'` (default)
   ties disc/torus/polar to CIGALE's single `agn_power` reference (energy-

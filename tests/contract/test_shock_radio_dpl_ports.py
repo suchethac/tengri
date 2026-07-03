@@ -8,10 +8,10 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri.components.nebular.shock_model import ShockNebular
+from tengri.components.nebular._params import SHOCK_PARAMS
+from tengri.components.nebular.shock_model import ShockNebular, ShockNebularConfig
 from tengri.components.radio.radio_dpl_model import RadioDPL
 from tengri.components.sed_model_component import _REGISTRY
-from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import SEDComponent
 
 
@@ -23,38 +23,55 @@ class TestShockNebular:
     def test_isinstance_protocol(self):
         assert isinstance(ShockNebular(), SEDComponent)
 
-    def test_declared_parameters(self):
-        decls = ShockNebular().declared_parameters()
-        names = {d.name for d in decls}
-        assert "shock_log_l_halpha" in names
-        assert "shock_velocity" in names
-        assert "shock_log_density" in names
-        by_name = {d.name: d for d in decls}
-        assert isinstance(by_name["shock_log_l_halpha"].prior, Uniform)
-        assert isinstance(by_name["shock_log_density"].prior, Fixed)
-        assert by_name["shock_velocity"].units == "km/s"
+    def test_params_supplied_by_bucket(self):
+        # The composable shock component reads the ``shock_*`` bucket rather
+        # than auto-declaring, so it never double-declares against the
+        # photoionized nebular backend (#851). Both normalization knobs live
+        # in the bucket.
+        assert ShockNebular().declared_parameters() == []
+        bucket = {d.name for d in SHOCK_PARAMS}
+        assert {"shock_frac", "shock_log_lhalpha", "shock_velocity"} <= bucket
 
     def test_outputs_contract(self):
         outputs = ShockNebular().outputs()
-        assert any(k.name == "L_shock" for k in outputs)
+        assert any(k.name == "sed_shock" for k in outputs)
 
     @pytest.mark.unit
-    def test_predict_adds_to_sed(self):
+    def test_predict_frac_adds_shock(self):
         wave = jnp.linspace(3000.0, 9000.0, 256)
-        sed_in = jnp.zeros_like(wave)
-        comp = ShockNebular()
+        sed_in = jnp.full_like(wave, 1e28)  # nonzero L_bol so frac normalizes
+        comp = ShockNebular()  # default norm="frac"
         p = {
-            "log_l_halpha": jnp.asarray(40.0),
+            "frac": jnp.asarray(0.8),
+            "log_lhalpha": jnp.asarray(41.0),
             "velocity": jnp.asarray(300.0),
             "log_density": jnp.asarray(0.0),
             "b_over_sqrt_n": jnp.asarray(1.0),
-            "line_sigma_aa": jnp.asarray(5.0),
         }
         sed_out, published = comp.predict(p, sed_in, wave)
         assert sed_out.shape == sed_in.shape
-        assert "L_shock" in published
-        # Lines should be present somewhere on the grid
-        assert bool(jnp.any(sed_out > 0))
+        assert "sed_shock" in published
+        assert bool(jnp.any(published["sed_shock"] > 0))
+        # additive: sed_out == sed_in + shock
+        assert bool(jnp.allclose(sed_out, sed_in + published["sed_shock"]))
+
+    @pytest.mark.unit
+    def test_absolute_knob_independent_of_sed_in(self):
+        wave = jnp.linspace(3000.0, 9000.0, 256)
+        comp = ShockNebular()
+        comp.config = ShockNebularConfig(norm="lhalpha")
+        p = {
+            "frac": jnp.asarray(0.0),
+            "log_lhalpha": jnp.asarray(41.5),
+            "velocity": jnp.asarray(300.0),
+            "log_density": jnp.asarray(0.0),
+            "b_over_sqrt_n": jnp.asarray(1.0),
+        }
+        _, pub_a = comp.predict(p, jnp.full_like(wave, 1e28), wave)
+        _, pub_b = comp.predict(p, jnp.full_like(wave, 1e30), wave)
+        # absolute normalization ignores sed_in entirely
+        assert bool(jnp.allclose(pub_a["sed_shock"], pub_b["sed_shock"]))
+        assert bool(jnp.any(pub_a["sed_shock"] > 0))
 
 
 class TestRadioDPL:

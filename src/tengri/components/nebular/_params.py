@@ -250,9 +250,18 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "shock_frac",
         Fixed(0.0),
-        "Fraction of nebular Halpha replaced by shock emission [0, 1]",
+        "Fraction of nebular Halpha replaced by shock emission [0, 1] "
+        "(used when shock norm='frac')",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "shock_log_lhalpha",
+        Fixed(41.0),
+        "log10(shock Halpha luminosity / [erg/s]) — absolute normalization "
+        "(used when shock norm='lhalpha')",
+        lambda lo, hi: lo >= 30 and hi <= 46,
+        "must be in [30, 46]",
     ),
     ParamDeclaration(
         "shock_velocity",
@@ -272,16 +281,10 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         "B/sqrt(n) in uG cm^(3/2) (MAPPINGS III) or absolute B in uG (MAPPINGS V); "
         "snapped to nearest grid point",
     ),
-    ParamDeclaration(
-        "shock_abundance",
-        Fixed("solar"),
-        "Abundance set: solar | 2xsolar | dopita2005 | lmc | smc",
-    ),
-    ParamDeclaration(
-        "shock_component",
-        Fixed("combined"),
-        "Emission component: shock | precursor | combined",
-    ),
+    # NOTE: the categorical ``shock_abundance`` / ``shock_component`` knobs are
+    # NOT free parameters — they are static structural config on Parameters
+    # (``shock_abundance`` / ``shock_component``, like ``radio_sfr_mode``),
+    # surfaced via the ``shock={...}`` grammar group (#851).
 )
 
 __all__ = [

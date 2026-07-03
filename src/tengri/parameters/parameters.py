@@ -512,6 +512,14 @@ class Parameters:
         self.xray = kwargs.pop("xray", False)
         self.xray_model = kwargs.pop("xray_model", "yang20")
         self.shock = kwargs.pop("shock", False)
+        # Composable MAPPINGS V shock config (#851). ``shock_norm`` selects the
+        # relative (``"frac"``) vs absolute (``"lhalpha"``) Halpha
+        # normalization; ``shock_abundance`` / ``shock_component`` are the
+        # categorical MAPPINGS knobs. These are static structural settings
+        # (like ``radio_sfr_mode`` / ``xray_model``), not traced free params.
+        self.shock_norm = kwargs.pop("shock_norm", "frac")
+        self.shock_abundance = kwargs.pop("shock_abundance", "solar")
+        self.shock_component = kwargs.pop("shock_component", "combined")
 
         # ── Metallicity ───────────────────────────────────────────
         self._init_metallicity_config(kwargs)

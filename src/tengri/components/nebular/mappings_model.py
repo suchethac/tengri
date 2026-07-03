@@ -78,6 +78,15 @@ class MAPPINGSSEDComponentConfig(SEDComponentConfig):
 class MAPPINGSSEDComponent(SEDModelComponent):
     """SEDComponent for MAPPINGS V shock-driven nebular emission.
 
+    .. deprecated:: (#851)
+        Superseded by :class:`tengri.components.nebular.shock_model.ShockNebular`
+        (registry key ``"shock"``), the canonical composable shock component
+        reached via the top-level ``shock={...}`` grammar group. This
+        ``"mappings"`` port is a grammar-unreachable no-op — its ``load()``
+        returns ``None`` unless a ``grid_path`` is set, and nothing routes
+        ``neb.type`` to it. Retained only for back-compat of the ``mappings``
+        registry name; scheduled for removal in a follow-up.
+
     Reads shock kinematic parameters (velocity, density, magnetic field)
     and shock luminosity to compute nebular emission via MAPPINGS grid.
 

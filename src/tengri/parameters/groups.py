@@ -797,6 +797,7 @@ def _translate_structural(groups: dict) -> dict:
         "stellar",
         "dust",
         "neb",
+        "shock",
         "igm",
         "radio",
         "xray",
@@ -832,6 +833,8 @@ def _translate_structural(groups: dict) -> dict:
             _translate_dust(group_dict, result)
         elif group_name == "neb":
             _translate_neb(group_dict, result)
+        elif group_name == "shock":
+            _translate_shock(group_dict, result)
         elif group_name == "igm":
             _translate_igm(group_dict, result)
         elif group_name == "radio":
@@ -1101,6 +1104,49 @@ def _translate_neb(neb_dict: dict, result: dict) -> None:
         result["nebular"] = "cb19"
 
 
+def _translate_shock(shock_dict: dict, result: dict) -> None:
+    """Translate the top-level ``shock`` group to shock settings (#851).
+
+    Activates the composable MAPPINGS V shock component, which is *additive*:
+    it composes with whatever photoionized backend the ``neb`` group selects
+    (a model may run both). ``type='none'`` disables it.
+
+    Recognized structural keys:
+
+    - ``norm`` — ``"frac"`` (relative to the galaxy Halpha, default) or
+      ``"lhalpha"`` (absolute ``shock_log_lhalpha``).
+    - ``abundance`` — MAPPINGS abundance set (``"solar"``, ``"2xsolar"``, …).
+    - ``component`` — ``"shock"`` | ``"precursor"`` | ``"combined"``.
+
+    Per-parameter overrides (``frac``, ``log_lhalpha``, ``velocity``,
+    ``log_density``, ``b_over_sqrt_n``) resolve to the ``shock_*`` bucket
+    params in :func:`parse_groups`.
+    """
+    shock_type = shock_dict.get("type", "mappings")
+    valid_shock = frozenset({"none", "mappings"})
+    if shock_type not in valid_shock:
+        suggestions = difflib.get_close_matches(shock_type, valid_shock, n=2, cutoff=0.6)
+        suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        raise ValueError(f"Unknown shock type '{shock_type}'.{suggest_str}")
+
+    if shock_type == "none":
+        result["shock"] = False
+        return
+
+    result["shock"] = True
+
+    norm = shock_dict.get("norm", "frac")
+    if norm not in ("frac", "lhalpha"):
+        raise ValueError(
+            f"shock norm must be 'frac' or 'lhalpha', got {norm!r}. "
+            "'frac' scales the galaxy Halpha; 'lhalpha' sets an absolute "
+            "log10(L_Halpha/[erg/s]) via shock_log_lhalpha."
+        )
+    result["shock_norm"] = norm
+    result["shock_abundance"] = shock_dict.get("abundance", "solar")
+    result["shock_component"] = shock_dict.get("component", "combined")
+
+
 def _translate_igm(igm_dict: dict, result: dict) -> None:
     """Translate igm group to apply_igm and related settings."""
     igm_type = igm_dict.get("type", "madau")
@@ -1356,6 +1402,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     ),
     "dust.emission": frozenset({"type", "*"}),
     "neb": frozenset({"type", "*", "full_catalog"}),
+    "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
     "igm.dla": frozenset({"type", "*"}),
     "radio": frozenset({"type", "*", "sf", "agn"}),
@@ -1443,7 +1490,7 @@ def _validate_user_keys(
     was added (issue tracked in the forward-model cleanup arc).
     """
     dust_emission_active = structural_params.dust_emission is not None
-    valid_top_groups = {"sfh", "stellar", "dust", "neb", "igm", "radio", "xray", "agn"}
+    valid_top_groups = {"sfh", "stellar", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
     agn_shared_names = _short_names_for_group("agn", param_partition)
@@ -1917,6 +1964,8 @@ def _partition_by_group(
             partition[name] = "igm"
         elif name.startswith("neb_") or name.startswith("ionspec_") or name.startswith("gas_log"):
             partition[name] = "neb"
+        elif name.startswith("shock_"):
+            partition[name] = "shock"
         elif dust_emission_active and name in _DUST_EMISSION_PARAM_NAMES:
             partition[name] = "dust.emission"
         elif name.startswith("dust_"):
@@ -2144,6 +2193,8 @@ def _extract_short_name(full_param_name: str, group_dict: dict) -> str:
         return full_param_name[5:]
     elif full_param_name.startswith("neb_"):
         return full_param_name[4:]
+    elif full_param_name.startswith("shock_"):
+        return full_param_name[6:]
     elif full_param_name.startswith("ionspec_"):
         return full_param_name[8:]
     elif full_param_name.startswith("gas_log"):
@@ -2285,7 +2336,7 @@ def parameters_to_groups(spec: Parameters) -> dict:
             group_output[short_name] = distribution
 
     # Also add groups that have no params but have a configured type (e.g., neb='none')
-    _all_possible_groups = {"sfh", "dust", "neb", "igm", "radio", "xray", "agn"}
+    _all_possible_groups = {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
     for group_name in sorted(_all_possible_groups):
         if group_name not in result:
             type_value = _extract_group_type(group_name, spec)
@@ -2342,6 +2393,10 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         # ``"none"``. Map at the boundary so to_groups() / parse_groups()
         # round-trip cleanly.
         return "none" if spec.nebular_mode == "off" else spec.nebular_mode
+    elif group_name == "shock":
+        # ``shock`` is a boolean toggle on Parameters; the grammar type is
+        # ``"mappings"`` when active and ``"none"`` when off (#851).
+        return "mappings" if getattr(spec, "shock", False) else "none"
     elif group_name == "igm":
         return spec.igm_model if hasattr(spec, "igm_model") else None
     elif group_name == "radio":
@@ -2398,6 +2453,15 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # noisily breaks existing diff-against-from_groups call sites.
         if getattr(spec, "met_mode", "delta") != "delta":
             group_output["met_mode"] = spec.met_mode
+    elif group_name == "shock":
+        # Round-trip the shock normalization + categorical knobs (only when
+        # non-default), mirroring the neb/dust structural round-trip (#851).
+        if getattr(spec, "shock_norm", "frac") != "frac":
+            group_output["norm"] = spec.shock_norm
+        if getattr(spec, "shock_abundance", "solar") != "solar":
+            group_output["abundance"] = spec.shock_abundance
+        if getattr(spec, "shock_component", "combined") != "combined":
+            group_output["component"] = spec.shock_component
 
 
 def _analyze_wildcard_intent(

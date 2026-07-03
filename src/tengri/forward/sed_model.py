@@ -1675,6 +1675,11 @@ class SEDModel:
         # Identity entries for shock_* and xray_* now come from registry
         # auto-derive in _build_param_map (Step B).
         self._uses_shock = getattr(spec, "shock", False)
+        # Composable-shock config (#851): normalization mode + categorical
+        # MAPPINGS knobs, threaded to the ShockNebular component config.
+        self._shock_norm = getattr(spec, "shock_norm", "frac")
+        self._shock_abundance = getattr(spec, "shock_abundance", "solar")
+        self._shock_component = getattr(spec, "shock_component", "combined")
 
         return delta
 
@@ -2645,6 +2650,13 @@ class SEDModel:
         uses_radio = bool(self._uses_radio)
         uses_xray = bool(self._uses_xray)
         uses_shock = bool(self._uses_shock)
+        # Shock normalization + categorical knobs change the emitted SED, so
+        # they are part of the structural fingerprint (#851).
+        shock_cfg = (
+            str(getattr(self, "_shock_norm", "frac")),
+            str(getattr(self, "_shock_abundance", "solar")),
+            str(getattr(self, "_shock_component", "combined")),
+        )
 
         # SFH configuration
         mean_sfh_type = str(self.spec.mean_sfh_type)
@@ -2804,6 +2816,7 @@ class SEDModel:
             uses_radio,
             uses_xray,
             uses_shock,
+            shock_cfg,
             mean_sfh_type,
             met_mode,
             stochastic,
@@ -4868,6 +4881,10 @@ class SEDModel:
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
             use_igm=bool(getattr(self, "_uses_igm", False)),
+            use_shock=bool(getattr(self, "_uses_shock", False)),
+            shock_norm=getattr(self, "_shock_norm", "frac"),
+            shock_abundance=getattr(self, "_shock_abundance", "solar"),
+            shock_component=getattr(self, "_shock_component", "combined"),
         )
 
         # Phase 3b/3c: Eager precompute stellar photometry LUT when wave_precomp is enabled.
@@ -5260,6 +5277,7 @@ class SEDModel:
         stellar=None,
         dust=None,
         neb=None,
+        shock=None,
         agn=None,
         igm=None,
         radio=None,
@@ -5333,6 +5351,7 @@ class SEDModel:
                 stellar=stellar,
                 dust=dust,
                 neb=neb,
+                shock=shock,
                 agn=agn,
                 igm=igm,
                 radio=radio,
