@@ -104,23 +104,26 @@ def test_kubota_done_disc_peak_matches_novikov_thorne():
     )
 
 
-def test_disc_peak_scales_with_eddington_ratio():
-    """T_in ∝ (Ṁ/M)^{1/4} ∝ λ_Edd^{1/4} ⟹ νLν peak λ ∝ λ_Edd^{-1/4} (NT scaling).
+def test_disc_peak_scales_with_lbol_at_fixed_mass():
+    """T_in ∝ (λ_Edd/M)^{1/4} ⟹ νLν peak λ ∝ L_bol^{-1/4} at fixed M_BH (#846).
 
-    The inner temperature is driven by the Eddington ratio (``agn_log_ledd``),
-    not the overall luminosity scaling (``agn_log_lbol`` sets amplitude only).
+    Luminosity-first parameterization (ADR-0020): the Eddington ratio is derived,
+    λ_Edd = L_bol / L_Edd(M_BH), so at fixed M_BH the disc shape is driven by
+    ``agn_log_lbol`` — higher L_bol → higher λ_Edd → hotter T_in → bluer peak.
+    ``agn_log_ledd`` no longer affects the shape. A −1 dex change in L_bol (at
+    fixed M) shifts the peak redward by 10^{1/4} ≈ 1.78x, the same
+    Novikov-Thorne scaling the old λ_Edd test checked.
     """
     wave = np.logspace(np.log10(50.0), np.log10(1.0e5), 4000)
 
-    def peak(log_ledd):
-        lnu = np.asarray(
-            multicolor_disc(wave, agn_log_lbol=12.215, agn_log_mbh=8.0, agn_log_ledd=log_ledd)
-        )
+    def peak(log_lbol):
+        lnu = np.asarray(multicolor_disc(wave, agn_log_lbol=log_lbol, agn_log_mbh=8.0))
         sel = (wave > 100.0) & (wave < 1.0e4) & (lnu > 0)
         return wave[sel][np.argmax((lnu * _C * 1e8 / wave)[sel])]
 
-    # -1 dex in Eddington ratio -> peak redder by 10^{1/4} = 1.78x.
-    ratio = peak(np.log10(0.05)) / peak(np.log10(0.5))
+    # L_Edd(1e8 M_sun) ≈ 10^12.52 L_sun; lambda_Edd = 0.05 → log_lbol ≈ 11.22,
+    # lambda_Edd = 0.5 → log_lbol ≈ 12.22 (1 dex in L_bol at fixed M = 1 dex in λ).
+    ratio = peak(11.22) / peak(12.22)
     assert abs(ratio - 10**0.25) / 10**0.25 < 0.15, (
-        f"disc peak should scale as λ_Edd^-0.25 (expect 1.78x for 1 dex); got {ratio:.2f}"
+        f"disc peak should scale as L_bol^-0.25 at fixed M (expect 1.78x/dex); got {ratio:.2f}"
     )

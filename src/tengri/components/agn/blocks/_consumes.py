@@ -70,12 +70,13 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_gamma_warm",
             "agn_kt_hot",
             "agn_kt_warm",
-            "agn_log_ledd",
+            # agn_log_ledd removed (#846): the Eddington ratio is now derived
+            # from agn_log_lbol, so agn_log_ledd no longer moves the SED.
             "agn_log_mbh",
             "agn_r_warm_ratio",
         }
     ),
-    ("disc", "multicolor"): frozenset({"agn_a_spin", "agn_log_ledd", "agn_log_mbh"}),
+    ("disc", "multicolor"): frozenset({"agn_a_spin", "agn_log_mbh"}),
     ("disc", "powerlaw"): frozenset({"agn_alpha"}),
     ("disc", "qsogen"): frozenset(),
     ("disc", "relagn"): frozenset({"agn_log_mbh", "agn_log_mdot", "agn_astar", "agn_cos_inc"}),

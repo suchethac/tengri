@@ -78,11 +78,15 @@ class TestKubotaDoneFullAgn:
         """
         from tengri.components.agn.unified import kubota_done_full_agn
 
+        # Physical L_bol (log10 L_sun): L_Edd(1e8 M_sun) ≈ 10^12.5 L_sun, so
+        # agn_log_lbol=12 is sub-Eddington. Previously 44 (super-Eddington),
+        # which now clips at the Eddington limit under the luminosity-first
+        # parameterization (ADR-0020) and saturates the f_hard effect.
         l_no_corona = kubota_done_full_agn(
-            wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_f_hard=0.0, agn_torus_frac=0.0
+            wavelength, agn_log_lbol=12.0, agn_frac=1.0, agn_f_hard=0.0, agn_torus_frac=0.0
         )
         l_corona = kubota_done_full_agn(
-            wavelength, agn_log_lbol=44.0, agn_frac=1.0, agn_f_hard=0.1, agn_torus_frac=0.0
+            wavelength, agn_log_lbol=12.0, agn_frac=1.0, agn_f_hard=0.1, agn_torus_frac=0.0
         )
         # The SEDs must differ somewhere (not identical arrays)
         assert not jnp.allclose(l_corona, l_no_corona, rtol=1e-6)

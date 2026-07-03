@@ -150,24 +150,21 @@ class TestKubotaDoneSelfConsistent:
         """
         sed_sc = kubota_done_disc(
             wavelength,
-            agn_log_lbol=45.0,
+            agn_log_lbol=12.0,
             agn_log_mbh=8.0,
-            agn_log_ledd=-1.0,
             agn_self_consistent_gamma=True,
         )
         sed_hard = kubota_done_disc(
             wavelength,
-            agn_log_lbol=45.0,
+            agn_log_lbol=12.0,
             agn_log_mbh=8.0,
-            agn_log_ledd=-1.0,
             agn_gamma_hard=1.4,
             agn_self_consistent_gamma=False,
         )
         sed_soft = kubota_done_disc(
             wavelength,
-            agn_log_lbol=45.0,
+            agn_log_lbol=12.0,
             agn_log_mbh=8.0,
-            agn_log_ledd=-1.0,
             agn_gamma_hard=3.0,
             agn_self_consistent_gamma=False,
         )

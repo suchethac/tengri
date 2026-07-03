@@ -237,10 +237,14 @@ class TestGradientCorrectness:
         def disc_sed_sum(log_mbh: float) -> float:
             sed = multicolor_disc(
                 wave,
-                agn_log_lbol=-1.0,
+                # Physical, sub-Eddington L_bol (log10 L_sun): under the
+                # luminosity-first parameterization (ADR-0020) the shape depends
+                # on M_BH via the derived Eddington ratio. agn_log_lbol=-1.0
+                # (0.1 L_sun) clips lambda_Edd to the floor, zeroing
+                # d(SED)/d(log_mbh).
+                agn_log_lbol=12.0,
                 agn_frac=1.0,
                 agn_log_mbh=log_mbh,
-                agn_log_ledd=-1.0,
                 agn_a_spin=0.0,
                 agn_cos_inc=0.5,
                 n_radii=30,

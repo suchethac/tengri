@@ -733,7 +733,7 @@ def _lookup_corona_filter(
 def _compute_bh_and_radii(
     agn_log_mbh: float,
     agn_a_spin: float,
-    agn_log_ledd: float,
+    agn_log_lbol: float,
     agn_f_hard: float,
     agn_r_warm_ratio: float,
     l_edd: jnp.ndarray,
@@ -754,8 +754,9 @@ def _compute_bh_and_radii(
         log10(M_bh / Msun).
     agn_a_spin : float
         Dimensionless spin parameter [0, 1].
-    agn_log_ledd : float
-        log10(L_edd_ratio) where L_edd_ratio = L_bol / L_edd ∈ [1e-10, 1].
+    agn_log_lbol : float
+        Bolometric luminosity log10(L_bol / L_sun). The Eddington ratio is
+        derived from it (#846).
     agn_f_hard : float
         Fractional hard X-ray luminosity [0, 0.5].
     agn_r_warm_ratio : float
@@ -789,8 +790,10 @@ def _compute_bh_and_radii(
     r_isco_rg = _isco_radius(agn_a_spin)
 
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco_rg))
-    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
-    l_bol_erg = l_edd_ratio * l_edd
+    # E fix (#846): derive the Eddington ratio from L_bol (mirrors the runtime
+    # kubota_done_disc; keeps this preintegration path bit-consistent with it).
+    l_bol_erg = 10.0**agn_log_lbol * L_SUN
+    l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)
     mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
     t_in = (
@@ -1074,13 +1077,13 @@ def kubota_done_disc_preintegrated(
     r_isco_rg = _isco_radius(agn_a_spin)
     r_isco_cm = r_isco_rg * r_g
     l_edd = _eddington_luminosity(agn_log_mbh)
-    l_edd_ratio = jnp.clip(10.0**agn_log_ledd, 1e-10, 1.0)
-    l_bol_erg = l_edd_ratio * l_edd
+    # E fix (#846): L_bol is the knob; Eddington ratio derived (see runtime path).
+    l_bol_erg = 10.0**agn_log_lbol * L_SUN
 
     r_hot_cm, r_warm_cm, r_out_cm, t_in, _eta = _compute_bh_and_radii(
         agn_log_mbh,
         agn_a_spin,
-        agn_log_ledd,
+        agn_log_lbol,
         agn_f_hard,
         agn_r_warm_ratio,
         l_edd,
