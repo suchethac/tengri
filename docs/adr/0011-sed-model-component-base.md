@@ -1,6 +1,6 @@
 # ADR-0011: `SEDModelComponent` base class for simplified physics authoring
 
-**Status:** Accepted (2026-05-21); in progress, being completed by ADR-0019
+**Status:** Accepted (2026-05-21); being completed by [ADR-0019](0019-unified-component-dispatch.md) — the single-`_REGISTRY`-dispatch phases for dust, nebular/shock, and radio/x-ray have landed; AGN + docs remain in progress under #738.
 
 **Stakeholders:** Suchetha; future contributors adding physics blocks
 

@@ -2,7 +2,10 @@
 
 **Status**: Accepted  
 **Date**: 2026-06-05  
-**Authors**: AGN Composable Task Force
+**Authors**: AGN Composable Task Force  
+**Related**: [ADR-0019](0019-unified-component-dispatch.md) — the AGN block
+registry described here is the domain-specific structure that ADR-0019's single
+`_REGISTRY` dispatch resolves into; the two are complementary (0019 §5).
 
 ## Context
 

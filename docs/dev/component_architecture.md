@@ -3,8 +3,9 @@
 > **One-page contributor guide for the bare-`SEDComponent` Protocol —
 > the advanced / fallback path.** For the recommended astronomer-facing
 > authoring style (class-level Distribution attributes, `reads` /
-> `publishes` dicts, single `predict` signature), see the
-> `SEDModelComponent` documentation (in flight). For the big-picture
+> `publishes` dicts, single `predict` signature), see the canonical
+> [`model-construction.md`](model-construction.md) and
+> [`sed-model-components.md`](sed-model-components.md). For the big-picture
 > architecture this fits into — `ForwardModel`, sub-models, populations,
 > spatial — see
 > [`forward-model-architecture.md`](forward-model-architecture.md).

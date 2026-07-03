@@ -1,9 +1,11 @@
 # Forward Model Architecture
 
-> Status: **design doc, pre-implementation.** Captured 2026-05-21 from a
-> design conversation. Section 2 depends on the in-flight
-> `SEDModelComponent` refactor; reconcile before treating this doc as
-> canonical. Multi-population namespace decision is captured separately in
+> Status: **historical design doc.** Captured 2026-05-21 from a design
+> conversation, before the ADR-0011/0019 dispatch migration landed. Kept for
+> the architectural reasoning; for the **current** canonical account of how a
+> model is built, dispatched, and extended, read
+> [`model-construction.md`](model-construction.md). Multi-population namespace
+> decision is captured separately in
 > [ADR-0012](../adr/0012-forward-model-population.md).
 
 This document describes the target architecture of the `tengri` forward

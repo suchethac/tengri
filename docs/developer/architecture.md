@@ -1,5 +1,13 @@
 # Architecture
 
+> **Historical / retired.** This page's package-structure listing predates the
+> ADR-0011/0019 dispatch migration and is no longer maintained. For the current
+> account of how a model is built, dispatched, and extended, read
+> [`../dev/model-construction.md`](../dev/model-construction.md); for "where do
+> I edit X?" see [`../dev/where-things-live.md`](../dev/where-things-live.md).
+> The Information Field Theory (IFT) framework notes below are kept for
+> reference.
+
 This page describes tengri's package structure, dependency layers, data flow,
 and the Information Field Theory (IFT) framework that underpins the SFH model.
 
