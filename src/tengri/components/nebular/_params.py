@@ -250,9 +250,18 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "shock_frac",
         Fixed(0.0),
-        "Fraction of nebular Halpha replaced by shock emission [0, 1]",
+        "Fraction of nebular Halpha replaced by shock emission [0, 1] "
+        "(used when shock norm='frac')",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
+    ),
+    ParamDeclaration(
+        "shock_log_lhalpha",
+        Fixed(41.0),
+        "log10(shock Halpha luminosity / [erg/s]) — absolute normalization "
+        "(used when shock norm='lhalpha')",
+        lambda lo, hi: lo >= 30 and hi <= 46,
+        "must be in [30, 46]",
     ),
     ParamDeclaration(
         "shock_velocity",

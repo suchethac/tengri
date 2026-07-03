@@ -309,31 +309,32 @@ def test_xray_e2e(ssp, obs, xray_type):
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_shock_L_published_is_total_not_halpha_anchor():
-    """The Shock port's published L_shock should be the trapezoidal
-    frequency integral of the emitted L_ν, not just the Hα anchor
-    luminosity. The integral spans the full line set (~11 lines), so
-    L_shock should be **larger** than the Hα anchor by the line-strength
-    sum (~6-7×)."""
-    from tengri.components.nebular.shock_model import ShockNebular
+def test_shock_total_luminosity_exceeds_halpha_anchor():
+    """The total shock luminosity — the trapezoidal frequency integral of the
+    published ``sed_shock`` — must exceed the single Hα anchor set by the
+    absolute ``shock_log_lhalpha`` knob, because the emitted spectrum spans the
+    full multi-line set (~11 lines), not Hα alone."""
+    from tengri.components.nebular.shock_model import ShockNebular, ShockNebularConfig
+    from tengri.utils.physics_constants import C_AA
 
     wave = jnp.linspace(3500.0, 7000.0, 1024)
     sed_in = jnp.zeros_like(wave)
+    comp = ShockNebular()
+    comp.config = ShockNebularConfig(norm="lhalpha")  # absolute Hα anchor
     p = {
-        "log_l_halpha": jnp.asarray(40.0),
+        "frac": jnp.asarray(0.0),
+        "log_lhalpha": jnp.asarray(40.0),
         "velocity": jnp.asarray(300.0),
         "log_density": jnp.asarray(0.0),
         "b_over_sqrt_n": jnp.asarray(1.0),
-        "line_sigma_aa": jnp.asarray(2.0),
     }
-    _, published = ShockNebular().predict(p, sed_in, wave)
+    _, published = comp.predict(p, sed_in, wave)
+    nu = C_AA / wave
+    L_shock = float(jnp.abs(jnp.trapezoid(published["sed_shock"], nu)))
     l_halpha = 10.0**40.0
-    L_shock = float(published["L_shock"])
-    # The trapezoidal integral of the multi-line sum must exceed the
-    # single Hα anchor.
     assert L_shock > l_halpha, (
-        f"L_shock={L_shock:.3e} should exceed the Hα anchor {l_halpha:.3e} "
-        "(the published value used to be the anchor; PR #221 fixed it)."
+        f"total shock luminosity {L_shock:.3e} should exceed the Hα anchor "
+        f"{l_halpha:.3e} (the emitted spectrum spans the full line set)."
     )
 
 

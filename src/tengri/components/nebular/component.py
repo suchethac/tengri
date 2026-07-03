@@ -300,9 +300,8 @@ class NebularSEDComponent:
 
         See :func:`tengri.forward.orchestrator.validate_pipeline`.
         """
-        return (
+        outs = [
             DerivedKey("sed_nebular", "erg/s/Hz", "Photoionized continuum + lines"),
-            DerivedKey("sed_shock", "erg/s/Hz", "MAPPINGS shock (zeros for photoion-only)"),
             DerivedKey("line_waves", "Angstrom", "Line vacuum wavelengths"),
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
             DerivedKey(
@@ -310,7 +309,16 @@ class NebularSEDComponent:
                 "",
                 "Stellar LyC survival fraction where(λ<912, neb_fesc, 1)",
             ),
-        )
+        ]
+        # ``sed_shock`` is owned by this component ONLY on the mutually-exclusive
+        # ``backend="shock"`` path. When a photoionized backend composes with a
+        # separate additive :class:`ShockNebular` component (#851), that
+        # component owns ``sed_shock`` — declaring it here too would trip the
+        # duplicate-publisher guard. Consumers read it via ``.get(..., zeros)``,
+        # so leaving it undeclared for photoionized/baked-in backends is safe.
+        if self.config.backend == "shock":
+            outs.insert(1, DerivedKey("sed_shock", "erg/s/Hz", "MAPPINGS shock emission"))
+        return tuple(outs)
 
     def inputs(self) -> tuple[DerivedKey, ...]:
         """Cross-component derived keys this nebular component reads.
@@ -435,17 +443,16 @@ class NebularSEDComponent:
         if isinstance(template_data, dict) and "nebular" in template_data:
             template_data = template_data["nebular"]
 
-        # Always publish both ``sed_nebular`` and ``sed_shock`` so
-        # downstream consumers (e.g. ``Posterior.sed_components``) can
-        # read them uniformly without conditioning on the active backend.
-        # Photoionized backends fill ``sed_nebular`` and leave
-        # ``sed_shock`` as zeros; the shock backend does the opposite.
-        # ``baked_in`` returns zeros for both because emission is already
-        # in the SSP grid.
+        # Publish ``sed_nebular`` for every backend; publish ``sed_shock`` only
+        # on the mutually-exclusive ``backend="shock"`` path (#851). When a
+        # photoionized backend composes with a separate :class:`ShockNebular`
+        # component, that component owns ``sed_shock``; ``Posterior`` reads it
+        # via ``.get(..., zeros)`` so an unset key is harmless. ``baked_in``
+        # returns zeros because emission is already in the SSP grid.
         zeros = jnp.zeros_like(state.wave)
 
         if self.config.backend == "baked_in":
-            return state.with_(derived=state.derived.with_(sed_nebular=zeros, sed_shock=zeros))
+            return state.with_(derived=state.derived.with_(sed_nebular=zeros))
 
         # Stellar metallicity (absolute log10(Z)) for downstream backends.
         log_z_history = state.derived.get("log_metallicity_history")

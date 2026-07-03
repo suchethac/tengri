@@ -108,6 +108,10 @@ from tengri.components.nebular.shock import (
     compute_shock_sed,
     shock_line_ratios,
 )
+from tengri.components.nebular.shock_model import (
+    ShockNebular,
+    ShockNebularConfig,
+)
 
 _DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
 
@@ -173,6 +177,8 @@ __all__ = [
     "NebularContinuumUnavailableError",
     "NebularRegistryEntry",
     "ShockBackend",
+    "ShockNebular",
+    "ShockNebularConfig",
     "SynthesizerGridData",
     "SynthesizerNLRBackend",
     "build_cloudy23_deck",

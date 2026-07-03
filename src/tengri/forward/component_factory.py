@@ -234,6 +234,15 @@ def build_components(
     # asks the Cue backend for the full ~271-species line catalog
     # instead of the default 128 CLOUDY/FSPS subset. See #303.
     cue_full_catalog: bool = False,
+    # Shock nebular emission (MAPPINGS V) — an ADDITIVE component that
+    # composes with any photoionized ``nebular_backend`` (#851). Gated by
+    # the top-level ``shock={...}`` grammar group / ``Parameters(shock=True)``.
+    # ``shock_norm`` selects the relative (``"frac"``) or absolute
+    # (``"lhalpha"``) Halpha normalization; the categorical knobs are static.
+    use_shock: bool = False,
+    shock_norm: str = "frac",
+    shock_abundance: str = "solar",
+    shock_component: str = "combined",
     # AGN
     agn_model: str | None = None,
     # Composable-AGN block selectors (only consulted when agn_model="composable").
@@ -432,6 +441,26 @@ def build_components(
                 backend=nebular_backend_instance,
             )
         )
+
+    # 3b. Shock (optional, #851) — MAPPINGS V shock emission as a separate
+    # additive component. Composes with the photoionized nebular backend
+    # above: both accumulate into ``sed_intrinsic`` (so both are reddened by
+    # the dust screen) and publish distinct diagnostic keys (``sed_nebular``
+    # vs ``sed_shock``). Resolved through the single dispatch seam.
+    if use_shock:
+        from tengri.components.nebular.shock_model import ShockNebularConfig
+
+        # ShockNebular is a SEDModelComponent port (config lives as a class
+        # attribute, not a constructor arg), so resolve the class through the
+        # seam and set the per-model config as an instance attribute — the same
+        # post-construction configuration pattern the seam uses for ``name``.
+        shock_component_obj = _resolve_registry_component("nebular", "shock")
+        shock_component_obj.config = ShockNebularConfig(
+            norm=shock_norm,
+            abundance=shock_abundance,
+            component=shock_component,
+        )
+        components.append(shock_component_obj)
 
     # 4. AGN (optional) — placed after dust so ``state.derived["L_absorbed"]``
     # is available for the CIGALE-coupled ``agn_fracAGN`` flow.

@@ -4868,6 +4868,10 @@ class SEDModel:
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
             use_igm=bool(getattr(self, "_uses_igm", False)),
+            use_shock=bool(getattr(self, "_uses_shock", False)),
+            shock_norm=getattr(self, "_shock_norm", "frac"),
+            shock_abundance=getattr(self, "_shock_abundance", "solar"),
+            shock_component=getattr(self, "_shock_component", "combined"),
         )
 
         # Phase 3b/3c: Eager precompute stellar photometry LUT when wave_precomp is enabled.
