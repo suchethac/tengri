@@ -103,10 +103,10 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 Layout: `parameters/ -> components/ -> forward/ -> observation/ -> inference/ -> analysis/ -> config/ + utils/`. Public API re-exported at `src/tengri/__init__.py`.
 
 Key directories:
-- `core/` — Protocols (SEDComponent, ObservationModel, Likelihood) — Part II scaffold; nothing consumes yet
+- `protocols/` — Protocols (`SEDComponent`, `ObservationModel`, `Likelihood`, `DerivedState`) + `SEDModelComponent` contract; consumed by the forward pipeline (ADR-0009/0011/0019)
 - `parameters/` — Parameters class, priors, param translation
 - `components/` — SED physics: sfh/, sps/, dust/, nebular/, agn/, igm/, radio/, xray/
-- `forward/` — SEDModel, pipeline, _kernels/ (JIT strategies, private), precompute/ (protocol+registry)
+- `forward/` — SEDModel, pipeline, component_factory (the `_REGISTRY` dispatch seam), precompute/ (protocol+registry)
 - `observation/` — photometry, spectroscopy, filters, noise, emission lines
 - `inference/` — fitter, posterior, all inference methods (vi, mcmc, nss, map, etc.)
 - `analysis/` — diagnostics, plotting, simulate, mock
@@ -122,6 +122,8 @@ Phase 4 sub-namespaces (additive re-export modules; added 2026-05):
 - `components/dust/{attenuation_models,emission_models,pah}.py`
 
 ## Model construction API (CURRENT)
+
+**Canonical narrative: [`docs/dev/model-construction.md`](docs/dev/model-construction.md)** — the build path, the single `_REGISTRY` dispatch, and the one add-a-model recipe in one place.
 
 User-facing model construction has two surfaces. The **recommended path** is
 the nested-dict builder shipped in 2026-05 (`parameters/groups.py`):
@@ -246,6 +248,7 @@ The contract:
 * Return `(sed_out, published_dict)` — new SED + dict matching `outputs` keys
 
 **Reference:**
+- [`docs/dev/model-construction.md`](docs/dev/model-construction.md) — the one narrative (build path + dispatch + this recipe in context)
 - [`docs/dev/sed-model-components.md`](docs/dev/sed-model-components.md) — full how-to + three worked examples (closed-form, library, NN emulator)
 - [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md) — architectural context
 - [`docs/adr/0011-sed-model-component-base.md`](docs/adr/0011-sed-model-component-base.md) — the design decision
@@ -386,6 +389,7 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 
 ## References
 
+- `docs/dev/model-construction.md` — **canonical** model construction narrative (build path + one `_REGISTRY` dispatch + add-a-model recipe)
 - `docs/dev/agents.md` — AI agent documentation
 - `docs/dev/history/handoff-2026-04.md` — frozen project-status snapshot (pre Phase II-3 closure)
 - `docs/dev/design_philosophy.md` — architecture decisions
