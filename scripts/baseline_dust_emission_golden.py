@@ -131,6 +131,14 @@ def main():
                 "dust_f_pah": 0.05,
             },
         },
+        # NOTE (#852): draine2021_pah is intentionally NOT captured here. Its
+        # DUST_EMISSION_MODELS entry is a DEPRECATED ALIAS to pah_drude (a
+        # different, analytic model; #693), so capturing it via this loader path
+        # would freeze the WRONG physics. The real tabulated PAHspec port
+        # (_REGISTRY["draine2021_pah_ir"]) is captured + regression-tested from
+        # the port directly in tests/regression/test_dust_goldens_852.py, whose
+        # frozen golden lives at
+        # tests/regression/data/dust_emission_golden/draine2021_pah_ir.npy.
     }
 
     # Metadata for the report

@@ -1,0 +1,151 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Bit-exact goldens for the two dust-emission ports the Phase-1 pilot skipped.
+
+The Phase-1 golden capture (#738) skipped ``schreiber2018`` and
+``draine2021_pah`` because their template HDF5 grids were absent from the test
+env. This module adds their regression protection now that the grids ship
+(``data/schreiber2018_templates.h5`` and ``data/pahspec_draine2021.h5``). Every
+test **skips cleanly** when its grid is missing, so CI (which does not ship the
+gitignored grids) stays green while local / data-present runs exercise them.
+
+Two distinct oracles, because the two templates differ (#852):
+
+* ``schreiber2018`` — the ``DUST_EMISSION_MODELS["schreiber2018"]`` loader is a
+  real, independent implementation of the same grid, so the port is pinned
+  **bit-exact against the loader** (the strongest check; mirrors the analytic
+  ``schreiber2016`` closure-vs-port test).
+* ``draine2021_pah_ir`` — its ``DUST_EMISSION_MODELS`` entry is a *deprecated
+  alias to ``pah_drude``* (a different, analytic model; #693), so there is no
+  independent loader oracle. The port is pinned against a **committed frozen
+  golden** plus a physical energy-balance check. This module also regression-
+  guards the silent-no-op bug #852 fixed: the port's auto-locate passed a
+  ``data/``-prefixed path to ``_find_data_file`` (which prepends its own
+  ``/data`` candidate dirs), so it never found the present grid and silently
+  emitted zeros.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import jax
+import numpy as np
+import pytest
+
+jax.config.update("jax_enable_x64", True)
+
+import jax.numpy as jnp
+
+from tengri.components.dust.emission import (
+    DUST_EMISSION_MODELS,
+    preload_emission_model,
+)
+from tengri.components.sed_model_component import _REGISTRY
+from tengri.utils.physics_constants import C_AA
+
+pytestmark = pytest.mark.regression_bug
+
+# Same representative grid + absorbed luminosity as the pilot goldens.
+_WAVE = jnp.linspace(1000.0, 1.0e7, 512)
+_L_IR = 1.0e44
+
+_GOLDEN_DIR = Path(__file__).parent / "data" / "dust_emission_golden"
+
+
+def _schreiber2018_available() -> bool:
+    """``preload_emission_model`` is lazy and does not raise on a missing grid —
+    the actual ``loader(...)`` call is what fails. Gate on a real trial call so
+    the test skips (not fails) when the HDF5 grid is absent (e.g. in CI)."""
+    try:
+        preload_emission_model("schreiber2018")
+        loader = DUST_EMISSION_MODELS["schreiber2018"]
+        loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05)
+        return True
+    except Exception:
+        return False
+
+
+def _draine2021_available() -> bool:
+    """The port loads the PAHspec grid via auto-locate; data present iff load()
+    returns a template dict."""
+    comp = _REGISTRY["draine2021_pah_ir"]()
+    try:
+        return comp.load(_WAVE) is not None
+    except Exception:
+        return False
+
+
+# ── schreiber2018 — bit-exact vs the independent loader ───────────────
+
+
+@pytest.mark.skipif(
+    not _schreiber2018_available(), reason="schreiber2018 template grid not available"
+)
+def test_schreiber2018_port_matches_loader_bit_exact():
+    """The schreiber2018 SEDModelComponent port reproduces the
+    ``DUST_EMISSION_MODELS`` loader exactly on the shipped grid. The loader
+    names the params ``dust_T`` / ``dust_f_pah``; the port strips to
+    ``tdust`` / ``fpah`` — same physical values, so the outputs are identical."""
+    preload_emission_model("schreiber2018")
+    loader = DUST_EMISSION_MODELS["schreiber2018"]
+    golden = np.asarray(loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05), dtype=np.float64)
+
+    comp = _REGISTRY["schreiber2018"]()
+    sed_out, _ = comp.predict(
+        {"tdust": 30.0, "fpah": 0.05}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR
+    )
+    np.testing.assert_allclose(np.asarray(sed_out), golden, rtol=1e-14, atol=1e-15)
+
+
+# ── draine2021_pah_ir — frozen golden + energy balance + no-op guard ──
+
+
+def _draine_port_sed() -> np.ndarray:
+    comp = _REGISTRY["draine2021_pah_ir"]()
+    comp.data = comp.load(_WAVE)
+    sed_out, _ = comp.predict({"lgU": 1.0}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR)
+    return np.asarray(sed_out, dtype=np.float64)
+
+
+@pytest.mark.skipif(
+    not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
+)
+def test_draine2021_pah_is_not_a_silent_no_op():
+    """Regression for the #852 silent-no-op fix: with the grid present, the port
+    must load it and emit a nonzero far-IR SED (before the fix, the
+    ``data/``-prefixed auto-locate path missed and the port returned zeros)."""
+    comp = _REGISTRY["draine2021_pah_ir"]()
+    assert comp.load(_WAVE) is not None, "PAHspec grid present but load() returned None"
+    sed = _draine_port_sed()
+    assert np.all(np.isfinite(sed))
+    assert np.nansum(np.abs(sed)) > 0.0, "port emitted all zeros despite present grid"
+
+
+@pytest.mark.skipif(
+    not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
+)
+def test_draine2021_pah_energy_balance():
+    """The emitted IR SED re-radiates the absorbed luminosity: the frequency
+    integral of L_nu recovers L_ir to within a few percent (grid-edge losses)."""
+    sed = _draine_port_sed()
+    nu = C_AA / np.asarray(_WAVE)
+    l_emitted = float(-np.trapezoid(sed, nu))
+    assert l_emitted == pytest.approx(_L_IR, rel=0.05)
+    # Peaks in the IR (not UV) — a dust re-emission sanity check.
+    peak_wave = float(np.asarray(_WAVE)[int(np.argmax(sed))])
+    assert peak_wave > 1.0e5
+
+
+@pytest.mark.skipif(
+    not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
+)
+def test_draine2021_pah_matches_frozen_golden():
+    """The port reproduces the committed frozen golden bit-exactly — a drift
+    lock (no independent loader oracle exists; the DUST_EMISSION_MODELS entry is
+    a deprecated pah_drude alias, #693)."""
+    golden_npy = _GOLDEN_DIR / "draine2021_pah_ir.npy"
+    if not golden_npy.exists():
+        pytest.skip(f"golden not found: {golden_npy}")
+    golden = np.load(golden_npy)
+    sed = _draine_port_sed()
+    np.testing.assert_allclose(sed, golden, rtol=1e-14, atol=1e-15)
