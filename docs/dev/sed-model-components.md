@@ -25,38 +25,44 @@ class ModifiedBlackbody(SEDModelComponent):
     T    = Uniform(20.0, 80.0, "dust temperature",      units="K")
     beta = Uniform( 1.0,  3.0, "dust emissivity index", units="")
 
-    # ─── What this model reads from upstream
-    reads = {"L_absorbed": "erg/s"}
+    # ─── What this model reads from upstream (0.0 fallback when absent)
+    optional_inputs = {"L_ir": "erg/s"}
 
     # ─── What this model publishes for downstream
-    publishes = {"L_ir": "erg/s"}
+    outputs = {"L_ir_reemitted": "erg/s"}
 
     # ─── (Optional) load static data once
     def load(self, wave):
         return None     # closed-form models leave this default
 
     # ─── The physics
-    def predict(self, p, sed_in, wave, *, L_absorbed):
-        addition = modified_blackbody_lnu(wave, L_absorbed, p["T"], p["beta"])
-        L_ir = trapz_freq(addition, wave)
-        return sed_in + addition, {"L_ir": L_ir}
+    def predict(self, p, sed_in, wave, *, L_ir):
+        addition = modified_blackbody_lnu(wave, L_ir, p["T"], p["beta"])
+        return sed_in + addition, {"L_ir_reemitted": trapz_freq(addition, wave)}
 ```
 
-That is the whole contract. The signature `predict(p, sed_in, wave, **reads) →
+That is the whole contract. The signature `predict(p, sed_in, wave, **inputs) →
 (sed_out, published)` is the same for every model — closed-form, atlas-based,
 or neural-net emulator.
 
+Cross-component reads come in two strengths: `inputs` (required — the
+pipeline validator rejects a chain that cannot supply them) and
+`optional_inputs` (supplied when an upstream component publishes them,
+`0.0` otherwise, so the model degrades to a graceful no-op). Dust
+re-emission declares `L_ir` optional for exactly this reason: a model with
+no attenuator still builds and simply re-radiates nothing.
+
 | Argument        | What you get                                                   |
 |-----------------|----------------------------------------------------------------|
-| `p`             | Your free parameters, prefix-stripped (`p["T"]`, not `p["dust_T"]`) |
+| `p`             | Your free parameters, prefix-stripped (`p["T"]`, not `p["dust_T"]`). Globals on the bare-name allowlist (e.g. `p["redshift"]`) pass through un-stripped |
 | `sed_in`        | The rest-frame L_ν built up by upstream components (`erg/s/Hz`) |
 | `wave`          | Rest-frame wavelength grid in Å                                |
-| `**reads`       | One keyword arg per entry in `reads`, supplied from upstream   |
+| `**inputs`      | One keyword arg per entry in `inputs`/`optional_inputs`, supplied from upstream (optional ones default to `0.0`) |
 
 | Return          | What it means                                                  |
 |-----------------|----------------------------------------------------------------|
 | `sed_out`       | The new rest-frame L_ν (emission models: `sed_in + addition`; transformations: `sed_in * factor`; pure pass-through: `sed_in`) |
-| `published`     | Dict of quantities to publish into `state.derived` — must match `publishes` keys exactly |
+| `published`     | Dict of quantities to publish into `state.derived` — must match `outputs` keys exactly |
 
 ---
 
@@ -74,14 +80,13 @@ class Calzetti(SEDModelComponent):
     tau_v = Uniform(0.0, 4.0, "V-band optical depth", units="")
     delta = Uniform(-0.5, 0.5, "UV slope deviation",  units="")
 
-    reads = {}
-    publishes = {"L_absorbed": "erg/s"}
+    outputs = {"L_ir": "erg/s"}   # absorbed luminosity, for energy balance
 
     def predict(self, p, sed_in, wave):
         atten   = calzetti_atten(wave, p["tau_v"], p["delta"])
         sed_out = sed_in * atten
-        L_absorbed = trapz_freq(sed_in - sed_out, wave)
-        return sed_out, {"L_absorbed": L_absorbed}
+        L_ir = trapz_freq(sed_in - sed_out, wave)
+        return sed_out, {"L_ir": L_ir}
 ```
 
 ### Atlas / template library
@@ -98,8 +103,7 @@ class SKIRTORTorus(SEDModelComponent):
     theta_view    = Uniform( 0.0, 90.0, "viewing angle",       units="deg")
     optical_depth = Uniform( 3.0, 11.0, "9.7 µm optical depth", units="")
 
-    reads = {}
-    publishes = {"L_agn_torus": "erg/s"}
+    outputs = {"L_agn_torus": "erg/s"}
 
     def load(self, wave):
         return load_skirtor("data/skirtor_v3.h5", wave)
@@ -124,8 +128,8 @@ class CueNebular(SEDModelComponent):
     logZ_gas = Uniform(-2.0,  0.5, "gas metallicity (Z/Zsun)",    units="dex")
     fesc     = Fixed(0.0,          "Lyman continuum escape frac", units="")
 
-    reads = {"ssp_ages_yr": "yr", "age_weights": ""}
-    publishes = {"line_waves": "Å", "line_lums": "erg/s"}
+    inputs = {"ssp_ages_yr": "yr", "age_weights": ""}   # required — stellar always publishes these
+    outputs = {"line_waves": "Å", "line_lums": "erg/s"}
 
     def load(self, wave):
         return load_cue_nn_weights(wave)
@@ -151,19 +155,18 @@ class BOSADust(SEDModelComponent):
     alpha   = Uniform( 1.0, 3.0, "intensity slope",           units="")
     fhot    = Uniform( 0.0, 0.3, "hot dust fraction",         units="")
 
-    reads = {"L_absorbed": "erg/s"}
-    publishes = {"L_ir": "erg/s"}
+    optional_inputs = {"L_ir": "erg/s"}
 
     def load(self, wave):
         return load_bosa("data/bosa.h5", wave)
 
-    def predict(self, p, sed_in, wave, *, L_absorbed):
+    def predict(self, p, sed_in, wave, *, L_ir):
         sed = interpolate_5d(
             self.data.grid,
             (p["logUmin"], p["qpah"], p["logSFR"], p["alpha"], p["fhot"]),
             self.data.axes,
-        ) * L_absorbed
-        return sed_in + sed, {"L_ir": trapz_freq(sed, wave)}
+        ) * L_ir
+        return sed_in + sed, {}
 ```
 
 ---
@@ -197,18 +200,20 @@ The class-level defaults never mutate — they're the prior baseline.
 `BOSADust`. No factory edits, no central registry to maintain — define the
 class anywhere and it's discoverable.
 
-### Cross-component reads
+### Cross-component inputs
 
-For each entry in `reads`, the framework looks up the key in `state.derived`
-and passes it as a keyword argument to `predict()`. Units are checked
-against the upstream `publishes` declaration at compile time. A typo or
-unit drift fails at construction, not at runtime.
+For each entry in `inputs` and `optional_inputs`, the framework looks up the
+key in `state.derived` and passes it as a keyword argument to `predict()`.
+Units are checked against the upstream `outputs` declaration at compile
+time — a typo or unit drift fails at construction, not at runtime. Required
+`inputs` must be publishable by some upstream component; `optional_inputs`
+silently default to `0.0` when nothing upstream provides them.
 
-### Cross-component publishes
+### Cross-component outputs
 
 The dict returned by `predict()`'s second slot is merged into `state.derived`
-with the units declared in `publishes`. Downstream components that list this
-key in their `reads` see it the next step in the chain.
+with the units declared in `outputs`. Downstream components that list this
+key in their `inputs`/`optional_inputs` see it the next step in the chain.
 
 ### Inference
 
@@ -265,15 +270,16 @@ class MyModel(SEDModelComponent):
     my_param = Uniform(lo, hi, "description", units="...")
 
     # Cross-component contract
-    reads     = {"key": "units"}     # what upstream gives me
-    publishes = {"key": "units"}     # what I publish for downstream
+    inputs          = {"key": "units"}   # required reads from upstream
+    optional_inputs = {"key": "units"}   # reads with a 0.0 fallback
+    outputs         = {"key": "units"}   # what I publish for downstream
 
     # Optional: load static data once at compile time
     def load(self, wave):
         return ...                   # available as self.data inside predict()
 
     # Required: the physics
-    def predict(self, p, sed_in, wave, **reads):
+    def predict(self, p, sed_in, wave, **inputs):
         return new_sed, {"key": value, ...}
 
     # Optional: opt in to Taylor refinement under WavePrecomp
@@ -292,10 +298,14 @@ class MyModel(SEDModelComponent):
   rest-frame one. The signature here is rest-frame; IGM stays on the bare
   protocol.
 
-* **Not retroactive.** Existing radio, X-ray, dust attenuation, dust IR,
-  AGN, nebular components keep working through the bare `SEDComponent`
-  protocol. `SEDModelComponent` is opt-in for new code or future ports. We
-  port them one at a time as scope allows.
+* **Not the only registered pattern.** The ADR-0019 migration is complete:
+  every built-in domain (dust attenuation, dust IR, nebular, radio, X-ray,
+  IGM, AGN) now dispatches through the single `_REGISTRY` seam — see
+  [`model-construction.md`](model-construction.md) for the per-domain
+  table. Some of those entries are bare-Protocol adapters registered
+  manually (rich state, e.g. the two-component dust screen); new models
+  should still be authored as `SEDModelComponent` subclasses unless they
+  genuinely don't fit the `predict()` shape.
 
 ---
 

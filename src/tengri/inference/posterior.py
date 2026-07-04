@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import warnings
 from dataclasses import dataclass, field
 
 __all__ = ["Posterior"]
@@ -237,6 +238,19 @@ class Posterior:
         if self.samples is None:
             # MAP: single point
             return self._model.predict_derived(self.params)
+
+        # vmap materializes the whole batch at once, so very large posteriors
+        # can exhaust memory here with no obvious culprit — warn before it hurts.
+        n_samples = next(iter(self.samples.values())).shape[0]
+        if n_samples > 20_000:
+            warnings.warn(
+                f"Computing derived quantities vmaps the SFH forward pass over "
+                f"all {n_samples} posterior samples at once, which can use "
+                "significant memory. Consider thinning first, e.g. "
+                "model.predict_sfh_quantities on result.resample(key, n=2000).",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Sampling: use JIT-compatible vmap for efficient batch computation
         sfh_batch = jax.vmap(self._model.predict_sfh_quantities)(self.samples)

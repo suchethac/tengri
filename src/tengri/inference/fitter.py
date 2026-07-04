@@ -2008,122 +2008,20 @@ class Fitter:
         return "\n".join(lines)
 
     # ── Private method runners ────────────────────────────────────────
-
-    def _run_vi(self, *, key, init_from=None, **kwargs) -> Posterior:
-        """Dispatch to geometric variational inference via NIFTy (nonlinear)."""
-        from tengri.inference.backends.vi.nifty import run_nifty_vi
-
-        kwargs.setdefault("sample_mode", "nonlinear_resample")
-        return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
-
-    def _run_vi_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
-        """Dispatch to metric Gaussian variational inference via NIFTy (linear)."""
-        from tengri.inference.backends.vi.nifty import run_nifty_vi
-
-        kwargs.setdefault("sample_mode", "linear_resample")
-        return run_nifty_vi(self, key=key, init_from=init_from, **kwargs)
-
-    def _run_vi_native(self, *, key, init_from=None, **kwargs) -> Posterior:
-        """Dispatch to native JAX geometric variational inference (experimental)."""
-        from tengri.inference.backends.vi.native import run_native_vi
-
-        kwargs.setdefault("sample_mode", "geovi")
-        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
-
-    def _run_vi_native_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
-        """Dispatch to native JAX MGVI inference (experimental)."""
-        from tengri.inference.backends.vi.native import run_native_vi
-
-        kwargs.setdefault("sample_mode", "linear")
-        return run_native_vi(self, key=key, init_from=init_from, **kwargs)
-
-    def _run_nifty_fast_vi(self, *, key, init_from=None, **kwargs) -> Posterior:
-        """Dispatch to fast geoVI via NIFTy OptimizeVI (no logging, ~35% speedup)."""
-        from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
-
-        kwargs.setdefault("sample_mode", "nonlinear_resample")
-        return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
-
-    def _run_nifty_fast_vi_linear(self, *, key, init_from=None, **kwargs) -> Posterior:
-        """Dispatch to fast MGVI via NIFTy OptimizeVI (no logging, ~35% speedup)."""
-        from tengri.inference.backends.vi.nifty import run_nifty_fast_vi
-
-        kwargs.setdefault("sample_mode", "linear_resample")
-        return run_nifty_fast_vi(self, key=key, init_from=init_from, **kwargs)
-
-    def _run_nss(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to nested slice sampling for Bayesian evidence estimation."""
-        from tengri.inference.backends.evidence import run_nss
-
-        return run_nss(self, key=key, **kwargs)
+    #
+    # Public dispatch does NOT pass through methods here: ``Fitter.run()``
+    # resolves the method name in the backend registry
+    # (``inference/_registration.py``) and calls the registered runner with
+    # an ``InferenceContext`` (ADR-0010). The per-method ``_run_*`` shims
+    # that used to mirror every backend were deleted 2026-07 once the
+    # registry migration completed; ``_run_map`` alone survives because
+    # warm-start paths (native VI, ``_sample_utils``) call it directly.
 
     def _run_map(self, *, key, **kwargs) -> Posterior:
         """Dispatch to MAP optimization via gradient descent (Adam by default)."""
         from tengri.inference.backends.map_dispatch import run_map
 
         return run_map(self, key=key, **kwargs)
-
-    def _run_raytrace(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to Ray Tracing MCMC sampler (Behroozi 2025)."""
-        from tengri.inference.backends.mcmc import run_raytrace
-
-        return run_raytrace(self, key=key, **kwargs)
-
-    def _run_nuts(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to NUTS sampler via BlackJAX for exact posterior sampling."""
-        from tengri.inference.backends.mcmc import run_nuts
-
-        return run_nuts(self, key=key, **kwargs)
-
-    def _run_hmc(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to standard Hamiltonian Monte Carlo (fixed trajectory length)."""
-        from tengri.inference.backends.mcmc import run_hmc
-
-        return run_hmc(self, key=key, **kwargs)
-
-    def _run_dynamic_hmc(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to dynamic HMC with adaptive trajectory length."""
-        from tengri.inference.backends.mcmc import run_dynamic_hmc
-
-        return run_dynamic_hmc(self, key=key, **kwargs)
-
-    def _run_ghmc(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to generalized HMC with partial momentum refresh."""
-        from tengri.inference.backends.mcmc import run_ghmc
-
-        return run_ghmc(self, key=key, **kwargs)
-
-    def _run_mclmc(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to micro-canonical Langevin MCMC (microcanonical dynamics)."""
-        from tengri.inference.backends.mcmc import run_mclmc
-
-        return run_mclmc(self, key=key, **kwargs)
-
-    def _run_adjusted_mclmc(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to MCLMC with Metropolis-Hastings correction."""
-        from tengri.inference.backends.mcmc import run_adjusted_mclmc
-
-        return run_adjusted_mclmc(self, key=key, **kwargs)
-
-    def _run_laplace(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to Laplace approximation (Gaussian posterior at MAP)."""
-        from tengri.inference.backends.map_dispatch import run_laplace
-
-        return run_laplace(self, key=key, **kwargs)
-
-    def _run_pathfinder(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to Pathfinder (L-BFGS trajectory + best Gaussian fit)."""
-        from tengri.inference.backends.map_dispatch import run_pathfinder
-
-        return run_pathfinder(self, key=key, **kwargs)
-
-    def _run_elliptical_slice(self, *, key, **kwargs) -> Posterior:
-        """Dispatch to elliptical slice sampling (gradient-free)."""
-        from tengri.inference.backends.mcmc.elliptical_slice import (
-            run_elliptical_slice_fitter,
-        )
-
-        return run_elliptical_slice_fitter(self, key=key, **kwargs)
 
     # ── Posterior sampling ────────────────────────────────────────────
 

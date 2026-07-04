@@ -17,7 +17,7 @@ edit:
 | Star formation history shape, GP-based bursty SFH | `components/stellar/sfh/` |
 | Stellar spectra, SSP grids, mass remaining | `components/stellar/sps/` |
 | Dust attenuation laws (Calzetti, Charlot+Fall, …) | `components/dust/attenuation.py` |
-| Dust IR emission (modified BB, Casey, Dale, DL07, PAH) | `components/dust/emission.py` |
+| Dust IR emission (modified BB, Casey, Dale, DL07, PAH) | `components/dust/emission/` (`analytic/` closed-form ports, `templates/` library ports) |
 | Nebular continuum + line emission | `components/nebular/` |
 | AGN disc / torus / NLR / BLR | `components/agn/` |
 | IGM transmission | `components/igm/` |
@@ -49,8 +49,10 @@ The base class lives at
 [`components/sed_model_component.py`](../../src/tengri/components/sed_model_component.py).
 For the how-to and the contract, see
 [`docs/dev/sed-model-components.md`](sed-model-components.md); for the
-architectural context (cross-component contract, WavePrecomp, builder
-resolution), see [`forward-model-architecture.md`](forward-model-architecture.md).
+build path, the single `_REGISTRY` dispatch, and the per-domain table, see
+[`model-construction.md`](model-construction.md) (the canonical narrative —
+[`forward-model-architecture.md`](forward-model-architecture.md) is kept as
+a historical design doc).
 
 The bare `SEDComponent` Protocol stays as the fallback for models that don't
 fit the `predict(p, sed_in, wave, **inputs)` shape — stellar (rich state
@@ -93,8 +95,8 @@ Each component owns its own `_params.py` (see the list above and the
 | Find the SpatialComponent Protocol | `protocols/spatial.py` — runtime-checkable mirror of `SEDComponent` |
 | Compose a list of spatial components into one sub-model | `forward/spatial_model.py` — `SpatialModel(components=[...])` satisfies `SubModel` |
 | Join a SED chain with a spatial chain for joint fits | `forward/spatial_model.py` — `SpatialSEDModel(sed=..., spatial=...)` runs SED then Spatial |
-| Understand which kernel (exact / hybrid / fast) is chosen | `forward/_kernels/` |
-| Wire a new physics component into the pipeline | `forward/components_assembly.py` |
+| Understand how the forward pass is compiled (exact vs `WavePrecomp`/`SpectrumPrecomp`) | `forward/sed_model.py` (`approx=` handling + `predict_observables_jit`) and `forward/orchestrator.py` (`run_components`) |
+| Wire a new physics component into the pipeline | `forward/component_factory.py` (`build_components` + the `_resolve_registry_component` seam) |
 | Add filter-preintegration to a new component | `forward/precompute/` (registry) + new `*_precompute.py` next to the component |
 
 ## User-facing public API
@@ -111,6 +113,28 @@ The thin re-export namespaces `tengri.cosmology`, `tengri.units`, `tengri.plot`,
 `tengri.filters` exist purely so you can write
 `from tengri.cosmology import angular_diameter_distance` instead of
 `from tengri.utils.cosmology import …`. They are deliberate.
+
+## Navigating the two big spine files
+
+The two largest modules are deliberately long (splitting them was declined —
+see #847); navigate them by section instead of scrolling:
+
+**`forward/sed_model.py`** (~6k lines) reads top-to-bottom as:
+`WavePrecomp`/`SpectrumPrecomp` approx configs → `SEDModel.__init__` (the
+`_init_<domain>()` chain: observation, ssp, sfh, metallicity, dust, igm,
+nebular, agn, multiwavelength, instrument, cosmology) → internal param
+accessors (`_get_internal_params`, `_get_non_stellar_kwargs`) → prediction
+methods (`predict_sfh` / `predict_rest_sed` / `predict_obs_sed` /
+`predict_photometry` / `predict_spectrum`) → the JIT kernel builder
+(`predict_observables_jit`, `_template_data_for_jit`) → component-chain
+assembly (`_build_component_chain`) → `SEDModel.build()` / `from_config()`
+→ thin `fit*`/`mock*` delegates into `forward/convenience.py`.
+
+**`inference/fitter.py`** (~3k lines): `Fitter.__init__` → method resolution
+(`resolve_method`) → the compile cache (`CompileCache` interplay, smart-lean
+vs persistent) → `Fitter.run()` (dispatches through the backend registry in
+`inference/_registration.py`; every backend receives an `InferenceContext`,
+ADR-0010) → posterior-sample drawing helpers.
 
 ## Where things definitely are NOT
 
