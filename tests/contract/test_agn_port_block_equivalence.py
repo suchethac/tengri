@@ -91,7 +91,13 @@ _SHARED_MODULE = [
     ("blocks.cat3d_wind_torus", "cat3d_torus_model", "components.agn.cat3d_wind"),
     ("blocks.skirtor_torus", "skirtor_model", "components.agn.skirtor"),
     ("blocks.kubota_done_disc", "kd18_disc_model", "components.agn.disc"),
-    ("blocks.nlr_analytic", "nlr_model", "components.agn.nlr"),
+    # NLR had a one-file port too (``nlr_model.AGNNebular``), but it was a
+    # grammar-unreachable orphan with drifted param names (``agn_nlr_cov_frac``
+    # vs the canonical ``agn_nlr_cf``) — the exact silent-divergence footgun
+    # this migration removes — so it was deleted (#897). The canonical NLR
+    # block ``blocks.nlr_analytic`` still wraps the single-source
+    # ``compute_nlr_sed`` from ``components.agn.nlr``; that faithfulness is
+    # pinned by ``test_nlr_analytic_wraps_single_source_kernel`` below.
 ]
 
 
@@ -105,3 +111,17 @@ def test_block_and_port_share_one_physics_module(block_mod, port_mod, physics_mo
     port_src = inspect.getsource(importlib.import_module(f"tengri.components.agn.{port_mod}"))
     assert physics_module in block_src, f"{block_mod} no longer imports {physics_module}"
     assert physics_module in port_src, f"{port_mod} no longer imports {physics_module}"
+
+
+def test_nlr_analytic_wraps_single_source_kernel():
+    """After #897 removed the redundant NLR one-file port, the canonical NLR
+    block ``blocks.nlr_analytic`` must still wrap the single-source physics
+    kernel ``compute_nlr_sed`` from ``components.agn.nlr`` — so there is one
+    source of truth for the analytic NLR spectrum and no second copy to drift.
+    """
+    import inspect
+
+    block = importlib.import_module("tengri.components.agn.blocks.nlr_analytic")
+    src = inspect.getsource(block)
+    assert "from tengri.components.agn.nlr import compute_nlr_sed" in src
+    assert "compute_nlr_sed(" in src
