@@ -493,7 +493,10 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
         "powerlaw_disc",
         "silva04",
         "cat3d_wind",
-        "agn_nlr",
+        # ``agn_nlr`` (nlr_model.AGNNebular) was deleted in #897 — a grammar-
+        # unreachable orphan port with drifted param names (agn_nlr_cov_frac vs
+        # the canonical agn_nlr_cf) and bit-identical physics to the reachable
+        # blocks/nlr_analytic. The analytic NLR ships via AGN_BLOCKS, not a port.
         # Nebular — cue/cloudy/cb19 dispatch to the canonical NebularSEDComponent
         # engine + backend; the port duplicates (cue_emulator/cloudy_grid/cb19)
         # were deleted (#738, Phase 3b). mappings/shock remain standalone ports.

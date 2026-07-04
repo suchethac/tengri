@@ -17,6 +17,20 @@ inclination angle.
 
 All functions are pure JAX and JIT-compilable.
 
+NLR module map (#897) — these are **distinct**, not duplicates
+---------------------------------------------------------------
+* ``nlr.py`` (this module) — the single-source **analytic** NLR physics
+  kernel (``compute_nlr_sed``, Richardson+2014 line ratios). Consumed by the
+  composable block ``blocks/nlr_analytic.py`` (the canonical, grammar-reachable
+  path via ``agn={'nlr': {'type': 'analytic'}}``).
+* ``nlr_cloudy.py`` — grid-backed (Feltre / Synthesizer CLOUDY) NLR **adapters**.
+  A *different* physics source (photoionization grids, not analytic line
+  ratios), consumed by ``blocks/nlr_synthesizer*.py``. Not a duplicate.
+* (removed) ``nlr_model.py`` — a one-file ``SEDModelComponent`` port that
+  wrapped this kernel but was a grammar-unreachable orphan with drifted param
+  names (``agn_nlr_cov_frac`` vs the canonical ``agn_nlr_cf``); deleted in #897
+  since ``blocks/nlr_analytic`` already delivers this physics bit-identically.
+
 References
 ----------
 - Richardson et al. 2014, ApJ, 786, 87 (NLR emission-line template)
