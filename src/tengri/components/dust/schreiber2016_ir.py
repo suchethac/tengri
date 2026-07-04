@@ -76,9 +76,11 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
     **JIT-compatible**: yes — all operations in :meth:`predict` are ``jnp``
     primitives.
 
-    **Parameter discovery**: Free parameters (``tdust``, ``fpah``)
-    are auto-discovered; :meth:`declared_parameters` constructs tuples with
-    units and descriptions.
+    **Parameter discovery**: Free parameters (``T``, ``f_pah``) are
+    auto-discovered; :meth:`declared_parameters` constructs tuples with
+    units and descriptions. Canonical names ``dust_T`` / ``dust_f_pah`` (#849);
+    the old ``dust_tdust`` / ``dust_fpah`` spellings resolve via
+    ``_LEGACY_PARAM_ALIASES`` with a deprecation warning.
 
     **Pipeline ordering**: This component MUST run after dust attenuation.
     Typical order: ``[Stellar, Nebular, DustAttenuation, Schreiber2016, IGM, Radio]``.
@@ -88,9 +90,11 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
     parameter_prefix = "dust_"
     config: Schreiber2016IRConfig = Schreiber2016IRConfig()
 
-    # Free parameters — auto-discovered by base class
-    tdust = Uniform(15.0, 99.0, default=25.0, description="Dust temperature", units="K")
-    fpah = Uniform(0.0, 1.0, default=0.05, description="PAH fraction", units="dimensionless")
+    # Free parameters — auto-discovered by base class. Canonical names (#849):
+    # ``dust_T`` (was ``dust_tdust``) + ``dust_f_pah`` (was ``dust_fpah``);
+    # the old spellings resolve via _LEGACY_PARAM_ALIASES.
+    T = Uniform(15.0, 99.0, default=25.0, description="Dust temperature", units="K")
+    f_pah = Uniform(0.0, 1.0, default=0.05, description="PAH fraction", units="dimensionless")
 
     # Cross-component contract
     inputs: ClassVar = {"L_ir": "erg/s"}
@@ -164,8 +168,8 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         ----------
         p : mapping[str, ndarray]
             Sliced parameters (prefix stripped):
-            - ``p["tdust"]``: dust temperature [K]
-            - ``p["fpah"]``: PAH fraction [dimensionless]
+            - ``p["T"]``: dust temperature [K]
+            - ``p["f_pah"]``: PAH fraction [dimensionless]
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (ignored; Schreiber2016 emission is computed
             from L_ir independently).
@@ -203,23 +207,23 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         tdust_grid = templates["tdust_grid"]
 
         # Clip parameters to grid bounds
-        dust_tdust_c = jnp.clip(p["tdust"], tdust_grid[0], tdust_grid[-1])
-        dust_fpah_c = jnp.clip(p["fpah"], 0.0, 1.0)
+        T_c = jnp.clip(p["T"], tdust_grid[0], tdust_grid[-1])
+        f_pah_c = jnp.clip(p["f_pah"], 0.0, 1.0)
 
-        # Linear interpolation index in tdust
+        # Linear interpolation index in temperature
         i_t = jnp.clip(
-            jnp.searchsorted(tdust_grid, dust_tdust_c) - 1,
+            jnp.searchsorted(tdust_grid, T_c) - 1,
             0,
             len(tdust_grid) - 2,
         )
-        ft = (dust_tdust_c - tdust_grid[i_t]) / (tdust_grid[i_t + 1] - tdust_grid[i_t])
+        ft = (T_c - tdust_grid[i_t]) / (tdust_grid[i_t + 1] - tdust_grid[i_t])
 
         # Interpolate both continuum and PAH at the requested temperature
         continuum_interp = (1.0 - ft) * continuum[i_t] + ft * continuum[i_t + 1]
         pah_interp = (1.0 - ft) * pah[i_t] + ft * pah[i_t + 1]
 
         # Mix continuum and PAH
-        template = (1.0 - dust_fpah_c) * continuum_interp + dust_fpah_c * pah_interp
+        template = (1.0 - f_pah_c) * continuum_interp + f_pah_c * pah_interp
 
         # Interpolate onto target wavelength grid
         sed = jnp.interp(wave, tmpl_wave, template, left=0.0, right=0.0)

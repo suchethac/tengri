@@ -83,17 +83,15 @@ def _draine2021_available() -> bool:
 )
 def test_schreiber2018_port_matches_loader_bit_exact():
     """The schreiber2018 SEDModelComponent port reproduces the
-    ``DUST_EMISSION_MODELS`` loader exactly on the shipped grid. The loader
-    names the params ``dust_T`` / ``dust_f_pah``; the port strips to
-    ``tdust`` / ``fpah`` — same physical values, so the outputs are identical."""
+    ``DUST_EMISSION_MODELS`` loader exactly on the shipped grid. Both the loader
+    and the port now use the canonical ``dust_T`` / ``dust_f_pah`` names (#849),
+    stripping to ``T`` / ``f_pah`` on the port."""
     preload_emission_model("schreiber2018")
     loader = DUST_EMISSION_MODELS["schreiber2018"]
     golden = np.asarray(loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05), dtype=np.float64)
 
     comp = _REGISTRY["schreiber2018"]()
-    sed_out, _ = comp.predict(
-        {"tdust": 30.0, "fpah": 0.05}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR
-    )
+    sed_out, _ = comp.predict({"T": 30.0, "f_pah": 0.05}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR)
     np.testing.assert_allclose(np.asarray(sed_out), golden, rtol=1e-14, atol=1e-15)
 
 

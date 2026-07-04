@@ -2082,13 +2082,14 @@ class SEDModel:
             kw["dust_qpah"] = p.get("dust_qpah", 2.5)
             kw["dust_lgU"] = p.get("dust_lgU", 0.0)
             # THEMIS qhac + radiation-field slope alpha, Dale AGN fraction,
-            # Schreiber tabulated (tdust, fpah) and MBB epsilon — forwarded so
-            # they reach the emission kernel (CIGALE parity, 2026-06).
+            # Schreiber PAH fraction and MBB epsilon — forwarded so they reach
+            # the emission kernel (CIGALE parity, 2026-06). Schreiber temperature
+            # rides the canonical ``dust_T`` (forwarded above); ``dust_f_pah`` is
+            # the canonical PAH-fraction name (#849).
             kw["dust_qhac"] = p.get("dust_qhac", 0.17)
             kw["dust_alpha"] = p.get("dust_alpha", 2.0)
             kw["dust_frac_agn"] = p.get("dust_frac_agn", 0.0)
-            kw["dust_tdust"] = p.get("dust_tdust", 25.0)
-            kw["dust_fpah"] = p.get("dust_fpah", 0.05)
+            kw["dust_f_pah"] = p.get("dust_f_pah", 0.05)
             kw["dust_epsilon_mbb"] = p.get("dust_epsilon_mbb", 1.0)
         # AGN (full params for exact evaluation)
         if self._agn_model is not None:
@@ -4651,8 +4652,7 @@ class SEDModel:
             "dust_qhac",
             "dust_alpha",
             "dust_frac_agn",
-            "dust_tdust",
-            "dust_fpah",
+            "dust_f_pah",
             "dust_epsilon_mbb",
             "dust_f_cold",
             "dust_L_agn_ir",
