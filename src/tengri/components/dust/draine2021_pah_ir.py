@@ -202,7 +202,14 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
 
             template_path = os.environ.get(PAHSPEC_PATH_ENV)
             if template_path is None:
-                template_path = _find_data_file(DRAINE2021_PAH_DEFAULT_PATH)
+                # ``_find_data_file`` searches the ``_DATA_CANDIDATES`` dirs
+                # (each already ending in ``/data``) for a BARE filename, so
+                # pass the basename — the ``data/`` prefix in
+                # ``DRAINE2021_PAH_DEFAULT_PATH`` (kept for the direct
+                # ``Path(...)`` fallback in ``draine2021_pah.py``) would
+                # otherwise produce a doubled ``data/data/…`` miss and the
+                # component would silently emit zeros (#852).
+                template_path = _find_data_file(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
 
         if template_path is None:
             warnings.warn(
