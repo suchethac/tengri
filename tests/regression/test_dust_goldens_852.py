@@ -53,16 +53,14 @@ _GOLDEN_DIR = Path(__file__).parent / "data" / "dust_emission_golden"
 
 
 def _schreiber2018_available() -> bool:
-    """``preload_emission_model`` is lazy and does not raise on a missing grid —
-    the actual ``loader(...)`` call is what fails. Gate on a real trial call so
-    the test skips (not fails) when the HDF5 grid is absent (e.g. in CI)."""
-    try:
-        preload_emission_model("schreiber2018")
-        loader = DUST_EMISSION_MODELS["schreiber2018"]
-        loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05)
-        return True
-    except Exception:
-        return False
+    """Gate on the grid FILE directly. ``preload_emission_model`` is lazy (does
+    not raise on a missing grid); a trial ``loader(...)`` call would fail *and*
+    leave the schreiber2018 lazy-loader entry in an inconsistent state that
+    pollutes later tests (e.g. ``test_dust_energy_balance``). Checking the file
+    up front skips cleanly without touching the loader."""
+    from tengri.components.dust.emission_templates import _find_data_file
+
+    return _find_data_file("schreiber2018_templates.h5") is not None
 
 
 def _draine2021_available() -> bool:
