@@ -91,3 +91,46 @@ def test_every_backend_param_has_default(backend):
         if lo is not None and hi is not None and not (lo <= float(prior.default) <= hi):
             offenders.append(f"{decl.name} default={prior.default} outside [{lo}, {hi}]")
     assert not offenders, f"backend {backend!r} has undefaulted params: {offenders}"
+
+
+def test_cue_ionspec_gas_single_source_of_truth():
+    """#887: the Cue ionizing-spectrum + gas-extra params are declared ONCE
+    (in ``components/nebular/_params.py``) and consumed by BOTH construction
+    paths — ``declared_parameters()`` (SEDComponent / grammar) and the
+    flat-builder bucket (``_resolve_lazy_bucket``). Guard that the two paths
+    report byte-identical priors, defaults, and bounds so they cannot drift
+    (previously the bucket carried ``None`` priors while the component
+    re-declared the same params inline with ``Uniform`` defaults)."""
+    from tengri.components.nebular._params import (
+        CUE_GAS_EXTRA_PARAMS,
+        CUE_IONSPEC_PARAMS,
+    )
+    from tengri.components.nebular.component import (
+        NebularSEDComponent,
+        NebularSEDComponentConfig,
+    )
+    from tengri.parameters._builders import _resolve_lazy_bucket
+
+    canonical = {d.name: d for d in (*CUE_IONSPEC_PARAMS, *CUE_GAS_EXTRA_PARAMS)}
+    assert len(canonical) == 10  # 7 ionspec + 3 gas
+
+    # (a) declared_parameters() returns the canonical declarations verbatim.
+    comp = NebularSEDComponent(config=NebularSEDComponentConfig(backend="cue"))
+    declared = {d.name: d for d in comp.declared_parameters()}
+    for name, cdecl in canonical.items():
+        assert declared[name] is cdecl, f"{name}: declared_parameters is not the canonical decl"
+
+    # (b) the flat-builder bucket derives from the SAME canonical declarations:
+    #     its resolved prior/default/bounds match (no None-vs-Uniform drift).
+    bucket = {
+        **_resolve_lazy_bucket("_CUE_IONSPEC_PARAMS"),
+        **_resolve_lazy_bucket("_CUE_GAS_EXTRA_PARAMS"),
+    }
+    for name, cdecl in canonical.items():
+        _desc, _check, _err, prior = bucket[name]
+        assert prior is cdecl.prior, (
+            f"{name}: bucket prior diverged from the canonical declaration"
+        )
+        assert prior is not None and prior.default is not None, (
+            f"{name}: bucket path lost the physical default (the #887 None-fallback bug)"
+        )
