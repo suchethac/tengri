@@ -19,21 +19,20 @@ bucket in ``tengri.parameters._param_defs``:
 - :data:`SHOCK_PARAMS` → ``_SHOCK_PARAMS`` (MAPPINGS shock-emission
   backend: velocity, density, B/√n, abundance, component).
 
-The CUE and SHOCK tuples carry ``None`` priors deliberately — the
-upstream registry only registers them when the user provides them
-explicitly. ``_bucket_from_declarations`` preserves the ``None``.
+Single source of truth (#887)
+-----------------------------
+:data:`CUE_IONSPEC_PARAMS` and :data:`CUE_GAS_EXTRA_PARAMS` are now the ONE
+canonical declaration of the Cue ionizing-spectrum + gas-extra priors,
+defaults, bounds, and descriptions. Both the flat-builder bucket (via
+``_bucket_from_declarations``) and
+:meth:`NebularSEDComponent.declared_parameters` (which returns these tuples
+verbatim) consume them, so the two paths cannot drift. Previously the bucket
+carried ``None`` priors while the component re-declared the same params inline
+with ``Uniform`` priors + physical defaults — the divergence #887 removed.
 
-Why not also share with `declared_parameters`
----------------------------------------------
-:meth:`NebularSEDComponent.declared_parameters` performs backend
-dispatch (``cloudy_grid`` vs ``cue`` vs ``shock`` vs ``baked_in``) and
-intentionally uses ``Uniform`` defaults for the SEDComponent /
-nested-dict-recipe path so users sampling those parameters get a
-plausible range out of the box. The flat-builder bucket here uses
-``Fixed`` defaults so legacy notebooks keep behaving like
-"everything fixed unless overridden". The two priors differ **by
-design** — not drift. Unifying them is deferred to a dedicated nebular
-PR; this file is currently only the flat-builder source of truth.
+The flat-builder still registers these Cue params only when the user provides
+them explicitly (an opt-in policy on the ``Parameters`` path, unchanged); the
+canonical prior/default is used when a param IS registered.
 """
 
 from __future__ import annotations
@@ -166,77 +165,98 @@ ELINE_BROAD_PARAMS: tuple[ParamDeclaration, ...] = (
 # Cue-specific optional params — only registered if the user provides
 # them explicitly. The ``None`` prior is intentional: the registry
 # treats absence-of-default as "must come from user kwargs".
+# Canonical single source (#887) for the 7 Cue ionizing-spectrum shape
+# parameters — consumed BOTH by the flat-builder bucket (via
+# ``_bucket_from_declarations``) AND by
+# ``NebularSEDComponent.declared_parameters`` (which returns these verbatim).
+# Priors + physical defaults live here only; previously the component
+# re-declared them inline with the same bounds but a separate default, and the
+# bucket carried ``None``, so the two could drift (that was the #887 target).
+# Defaults = a fiducial young-starburst ionizing spectrum: the 1-Myr solar-Z
+# BPASS SSP fit with ``fit_ionizing_spectrum`` (#845), so ``'*': FIXED`` yields a
+# physical ionizing SED instead of the prior midpoint (which, for these
+# correlated slopes, would be unphysical — #477 / #478).
+#
+# NOTE: these prior BOUNDS are the user-settable range and are DISTINCT from
+# ``ionizing_spectrum.py::_CLIP_RANGES`` — the tighter Cue-emulator training
+# grid used to clip the auto-derived (SSP-fit) coefficients against
+# extrapolation. They are different quantities and are intentionally NOT
+# unified.
 CUE_IONSPEC_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "ionspec_index1",
-        None,
-        "Cue ionizing spectrum slope segment 1 (HeII, 1-228A)",
+        Uniform(0.0, 50.0, default=22.21),
+        "Cue ionizing slope segment 1 (HeII, 1-228 Å) [dimensionless]",
         lambda lo, hi: lo >= 0 and hi <= 50,
         "must be in [0, 50]",
     ),
     ParamDeclaration(
         "ionspec_index2",
-        None,
-        "Cue ionizing spectrum slope segment 2 (OII, 228-353A)",
+        Uniform(-1.0, 35.0, default=10.52),
+        "Cue ionizing slope segment 2 (OII, 228-353 Å) [dimensionless]",
         lambda lo, hi: lo >= -1 and hi <= 35,
         "must be in [-1, 35]",
     ),
     ParamDeclaration(
         "ionspec_index3",
-        None,
-        "Cue ionizing spectrum slope segment 3 (HeI, 353-504A)",
+        Uniform(-2.0, 20.0, default=5.69),
+        "Cue ionizing slope segment 3 (HeI, 353-504 Å) [dimensionless]",
         lambda lo, hi: lo >= -2 and hi <= 20,
         "must be in [-2, 20]",
     ),
     ParamDeclaration(
         "ionspec_index4",
-        None,
-        "Cue ionizing spectrum slope segment 4 (HI, 504-912A)",
+        Uniform(-2.0, 10.0, default=2.15),
+        "Cue ionizing slope segment 4 (HI, 504-912 Å) [dimensionless]",
         lambda lo, hi: lo >= -2 and hi <= 10,
         "must be in [-2, 10]",
     ),
     ParamDeclaration(
         "ionspec_logLratio1",
-        None,
-        "Cue log luminosity ratio seg2/seg1",
+        Uniform(-1.0, 12.0, default=2.78),
+        "Cue log luminosity ratio seg2/seg1 [dimensionless]",
         lambda lo, hi: lo >= -1 and hi <= 12,
         "must be in [-1, 12]",
     ),
     ParamDeclaration(
         "ionspec_logLratio2",
-        None,
-        "Cue log luminosity ratio seg3/seg2",
+        Uniform(-1.0, 3.0, default=0.47),
+        "Cue log luminosity ratio seg3/seg2 [dimensionless]",
         lambda lo, hi: lo >= -1 and hi <= 3,
         "must be in [-1, 3]",
     ),
     ParamDeclaration(
         "ionspec_logLratio3",
-        None,
-        "Cue log luminosity ratio seg4/seg3",
+        Uniform(-1.0, 3.0, default=0.56),
+        "Cue log luminosity ratio seg4/seg3 [dimensionless]",
         lambda lo, hi: lo >= -1 and hi <= 3,
         "must be in [-1, 3]",
     ),
 )
 
+# Canonical single source (#887) for the 3 Cue gas-property knobs beyond
+# logU / logZ_gas. Defaults: n_H = 100 cm^-3 (typical HII region), solar [N/O]
+# and [C/O] (log ratios = 0.0). See :data:`CUE_IONSPEC_PARAMS` for the
+# consumed-by-both-paths rationale.
 CUE_GAS_EXTRA_PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "gas_logn",
-        None,
-        "Cue gas density log10(n_H/cm^-3)",
+        Uniform(0.0, 5.0, default=2.0),
+        "Cue gas density log10(n_H/cm^-3) [dimensionless]",
         lambda lo, hi: lo >= 0 and hi <= 5,
         "must be in [0, 5]",
     ),
     ParamDeclaration(
         "gas_logno",
-        None,
-        "Cue [N/O] abundance ratio (dex)",
+        Uniform(-2.0, 2.0, default=0.0),
+        "Cue [N/O] abundance ratio [dex]",
         lambda lo, hi: lo >= -2 and hi <= 2,
         "must be in [-2, 2]",
     ),
     ParamDeclaration(
         "gas_logco",
-        None,
-        "Cue [C/O] abundance ratio (dex)",
+        Uniform(-2.0, 2.0, default=0.0),
+        "Cue [C/O] abundance ratio [dex]",
         lambda lo, hi: lo >= -2 and hi <= 2,
         "must be in [-2, 2]",
     ),

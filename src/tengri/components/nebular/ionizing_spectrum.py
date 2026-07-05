@@ -335,7 +335,15 @@ HI_LIMIT = 911.76  # Lyman limit (physical: 911.7633 A)
 # Segment boundaries: [1, HeII, OII, HeI, HI]
 SEGMENT_EDGES = np.array([1.0, HEII_EDGE, OII_EDGE, HEI_EDGE, HI_LIMIT])
 
-# Cue parameter ranges (for clipping)
+# Cue-emulator TRAINING-GRID bounds, used to clip the auto-derived (SSP-fit)
+# ionspec coefficients so the Cue neural emulator is never evaluated outside the
+# grid it was trained on (extrapolation → garbage). These are DISTINCT from, and
+# deliberately NOT unified with, the user-facing prior bounds in
+# ``components/nebular/_params.py::CUE_IONSPEC_PARAMS`` (e.g. index1 clips to
+# [1, 42] here vs. the prior range [0, 50] there): the prior range is what a
+# user may sample, the clip range is what the emulator can faithfully evaluate.
+# Two different quantities — see #887 (which considered deriving one from the
+# other and confirmed they must stay separate).
 _CLIP_RANGES = {
     "ionspec_index1": (1.0, 42.0),
     "ionspec_index2": (-0.3, 30.0),
