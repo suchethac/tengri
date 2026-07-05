@@ -1,10 +1,10 @@
 {
-  "src/tengri/forward/sed_model.py": 5960,
-  "src/tengri/inference/fitter.py": 3191,
+  "src/tengri/forward/sed_model.py": 5977,
+  "src/tengri/inference/fitter.py": 3089,
   "src/tengri/components/dust/attenuation.py": 1874,
   "src/tengri/parameters/groups.py": 2551,
   "src/tengri/components/dust/emission_templates.py": 2419,
-  "src/tengri/inference/posterior.py": 2335,
+  "src/tengri/inference/posterior.py": 2349,
   "src/tengri/components/agn/disc.py": 2138,
   "src/tengri/forward/prediction.py": 2118,
   "src/tengri/inference/hierarchical.py": 2076,

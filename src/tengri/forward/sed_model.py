@@ -30,6 +30,15 @@ Usage::
     model = SEDModel(spec, ssp, filters=filters)
     params = spec.sample(jax.random.PRNGKey(0))
     photometry = model.predict_photometry(params)
+
+Comments in this module reference historical "Phase" labels from the 2026
+precompute rollout. The decoder ring: Phase 2 = approx settings owned by
+components; Phase 3b/3c = the WavePrecomp SSP x filter photometry LUT
+(fixed-z scalar -> free-z ztable); Phase 3d = the typed
+``approx=WavePrecomp(...)`` construction contract (dict/bool/str forms
+removed); Phase 5 = the SpectrumPrecomp per-pixel LUT; Phase 6 = removal of
+the legacy hybrid kernels (``predict_observables_jit`` is the single
+forward path).
 """
 
 from __future__ import annotations
@@ -790,9 +799,17 @@ class SEDModel:
                 self._cached_component_chain = chain
                 self._energy_balance_lut(chain)
                 self._dust_emission_band_response(chain)
-            except Exception:
+            except Exception as e:
                 # Any build-time failure leaves the LUT disabled — the exact
-                # full-wave energy-balance path is the correct fallback.
+                # full-wave energy-balance path is the correct fallback, but
+                # it forfeits the speedup the astronomer opted into, so say so.
+                warnings.warn(
+                    f"WavePrecomp energy-balance LUT precompute failed ({e!r}); "
+                    "falling back to the exact energy-balance path (correct, "
+                    "but without the precomputed-LUT speedup).",
+                    UserWarning,
+                    stacklevel=2,
+                )
                 self._energy_balance_lut_cache = None
                 self._dust_band_response_cache = None
 
