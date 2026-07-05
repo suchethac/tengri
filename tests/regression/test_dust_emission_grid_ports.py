@@ -222,44 +222,11 @@ class TestDraineLi2014GridPort:
         np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
 
 
-class TestAstrodustGridPort:
-    """Bit-exact regression for astrodust SEDModelComponent port."""
-
-    def test_astrodust_bit_exact(
-        self,
-        golden_data: dict,
-        golden_dir: Path,
-        wave_grid: jnp.ndarray,
-        L_ir: float,
-    ):
-        """AstrodustIRSEDComponent matches closure exactly."""
-        from tengri.components.sed_model_component import _REGISTRY
-
-        # Skip if golden is missing or was skipped
-        templates = golden_data.get("templates", {})
-        if "astrodust" not in templates:
-            pytest.skip("astrodust golden data not available")
-
-        golden_npy = golden_dir / "astrodust.npy"
-        if not golden_npy.exists():
-            pytest.skip(f"Golden file not found: {golden_npy}")
-
-        # Load component and golden
-        assert "astrodust" in _REGISTRY
-        comp_cls = _REGISTRY["astrodust"]
-        comp = comp_cls()
-        golden = np.load(golden_npy)
-
-        # Extract params from golden
-        params = templates["astrodust"]["params"]
-        p_stripped = {k.replace("dust_", ""): v for k, v in params.items()}
-
-        # Predict
-        sed_in = jnp.zeros_like(wave_grid)
-        sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
-
-        # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+# NOTE (#871): the astrodust port was re-parameterized from the DL07-costume
+# (umin/gamma/qpah) to the faithful Hensley & Draine 2023 native lgU model. Its
+# bit-exact regression now lives in tests/regression/test_dust_goldens_852.py
+# (port-native golden, energy-balance, no-op guard) — the lazy_loader golden path
+# used here no longer applies.
 
 
 class TestBosaGridPort:

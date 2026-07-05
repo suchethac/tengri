@@ -36,7 +36,9 @@ def test_every_concrete_component_implements_citations() -> None:
     from tengri.components.agn.component import AGNSEDComponent
     from tengri.components.agn.grahsp.component import GRAHSPSEDComponent
     from tengri.components.dust.component import DustAttenuationSEDComponent
-    from tengri.components.dust.emission_component import DustEmissionSEDComponent
+    from tengri.components.dust.emission.analytic.modified_blackbody import (
+        ModifiedBlackbodyIRSEDComponent,
+    )
     from tengri.components.dust.two_component import DustSEDComponent
     from tengri.components.igm.component import IGMSEDComponent
     from tengri.components.nebular.component import NebularSEDComponent
@@ -47,7 +49,7 @@ def test_every_concrete_component_implements_citations() -> None:
     concrete = (
         AGNSEDComponent,
         DustAttenuationSEDComponent,
-        DustEmissionSEDComponent,
+        ModifiedBlackbodyIRSEDComponent,
         DustSEDComponent,
         GRAHSPSEDComponent,
         IGMSEDComponent,

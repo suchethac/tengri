@@ -13,7 +13,7 @@ at Harvard Dataverse (doi:10.7910/DVN/3B6E6S):
 Three emission components are stored separately: ``astrodust``,
 ``pah``, and their sum (``total``).  Per-H normalization; downstream
 energy-balance rescaling against ``L_ir`` is handled by
-:class:`tengri.components.dust.emission_component.DustEmissionSEDComponent`.
+:class:`tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent`.
 
 Reference
 ---------
@@ -151,7 +151,7 @@ def missing_astrodust_template_message(path: Path) -> str:
         f"doi:10.7910/DVN/3B6E6S and packs HDU 7 (EMISSION) into a\n"
         f"compact HDF5 (~750 KB).  Override the location by setting\n"
         f"{ASTRODUST_HD23_PATH_ENV} or by passing template_path= to\n"
-        f"DustEmissionSEDComponentConfig."
+        f"AstrodustIRConfig."
     )
 
 

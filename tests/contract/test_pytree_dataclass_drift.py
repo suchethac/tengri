@@ -181,13 +181,6 @@ _KNOWN_STATIC_ARRAY_FIELDS: frozenset[str] = frozenset(
         "GRAHSPSEDComponentState.torus_mn12_si_lumin",
         "GRAHSPSEDComponentState.disc_wave_nm",
         "GRAHSPSEDComponentState.disc_lumin",
-        "DustEmissionSEDComponentState.pahspec_lgU_grid",
-        "DustEmissionSEDComponentState.pahspec_lnu_template",
-        "DustEmissionSEDComponentState.pahspec_norm_per_lgU",
-        "DustEmissionSEDComponentState.astrodust_lgU_grid",
-        "DustEmissionSEDComponentState.astrodust_lnu_template",
-        "DustEmissionSEDComponentState.astrodust_norm_per_lgU",
-        "DustEmissionSEDComponentState.astrodust_lnu_spinning",
         "DustAttenuationSEDComponentState.k_lambda",
     }
 )

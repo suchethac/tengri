@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for the Hensley & Draine 2023 Astrodust+PAH template branch.
+"""Tests for the Hensley & Draine 2023 Astrodust+PAH emission port.
 
-Exercises the ``template="astrodust"`` dispatch on
-:class:`~tengri.components.dust.emission_component.DustEmissionSEDComponent`
-against the real HDF5 grid built from the Harvard Dataverse FITS file.
+Exercises :class:`~tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent`
+(the faithful native ``lgU`` interpolation of the published grid; #871) against
+the real HDF5 grid built from the Harvard Dataverse FITS file, plus the shared
+loader in :mod:`tengri.components.dust.astrodust_hd23`.
 """
 
 from __future__ import annotations
@@ -31,25 +32,27 @@ def fixture_path():
 
 @pytest.fixture(scope="module")
 def component(fixture_path):
-    from tengri.components.dust.emission_component import (
-        DustEmissionSEDComponent,
-        DustEmissionSEDComponentConfig,
+    from tengri.components.dust.emission.templates.astrodust import (
+        AstrodustIRConfig,
+        AstrodustIRSEDComponent,
     )
 
-    cfg = DustEmissionSEDComponentConfig(
-        template="astrodust",
-        astrodust_component="total",
-        astrodust_include_spinning_dust=False,
-        astrodust_template_path=fixture_path,
+    cfg = AstrodustIRConfig(
+        component="total",
+        spinning_dust=False,
+        template_path=fixture_path,
     )
-    return DustEmissionSEDComponent(config=cfg)
+    return AstrodustIRSEDComponent(config=cfg)
 
 
 @pytest.fixture(scope="module")
-def precomputed(component):
+def loaded(component):
     wave_aa = jnp.asarray(np.geomspace(1.0e3, 3.0e8, 1500))
-    state = component.precompute(wave_grid=wave_aa)
-    return state, wave_aa
+    component.data = component.load(wave_aa)
+    return component.data, wave_aa
+
+
+# ── shared loader (tengri.components.dust.astrodust_hd23) ──────────────
 
 
 def test_loader_axes_match_published_grid(fixture_path):
@@ -97,32 +100,40 @@ def test_dust_mass_constants(fixture_path):
     assert tpl.M_PAH_over_M_H == pytest.approx(0.000659, rel=1e-3)
 
 
+# ── AstrodustIRSEDComponent port ──────────────────────────────────────
+
+
 def test_declared_parameter_is_lgU_only(component):
     decls = component.declared_parameters()
     names = [d.name for d in decls]
     assert names == ["dust_lgU"]
 
 
-def test_precompute_state_shape(precomputed):
-    state, wave_aa = precomputed
-    chex.assert_shape(state.astrodust_lgU_grid, (91,))
-    chex.assert_shape(state.astrodust_lnu_template, (91, wave_aa.size))
-    chex.assert_shape(state.astrodust_norm_per_lgU, (91,))
+def test_load_returns_grid(loaded):
+    data, wave_aa = loaded
+    chex.assert_shape(data["lgU_grid"], (91,))
+    chex.assert_shape(data["lnu_template"], (91, wave_aa.size))
+    chex.assert_shape(data["norm_per_lgU"], (91,))
+    # Norms are non-negative; the lowest-lgU (very weak field) slices emit
+    # essentially nothing, so their frequency integral underflows to 0 — the
+    # predict() rescale guards this with jnp.where(norm > 0, ...).
+    assert (np.asarray(data["norm_per_lgU"]) >= 0).all()
+    assert np.asarray(data["norm_per_lgU"]).max() > 0
     # No spinning dust requested -> zeros.
     np.testing.assert_array_equal(
-        np.asarray(state.astrodust_lnu_spinning),
+        np.asarray(data["lnu_spinning"]),
         np.zeros(wave_aa.size),
     )
 
 
-def test_apply_energy_balance(component, precomputed):
+def test_apply_energy_balance(component, loaded):
     """int L_nu d nu == L_ir within trapezoid discretization tolerance."""
     from tengri.protocols.component import ForwardState
 
-    state, wave_aa = precomputed
+    _data, wave_aa = loaded
     L_ir = 5.0e44
     pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
-    out = component.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}, precomputed=state)
+    out = component.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0})
     L_nu = np.asarray(out.derived["sed_dust_ir"])
     nu = 2.99792458e18 / np.asarray(wave_aa)
     order = np.argsort(nu)
@@ -130,15 +141,15 @@ def test_apply_energy_balance(component, precomputed):
     np.testing.assert_allclose(integral, L_ir, rtol=0.02)
 
 
-def test_apply_jit_and_grad(component, precomputed):
+def test_apply_jit_and_grad(component, loaded):
     from tengri.protocols.component import ForwardState
 
-    state, wave_aa = precomputed
+    _data, wave_aa = loaded
 
     @jax.jit
     def _run(L_ir, lgU):
         pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
-        out = component.apply(pipeline, {"dust_lgU": lgU, "redshift": 0.0}, precomputed=state)
+        out = component.apply(pipeline, {"dust_lgU": lgU, "redshift": 0.0})
         return jnp.sum(out.sed_intrinsic)
 
     val = float(_run(jnp.asarray(1.0e44), jnp.asarray(0.0)))
@@ -148,42 +159,29 @@ def test_apply_jit_and_grad(component, precomputed):
 
 
 def test_pah_only_component(fixture_path):
-    """Selecting ``astrodust_component="pah"`` returns only the PAH
-    contribution; should be smaller than ``"total"`` everywhere by
-    design."""
-    from tengri.components.dust.emission_component import (
-        DustEmissionSEDComponent,
-        DustEmissionSEDComponentConfig,
+    """Selecting ``component="pah"`` returns only the PAH contribution;
+    both renormalize to the same L_ir, so the test checks finiteness +
+    positivity (shape-only)."""
+    from tengri.components.dust.emission.templates.astrodust import (
+        AstrodustIRConfig,
+        AstrodustIRSEDComponent,
     )
     from tengri.protocols.component import ForwardState
 
     wave_aa = jnp.asarray(np.geomspace(1.0e4, 1.0e7, 800))
-
-    cfg_total = DustEmissionSEDComponentConfig(
-        template="astrodust",
-        astrodust_component="total",
-        astrodust_template_path=fixture_path,
-    )
-    cfg_pah = DustEmissionSEDComponentConfig(
-        template="astrodust",
-        astrodust_component="pah",
-        astrodust_template_path=fixture_path,
-    )
     L_ir = 1.0e44
     pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
 
-    a = DustEmissionSEDComponent(config=cfg_total)
-    b = DustEmissionSEDComponent(config=cfg_pah)
-    sa = a.precompute(wave_grid=wave_aa)
-    sb = b.precompute(wave_grid=wave_aa)
-    sed_total = np.asarray(
-        a.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}, precomputed=sa).sed_intrinsic
+    a = AstrodustIRSEDComponent(
+        config=AstrodustIRConfig(component="total", template_path=fixture_path)
     )
-    sed_pah = np.asarray(
-        b.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}, precomputed=sb).sed_intrinsic
+    b = AstrodustIRSEDComponent(
+        config=AstrodustIRConfig(component="pah", template_path=fixture_path)
     )
-    # Both renormalize to the same L_ir, so sed_pah is shape-only;
-    # the test is only that PAH-only output is finite + positive.
+    a.data = a.load(wave_aa)
+    b.data = b.load(wave_aa)
+    sed_total = np.asarray(a.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}).sed_intrinsic)
+    sed_pah = np.asarray(b.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}).sed_intrinsic)
     assert np.isfinite(sed_pah).all() and (sed_pah >= 0).all()
     assert sed_pah.sum() > 0
     assert sed_total.sum() > 0
@@ -192,9 +190,9 @@ def test_pah_only_component(fixture_path):
 def test_spinning_dust_inclusion_changes_microwave(fixture_path):
     """Including spinning dust must change the SED at microwave
     wavelengths but leave the IR substantially unchanged."""
-    from tengri.components.dust.emission_component import (
-        DustEmissionSEDComponent,
-        DustEmissionSEDComponentConfig,
+    from tengri.components.dust.emission.templates.astrodust import (
+        AstrodustIRConfig,
+        AstrodustIRSEDComponent,
     )
     from tengri.protocols.component import ForwardState
 
@@ -202,30 +200,16 @@ def test_spinning_dust_inclusion_changes_microwave(fixture_path):
     L_ir = 1.0e44
     pipeline = ForwardState(wave=wave_aa, sed_intrinsic=None, derived={"L_ir": L_ir})
 
-    no_spd = DustEmissionSEDComponent(
-        config=DustEmissionSEDComponentConfig(
-            template="astrodust",
-            astrodust_include_spinning_dust=False,
-            astrodust_template_path=fixture_path,
-        ),
+    no_spd = AstrodustIRSEDComponent(
+        config=AstrodustIRConfig(spinning_dust=False, template_path=fixture_path),
     )
-    yes_spd = DustEmissionSEDComponent(
-        config=DustEmissionSEDComponentConfig(
-            template="astrodust",
-            astrodust_include_spinning_dust=True,
-            astrodust_template_path=fixture_path,
-        ),
+    yes_spd = AstrodustIRSEDComponent(
+        config=AstrodustIRConfig(spinning_dust=True, template_path=fixture_path),
     )
-    s_no = no_spd.precompute(wave_grid=wave_aa)
-    s_yes = yes_spd.precompute(wave_grid=wave_aa)
-    sed_no = np.asarray(
-        no_spd.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}, precomputed=s_no).sed_intrinsic
-    )
-    sed_yes = np.asarray(
-        yes_spd.apply(
-            pipeline, {"dust_lgU": 0.2, "redshift": 0.0}, precomputed=s_yes
-        ).sed_intrinsic
-    )
+    no_spd.data = no_spd.load(wave_aa)
+    yes_spd.data = yes_spd.load(wave_aa)
+    sed_no = np.asarray(no_spd.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}).sed_intrinsic)
+    sed_yes = np.asarray(yes_spd.apply(pipeline, {"dust_lgU": 0.2, "redshift": 0.0}).sed_intrinsic)
 
     # Spinning dust peaks ~1 cm wavelength = 1e8 Å.
     wave_aa_np = np.asarray(wave_aa)
@@ -236,19 +220,19 @@ def test_spinning_dust_inclusion_changes_microwave(fixture_path):
 
 
 def test_missing_template_raises_with_build_instructions(tmp_path):
-    from tengri.components.dust.emission_component import (
-        DustEmissionSEDComponent,
-        DustEmissionSEDComponentConfig,
+    """Astrodust carries no analytic fallback: a missing grid must raise
+    FileNotFoundError with the build-script invocation, not silently emit
+    zeros."""
+    from tengri.components.dust.emission.templates.astrodust import (
+        AstrodustIRConfig,
+        AstrodustIRSEDComponent,
     )
 
-    cfg = DustEmissionSEDComponentConfig(
-        template="astrodust",
-        astrodust_template_path=str(tmp_path / "nope.h5"),
-    )
-    comp = DustEmissionSEDComponent(config=cfg)
+    cfg = AstrodustIRConfig(template_path=str(tmp_path / "nope.h5"))
+    comp = AstrodustIRSEDComponent(config=cfg)
     wave_aa = jnp.geomspace(1.0e4, 1.0e7, 100)
     with pytest.raises(FileNotFoundError) as ei:
-        comp.precompute(wave_grid=wave_aa)
+        comp.load(wave_aa)
     msg = str(ei.value)
     assert "nope.h5" in msg
     assert "build_astrodust_hdf5.py" in msg

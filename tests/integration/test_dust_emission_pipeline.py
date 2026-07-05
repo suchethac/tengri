@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for :class:`DustEmissionSEDComponent` and the dust energy-balance loop.
+"""Tests for the modified_blackbody emission port and the dust energy-balance loop.
 
 Two layers:
 
 1. **Standalone IR emission** — given an L_ir scalar already on
-   ``state.derived``, the adapter reproduces
+   ``state.derived``, the port reproduces
    :func:`modified_blackbody` exactly.
 2. **Closed loop** — DustAttenuation + DustEmission together approximately
    conserve energy across the attenuation/re-emission round-trip. The
@@ -21,7 +21,9 @@ import pytest
 
 from tengri.components.dust.component import DustAttenuationSEDComponent
 from tengri.components.dust.emission import modified_blackbody
-from tengri.components.dust.emission_component import DustEmissionSEDComponent
+from tengri.components.dust.emission.analytic.modified_blackbody import (
+    ModifiedBlackbodyIRSEDComponent,
+)
 from tengri.forward.orchestrator import merge_declared_parameters, run_components
 from tengri.protocols import ForwardState
 from tengri.utils.physics_constants import C_AA
@@ -50,9 +52,10 @@ def test_emission_matches_modified_blackbody(dust_T, dust_beta_ir, L_ir):
         "redshift": 0.0,
         "dust_T": dust_T,
         "dust_beta_ir": dust_beta_ir,
+        "dust_epsilon_mbb": 1.0,
     }
 
-    final = run_components([DustEmissionSEDComponent()], state, params)
+    final = run_components([ModifiedBlackbodyIRSEDComponent()], state, params)
 
     expected = modified_blackbody(
         wave,
@@ -72,8 +75,8 @@ def test_emission_is_noop_when_l_ir_is_zero():
     wave = jnp.logspace(2, 8, 64)
     state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
 
-    out = DustEmissionSEDComponent().apply(
-        state, {"redshift": 0.0, "dust_T": 30.0, "dust_beta_ir": 1.8}
+    out = ModifiedBlackbodyIRSEDComponent().apply(
+        state, {"redshift": 0.0, "dust_T": 30.0, "dust_beta_ir": 1.8, "dust_epsilon_mbb": 1.0}
     )
 
     # modified_blackbody(L_absorbed=0) returns zeros.
@@ -119,9 +122,15 @@ def test_closed_loop_chain_runs():
 
     state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
     final = run_components(
-        [DustAttenuationSEDComponent(), DustEmissionSEDComponent()],
+        [DustAttenuationSEDComponent(), ModifiedBlackbodyIRSEDComponent()],
         state,
-        {"redshift": 0.0, "dust_tau_v": 0.5, "dust_T": 30.0, "dust_beta_ir": 1.8},
+        {
+            "redshift": 0.0,
+            "dust_tau_v": 0.5,
+            "dust_T": 30.0,
+            "dust_beta_ir": 1.8,
+            "dust_epsilon_mbb": 1.0,
+        },
     )
 
     # Attenuated SED must exist (Phase II-1 attenuator wrote it).
@@ -146,9 +155,15 @@ def test_emitted_luminosity_integral_matches_l_ir():
 
     state = ForwardState(wave=wave, sed_intrinsic=intrinsic)
     final = run_components(
-        [DustAttenuationSEDComponent(), DustEmissionSEDComponent()],
+        [DustAttenuationSEDComponent(), ModifiedBlackbodyIRSEDComponent()],
         state,
-        {"redshift": 0.0, "dust_tau_v": 0.5, "dust_T": 30.0, "dust_beta_ir": 1.8},
+        {
+            "redshift": 0.0,
+            "dust_tau_v": 0.5,
+            "dust_T": 30.0,
+            "dust_beta_ir": 1.8,
+            "dust_epsilon_mbb": 1.0,
+        },
     )
 
     L_ir = float(final.derived["L_ir"])
@@ -173,7 +188,9 @@ def test_merge_dust_attenuation_and_emission_no_collision():
     declares ``dust_tau_v`` and emission declares ``dust_T`` /
     ``dust_beta_ir`` — no name collisions.
     """
-    merged = merge_declared_parameters([DustAttenuationSEDComponent(), DustEmissionSEDComponent()])
+    merged = merge_declared_parameters(
+        [DustAttenuationSEDComponent(), ModifiedBlackbodyIRSEDComponent()]
+    )
     assert "dust_tau_v" in merged
     assert "dust_T" in merged
     assert "dust_beta_ir" in merged

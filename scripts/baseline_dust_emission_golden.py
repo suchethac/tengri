@@ -103,14 +103,14 @@ def main():
                 "dust_alpha_dl14": 2.0,
             },
         },
-        "astrodust": {
-            "call_path": "lazy_loader",
-            "params": {
-                "dust_umin": 1.0,
-                "dust_gamma_dl": 0.01,
-                "dust_qpah": 3.0,
-            },
-        },
+        # NOTE (#871): astrodust is intentionally NOT captured here. Its
+        # DUST_EMISSION_MODELS entry is the retired DL07-*costume*
+        # (umin/gamma/qpah over an HD23→DL07-translated grid, with a no-op
+        # dust_qpah), not the faithful Hensley & Draine 2023 model. The faithful
+        # lgU port (_REGISTRY["astrodust"]) is captured + regression-tested from
+        # the port directly in tests/regression/test_dust_goldens_852.py, whose
+        # frozen golden lives at
+        # tests/regression/data/dust_emission_golden/astrodust.npy.
         "bosa": {
             "call_path": "lazy_loader",
             "params": {"dust_log_ssfr": -10.0},

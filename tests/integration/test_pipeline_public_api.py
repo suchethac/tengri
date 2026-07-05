@@ -2,7 +2,7 @@
 """End-to-end test for the public ``tengri.pipeline`` namespace.
 
 This test exercises the full Phase II-1 surface as a user would import
-it: one canonical import path, six adapters chained, parameters merged
+it: one canonical import path, five adapters chained, parameters merged
 through :func:`merge_declared_parameters`, the chain executed via
 :func:`run_components`. It is intentionally a thin smoke test — the
 per-adapter numerics are covered by the per-component integration tests.
@@ -28,14 +28,17 @@ def test_namespace_exports_protocol_and_orchestrator():
 
 
 @pytest.mark.unit
-def test_namespace_exports_all_six_adapters():
-    """Phase II-1 adapter cohort is reachable from the public namespace."""
+def test_namespace_exports_all_five_adapters():
+    """Phase II-1 adapter cohort is reachable from the public namespace.
+
+    Dust IR *emission* is no longer part of this top-level adapter cohort — it
+    is authored as :class:`~tengri.components.sed_model_component.SEDModelComponent`
+    emission ports selected via the model grammar (#871)."""
     for cls_name in (
         "RadioSEDComponent",
         "IGMSEDComponent",
         "XRaySEDComponent",
         "DustAttenuationSEDComponent",
-        "DustEmissionSEDComponent",
         "NebularSEDComponent",
     ):
         cls = getattr(pipeline, cls_name)
@@ -44,12 +47,11 @@ def test_namespace_exports_all_six_adapters():
 
 
 @pytest.mark.unit
-def test_full_six_adapter_chain_via_public_api():
+def test_full_five_adapter_chain_via_public_api():
     """User-perspective chain: build, merge, run."""
     chain = [
         pipeline.RadioSEDComponent(),
         pipeline.DustAttenuationSEDComponent(),
-        pipeline.DustEmissionSEDComponent(),
         pipeline.NebularSEDComponent(),
         pipeline.XRaySEDComponent(),
         pipeline.IGMSEDComponent(),
@@ -79,6 +81,7 @@ def test_full_six_adapter_chain_via_public_api():
         "dust_T": 30.0,
         "dust_beta_ir": 1.8,
         # xray
+        "xray_log_nh": 20.0,
         "xray_gamma_hmxb": 2.0,
         "xray_gamma_lmxb": 1.6,
         "xray_gamma_agn": 1.8,
@@ -100,19 +103,19 @@ def test_full_six_adapter_chain_via_public_api():
 
     final = pipeline.run_components(chain, state, params)
 
-    # Every published derived key from the chain should be present.
+    # Every published derived key from the chain should be present. Dust IR
+    # *emission* is no longer part of this adapter cohort (it is an
+    # SEDModelComponent port; #871), so ``sed_dust_ir`` is not expected here —
+    # the attenuator still publishes ``L_ir`` for a downstream emission port.
     for key in (
         "L_ir",
-        "sed_dust_ir",
         "dust_attenuation_factor",
         "sed_xray",
         "sed_nebular",
-        "sed_shock",
     ):
         assert key in final.derived, key
 
-    # Attenuation slot was written and IR re-emission added flux.
+    # Attenuation slot was written.
     assert final.sed_attenuated is not None
-    assert jnp.any(final.sed_intrinsic > 1e30)
     # IGM applied to observed-frame.
     assert final.sed_observed is not None

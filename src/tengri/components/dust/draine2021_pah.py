@@ -7,9 +7,9 @@ configuration, converting to :math:`L_\nu`, resampling onto the
 pipeline rest-frame wavelength grid, and integrating
 :math:`\int L_\nu \, d\nu` for the energy-balance rescale.
 
-The :class:`tengri.components.dust.emission_component.DustEmissionSEDComponent`
-adapter dispatches to this module when its ``config.template`` is
-``"draine2021_pah"``.
+The :class:`tengri.components.dust.draine2021_pah_ir.Draine2021PAHIRSEDComponent`
+emission port consumes this module (dispatched via
+``dust={'emission': {'type': 'draine2021_pah'}}``).
 
 Reference
 ---------
@@ -172,7 +172,7 @@ def missing_template_message(path: Path) -> str:
         f"https://www.astro.princeton.edu/~draine/PAHspec/ and packs "
         f"them into a single HDF5 (~150 MB).  Override the location "
         f"by setting {PAHSPEC_PATH_ENV} or by passing template_path= "
-        f"to DustEmissionSEDComponentConfig."
+        f"to Draine2021PAHIRConfig."
     )
 
 

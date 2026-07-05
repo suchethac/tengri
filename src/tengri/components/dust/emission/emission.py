@@ -470,8 +470,9 @@ def _make_lazy_loader(
                     raise RuntimeError(
                         f"Template file '{path}' has an incompatible schema "
                         f"for the legacy {name!r} registry path: {exc!r}. "
-                        f"Use the modern DustEmissionSEDComponent dispatch "
-                        f"(template={name!r}) or the model-specific loader "
+                        f"Use the modern emission-port dispatch "
+                        f"(dust={{'emission': {{'type': {name!r}}}}}) or the "
+                        f"model-specific loader "
                         f"(load_astrodust_hd23_or_raise / load_bosa_*) "
                         f"instead."
                     ) from exc

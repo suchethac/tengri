@@ -20,7 +20,8 @@ Narayanan+2018 cosmological RT simulations.
 
 # Convenience re-exports for `from tengri.dust import ...`
 # Dust block in the SEDComponent pipeline — combines UV–optical attenuation
-# with IR re-emission via ``DustEmissionSEDComponentConfig.template``.
+# with IR re-emission via per-template emission ports (``type='astrodust'``,
+# ``'draine2021_pah'``, ``'modified_blackbody'``, ``'dale2014'``, …).
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
     apply_lyman_cutoff as apply_lyman_cutoff,
@@ -100,11 +101,6 @@ from tengri.components.dust.emission import (
     register_themis_tabulated,
     themis,
 )
-from tengri.components.dust.emission_component import (
-    DustEmissionSEDComponent,
-    DustEmissionSEDComponentConfig,
-    DustEmissionSEDComponentState,
-)
 from tengri.components.dust.emission_templates import (
     Draine2021PAHTemplates,
     load_draine2021_pahspec_templates,
@@ -169,10 +165,6 @@ _CURATED_DIR = (
     # SEDModelComponent-style attenuation ports
     "WG00AttenuationSEDComponent",
     "WG00AttenuationSEDComponentConfig",
-    # Composable SEDComponent adapter (template= dispatch)
-    "DustEmissionSEDComponent",
-    "DustEmissionSEDComponentConfig",
-    "DustEmissionSEDComponentState",
     # Standalone IR emission SEDComponent backends
     "Schreiber2016IRSEDComponent",
     "Schreiber2016IRConfig",
@@ -212,3 +204,25 @@ def __dir__() -> list[str]:
     """Curated tab-completion list. Filtering only — everything remains
     accessible via attribute access."""
     return list(_CURATED_DIR)
+
+
+#: Names removed in #871 when the monolithic ``DustEmissionSEDComponent`` adapter
+#: was retired for per-template emission ports. No 1:1 successor (the adapter
+#: dispatched three templates), so the old names raise with a migration path
+#: rather than silently aliasing to one port.
+_REMOVED_DUST_EMISSION_NAMES = frozenset(
+    {"DustEmissionSEDComponent", "DustEmissionSEDComponentConfig", "DustEmissionSEDComponentState"}
+)
+
+
+def __getattr__(name: str):
+    if name in _REMOVED_DUST_EMISSION_NAMES:
+        raise AttributeError(
+            f"{name!r} was removed in tengri #871. Dust IR emission is now authored "
+            "as SEDModelComponent ports selected via the model grammar, e.g. "
+            "SEDModel.build(dust={'emission': {'type': 'astrodust'}}) with type in "
+            "{'modified_blackbody', 'draine2021_pah', 'astrodust', 'dale2014', "
+            "'casey2012', 'schreiber2016', ...}. To import a port directly use e.g. "
+            "tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent."
+        )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

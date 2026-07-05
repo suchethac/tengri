@@ -19,7 +19,9 @@ import pytest
 pytestmark = pytest.mark.contract
 
 from tengri.components.dust.component import DustAttenuationSEDComponent
-from tengri.components.dust.emission_component import DustEmissionSEDComponent
+from tengri.components.dust.emission.analytic.modified_blackbody import (
+    ModifiedBlackbodyIRSEDComponent,
+)
 from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
@@ -40,7 +42,7 @@ ADAPTERS: list[SEDComponent] = [
     XRaySEDComponent(),
     DustAttenuationSEDComponent(),
     NebularSEDComponent(),
-    DustEmissionSEDComponent(),
+    ModifiedBlackbodyIRSEDComponent(),
 ]
 
 
@@ -79,6 +81,7 @@ def _full_params() -> dict:
         "dust_tau_v": 0.3,
         "dust_T": 30.0,
         "dust_beta_ir": 1.8,
+        "dust_epsilon_mbb": 1.0,
     }
 
 
