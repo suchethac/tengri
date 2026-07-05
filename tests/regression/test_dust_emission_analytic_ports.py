@@ -267,8 +267,8 @@ class TestDustEmissionAnalyticPorts:
             redshift=0.0,
         )
 
-        # Component call (note: fpah in component, maps to dust_f_pah)
-        p = {"T": 30.0, "fpah": 0.05, "redshift": 0.0}
+        # Component call (canonical f_pah, #849)
+        p = {"T": 30.0, "f_pah": 0.05, "redshift": 0.0}
         sed_out, _published = comp.predict(
             p,
             jnp.zeros_like(wave_grid),
@@ -304,7 +304,7 @@ class TestDustEmissionAnalyticPorts:
         )
 
         # Component call
-        p = {"T": 30.0, "fpah": 0.05, "redshift": z}
+        p = {"T": 30.0, "f_pah": 0.05, "redshift": z}
         sed_out, _published = comp.predict(
             p,
             jnp.zeros_like(wave_grid),

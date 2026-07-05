@@ -497,7 +497,7 @@ def build_components(
                     agn_torus_block=agn_torus_block,
                     agn_attenuation_block=agn_attenuation_block,
                     agn_norm=agn_norm,
-                )
+                ),
             )
         )
 

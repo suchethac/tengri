@@ -195,17 +195,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0.0 and hi < 1.0,
         "must be in [0, 1)",
     ),
+    # dust_tdust (#849): retired — the Schreiber tabulated ports now share the
+    # canonical ``dust_T`` (used by modified_blackbody / casey2012 / the
+    # schreiber2016 closure). ``dust_tdust`` resolves to ``dust_T`` via
+    # _LEGACY_PARAM_ALIASES.
     ParamDeclaration(
-        "dust_tdust",
-        Fixed(25.0),
-        "Schreiber 2016 dust temperature (K) for tabulated continuum (15-99)",
-        lambda lo, hi: lo > 0,
-        "must be > 0",
-    ),
-    ParamDeclaration(
-        "dust_fpah",
+        "dust_f_pah",
         Fixed(0.05),
-        "Schreiber 2016 PAH mass fraction (CIGALE schreiber2016, 0-1)",
+        "Schreiber 2016/2018 PAH mass fraction (CIGALE schreiber, 0-1). "
+        "Canonical name (#849); the old spelling ``dust_fpah`` is an alias.",
         lambda lo, hi: lo >= 0.0 and hi <= 1.0,
         "must be in [0, 1]",
     ),

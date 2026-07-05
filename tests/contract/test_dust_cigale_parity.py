@@ -185,8 +185,9 @@ class TestSchreiber2016Tabulated:
         return comp
 
     def _sed(self, comp, tdust, fpah):
+        # Canonical stripped param names (#849): T / f_pah.
         sed_out, _ = comp.predict(
-            {"tdust": tdust, "fpah": fpah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0
+            {"T": tdust, "f_pah": fpah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0
         )
         return sed_out
 
@@ -222,6 +223,49 @@ class TestSchreiber2016Tabulated:
 
         assert jnp.isfinite(total(0.1))
         assert jnp.isfinite(jax.grad(total)(0.1))
+
+
+# ── Schreiber+2018: T / f_pah knobs are wired (no silent drop) ────
+
+
+class TestSchreiber2018NotNoOp:
+    """Regression for the #849 silent-drop fix: the schreiber2018 port passed
+    the old ``dust_tdust`` / ``dust_fpah`` kwarg names to a loader whose
+    signature is ``dust_T`` / ``dust_f_pah``, so both knobs landed in
+    ``**_kwargs`` and were silently ignored. After the canonical rename the
+    port passes ``dust_T=`` / ``dust_f_pah=`` and the knobs move the SED."""
+
+    def _component(self):
+        from tengri.components.dust.emission_templates import _find_data_file
+        from tengri.components.sed_model_component import _REGISTRY
+
+        # Gate on the grid file DIRECTLY (not preload — which is lazy and does
+        # not raise on a missing grid; a first predict without the grid leaves
+        # the schreiber2018 lazy loader in an inconsistent state that pollutes
+        # later tests). Skip before touching the loader when the grid is absent.
+        if _find_data_file("schreiber2018_templates.h5") is None:
+            pytest.skip("schreiber2018 template grid not available")
+        return _REGISTRY["schreiber2018"]()
+
+    def _sed(self, comp, T, f_pah):
+        sed, _ = comp.predict({"T": T, "f_pah": f_pah}, jnp.zeros_like(WAVE), WAVE, L_ir=1e44)
+        return sed
+
+    def test_temperature_shifts_peak(self):
+        comp = self._component()
+        cold = self._sed(comp, 25.0, 0.05)
+        hot = self._sed(comp, 60.0, 0.05)
+        rel = float(jnp.max(jnp.abs(cold - hot)) / (jnp.max(jnp.abs(cold)) + 1e-300))
+        assert rel > 1e-2, f"dust_T is a silent no-op (max frac change {rel:.2e})"
+        # Hotter dust peaks bluewards.
+        assert float(WAVE[jnp.argmax(hot)]) < float(WAVE[jnp.argmax(cold)])
+
+    def test_fpah_changes_sed(self):
+        comp = self._component()
+        s0 = self._sed(comp, 30.0, 0.0)
+        s5 = self._sed(comp, 30.0, 0.5)
+        rel = float(jnp.max(jnp.abs(s0 - s5)) / (jnp.max(jnp.abs(s0)) + 1e-300))
+        assert rel > 1e-2, f"dust_f_pah is a silent no-op (max frac change {rel:.2e})"
 
 
 # ── Modified blackbody: epsilon_mbb luminosity fraction ───────────

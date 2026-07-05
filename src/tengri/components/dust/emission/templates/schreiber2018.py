@@ -47,9 +47,11 @@ class Schreiber2018IRSEDComponent(EmissionPort):
 
     name: str = "schreiber2018"
 
-    # Free parameters (user-facing names, prefix-stripped)
-    tdust = Fixed(25.0)
-    fpah = Fixed(0.05)
+    # Free parameters (user-facing names, prefix-stripped). Canonical names
+    # (#849): ``dust_T`` (was ``dust_tdust``) + ``dust_f_pah`` (was
+    # ``dust_fpah``); old spellings resolve via _LEGACY_PARAM_ALIASES.
+    T = Fixed(25.0)
+    f_pah = Fixed(0.05)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("schreiber2018",)
 
@@ -66,7 +68,7 @@ class Schreiber2018IRSEDComponent(EmissionPort):
         Parameters
         ----------
         p : dict
-            Parameters with prefix stripped: keys are "tdust", "fpah"
+            Parameters with prefix stripped: keys are "T", "f_pah"
             (or subset if some are Fixed).
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for a dust emission component).
@@ -87,10 +89,14 @@ class Schreiber2018IRSEDComponent(EmissionPort):
         from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
         schreiber_fn = DUST_EMISSION_MODELS["schreiber2018"]
+        # The loader's kwargs are ``dust_T`` / ``dust_f_pah`` — passing the old
+        # ``dust_tdust`` / ``dust_fpah`` names sent them into ``**_kwargs`` where
+        # they were silently ignored (the port's temperature/PAH knobs had NO
+        # effect). Fixed as part of the #849 name unification.
         sed = schreiber_fn(
             wave,
             L_ir,
-            dust_tdust=p["tdust"],
-            dust_fpah=p["fpah"],
+            dust_T=p["T"],
+            dust_f_pah=p["f_pah"],
         )
         return sed_in + sed, {"sed_dust_ir": sed}
