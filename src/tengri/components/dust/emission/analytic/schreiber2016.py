@@ -55,9 +55,10 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionPort):
 
     **Gradient-safe**: yes — differentiable everywhere.
 
-    **Naming note**: The user-facing parameter is ``dust_fpah`` (preserving
-    the two_component.py convention), but the closure function argument is
-    ``dust_f_pah``. The component maps between them automatically.
+    **Naming note** (#849): the user-facing parameters are the canonical
+    ``dust_T`` and ``dust_f_pah`` (the closure arg is likewise ``dust_f_pah``,
+    so the mapping is now the identity). The old spellings ``dust_tdust`` /
+    ``dust_fpah`` resolve via ``_LEGACY_PARAM_ALIASES`` with a warning.
 
     References
     ----------
@@ -77,10 +78,10 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionPort):
 
     name: str = "schreiber2016"
 
-    # Free parameters (user-facing names, prefix-stripped)
-    # Note: user-facing param is "fpah", closure arg is "f_pah"
+    # Free parameters (user-facing names, prefix-stripped). Canonical (#849):
+    # ``dust_T`` + ``dust_f_pah`` (the old ``dust_fpah`` spelling is an alias).
     T = Fixed(30.0)
-    fpah = Fixed(0.05)
+    f_pah = Fixed(0.05)
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "schreiber2016",
@@ -101,8 +102,8 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionPort):
         Parameters
         ----------
         p : dict
-            Parameters with prefix stripped: keys are "T", "fpah"
-            (or subset if some are Fixed). Note: "fpah" is mapped to the
+            Parameters with prefix stripped: keys are "T", "f_pah"
+            (or subset if some are Fixed). Note: "f_pah" is mapped to the
             closure's "dust_f_pah" argument.
         sed_in : ndarray, shape (n_wave,)
             Input SED in erg/s/Hz (typically zeros for a dust emission component).
@@ -121,12 +122,12 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionPort):
         from tengri.components.dust.emission import schreiber2016 as sch_fn
 
         z = jnp.asarray(p.get("redshift", 0.0))
-        # Map user-facing fpah to closure arg dust_f_pah
+        # Canonical f_pah maps straight to the closure's dust_f_pah arg (#849)
         sed = sch_fn(
             wave,
             L_ir,
             dust_T=p["T"],
-            dust_f_pah=p["fpah"],
+            dust_f_pah=p["f_pah"],
             redshift=z,
         )
         return sed_in + sed, {"sed_dust_ir": sed}

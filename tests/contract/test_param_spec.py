@@ -134,6 +134,21 @@ class TestLegacyCompat:
         assert "sfh_dpl_alpha" in spec.free_params
         assert "sfh_dpl_beta" in spec.free_params
 
+    def test_dust_emission_name_aliases(self):
+        """#849: the old Schreiber spellings ``dust_tdust`` / ``dust_fpah``
+        resolve to the canonical ``dust_T`` / ``dust_f_pah`` (with a warning)."""
+        with pytest.warns(DeprecationWarning):
+            spec = Parameters(
+                mean_sfh_type="const",
+                dust_emission="schreiber2018",
+                dust_tdust=Uniform(15.0, 99.0),
+                dust_fpah=Uniform(0.0, 1.0),
+            )
+        assert "dust_T" in spec.free_params
+        assert "dust_f_pah" in spec.free_params
+        assert "dust_tdust" not in spec.free_params
+        assert "dust_fpah" not in spec.free_params
+
 
 class TestValidation:
     def test_dpl_alpha_must_be_positive(self):

@@ -53,16 +53,14 @@ _GOLDEN_DIR = Path(__file__).parent / "data" / "dust_emission_golden"
 
 
 def _schreiber2018_available() -> bool:
-    """``preload_emission_model`` is lazy and does not raise on a missing grid —
-    the actual ``loader(...)`` call is what fails. Gate on a real trial call so
-    the test skips (not fails) when the HDF5 grid is absent (e.g. in CI)."""
-    try:
-        preload_emission_model("schreiber2018")
-        loader = DUST_EMISSION_MODELS["schreiber2018"]
-        loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05)
-        return True
-    except Exception:
-        return False
+    """Gate on the grid FILE directly. ``preload_emission_model`` is lazy (does
+    not raise on a missing grid); a trial ``loader(...)`` call would fail *and*
+    leave the schreiber2018 lazy-loader entry in an inconsistent state that
+    pollutes later tests (e.g. ``test_dust_energy_balance``). Checking the file
+    up front skips cleanly without touching the loader."""
+    from tengri.components.dust.emission_templates import _find_data_file
+
+    return _find_data_file("schreiber2018_templates.h5") is not None
 
 
 def _draine2021_available() -> bool:
@@ -83,17 +81,15 @@ def _draine2021_available() -> bool:
 )
 def test_schreiber2018_port_matches_loader_bit_exact():
     """The schreiber2018 SEDModelComponent port reproduces the
-    ``DUST_EMISSION_MODELS`` loader exactly on the shipped grid. The loader
-    names the params ``dust_T`` / ``dust_f_pah``; the port strips to
-    ``tdust`` / ``fpah`` — same physical values, so the outputs are identical."""
+    ``DUST_EMISSION_MODELS`` loader exactly on the shipped grid. Both the loader
+    and the port now use the canonical ``dust_T`` / ``dust_f_pah`` names (#849),
+    stripping to ``T`` / ``f_pah`` on the port."""
     preload_emission_model("schreiber2018")
     loader = DUST_EMISSION_MODELS["schreiber2018"]
     golden = np.asarray(loader(_WAVE, _L_IR, dust_T=30.0, dust_f_pah=0.05), dtype=np.float64)
 
     comp = _REGISTRY["schreiber2018"]()
-    sed_out, _ = comp.predict(
-        {"tdust": 30.0, "fpah": 0.05}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR
-    )
+    sed_out, _ = comp.predict({"T": 30.0, "f_pah": 0.05}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR)
     np.testing.assert_allclose(np.asarray(sed_out), golden, rtol=1e-14, atol=1e-15)
 
 
