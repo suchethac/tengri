@@ -48,7 +48,6 @@ See :doc:`docs/dev/api_migration_v0.x.md` for the migration table.
 from __future__ import annotations
 
 from tengri.components.dust.component import DustAttenuationSEDComponent
-from tengri.components.dust.emission_component import DustEmissionSEDComponent
 from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
@@ -95,7 +94,6 @@ __all__ = [
     "CloudyELineMarginalizedLikelihood",
     "CompositeLikelihood",
     "DustAttenuationSEDComponent",
-    "DustEmissionSEDComponent",
     "ELineFittedLikelihood",
     "ELineMarginalizedLikelihood",
     "ForwardState",
@@ -120,3 +118,26 @@ __all__ = [
     "sample_params_dict",
     "slice_params_for_component",
 ]
+
+
+#: Names removed in #871 when the monolithic ``DustEmissionSEDComponent`` adapter
+#: was retired in favor of per-template ``SEDModelComponent`` emission ports. No
+#: 1:1 successor exists (the adapter dispatched three templates); accessing the
+#: old name raises with the migration path rather than silently aliasing to one
+#: port.
+_REMOVED_DUST_EMISSION_NAMES = frozenset(
+    {"DustEmissionSEDComponent", "DustEmissionSEDComponentConfig", "DustEmissionSEDComponentState"}
+)
+
+
+def __getattr__(name: str):
+    if name in _REMOVED_DUST_EMISSION_NAMES:
+        raise AttributeError(
+            f"{name!r} was removed in tengri #871. Dust IR emission is now authored "
+            "as SEDModelComponent ports selected via the model grammar, e.g. "
+            "SEDModel.build(dust={'emission': {'type': 'astrodust'}}) with "
+            "type in {'modified_blackbody', 'draine2021_pah', 'astrodust', 'dale2014', "
+            "'casey2012', 'schreiber2016', ...}. To import a port directly use e.g. "
+            "tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent."
+        )
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

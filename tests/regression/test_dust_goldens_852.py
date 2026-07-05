@@ -145,3 +145,68 @@ def test_draine2021_pah_matches_frozen_golden():
     golden = np.load(golden_npy)
     sed = _draine_port_sed()
     np.testing.assert_allclose(sed, golden, rtol=1e-14, atol=1e-15)
+
+
+# ── astrodust — frozen golden + energy balance (#871) ─────────────────
+#
+# The faithful Hensley & Draine 2023 astrodust port (native lgU interpolation of
+# the published emission grid) has no independent faithful loader oracle: the
+# ``DUST_EMISSION_MODELS["astrodust"]`` entry is the retired DL07-*costume*
+# (umin/gamma/qpah over an HD23→DL07-translated grid, with a no-op ``dust_qpah``;
+# #871). So — as with draine2021_pah_ir — the port is pinned against a committed
+# frozen golden plus a physical energy-balance check.
+
+
+def _astrodust_available() -> bool:
+    """Data present iff the port's ``load()`` returns a template dict. The port
+    *raises* FileNotFoundError on a missing grid (no analytic fallback), so the
+    try/except is required to skip cleanly."""
+    comp = _REGISTRY["astrodust"]()
+    try:
+        return comp.load(_WAVE) is not None
+    except Exception:
+        return False
+
+
+def _astrodust_port_sed() -> np.ndarray:
+    comp = _REGISTRY["astrodust"]()  # default config: component="total", no spinning
+    comp.data = comp.load(_WAVE)
+    sed_out, _ = comp.predict({"lgU": 1.0}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR)
+    return np.asarray(sed_out, dtype=np.float64)
+
+
+@pytest.mark.skipif(not _astrodust_available(), reason="astrodust template grid not available")
+def test_astrodust_is_not_a_silent_no_op():
+    """With the grid present the faithful port must load it and emit a nonzero
+    far-IR SED (guards against a silent-zeros regression like #852)."""
+    comp = _REGISTRY["astrodust"]()
+    assert comp.load(_WAVE) is not None, "astrodust grid present but load() returned None"
+    sed = _astrodust_port_sed()
+    assert np.all(np.isfinite(sed))
+    assert np.nansum(np.abs(sed)) > 0.0, "port emitted all zeros despite present grid"
+
+
+@pytest.mark.skipif(not _astrodust_available(), reason="astrodust template grid not available")
+def test_astrodust_energy_balance():
+    """The emitted IR SED re-radiates the absorbed luminosity: the frequency
+    integral of L_nu recovers L_ir to within a few percent (grid-edge losses),
+    and peaks in the IR (not UV)."""
+    sed = _astrodust_port_sed()
+    nu = C_AA / np.asarray(_WAVE)
+    l_emitted = float(-np.trapezoid(sed, nu))
+    assert l_emitted == pytest.approx(_L_IR, rel=0.05)
+    peak_wave = float(np.asarray(_WAVE)[int(np.argmax(sed))])
+    assert peak_wave > 1.0e5
+
+
+@pytest.mark.skipif(not _astrodust_available(), reason="astrodust template grid not available")
+def test_astrodust_matches_frozen_golden():
+    """The faithful lgU port reproduces the committed frozen golden bit-exactly —
+    a drift lock (the DUST_EMISSION_MODELS entry is the retired DL07-costume,
+    #871)."""
+    golden_npy = _GOLDEN_DIR / "astrodust.npy"
+    if not golden_npy.exists():
+        pytest.skip(f"golden not found: {golden_npy}")
+    golden = np.load(golden_npy)
+    sed = _astrodust_port_sed()
+    np.testing.assert_allclose(sed, golden, rtol=1e-14, atol=1e-15)

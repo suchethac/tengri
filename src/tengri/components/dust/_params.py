@@ -21,8 +21,8 @@ Three tuples, each the canonical source for one legacy bucket in
 
 Why not also share with `declared_parameters`
 ---------------------------------------------
-:meth:`DustEmissionSEDComponent.declared_parameters` does **per-template
-dispatch** — modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
+Each emission port's ``declared_parameters`` is **per-template** —
+modified_blackbody returns ``dust_T`` + ``dust_beta_ir``,
 draine2021_pah returns only ``dust_lgU``, astrodust uses a different
 ``dust_lgU`` bound, etc. The flat-builder bucket is the static superset
 registered together when ``dust_emission`` is set. The priors agree

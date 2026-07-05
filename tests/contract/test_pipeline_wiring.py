@@ -40,7 +40,6 @@ def _pipeline_src() -> str:
     from tengri.components.agn import component as agn_component, unified as agn_unified
     from tengri.components.dust import (
         component as dust_component,
-        emission_component as dust_emission_component,
         two_component as dust_two,
     )
     from tengri.components.radio import component as radio_component
@@ -58,7 +57,6 @@ def _pipeline_src() -> str:
         inspect.getsource(agn_component),
         inspect.getsource(agn_unified),
         inspect.getsource(dust_component),
-        inspect.getsource(dust_emission_component),
         inspect.getsource(dust_two),
         inspect.getsource(radio_component),
         inspect.getsource(xray_component),

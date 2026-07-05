@@ -1935,6 +1935,21 @@ class SEDModel:
             except Exception:
                 pass
 
+        # Astrodust+PAH emission grid (dust/emission/templates/astrodust.py).
+        # The faithful HD23 port self-loads its grid in load()/predict(); warm
+        # the process cache OUTSIDE any trace so an in-trace lazy load hits
+        # concrete arrays rather than leaking a tracer (UnexpectedTracerError).
+        # The grammar builds the port with the default template path (None).
+        if getattr(self, "_dust_emission_model", None) == "astrodust":
+            try:
+                from tengri.components.dust.emission.templates.astrodust import (
+                    _cached_astrodust_grid,
+                )
+
+                _cached_astrodust_grid(None)
+            except Exception:
+                pass
+
     def ensure_photometry_precomputed(self) -> bool:
         """Deprecated no-op (the legacy ``PrecomputedData`` container was retired, #620).
 
@@ -4545,9 +4560,10 @@ class SEDModel:
         **Nebular templates** (Phase 4-C): duck-typed on backend ``.grid``
         / ``.weights`` attributes (Cue, CloudyGrid, etc.).
 
-        **Dust IR templates** (Phase 4-D-B): extracted from the
-        DustEmissionSEDComponent's cached state (PAHspec, Astrodust, etc.),
-        indexed by template type.
+        **Dust IR**: emission ports (Astrodust, PAHspec, Dale, …) self-load
+        their HDF5 grids in ``EmissionPort.load``/``predict``; only the
+        build-time energy-balance LUT and per-filter band response are threaded
+        here (added below).
 
         **AGN templates** (Phase 4-D-C): extracted from the
         AGNSEDComponent's cached state (SKIRTOR templates).
@@ -4564,7 +4580,6 @@ class SEDModel:
             return None
 
         from tengri.components.agn.component import AGNSEDComponent
-        from tengri.components.dust.emission_component import DustEmissionSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
         result = {}
@@ -4587,45 +4602,10 @@ class SEDModel:
                     break
             break
 
-        # ── Dust IR template threading (Phase 4-D-B) ──
-        for component in cached:
-            if not isinstance(component, DustEmissionSEDComponent):
-                continue
-            # For dust emission, we need to precompute templates if they're
-            # template-based (PAHspec, Astrodust). Analytic models have no
-            # templates to thread. The wave_grid is needed for template resampling;
-            # we use a dummy grid (length 1) since the actual grid is only needed
-            # for reshaping, and the precomputed state is cached internally by
-            # the loaders via @functools.cache.
-            template_type = component.config.template
-            if template_type == "modified_blackbody":
-                # No templates to thread for analytic models.
-                pass
-            else:
-                # PAHspec and Astrodust need precompute to load their HDF5 grids.
-                # Use a minimal dummy wave_grid since the actual grid shape is
-                # irrelevant for threading — we just need the grids from the
-                # precompute path. In the actual apply() path, the real wave_grid
-                # from state will be used for dust computation.
-                dust_state = component.precompute(
-                    ssp_data=None,
-                    wave_grid=jnp.asarray([1.0, 2.0]),  # Dummy grid for precompute
-                )
-
-                if template_type == "draine2021_pah":
-                    result["dust_ir"] = {
-                        "pahspec_lgU_grid": dust_state.pahspec_lgU_grid,
-                        "pahspec_lnu_template": dust_state.pahspec_lnu_template,
-                        "pahspec_norm_per_lgU": dust_state.pahspec_norm_per_lgU,
-                    }
-                elif template_type == "astrodust":
-                    result["dust_ir"] = {
-                        "astrodust_lgU_grid": dust_state.astrodust_lgU_grid,
-                        "astrodust_lnu_template": dust_state.astrodust_lnu_template,
-                        "astrodust_norm_per_lgU": dust_state.astrodust_norm_per_lgU,
-                        "astrodust_lnu_spinning": dust_state.astrodust_lnu_spinning,
-                    }
-            break
+        # Dust IR emission ports (Astrodust, PAHspec, Dale, …) self-load their
+        # HDF5 grids in ``EmissionPort.load``/``predict`` — no adapter-state
+        # threading is needed here. The build-time energy-balance LUT and
+        # per-filter band response below are the only dust-IR data threaded.
 
         # ── AGN template threading (Phase 4-D-C) ──
         for component in cached:
@@ -4661,6 +4641,7 @@ class SEDModel:
             "dust_T",
             "dust_beta_ir",
             "dust_alpha_dale",
+            "dust_lgU",  # astrodust + draine2021_pah starlight-intensity knob
             "dust_umin",
             "dust_qpah",
             "dust_gamma_dl",

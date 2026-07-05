@@ -1,14 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Phase 4-D Category B tests: dust IR template data threading as JIT runtime inputs.
+"""Dust IR emission under JIT: ports self-load, JIT and non-JIT paths agree.
 
-Extends Phase 4-C (nebular threading) to dust IR emission templates (PAHspec,
-Astrodust, etc.). The contract:
+Since #871 the dust IR emission templates (PAHspec, Astrodust, Dale, …) are
+self-loading ``SEDModelComponent`` ports — they load their HDF5 grids in
+``EmissionPort.load``/``predict`` rather than being threaded through
+``SEDModel._template_data_for_jit()`` (the Phase 4-D-B adapter threading was
+removed with ``DustEmissionSEDComponent``). The contract these tests pin:
 
-* ``SEDModel._template_data_for_jit()`` returns a dict with ``"dust_ir"``
-  key carrying the template arrays when the dust emission component uses
-  a template-based model (PAHspec, Astrodust), ``None`` otherwise.
-* ``predict_observables_jit(params)`` threads it so dust template arrays
-  become JIT ``Parameter`` ops rather than baked Constants.
+* ``_template_data_for_jit()`` threads **no** dust-IR template arrays for the
+  emission ports (they self-load); only the build-time energy-balance LUT /
+  band response (MBB WavePrecomp) and nebular/AGN templates are threaded.
 * JIT and non-JIT paths agree to floating-point precision.
 """
 
@@ -99,68 +100,45 @@ def test_mbb_dust_returns_no_dust_ir_template_data(ssp_wneref, obs):
         )
 
 
-def test_pahspec_dust_publishes_template_data_for_jit(real_ssp_only, ssp_wneref, obs):
-    """PAHspec dust backend publishes template_data with dust_ir arrays.
+def test_pahspec_dust_does_not_thread_template_data(ssp_wneref, obs):
+    """PAHspec emission self-loads; no dust-IR template threading (#871).
 
-    Requires real grids: PAHspec's IR template is not shipped to CI, where the
-    synthetic #613 SSP lets the build succeed but publish no dust_ir template.
-    ``real_ssp_only`` skips on synthetic-only CI.
+    The Draine+2021 PAHspec model is a self-loading ``SEDModelComponent`` port:
+    its HDF5 grid loads in ``EmissionPort.load``/``predict``, so
+    ``_template_data_for_jit()`` threads no ``pahspec_*`` template arrays (the
+    Phase 4-D-B adapter threading was removed with ``DustEmissionSEDComponent``).
     """
 
     try:
-        dust_cfg = "draine2021_pah"
-        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
+        model = _silent_build(_base_spec(dust_emission="draine2021_pah"), ssp_wneref, obs)
     except (ImportError, FileNotFoundError, KeyError):
-        pytest.skip("PAHspec template files not available")
+        pytest.skip("PAHspec build unavailable")
 
     td = model._template_data_for_jit()
-    assert td is not None, "PAHspec should publish non-None template_data"
-    assert "dust_ir" in td, (
-        f"dust_ir key missing from template_data; got {td.keys() if td else 'None'}"
+    dust_ir = (td or {}).get("dust_ir", {}) or {}
+    assert not any(k.startswith("pahspec_") for k in dust_ir), (
+        f"PAHspec port must self-load, not thread template arrays; got {list(dust_ir)}"
     )
 
-    # Verify the required PAHspec arrays are present.
-    dust_ir = td["dust_ir"]
-    assert "pahspec_lgU_grid" in dust_ir, "Missing pahspec_lgU_grid"
-    assert "pahspec_lnu_template" in dust_ir, "Missing pahspec_lnu_template"
-    assert "pahspec_norm_per_lgU" in dust_ir, "Missing pahspec_norm_per_lgU"
 
-    # Check they're non-empty arrays.
-    assert jnp.prod(jnp.asarray(dust_ir["pahspec_lgU_grid"]).shape) > 0
-    assert jnp.prod(jnp.asarray(dust_ir["pahspec_lnu_template"]).shape) > 0
-    assert jnp.prod(jnp.asarray(dust_ir["pahspec_norm_per_lgU"]).shape) > 0
+def test_astrodust_dust_does_not_thread_template_data(ssp_wneref, obs):
+    """Astrodust emission self-loads; no dust-IR template threading (#871).
 
-
-def test_astrodust_dust_publishes_template_data_for_jit(real_ssp_only, ssp_wneref, obs):
-    """Astrodust backend publishes template_data with dust_ir arrays.
-
-    Requires real grids (see PAHspec sibling): ``real_ssp_only`` skips on
-    synthetic-only CI.
+    See the PAHspec sibling: the faithful HD23 astrodust port loads its grid in
+    ``EmissionPort.load``/``predict``, so ``_template_data_for_jit()`` threads no
+    ``astrodust_*`` template arrays.
     """
 
     try:
-        dust_cfg = "astrodust"
-        model = _silent_build(_base_spec(dust_emission=dust_cfg), ssp_wneref, obs)
+        model = _silent_build(_base_spec(dust_emission="astrodust"), ssp_wneref, obs)
     except (ImportError, FileNotFoundError, KeyError):
-        pytest.skip("Astrodust template files not available")
+        pytest.skip("Astrodust build unavailable")
 
     td = model._template_data_for_jit()
-    assert td is not None, "Astrodust should publish non-None template_data"
-    assert "dust_ir" in td, (
-        f"dust_ir key missing from template_data; got {td.keys() if td else 'None'}"
+    dust_ir = (td or {}).get("dust_ir", {}) or {}
+    assert not any(k.startswith("astrodust_") for k in dust_ir), (
+        f"Astrodust port must self-load, not thread template arrays; got {list(dust_ir)}"
     )
-
-    # Verify the required Astrodust arrays are present.
-    dust_ir = td["dust_ir"]
-    assert "astrodust_lgU_grid" in dust_ir, "Missing astrodust_lgU_grid"
-    assert "astrodust_lnu_template" in dust_ir, "Missing astrodust_lnu_template"
-    assert "astrodust_norm_per_lgU" in dust_ir, "Missing astrodust_norm_per_lgU"
-    assert "astrodust_lnu_spinning" in dust_ir, "Missing astrodust_lnu_spinning"
-
-    # Check they're non-empty arrays.
-    assert jnp.prod(jnp.asarray(dust_ir["astrodust_lgU_grid"]).shape) > 0
-    assert jnp.prod(jnp.asarray(dust_ir["astrodust_lnu_template"]).shape) > 0
-    assert jnp.prod(jnp.asarray(dust_ir["astrodust_norm_per_lgU"]).shape) > 0
 
 
 # ── JIT-path bit-exactness ──────────────────────────────────────────────────
@@ -178,6 +156,29 @@ def test_jit_and_non_jit_paths_agree_with_mbb_dust(ssp_wneref, obs):
 
     assert jnp.allclose(via_jit, via_nojit, rtol=1e-12, atol=0), (
         "JIT and non-JIT paths diverged for MBB dust after Phase 4-D-B wiring"
+    )
+
+
+def test_astrodust_port_re_radiates_far_ir(ssp_wneref, obs):
+    """The faithful astrodust port actually re-emits (#871).
+
+    JIT/non-JIT agreement alone would pass even if the self-loading port were a
+    silent no-op (both zero). This pins the physics end-to-end: with dust
+    attenuation on (L_ir > 0), the astrodust model must add far-IR flux the
+    no-emission model lacks — the guard against the silent-no-op class.
+    """
+    import numpy as np
+
+    wave_obs = jnp.asarray(np.geomspace(1.0e3, 1.0e7, 2000))  # observed Å into far-IR
+    m = _silent_build(_base_spec(dust_emission="astrodust"), ssp_wneref, obs)
+    m0 = _silent_build(_base_spec(dust_emission=None), ssp_wneref, obs)
+    lnu = np.asarray(m.predict_spectrum({}, wave_obs=wave_obs))
+    lnu0 = np.asarray(m0.predict_spectrum({}, wave_obs=wave_obs))
+    wo = np.asarray(wave_obs)
+    fir = (wo > 1.0e5) & (wo < 1.0e7)  # ~10 μm – 1 mm (observed)
+    assert np.all(np.isfinite(lnu))
+    assert np.nansum(lnu[fir]) > 10.0 * np.nansum(lnu0[fir]), (
+        "astrodust port added no far-IR re-emission (silent no-op)"
     )
 
 
