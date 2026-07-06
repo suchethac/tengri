@@ -182,13 +182,11 @@ class ForwardModel:
 
     def predict_photometry_components(self, params):
         """Delegate to :meth:`SEDModel.predict_photometry_components` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_photometry_components(params)
+        return self._inner_sed_for_delegation()._photometry_via_state(params)
 
     def predict_spectrum_components(self, params, wave_obs=None):
         """Delegate to :meth:`SEDModel.predict_spectrum_components` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_spectrum_components(
-            params, wave_obs=wave_obs
-        )
+        return self._inner_sed_for_delegation()._spectrum_via_state(params, wave_obs=wave_obs)
 
     def predict_line_fluxes(self, params, target_wavelengths=None, **kwargs):
         """Delegate to :meth:`SEDModel.predict_line_fluxes` on the inner SED.

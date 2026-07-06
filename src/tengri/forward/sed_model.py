@@ -3187,7 +3187,19 @@ class SEDModel:
 
         Divides rest-frame SED by :math:`L_{\\odot} = 3.828 \\times 10^{33}` erg/s
         (IAU 2015 definition).
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            Interactive getter moved to the lazy Prediction wrapper:
+            ``model.predict(params).sed.l_bol`` (one cached forward pass shared across
+            all derived quantities). Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_luminosity() is deprecated — use "
+            "model.predict(params).sed.l_bol instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.utils.physics_constants import L_SUN
 
         sed_erg = self.predict_rest_sed(params).sed
@@ -3499,7 +3511,19 @@ class SEDModel:
         .. [1] C. Leitherer et al., "Starburst99: Synthesis Models for Galaxies
            with Active Star Formation," ApJS, 123, 3 (1999).
            arXiv:astro-ph/9807340.
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            Interactive getter moved to the lazy Prediction wrapper:
+            ``model.predict(params).lines.hbeta`` (one cached forward pass shared across
+            all derived quantities). Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_hbeta() is deprecated — use "
+            "model.predict(params).lines.hbeta instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Case B: L_Hbeta [Lsun] = 4.76e-13 * Q_H, Q_H = 4.2e53 * SFR [Msun/yr]
         # => L_Hbeta = 4.76e-13 * 4.2e53 / 3.828e33 * SFR ≈ 5.22e7 * SFR
         _L_HBETA_PER_SFR = 5.22e7  # Lsun per Msun/yr (Leitherer+1999)
@@ -3892,39 +3916,47 @@ class SEDModel:
         # reconstruction has a hidden DSPS-joint-weight discrepancy
         # under trapz. The orchestrator value is the physically correct
         # one (energy-conserving by construction).
-        return self.predict_sed_quantities_components(params)
+        from tengri.forward import state_to_sed_quantities
+
+        return state_to_sed_quantities(self.predict_state(params))
 
     # ── Component orchestrator path (opt-in) ──────────────────────────
 
     def predict_sfh_quantities_components(self, params):
-        """Drop-in replacement for :meth:`predict_sfh_quantities`.
+        """Deprecated alias of :meth:`predict_sfh_quantities`.
 
-        Routes through the orchestrator and converts the resulting
-        :class:`ForwardState` to a legacy :class:`SFHQuantities`
-        NamedTuple via :func:`tengri.forward.state_to_sfh_quantities`.
-        Same return shape as the legacy method, computed via the
-        SEDComponent path.
-
-        Returns
-        -------
-        SFHQuantities
-            7-field NamedTuple matching the legacy contract.
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            The migration-era A/B twin is gone — the canonical method is
+            orchestrator-routed. Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_sfh_quantities_components() is deprecated — use "
+            "state_to_sfh_quantities(model.predict_state(params)) for these "
+            "exact numerics, or predict_sfh_quantities(params) / "
+            "model.predict(params).sfh for the canonical surface. "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.forward import state_to_sfh_quantities
 
         return state_to_sfh_quantities(self.predict_state(params))
 
     def predict_sed_quantities_components(self, params):
-        """Drop-in replacement for :meth:`predict_sed_quantities`.
+        """Deprecated alias of :meth:`predict_sed_quantities`.
 
-        Returns
-        -------
-        SEDQuantities
-            15-field NamedTuple matching the legacy contract.
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            The migration-era A/B twin is gone — the canonical method is
+            orchestrator-routed. Removed in tengri v1.0.
         """
-        from tengri.forward import state_to_sed_quantities
-
-        return state_to_sed_quantities(self.predict_state(params))
+        warnings.warn(
+            "predict_sed_quantities_components() is deprecated — use "
+            "predict_sed_quantities(params) (same orchestrator numerics). "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self.predict_sed_quantities(params)
 
     def predict_radio_quantities(self, params):
         """Orchestrator-path radio quantities.
@@ -3935,7 +3967,19 @@ class SEDModel:
             ``l_1p4ghz``, ``l_thermal``, ``l_nonthermal``, ``q_ir``.
             Fields are NaN if the configured chain has no
             :class:`RadioSEDComponent`.
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            Interactive getter moved to the lazy Prediction wrapper:
+            ``model.predict(params).radio`` (one cached forward pass shared across
+            all derived quantities). Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_radio_quantities() is deprecated — use "
+            "model.predict(params).radio instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.forward import state_to_radio_quantities
 
         return state_to_radio_quantities(self.predict_state(params))
@@ -3947,7 +3991,19 @@ class SEDModel:
         -------
         XRayQuantities
             ``l_x_xrb``, ``l_x_agn``, ``l_x_total``.
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            Interactive getter moved to the lazy Prediction wrapper:
+            ``model.predict(params).xray`` (one cached forward pass shared across
+            all derived quantities). Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_xray_quantities() is deprecated — use "
+            "model.predict(params).xray instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.forward import state_to_xray_quantities
 
         return state_to_xray_quantities(self.predict_state(params))
@@ -3959,13 +4015,25 @@ class SEDModel:
         -------
         IonizingQuantities
             ``q_h``, ``xi_ion``.
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            Interactive getter moved to the lazy Prediction wrapper:
+            ``model.predict(params).ionizing`` (one cached forward pass shared across
+            all derived quantities). Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_ionizing_quantities() is deprecated — use "
+            "model.predict(params).ionizing instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.forward import state_to_ionizing_quantities
 
         return state_to_ionizing_quantities(self.predict_state(params))
 
-    def predict_photometry_components(self, params):
-        """Photometry through the orchestrator path.
+    def _photometry_via_state(self, params):
+        """Photometry through the orchestrator path (internal).
 
         Runs the SEDComponent chain on the model's configuration,
         then projects the resulting rest-frame SED through every
@@ -4004,7 +4072,7 @@ class SEDModel:
         """
         if not self.observation.can_do_photometry:
             raise ValueError(
-                "predict_photometry_components requires photometric "
+                "Photometry prediction requires photometric "
                 "filters configured on the observation. Construct the "
                 "model with ``filters=`` or pass an Observation that "
                 "carries a Photometry instance."
@@ -4013,8 +4081,8 @@ class SEDModel:
         full = {**self.spec.get_fixed_values(), **params}
         return self.observation.predict(state, full)["phot_fnu"]
 
-    def predict_spectrum_components(self, params, wave_obs=None):
-        """Spectrum through the orchestrator path.
+    def _spectrum_via_state(self, params, wave_obs=None):
+        """Spectrum through the orchestrator path (internal).
 
         Runs the SEDComponent chain, applies the cosmological redshift +
         luminosity-distance projection, interpolates onto ``wave_obs``,
@@ -4063,7 +4131,7 @@ class SEDModel:
             wave_obs = self.observation.spectroscopy.wave_obs
         elif wave_obs is None:
             raise ValueError(
-                "predict_spectrum_components requires a wave_obs grid "
+                "Spectrum prediction requires a wave_obs grid "
                 "(pass it explicitly, or build with "
                 "Observation(spectroscopy=Spectroscopy(wave_obs=...)))."
             )
@@ -4079,6 +4147,40 @@ class SEDModel:
             lsf_sigma_lib_kms=self._sigma_lib_kms,
             lsf_n_bins=self._lsf_n_bins,
         )["spec_fnu"]
+
+    def predict_photometry_components(self, params):
+        """Deprecated alias of the orchestrator photometry path.
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            The legacy-vs-orchestrator A/B split is gone — every public
+            predict method routes through the component chain now. Call
+            :meth:`predict_photometry` instead. Removed in tengri v1.0.
+        """
+        warnings.warn(
+            "predict_photometry_components() is deprecated — the orchestrator "
+            "is the only forward path now; use predict_photometry(params). "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._photometry_via_state(params)
+
+    def predict_spectrum_components(self, params, wave_obs=None):
+        """Deprecated alias of the orchestrator spectrum path.
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            The legacy-vs-orchestrator A/B split is gone — every public
+            predict method routes through the component chain now. Call
+            :meth:`predict_spectrum` instead. Removed in tengri v1.0.
+        """
+        warnings.warn(
+            "predict_spectrum_components() is deprecated — the orchestrator "
+            "is the only forward path now; use predict_spectrum(params). "
+            "Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return self._spectrum_via_state(params, wave_obs=wave_obs)
 
     def predict_emission_lines(self, params):
         """Orchestrator-path emission-line luminosities.
@@ -4117,7 +4219,19 @@ class SEDModel:
         ----------
         .. [1] S. Charlot & S. Fall, "A Simple Model for the Absorption of
            Starlight by Dust in Galaxies," ApJ 539, 718 (2000).
+
+        .. deprecated:: 2026-07 (cleanup PR-2)
+            Interactive getter moved to the lazy Prediction wrapper:
+            ``model.predict(params).lines`` (one cached forward pass shared across
+            all derived quantities). Removed in tengri v1.0.
         """
+        warnings.warn(
+            "predict_emission_lines() is deprecated — use "
+            "model.predict(params).lines instead "
+            "(cached, one forward pass). Will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         from tengri.components.nebular import BakedInBackend
 
         if isinstance(self._nebular_backend, BakedInBackend):
