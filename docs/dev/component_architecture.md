@@ -8,7 +8,7 @@
 > [`sed-model-components.md`](sed-model-components.md). For the big-picture
 > architecture this fits into — `ForwardModel`, sub-models, populations,
 > spatial — see
-> [`forward-model-architecture.md`](forward-model-architecture.md).
+> [`forward-model-architecture.md`](archive/forward-model-architecture.md).
 >
 > For the migration history see
 > [`phase_ii_2_stellar_migration.md`](phase_ii_2_stellar_migration.md);

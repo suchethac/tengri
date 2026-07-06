@@ -201,4 +201,4 @@ retirement above (breaking).
 - **Issue #738** — Tracking issue for the unified dispatch migration.
 - **`docs/dev/sed-model-components.md`** — Contributor how-to (updated to match this recipe).
 - **`docs/dev/NAMING_CONTRACT.md`** — Free-parameter prefix discipline.
-- **`docs/dev/forward-model-architecture.md`** — Architectural context.
+- **`docs/dev/archive/forward-model-architecture.md`** — Architectural context.

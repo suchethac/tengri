@@ -47,7 +47,7 @@ Create `tests/unit/forward/test_sedmodel_as_submodel.py`:
 
 This makes the _LegacySEDSubModel adapter unnecessary; that file is
 deleted in this same plan. The architecture spec at
-``docs/dev/forward-model-architecture.md`` §4 has `SEDModel` listed
+``docs/dev/archive/forward-model-architecture.md`` §4 has `SEDModel` listed
 as one of the three sub-models satisfying SubModel.
 """
 
@@ -113,7 +113,7 @@ In `src/tengri/forward/sed_model.py`, find the `class SEDModel:` declaration (li
     #
     # SEDModel satisfies tengri.protocols.SubModel — the contract that
     # ForwardModel's per-population orchestration consumes. See the
-    # forward-model architecture spec (docs/dev/forward-model-architecture.md)
+    # forward-model architecture spec (docs/dev/archive/forward-model-architecture.md)
     # §4 for the SubModel layer.
 
     name: str = "sed"

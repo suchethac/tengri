@@ -538,13 +538,6 @@ from tengri.analysis.plotting import (
     safe_corner,
     setup_style,
 )
-from tengri.config.settings import (
-    AGNConfig,
-    DustConfig,
-    NebularConfig,
-    SEDModelConfig,
-    SFHConfig,
-)
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
 from tengri.inference.hierarchical import PopulationFitter
@@ -653,6 +646,14 @@ _RENAMED_SYMBOLS = {
     "PipelineContractError": ("ComponentIOError", "tengri.protocols.ComponentIOError"),
 }
 
+# Config dataclasses demoted from the top-level namespace (2026-07, #887):
+# the nested-dict grammar (``SEDModel.build``) is the one construction
+# surface; the dataclasses are internal lowering artifacts. Still importable
+# from ``tengri.config`` without a warning for internal/expert use.
+_DEMOTED_CONFIGS = frozenset(
+    {"AGNConfig", "DustConfig", "NebularConfig", "SEDModelConfig", "SFHConfig"}
+)
+
 
 def __getattr__(name: str) -> object:
     if name in _RENAMED_SYMBOLS:
@@ -661,4 +662,18 @@ def __getattr__(name: str) -> object:
 
         new_obj = globals()[new_name]
         return deprecated_attribute(new_obj, old_name=f"tengri.{name}", new_name=new_path)
+    if name in _DEMOTED_CONFIGS:
+        import warnings
+
+        from tengri.config import settings as _settings
+
+        warnings.warn(
+            f"tengri.{name} is internal — build models with the nested-dict "
+            f"grammar (SEDModel.build(...)) instead. For expert use import it "
+            f"from tengri.config ({name} stays there without a warning). "
+            f"Top-level access will be removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return getattr(_settings, name)
     raise AttributeError(f"module 'tengri' has no attribute {name!r}")

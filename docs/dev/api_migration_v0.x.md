@@ -320,7 +320,7 @@ remain and resolve to the canonical location without warning.
 
 Three new top-level names were added to `tengri.__all__` as part of the
 forward-model architecture tracer-bullet
-(`docs/dev/forward-model-architecture.md`, PR #149). All three are
+(`docs/dev/archive/forward-model-architecture.md`, PR #149). All three are
 purely additive — no existing name was renamed, removed, or shadowed.
 
 | New top-level name | Lives in                              | Purpose                                                                                  |
@@ -752,7 +752,7 @@ Ported in 2026-05:
 * `RadioPowerLawSEDComponent`, `XRayAirdSEDComponent` (multiwavelength)
 
 References: `docs/dev/sed-model-components.md` (how-to),
-`docs/dev/forward-model-architecture.md` (architecture),
+`docs/dev/archive/forward-model-architecture.md` (architecture),
 `docs/adr/0011-sed-model-component-base.md` (decision).
 
 ---

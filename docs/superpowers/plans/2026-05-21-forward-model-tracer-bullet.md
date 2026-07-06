@@ -129,7 +129,7 @@ Create `src/tengri/protocols/submodel.py`:
 """SubModel protocol: one mode of the ForwardModel (SED, spatial, joint).
 
 Defined by the forward-model architecture spec
-(``docs/dev/forward-model-architecture.md``) §4. A SubModel is the thin
+(``docs/dev/archive/forward-model-architecture.md``) §4. A SubModel is the thin
 composer over a list of components. Each population carries one SED
 SubModel and optionally one spatial SubModel; ``ForwardModel`` runs the
 populations in sequence and hands the result to ``ObservationModel``.
@@ -309,7 +309,7 @@ disc) is expressed as multiple :class:`Population`s. The tracer-bullet
 implementation supports single-population only; ADR-0012 will lift
 this to multi-population with namespaced parameter names.
 
-See ``docs/dev/forward-model-architecture.md`` §5 and ADR-0012.
+See ``docs/dev/archive/forward-model-architecture.md`` §5 and ADR-0012.
 """
 
 from __future__ import annotations
@@ -661,7 +661,7 @@ Create `src/tengri/forward/forward_model.py`:
 Owns a tuple of :class:`Population`s and an :class:`Observation`.
 Exposes a single ``.predict(params)`` method that inference calls.
 The architecture spec is at
-``docs/dev/forward-model-architecture.md`` §5; this file implements
+``docs/dev/archive/forward-model-architecture.md`` §5; this file implements
 the tracer-bullet single-population slice.
 """
 
@@ -686,7 +686,7 @@ class ForwardModel:
 
     Holds populations + observation; exposes ``.predict(params)`` as the
     sole API inference consumes. See
-    ``docs/dev/forward-model-architecture.md`` for the full design.
+    ``docs/dev/archive/forward-model-architecture.md`` for the full design.
 
     Tracer-bullet limitations (this slice):
       * Single population only.
@@ -1086,7 +1086,7 @@ Edit `CHANGELOG.md`. Under the `## Unreleased` section, add (alphabetized under 
   Wraps populations + observation and exposes a single
   ``.predict(params)`` method. Tracer-bullet single-population only;
   multi-population lands in the ADR-0012 follow-up plan. See
-  ``docs/dev/forward-model-architecture.md``.
+  ``docs/dev/archive/forward-model-architecture.md``.
 - **`tengri.Population`** — one (SED, spatial) pair held by
   ``ForwardModel``. Spatial submodel is reserved (``None``) in this
   slice.
@@ -1170,7 +1170,7 @@ gh pr create --title "feat(forward): ForwardModel outer shell (tracer-bullet, si
 ## Summary
 
 Implements the tracer-bullet vertical slice of the forward-model architecture
-spec (`docs/dev/forward-model-architecture.md`):
+spec (`docs/dev/archive/forward-model-architecture.md`):
 
 - `tengri.ForwardModel` — outer shell with `.build(sed=..., observation=...)`
   convenience and `.predict(params)` method.

@@ -1,7 +1,7 @@
 # ADR 0004: Kernel strategy as an explicit module
 
 **Status:** **SUPERSEDED** (2026-05-20) by Phase 6 of
-[`docs/dev/photometry_path_unification.md`](../dev/photometry_path_unification.md).
+[`docs/dev/archive/photometry_path_unification.md`](../dev/archive/photometry_path_unification.md).
 
 The kernel adapter family (``tengri.forward._kernels``) and the
 ``KernelStrategy`` selector this ADR describes were removed in PR #135

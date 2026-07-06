@@ -52,7 +52,7 @@ For the how-to and the contract, see
 [`docs/dev/sed-model-components.md`](sed-model-components.md); for the
 build path, the single `_REGISTRY` dispatch, and the per-domain table, see
 [`model-construction.md`](model-construction.md) (the canonical narrative —
-[`forward-model-architecture.md`](forward-model-architecture.md) is kept as
+[`forward-model-architecture.md`](archive/forward-model-architecture.md) is kept as
 a historical design doc).
 
 The bare `SEDComponent` Protocol stays as the fallback for models that don't
