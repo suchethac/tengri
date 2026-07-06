@@ -88,6 +88,47 @@ AGNfitter sources:
    composable configs move to the conserved (correct) numbers.
 6. **Disc-reddening param** = canonical `agn_ebv_disc`; `agn_polar_ebv` removed.
 
+## Section 0 — API surface: what's config vs. computation
+
+The target is that reproducing a reference code is **pure configuration** at the
+`SEDModel.build` public API — the recipe returns an `agn={'type':'composable',
+...}` group that composes into the full galaxy model exactly like `sfh`/`dust`/
+`neb`:
+
+```python
+model = SEDModel.build(ssp_data=ssp, observation=obs,
+                       sfh={...}, dust={...}, neb={...},
+                       agn=recipes.agn_cigale_skirtor())   # reproduces CIGALE, pure config
+```
+
+The clean split:
+
+| Declarative **config** (registry/grammar/params) | **Computation** (built once, in the runner/pipeline) |
+|---|---|
+| block selection (disc/torus/nlr/blr/feii/atten) | the energy-ledger debit/allocate math (`compose_l_nu`) |
+| per-block params | conservation enforcement `Σ=L_bol` |
+| `agn_norm` policy string | the policy implementations (conserving/cigale_joint/l5100/fagn) |
+| recipe = named bundle of the above | `agn_ebv_disc` disc-reddening wiring |
+
+So "just set the components" is the *surface*, but it only reproduces the codes
+**after** the ledger computation exists — config over today's runner gives the
+#916 divergence.
+
+**Two policies compute at the full-galaxy level** (the AGN normalization is
+defined relative to the host), routed through the ADR-0009 `inputs`/`outputs`
+cross-component contract — the same mechanism dust energy balance uses, not a
+special case:
+
+- **`fagn`** (Prospector): `L_AGN = fagn · L_stellar_bol`. The AGN group consumes
+  the stellar bolometric; stellar is upstream in the topo-sort → clean.
+- **`fracAGN`** (CIGALE): `L_AGN / L_total` in a band, where `L_total` includes
+  the AGN → mildly circular; resolved by band-normalization as CIGALE does. This
+  is the one genuinely non-local (solve-at-model-level) computation.
+
+Everything is expressible through the parameter/registry/contract system at the
+public API — nothing lives outside it. `fracAGN`/`fagn` are "config that
+triggers a cross-component computation," not "config that is a fixed value."
+
 ## Section 1 — The energy-ledger runner (architecture & data flow)
 
 `compose_l_nu` (`blocks/runner.py`) becomes the single ledger keeper:
