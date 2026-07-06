@@ -3186,7 +3186,9 @@ class SEDModel:
         sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / L_SUN
 
-    def predict_line_fluxes(self, params, target_wavelengths=None, tolerance_aa=5.0):
+    def predict_line_fluxes(
+        self, params, target_wavelengths=None, tolerance_aa=5.0, *, state=None
+    ):
         """Predict observed emission line fluxes.
 
         Calls the nebular backend to compute line luminosities,
@@ -3245,7 +3247,14 @@ class SEDModel:
         # ``predict_nebular_line_luminosities`` with SSP-derived
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
-        state = self.predict_state(params)
+        #
+        # ``state`` may be supplied by a caller that has already run the
+        # forward (e.g. the joint loss deriving line fluxes + ratios +
+        # indices from ONE ``predict_state`` — see
+        # ``loss_functions._build_prediction``) so the full-grid forward
+        # is not recomputed once per feature channel.
+        if state is None:
+            state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete "
@@ -3305,7 +3314,7 @@ class SEDModel:
         flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
         return flux
 
-    def predict_line_ratios(self, params, line_ratio_data):
+    def predict_line_ratios(self, params, line_ratio_data, *, state=None):
         """Predict emission line ratios for a :class:`LineRatioData` set.
 
         Computes the model flux ratio ``F(numerator) / F(denominator)`` for
@@ -3340,7 +3349,8 @@ class SEDModel:
         **JIT-compatible**: no — delegates to the nebular backend via
         :meth:`predict_state`.
         """
-        state = self.predict_state(params)
+        if state is None:
+            state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete line "
@@ -3365,7 +3375,7 @@ class SEDModel:
         den_flux = _match(line_ratio_data.denominator_waves)
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
-    def predict_spectral_indices(self, params, index_defs):
+    def predict_spectral_indices(self, params, index_defs, *, state=None):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -3393,6 +3403,7 @@ class SEDModel:
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
         """
+        from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
@@ -3403,9 +3414,18 @@ class SEDModel:
         # This works on both the exact and SpectrumPrecomp paths: the dust
         # components set ``state.sed_intrinsic`` to the full attenuated SED in
         # all cases (the spectrum LUT only *additionally* publishes per-pixel
-        # transmission), so ``predict_rest_sed`` returns the attenuated SED
+        # transmission), so the rest-frame SED is the attenuated SED
         # regardless of ``approx``.
-        rest = self.predict_rest_sed(params)
+        #
+        # ``state`` may be supplied by a caller that already ran the forward
+        # (the joint loss shares ONE ``predict_state`` across the line-flux,
+        # line-ratio, and index channels) — ``predict_rest_sed`` reads exactly
+        # ``(state.wave, state.sed_intrinsic)`` on the native grid, so deriving
+        # ``rest`` from a shared state is bit-identical to recomputing it.
+        if state is None:
+            rest = self.predict_rest_sed(params)
+        else:
+            rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]

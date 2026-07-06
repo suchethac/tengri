@@ -95,16 +95,27 @@ def _build_prediction(
         prediction["phot_fnu"] = pred_phot
     if pred_spec is not None:
         prediction["spec_fnu"] = pred_spec
+
+    # Fast path (2026-07-05): line fluxes, line ratios, and spectral indices
+    # all derive from the SAME orchestrator forward. Compute ``predict_state``
+    # ONCE when any feature channel is active and thread it into each
+    # predictor, so a joint fit with lines + ratios + indices runs the
+    # full-grid forward once per loss eval instead of two or three times.
+    feature_state = None
+    if has_line_fluxes or has_line_ratios or has_indices:
+        feature_state = model.predict_state(params)
     if has_line_fluxes:
         prediction["line_fluxes"] = model.predict_line_fluxes(
-            params, target_wavelengths=data_args["line_flux_waves"]
+            params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
         )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
-            params, model.observation.line_ratios
+            params, model.observation.line_ratios, state=feature_state
         )
     if has_indices:
-        prediction["indices"] = model.predict_spectral_indices(params, index_defs)
+        prediction["indices"] = model.predict_spectral_indices(
+            params, index_defs, state=feature_state
+        )
 
     return prediction, predicted, pred_phot, pred_spec
 
