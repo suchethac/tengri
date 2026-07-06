@@ -66,3 +66,38 @@ class TestGTheta:
         from tengri.components.agn.adaf import _adaf_g_theta
 
         assert 6.5 < float(_adaf_g_theta(1.5e9)) < 7.5
+
+
+class TestSelfSimilar:
+    """Self-similar flow quantities at r_min (Mahadevan Eq. 5)."""
+
+    def test_ne_b_at_rmin(self):
+        """n_e, B at r_min for m=5e9, mdot=1e-3, alpha=0.3, beta=0.5 (Fig. 1 params)."""
+        from tengri.components.agn.adaf import _adaf_ne_b_rmin
+
+        n_e, B = _adaf_ne_b_rmin(m=5e9, mdot=1e-3, alpha=0.3, beta=0.5)
+        # Hand-evaluated from Eq. 5 with c1=0.5, c3=0.3, r_min=3.
+        assert abs(float(n_e) - 8.11e6) / 8.11e6 < 0.02, f"n_e={float(n_e):.3e}"
+        assert abs(float(B) - 160.8) / 160.8 < 0.02, f"B={float(B):.3e}"
+
+
+class TestTauEsAlphaC:
+    """Electron-scattering optical depth (Eq. 31) and Compton slope (Eq. 34)."""
+
+    def test_tau_es_fiducial(self):
+        """Eq. 31: tau_es = 23.87 mdot at alpha=0.3 (c1=0.5, r_min=3)."""
+        from tengri.components.agn.adaf import _adaf_tau_es
+
+        assert abs(float(_adaf_tau_es(mdot=1e-2, alpha=0.3)) - 0.2387) / 0.2387 < 1e-3
+        # scales linearly in mdot and as 1/alpha
+        assert abs(float(_adaf_tau_es(mdot=1e-2, alpha=0.6)) - 0.1194) / 0.1194 < 1e-3
+
+    def test_alpha_c_eq34(self):
+        """Eq. 34: alpha_c = -ln(tau_es)/ln(A), A = 1 + 4 theta_e + 16 theta_e^2."""
+        from tengri.components.agn.adaf import _adaf_alpha_c
+
+        # T_e=2e9 -> theta_e~0.337 -> A~4.17 -> ln A~1.43; tau_es=0.024 -> -ln~3.73
+        ac = float(_adaf_alpha_c(tau_es=0.024, t_e=2e9))
+        assert 2.4 < ac < 2.9, f"alpha_c={ac}"
+        # Larger tau_es (higher mdot) -> smaller alpha_c (Compton cooling grows)
+        assert float(_adaf_alpha_c(tau_es=0.24, t_e=2e9)) < ac

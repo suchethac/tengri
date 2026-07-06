@@ -184,3 +184,109 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
     x = 1.0 / theta  # = 1/theta_e
     # g = (2 + 2 theta + 1/theta) e^{-x} / K_2(x) = numerator / (K_2(x) e^x).
     return (2.0 + 2.0 * theta + 1.0 / theta) / _bessel_k2e(x)
+
+
+# ── Self-similar flow structure (Mahadevan 1997 / Narayan & Yi 1995b, Eq. 5) ──
+
+
+def _adaf_s1(alpha: float, beta: float) -> jnp.ndarray:
+    r"""Magnetic-field self-similar constant ``s_1`` (Mahadevan Eq. 5).
+
+    :math:`s_1 = 1.42\times10^9\,\alpha^{-1/2}(1-\beta)^{1/2}c_1^{-1/2}c_3^{1/2}`.
+    """
+    return 1.42e9 * alpha**-0.5 * (1.0 - beta) ** 0.5 * _C1**-0.5 * _C3**0.5
+
+
+def _adaf_ne_b_rmin(
+    m: float, mdot: float, alpha: float, beta: float
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Electron number density and magnetic field at ``r_min`` (Mahadevan Eq. 5).
+
+    .. math::
+
+        n_e = b_1\,m^{-1}\dot m\,r^{-3/2}\ \mathrm{cm^{-3}}, \qquad
+        B   = s_1\,m^{-1/2}\dot m^{1/2}\,r^{-5/4}\ \mathrm{G},
+
+    with :math:`b_1 = 3.16\times10^{19}\alpha^{-1}c_1^{-1}`, evaluated at
+    :math:`r = r_{\min} = 3`.
+
+    Parameters
+    ----------
+    m : float
+        Black hole mass ``M / M_sun``.
+    mdot : float
+        Accretion rate in Eddington units.
+    alpha, beta : float
+        Viscosity and gas-to-total pressure ratio.
+
+    Returns
+    -------
+    tuple of ndarray
+        ``(n_e [cm^-3], B [G])`` at ``r_min``.
+    """
+    b1 = 3.16e19 * alpha**-1.0 * _C1**-1.0
+    n_e = b1 * m**-1.0 * mdot * _R_MIN**-1.5
+    b_field = _adaf_s1(alpha, beta) * m**-0.5 * mdot**0.5 * _R_MIN**-1.25
+    return n_e, b_field
+
+
+def _adaf_tau_es(mdot: float, alpha: float) -> jnp.ndarray:
+    r"""Electron-scattering optical depth ``tau_es`` at ``r_min`` (Mahadevan Eq. 31).
+
+    .. math::
+
+        \tau_{es} = 6.2\,\alpha^{-1}c_1^{-1}\dot m\,r_{\min}^{-1/2}
+                  = 23.87\,\dot m\,(\alpha/0.3)^{-1}
+
+    (with :math:`c_1=0.5`, :math:`r_{\min}=3`). Half the total optical depth, per
+    the paper's prescription.
+
+    Parameters
+    ----------
+    mdot : float
+        Accretion rate in Eddington units.
+    alpha : float
+        Viscosity parameter.
+
+    Returns
+    -------
+    ndarray
+        ``tau_es`` [dimensionless].
+    """
+    return 6.2 * alpha**-1.0 * _C1**-1.0 * mdot * _R_MIN**-0.5
+
+
+def _adaf_amplification(t_e: jnp.ndarray) -> jnp.ndarray:
+    r"""Mean Compton amplification factor per scattering ``A`` (Mahadevan Eq. 32).
+
+    :math:`A = 1 + 4\theta_e + 16\theta_e^2`, with :math:`\theta_e = kT_e/m_ec^2`.
+    """
+    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    return 1.0 + 4.0 * theta + 16.0 * theta**2
+
+
+def _adaf_alpha_c(tau_es: jnp.ndarray, t_e: jnp.ndarray) -> jnp.ndarray:
+    r"""Comptonization spectral slope ``alpha_c`` (Mahadevan Eq. 34).
+
+    .. math::
+
+        \alpha_c \equiv \frac{-\ln \tau_{es}}{\ln A}
+
+    where :math:`A` is the amplification factor (Eq. 32). Governs the sub-mm to
+    X-ray Compton spectrum :math:`L_\nu \propto \nu^{-\alpha_c}`; ``alpha_c < 1``
+    means Compton cooling dominates.
+
+    Parameters
+    ----------
+    tau_es : array_like
+        Electron-scattering optical depth (Eq. 31).
+    t_e : array_like
+        Electron temperature [K].
+
+    Returns
+    -------
+    ndarray
+        ``alpha_c`` [dimensionless].
+    """
+    a_factor = _adaf_amplification(t_e)
+    return -jnp.log(tau_es) / jnp.log(a_factor)
