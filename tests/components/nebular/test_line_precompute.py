@@ -39,7 +39,7 @@ _LINES = ["Halpha", "Hbeta", "OIII_5007", "NII_6584", "SII_6717", "OIII_4959", "
 _MET_LO, _MET_HI = -1.8, 0.4
 
 
-def _model(ssp_data_fsps):
+def _model(ssp_data_fsps, redshift=0.15, neb=None):
     import warnings
 
     dummy = LineFluxData.from_dict({n: (1e-16, 1e-17) for n in _LINES})
@@ -47,9 +47,11 @@ def _model(ssp_data_fsps):
     kw = recipes.star_forming_photometry()
     kw.pop("approx", None)
     kw.pop("redshift", None)
+    if neb is not None:
+        kw["neb"] = neb
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        m = SEDModel.build(ssp_data=ssp_data_fsps, observation=obs, redshift=Fixed(0.15), **kw)
+        m = SEDModel.build(ssp_data=ssp_data_fsps, observation=obs, redshift=Fixed(redshift), **kw)
     return m, dummy.wavelengths
 
 
@@ -81,18 +83,61 @@ def test_line_table_reconstructs_exact_across_sfh_and_metallicity(ssp_data_fsps)
         )
 
         exact = np.asarray(m.predict_line_fluxes(p, target_wavelengths=lw))
-        lut = np.asarray(reconstruct_line_lums(_nion(m, p), p["met_logzsol"], table))
+        lut = np.asarray(reconstruct_line_lums(_nion(m, p), p["met_logzsol"], 0.15, table))
         strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
         rel = np.max(np.abs(lut - exact)[strong] / np.maximum(np.abs(exact)[strong], 1e-40))
         worst = max(worst, rel)
     assert worst < 1e-3, f"line-table reconstruction off by {worst:.2e} (>1e-3) on strong lines"
 
 
+def test_table_is_redshift_independent(ssp_data_fsps):
+    """Regression: a table built at one redshift reconstructs correctly at another.
+
+    The table stores line LUMINOSITY (distance-independent); the cosmology is
+    applied at reconstruct with the EVALUATION redshift. Building at z=0.1 and
+    evaluating at z=0.5 must match the exact forward at z=0.5 — the earlier
+    design stored observed flux and was ~38x wrong across this redshift gap.
+    """
+    m_lo, lw = _model(ssp_data_fsps, redshift=0.1)
+    m_hi, _ = _model(ssp_data_fsps, redshift=0.5)
+    table = precompute_line_per_qh(m_lo, lw, met_lo=_MET_LO, met_hi=_MET_HI, n_met=40)
+
+    p = dict(m_lo.spec.sample(jax.random.PRNGKey(3)))
+    p["met_logzsol"] = jnp.asarray(-0.4)
+    # nion is a stellar (distance-independent) quantity — same physical galaxy
+    exact_hi = np.asarray(
+        m_hi.predict_line_fluxes({**p, "redshift": jnp.asarray(0.5)}, target_wavelengths=lw)
+    )
+    lut_hi = np.asarray(
+        reconstruct_line_lums(
+            _nion(m_hi, {**p, "redshift": jnp.asarray(0.5)}), p["met_logzsol"], 0.5, table
+        )
+    )
+    strong = np.abs(exact_hi) > 1e-3 * np.max(np.abs(exact_hi))
+    rel = np.max(np.abs(lut_hi - exact_hi)[strong] / np.maximum(np.abs(exact_hi)[strong], 1e-40))
+    assert rel < 1e-3, f"cross-redshift reconstruction off by {rel:.2e} (table built at z=0.1)"
+
+
+def test_free_ionization_is_rejected_at_build(ssp_data_fsps):
+    """Regression: building a table with a FREE ionization param must raise.
+
+    A free neb_logU / neb_logZ_gas / neb_fesc changes line ratios, so the
+    single-metallicity-axis table would be silently wrong away from its baked
+    reference value. The precondition must be a guard, not a docstring.
+    """
+    from tengri import FIXED, Uniform
+
+    m, lw = _model(ssp_data_fsps, neb={"type": "cue", "logU": Uniform(-3.5, -1.5), "*": FIXED})
+    assert "neb_logU" in set(m.spec.free_params)
+    with pytest.raises(ValueError, match="requires FIXED nebular ionization"):
+        precompute_line_per_qh(m, lw, n_met=5)
+
+
 def test_reconstruct_is_jit_and_linear_in_nion(ssp_data_fsps):
     """The hot path is jit'able and exactly linear in nion (= Q_H)."""
     m, lw = _model(ssp_data_fsps)
     table = precompute_line_per_qh(m, lw, met_lo=_MET_LO, met_hi=_MET_HI, n_met=20)
-    fn = jax.jit(lambda nion, mz: reconstruct_line_lums(nion, mz, table))
+    fn = jax.jit(lambda nion, mz: reconstruct_line_lums(nion, mz, 0.15, table))
     a = np.asarray(fn(1.0e56, -0.3))
     b = np.asarray(fn(2.0e56, -0.3))
     np.testing.assert_allclose(b, 2.0 * a, rtol=1e-12)  # exact linearity in Q_H

@@ -9,24 +9,32 @@ metallicity) and the fixed gas conditions (logU, logZ_gas, fesc) — **not on th
 star-formation-history shape**: the SFH enters lines only through the scalar
 Q_H (validated to CV = 0 % across SFH draws).
 
-So a joint fit that varies the SFH can skip Cue's ~3 ms neural forward every
-evaluation: precompute ``\\ell`` once on a dense stellar-metallicity grid, then
+The reconstruction is
 
-    L_line(params) = nion(params) \\cdot interp_met(ell, met_logzsol)
+    F_line(params) = nion(params) * interp_met(ell, met_logzsol) / (4 pi d_L(z)^2)
 
-where ``nion`` is the stellar-published ionizing rate (``nion == q_h``). The
-stellar metallicity enters Cue **nonlinearly** (via the ionizing-spectrum
-shape), so a coarse SSP-grid interpolation is not enough (1-60 % line errors);
-a dense grid (~40 points) with linear interpolation reaches < 4e-4 on the
-strong DESI lines — three orders of magnitude below the measurement floor.
+where ``nion`` is the stellar-published ionizing rate (``nion == q_h``,
+independently verified). The stored ``ell`` is a **luminosity** per Q_H
+(distance-independent), so the cosmology is applied at evaluation with the
+**evaluation** redshift — the table is valid at any (per-galaxy or free)
+redshift. The stellar metallicity enters Cue **nonlinearly** (via the
+ionizing-spectrum shape), so a coarse SSP-grid interpolation is not enough
+(1-60 % line errors); a dense grid (~40 points) with linear interpolation
+reaches < 4e-4 on the strong DESI lines.
 
-The table is built in **observed-flux space** (``predict_line_fluxes`` output)
-so reconstruction matches that method bit-for-bit at fixed redshift; the
-cosmological ``1/(4 pi d_L^2)`` factor is identical between build and eval and
-cancels in ``flux_ref / nion_ref``.
+Requires FIXED nebular ionization (logU, logZ_gas, fesc) — guarded at build;
+``met_logzsol`` may be free (it is the LUT axis). See issue #950.
 
-Requires FIXED nebular ionization (logU, logZ_gas, fesc); ``met_logzsol`` may be
-free (it is the LUT axis). See issue #950.
+.. warning::
+
+    **Not wired into the forward, and not a performance win as of #949.** This
+    module is a *validated physics record* (line-Q_H linearity, SFH-shape
+    independence, metallicity nonlinearity). After #949 made the objective
+    genuinely JIT-compiled, the Cue line forward is ~0.5 ms (not the ~85 ms
+    un-JIT'd figure #950 was scoped against), so ``reconstruct_line_lums`` is
+    NOT faster than running Cue. The expensive joint-fit channel is spectral
+    **indices** (Dn4000 forces the full-grid SED), not lines — see the
+    index-window LUT (#949) and the #950 benchmark comments.
 """
 
 from __future__ import annotations
@@ -36,18 +44,27 @@ import dataclasses
 import jax
 import jax.numpy as jnp
 
+#: Nebular ionization parameters that MUST be fixed for the table to be valid —
+#: they change ``line_per_qh`` (line ratios), so a free one would make the
+#: single-metallicity-axis table wrong away from its baked reference value.
+_REQUIRED_FIXED = ("neb_logU", "neb_logZ_gas", "neb_fesc")
+
 
 @dataclasses.dataclass(frozen=True)
 class LinePerQHTable:
-    """Dense metallicity grid of per-Q_H line fluxes for the FeaturePrecomp line path.
+    """Dense metallicity grid of per-Q_H line **luminosities** for the line path.
 
     Attributes
     ----------
     met_grid : ndarray, shape (n_met,)
         ``met_logzsol`` grid points [dex], ascending.
     line_per_qh : ndarray, shape (n_met, n_lines)
-        Observed line flux per unit ``nion`` at each grid metallicity —
-        ``predict_line_fluxes(ref) / nion(ref)`` [erg/s/cm^2 per (photons/s)].
+        Line **luminosity** per unit ``nion`` at each grid metallicity —
+        ``L_line(ref) / nion(ref)`` [erg/s per (photons/s)]. **Distance-
+        independent** (luminosity, not observed flux) so the table is valid at
+        any redshift; :func:`reconstruct_line_lums` applies the cosmology at the
+        evaluation redshift. (Storing observed flux here would bake the
+        reference distance and be silently wrong at any other z.)
     wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line wavelengths [Angstrom], matching the target
         lines the table was built for.
@@ -62,6 +79,14 @@ def _nion_of_state(state) -> jnp.ndarray:
     """Total ionizing photon rate published by the stellar component."""
     nion = state.derived["nion"]
     return jnp.sum(nion) if jnp.ndim(nion) else nion
+
+
+def _four_pi_dl2(redshift) -> jnp.ndarray:
+    """4 pi d_L(z)^2 [cm^2] — the line luminosity → observed flux divisor."""
+    from tengri.cosmology import luminosity_distance
+
+    dl_cm = jnp.asarray(luminosity_distance(jnp.asarray(redshift))).reshape(())
+    return 4.0 * jnp.pi * dl_cm**2
 
 
 def precompute_line_per_qh(
@@ -105,11 +130,31 @@ def precompute_line_per_qh(
     **Build cost**: ``n_met`` forward evaluations, once at construction.
     Not JIT'd (a build-time loop over concrete metallicities).
     """
+    # Guard the "fixed ionization" precondition: a free logU/logZ_gas/fesc
+    # changes line_per_qh (line ratios), so the single-metallicity-axis table
+    # would be silently wrong away from the baked reference value. Raise rather
+    # than let the caller build an invalid table.
+    free_ion = [p for p in _REQUIRED_FIXED if p in set(model.spec.free_params)]
+    if free_ion:
+        raise ValueError(
+            f"precompute_line_per_qh requires FIXED nebular ionization, but "
+            f"{free_ion} are free. The table has a single metallicity axis; a "
+            f"free ionization parameter changes line ratios and would make "
+            f"reconstruction wrong away from its reference value. Fix these "
+            f"parameters, or extend the table with extra axes (see #950)."
+        )
+
     wavelengths = jnp.asarray(wavelengths)
     if ref_params is None:
         ref_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     else:
         ref_params = dict(ref_params)
+
+    # Recover distance-independent LUMINOSITY: predict_line_fluxes returns
+    # observed flux L / (4 pi d_L(z_ref)^2); multiply by the reference divisor
+    # so the stored table carries L_line / nion, valid at any evaluation z.
+    ref_z = ref_params.get("redshift", 0.0)
+    ref_divisor = _four_pi_dl2(ref_z)
 
     met_grid = jnp.linspace(met_lo, met_hi, n_met)
     rows = []
@@ -118,20 +163,31 @@ def precompute_line_per_qh(
         p["met_logzsol"] = jnp.asarray(float(mz))
         flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths)
         nion = _nion_of_state(model.predict_state(p))
-        rows.append(jnp.asarray(flux) / jnp.maximum(nion, 1e-30))
+        lum = jnp.asarray(flux) * ref_divisor  # observed flux → line luminosity
+        rows.append(lum / jnp.maximum(nion, 1e-30))
     return LinePerQHTable(
         met_grid=met_grid,
-        line_per_qh=jnp.stack(rows),  # (n_met, n_lines)
+        line_per_qh=jnp.stack(rows),  # (n_met, n_lines) — luminosity per Q_H
         wavelengths=wavelengths,
     )
 
 
 def reconstruct_line_lums(
-    nion: jnp.ndarray, met_logzsol: jnp.ndarray, table: LinePerQHTable
+    nion: jnp.ndarray,
+    met_logzsol: jnp.ndarray,
+    redshift: jnp.ndarray,
+    table: LinePerQHTable,
 ) -> jnp.ndarray:
     """Reconstruct observed line fluxes from the table without a Cue forward.
 
-    ``L_line = nion * interp_met(line_per_qh, met_logzsol)``.
+    .. math::
+
+        F_{\\rm line} = \\frac{n_{\\rm ion}\\,
+            \\mathrm{interp\\_met}(\\ell, Z_\\star)}{4\\pi\\,d_L(z)^2}
+
+    where :math:`\\ell` is the stored luminosity-per-Q_H and :math:`d_L(z)` is
+    the luminosity distance at the **evaluation** redshift — so the same table
+    is correct at any (per-galaxy or free) redshift.
 
     Parameters
     ----------
@@ -139,6 +195,9 @@ def reconstruct_line_lums(
         Ionizing photon rate for this evaluation (stellar-published; == q_h).
     met_logzsol : float
         Stellar metallicity for this evaluation [dex].
+    redshift : float
+        Evaluation redshift — the cosmology is applied here, NOT baked into the
+        table (that was the redshift-lock bug).
     table : LinePerQHTable
         The dense-met table from :func:`precompute_line_per_qh`.
 
@@ -146,14 +205,14 @@ def reconstruct_line_lums(
     -------
     ndarray, shape (n_lines,)
         Observed line fluxes [erg/s/cm^2], matching ``predict_line_fluxes`` to
-        < 4e-4 on strong lines.
+        < 4e-4 on strong lines at the evaluation redshift.
 
     Notes
     -----
-    **JIT-compatible**: yes — ``jnp.interp`` + a scalar multiply. This is the
-    per-evaluation hot path that replaces the ~3 ms Cue neural forward.
+    **JIT-compatible**: yes — ``jnp.interp`` + cosmology + a scalar multiply.
     """
     mz = jnp.asarray(met_logzsol)
-    # per-line linear interpolation across the metallicity grid
+    # per-line linear interpolation across the metallicity grid → L_line / nion
     lpq = jax.vmap(lambda col: jnp.interp(mz, table.met_grid, col), in_axes=1)(table.line_per_qh)
-    return jnp.asarray(nion) * lpq
+    lum = jnp.asarray(nion) * lpq  # line luminosity [erg/s]
+    return lum / _four_pi_dl2(redshift)  # → observed flux at THIS redshift
