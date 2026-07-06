@@ -63,6 +63,9 @@ def bolometric_absorbed(
         Signed absorbed bolometric luminosity [erg/s]. Callers apply
         ``jnp.abs`` (sign robustness against grid orientation) and any
         energy-balance relaxation factor (``dust_eta_balance``) themselves.
+        Non-finite integrals (e.g. Inf·0 artifacts from extreme-metallicity
+        SSP fluxes, BUG-NSS-02 era) are clamped to 0.0 — the guard the
+        retired compositional kernel carried; identity for finite inputs.
 
     Notes
     -----
@@ -92,4 +95,5 @@ def bolometric_absorbed(
     absorbed_lnu = sed_intrinsic - sed_attenuated
     if lyman_cutoff_aa is not None:
         absorbed_lnu = jnp.where(wave >= lyman_cutoff_aa, absorbed_lnu, 0.0)
-    return jnp.trapezoid(absorbed_lnu, nu)
+    signed = jnp.trapezoid(absorbed_lnu, nu)
+    return jnp.where(jnp.isfinite(signed), signed, 0.0)

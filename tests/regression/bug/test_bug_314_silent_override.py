@@ -52,14 +52,16 @@ def model_with_filters():
 def test_unknown_override_key_raises(real_ssp_only, model_with_filters):
     # Needs the real grid: the expected suggestion set / valid-param list depends
     # on the real model's params; ``real_ssp_only`` skips on synthetic-only CI.
+    # (``age`` is no longer a probe here — it resolves as a short-form alias of
+    # the SFH age param instead of being flagged, which is correct behavior.)
     m = model_with_filters
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    p["age"] = 1.0
+    p["not_a_param"] = 1.0
     p["nonsense_param"] = 99.0
     with pytest.raises(UnknownParameterError) as exc:
         m.predict_photometry(p)
     msg = str(exc.value)
-    assert "age" in msg and "nonsense_param" in msg
+    assert "not_a_param" in msg and "nonsense_param" in msg
 
 
 def test_did_you_mean_suggestion(model_with_filters):

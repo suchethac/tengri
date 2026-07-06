@@ -233,3 +233,30 @@ class TestGoldenValues:
         phot_lut = np.asarray(m_lut.predict_photometry(_params(m_lut)))
         far_ir_rel = abs(phot_lut[-1] - phot_exact[-1]) / abs(phot_exact[-1])
         assert far_ir_rel < 0.02, f"far-IR LUT-vs-exact drift {far_ir_rel:.3%} (> 2%)"
+
+
+@pytest.mark.bounds
+class TestFiniteGuard:
+    """Non-finite integrals clamp to zero (guard carried over from the
+    retired compositional kernel, BUG-NSS-02 era — see #922)."""
+
+    def test_inf_sed_clamps_to_zero(self):
+        wave = jnp.logspace(2.0, 5.0, 50)
+        nu = C_AA / wave
+        # Index 30 sits well above the 912 Å cutoff, so the Inf survives the
+        # LyC mask and must be caught by the finiteness guard instead.
+        assert float(wave[30]) > 912.0
+        sed_intr = jnp.ones_like(wave).at[30].set(jnp.inf)
+        sed_att = jnp.zeros_like(wave)
+        out = bolometric_absorbed(sed_intr, sed_att, nu, wave=wave)
+        assert jnp.isfinite(out)
+        assert float(out) == 0.0
+
+    def test_finite_inputs_unaffected(self):
+        wave = jnp.logspace(2.0, 5.0, 50)
+        nu = C_AA / wave
+        sed_intr = jnp.ones_like(wave)
+        sed_att = 0.5 * sed_intr
+        out = bolometric_absorbed(sed_intr, sed_att, nu, wave=wave)
+        expected = jnp.trapezoid(jnp.where(wave >= 912.0, sed_intr - sed_att, 0.0), nu)
+        np.testing.assert_array_equal(np.asarray(out), np.asarray(expected))
