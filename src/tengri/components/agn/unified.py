@@ -365,63 +365,145 @@ def register_agn_model(
 def resolve_agn_model(name: str) -> Callable:
     """Retrieve a registered AGN model by name.
 
-    **DEPRECATED**: All AGN models have been unified to the composable dispatch
-    (AGN_BLOCKS registry). This function now only accepts ``name="composable"``
-    and will raise an error for deprecated monolithic models.
-
-    For migration, see the block recipes in :mod:`tengri.components.agn.blocks.recipe`.
+    All monolithic AGN models have been migrated to composable presets. This
+    function accepts old model names (with deprecation warning) and routes them
+    through the composable runner with the appropriate block selectors.
 
     Parameters
     ----------
     name : str
-        Model name. Only ``"composable"`` is now supported.
+        Model name. Both old monolithic names (deprecated) and ``"composable"``
+        are supported.
 
     Returns
     -------
     callable
-        The composable AGN runner: :func:`composable_agn_l_nu`.
-
-    Raises
-    ------
-    ValueError
-        If ``name`` is not ``"composable"`` (all monolithic models are retired).
+        Either the composable runner (for new code) or a preset-routed wrapper
+        for deprecated names.
 
     Notes
     -----
     **JIT-compatible**: no — performs dictionary lookup at initialization time.
+    Old monolithic model names still work but emit DeprecationWarning.
     """
-    _deprecation_map = {
-        "kubota_done": "disc=kubota_done + torus=silva04",
-        "multicolor_agn": "disc=multicolor + torus=silva04",
-        "kubota_done_full": "disc=kubota_done + torus=silva04",
-        "silva04": "disc=powerlaw + torus=silva04",
-        "cat3d_wind": "disc=powerlaw + torus=cat3d_wind",
-        "adaf": "disc=adaf + torus=silva04",
-        "relagn": "disc=relagn + torus=silva04",
-        "skirtor": "disc=skirtor + torus=skirtor",
-        "skirtor_stalevski": "disc=skirtor + torus=skirtor",
-        "qsogen": "disc=qsogen_sbpl_disc + nlr=qsogen_nlr + blr=qsogen_blr",
-        "grahsp": "disc=grahsp_sbpl_disc + nlr=grahsp_nlr + blr=grahsp_blr + feii=grahsp_feii",
-        "richards2006": "disc=richards2006_disc",
-        "unified_nlr_blr": "disc=multicolor + nlr=nlr_analytic + blr=blr_analytic + torus=silva04",
-    }
+    if name == "composable" or name not in _AGN_PRESETS:
+        # Direct return for composable or truly unknown names
+        if name == "composable":
+            return AGN_MODELS["composable"]
+        else:
+            raise ValueError(
+                f"Unknown AGN model '{name}'. Available: 'composable', "
+                f"or any of the deprecated monolithic names: {list(_AGN_PRESETS.keys())}"
+            )
 
-    if name == "composable":
-        return AGN_MODELS["composable"]
-
-    if name in _deprecation_map:
-        raise ValueError(
-            f"Monolithic AGN model '{name}' is retired (was in the fallback dispatch). "
-            f"Use composable blocks instead:\n"
-            f"  agn_model='composable', {_deprecation_map[name]}\n"
-            f"See docs/adr/0018-composable-agn-grammar.md for the composable grammar."
-        )
-
-    raise ValueError(
-        f"Unknown AGN model '{name}'. Only 'composable' is now supported. "
-        f"Available composable blocks: see AGN_BLOCKS registry or "
-        f"docs/adr/0018-composable-agn-grammar.md"
+    # Route deprecated monolithic names through composable with presets
+    warnings.warn(
+        f"AGN model '{name}' is deprecated. It routes through composable blocks: "
+        f"{_AGN_PRESETS[name]['_description']}. "
+        f"Update your code to use: agn_model='composable', {', '.join(f'{k}={v}' for k, v in _AGN_PRESETS[name].items() if k != '_description')}",
+        DeprecationWarning,
+        stacklevel=2,
     )
+
+    # Return a wrapper that applies the preset
+    preset = _AGN_PRESETS[name]
+    def preset_wrapper(wavelength, agn_log_lbol, **kwargs):
+        """Apply preset block selectors and route through composable runner."""
+        # Merge preset selectors with kwargs (kwargs override preset defaults)
+        preset_params = {k: v for k, v in preset.items() if k != "_description"}
+        preset_params.update(kwargs)
+        return AGN_MODELS["composable"](wavelength, agn_log_lbol, **preset_params)
+
+    return preset_wrapper
+
+
+# AGN_PRESETS: Maps deprecated monolithic model names to composable block recipes.
+# Each preset specifies block selectors + normalization policy to reproduce the
+# monolithic model behavior in the composable architecture.
+_AGN_PRESETS = {
+    "multicolor_agn": {
+        "agn_disc_block": "multicolor",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=multicolor + torus=silva04",
+    },
+    "kubota_done": {  # Alias for multicolor_agn
+        "agn_disc_block": "multicolor",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=multicolor + torus=silva04",
+    },
+    "kubota_done_full": {
+        "agn_disc_block": "kubota_done",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=kubota_done + torus=silva04",
+    },
+    "silva04": {
+        "agn_disc_block": "powerlaw",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=powerlaw + torus=silva04",
+    },
+    "cat3d_wind": {
+        "agn_disc_block": "powerlaw",
+        "agn_torus_block": "cat3d_wind",
+        "agn_norm": "independent",
+        "_description": "disc=powerlaw + torus=cat3d_wind",
+    },
+    "adaf": {
+        "agn_disc_block": "adaf",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=adaf + torus=silva04",
+    },
+    "relagn": {
+        "agn_disc_block": "relagn",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=relagn + torus=silva04",
+    },
+    "skirtor": {
+        "agn_disc_block": "skirtor",
+        "agn_torus_block": "skirtor",
+        "agn_norm": "cigale_joint",
+        "_description": "disc=skirtor + torus=skirtor",
+    },
+    "skirtor_stalevski": {
+        "agn_disc_block": "skirtor",
+        "agn_torus_block": "skirtor",
+        "agn_norm": "cigale_joint",
+        "_description": "disc=skirtor + torus=skirtor",
+    },
+    "qsogen": {
+        "agn_disc_block": "qsogen_sbpl_disc",
+        "agn_nlr_block": "qsogen_nlr",
+        "agn_blr_block": "qsogen_blr",
+        "agn_norm": "independent",
+        "_description": "disc=qsogen_sbpl_disc + nlr=qsogen_nlr + blr=qsogen_blr",
+    },
+    "grahsp": {
+        "agn_disc_block": "grahsp_sbpl_disc",
+        "agn_nlr_block": "grahsp_nlr",
+        "agn_blr_block": "grahsp_blr",
+        "agn_feii_block": "grahsp_feii",
+        "agn_norm": "independent",
+        "_description": "disc=grahsp_sbpl_disc + nlr=grahsp_nlr + blr=grahsp_blr + feii=grahsp_feii",
+    },
+    "richards2006": {
+        "agn_disc_block": "richards2006_disc",
+        "agn_norm": "independent",
+        "_description": "disc=richards2006_disc",
+    },
+    "unified_nlr_blr": {
+        "agn_disc_block": "multicolor",
+        "agn_nlr_block": "nlr_analytic",
+        "agn_blr_block": "blr_analytic",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=multicolor + nlr=nlr_analytic + blr=blr_analytic + torus=silva04",
+    },
+}
 
 
 # ── Generic unified AGN combiner ──────────────────────────────────
