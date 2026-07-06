@@ -107,27 +107,29 @@ The clean split:
 |---|---|
 | block selection (disc/torus/nlr/blr/feii/atten) | the energy-ledger debit/allocate math (`compose_l_nu`) |
 | per-block params | conservation enforcement `Σ=L_bol` |
-| `agn_norm` policy string | the policy implementations (conserving/cigale_joint/l5100/fagn) |
+| `agn_norm` policy string | the policy implementations (conserving/cigale_joint/independent) |
 | recipe = named bundle of the above | `agn_ebv_disc` disc-reddening wiring |
 
 So "just set the components" is the *surface*, but it only reproduces the codes
 **after** the ledger computation exists — config over today's runner gives the
 #916 divergence.
 
-**Two policies compute at the full-galaxy level** (the AGN normalization is
-defined relative to the host), routed through the ADR-0009 `inputs`/`outputs`
-cross-component contract — the same mechanism dust energy balance uses, not a
-special case:
+**Normalization defined relative to the host computes at the full-galaxy level**,
+routed through the ADR-0009 `inputs`/`outputs` cross-component contract — the
+same mechanism dust energy balance uses, not a special case:
 
-- **`fagn`** (Prospector): `L_AGN = fagn · L_stellar_bol`. The AGN group consumes
-  the stellar bolometric; stellar is upstream in the topo-sort → clean.
-- **`fracAGN`** (CIGALE): `L_AGN / L_total` in a band, where `L_total` includes
-  the AGN → mildly circular; resolved by band-normalization as CIGALE does. This
-  is the one genuinely non-local (solve-at-model-level) computation.
+- **`fracAGN`** (CIGALE, *implemented* under `cigale_joint`): `L_AGN / L_total`
+  in a band, where `L_total` includes the AGN → mildly circular; resolved by
+  band-normalization as CIGALE does. The one genuinely non-local
+  (solve-at-model-level) computation.
+- **`fagn`** (Prospector, *deferred* — see the Phase-2b finding below):
+  `L_AGN = fagn · L_stellar_bol`. A cross-component coupling, not a runner
+  policy; low-value (2-param nuisance, no CLUMPY torus block), not built.
 
 Everything is expressible through the parameter/registry/contract system at the
-public API — nothing lives outside it. `fracAGN`/`fagn` are "config that
-triggers a cross-component computation," not "config that is a fixed value."
+public API — nothing lives outside it. `fracAGN` (and the deferred `fagn`) are
+"config that triggers a cross-component computation," not "config that is a
+fixed value."
 
 ## Section 1 — The energy-ledger runner (architecture & data flow)
 
@@ -276,10 +278,10 @@ Synthesizer's UnifiedAGN."
 | `agn_cigale_skirtor()` | schartmann2005 (=skirtor disk_type=1) | skirtor | none | polar_dust | `cigale_joint` | X-CIGALE SKIRTOR (Yang+2020) | `reproduction/cigale` §9 (exists) |
 | `agn_cigale_fritz()` | schartmann2005 | fritz | none | polar_dust | `cigale_joint` | CIGALE Fritz (2006) | new — Fritz grid parity |
 | `agn_synthesizer_unified()` | kubota_done (KD18 = qsosed) | two_temperature | nlr + blr = `synthesizer_spectra` | none | `conserving` | Synthesizer UnifiedAGN | `reproduction/synthesizer` (exists) |
-| `agn_grahsp()` | grahsp_sbpl | grahsp | grahsp (nlr+blr+feii) | grahsp_biatten | `l5100` | GRAHSP (Buchner+2024) | grahsp parity (exists) |
+| `agn_grahsp()` | grahsp_sbpl | grahsp | grahsp (nlr+blr+feii) | grahsp_biatten | `independent` (grahsp blocks are self-contained → ledger-bypassed) | GRAHSP (Buchner+2024) | grahsp parity (exists) |
 | `agn_agnfitter(disc=, torus=)()` | R06 / SN12 / KD18 / THB21 | S04 / nenkova / skirtor / cat3d_wind | (per disc) | smc_prevot | `independent` | AGNfitter-rX 4×4 | `reproduction/agnfitter` (exists) |
 | `agn_qsogen()` | qsogen | qsogen (self-contained) | qsogen | qsogen_smc | self-normalized | qsogen (Temple+2021) | qsogen parity (exists) |
-| `agn_prospector()` | (CLUMPY-shaped) | nenkova | none | none | `fagn` (L_AGN/L_stellar) | Prospector/FSPS | new — 2-param fagn |
+| `agn_prospector()` *(deferred)* | (CLUMPY-shaped) | nenkova | none | none | `fagn` — **deferred**: a cross-component coupling (`components/agn/fracagn.py`), not a runner policy; low-value (2-param nuisance, no CLUMPY torus block) | Prospector/FSPS | new |
 
 Notes:
 - Self-contained tori (`qsogen`, `grahsp`) already bundle their own components
@@ -302,7 +304,7 @@ Notes:
 |---|---|---|
 | Conservation invariant | `conservation` | for every (disc × torus) under `conserving`: `∫Σ_emitted dν ≈ L_bol`, swept over `agn_torus_frac ∈ [0,0.9]` (the axis #916 broke) |
 | Monolithic equivalence gate | `regression_bug` | each of 14 models: composable preset == monolithic (bit-exact or documented-tol) |
-| Per-code parity | `regression_paper` | `cigale_joint` holds the §9 CIGALE reproduction; `l5100` holds GRAHSP parity; `independent` holds AGNfitter comparison |
+| Per-code parity | `regression_paper` | `cigale_joint` holds the §9 CIGALE reproduction; `independent` + self-contained grahsp blocks hold GRAHSP parity; `independent` holds AGNfitter comparison |
 | No-op param guards | `gradient` | `agn_ebv_disc` changes `predict()` w/ nonzero gradient; `agn_torus_frac` redistributes not adds |
 
 Existing guards (`check_single_dispatch`, `check_registry_completeness`,
