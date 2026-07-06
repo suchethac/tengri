@@ -473,20 +473,11 @@ class Parameters:
         # fittable param. "cigale_joint" (default) ties disc/torus/polar to
         # the single agn_power reference; "independent" keeps legacy scaling.
         self.agn_norm = kwargs.pop("agn_norm", "cigale_joint")
-        # Eagerly validate block selectors so a typo raises *before* the
-        # forward model is built. Mirrors how unknown agn_model values are
-        # caught by resolve_agn_model().
-        if self.agn_model == "composable":
-            from tengri.components.agn.blocks import validate_block_recipe
-
-            validate_block_recipe(
-                agn_disc_block=self.agn_disc_block,
-                agn_nlr_block=self.agn_nlr_block,
-                agn_blr_block=self.agn_blr_block,
-                agn_feii_block=self.agn_feii_block,
-                agn_torus_block=self.agn_torus_block,
-                agn_attenuation_block=self.agn_attenuation_block,
-            )
+        # Block-recipe validation (typo hard-error + suspicious-combo warnings)
+        # is deferred until after the parameter distributions are built, so the
+        # concrete agn_polar_ebv can be passed to Rule 7 (#890). Block selectors
+        # do not feed the parameter registry, so deferring does not change which
+        # error a malformed recipe raises first.
         # Composable AGN precompute axes. ``dict[param_name → ndarray]``;
         # SEDModel consumes this to build a triweight lookup at construction
         # time. Defaults to None → precompute disabled, runtime path used.
@@ -663,6 +654,30 @@ class Parameters:
             else:
                 self._distributions[name] = self._defaults[name]
         self._user_provided = frozenset(user_names)
+
+        # Eagerly validate the composable block recipe now that distributions
+        # exist: a typo raises and suspicious combos warn *before* the forward
+        # model is built. Passing the concrete agn_polar_ebv (a Fixed value, not
+        # a free prior) lets Rule 7 surface the polar-dust E(B-V)=0 no-op at
+        # construction (#890); a free/fitted E(B-V) stays a tracer at runtime and
+        # is intentionally left out so no no-op warning fires.
+        if self.agn_model == "composable":
+            from tengri.components.agn.blocks import validate_block_recipe
+
+            recipe_params: dict | None = None
+            if self.agn_attenuation_block == "polar_dust":
+                _ebv_dist = self._distributions.get("agn_polar_ebv")
+                if _ebv_dist is not None and _ebv_dist.is_fixed:
+                    recipe_params = {"agn_polar_ebv": float(_ebv_dist.value)}
+            validate_block_recipe(
+                agn_disc_block=self.agn_disc_block,
+                agn_nlr_block=self.agn_nlr_block,
+                agn_blr_block=self.agn_blr_block,
+                agn_feii_block=self.agn_feii_block,
+                agn_torus_block=self.agn_torus_block,
+                agn_attenuation_block=self.agn_attenuation_block,
+                params=recipe_params,
+            )
 
         # E fix (#846): the physical disc blocks (multicolor, kubota_done) now
         # DERIVE the Eddington ratio from agn_log_lbol + agn_log_mbh, so

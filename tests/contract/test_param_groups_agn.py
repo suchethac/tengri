@@ -10,9 +10,12 @@ Tests the nested-dict AGN specification via parse_groups(), including:
 - Provenance tagging
 """
 
+import warnings
+
 import pytest
 
 pytestmark = pytest.mark.contract
+from tengri.components.agn.blocks import RecipeWarning
 from tengri.parameters import FIXED, FREE, Fixed, Uniform
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
@@ -111,6 +114,46 @@ class TestAGNParameterRouting:
         )
         assert "agn_polar_ebv" in params.fixed_params
         assert params.get_distribution("agn_polar_ebv").value == 0.3
+
+    def test_construction_warns_on_polar_dust_zero_ebv(self):
+        """polar_dust attenuation with a Fixed E(B-V)=0 is a silent no-op; the
+        RecipeWarning must fire at construction, not only when
+        validate_block_recipe is called by hand (#890)."""
+        with pytest.warns(RecipeWarning, match="agn_polar_ebv=0"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "multicolor", "*": FIXED},
+                    "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Fixed(0.0)},
+                },
+                redshift=Fixed(0.1),
+            )
+
+    def test_construction_silent_when_ebv_free(self):
+        """A free (fitted) E(B-V) is intentional — no polar no-op warning (#890)."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RecipeWarning)
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "multicolor", "*": FIXED},
+                    "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Uniform(0.0, 1.0)},
+                },
+                redshift=Fixed(0.1),
+            )
+
+    def test_construction_silent_when_ebv_fixed_nonzero(self):
+        """A Fixed nonzero E(B-V) applies extinction — no no-op warning (#890)."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RecipeWarning)
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "multicolor", "*": FIXED},
+                    "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Fixed(0.3)},
+                },
+                redshift=Fixed(0.1),
+            )
 
     def test_agn_wildcard_at_agn_level_frees_shared(self):
         """agn={'*': FREE, 'disc': {...}} frees shared agn params."""
