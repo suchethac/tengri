@@ -194,9 +194,9 @@ block; line/torus *shapes* live in their blocks. So "which code" =
 |---|---|---|---|
 | **`conserving`** *(explicit general policy)* | tengri monolithic; Synthesizer (qsosed disc + grids) | disc `L_bol` from `agn_log_lbol`; `f_tor=agn_torus_frac`, `f_pol` from polar covering, lines from covering; `disc_obs=(1−Σf)·L_bol` | yes (structural) |
 | **`cigale_joint`** *(current default)* | X-CIGALE (Yang+2020) for SKIRTOR | Non-SKIRTOR (any `fracAGN`), and SKIRTOR at the default `fracAGN=0`: the `conserving` disc debit → **ledger**-conserving (∫total = L_bol). SKIRTOR at `fracAGN>0`: single `agn_power` reference, disc/torus/polar tied by template ratio R → **allocation**-conserving (components share one budget; ∫total scales with it — the CIGALE convention, and it vanishes as `agn_torus_frac→0`). | ledger @ fracAGN=0; allocation @ >0 |
+| **`independent`** | AGNfitter-rX | each component carries its own log-norm; no debiting | no (comparison-only) |
 
-The two *senses* of conservation matter (and Phase 2b's `l5100`/`fagn` will
-trip over them otherwise): **ledger** = ∫total emitted equals `L_bol`;
+The two *senses* of conservation matter: **ledger** = ∫total emitted equals `L_bol`;
 **allocation** = the components share one reference and cannot drift apart, but
 ∫total is set by that reference (not `L_bol`). `conserving` is always ledger;
 `cigale_joint`'s SKIRTOR R-tie at `fracAGN>0` is allocation.
@@ -208,9 +208,15 @@ physically-correct one — and it keeps the CIGALE-faithful R-tie for SKIRTOR at
 `fracAGN>0`, which a flip to `conserving` would lose. So `conserving` remains
 the *explicit, general* policy and `cigale_joint` stays the default; the
 Phase-2 "flip the default" step is dropped.
-| **`l5100`** | GRAHSP (Buchner+2024) | components normalized to disc λL_λ(5100 Å) — the current anchor as explicit policy | anchor-convention |
-| **`fagn`** | Prospector/FSPS | AGN allocated as a fraction of the *stellar* bolometric (`L_AGN = fagn·L_★`); disc/torus conserve internally | yes (AGN-internal) |
-| **`independent`** | AGNfitter-rX | each component carries its own log-norm; no debiting | no (comparison-only) |
+
+**Phase-2b finding — `l5100`/`fagn` are not needed as policies.** GRAHSP needs
+no `l5100` policy: the grahsp blocks are self-contained (`_SELF_CONTAINED_TORI`)
+and the grahsp disc self-normalizes to its own `l5100` param
+(`grahsp/bbb.py:104`), so a grahsp config bypasses the ledger under *any* policy
+— GRAHSP reproduction is `independent` + grahsp blocks. Prospector's `fagn` is a
+cross-component coupling (belongs in `components/agn/fracagn.py`, which already
+implements CIGALE's `L_AGN = L_dust·frac/(1−frac)`), not a runner policy, and is
+deferred as low-value. The policy set therefore stays at the three above.
 
 Two allocation modes sit outside this table by construction:
 - **Self-contained tori** (`qsogen`, `grahsp` — the `_SELF_CONTAINED_TORI` set)
@@ -311,8 +317,8 @@ Five independently-green PRs (supersedes #916; retirement lands Phase 4):
 |---|---|---|
 | 1 | Energy-ledger spine + `conserving` default + conservation invariant | `blocks/runner.py`, torus/polar/lines blocks → shape-providers, param declarations |
 | 2a ✅ | `conserving` reachable via public API (single-sourced `AGN_NORM_POLICIES`); `cigale_joint` conserves for every torus (R-tie for SKIRTOR, disc debit otherwise — was silently leaking); `independent` explicit; policy-contract test matrix. **Default stays `cigale_joint` (no flip).** | `blocks/_protocol.py`, `blocks/registry.py`, `parameters/groups.py`, `blocks/runner.py`, tests |
-| 2b | `l5100` (GRAHSP) + `fagn` (Prospector, cross-component stellar `L_bol`) policies + per-code parity | `blocks/runner.py`, `blocks/registry.py`, reproduction regressions |
-| 3 | Reddening unification (`agn_ebv_disc` canonical; remove `agn_polar_ebv`) | `blocks/runner.py`, param declarations, dust SMC path |
+| ~~2b~~ | **Dropped after investigation.** `l5100` is redundant (GRAHSP = `independent` + self-contained grahsp blocks); `fagn` is a low-value cross-component coupling (not a runner policy). The three-policy set is complete. | — |
+| 3 | Reddening unification (`agn_ebv_disc` canonical; remove `agn_polar_ebv`) + **the polar re-credit that lifts the `agn_polar_ebv=0` restriction on the conservation guarantee** — the real remaining foundation item | `blocks/runner.py`, param declarations, dust SMC path |
 | 4 | Fix 14 presets + equivalence gate; retire monolithic model-by-model | `unified.py`, `test_monolithic_equivalence.py` |
 | 5 | Reference-code reproduction recipes (`agn_cigale_skirtor`, `agn_synthesizer_unified`, `agn_grahsp`, `agn_agnfitter`, `agn_qsogen`, `agn_prospector`) + their parity tests | `recipes/`, `reproduction/*` wiring, `list_recipes`/`describe_recipe` |
 
