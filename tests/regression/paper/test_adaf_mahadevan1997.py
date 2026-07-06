@@ -39,13 +39,18 @@ class TestAdafRegistry:
     """Tests that ADAF is properly registered in the AGN model registry."""
 
     def test_registered_as_adaf(self):
-        """'adaf' is in AGN_MODELS registry.
+        """'adaf' resolves via resolve_agn_model.
 
         Mahadevan 1997 ADAF model is accessible by name 'adaf'.
         """
-        from tengri.components.agn.unified import AGN_MODELS
+        import warnings
 
-        assert "adaf" in AGN_MODELS
+        from tengri.components.agn.unified import resolve_agn_model
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = resolve_agn_model("adaf")
+        assert callable(fn)
 
     def test_get_agn_model_adaf(self):
         """resolve_agn_model('adaf') returns a callable.

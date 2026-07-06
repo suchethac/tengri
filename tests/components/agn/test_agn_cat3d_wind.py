@@ -127,10 +127,14 @@ def test_grad_flows_through_all_axes(torus_fn, wavelength) -> None:
 
 
 def test_unified_dispatch_registered() -> None:
-    from tengri.components.agn.unified import AGN_MODELS, resolve_agn_model
+    import warnings
 
-    assert "cat3d_wind" in AGN_MODELS
-    fn = resolve_agn_model("cat3d_wind")
+    from tengri.components.agn.unified import resolve_agn_model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("cat3d_wind")
+    assert callable(fn)
     wl = jnp.geomspace(1e3, 1e6, 128)
     sed = fn(
         wl,

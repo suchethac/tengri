@@ -19,12 +19,17 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import Parameters
-from tengri.components.agn import AGN_MODELS, resolve_agn_model
+from tengri.components.agn import resolve_agn_model
 from tengri.parameters.priors import Fixed, LogUniform, Uniform
 
 
 def test_agn_models_contains_grahsp():
-    assert "grahsp" in AGN_MODELS
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("grahsp")
+    assert callable(fn)
 
 
 def test_resolve_agn_model_returns_callable():

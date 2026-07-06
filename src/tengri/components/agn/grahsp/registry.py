@@ -45,7 +45,6 @@ from tengri.components.agn.grahsp.model import (
     _DEFAULT_UVSLOPE,
     compute_grahsp_sed,
 )
-from tengri.components.agn.unified import register_agn_model
 
 __all__ = ["grahsp"]
 

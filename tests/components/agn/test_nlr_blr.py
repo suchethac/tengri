@@ -38,10 +38,15 @@ class TestUnifiedNlrBlr:
         chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_unified_nlr_blr(self):
-        """'unified_nlr_blr' appears in AGN_MODELS."""
-        from tengri.components.agn.unified import AGN_MODELS
+        """'unified_nlr_blr' resolves via resolve_agn_model."""
+        import warnings
 
-        assert "unified_nlr_blr" in AGN_MODELS
+        from tengri.components.agn.unified import resolve_agn_model
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = resolve_agn_model("unified_nlr_blr")
+        assert callable(fn)
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""

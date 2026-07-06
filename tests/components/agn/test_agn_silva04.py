@@ -119,10 +119,14 @@ def test_grad_flows_through_log_nh(torus_fn, wavelength) -> None:
 
 
 def test_unified_dispatch_registered() -> None:
-    from tengri.components.agn.unified import AGN_MODELS, resolve_agn_model
+    import warnings
 
-    assert "silva04" in AGN_MODELS
-    fn = resolve_agn_model("silva04")
+    from tengri.components.agn.unified import resolve_agn_model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("silva04")
+    assert callable(fn)
     wl = jnp.geomspace(1e3, 1e6, 128)
     sed = fn(wl, agn_log_lbol=44.0, agn_frac=0.1, agn_log_nh_silva=23.0)
     chex.assert_equal_shape([sed, wl])

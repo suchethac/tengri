@@ -58,8 +58,8 @@ class TestResolveAgn:
         chex.assert_equal_shape([l_nu, wavelength])
 
     def test_all_canonical_models_in_registry(self):
-        """All canonical model names appear in AGN_MODELS."""
-        from tengri.components.agn.unified import AGN_MODELS
+        """All canonical model names resolve via resolve_agn_model."""
+        from tengri.components.agn.unified import resolve_agn_model
 
         for name in (
             "multicolor_agn",
@@ -68,7 +68,9 @@ class TestResolveAgn:
             "adaf",
             "unified_nlr_blr",
         ):
-            assert name in AGN_MODELS, f"'{name}' missing from AGN_MODELS"
+            with pytest.warns(DeprecationWarning):
+                fn = resolve_agn_model(name)
+            assert callable(fn), f"'{name}' failed to resolve"
 
 
 class TestRegisterAgn:

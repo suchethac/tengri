@@ -25,8 +25,6 @@ from importlib.resources import files
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn.unified import register_agn_model
-
 __all__ = [
     "RICHARDS2006_NU_FNU",
     "RICHARDS2006_WAVE_AA",

@@ -7,13 +7,11 @@ Verifies that each deprecated monolithic AGN model produces the same
 Taxonomy: regression_paper / contract
 """
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.unified import resolve_agn_model
-
 
 # Test wavelength grid (100 points, log-spaced 1000–30000 Å)
 _WAVE_TEST = np.logspace(3.0, 4.48, 100)

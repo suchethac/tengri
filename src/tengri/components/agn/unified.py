@@ -429,34 +429,39 @@ _AGN_PRESETS = {
         "_description": "disc=skirtor + torus=skirtor",
     },
     "qsogen": {
-        "agn_disc_block": "qsogen_sbpl_disc",
-        "agn_nlr_block": "qsogen_nlr",
-        "agn_blr_block": "qsogen_blr",
-        "agn_norm": "independent",
-        "_description": "disc=qsogen_sbpl_disc + nlr=qsogen_nlr + blr=qsogen_blr",
-    },
-    "grahsp": {
-        "agn_disc_block": "grahsp_sbpl_disc",
-        "agn_nlr_block": "grahsp_nlr",
-        "agn_blr_block": "grahsp_blr",
-        "agn_feii_block": "grahsp_feii",
+        "agn_disc_block": "qsogen",
+        "agn_nlr_block": "none",
+        "agn_blr_block": "qsogen",
+        "agn_feii_block": "qsogen_balmer",
+        "agn_torus_block": "qsogen",
+        "agn_attenuation_block": "qsogen_smc",
         "agn_norm": "independent",
         "_description": (
-            "disc=grahsp_sbpl_disc + nlr=grahsp_nlr + blr=grahsp_blr + feii=grahsp_feii"
+            "disc=qsogen + blr=qsogen + feii=qsogen_balmer + torus=qsogen + atten=qsogen_smc"
         ),
     },
-    "richards2006": {
-        "agn_disc_block": "richards2006_disc",
+    "grahsp": {
+        "agn_disc_block": "grahsp_sbpl",
+        "agn_nlr_block": "grahsp",
+        "agn_blr_block": "grahsp",
+        "agn_feii_block": "grahsp",
+        "agn_torus_block": "grahsp",
+        "agn_attenuation_block": "grahsp_biatten",
         "agn_norm": "independent",
-        "_description": "disc=richards2006_disc",
+        "_description": "disc=grahsp_sbpl + nlr/blr/feii/torus=grahsp + atten=grahsp_biatten",
+    },
+    "richards2006": {
+        "agn_disc_block": "richards2006",
+        "agn_norm": "independent",
+        "_description": "disc=richards2006",
     },
     "unified_nlr_blr": {
         "agn_disc_block": "multicolor",
-        "agn_nlr_block": "nlr_analytic",
-        "agn_blr_block": "blr_analytic",
+        "agn_nlr_block": "analytic",
+        "agn_blr_block": "analytic",
         "agn_torus_block": "silva04",
         "agn_norm": "independent",
-        "_description": "disc=multicolor + nlr=nlr_analytic + blr=blr_analytic + torus=silva04",
+        "_description": "disc=multicolor + nlr=analytic + blr=analytic + torus=silva04",
     },
 }
 

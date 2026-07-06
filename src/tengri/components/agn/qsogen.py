@@ -97,7 +97,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn.unified import register_agn_model
 from tengri.components.dust.attenuation import smc as smc_curve
 
 # ── Physical constants (CGS) ──────────────────────────────────────
