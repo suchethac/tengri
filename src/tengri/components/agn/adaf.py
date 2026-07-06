@@ -34,9 +34,14 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax.scipy.special import i0 as _i0, i1 as _i1
 
-from tengri.components.agn._phys import C_LIGHT as _C_LIGHT
+from tengri.components.agn._phys import (
+    C_LIGHT as _C_LIGHT,
+    H_PLANCK as _H_PLANCK,
+    wavelength_to_nu as _wavelength_to_nu,
+)
 from tengri.utils.physics_constants import (
     K_BOLTZ as _K_BOLTZ,
+    L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
 
@@ -250,7 +255,7 @@ def _adaf_tau_es(mdot: float, alpha: float) -> jnp.ndarray:
     (with :math:`c_1=0.5`, :math:`r_{\min}=3`). This is **half** the total
     electron-scattering depth of Narayan & Yi (1995b): the paper takes the mean
     photon to traverse half the total depth ("we therefore take the optical depth
-    to electron scattering to be half of that given in Narayan & Yi 1995b").
+    to electron scattering to be half of that as given in Narayan & Yi 1995b").
 
     Parameters
     ----------
@@ -338,7 +343,7 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
 
     Notes
     -----
-    **JIT/grad-safe**: yes — fixed 15-step unrolled Newton iteration.
+    **JIT/grad-safe**: yes — fixed 8-step unrolled Newton iteration.
     """
     n_e, b_field = _adaf_ne_b_rmin(m, mdot, alpha, beta)
     r_cm = _R_MIN * _R_SCHW_PER_M * m
@@ -358,7 +363,7 @@ def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
         return jnp.log(h), (dh_dxm * 3.0 * y**2) / h
 
     y = jnp.clip(ln_c / 1.8899, 1.0, 100.0)
-    for _ in range(15):
+    for _ in range(8):
         log_h, dlogh = _log_h_and_dlogh(y)
         f = 1.8899 * y - ln_c - log_h
         df = 1.8899 - dlogh
@@ -412,7 +417,7 @@ def _adaf_electron_temperature(
 
     Notes
     -----
-    **JIT/grad-safe**: yes — fixed 12-step unrolled fixed point; the Eq. 40 /
+    **JIT/grad-safe**: yes — fixed 8-step unrolled fixed point; the Eq. 40 /
     Eq. 43 regime choice is a branchless :func:`jnp.where` on the traced
     ``alpha_c``, so both branches are always evaluated (no data-dependent
     control flow).
@@ -426,7 +431,7 @@ def _adaf_electron_temperature(
     """
     tau_es = _adaf_tau_es(mdot, alpha)
     t_e = jnp.asarray(2.0e9, dtype=jnp.float64)
-    for _ in range(12):
+    for _ in range(8):
         x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
         alpha_c = _adaf_alpha_c(tau_es, t_e)
         # Eq. 40 (alpha_c > 1).
@@ -444,3 +449,250 @@ def _adaf_electron_temperature(
         t_e_43 = jnp.maximum(0.744e9 * (jnp.sqrt(sqrt_arg) - 1.0), 1e8)
         t_e = jnp.clip(jnp.where(alpha_c > 1.0, t_e_40, t_e_43), 1e8, 5e11)
     return t_e
+
+
+# ── Spectral component amplitudes (Mahadevan Eqs. 21-23, 28, 30) ──────────
+
+
+def _adaf_F_theta(t_e: jnp.ndarray) -> jnp.ndarray:
+    r"""Relativistic thermal bremsstrahlung factor ``F(theta_e)`` (Mahadevan Eq. 28).
+
+    Piecewise in :math:`\theta_e = kT_e/m_ec^2` (Stepney & Guilbert 1983):
+
+    .. math::
+
+        F(\theta_e) = \begin{cases}
+          4(2\theta_e/\pi^3)^{1/2}(1+1.781\theta_e^{1.34})
+            + 1.73\theta_e^{3/2}(1+1.1\theta_e+\theta_e^2-1.25\theta_e^{5/2}),
+            & \theta_e < 1,\\[4pt]
+          (9\theta_e/2\pi)[\ln(1.123\theta_e+0.48)+1.5]
+            + 2.30\theta_e[\ln(1.123\theta_e)+1.28], & \theta_e > 1.
+        \end{cases}
+
+    Parameters
+    ----------
+    t_e : array_like
+        Electron temperature [K].
+
+    Returns
+    -------
+    ndarray
+        ``F(theta_e)`` [dimensionless].
+    """
+    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    # Clip each branch's argument so the discarded jnp.where branch stays finite.
+    th_lo = jnp.clip(theta, 1e-8, 1.0)
+    f_lo = 4.0 * (2.0 * th_lo / jnp.pi**3) ** 0.5 * (
+        1.0 + 1.781 * th_lo**1.34
+    ) + 1.73 * th_lo**1.5 * (1.0 + 1.1 * th_lo + th_lo**2 - 1.25 * th_lo**2.5)
+    th_hi = jnp.clip(theta, 1.0, 1e6)
+    f_hi = (9.0 * th_hi / (2.0 * jnp.pi)) * (
+        jnp.log(1.123 * th_hi + 0.48) + 1.5
+    ) + 2.30 * th_hi * (jnp.log(1.123 * th_hi) + 1.28)
+    return jnp.where(theta < 1.0, f_lo, f_hi)
+
+
+def _adaf_nu_peak(
+    t_e: jnp.ndarray, x_m: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float
+) -> jnp.ndarray:
+    r"""Synchrotron peak (self-absorption) frequency at ``r_min`` (Mahadevan Eqs. 21-22).
+
+    .. math::
+
+        \nu_p = s_1\,s_2\,m^{-1/2}\dot m^{1/2}\,T_e^2\,r_{\min}^{-5/4}\ \mathrm{Hz},
+        \qquad s_2 = 1.19\times10^{-13}\,x_M.
+
+    The ``T_e^2`` dependence (dropped by the previous implementation) is essential.
+
+    Returns
+    -------
+    ndarray
+        Peak frequency [Hz]; ~few x 1e11 Hz (sub-mm) for typical ADAF parameters.
+    """
+    s2 = 1.19e-13 * x_m
+    return _adaf_s1(alpha, beta) * s2 * m**-0.5 * mdot**0.5 * t_e**2 * _R_MIN**-1.25
+
+
+def _adaf_lnu_peak(t_e: jnp.ndarray, nu_p: jnp.ndarray, m: float) -> jnp.ndarray:
+    r"""Synchrotron luminosity at the peak frequency (Mahadevan Eq. 23, at ``r_min``).
+
+    .. math::
+
+        L_{\nu_p} = s_3\,T_e\,\nu_p^2\,m^2\,r_{\min}^2\ \mathrm{erg\,s^{-1}\,Hz^{-1}},
+        \qquad s_3 = 1.05\times10^{-24}.
+    """
+    return 1.05e-24 * t_e * nu_p**2 * m**2 * _R_MIN**2
+
+
+def _adaf_lbrems0(t_e: jnp.ndarray, m: float, mdot: float, alpha: float) -> jnp.ndarray:
+    r"""Bremsstrahlung luminosity prefactor (Mahadevan Eq. 30, at ``hv << kT_e``).
+
+    :math:`L_\nu^{\rm brems}(\nu) = L_{\rm brems,0}\,e^{-h\nu/kT_e}` with
+
+    .. math::
+
+        L_{\rm brems,0} = 2.29\times10^{24}\,\alpha^{-2}c_1^{-2}
+            \ln(r_{\max}/r_{\min})\,F(\theta_e)\,T_e^{-1}\,m\,\dot m^2
+            \ \mathrm{erg\,s^{-1}\,Hz^{-1}}.
+    """
+    return (
+        2.29e24
+        * alpha**-2.0
+        * _C1**-2.0
+        * jnp.log(_R_MAX / _R_MIN)
+        * _adaf_F_theta(t_e)
+        * t_e**-1.0
+        * m
+        * mdot**2
+    )
+
+
+# ── L_bol -> mdot inversion (Mahadevan Eq. 49) ───────────────────────────
+
+
+def _adaf_mdot_from_lbol(
+    l_bol_erg: jnp.ndarray, m: float, alpha: float, beta: float, delta: float
+) -> jnp.ndarray:
+    r"""Derive the accretion rate ``mdot`` from the canonical bolometric luminosity.
+
+    Inverts the total ADAF luminosity (Mahadevan Eq. 49, ``mdot > 1e-3 alpha^2``):
+
+    .. math::
+
+        L_{\rm ADAF} = 1.2\times10^{38}\,g(\theta_e)\,c_1^{-2}c_3\,\beta\,
+            r_{\min}^{-1}\alpha^{-2}\,m\,\dot m^2
+            = 4.8\times10^{37}\,g(\theta_e)\,\beta\,\alpha^{-2}\,m\,\dot m^2
+
+    (with ``c1=0.5``, ``c3=0.3``, ``r_min=3``). Since ``g(theta_e)`` depends on
+    ``T_e(mdot)``, we iterate a short fixed point (``g`` varies slowly). Keeping
+    ``agn_log_lbol`` as the canonical luminosity knob (deriving ``mdot`` rather
+    than taking it as an independent input) is what makes the ADAF consistent
+    with the disc convention of #846 — ``agn_log_ledd`` is retired here.
+
+    The result is clipped to ``(0, mdot_crit]`` with ``mdot_crit = 0.28 alpha^2``
+    (Eq. 52): the ADAF solution does not exist above the critical rate.
+
+    Parameters
+    ----------
+    l_bol_erg : array_like
+        ADAF bolometric (radiated) luminosity [erg/s].
+    m, alpha, beta, delta : float
+        Mass, viscosity, gas-to-total pressure, electron-heating fraction.
+
+    Returns
+    -------
+    ndarray
+        ``mdot`` in Eddington units.
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes — fixed 3-step fixed point.
+    """
+    mdot_crit = 0.28 * alpha**2
+    coeff = 4.8e37 * beta * alpha**-2.0 * m
+    g = 7.0  # high-mdot equilibrium value as initial guess
+    mdot = jnp.sqrt(l_bol_erg / (coeff * g))
+    for _ in range(3):
+        mdot = jnp.clip(mdot, 1e-8, mdot_crit)
+        g = _adaf_g_theta(_adaf_electron_temperature(m, mdot, alpha, beta, delta))
+        mdot = jnp.sqrt(l_bol_erg / (coeff * g))
+    return jnp.clip(mdot, 1e-8, mdot_crit)
+
+
+# ── Public spectrum ──────────────────────────────────────────────────────
+
+
+def adaf_spectrum(
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float,
+    agn_frac: float = 1.0,
+    agn_log_mbh: float = 8.0,
+    agn_adaf_alpha: float = 0.3,
+    agn_adaf_beta: float = 0.5,
+    agn_adaf_delta: float = 0.1,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Faithful analytic ADAF spectrum (Mahadevan 1997).
+
+    Radio-to-X-ray SED of a radiatively inefficient (advection-dominated)
+    accretion flow: rising cyclo-synchrotron (:math:`L_\nu \propto \nu^{2/5}`)
+    up to the self-absorption peak :math:`\nu_p`, a Comptonized power law
+    (:math:`\nu^{-\alpha_c}`) from :math:`\nu_p` to :math:`3kT_e/h`, and a
+    bremsstrahlung tail (flat with an exponential cutoff at :math:`kT_e/h`).
+
+    ``agn_log_lbol`` is the canonical ADAF radiated luminosity; the accretion
+    rate ``mdot`` is derived from it (Eq. 49, :func:`_adaf_mdot_from_lbol`) and
+    drives the whole spectrum. The three component *amplitudes* (Eqs. 23 & 30)
+    set their relative weights (synchrotron/Compton join continuously at
+    :math:`\nu_p`), and the total is renormalized to ``L_bol`` — which both fixes
+    the canonical scale and absorbs the ``T_e^7``-sensitivity of the absolute
+    synchrotron power (see the module notes).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom].
+    agn_log_lbol : float
+        log10 of the ADAF bolometric luminosity [log10(L_sun)].
+    agn_frac : float, optional
+        Fraction of the bolometric assigned to the ADAF. Default 1.0.
+    agn_log_mbh : float, optional
+        Black hole mass [log10(M_sun)]. Default 8.0.
+    agn_adaf_alpha : float, optional
+        Viscosity parameter :math:`\alpha`. Default 0.3.
+    agn_adaf_beta : float, optional
+        Gas-to-total pressure ratio :math:`\beta` (magnetic fraction is
+        :math:`1-\beta`). Default 0.5.
+    agn_adaf_delta : float, optional
+        Fraction of viscous energy heating electrons directly :math:`\delta`.
+        Default 0.1.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density :math:`L_\nu` [erg/s/Hz], normalized so that
+        :math:`\int L_\nu\,d\nu = \mathrm{agn\_frac}\times L_{\rm bol}`.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all-``jnp`` with fixed-count unrolled solves.
+    Retains the ``alpha_c=1`` gradient kink of the underlying ``T_e`` solve.
+    Valid in the ADAF regime ``mdot < mdot_crit ~ 0.28 alpha^2``; the derived
+    ``mdot`` is clipped there.
+
+    References
+    ----------
+    .. [1] R. Mahadevan, ApJ, 477, 585 (1997). arXiv:astro-ph/9609107.
+    """
+    nu = _wavelength_to_nu(wavelength)
+    m = 10.0**agn_log_mbh
+    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    alpha, beta, delta = agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta
+
+    mdot = _adaf_mdot_from_lbol(l_bol_erg, m, alpha, beta, delta)
+    t_e = _adaf_electron_temperature(m, mdot, alpha, beta, delta)
+    x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
+    alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
+    nu_p = _adaf_nu_peak(t_e, x_m, m, mdot, alpha, beta)
+    l_nu_p = _adaf_lnu_peak(t_e, nu_p, m)
+    l_brems0 = _adaf_lbrems0(t_e, m, mdot, alpha)
+
+    # Synchrotron (nu^{2/5}, nu<nu_p) + Compton (nu^{-alpha_c}, nu>nu_p), joined
+    # continuously at nu_p (both = l_nu_p there).
+    ratio = nu / nu_p
+    shape_sc = jnp.where(nu <= nu_p, ratio**0.4, ratio ** (-alpha_c))
+    # Low cutoff at the largest-radius synchrotron frequency (nu ~ r^{-5/4});
+    # high cutoff at the Comptonization ceiling 3 k T_e / h.
+    nu_min = nu_p * (_R_MIN / _R_MAX) ** 1.25
+    nu_max_c = 3.0 * _K_BOLTZ * t_e / _H_PLANCK
+    shape_sc = shape_sc * jnp.exp(-nu_min / nu) * jnp.exp(-jnp.clip(nu / nu_max_c, 0.0, 500.0))
+    sc = l_nu_p * shape_sc
+
+    # Bremsstrahlung: flat with an exponential cutoff at k T_e / h.
+    brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu / (_K_BOLTZ * t_e), 0.0, 500.0))
+
+    total = sc + brems
+    # Renormalize to the canonical L_bol (nu descending -> reverse for trapezoid).
+    integral = jnp.trapezoid(total[::-1], nu[::-1])
+    l_nu = l_bol_erg * agn_frac * total / jnp.maximum(integral, 1e-100)
+    return l_nu

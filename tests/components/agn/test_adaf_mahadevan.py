@@ -11,6 +11,7 @@ relativistic Maxwellian factor ``g(theta_e)`` (Eq. 11), verified against SciPy.
 from __future__ import annotations
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from scipy.special import kve as scipy_kve
@@ -105,7 +106,7 @@ class TestTauEsAlphaC:
         own quoted normalization. This is HALF the total electron-scattering depth
         of Narayan & Yi (1995b): the paper takes the mean photon to see half the
         total depth ("we therefore take the optical depth ... to be half of that
-        given in Narayan & Yi 1995b")."""
+        as given in Narayan & Yi 1995b")."""
         from tengri.components.agn.adaf import _adaf_tau_es
 
         assert abs(float(_adaf_tau_es(mdot=1e-2, alpha=0.3)) - 0.2387) / 0.2387 < 1e-3
@@ -194,3 +195,139 @@ class TestElectronTemperature:
         assert abs(t_lo - t_hi) / t_hi < 0.5, (
             f"T_e mass-sensitivity too high: {t_lo:.2e} vs {t_hi:.2e}"
         )
+
+
+def _wide_grid():
+    """Radio-to-hard-X-ray rest-frame wavelength grid [Angstrom]."""
+    return np.logspace(-3.0, 10.0, 6000)
+
+
+class TestSpectrumAssembly:
+    """End-to-end L_nu spectrum (Mahadevan Eqs. 21-49 assembled).
+
+    Structural anchor to the paper's Fig. 1 (m=5e9, alpha=0.3, beta=0.5): a
+    rising nu^{2/5} synchrotron branch to a sub-mm self-absorption peak, a
+    Comptonized nu^{-alpha_c} decline, and a bremsstrahlung X-ray tail.
+    """
+
+    def test_normalizes_to_lbol(self):
+        """The canonical contract: int L_nu dnu = agn_frac * L_bol (Eq. 49 closes it)."""
+        from scipy.integrate import trapezoid
+
+        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn.adaf import adaf_spectrum
+        from tengri.utils.physics_constants import L_SUN
+
+        wave = _wide_grid()
+        nu = np.asarray(wavelength_to_nu(jnp.asarray(wave)))
+        for log_lbol in (8.5, 9.0, 9.5):
+            l_nu = np.asarray(
+                adaf_spectrum(jnp.asarray(wave), agn_log_lbol=log_lbol, agn_log_mbh=9.7)
+            )
+            integ = trapezoid(l_nu[::-1], nu[::-1])
+            assert abs(integ / (10**log_lbol * L_SUN) - 1.0) < 0.02, (
+                f"int L_nu / L_bol = {integ / (10**log_lbol * L_SUN):.3f}"
+            )
+
+    def test_synchrotron_slope_two_fifths(self):
+        """Below nu_p: L_nu ~ nu^{2/5} (Mahadevan Eq. 25)."""
+        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn.adaf import (
+            _adaf_electron_temperature,
+            _adaf_mdot_from_lbol,
+            _adaf_nu_peak,
+            _adaf_x_m,
+            adaf_spectrum,
+        )
+        from tengri.utils.physics_constants import L_SUN
+
+        m, log_lbol = 5e9, 8.9
+        mdot = float(_adaf_mdot_from_lbol(10**log_lbol * L_SUN, m, 0.3, 0.5, 0.1))
+        t_e = float(_adaf_electron_temperature(m, mdot, 0.3, 0.5, 0.1))
+        x_m = float(_adaf_x_m(t_e, m, mdot, 0.3, 0.5))
+        nu_p = float(_adaf_nu_peak(t_e, x_m, m, mdot, 0.3, 0.5))
+
+        wave = _wide_grid()
+        nu = np.asarray(wavelength_to_nu(jnp.asarray(wave)))
+        l_nu = np.asarray(adaf_spectrum(jnp.asarray(wave), agn_log_lbol=log_lbol, agn_log_mbh=9.7))
+        mask = (nu > nu_p / 100) & (nu < nu_p / 3) & (l_nu > 0)
+        slope = np.polyfit(np.log10(nu[mask]), np.log10(l_nu[mask]), 1)[0]
+        assert abs(slope - 0.40) < 0.05, f"synch slope {slope:.3f} != 2/5"
+
+    def test_compton_slope_minus_alpha_c(self):
+        """Above nu_p: L_nu ~ nu^{-alpha_c} (Mahadevan Eq. 38)."""
+        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn.adaf import (
+            _adaf_alpha_c,
+            _adaf_electron_temperature,
+            _adaf_mdot_from_lbol,
+            _adaf_nu_peak,
+            _adaf_tau_es,
+            _adaf_x_m,
+            adaf_spectrum,
+        )
+        from tengri.utils.physics_constants import L_SUN
+
+        m, log_lbol = 5e9, 8.9
+        mdot = float(_adaf_mdot_from_lbol(10**log_lbol * L_SUN, m, 0.3, 0.5, 0.1))
+        t_e = float(_adaf_electron_temperature(m, mdot, 0.3, 0.5, 0.1))
+        x_m = float(_adaf_x_m(t_e, m, mdot, 0.3, 0.5))
+        nu_p = float(_adaf_nu_peak(t_e, x_m, m, mdot, 0.3, 0.5))
+        alpha_c = float(_adaf_alpha_c(_adaf_tau_es(mdot, 0.3), t_e))
+
+        wave = _wide_grid()
+        nu = np.asarray(wavelength_to_nu(jnp.asarray(wave)))
+        l_nu = np.asarray(adaf_spectrum(jnp.asarray(wave), agn_log_lbol=log_lbol, agn_log_mbh=9.7))
+        mask = (nu > 3 * nu_p) & (nu < 100 * nu_p) & (l_nu > 0)
+        slope = np.polyfit(np.log10(nu[mask]), np.log10(l_nu[mask]), 1)[0]
+        assert abs(slope - (-alpha_c)) < 0.1, (
+            f"Compton slope {slope:.3f} != -alpha_c={-alpha_c:.3f}"
+        )
+
+    def test_nu_p_in_submm(self):
+        """The synchrotron self-absorption peak sits in the sub-mm/mm (Fig. 1)."""
+        from tengri.components.agn.adaf import (
+            _adaf_electron_temperature,
+            _adaf_mdot_from_lbol,
+            _adaf_nu_peak,
+            _adaf_x_m,
+        )
+        from tengri.utils.physics_constants import L_SUN
+
+        m, log_lbol = 5e9, 8.9
+        mdot = float(_adaf_mdot_from_lbol(10**log_lbol * L_SUN, m, 0.3, 0.5, 0.1))
+        t_e = float(_adaf_electron_temperature(m, mdot, 0.3, 0.5, 0.1))
+        x_m = float(_adaf_x_m(t_e, m, mdot, 0.3, 0.5))
+        nu_p = float(_adaf_nu_peak(t_e, x_m, m, mdot, 0.3, 0.5))
+        assert 5e10 < nu_p < 5e12, f"nu_p={nu_p:.2e} Hz not in sub-mm/mm"
+
+    def test_mdot_derived_from_lbol_and_clipped(self):
+        """mdot rises with L_bol (Eq. 49) and is clipped to mdot_crit=0.28 alpha^2 (Eq. 52)."""
+        from tengri.components.agn.adaf import _adaf_mdot_from_lbol
+        from tengri.utils.physics_constants import L_SUN
+
+        m, alpha = 5e9, 0.3
+        md_lo = float(_adaf_mdot_from_lbol(10**8.0 * L_SUN, m, alpha, 0.5, 0.1))
+        md_hi = float(_adaf_mdot_from_lbol(10**9.5 * L_SUN, m, alpha, 0.5, 0.1))
+        assert md_hi > md_lo, "mdot must increase with L_bol"
+        # Absurdly high L_bol -> clipped at the critical rate, not runaway.
+        md_max = float(_adaf_mdot_from_lbol(10**20 * L_SUN, m, alpha, 0.5, 0.1))
+        assert md_max <= 0.28 * alpha**2 + 1e-9, f"mdot={md_max} exceeds mdot_crit"
+
+    def test_finite_positive(self):
+        from tengri.components.agn.adaf import adaf_spectrum
+
+        l_nu = np.asarray(
+            adaf_spectrum(jnp.asarray(_wide_grid()), agn_log_lbol=9.0, agn_log_mbh=9.7)
+        )
+        assert np.all(np.isfinite(l_nu)) and np.all(l_nu >= 0.0)
+
+    def test_jit_and_grad(self):
+        """JIT-compiles and is differentiable wrt the canonical luminosity."""
+        from tengri.components.agn.adaf import adaf_spectrum
+
+        wave = jnp.asarray(np.logspace(1.0, 8.0, 200))
+        fn = jax.jit(lambda ll: adaf_spectrum(wave, agn_log_lbol=ll, agn_log_mbh=9.7).sum())
+        val = float(fn(9.0))
+        grad = float(jax.grad(fn)(9.0))
+        assert np.isfinite(val) and np.isfinite(grad) and grad != 0.0
