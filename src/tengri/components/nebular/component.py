@@ -628,7 +628,7 @@ class NebularSEDComponent:
                         air_votes = air_votes + jnp.where(in_band & is_air, 1.0, 0.0)
                         vac_votes = vac_votes + jnp.where(in_band & ~is_air, 1.0, 0.0)
                     looks_air = (air_votes >= 2.0) & (air_votes > vac_votes)
-                    # Ciddor (1996) air→vacuum, jnp inline (mirror of
+                    # Edlén (1953) air→vacuum, jnp inline (mirror of
                     # ``tengri.utils.conversions.air_to_vacuum``, which is
                     # numpy-only and not traceable).
                     sigma = 1e4 / line_waves

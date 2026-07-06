@@ -1283,7 +1283,14 @@ class StudentT(Distribution):
         return float(jnp.interp(z, self._z_grid, self._cdf_grid))
 
     def _t_quantile(self, p: jnp.ndarray) -> jnp.ndarray:
-        """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, else table."""
+        """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, else table.
+
+        The df∉{1,2} branch is piecewise-linear (``jnp.interp``), so its
+        gradient is discontinuous at the 4097 knots — fine for MAP/NUTS in
+        practice, but the only df used in-repo are 1 and 2 (both closed-form
+        above), so this branch is currently never exercised. Swap to a
+        monotone-cubic interpolation if a fittable df∉{1,2} is introduced.
+        """
         if self._df == 1.0:
             return jnp.tan(jnp.pi * (p - 0.5))
         if self._df == 2.0:
