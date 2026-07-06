@@ -192,8 +192,15 @@ block; line/torus *shapes* live in their blocks. So "which code" =
 
 | `agn_norm` | Reproduces | Allocation rule | Conserving |
 |---|---|---|---|
-| **`conserving`** *(default from Phase 2; opt-in in Phase 1)* | tengri monolithic; Synthesizer (qsosed disc + grids) | disc `L_bol` from `agn_log_lbol`; `f_tor=agn_torus_frac`, `f_pol` from polar covering, lines from covering; `disc_obs=(1−Σf)·L_bol` | yes (structural) |
-| **`cigale_joint`** | X-CIGALE (Yang+2020) | single `agn_power` reference; disc/torus/polar tied by R (template-R for SKIRTOR, covering-R for analytic tori); `fracAGN` band | yes |
+| **`conserving`** *(explicit general policy)* | tengri monolithic; Synthesizer (qsosed disc + grids) | disc `L_bol` from `agn_log_lbol`; `f_tor=agn_torus_frac`, `f_pol` from polar covering, lines from covering; `disc_obs=(1−Σf)·L_bol` | yes (structural) |
+| **`cigale_joint`** *(current default; conserves for every torus)* | X-CIGALE (Yang+2020) for SKIRTOR | SKIRTOR: single `agn_power` reference, disc/torus/polar tied by template ratio R + `fracAGN` band. **Every other torus: the `conserving` disc debit** (so it never leaks — the pre-fix bug). | yes |
+
+**No default flip needed.** Because `cigale_joint` now conserves for *every*
+torus (R-tie for SKIRTOR, disc debit otherwise), the existing default is already
+the physically-correct one — and it keeps the CIGALE-faithful R-tie for default
+SKIRTOR configs, which a flip to `conserving` would lose. So `conserving`
+remains the *explicit, general* policy and `cigale_joint` stays the default;
+the Phase-2 "flip the default" step is dropped.
 | **`l5100`** | GRAHSP (Buchner+2024) | components normalized to disc λL_λ(5100 Å) — the current anchor as explicit policy | anchor-convention |
 | **`fagn`** | Prospector/FSPS | AGN allocated as a fraction of the *stellar* bolometric (`L_AGN = fagn·L_★`); disc/torus conserve internally | yes (AGN-internal) |
 | **`independent`** | AGNfitter-rX | each component carries its own log-norm; no debiting | no (comparison-only) |
@@ -296,7 +303,8 @@ Five independently-green PRs (supersedes #916; retirement lands Phase 4):
 | Phase | Scope | Files |
 |---|---|---|
 | 1 | Energy-ledger spine + `conserving` default + conservation invariant | `blocks/runner.py`, torus/polar/lines blocks → shape-providers, param declarations |
-| 2 | Fold SKIRTOR #556 into `cigale_joint`; add `l5100`/`independent`/`fagn` policies + per-code parity | `blocks/runner.py`, `blocks/registry.py`, reproduction/cigale regression |
+| 2a ✅ | `conserving` reachable via public API (single-sourced `AGN_NORM_POLICIES`); `cigale_joint` conserves for every torus (R-tie for SKIRTOR, disc debit otherwise — was silently leaking); `independent` explicit; policy-contract test matrix. **Default stays `cigale_joint` (no flip).** | `blocks/_protocol.py`, `blocks/registry.py`, `parameters/groups.py`, `blocks/runner.py`, tests |
+| 2b | `l5100` (GRAHSP) + `fagn` (Prospector, cross-component stellar `L_bol`) policies + per-code parity | `blocks/runner.py`, `blocks/registry.py`, reproduction regressions |
 | 3 | Reddening unification (`agn_ebv_disc` canonical; remove `agn_polar_ebv`) | `blocks/runner.py`, param declarations, dust SMC path |
 | 4 | Fix 14 presets + equivalence gate; retire monolithic model-by-model | `unified.py`, `test_monolithic_equivalence.py` |
 | 5 | Reference-code reproduction recipes (`agn_cigale_skirtor`, `agn_synthesizer_unified`, `agn_grahsp`, `agn_agnfitter`, `agn_qsogen`, `agn_prospector`) + their parity tests | `recipes/`, `reproduction/*` wiring, `list_recipes`/`describe_recipe` |
