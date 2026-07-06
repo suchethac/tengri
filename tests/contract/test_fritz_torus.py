@@ -367,7 +367,7 @@ def test_fritz_jit_compiles(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -
 @pytest.mark.contract
 def test_fritz_torus_block_registered() -> None:
     """fritz torus block is registered and accessible."""
-    import tengri.components.agn.blocks.torus_blocks  # noqa: F401  populate registry
+    import tengri.components.agn.blocks.torus  # noqa: F401  populate registry
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     # The registry is populated at import time via @register_agn_block decorators
@@ -380,7 +380,7 @@ def test_fritz_torus_block_registered() -> None:
 @pytest.mark.contract
 def test_fritz_torus_block_callable(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
     """fritz_torus_block is callable and produces correct output shape."""
-    from tengri.components.agn.blocks.torus_blocks import fritz_torus_block
+    from tengri.components.agn.blocks.torus import fritz_torus_block
 
     L_lambda = fritz_torus_block(
         wavelength_aa,

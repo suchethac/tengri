@@ -377,14 +377,14 @@ def _agn_block_types(category: str) -> frozenset[str]:
     # decorators have fired. Mirrors the eager imports done by AGN
     # ``unified.py`` at module-load time; safe to redo here.
     import tengri.components.agn.blocks.alternates
-    import tengri.components.agn.blocks.atten_blocks
-    import tengri.components.agn.blocks.blr_blocks
-    import tengri.components.agn.blocks.disc_blocks
-    import tengri.components.agn.blocks.feii_blocks
+    import tengri.components.agn.blocks.atten
+    import tengri.components.agn.blocks.blr
+    import tengri.components.agn.blocks.disc
+    import tengri.components.agn.blocks.feii
     import tengri.components.agn.blocks.grahsp_blocks
-    import tengri.components.agn.blocks.nlr_blocks
+    import tengri.components.agn.blocks.nlr
     import tengri.components.agn.blocks.qsogen_blocks
-    import tengri.components.agn.blocks.torus_blocks  # noqa: F401
+    import tengri.components.agn.blocks.torus  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
@@ -1924,14 +1924,14 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
         result[block_to_kwarg[block_name]] = block_type
 
-    # Cross-block normalization policy (#556). ``agn={'norm': 'cigale_joint' |
-    # 'independent'}`` selects how disc/torus/polar share a luminosity
-    # reference. Default (unset) leaves AGNConfig.agn_norm at "cigale_joint".
+    # Cross-block normalization policy (``agn['norm']``): menu single-sourced
+    # from AGN_NORM_POLICIES so the grammar can't drift from the runner (#556).
     if "norm" in agn_dict:
+        from tengri.components.agn.blocks import AGN_NORM_POLICIES
+
         _norm = agn_dict["norm"]
-        _valid_norms = {"cigale_joint", "independent"}
-        if _norm not in _valid_norms:
-            raise ValueError(f"Unknown agn['norm'] = '{_norm}'. Valid: {sorted(_valid_norms)}.")
+        if _norm not in AGN_NORM_POLICIES:
+            raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
 
 

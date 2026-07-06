@@ -35,7 +35,7 @@ class TestRichards2006DiscBlock:
 
     def test_richards2006_disc_block_builds_finite(self):
         """Richards2006 disc block builds and returns finite values."""
-        from tengri.components.agn.blocks.disc_blocks import richards2006_disc_block
+        from tengri.components.agn.blocks.disc import richards2006_disc_block
 
         wave = np.linspace(1000, 10000, 100)  # Å
         L_lambda = richards2006_disc_block(wave, agn_log_lbol=45.0)
@@ -45,7 +45,7 @@ class TestRichards2006DiscBlock:
 
     def test_richards2006_disc_uv_peaked(self):
         """Richards2006 disc shows UV-peak (higher flux at short wavelengths)."""
-        from tengri.components.agn.blocks.disc_blocks import richards2006_disc_block
+        from tengri.components.agn.blocks.disc import richards2006_disc_block
 
         # Compare UV vs optical (representative wavelengths in Angstrom).
         wave_uv = np.array([2000.0, 2500.0, 3000.0])  # UV region
@@ -101,7 +101,7 @@ class TestRichards2006DiscBlock:
         target_bol_erg_s = (10.0**log_lbol) * L_SUN_ERG_S
 
         # Call the block.
-        from tengri.components.agn.blocks.disc_blocks import richards2006_disc_block
+        from tengri.components.agn.blocks.disc import richards2006_disc_block
 
         L_lambda = richards2006_disc_block(template_wave, agn_log_lbol=log_lbol)
 
@@ -139,7 +139,7 @@ class TestBorosonGreenFeiiBlock:
 
     def test_boroson_green_feii_block_builds_finite(self):
         """Boroson & Green feii block builds and returns finite values."""
-        from tengri.components.agn.blocks.feii_blocks import boroson_green_feii_block
+        from tengri.components.agn.blocks.feii import boroson_green_feii_block
 
         wave = np.linspace(1200, 7500, 200)  # FeII coverage [Å]
         l5100_disc = 1e44  # disc continuum at 5100Å [erg/s]
@@ -153,7 +153,7 @@ class TestBorosonGreenFeiiBlock:
 
     def test_boroson_green_feii_disabled_when_strength_zero(self):
         """FeII emission is zero when agn_fe2_strength=0."""
-        from tengri.components.agn.blocks.feii_blocks import boroson_green_feii_block
+        from tengri.components.agn.blocks.feii import boroson_green_feii_block
 
         wave = np.linspace(1200, 7500, 200)
         l5100_disc = 1e44
@@ -177,7 +177,7 @@ class TestBorosonGreenFeiiBlock:
         - ~2200–2600 Å: UV FeII multiplets
         - ~4400–5400 Å: optical FeII multiplets
         """
-        from tengri.components.agn.blocks.feii_blocks import boroson_green_feii_block
+        from tengri.components.agn.blocks.feii import boroson_green_feii_block
 
         # Fine-grained wavelength grid to resolve multiplets.
         wave = np.linspace(1200, 7500, 1000)
@@ -209,7 +209,7 @@ class TestBorosonGreenFeiiBlock:
         at the expected multiplet locations.
         """
         from tengri.components.agn.blocks._protocol import resolve_agn_block
-        from tengri.components.agn.blocks.feii_blocks import boroson_green_feii_block
+        from tengri.components.agn.blocks.feii import boroson_green_feii_block
 
         wave = np.linspace(1200, 7500, 1000)
         l5100_disc = 1e44

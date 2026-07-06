@@ -55,13 +55,16 @@ agn_torus_block, agn_attenuation_block : str, optional
         Per-stage block selectors (default ``"none"`` everywhere — the
         user **must** opt in by name, and a warning is emitted if the
         recipe is degenerate).
-    agn_norm : {"cigale_joint", "independent"}, optional
-        Cross-block normalization policy (#556). ``"cigale_joint"``
-        (default) ties the disc, torus, and polar dust to a *single*
-        ``agn_power`` reference via the fixed SKIRTOR template ratios —
-        bit-faithful to X-CIGALE's energy balance (Stalevski+2016).
-        ``"independent"`` keeps the legacy two-reference scaling (disc on
-        ``agn_log_lbol``, dust on the absorbed-energy ``agn_power``),
+    agn_norm : {"cigale_joint", "conserving", "independent"}, optional
+        Cross-block normalization policy (single-sourced from
+        :data:`AGN_NORM_POLICIES`). ``"cigale_joint"`` (current default)
+        ties the disc, torus, and polar dust to a *single* ``agn_power``
+        reference via the fixed SKIRTOR template ratios — bit-faithful to
+        X-CIGALE's energy balance (Stalevski+2016). ``"conserving"`` debits
+        the disc by the reprocessed fraction so ``disc(1-f) + torus(f)``
+        conserves ``L_bol`` for *every* torus (reproduces the monolithic
+        models). ``"independent"`` keeps the legacy two-reference scaling
+        (disc on ``agn_log_lbol``, dust on the absorbed-energy ``agn_power``),
         which does *not* conserve energy across the disc/dust boundary.
     **params
         Per-impl free parameters forwarded to every block.
