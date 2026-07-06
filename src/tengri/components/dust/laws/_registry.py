@@ -6,7 +6,7 @@ Leaf module for the ``DUST_LAWS`` catalog: the ``register_dust_law`` decorator,
 metadata record, and the shared curve helpers (``_drude_profile``,
 ``_calzetti_l02_kprime``) used across law families. Imports only ``jnp`` and
 physical constants, so law modules and the ``attenuation`` facade can import it
-without an import cycle (#843 / Phase 2).
+without an import cycle (#843).
 """
 
 from __future__ import annotations

@@ -568,8 +568,9 @@ class Observation:
         """Project an orchestrator :class:`ForwardState` into observable channels.
 
         Unified projection seam matching the :class:`ObservationModel`
-        Protocol in :mod:`tengri.protocols.observation`. Phase 1 of the
-        forward-projection unification (``docs/dev/photometry_path_unification.md``).
+        Protocol in :mod:`tengri.protocols.observation`. Part of the
+        forward-projection unification
+        (``docs/dev/archive/photometry_path_unification.md``).
 
         Parameters
         ----------
@@ -709,7 +710,7 @@ class Observation:
                 )
             out["spec_fnu"] = flux
 
-        # Phase 2: if observables_type is provided, populate and return NamedTuple.
+        # If observables_type is provided, populate and return the NamedTuple.
         # Line fluxes / line ratios / spectral indices are NOT projection
         # observables — they are scalar measurables computed separately
         # (predict_line_fluxes / predict_line_ratios / predict_spectral_indices)
@@ -754,24 +755,26 @@ class Observation:
     ):
         """Project observables via the photometric LUT instead of integrating ``sed_intrinsic``.
 
-        Phase 3c-3 opt-in fast path. Sums all ``*_phot_lnu_lut`` keys
-        present in ``state.derived`` (the rest-frame Lν contributions
-        from each component that publishes one) and applies the cosmology
-        factor ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
+        Opt-in fast path for ``approx=WavePrecomp()``. Sums all
+        ``*_phot_lnu_lut`` keys present in ``state.derived`` (the
+        rest-frame Lν contributions from each component that publishes
+        one) and applies the cosmology factor ``(1+z)/(4π·dl²)`` to
+        convert to observed F_ν.
 
-        Components that publish a LUT entry as of this PR:
+        Components that publish a LUT entry:
 
-        - ``stellar_phot_lnu_precomp`` — :class:`StellarSEDComponent` (Phase 3b/3c-1).
+        - ``stellar_phot_lnu_precomp`` — :class:`StellarSEDComponent`.
           For ``BakedIn`` nebular backends this already contains the nebular
           contribution, since the SSP grid carries baked-in nebular emission.
-        - ``nebular_phot_lnu_precomp`` — :class:`NebularSEDComponent` (Phase 3c-3b
-          and later, when the backend supports filter-level precomputation;
+        - ``nebular_phot_lnu_precomp`` — :class:`NebularSEDComponent`
+          (when the backend supports filter-level precomputation;
           non-BakedIn backends only).
 
-        Future entries (``dust_*``, ``agn_*``, …) sum in automatically.
+        Any additional ``*_phot_lnu_precomp`` entries (AGN, …) sum in
+        automatically.
 
-        Photometry only — spectroscopy / line_fluxes / spectral_indices
-        land in Phase 3c-3 final scope.
+        Photometry only — spectroscopy has its own LUT path
+        (:meth:`predict_spectrum_via_precomp`).
 
         Parameters
         ----------
@@ -806,7 +809,7 @@ class Observation:
         --------
         predict : The default projection path that integrates
             ``sed_intrinsic`` through filters. Stays the canonical
-            reference until Phase 3c-3e flips the default.
+            reference; the exact path remains the default (``approx=None``).
         """
         from tengri.cosmology import luminosity_distance
 
@@ -835,7 +838,7 @@ class Observation:
         for c in precomp_contribs[1:]:
             total_phi = total_phi + c
 
-        # Phase 3d-5 (2026-05-20): the previous runtime guards used
+        # 2026-05-20: the previous runtime guards used
         # ``float(L_ir) > 0`` / ``float(jnp.max(sed_nebular)) > 0`` to detect
         # "component ran on the wave grid but didn't publish a per-filter
         # precompute". They were correct in spirit but broke under
@@ -863,7 +866,7 @@ class Observation:
         dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
         unattenuated_phi = total_phi - dust_attenuable_phi
 
-        # Phase 3c-3c-iv-c: two-component (Charlot & Fall) dust LUT.
+        # Two-component (Charlot & Fall) dust LUT.
         # Factorization: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
         # At the filter level, with per-age stellar LUT
         # ``stellar_phot_lnu_per_age_precomp[a, b]``:
@@ -912,7 +915,7 @@ class Observation:
             nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
             total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
-        # Phase 3c-3c-iii: single-component dust via the Taylor expansion
+        # Single-component dust via the Taylor expansion
         # f_b = A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
         # When dust precompute is present, the Taylor moment Ψ MUST also be
         # present (the dust expansion is only valid with the second term).
@@ -974,9 +977,9 @@ class Observation:
         *,
         observables_type=None,
     ):
-        """Project spectrum observables via the spectrum LUT (Phase 5).
+        """Project spectrum observables via the spectrum LUT.
 
-        Phase 5 opt-in fast path for spectroscopy. Sums all ``*_spec_lnu_precomp``
+        Opt-in fast path for ``approx=SpectrumPrecomp()``. Sums all ``*_spec_lnu_precomp``
         keys present in ``state.derived`` and applies the cosmology factor
         ``(1+z)/(4π·dl²)`` to convert to observed F_ν.
 

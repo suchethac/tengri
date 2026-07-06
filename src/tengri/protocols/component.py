@@ -382,8 +382,7 @@ class SEDComponent(Protocol):
     Concrete subclasses (``StellarSEDComponent``, ``DustSEDComponent``,
     ``NebularSEDComponent``, ``AGNSEDComponent``, ``IGMSEDComponent``,
     ``RadioSEDComponent``, ``XRaySEDComponent``) live in
-    :mod:`tengri.components.<domain>.component` (added in Phases II-2
-    through II-4 of the migration).
+    :mod:`tengri.components.<domain>.component`.
 
     Required attributes
     -------------------

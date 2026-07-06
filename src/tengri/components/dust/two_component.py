@@ -548,7 +548,7 @@ class DustSEDComponent:
         non_stellar_other = non_stellar_pre_dust - sed_neb
         sed_total = non_stellar_other + sed_neb_attenuated + sed_attenuated
 
-        # Phase 3c-3c-iv-b: per-filter LUTs for two-component attenuation.
+        # Per-filter LUTs for two-component attenuation.
         # T(a, λ) factorizes as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
         # path we publish A_diff = exp(-τ_diff·k_diff(λ_eff)) and
         # A_bc = exp(-τ_bc·k_bc(λ_eff)) at each filter pivot, plus their
@@ -621,7 +621,7 @@ class DustSEDComponent:
             y_age = 1.0 / (1.0 + 10.0 ** ((log_t - log_t_birth) / transition))
             derived_overrides["dust_young_indicator"] = y_age
 
-        # Phase 5 (SpectrumPrecomp): per-pixel BC + diffuse transmission.
+        # SpectrumPrecomp: per-pixel BC + diffuse transmission.
         # T_bc(λ_pix), T_diff(λ_pix) are exact at the pixel — no Taylor slope.
         # The young indicator y(a) is reused to weight the per-age BC layer in
         # ``predict_spectrum_via_precomp``.

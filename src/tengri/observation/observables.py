@@ -9,7 +9,8 @@ on access), not silent zeros.
 
 Used by :meth:`SEDModel.predict_observables` and :meth:`Observation.predict`.
 
-Phase 2 of ``docs/dev/photometry_path_unification.md``.
+Part of the forward-projection unification
+(``docs/dev/archive/photometry_path_unification.md``).
 """
 
 from __future__ import annotations

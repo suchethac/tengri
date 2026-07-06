@@ -669,7 +669,7 @@ class NebularSEDComponent:
 
         # Photoionized path: ``sed_nebular`` carries continuum + lines;
         # shock contribution is zero (this branch is not the shock backend).
-        # Phase 3c-3d-neb: filter-integrate nebular SED and publish
+        # Filter-integrate the nebular SED and publish
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
         if (

@@ -200,7 +200,7 @@ class _KernelsRemoved:
     """Stand-in raised on access of removed ``KernelStrategy`` / ``NoCompatibleKernelError``.
 
     The kernel-adapter family (``tengri.forward._kernels``) was removed in
-    Phase 6. Importing the old names from ``tengri`` returns this stand-in;
+    2026-05. Importing the old names from ``tengri`` returns this stand-in;
     any attempt to call, instantiate, or subscript it raises ImportError
     with a migration message.
     """
@@ -366,7 +366,7 @@ from tengri.registry import (
     summary,
 )
 
-# Phase 6 (2026-05): the advertised top-level surface.
+# The advertised top-level surface (api_migration_v0.x.md Phase 6, 2026-05).
 #
 # This list is the *recommended* import paths. Everything in it is
 # either a user-facing class/facade (Galaxy, SEDModel, Fitter, ...) or

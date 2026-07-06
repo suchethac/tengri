@@ -99,25 +99,25 @@ class DerivedState:
     sfr_history: jnp.ndarray | None = None
     log_metallicity_history: jnp.ndarray | None = None
 
-    # Stellar — photometry LUT (Phase 3b, published only when
+    # Stellar — photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel).
     # Rest-frame F_nu through the configured filters, in erg/s/Hz at
     # the source (no redshift / luminosity distance applied).
     stellar_phot_lnu_precomp: jnp.ndarray | None = None
     # Stellar — Taylor moment for filter-level dust attenuation
-    # (Phase 3c-3c, published alongside stellar_phot_lnu_precomp). First
+    # (published alongside stellar_phot_lnu_precomp). First
     # spectral moment of the CSP within each filter:
     # Ψ_b = ∫ L_ν(λ) (λ - λ_eff_b) T_b(λ) λ dλ / ∫ T_b(λ) λ dλ.
-    # Used by Phase 3c-3c-ii dust integration via the expansion
+    # Used by the filter-level dust integration via the expansion
     # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b (Zacharegkas+2025).
     # Units: erg/s/Hz × Å.
     stellar_phot_moment_precomp: jnp.ndarray | None = None
-    # Stellar — age-resolved per-filter LUT (Phase 3c-3c-iv-a). Shape
+    # Stellar — age-resolved per-filter LUT. Shape
     # ``(n_age, n_filter)``, units erg/s/Hz. The age axis is NOT
     # marginalized. Sum over the age axis equals
     # ``stellar_phot_lnu_precomp``. Published only when
     # ``approx=WavePrecomp()`` is set. Consumed by the two-
-    # component dust LUT path (Phase 3c-3c-iv-c) to apply per-age
+    # component dust LUT path to apply per-age
     # attenuation ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)``.
     stellar_phot_lnu_per_age_precomp: jnp.ndarray | None = None
     stellar_phot_moment_per_age_precomp: jnp.ndarray | None = None
@@ -128,21 +128,21 @@ class DerivedState:
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
-    # Dust attenuation per filter (Phase 3c-3c-ii). A(λ_eff) and its
-    # wavelength derivative A'(λ_eff) at each filter pivot, used by
-    # Phase 3c-3c-iii to apply Taylor expansion attenuation in
+    # Dust attenuation per filter. A(λ_eff) and its
+    # wavelength derivative A'(λ_eff) at each filter pivot, used
+    # to apply Taylor-expansion attenuation in
     # ``Observation.predict_via_precomp``:
     # f_b ≈ A(λ_eff)·Φ_b + A'(λ_eff)·Ψ_b
     # Shape ``(n_filters,)``. Published only when
     # ``approx=WavePrecomp()`` is set.
     dust_attenuation_precomp: jnp.ndarray | None = None
     dust_attenuation_slope_precomp: jnp.ndarray | None = None
-    # Two-component dust (Phase 3c-3c-iv-b). Birth-cloud and diffuse
+    # Two-component dust. Birth-cloud and diffuse
     # attenuation factors per filter pivot, plus their wavelength
     # slopes. Two-component dust factorizes as
     # ``T(a, λ) = T_diff(λ) × T_bc(λ)^y(a)`` — the per-age dependence
-    # comes from the young indicator ``y(a)`` below. Used by
-    # Phase 3c-3c-iv-c to apply per-age expansion in predict_via_precomp.
+    # comes from the young indicator ``y(a)`` below. Used to apply
+    # the per-age expansion in predict_via_precomp.
     dust_bc_attenuation_precomp: jnp.ndarray | None = None
     dust_bc_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_attenuation_precomp: jnp.ndarray | None = None
@@ -153,7 +153,7 @@ class DerivedState:
     # the A_bc^(y−1) pole at X-ray/UV bands far off the dust curve).
     dust_bc_log_attenuation_slope_precomp: jnp.ndarray | None = None
     dust_diff_log_attenuation_slope_precomp: jnp.ndarray | None = None
-    # Young-star indicator on the SSP age grid (Phase 3c-3c-iv-b),
+    # Young-star indicator on the SSP age grid,
     # shape ``(n_age,)``. Smooth sigmoid transition around
     # ``DustSEDComponent.config.t_birth_yr``. ``y(a)`` = 1 for fully
     # young, 0 for fully old, with a logistic transition controlled by
@@ -172,8 +172,8 @@ class DerivedState:
     # ``(n_filters, max_len)``; ``phot_filter_waves_padded`` units Å.
     phot_filter_waves_padded: jnp.ndarray | None = None
     phot_filter_trans_padded: jnp.ndarray | None = None
-    # Spectrum pixel effective wavelengths in the rest frame (Phase 5,
-    # published when approx=SpectrumPrecomp() is set). Per-pixel effective
+    # Spectrum pixel effective wavelengths in the rest frame (published
+    # when approx=SpectrumPrecomp() is set). Per-pixel effective
     # wavelengths in the galaxy rest frame, computed as observed wavelengths
     # divided by (1 + z). Shape ``(n_spec_pixel,)``, units Å.
     spec_eff_waves: jnp.ndarray | None = None
@@ -190,7 +190,7 @@ class DerivedState:
     L_4400_intrinsic: jnp.ndarray | None = None
     sed_agn: jnp.ndarray | None = None
     sed_grahsp: jnp.ndarray | None = None
-    # AGN — filter-integrated LUT (Phase 3c-3d-agn). Rest-frame Lν of
+    # AGN — filter-integrated LUT. Rest-frame Lν of
     # the AGN contribution per filter, shape ``(n_filters,)``. Published
     # only when ``approx=WavePrecomp()`` is set and AGN is
     # configured. Consumed by ``predict_via_precomp`` via the multi-
@@ -206,7 +206,7 @@ class DerivedState:
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
     lyc_transmission: jnp.ndarray | None = None
-    # Nebular — photometry LUT (Phase 3c-3b, published only when
+    # Nebular — photometry LUT (published only when
     # ``approx=WavePrecomp()`` is set on SEDModel and the nebular
     # backend supports filter-level precomputation (Cue / CloudyGrid).
     # For BakedIn nebular this is None — the nebular emission is already
@@ -222,7 +222,7 @@ class DerivedState:
     radio_phot_lnu_precomp: jnp.ndarray | None = None
     xray_phot_lnu_precomp: jnp.ndarray | None = None
 
-    # Spectrum LUT (Phase 5, published only when approx=SpectrumPrecomp()
+    # Spectrum LUT (published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component
     # at spectrum pixel centers (effective wavelengths).
     # Shape ``(n_spec_pixel,)``, units erg/s/Hz.

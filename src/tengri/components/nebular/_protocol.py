@@ -7,7 +7,7 @@ the tengri forward model. The Protocol defines the minimal interface:
 - predict_nebular_sed: SED on the SSP wavelength grid (existing interface)
 
 Note: The unified line_luminosities / continuum_luminosity API is a future
-step (Phase N-2b). For now, has_continuum is the only required addition.
+step. For now, has_continuum is the only required addition.
 """
 
 from typing import Protocol, runtime_checkable

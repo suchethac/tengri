@@ -416,7 +416,7 @@ def neb_logzsol_to_mappings_zeta(logzsol: jnp.ndarray) -> jnp.ndarray:
     return 10.0**logzsol
 
 
-# ── Analytic nebular continuum  (Phase N-4b) ──────────────────────
+# ── Analytic nebular continuum ────────────────────────────────────
 
 # Case B recombination coefficient at T=10^4 K [cm³/s]
 # Storey & Hummer (1995) via pyNeb: alpha_B(1e4 K, ne=100) = 2.585e-13

@@ -306,7 +306,7 @@ class AGNSEDComponent:
         # provided, extract AGN SKIRTOR template and thread it.
         agn_fn = resolve_agn_model(self.config.model)
 
-        # Phase 4-D: thread SKIRTOR template as JIT runtime input
+        # Thread the SKIRTOR template as a JIT runtime input
         skirtor_template = None
         if template_data is not None and isinstance(template_data, dict):
             agn_data = template_data.get("agn")
@@ -375,7 +375,7 @@ class AGNSEDComponent:
             L_2500_intrinsic = jnp.asarray(0.0)
             L_4400_intrinsic = jnp.asarray(0.0)
 
-        # Phase 3c-3d-agn: filter-integrate L_agn through the cached filter
+        # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
         # can include the AGN contribution in the LUT sum.
         derived_overrides = dict(

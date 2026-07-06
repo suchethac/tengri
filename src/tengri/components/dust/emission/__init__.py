@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Dust emission package.
 
-Transitional layout (ADR-0019; full slim tracked in the Phase-1 epic): the
+Transitional layout (ADR-0019): the
 historical ``emission.py`` module now lives at ``emission/emission.py`` so the
 ``analytic/`` subpackage can host the SEDModelComponent ports. This ``__init__``
 preserves the full public + used surface of the old flat module, so every
