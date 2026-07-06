@@ -311,6 +311,55 @@ def register_agn_model(
     return decorator
 
 
+def _resolve_monolithic_model(name: str) -> Callable | None:
+    """Return the monolithic forward function for a self-contained model.
+
+    Some deprecated model names are backed by self-contained forward functions
+    that carry structural variant selectors (``torus_model``, ``disc_model``,
+    raw radiative-transfer templates) which have no composable-block
+    equivalent. For those the deprecated name resolves to the monolithic
+    function directly rather than a composable preset, so every parameter still
+    reaches the physics. Returns ``None`` for all other names.
+
+    Parameters
+    ----------
+    name : str
+        Deprecated AGN model name.
+
+    Returns
+    -------
+    callable or None
+        The monolithic forward function (with a deprecation warning already
+        emitted), or ``None`` if ``name`` is not a self-contained model.
+    """
+    if name == "skirtor_stalevski":
+        warnings.warn(
+            "AGN model 'skirtor_stalevski' is deprecated. It returns the raw "
+            "Stalevski (2016) SKIRTOR radiative-transfer total SED, which is not "
+            "reproducible as a composable disc+torus recipe. For the CIGALE-style "
+            "tunable-disc variant use agn_model='composable', "
+            "agn_disc_block='skirtor', agn_torus_block='skirtor'.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return skirtor_stalevski_agn
+    if name == "grahsp":
+        # Lazy import avoids a grahsp → unified import cycle at module load.
+        from tengri.components.agn.grahsp.registry import grahsp
+
+        warnings.warn(
+            "AGN model 'grahsp' is deprecated. It routes to the self-contained "
+            "GRAHSP forward model (Kauffmann et al.), whose torus_model/disc_model "
+            "variant selectors are not composable-block kwargs. For the block "
+            "grammar use agn_model='composable', agn_disc_block='grahsp_sbpl', "
+            "agn_torus_block='grahsp', etc.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return grahsp
+    return None
+
+
 def resolve_agn_model(name: str) -> Callable:
     """Retrieve a registered AGN model by name.
 
@@ -335,15 +384,32 @@ def resolve_agn_model(name: str) -> Callable:
     **JIT-compatible**: no — performs dictionary lookup at initialization time.
     Old monolithic model names still work but emit DeprecationWarning.
     """
-    if name == "composable" or name not in _AGN_PRESETS:
-        # Direct return for composable or truly unknown names
-        if name == "composable":
-            return AGN_MODELS["composable"]
-        else:
-            raise ValueError(
-                f"Unknown AGN model '{name}'. Available: 'composable', "
-                f"or any of the deprecated monolithic names: {list(_AGN_PRESETS.keys())}"
-            )
+    if name == "composable":
+        return AGN_MODELS["composable"]
+
+    # Self-contained / un-composable models: the deprecated name returns the
+    # monolithic forward function *directly*, not a composable preset, because
+    # it carries structural variant selectors that do not map to the composable
+    # disc/torus/lines block grammar:
+    #   * skirtor_stalevski — the raw Stalevski (2016) SKIRTOR radiative-transfer
+    #     *total* (disc + torus + scattering computed jointly), physically NOT a
+    #     disc-block + torus-block sum (see test_skirtor_stalevski.py).
+    #   * grahsp — a self-contained parity port whose ``torus_model`` /
+    #     ``disc_model`` variant selectors are GrahspConfig structural choices,
+    #     not forwardable block kwargs (see grahsp/test_parity_integration.py).
+    # Routing them here preserves full param forwarding; the composable blocks
+    # (disc='skirtor'/'grahsp_sbpl', torus='skirtor'/'grahsp', …) remain
+    # available for callers who opt into the block grammar explicitly.
+    monolithic = _resolve_monolithic_model(name)
+    if monolithic is not None:
+        return monolithic
+
+    if name not in _AGN_PRESETS:
+        deprecated = [*_AGN_PRESETS.keys(), "skirtor_stalevski", "grahsp"]
+        raise ValueError(
+            f"Unknown AGN model '{name}'. Available: 'composable', "
+            f"or any of the deprecated monolithic names: {deprecated}"
+        )
 
     # Route deprecated monolithic names through composable with presets
     _preset_args = ", ".join(
@@ -362,10 +428,16 @@ def resolve_agn_model(name: str) -> Callable:
 
     def preset_wrapper(wavelength, agn_log_lbol, **kwargs):
         """Apply preset block selectors and route through composable runner."""
-        # Merge preset selectors with kwargs (kwargs override preset defaults)
-        preset_params = {k: v for k, v in preset.items() if k != "_description"}
-        preset_params.update(kwargs)
-        return AGN_MODELS["composable"](wavelength, agn_log_lbol, **preset_params)
+        # Preset block-selectors + norm are AUTHORITATIVE and must win over
+        # kwargs. The build path (agn/component.py) injects the component's
+        # *default* block selectors ("none") into kwargs; if those clobbered
+        # the preset, a monolithic model like ``richards2006`` collapsed to
+        # ``disc=none`` → identically-zero SED (the #941 regression). The
+        # preset carries only selector/norm keys, so physics params in kwargs
+        # still flow through unchanged.
+        merged = dict(kwargs)
+        merged.update({k: v for k, v in preset.items() if k != "_description"})
+        return AGN_MODELS["composable"](wavelength, agn_log_lbol, **merged)
 
     return preset_wrapper
 
@@ -374,60 +446,64 @@ def resolve_agn_model(name: str) -> Callable:
 # Each preset specifies block selectors + normalization policy to reproduce the
 # monolithic model behavior in the composable architecture.
 _AGN_PRESETS = {
+    # ``agn_norm='conserving'`` reproduces the monolithic disc+torus functions'
+    # energy-conserving normalization bit-exactly (verified 3e-7 for
+    # multicolor/silva04/cat3d_wind); ``'independent'`` was a #941 regression
+    # that mis-scaled the disc/torus by an ``agn_frac`` factor (~2x, 99% off).
     "multicolor_agn": {
         "agn_disc_block": "multicolor",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=multicolor + torus=silva04",
     },
     "kubota_done": {  # Kubota & Done 2018 3-zone disc (full model)
         "agn_disc_block": "kubota_done",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=kubota_done + torus=silva04",
     },
     "kubota_done_full": {
         "agn_disc_block": "kubota_done",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=kubota_done + torus=silva04",
     },
     "silva04": {
         "agn_disc_block": "powerlaw",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=powerlaw + torus=silva04",
     },
     "cat3d_wind": {
         "agn_disc_block": "powerlaw",
         "agn_torus_block": "cat3d_wind",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=powerlaw + torus=cat3d_wind",
     },
     "adaf": {
         "agn_disc_block": "adaf",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=adaf + torus=silva04",
     },
     "relagn": {
         "agn_disc_block": "relagn",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=relagn + torus=silva04",
     },
     "skirtor": {
-        "agn_disc_block": "skirtor",
+        # The monolithic ``skirtor_agn`` pairs a *power-law* disc with the
+        # SKIRTOR clumpy torus (CIGALE ``skirtor2016``); ``disc='skirtor'``
+        # (the raw Stalevski disc) belongs to ``skirtor_stalevski`` only.
+        "agn_disc_block": "powerlaw",
         "agn_torus_block": "skirtor",
         "agn_norm": "cigale_joint",
-        "_description": "disc=skirtor + torus=skirtor",
+        "_description": "disc=powerlaw + torus=skirtor",
     },
-    "skirtor_stalevski": {
-        "agn_disc_block": "skirtor",
-        "agn_torus_block": "skirtor",
-        "agn_norm": "cigale_joint",
-        "_description": "disc=skirtor + torus=skirtor",
-    },
+    # NOTE: ``skirtor_stalevski`` is intentionally absent — it is an
+    # un-composable raw radiative-transfer template routed directly to the
+    # monolithic ``skirtor_stalevski_agn`` in ``resolve_agn_model``.
     "qsogen": {
         "agn_disc_block": "qsogen",
         "agn_nlr_block": "none",
@@ -440,16 +516,12 @@ _AGN_PRESETS = {
             "disc=qsogen + blr=qsogen + feii=qsogen_balmer + torus=qsogen + atten=qsogen_smc"
         ),
     },
-    "grahsp": {
-        "agn_disc_block": "grahsp_sbpl",
-        "agn_nlr_block": "grahsp",
-        "agn_blr_block": "grahsp",
-        "agn_feii_block": "grahsp",
-        "agn_torus_block": "grahsp",
-        "agn_attenuation_block": "grahsp_biatten",
-        "agn_norm": "independent",
-        "_description": "disc=grahsp_sbpl + nlr/blr/feii/torus=grahsp + atten=grahsp_biatten",
-    },
+    # NOTE: ``grahsp`` is intentionally absent — it is a self-contained parity
+    # model whose torus_model/disc_model variant selectors are not composable
+    # kwargs, so it routes directly to the monolithic GRAHSP function in
+    # ``resolve_agn_model`` (via ``_resolve_monolithic_model``). The block
+    # decomposition (disc='grahsp_sbpl' + torus='grahsp' + …) is still available
+    # explicitly through the composable grammar.
     "richards2006": {
         "agn_disc_block": "richards2006",
         "agn_norm": "independent",
@@ -460,7 +532,7 @@ _AGN_PRESETS = {
         "agn_nlr_block": "analytic",
         "agn_blr_block": "analytic",
         "agn_torus_block": "silva04",
-        "agn_norm": "independent",
+        "agn_norm": "conserving",
         "_description": "disc=multicolor + nlr=analytic + blr=analytic + torus=silva04",
     },
 }

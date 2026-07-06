@@ -15,7 +15,7 @@
   "src/tengri/components/nebular/cue.py": 1966,
   "src/tengri/components/stellar/sfh/registry.py": 1831,
   "src/tengri/parameters/parameters.py": 1840,
-  "src/tengri/components/agn/unified.py": 1779,
+  "src/tengri/components/agn/unified.py": 1851,
   "src/tengri/inference/backends/vi/native.py": 1717,
   "src/tengri/components/stellar/component.py": 1684,
   "src/tengri/inference/jit_engine.py": 1644,
