@@ -568,3 +568,20 @@ class TestGateGroupBoolRejected:
     def test_bool_gate_group_raises_actionable_error(self, group):
         with pytest.raises(ValueError, match=r"type"):
             parse_groups(**{group: True, "sfh": {"type": "dpl"}})
+
+    @pytest.mark.parametrize(
+        "group,decl,extra",
+        [
+            ("radio", {"type": "condon92"}, {}),
+            ("xray", {"type": "simple"}, {}),
+            ("shock", {"type": "mappings"}, {"neb": {"type": "cue"}}),
+        ],
+    )
+    def test_dict_gate_group_activates_params(self, group, decl, extra):
+        """The dict form activates the component — its params appear in the
+        built spec (guards the silent-drop regression from the positive side)."""
+        spec = parse_groups(sfh={"type": "dpl"}, **{group: decl}, **extra)
+        allp = set(spec.free_params) | set(spec.get_fixed_values())
+        assert any(group in k for k in allp), (
+            f"{group}={decl} produced no {group} params — silently absent"
+        )
