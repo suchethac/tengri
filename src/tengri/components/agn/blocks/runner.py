@@ -57,7 +57,7 @@ from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     resolve_agn_block,
 )
-from tengri.components.agn.blocks.atten_blocks import polar_dust_reemission_lnu
+from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
     sigmoid_visibility_mask,
     split_lines_result,

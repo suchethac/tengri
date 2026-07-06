@@ -1,14 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Attenuation-stage blocks: polar dust.
+r"""AGN attenuation blocks (polar dust + host/foreground screens).
 
-Wraps :func:`polar_dust_extinction` so the multiplicative extinction factor
-can be selected via ``agn_attenuation_block="polar_dust"``.
-
-The upstream :func:`polar_dust_extinction` returns ``(attenuated_l_nu,
-absorbed_l_nu)`` for a given input ``l_nu``. The block protocol wants a
-*pure* multiplicative factor, so the adapter calls upstream with
-``l_nu = ones_like(wavelength)`` and returns the attenuated array (which
-is the factor by construction).
+Pick via ``agn={'atten': {'type': ...}}``. Consolidated 2026-07 from
+polar_dust_atten + atten_blocks; registration unchanged.
 """
 
 from __future__ import annotations
@@ -19,7 +13,10 @@ from jax import Array
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
 
-__all__: list[str] = ["polar_dust_reemission_lnu"]  # registrations only
+__all__ = [
+    "polar_dust_attenuation_block",
+    "polar_dust_reemission_lnu",
+]
 
 
 @register_agn_block(

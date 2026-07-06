@@ -376,14 +376,14 @@ def _agn_block_types(category: str) -> frozenset[str]:
     # decorators have fired. Mirrors the eager imports done by AGN
     # ``unified.py`` at module-load time; safe to redo here.
     import tengri.components.agn.blocks.alternates
-    import tengri.components.agn.blocks.atten_blocks
-    import tengri.components.agn.blocks.blr_blocks
-    import tengri.components.agn.blocks.disc_blocks
-    import tengri.components.agn.blocks.feii_blocks
+    import tengri.components.agn.blocks.atten
+    import tengri.components.agn.blocks.blr
+    import tengri.components.agn.blocks.disc
+    import tengri.components.agn.blocks.feii
     import tengri.components.agn.blocks.grahsp_blocks
     import tengri.components.agn.blocks.nlr
     import tengri.components.agn.blocks.qsogen_blocks
-    import tengri.components.agn.blocks.torus_blocks  # noqa: F401
+    import tengri.components.agn.blocks.torus  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}

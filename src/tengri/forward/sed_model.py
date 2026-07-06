@@ -1579,7 +1579,7 @@ class SEDModel:
                 self._agn_blr_block in ("synthesizer", "synthesizer_spectra")
             ):
                 with contextlib.suppress(Exception):
-                    from tengri.components.agn.blocks.blr_blocks import (
+                    from tengri.components.agn.blocks.blr import (
                         _resolve_synthesizer_grid as _resolve_blr_grid,
                     )
                     from tengri.components.agn.blocks.nlr import (

@@ -23,16 +23,16 @@ Public API
 # mirror of qsogen_precompute / skirtor_precompute for the composable runner.
 from tengri.components.agn.blocks import (
     alternates,
-    atten_blocks,
-    blr_blocks,
+    atten,
+    blr,
     composable_precompute,
-    disc_blocks,
-    feii_blocks,
+    disc,
+    feii,
     grahsp_blocks,
     nlr,
     qsogen_blocks,
     registry,
-    torus_blocks,
+    torus,
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,

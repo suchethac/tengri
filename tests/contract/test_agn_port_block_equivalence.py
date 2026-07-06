@@ -87,10 +87,10 @@ def test_torus_block_is_faithful_wrapper_of_single_source_primitive(name, primit
 # physics module (the block pulls the ``*_sed`` primitive; the port pulls its
 # grid loader from the same module), so there is one source of truth per model.
 _SHARED_MODULE = [
-    ("blocks.silva04_torus", "silva04_model", "components.agn.silva04"),
-    ("blocks.cat3d_wind_torus", "cat3d_torus_model", "components.agn.cat3d_wind"),
-    ("blocks.skirtor_torus", "skirtor_model", "components.agn.skirtor"),
-    ("blocks.kubota_done_disc", "kd18_disc_model", "components.agn.disc"),
+    ("blocks.torus", "silva04_model", "components.agn.silva04"),
+    ("blocks.torus", "cat3d_torus_model", "components.agn.cat3d_wind"),
+    ("blocks.torus", "skirtor_model", "components.agn.skirtor"),
+    ("blocks.disc", "kd18_disc_model", "components.agn.disc"),
     # NLR had a one-file port too (``nlr_model.AGNNebular``), but it was a
     # grammar-unreachable orphan with drifted param names (``agn_nlr_cov_frac``
     # vs the canonical ``agn_nlr_cf``) — the exact silent-divergence footgun
