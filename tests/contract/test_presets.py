@@ -35,24 +35,25 @@ from tengri.presets import (
 
 
 class TestListPresets:
-    """Test list_presets() function."""
+    """Test the package preset registry menu (galaxy-type presets registered)."""
 
     def test_list_presets_nonempty(self):
-        """list_presets() returns a non-empty list."""
+        """list_presets() returns a non-empty registry dict."""
         presets = list_presets()
-        assert isinstance(presets, list)
+        assert isinstance(presets, dict)
         assert len(presets) > 0
 
     def test_list_presets_contains_expected(self):
-        """list_presets() contains expected preset names."""
+        """All six galaxy-type presets are registered in the package menu."""
         presets = list_presets()
         expected = {"starforming", "quiescent", "high_z", "photoz", "jwst_spec", "agn_host"}
-        assert set(presets) == expected
+        assert expected.issubset(presets.keys()), f"Missing: {expected - presets.keys()}"
 
-    def test_list_presets_sorted(self):
-        """list_presets() returns sorted names."""
-        presets = list_presets()
-        assert presets == sorted(presets)
+    def test_list_presets_entries_carry_metadata(self):
+        """Registry entries expose short_doc and citations for the menu."""
+        entry = list_presets()["starforming"]
+        assert entry["short_doc"]
+        assert "Calzetti_2000" in entry["citations"]
 
 
 class TestEachPresetReturnsValidTuple:

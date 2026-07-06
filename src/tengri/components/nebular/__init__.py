@@ -93,10 +93,6 @@ from tengri.components.nebular.cloudy_grid import (
 )
 from tengri.components.nebular.cue import CueBackend
 from tengri.components.nebular.dig import mix_dig_emission
-from tengri.components.nebular.mappings_model import (
-    MAPPINGSSEDComponent,
-    MAPPINGSSEDComponentConfig,
-)
 from tengri.components.nebular.mappings_photo import (
     IonizingSpectrumInconsistencyError,
     IonizingSpectrumInconsistencyWarning,
@@ -168,8 +164,6 @@ __all__ = [
     "FeltreNLRBackend",
     "IonizingSpectrumInconsistencyError",
     "IonizingSpectrumInconsistencyWarning",
-    "MAPPINGSSEDComponent",
-    "MAPPINGSSEDComponentConfig",
     "MappingsPhotoAGNBackend",
     "MappingsPhotoStellarBackend",
     "NebularBackend",

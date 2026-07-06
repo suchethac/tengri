@@ -36,7 +36,6 @@ __all__ = [
     "ASTRODUST_HD23_DEFAULT_PATH",
     "ASTRODUST_HD23_PATH_ENV",
     "AstrodustHD23Templates",
-    "integrate_lnu_over_nu_aa",
     "load_astrodust_hd23_or_raise",
     "missing_astrodust_template_message",
     "resample_lnu_on_aa_grid",
@@ -46,8 +45,6 @@ __all__ = [
 ASTRODUST_HD23_PATH_ENV = "TENGRI_ASTRODUST_PATH"
 ASTRODUST_HD23_DEFAULT_PATH = "data/astrodust_templates.h5"
 
-
-from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 # 1 micron = 10000 Angstrom.
 _UM_TO_AA = 1.0e4
@@ -324,34 +321,3 @@ def resample_lnu_on_aa_grid(
         return jnp.interp(wave_aa, template_wave_aa, row, left=0.0, right=0.0)
 
     return jax.vmap(_interp_one)(L_nu_um)
-
-
-def integrate_lnu_over_nu_aa(
-    L_nu: jnp.ndarray,
-    wave_aa: jnp.ndarray,
-) -> jnp.ndarray:
-    r"""Trapezoid of :math:`\int L_\nu \, d\nu` on a wavelength grid.
-
-    Uses the identity
-    :math:`\int L_\nu d\nu = \int (\nu L_\nu) d\ln\lambda` for an
-    increasing-:math:`\lambda` grid.
-
-    Parameters
-    ----------
-    L_nu : array_like, shape ``(..., n_wave_aa)``
-        :math:`L_\nu` in [erg/s/Hz] (or any per-Hz unit).
-    wave_aa : array_like, shape ``(n_wave_aa,)``
-        Wavelength grid in Angstrom.
-
-    Returns
-    -------
-    jnp.ndarray
-        :math:`\int L_\nu \, d\nu`.
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-    """
-    nu = _C_AA_PER_S / wave_aa
-    nu_lnu = nu * L_nu
-    return jnp.trapezoid(nu_lnu, jnp.log(wave_aa), axis=-1)

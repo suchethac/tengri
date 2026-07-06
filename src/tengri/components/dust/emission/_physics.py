@@ -15,10 +15,57 @@ import jax.numpy as jnp
 
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
+    C_AA as _C_AA_PER_S,
     C_CGS as _C_CGS,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZMANN,
 )
+
+# ── Utility: frequency integral ───────────────────────────────────
+
+
+def integrate_lnu_over_nu(
+    L_nu: jnp.ndarray,
+    wave_aa: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""JIT-friendly trapezoid of :math:`\int L_\nu \, d\nu`.
+
+    Uses the identity
+    :math:`\int L_\nu \, d\nu = \int (\nu L_\nu)\, d\ln\nu` and the
+    transformation :math:`d\ln\nu = -d\ln\lambda`, with the two sign
+    flips canceling for an increasing-:math:`\lambda` grid:
+
+    .. math::
+
+        \int_{\nu_{\min}}^{\nu_{\max}} L_\nu \, d\nu
+        \;=\; \int_{\lambda_{\min}}^{\lambda_{\max}}
+              (\nu L_\nu)\, d\ln\lambda \, .
+
+    Parameters
+    ----------
+    L_nu : array_like, shape ``(..., n_wave_aa)``
+        :math:`L_\nu` in [erg/s/Hz] (or any per-Hz unit).
+    wave_aa : array_like, shape ``(n_wave_aa,)``
+        Wavelength grid in Angstrom; strictly increasing.
+
+    Returns
+    -------
+    ndarray, shape ``(...,)``
+        :math:`\int L_\nu \, d\nu` in [erg/s] (or the matching unit).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure ``jnp.trapezoid`` over a static
+    axis.  **Gradient-safe**: yes.
+
+    The single canonical implementation — consolidated from bit-identical
+    per-module copies in ``draine2021_pah.py`` and ``astrodust_hd23.py``
+    (2026-07).
+    """
+    nu = _C_AA_PER_S / wave_aa
+    nu_lnu = nu * L_nu
+    return jnp.trapezoid(nu_lnu, jnp.log(wave_aa), axis=-1)
+
 
 # ── Utility: Planck function ──────────────────────────────────────
 

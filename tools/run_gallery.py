@@ -65,16 +65,22 @@ def run_one(path_str: str, timeout: int) -> dict:
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        return {"path": str(path.relative_to(REPO)), "status": "timeout",
-                "secs": round(time.time() - t0, 1), "tail": ""}
+        return {
+            "path": str(path.relative_to(REPO)),
+            "status": "timeout",
+            "secs": round(time.time() - t0, 1),
+            "tail": "",
+        }
     dt = round(time.time() - t0, 1)
     rel = str(path.relative_to(REPO))
     if proc.returncode == 0:
         return {"path": rel, "status": "pass", "secs": dt, "tail": ""}
     tail = (proc.stderr or proc.stdout or "").strip().splitlines()
     # last exception line is the most informative
-    exc_line = next((ln for ln in reversed(tail)
-                     if re.match(r"^\w+(\.\w+)*(Error|Exception|Warning):", ln)), "")
+    exc_line = next(
+        (ln for ln in reversed(tail) if re.match(r"^\w+(\.\w+)*(Error|Exception|Warning):", ln)),
+        "",
+    )
     return {
         "path": rel,
         "status": "error",
@@ -93,15 +99,14 @@ def main() -> int:
     args = ap.parse_args()
 
     scripts = sorted(
-        p for p in EXAMPLES.rglob("plot_*.py")
+        p
+        for p in EXAMPLES.rglob("plot_*.py")
         if not IGNORE.search(p.name) and (not args.filter or args.filter in str(p))
     )
     skipped = sorted(
-        str(p.relative_to(REPO)) for p in EXAMPLES.rglob("plot_*.py")
-        if IGNORE.search(p.name)
+        str(p.relative_to(REPO)) for p in EXAMPLES.rglob("plot_*.py") if IGNORE.search(p.name)
     )
-    print(f"discovered {len(scripts)} runnable, {len(skipped)} ignore_pattern-skipped",
-          flush=True)
+    print(f"discovered {len(scripts)} runnable, {len(skipped)} ignore_pattern-skipped", flush=True)
 
     results = []
     with ProcessPoolExecutor(max_workers=args.workers) as ex:
@@ -113,8 +118,7 @@ def main() -> int:
             done += 1
             mark = {"pass": "ok", "error": "ERR", "timeout": "T/O"}.get(r["status"], "?")
             extra = f"  {r.get('exc', '')}" if r["status"] != "pass" else ""
-            print(f"[{done}/{len(scripts)}] {mark} {r['path']} ({r['secs']}s){extra}",
-                  flush=True)
+            print(f"[{done}/{len(scripts)}] {mark} {r['path']} ({r['secs']}s){extra}", flush=True)
 
     results.sort(key=lambda r: (r["status"] != "error", r["path"]))
     report = {
@@ -126,8 +130,11 @@ def main() -> int:
         "results": results,
     }
     Path(args.out).write_text(json.dumps(report, indent=2))
-    print(f"\n== pass={report['n_pass']} error={report['n_error']} "
-          f"timeout={report['n_timeout']} -> {args.out}", flush=True)
+    print(
+        f"\n== pass={report['n_pass']} error={report['n_error']} "
+        f"timeout={report['n_timeout']} -> {args.out}",
+        flush=True,
+    )
     return 0
 
 
