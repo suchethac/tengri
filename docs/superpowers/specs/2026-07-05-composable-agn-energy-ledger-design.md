@@ -158,24 +158,30 @@ SKIRTOR `#556` `agn_power×R` machinery (`runner.py:466-587`) becomes the
 `cigale_joint` implementation of "compute `f_tor` from R," no longer a hardcoded
 `if torus=="skirtor"` branch.
 
-## Section 2 — Block contract (shape-providers; no back-compat)
+## Section 2 — Block contract (no back-compat)
 
-Blocks stop owning absolute normalization; they provide **shapes** and the
-runner scales each to its allocated budget.
+The composition already had most of what the ledger needs: **the torus blocks
+already normalize their output to `agn_torus_frac × L_bol`** (verified in
+silva04/cat3d_wind/fritz/nenkova/skirtor/skirtor_agnfitter torus blocks; the
+lines/FeII blocks normalize to the disc `l5100_disc` anchor). The only gap was
+the **disc**: the composable `powerlaw_disc_block` emitted at *full* `L_bol`
+(hardcoded `agn_frac=1.0`) while the monolithic models pass
+`agn_frac = 1 − agn_torus_frac`. So conservation is a disc-side debit in the
+runner, **not** a per-block migration.
 
 | Category | Today (`_protocol.py`) | Under the ledger |
 |---|---|---|
-| **disc** | returns `L_λ` at full `L_bol` | returns `L_λ` shape; runner reads `∫` as `L_bol` and **debits** by Σf |
-| **torus** | `L_λ` scaled to `l5100_disc`, added | shape; runner normalizes `∫=f_tor·L_bol` (`f_tor` from `agn_torus_frac` default, or template-R under cigale) |
-| **polar** | ad-hoc in runner (`agn_polar_ebv`) | reprocesses reddening-removed disc UV → conserved, uniform across tori |
-| **nlr/blr/feii** | `l5100_disc`-normalized, added | shapes; drawn from covering-fraction budget under conserving/synthesizer policy |
+| **disc** | returns `L_λ` at full `L_bol` (never debited) | runner **debits** it by `(1 − Σf)` under `conserving` — the Phase-1 change |
+| **torus** | already `∫ = agn_torus_frac · L_bol` (shape × budget) | unchanged — already a budget block |
+| **polar** | ad-hoc in runner (`agn_polar_ebv`) | reprocesses reddening-removed disc UV → conserved, uniform across tori (Phase 3) |
+| **nlr/blr/feii** | normalized to disc `l5100_disc`, added | unchanged; optional covering-fraction budget under `synthesizer` (later) |
 | **attenuation** | multiplicative factor | unchanged |
 
-The registry (`register_agn_block`) gains one optional field
-`reprocessed_fraction_param` (e.g. torus → `"agn_torus_frac"`); the runner uses
-it to allocate. Because there is no back-compat, all torus/polar/lines blocks
-migrate to shape-providers as part of Phase 1 — there is no dual "additive
-legacy" path to maintain.
+Because the tori are already budget blocks, **no block migration is needed** —
+the ledger lives entirely in `compose_l_nu`. A future optional registry field
+`reprocessed_fraction_param` (torus → `"agn_torus_frac"`) would let the runner
+allocate generically for any torus that doesn't yet carry the param, but the
+current set already does.
 
 ## Section 3 — The normalization-policy layer (`agn_norm`)
 
@@ -186,7 +192,7 @@ block; line/torus *shapes* live in their blocks. So "which code" =
 
 | `agn_norm` | Reproduces | Allocation rule | Conserving |
 |---|---|---|---|
-| **`conserving`** *(default)* | tengri monolithic; Synthesizer (qsosed disc + grids) | disc `L_bol` from `agn_log_lbol`; `f_tor=agn_torus_frac`, `f_pol` from polar covering, lines from covering; `disc_obs=(1−Σf)·L_bol` | yes (structural) |
+| **`conserving`** *(default from Phase 2; opt-in in Phase 1)* | tengri monolithic; Synthesizer (qsosed disc + grids) | disc `L_bol` from `agn_log_lbol`; `f_tor=agn_torus_frac`, `f_pol` from polar covering, lines from covering; `disc_obs=(1−Σf)·L_bol` | yes (structural) |
 | **`cigale_joint`** | X-CIGALE (Yang+2020) | single `agn_power` reference; disc/torus/polar tied by R (template-R for SKIRTOR, covering-R for analytic tori); `fracAGN` band | yes |
 | **`l5100`** | GRAHSP (Buchner+2024) | components normalized to disc λL_λ(5100 Å) — the current anchor as explicit policy | anchor-convention |
 | **`fagn`** | Prospector/FSPS | AGN allocated as a fraction of the *stellar* bolometric (`L_AGN = fagn·L_★`); disc/torus conserve internally | yes (AGN-internal) |

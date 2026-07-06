@@ -524,19 +524,28 @@ agn_torus_block, agn_attenuation_block : str
 
     L_lambda_disc = L_lambda_disc * _disc_ext
 
-    # Compute lambda*L_lambda(5100Å) for downstream block normalizations.
-    # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
-    # NOTE: computed from the *intrinsic* disc (before the conserving debit
-    # below), so line/FeII EW anchors stay tied to the accretion luminosity.
+    # Compute lambda*L_lambda(5100Å) for downstream block (line/FeII/torus)
+    # normalizations. Convention: this is the LOS-reddened disc — taken *after*
+    # the polar/LOS disc extinction (``_disc_ext`` above) but *before* the
+    # conserving debit below. With agn_polar_ebv=0 (the common case) it equals
+    # the intrinsic disc; with Type-1 polar reddening it carries the extinction.
+    # GRAHSP l5100 parity (Phase 2) should confirm and pin the intended anchor.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
 
-    # ── Energy ledger (agn_norm="conserving", the default) ───────────────
+    # ── Energy ledger (agn_norm="conserving") ────────────────────────────
     # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of
     # it. Debit the observed disc by (1 - agn_torus_frac) so that
     # disc(1-f) + torus(f) conserves L_bol for every torus — reproducing the
     # monolithic models (e.g. silva04_agn passes agn_frac=1-agn_torus_frac to
     # the disc). The torus block already normalizes its output to
     # agn_torus_frac * L_bol, so only the disc side changes.
+    #
+    # CONSERVATION DOMAIN: exact only when agn_polar_ebv=0. With Type-1 polar
+    # reddening, ``_disc_ext`` (above) removes disc UV that nothing re-credits
+    # under this policy (the polar-graybody re-credit currently lives in the
+    # cigale_joint branch). So "conserving" guarantees Sigma=L_bol iff
+    # agn_polar_ebv=0; the reddening unification (Phase 3) wires the re-credit
+    # here so the guarantee becomes unconditional.
     #
     # Self-contained tori (``none``, ``qsogen``, ``grahsp``) bundle disc+torus
     # in one self-normalized template and bypass the ledger — no debit. This

@@ -80,6 +80,7 @@ from jax import Array
 __all__ = [
     "AGN_BLOCKS",
     "AGN_BLOCK_META",
+    "AGN_NORM_POLICIES",
     "BLOCK_CATEGORIES",
     "BlockCategory",
     "register_agn_block",
@@ -98,6 +99,27 @@ AGN_BLOCKS: dict[str, dict[str, Callable]] = {cat: {} for cat in BLOCK_CATEGORIE
 # Enables introspection (list_agn_blocks, describe_agn_block) while keeping
 # resolve_agn_block() returning a bare callable for backward compatibility.
 AGN_BLOCK_META: dict[tuple[str, str], dict[str, str]] = {}
+
+# Cross-block normalization policies (``agn_norm``). Single source of truth
+# shared by the runner (``compose_l_nu``) and the grammar validator
+# (``parameters/groups.py``) so the two can never drift — the repo's recurring
+# "wired in one layer but not the other" footgun. Each value is a one-line
+# description for the ``describe``/``list`` surfaces. ``name -> description``.
+AGN_NORM_POLICIES: dict[str, str] = {
+    "cigale_joint": (
+        "Single agn_power reference; disc/torus/polar tied by the SKIRTOR "
+        "template ratio R (X-CIGALE, Yang+2020). Energy-conserving for the "
+        "SKIRTOR torus. Current default."
+    ),
+    "conserving": (
+        "Disc debited by the reprocessed fraction so disc(1-f)+torus(f) "
+        "conserves L_bol for every torus. Reproduces the monolithic models."
+    ),
+    "independent": (
+        "Each component on its own luminosity scale; no cross-block energy "
+        "tie (AGNfitter-style). For cross-code comparison, not conserving."
+    ),
+}
 
 
 def register_agn_block(

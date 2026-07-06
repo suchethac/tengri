@@ -33,18 +33,34 @@ _CASES = [
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 @pytest.mark.parametrize("name,mono_fn,blocks", _CASES)
 def test_conserving_reproduces_monolithic_full_sed(name, mono_fn, blocks):
-    for tf in (0.3, 0.5, 0.7):
-        mono = np.asarray(mono_fn(_WAVE, 45.0, agn_frac=1.0, agn_torus_frac=tf))
-        comp = np.asarray(
-            composable(
-                _WAVE, 45.0, agn_norm="conserving", agn_frac=1.0, agn_torus_frac=tf, **blocks
+    # The residual floor is the Stage-4.5 Type-1/2 sigmoid visibility mask the
+    # composable path applies and the monolithic models lack: at the default
+    # Type-1 viewing (i=30, theta_torus=30) the mask = 0.99999969, so the
+    # max peak-relative residual is ~3e-7 — a documented superset (the
+    # composable path adds inclination geometry), not a discrepancy. The 1e-6
+    # tolerance sits an order of magnitude above that floor. Both agn_frac axes
+    # are covered so the Phase-4 retirement gate holds at partial AGN fractions
+    # too (unified.py:581 scales the total by agn_frac).
+    for agn_frac in (0.5, 1.0):
+        for tf in (0.3, 0.5, 0.7):
+            mono = np.asarray(mono_fn(_WAVE, 45.0, agn_frac=agn_frac, agn_torus_frac=tf))
+            comp = np.asarray(
+                composable(
+                    _WAVE,
+                    45.0,
+                    agn_norm="conserving",
+                    agn_frac=agn_frac,
+                    agn_torus_frac=tf,
+                    **blocks,
+                )
             )
-        )
-        scale = np.max(np.abs(mono))
-        np.testing.assert_allclose(
-            comp / scale,
-            mono / scale,
-            atol=1e-5,
-            rtol=0,
-            err_msg=f"{name}: conserving preset != monolithic at torus_frac={tf}",
-        )
+            scale = np.max(np.abs(mono))
+            np.testing.assert_allclose(
+                comp / scale,
+                mono / scale,
+                atol=1e-6,
+                rtol=0,
+                err_msg=(
+                    f"{name}: conserving != monolithic at agn_frac={agn_frac}, torus_frac={tf}"
+                ),
+            )

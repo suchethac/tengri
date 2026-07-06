@@ -5,17 +5,29 @@ fraction of it. Moving energy from disc to torus via ``agn_torus_frac`` must not
 change the *total* emitted energy — bolometric is conserved. This is the
 invariant PR #916 violated (the composable path added the torus on top of a
 full-luminosity disc, inflating the total by 0.5-4x).
+
+The torus list is derived from the registry so every non-self-contained torus
+inherits the invariant automatically — new tori are covered, and deprecated
+toys (``simple``, ``two_temperature``) drop out when removed rather than leaving
+a stale hand-picked list. Data-gated tori (whose template h5 is absent in CI)
+skip gracefully.
 """
 
 import numpy as np
 import pytest
 
+from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.agn.blocks.registry import composable
+from tengri.components.agn.blocks.runner import _SELF_CONTAINED_TORI
 
 pytestmark = pytest.mark.conservation
 
 _WAVE = np.geomspace(1e2, 1e7, 2000)  # Å — wide enough for disc UV + torus IR
 _C_AA_PER_S = 2.99792458e18
+_L_SUN_ERG = 3.828e33  # erg/s (IAU 2015 nominal); the 10% tol absorbs the exact constant
+
+# Every non-self-contained torus must conserve energy under the conserving policy.
+_TORI = sorted(set(AGN_BLOCKS["torus"]) - set(_SELF_CONTAINED_TORI))
 
 
 def _band_energy(l_nu, wave):
@@ -25,35 +37,39 @@ def _band_energy(l_nu, wave):
     return np.trapezoid(np.asarray(l_nu)[order], nu[order])
 
 
-@pytest.mark.parametrize("torus", ["silva04", "cat3d_wind", "simple", "two_temperature"])
-def test_conserving_policy_is_invariant_under_torus_frac(torus):
-    """Under ``agn_norm='conserving'`` the total emitted energy is invariant as
-    ``agn_torus_frac`` shifts energy from disc to torus."""
-    e0 = _band_energy(
-        composable(
+def _compose_or_skip(torus, tf):
+    try:
+        return composable(
             _WAVE,
             45.0,
             agn_disc_block="powerlaw",
             agn_torus_block=torus,
             agn_norm="conserving",
             agn_frac=1.0,
-            agn_torus_frac=0.0,
-        ),
-        _WAVE,
-    )
-    for tf in (0.3, 0.6, 0.9):
-        e = _band_energy(
-            composable(
-                _WAVE,
-                45.0,
-                agn_disc_block="powerlaw",
-                agn_torus_block=torus,
-                agn_norm="conserving",
-                agn_frac=1.0,
-                agn_torus_frac=tf,
-            ),
-            _WAVE,
+            agn_torus_frac=tf,
         )
+    except Exception as exc:  # data-gated tori (template h5 absent in CI)
+        pytest.skip(f"torus '{torus}' unavailable: {type(exc).__name__}: {exc}")
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+@pytest.mark.parametrize("torus", _TORI)
+def test_conserving_policy_is_invariant_under_torus_frac(torus):
+    """Under ``agn_norm='conserving'`` the total emitted energy is invariant as
+    ``agn_torus_frac`` shifts energy from disc to torus, and it equals L_bol."""
+    e0 = _band_energy(_compose_or_skip(torus, 0.0), _WAVE)
+
+    # Absolute anchor: at agn_log_lbol=45 the disc-only (torus_frac=0) total is
+    # ~10^45 L_sun in erg/s. This catches a global mis-scale (e.g. disc AND
+    # torus both inflated 2x) that the relative invariance below cannot see.
+    l_bol_erg = 10.0**45 * _L_SUN_ERG
+    assert e0 == pytest.approx(l_bol_erg, rel=0.1), (
+        f"{torus}: disc-only band energy {e0:.3e} erg/s != L_bol {l_bol_erg:.3e}"
+    )
+
+    # Relative invariance: energy is conserved as it moves disc -> torus.
+    for tf in (0.3, 0.6, 0.9):
+        e = _band_energy(_compose_or_skip(torus, tf), _WAVE)
         assert e == pytest.approx(e0, rel=0.02), (
             f"{torus}: energy not conserved at torus_frac={tf} "
             f"({e:.3e} vs {e0:.3e}) — disc not debited"

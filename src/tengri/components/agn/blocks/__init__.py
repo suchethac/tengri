@@ -36,6 +36,7 @@ from tengri.components.agn.blocks import (
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
+    AGN_NORM_POLICIES,
     BLOCK_CATEGORIES,
     register_agn_block,
     resolve_agn_block,
@@ -52,6 +53,7 @@ from tengri.components.agn.blocks.runner import (
 
 __all__ = [
     "AGN_BLOCKS",
+    "AGN_NORM_POLICIES",
     "BLOCK_CATEGORIES",
     "BLOCK_SELECTOR_KEYS",
     "DEFAULT_BLOCK_SELECTORS",
