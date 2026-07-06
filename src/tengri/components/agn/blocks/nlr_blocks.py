@@ -14,6 +14,9 @@ from tengri.components.agn.blocks._nlr_common import (
 from tengri.components.agn.blocks.nlr_analytic import (
     nlr_analytic_block as nlr_analytic_block,
 )
+from tengri.components.agn.blocks.nlr_feltre import (
+    nlr_feltre_block as nlr_feltre_block,
+)
 from tengri.components.agn.blocks.nlr_synthesizer import (
     nlr_synthesizer_block as nlr_synthesizer_block,
 )
@@ -23,6 +26,7 @@ from tengri.components.agn.blocks.nlr_synthesizer_spectra import (
 
 __all__ = [
     "nlr_analytic_block",
+    "nlr_feltre_block",
     "nlr_synthesizer_block",
     "nlr_synthesizer_spectra_block",
 ]
