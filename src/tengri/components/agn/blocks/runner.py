@@ -67,6 +67,7 @@ from tengri.components.agn.blocks.torus_screen import (
     torus_screen_transmission,
 )
 from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
+from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
 from tengri.utils.physics_constants import L_SUN
 
@@ -415,6 +416,13 @@ agn_torus_block, agn_attenuation_block : str
         templates=grahsp_templates,
         **params,
     )
+    # Disc dust obscuration (agn_ebv_disc, Prévot SMC). Applied on the composable
+    # path so every disc block respects it — previously only the monolithic
+    # forward models reddened, so composable-routed presets (adaf, kubota_done_full)
+    # silently ignored agn_ebv_disc (#916). No-op at the default agn_ebv_disc=0.
+    # The intrinsic L_2500/L_4400 below recompute from the un-reddened disc block,
+    # so the X-ray/radio anchors stay obscuration-independent.
+    L_lambda_disc = redden_disc(wave, L_lambda_disc, jnp.asarray(params.get("agn_ebv_disc", 0.0)))
 
     # Capture L_2500_intrinsic and L_4400_intrinsic: the un-reddened,
     # agn_log_lbol-normalized disc monochromatic luminosities [erg/s/Hz] that

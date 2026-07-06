@@ -138,65 +138,14 @@ from tengri.components.agn.disc import (
     powerlaw_disc,
 )
 from tengri.components.agn.nlr import compute_nlr_sed
+from tengri.components.agn.reddening import redden_disc as _redden_disc
 from tengri.components.agn.silva04 import silva04_sed
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
-from tengri.components.dust.attenuation import prevot_smc
 from tengri.components.radio.radio import radio_total
 from tengri.components.xray.xray import (
     _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
 )
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-
-
-def _redden_disc(
-    wavelength: jnp.ndarray,
-    l_disc: jnp.ndarray,
-    agn_ebv_disc: float,
-) -> jnp.ndarray:
-    r"""Apply Prévot SMC extinction to the disc SED.
-
-    The Prévot et al. 1984 SMC law with ``R_V = 2.72`` is the standard
-    AGN-disc obscuration prescription used by AGNfitter
-    (``BBBred_Prevot`` in ``MODEL_AGNfitter.py``).  When
-    ``agn_ebv_disc`` is 0.0 this is a no-op (returns the input unchanged).
-
-    Parameters
-    ----------
-    wavelength : ndarray, shape (n_wave,)
-        Rest-frame wavelength grid. [Å]
-    l_disc : ndarray, shape (n_wave,)
-        Unreddened disc SED. [erg/s/Hz]
-    agn_ebv_disc : float
-        Color excess :math:`E(B-V)` applied to the disc. [mag]
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Reddened disc SED. [erg/s/Hz]
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-
-    **Gradient-safe**: yes — ``prevot_smc`` uses a smooth sigmoid ramp
-    through the X-ray region.
-
-    Attenuation at V band:
-
-    .. math::
-
-        A(V) = R_V \cdot E(B-V), \qquad
-        L_{\rm red}(\lambda) = L(\lambda)\, 10^{-0.4\, k(\lambda)\, R_V\, E(B-V)}
-
-    where :math:`k(\lambda) = A(\lambda)/A(V)` follows tengri's
-    ``k(V) = 1`` dust-law convention. The :math:`R_V = 2.72` factor
-    converts ``agn_ebv_disc`` (the user-facing :math:`E(B-V)`) to
-    :math:`A(V)` before applying the wavelength-dependent
-    :math:`k(\lambda)` curve.
-    """
-    _R_V_PREVOT_SMC = 2.72  # Prevot+1984
-    k = prevot_smc(wavelength)
-    return l_disc * jnp.power(10.0, -0.4 * k * _R_V_PREVOT_SMC * agn_ebv_disc)
 
 
 @functools.cache
@@ -397,16 +346,20 @@ def resolve_agn_model(name: str) -> Callable:
             )
 
     # Route deprecated monolithic names through composable with presets
+    _preset_args = ", ".join(
+        f"{k}={v}" for k, v in _AGN_PRESETS[name].items() if k != "_description"
+    )
     warnings.warn(
         f"AGN model '{name}' is deprecated. It routes through composable blocks: "
         f"{_AGN_PRESETS[name]['_description']}. "
-        f"Update your code to use: agn_model='composable', {', '.join(f'{k}={v}' for k, v in _AGN_PRESETS[name].items() if k != '_description')}",
+        f"Update your code to use: agn_model='composable', {_preset_args}",
         DeprecationWarning,
         stacklevel=2,
     )
 
     # Return a wrapper that applies the preset
     preset = _AGN_PRESETS[name]
+
     def preset_wrapper(wavelength, agn_log_lbol, **kwargs):
         """Apply preset block selectors and route through composable runner."""
         # Merge preset selectors with kwargs (kwargs override preset defaults)
@@ -488,7 +441,9 @@ _AGN_PRESETS = {
         "agn_blr_block": "grahsp_blr",
         "agn_feii_block": "grahsp_feii",
         "agn_norm": "independent",
-        "_description": "disc=grahsp_sbpl_disc + nlr=grahsp_nlr + blr=grahsp_blr + feii=grahsp_feii",
+        "_description": (
+            "disc=grahsp_sbpl_disc + nlr=grahsp_nlr + blr=grahsp_blr + feii=grahsp_feii"
+        ),
     },
     "richards2006": {
         "agn_disc_block": "richards2006_disc",
