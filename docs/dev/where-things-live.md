@@ -18,6 +18,7 @@ edit:
 | Stellar spectra, SSP grids, mass remaining | `components/stellar/sps/` |
 | Dust attenuation laws (Calzetti, Charlot+Fall, …) | `components/dust/attenuation.py` |
 | Dust IR emission (modified BB, Casey, Dale, DL07, PAH) | `components/dust/emission/` (`analytic/` closed-form ports, `templates/` library ports) |
+| Dust energy-balance integral (`L_absorbed`, LyC-masked) | `forward/energy_balance.py` (canonical `bolometric_absorbed`, #922); fast-path LUT in `components/dust/energy_balance_precompute.py` |
 | Nebular continuum + line emission | `components/nebular/` |
 | AGN disc / torus / NLR / BLR | `components/agn/` |
 | IGM transmission | `components/igm/` |

@@ -159,8 +159,8 @@ def attenuate_emission(
     neb_bc_fn=None,
     dust_slope: float = -0.7,
     dust_bump_strength: float = 0.0,
-) -> tuple[jnp.ndarray, float]:
-    """Apply dust attenuation to emission and integrate absorbed luminosity.
+) -> jnp.ndarray:
+    """Apply dust attenuation to an emission component's SED.
 
     Parameters
     ----------
@@ -190,15 +190,17 @@ def attenuate_emission(
     -------
     sed_attenuated : ndarray, shape (n_wave,)
         Attenuated SED [erg/s/Hz].
-    L_absorbed : float
-        Integrated absorbed luminosity [erg/s].
 
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The absorbed luminosity is not computed here; the dust energy balance
+    is owned by the dust attenuation components via
+    :func:`tengri.forward.energy_balance.bolometric_absorbed` (#922).
     """
     if mode == "none":
-        return sed, jnp.float64(0.0)
+        return sed
 
     dust_kw = {"n_slope": dust_slope, "dust_bump_strength": dust_bump_strength}
     sed_out = sed
@@ -218,12 +220,7 @@ def attenuate_emission(
         k_diff = law_diff_fn(wave, **dust_kw)
         sed_out = sed_out * jnp.exp(-tau_diff * k_diff)
 
-    # Absorbed luminosity: integrate (input − output) over frequency
-    nu = _C_AA / wave
-    L_absorbed = -jnp.trapezoid(sed - sed_out, nu)
-    L_absorbed = jnp.maximum(L_absorbed, 0.0)
-
-    return sed_out, L_absorbed
+    return sed_out
 
 
 # ═══════════════════════════════════════════════════════════════════════════

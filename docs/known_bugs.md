@@ -509,7 +509,13 @@ volume effect is well-known (Leja+2019a). Consider tighter priors on z_i or usin
 
 These are not bugs but acknowledged design/implementation issues that accumulate technical debt. Tracked here for visibility and future refactoring priority.
 
-### ARCH-01: Deep nesting in hybrid kernel non-stellar section (OPEN)
+### ARCH-01: Deep nesting in hybrid kernel non-stellar section (RESOLVED by deletion)
+
+**Resolution (2026-07, #922):** Both code paths this entry tracked are gone —
+`forward/_kernels/` was deleted in the ADR-0019 Phase-6 migration, and the
+orphaned compositional builder `forward/nonstell.py` (`build_nonstell_fn()`)
+was removed in #922. The component orchestrator replaced the fused kernels
+entirely; no deep-nesting site remains. Historical description below.
 
 **File:** `src/tengri/forward/_kernels/hybrid.py` (_hybrid_phot_body function, approx lines 1084-1372)
 **Metric:** 888 lines with 4+ indentation levels (most in codebase)
@@ -536,7 +542,7 @@ if _has_any_nonstell:
 
 **Impact:** Readability. The deep nesting reflects genuine conditional logic (two API-incompatible paths per component), not accidental complexity. Extracting helper functions wouldn't reduce nesting without first resolving the API incompatibility.
 
-**Status:** OPEN — tracking only, not blocking any work.
+**Status:** RESOLVED — both files deleted (Phase 6 kernels; #922 nonstell).
 
 ### ARCH-02: Deep nesting in other large files (OPEN)
 
