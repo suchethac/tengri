@@ -479,6 +479,32 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 1.0,
         "must be in [0, 1]",
     ),
+    # Synthesizer BLR photoionization axes (used by the blr='synthesizer' /
+    # 'synthesizer_spectra' grid blocks). agn_blr_-prefixed so they reach the
+    # runner instead of being frozen at their defaults (silent no-op, #931).
+    ParamDeclaration(
+        "agn_blr_logU",
+        Uniform(-4.0, 0.0, default=-1.0),
+        "BLR ionization parameter log10(U) (Synthesizer AGN grid logU axis).",
+        lambda lo, hi: lo >= -4.0 and hi <= 0.0,
+        "must be in [-4.0, 0.0]",
+    ),
+    ParamDeclaration(
+        "agn_blr_logn",
+        Uniform(2.0, 6.0, default=4.0),
+        "BLR gas density log10(n_H / cm^-3) (Synthesizer AGN grid density axis; "
+        "BLR densities exceed the NLR range).",
+        lambda lo, hi: lo >= 2.0 and hi <= 6.0,
+        "must be in [2.0, 6.0]",
+    ),
+    ParamDeclaration(
+        "agn_blr_logZ",
+        Uniform(-4.0, 0.5, default=-1.8477),
+        "BLR gas metallicity log10(Z) absolute (Synthesizer AGN grid logZ axis; "
+        "default -1.8477 = solar, IAU 2015 Zsun=0.0142).",
+        lambda lo, hi: lo >= -4.0 and hi <= 0.5,
+        "must be in [-4.0, 0.5]",
+    ),
     ParamDeclaration(
         "agn_fe2_strength",
         Uniform(0.0, 2.0, default=0.0),

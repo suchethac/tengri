@@ -33,6 +33,7 @@ from jax import Array
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.nlr import compute_nlr_sed
 from tengri.components.agn.nlr_cloudy import (
+    compute_nlr_sed_cue,
     compute_nlr_sed_feltre,
     compute_nlr_sed_synthesizer,
     compute_nlr_sed_synthesizer_spectra,
@@ -41,6 +42,7 @@ from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG
 
 __all__ = [
     "nlr_analytic_block",
+    "nlr_cue_block",
     "nlr_feltre_block",
     "nlr_synthesizer_block",
     "nlr_synthesizer_spectra_block",
@@ -179,6 +181,69 @@ def nlr_feltre_block(
 
 @register_agn_block(
     "nlr",
+    "cue",
+    citation=(
+        "Li, Y. et al. 2025, ApJ 986, 9 (arXiv:2405.04598), 'The Cue Nebular "
+        "Emulator'; disc->Cue->NLR pipeline in the BEAGLE spirit "
+        "(Feltre, Charlot & Gutkin 2016)"
+    ),
+    status="experimental",
+    short_doc="Cue emulator AGN-ionized NLR (fast differentiable, BEAGLE-style)",
+)
+def nlr_cue_block(
+    wavelength: Array,
+    agn_log_lbol: float,
+    l5100_disc: Array,
+    *,
+    agn_nlr_cf: float = 0.1,
+    agn_nlr_fwhm_kms: float = 500.0,
+    agn_nlr_alpha_pl: float = -1.7,
+    agn_nlr_logU: float = -2.0,
+    agn_nlr_logn: float = 3.0,
+    agn_nlr_logZ: float = -1.8477,
+    **_params,
+) -> tuple[Array, Array]:
+    r"""AGN-ionized NLR from the Cue emulator (BEAGLE-style, differentiable).
+
+    Self-consistent photoionization: the disc's ionizing continuum
+    (:math:`f_\nu \propto \nu^{\alpha}`) sets :math:`Q_{\rm H}` from
+    :math:`L_{\rm acc}`, and the Cue neural-network emulator (Li+2025) predicts
+    the AGN-ionized narrow lines — the same disc → :math:`Q_{\rm H}` → nebular
+    pipeline as ``nlr='feltre'``, but with Cue's fast differentiable emulator in
+    place of a tabulated CLOUDY grid. Requires ``data/cue_weights.npz`` (skips
+    gracefully if absent).
+
+    The grid axes are **AGN-specific** (``agn_nlr_logU/logn/logZ``, not the
+    galaxy ``neb_*`` names) so they route through the AGN component's ``agn_*``
+    parameter sweep — otherwise ``SEDModel.build`` would freeze them at their
+    defaults (only ``agn_``-prefixed params reach the runner) and collide with
+    the stellar nebular parameters. ``agn_nlr_logZ`` is **absolute**
+    :math:`\log_{10} Z` (matching the Feltre block); the adapter converts to
+    Cue's native :math:`\log_{10}(Z/Z_\odot)`.
+
+    **Energy:** like the other NLR blocks the lines are reprocessed disc
+    ionizing photons — currently additive; they join the Σf covering-fraction
+    ledger under ``agn_norm="conserving"`` once emission lines are debited.
+    """
+    del l5100_disc
+    wave_aa = jnp.asarray(wavelength)
+    l_disc_bol_erg = 10.0**agn_log_lbol * _L_SUN_ERG
+    L_nu = compute_nlr_sed_cue(
+        wave_aa,
+        l_disc_bol_erg=l_disc_bol_erg,
+        covering_fraction=agn_nlr_cf,
+        fwhm_kms=agn_nlr_fwhm_kms,
+        alpha_pl=agn_nlr_alpha_pl,
+        neb_logU=agn_nlr_logU,
+        neb_logn=agn_nlr_logn,
+        neb_logZ_gas=agn_nlr_logZ,
+    )
+    L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
+    return jnp.zeros_like(L_lambda), L_lambda
+
+
+@register_agn_block(
+    "nlr",
     "synthesizer",
     citation="Lovell et al. 2025 (Open J. Astrophys.); Roper et al. 2026 (JOSS) — Synthesizer",
     status="production",
@@ -191,8 +256,8 @@ def nlr_synthesizer_block(
     *,
     agn_nlr_cf: float = 0.1,
     agn_nlr_fwhm_kms: float = 500.0,
-    neb_logU: float = -2.0,
-    neb_logZ_gas: float = -1.8477,
+    agn_nlr_logU: float = -2.0,
+    agn_nlr_logZ: float = -1.8477,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR lines from the Synthesizer Cloudy ``/lines`` grid.
@@ -201,6 +266,12 @@ def nlr_synthesizer_block(
     isotropic. Grid path resolves from ``$TENGRI_SYNTHESIZER_AGN_GRID_DIR`` /
     ``data/synthesizer_grids/``. Backend init reads HDF5 (Python-level) — call
     once eagerly before any ``jax.jit`` over the forward model.
+
+    The photoionization axes are named ``agn_nlr_logU/logZ`` (not the galaxy
+    ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
+    and are drivable through ``SEDModel.build`` — otherwise they were frozen at
+    their defaults (a silent no-op, #931). They translate to the grid's
+    ``neb_*`` axes internally.
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -211,8 +282,8 @@ def nlr_synthesizer_block(
         covering_fraction=agn_nlr_cf,
         fwhm_kms=agn_nlr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("nlr"),
-        neb_logU=neb_logU,
-        neb_logZ_gas=neb_logZ_gas,
+        neb_logU=agn_nlr_logU,
+        neb_logZ_gas=agn_nlr_logZ,
     )
     L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
     return jnp.zeros_like(L_lambda), L_lambda
@@ -231,9 +302,9 @@ def nlr_synthesizer_spectra_block(
     l5100_disc: Array,
     *,
     agn_nlr_cf: float = 0.1,
-    neb_logU: float = -2.0,
-    neb_logn: float = 4.0,
-    neb_logZ_gas: float = -2.0,
+    agn_nlr_logU: float = -2.0,
+    agn_nlr_logn: float = 4.0,
+    agn_nlr_logZ: float = -2.0,
     **_params,
 ) -> tuple[Array, Array]:
     r"""NLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
@@ -242,6 +313,11 @@ def nlr_synthesizer_spectra_block(
     product Synthesizer's ``UnifiedAGN`` extracts — instead of re-broadening the
     discrete ``/lines`` table (#694). Isotropic: illuminated by the intrinsic
     bolometric with the grid inclination held at its isotropic node.
+
+    The photoionization axes are named ``agn_nlr_logU/logn/logZ`` (not the galaxy
+    ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
+    and are drivable through ``SEDModel.build`` (#931); they translate to the
+    grid's ``neb_*`` axes internally.
     """
     del l5100_disc
     wave_aa = jnp.asarray(wavelength)
@@ -251,9 +327,9 @@ def nlr_synthesizer_spectra_block(
         l_disc_bol_erg=l_bol_erg,
         covering_fraction=agn_nlr_cf,
         grid_path=_resolve_synthesizer_grid("nlr"),
-        neb_logU=neb_logU,
-        neb_logn=neb_logn,
-        neb_logZ_gas=neb_logZ_gas,
+        neb_logU=agn_nlr_logU,
+        neb_logn=agn_nlr_logn,
+        neb_logZ_gas=agn_nlr_logZ,
         region="nlr",
     )
     L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
