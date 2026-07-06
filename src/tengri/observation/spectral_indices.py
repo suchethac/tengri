@@ -423,6 +423,201 @@ def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) 
     return slope_fnu - 2.0
 
 
+# ── FeaturePrecomp: window-integral LUT for break / EW indices ─────
+#
+# The WavePrecomp-analog for spectral indices. A window mean flux is a linear
+# functional of the SED, and the SED is a weight-sum of SSP spectra, so a break
+# or EW index measured on ``SED = Σ_ij w_ij · SSP_ij`` can be evaluated from
+# per-window SSP integrals precomputed once at build time — a cheap SFH-weighted
+# sum instead of a full-resolution ``measure_index_jax`` on the reconstructed
+# SED. Parity is EXACT (up to floating point) when the SED carries no dust,
+# because the window mean commutes with the SFH weight sum:
+#
+#     <SED>_win = Σ_λ (Σ_ij w_ij SSP_ij(λ)) W(λ) / Σ_λ W(λ)
+#               = Σ_ij w_ij · [Σ_λ SSP_ij(λ) W(λ)] / Σ_λ W(λ)
+#               = Σ_ij w_ij · ssp_window_integral_ij / window_norm .
+#
+# Slope indices are NOT expressible this way (they need the SED shape within the
+# window, not one integral) and are excluded — callers fall back to the exact
+# ``measure_index_jax`` path for them.
+
+
+@dataclasses.dataclass(frozen=True)
+class IndexWindowPrecomputation:
+    """Precomputed SSP window integrals for break / EW spectral indices.
+
+    Built once at model construction (``approx=FeaturePrecomp()``) from the SSP
+    grid and the configured index windows. Consumed per evaluation by
+    :func:`measure_indices_from_windows` after the stellar component SFH-weights
+    ``window_integrals`` into per-window mean fluxes.
+
+    Attributes
+    ----------
+    window_integrals : ndarray, shape (n_met, n_age, n_window)
+        :math:`\\sum_\\lambda \\mathrm{SSP}_{ij}(\\lambda)\\,W_w(\\lambda)` — the
+        soft-window integral of each SSP spectrum, in the SSP flux units
+        [erg/s/Hz/Msun · Å] summed on the SSP wave grid.
+    window_norms : ndarray, shape (n_window,)
+        :math:`\\sum_\\lambda W_w(\\lambda)` — window normalization, so
+        ``mean = integral / norm`` matches :func:`_window_mean_flux`.
+    window_centers : ndarray, shape (n_window,)
+        Window mid-wavelength ``0.5*(lo+hi)`` [Å], for per-window dust.
+    index_slots : tuple
+        Per index, ``(kind, payload, meta)`` describing which window slots the
+        index consumes and how to combine them — see
+        :func:`measure_indices_from_windows`. ``kind`` is ``"break"``,
+        ``"EW"``, or ``"slope"`` (the last carries ``payload=None`` and is a
+        sentinel that the caller must measure exactly).
+    names : tuple of str
+        Index names in order, for diagnostics / alignment with observed data.
+    """
+
+    window_integrals: jnp.ndarray
+    window_norms: jnp.ndarray
+    window_centers: jnp.ndarray
+    index_slots: tuple
+    names: tuple
+
+    @property
+    def has_slope(self) -> bool:
+        """Whether any configured index is a slope (needs the exact path)."""
+        return any(kind == "slope" for kind, _, _ in self.index_slots)
+
+
+def _round_window(lo: float, hi: float) -> tuple[float, float]:
+    return (round(float(lo), 4), round(float(hi), 4))
+
+
+def precompute_index_windows(
+    ssp_wave: jnp.ndarray,
+    ssp_flux: jnp.ndarray,
+    index_defs,
+    edge_width: float = 1.0,
+) -> IndexWindowPrecomputation:
+    """Precompute SSP window integrals for break / EW indices.
+
+    Parameters
+    ----------
+    ssp_wave : ndarray, shape (n_wave,)
+        Rest-frame SSP wavelength grid [Å].
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
+        SSP spectra [erg/s/Hz/Msun].
+    index_defs : sequence of SpectralIndexDef
+        The indices to precompute. Slope indices are recorded as sentinels
+        (no window integrals) so the caller falls back to the exact path.
+    edge_width : float, default 1.0
+        Sigmoid edge width [Å] — MUST match :func:`_window_mean_flux` so the
+        LUT and exact paths agree.
+
+    Returns
+    -------
+    IndexWindowPrecomputation
+        Window integrals, norms, centers, and per-index window-slot recipe.
+
+    Notes
+    -----
+    **JIT-compatible**: yes (built once at construction; pure ``jnp``). Windows
+    shared across indices (e.g. two indices sharing a continuum band) are
+    deduplicated so each unique window is integrated once.
+    """
+    ssp_wave = jnp.asarray(ssp_wave)
+    ssp_flux = jnp.asarray(ssp_flux)
+
+    unique: dict[tuple[float, float], int] = {}
+    integrals: list[jnp.ndarray] = []
+    norms: list[jnp.ndarray] = []
+    centers: list[float] = []
+
+    def _slot(lo, hi) -> int:
+        key = _round_window(lo, hi)
+        if key in unique:
+            return unique[key]
+        w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid(
+            (hi - ssp_wave) / edge_width
+        )
+        # integral over wave for every (met, age): (n_met, n_age)
+        integrals.append(jnp.tensordot(ssp_flux, w, axes=([2], [0])))
+        norms.append(jnp.maximum(jnp.sum(w), 1e-10))
+        centers.append(0.5 * (float(lo) + float(hi)))
+        unique[key] = len(integrals) - 1
+        return unique[key]
+
+    slots = []
+    names = []
+    for idx in index_defs:
+        names.append(idx.name)
+        if idx.index_type == "break":
+            b = _slot(*idx.continuum[0])
+            r = _slot(*idx.continuum[1])
+            slots.append(("break", (b, r), None))
+        elif idx.index_type == "EW":
+            cont = tuple(_slot(lo, hi) for lo, hi in idx.continuum)
+            feat = _slot(*idx.feature)
+            feat_width = idx.feature[1] - idx.feature[0]
+            slots.append(("EW", (cont, feat), (feat_width, idx.units)))
+        else:  # slope — not expressible from a single window integral
+            slots.append(("slope", None, None))
+
+    if integrals:
+        window_integrals = jnp.stack(integrals, axis=-1)  # (n_met, n_age, n_window)
+        window_norms = jnp.stack(norms)
+    else:
+        # All indices are slope (no break/EW windows): empty LUT, exact fallback.
+        n_met, n_age = ssp_flux.shape[0], ssp_flux.shape[1]
+        window_integrals = jnp.zeros((n_met, n_age, 0))
+        window_norms = jnp.zeros((0,))
+    return IndexWindowPrecomputation(
+        window_integrals=window_integrals,
+        window_norms=window_norms,
+        window_centers=jnp.asarray(centers),
+        index_slots=tuple(slots),
+        names=tuple(names),
+    )
+
+
+def measure_indices_from_windows(
+    window_means: jnp.ndarray, precomp: IndexWindowPrecomputation
+) -> jnp.ndarray:
+    """Evaluate break / EW indices from precomputed per-window mean fluxes.
+
+    Parameters
+    ----------
+    window_means : ndarray, shape (n_window,)
+        SFH-weighted (and optionally dust-attenuated) mean flux in each unique
+        window: ``Σ_ij w_ij window_integrals_ijw / window_norm_w``.
+    precomp : IndexWindowPrecomputation
+        The build-time window recipe.
+
+    Returns
+    -------
+    ndarray, shape (n_index,)
+        Index values in ``precomp.names`` order. Slope slots return ``nan`` —
+        the caller must fill them from the exact path.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. Mirrors :func:`_measure_break` / :func:`_measure_ew`
+    exactly, reading precomputed window means instead of integrating the SED.
+    """
+    out = []
+    for kind, payload, meta in precomp.index_slots:
+        if kind == "break":
+            b, r = payload
+            out.append(window_means[r] / jnp.maximum(window_means[b], 1e-30))
+        elif kind == "EW":
+            cont_slots, feat = payload
+            feat_width, units = meta
+            cont_flux = jnp.mean(jnp.stack([window_means[c] for c in cont_slots]))
+            feat_flux = window_means[feat]
+            ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
+            if units == "mag":
+                ew = -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
+            out.append(ew)
+        else:  # slope
+            out.append(jnp.asarray(jnp.nan))
+    return jnp.stack(out)
+
+
 # ── Observed data container ───────────────────────────────────────
 
 

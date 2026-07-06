@@ -176,6 +176,56 @@ class TestHamiltonianSplit:
         assert callable(loglik_fn)
 
 
+class TestObjectiveIsJitCached:
+    """neg_log_posterior_fn must be a JIT-compiled callable, not a raw closure.
+
+    Regression for the 2026-07 precompute audit. ``neg_log_posterior_fn``
+    (and ``loss_fn``) are documented as *"JIT-compiled" / "JIT-cached"* on the
+    property and in ADR-0010, and callers pull the primitive straight out of
+    the context to evaluate the objective. But the accessor returned a raw
+    ``build_loss_fn`` closure, so a direct ``neg_log_posterior_fn(params,
+    data_args)`` call re-ran the per-component chain dispatcher at Python level
+    every evaluation. On a joint fit with a spectral-index / line-flux channel
+    (where the feature forward ``predict_state`` is otherwise never fused) that
+    was ~20x slower than the fused objective (27 ms -> 1.4 ms, value-identical),
+    silently swamping the WavePrecomp LUT speedup for the DESI-style
+    photometry + emission-line + Dn4000 use case.
+
+    ``grad_fn`` was already protected (it wraps ``value_and_grad`` in its own
+    ``jax.jit``); these tests pin the same guarantee on the objective itself so
+    VI / nested-sampling / MAP-logging / custom loops don't regress. A
+    ``jax.jit``-wrapped callable exposes ``.lower()`` / ``.trace()`` staging
+    methods; a plain Python function does not.
+    """
+
+    def test_neg_log_posterior_fn_is_jit_compiled(self):
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        fn = ctx.neg_log_posterior_fn
+        assert hasattr(fn, "lower") and hasattr(fn, "trace"), (
+            "neg_log_posterior_fn must be a jax.jit-wrapped callable "
+            "(exposes .lower()/.trace()); got a raw Python function, so the "
+            "objective would run the component chain un-fused every evaluation."
+        )
+
+    def test_grad_fn_is_jit_compiled(self):
+        """grad_fn parity — the already-protected sibling stays jit-wrapped."""
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        assert hasattr(ctx.grad_fn, "lower"), "grad_fn must stay jax.jit-wrapped"
+
+    def test_deprecated_loss_fn_alias_is_also_jit_compiled(self):
+        """The deprecated ``loss_fn`` alias returns the same jit'd callable."""
+        import warnings
+
+        fitter = _build_fitter()
+        ctx = InferenceContext(fitter=fitter)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = ctx.loss_fn
+        assert hasattr(fn, "lower") and hasattr(fn, "trace")
+
+
 class TestContextFrozenness:
     def test_cannot_replace_fitter(self):
         fitter = _build_fitter()

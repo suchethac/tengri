@@ -1262,11 +1262,28 @@ class Fitter:
         return build_loss_fn(self)
 
     def _get_or_build_loss_fn(self) -> Callable:
-        """Return the cached loss function, building it if needed.
+        """Return the cached, JIT-compiled loss function, building if needed.
 
         Cached on the Model object keyed by ``_engine_cache_key()`` so
         multiple Fitters with the same model structure share one
         compiled XLA program.
+
+        The built objective is wrapped in :func:`jax.jit` before caching so
+        the callable exposed through
+        :attr:`tengri.inference.context.InferenceContext.neg_log_posterior_fn`
+        is genuinely JIT-cached, as its docstring and ADR-0010 promise —
+        rather than a Python-level orchestration of the per-component chain.
+        Without the wrapper a raw ``neg_log_posterior_fn(params, data_args)``
+        call re-runs the chain dispatcher at Python level every evaluation:
+        ~20x slower on joint fits that add a spectral-index / line-flux
+        channel, where the feature forward (``predict_state``) is otherwise
+        never fused. Gradient-based backends were already protected —
+        ``grad_fn`` / ``logdensity_fn`` wrap ``value_and_grad`` in their own
+        ``jax.jit`` — so this only closes the gap for the objective itself
+        (VI, nested sampling, custom loops, MAP convergence logging).
+        ``jax.value_and_grad`` differentiates transparently through the inner
+        ``jax.jit`` (``grad(jit(f)) == grad(f)``), and XLA subsumes the nested
+        trace, so those already-JIT'd callers see no runtime cost.
         """
         from tengri.inference.jit_engine import get_or_build_cached
 
@@ -1274,7 +1291,7 @@ class Fitter:
         per_model = get_model_cache(self.model).setdefault("loss_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
-        loss_fn = get_or_build_cached(self, "loss", self._build_loss_fn)
+        loss_fn = jax.jit(get_or_build_cached(self, "loss", self._build_loss_fn))
         per_model[cache_key] = loss_fn
         return loss_fn
 
