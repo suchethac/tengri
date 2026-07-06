@@ -532,7 +532,7 @@ agn_torus_block, agn_attenuation_block : str
     # GRAHSP l5100 parity (Phase 2) should confirm and pin the intended anchor.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
 
-    # ── Energy ledger (agn_norm="conserving") ────────────────────────────
+    # ── Energy ledger (energy-conserving policies) ───────────────────────
     # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of
     # it. Debit the observed disc by (1 - agn_torus_frac) so that
     # disc(1-f) + torus(f) conserves L_bol for every torus — reproducing the
@@ -550,10 +550,20 @@ agn_torus_block, agn_attenuation_block : str
     # Self-contained tori (``none``, ``qsogen``, ``grahsp``) bundle disc+torus
     # in one self-normalized template and bypass the ledger — no debit. This
     # also covers the disc-only (``torus="none"``) case: with no reprocessor,
-    # the disc keeps its full L_bol. Static Python branch on the policy string
-    # + torus name (JIT-safe). The cigale_joint disc/agn_power tie is a distinct
-    # branch and never co-fires with this one.
-    if _agn_norm == "conserving" and agn_torus_block not in _SELF_CONTAINED_TORI:
+    # the disc keeps its full L_bol.
+    #
+    # Which policies debit: "conserving" always; "cigale_joint" too EXCEPT for
+    # the SKIRTOR torus, which instead uses the agn_power×R template tie (Stage
+    # 4 below) — the CIGALE-faithful path. So cigale_joint is energy-conserving
+    # for *every* torus (R-tie for skirtor, agn_torus_frac split otherwise),
+    # never the silent additive leak it used to be for non-skirtor tori.
+    # "independent" never debits (each component on its own luminosity scale).
+    # Static Python branch on the policy string + torus name (JIT-safe).
+    _conserve_via_debit = agn_torus_block not in _SELF_CONTAINED_TORI and (
+        _agn_norm == "conserving"
+        or (_agn_norm == "cigale_joint" and agn_torus_block != "skirtor")
+    )
+    if _conserve_via_debit:
         _cons_torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
         L_lambda_disc = L_lambda_disc * (1.0 - _cons_torus_frac)
 
