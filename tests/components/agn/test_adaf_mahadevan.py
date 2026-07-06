@@ -72,11 +72,26 @@ class TestSelfSimilar:
     """Self-similar flow quantities at r_min (Mahadevan Eq. 5)."""
 
     def test_ne_b_at_rmin(self):
-        """n_e, B at r_min for m=5e9, mdot=1e-3, alpha=0.3, beta=0.5 (Fig. 1 params)."""
+        """n_e, B at r_min, Mahadevan 1997 Eq. 5 (p.4), at the Fig. 1 parameters
+        m=5e9, mdot=1e-3, alpha=0.3, beta=0.5.
+
+        Verification trail (values are Eq. 5 evaluated by hand at r_min=3, c1=0.5,
+        c3=0.3 — the paper gives no worked table, so we pin the closed form):
+
+            b1  = 3.16e19 * alpha^-1 * c1^-1                       = 2.107e20
+            n_e = b1 * m^-1 * mdot * r_min^-3/2                    = 8.11e6  cm^-3
+            s1  = 1.42e9 * alpha^-1/2 (1-beta)^1/2 c1^-1/2 c3^1/2  = 1.420e9
+            B   = s1 * m^-1/2 * mdot^1/2 * r_min^-5/4              = 160.8   G
+
+        CONVENTION NOTE: these are the *Mahadevan 1997* (spherical-accretion)
+        constants, which the paper states explicitly "differ from Narayan & Yi
+        (1995b)" — Eq. 1's footnote carries a factor 1/3 for a 3-D tangled field,
+        so the NY95b B-normalization (~6.55e8 with a c3^1/4) does NOT apply here.
+        We port Mahadevan 1997 Eq. 5, not NY95b.
+        """
         from tengri.components.agn.adaf import _adaf_ne_b_rmin
 
         n_e, B = _adaf_ne_b_rmin(m=5e9, mdot=1e-3, alpha=0.3, beta=0.5)
-        # Hand-evaluated from Eq. 5 with c1=0.5, c3=0.3, r_min=3.
         assert abs(float(n_e) - 8.11e6) / 8.11e6 < 0.02, f"n_e={float(n_e):.3e}"
         assert abs(float(B) - 160.8) / 160.8 < 0.02, f"B={float(B):.3e}"
 
@@ -85,7 +100,12 @@ class TestTauEsAlphaC:
     """Electron-scattering optical depth (Eq. 31) and Compton slope (Eq. 34)."""
 
     def test_tau_es_fiducial(self):
-        """Eq. 31: tau_es = 23.87 mdot at alpha=0.3 (c1=0.5, r_min=3)."""
+        """Mahadevan 1997 Eq. 31 (p.12): tau_es = 6.2 alpha^-1 c1^-1 mdot r_min^-1/2,
+        which reduces to 23.87*mdot at alpha=0.3 (c1=0.5, r_min=3) — the paper's
+        own quoted normalization. This is HALF the total electron-scattering depth
+        of Narayan & Yi (1995b): the paper takes the mean photon to see half the
+        total depth ("we therefore take the optical depth ... to be half of that
+        given in Narayan & Yi 1995b")."""
         from tengri.components.agn.adaf import _adaf_tau_es
 
         assert abs(float(_adaf_tau_es(mdot=1e-2, alpha=0.3)) - 0.2387) / 0.2387 < 1e-3

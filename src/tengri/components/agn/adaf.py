@@ -190,9 +190,17 @@ def _adaf_g_theta(t_e: jnp.ndarray) -> jnp.ndarray:
 
 
 def _adaf_s1(alpha: float, beta: float) -> jnp.ndarray:
-    r"""Magnetic-field self-similar constant ``s_1`` (Mahadevan Eq. 5).
+    r"""Magnetic-field self-similar constant ``s_1`` (Mahadevan 1997 Eq. 5, p.4).
 
     :math:`s_1 = 1.42\times10^9\,\alpha^{-1/2}(1-\beta)^{1/2}c_1^{-1/2}c_3^{1/2}`.
+
+    Notes
+    -----
+    This is the *Mahadevan 1997* (spherical-accretion) coefficient. The paper
+    states Eq. 5 "differ[s] from Narayan & Yi (1995b) since we have assumed
+    spherical accretion," and Eq. 1's footnote carries a factor 1/3 for a 3-D
+    tangled field. The alternative NY95b B-normalization (~6.55e8 with a
+    :math:`c_3^{1/4}`) is a different convention and must NOT be substituted here.
     """
     return 1.42e9 * alpha**-0.5 * (1.0 - beta) ** 0.5 * _C1**-0.5 * _C3**0.5
 
@@ -200,7 +208,7 @@ def _adaf_s1(alpha: float, beta: float) -> jnp.ndarray:
 def _adaf_ne_b_rmin(
     m: float, mdot: float, alpha: float, beta: float
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
-    r"""Electron number density and magnetic field at ``r_min`` (Mahadevan Eq. 5).
+    r"""Electron number density and magnetic field at ``r_min`` (Mahadevan 1997 Eq. 5, p.4).
 
     .. math::
 
@@ -208,7 +216,8 @@ def _adaf_ne_b_rmin(
         B   = s_1\,m^{-1/2}\dot m^{1/2}\,r^{-5/4}\ \mathrm{G},
 
     with :math:`b_1 = 3.16\times10^{19}\alpha^{-1}c_1^{-1}`, evaluated at
-    :math:`r = r_{\min} = 3`.
+    :math:`r = r_{\min} = 3`. ``s_1`` (and the spherical-accretion convention that
+    distinguishes it from Narayan & Yi 1995b) is in :func:`_adaf_s1`.
 
     Parameters
     ----------
@@ -231,15 +240,17 @@ def _adaf_ne_b_rmin(
 
 
 def _adaf_tau_es(mdot: float, alpha: float) -> jnp.ndarray:
-    r"""Electron-scattering optical depth ``tau_es`` at ``r_min`` (Mahadevan Eq. 31).
+    r"""Electron-scattering optical depth ``tau_es`` at ``r_min`` (Mahadevan 1997 Eq. 31, p.12).
 
     .. math::
 
         \tau_{es} = 6.2\,\alpha^{-1}c_1^{-1}\dot m\,r_{\min}^{-1/2}
                   = 23.87\,\dot m\,(\alpha/0.3)^{-1}
 
-    (with :math:`c_1=0.5`, :math:`r_{\min}=3`). Half the total optical depth, per
-    the paper's prescription.
+    (with :math:`c_1=0.5`, :math:`r_{\min}=3`). This is **half** the total
+    electron-scattering depth of Narayan & Yi (1995b): the paper takes the mean
+    photon to traverse half the total depth ("we therefore take the optical depth
+    to electron scattering to be half of that given in Narayan & Yi 1995b").
 
     Parameters
     ----------
@@ -401,7 +412,17 @@ def _adaf_electron_temperature(
 
     Notes
     -----
-    **JIT/grad-safe**: yes — fixed 12-step unrolled fixed point.
+    **JIT/grad-safe**: yes — fixed 12-step unrolled fixed point; the Eq. 40 /
+    Eq. 43 regime choice is a branchless :func:`jnp.where` on the traced
+    ``alpha_c``, so both branches are always evaluated (no data-dependent
+    control flow).
+
+    **Gradient kink**: ``T_e`` (and hence the whole spectrum) has a first-order
+    kink at ``alpha_c = 1`` where the branch switches. Samplers crossing this
+    boundary see a discontinuous derivative — the same class as the
+    ``agn_torus_frac`` / ``cos(theta_torus)`` discontinuity noted in the project
+    gotchas. It is continuous in value (both branches meet at ``alpha_c = 1``),
+    only the slope jumps.
     """
     tau_es = _adaf_tau_es(mdot, alpha)
     t_e = jnp.asarray(2.0e9, dtype=jnp.float64)
