@@ -745,6 +745,40 @@ class SEDProperties(_CachedBase):
         """Get rest-frame wavelength array from model."""
         return self._pred._model.ssp_data.ssp_wave
 
+    @property
+    def components(self):
+        r"""Per-component SED decomposition on the rest-frame grid.
+
+        The single-prediction counterpart of
+        :meth:`Posterior.sed_components
+        <tengri.inference.posterior.Posterior.sed_components>` — both
+        read the per-component arrays every adapter publishes into
+        ``state.derived`` (ADR-0009) via
+        :func:`tengri.forward.state_to_sed_components`. Reuses the
+        prediction's cached forward state: no extra forward pass.
+
+        Returns
+        -------
+        dict
+            ``wavelength`` [Angstrom] plus rest-frame :math:`L_\nu`
+            [erg/s/Hz] per component, each shape ``(n_wave,)``:
+            ``sed_total``, ``sed_intrinsic`` (stellar pre-dust),
+            ``sed_attenuated`` (stellar post-dust), ``sed_nebular``,
+            ``sed_shock``, ``sed_dust_ir``, ``sed_agn``, ``sed_radio``,
+            ``sed_xray`` — zeros for components not in the chain.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> comp = pred.sed.components
+        >>> comp["sed_dust_ir"]  # one component
+        >>> (comp["sed_agn"] / comp["sed_total"]).max()  # AGN fraction
+        """
+        from tengri.forward.component_factory import state_to_sed_components
+
+        self._pred._ensure_sfh()
+        return state_to_sed_components(self._pred._cache["_state"])
+
     def _sed(self):
         """Retrieve cached total SED, computing if necessary."""
         self._pred._ensure_sed()

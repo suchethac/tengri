@@ -69,20 +69,20 @@ def _build_prediction(
     """
     if data_type == "photometry":
         if use_components:
-            predicted = model.predict_photometry_components(params)
+            predicted = model._photometry_via_state(params)
         else:
             predicted = model.predict_photometry(params)
         pred_phot, pred_spec = predicted, None
     elif data_type == "spectroscopy":
         if use_components:
-            predicted = model.predict_spectrum_components(params)
+            predicted = model._spectrum_via_state(params)
         else:
             predicted = model.predict_spectrum(params)
         pred_phot, pred_spec = None, predicted
     elif data_type == "joint":
         if use_components:
-            pred_phot = model.predict_photometry_components(params)
-            pred_spec = model.predict_spectrum_components(params)
+            pred_phot = model._photometry_via_state(params)
+            pred_spec = model._spectrum_via_state(params)
         else:
             pred_phot = model.predict_photometry(params)
             pred_spec = model.predict_spectrum(params)

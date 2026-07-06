@@ -324,3 +324,69 @@ def test_new_subpackages_resolve() -> None:
     assert hasattr(tengri.units, "fnu_to_jy")
     assert hasattr(tengri.units, "ab_mag_to_fnu")
     assert hasattr(tengri.plot, "plot_sed_fit")
+
+
+# ── SEDModel predict-surface ratchet (cleanup PR-2, 2026-07) ────────
+# The predict_* surface accreted to 28 methods session-by-session; the
+# diet froze it. Shrink-only: removing a method updates this list in the
+# same PR (forcing the conversation); ADDING a public predict_* method
+# fails here — new derived quantities belong on the lazy Prediction
+# wrapper (model.predict(params).sed / .sfh / .lines / ...), not on
+# SEDModel.
+
+ALLOWED_PREDICT_METHODS = frozenset(
+    {
+        # core forward passes
+        "predict",
+        "predict_state",
+        "predict_observables",
+        "predict_observables_jit",
+        # likelihood-facing channels (inference callers)
+        "predict_photometry",
+        "predict_spectrum",
+        "predict_line_fluxes",
+        "predict_line_ratios",
+        "predict_spectral_indices",
+        # batch conveniences
+        "predict_photometry_batch",
+        "predict_spectrum_batch",
+        # interactive conveniences with production callers
+        "predict_rest_sed",
+        "predict_obs_sed",
+        "predict_sfh",
+        "predict_magnitudes",
+        "predict_derived",
+        "predict_sfh_quantities",
+        "predict_sed_quantities",
+        # deprecated shims (DeprecationWarning; removal v1.0)
+        "predict_photometry_components",
+        "predict_spectrum_components",
+        "predict_sfh_quantities_components",
+        "predict_sed_quantities_components",
+        "predict_hbeta",
+        "predict_emission_lines",
+        "predict_luminosity",
+        "predict_ionizing_quantities",
+        "predict_radio_quantities",
+        "predict_xray_quantities",
+    }
+)
+
+
+@pytest.mark.contract
+def test_sedmodel_predict_surface_does_not_grow() -> None:
+    """No new public predict_* methods on SEDModel (shrink-only ratchet)."""
+    from tengri.forward.sed_model import SEDModel
+
+    actual = {
+        name
+        for name in dir(SEDModel)
+        if name.startswith("predict") and callable(getattr(SEDModel, name))
+    }
+    new = actual - ALLOWED_PREDICT_METHODS
+    assert not new, (
+        f"New public predict_* method(s) on SEDModel: {sorted(new)}. "
+        f"Derived quantities belong on the Prediction wrapper "
+        f"(model.predict(params).<accessor>); if a new forward channel is "
+        f"genuinely needed, update ALLOWED_PREDICT_METHODS deliberately."
+    )

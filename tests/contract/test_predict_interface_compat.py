@@ -1,0 +1,136 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""Contract locks for the SEDModel predict-surface diet (cleanup PR-2).
+
+Three guarantees:
+
+1. Every deprecated ``predict_*`` shim emits DeprecationWarning AND returns
+   bit-exact the same values as its replacement (shims are pass-through).
+2. The promoted per-component surface ``pred.sed.components`` decomposes the
+   SAME published arrays as ``state_to_sed_components`` /
+   ``Posterior.sed_components`` (one shared helper).
+3. Uses the synthetic wide SSP (#613) so it runs on CI without data files.
+"""
+
+from __future__ import annotations
+
+import warnings
+
+import chex
+import jax.numpy as jnp
+import pytest
+
+from tengri import Fixed, SEDModel
+
+pytestmark = pytest.mark.contract
+
+
+@pytest.fixture(scope="module")
+def model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Small all-fixed model with dust so attenuated != intrinsic."""
+    return SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl"},
+        dust={"type": "two_component", "law_bc": "calzetti", "tau_bc": 0.3, "tau_diff": 0.2},
+        neb={"type": "none"},
+        redshift=Fixed(0.1),
+    )
+
+
+def _no_dep_warnings():
+    ctx = warnings.catch_warnings()
+    warnings.simplefilter("ignore", DeprecationWarning)
+    return ctx
+
+
+class TestTwinShims:
+    """Migration-era ``*_components`` twins: warn + bit-exact pass-through."""
+
+    def test_photometry_twin_warns_and_matches(self, model):
+        with pytest.warns(DeprecationWarning, match="predict_photometry"):
+            via_shim = model.predict_photometry_components({})
+        chex.assert_trees_all_close(via_shim, model._photometry_via_state({}), rtol=0)
+
+    def test_sfh_quantities_twin_warns_and_matches(self, model):
+        from tengri.forward import state_to_sfh_quantities
+
+        with pytest.warns(DeprecationWarning, match="state_to_sfh_quantities"):
+            via_shim = model.predict_sfh_quantities_components({})
+        direct = state_to_sfh_quantities(model.predict_state({}))
+        chex.assert_trees_all_close(
+            jnp.asarray(via_shim.stellar_mass), jnp.asarray(direct.stellar_mass), rtol=0
+        )
+
+    def test_sed_quantities_twin_warns_and_matches_canonical(self, model):
+        with pytest.warns(DeprecationWarning, match="predict_sed_quantities"):
+            via_shim = model.predict_sed_quantities_components({})
+        with _no_dep_warnings():
+            canonical = model.predict_sed_quantities({})
+        chex.assert_trees_all_close(
+            jnp.asarray(via_shim.l_bol), jnp.asarray(canonical.l_bol), rtol=0
+        )
+
+
+class TestTailShims:
+    """Zero-caller interactive getters: warn, behavior unchanged."""
+
+    @pytest.mark.parametrize(
+        "method",
+        [
+            "predict_luminosity",
+            "predict_ionizing_quantities",
+            "predict_radio_quantities",
+            "predict_xray_quantities",
+        ],
+    )
+    def test_tail_method_warns(self, model, method):
+        with pytest.warns(DeprecationWarning, match="model.predict"):
+            getattr(model, method)({})
+
+    def test_emission_lines_warns_before_backend_error(self, model):
+        """The shim warns even when the no-nebular model then raises."""
+        with (
+            pytest.warns(DeprecationWarning, match="model.predict"),
+            pytest.raises(NotImplementedError, match="BakedIn"),
+        ):
+            model.predict_emission_lines({})
+
+
+class TestComponentsPromotion:
+    """pred.sed.components — the one per-component decomposition surface."""
+
+    def test_components_matches_state_helper(self, model):
+        from tengri.forward import state_to_sed_components
+
+        pred = model.predict({})
+        comp = pred.sed.components
+        direct = state_to_sed_components(model.predict_state({}))
+        assert set(comp) == set(direct)
+        for key in comp:
+            chex.assert_trees_all_close(comp[key], direct[key], rtol=0)
+
+    def test_components_keys_cover_posterior_contract(self, model):
+        from tengri.inference.posterior import Posterior
+
+        comp = model.predict({}).sed.components
+        assert set(Posterior._COMPONENT_KEYS) <= set(comp)
+        assert "wavelength" in comp
+
+    def test_components_shapes_and_finiteness(self, model):
+        comp = model.predict({}).sed.components
+        n_wave = comp["wavelength"].shape[0]
+        for arr in comp.values():
+            chex.assert_shape(arr, (n_wave,))
+        chex.assert_tree_all_finite(comp["sed_total"])
+
+    def test_dust_makes_attenuated_differ_from_intrinsic(self, model):
+        comp = model.predict({}).sed.components
+        assert not bool(jnp.allclose(comp["sed_attenuated"], comp["sed_intrinsic"]))
+
+    def test_no_extra_forward_pass(self, model):
+        """components reuses the Prediction's cached state object."""
+        pred = model.predict({})
+        _ = pred.sfh.stellar_mass  # populates the cache
+        state_before = pred._cache["_state"]
+        _ = pred.sed.components
+        assert pred._cache["_state"] is state_before

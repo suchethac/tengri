@@ -595,41 +595,11 @@ class Posterior:
         del wavelength  # reserved for a future re-grid hook
 
         def _one(p: dict) -> dict:
+            from tengri.forward.component_factory import state_to_sed_components
+
             full_p = {**self._model.spec.get_fixed_values(), **p}
             state = self._model.predict_state(full_p)
-            derived = state.derived
-            wave = jnp.asarray(state.wave)
-            n_wave = wave.shape[0]
-            zeros = jnp.zeros(n_wave)
-
-            # Stellar pre-attenuation: sum the per-age cube. Always present
-            # because StellarSEDComponent is mandatory in every chain.
-            lnu_age = derived.get("lnu_age")
-            sed_intrinsic_stellar = (
-                jnp.sum(jnp.asarray(lnu_age), axis=0) if lnu_age is not None else zeros
-            )
-
-            # Stellar post-attenuation. ``sed_dust_attenuated`` is the
-            # canonical key (DustSEDComponent); fall back to stellar
-            # intrinsic when no Dust adapter ran.
-            sed_attenuated_stellar = jnp.asarray(
-                derived.get("sed_dust_attenuated", sed_intrinsic_stellar)
-            )
-
-            return {
-                "wavelength": wave,
-                "sed_total": jnp.asarray(state.sed_intrinsic)
-                if state.sed_intrinsic is not None
-                else zeros,
-                "sed_attenuated": sed_attenuated_stellar,
-                "sed_intrinsic": sed_intrinsic_stellar,
-                "sed_nebular": jnp.asarray(derived.get("sed_nebular", zeros)),
-                "sed_shock": jnp.asarray(derived.get("sed_shock", zeros)),
-                "sed_dust_ir": jnp.asarray(derived.get("sed_dust_ir", zeros)),
-                "sed_agn": jnp.asarray(derived.get("sed_agn", zeros)),
-                "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
-                "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),
-            }
+            return state_to_sed_components(state)
 
         if self.samples is None:
             comp = _one(self.params)

@@ -69,6 +69,7 @@ __all__ = [
     "state_to_emission_lines",
     "state_to_ionizing_quantities",
     "state_to_radio_quantities",
+    "state_to_sed_components",
     "state_to_sed_quantities",
     "state_to_sfh_quantities",
     "state_to_xray_quantities",
@@ -900,6 +901,75 @@ def state_to_ionizing_quantities(state: Any) -> IonizingQuantities:
         xi_ion = q_h / jnp.maximum(nu_l_uv, _TINY)
 
     return IonizingQuantities(q_h=q_h, xi_ion=xi_ion)
+
+
+def state_to_sed_components(state: Any) -> dict:
+    r"""Convert :class:`ForwardState` → per-component SED decomposition.
+
+    Reads the per-component SED arrays every adapter publishes into
+    ``state.derived`` under the ADR-0009 typed contract — the single
+    source both :attr:`Prediction.sed.components
+    <tengri.forward.prediction.SEDProperties.components>` and
+    :meth:`Posterior.sed_components
+    <tengri.inference.posterior.Posterior.sed_components>` decompose from.
+
+    Parameters
+    ----------
+    state : ForwardState
+        Output of :func:`run_components` on any component chain
+        (missing components decompose to zeros).
+
+    Returns
+    -------
+    dict
+        ``wavelength`` — rest-frame grid [Angstrom], shape ``(n_wave,)`` —
+        plus per-component rest-frame :math:`L_\nu` [erg/s/Hz], each of
+        shape ``(n_wave,)``:
+
+        - ``sed_total`` — accumulated post-chain total
+          (``state.sed_intrinsic`` after every adapter ran);
+        - ``sed_intrinsic`` — stellar pre-attenuation,
+          ``sum(lnu_age, axis=0)``;
+        - ``sed_attenuated`` — stellar post-attenuation
+          (``sed_dust_attenuated``; falls back to intrinsic when no
+          dust adapter ran);
+        - ``sed_nebular``, ``sed_shock``, ``sed_dust_ir``, ``sed_agn``,
+          ``sed_radio``, ``sed_xray`` — each component's own published
+          contribution (zeros when the component is absent).
+
+    Notes
+    -----
+    **JIT-compatible**: yes — pure reads of published arrays with
+    ``jnp`` fallbacks; no Python branching on traced values.
+    """
+    derived = state.derived
+    wave = jnp.asarray(state.wave)
+    zeros = jnp.zeros(wave.shape[0])
+
+    # Stellar pre-attenuation: sum the per-age cube. Always present
+    # because StellarSEDComponent is mandatory in every chain.
+    lnu_age = derived.get("lnu_age")
+    sed_intrinsic_stellar = jnp.sum(jnp.asarray(lnu_age), axis=0) if lnu_age is not None else zeros
+
+    # Stellar post-attenuation. ``sed_dust_attenuated`` is the canonical
+    # key (DustSEDComponent); fall back to stellar intrinsic when no
+    # dust adapter ran.
+    sed_attenuated_stellar = jnp.asarray(derived.get("sed_dust_attenuated", sed_intrinsic_stellar))
+
+    return {
+        "wavelength": wave,
+        "sed_total": jnp.asarray(state.sed_intrinsic)
+        if state.sed_intrinsic is not None
+        else zeros,
+        "sed_attenuated": sed_attenuated_stellar,
+        "sed_intrinsic": sed_intrinsic_stellar,
+        "sed_nebular": jnp.asarray(derived.get("sed_nebular", zeros)),
+        "sed_shock": jnp.asarray(derived.get("sed_shock", zeros)),
+        "sed_dust_ir": jnp.asarray(derived.get("sed_dust_ir", zeros)),
+        "sed_agn": jnp.asarray(derived.get("sed_agn", zeros)),
+        "sed_radio": jnp.asarray(derived.get("sed_radio", zeros)),
+        "sed_xray": jnp.asarray(derived.get("sed_xray", zeros)),
+    }
 
 
 def state_to_emission_lines(state: Any):

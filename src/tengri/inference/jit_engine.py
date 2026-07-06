@@ -576,16 +576,16 @@ def _build_signal_response(fitter):
         params = _primals_to_params(primals)
         if data_type == "photometry":
             if use_components:
-                return model.predict_photometry_components(params)
+                return model._photometry_via_state(params)
             return model.predict_photometry(params)
         elif data_type == "spectroscopy":
             if use_components:
-                return model.predict_spectrum_components(params)
+                return model._spectrum_via_state(params)
             return model.predict_spectrum(params)
         elif data_type == "joint":
             if use_components:
-                p = model.predict_photometry_components(params)
-                s = model.predict_spectrum_components(params)
+                p = model._photometry_via_state(params)
+                s = model._spectrum_via_state(params)
             else:
                 p = model.predict_photometry(params)
                 s = model.predict_spectrum(params)
@@ -729,18 +729,18 @@ def build_jit_engine(fitter, pos_dict):
             params = _primals_to_params(primals)
             if data_type == "photometry":
                 if use_components:
-                    predicted = model.predict_photometry_components(params)
+                    predicted = model._photometry_via_state(params)
                 else:
                     predicted = model.predict_photometry(params)
             elif data_type == "spectroscopy":
                 if use_components:
-                    predicted = model.predict_spectrum_components(params)
+                    predicted = model._spectrum_via_state(params)
                 else:
                     predicted = model.predict_spectrum(params)
             elif data_type == "joint":
                 if use_components:
-                    p = model.predict_photometry_components(params)
-                    s = model.predict_spectrum_components(params)
+                    p = model._photometry_via_state(params)
+                    s = model._spectrum_via_state(params)
                 else:
                     p = model.predict_photometry(params)
                     s = model.predict_spectrum(params)
