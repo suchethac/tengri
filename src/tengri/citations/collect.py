@@ -23,9 +23,12 @@ from tengri.citations.associations import (
     IMF_CITATIONS,
     NEBULAR_BACKEND_CITATIONS,
     PHOTOMETRY_CONVENTION_CITATIONS,
+    RADIO_CITATIONS,
+    SHOCK_CITATIONS,
     SSP_CODE_CITATIONS,
     SSP_ISOCHRONE_CITATIONS,
     SSP_LIBRARY_CITATIONS,
+    XRAY_CITATIONS,
 )
 from tengri.citations.citation import Citation
 from tengri.citations.registry import cite
@@ -413,6 +416,27 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
             out.extend(IGM_CITATIONS[igm_model])
     if getattr(spec, "dla", False):
         out.extend(DLA_CITATIONS)
+
+    # Nebular backend, X-ray, radio, shock — read off the live model (``obj``);
+    # these are not exposed as flat spec attributes the way the mean-IGM model
+    # is. The config-based ``_collect_keys`` path handles nebular only when
+    # ``_find_model_config`` resolves a ModelConfig (it returns None for a live
+    # SEDModel), so map them here too. See #938.
+    backend = getattr(obj, "_nebular_backend", None)
+    backend_name = getattr(backend, "name", None)
+    if backend_name in NEBULAR_BACKEND_CITATIONS:
+        out.extend(NEBULAR_BACKEND_CITATIONS[backend_name])
+
+    if getattr(obj, "_uses_xray", False):
+        xray_model = getattr(spec, "xray_model", None)
+        out.extend(XRAY_CITATIONS.get(xray_model, []))
+
+    if getattr(obj, "_uses_radio", False):
+        out.extend(RADIO_CITATIONS)
+
+    if getattr(obj, "_uses_shock", False):
+        # The canonical shock component is the MAPPINGS V grid.
+        out.extend(SHOCK_CITATIONS["mappings"])
 
     # Inference method (Posterior exposes .method)
     method = getattr(obj, "method", None)

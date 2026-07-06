@@ -79,6 +79,10 @@ DUST_MODEL_CITATIONS: dict[str, list[str]] = {
 NEBULAR_BACKEND_CITATIONS: dict[str, list[str]] = {
     "cue": ["cue"],
     "cloudy": ["cloudy"],
+    # The live backend objects report these ``.name`` values; map them to the
+    # same underlying Cloudy photoionization-grid citations.
+    "cloudy_grid": ["cloudy"],
+    "cb19_grid": ["byler2017", "cloudy"],
     "mappings": ["mappings"],
     # Nebular emission baked into the SSP grid (FSPS ``wNE`` files) uses the
     # Byler+2017 Cloudy photoionization grids.
@@ -211,6 +215,28 @@ IGM_CITATIONS: dict[str, list[str]] = {
 #: the Tepper-García (2006) analytic Voigt-Hjerting approximation.
 DLA_CITATIONS: list[str] = ["teppergarcia2006"]
 
+#: X-ray model name → citation keys. Star-formation X-rays always carry the
+#: X-ray-binary scalings (Lehmer+2016); the AGN corona adds the X-CIGALE
+#: alpha_ox-L2500 module (Yang+2020).
+XRAY_CITATIONS: dict[str, list[str]] = {
+    "simple": ["lehmer2016"],
+    "yang20": ["yang2020", "lehmer2016"],
+    # The Lopez+2024 IRX corona is a variant within the same X-CIGALE X-ray
+    # framework (Yang+2020) layered on the XRB scalings.
+    "lopez24": ["yang2020", "lehmer2016"],
+    None: [],
+}
+
+#: Radio: star-forming synchrotron + free-free continuum (Condon 1992) with the
+#: IR-radio SFR calibration (Bell 2003). Triggered whenever radio is active.
+RADIO_CITATIONS: list[str] = ["condon1992", "bell2003"]
+
+#: Shock model name → citation keys. MAPPINGS V shock/precursor grids.
+SHOCK_CITATIONS: dict[str, list[str]] = {
+    "mappings": ["mappings"],
+    None: [],
+}
+
 # Photometric filter-convolution convention (FilterConvention; ADR-0017).
 # The AB-system foundations apply to any broadband flux; the per-convention
 # entries cite the code each convention reproduces. See docs/units.md.
@@ -314,10 +340,13 @@ __all__ = [
     "IMF_CITATIONS",
     "NEBULAR_BACKEND_CITATIONS",
     "PHOTOMETRY_CONVENTION_CITATIONS",
+    "RADIO_CITATIONS",
+    "SHOCK_CITATIONS",
     "SSP_CODE_CITATIONS",
     "SSP_ISOCHRONE_CITATIONS",
     "SSP_LIBRARY_CITATIONS",
     "SYNTHESIZER_CITATIONS",
+    "XRAY_CITATIONS",
     "cites",
     "register_function_citations",
 ]
