@@ -190,6 +190,47 @@ class CB19NoContinuumWarning(UserWarning):
     """Warning: CB19Backend provides no nebular continuum (returns zeros)."""
 
 
+class CB19DegenerateGridWarning(UserWarning):
+    """Warning: the loaded CB19 line-ratio grid carries no usable variation.
+
+    Emitted at load time when every line ratio in the grid is identical (the
+    flat placeholder ``cb19_templates.h5`` of #924). A degenerate grid gives all
+    emission lines the same luminosity — e.g. Halpha/Hbeta = 1.0 instead of the
+    Case B 2.87 — producing plausible-looking but silently wrong line physics.
+    """
+
+
+def _warn_if_degenerate_line_ratios(ratios: np.ndarray, filepath: Path) -> None:
+    """Warn loudly if a CB19 line-ratio slab has no usable variation (#924).
+
+    A grid is degenerate when every finite ratio is identical: interpolating it
+    is a no-op and all lines collapse to the same luminosity. This is the shipped
+    flat-placeholder failure mode; a real CLOUDY grid varies with metallicity,
+    ionization parameter, and density.
+
+    Parameters
+    ----------
+    ratios : ndarray
+        Loaded line-ratio slab (L_line / L_Hbeta), any shape.
+    filepath : Path
+        Source file, for the diagnostic message.
+    """
+    finite = ratios[np.isfinite(ratios)]
+    if finite.size == 0 or float(finite.min()) == float(finite.max()):
+        value = float(finite.min()) if finite.size else float("nan")
+        warnings.warn(
+            f"CB19: the line-ratio grid loaded from {filepath} is DEGENERATE — "
+            f"every line ratio is identical ({value:g}). This is the flat "
+            "placeholder cb19_templates.h5 (#924), not a usable CLOUDY grid: all "
+            "10 emission lines would receive the same luminosity (Halpha/Hbeta = "
+            "1.0 instead of the Case B 2.87), producing plausible-looking but "
+            "silently wrong line physics. Regenerate the real grid with "
+            "scripts/download_cb19_templates.py.",
+            CB19DegenerateGridWarning,
+            stacklevel=3,
+        )
+
+
 def _emit_cb19_warnings(ionizing_source_warning: str, continuum_warning: str) -> None:
     """Emit warnings or raise errors about CB19Backend limitations."""
     if ionizing_source_warning not in ("raise", "warn", "suppress"):
@@ -349,6 +390,10 @@ def load_cb19_grid(
         # Collapse HbFrac axis → (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_lines)
         grp = f[group_key]
         ratios = np.array(grp["line_ratios"][:, :, :, :, :, :, i_hb, :], dtype=np.float32)
+
+    # Guard against a degenerate/placeholder grid (all ratios identical), which
+    # would silently give every line the same luminosity (#924).
+    _warn_if_degenerate_line_ratios(ratios, filepath)
 
     # Convert to log10 space; replace NaN with log10(floor)
     log_ratios = np.log10(np.where(np.isfinite(ratios) & (ratios > 0), ratios, _LOG_FLOOR))
