@@ -403,8 +403,8 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
                 "*": FIXED,
             },
             agn=agn,
-            radio=True,
-            xray=True,
+            radio={"type": "condon92"},
+            xray={"type": "simple"},
             redshift=Fixed(0.05),
         )
         return np.asarray(m.predict_photometry({}))

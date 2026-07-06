@@ -674,6 +674,74 @@ class TestComposableAGNRuntimeWiring:
             "agn_frac may have regressed back to 0."
         )
 
+    def test_agn_norm_conserving_reachable_and_not_a_noop(self, synthetic_ssp_wide):
+        """``agn_norm='conserving'`` must be selectable through the *public*
+        grammar (not just the low-level ``composable()`` call) and must
+        actually change ``predict()`` versus ``'independent'``.
+
+        Guards the two failure modes this repo's multi-layer ``agn_norm``
+        wiring keeps hitting: (a) a policy accepted by the runner but rejected
+        by the grammar validator (unreachable from ``SEDModel.build``), and
+        (b) a policy that is wired but silently a no-op.
+        """
+        import numpy as np
+
+        import tengri
+
+        def _build(norm):
+            # disc=multicolor + torus=silva04: under 'conserving' the disc is
+            # debited by (1 - agn_torus_frac); under 'independent' it is not, so
+            # the two policies must give measurably different AGN SEDs.
+            return tengri.SEDModel.build(
+                synthetic_ssp_wide,
+                sfh={
+                    "type": "delayed",
+                    "tau_gyr": Fixed(1.0),
+                    "age_gyr": Fixed(5.0),
+                    "log_total_mass": Fixed(0.0),
+                    "*": FIXED,
+                },
+                dust={
+                    "type": "two_component",
+                    "tau_bc": Fixed(0.0),
+                    "tau_diff": Fixed(0.0),
+                    "*": FIXED,
+                },
+                agn={
+                    "type": "composable",
+                    "*": FIXED,
+                    "log_lbol": 13.0,
+                    "disc": {"type": "multicolor", "*": FIXED},
+                    "torus": {"type": "silva04", "*": FIXED},
+                    "norm": norm,
+                },
+                redshift=Fixed(0.0),
+            )
+
+        # (a) reachability: 'conserving' constructs through the grammar.
+        m_cons = _build("conserving")
+        m_indep = _build("independent")
+        sed_cons = np.asarray(m_cons.predict_state({}).derived["sed_agn"])
+        sed_indep = np.asarray(m_indep.predict_state({}).derived["sed_agn"])
+
+        # (b) not a no-op: the conserving disc debit measurably changes the AGN
+        # SED, and makes the AGN dimmer than the non-conserving 'independent' sum.
+        assert not np.allclose(sed_cons, sed_indep), (
+            "agn_norm='conserving' gave the same SED as 'independent' — the "
+            "policy is a silent no-op (disc not debited)."
+        )
+        assert sed_cons.max() < sed_indep.max()
+
+        # (c) end-to-end: the policy must propagate all the way to the total
+        # predicted rest-frame SED (the spectrum photometry integrates), not
+        # just the isolated AGN component.
+        total_cons = np.asarray(m_cons.predict_rest_sed({}).sed)
+        total_indep = np.asarray(m_indep.predict_rest_sed({}).sed)
+        assert not np.allclose(total_cons, total_indep), (
+            "agn_norm='conserving' did not change the total predicted SED — "
+            "the policy is not propagating end-to-end."
+        )
+
     def test_top_level_agn_type_selects_monolithic_model(self):
         """``agn={'type':'richards2006', ...}`` must produce a non-zero
         AGN SED (regression for #417).

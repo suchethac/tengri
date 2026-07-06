@@ -422,6 +422,54 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0 and hi <= 1.0,
         "must be in [0, 1]",
     ),
+    # Feltre+2016 CLOUDY NLR grid axes (used by the nlr='feltre' block). Bounds
+    # match the shipped data/feltre_grid.h5 axes so the grammar can drive them
+    # without silent grid extrapolation. agn_-prefixed so they reach the runner.
+    ParamDeclaration(
+        "agn_nlr_fwhm_kms",
+        Uniform(100.0, 2000.0, default=500.0),
+        "NLR emission-line FWHM [km/s]. Applied as Gaussian broadening after the "
+        "grid lookup; typical narrow-line widths 300-1000 km/s.",
+        lambda lo, hi: lo >= 0.0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_nlr_alpha_pl",
+        Uniform(-2.0, -1.2, default=-1.7),
+        "AGN EUV ionizing power-law slope alpha (f_nu ~ nu^alpha) driving the "
+        "Feltre+2016 NLR grid (alpha_axis).",
+        lambda lo, hi: lo >= -2.0 and hi <= -1.2,
+        "must be within the Feltre grid alpha axis [-2.0, -1.2]",
+    ),
+    ParamDeclaration(
+        "agn_nlr_logU",
+        Uniform(-5.0, -1.0, default=-2.0),
+        "NLR ionization parameter log10(U) (Feltre+2016 logU grid axis).",
+        lambda lo, hi: lo >= -5.0 and hi <= -1.0,
+        "must be within the Feltre grid logU axis [-5.0, -1.0]",
+    ),
+    ParamDeclaration(
+        "agn_nlr_logn",
+        Uniform(2.0, 4.0, default=3.0),
+        "NLR gas density log10(n_H / cm^-3) (Feltre+2016 logn grid axis).",
+        lambda lo, hi: lo >= 2.0 and hi <= 4.0,
+        "must be within the Feltre grid density axis [2.0, 4.0]",
+    ),
+    ParamDeclaration(
+        "agn_nlr_logZ",
+        Uniform(-4.0, -1.155, default=-1.8477),
+        "NLR gas metallicity log10(Z) absolute (Feltre+2016 logZ grid axis; "
+        "default -1.8477 = solar, IAU 2015 Zsun=0.0142).",
+        lambda lo, hi: lo >= -4.0 and hi <= -1.155,
+        "must be within the Feltre grid metallicity axis [-4.0, -1.155]",
+    ),
+    ParamDeclaration(
+        "agn_nlr_xi_d",
+        Uniform(0.1, 0.5, default=0.3),
+        "NLR dust-to-metal mass ratio xi_d (Feltre+2016 xi_d grid axis).",
+        lambda lo, hi: lo >= 0.1 and hi <= 0.5,
+        "must be within the Feltre grid xi_d axis [0.1, 0.5]",
+    ),
     ParamDeclaration(
         "agn_blr_line_efficiency",
         Uniform(0.0, 1.0, default=0.08),

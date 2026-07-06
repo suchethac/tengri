@@ -5,7 +5,8 @@ Guards that the top-level ``shock={...}`` grammar group reaches the live
 forward model and composes *additively* with any photoionized nebular backend
 — the surface is not the silent no-op it was before #851, where
 ``Parameters(shock=True)`` registered ``shock_*`` params that ``predict()``
-ignored entirely (only the legacy ``nonstell`` kernel composed shock).
+ignored entirely (only the legacy ``nonstell`` kernel — dead code removed in
+#922 — composed shock).
 
 Covers:
 

@@ -190,15 +190,27 @@ class ForwardModel:
             params, wave_obs=wave_obs
         )
 
-    def predict_line_fluxes(self, params, target_wavelengths):
-        """Delegate to :meth:`SEDModel.predict_line_fluxes` on the inner SED."""
+    def predict_line_fluxes(self, params, target_wavelengths=None, **kwargs):
+        """Delegate to :meth:`SEDModel.predict_line_fluxes` on the inner SED.
+
+        Forwards ``**kwargs`` (``tolerance_aa``, the shared-forward ``state=``)
+        so the joint-loss fast path works on the ForwardModel path.
+        """
         return self._inner_sed_for_delegation().predict_line_fluxes(
-            params, target_wavelengths=target_wavelengths
+            params, target_wavelengths=target_wavelengths, **kwargs
         )
 
-    def predict_spectral_indices(self, params, index_defs):
+    def predict_line_ratios(self, params, line_ratio_data, **kwargs):
+        """Delegate to :meth:`SEDModel.predict_line_ratios` on the inner SED."""
+        return self._inner_sed_for_delegation().predict_line_ratios(
+            params, line_ratio_data, **kwargs
+        )
+
+    def predict_spectral_indices(self, params, index_defs, **kwargs):
         """Delegate to :meth:`SEDModel.predict_spectral_indices` on the inner SED."""
-        return self._inner_sed_for_delegation().predict_spectral_indices(params, index_defs)
+        return self._inner_sed_for_delegation().predict_spectral_indices(
+            params, index_defs, **kwargs
+        )
 
     def predict_state(self, params):
         """Delegate to :meth:`SEDModel.predict_state` on the inner SED."""

@@ -95,16 +95,27 @@ def _build_prediction(
         prediction["phot_fnu"] = pred_phot
     if pred_spec is not None:
         prediction["spec_fnu"] = pred_spec
+
+    # Fast path (2026-07-05): line fluxes, line ratios, and spectral indices
+    # all derive from the SAME orchestrator forward. Compute ``predict_state``
+    # ONCE when any feature channel is active and thread it into each
+    # predictor, so a joint fit with lines + ratios + indices runs the
+    # full-grid forward once per loss eval instead of two or three times.
+    feature_state = None
+    if has_line_fluxes or has_line_ratios or has_indices:
+        feature_state = model.predict_state(params)
     if has_line_fluxes:
         prediction["line_fluxes"] = model.predict_line_fluxes(
-            params, target_wavelengths=data_args["line_flux_waves"]
+            params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
         )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
-            params, model.observation.line_ratios
+            params, model.observation.line_ratios, state=feature_state
         )
     if has_indices:
-        prediction["indices"] = model.predict_spectral_indices(params, index_defs)
+        prediction["indices"] = model.predict_spectral_indices(
+            params, index_defs, state=feature_state
+        )
 
     return prediction, predicted, pred_phot, pred_spec
 
@@ -153,6 +164,17 @@ def _build_data_neg_log_likelihood_fn(fitter):
             index_defs = obs_for_idx.spectral_indices.index_defs
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
+    # Build-time signature check: the internal adapter cohort accepts
+    # ``data_args`` (call-time data threading); user-supplied likelihoods
+    # with the two-argument signature keep working on their baked arrays.
+    if user_likelihood is not None:
+        import inspect
+
+        _likelihood_takes_data_args = (
+            "data_args" in inspect.signature(user_likelihood.log_prob).parameters
+        )
+    else:
+        _likelihood_takes_data_args = False
 
     # Phase 4-D (#250 follow-up): photometry-only fits use the
     # threaded ``_impl`` directly so the outer JIT trace (HMC/NUTS
@@ -204,7 +226,13 @@ def _build_data_neg_log_likelihood_fn(fitter):
 
         # Auto-built / user-supplied Likelihood adapter handles the data
         # term (and any extras composed via CompositeLikelihood).
+        # ``data_args`` is forwarded so adapters read the CURRENT
+        # Fitter's data — the compiled loss is shared across Fitters
+        # (get_or_build_cached), and adapter-baked arrays would XLA-bake
+        # the first galaxy's data into every subsequent fit.
         if user_likelihood is not None:
+            if _likelihood_takes_data_args:
+                return -user_likelihood.log_prob(prediction, params, data_args=data_args)
             return -user_likelihood.log_prob(prediction, params)
 
         # Legacy χ² fall-through. Exactly one case reaches this code path:

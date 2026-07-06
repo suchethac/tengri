@@ -1,19 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""FeII pseudo-continuum blocks for the composable AGN pipeline.
+r"""FeII forest blocks for the composable AGN pipeline.
 
-Wraps Fe II emission templates so they fit into the composable AGN
-block-protocol signature. FeII is a minor but measurable component of
-quasar spectra, typically detected in the optical-UV (2000–6000 Å)
-as a weak pseudo-continuum beneath broad emission lines. When enabled,
-the FeII strength is set via ``agn_fe2_strength`` (the standard R_Fe ratio
-= F(Fe II) / F(H-beta)) and normalized to the disc continuum bolometric
-luminosity using the Krawczyk+2013 bolometric correction.
-
-References
-----------
-- Boroson, T. A., & Green, R. F. 1992, ApJS, 80, 109
-  https://doi.org/10.1086/191679
-- Krawczyk, C. M., et al. 2013, ApJS, 206, 4
+One file, every FeII option — pick via ``agn={'feii': {'type': ...}}``.
+Consolidated 2026-07 from boroson_green_feii + feii_blocks; registration
+unchanged.
 """
 
 from __future__ import annotations
@@ -24,13 +14,11 @@ from jax import Array
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.blr import _blr_l_hbeta, _fe2_pseudo_continuum
 
-__all__: list[str] = []  # registrations only
+__all__ = [
+    "boroson_green_feii_block",
+]
 
-#: Speed of light in Å × Hz, for L_ν → L_λ conversion.
 _C_AA_PER_S: float = 2.99792458e18
-
-#: Default bolometric correction :math:`L_{\rm bol}/\lambda L_\lambda(5100\,\mathrm{\AA})`
-#: from Krawczyk+ 2013 (2013ApJS..206....4K). Type-1 quasar median.
 DEFAULT_F_BOL_5100: float = 9.0
 
 

@@ -39,8 +39,11 @@ L_ir = (L_absorbed_stellar + L_absorbed_nebular) × dust_eta_balance
 
 where:
 
-- **L_absorbed_stellar:** Integrated stellar luminosity attenuated by dust (from attenuation.py)
-- **L_absorbed_nebular:** Integrated nebular continuum luminosity attenuated by dust (from emission_helpers.py)
+- **L_absorbed_stellar:** Integrated stellar luminosity attenuated by dust. Canonical
+  integral: `forward/energy_balance.py::bolometric_absorbed` (λ ≥ 912 Å masked, #922);
+  fast-path LUT form in `components/dust/energy_balance_precompute.py`
+- **L_absorbed_nebular:** Integrated nebular continuum luminosity attenuated by dust
+  (same canonical integral, computed in `components/dust/two_component.py`)
 - **dust_eta_balance:** Dimensionless efficiency parameter (0–1, default 1.0); accounts for dust radiative efficiency uncertainties
 - **L_ir:** Total dust IR luminosity in the rest frame [erg/s]
 

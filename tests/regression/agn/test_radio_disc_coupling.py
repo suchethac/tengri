@@ -211,7 +211,7 @@ class TestEndToEndRadioDiscCoupling:
                 "*": FIXED,
             },
             agn=_composable_agn("multicolor"),
-            radio=True,
+            radio={"type": "condon92"},
             redshift=Fixed(0.05),
         )
         # Model 2: richards2006 disc
@@ -225,7 +225,7 @@ class TestEndToEndRadioDiscCoupling:
                 "*": FIXED,
             },
             agn=_composable_agn("richards2006"),
-            radio=True,
+            radio={"type": "condon92"},
             redshift=Fixed(0.05),
         )
 
@@ -267,7 +267,7 @@ class TestEndToEndRadioDiscCoupling:
                     "*": FIXED,
                 },
                 agn=_composable_agn(disc),
-                radio=True,
+                radio={"type": "condon92"},
                 redshift=Fixed(0.05),
             )
             state = model.predict_state({})

@@ -284,6 +284,31 @@ def test_forward_model_predict_delegates_match_inner_sed(
     assert jnp.allclose(direct_phot, forward_phot, rtol=1e-12)
 
 
+def test_forward_model_feature_delegates_forward_state_kwarg(
+    sed_model_minimal, simple_observation
+) -> None:
+    """The line-flux / line-ratio / spectral-index delegates must forward
+    keyword extras (``tolerance_aa`` and the shared-forward ``state=``).
+
+    Regression: the joint-loss fast path (``_build_prediction`` computes
+    ``predict_state`` once and threads it into each feature channel via
+    ``state=``). ForwardModel's explicit delegates dropped that kwarg, so a
+    joint phot+lines fit on the canonical ForwardModel path raised
+    ``TypeError: unexpected keyword argument 'state'``. ``predict_line_ratios``
+    had no delegate at all. Signature-based so it needs no SSP data.
+    """
+    import inspect
+
+    forward = ForwardModel.build(sed=sed_model_minimal, observation=simple_observation)
+    for name in ("predict_line_fluxes", "predict_line_ratios", "predict_spectral_indices"):
+        assert hasattr(forward, name), f"ForwardModel missing {name} delegate"
+        params = inspect.signature(getattr(forward, name)).parameters
+        assert any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()), (
+            f"ForwardModel.{name} must accept **kwargs to forward state=/tolerance_aa "
+            f"to the inner SEDModel; got {list(params)}"
+        )
+
+
 def test_forward_model_delegation_walks_into_population_sed_model(
     sed_model_minimal, simple_observation
 ) -> None:

@@ -36,6 +36,12 @@ The spectral integral is held at full SSP resolution (so #622's far-IR exactness
 is preserved); the only approximation is the smooth bilinear interpolation in
 the two optical-depth axes, where :math:`\int \mathrm{SSP}\, e^{-\tau k}\, d\nu`
 is monotone and well behaved.
+
+This LUT is the precomputed factorization of the canonical energy-balance
+integral :func:`tengri.forward.energy_balance.bolometric_absorbed` — same
+signed :math:`\int (L_\nu^{\rm intr} - L_\nu^{\rm att})\, d\nu` with the same
+912 Å Lyman-continuum mask (#922). The two must agree; the contract is pinned
+by ``tests/contract/test_energy_balance_lut.py``.
 """
 
 from __future__ import annotations

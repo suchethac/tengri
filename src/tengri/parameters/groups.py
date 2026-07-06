@@ -376,14 +376,14 @@ def _agn_block_types(category: str) -> frozenset[str]:
     # decorators have fired. Mirrors the eager imports done by AGN
     # ``unified.py`` at module-load time; safe to redo here.
     import tengri.components.agn.blocks.alternates
-    import tengri.components.agn.blocks.atten_blocks
-    import tengri.components.agn.blocks.blr_blocks
-    import tengri.components.agn.blocks.disc_blocks
-    import tengri.components.agn.blocks.feii_blocks
+    import tengri.components.agn.blocks.atten
+    import tengri.components.agn.blocks.blr
+    import tengri.components.agn.blocks.disc
+    import tengri.components.agn.blocks.feii
     import tengri.components.agn.blocks.grahsp_blocks
-    import tengri.components.agn.blocks.nlr_blocks
+    import tengri.components.agn.blocks.nlr
     import tengri.components.agn.blocks.qsogen_blocks
-    import tengri.components.agn.blocks.torus_blocks  # noqa: F401
+    import tengri.components.agn.blocks.torus  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     return frozenset(AGN_BLOCKS.get(category, {}).keys()) | {"none"}
@@ -806,6 +806,12 @@ def _translate_structural(groups: dict) -> dict:
     }
     result = {}
 
+    # Suggested model when someone tries the (unsupported) bool form for an
+    # additive gate group — used only to make the error message actionable.
+    # radio: Condon (1992) radio-IR correlation; xray: 'simple' (X-ray binaries
+    # + AGN corona; 'simple' ≡ 'yang20' physics); shock: MAPPINGS V.
+    _GATE_SUGGESTED_TYPE = {"radio": "condon92", "xray": "simple", "shock": "mappings"}
+
     for group_name, group_dict in groups.items():
         if group_name in _TOP_LEVEL_SETTINGS:
             continue
@@ -820,6 +826,21 @@ def _translate_structural(groups: dict) -> dict:
             raise ValueError(
                 f"Unknown group key '{group_name}'. "
                 f"Valid groups: {', '.join(sorted(valid_groups))}.{suggest_str}"
+            )
+
+        # Every component is declared the same way — a dict selecting the
+        # model, e.g. ``neb={'type': 'cue'}``. The bool form (``xray=True``)
+        # is NOT supported: it used to fall through the ``isinstance(dict)``
+        # skip below and leave the component silently absent, so the
+        # panchromatic recipes shipped with no radio / X-ray at all. Reject it
+        # loudly and point at the consistent dict grammar rather than guessing.
+        if group_name in _GATE_SUGGESTED_TYPE and isinstance(group_dict, bool):
+            suggested = _GATE_SUGGESTED_TYPE[group_name]
+            raise ValueError(
+                f"{group_name}={group_dict!r} is not a valid declaration — declare "
+                f"{group_name} like every other component, with a dict selecting the "
+                f"model: {group_name}={{'type': '{suggested}'}} to enable (add per-param "
+                f"priors as needed), or {group_name}={{'type': 'none'}} / omit to disable."
             )
 
         if not isinstance(group_dict, dict):
@@ -1902,14 +1923,14 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
         result[block_to_kwarg[block_name]] = block_type
 
-    # Cross-block normalization policy (#556). ``agn={'norm': 'cigale_joint' |
-    # 'independent'}`` selects how disc/torus/polar share a luminosity
-    # reference. Default (unset) leaves AGNConfig.agn_norm at "cigale_joint".
+    # Cross-block normalization policy (``agn['norm']``): menu single-sourced
+    # from AGN_NORM_POLICIES so the grammar can't drift from the runner (#556).
     if "norm" in agn_dict:
+        from tengri.components.agn.blocks import AGN_NORM_POLICIES
+
         _norm = agn_dict["norm"]
-        _valid_norms = {"cigale_joint", "independent"}
-        if _norm not in _valid_norms:
-            raise ValueError(f"Unknown agn['norm'] = '{_norm}'. Valid: {sorted(_valid_norms)}.")
+        if _norm not in AGN_NORM_POLICIES:
+            raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
 
 

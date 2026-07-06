@@ -57,7 +57,7 @@ from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     resolve_agn_block,
 )
-from tengri.components.agn.blocks.atten_blocks import polar_dust_reemission_lnu
+from tengri.components.agn.blocks.atten import polar_dust_reemission_lnu
 from tengri.components.agn.blocks.masking import (
     sigmoid_visibility_mask,
     split_lines_result,
@@ -477,11 +477,20 @@ agn_torus_block, agn_attenuation_block : str
     _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
     _disc_R = None
     _disc_incl = None
-    # ``agn_norm`` policy (#556): "cigale_joint" ties disc/torus/polar to the
-    # single agn_power reference (only meaningful for the SKIRTOR torus, whose
-    # template ratios define R); "independent" keeps the legacy per-component
-    # scaling. Static string (JIT-safe Python branch).
+    # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus/
+    # polar to the single agn_power reference (only meaningful for the SKIRTOR
+    # torus, whose template ratios define R, #556); "conserving" debits the disc
+    # by the reprocessed fraction so disc(1-f)+torus(f) conserves L_bol for ALL
+    # tori (the energy-ledger debit below) — opt-in for now; it becomes the
+    # default once the CIGALE reproduction + recipes pin cigale_joint explicitly
+    # (Phase 2), so flipping it here would silently change the CIGALE §9 parity;
+    # "independent" keeps the legacy per-component scaling. Static string
+    # (JIT-safe Python branch).
     _agn_norm = params.get("agn_norm", "cigale_joint")
+    # agn_torus_frac clipped to [0, 1] once and reused by both the conserving
+    # disc debit and the cigale_joint SKIRTOR R-tie fallback, so the default
+    # (0.5) can never drift between the sites that debit the disc.
+    _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
         _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
             wave,
@@ -503,9 +512,8 @@ agn_torus_block, agn_attenuation_block : str
         # (``agn_torus_frac × L_bol``), available *before* the torus runs so
         # there is no circular dependency on ∫torus. Branchless: fall back to
         # the legacy proxy where ``agn_fracAGN == 0``.
-        _agn_torus_frac = jnp.asarray(params.get("agn_torus_frac", 0.5))
         _Lbol = 10.0**agn_log_lbol * L_SUN
-        _agn_power_pre = _agn_torus_frac * _Lbol
+        _agn_power_pre = _torus_frac * _Lbol
         # Face-on UN-reddened disc ∫AGN1.disk = agn_power × R_faceon (the
         # ratio the CIGALE l_ext proxy needs), NOT agn_power × R (which is the
         # reddened, inclination-weighted *observed* disc).
@@ -519,9 +527,46 @@ agn_torus_block, agn_attenuation_block : str
 
     L_lambda_disc = L_lambda_disc * _disc_ext
 
-    # Compute lambda*L_lambda(5100Å) for downstream block normalizations.
-    # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
+    # Compute lambda*L_lambda(5100Å) for downstream block (line/FeII/torus)
+    # normalizations. Convention: this is the LOS-reddened disc — taken *after*
+    # the polar/LOS disc extinction (``_disc_ext`` above) but *before* the
+    # conserving debit below. With agn_polar_ebv=0 (the common case) it equals
+    # the intrinsic disc; with Type-1 polar reddening it carries the extinction.
+    # GRAHSP l5100 parity (Phase 2) should confirm and pin the intended anchor.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
+
+    # ── Energy ledger (energy-conserving policies) ───────────────────────
+    # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of
+    # it. Debit the observed disc by (1 - agn_torus_frac) so that
+    # disc(1-f) + torus(f) conserves L_bol for every torus — reproducing the
+    # monolithic models (e.g. silva04_agn passes agn_frac=1-agn_torus_frac to
+    # the disc). The torus block already normalizes its output to
+    # agn_torus_frac * L_bol, so only the disc side changes.
+    #
+    # CONSERVATION DOMAIN: exact only when agn_polar_ebv=0. With Type-1 polar
+    # reddening, ``_disc_ext`` (above) removes disc UV that nothing re-credits
+    # under this policy (the polar-graybody re-credit currently lives in the
+    # cigale_joint branch). So "conserving" guarantees Sigma=L_bol iff
+    # agn_polar_ebv=0; the reddening unification (Phase 3) wires the re-credit
+    # here so the guarantee becomes unconditional.
+    #
+    # Self-contained tori (``none``, ``qsogen``, ``grahsp``) bundle disc+torus
+    # in one self-normalized template and bypass the ledger — no debit. This
+    # also covers the disc-only (``torus="none"``) case: with no reprocessor,
+    # the disc keeps its full L_bol.
+    #
+    # Which policies debit: "conserving" always; "cigale_joint" too EXCEPT for
+    # the SKIRTOR torus, which instead uses the agn_power×R template tie (Stage
+    # 4 below) — the CIGALE-faithful path. So cigale_joint is energy-conserving
+    # for *every* torus (R-tie for skirtor, agn_torus_frac split otherwise),
+    # never the silent additive leak it used to be for non-skirtor tori.
+    # "independent" never debits (each component on its own luminosity scale).
+    # Static Python branch on the policy string + torus name (JIT-safe).
+    _conserve_via_debit = agn_torus_block not in _SELF_CONTAINED_TORI and (
+        _agn_norm == "conserving" or (_agn_norm == "cigale_joint" and agn_torus_block != "skirtor")
+    )
+    if _conserve_via_debit:
+        L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
 
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)
@@ -569,12 +614,21 @@ agn_torus_block, agn_attenuation_block : str
     )
 
     # CIGALE single-reference disc normalization (#556), part 2. The SKIRTOR
-    # torus block fixes ``agn_power = ∫L_lambda_torus`` (disc+torus+polar
-    # share this budget). Tie the disc bolometric to ``agn_power × R`` so
-    # the disc scales with the same reference as the dust — energy conserved,
-    # inclination-correct via the ``η(i)`` baked into R. Applied branchlessly:
-    # only when ``agn_fracAGN > 0`` (the CIGALE-coupled mode); otherwise the
-    # disc keeps its independent ``agn_log_lbol`` scaling.
+    # torus block fixes ``agn_power = ∫L_lambda_torus`` (disc+torus+polar share
+    # this budget). Two regimes, selected branchlessly by the *traced*
+    # ``agn_fracAGN`` (so this cannot join the static _conserve_via_debit gate):
+    #   * fracAGN > 0 (CIGALE-coupled): tie the disc to ``agn_power × R`` so
+    #     disc/torus/polar share one reference — *allocation*-conserving (the
+    #     components can't drift apart), CIGALE-faithful, inclination-correct via
+    #     the η(i) baked into R. This is NOT *ledger* conservation: ∫total scales
+    #     with ``agn_power = agn_torus_frac·L_bol``, so agn_torus_frac→0 drives
+    #     the whole AGN to zero — outside CIGALE's reachable domain, but a free
+    #     agn_torus_frac sampler can reach that degenerate zero-AGN plateau.
+    #   * fracAGN = 0 (default): no CIGALE coupling, so debit the disc by
+    #     (1 − agn_torus_frac) exactly like the ``conserving`` policy — *ledger*
+    #     conservation (∫total = L_bol). This closes the leak that used to hit
+    #     the DEFAULT skirtor config, where neither the R-tie nor the
+    #     _conserve_via_debit gate (which excludes skirtor) fired.
     if _disc_R is not None:
         _agn_power = jnp.trapezoid(L_lambda_torus, wave)
         # Apply the wavelength-dependent ``disk(i)/disk(0)`` inclination
@@ -584,7 +638,8 @@ agn_torus_block, agn_attenuation_block : str
         _disc_reweighted = L_lambda_disc * _disc_incl
         _disc_int = jnp.maximum(jnp.trapezoid(_disc_reweighted, wave), 1e-30)
         _disc_scaled = _disc_reweighted * (_agn_power * _disc_R) / _disc_int
-        L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, L_lambda_disc)
+        _disc_debited = L_lambda_disc * (1.0 - _torus_frac)
+        L_lambda_disc = jnp.where(_agn_fracAGN > 0.0, _disc_scaled, _disc_debited)
 
     # Stage 4.5: Type-1/2 obscuration of the *anisotropic* central engine (disc +
     # broad lines + FeII). The isotropic NLR is added back afterwards, so it stays
