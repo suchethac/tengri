@@ -6,8 +6,9 @@ import pytest
 pytestmark = pytest.mark.contract
 
 """Phase II opt-in: Fitter(use_components=True) routes prediction through
-:meth:`SEDModel.predict_photometry_components` instead of the legacy
-fused kernel.
+the orchestrator seam (:meth:`SEDModel._photometry_via_state`; the public
+``predict_photometry_components`` name is a deprecation shim since cleanup
+PR-2) instead of the legacy fused kernel.
 
 Smoke-tests only — full numerical-equivalence sweep is part of the eventual
 Phase B cutover. Here we verify (1) the flag is honored, (2) wiring picks
@@ -71,7 +72,7 @@ class _DualPathModel:
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def predict_photometry_components(self, params):
+    def _photometry_via_state(self, params):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
@@ -79,7 +80,7 @@ class _DualPathModel:
         self.legacy_calls += 1
         return jnp.array([1.0, 2.0, 3.0])
 
-    def predict_spectrum_components(self, params, wave_obs=None):
+    def _spectrum_via_state(self, params, wave_obs=None):
         self.orchestrator_calls += 1
         return jnp.array([10.0, 20.0, 30.0])
 
