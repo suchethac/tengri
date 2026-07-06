@@ -15,8 +15,9 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blocks._protocol import register_agn_block
-from tengri.components.agn.disc import adaf_disc, kubota_done_disc, multicolor_disc
+from tengri.components.agn.disc import kubota_done_disc, multicolor_disc
 from tengri.components.agn.disc_cigale import (
     adaf_disk_spectrum,
     schartmann2005_disk_spectrum,
@@ -85,62 +86,72 @@ def _cigale_disc_lambda(
     "disc",
     "adaf",
     citation="Mahadevan 1997, ApJ, 477, 585",
-    status="deprecated",
-    short_doc="ADAF inner flow (DEPRECATED: misapplies Mahadevan Eq. 49; use kubota_done) — #898",
+    status="production",
+    short_doc="Faithful Mahadevan-1997 ADAF (synchrotron + Compton + bremsstrahlung)",
 )
 def adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
     agn_log_mbh: float = 8.0,
-    agn_log_ledd: float = -3.0,
-    agn_r_tr: float = 100.0,
+    agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.01,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_adaf_delta: float = 0.1,
     **_params,
 ) -> Array:
-    r"""ADAF + truncated disc for low-luminosity AGN.
+    r"""Advection-dominated accretion flow (ADAF) — faithful Mahadevan 1997.
 
-    Inner accretion flow is advection-dominated (radiatively inefficient);
-    outer flow is a SS thin disc truncated at :math:`r_{\rm tr}`.
+    Radio-to-X-ray SED of a radiatively inefficient inner flow: rising
+    cyclo-synchrotron (:math:`\nu^{2/5}`) to a sub-mm self-absorption peak, a
+    Comptonized :math:`\nu^{-\alpha_c}` decline, and a bremsstrahlung X-ray tail
+    (see :func:`tengri.components.agn.adaf.adaf_spectrum`).
+
+    ``agn_log_lbol`` is the canonical luminosity; the accretion rate is derived
+    from it via Mahadevan Eq. 49 (``agn_log_ledd`` is retired — consistent with
+    the disc convention of #846). Pure ADAF: no bundled truncated thin disc (the
+    ad-hoc split of the old model is removed; use a separate disc block or the
+    Nemmen template block for the outer-disc red bump).
 
     .. warning::
 
-       The ADAF inner flow does **not** produce a meaningful 5100 Å
-       continuum; pairing this disc with GRAHSP-style downstream blocks
-       (which normalize to :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`)
-       will trigger :class:`RecipeWarning`. Use only when a UV/optical
-       contribution is genuinely absent from the source.
+       The ADAF does **not** produce a meaningful 5100 Å continuum; pairing it
+       with GRAHSP-style downstream blocks (which normalize to
+       :math:`\lambda L_\lambda(5100\,\mathrm{\AA})`) triggers
+       :class:`RecipeWarning`.
 
     Parameters
     ----------
     wavelength : array_like, shape (n_wave,)
-    agn_log_lbol, agn_log_mbh, agn_log_ledd, agn_cos_inc
-        Standard disc parameters.
-    agn_r_tr : float, optional
-        Truncation radius :math:`r_{\rm tr}` [:math:`R_g`]. Default ``100``.
+        Rest-frame wavelength [Å].
+    agn_log_lbol, agn_log_mbh : float
+        ADAF bolometric luminosity [log10(L_sun)] and black hole mass
+        [log10(M_sun)].
+    agn_adaf_alpha : float, optional
+        Viscosity parameter :math:`\alpha`. Default ``0.3``.
     agn_adaf_beta : float, optional
-        Magnetic-to-gas pressure ratio. Default ``0.5``.
+        Gas-to-total pressure ratio :math:`\beta` (magnetic fraction ``1-beta``).
+        Default ``0.5``.
     agn_adaf_delta : float, optional
-        Electron heating fraction. Default ``0.01``.
+        Fraction of viscous energy heating electrons directly. Default ``0.1``.
+
+    Returns
+    -------
+    L_lambda : ndarray, shape (n_wave,)
+        ADAF :math:`L_\lambda` [erg/s/Å].
 
     References
     ----------
-    .. [1] Mahadevan, R. 1997, ApJ, 477, 585. ADAF emission spectra.
-    .. [2] Lopez Navas, E. et al. 2024 (low-luminosity AGN application).
+    .. [1] Mahadevan, R. 1997, ApJ, 477, 585. arXiv:astro-ph/9609107.
     """
     wave_aa = jnp.asarray(wavelength)
-    L_nu = adaf_disc(
+    L_nu = adaf_spectrum(
         wave_aa,
         agn_log_lbol=agn_log_lbol,
         agn_frac=1.0,
         agn_log_mbh=agn_log_mbh,
-        agn_log_ledd=agn_log_ledd,
-        agn_r_tr=agn_r_tr,
+        agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
         agn_adaf_delta=agn_adaf_delta,
-        agn_cos_inc=agn_cos_inc,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 

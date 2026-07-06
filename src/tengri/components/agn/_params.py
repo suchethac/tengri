@@ -128,6 +128,26 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(-1.5, 0.3, default=-1.0),
         "RELAGN Eddington-scaled accretion rate log10(Mdot/Mdot_Edd)",
     ),
+    # ── ADAF (Mahadevan 1997) plasma parameters — for disc='adaf' (#898) ──
+    ParamDeclaration(
+        "agn_adaf_alpha",
+        # Shakura-Sunyaev viscosity; ADAF applications use ~0.1-0.3 (Narayan 1996).
+        Uniform(0.05, 0.5, default=0.3),
+        "ADAF viscosity parameter alpha",
+    ),
+    ParamDeclaration(
+        "agn_adaf_beta",
+        # Gas-to-total pressure ratio (magnetic fraction is 1-beta).
+        Uniform(0.1, 0.9, default=0.5),
+        "ADAF gas-to-total pressure ratio beta",
+    ),
+    ParamDeclaration(
+        "agn_adaf_delta",
+        # Fraction of viscous energy heating electrons directly; ~1e-3 (Coulomb)
+        # to ~0.5 (modern preferred; Yuan & Narayan 2014).
+        Uniform(0.001, 0.5, default=0.1),
+        "ADAF electron viscous-heating fraction delta",
+    ),
     ParamDeclaration(
         "agn_astar",
         # Black hole spin a*: prograde only, grid extent 0 to 0.998.
