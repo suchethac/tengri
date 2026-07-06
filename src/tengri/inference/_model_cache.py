@@ -5,7 +5,7 @@ Replaces the pattern of monkey-patching private dicts onto SEDModel at runtime
 (model._jit_engine_cache = {}, model._loss_fn_cache = {}, etc.).
 
 Keyed on the SEDModel object identity. When ``precompute_spectroscopy`` /
-``precompute_ztable`` later return a new SEDModel (Phase 4), the new instance
+``precompute_ztable`` later return a new SEDModel, the new instance
 gets a fresh cache and the JIT functions recompile on first use — an
 acceptable cost since the cached artefacts can always be regenerated.
 

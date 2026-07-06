@@ -698,7 +698,7 @@ class Fitter:
         engines compiled for one galaxy can be reused for another with
         the same model + parameter structure.
 
-        Phase 4-D (2026-05-23, issue #250 follow-up): also threads the
+        2026-05-23 (issue #250 follow-up): also threads the
         big template arrays (SSP grid, nebular templates, dust IR / AGN
         template data, fixed-value dict) so the **outer** JIT used by
         loss-fn-based samplers (HMC, NUTS, raytrace) sees them as

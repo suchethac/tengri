@@ -1025,7 +1025,7 @@ def skirtor_sed(*args, **kwargs):
     See ``create_skirtor_from_grid`` for full parameter documentation and
     grid-dependent ranges.
     """
-    # Support Phase 4-D: allow template to be threaded as JIT runtime input
+    # Allow the template to be threaded as a JIT runtime input
     _template = kwargs.pop("_template", None)
     template_fn = _template if _template is not None else _load_skirtor_default()
     return template_fn(*args, **kwargs)
@@ -1081,7 +1081,7 @@ def skirtor_components(*args, **kwargs) -> SKIRTORComponents:
     **JIT-compatible**: yes — delegates to cached grid function or
     pre-loaded template (when _template is threaded).
     """
-    # Support Phase 4-D: allow template to be threaded as JIT runtime input
+    # Allow the template to be threaded as a JIT runtime input
     _template = kwargs.pop("_template", None)
 
     # Handle deprecated agn_torus_frac → frac_agn migration

@@ -176,7 +176,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
     else:
         _likelihood_takes_data_args = False
 
-    # Phase 4-D (#250 follow-up): photometry-only fits use the
+    # Template threading (#250 follow-up): photometry-only fits use the
     # threaded ``_impl`` directly so the outer JIT trace (HMC/NUTS
     # loss_fn) sees ssp_data + template_data + fixed_values as
     # outer-level Parameters. Without this, the outer JIT inlines

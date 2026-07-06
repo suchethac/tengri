@@ -49,15 +49,6 @@ marker lines to jump. In order:
   - ``Batch operations``
   - ``Private prediction dispatch``
   - ``Utilities``
-
-Comments in this module reference historical "Phase" labels from the 2026
-precompute rollout. The decoder ring: Phase 2 = approx settings owned by
-components; Phase 3b/3c = the WavePrecomp SSP x filter photometry LUT
-(fixed-z scalar -> free-z ztable); Phase 3d = the typed
-``approx=WavePrecomp(...)`` construction contract (dict/bool/str forms
-removed); Phase 5 = the SpectrumPrecomp per-pixel LUT; Phase 6 = removal of
-the legacy hybrid kernels (``predict_observables_jit`` is the single
-forward path).
 """
 
 from __future__ import annotations
@@ -194,13 +185,13 @@ class WavePrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class SpectrumPrecomp:
-    """Configuration for spectrum-grid LUT precomputation (Phase 5).
+    """Configuration for spectrum-grid LUT precomputation.
 
     Pass this to :class:`SEDModel` via ``approx=`` to enable spectroscopic
     LUT precomputation. The SSP × dust × IGM stack is precomputed at
     spectrum pixel centers (effective wavelengths in the galaxy rest frame)
-    and cached per redshift. This is analogous to the photometric LUT path
-    (Phase 3b/3c) but for spectroscopy.
+    and cached per redshift. This is analogous to the photometric
+    ``WavePrecomp`` LUT path but for spectroscopy.
 
     The pixel grid is inherited from ``Observation.spectroscopy.wave_obs``.
     For a free redshift, a redshift table is built so the rest-frame pixel
@@ -326,7 +317,7 @@ class SEDModel:
         Unified observation config (photometry + spectroscopy + emission lines).
         Mutually exclusive with ``filters``.
     precompute : bool, optional
-        **Legacy / largely superseded.** Builds the pre-Phase-3
+        **Legacy / largely superseded.** Builds the pre-``approx=``-era
         ``PrecomputedData`` container (fixed-z SSP photometry/spectroscopy grid
         defaults). This predates — and is NOT — the fast LUT path: the
         Zacharegkas+2025 fast-photometry / spectroscopy speedup is selected at
@@ -407,10 +398,10 @@ class SEDModel:
     for inference via HMC, VI, and score-based methods.
 
     **Approximation scheme**: All prediction methods route through the
-    single JIT-safe orchestrator :meth:`predict_observables_jit` (Phase
-    4-B, with SSP threading). Historical mode-cascade strategies
-    (compositional / hybrid / exact) collapsed into this one path in
-    Phase 6-prep (2026-05-20); the orchestrator itself remains XLA-fused
+    single JIT-safe orchestrator :meth:`predict_observables_jit` (the
+    SSP grid is threaded as a JIT runtime input). Historical mode-cascade
+    strategies (compositional / hybrid / exact) collapsed into this one
+    path in 2026-05; the orchestrator itself remains XLA-fused
     and bit-exact for the configured ``approx=`` policy.
 
     **Physical units** (internal):
@@ -456,14 +447,14 @@ class SEDModel:
 
     name: str = "sed"
 
-    # Default approximation settings (immutable — used as template only)
-    # Phase 2: owned by components, per the unification plan.
+    # Default approximation settings (immutable — used as template only);
+    # the settings themselves are owned by the components.
     # "wave_precomp" = SSP × filter LUT on fixed wavelength grid (stellar component)
     # "ztable" = SSP × filter LUT indexed on redshift grid, requires wave_precomp
     # ztable is auto-enabled when wave_precomp=True and redshift is free.
     # "igm" = pre-compute IGM transmission at filter effective wavelengths for
     # the hybrid kernel at fixed z. Default True matches the historic behavior
-    # before the Phase 3 ``approx=`` flag was introduced (``_build_precomputed_data``
+    # before the ``approx=`` flag was introduced (``_build_precomputed_data``
     # always computed ``igm_eff`` when ``_uses_igm`` and ``_z_fixed`` were set).
     _DEFAULT_APPROX: ClassVar[dict] = {
         "wave_precomp": False,
@@ -563,7 +554,7 @@ class SEDModel:
         compile=None,
     ):
         # ``strategy`` is accepted for backwards-compat signature but ignored —
-        # the kernel-selection strategy machinery was removed in Phase 6
+        # the kernel-selection strategy machinery was removed in 2026-05
         # (kernel adapters deleted). ``predict_observables_jit`` is the only
         # forward path now.
         del strategy
@@ -576,7 +567,7 @@ class SEDModel:
         self._forward_dtype = jnp.dtype(forward_dtype)
         self._wave_chunk_size = wave_chunk_size
 
-        # ── Observables NamedTuple (Phase 2) ─────────────────────
+        # ── Observables NamedTuple (synthesized per model) ───────
         from tengri.observation.observables import build_observables_class
 
         self._Observables = (
@@ -593,7 +584,7 @@ class SEDModel:
         self._compile_mode = compile
 
         # Resolve and validate approximation kwarg.
-        # Contract (Phase 3d, 2026-05-20):
+        # Contract (2026-05-20):
         #   * ``approx=None`` (default)        — exact wave-grid integration.
         #   * ``approx=WavePrecomp(...)``      — opt into the precomputed
         #     SSP × filter LUT path. ``WavePrecomp()`` gives the default
@@ -1122,9 +1113,9 @@ class SEDModel:
 
         Notes
         -----
-        Phase 2 of forward-projection unification. Each model gets its own
-        NamedTuple class, with fields (and magnitude properties) appearing
-        only when the corresponding observation sub-block is configured.
+        Each model gets its own NamedTuple class, with fields (and
+        magnitude properties) appearing only when the corresponding
+        observation sub-block is configured.
         """
         if self._Observables is None:
             raise ValueError(
@@ -2765,11 +2756,11 @@ class SEDModel:
         # Velocity dispersion
         has_sigma_v = bool(self._has_sigma_v)
 
-        # Compile mode (Phase 2)
+        # Compile mode
         compile_mode = str(self._compile_mode)
 
-        # Approximation settings (Phase 2), resolved and sorted.
-        # Phase 3d (2026-05-20): include the resolved WavePrecomp configuration
+        # Approximation settings, resolved and sorted.
+        # 2026-05-20: include the resolved WavePrecomp configuration
         # so two models with different ztable sampling (n_z / z_min / z_max)
         # get distinct cache slots. Without this, ``WavePrecomp(n_z=100)`` and
         # ``WavePrecomp(n_z=200)`` would collide and the second galaxy would
@@ -2819,7 +2810,7 @@ class SEDModel:
             except (TypeError, ValueError):
                 return ("repr", repr(val))
 
-        # Phase 4-A (2026-05-20): drop fixed-parameter VALUES from the
+        # 2026-05-20: drop fixed-parameter VALUES from the
         # cache key. Keep names + types-of-fixed only. Two SEDModels with
         # the same physics + same SSP + same filters + same WavePrecomp
         # config + same FREE-parameter shape and same set of FIXED names
@@ -2891,7 +2882,7 @@ class SEDModel:
         Convolves the SED (redshifted and IGM-absorbed) through filter
         transmission curves, returning flux densities in the AB system
         at the source. Routes through :meth:`predict_observables_jit`,
-        the JIT-safe orchestrator with SSP threading (Phase 4-B).
+        the JIT-safe orchestrator with SSP threading.
 
         **Raw forward-pass output.** For interactive use with cached
         derived quantities, see ``model.predict(params).photometry``.
@@ -3011,7 +3002,7 @@ class SEDModel:
         Notes
         -----
         **JIT-compatible**: yes — routes through
-        :meth:`predict_observables_jit` (Phase 4-B orchestrator).
+        :meth:`predict_observables_jit` (the JIT-safe orchestrator).
 
         **Velocity dispersion**: When ``sigma_v`` is in free params,
         applies line-of-sight broadening via Gaussian convolution at
@@ -4398,15 +4389,15 @@ class SEDModel:
         fixed_values : Mapping | None, optional
             Fixed parameter values. When provided, overrides
             ``self.spec.get_fixed_values()``. Used by :meth:`predict_observables_jit`
-            to thread per-galaxy fixed values as JIT runtime inputs (Phase 4-A).
+            to thread per-galaxy fixed values as JIT runtime inputs.
         ssp_data : Any | None, optional
             SSP grid. When provided, passed to components that need it as a
-            JIT runtime input instead of using closure capture (Phase 4-B).
+            JIT runtime input instead of using closure capture.
             Defaults to ``None``, which causes components to use their
             internal ``self.ssp_data``.
         template_data : Any | None, optional
             Nebular backend grids and weights. When provided, passed to
-            components as JIT runtime inputs instead of closure capture (Phase 4-C).
+            components as JIT runtime inputs instead of closure capture.
             Defaults to ``None``, which causes components to use their
             internal template data.
 
@@ -4433,7 +4424,7 @@ class SEDModel:
         from tengri.forward import build_components, run_components
         from tengri.protocols.component import ForwardState
 
-        # Phase 3d-5 (2026-05-20): cache the built chain on the model. Chain
+        # 2026-05-20: cache the built chain on the model. Chain
         # construction runs each component's ``precompute()``, which for the
         # stellar component with ``wave_precomp=True`` calls
         # ``preintegrate_grid`` — a numpy-level routine with Python ``float()``
@@ -4475,7 +4466,7 @@ class SEDModel:
         # convention so callers using ``predict_rest_sed`` and
         # ``predict_state`` can pass the same params dict.
         #
-        # Phase 4-A: ``fixed_values`` is an optional override. When provided
+        # ``fixed_values`` is an optional override. When provided
         # (typically from ``predict_observables_jit`` threading it as a
         # JIT runtime input), use it instead of ``self.spec.get_fixed_values()``.
         # That decouples per-galaxy fixed values from the closure so two
@@ -4485,9 +4476,9 @@ class SEDModel:
             fixed_values = self.spec.get_fixed_values()
         full_params = {**fixed_values, **params}
 
-        # Phase 4-B: thread ssp_data as JIT input. Defaults to None,
-        # which causes components to use their closure-captured self.ssp_data.
-        # Phase 4-C: thread template_data (nebular grids) as JIT input.
+        # Thread ssp_data and template_data (nebular grids) as JIT inputs.
+        # A None default makes components fall back to their
+        # closure-captured copies (self.ssp_data / internal templates).
         return run_components(
             chain, state0, full_params, ssp_data=ssp_data, template_data=template_data
         )
@@ -4519,9 +4510,8 @@ class SEDModel:
         :func:`jax.jit` for hot loops, or call
         :meth:`predict_observables_jit` for the pre-cached version.
 
-        **Phase 2 of forward-projection unification.** Synthesized per-model
-        at :meth:`__init__` from observation contents; missing channels
-        raise ``AttributeError`` on access.
+        Synthesized per-model at :meth:`__init__` from observation
+        contents; missing channels raise ``AttributeError`` on access.
         """
         if self.observation is None:
             raise ValueError(
@@ -4570,7 +4560,7 @@ class SEDModel:
         -----
         **JIT-compatible**: yes — this method IS the JIT entry point.
 
-        Phase 4-A (2026-05-20): ``self.spec.get_fixed_values()`` is now
+        2026-05-20: ``self.spec.get_fixed_values()`` is now
         passed as a JIT runtime input rather than closure-captured. Two
         SEDModels with the same structural config but different per-galaxy
         fixed values (e.g., ``redshift=Fixed(0.1)`` vs ``redshift=Fixed(0.5)``)
@@ -4587,12 +4577,12 @@ class SEDModel:
         predict_observables : un-JIT'd version (debug / one-shot).
         compile_signature : structural fingerprint controlling cache reuse.
 
-        Phase 4-B (2026-05-20): ``self.ssp_data`` is now passed as a JIT
+        2026-05-20: ``self.ssp_data`` is now passed as a JIT
         runtime input rather than closure-captured. The SSP grid becomes a
         ``Parameter`` op in the compiled HLO instead of a ``Constant`` op,
         reducing compile size and time.
 
-        Phase 4-C (2026-05-21): nebular backend grids and weights are now
+        2026-05-21: nebular backend grids and weights are now
         passed as JIT runtime inputs. Backend grids become ``Parameter`` ops
         instead of ``Constant`` ops, reducing compile size for Cue and CloudyGrid.
         """
@@ -4615,7 +4605,7 @@ class SEDModel:
         # Capture the model's per-instance LSF + wave_obs into the closure.
         # These are part of compile_signature when spectroscopy is configured,
         # so caching is safe across instances with identical structure.
-        # Phase 4-A: ``fixed_values`` is no longer closure-captured — it
+        # ``fixed_values`` is no longer closure-captured — it
         # comes through as a JIT runtime input from ``predict_observables_jit``.
         observation = self.observation
         sigma_v_getter = self._get_sigma_v_kms
@@ -4630,7 +4620,7 @@ class SEDModel:
             )
         )
         observables_type = self._Observables
-        # Phase 3d-5: route the photometry channel through the LUT projection
+        # Route the photometry channel through the LUT projection
         # when the model was built with ``approx=WavePrecomp(...)``. The
         # routing decision is closure-captured per-model and baked into
         # ``compile_signature`` (via the resolved ``approx`` config tuple),
@@ -4712,7 +4702,7 @@ class SEDModel:
         inputs instead of closure-captured, so they appear as JAX
         ``Parameter`` ops rather than baked-in HLO ``Constant`` ops.
 
-        **Nebular templates** (Phase 4-C): duck-typed on backend ``.grid``
+        **Nebular templates**: duck-typed on backend ``.grid``
         / ``.weights`` attributes (Cue, CloudyGrid, etc.).
 
         **Dust IR**: emission ports (Astrodust, PAHspec, Dale, …) self-load
@@ -4720,7 +4710,7 @@ class SEDModel:
         build-time energy-balance LUT and per-filter band response are threaded
         here (added below).
 
-        **AGN templates** (Phase 4-D-C): extracted from the
+        **AGN templates**: extracted from the
         AGNSEDComponent's cached state (SKIRTOR templates).
 
         Returns
@@ -4739,7 +4729,7 @@ class SEDModel:
 
         result = {}
 
-        # ── Nebular backend threading (Phase 4-C) ──
+        # ── Nebular backend threading ──
         for component in cached:
             if not isinstance(component, NebularSEDComponent):
                 continue
@@ -4762,7 +4752,7 @@ class SEDModel:
         # threading is needed here. The build-time energy-balance LUT and
         # per-filter band response below are the only dust-IR data threaded.
 
-        # ── AGN template threading (Phase 4-D-C) ──
+        # ── AGN template threading ──
         for component in cached:
             if not isinstance(component, AGNSEDComponent):
                 continue
@@ -5043,9 +5033,9 @@ class SEDModel:
             shock_component=getattr(self, "_shock_component", "combined"),
         )
 
-        # Phase 3b/3c: Eager precompute stellar photometry LUT when wave_precomp is enabled.
-        # Phase 3b: fixed-z LUT when redshift is Fixed.
-        # Phase 3c-1: free-z ztable when redshift is Free (Uniform prior).
+        # Eager-precompute the stellar photometry LUT when wave_precomp is
+        # enabled: a fixed-z LUT when redshift is Fixed, a free-z ztable
+        # when redshift is Free (Uniform prior).
         if (
             self._approx.get("wave_precomp")
             and self.observation is not None
@@ -5069,7 +5059,7 @@ class SEDModel:
                     )
                 )
 
-                # Determine redshift spec: fixed or free. Phase 3c-1 dispatch.
+                # Determine redshift spec: fixed or free.
                 try:
                     redshift_dist = self.spec.get_distribution("redshift")
                     is_fixed = redshift_dist.is_fixed
@@ -5085,10 +5075,10 @@ class SEDModel:
                 # spec — different per-galaxy ``Fixed(z)`` values then share
                 # the same compile.
                 if is_fixed and self._catalog_z_range is None:
-                    # Phase 3b: fixed-z LUT
+                    # Fixed-z LUT
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
-                    # Phase 3c-1: free-z ztable. User can override n_z / z_min /
+                    # Free-z ztable. User can override n_z / z_min /
                     # z_max via ``approx=WavePrecomp(...)``; otherwise pull from
                     # the redshift prior with 1 % padding and use n_z=100.
                     cfg = self._approx_config or WavePrecomp()
@@ -5121,7 +5111,7 @@ class SEDModel:
                 # Replace the stellar component with one carrying the precomputed state.
                 chain[0] = replace(stellar, _state=state)
 
-                # Phase 3c-3d-agn: AGN component also needs filter passbands
+                # The AGN component also needs filter passbands
                 # so its apply() can publish ``agn_phot_lnu_precomp``. Find the
                 # AGN component in the chain and re-precompute it with filters.
                 from tengri.components.agn.component import AGNSEDComponent
@@ -5137,7 +5127,7 @@ class SEDModel:
                         chain[idx] = replace(comp, _state=agn_state)
                         break
 
-                # Phase 3c-3d-neb: non-BakedIn nebular component caches
+                # The non-BakedIn nebular component caches
                 # filters too, for its filter-integrated precompute publish.
                 from tengri.components.nebular.component import NebularSEDComponent
 
@@ -5152,7 +5142,7 @@ class SEDModel:
                         chain[idx] = replace(comp, _state=neb_state)
                         break
 
-        # Phase 5: SpectrumPrecomp — pre-rebin the SSP grid to the spectrum
+        # SpectrumPrecomp — pre-rebin the SSP grid to the spectrum
         # pixel centers. Only the stellar component needs a build-time LUT;
         # downstream SEDModelComponents (dust / AGN / IGM / nebular continuum)
         # route through their ``_apply_spec_precomp`` branch at runtime once

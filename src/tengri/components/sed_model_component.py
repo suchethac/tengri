@@ -12,7 +12,7 @@ The base class auto-derives :class:`ParamDeclaration` and :class:`DerivedKey`
 tuples from these class-level declarations.
 
 Concrete adapters like :class:`tengri.components.radio.RadioSEDComponent`
-and :class:`tengri.components.igm.IGMSEDComponent` (Phase II-2 onward) follow
+and :class:`tengri.components.igm.IGMSEDComponent` follow
 this pattern. See :doc:`docs/dev/forward-model-architecture.md` §3.1 and
 :doc:`docs/dev/sed-model-components.md` for the full authoring guide.
 
@@ -583,7 +583,7 @@ class SEDModelComponent:
             sed_in = state.sed_intrinsic
 
         # LUT mode(s). A joint photometry+spectroscopy model publishes BOTH
-        # ``spec_eff_waves`` (Phase 5) and ``filter_eff_waves`` (WavePrecomp);
+        # ``spec_eff_waves`` (SpectrumPrecomp) and ``filter_eff_waves`` (WavePrecomp);
         # photometry- or spectroscopy-only models publish just one. Run every
         # LUT branch whose grid is present and UNION the published dicts, so a
         # single pass emits both ``*_spec_lnu_precomp`` and ``*_phot_lnu_precomp``
@@ -687,7 +687,7 @@ class SEDModelComponent:
         spec_eff_waves: jnp.ndarray,
         **inputs: Any,
     ) -> Mapping[str, jnp.ndarray]:
-        """Compute spectrum LUT at pixel centers (Phase 5).
+        """Compute spectrum LUT at pixel centers (SpectrumPrecomp).
 
         Called by :meth:`apply` when approx=SpectrumPrecomp() is active.
         Evaluates :meth:`predict` at spectrum pixel effective wavelengths

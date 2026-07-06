@@ -262,7 +262,7 @@ class DustAttenuationSEDComponent:
             bolometric_absorbed(state.sed_intrinsic, attenuated, nu, wave=state.wave)
         )  # erg/s
 
-        # Phase 3c-3c-ii: filter-level A(λ_eff) and A'(λ_eff) LUTs.
+        # Filter-level A(λ_eff) and A'(λ_eff) LUTs.
         # Published only when an upstream component (stellar) has put
         # ``filter_eff_waves`` into ``state.derived`` — i.e. only when
         # ``approx=WavePrecomp()`` is set on SEDModel.
@@ -299,7 +299,7 @@ class DustAttenuationSEDComponent:
             derived_overrides["dust_attenuation_precomp"] = a_lut
             derived_overrides["dust_attenuation_slope_precomp"] = a_slope_lut
 
-        # Phase 5 (SpectrumPrecomp): per-pixel transmission. A spectrum pixel
+        # SpectrumPrecomp: per-pixel transmission. A spectrum pixel
         # is a single wavelength, so T(λ_pix) = exp(-τ·k(λ_pix)) is exact —
         # no Taylor slope needed (contrast the filter branch above).
         spec_eff = state.derived.get("spec_eff_waves")

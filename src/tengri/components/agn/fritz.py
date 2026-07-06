@@ -476,7 +476,7 @@ def fritz_sed(*args, **kwargs):
     .. [1] O. Fritz et al., A&A, 470, 221 (2006).
     .. [2] M. Boquien et al., A&A, 622, A103 (2019).
     """
-    # Support Phase 4-D: allow template to be threaded as JIT runtime input
+    # Allow the template to be threaded as a JIT runtime input
     _template = kwargs.pop("_template", None)
     template_fn = _template if _template is not None else _load_fritz_default()
     return template_fn(*args, **kwargs)

@@ -4,7 +4,7 @@
 Centralizes the shims used to keep old import paths working while the API
 is reorganized toward the structure described in
 ``docs/dev/api_migration_v0.x.md``. Every entry here MUST have a matching
-row in that migration document (a CI check enforces this in Phase 6).
+row in that migration document.
 
 The two patterns provided:
 

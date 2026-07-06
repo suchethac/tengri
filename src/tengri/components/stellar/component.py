@@ -182,7 +182,7 @@ def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
     -----
     Pure JAX (no host-side branching or static indexing), so the correction is
     JIT/grad/vmap-safe even when the SSP grid is threaded as a *traced* argument
-    (the Phase-4b SSP-as-JIT-parameter path). The factor depends only on the SSP
+    (the SSP-as-JIT-parameter path). The factor depends only on the SSP
     age grid, never on a fitted parameter, so no gradient flows through it. The
     double ``where`` is the standard JAX safe-divide guard for the ``-inf`` edge
     of an ``age = 0`` template (avoids ``0/0`` in that unused entry).
@@ -401,7 +401,7 @@ class StellarSEDComponentState(SEDComponentState):
     name: str = "stellar"
     ssp_phot_lut: Any | None = None
     ssp_phot_ztable: Any | None = None
-    # Phase 5 (SpectrumPrecomp): SSP flux pre-rebinned to spectrum pixel
+    # SpectrumPrecomp: SSP flux pre-rebinned to spectrum pixel
     # centers in the galaxy rest frame. ``ssp_spec_lut`` is a
     # :class:`SpectroscopicPrecomputation` (fixed-z); ``ssp_spec_ztable``
     # is a :class:`SpectroscopicZTable` (free-z).
@@ -571,13 +571,13 @@ class StellarSEDComponent:
 
         Reads the ``wave_precomp`` / ``spectrum_precomp`` flags from
         ``approx``. For ``wave_precomp`` (with ``filters``), calls
-        :func:`precompute_photometry` (fixed-z, Phase 3b) or
-        :func:`precompute_photometry_ztable` (free-z, Phase 3c-1). For
+        :func:`precompute_photometry` (fixed-z) or
+        :func:`precompute_photometry_ztable` (free-z). For
         ``spectrum_precomp`` (with ``spec_wave_obs``), calls
         :func:`precompute_spectroscopy` (fixed-z) or
         :func:`precompute_spectroscopy_ztable` (free-z), pre-rebinning the
-        SSP grid to the spectrum pixel centers in the galaxy rest frame
-        (Phase 5). Otherwise returns an empty state marker.
+        SSP grid to the spectrum pixel centers in the galaxy rest frame.
+        Otherwise returns an empty state marker.
 
         Parameters
         ----------
@@ -590,7 +590,7 @@ class StellarSEDComponent:
             1-D arrays. The filter_wave is observed-frame.
         redshift_spec : dict[str, Any] | None
             Redshift specification for precomputation. If None or
-            mode="fixed", builds a fixed-z LUT (Phase 3b).
+            mode="fixed", builds a fixed-z LUT.
             - mode="fixed", value=float: builds LUT at that fixed z.
             - mode="free", z_min=float, z_max=float, n_z=int: builds
               ztable via precompute_photometry_ztable with the given grid.
@@ -605,7 +605,7 @@ class StellarSEDComponent:
 
         state = StellarSEDComponentState(name=self.name)
 
-        # Phase 5: SpectrumPrecomp — pre-rebin SSP to spectrum pixel centers.
+        # SpectrumPrecomp — pre-rebin SSP to spectrum pixel centers.
         # Part A (joint): build the spectrum LUT *alongside* the photometry LUT
         # below (not an early return) so a joint photometry+spectroscopy model
         # carries BOTH families in one state. ``_precompute_spectrum`` populates
@@ -618,7 +618,7 @@ class StellarSEDComponent:
                 ssp_spec_ztable=spec_state.ssp_spec_ztable,
             )
 
-        # Phase 3b/3c: photometry SSP×filter LUT. Requires filters + SSP grid.
+        # WavePrecomp: photometry SSP×filter LUT. Requires filters + SSP grid.
         if approx.get("wave_precomp") and filters is not None and self.ssp_data is not None:
             from tengri.observation.photometry import pad_filters
 
@@ -632,9 +632,9 @@ class StellarSEDComponent:
             fw_pad, ft_pad, _ = pad_filters(filter_list, filter_trans_list)
             state = _replace_state(state, phot_fw_padded=fw_pad, phot_ft_padded=ft_pad)
 
-            # Dispatch: fixed-z (Phase 3b) or free-z (Phase 3c-1)
+            # Dispatch: fixed-z LUT or free-z ztable
             if redshift_spec is None or redshift_spec.get("mode") == "fixed":
-                # Phase 3c-3a: build the fixed-z LUT at the source's z so the
+                # Build the fixed-z LUT at the source's z so the
                 # filter passband is correctly redshifted into the rest frame.
                 # Cosmology ``(1+z)/(4π·dl²)`` is applied in
                 # :meth:`Observation.predict_via_precomp`.
@@ -653,7 +653,7 @@ class StellarSEDComponent:
                 )
                 state = _replace_state(state, ssp_phot_lut=lut)
             else:  # mode == "free"
-                # Phase 3c-1 path: build ztable for free-z interpolation.
+                # Free-z path: build ztable for redshift interpolation.
                 from tengri.components.stellar.sps.precompute import (
                     precompute_photometry_ztable,
                 )
@@ -679,7 +679,7 @@ class StellarSEDComponent:
         spec_wave_obs: jnp.ndarray | None,
         redshift_spec: dict[str, Any] | None,
     ) -> StellarSEDComponentState:
-        """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()`` (Phase 5).
+        """Build the SSP×pixel LUT for ``approx=SpectrumPrecomp()``.
 
         Pre-rebins the SSP flux cube to the spectrum pixel centers in the
         galaxy rest frame. Unlike the photometric LUT, **no Taylor moment
@@ -744,7 +744,7 @@ class StellarSEDComponent:
             Receives ``sfh_*``, ``met_*``, ``chem_*`` keys plus the bare
             ``redshift`` from :data:`BARE_NAME_ALLOWLIST`.
         ssp_data : Any | None, optional
-            SSP data passed as a JIT runtime input (Phase 4-B threading).
+            SSP data passed as a JIT runtime input.
             When provided, uses this instead of ``self.ssp_data``. Enables
             SSP arrays to be ``Parameter`` ops in compiled code rather than
             ``Constant`` ops, reducing HLO size and compile time.
@@ -755,7 +755,7 @@ class StellarSEDComponent:
             New state with ``sed_intrinsic`` set and 13 derived keys
             published.
         """
-        # Phase 4-B: use ssp_data if threaded as JIT input, otherwise fall
+        # Use ssp_data if threaded as JIT input, otherwise fall
         # back to the closure (for non-JIT paths).
         ssp = ssp_data if ssp_data is not None else self.ssp_data
         if ssp is None:
@@ -1433,7 +1433,7 @@ class StellarSEDComponent:
             sed_intrinsic = sed_intrinsic_proj
             lnu_age = lnu_age_proj
 
-        # ── 12b. Stellar photometry LUT (Phase 3b) ─────────────────────
+        # ── 12b. Stellar photometry LUT (WavePrecomp) ──────────────────
         # When eager precomputation is enabled and the LUT is available,
         # compute stellar_phot_lnu_precomp and publish it to derived.
         derived_overrides = dict(
@@ -1467,7 +1467,7 @@ class StellarSEDComponent:
         )
 
         if self._state is not None and self._state.ssp_phot_lut is not None:
-            # Fixed-z path (Phase 3b) — LUT built at source's z in precompute()
+            # Fixed-z path — LUT built at source's z in precompute()
             ssp_phot = self._state.ssp_phot_lut.ssp_phot
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
@@ -1476,7 +1476,7 @@ class StellarSEDComponent:
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
-            # Phase 3c-3c-iv-a: age-resolved per-filter LUT for two-component
+            # Age-resolved per-filter LUT for two-component
             # dust attenuation. Marginalize over metallicity only; preserve
             # the age axis. Shape (n_age, n_filter). Sum over age == the
             # marginalized stellar_phot_lnu_precomp above.
@@ -1484,7 +1484,7 @@ class StellarSEDComponent:
                 total_mass * jnp.einsum("ma,maf->af", joint_weights, ssp_phot) * LSUN_ERG_PER_S
             )
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
-            # Phase 3c-3c: Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
+            # Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
                 stellar_phot_moment_precomp = (
@@ -1501,7 +1501,7 @@ class StellarSEDComponent:
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
                 )
-            # Phase 3c-3c-ii: publish filter pivot wavelengths so the dust LUT
+            # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
             derived_overrides["filter_eff_waves"] = jnp.asarray(
                 self._state.ssp_phot_lut.effective_wavelengths_rest
@@ -1511,7 +1511,7 @@ class StellarSEDComponent:
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
 
         elif self._state is not None and self._state.ssp_phot_ztable is not None:
-            # Free-z path (Phase 3c-1 + Phase 3c-3c-v) — smooth triweight
+            # Free-z path — smooth triweight
             # interp of the ztable at runtime z. Publishes the same derived
             # keys as the fixed-z path: stellar_phot_lnu_precomp,
             # stellar_phot_moment_precomp, stellar_phot_lnu_per_age_precomp,
@@ -1519,7 +1519,7 @@ class StellarSEDComponent:
             #
             # The original linear z-interp was O(h^2) and non-monotonic in
             # n_z at fixed test redshifts: doubling the grid can shift a
-            # test point into a less-favourable cell and raise the error.
+            # test point into a less-favorable cell and raise the error.
             # The triweight kernel (Hearin et al. 2023) is the canonical
             # smooth-grid interpolant used throughout tengri for SSP, CLOUDY,
             # and SKIRTOR grids — C²-continuous, kernel-supported on the
@@ -1541,7 +1541,7 @@ class StellarSEDComponent:
 
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
             ssp_phot_at_z = _interp(ztable.ssp_phot_table)
-            # Marginalized + age-resolved LUTs (Phase 3c-3c-iv-a parity).
+            # Marginalized + age-resolved LUTs (parity with the fixed-z path).
             stellar_phot_lnu_precomp_rest = (
                 total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
             )
@@ -1552,7 +1552,7 @@ class StellarSEDComponent:
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
-            # Phase 3c-3c-v: Taylor moment Ψ at runtime z. Interpolate the
+            # Taylor moment Ψ at runtime z. Interpolate the
             # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:
                 ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
@@ -1578,7 +1578,7 @@ class StellarSEDComponent:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
                 derived_overrides["phot_filter_trans_padded"] = self._state.phot_ft_padded
 
-        # ── 12c. Stellar spectrum LUT (Phase 5; SpectrumPrecomp) ────────
+        # ── 12c. Stellar spectrum LUT (SpectrumPrecomp) ─────────────────
         # Pre-rebinned SSP × pixel LUT: the continuum at the spectrum pixel
         # centers in the galaxy rest frame. Publishes:
         #   - ``stellar_spec_lnu_precomp`` (n_pix,) — rest-frame Lν [erg/s/Hz]

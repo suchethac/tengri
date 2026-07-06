@@ -51,7 +51,7 @@ from tengri.components.agn.blocks import (
 )
 from tengri.components.agn.blr import compute_blr_sed
 
-# SEDModelComponent adapters (Phase II-4)
+# SEDModelComponent adapters
 from tengri.components.agn.cat3d_torus_model import CAT3DTorus
 from tengri.components.agn.cat3d_wind import (
     cat3d_wind_analytic,
