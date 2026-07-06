@@ -51,6 +51,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # ── Priors (parameters/) ─────────────────────────────────────
         "Fixed",
         "Gaussian",
+        "Laplace",
         "LogNormal",
         "LogUniform",
         "StudentT",
