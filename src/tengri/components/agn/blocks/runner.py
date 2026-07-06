@@ -477,10 +477,15 @@ agn_torus_block, agn_attenuation_block : str
     _agn_fracAGN = jnp.asarray(params.get("agn_fracAGN", 0.0))
     _disc_R = None
     _disc_incl = None
-    # ``agn_norm`` policy (#556): "cigale_joint" ties disc/torus/polar to the
-    # single agn_power reference (only meaningful for the SKIRTOR torus, whose
-    # template ratios define R); "independent" keeps the legacy per-component
-    # scaling. Static string (JIT-safe Python branch).
+    # ``agn_norm`` policy: "cigale_joint" (current default) ties disc/torus/
+    # polar to the single agn_power reference (only meaningful for the SKIRTOR
+    # torus, whose template ratios define R, #556); "conserving" debits the disc
+    # by the reprocessed fraction so disc(1-f)+torus(f) conserves L_bol for ALL
+    # tori (the energy-ledger debit below) — opt-in for now; it becomes the
+    # default once the CIGALE reproduction + recipes pin cigale_joint explicitly
+    # (Phase 2), so flipping it here would silently change the CIGALE §9 parity;
+    # "independent" keeps the legacy per-component scaling. Static string
+    # (JIT-safe Python branch).
     _agn_norm = params.get("agn_norm", "cigale_joint")
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
         _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
@@ -521,7 +526,27 @@ agn_torus_block, agn_attenuation_block : str
 
     # Compute lambda*L_lambda(5100Å) for downstream block normalizations.
     # L_lambda is on the user's wave grid; jnp.interp pulls the value at 5100Å.
+    # NOTE: computed from the *intrinsic* disc (before the conserving debit
+    # below), so line/FeII EW anchors stay tied to the accretion luminosity.
     l5100_disc = jnp.interp(5100.0, wave, L_lambda_disc) * 5100.0
+
+    # ── Energy ledger (agn_norm="conserving", the default) ───────────────
+    # The disc carries the intrinsic L_bol; the torus reprocesses a fraction of
+    # it. Debit the observed disc by (1 - agn_torus_frac) so that
+    # disc(1-f) + torus(f) conserves L_bol for every torus — reproducing the
+    # monolithic models (e.g. silva04_agn passes agn_frac=1-agn_torus_frac to
+    # the disc). The torus block already normalizes its output to
+    # agn_torus_frac * L_bol, so only the disc side changes.
+    #
+    # Self-contained tori (``none``, ``qsogen``, ``grahsp``) bundle disc+torus
+    # in one self-normalized template and bypass the ledger — no debit. This
+    # also covers the disc-only (``torus="none"``) case: with no reprocessor,
+    # the disc keeps its full L_bol. Static Python branch on the policy string
+    # + torus name (JIT-safe). The cigale_joint disc/agn_power tie is a distinct
+    # branch and never co-fires with this one.
+    if _agn_norm == "conserving" and agn_torus_block not in _SELF_CONTAINED_TORI:
+        _cons_torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
+        L_lambda_disc = L_lambda_disc * (1.0 - _cons_torus_frac)
 
     # Stage 2a: narrow-line region.
     nlr_fn = resolve_agn_block("nlr", agn_nlr_block)

@@ -4,7 +4,7 @@
 
 **Goal:** Make the composable AGN runner energy-conserving by default — the disc's `L_bol` is debited by the reprocessed fractions so `disc(1−Σf) + Σ reprocessor(f)` conserves `L_bol`, reproducing the monolithic models and fixing the #916 root cause.
 
-**Architecture:** Add an `agn_norm="conserving"` policy (new default) to `compose_l_nu` in `blocks/runner.py`. Under it, the runner debits the disc `L_λ` by `(1 − agn_torus_frac)` before summing. Torus blocks already normalize to `agn_torus_frac·L_bol`, so only the disc side changes. The change is a single branchless multiply gated on a static policy string (JIT-safe).
+**Architecture:** Add an `agn_norm="conserving"` **opt-in** policy to `compose_l_nu` in `blocks/runner.py`. Under it, the runner debits the disc `L_λ` by `(1 − agn_torus_frac)` before summing (skipping self-contained tori `none`/`qsogen`/`grahsp`). Torus blocks already normalize to `agn_torus_frac·L_bol`, so only the disc side changes. The change is a single branchless multiply gated on the static policy string + torus name (JIT-safe). **The default stays `cigale_joint` in Phase 1** — flipping it lands in Phase 2 with the CIGALE-reproduction update + recipes (the reproduction relies on the cigale_joint default).
 
 **Tech Stack:** JAX (pure functions, `jnp`, JIT), pytest, chex.
 
@@ -97,20 +97,20 @@ In `compose_l_nu`, the policy is read as `_agn_norm = params.get("agn_norm", "ci
     # models (e.g. silva04_agn passes agn_frac=1-agn_torus_frac to the disc).
     # Static Python branch on the policy string (JIT-safe); the torus block
     # already normalizes its output to agn_torus_frac * L_bol.
-    if _agn_norm == "conserving":
-        _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
-        L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
+    if _agn_norm == "conserving" and agn_torus_block not in _SELF_CONTAINED_TORI:
+        _cons_torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
+        L_lambda_disc = L_lambda_disc * (1.0 - _cons_torus_frac)
 ```
 
-And change the policy default read (~L484) from:
+Self-contained tori (`_SELF_CONTAINED_TORI = {"none", "qsogen", "grahsp"}`,
+runner.py:78) bundle disc+torus self-normalized and bypass the debit; `none`
+also covers disc-only configs (no reprocessor → no debit).
 
-```python
-    _agn_norm = params.get("agn_norm", "cigale_joint")
-```
-to:
-```python
-    _agn_norm = params.get("agn_norm", "conserving")
-```
+**Do NOT flip the default in Phase 1.** Keep `_agn_norm = params.get("agn_norm",
+"cigale_joint")`. `conserving` is opt-in — the tests and the Phase-4 retirement
+presets pin it explicitly. Flipping the default would silently change the CIGALE
+§9 reproduction (which relies on the `cigale_joint` default); that flip lands in
+Phase 2 alongside the reproduction update + recipes.
 
 - [ ] **Step 2: Run the conservation test to verify it passes**
 
