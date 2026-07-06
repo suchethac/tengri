@@ -57,27 +57,34 @@ import jax.numpy as jnp
 from jax import vmap
 
 from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_profile
+from tengri.components.nebular._constants import _LOG10_ZSUN
 from tengri.components.nebular.agn_nebular import (
     FeltreNLRBackend,
     SynthesizerBLRBackend,
     SynthesizerNLRBackend,
     _log_qh_from_lacc,
+    agn_nlr_cue,
 )
 from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG_S
 
 __all__ = [
     "compute_blr_sed_synthesizer",
+    "compute_nlr_sed_cue",
     "compute_nlr_sed_feltre",
     "compute_nlr_sed_synthesizer",
+    "get_cue_agn_backend",
     "get_feltre_backend",
     "get_synthesizer_blr_backend",
     "get_synthesizer_nlr_backend",
 ]
 
+#: Default location of the Cue emulator weights (built by the user; data-gated).
+_DEFAULT_CUE_WEIGHTS_PATH = "data/cue_weights.npz"
 
 _FELTRE_BACKEND: FeltreNLRBackend | None = None
 _SYNTHESIZER_BACKEND: SynthesizerNLRBackend | None = None
 _SYNTHESIZER_BLR_BACKEND: SynthesizerBLRBackend | None = None
+_CUE_AGN_BACKEND = None  # lazy CueBackend for the AGN-ionized NLR block
 
 
 def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
@@ -288,6 +295,122 @@ def compute_nlr_sed_feltre(
     )
 
     # Backend returns L_sun; convert to erg/s for downstream consumers.
+    line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S
+    return _lines_to_lnu(
+        wavelength,
+        jnp.asarray(line_wave_aa),
+        line_lum_erg,
+        fwhm_kms,
+    )
+
+
+def get_cue_agn_backend(weights_path: str | None = None):
+    """Lazy singleton accessor for the Cue emulator (AGN-ionized NLR).
+
+    Loading the ``cue_weights.npz`` neural-net weights is the slow step; the
+    backend is cached for the process. No SSP data is threaded — the AGN NLR is
+    driven by the disc ionizing spectrum, not a stellar population.
+
+    Parameters
+    ----------
+    weights_path : str or None, optional
+        Path to ``cue_weights.npz``. ``None`` uses
+        :data:`_DEFAULT_CUE_WEIGHTS_PATH`.
+
+    Returns
+    -------
+    CueBackend
+        Initialized Cue emulator, ready for ``agn_nlr_cue`` calls.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the weights file does not exist at the resolved path.
+    """
+    global _CUE_AGN_BACKEND
+    if weights_path is not None or _CUE_AGN_BACKEND is None:
+        from tengri.components.nebular.cue import CueBackend
+
+        _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
+    return _CUE_AGN_BACKEND
+
+
+def compute_nlr_sed_cue(
+    wavelength: jnp.ndarray,
+    l_disc_bol_erg: float,
+    covering_fraction: float = 0.1,
+    fwhm_kms: float = 500.0,
+    alpha_pl: float = -1.7,
+    neb_logU: float = -2.0,
+    neb_logn: float = 3.0,
+    neb_logZ_gas: float = -1.8477,
+    weights_path: str | None = None,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Cue-emulator AGN-ionized NLR adapter (the disc → Cue → NLR pipeline).
+
+    The disc's power-law ionizing continuum (:math:`f_\nu \propto \nu^{\alpha}`)
+    sets :math:`Q_{\rm H}` from :math:`L_{\rm acc}`, and the Cue neural-network
+    emulator (Li+2025) predicts AGN-ionized narrow lines from the ionizing
+    spectrum shape and gas parameters — the BEAGLE-style physical NLR, but with
+    Cue's fast differentiable emulator in place of a tabulated CLOUDY grid. Lines
+    are Gaussian-broadened at ``fwhm_kms``. Output is :math:`L_\nu` [erg/s/Hz].
+
+    Parameters
+    ----------
+    wavelength : array, shape (n_wave,)
+        Rest-frame wavelength grid [Å].
+    l_disc_bol_erg : float
+        AGN disc bolometric luminosity [erg/s]; drives :math:`Q_{\rm H}`.
+    covering_fraction : float, optional
+        NLR covering factor; scales the emergent line luminosity. Default 0.1.
+    fwhm_kms : float, optional
+        NLR line FWHM [km/s]. Default 500.
+    alpha_pl : float, optional
+        AGN EUV ionizing power-law slope. Default −1.7.
+    neb_logU : float, optional
+        :math:`\log_{10}(U)` gas ionization parameter. Default −2.0.
+    neb_logn : float, optional
+        :math:`\log_{10}(n_H/\mathrm{cm}^{-3})` gas density. Default 3.0.
+    neb_logZ_gas : float, optional
+        :math:`\log_{10}(Z_{\rm gas})` **absolute** gas metallicity (same
+        convention as the Feltre block). Converted to Cue's native
+        :math:`\log_{10}(Z/Z_\odot)` internally via ``_LOG10_ZSUN``. Default
+        −1.8477 = solar.
+    weights_path : str or None, optional
+        Path to ``cue_weights.npz``. ``None`` uses the package default.
+    **_kwargs
+        Accepted for signature compatibility; ignored.
+
+    Returns
+    -------
+    array, shape (n_wave,)
+        Spectral luminosity density :math:`L_\nu` [erg/s/Hz].
+
+    Notes
+    -----
+    **Not JIT-compatible at the closure level**: backend init loads the weights.
+    The numerical core (``agn_nlr_cue`` emulator call + Gaussian convolution) is
+    JIT-safe — call it inside a wrapping ``jax.jit`` with the backend held as a
+    Python closure.
+
+    References
+    ----------
+    .. [1] M. Li et al., ApJ 986, 9 (2025). arXiv:2405.04598.
+    """
+    backend = get_cue_agn_backend(weights_path)
+    # agn_nlr_cue takes Cue's native log10(Z/Zsun); the block axis is absolute.
+    gas_logz_rel = neb_logZ_gas - _LOG10_ZSUN
+    line_wave_aa, line_lum_lsun = agn_nlr_cue(
+        backend,
+        l_acc_erg=l_disc_bol_erg,
+        covering_fraction=covering_fraction,
+        neb_logU=neb_logU,
+        gas_logn=neb_logn,
+        gas_logz=gas_logz_rel,
+        alpha_pl=alpha_pl,
+    )
+    # agn_nlr_cue already scales lines by covering_fraction; convert L_sun→erg/s.
     line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S
     return _lines_to_lnu(
         wavelength,

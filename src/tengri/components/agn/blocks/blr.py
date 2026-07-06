@@ -145,8 +145,8 @@ def blr_synthesizer_block(
     agn_blr_cf: float = 0.1,
     agn_blr_fwhm_kms: float = 5000.0,
     agn_blr_f_bol: float = DEFAULT_F_BOL_5100,
-    neb_logU: float = -1.0,
-    neb_logZ_gas: float = -1.8477,
+    agn_blr_logU: float = -1.0,
+    agn_blr_logZ: float = -1.8477,
     **_params,
 ) -> Array:
     r"""BLR lines from the Synthesizer Cloudy grid (grid-backed blr block).
@@ -154,6 +154,11 @@ def blr_synthesizer_block(
     Broad-line sibling of :func:`nlr_synthesizer_block`, routing to
     :func:`compute_blr_sed_synthesizer` (default FWHM 5000 km/s). Grid path is
     resolved the same way. See that function's Notes for the JIT caveat.
+
+    The photoionization axes are named ``agn_blr_logU/logZ`` (not the galaxy
+    ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
+    and are drivable through ``SEDModel.build`` (#931); they translate to the
+    grid's ``neb_*`` axes internally.
 
     Parameters
     ----------
@@ -165,7 +170,7 @@ def blr_synthesizer_block(
             :math:`\lambda L_\lambda(5100\,\mathrm{\AA})` of the disc [erg/s].
     agn_blr_cf, agn_blr_fwhm_kms, agn_blr_f_bol : float
             Covering fraction, broad-line FWHM [km/s], and bolometric correction.
-    neb_logU, neb_logZ_gas : float
+    agn_blr_logU, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter.
 
     Returns
@@ -182,8 +187,8 @@ def blr_synthesizer_block(
         covering_fraction=agn_blr_cf,
         fwhm_kms=agn_blr_fwhm_kms,
         grid_path=_resolve_synthesizer_grid("blr"),
-        neb_logU=neb_logU,
-        neb_logZ_gas=neb_logZ_gas,
+        neb_logU=agn_blr_logU,
+        neb_logZ_gas=agn_blr_logZ,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -201,9 +206,9 @@ def blr_synthesizer_spectra_block(
     l5100_disc: Array,
     *,
     agn_blr_cf: float = 0.1,
-    neb_logU: float = -1.0,
-    neb_logn: float = 4.0,
-    neb_logZ_gas: float = -2.0,
+    agn_blr_logU: float = -1.0,
+    agn_blr_logn: float = 4.0,
+    agn_blr_logZ: float = -2.0,
     **_params,
 ) -> Array:
     r"""BLR reprocessed nebular spectrum reproducing Synthesizer's UnifiedAGN.
@@ -213,6 +218,11 @@ def blr_synthesizer_spectra_block(
     isotropically (grid ``cosine_inclination=0.5``), so this is returned on the
     isotropic channel to reproduce ``UnifiedAGN``'s ``blr`` component (issue #694)
     — the physically Type-2-obscured BLR is the ``blr``/``blr_synthesizer`` path.
+
+    The photoionization axes are named ``agn_blr_logU/logn/logZ`` (not the galaxy
+    ``neb_*`` names) so they survive the AGN component's ``agn_``-prefix filter
+    and are drivable through ``SEDModel.build`` (#931); they translate to the
+    grid's ``neb_*`` axes internally.
 
     Parameters
     ----------
@@ -224,7 +234,7 @@ def blr_synthesizer_spectra_block(
             Ignored (bolometric is taken from ``agn_log_lbol``).
     agn_blr_cf : float
             BLR covering fraction.
-    neb_logU, neb_logn, neb_logZ_gas : float
+    agn_blr_logU, agn_blr_logn, agn_blr_logZ : float
             Photoionization knobs forwarded to the grid adapter (log Z absolute).
 
     Returns
@@ -240,9 +250,9 @@ def blr_synthesizer_spectra_block(
         l_disc_bol_erg=l_bol_erg,
         covering_fraction=agn_blr_cf,
         grid_path=_resolve_synthesizer_grid("blr"),
-        neb_logU=neb_logU,
-        neb_logn=neb_logn,
-        neb_logZ_gas=neb_logZ_gas,
+        neb_logU=agn_blr_logU,
+        neb_logn=agn_blr_logn,
+        neb_logZ_gas=agn_blr_logZ,
         region="blr",
     )
     L_lambda = L_nu * _C_AA_PER_S / wave_aa**2
