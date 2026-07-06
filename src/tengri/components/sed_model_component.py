@@ -209,6 +209,14 @@ class SEDModelComponent:
         falls back to :meth:`predict`; subclasses with direct photometric
         paths should override for specialized LUT generation.
 
+    Vocabulary: **precompute** (verb) names build-time work — the
+    :meth:`precompute` hook and the ``*_precompute.py`` modules run once
+    at construction. **precomp** (noun) names the resulting LUT path and
+    its artifacts — ``predict_precomp`` / ``_apply_precomp`` here, the
+    published ``<name>_phot_lnu_precomp`` state keys, and
+    ``observation.predict_via_precomp``. The two spellings are
+    deliberate, not drift.
+
     Raises
     ------
     ValueError

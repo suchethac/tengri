@@ -3,12 +3,16 @@
 
 Merges the SFH and SSP sub-modules into a single ``SEDComponent``.
 
-Currently supported models:
+Model selection (see :class:`StellarSEDComponentConfig`):
 
-- ``sfh_model="tsnorm"`` (truncated skew-normal SFH, no GP field)
-- ``metallicity_model="delta"`` (single ``met_logzsol`` scalar)
-- ``sps_backend="dsps"`` (DSPS native CSP integration)
-- ``field=False``
+- ``sfh_model`` — any name in ``SFH_REGISTRY`` (``tsnorm``, ``dpl``,
+  ``dense_basis``, …); validated at construction.
+- ``metallicity_model`` — any name in ``MET_REGISTRY`` (``delta``,
+  ``bins``, ``table``, …); validated at construction.
+- ``field=True`` adds the stochastic GP-field parameters on top of the
+  chosen mean SFH.
+- ``sps_backend="dsps"`` (DSPS native CSP integration) is the only
+  backend.
 
 The component publishes derived quantities (stellar mass, SFR history, etc.)
 in ``state.derived`` that downstream components (dust, nebular, radio, X-ray)
@@ -17,8 +21,6 @@ read to compute their own emission.
 Architectural note: the SSP grid is held on the component instance
 (constructor field) and treated as a fixed input baked in at construction time,
 not an output of a separate precompute step.
-
-See ``docs/dev/20260404-refactor.md`` for the migration plan.
 """
 
 from __future__ import annotations

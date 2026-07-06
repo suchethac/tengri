@@ -12,6 +12,31 @@ Usage:
     result_map = fitter.run("map", n_steps=1500)
     result_rts = fitter.run("raytrace", init_from=result_map)
     result_nuts = fitter.run("nuts", init_from=result_map, n_warmup=500)
+
+Navigation
+----------
+This file stays one module by design; use the ``# ── <section> ──``
+marker lines to jump. In order:
+
+- ``Method name validation`` — ``resolve_method`` (alias → canonical),
+  legacy-SEDModel nudge, batched-data auto-extraction
+- ``Fitter`` class (the bulk of the file):
+
+  - ``Construction`` — ``__init__`` (data validation, likelihood
+    auto-build, emission lines, compile-cache setup)
+  - ``Compilation`` — ``compile_signature``, the JIT-engine cache,
+    background compilation
+  - ``Loss and likelihood builders``
+  - ``Parameter transforms``
+  - ``AOT pre-warm and adaptation persistence``
+  - ``Inference dispatch`` — ``run()`` routing into
+    ``inference/backends/`` via the backend registry
+  - ``Private method runners``
+  - ``Posterior sampling``
+  - ``Batch``
+
+- ``Backend Registry Initialization`` — imports that populate the
+  registry at module load
 """
 
 from __future__ import annotations

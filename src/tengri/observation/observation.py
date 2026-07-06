@@ -622,13 +622,14 @@ class Observation:
         :meth:`observe_photometry` and :meth:`observe_spectrum`.
 
         Joint observations (``is_joint``) return both keys from a single
-        forward pass — Phase 2 of the unification plan will collapse
-        ``loss_functions._build_prediction``'s two-call joint branch
-        onto this single call.
+        forward pass. ``loss_functions._build_prediction`` still makes
+        two separate calls for joint fits; collapsing that branch onto
+        this single call is an open consolidation.
 
         When ``observables_type`` is provided and the observation has
         ``line_fluxes`` or ``spectral_indices`` configured, raises
-        ``NotImplementedError`` — Phase 3+ territory.
+        ``NotImplementedError`` — those channels are not routed through
+        this entry point yet.
         """
         from tengri.cosmology import luminosity_distance
         from tengri.observation.photometry import compute_flux_density_batch

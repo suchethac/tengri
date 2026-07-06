@@ -1,14 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Core SED computation pipeline.
+"""Stellar SED interpolation kernels used by :class:`~tengri.SEDModel`.
 
-This module implements the forward model engine that translates
-physical parameters into rest-frame SEDs. It handles SFH dispatch,
-metallicity interpolation, dust attenuation, nebular emission,
-AGN contribution, dust emission, and IGM absorption.
+Computational annex of ``forward/sed_model.py`` (its only importer):
+SSP grid interpolation, metallicity weighting, and CSP assembly helpers
+that translate an SFH into a rest-frame stellar SED.
 
-All functions take a ``model`` argument (the :class:`~tengri.model.Model`
-instance) instead of ``self``, allowing the heavy computation to live
-outside the class while preserving access to model state.
+Not the component chain — the driver that threads ``ForwardState``
+through the ordered physics components (dust, nebular, AGN, IGM, …)
+lives in :mod:`tengri.forward.orchestrator`.
+
+All functions take a ``model`` argument (the
+:class:`~tengri.forward.sed_model.SEDModel` instance) instead of
+``self``, allowing the heavy computation to live outside the class
+while preserving access to model state.
 """
 
 from __future__ import annotations
