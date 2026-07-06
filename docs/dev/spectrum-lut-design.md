@@ -195,7 +195,7 @@ than the full rest-frame grid.
 | `src/tengri/observation/predict_via_precomp.py`     | Consume `<name>_spec_lnu_precomp` and produce `spec_fnu` |
 | `tests/contract/test_spectrum_lut.py`               | NEW: exact-vs-LUT agreement + gradient parity            |
 | `bench/scripts/benchmark_forward_model.py`          | Extend to time spectroscopy under all approx modes      |
-| `docs/dev/forward-model-architecture.md`            | Add §5.5 "Spectrum LUT" with the matrix of when it applies |
+| `docs/dev/archive/forward-model-architecture.md`            | Add §5.5 "Spectrum LUT" with the matrix of when it applies |
 
 ## Open design questions
 
@@ -213,6 +213,6 @@ than the full rest-frame grid.
 
 ## References
 
-* `docs/dev/forward-model-architecture.md` §5 (current WavePrecomp doc)
+* `docs/dev/archive/forward-model-architecture.md` §5 (current WavePrecomp doc)
 * Zacharegkas et al. 2025, arXiv:2506.19919
 * `src/tengri/components/sed_model_component.py:_apply_precomp` (the photometry-side base implementation to mirror)

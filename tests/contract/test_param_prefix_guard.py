@@ -64,7 +64,10 @@ class TestParamPrefixValidation:
     )
     def test_preset_compliance(self, preset_fn_name):
         """Test that all presets comply with parameter naming contract."""
+        from check_param_prefixes import collect_registered_params
+
+        registered = collect_registered_params()
         preset_fn = getattr(presets, preset_fn_name)
         params, _ = preset_fn()
-        violations = check_preset(preset_fn.__name__, params, None)
+        violations = check_preset(preset_fn.__name__, params, None, registered)
         assert len(violations) == 0, f"Preset '{preset_fn.__name__}' has violations: {violations}"

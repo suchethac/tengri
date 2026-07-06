@@ -2,6 +2,12 @@
 
 Files in this directory have been completed, superseded, or represent past design decisions. They are preserved for reference but should not guide new contributor decisions. Refer to the active docs in `docs/dev/` for current project state.
 
+## Archived Files (2026-07-06)
+
+### Superseded Design Docs (doc-truth sweep, cleanup PR-3)
+- `forward-model-architecture.md` — historical design conversation (2026-05-21) predating the ADR-0011/0019 dispatch migration. Superseded by `../model-construction.md` for the current account; kept for the architectural reasoning behind `ForwardModel`/sub-models/populations.
+- `photometry_path_unification.md` — Phases 1–3 of the `state → observation.predict() → Observables` unification shipped in PR #135 (self-marked superseded 2026-05); deferred follow-ups are tracked on the issue board, not here.
+
 ## Archived Files (2026-05-05)
 
 ### Refactor Plans (Completed Phases)

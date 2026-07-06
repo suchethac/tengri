@@ -91,10 +91,11 @@ class TestParameterValidation:
         from pathlib import Path
 
         sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-        import tengri
+        from check_param_prefixes import collect_registered_params
+
         import tengri.presets as presets
 
-        registered = set(tengri.list_parameters())
+        registered = collect_registered_params()
 
         # Check all presets
         all_failures = {}

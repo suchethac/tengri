@@ -146,7 +146,7 @@ First public preview release.
 - **`tengri.ForwardModel`** — the outer-shell forward-model class.
   Wraps populations + observation and exposes a single
   `.predict(params)` method. See
-  `docs/dev/forward-model-architecture.md`.
+  `docs/dev/archive/forward-model-architecture.md`.
 - **`tengri.Population`** — one (SED, spatial) pair held by
   `ForwardModel`. Spatial submodel is reserved (`None`) in this
   slice.

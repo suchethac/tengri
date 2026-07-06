@@ -573,6 +573,10 @@ agn_torus_block, agn_attenuation_block : str
     _conserve_via_debit = agn_torus_block not in _SELF_CONTAINED_TORI and (
         _agn_norm == "conserving" or (_agn_norm == "cigale_joint" and agn_torus_block != "skirtor")
     )
+    # Intrinsic (pre-reprocessor) disc shape, captured before any debit so the
+    # line-energy debit below (#929) can subtract exactly the integrated line
+    # energy additively with the torus debit.
+    _disc_intrinsic = L_lambda_disc
     if _conserve_via_debit:
         L_lambda_disc = L_lambda_disc * (1.0 - _torus_frac)
 
@@ -610,6 +614,24 @@ agn_torus_block, agn_attenuation_block : str
         templates=grahsp_templates,
         **params,
     )
+
+    # Line-energy debit (#929, the Sigma-f ledger). The NLR/BLR/FeII lines are
+    # reprocessed disc photons, so under the *conserving* ledger they must be
+    # debited from the disc, not stacked on a full-luminosity disc (which
+    # inflates the total above L_bol). Subtract exactly the integrated line
+    # energy, shaped as the intrinsic disc — additive with the torus debit
+    # (disc -> 1 - f_torus - f_lines), matching Synthesizer's covering-fraction
+    # dimming. Scoped to "conserving": cigale_joint follows CIGALE (nebular added
+    # separately, allocation-conserving) and independent keeps each component on
+    # its own luminosity scale. Excludes only the self-normalized bundled
+    # templates (grahsp/qsogen carry disc+torus+lines in one template) — NOT
+    # ``torus="none"``, whose disc and lines are still real ledger emission.
+    # E_disc guards a zero/near-zero disc (e.g. agn_disc_block="none") so the
+    # ratio never blows up.
+    if _agn_norm == "conserving" and agn_torus_block not in ("grahsp", "qsogen"):
+        _e_lines = jnp.trapezoid(L_lambda_lines_aniso + L_lambda_lines_iso + L_lambda_feii, wave)
+        _e_disc = jnp.maximum(jnp.trapezoid(_disc_intrinsic, wave), 1e-30)
+        L_lambda_disc = L_lambda_disc - (_e_lines / _e_disc) * _disc_intrinsic
 
     # Stage 4: IR torus.
     torus_fn = resolve_agn_block("torus", agn_torus_block)

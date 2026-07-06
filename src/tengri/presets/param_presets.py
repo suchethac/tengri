@@ -1,10 +1,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Vetted factory functions for common galaxy types.
+"""Vetted factory functions for common galaxy types (legacy expert surface).
 
 This module provides preset Parameter + SEDModelConfig tuples for typical galaxy
 populations, avoiding the 10-line setup ritual. Each preset is a callable that
 returns a fully-configured (Parameters, SEDModelConfig) pair ready for forward
-modeling or inference.
+modeling or inference. It is the surface consumed by :class:`tengri.Galaxy`
+(``Galaxy.from_arrays(preset=...)``) via :func:`resolve_preset`.
+
+For new code prefer the nested-dict grammar recipes in :mod:`tengri.recipes`
+(``SEDModel.build(**recipes.high_z())``) — the ``high_z`` and ``photoz``
+recipes are grammar ports of the presets here.
+
+.. note::
+    Relocated from the former top-level ``tengri/presets.py`` module (2026-07),
+    which had been silently shadowed — and made unreachable — by this
+    ``tengri.presets`` package since the package landed.
 
 Usage
 -----
@@ -39,19 +49,25 @@ from tengri.config.settings import (
 )
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
+from tengri.presets._registry import register_preset
 
 __all__ = [
     "agn_host",
     "describe",
     "high_z",
     "jwst_spec",
-    "list_presets",
     "photoz",
     "quiescent",
+    "resolve_preset",
     "starforming",
 ]
 
 
+@register_preset(
+    "starforming",
+    short_doc="Main-sequence star-forming galaxies (z ~ 0-3), Calzetti+CF00 dust",
+    citations=["Calzetti_2000", "Charlot_2000"],
+)
 def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """Star-forming galaxy preset (main sequence, z ~ 0–3).
 
@@ -129,6 +145,11 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
     return params, config
 
 
+@register_preset(
+    "quiescent",
+    short_doc="Quiescent/red galaxies (z ~ 0-2), minimal power-law dust",
+    citations=["Charlot_2000"],
+)
 def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """Quiescent / early-type galaxy preset (z ~ 0–2).
 
@@ -202,6 +223,11 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     return params, config
 
 
+@register_preset(
+    "high_z",
+    short_doc="Young bursty galaxies at z > 3.5, tsnorm SFH + strong nebular",
+    citations=["Calzetti_2000", "Charlot_2000"],
+)
 def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """High-redshift galaxy preset (z > 4, young starburst).
 
@@ -278,6 +304,11 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     return params, config
 
 
+@register_preset(
+    "photoz",
+    short_doc="Photometric-redshift surveys: wide free z, uninformative SFH/dust",
+    citations=["Calzetti_2000", "Charlot_2000"],
+)
 def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """Photometric-redshift galaxy preset (redshift-unconstrained survey).
 
@@ -352,6 +383,11 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     return params, config
 
 
+@register_preset(
+    "jwst_spec",
+    short_doc="JWST NIRSpec spectroscopy: known/constrained z, moderate-high dust",
+    citations=["Calzetti_2000", "Charlot_2000"],
+)
 def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """JWST NIRSpec spectroscopic fitting preset (known or constrained redshift).
 
@@ -430,6 +466,11 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
     return params, config
 
 
+@register_preset(
+    "agn_host",
+    short_doc="AGN host galaxies (Type 1/2): high dust, torus/NLR not included",
+    citations=["Calzetti_2000", "Charlot_2000"],
+)
 def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
     """AGN host galaxy preset (Type 1/2 AGN).
 
@@ -561,33 +602,14 @@ def resolve_preset(
     return params, config
 
 
-def list_presets() -> list[str]:
-    """Return a list of available preset names.
-
-    Returns
-    -------
-    list[str]
-        Sorted list of preset names: ``["high_z", "quiescent", "starforming"]``.
-
-    Notes
-    -----
-    **JIT-compatible**: no — returns Python list of strings.
-
-    Examples
-    --------
-    >>> presets.list_presets()
-    ['agn_host', 'high_z', 'jwst_spec', 'photoz', 'quiescent', 'starforming']
-    """
-    return sorted(PRESETS.keys())
-
-
 def describe(name: str) -> str:
     """Return a multi-line human description of a preset.
 
     Parameters
     ----------
     name : str
-        Preset name, one of ``list_presets()``.
+        Preset name, one of the keys of the package preset registry
+        (:func:`tengri.presets.list_presets`).
 
     Returns
     -------
@@ -681,5 +703,5 @@ Note: Torus/NLR modeled separately; future agn_unified preset will integrate the
     }
 
     if name not in descriptions:
-        raise ValueError(f"Unknown preset {name!r}. Choose from: {', '.join(list_presets())}")
+        raise ValueError(f"Unknown preset {name!r}. Choose from: {', '.join(sorted(PRESETS))}")
     return descriptions[name]
