@@ -2434,7 +2434,7 @@ class SEDModel:
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
         if self._uses_igm or self._uses_dla:
-            from tengri.forward.emission_helpers import igm_absorption
+            from tengri.components.igm.igm import igm_absorption
 
             # One flat dispatch: mean-IGM model (or 'none' when only a DLA is
             # requested) plus the optional DLA absorber. This is the same call

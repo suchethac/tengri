@@ -79,3 +79,25 @@ def test_igm_model_selection_is_honored(synthetic_ssp_wide, synthetic_tophat_obs
     assert not np.isclose(r_inoue, r_madau, rtol=1e-3), (
         f"igm_model ignored: inoue={r_inoue:.4f} == madau={r_madau:.4f}"
     )
+
+
+def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_tophat_obs):
+    """predict_obs_sed must accept the unified use_dla/dla_* dispatch.
+
+    Guards against the emission_helpers shim regression: predict_obs_sed calls
+    the flat igm_absorption with use_dla/dla_* kwargs, which a stale wrapper
+    copy did not accept — crashing every IGM-enabled call.
+    """
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp_wide,
+        observation=synthetic_tophat_obs,
+        sfh={"type": "dpl", "*": FREE},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+        redshift=Fixed(3.0),
+        apply_igm=True,
+        igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
+    )
+    params = model.spec.sample(jax.random.PRNGKey(1))
+    sed = np.asarray(model.predict_obs_sed(params).sed)
+    assert np.all(np.isfinite(sed)) and sed.shape[0] > 0
