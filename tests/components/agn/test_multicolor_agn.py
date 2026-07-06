@@ -38,17 +38,42 @@ class TestMulticolorAgn:
         chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_multicolor_agn(self):
-        """'multicolor_agn' appears in AGN_MODELS."""
-        from tengri.components.agn.unified import AGN_MODELS
+        """'multicolor_agn' resolves via resolve_agn_model."""
+        import warnings
 
-        assert "multicolor_agn" in AGN_MODELS
+        from tengri.components.agn.unified import resolve_agn_model
 
-    def test_kubota_done_alias_is_same_function(self):
-        """AGN_MODELS['kubota_done'] wraps the same function as multicolor_agn."""
-        from tengri.components.agn.unified import AGN_MODELS
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = resolve_agn_model("multicolor_agn")
+        assert callable(fn)
 
-        # kubota_done and multicolor_agn are registry entries; check they wrap same function
-        assert AGN_MODELS["kubota_done"] is AGN_MODELS["multicolor_agn"]
+    def test_kubota_done_alias_is_same_function(self, wavelength):
+        """kubota_done and multicolor_agn are distinct deprecated models.
+
+        Both names resolve to callables via resolve_agn_model.
+        NOTE: They are NOT equivalent — kubota_done uses disc=kubota_done (3-zone)
+        while multicolor_agn uses disc=multicolor (outer-only). See _AGN_PRESETS.
+        """
+        import warnings
+
+        from tengri.components.agn.unified import resolve_agn_model
+
+        # Suppress deprecation warnings for this test
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn_kubota = resolve_agn_model("kubota_done")
+            fn_multicolor = resolve_agn_model("multicolor_agn")
+
+        # Both must be callable and produce finite outputs
+        assert callable(fn_kubota)
+        assert callable(fn_multicolor)
+
+        sed_kubota = fn_kubota(wavelength, agn_log_lbol=44.0)
+        sed_multicolor = fn_multicolor(wavelength, agn_log_lbol=44.0)
+
+        chex.assert_tree_all_finite(sed_kubota)
+        chex.assert_tree_all_finite(sed_multicolor)
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""

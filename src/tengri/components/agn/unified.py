@@ -138,65 +138,14 @@ from tengri.components.agn.disc import (
     powerlaw_disc,
 )
 from tengri.components.agn.nlr import compute_nlr_sed
+from tengri.components.agn.reddening import redden_disc as _redden_disc
 from tengri.components.agn.silva04 import silva04_sed
 from tengri.components.agn.skirtor import _find_skirtor_grid, create_skirtor_from_grid
-from tengri.components.dust.attenuation import prevot_smc
 from tengri.components.radio.radio import radio_total
 from tengri.components.xray.xray import (
     _xray_agn_corona_bolometric as _xray_agn_corona_legacy,
 )
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
-
-
-def _redden_disc(
-    wavelength: jnp.ndarray,
-    l_disc: jnp.ndarray,
-    agn_ebv_disc: float,
-) -> jnp.ndarray:
-    r"""Apply Prévot SMC extinction to the disc SED.
-
-    The Prévot et al. 1984 SMC law with ``R_V = 2.72`` is the standard
-    AGN-disc obscuration prescription used by AGNfitter
-    (``BBBred_Prevot`` in ``MODEL_AGNfitter.py``).  When
-    ``agn_ebv_disc`` is 0.0 this is a no-op (returns the input unchanged).
-
-    Parameters
-    ----------
-    wavelength : ndarray, shape (n_wave,)
-        Rest-frame wavelength grid. [Å]
-    l_disc : ndarray, shape (n_wave,)
-        Unreddened disc SED. [erg/s/Hz]
-    agn_ebv_disc : float
-        Color excess :math:`E(B-V)` applied to the disc. [mag]
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Reddened disc SED. [erg/s/Hz]
-
-    Notes
-    -----
-    **JIT-compatible**: yes.
-
-    **Gradient-safe**: yes — ``prevot_smc`` uses a smooth sigmoid ramp
-    through the X-ray region.
-
-    Attenuation at V band:
-
-    .. math::
-
-        A(V) = R_V \cdot E(B-V), \qquad
-        L_{\rm red}(\lambda) = L(\lambda)\, 10^{-0.4\, k(\lambda)\, R_V\, E(B-V)}
-
-    where :math:`k(\lambda) = A(\lambda)/A(V)` follows tengri's
-    ``k(V) = 1`` dust-law convention. The :math:`R_V = 2.72` factor
-    converts ``agn_ebv_disc`` (the user-facing :math:`E(B-V)`) to
-    :math:`A(V)` before applying the wavelength-dependent
-    :math:`k(\lambda)` curve.
-    """
-    _R_V_PREVOT_SMC = 2.72  # Prevot+1984
-    k = prevot_smc(wavelength)
-    return l_disc * jnp.power(10.0, -0.4 * k * _R_V_PREVOT_SMC * agn_ebv_disc)
 
 
 @functools.cache
@@ -365,51 +314,156 @@ def register_agn_model(
 def resolve_agn_model(name: str) -> Callable:
     """Retrieve a registered AGN model by name.
 
+    All monolithic AGN models have been migrated to composable presets. This
+    function accepts old model names (with deprecation warning) and routes them
+    through the composable runner with the appropriate block selectors.
+
     Parameters
     ----------
     name : str
-        Model name (e.g., "simple", "standard", "multicolor_agn", "adaf").
+        Model name. Both old monolithic names (deprecated) and ``"composable"``
+        are supported.
 
     Returns
     -------
     callable
-        Model function: fn(wavelength, agn_log_lbol, **kwargs) -> L_nu [erg/s/Hz].
-
-    Raises
-    ------
-    ValueError
-        If name is not registered.
+        Either the composable runner (for new code) or a preset-routed wrapper
+        for deprecated names.
 
     Notes
     -----
     **JIT-compatible**: no — performs dictionary lookup at initialization time.
+    Old monolithic model names still work but emit DeprecationWarning.
     """
-    if name not in AGN_MODELS:
-        raise ValueError(f"Unknown AGN model '{name}'. Available: {list(AGN_MODELS.keys())}")
+    if name == "composable" or name not in _AGN_PRESETS:
+        # Direct return for composable or truly unknown names
+        if name == "composable":
+            return AGN_MODELS["composable"]
+        else:
+            raise ValueError(
+                f"Unknown AGN model '{name}'. Available: 'composable', "
+                f"or any of the deprecated monolithic names: {list(_AGN_PRESETS.keys())}"
+            )
 
-    # Emit deprecation warnings for deprecated monolithic models
-    _deprecation_map = {
-        "kubota_done": "disc=kubota_done + torus=silva04 (via composable grammar)",
-        "multicolor_agn": "disc=multicolor + torus=silva04 (via composable grammar)",
-        "kubota_done_full": "disc=kubota_done + torus=silva04 (via composable grammar)",
-        "silva04": "disc=powerlaw + torus=silva04 (via composable grammar)",
-        "cat3d_wind": "disc=powerlaw + torus=cat3d_wind (via composable grammar)",
-        "adaf": "disc=adaf + torus=silva04 (via composable grammar)",
-        "relagn": "disc=relagn + torus=silva04 (via composable grammar)",
-        "skirtor": "disc=skirtor + torus=skirtor (via composable grammar)",
-        "qsogen": "composable AGN blocks (qsogen disc, qsogen nlr, qsogen blr)",
-        "grahsp": "composable AGN blocks (grahsp disc, grahsp nlr, grahsp blr, grahsp feii)",
-        "unified_nlr_blr": "recipes.unified_agn()",
-    }
+    # Route deprecated monolithic names through composable with presets
+    _preset_args = ", ".join(
+        f"{k}={v}" for k, v in _AGN_PRESETS[name].items() if k != "_description"
+    )
+    warnings.warn(
+        f"AGN model '{name}' is deprecated. It routes through composable blocks: "
+        f"{_AGN_PRESETS[name]['_description']}. "
+        f"Update your code to use: agn_model='composable', {_preset_args}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
-    if name in _deprecation_map:
-        warnings.warn(
-            f"'{name}' is deprecated. Use '{_deprecation_map[name]}' instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+    # Return a wrapper that applies the preset
+    preset = _AGN_PRESETS[name]
 
-    return AGN_MODELS[name]
+    def preset_wrapper(wavelength, agn_log_lbol, **kwargs):
+        """Apply preset block selectors and route through composable runner."""
+        # Merge preset selectors with kwargs (kwargs override preset defaults)
+        preset_params = {k: v for k, v in preset.items() if k != "_description"}
+        preset_params.update(kwargs)
+        return AGN_MODELS["composable"](wavelength, agn_log_lbol, **preset_params)
+
+    return preset_wrapper
+
+
+# AGN_PRESETS: Maps deprecated monolithic model names to composable block recipes.
+# Each preset specifies block selectors + normalization policy to reproduce the
+# monolithic model behavior in the composable architecture.
+_AGN_PRESETS = {
+    "multicolor_agn": {
+        "agn_disc_block": "multicolor",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=multicolor + torus=silva04",
+    },
+    "kubota_done": {  # Kubota & Done 2018 3-zone disc (full model)
+        "agn_disc_block": "kubota_done",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=kubota_done + torus=silva04",
+    },
+    "kubota_done_full": {
+        "agn_disc_block": "kubota_done",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=kubota_done + torus=silva04",
+    },
+    "silva04": {
+        "agn_disc_block": "powerlaw",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=powerlaw + torus=silva04",
+    },
+    "cat3d_wind": {
+        "agn_disc_block": "powerlaw",
+        "agn_torus_block": "cat3d_wind",
+        "agn_norm": "independent",
+        "_description": "disc=powerlaw + torus=cat3d_wind",
+    },
+    "adaf": {
+        "agn_disc_block": "adaf",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=adaf + torus=silva04",
+    },
+    "relagn": {
+        "agn_disc_block": "relagn",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=relagn + torus=silva04",
+    },
+    "skirtor": {
+        "agn_disc_block": "skirtor",
+        "agn_torus_block": "skirtor",
+        "agn_norm": "cigale_joint",
+        "_description": "disc=skirtor + torus=skirtor",
+    },
+    "skirtor_stalevski": {
+        "agn_disc_block": "skirtor",
+        "agn_torus_block": "skirtor",
+        "agn_norm": "cigale_joint",
+        "_description": "disc=skirtor + torus=skirtor",
+    },
+    "qsogen": {
+        "agn_disc_block": "qsogen",
+        "agn_nlr_block": "none",
+        "agn_blr_block": "qsogen",
+        "agn_feii_block": "qsogen_balmer",
+        "agn_torus_block": "qsogen",
+        "agn_attenuation_block": "qsogen_smc",
+        "agn_norm": "independent",
+        "_description": (
+            "disc=qsogen + blr=qsogen + feii=qsogen_balmer + torus=qsogen + atten=qsogen_smc"
+        ),
+    },
+    "grahsp": {
+        "agn_disc_block": "grahsp_sbpl",
+        "agn_nlr_block": "grahsp",
+        "agn_blr_block": "grahsp",
+        "agn_feii_block": "grahsp",
+        "agn_torus_block": "grahsp",
+        "agn_attenuation_block": "grahsp_biatten",
+        "agn_norm": "independent",
+        "_description": "disc=grahsp_sbpl + nlr/blr/feii/torus=grahsp + atten=grahsp_biatten",
+    },
+    "richards2006": {
+        "agn_disc_block": "richards2006",
+        "agn_norm": "independent",
+        "_description": "disc=richards2006",
+    },
+    "unified_nlr_blr": {
+        "agn_disc_block": "multicolor",
+        "agn_nlr_block": "analytic",
+        "agn_blr_block": "analytic",
+        "agn_torus_block": "silva04",
+        "agn_norm": "independent",
+        "_description": "disc=multicolor + nlr=analytic + blr=analytic + torus=silva04",
+    },
+}
 
 
 # ── Generic unified AGN combiner ──────────────────────────────────
@@ -500,15 +554,12 @@ def unified_agn(
     return l_disc + l_torus
 
 
-# ── Pre-registered AGN models ─────────────────────────────────────
+# ── Deprecated monolithic AGN models ──────────────────────────────
+# These functions are deprecated and no longer registered in AGN_MODELS.
+# Use composable blocks instead (see resolve_agn_model for migration paths).
+# Functions are retained for backward compatibility if imported directly.
 
 
-@register_agn_model(
-    "multicolor_agn",
-    citation="Kubota & Done 2018 (MNRAS 480, 1247)",
-    status="deprecated",
-    short_doc="Shakura-Sunyaev disc + 2-T torus",
-)
 def multicolor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -581,19 +632,10 @@ def multicolor_agn(
     return l_nu * agn_frac
 
 
-# "kubota_done" is a registered alias for multicolor_agn in the model registry.
-# After the AGNRegistryEntry refactor, the alias must point to the same wrapper
-# instance so ``AGN_MODELS["kubota_done"] is AGN_MODELS["multicolor_agn"]`` and
-# both share metadata (citation, status, short_doc).
-AGN_MODELS["kubota_done"] = AGN_MODELS["multicolor_agn"]
+# kubota_done alias removed — use composable blocks instead:
+# agn_model="composable", agn_disc_block="multicolor", agn_torus_block="silva04"
 
 
-@register_agn_model(
-    "kubota_done_full",
-    citation="Kubota & Done 2018 (MNRAS 480, 1247)",
-    status="deprecated",
-    short_doc="K&D 3-zone disc + 2-T torus + Comptonization",
-)
 def kubota_done_full_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -699,12 +741,6 @@ def kubota_done_full_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model(
-    "skirtor",
-    citation="Stalevski et al. 2012 (MNRAS 420, 2756); Stalevski et al. 2016 (MNRAS 458, 2288)",
-    status="deprecated",
-    short_doc="Power-law disc + SKIRTOR clumpy torus",
-)
 def skirtor_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
@@ -777,12 +813,6 @@ def skirtor_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model(
-    "skirtor_stalevski",
-    citation="Stalevski et al. 2012 (MNRAS 420, 2756); Stalevski et al. 2016 (MNRAS 458, 2288)",
-    status="production",
-    short_doc="Raw SKIRTOR 2016 radiative-transfer SED (disc+torus as published)",
-)
 def skirtor_stalevski_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
@@ -864,12 +894,6 @@ def skirtor_stalevski_agn(
     return fn(wavelength, **kw) * agn_frac
 
 
-@register_agn_model(
-    "silva04",
-    citation="Silva et al. 2004 (MNRAS 355, 973)",
-    status="deprecated",
-    short_doc="Power-law disc + Silva+04 smooth torus",
-)
 def silva04_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
@@ -925,12 +949,6 @@ def silva04_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model(
-    "cat3d_wind",
-    citation="Hönig & Kishimoto 2017 (ApJL 838, L20)",
-    status="deprecated",
-    short_doc="Power-law disc + CAT3D-Wind clumpy torus",
-)
 def cat3d_wind_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,
@@ -996,12 +1014,6 @@ def cat3d_wind_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model(
-    "adaf",
-    citation="Mahadevan 1997 (ApJ 477, 585)",
-    status="deprecated",
-    short_doc="ADAF + truncated disc + simple torus (low-luminosity)",
-)
 def adaf_agn(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
@@ -1098,12 +1110,6 @@ def adaf_agn(
     return (l_disc + l_torus) * agn_frac
 
 
-@register_agn_model(
-    "relagn",
-    citation="Hagen & Done 2023 (MNRAS 521, 251)",
-    status="deprecated",
-    short_doc="RELAGN relativistic disc + 2-T torus",
-)
 def relagn_agn(
     wavelength: jnp.ndarray,
     agn_log_mbh: float = 8.0,
@@ -1267,12 +1273,6 @@ def _sigmoid_mask(
 # ── Unified AGN with NLR + BLR decomposition ──────────────────────
 
 
-@register_agn_model(
-    "unified_nlr_blr",
-    citation="Lovell et al. 2025 + Roper et al. 2026 (Synthesizer); Hönig & Kishimoto 2017",
-    status="deprecated",
-    short_doc="Unified AGN + NLR/BLR decomposition + geometric masking",
-)
 def unified_nlr_blr(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 11.0,

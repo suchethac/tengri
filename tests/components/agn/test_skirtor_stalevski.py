@@ -34,9 +34,14 @@ def _grid_or_skip():
 
 
 def test_skirtor_stalevski_registered():
-    from tengri.components.agn import AGN_MODELS
+    import warnings
 
-    assert "skirtor_stalevski" in AGN_MODELS
+    from tengri.components.agn import resolve_agn_model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("skirtor_stalevski")
+    assert callable(fn)
 
 
 def test_skirtor_stalevski_is_raw_total():
