@@ -19,12 +19,12 @@ import pytest
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.agn.blocks.registry import composable
 from tengri.components.agn.blocks.runner import _SELF_CONTAINED_TORI
+from tengri.utils.physics_constants import L_SUN
 
 pytestmark = pytest.mark.conservation
 
 _WAVE = np.geomspace(1e2, 1e7, 2000)  # Å — wide enough for disc UV + torus IR
 _C_AA_PER_S = 2.99792458e18
-_L_SUN_ERG = 3.828e33  # erg/s (IAU 2015 nominal); the 10% tol absorbs the exact constant
 
 # Every non-self-contained torus must conserve energy under the conserving policy.
 _TORI = sorted(set(AGN_BLOCKS["torus"]) - set(_SELF_CONTAINED_TORI))
@@ -48,7 +48,9 @@ def _compose_or_skip(torus, tf):
             agn_frac=1.0,
             agn_torus_frac=tf,
         )
-    except Exception as exc:  # data-gated tori (template h5 absent in CI)
+    except (FileNotFoundError, OSError) as exc:
+        # data-gated tori (template h5 absent in CI). Narrow on purpose: a
+        # ValueError/KeyError is a real bug we want to surface, not skip.
         pytest.skip(f"torus '{torus}' unavailable: {type(exc).__name__}: {exc}")
 
 
@@ -62,7 +64,7 @@ def test_conserving_policy_is_invariant_under_torus_frac(torus):
     # Absolute anchor: at agn_log_lbol=45 the disc-only (torus_frac=0) total is
     # ~10^45 L_sun in erg/s. This catches a global mis-scale (e.g. disc AND
     # torus both inflated 2x) that the relative invariance below cannot see.
-    l_bol_erg = 10.0**45 * _L_SUN_ERG
+    l_bol_erg = 10.0**45 * L_SUN
     assert e0 == pytest.approx(l_bol_erg, rel=0.1), (
         f"{torus}: disc-only band energy {e0:.3e} erg/s != L_bol {l_bol_erg:.3e}"
     )

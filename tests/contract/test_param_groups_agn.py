@@ -719,16 +719,28 @@ class TestComposableAGNRuntimeWiring:
             )
 
         # (a) reachability: 'conserving' constructs through the grammar.
-        sed_cons = np.asarray(_build("conserving").predict_state({}).derived["sed_agn"])
-        sed_indep = np.asarray(_build("independent").predict_state({}).derived["sed_agn"])
+        m_cons = _build("conserving")
+        m_indep = _build("independent")
+        sed_cons = np.asarray(m_cons.predict_state({}).derived["sed_agn"])
+        sed_indep = np.asarray(m_indep.predict_state({}).derived["sed_agn"])
 
-        # (b) not a no-op: the conserving disc debit measurably changes the SED,
-        # and makes the AGN dimmer than the non-conserving 'independent' sum.
+        # (b) not a no-op: the conserving disc debit measurably changes the AGN
+        # SED, and makes the AGN dimmer than the non-conserving 'independent' sum.
         assert not np.allclose(sed_cons, sed_indep), (
             "agn_norm='conserving' gave the same SED as 'independent' — the "
             "policy is a silent no-op (disc not debited)."
         )
         assert sed_cons.max() < sed_indep.max()
+
+        # (c) end-to-end: the policy must propagate all the way to the total
+        # predicted rest-frame SED (the spectrum photometry integrates), not
+        # just the isolated AGN component.
+        total_cons = np.asarray(m_cons.predict_rest_sed({}).sed)
+        total_indep = np.asarray(m_indep.predict_rest_sed({}).sed)
+        assert not np.allclose(total_cons, total_indep), (
+            "agn_norm='conserving' did not change the total predicted SED — "
+            "the policy is not propagating end-to-end."
+        )
 
     def test_top_level_agn_type_selects_monolithic_model(self):
         """``agn={'type':'richards2006', ...}`` must produce a non-zero

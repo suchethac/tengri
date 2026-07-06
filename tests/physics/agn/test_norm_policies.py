@@ -25,7 +25,7 @@ def _band_energy(l_nu):
     return np.trapezoid(np.asarray(l_nu)[order], nu[order])
 
 
-def _energy(norm, torus, tf):
+def _energy(norm, torus, tf, **extra):
     return _band_energy(
         composable(
             _WAVE,
@@ -35,6 +35,7 @@ def _energy(norm, torus, tf):
             agn_norm=norm,
             agn_frac=1.0,
             agn_torus_frac=tf,
+            **extra,
         )
     )
 
@@ -60,6 +61,28 @@ def test_cigale_joint_conserves_for_nonskirtor_tori(torus):
     assert e6 == pytest.approx(e0, rel=0.02), (
         f"cigale_joint leaks energy for non-SKIRTOR torus {torus!r}: "
         f"E(0.6)/E(0.0) = {e6 / e0:.3f} (should be ~1.0)"
+    )
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+def test_cigale_joint_conserves_for_skirtor_at_default_fracagn():
+    """Regression for the SKIRTOR/fracAGN=0 hole: cigale_joint + SKIRTOR at the
+    DEFAULT ``agn_fracAGN=0`` got neither the ``agn_power x R`` tie (gated on
+    fracAGN>0) nor the disc debit (skirtor is excluded from _conserve_via_debit)
+    → it leaked 1.6x. The R-tie's fracAGN=0 fallback now debits the disc, so it
+    ledger-conserves.
+
+    ``agn_fracAGN > 0`` is the CIGALE allocation R-tie, where ledger conservation
+    is *not* expected (∫total scales with the shared agn_power budget); that
+    path is pinned by the #556 CIGALE §9 parity tests, not here.
+    """
+    try:
+        e0 = _energy("cigale_joint", "skirtor", 0.0, agn_fracAGN=0.0)
+        e6 = _energy("cigale_joint", "skirtor", 0.6, agn_fracAGN=0.0)
+    except (FileNotFoundError, OSError) as exc:  # data-gated (template h5 absent)
+        pytest.skip(f"skirtor torus unavailable: {type(exc).__name__}: {exc}")
+    assert e6 == pytest.approx(e0, rel=0.05), (
+        f"cigale_joint+skirtor leaks at default fracAGN=0: E(0.6)/E(0.0) = {e6 / e0:.3f}"
     )
 
 

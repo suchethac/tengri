@@ -193,14 +193,21 @@ block; line/torus *shapes* live in their blocks. So "which code" =
 | `agn_norm` | Reproduces | Allocation rule | Conserving |
 |---|---|---|---|
 | **`conserving`** *(explicit general policy)* | tengri monolithic; Synthesizer (qsosed disc + grids) | disc `L_bol` from `agn_log_lbol`; `f_tor=agn_torus_frac`, `f_pol` from polar covering, lines from covering; `disc_obs=(1−Σf)·L_bol` | yes (structural) |
-| **`cigale_joint`** *(current default; conserves for every torus)* | X-CIGALE (Yang+2020) for SKIRTOR | SKIRTOR: single `agn_power` reference, disc/torus/polar tied by template ratio R + `fracAGN` band. **Every other torus: the `conserving` disc debit** (so it never leaks — the pre-fix bug). | yes |
+| **`cigale_joint`** *(current default)* | X-CIGALE (Yang+2020) for SKIRTOR | Non-SKIRTOR (any `fracAGN`), and SKIRTOR at the default `fracAGN=0`: the `conserving` disc debit → **ledger**-conserving (∫total = L_bol). SKIRTOR at `fracAGN>0`: single `agn_power` reference, disc/torus/polar tied by template ratio R → **allocation**-conserving (components share one budget; ∫total scales with it — the CIGALE convention, and it vanishes as `agn_torus_frac→0`). | ledger @ fracAGN=0; allocation @ >0 |
 
-**No default flip needed.** Because `cigale_joint` now conserves for *every*
-torus (R-tie for SKIRTOR, disc debit otherwise), the existing default is already
-the physically-correct one — and it keeps the CIGALE-faithful R-tie for default
-SKIRTOR configs, which a flip to `conserving` would lose. So `conserving`
-remains the *explicit, general* policy and `cigale_joint` stays the default;
-the Phase-2 "flip the default" step is dropped.
+The two *senses* of conservation matter (and Phase 2b's `l5100`/`fagn` will
+trip over them otherwise): **ledger** = ∫total emitted equals `L_bol`;
+**allocation** = the components share one reference and cannot drift apart, but
+∫total is set by that reference (not `L_bol`). `conserving` is always ledger;
+`cigale_joint`'s SKIRTOR R-tie at `fracAGN>0` is allocation.
+
+**No default flip needed.** Because `cigale_joint` ledger-conserves at the
+default `fracAGN=0` for *every* torus (disc debit for non-SKIRTOR; the R-tie's
+`fracAGN=0` fallback debits for SKIRTOR), the existing default is already the
+physically-correct one — and it keeps the CIGALE-faithful R-tie for SKIRTOR at
+`fracAGN>0`, which a flip to `conserving` would lose. So `conserving` remains
+the *explicit, general* policy and `cigale_joint` stays the default; the
+Phase-2 "flip the default" step is dropped.
 | **`l5100`** | GRAHSP (Buchner+2024) | components normalized to disc λL_λ(5100 Å) — the current anchor as explicit policy | anchor-convention |
 | **`fagn`** | Prospector/FSPS | AGN allocated as a fraction of the *stellar* bolometric (`L_AGN = fagn·L_★`); disc/torus conserve internally | yes (AGN-internal) |
 | **`independent`** | AGNfitter-rX | each component carries its own log-norm; no debiting | no (comparison-only) |
