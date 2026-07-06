@@ -1408,7 +1408,7 @@ class Laplace(Distribution):
     r"""Laplace (double-exponential) prior — a sparsity/robustness prior.
 
     Heavier-tailed than a Gaussian and peaked at the location, the Laplace
-    prior is the continuous analogue of an L1 penalty (LASSO): it pulls weakly
+    prior is the continuous analog of an L1 penalty (LASSO): it pulls weakly
     constrained parameters toward ``mu`` while tolerating occasional large
     excursions. Useful for coefficients expected to be near a default with a
     few genuine departures (e.g. per-band calibration offsets, sparse
