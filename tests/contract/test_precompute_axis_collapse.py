@@ -209,7 +209,7 @@ class TestDiscPrecomputeAxisCollapse:
 
     @pytest.mark.skip(reason="disc build_lookup signature mismatch; deferred to Wilkinson phase")
     def test_disc_ss_collapse_axis1(self, filter_set_radio):
-        """Test ss_disc with 2 axes, collapse axis 1 (agn_log_mdot)."""
+        """Test ss_disc with 2 axes, collapse axis 1 (agn_log_lbol)."""
         pass
 
 

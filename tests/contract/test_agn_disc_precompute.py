@@ -86,8 +86,40 @@ class TestSSDiscAdapter:
         )
         lookup = disc_precompute.build_lookup(result, model="ss_disc")
         jit_lookup = jax.jit(lookup)
-        out = jit_lookup(jnp.float64(1.0), jnp.float64(8.0), jnp.float64(-1.5))
+        # Axes are (agn_log_mbh, agn_log_lbol) after #902; query at M_bh=1e8,
+        # log10(L_bol/L_sun)=11 (sub-Eddington).
+        out = jit_lookup(jnp.float64(1.0), jnp.float64(8.0), jnp.float64(11.0))
         chex.assert_tree_all_finite(np.asarray(out))
+
+    def test_second_axis_is_not_degenerate(self, filter_set):
+        """The ss_disc grid's second axis must produce distinct disc shapes.
+
+        Regression for #902 (silent-failure): the second axis was
+        ``agn_log_mdot``, passed to ``multicolor_disc`` as ``agn_log_ledd`` —
+        a parameter that block has ignored since #846 (the Eddington ratio is
+        derived from ``agn_log_lbol``). Every node along axis 1 therefore
+        produced the *identical* disc: a silent no-op grid axis. The axis is
+        now ``agn_log_lbol`` (the post-#846 shape driver), so slices at
+        different luminosities must be measurably distinct.
+        """
+        from tengri.components.agn import disc_precompute
+
+        waves, trans = filter_set
+        result = disc_precompute.precompute(
+            waves, trans, redshift=0.5, parameters=None, model="ss_disc"
+        )
+        phot = np.asarray(result["grid_phot"])  # (n_mbh, n_lbol, n_filters)
+        assert phot.ndim == 3, f"expected (n_mbh, n_lbol, n_filters), got {phot.shape}"
+        low_lum = phot[:, 0, :]
+        high_lum = phot[:, -1, :]
+        # Relative comparison: the energy-normalized (shape-only) templates are
+        # O(1e-17), so an absolute tolerance would trivially call them equal.
+        max_rel = float(np.max(np.abs(high_lum - low_lum) / (np.abs(low_lum) + 1e-30)))
+        assert max_rel > 0.05, (
+            "ss_disc second grid axis is degenerate — the faintest and brightest "
+            f"luminosity nodes produce near-identical disc shapes (max rel diff "
+            f"{max_rel:.2e}); silent no-op (#902)."
+        )
 
 
 class TestCigaleDiscAdapter:

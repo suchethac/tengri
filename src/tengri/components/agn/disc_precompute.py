@@ -8,7 +8,9 @@ three disc models:
    UV cutoff. One free axis: ``agn_alpha_pl`` (power-law index).
 
 2. **disc_ss** (Shakura-Sunyaev): Multi-color thin disc with temperature
-   gradient. Two free axes: ``agn_log_mbh``, ``agn_log_mdot``.
+   gradient. Two free axes: ``agn_log_mbh``, ``agn_log_lbol`` (the post-#846
+   shape driver — the Eddington ratio, hence the disc temperature profile, is
+   derived from ``agn_log_lbol`` and ``agn_log_mbh``).
 
 3. **cigale_disc** (piecewise power-law from CIGALE): Empirical disc model
    with fixed wavelength breakpoints and power-law segments. No free axes
@@ -64,10 +66,12 @@ from tengri.utils.interpolation import edges_for_grid
 # powerlaw_disc: parametrized by agn_alpha (power-law index)
 AXIS_PARAMS_POWERLAW = ("agn_alpha_pl",)
 
-# disc_ss (Shakura-Sunyaev): parametrized by BH mass and accretion rate
-# Note: internally uses agn_log_ledd (Eddington ratio), but for the grid
-# we directly vary agn_log_mbh and agn_log_mdot.
-AXIS_PARAMS_SS = ("agn_log_mbh", "agn_log_mdot")
+# disc_ss (Shakura-Sunyaev): parametrized by BH mass and bolometric luminosity.
+# Since #846 the disc shape is self-consistent with agn_log_lbol (the Eddington
+# ratio, and hence T_in / r_out, is DERIVED from L_bol and M_bh), so L_bol is a
+# genuine shape axis. The former agn_log_mdot axis fed the now-ignored
+# agn_log_ledd and was silently degenerate (#902).
+AXIS_PARAMS_SS = ("agn_log_mbh", "agn_log_lbol")
 
 # cigale_disc: shape is fixed; no grid axes (purely template-scaled by L_bol)
 AXIS_PARAMS_CIGALE = ()
@@ -157,11 +161,18 @@ def _build_grid_ss(
     filter_trans: list,
     redshift: float,
     mbh_grid: np.ndarray,
-    mdot_grid: np.ndarray,
-    agn_log_lbol: float = 45.0,
+    lbol_grid: np.ndarray,
     agn_frac: float = 1.0,
 ) -> PreintegratedGrid:
-    """Preintegrate disc_ss (Shakura-Sunyaev) over 2D grid of (M_bh, M_dot).
+    """Preintegrate disc_ss (Shakura-Sunyaev) over 2D grid of (M_bh, L_bol).
+
+    Both axes drive the disc *shape*: since #846 the Eddington ratio (hence the
+    temperature profile) is derived from ``agn_log_lbol`` and ``agn_log_mbh``.
+    Templates are energy-normalized to unit bolometric luminosity so the grid
+    captures pure shape variation; the absolute normalization is reintroduced by
+    the runtime ``agn_log_lbol`` scaling in :func:`build_lookup`. Varying L_bol
+    here — rather than the now-ignored ``agn_log_ledd`` — fixes the silently
+    degenerate second axis of #902.
 
     Parameters
     ----------
@@ -173,36 +184,34 @@ def _build_grid_ss(
         Source redshift.
     mbh_grid : ndarray, shape (n_mbh,)
         Black hole mass grid [log10(M_sun)].
-    mdot_grid : ndarray, shape (n_mdot,)
-        Accretion rate grid (in units of Eddington rate, log10 scale).
-    agn_log_lbol : float
-        Reference bolometric luminosity [log10(L_sun)].
+    lbol_grid : ndarray, shape (n_lbol,)
+        Bolometric luminosity grid [log10(L_sun)]. Drives the disc temperature
+        profile via the derived Eddington ratio.
     agn_frac : float
         Disc fraction. Default 1.0.
 
     Returns
     -------
     PreintegratedGrid
-        Preintegrated photometry with shape (n_mbh, n_mdot, n_filters).
+        Preintegrated photometry with shape (n_mbh, n_lbol, n_filters).
     """
     mbh_grid = np.asarray(mbh_grid, dtype=np.float64)
-    mdot_grid = np.asarray(mdot_grid, dtype=np.float64)
+    lbol_grid = np.asarray(lbol_grid, dtype=np.float64)
     n_mbh = len(mbh_grid)
-    n_mdot = len(mdot_grid)
+    n_lbol = len(lbol_grid)
 
     wave_rest = np.logspace(1, 5, 1000, dtype=np.float64)
 
     phot_grid = []
     for mbh in mbh_grid:
-        for mdot_edd in mdot_grid:
-            # mdot_edd is log10(L/L_Edd); call multicolor_disc
+        for lbol in lbol_grid:
+            # agn_log_lbol drives both normalization and (post-#846) the shape.
             l_nu = np.asarray(
                 _multicolor_disc(
                     jnp.asarray(wave_rest),
-                    agn_log_lbol=agn_log_lbol,
+                    agn_log_lbol=float(lbol),
                     agn_frac=agn_frac,
                     agn_log_mbh=float(mbh),
-                    agn_log_ledd=float(mdot_edd),
                     agn_a_spin=0.0,  # non-spinning for simplicity
                     agn_cos_inc=0.5,  # 60 degree inclination
                     n_radii=50,
@@ -210,17 +219,19 @@ def _build_grid_ss(
             )
             phot_grid.append(l_nu)
 
-    templates = np.array(phot_grid, dtype=np.float64).reshape(n_mbh, n_mdot, len(wave_rest))
+    templates = np.array(phot_grid, dtype=np.float64).reshape(n_mbh, n_lbol, len(wave_rest))
 
     return precompute_template_photometry(
         templates=templates,
         wave_rest=wave_rest,
         filter_waves=[np.asarray(fw, dtype=np.float64) for fw in filter_waves],
         filter_trans=[np.asarray(ft, dtype=np.float64) for ft in filter_trans],
-        axes=(mbh_grid, mdot_grid),
+        axes=(mbh_grid, lbol_grid),
         redshift=redshift,
         dl_cm=1.0,
-        energy_normalize=False,
+        # Shape-only grid: unit-bolometric templates; runtime agn_log_lbol
+        # reintroduces the absolute scale (no double-count).
+        energy_normalize=True,
         units="lnu",
     )
 
@@ -295,7 +306,7 @@ def precompute(
     model: str = "powerlaw_disc",
     alpha_grid: np.ndarray | None = None,
     mbh_grid: np.ndarray | None = None,
-    mdot_grid: np.ndarray | None = None,
+    lbol_grid: np.ndarray | None = None,
 ) -> dict:
     """Build preintegrated disc grid, auto-collapsing Fixed-parameter axes.
 
@@ -320,8 +331,11 @@ def precompute(
         range [-2, 0] with 15 points.
     mbh_grid : ndarray, optional
         Grid for agn_log_mbh (ss_disc only). If None, uses [6, 7, 8, 9, 10].
-    mdot_grid : ndarray, optional
-        Grid for agn_log_mdot (ss_disc only). If None, uses [-2.5, -2, -1.5, -1].
+    lbol_grid : ndarray, optional
+        Grid for agn_log_lbol (ss_disc only) [log10(L_sun)]. If None, uses
+        [9, 10, 11, 12, 13] — faint-Seyfert through bright-quasar bolometric
+        luminosities (sub-Eddington across the default M_bh grid; the disc peak
+        sweeps from the optical into the EUV over this range).
 
     Returns
     -------
@@ -356,14 +370,14 @@ def precompute(
     elif model == "ss_disc":
         if mbh_grid is None:
             mbh_grid = np.array([6.0, 7.0, 8.0, 9.0, 10.0], dtype=np.float64)
-        if mdot_grid is None:
-            mdot_grid = np.array([-2.5, -2.0, -1.5, -1.0], dtype=np.float64)
+        if lbol_grid is None:
+            lbol_grid = np.array([9.0, 10.0, 11.0, 12.0, 13.0], dtype=np.float64)
         result = {
             "grid_phot": _build_grid_ss(
-                filter_waves, filter_trans, redshift, mbh_grid, mdot_grid
+                filter_waves, filter_trans, redshift, mbh_grid, lbol_grid
             ).phot,
-            "axes": (jnp.asarray(mbh_grid), jnp.asarray(mdot_grid)),
-            "_preint": _build_grid_ss(filter_waves, filter_trans, redshift, mbh_grid, mdot_grid),
+            "axes": (jnp.asarray(mbh_grid), jnp.asarray(lbol_grid)),
+            "_preint": _build_grid_ss(filter_waves, filter_trans, redshift, mbh_grid, lbol_grid),
         }
         axis_params = AXIS_PARAMS_SS
 
