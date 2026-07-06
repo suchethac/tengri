@@ -560,8 +560,7 @@ agn_torus_block, agn_attenuation_block : str
     # "independent" never debits (each component on its own luminosity scale).
     # Static Python branch on the policy string + torus name (JIT-safe).
     _conserve_via_debit = agn_torus_block not in _SELF_CONTAINED_TORI and (
-        _agn_norm == "conserving"
-        or (_agn_norm == "cigale_joint" and agn_torus_block != "skirtor")
+        _agn_norm == "conserving" or (_agn_norm == "cigale_joint" and agn_torus_block != "skirtor")
     )
     if _conserve_via_debit:
         _cons_torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)

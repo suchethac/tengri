@@ -69,6 +69,4 @@ def test_independent_does_not_conserve():
     added on top, so total energy grows with `agn_torus_frac`."""
     e0 = _energy("independent", "silva04", 0.0)
     e6 = _energy("independent", "silva04", 0.6)
-    assert e6 > 1.3 * e0, (
-        f"independent unexpectedly conserved: E(0.6)/E(0.0) = {e6 / e0:.3f}"
-    )
+    assert e6 > 1.3 * e0, f"independent unexpectedly conserved: E(0.6)/E(0.0) = {e6 / e0:.3f}"
