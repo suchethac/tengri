@@ -206,7 +206,7 @@ class TestXRayConsumesL2500:
                     "*": FIXED,
                 },
                 agn=_composable_agn(disc),
-                xray=True,
+                xray={"type": "simple"},
                 redshift=Fixed(0.05),
             )
             state = model.predict_state({})
