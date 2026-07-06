@@ -31,6 +31,25 @@ Usage::
     params = spec.sample(jax.random.PRNGKey(0))
     photometry = model.predict_photometry(params)
 
+Navigation
+----------
+This file stays one module by design; use the ``# ── <section> ──``
+marker lines to jump. In order:
+
+- ``WavePrecomp`` / ``SpectrumPrecomp`` — build-time approximation configs
+- ``SEDModel`` class:
+
+  - ``SubModel Protocol surface``
+  - ``Construction`` — ``__init__``, the ``_init_*`` chain, ``build()``
+  - ``Deprecated filter/noise attributes → Observation delegation``
+  - ``Core physics (SFH → SED pipeline)``
+  - ``Predictions (public API)`` — the ``predict_*`` surface
+  - ``Component orchestrator path`` — ``predict_state`` and the JIT
+    kernel behind every prediction
+  - ``Batch operations``
+  - ``Private prediction dispatch``
+  - ``Utilities``
+
 Comments in this module reference historical "Phase" labels from the 2026
 precompute rollout. The decoder ring: Phase 2 = approx settings owned by
 components; Phase 3b/3c = the WavePrecomp SSP x filter photometry LUT
@@ -3920,7 +3939,7 @@ class SEDModel:
 
         return state_to_sed_quantities(self.predict_state(params))
 
-    # ── Component orchestrator path (opt-in) ──────────────────────────
+    # ── Component orchestrator path ───────────────────────────────────
 
     def predict_sfh_quantities_components(self, params):
         """Deprecated alias of :meth:`predict_sfh_quantities`.

@@ -43,11 +43,21 @@ Parameters
 
 Raises
 ------
-NotImplementedError
-    If AGN group is provided (deferred to PR4).
-    If SFH type is a list (composition lands in PR4).
 ValueError
     If unknown group key, unknown type value, or unknown sub-key is provided.
+
+Navigation
+----------
+This file stays one module by design; use the ``# ── <section> ──``
+marker lines to jump. In order:
+
+- registry loading helpers and ``_valid_*_types()`` menus
+- ``Constants``
+- ``Main API`` — ``parse_groups()``
+- ``Internal helpers`` — one ``_translate_<group>()`` per group (sfh,
+  stellar, dust, neb, shock, igm, radio, foreground, xray, agn), then
+  key validation and per-parameter resolution
+- ``Inverse: Parameters to nested-dict form`` — ``parameters_to_groups()``
 
 Notes
 -----
@@ -1764,9 +1774,9 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
     (agn_disc_block, agn_torus_block, agn_nlr_block, agn_blr_block,
     agn_feii_block, agn_attenuation_block). Omitted blocks default to 'none'.
 
-    A top-level ``'type'`` key picks a non-composable monolithic AGN model
-    registered in :data:`tengri.components.agn.AGN_MODELS` (e.g.
-    ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``). When
+    A top-level ``'type'`` key picks a named non-composable AGN model
+    (e.g. ``'richards2006'``, ``'kubota_done'``, ``'multicolor_agn'``),
+    validated lazily by ``resolve_agn_model`` at predict time. When
     ``type='composable'`` (or absent), the sub-block selectors are honored.
     Mixing a non-composable ``type`` with sub-blocks is an error.
 

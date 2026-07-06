@@ -22,10 +22,10 @@ from a flat set of keyword arguments without constructing each
     )
     state = run_components(components, ForwardState(wave=ssp.ssp_wave), params)
 
-This is the **public-facing** orchestrator entry point — independent
-of :class:`tengri.SEDModel` (which keeps its legacy tier-dispatch
-path). The two paths coexist; users opt into the orchestrator by
-calling this helper.
+This is the **public-facing** orchestrator entry point for users who
+want the raw component chain without a :class:`tengri.SEDModel`.
+``SEDModel`` itself routes every prediction through the same
+orchestrator internally — there is one forward path.
 """
 
 from __future__ import annotations
@@ -52,8 +52,7 @@ from tengri.components.dust.wg00_model import (
 # Non-stellar component CLASSES (nebular/dust/radio/xray/igm/agn) are resolved
 # from _REGISTRY via the dispatch seam (single dispatch, #844/#845) — only their
 # config dataclasses are imported. Stellar stays a direct import (the permanent
-# exception: rich SFH+SSP orchestrator, never registry-dispatched); AGN is
-# hardcoded pending Phase 4 (#846).
+# exception: rich SFH+SSP orchestrator, never registry-dispatched).
 from tengri.components.nebular.component import NebularSEDComponentConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.components.stellar import StellarSEDComponent

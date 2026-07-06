@@ -22,6 +22,23 @@ if TYPE_CHECKING:
 # ── Mock data generation ──────────────────────────────────────────
 
 
+def _assemble_mock(params, flux_true, noise, key) -> MockData:
+    """Assemble a :class:`MockData`, adding Gaussian noise when ``key`` is given."""
+    from tengri.forward.sed_model import MockData
+
+    if key is not None:
+        flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
+    else:
+        flux_obs = flux_true
+
+    return MockData(
+        flux_true=flux_true,
+        flux_obs=flux_obs,
+        noise=noise,
+        params=params,
+    )
+
+
 def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
     """Generate mock photometric observation with Gaussian noise.
 
@@ -47,22 +64,9 @@ def mock(model: SEDModel, params, snr=20.0, key=None) -> MockData:
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
-    from tengri.forward.sed_model import MockData
-
     flux_true = model.predict_photometry(params)
-    noise = flux_true / snr
-
-    if key is not None:
-        flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
-    else:
-        flux_obs = flux_true
-
-    return MockData(
-        flux_true=flux_true,
-        flux_obs=flux_obs,
-        noise=noise,
-        params=params,
-    )
+    # No abs() here (unlike mock_spectrum) — inherited difference kept bit-exact.
+    return _assemble_mock(params, flux_true, flux_true / snr, key)
 
 
 def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> MockData:
@@ -92,22 +96,8 @@ def mock_spectrum(model: SEDModel, params, wave_obs, snr=30.0, key=None) -> Mock
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     """
-    from tengri.forward.sed_model import MockData
-
     flux_true = model.predict_spectrum(params, wave_obs)
-    noise = jnp.abs(flux_true) / snr
-
-    if key is not None:
-        flux_obs = flux_true + noise * jax.random.normal(key, shape=flux_true.shape)
-    else:
-        flux_obs = flux_true
-
-    return MockData(
-        flux_true=flux_true,
-        flux_obs=flux_obs,
-        noise=noise,
-        params=params,
-    )
+    return _assemble_mock(params, flux_true, jnp.abs(flux_true) / snr, key)
 
 
 def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:

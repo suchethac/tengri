@@ -183,6 +183,22 @@ def _resolve_cosmo(
     return DEFAULT_COSMO
 
 
+def _cosmo_from_args(
+    h0: float | None,
+    om0: float | None,
+    cosmo: CosmoParams | None,
+) -> CosmoParams:
+    """Resolve the ``(h0, om0, cosmo)`` convention shared by every wrapper below.
+
+    Positional ``h0``/``om0`` take priority: when either is given, a
+    keyword ``cosmo`` is ignored (never an error). With neither, falls
+    back to the module defaults via :func:`_resolve_cosmo`.
+    """
+    if h0 is not None or om0 is not None:
+        cosmo = None
+    return _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+
+
 def luminosity_distance(
     z: float,
     h0: float | None = None,
@@ -215,10 +231,7 @@ def luminosity_distance(
     float
         Luminosity distance in cm. At z=0, returns 10 pc (3.086e19 cm).
     """
-    # Handle positional args taking priority
-    if h0 is not None or om0 is not None:
-        cosmo = None  # Ignore cosmo if positional args provided
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     dl_mpc = luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
     # At z=0, use 10 pc (1e-5 Mpc) for the optical absolute-magnitude convention
     dl_mpc = jnp.where(z <= 0.0, 1e-5, dl_mpc)
@@ -250,9 +263,7 @@ def luminosity_distance_mpc(
     float
         Luminosity distance in Mpc.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     return luminosity_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
 
 
@@ -281,9 +292,7 @@ def comoving_distance(
     float
         Comoving distance in cm.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     dc_mpc = comoving_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
     return dc_mpc * MPC_CM
 
@@ -313,9 +322,7 @@ def comoving_distance_mpc(
     float
         Comoving distance in Mpc.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     return comoving_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
 
 
@@ -344,9 +351,7 @@ def angular_diameter_distance(
     float
         Angular diameter distance in cm.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
     return da_mpc * MPC_CM
 
@@ -376,9 +381,7 @@ def angular_diameter_distance_mpc(
     float
         Angular diameter distance in Mpc.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     return angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
 
 
@@ -410,9 +413,7 @@ def distance_modulus(
     float
         Distance modulus in magnitudes.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     return distance_modulus_to_z(z, c.Om0, c.w0, c.wa, c.h)
 
 
@@ -444,9 +445,7 @@ def lookback_time(
     float
         Lookback time in Gyr.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     return lookback_to_z(z, c.Om0, c.w0, c.wa, c.h)
 
 
@@ -476,9 +475,7 @@ def age_at_z(
         Age of universe in Gyr. Returns scalar if input is scalar, array if
         input is array.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     # DSPS age_at_z always returns array (minimum shape (1,))
     result = _dsps_age_at_z(z, c.Om0, c.w0, c.wa, c.h)
     # Return scalar if input was scalar
@@ -507,9 +504,7 @@ def age_at_z0(
     float
         Age of universe in Gyr.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     return _dsps_age_at_z0(c.Om0, c.w0, c.wa, c.h)
 
 
@@ -541,9 +536,7 @@ def comoving_volume_element(
     float or array
         Comoving volume element in Mpc³/sr. Returns scalar if input is scalar.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     # differential_comoving_volume requires array input; ensure z is array
     z_arr = jnp.atleast_1d(z)
     result = differential_comoving_volume(z_arr, c.Om0, c.w0, c.wa, c.h)
@@ -579,9 +572,7 @@ def arcsec_per_kpc(
     float
         Angular scale in arcsec/kpc.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
     # 206265 arcsec/radian, 1000 kpc/Mpc
     return 206265.0 / (da_mpc * 1000.0)
@@ -614,9 +605,7 @@ def kpc_per_arcsec(
     float
         Physical scale in kpc/arcsec.
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
     da_mpc = angular_diameter_distance_to_z(z, c.Om0, c.w0, c.wa, c.h)
     # Inverse of arcsec_per_kpc
     return (da_mpc * 1000.0) / 206265.0
@@ -659,9 +648,7 @@ def z_at_cosmic_time(
         Redshift corresponding to the given cosmic time. Returns z_max
         for t < age(z_max), and 0 for t >= age(0).
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
 
     # Build lookup table: z_grid → t_grid (decreasing in t)
     z_grid = jnp.linspace(0.0, z_max, n_grid)
@@ -709,9 +696,7 @@ def z_at_lookback_time(
         Redshift corresponding to the given lookback time. Returns 0
         for t_lookback=0, z_max for t_lookback >= lookback(z_max).
     """
-    if h0 is not None or om0 is not None:
-        cosmo = None
-    c = _resolve_cosmo(cosmo=cosmo, h0=h0, om0=om0)
+    c = _cosmo_from_args(h0, om0, cosmo)
 
     # Build lookup table: z_grid → t_lookback_grid (increasing)
     z_grid = jnp.linspace(0.0, z_max, n_grid)
