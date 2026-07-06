@@ -290,3 +290,136 @@ def _adaf_alpha_c(tau_es: jnp.ndarray, t_e: jnp.ndarray) -> jnp.ndarray:
     """
     a_factor = _adaf_amplification(t_e)
     return -jnp.log(tau_es) / jnp.log(a_factor)
+
+
+# ── Synchrotron self-absorption parameter x_M (Mahadevan Eq. 20) ──────────
+
+# Schwarzschild radius R_schw = 2.95e5 * m  cm  (Eq. 3).
+_R_SCHW_PER_M: float = 2.95e5
+
+
+def _adaf_x_m(t_e: jnp.ndarray, m: float, mdot: float, alpha: float, beta: float) -> jnp.ndarray:
+    r"""Solve for the synchrotron self-absorption parameter ``x_M`` (Mahadevan Eq. 20).
+
+    The cyclo-synchrotron photons self-absorb up to a critical frequency; ``x_M``
+    (the scaled critical frequency at ``r_min``) is the root of the transcendental
+
+    .. math::
+
+        e^{1.8899\,x_M^{1/3}} = 2.49\times10^{-10}\,\frac{4\pi n_e R}{B}\,
+            \frac{1}{\theta_e^3 K_2(1/\theta_e)}
+            \left(x_M^{-7/6} + 0.40\,x_M^{-17/12} + 0.5316\,x_M^{-5/3}\right).
+
+    Solved by Newton's method in :math:`y = x_M^{1/3}` (the function is monotonic,
+    so the root is unique and Newton is stable from a log-based initial guess).
+
+    Parameters
+    ----------
+    t_e : array_like
+        Electron temperature [K] (sets :math:`\theta_e`).
+    m, mdot, alpha, beta : float
+        Mass, accretion rate, viscosity, gas-to-total pressure ratio.
+
+    Returns
+    -------
+    ndarray
+        ``x_M`` [dimensionless]; ~1e3 for typical ADAF parameters.
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes — fixed 15-step unrolled Newton iteration.
+    """
+    n_e, b_field = _adaf_ne_b_rmin(m, mdot, alpha, beta)
+    r_cm = _R_MIN * _R_SCHW_PER_M * m
+    theta = _THETA_PER_TE * jnp.asarray(t_e, dtype=jnp.float64)
+    x_arg = 1.0 / theta
+    k2 = _bessel_k2e(x_arg) * jnp.exp(-x_arg)  # unscaled K_2(1/theta_e)
+    ln_c = jnp.log(2.49e-10 * (4.0 * jnp.pi * n_e * r_cm / b_field) / (theta**3 * k2))
+
+    def _log_h_and_dlogh(y):
+        xm = y**3
+        h = xm ** (-7.0 / 6.0) + 0.40 * xm ** (-17.0 / 12.0) + 0.5316 * xm ** (-5.0 / 3.0)
+        dh_dxm = (
+            (-7.0 / 6.0) * xm ** (-7.0 / 6.0 - 1.0)
+            + 0.40 * (-17.0 / 12.0) * xm ** (-17.0 / 12.0 - 1.0)
+            + 0.5316 * (-5.0 / 3.0) * xm ** (-5.0 / 3.0 - 1.0)
+        )
+        return jnp.log(h), (dh_dxm * 3.0 * y**2) / h
+
+    y = jnp.clip(ln_c / 1.8899, 1.0, 100.0)
+    for _ in range(15):
+        log_h, dlogh = _log_h_and_dlogh(y)
+        f = 1.8899 * y - ln_c - log_h
+        df = 1.8899 - dlogh
+        y = jnp.clip(y - f / df, 1.0, 100.0)
+    return y**3
+
+
+# ── Equilibrium electron temperature (Mahadevan Eqs. 40 & 43) ─────────────
+
+
+def _adaf_electron_temperature(
+    m: float, mdot: float, alpha: float, beta: float, delta: float
+) -> jnp.ndarray:
+    r"""Self-consistent equilibrium electron temperature ``T_e`` (Mahadevan Eqs. 40/43).
+
+    The electrons cool via synchrotron, bremsstrahlung, and Compton; equating the
+    total cooling to the heating :math:`Q^{e+} = Q^-` fixes ``T_e``. The paper gives
+    two analytic branches selected by the Compton slope :math:`\alpha_c`:
+
+    - :math:`\alpha_c > 1` (weak Compton, low ``mdot``) — Eq. 40:
+
+      .. math::
+
+          T_e = 1.1\times10^9 (2000\delta)^{1/7} (x_M/300)^{-3/7}
+                (\alpha/0.3)^{3/14} ((1-\beta)/0.5)^{-1/14}
+                m^{1/14} \dot m^{-1/14}\ \mathrm{K}
+
+    - :math:`\alpha_c < 1` (strong Compton, high ``mdot``) — Eq. 43:
+
+      .. math::
+
+          T_e = 0.744\times10^9 \left[(4\,\tau_{es}^{-1/\alpha_c} - 3)^{1/2} - 1\right]\ \mathrm{K}
+
+    Since ``x_M`` and :math:`\alpha_c` themselves depend on ``T_e``, the equations
+    are solved together by a short fixed-point iteration (the paper notes accurate
+    results without iteration; we iterate for robustness). ``c1=0.5``, ``c3=0.3``,
+    ``r_min=3`` reduce those factors to unity. The A_c fitting factor of Eq. 40
+    (~0.95-1.4) is taken as unity.
+
+    Parameters
+    ----------
+    m, mdot, alpha, beta, delta : float
+        Mass, accretion rate, viscosity, gas-to-total pressure ratio, and electron
+        viscous-heating fraction.
+
+    Returns
+    -------
+    ndarray
+        Equilibrium electron temperature [K], clipped to ``[1e8, 5e11]`` K. For the
+        ADAF range this is ~1e9-1e10 K, ~2e9 at the high-``mdot`` limit.
+
+    Notes
+    -----
+    **JIT/grad-safe**: yes — fixed 12-step unrolled fixed point.
+    """
+    tau_es = _adaf_tau_es(mdot, alpha)
+    t_e = jnp.asarray(2.0e9, dtype=jnp.float64)
+    for _ in range(12):
+        x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
+        alpha_c = _adaf_alpha_c(tau_es, t_e)
+        # Eq. 40 (alpha_c > 1).
+        t_e_40 = (
+            1.1e9
+            * (2000.0 * delta) ** (1.0 / 7.0)
+            * (x_m / 300.0) ** (-3.0 / 7.0)
+            * (alpha / 0.3) ** (3.0 / 14.0)
+            * ((1.0 - beta) / 0.5) ** (-1.0 / 14.0)
+            * m ** (1.0 / 14.0)
+            * mdot ** (-1.0 / 14.0)
+        )
+        # Eq. 43 (alpha_c < 1).
+        sqrt_arg = jnp.maximum(4.0 * tau_es ** (-1.0 / jnp.maximum(alpha_c, 1e-3)) - 3.0, 0.0)
+        t_e_43 = jnp.maximum(0.744e9 * (jnp.sqrt(sqrt_arg) - 1.0), 1e8)
+        t_e = jnp.clip(jnp.where(alpha_c > 1.0, t_e_40, t_e_43), 1e8, 5e11)
+    return t_e
