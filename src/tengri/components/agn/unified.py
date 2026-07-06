@@ -427,11 +427,11 @@ _AGN_PRESETS = {
         "agn_norm": "independent",
         "_description": "disc=multicolor + torus=silva04",
     },
-    "kubota_done": {  # Alias for multicolor_agn
-        "agn_disc_block": "multicolor",
+    "kubota_done": {  # Kubota & Done 2018 3-zone disc (full model)
+        "agn_disc_block": "kubota_done",
         "agn_torus_block": "silva04",
         "agn_norm": "independent",
-        "_description": "disc=multicolor + torus=silva04",
+        "_description": "disc=kubota_done + torus=silva04",
     },
     "kubota_done_full": {
         "agn_disc_block": "kubota_done",
