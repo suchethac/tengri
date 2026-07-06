@@ -121,7 +121,7 @@ def test_nlr_analytic_wraps_single_source_kernel():
     """
     import inspect
 
-    block = importlib.import_module("tengri.components.agn.blocks.nlr_analytic")
+    block = importlib.import_module("tengri.components.agn.blocks.nlr")
     src = inspect.getsource(block)
     assert "from tengri.components.agn.nlr import compute_nlr_sed" in src
     assert "compute_nlr_sed(" in src

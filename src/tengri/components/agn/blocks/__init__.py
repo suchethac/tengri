@@ -29,7 +29,7 @@ from tengri.components.agn.blocks import (
     disc_blocks,
     feii_blocks,
     grahsp_blocks,
-    nlr_blocks,
+    nlr,
     qsogen_blocks,
     registry,
     torus_blocks,

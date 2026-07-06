@@ -381,7 +381,7 @@ def _agn_block_types(category: str) -> frozenset[str]:
     import tengri.components.agn.blocks.disc_blocks
     import tengri.components.agn.blocks.feii_blocks
     import tengri.components.agn.blocks.grahsp_blocks
-    import tengri.components.agn.blocks.nlr_blocks
+    import tengri.components.agn.blocks.nlr
     import tengri.components.agn.blocks.qsogen_blocks
     import tengri.components.agn.blocks.torus_blocks  # noqa: F401
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
