@@ -806,6 +806,12 @@ def _translate_structural(groups: dict) -> dict:
     }
     result = {}
 
+    # Suggested model when someone tries the (unsupported) bool form for an
+    # additive gate group — used only to make the error message actionable.
+    # radio: Condon (1992) radio-IR correlation; xray: 'simple' (X-ray binaries
+    # + AGN corona; 'simple' ≡ 'yang20' physics); shock: MAPPINGS V.
+    _GATE_SUGGESTED_TYPE = {"radio": "condon92", "xray": "simple", "shock": "mappings"}
+
     for group_name, group_dict in groups.items():
         if group_name in _TOP_LEVEL_SETTINGS:
             continue
@@ -820,6 +826,21 @@ def _translate_structural(groups: dict) -> dict:
             raise ValueError(
                 f"Unknown group key '{group_name}'. "
                 f"Valid groups: {', '.join(sorted(valid_groups))}.{suggest_str}"
+            )
+
+        # Every component is declared the same way — a dict selecting the
+        # model, e.g. ``neb={'type': 'cue'}``. The bool form (``xray=True``)
+        # is NOT supported: it used to fall through the ``isinstance(dict)``
+        # skip below and leave the component silently absent, so the
+        # panchromatic recipes shipped with no radio / X-ray at all. Reject it
+        # loudly and point at the consistent dict grammar rather than guessing.
+        if group_name in _GATE_SUGGESTED_TYPE and isinstance(group_dict, bool):
+            suggested = _GATE_SUGGESTED_TYPE[group_name]
+            raise ValueError(
+                f"{group_name}={group_dict!r} is not a valid declaration — declare "
+                f"{group_name} like every other component, with a dict selecting the "
+                f"model: {group_name}={{'type': '{suggested}'}} to enable (add per-param "
+                f"priors as needed), or {group_name}={{'type': 'none'}} / omit to disable."
             )
 
         if not isinstance(group_dict, dict):

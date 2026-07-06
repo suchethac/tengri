@@ -151,6 +151,7 @@ EXPECTED_ALL = frozenset(
         # Priors
         "Fixed",
         "Gaussian",
+        "Laplace",
         "LogNormal",
         "LogUniform",
         "StudentT",

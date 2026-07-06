@@ -3201,7 +3201,9 @@ class SEDModel:
         sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / L_SUN
 
-    def predict_line_fluxes(self, params, target_wavelengths=None, tolerance_aa=5.0):
+    def predict_line_fluxes(
+        self, params, target_wavelengths=None, tolerance_aa=5.0, *, state=None
+    ):
         """Predict observed emission line fluxes.
 
         Calls the nebular backend to compute line luminosities,
@@ -3244,12 +3246,11 @@ class SEDModel:
 
         .. math::
 
-            F = \\frac{L_{\\odot}}{4\\pi d_L^2}
+            F = \\frac{L}{4\\pi d_L^2}
 
-        where :math:`d_L` is the luminosity distance.
+        where :math:`L` is the line luminosity [erg/s] and :math:`d_L` is
+        the luminosity distance [cm].
         """
-        from tengri.utils.physics_constants import L_SUN
-
         backend = self._nebular_backend
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
             raise ValueError(
@@ -3261,7 +3262,14 @@ class SEDModel:
         # ``predict_nebular_line_luminosities`` with SSP-derived
         # ``ssp_weights`` + ``ssp_log_ages_yr`` and the canonical
         # neb_logZ_gas → absolute-log10(Z) translation.
-        state = self.predict_state(params)
+        #
+        # ``state`` may be supplied by a caller that has already run the
+        # forward (e.g. the joint loss deriving line fluxes + ratios +
+        # indices from ONE ``predict_state`` — see
+        # ``loss_functions._build_prediction``) so the full-grid forward
+        # is not recomputed once per feature channel.
+        if state is None:
+            state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete "
@@ -3284,7 +3292,13 @@ class SEDModel:
             # for vacuum 5008.24 when the catalog is in air at 5006.84 is
             # within 1.4 Aa and OK; asking for a missing 6300 [OI] line could
             # match Halpha 264 Aa away). ``tolerance_aa=None`` disables.
-            if tolerance_aa is not None:
+            # The guard needs concrete values; under a jitted loss
+            # (NUTS/HMC) ``min_deltas`` is a Tracer, so skip it there —
+            # line matching is structural (static catalog × static
+            # targets), and any eager call on the same model (mock
+            # generation, prediction, the first Fitter setup) runs the
+            # loud check for the identical matching.
+            if tolerance_aa is not None and not isinstance(min_deltas, jax.core.Tracer):
                 import numpy as _np
 
                 bad = _np.asarray(min_deltas) > float(tolerance_aa)
@@ -3308,10 +3322,14 @@ class SEDModel:
             selected_lums = all_lums
 
         dl_cm = self._get_dl_cm(params)
-        flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
+        # ``line_lums`` are published in erg/s (DerivedKey contract in
+        # NebularSEDComponent) — no L_sun conversion here. Multiplying by
+        # L_SUN was a 33.6-dex unit error that made every joint
+        # photometry+line-flux fit unusable against real data.
+        flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
         return flux
 
-    def predict_line_ratios(self, params, line_ratio_data):
+    def predict_line_ratios(self, params, line_ratio_data, *, state=None):
         """Predict emission line ratios for a :class:`LineRatioData` set.
 
         Computes the model flux ratio ``F(numerator) / F(denominator)`` for
@@ -3346,9 +3364,8 @@ class SEDModel:
         **JIT-compatible**: no — delegates to the nebular backend via
         :meth:`predict_state`.
         """
-        from tengri.utils.physics_constants import L_SUN
-
-        state = self.predict_state(params)
+        if state is None:
+            state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
                 "Configured nebular backend did not publish a discrete line "
@@ -3358,7 +3375,10 @@ class SEDModel:
         all_waves = jnp.asarray(state.derived["line_waves"])
         all_lums = jnp.asarray(state.derived["line_lums"])
         dl_cm = self._get_dl_cm(params)
-        scale = L_SUN / (4.0 * jnp.pi * dl_cm**2)
+        # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
+        # ``predict_line_fluxes``. The scale cancels in every ratio, so
+        # this is unit hygiene, not a behavior change.
+        scale = 1.0 / (4.0 * jnp.pi * dl_cm**2)
 
         def _match(targets):
             targets = jnp.asarray(targets)
@@ -3370,7 +3390,7 @@ class SEDModel:
         den_flux = _match(line_ratio_data.denominator_waves)
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
-    def predict_spectral_indices(self, params, index_defs):
+    def predict_spectral_indices(self, params, index_defs, *, state=None):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -3398,6 +3418,7 @@ class SEDModel:
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
         """
+        from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
@@ -3408,9 +3429,18 @@ class SEDModel:
         # This works on both the exact and SpectrumPrecomp paths: the dust
         # components set ``state.sed_intrinsic`` to the full attenuated SED in
         # all cases (the spectrum LUT only *additionally* publishes per-pixel
-        # transmission), so ``predict_rest_sed`` returns the attenuated SED
+        # transmission), so the rest-frame SED is the attenuated SED
         # regardless of ``approx``.
-        rest = self.predict_rest_sed(params)
+        #
+        # ``state`` may be supplied by a caller that already ran the forward
+        # (the joint loss shares ONE ``predict_state`` across the line-flux,
+        # line-ratio, and index channels) — ``predict_rest_sed`` reads exactly
+        # ``(state.wave, state.sed_intrinsic)`` on the native grid, so deriving
+        # ``rest`` from a shared state is bit-identical to recomputing it.
+        if state is None:
+            rest = self.predict_rest_sed(params)
+        else:
+            rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         wave_rest, flux_rest = rest.wavelength, rest.sed
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]

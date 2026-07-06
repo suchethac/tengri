@@ -82,6 +82,9 @@ def build_base_likelihood(context: InferenceContext):
             dof=dof,
             f_cal_param="noise_frac_cal" if has_noise_model(context.spec) else None,
             channel="phot_fnu",
+            obs_key="data",
+            err_key="noise",
+            mask_key="data_mask",
         )
     # Censored mask on spec / joint isn't covered by a single-channel
     # adapter (the mask spans the concatenated data array). Defer to
@@ -109,6 +112,8 @@ def build_base_likelihood(context: InferenceContext):
                 dof=dof,
                 f_cal_param="noise_frac_cal",
                 channel="phot_fnu",
+                obs_key="data",
+                err_key="noise",
             )
         if context.data_type == "spectroscopy":
             return StudentTLikelihood(
@@ -117,9 +122,12 @@ def build_base_likelihood(context: InferenceContext):
                 dof=dof,
                 f_cal_param="noise_frac_cal",
                 channel="spec_fnu",
+                obs_key="data",
+                err_key="noise",
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
+            n_total = len(context.data)
             return CompositeLikelihood(
                 StudentTLikelihood(
                     obs=context.data[:n_phot],
@@ -127,6 +135,9 @@ def build_base_likelihood(context: InferenceContext):
                     dof=dof,
                     f_cal_param="noise_frac_cal",
                     channel="phot_fnu",
+                    obs_key="data",
+                    err_key="noise",
+                    data_slice=(0, n_phot),
                 ),
                 StudentTLikelihood(
                     obs=context.data[n_phot:],
@@ -134,6 +145,9 @@ def build_base_likelihood(context: InferenceContext):
                     dof=dof,
                     f_cal_param="noise_frac_cal",
                     channel="spec_fnu",
+                    obs_key="data",
+                    err_key="noise",
+                    data_slice=(n_phot, n_total),
                 ),
             )
 
@@ -142,16 +156,22 @@ def build_base_likelihood(context: InferenceContext):
         cov_inv = context.data_args["spec_cov_inv"]
         if context.data_type == "spectroscopy":
             return MultivariateGaussianLikelihood(
-                obs=context.data, cov_inv=cov_inv, channel="spec_fnu"
+                obs=context.data, cov_inv=cov_inv, channel="spec_fnu", obs_key="data"
             )
         if context.data_type == "joint":
             n_phot = _n_phot_split(context)
             return CompositeLikelihood(
                 PhotometryLikelihood(
-                    fnu_obs=context.data[:n_phot], fnu_err=context.noise[:n_phot]
+                    fnu_obs=context.data[:n_phot],
+                    fnu_err=context.noise[:n_phot],
+                    data_slice=(0, n_phot),
                 ),
                 MultivariateGaussianLikelihood(
-                    obs=context.data[n_phot:], cov_inv=cov_inv, channel="spec_fnu"
+                    obs=context.data[n_phot:],
+                    cov_inv=cov_inv,
+                    channel="spec_fnu",
+                    obs_key="data",
+                    data_slice=(n_phot, len(context.data)),
                 ),
             )
 
@@ -189,9 +209,17 @@ def build_base_likelihood(context: InferenceContext):
             n_phot = _n_phot_split(context)
             spec_obs = context.data[n_phot:]
             spec_err = context.noise[n_phot:]
+        _spec_slice = (
+            None
+            if context.data_type == "spectroscopy"
+            else (_n_phot_split(context), len(context.data))
+        )
         cal_eline_lk = CalibrationELineMarginalizedLikelihood(
             fnu_obs=spec_obs,
             fnu_err=spec_err,
+            fnu_obs_key="data",
+            fnu_err_key="noise",
+            data_slice=_spec_slice,
             wavelength=wavelength,
             design_matrix_builder=builder,
             n_poly=context.cal_n_poly,
@@ -205,7 +233,11 @@ def build_base_likelihood(context: InferenceContext):
         if context.data_type == "spectroscopy":
             return cal_eline_lk
         return CompositeLikelihood(
-            PhotometryLikelihood(fnu_obs=context.data[:n_phot], fnu_err=context.noise[:n_phot]),
+            PhotometryLikelihood(
+                fnu_obs=context.data[:n_phot],
+                fnu_err=context.noise[:n_phot],
+                data_slice=(0, n_phot),
+            ),
             cal_eline_lk,
         )
 
@@ -224,6 +256,13 @@ def build_base_likelihood(context: InferenceContext):
             fnu_err=context.noise
             if context.data_type == "spectroscopy"
             else context.noise[_n_phot_split(context) :],
+            fnu_obs_key="data",
+            fnu_err_key="noise",
+            data_slice=(
+                None
+                if context.data_type == "spectroscopy"
+                else (_n_phot_split(context), len(context.data))
+            ),
             wavelength=wavelength,
             n_poly=context.cal_n_poly,
             prior_sigma=context.cal_prior_sigma,
@@ -233,7 +272,11 @@ def build_base_likelihood(context: InferenceContext):
             return cal_lk
         n_phot = _n_phot_split(context)
         return CompositeLikelihood(
-            PhotometryLikelihood(fnu_obs=context.data[:n_phot], fnu_err=context.noise[:n_phot]),
+            PhotometryLikelihood(
+                fnu_obs=context.data[:n_phot],
+                fnu_err=context.noise[:n_phot],
+                data_slice=(0, n_phot),
+            ),
             cal_lk,
         )
 
@@ -263,6 +306,13 @@ def build_base_likelihood(context: InferenceContext):
             eline_lk = ELineFittedLikelihood(
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
+                fnu_obs_key="data",
+                fnu_err_key="noise",
+                data_slice=(
+                    None
+                    if context.data_type == "spectroscopy"
+                    else (_n_phot_split(context), len(context.data))
+                ),
                 design_matrix_builder=builder,
                 amplitude_names=tuple(context.eline_amplitude_names),
                 channel="spec_fnu",
@@ -271,6 +321,13 @@ def build_base_likelihood(context: InferenceContext):
             eline_lk = CloudyELineMarginalizedLikelihood(
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
+                fnu_obs_key="data",
+                fnu_err_key="noise",
+                data_slice=(
+                    None
+                    if context.data_type == "spectroscopy"
+                    else (_n_phot_split(context), len(context.data))
+                ),
                 design_matrix_builder=builder,
                 line_wavelengths=context.eline_independent_wavelengths,
                 prior_width_dex=context.eline_prior_width_dex,
@@ -280,6 +337,13 @@ def build_base_likelihood(context: InferenceContext):
             eline_lk = ELineMarginalizedLikelihood(
                 fnu_obs=spec_obs,
                 fnu_err=spec_err,
+                fnu_obs_key="data",
+                fnu_err_key="noise",
+                data_slice=(
+                    None
+                    if context.data_type == "spectroscopy"
+                    else (_n_phot_split(context), len(context.data))
+                ),
                 design_matrix_builder=builder,
                 channel="spec_fnu",
             )
@@ -289,6 +353,7 @@ def build_base_likelihood(context: InferenceContext):
             PhotometryLikelihood(
                 fnu_obs=context.data[: _n_phot_split(context)],
                 fnu_err=context.noise[: _n_phot_split(context)],
+                data_slice=(0, _n_phot_split(context)),
             ),
             eline_lk,
         )
@@ -300,9 +365,18 @@ def build_base_likelihood(context: InferenceContext):
         return SpectroscopyLikelihood(fnu_obs=context.data, fnu_err=context.noise)
     if context.data_type == "joint":
         n_phot = _n_phot_split(context)
+        n_total = len(context.data)
         return CompositeLikelihood(
-            PhotometryLikelihood(fnu_obs=context.data[:n_phot], fnu_err=context.noise[:n_phot]),
-            SpectroscopyLikelihood(fnu_obs=context.data[n_phot:], fnu_err=context.noise[n_phot:]),
+            PhotometryLikelihood(
+                fnu_obs=context.data[:n_phot],
+                fnu_err=context.noise[:n_phot],
+                data_slice=(0, n_phot),
+            ),
+            SpectroscopyLikelihood(
+                fnu_obs=context.data[n_phot:],
+                fnu_err=context.noise[n_phot:],
+                data_slice=(n_phot, n_total),
+            ),
         )
     return None
 
@@ -328,19 +402,37 @@ def build_likelihood_extras(context: InferenceContext):
     list of Likelihood
         Likelihood adapters for constraint terms (line fluxes, spectral indices).
     """
-    from tengri.inference.likelihoods import GaussianLikelihood
+    from tengri.inference.likelihoods import CensoredLikelihood, GaussianLikelihood
 
     data_args = context.data_args
     extras = []
     if "line_flux_waves" in data_args:
-        extras.append(
-            GaussianLikelihood(
-                obs=data_args["line_flux_obs"],
-                err=data_args["line_flux_err"],
-                channel="line_fluxes",
-                name="line_flux_constraint",
+        # Lines flagged as upper/lower limits enter as censored data
+        # points (ln Φ terms), not Gaussian detections at the limit value.
+        if "line_flux_limit_mask" in data_args:
+            extras.append(
+                CensoredLikelihood(
+                    obs=data_args["line_flux_obs"],
+                    err=data_args["line_flux_err"],
+                    mask=data_args["line_flux_limit_mask"],
+                    channel="line_fluxes",
+                    name="line_flux_constraint",
+                    obs_key="line_flux_obs",
+                    err_key="line_flux_err",
+                    mask_key="line_flux_limit_mask",
+                )
             )
-        )
+        else:
+            extras.append(
+                GaussianLikelihood(
+                    obs=data_args["line_flux_obs"],
+                    err=data_args["line_flux_err"],
+                    channel="line_fluxes",
+                    name="line_flux_constraint",
+                    obs_key="line_flux_obs",
+                    err_key="line_flux_err",
+                )
+            )
     if "line_ratio_obs" in data_args:
         extras.append(
             GaussianLikelihood(
@@ -348,6 +440,8 @@ def build_likelihood_extras(context: InferenceContext):
                 err=data_args["line_ratio_err"],
                 channel="line_ratios",
                 name="line_ratio_constraint",
+                obs_key="line_ratio_obs",
+                err_key="line_ratio_err",
             )
         )
     if "index_obs" in data_args:
@@ -357,6 +451,8 @@ def build_likelihood_extras(context: InferenceContext):
                 err=data_args["index_err"],
                 channel="indices",
                 name="spectral_index_constraint",
+                obs_key="index_obs",
+                err_key="index_err",
             )
         )
     return extras

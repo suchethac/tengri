@@ -18,7 +18,7 @@ References
 - Cosmological flux-luminosity: f_ν = L_ν × (1+z) / (4π d_L²)
   (e.g., Hogg et al. 1999, AJ, 118, 1407)
 - Morton (1991) vacuum-air conversion: ApJS, 77, 119
-- Ciddor (1996) air-vacuum conversion: ApOpt, 35, 1566
+- Edlén (1953) air-vacuum conversion: JOSA, 43(5), 339
 """
 
 from __future__ import annotations
@@ -563,7 +563,7 @@ def vacuum_to_air(wavelength_aa: np.ndarray) -> np.ndarray:
 def air_to_vacuum(wavelength_aa: np.ndarray) -> np.ndarray:
     """Convert air wavelengths to vacuum wavelengths.
 
-    Uses the Ciddor (1996) formula via wavenumber inversion.
+    Uses the Edlén (1953) dispersion formula for standard air.
 
     Parameters
     ----------
@@ -580,17 +580,19 @@ def air_to_vacuum(wavelength_aa: np.ndarray) -> np.ndarray:
     The refractive index of air is computed from the wavenumber σ = 1e4 / λ_air:
         n = 1 + 6.4328e-5 + 2.94981e-2 / (146 - σ²) + 2.5540e-4 / (41 - σ²)
 
-    This iterative approach (Ciddor 1996) is more accurate than Morton for
-    the air→vacuum direction, especially near strong absorption features.
+    and λ_vac = n · λ_air. This is the Edlén (1953) formula for standard air
+    (15 °C, 760 mmHg) — the same conversion used by IRAF/SDSS. The Edlén
+    (1966) revision differs negligibly for optical spectroscopy.
 
-    Reference: Ciddor, P. E. (1996), ApOpt, 35, 1566.
+    Reference: Edlén, B. (1953), "The Dispersion of Standard Air",
+    J. Opt. Soc. Am., 43(5), 339.
     """
     wavelength_aa = np.asarray(wavelength_aa, dtype=np.float64)
 
     # Wavenumber in cm^-1 for air
     sigma = 1e4 / wavelength_aa
 
-    # Refractive index (Ciddor 1996)
+    # Refractive index (Edlén 1953)
     n = 1.0 + 6.4328e-5 + 2.94981e-2 / (146.0 - sigma**2) + 2.5540e-4 / (41.0 - sigma**2)
 
     return wavelength_aa * n

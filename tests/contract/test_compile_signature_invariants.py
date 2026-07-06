@@ -102,8 +102,15 @@ class TestCompileSignatureInvariants:
         # 9. _calibration_marginalize
         # 10. _eline_prior_type
         # (memory_mode was removed; it was the 11th)
-        assert len(fitter_sig) == 10, (
-            f"fitter_sig field count changed from 10 to {len(fitter_sig)}. "
+        # 11. line_flux_key (wavelengths + limit-mask presence)
+        # 12. line_ratios present
+        # 13. spectral_indices present
+        # 14. data_mask present
+        # (11-14 added 2026-07: observation feature channels are baked into
+        # the loss closure, so they must key the engine/loss cache — else a
+        # joint phot+lines Fitter reuses a photometry-only compiled loss.)
+        assert len(fitter_sig) == 14, (
+            f"fitter_sig field count changed from 14 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 
