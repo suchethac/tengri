@@ -5,7 +5,7 @@
 > the nested-dict builder, the kernel-strategy refactor, and the
 > `ForwardModel` architecture design (2026-05-21). For current state
 > see `CHANGELOG.md`; for forward-looking architecture see
-> [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md).
+> [`docs/dev/archive/forward-model-architecture.md`](docs/dev/archive/forward-model-architecture.md).
 > Kept as a historical record of the project state at that point.
 
 **Last updated:** 2026-04-08 (session 5)

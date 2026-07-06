@@ -53,7 +53,7 @@ side of the forward model. Each spatial component owns one piece of the
 a flat aperture, etc. — plus the parameters and precomputed tensors that
 go with it.
 
-See architecture spec ``docs/dev/forward-model-architecture.md`` §3.2
+See architecture spec ``docs/dev/archive/forward-model-architecture.md`` §3.2
 for the astronomer-facing convenience base ``SpatialModelComponent``
 that satisfies this Protocol with auto-discovery and a default apply().
 """
@@ -240,7 +240,7 @@ contract, and a sensible default :meth:`apply` orchestration that:
 Subclasses MUST override :meth:`predict` with signature
 ``predict(p, profile_in, grid_kpc) → (profile_out, published)``.
 
-See architecture spec ``docs/dev/forward-model-architecture.md`` §3.2.
+See architecture spec ``docs/dev/archive/forward-model-architecture.md`` §3.2.
 """
 
 from __future__ import annotations
@@ -913,7 +913,7 @@ def test_flat_slab_inside_is_near_unity_outside_is_near_zero() -> None:
 ```python
 """Spatial physics blocks: surface-brightness profiles.
 
-See :doc:`docs/dev/forward-model-architecture.md` §3.2.
+See :doc:`docs/dev/archive/forward-model-architecture.md` §3.2.
 """
 
 from tengri.components.spatial.exponential import Exponential

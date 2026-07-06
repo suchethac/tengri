@@ -15,7 +15,7 @@ class TestAGNNebularConfigFlags:
 
     def test_agn_config_creation(self):
         """Test that AGNConfig can be created with new flags."""
-        from tengri import AGNConfig
+        from tengri.config import AGNConfig
 
         # Default: all off
         cfg_default = AGNConfig()
@@ -39,7 +39,7 @@ class TestAGNNebularConfigFlags:
 
     def test_agn_config_validation(self):
         """Test AGNConfig validation."""
-        from tengri import AGNConfig
+        from tengri.config import AGNConfig
 
         # Invalid backend should raise
         with pytest.raises(ValueError, match="agn_nlr_backend"):
@@ -58,7 +58,8 @@ class TestAGNNebularConfigFlags:
 
     def test_sedmodel_accepts_agn_config(self):
         """Test that SEDModel can accept agn_config parameter."""
-        from tengri import AGNConfig, Parameters, SEDModel
+        from tengri import Parameters, SEDModel
+        from tengri.config import AGNConfig
 
         spec = Parameters(redshift=0.1)
 

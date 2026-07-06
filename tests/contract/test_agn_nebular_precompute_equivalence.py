@@ -10,7 +10,8 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import AGNConfig, Parameters, SEDModel
+from tengri import Parameters, SEDModel
+from tengri.config import AGNConfig
 
 
 class TestAGNNebularPrecomputeEquivalence:
