@@ -111,6 +111,26 @@ def check_preset(
     return violations
 
 
+def collect_registered_params() -> set[str]:
+    """Union of every declared parameter name the guard should accept.
+
+    ``tengri.list_parameters()`` covers only the bucket registries (dust_*,
+    agn_*, neb_*, ...). Structural SFH parameters are declared per-variant in
+    ``SFH_REGISTRY`` (e.g. ``sfh_dpl_alpha``) and must be unioned in, plus the
+    top-level settings every spec carries.
+    """
+    import tengri
+    from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+
+    registered = set(tengri.list_parameters())
+    for entry in SFH_REGISTRY.values():
+        params = getattr(entry, "params", None)
+        if params:
+            registered.update(params.keys())
+    registered.add("redshift")
+    return registered
+
+
 def main() -> int:
     """Run the parameter prefix guard.
 
@@ -123,9 +143,7 @@ def main() -> int:
 
     # Load the parameter registry
     try:
-        import tengri
-
-        registered_params = set(tengri.list_parameters())
+        registered_params = collect_registered_params()
     except Exception as e:
         print(f"ERROR loading parameter registry: {e}", file=sys.stderr)
         return 1

@@ -62,8 +62,6 @@ from tengri.forward.pipeline import (
     interp_metallicity_evolving,
 )
 from tengri.forward.sed_model_types import (
-    CompositionalKernels,
-    HybridKernels,
     MockData,
     PriorPredictive,
     SEDModelState,
@@ -88,8 +86,6 @@ from tengri.utils.grid import (
 
 # Re-export supporting types for backwards compatibility
 __all__ = [
-    "CompositionalKernels",
-    "HybridKernels",
     "MockData",
     "PriorPredictive",
     "SEDModel",

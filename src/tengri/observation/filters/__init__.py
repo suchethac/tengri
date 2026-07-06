@@ -136,9 +136,8 @@ def compute_effective_wavelength(wave: np.ndarray, trans: np.ndarray) -> float:
     used for filter metadata, observational work, and validation against
     external codes (e.g., FSPS).
 
-    NOT the same as the power-weighted effective wavelength used in
-    approximate photometry. See :func:`~tengri.utils.optimizations.effective_wavelength`
-    for the alternative definition.
+    NOT the same as the power-weighted (transmission x flux) effective
+    wavelength sometimes used in approximate photometry schemes.
 
     Not JAX-compatible (uses NumPy). Intended for filter metadata
     computation, not forward model evaluation.

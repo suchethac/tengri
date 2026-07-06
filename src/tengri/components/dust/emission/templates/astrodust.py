@@ -36,10 +36,10 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.astrodust_hd23 import (
-    integrate_lnu_over_nu_aa,
     load_astrodust_hd23_or_raise,
     resample_lnu_on_aa_grid,
 )
+from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.components.dust.emission._port_base import EmissionPort
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
@@ -275,7 +275,7 @@ class AstrodustIRSEDComponent(EmissionPort):
             wave_um=templates.wavelength_um,
             wave_aa=wave_aa,
         )
-        norms = integrate_lnu_over_nu_aa(lnu_template, wave_aa)
+        norms = integrate_lnu_over_nu(lnu_template, wave_aa)
 
         if self.config.spinning_dust:
             spd_um = self._compose_spinning_um(templates)
