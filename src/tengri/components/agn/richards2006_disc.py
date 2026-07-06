@@ -119,12 +119,9 @@ def richards2006_disc(
     return lnu_shape * norm
 
 
-@register_agn_model(
-    "richards2006",
-    citation="Richards et al. 2006, ApJS, 166, 470",
-    status="deprecated",
-    short_doc="Richards+2006 SDSS quasar mean SED composite",
-)
+# Deprecated: richards2006 is no longer registered in AGN_MODELS.
+# Use composable AGN blocks instead: agn_disc_block="richards2006_disc".
+# This function is retained for backward compatibility if imported directly.
 def richards2006(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,

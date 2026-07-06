@@ -50,12 +50,9 @@ from tengri.components.agn.unified import register_agn_model
 __all__ = ["grahsp"]
 
 
-@register_agn_model(
-    "grahsp",
-    citation="Buchner et al. 2024, arXiv:2405.19297",
-    status="deprecated",
-    short_doc="GRAHSP AGN SED (Buchner+2024)",
-)
+# Deprecated: grahsp is no longer registered in AGN_MODELS.
+# Use composable AGN blocks instead: agn_disc_block="grahsp_sbpl_disc" + nlr/blr/feii blocks.
+# This function is retained for backward compatibility if imported directly.
 def grahsp(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,
