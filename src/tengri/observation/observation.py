@@ -1071,6 +1071,17 @@ class Observation:
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
         spec_rest_fnu = total_spec_lnu * cosmology_rest
 
+        # IGM / DLA attenuation. Unlike the photometry LUT, the spectrum LUT is
+        # per-pixel, so the observed-frame transmission is applied *exactly*:
+        # sample the transmission the IGM component published on the rest grid
+        # at each pixel's rest effective wavelength. Only the observed-frame flux
+        # is attenuated; spec_rest_fnu (z=0) carries no IGM (#932).
+        igm_trans = state.derived.get("igm_transmission")
+        eff_waves = state.derived.get("spec_eff_waves")
+        if igm_trans is not None and eff_waves is not None:
+            igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
+            spec_fnu = spec_fnu * igm_factor
+
         out = {"spec_fnu": spec_fnu, "spec_rest_fnu": spec_rest_fnu}
 
         if observables_type is not None:

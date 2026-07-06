@@ -23,7 +23,16 @@ import jax
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, Fixed, SEDModel, WavePrecomp
+from tengri import (
+    FIXED,
+    FREE,
+    Fixed,
+    Observation,
+    SEDModel,
+    Spectroscopy,
+    SpectrumPrecomp,
+    WavePrecomp,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -101,3 +110,27 @@ def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_top
     params = model.spec.sample(jax.random.PRNGKey(1))
     sed = np.asarray(model.predict_obs_sed(params).sed)
     assert np.all(np.isfinite(sed)) and sed.shape[0] > 0
+
+
+def test_igm_attenuates_spectrum_precomp_path(synthetic_ssp_wide):
+    """SpectrumPrecomp LUT path applies IGM per-pixel (exact, not per-band)."""
+    import jax.numpy as jnp
+
+    wave_obs = jnp.linspace(4000.0, 9000.0, 200)  # z=3 -> rest 1000-2250 A
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs, resolution=500.0))
+    common = dict(
+        ssp_data=synthetic_ssp_wide,
+        observation=obs,
+        sfh={"type": "dpl", "*": FREE},
+        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        neb={"type": "none"},
+        redshift=Fixed(3.0),
+        approx=SpectrumPrecomp(),
+    )
+    on = SEDModel.build(apply_igm=True, igm={"type": "inoue"}, **common)
+    off = SEDModel.build(apply_igm=False, **common)
+    params = on.spec.sample(jax.random.PRNGKey(1))
+    s_on = np.asarray(on.predict_spectrum(params))
+    s_off = np.asarray(off.predict_spectrum(params))
+    # blue end (4000 A obs -> rest ~1000 A, below Ly-alpha at z=3) is absorbed.
+    assert s_on[:30].sum() < 0.9 * s_off[:30].sum(), "SpectrumPrecomp drops IGM"
