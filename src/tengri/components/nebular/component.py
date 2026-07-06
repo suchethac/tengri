@@ -22,7 +22,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
-import numpy as np
 
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.parameters.priors import Fixed, Uniform
@@ -605,44 +604,62 @@ class NebularSEDComponent:
                 # Hα 6564.61 v / 6562.80 a, Hβ 4862.68 v / 4861.33 a,
                 # Hγ 4341.68 v / 4340.47 a.
                 if self.config.backend in ("cue", "cloudy_grid", "cb19", "mappings"):
-                    line_waves_np = np.asarray(line_waves)
+                    # Trace-safe implementation: under a jitted sampler
+                    # (NUTS/HMC loss), ``line_waves`` arrives as a Tracer
+                    # via the threaded ``template_data``, so numpy
+                    # conversion / boolean indexing / Python branches
+                    # raise — and the guard below used to swallow that,
+                    # silently dropping the line catalog from
+                    # ``state.derived`` (joint phot+lines fits then fail
+                    # with a misleading "backend did not publish" error).
+                    line_waves = jnp.asarray(line_waves)
                     _BALMER_AIR_VAC = (
                         (6562.80, 6564.61),
                         (4861.33, 4862.68),
                         (4340.47, 4341.68),
                     )
-                    air_hits = 0
-                    vac_hits = 0
+                    air_votes = jnp.asarray(0.0)
+                    vac_votes = jnp.asarray(0.0)
                     for air_w, vac_w in _BALMER_AIR_VAC:
-                        in_band = line_waves_np[
-                            (line_waves_np > air_w - 1.0) & (line_waves_np < vac_w + 1.0)
-                        ]
-                        if in_band.size == 0:
-                            continue
-                        # Pick the closest line in the band and classify
-                        idx = int(np.argmin(np.abs(in_band - 0.5 * (air_w + vac_w))))
-                        probe = float(in_band[idx])
-                        if abs(probe - air_w) < abs(probe - vac_w):
-                            air_hits += 1
-                        else:
-                            vac_hits += 1
-                    looks_air = air_hits >= 2 and air_hits > vac_hits
-                    if looks_air:
-                        from tengri.units import air_to_vacuum
-
-                        in_optical = (line_waves_np >= 2000.0) & (line_waves_np <= 1.0e4)
-                        converted = line_waves_np.astype(np.float64).copy()
-                        converted[in_optical] = air_to_vacuum(line_waves_np[in_optical])
-                        line_waves = jnp.asarray(converted)
+                        mid = 0.5 * (air_w + vac_w)
+                        probe = line_waves[jnp.argmin(jnp.abs(line_waves - mid))]
+                        in_band = (probe > air_w - 1.0) & (probe < vac_w + 1.0)
+                        is_air = jnp.abs(probe - air_w) < jnp.abs(probe - vac_w)
+                        air_votes = air_votes + jnp.where(in_band & is_air, 1.0, 0.0)
+                        vac_votes = vac_votes + jnp.where(in_band & ~is_air, 1.0, 0.0)
+                    looks_air = (air_votes >= 2.0) & (air_votes > vac_votes)
+                    # Ciddor (1996) air→vacuum, jnp inline (mirror of
+                    # ``tengri.utils.conversions.air_to_vacuum``, which is
+                    # numpy-only and not traceable).
+                    sigma = 1e4 / line_waves
+                    n_refr = (
+                        1.0
+                        + 6.4328e-5
+                        + 2.94981e-2 / (146.0 - sigma**2)
+                        + 2.5540e-4 / (41.0 - sigma**2)
+                    )
+                    in_optical = (line_waves >= 2000.0) & (line_waves <= 1.0e4)
+                    converted = jnp.where(in_optical, line_waves * n_refr, line_waves)
+                    line_waves = jnp.where(looks_air, converted, line_waves)
 
                 state = state.with_(
                     derived=state.derived.with_(line_waves=line_waves, line_lums=line_lums)
                 )
-            except Exception:
+            except Exception as exc:
                 # Backend's line-luminosity path may fail (e.g. when
                 # ``cloudyfsps_only=True`` filters everything out).
-                # Don't let it block the SED forward pass.
-                pass
+                # Don't let it block the SED forward pass — but never
+                # swallow silently: a dropped publish disables line-flux
+                # fitting downstream.
+                import warnings
+
+                warnings.warn(
+                    f"nebular backend {self.config.backend!r}: discrete "
+                    f"line-catalog publish failed ({type(exc).__name__}: {exc}); "
+                    "line_waves/line_lums will be absent from state.derived and "
+                    "line-flux fitting will not work for this model.",
+                    stacklevel=2,
+                )
 
         # Add nebular contribution to sed_intrinsic. Birth-cloud + diffuse
         # dust attenuation of this continuum is the dust component's

@@ -56,6 +56,45 @@ __all__ = [
 ]
 
 
+def resolve_channel_data(baked, key, data_slice, data_args):
+    """Read a channel's observed data from ``data_args`` at call time.
+
+    The adapters store the arrays they were built with (``baked``), but a
+    compiled loss function is shared across Fitters with the same model
+    structure (``get_or_build_cached`` in ``jit_engine``). Baked arrays
+    become XLA constants — every galaxy after the first would silently be
+    fit against the first galaxy's data. Reading through ``data_args``
+    keeps the data a traced argument, so one compile serves the whole
+    catalog with each galaxy's own data.
+
+    Parameters
+    ----------
+    baked : ndarray
+        The array captured at adapter construction (fallback when the
+        caller supplies no ``data_args`` — e.g. user-facing ``log_prob``).
+    key : str or None
+        ``data_args`` entry to read (``"data"``, ``"noise"``,
+        ``"line_flux_obs"``, ...). ``None`` → always use ``baked``.
+    data_slice : tuple[int, int] or None
+        Optional ``(start, stop)`` slice into the ``data_args`` array —
+        used by joint phot+spec adapters that each own a segment of the
+        concatenated data vector.
+    data_args : Mapping or None
+        The loss-function data dict, threaded from the call site.
+
+    Returns
+    -------
+    ndarray
+        The call-time array when available, else ``baked``.
+    """
+    if data_args is None or key is None or key not in data_args:
+        return baked
+    arr = data_args[key]
+    if data_slice is not None:
+        arr = arr[data_slice[0] : data_slice[1]]
+    return arr
+
+
 # ─────────────────────────────────────────────────────────────────────
 # 1. Diagonal Gaussian — the workhorse
 # ─────────────────────────────────────────────────────────────────────
@@ -92,15 +131,21 @@ class GaussianLikelihood:
     channel: str = "phot_fnu"
     sigma_floor: float = 0.0
     name: str = "gaussian"
+    obs_key: str | None = None
+    err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         del params
+        obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
+        err = resolve_channel_data(self.err, self.err_key, self.data_slice, data_args)
         return diag_gaussian_log_prob(
-            prediction[self.channel], self.obs, self.err, sigma_floor=self.sigma_floor
+            prediction[self.channel], obs, err, sigma_floor=self.sigma_floor
         )
 
     def declared_parameters(self):
@@ -148,11 +193,15 @@ class StudentTLikelihood:
     f_cal_param: str | None = None
     channel: str = "phot_fnu"
     name: str = "student_t"
+    obs_key: str | None = None
+    err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         # When ``f_cal_param`` is set, the calibration uncertainty is a
         # free parameter the inference engine fits — read it from the
@@ -163,8 +212,8 @@ class StudentTLikelihood:
         else:
             f_cal = self.f_cal
         return -_student_t_neg_log_lik(
-            data=self.obs,
-            noise_obs=self.err,
+            data=resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
+            noise_obs=resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
             predicted=prediction[self.channel],
             f_cal=f_cal,
             dof=self.dof,
@@ -214,21 +263,26 @@ class CensoredLikelihood:
     dof: float | None = None
     channel: str = "phot_fnu"
     name: str = "censored"
+    obs_key: str | None = None
+    err_key: str | None = None
+    mask_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         if self.f_cal_param is not None and params is not None and self.f_cal_param in params:
             f_cal = params[self.f_cal_param]
         else:
             f_cal = self.f_cal
         return -_censored_neg_log_lik(
-            data=self.obs,
-            noise_obs=self.err,
+            data=resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args),
+            noise_obs=resolve_channel_data(self.err, self.err_key, self.data_slice, data_args),
             predicted=prediction[self.channel],
-            mask=self.mask,
+            mask=resolve_channel_data(self.mask, self.mask_key, self.data_slice, data_args),
             f_cal=f_cal,
             dof=self.dof,
         )
@@ -275,14 +329,18 @@ class MultivariateGaussianLikelihood:
     _: KW_ONLY
     channel: str = "spec_fnu"
     name: str = "mvn_gaussian"
+    obs_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         del params
-        diff = self.obs - prediction[self.channel]
+        obs = resolve_channel_data(self.obs, self.obs_key, self.data_slice, data_args)
+        diff = obs - prediction[self.channel]
         return -0.5 * (diff @ self.cov_inv @ diff)
 
     def declared_parameters(self):
