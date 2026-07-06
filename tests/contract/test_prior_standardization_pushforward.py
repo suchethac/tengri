@@ -40,7 +40,14 @@ import numpy as np
 import pytest
 import scipy.stats as st
 
-from tengri.parameters.priors import Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.parameters.priors import (
+    Gaussian,
+    Laplace,
+    LogNormal,
+    LogUniform,
+    StudentT,
+    Uniform,
+)
 
 pytestmark = pytest.mark.contract
 
@@ -89,6 +96,15 @@ CASES = [
             / (st.t.cdf(1.0 / 0.3, 2.0) - st.t.cdf(-1.0 / 0.3, 2.0))
         ),
         id="studentt-truncated",
+    ),
+    pytest.param(Laplace(0.0, 0.5), lambda x: st.laplace.cdf(x, 0.0, 0.5), id="laplace"),
+    pytest.param(
+        Laplace(0.2, 0.3, lo=-0.5, hi=0.8),
+        lambda x: (
+            (st.laplace.cdf(np.clip(x, -0.5, 0.8), 0.2, 0.3) - st.laplace.cdf(-0.5, 0.2, 0.3))
+            / (st.laplace.cdf(0.8, 0.2, 0.3) - st.laplace.cdf(-0.5, 0.2, 0.3))
+        ),
+        id="laplace-truncated",
     ),
 ]
 

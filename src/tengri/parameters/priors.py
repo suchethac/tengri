@@ -1389,6 +1389,197 @@ class StudentT(Distribution):
         return f"StudentT(mu={self._mu}, sigma={self._sigma}, df={self._df})"
 
 
+def _laplace_cdf_float(x: float, mu: float, b: float) -> float:
+    """Laplace CDF at a Python float; handles ±inf exactly."""
+    if math.isinf(x):
+        return 0.0 if x < 0 else 1.0
+    z = (x - mu) / b
+    return 0.5 * math.exp(z) if z < 0 else 1.0 - 0.5 * math.exp(-z)
+
+
+class Laplace(Distribution):
+    r"""Laplace (double-exponential) prior — a sparsity/robustness prior.
+
+    Heavier-tailed than a Gaussian and peaked at the location, the Laplace
+    prior is the continuous analogue of an L1 penalty (LASSO): it pulls weakly
+    constrained parameters toward ``mu`` while tolerating occasional large
+    excursions. Useful for coefficients expected to be near a default with a
+    few genuine departures (e.g. per-band calibration offsets, sparse
+    additive components).
+
+    Parameters
+    ----------
+    mu : float
+        Location (median and mode).
+    b : float
+        Scale (diversity). Must be positive; variance is ``2 b^2``.
+    lo : float, optional
+        Lower truncation bound. Default: ``-inf``.
+    hi : float, optional
+        Upper truncation bound. Default: ``+inf``.
+
+    Attributes
+    ----------
+    bounds : tuple[float, float]
+        ``(lo, hi)`` truncation bounds.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The density is
+
+    .. math::
+
+        p(x) = \\frac{1}{2b}\\exp\\!\\left(-\\frac{|x-\\mu|}{b}\\right).
+
+    **Standardization**: exact inverse-CDF pushforward
+    :math:`\\theta = \\mu - b\\,\\mathrm{sgn}(p-\\tfrac12)\\,
+    \\ln(1-2|p-\\tfrac12|)` with :math:`p = \\Phi(\\xi)` mapped through the
+    truncation bounds in CDF space (Knollmüller & Enßlin 2019 [1]_,
+    Eqs. 18-25). The quantile is closed-form, so no interpolation table is
+    needed.
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import Laplace
+    >>> prior = Laplace(mu=0.0, b=0.1)  # sparse calibration offset
+    >>> sample = prior.sample(jax.random.PRNGKey(0))
+
+    References
+    ----------
+    .. [1] Knollmüller, J. & Enßlin, T. A., "Metric Gaussian Variational
+       Inference", arXiv:1901.11033.
+    """
+
+    def __init__(
+        self,
+        mu: float = 0.0,
+        b: float = 1.0,
+        lo: float = float("-inf"),
+        hi: float = float("inf"),
+        *,
+        default: float | None = None,
+    ):
+        if b <= 0:
+            raise ValueError(f"Laplace requires b > 0, got {b}")
+        if lo >= hi:
+            raise ValueError(f"Laplace requires lo < hi, got lo={lo}, hi={hi}")
+        self._mu = float(mu)
+        self._b = float(b)
+        self._lo = float(lo)
+        self._hi = float(hi)
+        self._cdf_lo = _laplace_cdf_float(self._lo, self._mu, self._b)
+        self._cdf_hi = _laplace_cdf_float(self._hi, self._mu, self._b)
+        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
+        self._register_default(default)
+
+    @property
+    def bounds(self) -> tuple[float, float]:
+        """Lower and upper truncation bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
+        return (self._lo, self._hi)
+
+    def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw one sample from the (truncated) Laplace via inverse-CDF.
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample from Laplace(mu, b) truncated to [lo, hi].
+        """
+        # One source of truth with unstandardize(); exactly truncated.
+        return self.unstandardize(jax.random.normal(key))
+
+    def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Return the normalized (truncated) Laplace log-density, -inf outside.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
+        z_mass = self._cdf_hi - self._cdf_lo
+        lp = -jnp.abs(x - self._mu) / self._b - math.log(2.0 * self._b) - math.log(z_mass)
+        in_bounds = (x >= self._lo) & (x <= self._hi)
+        return jnp.where(in_bounds, lp, -jnp.inf)
+
+    def _quantile(self, p: jnp.ndarray) -> jnp.ndarray:
+        """Standard Laplace(mu, b) quantile F^{-1}(p), closed form."""
+        q = p - 0.5
+        return self._mu - self._b * jnp.sign(q) * jnp.log1p(-2.0 * jnp.abs(q))
+
+    def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
+        """ξ ~ N(0,1) → Laplace(mu, b) exactly truncated to [lo, hi].
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
+        """
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        p = self._cdf_lo + phi_xi * (self._cdf_hi - self._cdf_lo)
+        p = jnp.clip(p, _P_EPS, 1.0 - _P_EPS)
+        return self._quantile(p)
+
+    def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
+        """Laplace(mu, b) → ξ (inverse of the truncation-aware map).
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value.
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
+        z = (theta - self._mu) / self._b
+        p = jnp.where(z < 0, 0.5 * jnp.exp(z), 1.0 - 0.5 * jnp.exp(-z))
+        u = (p - self._cdf_lo) / (self._cdf_hi - self._cdf_lo)
+        u = jnp.clip(u, _P_EPS, 1.0 - _P_EPS)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * u - 1.0)
+
+    def __repr__(self) -> str:
+        parts = [f"mu={self._mu}", f"b={self._b}"]
+        if self._lo != float("-inf"):
+            parts.append(f"lo={self._lo}")
+        if self._hi != float("inf"):
+            parts.append(f"hi={self._hi}")
+        return f"Laplace({', '.join(parts)})"
+
+    def __eq__(self, other) -> bool:
+        return (
+            isinstance(other, Laplace)
+            and self._mu == other._mu
+            and self._b == other._b
+            and self._lo == other._lo
+            and self._hi == other._hi
+        )
+
+
 class Fixed(Distribution):
     """Fixed (non-free) parameter with a constant value.
 
