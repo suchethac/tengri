@@ -79,12 +79,9 @@ class TestBugNSS02EvolvingMetFusedKernel:
 
         model = SEDModel(spec, ssp_data, filters=filters)
 
-        # Ensure compositional kernel is built (happens automatically for
-        # evolving_metallicity=True, but verify for safety)
-        assert model._compositional is not None, (
-            "Compositional kernel must be built for evolving_metallicity=True"
-        )
-        assert model._compositional.photometry is not None
+        # The compositional kernel this bug lived in was retired (ADR-0019
+        # Phase 6 / #922); the physics contract — evolving metallicity gives
+        # finite, positive photometry — is pinned on the live orchestrator.
 
         # Sample parameters and compute photometry
         params = spec.sample(jax.random.PRNGKey(42))

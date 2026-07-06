@@ -4130,7 +4130,7 @@ class SEDModel:
             dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
         )
         _is_single = self._dust_model == "single_component"
-        atten_lums, _ = attenuate_emission(
+        atten_lums = attenuate_emission(
             lines.all_lums,
             lines.all_waves,
             self._neb_dust_mode,

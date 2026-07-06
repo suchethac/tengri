@@ -241,13 +241,13 @@ class WG00AttenuationSEDComponent:
         attenuation = jnp.exp(-a_lambda)
         attenuated = state.sed_intrinsic * attenuation
 
-        # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν.
+        # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
+        # LyC-masked (λ < 912 Å ionizes H, it does not heat dust — #922).
+        from tengri.forward.energy_balance import bolometric_absorbed
         from tengri.utils.physics_constants import C_AA
 
-        absorbed_lnu = state.sed_intrinsic - attenuated
         nu = C_AA / state.wave
-        order = jnp.argsort(nu)
-        l_ir = jnp.trapezoid(absorbed_lnu[order], nu[order])
+        l_ir = jnp.abs(bolometric_absorbed(state.sed_intrinsic, attenuated, nu, wave=state.wave))
 
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,

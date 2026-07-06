@@ -46,7 +46,6 @@ def _pipeline_src() -> str:
     from tengri.components.xray import component as xray_component
     from tengri.forward import (
         emission_helpers as emission_helpers_mod,
-        nonstell as nonstell_mod,
         pipeline as sed_pipeline,
         sed_model as sed_model_mod,
     )
@@ -61,7 +60,6 @@ def _pipeline_src() -> str:
         inspect.getsource(radio_component),
         inspect.getsource(xray_component),
         inspect.getsource(emission_helpers_mod),
-        inspect.getsource(nonstell_mod),
     ]
     return "\n".join(parts)
 

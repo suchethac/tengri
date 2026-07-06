@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """End-to-end smoke test: ``Parameters(agn_model="grahsp", ...)`` resolves
-to ``AGN_MODELS["grahsp"]`` and the SED model dispatches GRAHSP params
-correctly through the standard ``nonstell_fn`` path.
+to ``AGN_MODELS["grahsp"]`` and the SED model forwards GRAHSP params to the
+registered emission function.
 
 This test catches the gap closed in 2026-05: GRAHSP params were registered
-in :data:`tengri.components.agn.AGN_MODELS` but **not** forwarded by
-:mod:`tengri.forward.nonstell` to ``agn_emission``, which meant a fit set
-up via ``Parameters(agn_model="grahsp", agn_grahsp_l5100=…)`` silently used
-defaults.
+in :data:`tengri.components.agn.AGN_MODELS` but **not** forwarded by the
+forward pipeline to ``agn_emission``, which meant a fit set up via
+``Parameters(agn_model="grahsp", agn_grahsp_l5100=…)`` silently used
+defaults. (The originally affected dispatch site, ``forward/nonstell.py``,
+was retired as dead code in #922; the kwarg-forwarding contract it pinned
+lives on in the registry dispatch exercised here.)
 """
 
 from __future__ import annotations
@@ -74,13 +76,12 @@ def test_parameters_rejects_unknown_grahsp_param():
 
 
 def test_grahsp_params_flow_through_dispatch():
-    """The forwarded params in nonstell.py must reach the registered grahsp() function.
+    """Forwarded GRAHSP kwargs must reach the registered grahsp() function.
 
-    We can't easily call ``nonstell_fn`` in isolation without a full SEDModel,
-    so we exercise the registry function directly with the explicit kwargs
-    that ``nonstell.py:363`` now passes. If a user-set ``agn_grahsp_plslope``
-    actually changes the SED, then the dispatch path will too (since the
-    same kwarg name is used).
+    Exercise the registry function directly with the explicit kwargs the
+    forward pipeline passes. If a user-set ``agn_grahsp_plslope`` actually
+    changes the SED, then the dispatch path will too (since the same kwarg
+    name is used).
     """
     fn = resolve_agn_model("grahsp")
     wave = jnp.logspace(2, 6, 200)
