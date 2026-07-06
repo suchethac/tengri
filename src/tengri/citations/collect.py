@@ -15,6 +15,7 @@ from tengri.citations.associations import (
     AGN_NLR_CITATIONS,
     BACKEND_CITATIONS,
     CORE_CITATIONS,
+    DLA_CITATIONS,
     DUST_LAW_CITATIONS,
     DUST_MODEL_CITATIONS,
     FUNCTION_CITATIONS,
@@ -222,6 +223,13 @@ def _collect_keys(obj: Any, *, include_backend: bool = True) -> list[str]:
             if model in IGM_CITATIONS:
                 keys.extend(IGM_CITATIONS[model])
 
+        # DLA foreground absorber (Tepper-García Voigt profile), independent of
+        # the mean-IGM model. Flagged via ``dla`` on the igm config or the
+        # top-level model config.
+        uses_dla = bool(getattr(igm, "dla", False)) or bool(getattr(mc, "dla", False))
+        if uses_dla:
+            keys.extend(DLA_CITATIONS)
+
     # Photometry: AB-system + filter-convolution convention (ADR-0017). Any
     # run that produces broadband fluxes cites the AB foundations; the
     # per-convention entry cites the code each convention reproduces.
@@ -394,6 +402,17 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
     _push(getattr(spec, "dust_law", None))
     _push(getattr(spec, "dust_law_bc", None))
     _push(getattr(spec, "dust_law_diff", None))
+
+    # IGM mean-model + DLA (observed-frame absorption). The config-based
+    # ``_collect_keys`` path only fires when ``_find_model_config`` resolves a
+    # ModelConfig; a live SEDModel exposes these on the spec, so map them here
+    # too (mean-IGM inoue/madau/meiksin06/asada25 + DLA cite their papers).
+    if getattr(spec, "apply_igm", False):
+        igm_model = getattr(spec, "igm_model", None)
+        if igm_model in IGM_CITATIONS:
+            out.extend(IGM_CITATIONS[igm_model])
+    if getattr(spec, "dla", False):
+        out.extend(DLA_CITATIONS)
 
     # Inference method (Posterior exposes .method)
     method = getattr(obj, "method", None)

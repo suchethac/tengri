@@ -909,6 +909,23 @@ def igm_transmission_madau(
 
 from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
 
+
+def igm_transmission_asada25(wave_obs: jnp.ndarray, z: float, **kwargs: object) -> jnp.ndarray:
+    r"""Inoue+2014 mean IGM plus the Asada+2025 proximate-CGM damping wing.
+
+    A registry model (not a flag) so future CGM prescriptions slot in as
+    additional registry entries. Uses the published Asada+2025 (ApJL 983, L2)
+    H I column-density sigmoid (``cgm_*`` left at their paper defaults). Fixes
+    the z > 7 photometric-redshift bias from assuming a sharp Lyman break.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — delegates to :func:`igm_transmission`.
+    """
+    del kwargs
+    return igm_transmission(wave_obs, z, add_cgm=True)
+
+
 IGM_TRANSMISSION_MODELS: dict[str, object] = {
     "inoue14": igm_transmission,
     "madau": igm_transmission_madau,
@@ -918,6 +935,9 @@ IGM_TRANSMISSION_MODELS: dict[str, object] = {
     # ``IGM_TRANSMISSION_MODELS`` and ``resolve_igm_model`` did not — exactly
     # the kind of drift the parity contract test was added to catch.
     "meiksin06": igm_transmission_meiksin06,
+    # Inoue+2014 + Asada+2025 CGM damping wing, as its own model so new CGM
+    # prescriptions register flatly rather than accreting boolean flags.
+    "asada25": igm_transmission_asada25,
 }
 
 #: Back-compat aliases that route to canonical registry keys. The bare
@@ -953,3 +973,87 @@ def resolve_igm_model(name: str) -> object:
         available = sorted(IGM_TRANSMISSION_MODELS.keys() | _IGM_ALIASES.keys())
         raise ValueError(f"Unknown IGM model {name!r}. Available: {available}")
     return IGM_TRANSMISSION_MODELS[resolved]
+
+
+def igm_absorption(
+    wave_obs: jnp.ndarray,
+    z: float,
+    *,
+    igm_x_HI: float = 0.0,
+    igm_bubble_mpc: float = 10.0,
+    igm_patchy: bool = False,
+    igm_model: str = "inoue",
+    use_dla: bool = False,
+    dla_z: float = 0.0,
+    dla_log_n_hi: float = 20.0,
+    dla_temp: float = 1e4,
+    dla_b_turb: float = 0.0,
+) -> jnp.ndarray:
+    r"""Total observed-frame absorption — the single flat dispatch.
+
+    Composes the observed-frame transmission from a *mean-IGM model* and
+    optional *modifiers*, and is the ONE call every observed-frame consumer
+    uses (the exact ``predict_obs_sed`` path and the :class:`IGMSEDComponent`
+    photometry/spectroscopy projection), so all paths stay consistent (#932):
+
+    * **mean IGM** — resolved once from the registry
+      (:func:`resolve_igm_model`: ``inoue``/``inoue14``, ``madau``,
+      ``meiksin06``, ``asada25`` = Inoue + Asada+2025 CGM damping wing), or
+      replaced by the patchy-reionization model when ``igm_patchy`` is set.
+    * **DLA** — an optional multiplicative damped-Lyman-α absorber layered on
+      top of the mean IGM (``use_dla``), so photometry and spectroscopy both
+      see it rather than only ``predict_obs_sed``.
+
+    New CGM prescriptions are added as new *registry models* (like
+    ``asada25``), not flags — keeping the per-model dispatch flat.
+
+    Parameters
+    ----------
+    wave_obs : ndarray, shape (n_wave,)
+        Observed-frame wavelength [Angstrom].
+    z : float
+        Source redshift [dimensionless].
+    igm_x_HI, igm_bubble_mpc : float, optional
+        Patchy-reionization neutral fraction (0-1) and bubble radius [proper
+        Mpc]; only used when ``igm_patchy=True``.
+    igm_patchy : bool, optional
+        Use the patchy reionization damping-wing model instead of the mean
+        IGM. Default ``False``.
+    igm_model : str, optional
+        Registry key or alias of the mean-IGM model. Default ``"inoue"``.
+    use_dla : bool, optional
+        Multiply by a damped-Lyman-α absorber. Default ``False``.
+    dla_z, dla_log_n_hi, dla_temp, dla_b_turb : float, optional
+        DLA absorber redshift (0 → source ``z``), log10 H I column density
+        [cm^-2], temperature [K], and turbulent Doppler velocity [km/s].
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Transmission fraction [dimensionless, 0-1].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``igm_patchy`` / ``use_dla`` are static structural
+    flags, so their branches resolve at trace time.
+    """
+    if igm_model in ("none", None):
+        # Mean IGM disabled (e.g. DLA-only, or a low-z fit with only a
+        # foreground absorber): start from unit transmission.
+        transmission = jnp.ones_like(wave_obs)
+    elif igm_patchy and igm_x_HI > 0.0:
+        transmission = igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
+    else:
+        transmission = resolve_igm_model(igm_model)(wave_obs, z)
+    if use_dla:
+        from tengri.components.igm.dla import dla_transmission_obs
+
+        z_dla = jnp.where(dla_z > 0.0, dla_z, z)
+        transmission = transmission * dla_transmission_obs(
+            wave_obs,
+            z_dla=z_dla,
+            log_n_hi=dla_log_n_hi,
+            temp=dla_temp,
+            b_turb_kms=dla_b_turb,
+        )
+    return transmission

@@ -2433,32 +2433,28 @@ class SEDModel:
         z = self._get_redshift(params)
         wave_obs = rest_result.wavelength * (1.0 + z)
         sed_obs = rest_result.sed
-        if self._uses_igm:
+        if self._uses_igm or self._uses_dla:
             from tengri.forward.emission_helpers import igm_absorption
 
-            # Always apply IGM when enabled — igm_transmission returns
-            # all-ones at z=0. Avoid z>0 comparison which fails under JIT.
-            igm_trans = igm_absorption(
+            # One flat dispatch: mean-IGM model (or 'none' when only a DLA is
+            # requested) plus the optional DLA absorber. This is the same call
+            # the IGMSEDComponent projection makes, so predict_obs_sed and
+            # photometry/spectroscopy stay consistent (#932). Transmission is
+            # all-ones at z=0, so no z>0 comparison is needed under JIT.
+            transmission = igm_absorption(
                 wave_obs,
                 z,
                 igm_x_HI=params.get("igm_x_HI", 0.0),
                 igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
                 igm_patchy=getattr(self, "_igm_patchy", False),
-                igm_model=self._igm_model,
+                igm_model=self._igm_model if self._uses_igm else "none",
+                use_dla=self._uses_dla,
+                dla_z=params.get("dla_z", 0.0),
+                dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
+                dla_temp=params.get("dla_temp", 1e4),
+                dla_b_turb=params.get("dla_b_turb", 0.0),
             )
-            sed_obs = sed_obs * igm_trans
-        if self._uses_dla:
-            from tengri.components.igm.dla import dla_transmission_obs
-
-            z_dla = params.get("dla_z", 0.0)
-            z_dla = jnp.where(z_dla > 0.0, z_dla, z)
-            sed_obs = sed_obs * dla_transmission_obs(
-                wave_obs,
-                z_dla=z_dla,
-                log_n_hi=params.get("dla_log_n_hi", 20.0),
-                temp=params.get("dla_temp", 1e4),
-                b_turb_kms=params.get("dla_b_turb", 0.0),
-            )
+            sed_obs = sed_obs * transmission
         # MW foreground screen (#297) — final transformation on the
         # observed-frame SED, independent of host-galaxy dust. Applied
         # at observed-frame wavelengths so it works for any source
@@ -4909,6 +4905,9 @@ class SEDModel:
             use_xray=bool(getattr(self, "_uses_xray", False)),
             xray_model=getattr(self, "_xray_model", "yang20"),
             use_igm=bool(getattr(self, "_uses_igm", False)),
+            igm_model=getattr(self, "_igm_model", "inoue"),
+            igm_patchy=bool(getattr(self, "_igm_patchy", False)),
+            use_dla=bool(getattr(self, "_uses_dla", False)),
             use_shock=bool(getattr(self, "_uses_shock", False)),
             shock_norm=getattr(self, "_shock_norm", "frac"),
             shock_abundance=getattr(self, "_shock_abundance", "solar"),

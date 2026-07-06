@@ -614,16 +614,17 @@ def igm_absorption(
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     Patchy reionization always uses Inoue+2014 as the mean-IGM base.
     """
-    if igm_patchy and igm_x_HI > 0.0:
-        from tengri.components.igm import igm_transmission_patchy
+    # Single source of truth: the flat registry dispatch in components.igm.
+    # This shim keeps ``tengri.forward.emission_helpers.igm_absorption`` as a
+    # stable import site while delegating model selection (inoue/madau/
+    # meiksin06) + patchy to one place, so every path stays consistent (#932).
+    from tengri.components.igm.igm import igm_absorption as _flat_igm_absorption
 
-        return igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
-
-    if igm_model == "madau":
-        from tengri.components.igm import igm_transmission_madau
-
-        return igm_transmission_madau(wave_obs, z)
-
-    from tengri.components.igm import igm_transmission
-
-    return igm_transmission(wave_obs, z)
+    return _flat_igm_absorption(
+        wave_obs,
+        z,
+        igm_x_HI=igm_x_HI,
+        igm_bubble_mpc=igm_bubble_mpc,
+        igm_patchy=igm_patchy,
+        igm_model=igm_model,
+    )
