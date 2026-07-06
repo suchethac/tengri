@@ -104,16 +104,26 @@ class CompositeLikelihood:
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         r"""Sum of log-probabilities across constituents.
 
         Each constituent reads only the prediction keys it needs —
         :class:`PhotometryLikelihood` ignores ``"spec_fnu"`` and vice
-        versa.
+        versa. ``data_args`` is forwarded to constituents that accept it
+        (the built-in adapter cohort) so a shared compiled loss reads the
+        current Fitter's data; user-supplied two-argument likelihoods
+        keep working unchanged. The signature check runs at trace time,
+        not per evaluation.
         """
+        import inspect
+
         total = jnp.asarray(0.0)
         for lk in self.likelihoods:
-            total = total + lk.log_prob(prediction, params)
+            if data_args is not None and "data_args" in inspect.signature(lk.log_prob).parameters:
+                total = total + lk.log_prob(prediction, params, data_args=data_args)
+            else:
+                total = total + lk.log_prob(prediction, params)
         return total
 
     def declared_parameters(self) -> list[str]:

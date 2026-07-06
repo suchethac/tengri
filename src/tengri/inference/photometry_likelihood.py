@@ -52,15 +52,23 @@ class PhotometryLikelihood(GaussianLikelihood):
         fnu_obs: jnp.ndarray,
         fnu_err: jnp.ndarray,
         sigma_floor: float = 0.0,
+        data_slice: tuple[int, int] | None = None,
     ) -> None:
         # frozen=True forbids ordinary __setattr__; route through the
         # superclass __init__ which uses object.__setattr__ internally.
+        # obs_key/err_key default to the Fitter data_args entries so a
+        # shared compiled loss reads the current galaxy's data (see
+        # ``resolve_channel_data``); ``data_slice`` selects the photometry
+        # segment of a joint data vector.
         super().__init__(
             obs=fnu_obs,
             err=fnu_err,
             channel="phot_fnu",
             sigma_floor=sigma_floor,
             name="photometry_gaussian",
+            obs_key="data",
+            err_key="noise",
+            data_slice=data_slice,
         )
 
     @property

@@ -3244,12 +3244,11 @@ class SEDModel:
 
         .. math::
 
-            F = \\frac{L_{\\odot}}{4\\pi d_L^2}
+            F = \\frac{L}{4\\pi d_L^2}
 
-        where :math:`d_L` is the luminosity distance.
+        where :math:`L` is the line luminosity [erg/s] and :math:`d_L` is
+        the luminosity distance [cm].
         """
-        from tengri.utils.physics_constants import L_SUN
-
         backend = self._nebular_backend
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
             raise ValueError(
@@ -3284,7 +3283,13 @@ class SEDModel:
             # for vacuum 5008.24 when the catalog is in air at 5006.84 is
             # within 1.4 Aa and OK; asking for a missing 6300 [OI] line could
             # match Halpha 264 Aa away). ``tolerance_aa=None`` disables.
-            if tolerance_aa is not None:
+            # The guard needs concrete values; under a jitted loss
+            # (NUTS/HMC) ``min_deltas`` is a Tracer, so skip it there —
+            # line matching is structural (static catalog × static
+            # targets), and any eager call on the same model (mock
+            # generation, prediction, the first Fitter setup) runs the
+            # loud check for the identical matching.
+            if tolerance_aa is not None and not isinstance(min_deltas, jax.core.Tracer):
                 import numpy as _np
 
                 bad = _np.asarray(min_deltas) > float(tolerance_aa)
@@ -3308,7 +3313,11 @@ class SEDModel:
             selected_lums = all_lums
 
         dl_cm = self._get_dl_cm(params)
-        flux = selected_lums * L_SUN / (4.0 * jnp.pi * dl_cm**2)
+        # ``line_lums`` are published in erg/s (DerivedKey contract in
+        # NebularSEDComponent) — no L_sun conversion here. Multiplying by
+        # L_SUN was a 33.6-dex unit error that made every joint
+        # photometry+line-flux fit unusable against real data.
+        flux = selected_lums / (4.0 * jnp.pi * dl_cm**2)
         return flux
 
     def predict_line_ratios(self, params, line_ratio_data):
@@ -3346,8 +3355,6 @@ class SEDModel:
         **JIT-compatible**: no — delegates to the nebular backend via
         :meth:`predict_state`.
         """
-        from tengri.utils.physics_constants import L_SUN
-
         state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
             raise ValueError(
@@ -3358,7 +3365,10 @@ class SEDModel:
         all_waves = jnp.asarray(state.derived["line_waves"])
         all_lums = jnp.asarray(state.derived["line_lums"])
         dl_cm = self._get_dl_cm(params)
-        scale = L_SUN / (4.0 * jnp.pi * dl_cm**2)
+        # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
+        # ``predict_line_fluxes``. The scale cancels in every ratio, so
+        # this is unit hygiene, not a behavior change.
+        scale = 1.0 / (4.0 * jnp.pi * dl_cm**2)
 
         def _match(targets):
             targets = jnp.asarray(targets)

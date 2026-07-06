@@ -153,6 +153,17 @@ def _build_data_neg_log_likelihood_fn(fitter):
             index_defs = obs_for_idx.spectral_indices.index_defs
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
+    # Build-time signature check: the internal adapter cohort accepts
+    # ``data_args`` (call-time data threading); user-supplied likelihoods
+    # with the two-argument signature keep working on their baked arrays.
+    if user_likelihood is not None:
+        import inspect
+
+        _likelihood_takes_data_args = (
+            "data_args" in inspect.signature(user_likelihood.log_prob).parameters
+        )
+    else:
+        _likelihood_takes_data_args = False
 
     # Phase 4-D (#250 follow-up): photometry-only fits use the
     # threaded ``_impl`` directly so the outer JIT trace (HMC/NUTS
@@ -204,7 +215,13 @@ def _build_data_neg_log_likelihood_fn(fitter):
 
         # Auto-built / user-supplied Likelihood adapter handles the data
         # term (and any extras composed via CompositeLikelihood).
+        # ``data_args`` is forwarded so adapters read the CURRENT
+        # Fitter's data — the compiled loss is shared across Fitters
+        # (get_or_build_cached), and adapter-baked arrays would XLA-bake
+        # the first galaxy's data into every subsequent fit.
         if user_likelihood is not None:
+            if _likelihood_takes_data_args:
+                return -user_likelihood.log_prob(prediction, params, data_args=data_args)
             return -user_likelihood.log_prob(prediction, params)
 
         # Legacy χ² fall-through. Exactly one case reaches this code path:

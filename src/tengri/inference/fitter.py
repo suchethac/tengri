@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from tengri.inference.posterior import Posterior
 
 import jax
+import numpy as np
 
 logger = logging.getLogger(__name__)
 import jax.numpy as jnp
@@ -210,9 +211,16 @@ class Fitter:
         Data type indicator: ``"photometry"``, ``"spectroscopy"``, or
         ``"joint"``. If ``None`` (default), inferred from
         ``model.observation``. Explicit values override inference.
-    data_mask : array_like, bool or None
-        Optional boolean mask for censored/non-detections. ``True`` = use datum
-        in likelihood, ``False`` = exclude. Default ``None`` (use all).
+    data_mask : array_like or None
+        Optional per-datum censoring flags (CIGALE-style limits):
+        ``0`` = detected (Gaussian term), ``1`` = upper limit
+        (``ln Φ((limit − model)/σ)``), ``-1`` = lower limit
+        (``ln Φ((model − limit)/σ)``). The corresponding ``data`` entry
+        carries the limit value. Default ``None`` (all detected).
+        Boolean arrays are rejected: ``True`` would silently be read as
+        "upper limit", the opposite of the include/exclude semantics a
+        boolean mask suggests. To exclude a datum, drop it from ``data``
+        and ``noise`` (or inflate its ``noise``).
     calibration_marginalize : bool, optional
         If ``True``, analytically marginalize over spectroscopic calibration
         polynomial coefficients (Chebyshev order 1--``cal_n_poly``) when
@@ -396,7 +404,19 @@ class Fitter:
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
-        self.data_mask = jnp.asarray(data_mask) if data_mask is not None else None
+        if data_mask is not None:
+            data_mask = jnp.asarray(data_mask)
+            # A boolean mask here is a semantics trap: the censored
+            # likelihood reads 1 as "upper limit", so True/False intended
+            # as include/exclude would silently censor every included
+            # datum. Require the explicit trinary convention.
+            if data_mask.dtype == jnp.bool_:
+                raise ValueError(
+                    "data_mask must use censoring flags (0=detected, 1=upper "
+                    "limit, -1=lower limit), not booleans. To exclude a datum, "
+                    "drop it from data/noise or inflate its noise."
+                )
+        self.data_mask = data_mask
         self.data_type = self._resolve_data_type(data_type, model)
         self.spec = model.spec
 
@@ -684,6 +704,9 @@ class Fitter:
                 args["line_flux_obs"] = line_flux_cfg.fluxes
                 args["line_flux_err"] = line_flux_cfg.errors
                 args["line_flux_waves"] = line_flux_cfg.wavelengths
+                limit_mask = getattr(line_flux_cfg, "limit_mask", None)
+                if limit_mask is not None:
+                    args["line_flux_limit_mask"] = limit_mask
 
             line_ratio_cfg = getattr(obs, "line_ratios", None)
             if line_ratio_cfg is not None:
@@ -845,22 +868,14 @@ class Fitter:
         ONCE per Fitter construction and cached to avoid recomputation
         in tight loops.
         """
-        from tengri.observation.noise import has_noise_model
-
         model_sig = self.model.compile_signature()
-        fitter_sig = (
-            self.data_type,
-            self.spec.stochastic,
-            self.spec.n_grid if self.spec.stochastic else 0,
-            len(self.data),
-            tuple(sorted(self._free_names)),
-            has_noise_model(self.spec),
-            self._eline_marginalize,
-            self._eline_fitted,
-            self._calibration_marginalize,
-            self._eline_prior_type,
-        )
-        return (model_sig, fitter_sig)
+        # Single source of truth with the engine cache: _engine_cache_key
+        # carries the observation feature channels (line fluxes / ratios /
+        # indices / censoring mask) whose presence is baked into the loss
+        # closure. Keeping them out of this signature lets a joint
+        # phot+lines Fitter silently reuse a photometry-only loss (line
+        # term dropped) or crash on a missing data_args key.
+        return (model_sig, self._engine_cache_key())
 
     @property
     def _lean_keep_sig(self) -> tuple:
@@ -879,10 +894,34 @@ class Fitter:
 
         Two Fitters sharing the same Model will reuse the same compiled
         engine if their cache keys match (same data_type, stochastic
-        flag, latent dimension, data length, free parameter names, and
-        noise model presence).
+        flag, latent dimension, data length, free parameter names, noise
+        model presence, and observation feature channels).
+
+        The feature-channel entries (line fluxes / line ratios / spectral
+        indices / censoring mask) are load-bearing: the loss closure bakes
+        ``has_line_fluxes`` etc. in at build time, so two Fitters that
+        differ only in these channels produce *different* loss functions.
+        Without them in the key, a joint phot+lines fit silently reuses a
+        photometry-only engine and drops the line term from the
+        likelihood (or crashes with a missing ``line_flux_waves`` key,
+        depending on build order).
         """
         from tengri.observation.noise import has_noise_model
+
+        obs = getattr(self.model, "observation", None)
+        line_flux_cfg = getattr(obs, "line_fluxes", None) if obs is not None else None
+        line_flux_key = (
+            (
+                tuple(round(float(w), 6) for w in np.asarray(line_flux_cfg.wavelengths)),
+                # Limit-mask PRESENCE selects Censored vs Gaussian adapters
+                # (structure); the mask VALUES ride through data_args.
+                getattr(line_flux_cfg, "limit_mask", None) is not None,
+            )
+            if line_flux_cfg is not None
+            else None
+        )
+        line_ratio_cfg = getattr(obs, "line_ratios", None) if obs is not None else None
+        index_cfg = getattr(obs, "spectral_indices", None) if obs is not None else None
 
         return (
             self.data_type,
@@ -895,6 +934,10 @@ class Fitter:
             self._eline_fitted,
             self._calibration_marginalize,
             self._eline_prior_type,
+            line_flux_key,
+            line_ratio_cfg is not None,
+            index_cfg is not None,
+            self.data_mask is not None,
         )
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:

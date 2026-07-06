@@ -186,7 +186,18 @@ def place_line_profiles_velocity(
     # Floor h at ~half the local grid spacing so σ→0 stays finite (≈1-pixel line).
     # ``obs_wavelengths.shape`` is static, so the size guard is JIT-safe.
     if obs_wavelengths.shape[0] > 1:
-        dwave_grid = jnp.median(jnp.abs(jnp.diff(obs_wavelengths)))
+        # The wavelength grid is usually a compile-time constant inside the
+        # jitted forward pass; computing the median there makes XLA
+        # constant-fold an O(n log n) sort at every kernel compile (slow
+        # compiles + "Constant folding an instruction is taking > 1s"
+        # warnings). Evaluate eagerly at trace time when concrete; keep the
+        # traced path for genuinely dynamic grids (vmap over grids, jit args).
+        if isinstance(obs_wavelengths, jax.core.Tracer):
+            dwave_grid = jnp.median(jnp.abs(jnp.diff(obs_wavelengths)))
+        else:
+            import numpy as _np
+
+            dwave_grid = float(_np.median(_np.abs(_np.diff(_np.asarray(obs_wavelengths)))))
         h = jnp.maximum(h_raw, 0.5 * dwave_grid)  # (n_lines,) [Å]
     else:
         h = jnp.maximum(h_raw, line_wavelengths * 1e-6)  # degenerate grid: tiny floor
