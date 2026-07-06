@@ -143,10 +143,15 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ),
     ParamDeclaration(
         "agn_adaf_delta",
-        # Fraction of viscous energy heating electrons directly; ~1e-3 (Coulomb)
-        # to ~0.5 (modern preferred; Yuan & Narayan 2014).
+        # delta is the single most consequential ADAF parameter (it sets the flow
+        # luminosity at fixed mdot). DEFAULT DEPARTS FROM THE PAPER: Mahadevan
+        # 1997's own fiducial is delta ~ m_e/m_i ~ 1/2000 (~5e-4). We default to
+        # 0.1 following the modern post-GRMHD preference (delta ~ 0.1-0.5; Yuan &
+        # Narayan 2014, ARA&A 52, 529), which better matches observed LLAGN. The
+        # paper's fiducial (and the full range) remain available as free values.
         Uniform(0.001, 0.5, default=0.1),
-        "ADAF electron viscous-heating fraction delta",
+        "ADAF electron viscous-heating fraction delta "
+        "(default 0.1 = modern preference; Mahadevan 1997 fiducial is 1/2000)",
     ),
     ParamDeclaration(
         "agn_astar",

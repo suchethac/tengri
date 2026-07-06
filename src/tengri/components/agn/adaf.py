@@ -644,8 +644,12 @@ def adaf_spectrum(
         Gas-to-total pressure ratio :math:`\beta` (magnetic fraction is
         :math:`1-\beta`). Default 0.5.
     agn_adaf_delta : float, optional
-        Fraction of viscous energy heating electrons directly :math:`\delta`.
-        Default 0.1.
+        Fraction of viscous energy heating electrons directly :math:`\delta` —
+        the single most consequential ADAF parameter (it sets the flow luminosity
+        at fixed :math:`\dot m`). Default ``0.1`` **departs from Mahadevan 1997's
+        own fiducial** :math:`\delta \sim m_e/m_i \sim 1/2000`; ``0.1`` follows the
+        modern post-GRMHD preference (:math:`\delta \sim 0.1`–``0.5``; Yuan &
+        Narayan 2014) that better matches observed LLAGN.
 
     Returns
     -------

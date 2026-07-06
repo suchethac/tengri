@@ -670,6 +670,77 @@ class TestComposableAGNRuntimeWiring:
             "block selectors may not be reaching the runtime."
         )
 
+    def test_adaf_plasma_params_not_a_noop(self, synthetic_ssp_wide):
+        """agn_adaf_delta / agn_adaf_alpha measurably change the *AGN* SED through
+        the public grammar — proof at the SEDModel.build layer that the plasma
+        params route through spec -> runner -> block. Before #898 they were
+        undeclared silent no-ops (agn_adaf_beta/delta were never in _params.py or
+        _consumes). The AGN component (not the total SED) is the probe: the ADAF
+        synchrotron/Compton action peaks in the radio-mm and X-ray, so on an
+        optical-NIR grid it is dwarfed by the stellar host in the total SED.
+
+        Parameters are chosen in the low-mdot regime (log_lbol=9, log_mbh=9 ->
+        mdot ~ 1e-3, alpha_c>1) where delta is physically active: at high mdot
+        (alpha_c<1) Mahadevan's Eq. 43 for T_e has no delta dependence, so delta
+        is *correctly* inert there — a regime-dependence, not a no-op."""
+        import jax
+        import numpy as np
+
+        from tengri import SEDModel
+
+        def _build(delta, alpha):
+            return SEDModel.build(
+                synthetic_ssp_wide,
+                sfh={
+                    "type": "delayed",
+                    "tau_gyr": Fixed(1.0),
+                    "age_gyr": Fixed(5.0),
+                    "log_total_mass": Fixed(0.0),
+                    "*": FIXED,
+                },
+                dust={
+                    "type": "two_component",
+                    "tau_bc": Fixed(0.0),
+                    "tau_diff": Fixed(0.0),
+                    "*": FIXED,
+                },
+                agn={
+                    "type": "composable",
+                    "*": FIXED,
+                    "frac": 1.0,
+                    "log_lbol": 9.0,
+                    "log_mbh": 9.0,
+                    "disc": {
+                        "type": "adaf",
+                        "*": FIXED,
+                        "adaf_delta": Fixed(delta),
+                        "adaf_alpha": Fixed(alpha),
+                    },
+                },
+                redshift=Fixed(0.05),
+            )
+
+        # Grammar routing: the short-form keys reach the canonical param names.
+        spec = _build(0.4, 0.2).spec
+        assert spec.get_distribution("agn_adaf_delta").value == 0.4
+        assert spec.get_distribution("agn_adaf_alpha").value == 0.2
+
+        def _sed_agn(model):
+            p = dict(model.spec.sample(jax.random.PRNGKey(0)))
+            return np.asarray(model.predict_state(p).derived["sed_agn"])
+
+        base = _sed_agn(_build(0.05, 0.3))
+
+        def _max_rel(other):
+            return float(np.max(np.abs(other - base) / (np.abs(base) + base.max() * 1e-12)))
+
+        assert _max_rel(_sed_agn(_build(0.4, 0.3))) > 1e-3, (
+            "agn_adaf_delta is a silent no-op through SEDModel.build"
+        )
+        assert _max_rel(_sed_agn(_build(0.05, 0.1))) > 1e-3, (
+            "agn_adaf_alpha is a silent no-op through SEDModel.build"
+        )
+
     def test_composable_agn_wildcard_fixed_emits_nonzero_sed(self, synthetic_ssp_wide):
         """Wildcard ``'*': FIXED`` with no explicit ``frac`` must still
         produce a non-zero AGN SED (regression for #417).
