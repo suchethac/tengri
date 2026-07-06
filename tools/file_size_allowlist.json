@@ -1,5 +1,5 @@
 {
-  "src/tengri/components/agn/blocks/runner.py": 801,
+  "src/tengri/components/agn/blocks/runner.py": 823,
   "src/tengri/forward/sed_model.py": 6007,
   "src/tengri/inference/fitter.py": 3132,
   "src/tengri/components/dust/attenuation.py": 1874,
