@@ -1923,20 +1923,14 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
 
         result[block_to_kwarg[block_name]] = block_type
 
-    # Cross-block normalization policy. ``agn={'norm': 'conserving' |
-    # 'cigale_joint' | 'independent'}`` selects how disc/torus/polar share a
-    # luminosity reference; the valid menu is single-sourced from
-    # AGN_NORM_POLICIES so the grammar can never drift from the runner (the
-    # recurring "wired in one layer but not the other" footgun). Default
-    # (unset) leaves AGNConfig.agn_norm at "cigale_joint".
+    # Cross-block normalization policy (``agn['norm']``): menu single-sourced
+    # from AGN_NORM_POLICIES so the grammar can't drift from the runner (#556).
     if "norm" in agn_dict:
         from tengri.components.agn.blocks import AGN_NORM_POLICIES
 
         _norm = agn_dict["norm"]
         if _norm not in AGN_NORM_POLICIES:
-            raise ValueError(
-                f"Unknown agn['norm'] = '{_norm}'. Valid: {sorted(AGN_NORM_POLICIES)}."
-            )
+            raise ValueError(f"Unknown agn['norm']={_norm!r}. Valid: {sorted(AGN_NORM_POLICIES)}")
         result["agn_norm"] = _norm
 
 

@@ -16,9 +16,12 @@ import pytest
 from tengri import FIXED, Fixed, SEDModel
 
 _GRID = os.path.join("data", "feltre_grid.h5")
-pytestmark = pytest.mark.skipif(
-    not os.path.exists(_GRID), reason="data/feltre_grid.h5 absent (user-built grid)"
-)
+pytestmark = [
+    pytest.mark.contract,
+    pytest.mark.skipif(
+        not os.path.exists(_GRID), reason="data/feltre_grid.h5 absent (user-built grid)"
+    ),
+]
 
 
 def _build_feltre(synthetic_ssp_wide, logU):
