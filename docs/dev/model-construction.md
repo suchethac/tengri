@@ -179,7 +179,7 @@ silent no-op — this is exactly how the shock port went dead before #851).
 
 - [`sed-model-components.md`](sed-model-components.md) — full how-to with three
   worked examples (closed-form, library, NN emulator).
-- [`forward-model-architecture.md`](forward-model-architecture.md) —
+- [`forward-model-architecture.md`](archive/forward-model-architecture.md) —
   architectural context for the forward pipeline.
 - [ADR-0011](../adr/0011-sed-model-component-base.md) — the base-class design.
 - [`src/tengri/components/dust/wg00_model.py`](../../src/tengri/components/dust/wg00_model.py)

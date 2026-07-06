@@ -132,7 +132,7 @@ Ship **Approach A first.**
 | `src/tengri/observation/predict_via_precomp.py`     | Confirm cosmology + IGM read z at runtime, not from compile signature |
 | `tests/contract/test_cross_compile_catalog_fit.py`  | NEW — same model fit at three different z values produces three results with **one** JIT compile |
 | `bench/scripts/benchmark_catalog_fit.py`            | NEW — time a 100-galaxy catalog fit before/after      |
-| `docs/dev/forward-model-architecture.md`            | New §6.5 "Catalog fits at per-galaxy Fixed(z)"        |
+| `docs/dev/archive/forward-model-architecture.md`            | New §6.5 "Catalog fits at per-galaxy Fixed(z)"        |
 
 ## Acceptance
 
@@ -172,6 +172,6 @@ Ship **Approach A first.**
 
 * `src/tengri/forward/sed_model.py:WavePrecomp` (current dataclass)
 * `WavePrecomp(z_min, z_max)` ztable path documented in
-  `docs/dev/forward-model-architecture.md` §5
+  `docs/dev/archive/forward-model-architecture.md` §5
 * `docs/dev/orchestrator_ssp_threading.md` — earlier Phase 4 work on
   threading arrays as JIT runtime inputs (analogous mechanism)

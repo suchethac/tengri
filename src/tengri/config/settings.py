@@ -107,7 +107,7 @@ class AGNConfig:
 
     Examples
     --------
-    >>> from tengri import AGNConfig
+    >>> from tengri.config import AGNConfig
     >>> cfg = AGNConfig()
     >>> cfg.disc, cfg.torus
     ('multicolor', 'skirtor')
@@ -174,7 +174,7 @@ class SFHConfig:
 
     Examples
     --------
-    >>> from tengri import SFHConfig
+    >>> from tengri.config import SFHConfig
     >>> cfg = SFHConfig(mean_type=["dpl", "field"], n_grid=128)
     >>> cfg.mean_type
     ('dpl', 'field')
@@ -233,7 +233,7 @@ class DustConfig:
 
     Examples
     --------
-    >>> from tengri import DustConfig
+    >>> from tengri.config import DustConfig
     >>> cfg = DustConfig(law_bc="calzetti", emission="dale2014")
     >>> cfg.law_bc
     'calzetti'
@@ -312,7 +312,7 @@ class NebularConfig:
 
     Examples
     --------
-    >>> from tengri import NebularConfig
+    >>> from tengri.config import NebularConfig
     >>> cfg = NebularConfig(backend="cue")
     >>> cfg.backend
     'cue'
@@ -366,7 +366,7 @@ class MultiwavelengthConfig:
 
     Examples
     --------
-    >>> from tengri import MultiwavelengthConfig
+    >>> from tengri.config import MultiwavelengthConfig
     >>> cfg = MultiwavelengthConfig(radio=True, xray=True)
     >>> cfg.radio
     True

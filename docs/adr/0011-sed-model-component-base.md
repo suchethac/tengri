@@ -37,7 +37,7 @@ Consequences:
   with no single source of truth. Renaming or extending a model means edits
   to four files plus verification.
 
-The forward-model architecture (§2.1 of `docs/dev/forward-model-architecture.md`)
+The forward-model architecture (§2.1 of `docs/dev/archive/forward-model-architecture.md`)
 sketches a solution: a concrete convenience base class `SEDModelComponent` that
 auto-discovers parameters, auto-registers via `__init_subclass__`, and provides
 sensible defaults for `precompute()` and `apply()`. New models become **one
@@ -231,7 +231,7 @@ as efficient as a hand-written adapter.
   the base class writes to via `state.derived`.
 - **ADR-0005** (`0005-component-owns-its-parameters.md`) — Parameter ownership
   principle; the base class auto-discovers parameters from the class definition.
-- **`docs/dev/forward-model-architecture.md`** — The target architecture sketch
+- **`docs/dev/archive/forward-model-architecture.md`** — The target architecture sketch
   (§2.1 SED components).
 - **`docs/dev/sed-model-components.md`** — Contributor how-to guide for writing
   models with the base class.

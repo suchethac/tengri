@@ -38,7 +38,6 @@ __all__ = [
     "DRAINE2021_PAH_DEFAULT_PATH",
     "PAHSPEC_PATH_ENV",
     "STARLIGHT_PROPERTIES",
-    "integrate_lnu_over_nu",
     "load_pahspec_or_raise",
     "missing_template_message",
     "resample_lnu_on_aa_grid",
@@ -132,9 +131,6 @@ STARLIGHT_PROPERTIES: dict[str, dict] = {
 
 # 1 micron = 10000 Angstrom.
 _UM_TO_AA = 1.0e4
-# Speed of light in Angstrom / s.  Used for nu = c / lam_aa when
-# integrating L_nu over nu.
-_C_AA_PER_S = _C_CGS * 1.0e8
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -511,42 +507,3 @@ def resample_lnu_on_aa_grid(
         )
 
     return jax.vmap(_interp_one)(L_nu_template)
-
-
-def integrate_lnu_over_nu(
-    L_nu: jnp.ndarray,
-    wave_aa: jnp.ndarray,
-) -> jnp.ndarray:
-    r"""JIT-friendly trapezoid of :math:`\int L_\nu \, d\nu`.
-
-    Uses the identity
-    :math:`\int L_\nu \, d\nu = \int (\nu L_\nu)\, d\ln\nu` and the
-    transformation :math:`d\ln\nu = -d\ln\lambda`, with the two sign
-    flips canceling for an increasing-:math:`\lambda` grid:
-
-    .. math::
-
-        \int_{\nu_{\min}}^{\nu_{\max}} L_\nu \, d\nu
-        \;=\; \int_{\lambda_{\min}}^{\lambda_{\max}}
-              (\nu L_\nu)\, d\ln\lambda \, .
-
-    Parameters
-    ----------
-    L_nu : array_like, shape ``(..., n_wave_aa)``
-        :math:`L_\nu` in [erg/s/Hz] (or any per-Hz unit).
-    wave_aa : array_like, shape ``(n_wave_aa,)``
-        Wavelength grid in Angstrom; strictly increasing.
-
-    Returns
-    -------
-    ndarray, shape ``(...,)``
-        :math:`\int L_\nu \, d\nu` in [erg/s] (or the matching unit).
-
-    Notes
-    -----
-    **JIT-compatible**: yes — pure ``jnp.trapezoid`` over a static
-    axis.  **Gradient-safe**: yes.
-    """
-    nu = _C_AA_PER_S / wave_aa
-    nu_lnu = nu * L_nu
-    return jnp.trapezoid(nu_lnu, jnp.log(wave_aa), axis=-1)

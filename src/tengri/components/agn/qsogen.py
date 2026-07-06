@@ -97,7 +97,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn.unified import register_agn_model
 from tengri.components.dust.attenuation import smc as smc_curve
 
 # ── Physical constants (CGS) ──────────────────────────────────────
@@ -744,12 +743,9 @@ def compute_qsogen_sed(
 # ── Register in AGN_MODELS ────────────────────────────────────────
 
 
-@register_agn_model(
-    "qsogen",
-    citation="Temple, Hewett & Banerji 2021, MNRAS, 508, 737",
-    status="deprecated",
-    short_doc="QSOgen empirical quasar SED (Temple+2021)",
-)
+# Deprecated: qsogen is no longer registered in AGN_MODELS.
+# Use composable AGN blocks instead: agn_disc_block="qsogen_sbpl_disc" + nlr/blr blocks.
+# This function is retained for backward compatibility if imported directly.
 def qsogen(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = 45.0,

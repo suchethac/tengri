@@ -103,7 +103,7 @@ Once the forward-path works, what happens to `PopulationFitter`?
 
 ### Task 1: Decide on parameter-encoding contract (Option B above)
 
-No code. Document the chosen per-galaxy parameter encoding in `docs/dev/forward-model-architecture.md` §6.5 as a new sub-section "Hierarchical-population parameter encoding."
+No code. Document the chosen per-galaxy parameter encoding in `docs/dev/archive/forward-model-architecture.md` §6.5 as a new sub-section "Hierarchical-population parameter encoding."
 
 ### Task 2: PopulationSEDModel publishes the per-galaxy-vs-shared partition
 

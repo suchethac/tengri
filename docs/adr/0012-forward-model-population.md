@@ -3,7 +3,7 @@
 - **Status:** Accepted (2026-05-22)
 - **Stakeholders:** Suchetha; future contributors adding multi-component
   galaxy models (AGN + host, bulge + disc, mergers).
-- **Related:** [Forward Model Architecture](../dev/forward-model-architecture.md);
+- **Related:** [Forward Model Architecture](../dev/archive/forward-model-architecture.md);
   ADR-0009 (typed publish/require contract); NAMING_CONTRACT §3.2
   (free-parameter prefix discipline).
 

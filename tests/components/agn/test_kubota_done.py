@@ -32,10 +32,15 @@ class TestKubotaDoneFullAgn:
         chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_kubota_done_full(self):
-        """'kubota_done_full' appears in AGN_MODELS."""
-        from tengri.components.agn.unified import AGN_MODELS
+        """'kubota_done_full' resolves via resolve_agn_model."""
+        import warnings
 
-        assert "kubota_done_full" in AGN_MODELS
+        from tengri.components.agn.unified import resolve_agn_model
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = resolve_agn_model("kubota_done_full")
+        assert callable(fn)
 
     def test_agn_frac_scales_linearly(self, wavelength):
         """agn_frac multiplies the whole SED linearly."""

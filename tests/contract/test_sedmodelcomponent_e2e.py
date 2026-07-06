@@ -499,8 +499,10 @@ _EXPECTED_REGISTRY_NAMES = frozenset(
         # blocks/nlr_analytic. The analytic NLR ships via AGN_BLOCKS, not a port.
         # Nebular — cue/cloudy/cb19 dispatch to the canonical NebularSEDComponent
         # engine + backend; the port duplicates (cue_emulator/cloudy_grid/cb19)
-        # were deleted (#738, Phase 3b). mappings/shock remain standalone ports.
-        "mappings",
+        # were deleted (#738, Phase 3b). The ``mappings`` port was deleted in the
+        # 2026-07 dead-code purge — a grammar-unreachable no-op superseded by the
+        # canonical ``shock`` port (#851); its load() passed a ``grid_path`` kwarg
+        # ShockBackend does not even accept.
         "shock",
         # Radio
         "radio_powerlaw",

@@ -110,16 +110,12 @@ Key directories:
 - `observation/` — photometry, spectroscopy, filters, noise, emission lines
 - `inference/` — fitter, posterior, all inference methods (vi, mcmc, nss, map, etc.)
 - `analysis/` — diagnostics, plotting, simulate, mock
-- `config/` — DustConfig/NebularConfig/SFHConfig/ModelConfig, exceptions, display, deprecation
+- `config/` — config dataclasses (internal lowering artifacts — build models via `SEDModel.build` grammar; top-level `tengri.DustConfig` etc. emit DeprecationWarning since 2026-07), exceptions, display, deprecation
 - `utils/` — cosmology, conversions, interpolation, physics_constants
 - `cosmology/` — re-exports from `utils/cosmology` (canonical user-facing path; added 2026-05)
 - `units/` — re-exports F_nu/L_nu/AB-magnitude conversions (canonical user-facing path; added 2026-05)
 - `plot/` — re-exports plotting helpers from `analysis/plotting` (canonical user-facing path; added 2026-05)
 - `_deprecated.py` — `deprecated_alias()` / `deprecated_attribute()` shims (added 2026-05)
-
-Phase 4 sub-namespaces (additive re-export modules; added 2026-05):
-- `components/agn/{disc_api,torus_api,lines,compose}.py`
-- `components/dust/{attenuation_models,emission_models,pah}.py`
 
 ## Model construction API (CURRENT)
 
@@ -160,9 +156,10 @@ model = SEDModel.build(
 - Grammar: each group dict accepts `'type'` (structural choice), `'*'`
   wildcard (`FREE`/`FIXED`; default `FIXED`), and per-parameter short-form
   overrides (e.g. `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
-- Sub-blocks: `dust.emission`, plus the five AGN composable selectors —
-  `agn.disc`, `agn.torus`, `agn.lines`, `agn.feii`, `agn.atten`. Each nests as
-  a dict with its own `'type'`, `'*'`, and per-param keys.
+- Sub-blocks: `dust.emission`, plus the six AGN composable selectors —
+  `agn.disc`, `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten`
+  (the deprecated `agn.lines` alias expands to an nlr/blr pair). Each nests
+  as a dict with its own `'type'`, `'*'`, and per-param keys.
 - Composable shock (#851): the top-level `shock={...}` group adds MAPPINGS V
   shock emission as a **separate additive** component that composes with any
   photoionized `neb` backend (both on at once). `shock={'norm': 'frac' |
@@ -250,7 +247,7 @@ The contract:
 **Reference:**
 - [`docs/dev/model-construction.md`](docs/dev/model-construction.md) — the one narrative (build path + dispatch + this recipe in context)
 - [`docs/dev/sed-model-components.md`](docs/dev/sed-model-components.md) — full how-to + three worked examples (closed-form, library, NN emulator)
-- [`docs/dev/forward-model-architecture.md`](docs/dev/forward-model-architecture.md) — architectural context
+- [`docs/dev/archive/forward-model-architecture.md`](docs/dev/archive/forward-model-architecture.md) — architectural context
 - [`docs/adr/0011-sed-model-component-base.md`](docs/adr/0011-sed-model-component-base.md) — the design decision
 - [`src/tengri/components/dust/wg00_model.py`](src/tengri/components/dust/wg00_model.py) — canonical small port (closed-form attenuation)
 - [`src/tengri/components/agn/skirtor_model.py`](src/tengri/components/agn/skirtor_model.py) — canonical library port

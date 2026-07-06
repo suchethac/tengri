@@ -17,12 +17,13 @@ def test_registry_baseline_keys_registered():
     """Verify baseline component keys are in the unified registry."""
     from tengri.components.sed_model_component import _REGISTRY
 
-    # Baseline: 10 components that must remain registered
+    # Baseline: components that must remain registered. The "mappings" port
+    # was deleted in the 2026-07 dead-code purge (grammar-unreachable no-op;
+    # canonical shock component is "shock", #851).
     expected_baseline = {
         "cat3d_wind",
         "draine2021_pah_ir",
         "kd18_disc",
-        "mappings",
         "powerlaw_disc",
         "radio_powerlaw",
         "schreiber2016_ir",

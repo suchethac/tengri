@@ -64,9 +64,14 @@ def test_veroncetty_differs_from_bruhweiler():
 
 def test_registry_forwards_new_params():
     """The registered ``grahsp`` entry point must forward the new kwargs."""
-    from tengri.components.agn.unified import AGN_MODELS
+    import warnings
 
-    fn = AGN_MODELS["grahsp"]
+    from tengri.components.agn.unified import resolve_agn_model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("grahsp")
+    assert callable(fn)
     out_default = np.asarray(fn(WAVE_AA, agn_log_lbol=45.0))
     out_mn12 = np.asarray(fn(WAVE_AA, agn_log_lbol=45.0, torus_model="mn12"))
     out_disc = np.asarray(fn(WAVE_AA, agn_log_lbol=45.0, disc_model="netzer"))

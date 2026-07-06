@@ -1,19 +1,14 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """AGN emission models for tengri.
 
-Provides modular accretion disc and dust torus components that combine
-into a unified AGN SED. Available models:
+ALL AGN models now use the composable-blocks dispatch system (AGN_BLOCKS registry).
+The legacy monolithic fallback (AGN_MODELS) has been retired. Users should construct
+AGN SEDs by composing registered blocks:
 
-- **multicolor_agn** (= deprecated alias ``kubota_done``): Kubota & Done (2018)
-  outer-zone disc + 2-T torus (8+ params)
-- **kubota_done_full**: Kubota & Done (2018) full 3-zone disc + torus (13+ params)
-- **adaf**: ADAF + truncated disc for low-luminosity AGN (Mahadevan 1997) (6 params)
-- **unified_nlr_blr**: kubota_done + NLR/BLR decomposition with geometric masking (12+ params)
-- **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 2016) (7 params)
-- **silva04**: power-law disc + Silva+04 smooth torus (5 params)
-- **cat3d_wind**: power-law disc + CAT3D-Wind clumpy torus (6 params)
-- **relagn**: RELAGN relativistic outer disc + 2-T torus (8 params)
-- **qsogen**: Temple, Hewett & Banerji (2021) empirical quasar SED (7 params)
+    agn_model="composable", agn_disc_block=..., agn_torus_block=..., etc.
+
+See :mod:`tengri.components.agn.blocks` and :doc:`docs/adr/0018-composable-agn-grammar.md`
+for the full block registry and migration guide from legacy model names.
 
 Usage::
 

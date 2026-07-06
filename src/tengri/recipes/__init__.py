@@ -35,7 +35,9 @@ __all__ = [
     "agn_panchromatic",
     "composable_agn",
     "dust_demo",
+    "high_z",
     "mock_recovery_minimal",
+    "photoz",
     "quiescent_z0",
     "star_forming_photometry",
     "stochastic_sfh_jwst",
@@ -141,6 +143,130 @@ def quiescent_z0() -> dict:
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
+    )
+
+
+def high_z() -> dict:
+    """Recipe for high-redshift galaxies (z > 3.5, young starburst).
+
+    Suitable for rest-UV/optical photometry of young, bursty systems at
+    z > 3.5: strong nebular emission, metal-poor stellar populations, and
+    SMC/Calzetti-like dust.
+
+    **SSP requirement:** with-nebular-emission (wNE) SSP grids — the ``ssp``
+    nebular backend reads line and continuum emission baked into the SSP
+    file itself, so a bare-stellar grid would silently drop the nebular
+    contribution.
+
+    **Configuration:**
+    - **SFH**: Truncated skew-normal (tsnorm) — bursty, short timescales
+    - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
+      (slope fixed at -0.7), no IR emission block
+    - **Nebular**: baked into the SSP grid (``ssp`` backend)
+    - **Redshift**: Free with bounds (3.5, 10.0)
+    - **IGM**: Applied (mandatory across the Lyman forest)
+    - **Metallicity**: Free, Uniform(-1.0, 0.2) [log10(Z/Zsun)]
+
+    Returns
+    -------
+    dict
+        Nested-dict ready for parse_groups() or SEDModel.build().
+
+    Notes
+    -----
+    Rescued from the pre-grammar ``presets.high_z()`` factory (2026-07);
+    prior ranges are unchanged. Deliberately **no** ``approx=WavePrecomp()``:
+    the LUT's first-order dust projection biases rest-UV bands (#617, #731),
+    which is exactly the regime this recipe samples — the exact wave-grid
+    path is the correct default here.
+
+    Examples
+    --------
+    >>> from tengri import SEDModel, recipes
+    >>> model = SEDModel.build(ssp_data=ssp_wne, **recipes.high_z())
+    >>> assert "sfh_tsnorm_peak_lbt_gyr" in model.spec.free_params
+    """
+    return dict(
+        sfh={
+            "type": "tsnorm",
+            "log_total_mass": Uniform(8.0, 12.0),
+            "peak_lbt_gyr": Uniform(0.1, 1.5),
+            "width_gyr": Uniform(0.05, 1.0),
+            "skew": Uniform(-1.0, 1.0),
+            "trunc": Uniform(1.0, 10.0),
+            "met_logzsol": Uniform(-1.0, 0.2),
+        },
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "power_law",
+            "tau_bc": Uniform(0.1, 1.5),
+            "tau_diff": Uniform(0.0, 0.8),
+            "slope": Fixed(-0.7),
+        },
+        neb={"type": "ssp"},
+        redshift=Uniform(3.5, 10.0),
+        apply_igm=True,
+    )
+
+
+def photoz() -> dict:
+    """Recipe for photometric-redshift fits (redshift-unconstrained surveys).
+
+    Prioritizes redshift as the parameter of interest, with broad
+    uninformative priors on SFH, dust, and metallicity to avoid
+    prior-driven photo-z biases.
+
+    **SSP requirement:** any (nebular emission is off).
+
+    **Configuration:**
+    - **SFH**: Double power-law with extended timescales (tau up to 13 Gyr)
+    - **Dust**: Two-component, Calzetti birth cloud + power-law diffuse
+      (slope fixed at -0.7), wide optical-depth ranges for photo-z
+      degeneracies
+    - **Nebular**: Off (unconstrained by broadband photometry)
+    - **Redshift**: Free with bounds (0.01, 12.0)
+    - **IGM**: Applied (the wide z range crosses the Lyman forest)
+    - **Metallicity**: Free, Uniform(-1.0, 0.5) [log10(Z/Zsun)]
+
+    Returns
+    -------
+    dict
+        Nested-dict ready for parse_groups() or SEDModel.build().
+
+    Notes
+    -----
+    Rescued from the pre-grammar ``presets.photoz()`` factory (2026-07);
+    prior ranges are unchanged. Deliberately **no** ``approx=WavePrecomp()``:
+    the default ztable does not cover z up to 12 and the LUT's dust
+    projection biases blue bands at high redshift (#617, #731).
+
+    Examples
+    --------
+    >>> from tengri import SEDModel, recipes
+    >>> model = SEDModel.build(ssp_data=ssp, **recipes.photoz())
+    >>> assert "redshift" in model.spec.free_params
+    """
+    return dict(
+        sfh={
+            "type": "dpl",
+            "alpha": Uniform(0.5, 3.0),
+            "beta": Uniform(0.3, 2.0),
+            "tau_gyr": Uniform(0.5, 13.0),
+            "log_total_mass": Uniform(8.0, 12.5),
+            "met_logzsol": Uniform(-1.0, 0.5),
+        },
+        dust={
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "law_diff": "power_law",
+            "tau_bc": Uniform(0.0, 3.0),
+            "tau_diff": Uniform(0.0, 2.0),
+            "slope": Fixed(-0.7),
+        },
+        neb={"type": "none"},
+        redshift=Uniform(0.01, 12.0),
+        apply_igm=True,
     )
 
 

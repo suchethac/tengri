@@ -2,7 +2,7 @@
 
 > Item #3 of the post-tracer-bullet architecture sequence. Closes the
 > last load-bearing piece of the architecture spec
-> (`docs/dev/forward-model-architecture.md` §6 + ADR-0012).
+> (`docs/dev/archive/forward-model-architecture.md` §6 + ADR-0012).
 
 **Status:** Plan only. **Do not start implementation until the user reviews this document.** The parameter-namespace decision is irreversible once users have notebooks and saved fits in this format; the user should validate the namespace separator, error-message wording, and `ForwardModel.build` ergonomics before code lands.
 

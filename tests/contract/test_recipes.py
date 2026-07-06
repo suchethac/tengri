@@ -585,3 +585,87 @@ class TestGateGroupBoolRejected:
         assert any(group in k for k in allp), (
             f"{group}={decl} produced no {group} params — silently absent"
         )
+
+
+class TestHighZ:
+    """Tests for high_z() recipe (rescued from the shadowed presets.py, 2026-07)."""
+
+    def test_high_z_returns_dict(self):
+        result = recipes.high_z()
+        assert isinstance(result, dict)
+
+    def test_high_z_builds_parameters(self):
+        spec = parse_groups(**recipes.high_z())
+        assert isinstance(spec, Parameters)
+
+    def test_high_z_has_tsnorm_sfh(self):
+        """Bursty truncated skew-normal SFH for young high-z systems."""
+        result = recipes.high_z()
+        assert result["sfh"]["type"] == "tsnorm"
+        spec = parse_groups(**result)
+        assert "sfh_tsnorm_peak_lbt_gyr" in spec.free_params
+
+    def test_high_z_free_redshift_above_3p5(self):
+        """Default is a free-z fit restricted to z > 3.5."""
+        spec = parse_groups(**recipes.high_z())
+        assert "redshift" in spec.free_params
+
+    def test_high_z_metal_poor_prior(self):
+        """Metallicity prior spans metal-poor to slightly super-solar."""
+        spec = parse_groups(**recipes.high_z())
+        assert "met_logzsol" in spec.free_params
+
+    def test_high_z_applies_igm(self):
+        """IGM absorption is mandatory at z > 3.5."""
+        result = recipes.high_z()
+        assert result["apply_igm"] is True
+
+    def test_high_z_no_dust_emission(self):
+        """No IR emission block — recipe targets rest-UV/optical photometry."""
+        result = recipes.high_z()
+        assert "emission" not in result["dust"]
+
+    def test_high_z_exact_wave_path(self):
+        """No WavePrecomp: the dust Taylor projection biases rest-UV bands,
+        which is exactly the regime this recipe samples (#617/#731)."""
+        result = recipes.high_z()
+        assert "approx" not in result
+
+
+class TestPhotoz:
+    """Tests for photoz() recipe (rescued from the shadowed presets.py, 2026-07)."""
+
+    def test_photoz_returns_dict(self):
+        result = recipes.photoz()
+        assert isinstance(result, dict)
+
+    def test_photoz_builds_parameters(self):
+        spec = parse_groups(**recipes.photoz())
+        assert isinstance(spec, Parameters)
+
+    def test_photoz_has_dpl_sfh(self):
+        result = recipes.photoz()
+        assert result["sfh"]["type"] == "dpl"
+        spec = parse_groups(**result)
+        assert "sfh_dpl_tau_gyr" in spec.free_params
+
+    def test_photoz_wide_free_redshift(self):
+        """Redshift is THE parameter of interest — free with very wide bounds."""
+        spec = parse_groups(**recipes.photoz())
+        assert "redshift" in spec.free_params
+
+    def test_photoz_nebular_off(self):
+        """Nebular emission off — unconstrained by broadband photometry."""
+        result = recipes.photoz()
+        assert result["neb"]["type"] == "none"
+
+    def test_photoz_applies_igm(self):
+        """Wide z range crosses the Lyman forest — IGM required."""
+        result = recipes.photoz()
+        assert result["apply_igm"] is True
+
+    def test_photoz_exact_wave_path(self):
+        """No WavePrecomp: default ztable does not cover z up to 12 and the
+        dust Taylor projection biases blue bands at high z (#617/#731)."""
+        result = recipes.photoz()
+        assert "approx" not in result

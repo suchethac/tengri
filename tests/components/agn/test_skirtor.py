@@ -35,9 +35,14 @@ class TestSKIRTORRegistration:
     """Test that SKIRTOR is properly registered."""
 
     def test_skirtor_in_agn_models(self):
-        from tengri.components.agn import AGN_MODELS
+        import warnings
 
-        assert "skirtor" in AGN_MODELS
+        from tengri.components.agn import resolve_agn_model
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            fn = resolve_agn_model("skirtor")
+        assert callable(fn)
 
     def test_get_agn_model_skirtor(self):
         from tengri.components.agn import resolve_agn_model
@@ -342,9 +347,13 @@ class TestSKIRTORGradients:
 
     def test_gradient_registered_model(self, wave):
         """Gradient should flow through the registered 'skirtor' model."""
-        from tengri.components.agn import AGN_MODELS
+        import warnings
 
-        model_fn = AGN_MODELS["skirtor"]
+        from tengri.components.agn import resolve_agn_model
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            model_fn = resolve_agn_model("skirtor")
 
         def loss(tau, ci):
             return jnp.sum(
@@ -394,12 +403,17 @@ class TestSKIRTORJIT:
         chex.assert_tree_all_finite(sed)
 
     def test_jit_registered_model(self, wave):
-        from tengri.components.agn import AGN_MODELS
+        import warnings
 
-        model_fn = AGN_MODELS["skirtor"]
+        from tengri.components.agn import resolve_agn_model
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            model_fn = resolve_agn_model("skirtor")
         fn = jax.jit(
             lambda tau, p, q, oa, ci: model_fn(
                 wave,
+                agn_log_lbol=44.0,
                 agn_tau_skirtor=tau,
                 agn_p_skirtor=p,
                 agn_q_skirtor=q,

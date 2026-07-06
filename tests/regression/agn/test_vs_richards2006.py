@@ -63,13 +63,14 @@ def test_richards2006_bolometric_normalization():
 
 @pytest.mark.regression_paper
 def test_richards2006_registered_in_agn_models():
-    """``AGN_MODELS["richards2006"]`` resolves and is callable."""
-    from tengri.components.agn.unified import AGN_MODELS
+    """``resolve_agn_model("richards2006")`` returns a callable."""
+    import warnings
 
-    assert "richards2006" in AGN_MODELS
-    entry = AGN_MODELS["richards2006"]
-    # Resolve the underlying callable via the registry entry
-    fn = getattr(entry, "fn", entry)
+    from tengri.components.agn.unified import resolve_agn_model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("richards2006")
     assert callable(fn)
     wave = jnp.logspace(2, 5, 10)
     out = fn(wave, agn_log_lbol=12.0)

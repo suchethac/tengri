@@ -27,12 +27,12 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.draine2021_pah import (
-    integrate_lnu_over_nu,
     load_pahspec_or_raise,
     resample_lnu_on_aa_grid,
     select_pahspec_axes,
     select_pahspec_starlight_auto,
 )
+from tengri.components.dust.emission._physics import integrate_lnu_over_nu
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import SEDComponentConfig
