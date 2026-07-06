@@ -643,6 +643,22 @@ class Observation:
         sed_rest = state.sed_intrinsic
         wave_rest = state.wave
 
+        # IGM attenuation is an observed-frame transmission the IGM component
+        # publishes on the rest grid (``T`` evaluated at ``wave_obs =
+        # wave*(1+z)``). Both projections below redshift ``sed_rest``
+        # internally, so multiplying here — before projection — attenuates the
+        # observed SED for photometry *and* spectroscopy at once. Applying the
+        # full transmission curve (not a single per-band effective-wavelength
+        # factor) is what captures the sharp Lyman break across broad bands and
+        # spectral pixels at high redshift (#932). ``T`` shares the rest grid
+        # with ``sed_rest``; the key is absent (structural no-op) when IGM is
+        # disabled, so low-z / IGM-off models are bit-unchanged.
+        igm_trans = (
+            state.derived.get("igm_transmission", None) if state.derived is not None else None
+        )
+        if igm_trans is not None:
+            sed_rest = sed_rest * igm_trans
+
         out: dict[str, jnp.ndarray] = {}
 
         if self.can_do_photometry:
@@ -927,6 +943,23 @@ class Observation:
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
         phot_rest_fnu = total_lnu * cosmology_rest
 
+        # IGM / DLA attenuation. The LUT path carries no per-λ observed SED, so
+        # the exact full-curve transmission used by the wave-grid projection
+        # (observation.predict) is unavailable here. Instead sample the
+        # transmission the IGM component published on the rest grid at each
+        # filter's rest effective wavelength — a per-band (effective-wavelength)
+        # approximation. It is coarse across the *sharp* Lyman break for bands
+        # straddling it (use ``approx=None`` for unbiased rest-UV IGM at high z,
+        # mirroring the WavePrecomp dust-Taylor caveat), but recovers the bulk
+        # of the attenuation instead of silently dropping it entirely (#932).
+        # Only the observed-frame flux is attenuated; ``phot_rest_fnu`` (z=0)
+        # carries no IGM.
+        igm_trans = state.derived.get("igm_transmission")
+        eff_waves = state.derived.get("filter_eff_waves")
+        if igm_trans is not None and eff_waves is not None:
+            igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
+            phot_fnu = phot_fnu * igm_factor
+
         out = {"phot_fnu": phot_fnu, "phot_rest_fnu": phot_rest_fnu}
 
         if observables_type is not None:
@@ -1037,6 +1070,17 @@ class Observation:
 
         cosmology_rest = 1.0 / (4.0 * jnp.pi * TEN_PC_CM**2)
         spec_rest_fnu = total_spec_lnu * cosmology_rest
+
+        # IGM / DLA attenuation. Unlike the photometry LUT, the spectrum LUT is
+        # per-pixel, so the observed-frame transmission is applied *exactly*:
+        # sample the transmission the IGM component published on the rest grid
+        # at each pixel's rest effective wavelength. Only the observed-frame flux
+        # is attenuated; spec_rest_fnu (z=0) carries no IGM (#932).
+        igm_trans = state.derived.get("igm_transmission")
+        eff_waves = state.derived.get("spec_eff_waves")
+        if igm_trans is not None and eff_waves is not None:
+            igm_factor = jnp.interp(jnp.asarray(eff_waves), state.wave, igm_trans)
+            spec_fnu = spec_fnu * igm_factor
 
         out = {"spec_fnu": spec_fnu, "spec_rest_fnu": spec_rest_fnu}
 

@@ -29,7 +29,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.igm._params import PARAMS as _IGM_PARAMS
-from tengri.components.igm.igm import igm_transmission
+from tengri.components.igm.igm import igm_absorption
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -49,13 +49,26 @@ class IGMSEDComponentConfig(SEDComponentConfig):
     ----------
     name : str
         Diagnostic identifier. Default ``"igm"``.
-    add_cgm : bool
-        Add Asada+2025 CGM damping wing at z > 5. Default ``False``
-        (matches :func:`igm_transmission`).
+    igm_model : str
+        Mean-IGM transmission model resolved from the registry: ``"inoue"``
+        (Inoue+2014, default), ``"madau"`` (Madau+1995), ``"meiksin06"``
+        (Meiksin 2006), or ``"asada25"`` (Inoue + Asada+2025 CGM damping
+        wing). Threaded from ``spec.igm_model`` so the observed-frame
+        photometry and spectroscopy honor the configured model rather than
+        always falling back to Inoue.
+    igm_patchy : bool
+        Use the patchy-reionization damping-wing model instead of the mean
+        IGM. Default ``False``.
+    use_dla : bool
+        Multiply by a damped-Lyman-α absorber (params read at apply time),
+        so photometry/spectroscopy see the DLA — not only
+        ``predict_obs_sed``. Default ``False``.
     """
 
     name: str = "igm"
-    add_cgm: bool = False
+    igm_model: str = "inoue"
+    igm_patchy: bool = False
+    use_dla: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,13 +172,22 @@ class IGMSEDComponent:
         z = jnp.asarray(params["redshift"])
         wave_obs = state.wave * (1.0 + z)
 
-        T = igm_transmission(
+        # Single flat dispatch honoring the configured mean-IGM model and DLA
+        # (was hardcoded to Inoue with no DLA, so the observed-frame
+        # photometry/spectroscopy projection silently ignored both — #932).
+        dla_z = params.get("dla_z", 0.0)
+        T = igm_absorption(
             wave_obs,
             z,
-            add_cgm=self.config.add_cgm,
-            cgm_z_mid=jnp.asarray(params.get("igm_z_mid", 7.0)),
-            cgm_dz=jnp.asarray(params.get("igm_dz", 0.5)),
-            cgm_log_nhi=jnp.asarray(params.get("igm_log_nhi", 20.0)),
+            igm_x_HI=params.get("igm_x_HI", 0.0),
+            igm_bubble_mpc=params.get("igm_bubble_mpc", 10.0),
+            igm_patchy=self.config.igm_patchy,
+            igm_model=self.config.igm_model,
+            use_dla=self.config.use_dla,
+            dla_z=dla_z,
+            dla_log_n_hi=params.get("dla_log_n_hi", 20.0),
+            dla_temp=params.get("dla_temp", 1e4),
+            dla_b_turb=params.get("dla_b_turb", 0.0),
         )
 
         return state.with_(

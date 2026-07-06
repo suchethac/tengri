@@ -323,6 +323,7 @@ _IGM_TYPE_ALIASES = {
     "inoue": "inoue",
     "madau": "madau",
     "meiksin06": "meiksin06",
+    "asada25": "asada25",
 }
 
 

@@ -573,57 +573,9 @@ def xray_emission(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def igm_absorption(
-    wave_obs: jnp.ndarray,
-    z: float,
-    igm_x_HI: float = 0.0,
-    igm_bubble_mpc: float = 10.0,
-    igm_patchy: bool = False,
-    igm_model: str = "inoue",
-) -> jnp.ndarray:
-    """Compute IGM transmission with optional patchy reionization.
-
-    Computes transmission using the selected mean-IGM model, optionally
-    modified by Miralda-Escudé (1998) / Mason+2018 patchy reionization.
-
-    Parameters
-    ----------
-    wave_obs : ndarray, shape (n_wave,)
-        Observed-frame wavelength [Angstrom].
-    z : float
-        Redshift [dimensionless].
-    igm_x_HI : float, optional
-        Volume-averaged neutral hydrogen fraction (0-1). Default 0.0.
-        Only used when ``igm_patchy=True``.
-    igm_bubble_mpc : float, optional
-        Ionized bubble radius [proper Mpc]. Default 10.0.
-        Only used when ``igm_patchy=True``.
-    igm_patchy : bool, optional
-        Enable patchy reionization damping wing model. Default False.
-    igm_model : str, optional
-        Mean IGM model: ``"inoue"`` (Inoue+2014, default) or
-        ``"madau"`` (Madau+1995).
-
-    Returns
-    -------
-    ndarray, shape (n_wave,)
-        Transmission fraction [dimensionless, 0-1].
-
-    Notes
-    -----
-    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
-    Patchy reionization always uses Inoue+2014 as the mean-IGM base.
-    """
-    if igm_patchy and igm_x_HI > 0.0:
-        from tengri.components.igm import igm_transmission_patchy
-
-        return igm_transmission_patchy(wave_obs, z, x_HI=igm_x_HI, R_bubble=igm_bubble_mpc)
-
-    if igm_model == "madau":
-        from tengri.components.igm import igm_transmission_madau
-
-        return igm_transmission_madau(wave_obs, z)
-
-    from tengri.components.igm import igm_transmission
-
-    return igm_transmission(wave_obs, z)
+# ``igm_absorption`` now lives solely in ``tengri.components.igm.igm`` — the
+# single source of truth for the mean-IGM model dispatch (inoue / madau /
+# meiksin06 / asada25) plus the patchy and DLA modifiers (#932). Import it from
+# there; this module deliberately no longer defines a wrapper copy (an earlier
+# shim here had a stale signature and dropped the new use_dla/dla_* kwargs,
+# crashing every IGM-enabled predict_obs_sed call).

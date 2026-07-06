@@ -282,6 +282,9 @@ def build_components(
     xray_model: str = "yang20",
     use_xray: bool = False,
     use_igm: bool = False,
+    igm_model: str = "inoue",
+    igm_patchy: bool = False,
+    use_dla: bool = False,
 ) -> list[SEDComponent]:
     r"""Construct an ordered :class:`SEDComponent` list for the orchestrator.
 
@@ -525,8 +528,21 @@ def build_components(
                 config=XRaySEDComponentConfig(model=xray_model),
             )
         )
-    if use_igm:
-        components.append(_resolve_registry_component("igm", "igm"))
+    if use_igm or use_dla:
+        from tengri.components.igm.component import IGMSEDComponentConfig
+
+        components.append(
+            _resolve_registry_component(
+                "igm",
+                "igm",
+                config=IGMSEDComponentConfig(
+                    # 'none' disables the mean IGM when only a DLA is requested.
+                    igm_model=igm_model if use_igm else "none",
+                    igm_patchy=igm_patchy,
+                    use_dla=use_dla,
+                ),
+            )
+        )
 
     from tengri.forward.orchestrator import topological_sort, validate_pipeline
 

@@ -194,11 +194,22 @@ AGN_BLR_CITATIONS: dict[str, list[str]] = {
 # IGM-attenuation models.
 IGM_CITATIONS: dict[str, list[str]] = {
     "inoue": ["inoue2014"],
+    "inoue14": ["inoue2014"],
     "inoue2014": ["inoue2014"],
     "madau": ["madau1995"],
     "madau1995": ["madau1995"],
+    "meiksin06": ["meiksin2006"],
+    "meiksin2006": ["meiksin2006"],
+    # Asada+2025 builds the CGM damping wing on top of the Inoue+2014 mean IGM,
+    # so it cites both.
+    "asada25": ["inoue2014", "asada2025"],
     None: [],
 }
+
+#: Damped-Lyman-α absorber citation, triggered when ``spec.dla`` is set
+#: (independent of the mean-IGM model). The absorber's Voigt profile follows
+#: the Tepper-García (2006) analytic Voigt-Hjerting approximation.
+DLA_CITATIONS: list[str] = ["teppergarcia2006"]
 
 # Photometric filter-convolution convention (FilterConvention; ADR-0017).
 # The AB-system foundations apply to any broadband flux; the per-convention
@@ -295,6 +306,7 @@ __all__ = [
     "AGN_TORUS_CITATIONS",
     "BACKEND_CITATIONS",
     "CORE_CITATIONS",
+    "DLA_CITATIONS",
     "DUST_LAW_CITATIONS",
     "DUST_MODEL_CITATIONS",
     "FUNCTION_CITATIONS",
