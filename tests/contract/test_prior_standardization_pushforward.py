@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Contract: every Distribution's unstandardize is the exact prior pushforward.
 
 The standardized parameterization (Knollmüller & Enßlin 2019 [1]_, Eqs.
