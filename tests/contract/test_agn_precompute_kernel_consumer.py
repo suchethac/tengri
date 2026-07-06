@@ -81,8 +81,8 @@ class TestSSDiscPrecomputeConsumer:
         lookup = adapter.build_lookup(result, model="ss_disc")
 
         jitted_lookup = jax.jit(lookup)
-        # ss_disc has 2 axes: agn_log_mbh, agn_log_mdot
-        phot = jitted_lookup(jnp.float64(10.5), jnp.float64(8.0), jnp.float64(-1.5))
+        # ss_disc has 2 axes: agn_log_mbh, agn_log_lbol (#902)
+        phot = jitted_lookup(jnp.float64(10.5), jnp.float64(8.0), jnp.float64(11.0))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
         chex.assert_tree_all_finite(np.asarray(phot))
