@@ -249,22 +249,18 @@ class DustAttenuationSEDComponent:
         attenuated = state.sed_intrinsic * attenuation
 
         # Energy balance — integrate the absorbed luminosity in frequency
-        # space and publish for downstream consumers (DustEmissionSEDComponent
-        # re-emits it as a modified blackbody; RadioSEDComponent uses it
-        # to set the SF radio amplitude via the FIR-radio correlation).
-        # L_ir = ∫(L_nu_intrinsic - L_nu_attenuated) dν
-        # = -∫(L_nu_intrinsic - L_nu_attenuated)/λ² dλ × c × <correction>
-        # We use the simpler cgs identity: dν = -c/λ² dλ; trapezoid in
-        # log-wavelength would be more accurate but the simple trap is
-        # what the legacy pipeline uses (forward/_kernels/compositional.py).
+        # space and publish for downstream consumers (dust emission ports
+        # re-emit it; RadioSEDComponent uses it to set the SF radio
+        # amplitude via the FIR-radio correlation). LyC photons ionize H
+        # rather than heat dust, so the canonical integral masks λ < 912 Å
+        # (#922).
+        from tengri.forward.energy_balance import bolometric_absorbed
         from tengri.utils.physics_constants import C_AA
 
-        absorbed_lnu = state.sed_intrinsic - attenuated  # erg/s/Hz
-        # Integrate in frequency: ∫ L_nu dν, with ν = c/λ.
-        # Sort wavelength ascending → frequency descending; reverse and trap.
         nu = C_AA / state.wave  # Hz
-        order = jnp.argsort(nu)
-        l_ir = jnp.trapezoid(absorbed_lnu[order], nu[order])  # erg/s
+        l_ir = jnp.abs(
+            bolometric_absorbed(state.sed_intrinsic, attenuated, nu, wave=state.wave)
+        )  # erg/s
 
         # Phase 3c-3c-ii: filter-level A(λ_eff) and A'(λ_eff) LUTs.
         # Published only when an upstream component (stellar) has put

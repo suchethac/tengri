@@ -9,8 +9,22 @@ All methods are JAX-compatible for use inside JIT-compiled functions.
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
+import numpy as np
+
+
+def _norm_cdf_float(x: float) -> float:
+    """Standard normal CDF Φ(x) for a Python float; handles ±inf exactly."""
+    if math.isinf(x):
+        return 0.0 if x < 0 else 1.0
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+# Guard for probabilities entering inverse CDFs (matches Uniform.standardize).
+_P_EPS = 1e-7
 
 # ── Base class ────────────────────────────────────────────────────
 
@@ -264,7 +278,8 @@ class Uniform(Distribution):
 
     A flat probability density on the interval [lo, hi]. Commonly used for
     bounded astrophysical quantities with little prior knowledge. Reparameterizes
-    via sigmoid to ensure differentiability and automatic bound satisfaction.
+    via the Gaussian CDF to ensure differentiability and automatic bound
+    satisfaction.
 
     Parameters
     ----------
@@ -487,14 +502,22 @@ class Gaussian(Distribution):
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
 
-    **Standardization**: Maps ξ ~ N(0,1) to θ via:
+    **Standardization**: Unbounded case maps ξ ~ N(0,1) to θ = μ + σ·ξ.
+    With finite bounds, uses the truncated-normal inverse CDF:
 
     .. math::
 
-        \\theta = \\text{clip}(\\mu + \\sigma \\cdot \\xi, lo, hi)
+        \\theta = \\mu + \\sigma \\cdot \\Phi^{-1}\\left[\\Phi(\\alpha) +
+        \\Phi(\\xi)\\,(\\Phi(\\beta) - \\Phi(\\alpha))\\right]
 
-    **Normalization**: When lo, hi are finite, the density is normalized over [lo, hi],
-    not over the full real line. Use this for physically bounded quantities.
+    with α = (lo−μ)/σ, β = (hi−μ)/σ — the exact inverse-CDF pushforward
+    (Knollmüller & Enßlin 2019, arXiv:1901.11033, Eqs. 18–25). Clipping
+    would instead censor: point-masses at the bounds and zero gradient
+    outside them.
+
+    **Normalization**: When lo, hi are finite, the density is normalized over
+    [lo, hi] (``log_prob`` includes the −log[Φ(β)−Φ(α)] mass term), not over
+    the full real line. Use this for physically bounded quantities.
 
     Examples
     --------
@@ -527,6 +550,11 @@ class Gaussian(Distribution):
         self._sigma = float(sigma)
         self._lo = float(lo)
         self._hi = float(hi)
+        # Truncation constants (Python floats, fixed at construction):
+        # Φ((lo−μ)/σ), Φ((hi−μ)/σ) and the mass Z = Φ(β) − Φ(α) in [lo, hi].
+        self._cdf_lo = _norm_cdf_float((self._lo - self._mu) / self._sigma)
+        self._cdf_hi = _norm_cdf_float((self._hi - self._mu) / self._sigma)
+        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
         self.description = description
         self.units = units
         self._register_default(default)
@@ -597,10 +625,12 @@ class Gaussian(Distribution):
         Returns
         -------
         ndarray
-            A single sample from N(mu, sigma²), clipped to [lo, hi].
+            A single sample from N(mu, sigma²) truncated to [lo, hi].
         """
-        raw = self._mu + self._sigma * jax.random.normal(key)
-        return jnp.clip(raw, self._lo, self._hi)
+        # Inverse-CDF sampling through the standardization pushforward —
+        # one source of truth with unstandardize(), exactly truncated
+        # (no clip point-masses at the bounds).
+        return self.unstandardize(jax.random.normal(key))
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
         """Evaluate log probability density, returning -inf outside bounds.
@@ -615,12 +645,26 @@ class Gaussian(Distribution):
         float
             Log probability density at x.
         """
-        lp = -0.5 * ((x - self._mu) / self._sigma) ** 2
+        # Normalized truncated-normal density: the constants matter for
+        # nested-sampling evidence, which compares priors across models.
+        z_mass = self._cdf_hi - self._cdf_lo
+        lp = (
+            -0.5 * ((x - self._mu) / self._sigma) ** 2
+            - math.log(self._sigma)
+            - 0.5 * math.log(2.0 * math.pi)
+            - math.log(z_mass)
+        )
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → N(μ,σ²) clipped to [lo, hi].
+        """ξ ~ N(0,1) → N(μ,σ²) exactly truncated to [lo, hi].
+
+        Unbounded case is the identity-affine map θ = μ + σξ. With finite
+        bounds, uses the truncated-normal inverse CDF
+        θ = μ + σ·Φ⁻¹(Φ(α) + Φ(ξ)·(Φ(β) − Φ(α))) — a smooth bijection onto
+        (lo, hi), unlike clipping, which piles point-masses at the bounds
+        and zeroes the gradient outside them.
 
         Parameters
         ----------
@@ -632,10 +676,15 @@ class Gaussian(Distribution):
         float or ndarray
             Physical-space parameter in [lo, hi].
         """
-        return jnp.clip(self._mu + self._sigma * xi, self._lo, self._hi)
+        if not self._truncated:
+            return self._mu + self._sigma * xi
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        p = self._cdf_lo + phi_xi * (self._cdf_hi - self._cdf_lo)
+        p = jnp.clip(p, _P_EPS, 1.0 - _P_EPS)
+        return self._mu + self._sigma * jax.scipy.special.ndtri(p)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """N(μ,σ²) → ξ.
+        """N(μ,σ²) → ξ (inverse of the truncation-aware map).
 
         Parameters
         ----------
@@ -647,7 +696,12 @@ class Gaussian(Distribution):
         float or ndarray
             Standardized latent-space value.
         """
-        return (theta - self._mu) / self._sigma
+        if not self._truncated:
+            return (theta - self._mu) / self._sigma
+        p = 0.5 * (1.0 + jax.scipy.special.erf((theta - self._mu) / (self._sigma * jnp.sqrt(2.0))))
+        u = (p - self._cdf_lo) / (self._cdf_hi - self._cdf_lo)
+        u = jnp.clip(u, _P_EPS, 1.0 - _P_EPS)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * u - 1.0)
 
     def __repr__(self) -> str:
         parts = [f"mu={self._mu}", f"sigma={self._sigma}"]
@@ -708,11 +762,26 @@ class LogUniform(Distribution):
     where x ∈ [lo, hi]. Samples drawn from this distribution are equally
     spaced in log10 space: log10(x) ~ U(log10(lo), log10(hi)).
 
-    **Standardization**: Maps ξ ~ N(0,1) to θ via sigmoid in log space:
+    **Standardization**: Maps ξ ~ N(0,1) to θ via the Gaussian CDF in log
+    space (the exact inverse-CDF pushforward required by the standardized
+    parameterization; Knollmüller & Enßlin 2019 [1]_, Eqs. 18–25):
 
     .. math::
 
-        \\theta = 10^{\\log_{10}(lo) + (\\log_{10}(hi) - \\log_{10}(lo)) \\cdot \\sigma(\\xi)}
+        \\theta = \\exp\\left[\\ln(lo) + (\\ln(hi) - \\ln(lo))
+        \\cdot \\Phi(\\xi)\\right]
+
+    where Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) is the standard normal CDF.
+    This ensures an N(0,1) latent yields a genuine log-uniform prior on
+    [lo, hi] — matching ``log_prob`` and ``sample`` — not a midpoint-peaked
+    one. (A sigmoid map here would silently substitute a logit-normal
+    prior in log space, biasing weakly-constrained scale parameters toward
+    the geometric midpoint and compressing the tails.)
+
+    References
+    ----------
+    .. [1] Knollmüller, J. & Enßlin, T. A., "Metric Gaussian Variational
+       Inference", arXiv:1901.11033.
 
     Examples
     --------
@@ -804,7 +873,12 @@ class LogUniform(Distribution):
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → LogUniform(lo, hi) via sigmoid in log space.
+        """ξ ~ N(0,1) → LogUniform(lo, hi) via Gaussian CDF in log space.
+
+        Uses the standard normal CDF Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2))) so
+        that an N(0,1) latent yields a genuine log-uniform prior — the exact
+        inverse-CDF pushforward θ = F⁻¹(Φ(ξ)) required for the ½ξᵀξ prior
+        term in the standardized information Hamiltonian.
 
         Parameters
         ----------
@@ -818,10 +892,15 @@ class LogUniform(Distribution):
         """
         log_lo = jnp.log(self._lo)
         log_hi = jnp.log(self._hi)
-        return jnp.exp(log_lo + (log_hi - log_lo) * jax.nn.sigmoid(xi))
+        # Standard normal CDF: Φ(ξ) = 0.5 * (1 + erf(ξ / sqrt(2)))
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        return jnp.exp(log_lo + (log_hi - log_lo) * phi_xi)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """LogUniform(lo, hi) → ξ via logit in log space.
+        """LogUniform(lo, hi) → ξ via inverse Gaussian CDF in log space.
+
+        Inverts the unstandardize map: given θ ∈ (lo, hi), returns ξ such
+        that θ = exp(ln lo + (ln hi − ln lo) · Φ(ξ)).
 
         Parameters
         ----------
@@ -835,9 +914,11 @@ class LogUniform(Distribution):
         """
         log_lo = jnp.log(self._lo)
         log_hi = jnp.log(self._hi)
-        u = (jnp.log(theta) - log_lo) / (log_hi - log_lo)
-        u = jnp.clip(u, 1e-6, 1 - 1e-6)
-        return jnp.log(u / (1 - u))
+        p = (jnp.log(theta) - log_lo) / (log_hi - log_lo)
+        # Clip to avoid numerical issues at the extremes
+        p = jnp.clip(p, 1e-7, 1.0 - 1e-7)
+        # Inverse of Φ: Φ^{-1}(p) = sqrt(2) * erfinv(2p - 1)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * p - 1.0)
 
     def __repr__(self) -> str:
         return f"LogUniform({self._lo}, {self._hi})"
@@ -927,6 +1008,12 @@ class LogNormal(Distribution):
         self._sigma = float(sigma)
         self._lo = float(lo)
         self._hi = float(hi)
+        # Truncation constants in log space (lo = 0 → log lo = −inf → Φ = 0).
+        log_lo = math.log(self._lo) if self._lo > 0 else float("-inf")
+        log_hi = math.log(self._hi) if math.isfinite(self._hi) else float("inf")
+        self._cdf_lo = _norm_cdf_float((log_lo - self._mu) / self._sigma)
+        self._cdf_hi = _norm_cdf_float((log_hi - self._mu) / self._sigma)
+        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
         self._register_default(default)
 
     @property
@@ -973,13 +1060,17 @@ class LogNormal(Distribution):
         Returns
         -------
         ndarray
-            A single sample from LogNormal(mu, sigma²), clipped to [lo, hi].
+            A single sample from LogNormal(mu, sigma²) truncated to [lo, hi].
         """
-        log_val = self._mu + self._sigma * jax.random.normal(key)
-        return jnp.clip(jnp.exp(log_val), self._lo, self._hi)
+        # Inverse-CDF sampling through the standardization pushforward —
+        # one source of truth with unstandardize(), exactly truncated.
+        return self.unstandardize(jax.random.normal(key))
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
         """Evaluate log probability density, returning -inf outside bounds.
+
+        Normalized over [lo, hi] (the constants matter for nested-sampling
+        evidence, which compares priors across models).
 
         Parameters
         ----------
@@ -991,12 +1082,23 @@ class LogNormal(Distribution):
         float
             Log probability density at x.
         """
-        lp = -jnp.log(x) - 0.5 * ((jnp.log(x) - self._mu) / self._sigma) ** 2
+        z_mass = self._cdf_hi - self._cdf_lo
+        lp = (
+            -jnp.log(x)
+            - 0.5 * ((jnp.log(x) - self._mu) / self._sigma) ** 2
+            - math.log(self._sigma)
+            - 0.5 * math.log(2.0 * math.pi)
+            - math.log(z_mass)
+        )
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → exp(μ + σ·ξ), clipped to [lo, hi].
+        """ξ ~ N(0,1) → LogNormal(μ, σ²) exactly truncated to [lo, hi].
+
+        Unbounded case is θ = exp(μ + σξ). With finite bounds, applies the
+        truncated-normal inverse CDF in log space (see ``Gaussian`` for the
+        formula) — a smooth bijection onto (lo, hi) instead of clipping.
 
         Parameters
         ----------
@@ -1008,10 +1110,15 @@ class LogNormal(Distribution):
         float or ndarray
             Physical-space parameter in [lo, hi].
         """
-        return jnp.clip(jnp.exp(self._mu + self._sigma * xi), self._lo, self._hi)
+        if not self._truncated:
+            return jnp.exp(self._mu + self._sigma * xi)
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        p = self._cdf_lo + phi_xi * (self._cdf_hi - self._cdf_lo)
+        p = jnp.clip(p, _P_EPS, 1.0 - _P_EPS)
+        return jnp.exp(self._mu + self._sigma * jax.scipy.special.ndtri(p))
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """LogNormal → ξ.
+        """LogNormal → ξ (inverse of the truncation-aware map).
 
         Parameters
         ----------
@@ -1023,7 +1130,13 @@ class LogNormal(Distribution):
         float or ndarray
             Standardized latent-space value.
         """
-        return (jnp.log(jnp.maximum(theta, 1e-30)) - self._mu) / self._sigma
+        z = (jnp.log(jnp.maximum(theta, 1e-30)) - self._mu) / self._sigma
+        if not self._truncated:
+            return z
+        p = 0.5 * (1.0 + jax.scipy.special.erf(z / jnp.sqrt(2.0)))
+        u = (p - self._cdf_lo) / (self._cdf_hi - self._cdf_lo)
+        u = jnp.clip(u, _P_EPS, 1.0 - _P_EPS)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * u - 1.0)
 
     def __repr__(self) -> str:
         parts = [f"mu={self._mu}", f"sigma={self._sigma}"]
@@ -1076,14 +1189,24 @@ class StudentT(Distribution):
     standard normalization. For finite df, it has heavier tails than a
     Gaussian.
 
-    **Standardization**: Uses a Gaussian approximation with variance scaling:
+    **Standardization**: Exact quantile pushforward
+    θ = μ + σ·F⁻¹_t,df(Φ(ξ)) (Knollmüller & Enßlin 2019, arXiv:1901.11033,
+    Eqs. 18–25). Closed forms for df = 1 (Cauchy: tan(π(p−½))) and df = 2
+    ((2p−1)/√(2p(1−p))); other df use a monotone quantile table built at
+    construction from the incomplete-beta CDF and interpolated with
+    ``jnp.interp`` (the NIFTy interpolation-operator pattern). Finite
+    truncation bounds are applied in CDF space, giving a smooth bijection
+    onto (lo, hi).
 
-    .. math::
+    Heavy tails are preserved exactly — the previous variance-matched
+    Gaussian approximation silently discarded them, which matters for the
+    Leja et al. (2019) [1]_ continuity-SFH log-SFR-ratio priors
+    (StudentT(0, 0.3, df=2)) whose tails control burst flexibility.
 
-        \\theta = \\text{clip}(\\mu + \\sigma \\cdot \\sqrt{df/(df-2)} \\cdot \\xi,
-          lo, hi)
-
-    This is valid for df > 2. For df ≤ 2, a fallback scale of 3 is used.
+    References
+    ----------
+    .. [1] Leja, J., et al. 2019, ApJ, 876, 3, "How to Measure Galaxy Star
+       Formation Histories. II.", arXiv:1811.03637, doi:10.3847/1538-4357/ab133c
 
     Examples
     --------
@@ -1110,7 +1233,69 @@ class StudentT(Distribution):
         self._df = float(df)
         self._lo = float(lo)
         self._hi = float(hi)
+        # Quantile machinery: closed forms for df ∈ {1, 2}; otherwise a
+        # monotone (F, z) table for interpolation, built once here (the
+        # NIFTy interpolation-operator pattern — no scipy dependency).
+        if self._df not in (1.0, 2.0):
+            self._cdf_grid, self._z_grid = self._build_cdf_table(self._df)
+        else:
+            self._cdf_grid = self._z_grid = None
+        # Truncation constants in t-CDF space (Python floats).
+        self._pcdf_lo = self._t_cdf_float((self._lo - self._mu) / self._sigma)
+        self._pcdf_hi = self._t_cdf_float((self._hi - self._mu) / self._sigma)
+        self._truncated = self._pcdf_lo > 0.0 or self._pcdf_hi < 1.0
+        # Normalization: ln Γ((ν+1)/2) − ln Γ(ν/2) − ½ln(νπ) − ln σ − ln Z.
+        self._log_norm = (
+            math.lgamma((self._df + 1.0) / 2.0)
+            - math.lgamma(self._df / 2.0)
+            - 0.5 * math.log(self._df * math.pi)
+            - math.log(self._sigma)
+            - math.log(self._pcdf_hi - self._pcdf_lo)
+        )
         self._register_default(default)
+
+    @staticmethod
+    def _build_cdf_table(df: float) -> tuple[jnp.ndarray, jnp.ndarray]:
+        """Monotone (CDF, z) table for the standard t distribution.
+
+        z on a tan-spaced grid reaching the extreme quantiles heavy tails
+        need; CDF via the regularized incomplete beta function
+        F(z) = 1 − ½ I_x(ν/2, ½), x = ν/(ν+z²) for z ≥ 0 (symmetric below).
+        """
+        u = np.linspace(-0.5 * np.pi + 1e-4, 0.5 * np.pi - 1e-4, 4097)
+        z = np.tan(u) * max(1.0, np.sqrt(df))
+        x = df / (df + z**2)
+        upper_half = np.asarray(
+            1.0 - 0.5 * jax.scipy.special.betainc(df / 2.0, 0.5, jnp.asarray(x))
+        )
+        cdf = np.where(z >= 0, upper_half, 1.0 - upper_half)
+        cdf = np.maximum.accumulate(cdf)
+        return jnp.asarray(cdf), jnp.asarray(z)
+
+    def _t_cdf_float(self, z: float) -> float:
+        """Standard-t CDF at a Python float; handles ±inf exactly."""
+        if math.isinf(z):
+            return 0.0 if z < 0 else 1.0
+        if self._df == 1.0:
+            return 0.5 + math.atan(z) / math.pi
+        if self._df == 2.0:
+            return 0.5 * (1.0 + z / math.sqrt(2.0 + z * z))
+        return float(jnp.interp(z, self._z_grid, self._cdf_grid))
+
+    def _t_quantile(self, p: jnp.ndarray) -> jnp.ndarray:
+        """Standard-t quantile F⁻¹(p): closed form for df ∈ {1, 2}, else table.
+
+        The df∉{1,2} branch is piecewise-linear (``jnp.interp``), so its
+        gradient is discontinuous at the 4097 knots — fine for MAP/NUTS in
+        practice, but the only df used in-repo are 1 and 2 (both closed-form
+        above), so this branch is currently never exercised. Swap to a
+        monotone-cubic interpolation if a fittable df∉{1,2} is introduced.
+        """
+        if self._df == 1.0:
+            return jnp.tan(jnp.pi * (p - 0.5))
+        if self._df == 2.0:
+            return (2.0 * p - 1.0) / jnp.sqrt(2.0 * p * (1.0 - p))
+        return jnp.interp(p, self._cdf_grid, self._z_grid)
 
     @property
     def bounds(self) -> tuple[float, float]:
@@ -1134,14 +1319,11 @@ class StudentT(Distribution):
         Returns
         -------
         ndarray
-            A single sample from Student's t distribution, clipped to [lo, hi].
+            A single sample from Student's t distribution truncated to [lo, hi].
         """
-        # t = normal / sqrt(chi2/df)
-        k1, k2 = jax.random.split(key)
-        z = jax.random.normal(k1)
-        chi2 = jax.random.gamma(k2, self._df / 2) * 2
-        t = z / jnp.sqrt(chi2 / self._df)
-        return jnp.clip(self._mu + self._sigma * t, self._lo, self._hi)
+        # Inverse-CDF sampling through the standardization pushforward —
+        # one source of truth with unstandardize(), exactly truncated.
+        return self.unstandardize(jax.random.normal(key))
 
     def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
         """Evaluate log probability density, returning -inf outside bounds.
@@ -1156,16 +1338,20 @@ class StudentT(Distribution):
         float
             Log probability density at x.
         """
+        # Normalized (truncated) Student-t density — constants matter for
+        # nested-sampling evidence.
         z = (x - self._mu) / self._sigma
-        lp = -0.5 * (self._df + 1) * jnp.log(1 + z**2 / self._df)
+        lp = -0.5 * (self._df + 1) * jnp.log(1 + z**2 / self._df) + self._log_norm
         in_bounds = (x >= self._lo) & (x <= self._hi)
         return jnp.where(in_bounds, lp, -jnp.inf)
 
     def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
-        """ξ ~ N(0,1) → t-distributed via Gaussian approximation.
+        """ξ ~ N(0,1) → t-distributed via the exact quantile pushforward.
 
-        For df>2, a Gaussian with matched variance is a reasonable
-        approximation for the bulk of the distribution.
+        θ = μ + σ·F⁻¹_t,df(p) with p = Φ(ξ) mapped through the truncation
+        bounds in CDF space. Closed-form quantiles for df ∈ {1, 2}
+        (df = 2 is the Leja+2019 / Tacchella+2022 continuity-SFH ratio
+        prior); other df interpolate the construction-time CDF table.
 
         Parameters
         ----------
@@ -1177,19 +1363,13 @@ class StudentT(Distribution):
         float or ndarray
             Physical-space parameter in [lo, hi].
         """
-        # Scale factor: Var(t) = df/(df-2) for df>2. ``self._df`` is a
-        # Python scalar set at construction, so branch in Python instead
-        # of jnp.where (whose unselected branch still evaluates eagerly
-        # and would 1/0 at df=2 — the very value Leja+2019 / Tacchella+2022
-        # specify for the continuity SFH ratio prior).
-        if self._df > 2:
-            scale = float(jnp.sqrt(self._df / (self._df - 2)))
-        else:
-            scale = 3.0
-        return jnp.clip(self._mu + self._sigma * scale * xi, self._lo, self._hi)
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        p = self._pcdf_lo + phi_xi * (self._pcdf_hi - self._pcdf_lo)
+        p = jnp.clip(p, _P_EPS, 1.0 - _P_EPS)
+        return self._mu + self._sigma * self._t_quantile(p)
 
     def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
-        """Map a physical parameter value to a standardized coordinate via the Student-t scale.
+        """Physical value → ξ (inverse of the exact quantile pushforward).
 
         Parameters
         ----------
@@ -1201,16 +1381,210 @@ class StudentT(Distribution):
         float or ndarray
             Standardized latent-space value.
         """
-        # Same df>2 / df<=2 split as unstandardize; branch in Python so
-        # df=2 doesn't 1/0 in the unused branch.
-        if self._df > 2:
-            scale = float(jnp.sqrt(self._df / (self._df - 2)))
+        z = (theta - self._mu) / self._sigma
+        if self._df == 1.0:
+            p = 0.5 + jnp.arctan(z) / jnp.pi
+        elif self._df == 2.0:
+            p = 0.5 * (1.0 + z / jnp.sqrt(2.0 + z * z))
         else:
-            scale = 3.0
-        return (theta - self._mu) / (self._sigma * scale)
+            p = jnp.interp(z, self._z_grid, self._cdf_grid)
+        u = (p - self._pcdf_lo) / (self._pcdf_hi - self._pcdf_lo)
+        u = jnp.clip(u, _P_EPS, 1.0 - _P_EPS)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * u - 1.0)
 
     def __repr__(self) -> str:
         return f"StudentT(mu={self._mu}, sigma={self._sigma}, df={self._df})"
+
+
+def _laplace_cdf_float(x: float, mu: float, b: float) -> float:
+    """Laplace CDF at a Python float; handles ±inf exactly."""
+    if math.isinf(x):
+        return 0.0 if x < 0 else 1.0
+    z = (x - mu) / b
+    return 0.5 * math.exp(z) if z < 0 else 1.0 - 0.5 * math.exp(-z)
+
+
+class Laplace(Distribution):
+    r"""Laplace (double-exponential) prior — a sparsity/robustness prior.
+
+    Heavier-tailed than a Gaussian and peaked at the location, the Laplace
+    prior is the continuous analog of an L1 penalty (LASSO): it pulls weakly
+    constrained parameters toward ``mu`` while tolerating occasional large
+    excursions. Useful for coefficients expected to be near a default with a
+    few genuine departures (e.g. per-band calibration offsets, sparse
+    additive components).
+
+    Parameters
+    ----------
+    mu : float
+        Location (median and mode).
+    b : float
+        Scale (diversity). Must be positive; variance is ``2 b^2``.
+    lo : float, optional
+        Lower truncation bound. Default: ``-inf``.
+    hi : float, optional
+        Upper truncation bound. Default: ``+inf``.
+
+    Attributes
+    ----------
+    bounds : tuple[float, float]
+        ``(lo, hi)`` truncation bounds.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+    The density is
+
+    .. math::
+
+        p(x) = \\frac{1}{2b}\\exp\\!\\left(-\\frac{|x-\\mu|}{b}\\right).
+
+    **Standardization**: exact inverse-CDF pushforward
+    :math:`\\theta = \\mu - b\\,\\mathrm{sgn}(p-\\tfrac12)\\,
+    \\ln(1-2|p-\\tfrac12|)` with :math:`p = \\Phi(\\xi)` mapped through the
+    truncation bounds in CDF space (Knollmüller & Enßlin 2019 [1]_,
+    Eqs. 18-25). The quantile is closed-form, so no interpolation table is
+    needed.
+
+    Examples
+    --------
+    >>> import jax.random
+    >>> from tengri import Laplace
+    >>> prior = Laplace(mu=0.0, b=0.1)  # sparse calibration offset
+    >>> sample = prior.sample(jax.random.PRNGKey(0))
+
+    References
+    ----------
+    .. [1] Knollmüller, J. & Enßlin, T. A., "Metric Gaussian Variational
+       Inference", arXiv:1901.11033.
+    """
+
+    def __init__(
+        self,
+        mu: float = 0.0,
+        b: float = 1.0,
+        lo: float = float("-inf"),
+        hi: float = float("inf"),
+        *,
+        default: float | None = None,
+    ):
+        if b <= 0:
+            raise ValueError(f"Laplace requires b > 0, got {b}")
+        if lo >= hi:
+            raise ValueError(f"Laplace requires lo < hi, got lo={lo}, hi={hi}")
+        self._mu = float(mu)
+        self._b = float(b)
+        self._lo = float(lo)
+        self._hi = float(hi)
+        self._cdf_lo = _laplace_cdf_float(self._lo, self._mu, self._b)
+        self._cdf_hi = _laplace_cdf_float(self._hi, self._mu, self._b)
+        self._truncated = self._cdf_lo > 0.0 or self._cdf_hi < 1.0
+        self._register_default(default)
+
+    @property
+    def bounds(self) -> tuple[float, float]:
+        """Lower and upper truncation bounds [lo, hi].
+
+        Returns
+        -------
+        tuple[float, float]
+            Bounds as (lo, hi) tuple.
+        """
+        return (self._lo, self._hi)
+
+    def sample(self, key: jax.Array) -> jnp.ndarray:
+        """Draw one sample from the (truncated) Laplace via inverse-CDF.
+
+        Parameters
+        ----------
+        key : jax.Array
+            JAX PRNG key for random sampling.
+
+        Returns
+        -------
+        ndarray
+            A single sample from Laplace(mu, b) truncated to [lo, hi].
+        """
+        # One source of truth with unstandardize(); exactly truncated.
+        return self.unstandardize(jax.random.normal(key))
+
+    def log_prob(self, x: jnp.ndarray) -> jnp.ndarray:
+        """Return the normalized (truncated) Laplace log-density, -inf outside.
+
+        Parameters
+        ----------
+        x : float or array_like
+            Parameter value in physical space.
+
+        Returns
+        -------
+        float
+            Log probability density at x.
+        """
+        z_mass = self._cdf_hi - self._cdf_lo
+        lp = -jnp.abs(x - self._mu) / self._b - math.log(2.0 * self._b) - math.log(z_mass)
+        in_bounds = (x >= self._lo) & (x <= self._hi)
+        return jnp.where(in_bounds, lp, -jnp.inf)
+
+    def _quantile(self, p: jnp.ndarray) -> jnp.ndarray:
+        """Standard Laplace(mu, b) quantile F^{-1}(p), closed form."""
+        q = p - 0.5
+        return self._mu - self._b * jnp.sign(q) * jnp.log1p(-2.0 * jnp.abs(q))
+
+    def unstandardize(self, xi: jnp.ndarray) -> jnp.ndarray:
+        """ξ ~ N(0,1) → Laplace(mu, b) exactly truncated to [lo, hi].
+
+        Parameters
+        ----------
+        xi : float or array_like
+            Standardized latent value from standard normal distribution.
+
+        Returns
+        -------
+        float or ndarray
+            Physical-space parameter in [lo, hi].
+        """
+        phi_xi = 0.5 * (1.0 + jax.scipy.special.erf(xi / jnp.sqrt(2.0)))
+        p = self._cdf_lo + phi_xi * (self._cdf_hi - self._cdf_lo)
+        p = jnp.clip(p, _P_EPS, 1.0 - _P_EPS)
+        return self._quantile(p)
+
+    def standardize(self, theta: jnp.ndarray) -> jnp.ndarray:
+        """Laplace(mu, b) → ξ (inverse of the truncation-aware map).
+
+        Parameters
+        ----------
+        theta : float or array_like
+            Physical-space parameter value.
+
+        Returns
+        -------
+        float or ndarray
+            Standardized latent-space value.
+        """
+        z = (theta - self._mu) / self._b
+        p = jnp.where(z < 0, 0.5 * jnp.exp(z), 1.0 - 0.5 * jnp.exp(-z))
+        u = (p - self._cdf_lo) / (self._cdf_hi - self._cdf_lo)
+        u = jnp.clip(u, _P_EPS, 1.0 - _P_EPS)
+        return jnp.sqrt(2.0) * jax.scipy.special.erfinv(2.0 * u - 1.0)
+
+    def __repr__(self) -> str:
+        parts = [f"mu={self._mu}", f"b={self._b}"]
+        if self._lo != float("-inf"):
+            parts.append(f"lo={self._lo}")
+        if self._hi != float("inf"):
+            parts.append(f"hi={self._hi}")
+        return f"Laplace({', '.join(parts)})"
+
+    def __eq__(self, other) -> bool:
+        return (
+            isinstance(other, Laplace)
+            and self._mu == other._mu
+            and self._b == other._b
+            and self._lo == other._lo
+            and self._hi == other._hi
+        )
 
 
 class Fixed(Distribution):

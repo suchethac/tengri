@@ -256,7 +256,15 @@ from tengri.observation.noise import (
 from tengri.observation.photometry import FilterConvention, list_filter_conventions
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
-from tengri.parameters.priors import Fixed, Gaussian, LogNormal, LogUniform, StudentT, Uniform
+from tengri.parameters.priors import (
+    Fixed,
+    Gaussian,
+    Laplace,
+    LogNormal,
+    LogUniform,
+    StudentT,
+    Uniform,
+)
 from tengri.parameters.registry import (
     ParameterRecord,
     describe_parameter,
@@ -400,6 +408,7 @@ __all__ = [
     "Galaxy",
     "Gaussian",
     "InferenceError",
+    "Laplace",
     "LogNormal",
     "LogUniform",
     "ParameterError",

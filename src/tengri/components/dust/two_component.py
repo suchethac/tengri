@@ -499,6 +499,7 @@ class DustSEDComponent:
             # signed ∫(L_intrinsic - L_attenuated) dν, then abs(); when the
             # full cube is not otherwise needed XLA dead-code-eliminates it.
             from tengri.components.dust.energy_balance_precompute import lut_l_absorbed_stellar
+            from tengri.forward.energy_balance import bolometric_absorbed
 
             stellar_absorbed = lut_l_absorbed_stellar(
                 eb_lut,
@@ -507,16 +508,19 @@ class DustSEDComponent:
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
             )
-            neb_absorbed_lnu = jnp.where(wave >= 912.0, sed_neb - sed_neb_attenuated, 0.0)
-            neb_absorbed = jnp.trapezoid(neb_absorbed_lnu, nu)
+            neb_absorbed = bolometric_absorbed(sed_neb, sed_neb_attenuated, nu, wave=wave)
             L_absorbed = jnp.abs(stellar_absorbed + neb_absorbed)
         else:
-            absorbed_lnu = (sed_intrinsic_stellar - sed_attenuated) + (
-                sed_neb - sed_neb_attenuated
+            from tengri.forward.energy_balance import bolometric_absorbed
+
+            L_absorbed = jnp.abs(
+                bolometric_absorbed(
+                    sed_intrinsic_stellar + sed_neb,
+                    sed_attenuated + sed_neb_attenuated,
+                    nu,
+                    wave=wave,
+                )
             )
-            # Mask LyC photons out of the L_absorbed integral.
-            absorbed_lnu = jnp.where(wave >= 912.0, absorbed_lnu, 0.0)
-            L_absorbed = jnp.abs(jnp.trapezoid(absorbed_lnu, nu))
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
         L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
 

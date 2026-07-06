@@ -39,6 +39,28 @@ def ssp():
     return tengri.load_ssp()
 
 
+def _cb19_grid_is_flat_placeholder() -> bool:
+    """True when the local cb19_templates.h5 is the all-ratios-equal-1 stub.
+
+    The per-line-variation tests below target the synthetic Case-B fixture
+    (#613) used on CI. A machine carrying the placeholder grid would load it
+    instead and every line collapses to the same luminosity by construction —
+    a data artifact, not the #361 regression.
+    """
+    grid_file = _DATA_DIR / "cb19_templates.h5"
+    if not grid_file.is_file():
+        return False
+    import h5py
+    import numpy as np
+
+    with h5py.File(grid_file, "r") as f:
+        key = "grids/SSP/Kroupa01/mu100/line_ratios"
+        if key not in f:
+            return False
+        ratios = f[key][:]
+    return bool(np.unique(ratios).size == 1)
+
+
 class TestBug361A_cb19_dispatch:
     """``neb={'type': 'cb19'}`` must wire CB19Backend, not BakedInBackend."""
 
@@ -80,6 +102,11 @@ class TestBug361A_cb19_dispatch:
         assert isinstance(m._nebular_backend, BakedInBackend)
 
 
+@pytest.mark.skipif(
+    _cb19_grid_is_flat_placeholder(),
+    reason="local cb19_templates.h5 is a flat placeholder (all ratios = 1.0); "
+    "these tests target the synthetic Case-B fixture used on CI",
+)
 class TestBug361C_cb19_per_line_variation:
     """CB19 line_lums must vary per line.
 

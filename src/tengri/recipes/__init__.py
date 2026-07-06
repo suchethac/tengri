@@ -197,8 +197,8 @@ def agn_panchromatic() -> dict:
             torus=builders.agn.torus.skirtor(defaults=FREE),
             nlr=builders.agn.nlr.analytic(defaults=FREE),
         ),
-        radio=True,
-        xray=True,
+        radio={"type": "condon92"},
+        xray={"type": "simple"},
         redshift=Uniform(0.01, 6.0),
         approx=WavePrecomp(),
     )
@@ -274,8 +274,8 @@ def composable_agn() -> dict:
             "fracAGN": Uniform(0.01, 0.99),
             "*": FREE,
         },
-        radio=True,
-        xray=True,
+        radio={"type": "condon92"},
+        xray={"type": "simple"},
         redshift=Uniform(0.01, 6.0),
         approx=WavePrecomp(),
     )

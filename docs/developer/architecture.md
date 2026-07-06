@@ -40,12 +40,11 @@ src/tengri/                  # (key files only — not exhaustive)
 │   ├── sed_model_types.py   # Typed data containers for SEDModel I/O
 │   ├── pipeline.py          # Non-fused SED engine + component tracking
 │   ├── emission_helpers.py  # Shared emission functions (single source of truth)
+│   ├── energy_balance.py    # Canonical dust energy-balance integral (L_absorbed)
 │   ├── components_assembly.py  # Component wiring + dependency injection
 │   ├── prediction.py        # Photometry / spectroscopy prediction utilities
 │   ├── result.py            # SEDResult container
-│   ├── nonstell.py          # Non-stellar SED contributions (AGN, radio, X-ray)
 │   ├── convenience.py       # High-level convenience wrappers
-│   ├── _kernels/            # Fused JIT kernels (private — not user-facing)
 │   └── precompute/          # Precomputation protocol + registry
 │
 ├── observation/             # Observational data containers and utilities

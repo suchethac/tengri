@@ -25,6 +25,7 @@ from dataclasses import KW_ONLY, dataclass
 import jax.numpy as jnp
 
 from tengri.inference.likelihoods.gaussian import diag_gaussian_chi2
+from tengri.inference.likelihoods.protocol import resolve_channel_data
 from tengri.observation.calibration import (
     marginalize_calibration as _marginalize_calibration,
 )
@@ -95,17 +96,25 @@ class CalibrationMarginalizedLikelihood:
     prior_sigma: float = 1.0
     channel: str = "spec_fnu"
     name: str = "calibration_marginalized"
+    fnu_obs_key: str | None = None
+    fnu_err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         del params
         log_lik, _c_hat, _c_err = _marginalize_calibration(
             model_flux=prediction[self.channel],
-            obs_flux=self.fnu_obs,
-            obs_err=self.fnu_err,
+            obs_flux=resolve_channel_data(
+                self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args
+            ),
+            obs_err=resolve_channel_data(
+                self.fnu_err, self.fnu_err_key, self.data_slice, data_args
+            ),
             wavelength=self.wavelength,
             n_poly=self.n_poly,
             prior_sigma=self.prior_sigma,
@@ -167,6 +176,9 @@ class ELineMarginalizedLikelihood:
     prior_variance: jnp.ndarray | None = None
     channel: str = "spec_fnu"
     name: str = "eline_marginalized"
+    fnu_obs_key: str | None = None
+    fnu_err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def __post_init__(self) -> None:
         # Exactly one of (static design matrix) | (per-call builder)
@@ -186,6 +198,7 @@ class ELineMarginalizedLikelihood:
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         # When the line wavelengths shift with redshift (or any other
         # free parameter), the design matrix must be rebuilt every
@@ -196,10 +209,12 @@ class ELineMarginalizedLikelihood:
             design_matrix = self.design_matrix_builder(params or {})
         else:
             design_matrix = self.design_matrix
-        residual = self.fnu_obs - prediction[self.channel]
+        fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
+        fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
+        residual = fnu_obs - prediction[self.channel]
         ln_l_marg, _a_hat, _a_cov = _marginalize_emission_lines(
             residual=residual,
-            noise=self.fnu_err,
+            noise=fnu_err,
             design_matrix=design_matrix,
             prior_variance=self.prior_variance,
         )
@@ -259,22 +274,28 @@ class CloudyELineMarginalizedLikelihood:
     prior_width_dex: float = 0.5
     channel: str = "spec_fnu"
     name: str = "eline_marginalized_cloudy"
+    fnu_obs_key: str | None = None
+    fnu_err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 
         params = params or {}
         design_matrix = self.design_matrix_builder(params)
-        residual = self.fnu_obs - prediction[self.channel]
+        fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
+        fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
+        residual = fnu_obs - prediction[self.channel]
         log_z = params.get("met_logzsol", 0.0)
         neb_logU = params.get("neb_logU", -3.0)
         ln_l, _a_hat, _a_err = marginalize_emission_lines_cloudy(
             residual,
-            self.fnu_err,
+            fnu_err,
             design_matrix,
             log_z=log_z,
             neb_logU=neb_logU,
@@ -329,17 +350,23 @@ class ELineFittedLikelihood:
     amplitude_names: tuple[str, ...] = ()
     channel: str = "spec_fnu"
     name: str = "eline_fitted"
+    fnu_obs_key: str | None = None
+    fnu_err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         params = params or {}
         design_matrix = self.design_matrix_builder(params)
         amplitudes = jnp.array([params[nm] for nm in self.amplitude_names])
         pred_with_lines = prediction[self.channel] + design_matrix @ amplitudes
-        chi2 = diag_gaussian_chi2(pred_with_lines, self.fnu_obs, self.fnu_err)
+        fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
+        fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
+        chi2 = diag_gaussian_chi2(pred_with_lines, fnu_obs, fnu_err)
         return -0.5 * chi2
 
     def declared_parameters(self):
@@ -422,11 +449,15 @@ class CalibrationELineMarginalizedLikelihood:
     eline_prior_width_dex: float = 0.5
     channel: str = "spec_fnu"
     name: str = "calibration_eline_marginalized"
+    fnu_obs_key: str | None = None
+    fnu_err_key: str | None = None
+    data_slice: tuple[int, int] | None = None
 
     def log_prob(
         self,
         prediction: Mapping[str, jnp.ndarray],
         params: Mapping[str, jnp.ndarray] | None = None,
+        data_args: Mapping[str, jnp.ndarray] | None = None,
     ) -> jnp.ndarray:
         from tengri.observation.eline_marginalization import (
             marginalize_emission_lines as _marginalize_flat,
@@ -435,7 +466,9 @@ class CalibrationELineMarginalizedLikelihood:
         params = params or {}
         design_matrix = self.design_matrix_builder(params)
         model_spec = prediction[self.channel]
-        residual = self.fnu_obs - model_spec
+        fnu_obs = resolve_channel_data(self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args)
+        fnu_err = resolve_channel_data(self.fnu_err, self.fnu_err_key, self.data_slice, data_args)
+        residual = fnu_obs - model_spec
 
         if self.eline_prior_type == "cloudy":
             from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
@@ -444,7 +477,7 @@ class CalibrationELineMarginalizedLikelihood:
             neb_logU = params.get("neb_logU", -3.0)
             _ln_l, a_hat, _a_err = marginalize_emission_lines_cloudy(
                 residual,
-                self.fnu_err,
+                fnu_err,
                 design_matrix,
                 log_z=log_z,
                 neb_logU=neb_logU,
@@ -454,14 +487,18 @@ class CalibrationELineMarginalizedLikelihood:
         else:
             prior_var = jnp.full(design_matrix.shape[1], self.eline_prior_sigma**2)
             _ln_l, a_hat, _a_err = _marginalize_flat(
-                residual, self.fnu_err, design_matrix, prior_variance=prior_var
+                residual, fnu_err, design_matrix, prior_variance=prior_var
             )
 
         pred_with_lines = model_spec + design_matrix @ a_hat
         log_lik, _c_hat, _c_err = _marginalize_calibration(
             model_flux=pred_with_lines,
-            obs_flux=self.fnu_obs,
-            obs_err=self.fnu_err,
+            obs_flux=resolve_channel_data(
+                self.fnu_obs, self.fnu_obs_key, self.data_slice, data_args
+            ),
+            obs_err=resolve_channel_data(
+                self.fnu_err, self.fnu_err_key, self.data_slice, data_args
+            ),
             wavelength=self.wavelength,
             n_poly=self.n_poly,
             prior_sigma=self.prior_sigma,

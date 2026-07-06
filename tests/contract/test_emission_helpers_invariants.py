@@ -3,8 +3,9 @@
 
 Bug classes covered:
 - Shape regression: output shape must match input wave shape for all helpers.
-- Unit regression: attenuate_emission returns (erg/s/Hz SED, erg/s L_absorbed).
-- Energy conservation: L_transmitted + L_absorbed = L_incident within 1%.
+- Energy conservation: L_transmitted + L_absorbed = L_incident within 1%,
+  with L_absorbed computed via the canonical energy-balance integral
+  (:func:`tengri.forward.energy_balance.bolometric_absorbed`, #922).
 - Zero-dust identity: tau_bc=0, tau_diff=0 → attenuation factor ≈ 1 everywhere.
 - Mode completeness: all four modes ("bc", "diff", "neb", "none") return finite arrays.
 - IGM: z=0 → transmission=1, no NaN for short-wavelength photons.
@@ -27,6 +28,7 @@ from tengri.forward.emission_helpers import (
     _C_AA,
     attenuate_emission,
 )
+from tengri.forward.energy_balance import bolometric_absorbed
 
 # ── Helpers: synthetic grids and mock dust laws ───────────────────
 
@@ -54,6 +56,13 @@ def _calzetti_approx(wave: jnp.ndarray, *, n_slope: float = -0.7, dust_bump_stre
     return (5500.0 / wave) ** 0.7
 
 
+def _absorbed(sed_in: jnp.ndarray, sed_out: jnp.ndarray, wave: jnp.ndarray) -> float:
+    """Positive absorbed luminosity [erg/s] via the canonical integral (unmasked)."""
+    nu = _C_AA / wave
+    signed = bolometric_absorbed(sed_in, sed_out, nu, wave=wave, lyman_cutoff_aa=None)
+    return float(jnp.abs(signed))
+
+
 # ── Shape invariants ──────────────────────────────────────────────
 
 
@@ -62,7 +71,7 @@ class TestAttenuateEmissionShape:
     def test_output_shape_matches_input(self, n_wave: int) -> None:
         wave = jnp.linspace(1000.0, 20000.0, n_wave)
         sed = _flat_sed(n_wave)
-        sed_out, _ = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             wave,
             "bc",
@@ -78,7 +87,7 @@ class TestAttenuateEmissionShape:
     @pytest.mark.parametrize("mode", ["bc", "diff", "neb", "none"])
     def test_all_modes_return_correct_shape(self, mode: str) -> None:
         sed = _flat_sed()
-        sed_out, _ = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             mode,
@@ -93,37 +102,14 @@ class TestAttenuateEmissionShape:
         )
 
 
-# ── Return type: (array, scalar) ──────────────────────────────────
+# ── Absorbed luminosity (canonical integral over the helper's output) ─
 
 
-class TestAttenuateReturnType:
-    def test_returns_tuple_of_two(self) -> None:
-        result = attenuate_emission(
-            _flat_sed(),
-            _WAVE,
-            "bc",
-            tau_bc=0.3,
-            tau_diff=0.5,
-            law_bc_fn=_const_law,
-            law_diff_fn=_const_law,
-        )
-        assert isinstance(result, tuple) and len(result) == 2
-
-    def test_second_element_is_scalar(self) -> None:
-        _, L_absorbed = attenuate_emission(
-            _flat_sed(),
-            _WAVE,
-            "diff",
-            tau_bc=0.0,
-            tau_diff=0.5,
-            law_bc_fn=_const_law,
-            law_diff_fn=_const_law,
-        )
-        assert L_absorbed.ndim == 0, f"L_absorbed should be a scalar; got shape {L_absorbed.shape}"
-
+class TestAbsorbedLuminosity:
     def test_l_absorbed_is_finite(self) -> None:
-        _, L_absorbed = attenuate_emission(
-            _flat_sed(),
+        sed = _flat_sed()
+        sed_out = attenuate_emission(
+            sed,
             _WAVE,
             "bc",
             tau_bc=0.5,
@@ -131,11 +117,13 @@ class TestAttenuateReturnType:
             law_bc_fn=_const_law,
             law_diff_fn=_const_law,
         )
-        assert jnp.isfinite(L_absorbed), "L_absorbed is not finite"
+        assert jnp.isfinite(_absorbed(sed, sed_out, _WAVE)), "L_absorbed is not finite"
 
-    def test_l_absorbed_is_non_negative(self) -> None:
-        _, L_absorbed = attenuate_emission(
-            _flat_sed(),
+    def test_l_absorbed_positive_for_positive_tau(self) -> None:
+        """Nonzero optical depth must absorb a strictly positive luminosity."""
+        sed = _flat_sed()
+        sed_out = attenuate_emission(
+            sed,
             _WAVE,
             "bc",
             tau_bc=0.5,
@@ -143,7 +131,7 @@ class TestAttenuateReturnType:
             law_bc_fn=_const_law,
             law_diff_fn=_const_law,
         )
-        assert float(L_absorbed) >= 0.0, f"L_absorbed={float(L_absorbed)} is negative"
+        assert _absorbed(sed, sed_out, _WAVE) > 0.0, "tau > 0 should absorb luminosity"
 
 
 # ── All four modes return finite arrays ───────────────────────────
@@ -153,7 +141,7 @@ class TestAttenuateEmissionModes:
     @pytest.mark.parametrize("mode", ["bc", "diff", "neb", "none"])
     def test_mode_returns_finite_sed(self, mode: str) -> None:
         sed = _power_sed(_WAVE)
-        sed_out, L_absorbed = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             mode,
@@ -166,13 +154,15 @@ class TestAttenuateEmissionModes:
         assert jnp.all(jnp.isfinite(sed_out)), (
             f"Mode {mode!r}: output SED contains non-finite values"
         )
-        assert jnp.isfinite(L_absorbed), f"Mode {mode!r}: L_absorbed is non-finite"
+        assert jnp.isfinite(_absorbed(sed, sed_out, _WAVE)), (
+            f"Mode {mode!r}: L_absorbed is non-finite"
+        )
 
     @pytest.mark.parametrize("mode", ["bc", "diff", "neb"])
     def test_attenuated_sed_not_greater_than_input(self, mode: str) -> None:
         """Attenuation must not amplify the SED (L_out ≤ L_in pixel-wise)."""
         sed = _flat_sed()
-        sed_out, _ = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             mode,
@@ -193,7 +183,7 @@ class TestZeroDustIdentity:
     def test_zero_tau_bc_and_diff_returns_input(self) -> None:
         """With tau_bc=0 and tau_diff=0, output must be ≈ input everywhere."""
         sed = _power_sed(_WAVE)
-        sed_out, _ = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             "bc",
@@ -211,7 +201,7 @@ class TestZeroDustIdentity:
     def test_zero_dust_none_mode_returns_input(self) -> None:
         """mode='none' must always return the input SED exactly."""
         sed = _power_sed(_WAVE)
-        sed_out, L_absorbed = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             "none",
@@ -223,9 +213,8 @@ class TestZeroDustIdentity:
         assert jnp.allclose(sed_out, sed, atol=0.0, rtol=0.0), (
             "mode='none' did not return input SED exactly"
         )
-        assert float(L_absorbed) == 0.0, (
-            f"mode='none' L_absorbed should be 0, got {float(L_absorbed)}"
-        )
+        L_absorbed = _absorbed(sed, sed_out, _WAVE)
+        assert L_absorbed == 0.0, f"mode='none' L_absorbed should be 0, got {L_absorbed}"
 
 
 # ── Energy conservation ───────────────────────────────────────────
@@ -242,7 +231,7 @@ class TestEnergyConservation:
         """L_transmitted + L_absorbed ≈ L_incident within 1%."""
         sed = _flat_sed(amplitude=1e-15)
         tau = 0.5
-        sed_out, L_absorbed = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             mode,
@@ -251,21 +240,22 @@ class TestEnergyConservation:
             law_bc_fn=_calzetti_approx,
             law_diff_fn=_calzetti_approx,
         )
+        L_absorbed = _absorbed(sed, sed_out, _WAVE)
 
         L_incident = self._integrate_luminosity(sed, _WAVE)
         L_transmitted = self._integrate_luminosity(sed_out, _WAVE)
 
-        rel_err = abs(L_transmitted + float(L_absorbed) - L_incident) / (L_incident + 1e-40)
+        rel_err = abs(L_transmitted + L_absorbed - L_incident) / (L_incident + 1e-40)
         assert rel_err < 0.01, (
             f"Mode {mode!r}: energy not conserved to 1%. "
             f"L_incident={L_incident:.3e}, L_transmitted={L_transmitted:.3e}, "
-            f"L_absorbed={float(L_absorbed):.3e}, rel_err={rel_err:.3%}"
+            f"L_absorbed={L_absorbed:.3e}, rel_err={rel_err:.3%}"
         )
 
     def test_none_mode_zero_absorbed(self) -> None:
         """mode='none' must have exactly zero absorbed luminosity."""
         sed = _flat_sed()
-        _, L_absorbed = attenuate_emission(
+        sed_out = attenuate_emission(
             sed,
             _WAVE,
             "none",
@@ -274,12 +264,12 @@ class TestEnergyConservation:
             law_bc_fn=_calzetti_approx,
             law_diff_fn=_calzetti_approx,
         )
-        assert float(L_absorbed) == 0.0
+        assert _absorbed(sed, sed_out, _WAVE) == 0.0
 
     def test_high_tau_absorbs_most_luminosity(self) -> None:
         """Very high optical depth should absorb nearly all incident luminosity."""
         sed = _flat_sed(amplitude=1e-15)
-        _, L_absorbed_high = attenuate_emission(
+        sed_out_high = attenuate_emission(
             sed,
             _WAVE,
             "bc",
@@ -288,7 +278,7 @@ class TestEnergyConservation:
             law_bc_fn=_calzetti_approx,
             law_diff_fn=_calzetti_approx,
         )
-        _, L_absorbed_low = attenuate_emission(
+        sed_out_low = attenuate_emission(
             sed,
             _WAVE,
             "bc",
@@ -297,7 +287,7 @@ class TestEnergyConservation:
             law_bc_fn=_calzetti_approx,
             law_diff_fn=_calzetti_approx,
         )
-        assert float(L_absorbed_high) > float(L_absorbed_low), (
+        assert _absorbed(sed, sed_out_high, _WAVE) > _absorbed(sed, sed_out_low, _WAVE), (
             "Higher optical depth should absorb more luminosity"
         )
 
