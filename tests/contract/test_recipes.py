@@ -234,12 +234,22 @@ class TestAgnPanchromatic:
         assert "torus" in recipe_dict["agn"]
 
     def test_agn_panchromatic_includes_radio_xray(self):
-        """Recipe includes radio and xray settings."""
+        """Recipe declares radio and xray via the dict grammar AND the built
+        spec actually carries their parameters.
+
+        Regression: the recipe previously used the bool form (``radio=True``),
+        which the group grammar silently skipped — so the panchromatic recipe
+        shipped with no radio / X-ray at all while this test (which only
+        checked ``recipe_dict['radio'] is True``) stayed green. Assert the
+        real thing: radio / X-ray params exist after ``parse_groups``.
+        """
         recipe_dict = recipes.agn_panchromatic()
-        assert "radio" in recipe_dict, "Radio should be in recipe"
-        assert "xray" in recipe_dict, "Xray should be in recipe"
-        assert recipe_dict["radio"] is True, "Radio should be True"
-        assert recipe_dict["xray"] is True, "Xray should be True"
+        assert recipe_dict["radio"] == {"type": "condon92"}
+        assert recipe_dict["xray"] == {"type": "simple"}
+        spec = parse_groups(**recipe_dict)
+        allp = set(spec.free_params) | set(spec.get_fixed_values())
+        assert any("radio" in k for k in allp), "radio params absent from built spec"
+        assert any("xray" in k for k in allp), "xray params absent from built spec"
 
     def test_agn_panchromatic_free_param_count(self):
         """Recipe has reasonable number of free parameters."""
@@ -506,10 +516,15 @@ class TestComposableAgn:
         assert recipe_dict["sfh"]["type"] == "dpl"
 
     def test_composable_agn_includes_radio_xray(self):
-        """Recipe includes radio and xray."""
+        """Recipe declares radio/xray via the dict grammar and the built spec
+        carries their params (see agn_panchromatic counterpart for context)."""
         recipe_dict = recipes.composable_agn()
-        assert recipe_dict["radio"] is True
-        assert recipe_dict["xray"] is True
+        assert recipe_dict["radio"] == {"type": "condon92"}
+        assert recipe_dict["xray"] == {"type": "simple"}
+        spec = parse_groups(**recipe_dict)
+        allp = set(spec.free_params) | set(spec.get_fixed_values())
+        assert any("radio" in k for k in allp), "radio params absent from built spec"
+        assert any("xray" in k for k in allp), "xray params absent from built spec"
 
     def test_composable_agn_free_redshift(self):
         """Redshift is free with appropriate bounds."""
@@ -542,3 +557,14 @@ class TestRecipesIntegration:
             spec = parse_groups(**recipe_dict)
             assert isinstance(spec, Parameters)
             assert spec.n_free > 0, f"{recipe_func.__name__} has no free params"
+
+
+class TestGateGroupBoolRejected:
+    """Additive gate groups (radio / xray / shock) are declared like every
+    other component — a dict selecting the model. The bool form must raise
+    (it used to be silently skipped, absenting the component)."""
+
+    @pytest.mark.parametrize("group", ["radio", "xray", "shock"])
+    def test_bool_gate_group_raises_actionable_error(self, group):
+        with pytest.raises(ValueError, match=r"type"):
+            parse_groups(**{group: True, "sfh": {"type": "dpl"}})
