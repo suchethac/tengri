@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Energy semantics of each ``agn_norm`` policy — the foundation contract.
 
 Pins what each cross-block normalization policy guarantees so the layer can

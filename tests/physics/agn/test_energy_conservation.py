@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Energy conservation of the composable AGN runner (conserving policy).
 
 The disc carries the intrinsic bolometric luminosity; the torus reprocesses a

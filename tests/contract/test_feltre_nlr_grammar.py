@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Grammar-level contract for the Feltre NLR block (nlr='feltre').
 
 The block claims a *public-API capability*: selectable through the composable

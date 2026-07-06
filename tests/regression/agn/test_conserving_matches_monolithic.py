@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The conserving composable path reproduces the monolithic energy-conserving
 AGN models across the FULL SED (not just the peak).
 
