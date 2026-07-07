@@ -40,7 +40,8 @@ __all__ = [
     "slone_netzer_disc_block",
 ]
 
-_C_AA_PER_S: float = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
+
 _L_SUN_ERG: float = L_SUN
 
 

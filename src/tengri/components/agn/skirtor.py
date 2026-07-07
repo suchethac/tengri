@@ -36,6 +36,7 @@ import jax.numpy as jnp
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
+    bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.grid_interp import interp_nd_pchip, interp_nd_triweight
@@ -44,7 +45,7 @@ from tengri.utils.interpolation import edges_for_grid
 #: Speed of light in Å/s. Used for L_λ ↔ L_ν conversions on SKIRTOR's
 #: Angstrom-grid templates. Matches the value used in
 #: ``tengri.components.agn.blocks.runner.C_AA_PER_S``.
-_C_AA_PER_S: float = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
 class SKIRTORComponents(NamedTuple):
@@ -279,8 +280,7 @@ def _compute_intrinsic_30deg_luminosity(
 
     # Bolometric intrinsic disc luminosity at 30°
     nu = _wavelength_to_nu(wave_grid)
-    idx_sort = jnp.argsort(nu)
-    integral_disk = jnp.trapezoid(disk_template[idx_sort], nu[idx_sort])
+    integral_disk = _bolometric_integral_nu(disk_template, nu)
     norm_fac = aniso_factor * norm
     lumin_intrin_disk = integral_disk * norm_fac
 

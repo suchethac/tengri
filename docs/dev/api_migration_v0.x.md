@@ -845,6 +845,22 @@ they resolve from an example subdirectory under sphinx-gallery's `chdir`.
 `AstrodustHD23Templates` gains a `size_distribution` field so the grain-size
 example no longer opens the HDF5 by hand.
 
+## Advertise the composable-block discovery surface (2026-07)
+
+Four already-importable helpers joined `__all__`. `list_agn_blocks()` /
+`describe_agn_block()` are the discovery functions for the composable AGN
+blocks (the `agn={'type': 'composable', ...}` grammar) and now sit beside
+their older siblings `list_agn_models()` / `describe_agn_model()`;
+`suggest_parameters()` was already in the curated tab-completion list, and
+`print_components_bibtex()` pairs with the advertised citation helpers.
+
+| Old path                              | New path                          | Status (v0.x)                  |
+| ------------------------------------- | --------------------------------- | ------------------------------ |
+| importable, absent from `__all__`     | `tengri.list_agn_blocks`          | Advertised (also tab-completed) |
+| importable, absent from `__all__`     | `tengri.describe_agn_block`       | Advertised                     |
+| importable, absent from `__all__`     | `tengri.suggest_parameters`       | Advertised                     |
+| importable, absent from `__all__`     | `tengri.print_components_bibtex`  | Advertised                     |
+
 ---
 
 ## How to update this document

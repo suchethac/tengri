@@ -365,7 +365,7 @@ class SKIRTORTorus(SEDModelComponent):
         viewing-angle-independent (bi-conical geometry). This means both Type 1
         (face-on) and Type 2 (edge-on) sightlines see the FIR bump in the combined SED.
         """
-        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
         from tengri.components.agn.disc_cigale import (
             adaf_disk_spectrum,
             schartmann2005_disk_spectrum,
@@ -408,12 +408,11 @@ class SKIRTORTorus(SEDModelComponent):
 
         # Compute derived quantities from disc
         nu = wavelength_to_nu(wave)
-        idx_sort = jnp.argsort(nu)
 
         # L_agn_disc: bolometric luminosity of the intrinsic disc. Preserved
         # across the disc-shape selection below so frac_agn / energy balance is
         # unaffected by disk_type / delta (only the SED *shape* changes).
-        L_agn_disc = jnp.trapezoid(sed_disc_template[idx_sort], nu[idx_sort])
+        L_agn_disc = bolometric_integral_nu(sed_disc_template, nu)
 
         # --- CIGALE disc-shape selection (skirtor2016.py:324-339) -----------
         # CIGALE builds the disc analytically and selects its shape via
@@ -446,8 +445,8 @@ class SKIRTORTorus(SEDModelComponent):
         retilt = shape_sel / jnp.maximum(shape_ref, 1e-100)
         sed_disc = sed_disc_template * retilt
         # Restore the disc bolometric luminosity (shape-only change).
-        L_retilt = jnp.trapezoid(sed_disc[idx_sort], nu[idx_sort])
-        sed_disc = sed_disc * (L_agn_disc / jnp.maximum(jnp.abs(L_retilt), 1e-100))
+        L_retilt_safe = bolometric_integral_nu(sed_disc, nu, floor=1e-100)
+        sed_disc = sed_disc * (L_agn_disc / L_retilt_safe)
 
         # L_2500_30deg: specific luminosity at 2500 Å (for α_OX)
         L_2500 = jnp.interp(2500.0, wave, sed_disc)
@@ -457,7 +456,7 @@ class SKIRTORTorus(SEDModelComponent):
         L_12um = jnp.interp(120000.0, wave, sed_disc + sed_torus_dust)  # 12 um = 120000 A
 
         # L_agn_torus: bolometric torus dust luminosity
-        L_agn_torus = jnp.trapezoid(sed_torus_dust[idx_sort], nu[idx_sort])
+        L_agn_torus = bolometric_integral_nu(sed_torus_dust, nu)
 
         # Apply polar dust (Type 1 only): extinction of disc, reemission
         sed_disc_polar, l_abs = polar_dust_extinction(
@@ -469,13 +468,13 @@ class SKIRTORTorus(SEDModelComponent):
             law="smc",
         )
         sed_polar_reemit = polar_dust_emission(
-            jnp.trapezoid(l_abs[idx_sort], nu[idx_sort]),
+            bolometric_integral_nu(l_abs, nu),
             wave,
             temperature=p["polar_temperature"],
             beta=p["polar_beta"],
             lambda_0=2e6,
         )
-        L_agn_polar_dust = jnp.trapezoid(sed_polar_reemit[idx_sort], nu[idx_sort])
+        L_agn_polar_dust = bolometric_integral_nu(sed_polar_reemit, nu)
 
         # Total SED: attenuated disc + torus + polar reemission
         sed_out = sed_in + sed_disc_polar + sed_torus_dust + sed_polar_reemit

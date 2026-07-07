@@ -117,6 +117,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "compute_mass_remaining_fraction",
         # ── Registry introspection ──────────────────────────────────
         "describe",
+        "describe_agn_block",
         "describe_agn_model",
         "describe_dust_emission_model",
         "describe_dust_law",
@@ -128,6 +129,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "examples",
         "explain",
         "help",
+        "list_agn_blocks",
         "list_agn_models",
         "list_all",
         "list_components",
@@ -145,7 +147,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_sfh_models",
         "list_xray_models",
         "ParameterRecord",
+        "print_components_bibtex",
         "recipe_parameters",
+        "suggest_parameters",
         "summary",
         "tutorial",
         # ── Subpackage namespaces (canonical import paths) ──────────
