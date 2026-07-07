@@ -50,6 +50,11 @@ def _model(ssp_path, neb, tau=0.0):
     import warnings
 
     ssp = _ssp(ssp_path)
+    # Cue backends need the trained-weights file; skip cleanly when it is absent
+    # (CI ships neither cue_weights.npz nor a bare SSP) rather than FileNotFoundError.
+    _is_cue = isinstance(neb, dict) and neb.get("type") == "cue"
+    if _is_cue and not Path("data/cue_weights.npz").is_file():
+        pytest.skip("Cue weights (data/cue_weights.npz) not present")
     obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]), line_fluxes=_LINE_DATA)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

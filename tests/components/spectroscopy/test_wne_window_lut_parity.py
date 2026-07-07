@@ -465,6 +465,10 @@ def test_predict_spectral_indices_fast_raises_on_additive_nebular():
     import warnings
 
     ssp = _wne_ssp()
+    # Cue needs its trained-weights file; skip cleanly when absent (CI lacks it)
+    # rather than FileNotFoundError at model build.
+    if not Path("data/cue_weights.npz").is_file():
+        pytest.skip("Cue weights (data/cue_weights.npz) not present")
     obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
