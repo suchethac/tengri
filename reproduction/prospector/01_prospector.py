@@ -319,6 +319,16 @@ save_fig("prospector_02_sfh_delayed.png")
 # uses the same sign and the same youngest-first ordering, so the *same*
 # numbers drive both codes — the comparison is at matched parameters, not just
 # a matched shape.
+#
+# **Reading the residuals.** The remaining 0.3–2 % optical residuals below are
+# *not* a binning or sub-Myr-convention mismatch — pinning the 0–1 Myr edge on
+# both sides changes nothing (#962, measured null). A per-age-bin
+# decomposition against a dense code-independent reference localizes them to
+# tengri's DSPS age-weight handoff, which truncates the oldest slice of any
+# bin whose upper edge falls between SSP grid ages (young bins lose their
+# red-supergiant-rich tail: UV +4 %, optical −2 %, NIR −4 % for the 0–30 Myr
+# bin). Young-heavy fiducials (dirichlet, flex) expose this at the 1–2 %
+# level; old-heavy mixes (continuity) largely cancel it. Tracked in #964.
 
 # %%
 # Shared seven-bin lookback grid (tengri's DEFAULT_BIN_EDGES_GYR). Passed
@@ -715,6 +725,13 @@ save_fig("prospector_02e_sfh_ift_field.png")
 # Convolve the τ-delayed SFH with the MIST+MILES SSPs. No dust, no
 # nebular. Both panels show `L_ν` vs `λ_rest` for 1 M⊙ formed; the
 # surviving stellar mass is reported on each side.
+#
+# The printed ~+1 % optical ratio is a diagnosed tengri-side bias, not an
+# engine convention: FSPS matches a dense code-independent convolution of
+# the same SSP arrays to ≤0.1 %, while tengri's DSPS age-weight handoff
+# assigns zero weight to the first SSP node older than the SFH's maximum
+# age (here 5.012 Gyr vs age = 5.0 Gyr), re-attributing the oldest 3.8 %
+# of the mass to younger, brighter nodes. Tracked in #964.
 
 # %%
 w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0)
