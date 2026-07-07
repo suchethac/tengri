@@ -12,8 +12,10 @@ weights,
 
 (verified here to ~1e-15), so break/EW features — including emission-line EWs —
 can be measured from precomputed SSP **window integrals** contracted with the
-published ``joint_weights``, bit-exactly and in ~30 µs. This is the foundation
-of the wNE FeaturePrecomp fast path.
+published ``joint_weights``, bit-exactly and in ~18 µs (the measurement step;
+~60 µs end-to-end including the SED-free weight extract — a ~17x per-eval win
+over the ~1.0 ms full-grid path). This is the foundation of the wNE
+FeaturePrecomp fast path.
 
 Parity is exact only with **no dust** here; the age-dependent two-component
 screen (Hα from the youngest bins sees more attenuation than the age-mixed
@@ -286,6 +288,67 @@ def test_compute_joint_weights_bitidentical_to_predict_state():
         worst = max(worst, rel)
     assert worst == 0.0, (
         f"weight extract diverges from predict_state by {worst:.2e} (must be bit-exact)"
+    )
+
+
+def test_fast_path_is_faster_than_full_grid():
+    """The window-LUT fast path must be materially faster than the full-grid path.
+
+    Guards the *reason the fast path exists*: reconstructing the ~6000-wave SED
+    and measuring on it (``predict_rest_sed`` + ``measure_index_jax``) versus the
+    SED-free weight extract + window-LUT contraction. Measured ~17x end-to-end on
+    CPU; we assert a conservative >=3x so the bound is robust across machines but
+    still fails loudly if the fast path regresses to full-grid cost (e.g. an
+    accidental full-SED reconstruction creeping back in). Data-gated -> never runs
+    in CI, so the timing assertion cannot flake there.
+    """
+    import statistics
+    import time
+
+    m, ssp = _dust_model()
+    stellar = _stellar_of(m)
+    pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, [_HALPHA_EW])
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    p["dust_tau_diff"] = jnp.asarray(0.6)
+    p["dust_tau_bc"] = jnp.asarray(1.0)
+
+    @jax.jit
+    def exact(params):
+        rest = m.predict_rest_sed(params)
+        return measure_index_jax(rest.wavelength, rest.sed, _HALPHA_EW)
+
+    @jax.jit
+    def fast(params):
+        jw, tm, ages = stellar.compute_joint_weights(params)
+        trans = two_component_dust(
+            wavelength=pc.window_centers,
+            age_grid=ages,
+            tau_v1=params["dust_tau_bc"],
+            tau_v2=params["dust_tau_diff"],
+            law_bc="calzetti",
+            law_diff="calzetti",
+        )
+        return measure_indices_from_window_lut(jw, tm * 3.828e33, trans, pc)
+
+    # accuracy: fast path must agree with the exact measurement it replaces
+    ex = float(exact(p))
+    fa = float(np.asarray(fast(p))[0])
+    assert abs(ex - fa) / max(abs(ex), 1e-9) < 4e-4, f"fast {fa} vs exact {ex}"
+
+    def med(fn, n=40, warmup=3):
+        for _ in range(warmup):
+            jax.block_until_ready(fn(p))
+        ts = []
+        for _ in range(n):
+            t0 = time.perf_counter()
+            jax.block_until_ready(fn(p))
+            ts.append(time.perf_counter() - t0)
+        return statistics.median(ts)
+
+    t_exact, t_fast = med(exact), med(fast)
+    assert t_fast < t_exact / 3.0, (
+        f"fast path not >=3x faster: exact {t_exact * 1e6:.0f} us vs "
+        f"fast {t_fast * 1e6:.0f} us ({t_exact / t_fast:.1f}x)"
     )
 
 

@@ -371,31 +371,62 @@ def _window_mean_flux(
     return jnp.sum(flux * weights) / n
 
 
+# ── Single-sourced index arithmetic ───────────────────────────────
+#
+# A break or EW index is a small piece of arithmetic on *window mean fluxes*.
+# There are two ways to get those means — integrate the reconstructed SED
+# (the exact path) or read the precomputed window LUT (the FeaturePrecomp fast
+# path) — but the arithmetic that turns means into an index value is identical.
+# These two helpers ARE that arithmetic, written once. Both the exact
+# ``_measure_*`` functions and the LUT ``measure_indices_from_windows`` call
+# them, so there is no hand-synced "mirror": one measurement, two window-mean
+# sources. Add a new index kind here and both paths get it.
+
+
+def _break_from_means(f_blue: jnp.ndarray, f_red: jnp.ndarray) -> jnp.ndarray:
+    """Break ratio (red continuum mean flux / blue continuum mean flux).
+
+    The single break primitive — shared by :func:`_measure_break` (means from the
+    reconstructed SED) and :func:`measure_indices_from_windows` (means from the
+    window LUT).
+    """
+    return f_red / jnp.maximum(f_blue, 1e-30)
+
+
+def _ew_from_means(
+    cont_means: jnp.ndarray, feat_flux: jnp.ndarray, feat_width: float, units: str
+) -> jnp.ndarray:
+    """Equivalent width from continuum + feature mean fluxes.
+
+    Averages the continuum-window means, forms the continuum-to-feature ratio
+    scaled by the feature width, and (for ``units == "mag"``) converts to a
+    magnitude index. The single EW primitive — shared by :func:`_measure_ew`
+    and :func:`measure_indices_from_windows` so the EW arithmetic (and its
+    ``mag`` variant) is single-sourced.
+    """
+    cont_flux = jnp.mean(jnp.asarray(cont_means))
+    ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
+    if units == "mag":
+        return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
+    return ew
+
+
 def _measure_break(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
     """Compute spectral break ratio (red window mean flux / blue window mean flux)."""
     blue_lo, blue_hi = idx.continuum[0]
     red_lo, red_hi = idx.continuum[1]
     f_blue = _window_mean_flux(wave, flux, blue_lo, blue_hi)
     f_red = _window_mean_flux(wave, flux, red_lo, red_hi)
-    return f_red / jnp.maximum(f_blue, 1e-30)
+    return _break_from_means(f_blue, f_red)
 
 
 def _measure_ew(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
     """Compute equivalent width from continuum-to-feature flux ratio and feature window width."""
-    cont_fluxes = []
-    for lo, hi in idx.continuum:
-        cont_fluxes.append(_window_mean_flux(wave, flux, lo, hi))
-    cont_flux = jnp.mean(jnp.array(cont_fluxes))
-
+    cont_fluxes = [_window_mean_flux(wave, flux, lo, hi) for lo, hi in idx.continuum]
     feat_lo, feat_hi = idx.feature
     feat_flux = _window_mean_flux(wave, flux, feat_lo, feat_hi)
     feat_width = feat_hi - feat_lo
-
-    ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
-
-    if idx.units == "mag":
-        return -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
-    return ew
+    return _ew_from_means(cont_fluxes, feat_flux, feat_width, idx.units)
 
 
 def _measure_slope(wave: jnp.ndarray, flux: jnp.ndarray, idx: SpectralIndexDef) -> jnp.ndarray:
@@ -596,23 +627,21 @@ def measure_indices_from_windows(
 
     Notes
     -----
-    **JIT-compatible**: yes. Mirrors :func:`_measure_break` / :func:`_measure_ew`
-    exactly, reading precomputed window means instead of integrating the SED.
+    **JIT-compatible**: yes. Calls the same :func:`_break_from_means` /
+    :func:`_ew_from_means` primitives as the exact path — only the window-mean
+    source differs (precomputed LUT here vs integrated SED there), so there is no
+    duplicated index arithmetic to keep in sync.
     """
     out = []
     for kind, payload, meta in precomp.index_slots:
         if kind == "break":
             b, r = payload
-            out.append(window_means[r] / jnp.maximum(window_means[b], 1e-30))
+            out.append(_break_from_means(window_means[b], window_means[r]))
         elif kind == "EW":
             cont_slots, feat = payload
             feat_width, units = meta
-            cont_flux = jnp.mean(jnp.stack([window_means[c] for c in cont_slots]))
-            feat_flux = window_means[feat]
-            ew = feat_width * (cont_flux - feat_flux) / jnp.maximum(cont_flux, 1e-30)
-            if units == "mag":
-                ew = -2.5 * jnp.log10(jnp.maximum(1.0 - ew / feat_width, 1e-30))
-            out.append(ew)
+            cont_means = [window_means[c] for c in cont_slots]
+            out.append(_ew_from_means(cont_means, window_means[feat], feat_width, units))
         else:  # slope
             out.append(jnp.asarray(jnp.nan))
     return jnp.stack(out)
@@ -629,9 +658,10 @@ def measure_indices_from_window_lut(
     The FeaturePrecomp fast path for baked-in (wNE) templates, where emission
     lines and indices are spectral features on the SSP and must be measured from
     the spectrum (no direct line output). Instead of reconstructing the full-grid
-    SED (~1.1 ms) and measuring on it, contract the precomputed SSP window
+    SED (~1.0 ms) and measuring on it, contract the precomputed SSP window
     integrals with the published SFH+metallicity weights and apply the
-    age-dependent two-component screen at each window centre (~30 µs):
+    age-dependent two-component screen at each window centre (~18 µs for this
+    contraction; ~58x the full-grid measurement):
 
     .. math::
 
@@ -674,8 +704,13 @@ def measure_indices_from_window_lut(
     Notes
     -----
     **JIT-compatible**: yes — one ``einsum`` + a weighted age sum + the ratio
-    measurement. This is the per-evaluation hot path (~30 µs) replacing the
-    full-grid SED reconstruction + measurement.
+    measurement. This is the per-evaluation hot path replacing the full-grid SED
+    reconstruction + measurement. Measured (CPU, PRSC wNE grid, 4 indices):
+    ~18 µs for this contraction alone and ~60 µs end-to-end including the
+    SED-free weight extract (:meth:`StellarSEDComponent.compute_joint_weights`)
+    and the transmission evaluation, versus ~1.0 ms for the full-grid path — a
+    ~17x per-evaluation win end-to-end (~58x for the measurement step in
+    isolation).
     """
     # marginalize metallicity, keep age: (n_age, n_window)
     wint_age = jnp.einsum("ma,maw->aw", joint_weights, precomp.window_integrals)
