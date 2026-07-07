@@ -87,13 +87,15 @@ def _trapz_line_flux(m, p, line_def):
     lam_c = 0.5 * (flo + fhi)
     cont = yb + (yr - yb) * (lam_c - xb) / (xr - xb)
     fsel = (wave > flo) & (wave < fhi)
-    trapz = getattr(np, "trapezoid", np.trapz)
+    # numpy 2.0 removed np.trapz -> np.trapezoid. A getattr default would eval
+    # np.trapz eagerly (AttributeError on 2.0); branch on hasattr instead.
+    trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
     L = trapz(llam[fsel] - cont, wave[fsel])
     dl = float(luminosity_distance(jnp.asarray(Z)))
     return L / (4.0 * np.pi * dl**2)
 
 
-def test_measured_matches_independent_integration():
+def test_measured_matches_independent_integration(real_ssp_only):
     """The operator matches a hand-rolled trapz integration of the SED (baked-in)."""
     m, p = _model(_WNE, {"type": "none"}, tau=0.5)
     got = float(m.measure_line_fluxes(p, [_HALPHA], fast=False)[0])
@@ -102,7 +104,7 @@ def test_measured_matches_independent_integration():
     assert abs(got - ref) / ref < 0.05, f"operator {got:.3e} vs trapz {ref:.3e}"
 
 
-def test_fast_line_fluxes_bitexact_to_exact():
+def test_fast_line_fluxes_bitexact_to_exact(real_ssp_only):
     """Window-LUT line fluxes reproduce the exact-SED measurement (baked-in)."""
     for tau, tol in ((0.0, 1e-9), (0.7, 1e-3)):
         m, p = _model(_WNE, {"type": "none"}, tau=tau)
@@ -121,7 +123,7 @@ def test_line_flux_measured_is_jittable():
     assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
 
 
-def test_measured_works_for_cue_backend():
+def test_measured_works_for_cue_backend(real_ssp_only):
     """Measure-as-catalog works on Cue's total SED; a clean line ([OIII]) recovers
     the direct nebular luminosity to ~10% (dust off)."""
     m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
@@ -137,7 +139,7 @@ def test_measured_works_for_cue_backend():
     assert (measured["Hbeta"] / direct["Hbeta"]) < (measured["OIII_5007"] / direct["OIII_5007"])
 
 
-def test_measured_includes_dust_reddening():
+def test_measured_includes_dust_reddening(real_ssp_only):
     """Measured fluxes redden with dust (bluer lines attenuated more) — the
     catalog-observable behaviour the intrinsic predict_line_fluxes lacks."""
     m0, p0 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
@@ -156,7 +158,7 @@ def test_fast_line_fluxes_raise_for_additive_nebular():
         m.measure_line_fluxes(p, DESI_LINES, fast=True)
 
 
-def test_predict_line_fluxes_reddens_by_default():
+def test_predict_line_fluxes_reddens_by_default(real_ssp_only):
     """predict_line_fluxes applies line dust reddening by default (fix a).
 
     Before 2026-07 it returned intrinsic (un-reddened) fluxes — dust on the lines

@@ -122,6 +122,14 @@ class TestRegistryCompleteness:
             # path (threaded as template_data), not a registry-routed kernel
             # adapter. See ``components/dust/energy_balance_precompute.py``.
             "tengri.components.dust.energy_balance_precompute",
+            # line_precompute: the #950 metallicity-indexed L_line/Q_H table. A
+            # VALIDATED PHYSICS RECORD, deliberately NOT wired (post-#949 the Cue
+            # line forward is ~0.5 ms, so reconstructing from the table is not a
+            # win — see the module ``.. warning::``). It is not a kernel adapter
+            # (no AXIS_PARAMS / build_lookup); the live FeaturePrecomp fast path is
+            # the window-LUT (measure_line_fluxes / predict_spectral_indices
+            # fast=True), cached on the model. See ``nebular/line_precompute.py``.
+            "tengri.components.nebular.line_precompute",
         }
     )
 

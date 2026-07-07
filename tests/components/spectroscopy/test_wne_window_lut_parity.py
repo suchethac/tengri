@@ -208,7 +208,7 @@ def _window_lut_indices(m, ssp, p, defs):
     return np.asarray(measure_indices_from_window_lut(jw, sms, trans, pc)), pc
 
 
-def test_window_lut_with_two_component_dust_matches_full_sed():
+def test_window_lut_with_two_component_dust_matches_full_sed(real_ssp_only):
     """Age-resolved window LUT (dust ON) matches the full-SED measure < 1e-3."""
     m, ssp = _dust_model()
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -229,7 +229,7 @@ def test_window_lut_with_two_component_dust_matches_full_sed():
         assert rel < 1e-3, f"{d.name}: LUT {l:.4f} vs exact {exact:.4f} (rel {rel:.2e})"
 
 
-def test_nebular_emission_reddened_by_birth_cloud():
+def test_nebular_emission_reddened_by_birth_cloud(real_ssp_only):
     """Two-component: the young-bin nebular emission sees the birth cloud.
 
     Raising tau_bc must attenuate the Hα emission-line EW (emission lives in the
@@ -291,7 +291,7 @@ def test_compute_joint_weights_bitidentical_to_predict_state():
     )
 
 
-def test_fast_path_is_faster_than_full_grid():
+def test_fast_path_is_faster_than_full_grid(real_ssp_only):
     """The window-LUT fast path must be materially faster than the full-grid path.
 
     Guards the *reason the fast path exists*: reconstructing the ~6000-wave SED
@@ -389,7 +389,7 @@ _INDEX_SET = (
 )
 
 
-def test_predict_spectral_indices_fast_matches_exact():
+def test_predict_spectral_indices_fast_matches_exact(real_ssp_only):
     """fast=True reproduces the exact predict_spectral_indices, dust on and off.
 
     The public surface must route through the window LUT and land on the same
@@ -420,7 +420,7 @@ def test_predict_spectral_indices_fast_is_jittable():
     assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
 
 
-def test_predict_spectral_indices_fast_fills_slope_from_exact():
+def test_predict_spectral_indices_fast_fills_slope_from_exact(real_ssp_only):
     """Slope indices are not LUT-expressible → filled from the exact SED, not NaN."""
     m, _ssp = _dust_model()
     uv_slope = SpectralIndexDef(
