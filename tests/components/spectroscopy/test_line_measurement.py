@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Contract: emission-line fluxes measured from the model spectrum (#950).
 
-`predict_line_fluxes_measured` applies a catalog-style operator (side-band
+`measure_line_fluxes` applies a catalog-style operator (side-band
 continuum, subtract, integrate) to the model's own rest-frame SED. Validated:
 
 - the measured flux matches an independent trapezoidal integration of the SED;
@@ -96,7 +96,7 @@ def _trapz_line_flux(m, p, line_def):
 def test_measured_matches_independent_integration():
     """The operator matches a hand-rolled trapz integration of the SED (baked-in)."""
     m, p = _model(_WNE, {"type": "none"}, tau=0.5)
-    got = float(m.predict_line_fluxes_measured(p, [_HALPHA], fast=False)[0])
+    got = float(m.measure_line_fluxes(p, [_HALPHA], fast=False)[0])
     ref = _trapz_line_flux(m, p, _HALPHA)
     assert got > 0, "Halpha emission flux must be positive"
     assert abs(got - ref) / ref < 0.05, f"operator {got:.3e} vs trapz {ref:.3e}"
@@ -106,16 +106,16 @@ def test_fast_line_fluxes_bitexact_to_exact():
     """Window-LUT line fluxes reproduce the exact-SED measurement (baked-in)."""
     for tau, tol in ((0.0, 1e-9), (0.7, 1e-3)):
         m, p = _model(_WNE, {"type": "none"}, tau=tau)
-        exact = np.asarray(m.predict_line_fluxes_measured(p, DESI_LINES, fast=False))
-        fast = np.asarray(m.predict_line_fluxes_measured(p, DESI_LINES, fast=True))
+        exact = np.asarray(m.measure_line_fluxes(p, DESI_LINES, fast=False))
+        fast = np.asarray(m.measure_line_fluxes(p, DESI_LINES, fast=True))
         rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-30))
         assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e}"
 
 
 def test_line_flux_measured_is_jittable():
     m, p = _model(_WNE, {"type": "none"}, tau=0.4)
-    jitted = jax.jit(lambda pp: m.predict_line_fluxes_measured(pp, DESI_LINES, fast=True))
-    eager = np.asarray(m.predict_line_fluxes_measured(p, DESI_LINES, fast=True))
+    jitted = jax.jit(lambda pp: m.measure_line_fluxes(pp, DESI_LINES, fast=True))
+    eager = np.asarray(m.measure_line_fluxes(p, DESI_LINES, fast=True))
     got = np.asarray(jitted(p))
     assert np.all(np.isfinite(got))
     assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
@@ -125,7 +125,7 @@ def test_measured_works_for_cue_backend():
     """Measure-as-catalog works on Cue's total SED; a clean line ([OIII]) recovers
     the direct nebular luminosity to ~10% (dust off)."""
     m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
-    measured = {ld.name: float(v) for ld, v in zip(DESI_LINES, m.predict_line_fluxes_measured(p))}
+    measured = {ld.name: float(v) for ld, v in zip(DESI_LINES, m.measure_line_fluxes(p))}
     direct = {
         n: float(v)
         for n, v in zip(
@@ -142,8 +142,8 @@ def test_measured_includes_dust_reddening():
     catalog-observable behaviour the intrinsic predict_line_fluxes lacks."""
     m0, p0 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
     m1, p1 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.6)
-    f0 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m0.predict_line_fluxes_measured(p0))}
-    f1 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m1.predict_line_fluxes_measured(p1))}
+    f0 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m0.measure_line_fluxes(p0))}
+    f1 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m1.measure_line_fluxes(p1))}
     # reddening lowers observed flux, and Hbeta (bluer) more than Halpha (redder)
     assert f1["Halpha"] < f0["Halpha"] and f1["Hbeta"] < f0["Hbeta"]
     assert (f1["Hbeta"] / f0["Hbeta"]) < (f1["Halpha"] / f0["Halpha"])
@@ -153,4 +153,27 @@ def test_fast_line_fluxes_raise_for_additive_nebular():
     """The window LUT misses additive Cue emission → fast=True must raise."""
     m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
     with pytest.raises(ValueError, match=r"baked-in nebular only"):
-        m.predict_line_fluxes_measured(p, DESI_LINES, fast=True)
+        m.measure_line_fluxes(p, DESI_LINES, fast=True)
+
+
+def test_predict_line_fluxes_reddens_by_default():
+    """predict_line_fluxes applies line dust reddening by default (fix a).
+
+    Before 2026-07 it returned intrinsic (un-reddened) fluxes — dust on the lines
+    was silently dropped in the fit likelihood. Now redden=True is the default;
+    redden=False recovers the intrinsic (dust-independent) values.
+    """
+    m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.5)
+    waves = _LINE_DATA.wavelengths
+    red = np.asarray(m.predict_line_fluxes(p, target_wavelengths=waves))
+    intr = np.asarray(m.predict_line_fluxes(p, target_wavelengths=waves, redden=False))
+    assert np.all(red < intr), "reddening must lower the observed line flux"
+    # redden=False is dust-independent
+    p0 = dict(p)
+    p0["dust_tau_bc"] = jnp.asarray(0.0)
+    p0["dust_tau_diff"] = jnp.asarray(0.0)
+    intr0 = np.asarray(m.predict_line_fluxes(p0, target_wavelengths=waves, redden=False))
+    assert np.allclose(intr, intr0, rtol=1e-6), "redden=False must ignore dust"
+    # reddening raises the observed Balmer decrement (Hbeta attenuated more)
+    ha, hb = _LINES.index("Halpha"), _LINES.index("Hbeta")
+    assert (red[ha] / red[hb]) > (intr[ha] / intr[hb])

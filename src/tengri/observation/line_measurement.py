@@ -282,6 +282,63 @@ def measure_line_fluxes_from_window_lut(joint_weights, scale, transmission, prec
     return jnp.stack(out)
 
 
+def default_line_defs(
+    wavelengths,
+    names=None,
+    *,
+    feature_halfwidth: float = 8.0,
+    cont_gap: float = 17.0,
+    cont_width: float = 20.0,
+):
+    """Build generic :class:`LineDef` windows around a set of line centres.
+
+    Used to fit line fluxes through the measure-as-catalog path when only line
+    *centres* are known (e.g. a :class:`LineFluxData` set) — the likelihood needs
+    continuum windows and these are concrete, built once at fitter setup (never
+    from traced ``data_args``).
+
+    Parameters
+    ----------
+    wavelengths : array_like, shape (n_line,)
+        Rest-frame vacuum line centres [Å].
+    names : sequence of str, optional
+        Per-line names; defaults to ``line_<λ>``.
+    feature_halfwidth : float, default 8.0
+        Half-width of the feature window [Å].
+    cont_gap, cont_width : float, default 17.0, 20.0
+        The continuum side-bands sit at ``[λ ± (gap+width), λ ± gap]`` [Å].
+
+    Returns
+    -------
+    tuple of LineDef
+
+    Notes
+    -----
+    These are **generic** windows: they clear the line itself but not necessarily
+    neighbouring lines in crowded regions (Hα+[NII]+[SII]). For science against a
+    real catalog, pass survey-matched :class:`LineDef` windows explicitly.
+    """
+    import numpy as _np
+
+    waves = _np.atleast_1d(_np.asarray(wavelengths, dtype=float))
+    out = []
+    for i, lam in enumerate(waves):
+        lam = float(lam)
+        name = names[i] if names is not None else f"line_{lam:.0f}"
+        out.append(
+            LineDef(
+                name=name,
+                wavelength=lam,
+                continuum=(
+                    (lam - cont_gap - cont_width, lam - cont_gap),
+                    (lam + cont_gap, lam + cont_gap + cont_width),
+                ),
+                feature=(lam - feature_halfwidth, lam + feature_halfwidth),
+            )
+        )
+    return tuple(out)
+
+
 #: Illustrative DESI-like emission-line set (rest-frame **vacuum** centres [Å]).
 #: The continuum side-bands are reasonable defaults for clean regions; the
 #: crowded Halpha+[NII]+[SII] complex is approximate and should be tuned to the

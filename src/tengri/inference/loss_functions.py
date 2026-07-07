@@ -57,6 +57,7 @@ def _build_prediction(
     data_args,
     use_components=False,
     has_line_ratios=False,
+    measured_line_defs=None,
 ):
     """Forward-model prediction in one place.
 
@@ -105,9 +106,16 @@ def _build_prediction(
     if has_line_fluxes or has_line_ratios or has_indices:
         feature_state = model.predict_state(params)
     if has_line_fluxes:
-        prediction["line_fluxes"] = model.predict_line_fluxes(
-            params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
-        )
+        if measured_line_defs is not None:
+            # No discrete line catalog (BakedIn) → measure the fluxes off the
+            # model spectrum the way a pipeline does (measure_line_fluxes).
+            prediction["line_fluxes"] = model.measure_line_fluxes(
+                params, measured_line_defs, state=feature_state
+            )
+        else:
+            prediction["line_fluxes"] = model.predict_line_fluxes(
+                params, target_wavelengths=data_args["line_flux_waves"], state=feature_state
+            )
     if has_line_ratios:
         prediction["line_ratios"] = model.predict_line_ratios(
             params, model.observation.line_ratios, state=feature_state
@@ -162,6 +170,20 @@ def _build_data_neg_log_likelihood_fn(fitter):
         obs_for_idx = getattr(model, "observation", None)
         if obs_for_idx is not None and obs_for_idx.spectral_indices is not None:
             index_defs = obs_for_idx.spectral_indices.index_defs
+    # Line-flux channel: backends with no discrete catalog (BakedIn) can't run
+    # predict_line_fluxes — measure the fluxes off the spectrum instead. Build the
+    # continuum windows ONCE from the observation's concrete line centres (never
+    # from traced data_args) so the jitted loss sees a static LineDef set.
+    measured_line_defs = None
+    if has_line_fluxes and not model._has_line_catalog():
+        obs_for_lines = getattr(model, "observation", None)
+        lf = getattr(obs_for_lines, "line_fluxes", None) if obs_for_lines is not None else None
+        if lf is not None:
+            import numpy as _np
+
+            from tengri.observation.line_measurement import default_line_defs
+
+            measured_line_defs = default_line_defs(_np.asarray(lf.wavelengths), tuple(lf.names))
     user_likelihood = getattr(fitter, "_user_likelihood", None)
     use_components = bool(getattr(fitter, "use_components", False))
     # Build-time signature check: the internal adapter cohort accepts
@@ -222,6 +244,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
                 data_args=data_args,
                 use_components=use_components,
                 has_line_ratios=has_line_ratios,
+                measured_line_defs=measured_line_defs,
             )
 
         # Auto-built / user-supplied Likelihood adapter handles the data

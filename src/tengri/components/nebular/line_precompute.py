@@ -161,7 +161,11 @@ def precompute_line_per_qh(
     for mz in met_grid:
         p = dict(ref_params)
         p["met_logzsol"] = jnp.asarray(float(mz))
-        flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths)
+        # INTRINSIC line-per-Q_H (redden=False): the table is the nebular line
+        # luminosity per ionizing photon — a property of the gas, independent of
+        # the reference SFH *and* the reference dust. Dust reddening (which now
+        # defaults on in predict_line_fluxes) is applied downstream, not baked in.
+        flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths, redden=False)
         nion = _nion_of_state(model.predict_state(p))
         lum = jnp.asarray(flux) * ref_divisor  # observed flux → line luminosity
         rows.append(lum / jnp.maximum(nion, 1e-30))

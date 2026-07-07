@@ -82,7 +82,8 @@ def test_line_table_reconstructs_exact_across_sfh_and_metallicity(ssp_data_fsps)
             float(jax.random.uniform(k[4], minval=9.0, maxval=11.0))
         )
 
-        exact = np.asarray(m.predict_line_fluxes(p, target_wavelengths=lw))
+        # intrinsic (redden=False): the line-per-Q_H table is un-reddened
+        exact = np.asarray(m.predict_line_fluxes(p, target_wavelengths=lw, redden=False))
         lut = np.asarray(reconstruct_line_lums(_nion(m, p), p["met_logzsol"], 0.15, table))
         strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
         rel = np.max(np.abs(lut - exact)[strong] / np.maximum(np.abs(exact)[strong], 1e-40))
@@ -106,7 +107,9 @@ def test_table_is_redshift_independent(ssp_data_fsps):
     p["met_logzsol"] = jnp.asarray(-0.4)
     # nion is a stellar (distance-independent) quantity — same physical galaxy
     exact_hi = np.asarray(
-        m_hi.predict_line_fluxes({**p, "redshift": jnp.asarray(0.5)}, target_wavelengths=lw)
+        m_hi.predict_line_fluxes(
+            {**p, "redshift": jnp.asarray(0.5)}, target_wavelengths=lw, redden=False
+        )
     )
     lut_hi = np.asarray(
         reconstruct_line_lums(

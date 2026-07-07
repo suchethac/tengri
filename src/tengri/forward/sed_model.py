@@ -3215,18 +3215,35 @@ class SEDModel:
         sed_erg = self.predict_rest_sed(params).sed
         return sed_erg / L_SUN
 
+    def _has_line_catalog(self):
+        """Whether the nebular backend publishes a discrete line catalog.
+
+        ``True`` for photoionization backends (Cue / CloudyGrid) →
+        :meth:`predict_line_fluxes` works. ``False`` for BakedIn / shock → line
+        fluxes must be *measured* from the spectrum (:meth:`measure_line_fluxes`).
+        """
+        backend = getattr(self, "_nebular_backend", None)
+        return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
+
     def predict_line_fluxes(
-        self, params, target_wavelengths=None, tolerance_aa=5.0, *, state=None
+        self, params, target_wavelengths=None, tolerance_aa=5.0, *, redden=True, state=None
     ):
-        """Predict observed emission line fluxes.
+        """Predict observed emission line fluxes (dust-reddened by default).
 
-        Calls the nebular backend to compute line luminosities,
-        selects target lines by wavelength matching, and converts
-        from luminosity (Lsun) to observed flux (erg/s/cm^2).
+        The **model's** nebular line emission: calls the photoionization backend
+        (Cue / CloudyGrid) for line luminosities, applies dust attenuation at each
+        line wavelength (Charlot & Fall birth-cloud + diffuse), and converts to
+        observed flux ``L / (4 pi d_L^2)`` [erg/s/cm^2].
 
-        **Raw forward-pass output.** For interactive access to individual
-        named lines (with luminosities, ratios, and BPT diagnostics), see
-        ``model.predict(params).lines.halpha`` etc.
+        See also :meth:`measure_line_fluxes`, which instead *measures* line fluxes
+        off the model spectrum the way a spectroscopic pipeline measures data
+        (continuum-subtract + integrate) — works for any backend (including
+        baked-in wNE) and carries the stellar Balmer absorption self-consistently.
+        The distinction: ``predict_line_fluxes`` = what the galaxy emits;
+        ``measure_line_fluxes`` = what a pipeline would extract from its spectrum.
+
+        For interactive access to individual named lines (luminosities, ratios,
+        BPT diagnostics), see ``model.predict(params).lines.halpha`` etc.
 
         Parameters
         ----------
@@ -3241,6 +3258,13 @@ class SEDModel:
             target and the matched catalog line. Raises ``ValueError`` on
             any miss, listing the offending targets. Pass ``None`` to disable
             (recovers legacy nearest-line-no-matter-what behavior).
+        redden : bool, default True
+            Apply dust attenuation to the lines (HII regions see birth-cloud +
+            diffuse dust; Charlot & Fall 2000). ``True`` returns **observed**
+            fluxes comparable to a raw catalog; set ``False`` for **intrinsic**
+            (un-reddened) fluxes — e.g. when fitting extinction-corrected
+            catalog line fluxes. (Before 2026-07 this was always intrinsic —
+            silently omitting the line reddening; ``redden=True`` is the fix.)
 
         Returns
         -------
@@ -3294,6 +3318,27 @@ class SEDModel:
             )
         all_waves = jnp.asarray(state.derived["line_waves"])
         all_lums = jnp.asarray(state.derived["line_lums"])
+
+        # Dust-redden the lines at their wavelengths (HII regions see BC +
+        # diffuse; Charlot & Fall 2000) — the same operator predict_emission_lines
+        # applies. The backend publishes INTRINSIC line_lums, so without this the
+        # observed flux omits the line reddening entirely (JIT-safe: pure jnp).
+        if redden:
+            from tengri.forward.emission_helpers import attenuate_emission
+
+            _is_single = self._dust_model == "single_component"
+            all_lums = attenuate_emission(
+                all_lums,
+                all_waves,
+                self._neb_dust_mode,
+                jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0))),
+                jnp.asarray(params.get("dust_tau_diff", 0.0)),
+                self._dust_law_bc_fn,
+                self._dust_law_bc_fn if _is_single else self._dust_law_diff_fn,
+                neb_bc_fn=self._neb_dust_law_bc_fn,
+                dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
+                dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+            )
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
@@ -3617,16 +3662,17 @@ class SEDModel:
             )
         return values
 
-    def predict_line_fluxes_measured(self, params, line_defs=None, *, fast=False, state=None):
+    def measure_line_fluxes(self, params, line_defs=None, *, fast=False, state=None):
         r"""Emission-line fluxes **measured from the model spectrum**, catalog-style.
 
-        Unlike :meth:`predict_line_fluxes` (which returns a nebular backend's
-        *direct* line luminosity, e.g. the Cue network output), this applies the
-        same operator a spectroscopic pipeline applies to data — estimate a local
-        continuum from side-bands, subtract it, integrate the emission — to the
-        model's own rest-frame SED. It therefore works for **any** nebular backend
-        (Cue additive, baked-in wNE, …) and yields a quantity directly comparable
-        to a catalog's continuum-subtracted line flux.
+        The counterpart to :meth:`predict_line_fluxes`: where ``predict_*`` returns
+        what the galaxy *emits* (the backend's nebular line luminosity → flux),
+        ``measure_*`` applies the operator a spectroscopic pipeline applies to
+        *data* — estimate a local continuum from side-bands, subtract it, integrate
+        the emission — to the model's own rest-frame SED. It therefore works for
+        **any** nebular backend (Cue additive, baked-in wNE, …), yields a quantity
+        directly comparable to a catalog's continuum-subtracted line flux, and
+        carries the stellar Balmer absorption under the line self-consistently.
 
         Parameters
         ----------
