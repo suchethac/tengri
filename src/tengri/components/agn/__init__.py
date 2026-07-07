@@ -59,7 +59,6 @@ from tengri.components.agn.cat3d_wind import (
     create_cat3d_wind_from_grid,
 )
 from tengri.components.agn.disc import (
-    adaf_disc,
     beloborodov_gamma_hot,
     compute_l2500,
     create_relagn_disc_from_grid,
@@ -129,7 +128,6 @@ __all__ = [
     "SKIRTORTorus",
     "Silva04Torus",
     "adaf_agn",
-    "adaf_disc",
     "beloborodov_gamma_hot",
     "blocks",
     "cat3d_wind_analytic",
