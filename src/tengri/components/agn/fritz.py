@@ -37,6 +37,7 @@ import jax.numpy as jnp
 from tengri._deprecated import deprecated_alias
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
+    bolometric_integral_nu as _bolometric_integral_nu,
     wavelength_to_nu as _wavelength_to_nu,
 )
 from tengri.utils.grid_interp import interp_nd_triweight
@@ -145,9 +146,7 @@ def _interpolate_and_normalize(
     template = interp_nd_triweight(grid_jax, axes, edges, point)
     sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
     nu = _wavelength_to_nu(wavelength)
-    idx_sort = jnp.argsort(nu)
-    integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
     return l_scale * sed / integral_safe
 
 

@@ -97,6 +97,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
 from tengri.components.dust.attenuation import smc as smc_curve
 
 # ── Physical constants (CGS) ──────────────────────────────────────
@@ -603,9 +604,7 @@ def _qsogen_components(
     f_nu_cont = continuum_unscaled + hot_dust_unscaled
 
     nu = _wavelength_to_nu(wavelength)
-    idx_sort = jnp.argsort(nu)
-    integral_nu = jnp.trapezoid(f_nu_cont[idx_sort], nu[idx_sort])
-    integral_nu = jnp.maximum(jnp.abs(integral_nu), 1e-30)
+    integral_nu = _bolometric_integral_nu(f_nu_cont, nu, floor=1e-30)
 
     l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     norm_factor = l_bol_erg / integral_nu

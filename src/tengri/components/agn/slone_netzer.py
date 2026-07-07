@@ -38,6 +38,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._phys import bolometric_integral_nu as _bolometric_integral_nu
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
@@ -45,7 +46,7 @@ __all__ = [
     "slone_netzer_sed",
 ]
 
-_C_AA_PER_S: float = 2.99792458e18  # speed of light [Å·Hz]
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
 def _wavelength_to_nu(wavelength: jnp.ndarray) -> jnp.ndarray:
@@ -162,9 +163,7 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
         )
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
-        idx_sort = jnp.argsort(nu)
-        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG
         return l_scale * sed / integral_safe
 

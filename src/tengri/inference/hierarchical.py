@@ -418,7 +418,7 @@ class PopulationFitter:
             **MCMC**
 
             - ``"mcmc_raytrace"`` — Ray Tracing on flat vector.
-            - ``"mcmc_ess"`` — Ensemble sampling (alias for native_vi_linear).
+            - ``"mcmc_ess"`` — Elliptical slice sampling (cheap MCMC variant).
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
         **kwargs

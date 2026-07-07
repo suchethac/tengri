@@ -18,7 +18,8 @@ __all__ = [
     "boroson_green_feii_block",
 ]
 
-_C_AA_PER_S: float = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
+
 DEFAULT_F_BOL_5100: float = 9.0
 
 

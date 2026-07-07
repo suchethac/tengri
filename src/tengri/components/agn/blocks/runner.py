@@ -138,7 +138,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 )
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
-C_AA_PER_S: float = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as C_AA_PER_S
 
 #: Selector keys recognized by the runner. Match the canonical pipeline order.
 BLOCK_SELECTOR_KEYS: tuple[str, ...] = (

@@ -59,7 +59,10 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
+from tengri.components.agn._phys import (
+    bolometric_integral_nu as _bolometric_integral_nu,
+    wavelength_to_nu as _wavelength_to_nu,
+)
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -208,9 +211,7 @@ def create_skirtor_agnfitter_from_grid(grid_path: str) -> Callable:
         # by L_bol * torus_frac, exactly as the cat3d_wind / silva04 torus blocks
         # and the skirtor_agnfitter precompute path do (lnu = L_SUN * T / int T dnu).
         nu = _wavelength_to_nu(wavelength)
-        idx_sort = jnp.argsort(nu)
-        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
         return l_scale * sed / integral_safe
 

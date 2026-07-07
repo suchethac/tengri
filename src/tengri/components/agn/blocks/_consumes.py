@@ -72,8 +72,10 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_gamma_warm",
             "agn_kt_hot",
             "agn_kt_warm",
-            # agn_log_ledd removed (#846): the Eddington ratio is now derived
-            # from agn_log_lbol, so agn_log_ledd no longer moves the SED.
+            # agn_log_ledd is deliberately not consumed here (#846): for this
+            # disc block the Eddington ratio is derived from agn_log_lbol, so
+            # agn_log_ledd does not move the SED. The parameter itself is
+            # still declared (and consumed by the kd18/unified disc paths).
             "agn_log_mbh",
             "agn_r_warm_ratio",
         }
