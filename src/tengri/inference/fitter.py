@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 import jax.numpy as jnp
 
 from tengri.config.exceptions import ParameterError
-from tengri.inference._model_cache import get_model_cache
+from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
 from tengri.inference.loss_functions import (
@@ -974,7 +974,7 @@ class Fitter:
         different SSP files of identical shape).
 
         Also maintains a backward-compat per-model cache for any code
-        that reads directly from get_model_cache(self.model)["jit_engine"].
+        that reads the model's cache namespace under ``"jit_engine"``.
 
         Blocks until the background compilation thread (started in
         ``__init__``) has finished.  On an XLA cache hit the wait is
@@ -999,7 +999,9 @@ class Fitter:
 
         # Write-through to per-model cache for backward compat
         cache_key = (self._engine_cache_key(), getattr(self, "_memory_mode", "fast"))
-        per_model_cache = get_model_cache(self.model).setdefault("jit_engine", {})
+        per_model_cache = _model_cache_owner.get_or_compile_model(self.model).setdefault(
+            "jit_engine", {}
+        )
         per_model_cache[cache_key] = engine
 
         self._jit_sampler = engine
@@ -1313,7 +1315,7 @@ class Fitter:
         from tengri.inference.jit_engine import get_or_build_cached
 
         cache_key = self._engine_cache_key()
-        per_model = get_model_cache(self.model).setdefault("loss_fn", {})
+        per_model = _model_cache_owner.get_or_compile_model(self.model).setdefault("loss_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
         loss_fn = jax.jit(get_or_build_cached(self, "loss", self._build_loss_fn))
@@ -1333,7 +1335,7 @@ class Fitter:
         from tengri.inference.jit_engine import get_or_build_cached
 
         cache_key = self._engine_cache_key()
-        per_model = get_model_cache(self.model).setdefault("loglik_fn", {})
+        per_model = _model_cache_owner.get_or_compile_model(self.model).setdefault("loglik_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
         loglik_fn = get_or_build_cached(self, "loglik", self._build_loglikelihood_fn)
@@ -1356,7 +1358,9 @@ class Fitter:
         marginal and the cache key would mirror the loss cache anyway.
         """
         cache_key = self._engine_cache_key()
-        per_model = get_model_cache(self.model).setdefault("loglik_unbounded_fn", {})
+        per_model = _model_cache_owner.get_or_compile_model(self.model).setdefault(
+            "loglik_unbounded_fn", {}
+        )
         if cache_key in per_model:
             return per_model[cache_key]
         fn = self._build_loglikelihood_unbounded_fn()
@@ -1373,7 +1377,7 @@ class Fitter:
         from tengri.inference.jit_engine import get_or_build_cached
 
         cache_key = self._engine_cache_key()
-        per_model = get_model_cache(self.model).setdefault("grad_fn", {})
+        per_model = _model_cache_owner.get_or_compile_model(self.model).setdefault("grad_fn", {})
         if cache_key in per_model:
             return per_model[cache_key]
 
@@ -1400,7 +1404,9 @@ class Fitter:
         cache_key = self._engine_cache_key()
         from tengri.inference.jit_engine import get_or_build_cached
 
-        per_model = get_model_cache(self.model).setdefault("logdensity_fn", {})
+        per_model = _model_cache_owner.get_or_compile_model(self.model).setdefault(
+            "logdensity_fn", {}
+        )
         if cache_key in per_model:
             return per_model[cache_key]
 
@@ -1568,7 +1574,7 @@ class Fitter:
         Stored payload:
 
         - ``adaptation`` : dict keyed by ``(engine_key, method_key)`` — the
-          contents of ``get_model_cache(model)["adaptation"]``.
+          contents of the model's cache namespace under ``"adaptation"``.
         - ``spec_fingerprint`` : a content hash of the free-parameter names
           and prior shape, used by :meth:`load_cache` to refuse to load a
           cache that was written for a different model.
@@ -1586,9 +1592,7 @@ class Fitter:
         import pickle
         from pathlib import Path as _Path
 
-        from tengri.inference._model_cache import get_model_cache
-
-        mc = get_model_cache(self.model)
+        mc = _model_cache_owner.get_or_compile_model(self.model)
         adaptation = mc.get("adaptation", {})
         # Cached MAP point estimate (if a previous .run() or .prewarm()
         # populated it). Saving it skips MAP init on the next load_cache
@@ -1628,8 +1632,6 @@ class Fitter:
         import pickle
         from pathlib import Path as _Path
 
-        from tengri.inference._model_cache import get_model_cache
-
         with _Path(path).open("rb") as f:
             payload = pickle.load(f)
         if payload.get("spec_fingerprint") != self._spec_fingerprint():
@@ -1637,7 +1639,7 @@ class Fitter:
                 f"Adaptation cache at {path} was written for a different model "
                 "(spec fingerprint mismatch). Re-run prewarm + save_cache."
             )
-        mc = get_model_cache(self.model)
+        mc = _model_cache_owner.get_or_compile_model(self.model)
         mc.setdefault("adaptation", {}).update(payload["adaptation"])
         if payload.get("map_params_physical") is not None:
             mc["map_params_physical"] = payload["map_params_physical"]

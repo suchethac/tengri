@@ -23,7 +23,7 @@ from typing import Any, Literal
 import jax
 import jax.numpy as jnp
 
-from tengri.inference._model_cache import get_model_cache
+from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
 __all__ = [
     "CompileCache",
@@ -468,11 +468,6 @@ def clear_shared_caches(
     # it at scope="all".
     _drop(_SHARED_ENGINE_CACHE, _SHARED_ENGINE_CACHE_LOCK)
 
-    if keep_sig is None:
-        from tengri.inference._model_cache import _caches as _per_model_caches
-
-        _per_model_caches.clear()
-
     # For scope="all", also drop structural kernels and all shared function caches
     if scope == "all":
         with _SHARED_SIGNAL_RESPONSE_CACHE_LOCK:
@@ -486,10 +481,13 @@ def clear_shared_caches(
         with _SHARED_LOGLIK_FN_CACHE_LOCK:
             _SHARED_LOGLIK_FN_CACHE.clear()
 
-        from tengri.inference._model_cache import clear_structural_kernel_cache
         from tengri.inference._sample_utils import _clear_vmap_to_physical_cache
 
-        clear_structural_kernel_cache()
+        # Drops both the structural prediction kernels and the per-model
+        # namespaces (loss/grad/engine handles). scope="inference_body"
+        # deliberately leaves per-model caches in place — see the scope
+        # contract in the docstring above.
+        _model_cache_owner.clear()
         _clear_vmap_to_physical_cache()
 
     if drop_xla:
@@ -649,7 +647,9 @@ def get_or_build_signal_response(fitter):
                 _ENGINE_CACHE_MAXSIZE,
             )
 
-    per_model_cache = get_model_cache(fitter.model).setdefault("signal_response", {})
+    per_model_cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault(
+        "signal_response", {}
+    )
     per_model_cache[cache_key] = result
     return result
 

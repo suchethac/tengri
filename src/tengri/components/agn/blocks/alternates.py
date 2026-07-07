@@ -36,8 +36,7 @@ from tengri.components.dust.attenuation import prevot_smc
 __all__: list[str] = []  # registrations only
 
 #: Speed of light in Å × Hz, for L_ν → L_λ conversion.
-_C_AA_PER_S: float = 2.99792458e18
-
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 # ──────────────────────────────────────────────────────────────────────
 # Disc alternates

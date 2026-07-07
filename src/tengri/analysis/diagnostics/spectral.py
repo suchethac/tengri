@@ -25,6 +25,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
+from tengri.utils.physics_constants import C_AA
 
 # ── UV Slope (Calzetti et al. 1994) ────────────────────────────────
 
@@ -109,8 +110,7 @@ def uv_slope_beta(wavelength_aa: jnp.ndarray, l_nu: jnp.ndarray) -> float:
         ]
     )
 
-    c_aa = 2.99792458e18  # Å/s
-    f_lambda = l_nu * (c_aa / (wavelength_aa**2))
+    f_lambda = l_nu * (C_AA / (wavelength_aa**2))
 
     log_w = jnp.log(wavelength_aa)
     log_f = jnp.log(jnp.maximum(f_lambda, 1e-40))
@@ -293,9 +293,7 @@ def equivalent_width(
     .. [1] Vollmann, K. & Eversberg, T., 2006, AN, 327, 862.
            Standard definition of spectroscopic equivalent width.
     """
-    c_aa_s = 2.99792458e18
-
-    f_lambda = l_nu * (c_aa_s / (wavelength_aa**2))
+    f_lambda = l_nu * (C_AA / (wavelength_aa**2))
 
     line_mask = (wavelength_aa >= line_center_aa - window_aa) & (
         wavelength_aa <= line_center_aa + window_aa

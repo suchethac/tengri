@@ -50,7 +50,7 @@ from tengri.components.agn.qsogen import (
 
 __all__: list[str] = []  # registrations only
 
-_C_AA_PER_S: float = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 # QSOgen-block parameters share a common kwargs subset; defining defaults once
 # keeps the 5 wrappers in sync with the upstream module's defaults.

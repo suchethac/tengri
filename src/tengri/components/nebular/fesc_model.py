@@ -14,6 +14,8 @@ high-z (z > 6) during reionization epoch.
 
 import jax.numpy as jnp
 
+from tengri.utils.physics_constants import C_AA
+
 
 def compute_uv_slope(
     wavelength_aa: jnp.ndarray,
@@ -80,13 +82,11 @@ def compute_uv_slope(
        Infrared Galaxies," A&A, 223, 42 (1989).
 
     """
-    c_aa_per_s = 2.99792458e18  # speed of light in Angstrom/s
-
     # Mask for UV window (JIT-compatible: use jnp.where, not boolean indexing)
     w = jnp.where((wavelength_aa >= lam_lo) & (wavelength_aa <= lam_hi), 1.0, 0.0)
 
     # Convert L_nu to L_lambda: L_lambda = L_nu * c / lambda^2
-    l_lambda = l_nu * c_aa_per_s / (wavelength_aa**2)
+    l_lambda = l_nu * C_AA / (wavelength_aa**2)
 
     # Log-space regression with masking
     log_wave = jnp.log10(jnp.where(w > 0, wavelength_aa, 1.0))

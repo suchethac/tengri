@@ -24,7 +24,7 @@ from typing import NamedTuple
 import jax
 import jax.numpy as jnp
 
-from tengri.inference._model_cache import get_model_cache
+from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params
 
 
@@ -602,7 +602,7 @@ def _get_or_build_nifty_likelihood(fitter):
     structure regardless of galaxy count.  Variable-noise models build their
     own per-Fitter model because ``signal_response`` captures ``noise`` data.
     """
-    cached = get_model_cache(fitter.model).get("nifty_lh")
+    cached = _model_cache_owner.get_or_compile_model(fitter.model).get("nifty_lh")
     if cached is not None:
         return cached
 
@@ -712,7 +712,7 @@ def _get_or_build_nifty_likelihood(fitter):
         noise_cov_inv = 1.0 / noise**2
         likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
 
-    get_model_cache(fitter.model)["nifty_lh"] = likelihood
+    _model_cache_owner.get_or_compile_model(fitter.model)["nifty_lh"] = likelihood
     return likelihood
 
 

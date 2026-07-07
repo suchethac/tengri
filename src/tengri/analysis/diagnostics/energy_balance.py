@@ -29,7 +29,7 @@ import numpy as np
 __all__ = ["dust_energy_balance", "integrate_lnu_over_band"]
 
 # Speed of light, Å/s.
-_C_AA_S = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_S
 
 # Default integration bands (rest-frame Å).
 _UV_NIR_LO = 912.0  # Lyman limit

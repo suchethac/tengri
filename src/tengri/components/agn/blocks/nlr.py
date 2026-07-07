@@ -48,7 +48,7 @@ __all__ = [
     "nlr_synthesizer_spectra_block",
 ]
 
-_C_AA_PER_S: float = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
 def _resolve_synthesizer_grid(kind: str) -> str:

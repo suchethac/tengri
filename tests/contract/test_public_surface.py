@@ -75,6 +75,7 @@ EXPECTED_ALL = frozenset(
         "units",
         # Registry verbs
         "describe",
+        "describe_agn_block",
         "describe_agn_model",
         "describe_dust_emission_model",
         "describe_dust_law",
@@ -86,6 +87,7 @@ EXPECTED_ALL = frozenset(
         "examples",
         "explain",
         "help",
+        "list_agn_blocks",
         "list_agn_models",
         "list_all",
         "list_components",
@@ -103,8 +105,10 @@ EXPECTED_ALL = frozenset(
         "list_sfh_models",
         "list_xray_models",
         "ParameterRecord",
+        "print_components_bibtex",
         "recipe_parameters",
         "search",
+        "suggest_parameters",
         "summary",
         "tutorial",
         # Runtime verbs (cache machinery demoted to tengri.utils.jax_cache /

@@ -4,7 +4,7 @@
 Extracted from disc.py, torus.py, and skirtor.py to eliminate
 three identical copies of the Planck function and related helpers.
 
-Fundamental constants are imported from :mod:`tengri.utils.physics`,
+Fundamental constants are imported from :mod:`tengri.utils.physics_constants`,
 which documents their SI→CGS derivations and CODATA 2018 / IAU 2015 sources.
 """
 
@@ -27,6 +27,7 @@ __all__ = [
     "H_PLANCK",
     "K_BOLTZ",
     "L_SUN",
+    "bolometric_integral_nu",
     "compute_l_12um_from_lbol",
     "gaussian_line_profile",
     "lines_to_sed",
@@ -125,6 +126,69 @@ def wavelength_to_nu(wavelength_angstrom: jnp.ndarray) -> jnp.ndarray:
     of light [cm/s].
     """
     return C_LIGHT / (wavelength_angstrom * ANGSTROM_CM)
+
+
+# ── Bolometric frequency integral ─────────────────────────────────
+
+
+def bolometric_integral_nu(
+    lnu: jnp.ndarray,
+    nu: jnp.ndarray,
+    *,
+    floor: float | None = None,
+) -> jnp.ndarray:
+    r"""Trapezoid integral of :math:`L_\nu` over an ascending-sorted frequency grid.
+
+    The one shared implementation of the bolometric-normalization idiom
+    used by every tabulated AGN template component (SKIRTOR, Fritz,
+    Nenkova, Silva04, CAT3D, qsogen, ...): sort the frequency grid
+    ascending (wavelength grids arrive ascending in :math:`\lambda`, i.e.
+    *descending* in :math:`\nu`) and integrate.
+
+    .. math::
+
+        L = \int_{\nu_{\min}}^{\nu_{\max}} L_\nu \, d\nu
+
+    where :math:`L_\nu` is the spectral luminosity density [erg/s/Hz],
+    :math:`\nu` the frequency [Hz], and :math:`L` the integrated
+    luminosity [erg/s].
+
+    Parameters
+    ----------
+    lnu : array_like, shape (n_wave,)
+        Spectral luminosity density on the same grid as ``nu``. [erg/s/Hz]
+    nu : array_like, shape (n_wave,)
+        Frequency grid, any ordering. [Hz]
+    floor : float, optional
+        When given, return ``max(|integral|, floor)`` — the safe form used
+        as a normalization denominator (templates can be identically zero
+        outside their tabulated range). When ``None`` (default), return
+        the raw signed integral.
+
+    Returns
+    -------
+    ndarray, shape ()
+        Integrated luminosity [erg/s]; floored absolute value if ``floor``
+        is given.
+
+    Notes
+    -----
+    **JIT-compatible**: yes (``floor`` is a static Python-level branch).
+
+    **Gradient-safe**: yes.
+
+    This is the ``argsort`` formulation and reproduces the historical
+    per-component copies bit-for-bit. It is NOT interchangeable
+    bit-for-bit with :func:`tengri.components.dust.emission._physics.
+    integrate_lnu_over_nu`, which integrates via the
+    :math:`d\ln\nu = -d\ln\lambda` identity and differs in floating-point
+    rounding.
+    """
+    idx_sort = jnp.argsort(nu)
+    integral = jnp.trapezoid(lnu[idx_sort], nu[idx_sort])
+    if floor is None:
+        return integral
+    return jnp.maximum(jnp.abs(integral), floor)
 
 
 # ── Gaussian emission-line profile (scalar kernel) ────────────────

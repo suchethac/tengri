@@ -691,8 +691,7 @@ def compute_dsps_native_weights(
         :func:`compute_csp_weights`.
     ssp_flux_at_z : array, shape (n_age, n_wave)
         SSP flux marginalized over the metallicity distribution
-        (Lsun/Hz/Msun).  Replaces the output of
-        ``interp_met_alpha_dispatch``.
+        (Lsun/Hz/Msun).
 
     Notes
     -----
