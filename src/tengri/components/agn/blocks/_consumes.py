@@ -49,7 +49,9 @@ AGN_SHARED_PARAMS: frozenset[str] = frozenset({"agn_frac", "agn_log_lbol"})
 
 #: Composable block -> the agn_* params that block itself consumes.
 AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
-    ("disc", "adaf"): frozenset({"agn_log_ledd", "agn_log_mbh"}),
+    ("disc", "adaf"): frozenset(
+        {"agn_log_mbh", "agn_adaf_alpha", "agn_adaf_beta", "agn_adaf_delta"}
+    ),
     ("disc", "adaf_lopez2024"): frozenset({"agn_cigale_disk_delta"}),
     ("disc", "grahsp_sbpl"): frozenset(
         {

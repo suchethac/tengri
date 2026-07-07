@@ -226,10 +226,14 @@ def test_validate_polar_dust_nonzero_ebv_clean():
     assert not any("agn_polar_ebv=0" in str(x.message) for x in w)
 
 
-def test_validate_adaf_disc_deprecated_warns():
-    """The adaf disc misapplies Mahadevan 1997 Eq. 49; selecting it must warn
-    (deprecated, #898) and steer users to kubota_done."""
-    with pytest.warns(RecipeWarning, match="agn_disc_block='adaf' is DEPRECATED"):
+def test_validate_adaf_disc_no_longer_deprecation_warns():
+    """After the faithful Mahadevan 1997 rewrite (#898) the adaf disc is a valid
+    production choice — selecting it (with no downstream lines blocks) must NOT
+    emit any deprecation RecipeWarning."""
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RecipeWarning)
         validate_block_recipe(
             agn_disc_block="adaf",
             agn_nlr_block="none",
@@ -240,11 +244,11 @@ def test_validate_adaf_disc_deprecated_warns():
         )
 
 
-def test_adaf_disc_block_status_is_deprecated():
-    """The adaf disc block registry metadata reflects its deprecated status."""
+def test_adaf_disc_block_status_is_production():
+    """After the #898 rewrite the adaf disc block is registered as production."""
     from tengri.components.agn.blocks._protocol import AGN_BLOCK_META
 
-    assert AGN_BLOCK_META[("disc", "adaf")]["status"] == "deprecated"
+    assert AGN_BLOCK_META[("disc", "adaf")]["status"] == "production"
 
 
 def test_validate_boroson_green_feii_needs_5100A_disc():

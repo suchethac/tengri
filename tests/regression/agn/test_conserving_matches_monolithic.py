@@ -27,7 +27,14 @@ _CASES = [
         U.cat3d_wind_agn,
         dict(agn_disc_block="powerlaw", agn_torus_block="cat3d_wind"),
     ),
-    ("adaf", U.adaf_agn, dict(agn_disc_block="adaf", agn_torus_block="silva04")),
+    # NOTE (#898): adaf is intentionally absent. Its composable disc block is now
+    # the faithful Mahadevan 1997 model, which has SURPASSED the monolithic
+    # ``adaf_agn`` (built on the old ``adaf_disc`` that misapplied Eq. 49). The
+    # composable adaf therefore no longer *reproduces* the monolithic — asserting
+    # equivalence would guard the buggy side. The intended divergence is pinned by
+    # ``test_adaf_surpasses_deprecated_monolithic`` in
+    # test_monolithic_composable_equivalence.py; the faithful physics by
+    # test_adaf_mahadevan.py.
 ]
 
 

@@ -128,6 +128,31 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         Uniform(-1.5, 0.3, default=-1.0),
         "RELAGN Eddington-scaled accretion rate log10(Mdot/Mdot_Edd)",
     ),
+    # ── ADAF (Mahadevan 1997) plasma parameters — for disc='adaf' (#898) ──
+    ParamDeclaration(
+        "agn_adaf_alpha",
+        # Shakura-Sunyaev viscosity; ADAF applications use ~0.1-0.3 (Narayan 1996).
+        Uniform(0.05, 0.5, default=0.3),
+        "ADAF viscosity parameter alpha",
+    ),
+    ParamDeclaration(
+        "agn_adaf_beta",
+        # Gas-to-total pressure ratio (magnetic fraction is 1-beta).
+        Uniform(0.1, 0.9, default=0.5),
+        "ADAF gas-to-total pressure ratio beta",
+    ),
+    ParamDeclaration(
+        "agn_adaf_delta",
+        # delta is the single most consequential ADAF parameter (it sets the flow
+        # luminosity at fixed mdot). DEFAULT DEPARTS FROM THE PAPER: Mahadevan
+        # 1997's own fiducial is delta ~ m_e/m_i ~ 1/2000 (~5e-4). We default to
+        # 0.1 following the modern post-GRMHD preference (delta ~ 0.1-0.5; Yuan &
+        # Narayan 2014, ARA&A 52, 529), which better matches observed LLAGN. The
+        # paper's fiducial (and the full range) remain available as free values.
+        Uniform(0.001, 0.5, default=0.1),
+        "ADAF electron viscous-heating fraction delta "
+        "(default 0.1 = modern preference; Mahadevan 1997 fiducial is 1/2000)",
+    ),
     ParamDeclaration(
         "agn_astar",
         # Black hole spin a*: prograde only, grid extent 0 to 0.998.
