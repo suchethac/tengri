@@ -34,12 +34,14 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, load_ssp_data
+from tengri.components.dust._apply import two_component_dust
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.spectral_indices import (
     STANDARD_INDICES,
     SpectralIndexDef,
     measure_index_jax,
+    measure_indices_from_window_lut,
     measure_indices_from_windows,
     precompute_index_windows,
 )
@@ -157,3 +159,102 @@ def test_bakedin_has_no_direct_line_fluxes():
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     with pytest.raises(ValueError, match=r"[Nn]o nebular backend"):
         m.predict_line_fluxes(p, target_wavelengths=jnp.array([6564.61]))
+
+
+def _dust_model():
+    import warnings
+
+    ssp = _wne_ssp()
+    obs = Observation(
+        photometry=Photometry.from_names(["des_g", "des_r"]),
+        line_fluxes=LineFluxData.from_dict({"Halpha": (1e-16, 1e-17)}),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "*": FREE},
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+                "tau_diff": Uniform(0.0, 2.0),
+                "tau_bc": Uniform(0.0, 2.0),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+    return m, ssp
+
+
+def _window_lut_indices(m, ssp, p, defs):
+    """indices via measure_indices_from_window_lut with two-component dust."""
+    st = m.predict_state(p)
+    jw = jnp.asarray(st.derived["joint_weights"])
+    sms = jnp.asarray(st.derived["stellar_mass_scale"])
+    ages = jnp.asarray(st.derived["ssp_ages_yr"])
+    pc = precompute_index_windows(ssp.ssp_wave, ssp.ssp_flux, defs)
+    trans = two_component_dust(
+        wavelength=pc.window_centers,
+        age_grid=ages,
+        tau_v1=jnp.asarray(p["dust_tau_bc"]),
+        tau_v2=jnp.asarray(p["dust_tau_diff"]),
+        law_bc="calzetti",
+        law_diff="calzetti",
+    )  # (n_age, n_window)
+    return np.asarray(measure_indices_from_window_lut(jw, sms, trans, pc)), pc
+
+
+def test_window_lut_with_two_component_dust_matches_full_sed():
+    """Age-resolved window LUT (dust ON) matches the full-SED measure < 1e-3."""
+    m, ssp = _dust_model()
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    p["dust_tau_diff"] = jnp.asarray(0.6)
+    p["dust_tau_bc"] = jnp.asarray(1.0)
+
+    defs = [
+        STANDARD_INDICES["Dn4000"],
+        STANDARD_INDICES["HdA"],
+        STANDARD_INDICES["Hbeta"],
+        _HALPHA_EW,
+    ]
+    lut, _ = _window_lut_indices(m, ssp, p, defs)
+    rest = m.predict_rest_sed(p)
+    for d, l in zip(defs, lut):
+        exact = float(measure_index_jax(rest.wavelength, rest.sed, d))
+        rel = abs(exact - l) / max(abs(exact), 1e-9)
+        assert rel < 1e-3, f"{d.name}: LUT {l:.4f} vs exact {exact:.4f} (rel {rel:.2e})"
+
+
+def test_nebular_emission_reddened_by_birth_cloud():
+    """Two-component: the young-bin nebular emission sees the birth cloud.
+
+    Raising tau_bc must attenuate the Hα emission-line EW (emission lives in the
+    youngest bins, which carry the birth-cloud screen) — and the window LUT must
+    track that change exactly like the full SED, not treat the emission like the
+    age-mixed continuum.
+    """
+    m, ssp = _dust_model()
+    base = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    base["dust_tau_diff"] = jnp.asarray(0.3)
+
+    defs = [_HALPHA_EW]
+    ha = []
+    for tau_bc in (0.0, 2.0):
+        p = dict(base)
+        p["dust_tau_bc"] = jnp.asarray(tau_bc)
+        lut, _ = _window_lut_indices(m, ssp, p, defs)
+        exact = float(
+            measure_index_jax(
+                *(lambda r: (r.wavelength, r.sed))(m.predict_rest_sed(p)), _HALPHA_EW
+            )
+        )
+        # LUT tracks the exact forward under the bc change
+        assert abs(lut[0] - exact) / max(abs(exact), 1e-9) < 1e-3
+        ha.append(lut[0])
+    # emission EW (negative) shrinks in magnitude as the bc attenuates the line
+    assert abs(ha[1]) < abs(ha[0]), (
+        f"Hα emission EW must change with tau_bc (birth cloud reddens the "
+        f"young-bin emission): {ha[0]:.3f} -> {ha[1]:.3f}"
+    )
