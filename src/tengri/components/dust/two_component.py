@@ -326,13 +326,13 @@ class DustSEDComponent:
         The single source of this component's dust screen. :meth:`apply` calls it
         on the full SSP wave grid; the FeaturePrecomp fast path
         (:meth:`SEDModel.predict_spectral_indices` with ``fast=True``) calls it at
-        the index window centres — so the fast path applies **exactly** the dust
+        the index window centers — so the fast path applies **exactly** the dust
         the forward applies, with no second implementation to keep in sync.
 
         Resolves per-component (birth-cloud vs diffuse) law parameters — the
         shared ``dust_<x>`` params with any config overrides layered on top; empty
         overrides reproduce the original single-slope Charlot & Fall (2000)
-        behaviour exactly — then evaluates :func:`two_component_dust`.
+        behavior exactly — then evaluates :func:`two_component_dust`.
 
         Parameters
         ----------

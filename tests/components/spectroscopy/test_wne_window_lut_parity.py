@@ -19,7 +19,7 @@ FeaturePrecomp fast path.
 
 Parity is exact only with **no dust** here; the age-dependent two-component
 screen (Hα from the youngest bins sees more attenuation than the age-mixed
-continuum) is applied per-age at the window centres in the wired path — that
+continuum) is applied per-age at the window centers in the wired path — that
 step is what this test deliberately isolates *out* by zeroing the taus.
 
 Data-gated (needs a wNE SSP grid); skips in CI.

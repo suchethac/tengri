@@ -172,7 +172,7 @@ def _build_data_neg_log_likelihood_fn(fitter):
             index_defs = obs_for_idx.spectral_indices.index_defs
     # Line-flux channel: backends with no discrete catalog (BakedIn) can't run
     # predict_line_fluxes — measure the fluxes off the spectrum instead. Build the
-    # continuum windows ONCE from the observation's concrete line centres (never
+    # continuum windows ONCE from the observation's concrete line centers (never
     # from traced data_args) so the jitted loss sees a static LineDef set.
     measured_line_defs = None
     if has_line_fluxes and not model._has_line_catalog():

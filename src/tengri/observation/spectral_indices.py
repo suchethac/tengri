@@ -689,7 +689,7 @@ def measure_indices_from_window_lut(
     the spectrum (no direct line output). Instead of reconstructing the full-grid
     SED (~1.0 ms) and measuring on it, contract the precomputed SSP window
     integrals with the published SFH+metallicity weights and apply the
-    age-dependent two-component screen at each window centre (~18 µs for this
+    age-dependent two-component screen at each window center (~18 µs for this
     contraction; ~58x the full-grid measurement):
 
     .. math::
@@ -718,7 +718,7 @@ def measure_indices_from_window_lut(
         ``stellar_mass_scale`` = total_mass · L_sun [erg/s per (Msun weight)];
         cancels for break/EW ratios but keeps the window means physical.
     transmission_at_centers : ndarray, shape (n_age, n_window)
-        Two-component transmission evaluated at each window centre per SSP age
+        Two-component transmission evaluated at each window center per SSP age
         (``two_component_dust(window_centers, ssp_ages, tau_bc, tau_diff, ...)``).
     precomp : IndexWindowPrecomputation
         Per-(met, age) window integrals from :func:`precompute_index_windows`.

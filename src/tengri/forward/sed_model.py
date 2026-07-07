@@ -3551,7 +3551,7 @@ class SEDModel:
 
         Depends only on the model's (concrete) SSP grid and the index windows,
         so it is built once per distinct index set and reused across evaluations
-        — the FeaturePrecomp analogue of the WavePrecomp SSP x filter LUT. Built
+        — the FeaturePrecomp analog of the WavePrecomp SSP x filter LUT. Built
         from concrete SSP data (not traced params), so it is safe under jit.
         """
         from tengri.observation.spectral_indices import precompute_index_windows
@@ -3572,7 +3572,7 @@ class SEDModel:
     def _line_window_precomp(self, line_defs):
         """Build (and memoize) the SSP line-window LUT for ``line_defs``.
 
-        The line-flux analogue of :meth:`_index_window_precomp` — same concrete-
+        The line-flux analog of :meth:`_index_window_precomp` — same concrete-
         SSP, cached-per-line-set contract (JIT-safe).
         """
         from tengri.observation.line_measurement import precompute_line_windows
@@ -3648,7 +3648,7 @@ class SEDModel:
 
         pc = self._index_window_precomp(index_defs)
 
-        # per-age transmission at the window centres, from the model's own dust
+        # per-age transmission at the window centers, from the model's own dust
         # (single-sourced with the forward) — or unity when there is no dust.
         dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
         if dust is None:

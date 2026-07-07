@@ -14,7 +14,7 @@ integrating the emission that remains:
 
 with the continuum a linear interpolation between blue and red side-band means.
 This module applies that **same operator** to a *model* spectrum — "measure the
-observable the way it was measured" — so a forward-modelled line flux is directly
+observable the way it was measured" — so a forward-modeled line flux is directly
 comparable to a catalog line flux (including, self-consistently, the stellar
 Balmer absorption under the emission for baked-in nebular SSPs).
 
@@ -59,13 +59,13 @@ class LineDef:
     name : str
         Line identifier (e.g. ``"Halpha"``).
     wavelength : float
-        Rest-frame **vacuum** line centre [Å] (for labelling / data alignment).
+        Rest-frame **vacuum** line center [Å] (for labeling / data alignment).
     continuum : tuple of (float, float)
         ``((blue_lo, blue_hi), (red_lo, red_hi))`` — the two pseudo-continuum
         side-bands [Å], used for a linear continuum under the line.
     feature : tuple of float
         ``(lo, hi)`` — the feature window [Å] over which the continuum-subtracted
-        emission is integrated. Its centre is the effective :math:`\\lambda_c`.
+        emission is integrated. Its center is the effective :math:`\\lambda_c`.
     """
 
     name: str
@@ -88,7 +88,7 @@ def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, four_pi_dl2):
     feat_mean, cont_mean : ndarray, shape ()
         Feature-window and continuum mean :math:`L_\nu` [erg/s/Hz].
     lam_c : float
-        Feature-window centre :math:`\lambda_c` [Å].
+        Feature-window center :math:`\lambda_c` [Å].
     feat_width : float
         Feature-window width :math:`\Delta\lambda` [Å].
     four_pi_dl2 : ndarray, shape ()
@@ -246,7 +246,7 @@ def measure_line_fluxes_from_window_lut(joint_weights, scale, transmission, prec
 
     The FeaturePrecomp line-flux path: contract precomputed SSP window integrals
     with the SFH+metallicity weights, apply the age-dependent two-component screen
-    at each window centre, then run the same :func:`_line_flux_from_means`
+    at each window center, then run the same :func:`_line_flux_from_means`
     reduction as the exact path — no full-grid SED reconstruction.
 
     Parameters
@@ -256,7 +256,7 @@ def measure_line_fluxes_from_window_lut(joint_weights, scale, transmission, prec
     scale : ndarray, shape ()
         ``stellar_mass_scale`` = ``total_mass · L_sun`` [erg/s per Msun weight].
     transmission : ndarray, shape (n_age, n_window)
-        Two-component transmission at each window centre per SSP age.
+        Two-component transmission at each window center per SSP age.
     precomp : LineWindowPrecomputation
         Per-(met, age) window integrals + per-line window recipe.
     four_pi_dl2 : ndarray, shape ()
@@ -290,17 +290,17 @@ def default_line_defs(
     cont_gap: float = 17.0,
     cont_width: float = 20.0,
 ):
-    """Build generic :class:`LineDef` windows around a set of line centres.
+    """Build generic :class:`LineDef` windows around a set of line centers.
 
     Used to fit line fluxes through the measure-as-catalog path when only line
-    *centres* are known (e.g. a :class:`LineFluxData` set) — the likelihood needs
+    *centers* are known (e.g. a :class:`LineFluxData` set) — the likelihood needs
     continuum windows and these are concrete, built once at fitter setup (never
     from traced ``data_args``).
 
     Parameters
     ----------
     wavelengths : array_like, shape (n_line,)
-        Rest-frame vacuum line centres [Å].
+        Rest-frame vacuum line centers [Å].
     names : sequence of str, optional
         Per-line names; defaults to ``line_<λ>``.
     feature_halfwidth : float, default 8.0
@@ -315,7 +315,7 @@ def default_line_defs(
     Notes
     -----
     These are **generic** windows: they clear the line itself but not necessarily
-    neighbouring lines in crowded regions (Hα+[NII]+[SII]). For science against a
+    neighboring lines in crowded regions (Hα+[NII]+[SII]). For science against a
     real catalog, pass survey-matched :class:`LineDef` windows explicitly.
     """
     import numpy as _np
@@ -339,7 +339,7 @@ def default_line_defs(
     return tuple(out)
 
 
-#: Illustrative DESI-like emission-line set (rest-frame **vacuum** centres [Å]).
+#: Illustrative DESI-like emission-line set (rest-frame **vacuum** centers [Å]).
 #: The continuum side-bands are reasonable defaults for clean regions; the
 #: crowded Halpha+[NII]+[SII] complex is approximate and should be tuned to the
 #: target survey's continuum definition (see the module Balmer caveat).

@@ -141,7 +141,7 @@ def test_measured_works_for_cue_backend(real_ssp_only):
 
 def test_measured_includes_dust_reddening():
     """Measured fluxes redden with dust (bluer lines attenuated more) — the
-    catalog-observable behaviour the intrinsic predict_line_fluxes lacks."""
+    catalog-observable behavior the intrinsic predict_line_fluxes lacks."""
     m0, p0 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
     m1, p1 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.6)
     f0 = {ld.name: float(v) for ld, v in zip(DESI_LINES, m0.measure_line_fluxes(p0))}
