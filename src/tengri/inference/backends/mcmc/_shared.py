@@ -37,7 +37,7 @@ import functools
 import jax
 from jax.flatten_util import ravel_pytree
 
-from tengri.inference._model_cache import get_model_cache
+from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
 # ---------------------------------------------------------------------------
 # Kernel getters (cached in Python so we don't rebuild on every JIT call)
@@ -682,7 +682,7 @@ def _get_flat_logdensity(fitter, init_params):
     """
     cache_key = fitter._engine_cache_key()
     model = fitter.model
-    cache = get_model_cache(model).setdefault("flat_logdensity", {})
+    cache = _model_cache_owner.get_or_compile_model(model).setdefault("flat_logdensity", {})
 
     if cache_key not in cache:
         logdensity_2arg = fitter._get_or_build_logdensity_fn()
@@ -704,7 +704,7 @@ def _get_flat_logdensity(fitter, init_params):
 
 def _get_cached_adaptation(fitter, method_key):
     """Retrieve cached adaptation parameters by method key, or None if not cached."""
-    mc = get_model_cache(fitter.model)
+    mc = _model_cache_owner.get_or_compile_model(fitter.model)
     cache = mc.get("adaptation")
     if cache is None:
         return None
@@ -714,7 +714,7 @@ def _get_cached_adaptation(fitter, method_key):
 
 def _set_cached_adaptation(fitter, method_key, params):
     """Store adaptation parameters on the Model for cross-fitter reuse."""
-    cache = get_model_cache(fitter.model).setdefault("adaptation", {})
+    cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault("adaptation", {})
     engine_key = fitter._engine_cache_key()
     cache[(engine_key, method_key)] = params
 

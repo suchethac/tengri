@@ -559,7 +559,7 @@ def chebyshev_calibration(
 
 
 # ── Speed of light in Angstrom/s (for frequency conversions) ──────
-_C_AA_PER_S = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 
 @jax.jit

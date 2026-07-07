@@ -27,6 +27,9 @@ _CASES = [
         U.cat3d_wind_agn,
         dict(agn_disc_block="powerlaw", agn_torus_block="cat3d_wind"),
     ),
+    # adaf is exact again (#898): both the monolithic ``adaf_agn`` and the
+    # composable disc='adaf' preset now use the faithful Mahadevan 1997
+    # ``adaf_spectrum``, so the conserving composable reproduces the monolithic.
     ("adaf", U.adaf_agn, dict(agn_disc_block="adaf", agn_torus_block="silva04")),
 ]
 

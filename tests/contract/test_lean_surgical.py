@@ -17,10 +17,9 @@ from tengri.inference._model_cache import (
     get_structural_kernel_cache,
 )
 
-# Reach the real structural cache via the singleton ``ModelCacheOwner``;
-# the module-level ``_STRUCTURAL_KERNEL_CACHE`` global is a stale legacy
-# alias that no longer reflects current state after the cache-owner
-# refactor.
+# Reach the real structural cache via the singleton ``ModelCacheOwner``
+# (all cache state lives on the owner since #958 removed the stale
+# module-level globals).
 _STRUCTURAL_KERNEL_CACHE = _default_owner._kernel_cache
 from tengri.inference.jit_engine import (
     _SHARED_ENGINE_CACHE,
@@ -52,7 +51,7 @@ def _isolate_shared_caches():
 
 @pytest.mark.unit
 def test_clear_shared_caches_inference_body_scope():
-    """scope='inference_body' drops only engine and per-model caches."""
+    """scope='inference_body' drops only the engine cache."""
     # Populate all caches with dummy entries
     _SHARED_ENGINE_CACHE[("engine_key",)] = "engine_value"
     _SHARED_LOSS_FN_CACHE[("loss_key",)] = "loss_value"
@@ -184,7 +183,6 @@ def test_lean_keep_sig_matches_engine_cache_key():
       1. The keep_sig from Fitter equals the actual cache key.
       2. ``clear_shared_caches(keep_sig=...)`` actually preserves it.
     """
-    from tengri.inference._model_cache import _caches as _per_model_caches
     from tengri.inference.jit_engine import _key_matches_sig
 
     _SHARED_ENGINE_CACHE.clear()
@@ -211,8 +209,6 @@ def test_lean_keep_sig_matches_engine_cache_key():
     clear_shared_caches(scope="inference_body", drop_xla=False, keep_sig=other_sig)
     assert fake_sig not in _SHARED_ENGINE_CACHE, "non-matching entry must be dropped"
 
-    _per_model_caches.clear()
-
 
 @pytest.mark.unit
 def test_gc_calls_clear_all():
@@ -230,3 +226,43 @@ def test_gc_calls_clear_all():
     assert len(_SHARED_ENGINE_CACHE) == 0
     assert len(_SHARED_LOSS_FN_CACHE) == 0
     assert len(_STRUCTURAL_KERNEL_CACHE) == 0
+
+
+@pytest.mark.unit
+def test_clear_shared_caches_per_model_scope_semantics():
+    """Per-model namespaces survive scope='inference_body', drop at scope='all' (#958).
+
+    Before #958 the scope='all' clear went through a stale module-level
+    dict that nothing wrote to; this pins the live-owner semantics.
+    """
+
+    class _DummyModel:
+        pass
+
+    model = _DummyModel()
+    _default_owner.get_or_compile_model(model)["loss_fn"] = "compiled"
+
+    clear_shared_caches(scope="inference_body", drop_xla=False)
+    assert model in _default_owner._model_caches, (
+        "inference_body must preserve per-model caches (lean-mode contract)"
+    )
+
+    clear_shared_caches(scope="all", drop_xla=False)
+    assert model not in _default_owner._model_caches, "scope='all' must drop per-model caches"
+
+
+@pytest.mark.unit
+def test_gc_emits_no_internal_deprecation_warning():
+    """tengri.gc() must not warn about tengri's own deprecated cache wrappers (#958)."""
+    import warnings
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        tengri.gc()
+
+    internal = [
+        w
+        for w in caught
+        if issubclass(w.category, DeprecationWarning) and "ModelCacheOwner" in str(w.message)
+    ]
+    assert not internal, f"tengri.gc() warned about its own internals: {internal}"

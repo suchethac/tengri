@@ -942,13 +942,11 @@ class StellarSEDComponent:
 
         if self.config.metallicity_model == "delta":
             # Apply alpha-Fe enhancement via effective_metallicity for
-            # 3D SSP grids (no native α axis). Mirrors the legacy
-            # ``interp_met_alpha_dispatch`` fallback in
-            # ``forward/pipeline.py:239``: when no α grid is available,
-            # the α-shift is folded into log_z via Salaris+05 / DSPS
-            # canonical relation. For 4D α-grid SSPs the α axis has
-            # already been collapsed above, so we use ``met_logzsol``
-            # directly without the effective-Z approximation.
+            # 3D SSP grids (no native α axis): the α-shift is folded
+            # into log_z via the Salaris+05 / DSPS canonical relation.
+            # For 4D α-grid SSPs the α axis has already been collapsed
+            # above, so we use ``met_logzsol`` directly without the
+            # effective-Z approximation.
             alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
             if _alpha_collapse_active:
                 log_z_abs_scalar = jnp.asarray(params["met_logzsol"]) + LOG10_ZSUN

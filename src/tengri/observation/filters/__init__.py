@@ -45,7 +45,7 @@ FILTER_REGISTRY: dict[str, str] = json.loads(_REGISTRY_PATH.read_text())
 _DEFAULT_CACHE_DIR = "data/filters"
 
 # Speed of light in Å/s — used for GHz ↔ Å conversion.
-_C_AA_S = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_S
 
 # ALMA receiver band definitions (ALMA Cycle 11 specifications).
 # Each entry maps band number → (lo_ghz, hi_ghz) at the edges of the

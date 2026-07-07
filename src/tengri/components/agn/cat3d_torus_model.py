@@ -256,11 +256,10 @@ class CAT3DTorus(SEDModelComponent):
         )
 
         # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
 
         nu = wavelength_to_nu(wave)
-        idx_sort = jnp.argsort(nu)
-        L_torus = jnp.trapezoid(sed_torus[idx_sort], nu[idx_sort])
+        L_torus = bolometric_integral_nu(sed_torus, nu)
 
         # Add to intrinsic SED
         sed_out = sed_in + sed_torus

@@ -65,7 +65,7 @@ Pre-registered configurations
 - **multicolor_agn** (= deprecated alias ``kubota_done``): multi-color disc with
   BH physics + 2-T torus (8+ params).
 - **kubota_done_full**: full Kubota & Done 3-zone disc + 2-T torus (13+ params).
-- **adaf**: ADAF + truncated disc + IR torus for low-luminosity AGN (6 params).
+- **adaf**: faithful Mahadevan 1997 ADAF + Silva+04 IR torus for LLAGN.
 - **unified_nlr_blr**: full Synthesizer-inspired model with NLR/BLR + polar dust.
 - **skirtor**: power-law disc + SKIRTOR clumpy torus (Stalevski+2012, 2016).
 - **silva04**: power-law disc + Silva+04 smooth torus.
@@ -128,10 +128,10 @@ from collections.abc import Callable
 
 import jax.numpy as jnp
 
+from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blr import compute_blr_sed
 from tengri.components.agn.cat3d_wind import cat3d_wind_sed
 from tengri.components.agn.disc import (
-    adaf_disc,
     create_relagn_disc_from_grid,
     kubota_done_disc,
     multicolor_disc,
@@ -596,7 +596,7 @@ def unified_agn(
         "powerlaw": powerlaw_disc,
         "multicolor": multicolor_disc,
         "kubota_done_3zone": kubota_done_disc,
-        "adaf": adaf_disc,
+        "adaf": adaf_spectrum,
     }
     torus_fns = {
         "silva04": silva04_sed,
@@ -1091,30 +1091,22 @@ def adaf_agn(
     agn_log_lbol: float,
     agn_frac: float = 0.1,
     agn_log_mbh: float = 8.0,
-    agn_log_ledd: float = -3.0,
-    agn_r_tr: float = 100.0,
+    agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
-    agn_adaf_delta: float = 0.01,
-    agn_cos_inc: float = 0.86602540378443864,
-    agn_torus_frac: float = 0.3,
+    agn_adaf_delta: float = 0.1,
+    agn_torus_frac: float = 0.5,
     agn_log_nh_silva: float = 23.0,
     agn_ebv_disc: float = 0.0,
     **_kwargs,
 ) -> jnp.ndarray:
-    """ADAF + truncated disc + Silva+04 torus for low-luminosity AGN.
+    """Faithful ADAF (Mahadevan 1997) + Silva+04 torus for low-luminosity AGN.
 
-    At low accretion rates (L/L_Edd < 0.01), the inner disc transitions
-    to an ADAF. The outer disc remains as a truncated Shakura-Sunyaev disc.
-    A Silva+04 smooth torus re-emits a fraction of the bolometric luminosity in the IR.
-
-    6 free parameters (+ agn_frac scaling):
-
-    - agn_log_mbh: BH mass
-    - agn_log_ledd: Eddington ratio (should be < -2 for ADAF regime)
-    - agn_r_tr: truncation radius [R_g]
-    - agn_adaf_beta: magnetic pressure fraction
-    - agn_adaf_delta: electron heating fraction
-    - agn_torus_frac: torus covering factor
+    The inner flow is an advection-dominated accretion flow; a Silva+04 smooth
+    torus re-emits a fraction of the bolometric luminosity in the IR. As of #898
+    the disc is the *faithful* Mahadevan 1997 model
+    (:func:`~tengri.components.agn.adaf.adaf_spectrum`): ``agn_log_lbol`` is the
+    canonical luminosity and the accretion rate is derived from it (Eq. 49), so
+    ``agn_log_ledd`` is retired; the ad-hoc truncated outer disc is dropped.
 
     Parameters
     ----------
@@ -1126,18 +1118,15 @@ def adaf_agn(
         AGN luminosity fraction [dimensionless]. Default 0.1.
     agn_log_mbh : float, optional
         log10 of black hole mass [Msun]. Default 8.0.
-    agn_log_ledd : float, optional
-        log10 of Eddington ratio [dimensionless]. Default -3.0.
-    agn_r_tr : float, optional
-        Truncation radius [R_g]. Default 100.
+    agn_adaf_alpha : float, optional
+        ADAF viscosity parameter alpha. Default 0.3.
     agn_adaf_beta : float, optional
-        Magnetic pressure fraction [dimensionless], range [0, 1]. Default 0.5.
+        Gas-to-total pressure ratio (magnetic fraction is 1-beta). Default 0.5.
     agn_adaf_delta : float, optional
-        Electron heating fraction [dimensionless], range [0, 1]. Default 0.01.
-    agn_cos_inc : float, optional
-        cos(inclination) [dimensionless]. Default 0.5.
+        Electron viscous-heating fraction (default 0.1 = modern preference;
+        Mahadevan 1997 fiducial is 1/2000). Default 0.1.
     agn_torus_frac : float, optional
-        Torus covering factor [dimensionless]. Default 0.3.
+        Torus covering factor [dimensionless]. Default 0.5.
     agn_log_nh_silva : float, optional
         Torus hydrogen column density, log10(N_H / cm^-2). Default 23.0.
     agn_ebv_disc : float, optional
@@ -1150,24 +1139,24 @@ def adaf_agn(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses :func:`adaf_disc` and :func:`silva04_sed`.
+    **JIT-compatible**: yes — uses :func:`~tengri.components.agn.adaf.adaf_spectrum`
+    and :func:`silva04_sed`.
 
     References
     ----------
-    .. [1] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
+    .. [1] Mahadevan, R. 1997, ApJ, 477, 585. arXiv:astro-ph/9609107.
+    .. [2] Silva, L., Maiolino, R., & Granato, G. L. (2004). MNRAS, 355, 973.
        arXiv:astro-ph/0403425. AGN torus radiative transfer.
     """
-    # ADAF + truncated disc gets (1 - torus_frac) of L_bol
-    l_disc = adaf_disc(
+    # ADAF disc gets (1 - torus_frac) of L_bol (energy-conserving debit).
+    l_disc = adaf_spectrum(
         wavelength,
         agn_log_lbol=agn_log_lbol,
         agn_frac=1.0 - agn_torus_frac,
         agn_log_mbh=agn_log_mbh,
-        agn_log_ledd=agn_log_ledd,
-        agn_r_tr=agn_r_tr,
+        agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
         agn_adaf_delta=agn_adaf_delta,
-        agn_cos_inc=agn_cos_inc,
     )
     l_disc = _redden_disc(wavelength, l_disc, agn_ebv_disc)
 

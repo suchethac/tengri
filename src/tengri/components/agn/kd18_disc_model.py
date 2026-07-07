@@ -284,11 +284,10 @@ class KD18Disc(SEDModelComponent):
         )
 
         # Integrate to bolometric luminosity
-        from tengri.components.agn._phys import wavelength_to_nu
+        from tengri.components.agn._phys import bolometric_integral_nu, wavelength_to_nu
 
         nu = wavelength_to_nu(wave)
-        idx_sort = jnp.argsort(nu)
-        L_disc = jnp.trapezoid(sed_disc[idx_sort], nu[idx_sort])
+        L_disc = bolometric_integral_nu(sed_disc, nu)
 
         # Add to intrinsic SED
         sed_out = sed_in + sed_disc

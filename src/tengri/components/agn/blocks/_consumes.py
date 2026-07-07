@@ -49,7 +49,9 @@ AGN_SHARED_PARAMS: frozenset[str] = frozenset({"agn_frac", "agn_log_lbol"})
 
 #: Composable block -> the agn_* params that block itself consumes.
 AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
-    ("disc", "adaf"): frozenset({"agn_log_ledd", "agn_log_mbh"}),
+    ("disc", "adaf"): frozenset(
+        {"agn_log_mbh", "agn_adaf_alpha", "agn_adaf_beta", "agn_adaf_delta"}
+    ),
     ("disc", "adaf_lopez2024"): frozenset({"agn_cigale_disk_delta"}),
     ("disc", "grahsp_sbpl"): frozenset(
         {
@@ -70,8 +72,10 @@ AGN_BLOCK_CONSUMES: dict[tuple[str, str], frozenset[str]] = {
             "agn_gamma_warm",
             "agn_kt_hot",
             "agn_kt_warm",
-            # agn_log_ledd removed (#846): the Eddington ratio is now derived
-            # from agn_log_lbol, so agn_log_ledd no longer moves the SED.
+            # agn_log_ledd is deliberately not consumed here (#846): for this
+            # disc block the Eddington ratio is derived from agn_log_lbol, so
+            # agn_log_ledd does not move the SED. The parameter itself is
+            # still declared (and consumed by the kd18/unified disc paths).
             "agn_log_mbh",
             "agn_r_warm_ratio",
         }

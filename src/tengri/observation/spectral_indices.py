@@ -338,8 +338,8 @@ def measure_index_jax(
     Returns
     -------
     ndarray, shape ()
-        Measured index value (scalar). Units depend on ``index_def.units``:
-        [Angstrom] for EW indices, [dimensionless] for break indices.
+        Measured index value (scalar). Units per ``index_def.units``:
+        [Angstrom] for EW; [dimensionless] for break and slope (beta) indices.
 
     Notes
     -----

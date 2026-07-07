@@ -49,7 +49,8 @@ RICHARDS2006_WAVE_AA, RICHARDS2006_NU_FNU = _load_template()
 # We treat the shipped column as nu·F_nu (arbitrary scale) and divide by nu
 # to get the F_nu shape, since SED-fitting outputs are normalized at the
 # bolometric anchor downstream.
-_C_AA_PER_S = 2.99792458e18
+from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
+
 _RICHARDS2006_NU_HZ = _C_AA_PER_S / RICHARDS2006_WAVE_AA
 _RICHARDS2006_LNU_SHAPE = RICHARDS2006_NU_FNU / _RICHARDS2006_NU_HZ
 # Integrate L_nu shape over frequency for bolometric normalization
@@ -62,7 +63,7 @@ _RICHARDS2006_BOL_INTEGRAL = float(
 )
 
 # L_sun in erg/s (IAU 2015)
-_L_SUN_ERG_S = 3.828e33
+from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG_S
 
 
 def richards2006_disc(

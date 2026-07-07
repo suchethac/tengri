@@ -26,6 +26,7 @@ import numpy as np
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
+from tengri.utils.physics_constants import C_AA
 
 __all__ = [
     "PreintegratedGrid",
@@ -237,8 +238,7 @@ def preintegrate_grid(
     # ∫ L_ν dλ. Sort by ν ascending (i.e. λ descending) to keep the
     # trapezoid sign positive.
     if energy_normalize:
-        c_aa = 2.99792458e18  # speed of light [Å/s]
-        nu = c_aa / wave_rest
+        nu = C_AA / wave_rest
         sort_idx = np.argsort(nu)
         nu_sorted = nu[sort_idx]
         bol_lum = np.zeros(n_grid_points)

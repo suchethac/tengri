@@ -11,7 +11,7 @@ import time
 import jax
 import jax.numpy as jnp
 
-from tengri.inference._model_cache import get_model_cache
+from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
 
 def _get_nss_fns(
@@ -39,7 +39,7 @@ def _get_nss_fns(
         max_steps,
         max_shrinkage,
     )
-    cache = get_model_cache(fitter.model).setdefault("nss_fns", {})
+    cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault("nss_fns", {})
 
     if cache_key not in cache:
         from tengri.inference.backends.nested.nss import as_top_level_api
@@ -141,7 +141,7 @@ def run_nss(
     **Cross-galaxy cache reuse**
 
     The compiled XLA step function is cached on the ``SEDModel`` object via
-    :func:`~tengri.inference._model_cache.get_model_cache`.  ``data_args`` is
+    the default :class:`~tengri.inference._model_cache.ModelCacheOwner`.  ``data_args`` is
     passed as a *traced* JAX value (not a compile-time constant), so the same
     compiled program is reused for every galaxy that shares the same model
     dimensionality and photometric band layout.  The cache is keyed on

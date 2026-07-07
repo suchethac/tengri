@@ -164,7 +164,7 @@ class TestComposableAGNEquivalents:
         ADAF (advection-dominated accretion flow) for low-luminosity AGN.
         Composable: disc=adaf + torus=silva04.
         """
-        from tengri.components.agn.disc import adaf_disc
+        from tengri.components.agn.adaf import adaf_spectrum
         from tengri.components.agn.silva04 import silva04_sed
 
         # Deprecated monolithic path
@@ -172,21 +172,19 @@ class TestComposableAGNEquivalents:
             fn_monolithic = resolve_agn_model("adaf")
         l_nu_mono = fn_monolithic(wavelength, agn_log_lbol=10.0, agn_frac=0.05)
 
-        # Composable path
+        # Composable path (faithful Mahadevan 1997 ADAF, #898)
         agn_log_lbol = 10.0
         agn_frac = 0.05
         agn_torus_frac = 0.3
 
-        l_disc = adaf_disc(
+        l_disc = adaf_spectrum(
             wavelength,
             agn_log_lbol=agn_log_lbol,
             agn_frac=1.0 - agn_torus_frac,
             agn_log_mbh=8.0,
-            agn_log_ledd=-3.0,
-            agn_r_tr=100.0,
+            agn_adaf_alpha=0.3,
             agn_adaf_beta=0.5,
-            agn_adaf_delta=0.01,
-            agn_cos_inc=0.86602540378443864,
+            agn_adaf_delta=0.1,
         )
         l_torus = silva04_sed(
             wavelength,

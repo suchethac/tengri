@@ -46,7 +46,12 @@ _TIGHT = 1e-5
 
 # Known block-level gaps: the composable block does not yet reproduce the
 # monolithic disc/torus bit-for-bit. Tracked, xfail(strict) — not loosened.
-_ADAF_GAP = "ADAF disc block wrong vs Mahadevan 1997; rewrite tracked in #898"
+#
+# adaf is an EXACT case (no xfail): as of #898 the monolithic ``adaf_agn`` and
+# the composable ``disc='adaf'`` preset both use the faithful Mahadevan 1997
+# ``adaf_spectrum``, so the preset reproduces the monolithic to the Type-1/2
+# mask floor. (The Phase-1 documented-divergence gate was retired once the
+# monolithic path was unified onto the faithful physics.)
 _KUBOTA_GAP = "kubota_done disc block normalization ~39% off monolithic (#944)"
 _SKIRTOR_GAP = (
     "monolithic skirtor uses CIGALE's joint disc+torus energy balance; the "
@@ -65,12 +70,12 @@ _CASES = [
     pytest.param("multicolor_agn", U.multicolor_agn, id="multicolor_agn"),
     pytest.param("silva04", U.silva04_agn, id="silva04"),
     pytest.param("cat3d_wind", U.cat3d_wind_agn, id="cat3d_wind"),
+    pytest.param("adaf", U.adaf_agn, id="adaf"),
     pytest.param("richards2006", richards2006, id="richards2006"),
     pytest.param("kubota_done", U.kubota_done_full_agn, marks=_gap(_KUBOTA_GAP), id="kubota_done"),
     pytest.param(
         "kubota_done_full", U.kubota_done_full_agn, marks=_gap(_KUBOTA_GAP), id="kubota_done_full"
     ),
-    pytest.param("adaf", U.adaf_agn, marks=_gap(_ADAF_GAP), id="adaf"),
     pytest.param("skirtor", U.skirtor_agn, marks=_gap(_SKIRTOR_GAP), id="skirtor"),
     pytest.param(
         "unified_nlr_blr", U.unified_nlr_blr, marks=_gap(_UNLRBLR_GAP), id="unified_nlr_blr"

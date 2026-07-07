@@ -41,7 +41,10 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._phys import wavelength_to_nu as _wavelength_to_nu
+from tengri.components.agn._phys import (
+    bolometric_integral_nu as _bolometric_integral_nu,
+    wavelength_to_nu as _wavelength_to_nu,
+)
 from tengri.utils.grid_interp import interp_nd_triweight
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
@@ -185,9 +188,7 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
         template = interp_nd_triweight(grid_jax, (log_nh_axis,), edges, (agn_log_nh_silva,))
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
-        idx_sort = jnp.argsort(nu)
-        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
         return l_scale * sed / integral_safe
 

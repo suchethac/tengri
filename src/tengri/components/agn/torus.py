@@ -34,6 +34,7 @@ import numpy as np
 
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
+    bolometric_integral_nu as _bolometric_integral_nu,
     planck_lnu as _planck_lnu,
     wavelength_to_nu as _wavelength_to_nu,
 )
@@ -129,9 +130,7 @@ def simple_torus(
     shape = b_nu * opacity
 
     # Normalize to L_bol * f_torus
-    idx_sort = jnp.argsort(nu)
-    integral = jnp.trapezoid(shape[idx_sort], nu[idx_sort])
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    integral_safe = _bolometric_integral_nu(shape, nu, floor=1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
     return l_nu_erg
@@ -224,9 +223,7 @@ def two_temperature_torus(
     shape = (agn_frac_hot * b_hot + (1.0 - agn_frac_hot) * b_warm) * opacity
 
     # Normalize
-    idx_sort = jnp.argsort(nu)
-    integral = jnp.trapezoid(shape[idx_sort], nu[idx_sort])
-    integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+    integral_safe = _bolometric_integral_nu(shape, nu, floor=1e-100)
 
     l_nu_erg = l_bol_erg * agn_torus_frac * shape / integral_safe
     return l_nu_erg
@@ -372,9 +369,7 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         template = interp_nd_triweight(grid_jax, (tau_axis,), edges, (agn_tau,))
         sed = jnp.interp(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
-        idx_sort = jnp.argsort(nu)
-        integral = jnp.trapezoid(sed[idx_sort], nu[idx_sort])
-        integral_safe = jnp.maximum(jnp.abs(integral), 1e-100)
+        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
         l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
         return l_scale * sed / integral_safe
 

@@ -40,6 +40,7 @@ from tengri.components.agn._phys import gaussian_line_profile as _gaussian_line_
 
 # ── Physical constants ────────────────────────────────────────────
 from tengri.utils.physics_constants import (
+    C_AA as _C_AA,
     C_KM_S as _C_LIGHT_KMS,
 )
 
@@ -259,7 +260,6 @@ def _fe2_pseudo_continuum(
     # Normalize: compute the integral of the optical 4434-4684 A bump
     # This is the standard R_Fe measurement window (Boroson & Green 1992).
     mask_opt = (wavelength >= 4434.0) & (wavelength <= 4684.0)
-    _C_AA = 2.99792458e18  # c in Angstrom/s
     nu_opt = _C_AA / jnp.maximum(wavelength, 1.0)
     sort_nu = jnp.argsort(nu_opt)
     opt_window_flux = jnp.abs(jnp.trapezoid((fe2_broadened * mask_opt)[sort_nu], nu_opt[sort_nu]))
