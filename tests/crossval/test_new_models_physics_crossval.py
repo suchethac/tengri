@@ -141,9 +141,9 @@ class TestADAFSpectralPhysics:
 
         Synchrotron peak at ~10^11-10^12 Hz = 3e4-3e5 um = 3e8-3e9 A.
         """
-        from tengri.components.agn.disc import adaf_disc
+        from tengri.components.agn.adaf import adaf_spectrum
 
-        l_nu = adaf_disc(
+        l_nu = adaf_spectrum(
             wavelength,
             agn_log_lbol=42.0,
             agn_frac=1.0,
@@ -158,64 +158,38 @@ class TestADAFSpectralPhysics:
         assert radio_flux > 0, "ADAF should emit in radio/mm (synchrotron)"
 
     def test_adaf_radiative_efficiency_low(self, wavelength):
-        """ADAF is radiatively inefficient: L_bol << L_Edd * mdot.
+        """ADAF stays sub-Eddington at a physical accretion luminosity.
 
-        At mdot=1e-3, a thin disc would produce L ~ 0.1 * mdot * L_Edd,
-        but ADAF produces much less because energy is advected.
+        adaf_spectrum is L_bol-canonical (#898): ``agn_log_lbol`` is log10(L/Lsun)
+        and the radiative inefficiency lives in the derived mdot (Eq. 49), tested
+        in test_adaf_mahadevan.py. Here we simply check the model does not produce
+        super-Eddington output at a physical LLAGN luminosity.
         """
-        from tengri.components.agn.disc import adaf_disc
+        from tengri.components.agn.adaf import adaf_spectrum
 
         c_aa = 2.99792458e18
-        l_nu = adaf_disc(
+        l_nu = adaf_spectrum(
             wavelength,
-            agn_log_lbol=42.0,
+            agn_log_lbol=10.0,
             agn_frac=1.0,
             agn_log_mbh=8.0,
-            agn_log_ledd=-3.0,
-            agn_r_tr=100.0,
-            agn_adaf_delta=0.01,
+            agn_adaf_delta=0.1,
         )
-
-        # Integrate to get total luminosity (L_nu in erg/s/Hz)
         nu = c_aa / wavelength
         l_bol = float(-jnp.trapezoid(l_nu, nu))
 
-        # L_Edd for M_BH = 1e8 Msun: 1.26e46 erg/s
+        # L_Edd for M_BH = 1e8 Msun ~ 1.26e46 erg/s.
         l_edd = 1.26e46
-        # At mdot = 1e-3, thin disc: L ~ 0.1 * 1e-3 * L_Edd = 1.26e42
-        # ADAF should be much less efficient
         assert l_bol < l_edd, f"ADAF L_bol={l_bol:.3e} exceeds L_Edd={l_edd:.3e}"
 
-    def test_larger_r_tr_less_disc_emission(self, wavelength):
-        """Larger truncation radius means less thin disc area → less UV."""
-        from tengri.components.agn.disc import adaf_disc
+    def test_truncation_radius_retired(self, wavelength):
+        """agn_r_tr (the bundled truncated outer disc) was retired in #898 — the
+        faithful Mahadevan 1997 ADAF is inner-flow only, so r_tr has no effect."""
+        from tengri.components.agn.adaf import adaf_spectrum
 
-        uv_mask = (wavelength > 500) & (wavelength < 3000)
-
-        l_small = adaf_disc(
-            wavelength,
-            agn_log_lbol=42.0,
-            agn_frac=1.0,
-            agn_log_mbh=8.0,
-            agn_log_ledd=-3.0,
-            agn_r_tr=30.0,
-        )
-        l_large = adaf_disc(
-            wavelength,
-            agn_log_lbol=42.0,
-            agn_frac=1.0,
-            agn_log_mbh=8.0,
-            agn_log_ledd=-3.0,
-            agn_r_tr=300.0,
-        )
-
-        uv_small = float(jnp.sum(l_small[uv_mask]))
-        uv_large = float(jnp.sum(l_large[uv_mask]))
-
-        assert uv_small > uv_large, (
-            f"UV flux should decrease with larger r_tr: "
-            f"r_tr=30→{uv_small:.3e}, r_tr=300→{uv_large:.3e}"
-        )
+        l_small = adaf_spectrum(wavelength, agn_log_lbol=10.0, agn_log_mbh=8.0, agn_r_tr=30.0)
+        l_large = adaf_spectrum(wavelength, agn_log_lbol=10.0, agn_log_mbh=8.0, agn_r_tr=300.0)
+        assert bool(jnp.array_equal(l_small, l_large)), "agn_r_tr should have no effect (retired)"
 
 
 # ── 3. PATCHY IGM — Gunn-Peterson & damping wing quantitative ─────
