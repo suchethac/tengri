@@ -109,9 +109,10 @@ def _maybe_map_init(
         return fitter._unbounded_from_posterior(init_from), key
 
     # Cached MAP point (from a prior fit or load_cache)?
-    from tengri.inference._model_cache import get_model_cache
 
-    mc = get_model_cache(fitter.model)
+    from tengri.inference._model_cache import _default_owner as _model_cache_owner
+
+    mc = _model_cache_owner.get_or_compile_model(fitter.model)
     cached_map = mc.get("map_params_physical")
     if cached_map is not None:
         # Build a minimal posterior-like shim to reuse _unbounded_from_posterior.

@@ -16,7 +16,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-from tengri.inference._model_cache import get_model_cache
+from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
 
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
@@ -113,7 +113,7 @@ def _get_or_build_map_fns(model, loss_fn, optimizer, learning_rate):
     cache_key = optimizer if isinstance(optimizer, str) else "custom"
     step_key = (id(loss_fn), cache_key, learning_rate)
 
-    cache = get_model_cache(model).setdefault("map_step", {})
+    cache = _model_cache_owner.get_or_compile_model(model).setdefault("map_step", {})
 
     if step_key in cache:
         return cache[step_key]
