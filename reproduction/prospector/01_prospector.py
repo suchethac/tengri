@@ -968,6 +968,12 @@ save_fig("prospector_05_dust_applied.png")
 # receives the correct weight and the IR shape matches FSPS and BAGPIPES
 # observations.
 #
+# One tabulation difference to know about: FSPS ships DL07 tables with the
+# 3.3 µm PAH feature halved (stated in its `dust/dustem` file headers);
+# tengri carries the original Draine & Li (2007) feature — the two grids
+# agree to ≤1.2 % everywhere else at matched `(q_PAH, U_min)` (#963). Bands
+# on rest-frame 3–3.6 µm (WISE W1 at low z) inherit that choice.
+#
 # **The FIR amplitude differs by construction — the LyC convention (#961).**
 # FSPS re-emits *all* the absorbed luminosity as dust IR (measured
 # `L_IR/L_abs = 0.9996`), Lyman continuum included. tengri's canonical
