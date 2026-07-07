@@ -1910,8 +1910,14 @@ class Prediction:
         state = model.predict_state(self._params)
         derived = state.derived
         if "line_waves" in derived and "line_lums" in derived:
-            self._cache["line_waves"] = jnp.asarray(derived["line_waves"])
-            self._cache["line_lums"] = jnp.asarray(derived["line_lums"])
+            waves = jnp.asarray(derived["line_waves"])
+            lums = jnp.asarray(derived["line_lums"])
+            self._cache["line_waves"] = waves
+            # Backends publish INTRINSIC line_lums; apply dust reddening so the
+            # interactive catalog is observed-frame, matching predict_line_fluxes
+            # (single-sourced via SEDModel._attenuate_line_catalog). Without this
+            # the .lines catalog is silently intrinsic despite its docstring.
+            self._cache["line_lums"] = model._attenuate_line_catalog(self._params, waves, lums)
         else:
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])

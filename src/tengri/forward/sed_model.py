@@ -3225,6 +3225,32 @@ class SEDModel:
         backend = getattr(self, "_nebular_backend", None)
         return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
 
+    def _attenuate_line_catalog(self, params, line_waves, line_lums):
+        """Dust-redden a discrete nebular line catalog at its wavelengths.
+
+        THE single source of nebular-line reddening (Charlot & Fall 2000 birth-
+        cloud + diffuse) — used by :meth:`predict_line_fluxes` AND the interactive
+        ``model.predict(params).lines`` catalog, so no public line path is
+        silently intrinsic while carrying an "observed" contract. Backends publish
+        INTRINSIC ``line_lums``; this applies the same operator the continuum
+        nebular SED gets. JIT-safe (pure ``jnp`` via ``attenuate_emission``).
+        """
+        from tengri.forward.emission_helpers import attenuate_emission
+
+        _is_single = self._dust_model == "single_component"
+        return attenuate_emission(
+            line_lums,
+            line_waves,
+            self._neb_dust_mode,
+            jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0))),
+            jnp.asarray(params.get("dust_tau_diff", 0.0)),
+            self._dust_law_bc_fn,
+            self._dust_law_bc_fn if _is_single else self._dust_law_diff_fn,
+            neb_bc_fn=self._neb_dust_law_bc_fn,
+            dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
+            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+        )
+
     def predict_line_fluxes(
         self, params, target_wavelengths=None, tolerance_aa=5.0, *, redden=True, state=None
     ):
@@ -3319,26 +3345,11 @@ class SEDModel:
         all_waves = jnp.asarray(state.derived["line_waves"])
         all_lums = jnp.asarray(state.derived["line_lums"])
 
-        # Dust-redden the lines at their wavelengths (HII regions see BC +
-        # diffuse; Charlot & Fall 2000) — the same operator predict_emission_lines
-        # applies. The backend publishes INTRINSIC line_lums, so without this the
-        # observed flux omits the line reddening entirely (JIT-safe: pure jnp).
+        # Dust-redden the lines at their wavelengths (single-sourced with the
+        # interactive .lines path). The backend publishes INTRINSIC line_lums, so
+        # without this the observed flux omits the line reddening entirely.
         if redden:
-            from tengri.forward.emission_helpers import attenuate_emission
-
-            _is_single = self._dust_model == "single_component"
-            all_lums = attenuate_emission(
-                all_lums,
-                all_waves,
-                self._neb_dust_mode,
-                jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0))),
-                jnp.asarray(params.get("dust_tau_diff", 0.0)),
-                self._dust_law_bc_fn,
-                self._dust_law_bc_fn if _is_single else self._dust_law_diff_fn,
-                neb_bc_fn=self._neb_dust_law_bc_fn,
-                dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-                dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
-            )
+            all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
