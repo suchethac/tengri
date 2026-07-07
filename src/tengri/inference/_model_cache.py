@@ -10,7 +10,12 @@ gets a fresh cache and the JIT functions recompile on first use — an
 acceptable cost since the cached artefacts can always be regenerated.
 
 Structural kernel cache: two SEDModel instances with identical compile_signature()
-share their prediction-kernel JIT compiles via _STRUCTURAL_KERNEL_CACHE.
+share their prediction-kernel JIT compiles via
+``ModelCacheOwner.get_structural_kernel()``.
+
+All state lives on ``ModelCacheOwner`` instances; the module-level
+``_default_owner`` singleton backs the deprecated free functions below and
+the internal callers in ``fitter.py`` / ``jit_engine.py`` / ``backends/``.
 """
 
 from __future__ import annotations
@@ -22,15 +27,6 @@ import weakref
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from typing import Any
-
-_caches: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
-
-# Structural cache for prediction kernels keyed on SEDModel.compile_signature()
-# Enables sharing of JIT'd photometry/spectrum/mock kernels across instances
-# with identical structure (same filters, wavelength grid, physics config, etc.)
-_STRUCTURAL_KERNEL_CACHE: OrderedDict[tuple, dict] = OrderedDict()
-_STRUCTURAL_KERNEL_MAXSIZE = int(os.environ.get("TENGRI_STRUCTURAL_CACHE_MAXSIZE", "4"))
-_STRUCTURAL_KERNEL_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -162,9 +158,6 @@ def clear_model_cache(model: Any) -> None:
         DeprecationWarning,
         stacklevel=2,
     )
-    # Pop from the live cache (managed by the singleton ``ModelCacheOwner``).
-    # The module-level ``_caches`` global is a stale legacy alias left from
-    # the pre-refactor implementation; popping from it would no-op.
     with _default_owner._lock:
         _default_owner._model_caches.pop(model, None)
 
