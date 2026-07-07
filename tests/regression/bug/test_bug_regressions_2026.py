@@ -225,7 +225,7 @@ class TestVacuumWavelengthConsistency:
 class TestAdafSyncSpectralIndex:
     """The faithful ADAF (Mahadevan 1997) integrated synchrotron slope is ν^{2/5}.
 
-    The old single-zone ``adaf_disc`` modelled the self-absorbed regime as the
+    The old single-zone ``adaf_disc`` modeled the self-absorbed regime as the
     *local* Rayleigh-Jeans ν^2 (Eq. 19). The faithful ``adaf_spectrum`` (#898)
     integrates the self-absorbed thermal synchrotron over the ADAF's radial
     temperature/field structure — emission at each frequency arises from a
