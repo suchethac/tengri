@@ -3404,7 +3404,7 @@ class SEDModel:
         den_flux = _match(line_ratio_data.denominator_waves)
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
-    def predict_spectral_indices(self, params, index_defs, *, state=None):
+    def predict_spectral_indices(self, params, index_defs, *, state=None, fast=False):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -3418,6 +3418,22 @@ class SEDModel:
             Parameter values (public names).
         index_defs : tuple of SpectralIndexDef
             Index definitions to measure.
+        state : ForwardState, optional
+            A pre-computed forward state to measure on (shares one
+            ``predict_state`` across channels). Ignored when ``fast=True``.
+        fast : bool, default False
+            Route through the FeaturePrecomp window-LUT fast path
+            (:meth:`_feature_fast_indices`): contract precomputed SSP window
+            integrals with SED-free SFH weights and the model's per-age dust
+            screen, instead of reconstructing the full-grid SED. ~17x faster
+            per evaluation (measured, wNE grid) and bit-exact for the supported
+            configuration — **stellar + two-component (or no) dust + baked-in
+            (or no) nebular, delta metallicity, parametric non-field SFH**. Any
+            other configuration (additive nebular, AGN, non-delta metallicity,
+            GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
+            silently falling back, because ``fast=True`` is an explicit opt-in;
+            use ``fast=False`` there. Slope indices are filled from the exact
+            SED (they are not window-LUT-expressible).
 
         Returns
         -------
@@ -3426,14 +3442,18 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes — routes through
-        :meth:`predict_spectrum` → :meth:`predict_observables_jit`.
+        **JIT-compatible**: yes — both paths are pure ``jnp``. The ``fast`` path
+        builds its window LUT once (cached on the model) from concrete SSP data,
+        so it is safe to call under ``jax.jit``.
 
         Measures spectral indices (equivalent width or break ratio) from a
         rest-frame spectrum covering all wavelength ranges in ``index_defs``.
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
+
+        if fast:
+            return self._feature_fast_indices(params, tuple(index_defs))
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
         # quantities measured on the attenuated galaxy SED. Evaluate the
@@ -3459,6 +3479,124 @@ class SEDModel:
 
         indices = [measure_index_jax(wave_rest, flux_rest, idx_def) for idx_def in index_defs]
         return jnp.array(indices)
+
+    # ── FeaturePrecomp fast path for spectral indices (#950) ──────────
+
+    def _feature_chain(self):
+        """The component chain, reusing the construction-time cache when present."""
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._build_component_chain()
+            self._cached_component_chain = chain
+        return chain
+
+    def _index_window_precomp(self, index_defs):
+        """Build (and memoize) the SSP window-integral LUT for ``index_defs``.
+
+        Depends only on the model's (concrete) SSP grid and the index windows,
+        so it is built once per distinct index set and reused across evaluations
+        — the FeaturePrecomp analogue of the WavePrecomp SSP x filter LUT. Built
+        from concrete SSP data (not traced params), so it is safe under jit.
+        """
+        from tengri.observation.spectral_indices import precompute_index_windows
+
+        cache = getattr(self, "_index_window_lut_cache", None)
+        if cache is None:
+            cache = {}
+            self._index_window_lut_cache = cache
+        key = tuple(index_defs)
+        pc = cache.get(key)
+        if pc is None:
+            pc = precompute_index_windows(
+                self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
+            )
+            cache[key] = pc
+        return pc
+
+    def _require_feature_fast_eligible(self, chain):
+        """Return the stellar component, or raise if the chain is unsupported.
+
+        The window LUT reconstructs indices from ``scale * sum(jw * SSP * T)`` —
+        the baked-in stellar+dust SED only. Any component that adds rest-frame
+        flux the LUT does not model (additive nebular, AGN, radio, …) would make
+        the fast indices silently wrong, so those raise. IGM is rest-frame-
+        neutral (observer-frame, applied after redshifting) and is allowed.
+        """
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.igm.component import IGMSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        allowed = (StellarSEDComponent, DustSEDComponent, NebularSEDComponent, IGMSEDComponent)
+        stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+        if stellar is None:
+            raise ValueError("predict_spectral_indices(fast=True) requires a stellar component.")
+        for c in chain:
+            if not isinstance(c, allowed):
+                raise ValueError(
+                    f"predict_spectral_indices(fast=True) does not support a "
+                    f"{type(c).__name__} in the chain: it adds rest-frame flux the window "
+                    f"LUT does not model. Use fast=False for this model."
+                )
+        neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+        if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
+            raise ValueError(
+                f"predict_spectral_indices(fast=True) supports baked-in nebular only "
+                f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
+                f"backend's emission is not in the SSP window integrals. Use fast=False."
+            )
+        return stellar
+
+    def _feature_fast_indices(self, params, index_defs):
+        """FeaturePrecomp window-LUT measurement of ``index_defs`` (``fast=True``).
+
+        Contracts the precomputed SSP window integrals with SED-free SFH+met
+        weights (:meth:`StellarSEDComponent.compute_joint_weights`) and the
+        model's per-age two-component dust screen
+        (:meth:`DustSEDComponent.compute_transmission`) — no full-grid SED. See
+        :meth:`predict_spectral_indices` for the supported-configuration
+        contract; unsupported chains raise here (never silently wrong).
+        """
+        from tengri.components.dust.two_component import DustSEDComponent
+        from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+        from tengri.observation.spectral_indices import (
+            measure_index_jax,
+            measure_indices_from_window_lut,
+        )
+
+        chain = self._feature_chain()
+        stellar = self._require_feature_fast_eligible(chain)
+
+        # SED-free (met, age) weights — raises on unsupported SFH / metallicity.
+        joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+        scale = total_mass * LSUN_ERG_PER_S  # physical window means; cancels for ratios
+
+        pc = self._index_window_precomp(index_defs)
+
+        # per-age transmission at the window centres, from the model's own dust
+        # (single-sourced with the forward) — or unity when there is no dust.
+        dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+        if dust is None:
+            transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+        else:
+            transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+
+        values = measure_indices_from_window_lut(joint_weights, scale, transmission, pc)
+
+        # Slope indices are not a single-window functional → the LUT leaves NaN
+        # in those slots; fill them from one exact rest-frame SED measurement.
+        if pc.has_slope:
+            rest = self.predict_rest_sed(params)
+            slots = pc.index_slots
+            values = jnp.stack(
+                [
+                    measure_index_jax(rest.wavelength, rest.sed, d)
+                    if slots[i][0] == "slope"
+                    else values[i]
+                    for i, d in enumerate(index_defs)
+                ]
+            )
+        return values
 
     def predict_hbeta(self, params: dict) -> float:
         """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.

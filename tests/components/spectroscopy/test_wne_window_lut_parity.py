@@ -377,3 +377,105 @@ def test_compute_joint_weights_guards_unsupported_configs():
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     with pytest.raises(ValueError, match=r"non-field SFH only"):
         stellar.compute_joint_weights(p)
+
+
+# ── public routing: predict_spectral_indices(fast=True) ────────────
+
+_INDEX_SET = (
+    STANDARD_INDICES["Dn4000"],
+    STANDARD_INDICES["HdA"],
+    STANDARD_INDICES["Hbeta"],
+    _HALPHA_EW,
+)
+
+
+def test_predict_spectral_indices_fast_matches_exact():
+    """fast=True reproduces the exact predict_spectral_indices, dust on and off.
+
+    The public surface must route through the window LUT and land on the same
+    values as the full-grid path: bit-exact with no dust, <1e-3 with the
+    age-dependent two-component screen (intra-window transmission variation).
+    """
+    m, _ssp = _dust_model()
+    for tau, tol in ((0.0, 1e-9), (0.8, 1e-3)):
+        p = dict(m.spec.sample(jax.random.PRNGKey(1)))
+        p["dust_tau_diff"] = jnp.asarray(tau)
+        p["dust_tau_bc"] = jnp.asarray(1.5 * tau)
+        exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=False))
+        fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=True))
+        rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-9))
+        assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e} >= {tol}"
+
+
+def test_predict_spectral_indices_fast_is_jittable():
+    """The fast path builds its LUT from concrete SSP data → safe under jax.jit."""
+    m, _ssp = _dust_model()
+    p = dict(m.spec.sample(jax.random.PRNGKey(2)))
+    p["dust_tau_diff"] = jnp.asarray(0.5)
+    p["dust_tau_bc"] = jnp.asarray(0.9)
+    jitted = jax.jit(lambda pp: m.predict_spectral_indices(pp, _INDEX_SET, fast=True))
+    eager = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=True))
+    got = np.asarray(jitted(p))
+    assert np.all(np.isfinite(got))
+    assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
+
+
+def test_predict_spectral_indices_fast_fills_slope_from_exact():
+    """Slope indices are not LUT-expressible → filled from the exact SED, not NaN."""
+    m, _ssp = _dust_model()
+    uv_slope = SpectralIndexDef(
+        name="uv_slope", index_type="slope", continuum=(), feature=(1500.0, 2500.0)
+    )
+    defs = (STANDARD_INDICES["Dn4000"], uv_slope)
+    p = dict(m.spec.sample(jax.random.PRNGKey(3)))
+    p["dust_tau_diff"] = jnp.asarray(0.4)
+    p["dust_tau_bc"] = jnp.asarray(0.7)
+    fast = np.asarray(m.predict_spectral_indices(p, defs, fast=True))
+    exact = np.asarray(m.predict_spectral_indices(p, defs, fast=False))
+    assert np.all(np.isfinite(fast)), "slope slot left as NaN"
+    # the slope slot must come from the exact path (bit-exact), the break from LUT
+    assert abs(fast[1] - exact[1]) / max(abs(exact[1]), 1e-9) < 1e-9
+    assert abs(fast[0] - exact[0]) / max(abs(exact[0]), 1e-9) < 1e-3
+
+
+def test_predict_spectral_indices_fast_raises_on_field_sfh():
+    """fast=True on a GP-field SFH raises (via the weight extract) — never silent."""
+    import warnings
+
+    ssp = _wne_ssp()
+    obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": ["dpl", "field"], "*": FREE},
+            dust=None,
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    with pytest.raises(ValueError, match=r"non-field SFH only"):
+        m.predict_spectral_indices(p, _INDEX_SET, fast=True)
+
+
+def test_predict_spectral_indices_fast_raises_on_additive_nebular():
+    """fast=True with an additive (Cue) nebular backend raises — its emission is
+    not in the SSP window integrals, so the LUT would be silently wrong."""
+    import warnings
+
+    ssp = _wne_ssp()
+    obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "*": FREE},
+            dust=None,
+            neb={"type": "cue", "*": FIXED},
+            redshift=Fixed(0.05),
+        )
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    with pytest.raises(ValueError, match=r"baked-in nebular only"):
+        m.predict_spectral_indices(p, _INDEX_SET, fast=True)
