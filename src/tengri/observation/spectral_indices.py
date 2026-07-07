@@ -519,6 +519,38 @@ def _round_window(lo: float, hi: float) -> tuple[float, float]:
     return (round(float(lo), 4), round(float(hi), 4))
 
 
+def soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width: float = 1.0):
+    """Soft top-hat window integral of every SSP spectrum over ``[lo, hi]``.
+
+    The shared window-integral primitive for both the spectral-index LUT
+    (:func:`precompute_index_windows`) and the emission-line-flux LUT
+    (:func:`tengri.observation.line_measurement.precompute_line_windows`), so the
+    two precomputes integrate the SSP grid identically. Uses the same sigmoid
+    edges as :func:`_window_mean_flux` (``mean = integral / norm``).
+
+    Parameters
+    ----------
+    ssp_wave : ndarray, shape (n_wave,)
+        SSP wavelength grid [Å].
+    ssp_flux : ndarray, shape (n_met, n_age, n_wave)
+        SSP spectra [erg/s/Hz/Msun].
+    lo, hi : float
+        Window bounds [Å].
+    edge_width : float, default 1.0
+        Sigmoid edge width [Å].
+
+    Returns
+    -------
+    integral : ndarray, shape (n_met, n_age)
+        :math:`\\sum_\\lambda \\mathrm{SSP}(\\lambda)\\,W(\\lambda)`.
+    norm : ndarray, shape ()
+        :math:`\\sum_\\lambda W(\\lambda)`.
+    """
+    w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid((hi - ssp_wave) / edge_width)
+    integral = jnp.tensordot(ssp_flux, w, axes=([2], [0]))  # (n_met, n_age)
+    return integral, jnp.maximum(jnp.sum(w), 1e-10)
+
+
 def precompute_index_windows(
     ssp_wave: jnp.ndarray,
     ssp_flux: jnp.ndarray,
@@ -563,12 +595,9 @@ def precompute_index_windows(
         key = _round_window(lo, hi)
         if key in unique:
             return unique[key]
-        w = jax.nn.sigmoid((ssp_wave - lo) / edge_width) * jax.nn.sigmoid(
-            (hi - ssp_wave) / edge_width
-        )
-        # integral over wave for every (met, age): (n_met, n_age)
-        integrals.append(jnp.tensordot(ssp_flux, w, axes=([2], [0])))
-        norms.append(jnp.maximum(jnp.sum(w), 1e-10))
+        integral, norm = soft_window_ssp_integral(ssp_wave, ssp_flux, lo, hi, edge_width)
+        integrals.append(integral)  # (n_met, n_age)
+        norms.append(norm)
         centers.append(0.5 * (float(lo) + float(hi)))
         unique[key] = len(integrals) - 1
         return unique[key]

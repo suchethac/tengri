@@ -3513,6 +3513,25 @@ class SEDModel:
             cache[key] = pc
         return pc
 
+    def _line_window_precomp(self, line_defs):
+        """Build (and memoize) the SSP line-window LUT for ``line_defs``.
+
+        The line-flux analogue of :meth:`_index_window_precomp` — same concrete-
+        SSP, cached-per-line-set contract (JIT-safe).
+        """
+        from tengri.observation.line_measurement import precompute_line_windows
+
+        cache = getattr(self, "_line_window_lut_cache", None)
+        if cache is None:
+            cache = {}
+            self._line_window_lut_cache = cache
+        key = tuple(line_defs)
+        pc = cache.get(key)
+        if pc is None:
+            pc = precompute_line_windows(self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs)
+            cache[key] = pc
+        return pc
+
     def _require_feature_fast_eligible(self, chain):
         """Return the stellar component, or raise if the chain is unsupported.
 
@@ -3597,6 +3616,92 @@ class SEDModel:
                 ]
             )
         return values
+
+    def predict_line_fluxes_measured(self, params, line_defs=None, *, fast=False, state=None):
+        r"""Emission-line fluxes **measured from the model spectrum**, catalog-style.
+
+        Unlike :meth:`predict_line_fluxes` (which returns a nebular backend's
+        *direct* line luminosity, e.g. the Cue network output), this applies the
+        same operator a spectroscopic pipeline applies to data — estimate a local
+        continuum from side-bands, subtract it, integrate the emission — to the
+        model's own rest-frame SED. It therefore works for **any** nebular backend
+        (Cue additive, baked-in wNE, …) and yields a quantity directly comparable
+        to a catalog's continuum-subtracted line flux.
+
+        Parameters
+        ----------
+        params : dict
+            Parameter values (public names). ``redshift`` sets the luminosity
+            distance for the observed flux.
+        line_defs : sequence of LineDef, optional
+            Lines + continuum windows to measure. Defaults to
+            :data:`tengri.observation.line_measurement.DESI_LINES`.
+        fast : bool, default False
+            Route through the window-LUT fast path
+            (:func:`~tengri.observation.line_measurement.measure_line_fluxes_from_window_lut`):
+            SED-free SFH weights × precomputed SSP line-window integrals × the
+            per-age dust screen — no full-grid SED. Bit-exact with the exact path
+            for the supported configuration (stellar + two-component/no dust +
+            baked-in/no nebular, delta metallicity, parametric non-field SFH) and
+            **raises** otherwise (same contract as
+            :meth:`predict_spectral_indices` ``fast=True``). An **additive** Cue
+            backend is *not* fast-eligible — its emission is not in the SSP window
+            integrals — so use ``fast=False`` for Cue.
+        state : ForwardState, optional
+            Pre-computed forward state to measure on (exact path only).
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_line,)
+            Observed emission-line fluxes [erg/s/cm^2], in ``line_defs`` order.
+
+        Notes
+        -----
+        **JIT-compatible / differentiable**: yes.
+
+        **Continuum caveat.** The side-band continuum carries the stellar
+        absorption around the line; for baked-in nebular the Balmer flux is
+        continuum-sensitive exactly as a real pipeline's is. See the
+        :mod:`tengri.observation.line_measurement` module docstring.
+        """
+        from tengri.cosmology import luminosity_distance
+        from tengri.forward.result import SEDResult
+        from tengri.observation.line_measurement import (
+            DESI_LINES,
+            measure_line_flux_jax,
+            measure_line_fluxes_from_window_lut,
+        )
+
+        line_defs = tuple(DESI_LINES if line_defs is None else line_defs)
+        z = jnp.asarray(params.get("redshift", 0.0))
+        dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
+        four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
+
+        if fast:
+            from tengri.components.dust.two_component import DustSEDComponent
+            from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
+
+            chain = self._feature_chain()
+            stellar = self._require_feature_fast_eligible(chain)
+            joint_weights, total_mass, ssp_ages_yr = stellar.compute_joint_weights(params)
+            scale = total_mass * LSUN_ERG_PER_S
+            pc = self._line_window_precomp(line_defs)
+            dust = next((c for c in chain if isinstance(c, DustSEDComponent)), None)
+            if dust is None:
+                transmission = jnp.ones((ssp_ages_yr.shape[0], pc.window_centers.shape[0]))
+            else:
+                transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
+            return measure_line_fluxes_from_window_lut(
+                joint_weights, scale, transmission, pc, four_pi_dl2
+            )
+
+        if state is None:
+            rest = self.predict_rest_sed(params)
+        else:
+            rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
+        return jnp.stack(
+            [measure_line_flux_jax(rest.wavelength, rest.sed, ld, four_pi_dl2) for ld in line_defs]
+        )
 
     def predict_hbeta(self, params: dict) -> float:
         """Predict Hβ luminosity for use with CLOUDY-informed emission line priors.
