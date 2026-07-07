@@ -950,6 +950,17 @@ save_fig("prospector_05_dust_applied.png")
 # per unit mass (DL07 Eq. 33). With this correction, the warm component
 # receives the correct weight and the IR shape matches FSPS and BAGPIPES
 # observations.
+#
+# **The FIR amplitude differs by construction — the LyC convention (#961).**
+# FSPS re-emits *all* the absorbed luminosity as dust IR (measured
+# `L_IR/L_abs = 0.9996`), Lyman continuum included. tengri's canonical
+# energy balance excludes the LyC (λ < 912 Å): those photons ionize
+# hydrogen and re-emerge as nebular emission, not dust heating — the
+# CIGALE convention (#922). At this star-forming fiducial the LyC carries
+# ~11 % of the absorbed energy, so tengri's far-IR sits ~9 % below
+# Prospector at identical parameters. Both ratios are printed below —
+# the default (LyC-masked) and the opt-in FSPS-parity mode
+# `dust={'eb_include_lyc': True}`, which closes the gap.
 
 # %%
 w_p_ir, L_p_ir = P.csp_lnu(
@@ -1032,6 +1043,54 @@ _p_fir = w_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
 _L_fir = L_p_ir[(w_p_ir > 1e5) & (w_p_ir < 1e7)]
 _peak_p = _p_fir[np.argmax(_L_fir)]
 print(f"§6 FSPS far-IR peak at {_peak_p / 1e4:.0f} µm")
+
+# FIR amplitude vs FSPS — quantifies the LyC energy-balance convention
+# (#961). The default (LyC-masked, #922) sits ~9 % low; the opt-in
+# `eb_include_lyc` FSPS-parity mode re-emits the full absorbed luminosity
+# like FSPS and closes the gap.
+_fir_win = (w_p_ir > 3e5) & (w_p_ir < 1e7)  # 30–1000 µm
+_t_on_p_ir = U.regrid(np.asarray(s_ir.wave), sed_full_t, w_p_ir)
+_fir_ratio = float(np.median(_t_on_p_ir[_fir_win] / L_p_ir[_fir_win]))
+
+m_ir_fsps = SEDModel.build(
+    ssp_data=ssp,
+    stellar=STELLAR_FIDUCIAL,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
+        "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
+        "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
+        "*": FIXED,
+    },
+    dust={
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "law_diff": "calzetti",
+        "tau_bc": Fixed(TAU_BC),
+        "tau_diff": Fixed(TAU_DIFF),
+        "eb_include_lyc": True,  # FSPS parity: LyC heats dust too (#961)
+        "emission": {
+            "type": "draine_li2007",
+            "qpah": Fixed(QPAH_FIDUCIAL),
+            "umin": Fixed(UMIN_FIDUCIAL),
+            "gamma_dl": Fixed(GAMMA_FIDUCIAL),
+            "*": FIXED,
+        },
+        "*": FIXED,
+    },
+    redshift=Fixed(0.0),
+)
+s_ir_fsps = m_ir_fsps.predict_state({})
+_sed_fsps_mode = np.asarray(s_ir_fsps.derived["sed_dust_attenuated"]) + np.asarray(
+    s_ir_fsps.derived["sed_dust_ir"]
+)
+_t_fsps_on_p = U.regrid(np.asarray(s_ir_fsps.wave), _sed_fsps_mode, w_p_ir)
+_fir_ratio_fsps = float(np.median(_t_fsps_on_p[_fir_win] / L_p_ir[_fir_win]))
+print(
+    f"§6 FIR amplitude tengri/FSPS (30–1000 µm): "
+    f"{_fir_ratio:.3f} (canonical LyC-masked) → "
+    f"{_fir_ratio_fsps:.3f} with eb_include_lyc=True (FSPS parity)"
+)
 
 
 # %% [markdown]
@@ -1416,6 +1475,21 @@ plt.show()
 # panel and an optical normalization ratio with its 16–84 % spread. The
 # per-section scalars printed above (residuals, ratios, peak locations)
 # are the quantitative record; the figures in `_figs/` are the visual one.
+#
+# **Prospector-mode checklist.** Two *default conventions* differ between
+# the codes and must be set explicitly for a faithful match (#961):
+#
+# 1. **Far-IR amplitude** — tengri's canonical energy balance excludes the
+#    Lyman continuum from dust heating (#922), FSPS re-emits all of it;
+#    at this fiducial the difference is ~9 % in every FIR band. Opt into
+#    the FSPS convention with `dust={'eb_include_lyc': True}` (§6).
+# 2. **IGM** — `SEDModel.build` defaults the IGM **on** (Inoue+2014);
+#    Prospector defaults `add_igm_absorption=False`. At z = 1 this alone
+#    moves a GALEX FUV band by ~18 % (rest-frame Lyman continuum). Match
+#    with `igm={'type': 'none'}` (or set FSPS's flag and use `'madau'`).
+#
+# The nebular grid (Cue vs Byler+2017, §8) is the remaining *physics-input*
+# difference; it is inherent to the backends, not a switchable convention.
 
 # %% [markdown]
 # ## References
