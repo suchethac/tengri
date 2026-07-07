@@ -139,7 +139,7 @@ def test_measured_works_for_cue_backend(real_ssp_only):
     assert (measured["Hbeta"] / direct["Hbeta"]) < (measured["OIII_5007"] / direct["OIII_5007"])
 
 
-def test_measured_includes_dust_reddening(real_ssp_only):
+def test_measured_includes_dust_reddening():
     """Measured fluxes redden with dust (bluer lines attenuated more) — the
     catalog-observable behaviour the intrinsic predict_line_fluxes lacks."""
     m0, p0 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
@@ -158,7 +158,7 @@ def test_fast_line_fluxes_raise_for_additive_nebular():
         m.measure_line_fluxes(p, DESI_LINES, fast=True)
 
 
-def test_predict_line_fluxes_reddens_by_default(real_ssp_only):
+def test_predict_line_fluxes_reddens_by_default():
     """predict_line_fluxes applies line dust reddening by default (fix a).
 
     Before 2026-07 it returned intrinsic (un-reddened) fluxes — dust on the lines
@@ -179,3 +179,24 @@ def test_predict_line_fluxes_reddens_by_default(real_ssp_only):
     # reddening raises the observed Balmer decrement (Hbeta attenuated more)
     ha, hb = _LINES.index("Halpha"), _LINES.index("Hbeta")
     assert (red[ha] / red[hb]) > (intr[ha] / intr[hb])
+
+
+def test_attenuate_line_catalog_reddens():
+    """The single-source line-reddening operator attenuates, bluer more.
+
+    This is the CI guard for the predict_line_fluxes / .lines dust fix: it tests
+    ``SEDModel._attenuate_line_catalog`` directly on synthetic line inputs, so it
+    is grid-INDEPENDENT (only the dust laws matter) and runs on CI's synthetic
+    wNE SSP — unlike the calibrated-parity tests, which need the real grid.
+    """
+    m, p = _model(_WNE, {"type": "none"}, tau=0.6)  # BakedIn; any grid builds
+    waves = jnp.array([4862.71, 6564.61])  # Hbeta (blue), Halpha (red)
+    lums = jnp.array([1.0, 1.0])
+    red = np.asarray(m._attenuate_line_catalog(p, waves, lums))
+    p0 = dict(p)
+    p0["dust_tau_bc"] = jnp.asarray(0.0)
+    p0["dust_tau_diff"] = jnp.asarray(0.0)
+    intr = np.asarray(m._attenuate_line_catalog(p0, waves, lums))
+    assert np.allclose(intr, 1.0), "tau=0 must be transparent"
+    assert np.all(red < 1.0), "dust must attenuate the lines"
+    assert red[0] < red[1], "bluer line (Hbeta) attenuated more than redder (Halpha)"
