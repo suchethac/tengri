@@ -1641,6 +1641,130 @@ class StellarSEDComponent:
             derived=state.derived.with_(**derived_overrides),
         )
 
+    def compute_joint_weights(self, params, ssp_data=None):
+        """(met, age) CSP weights + total mass WITHOUT the full-wavelength SED.
+
+        Reproduces exactly the weight computation inside :meth:`apply` — the
+        registry SFH-kwargs translation, the DSPS SFH table, the lognormal-MDF
+        metallicity smear, and the youngest-bin edge correction (#821) — but
+        calls DSPS's **SED-free** ``calc_ssp_weights_sfh_table_lognormal_mdf``.
+        Its ``.weights`` are bit-identical to the ``calc_rest_sed_...`` output
+        ``apply`` already reads (``apply`` never uses that call's ``rest_sed`` —
+        it recomputes the SED itself), so this drops the ~5994-wavelength einsum.
+
+        This is the FeaturePrecomp fast-path entry: the wNE window-LUT gets
+        ``joint_weights`` in microseconds and never reconstructs the full SED.
+
+        Restricted to the supported configuration — **delta** metallicity,
+        **parametric** SFH, **no** GP field, **no** alpha-Fe SSP grid — and
+        raises for anything else, so the fast path can never silently diverge
+        from the exact forward. Callers must fall back to the exact path.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        joint_weights : ndarray, shape (n_met, n_age)
+            Normalized (met, age) CSP weight distribution (sums to 1).
+        total_mass : ndarray, shape ()
+            Total formed stellar mass [Msun] (coarse, pre-young-knot basis).
+        ssp_ages_yr : ndarray, shape (n_age,)
+            SSP lookback ages [yr].
+
+        Raises
+        ------
+        ValueError
+            For any configuration outside delta / parametric / non-field /
+            no-alpha-grid — the caller must use the exact forward there.
+        """
+        from dsps.sed.stellar_sed import calc_ssp_weights_sfh_table_lognormal_mdf
+
+        from tengri.components.stellar.sfh.registry import SFH_REGISTRY
+        from tengri.components.stellar.sps.dsps_wrapper import has_alpha_grid
+        from tengri.cosmology import age_at_z as _age_at_z
+
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        sfh_spec = SFH_REGISTRY[self.config.sfh_model]
+
+        # ── supported-configuration guards (loud, never silent) ──
+        if self.config.field:
+            raise ValueError(
+                "compute_joint_weights supports non-field SFH only; the GP-field "
+                "path modulates the SFR on the lookback grid — use the exact forward."
+            )
+        if self.config.metallicity_model != "delta":
+            raise ValueError(
+                f"compute_joint_weights supports metallicity_model='delta' only "
+                f"(got {self.config.metallicity_model!r}); use the exact forward."
+            )
+        if sfh_spec.fn in _NONPARAMETRIC_SFH_FNS:
+            raise ValueError(
+                f"compute_joint_weights supports parametric SFH only "
+                f"(got {self.config.sfh_model!r}); use the exact forward."
+            )
+        if has_alpha_grid(ssp):
+            raise ValueError(
+                "compute_joint_weights does not support alpha-Fe SSP grids; use the exact forward."
+            )
+
+        ssp_ages_yr = (10.0**ssp.ssp_lg_age_gyr) * 1e9
+
+        # SFH kwargs — identical registry translation to apply (§2)
+        sfh_kwargs = {}
+        for public_name, (internal_name, scale, offset) in sfh_spec.internal_param_map.items():
+            if public_name in params:
+                raw = params[public_name]
+            else:
+                pdef = sfh_spec.params.get(public_name)
+                default_scalar = pdef.default.default if pdef is not None else None
+                if default_scalar is None:
+                    continue
+                raw = default_scalar
+            sfh_kwargs[internal_name] = jnp.asarray(raw) * scale + offset
+        if self.config.sfh_model == "dense_basis":
+            age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
+            sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+
+        sfr_on_ssp = sfh_spec.fn(ssp_ages_yr, **sfh_kwargs)
+        z = jnp.asarray(params.get("redshift", 0.0))
+        t_obs_gyr = jnp.asarray(_age_at_z(z)).reshape(())
+
+        # total_mass: coarse per-SSP-age table (no young knot), matches apply §6.
+        _, _, total_mass = _build_dsps_sfh_table(ssp_ages_yr, sfr_on_ssp, t_obs_gyr)
+
+        # delta metallicity → absolute log10(Z) (matches apply §4)
+        alpha_fe = jnp.asarray(params.get("met_alpha_fe", 0.0))
+        log_z_abs_scalar = (
+            effective_metallicity(jnp.asarray(params["met_logzsol"]), alpha_fe) + LOG10_ZSUN
+        )
+        lgmet_scatter = jnp.asarray(params.get("met_logzsol_scatter", self.config.lgmet_scatter))
+
+        # parametric-delta DSPS table with the young-boundary knot (#538),
+        # weights-only call (bit-identical .weights to calc_rest_sed_...).
+        gal_t_table, gal_sfr_table, _ = _build_dsps_sfh_table(
+            ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
+        )
+        weights = calc_ssp_weights_sfh_table_lognormal_mdf(
+            gal_t_table=gal_t_table,
+            gal_sfr_table=gal_sfr_table,
+            gal_lgmet=log_z_abs_scalar,
+            gal_lgmet_scatter=lgmet_scatter,
+            ssp_lgmet=ssp.ssp_lgmet,
+            ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+            t_obs=t_obs_gyr,
+        ).weights
+
+        # youngest-bin lookback edge correction (#821), matches apply §6
+        _young_mult = _youngest_bin_lookback_multiplier(ssp.ssp_lg_age_gyr)
+        joint_weights = weights * _young_mult[None, :]
+        joint_weights = joint_weights / joint_weights.sum()
+        return joint_weights, total_mass, ssp_ages_yr
+
 
 def _time_weighted_sfr(
     sfr_history: jnp.ndarray,

@@ -258,3 +258,59 @@ def test_nebular_emission_reddened_by_birth_cloud():
         f"Hα emission EW must change with tau_bc (birth cloud reddens the "
         f"young-bin emission): {ha[0]:.3f} -> {ha[1]:.3f}"
     )
+
+
+def _stellar_of(m):
+    chain = m._build_component_chain() if hasattr(m, "_build_component_chain") else None
+    from tengri.components.stellar.component import StellarSEDComponent
+
+    return next(c for c in chain if isinstance(c, StellarSEDComponent))
+
+
+def test_compute_joint_weights_bitidentical_to_predict_state():
+    """The SED-free weight extract must match predict_state's published weights EXACTLY.
+
+    This is the correctness gate for the fast path: compute_joint_weights calls
+    DSPS's weights-only routine (no 5994-wave einsum) and must reproduce the
+    joint_weights the full forward publishes to the bit — else the fast feature
+    path silently diverges from the exact forward.
+    """
+    m, _ssp = _dust_model()
+    stellar = _stellar_of(m)
+    worst = 0.0
+    for i in range(6):
+        p = dict(m.spec.sample(jax.random.PRNGKey(i)))
+        jw_exact = np.asarray(m.predict_state(p).derived["joint_weights"])
+        jw_fast, _tm, _ages = stellar.compute_joint_weights(p)
+        rel = np.max(np.abs(np.asarray(jw_fast) - jw_exact) / np.maximum(np.abs(jw_exact), 1e-40))
+        worst = max(worst, rel)
+    assert worst == 0.0, (
+        f"weight extract diverges from predict_state by {worst:.2e} (must be bit-exact)"
+    )
+
+
+def test_compute_joint_weights_guards_unsupported_configs():
+    """Unsupported configs must RAISE, never silently return wrong weights.
+
+    The GP-field SFH modulates the SFR on the lookback grid, which the SED-free
+    extract does not reproduce — it must raise rather than return weights that
+    silently omit the field modulation.
+    """
+    import warnings
+
+    ssp = _wne_ssp()
+    obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        m = SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": ["dpl", "field"], "*": FREE},  # stochastic GP field → unsupported
+            dust=None,
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
+    stellar = _stellar_of(m)
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    with pytest.raises(ValueError, match=r"non-field SFH only"):
+        stellar.compute_joint_weights(p)
