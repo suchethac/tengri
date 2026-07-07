@@ -62,18 +62,34 @@ import jax.numpy as jnp
 # ── Template search paths (resolved once, reused for all models) ──
 
 _DATA_CANDIDATES = [
+    # Repo root for the src layout (src/tengri/components/dust/emission/ →
+    # five parents up). parents[4] was the repo root before this module moved
+    # into the emission/ subpackage; kept for any legacy flat layout. Both are
+    # harmless when they don't exist (is_file() check below).
+    Path(__file__).resolve().parents[5] / "data",
     Path(__file__).resolve().parents[4] / "data",
     Path("data"),
 ]
 
 
 def _find_data_file(filename: str) -> str | None:
-    """Search standard data directories for a template file."""
+    """Search standard data directories for a template file.
+
+    Falls back to walking the CWD's parents (``tengri.data_path``) so
+    notebooks and scripts running from a subdirectory (e.g.
+    ``reproduction/prospector/``) still resolve ``<repo>/data/`` — the
+    static candidates only cover the source tree and a repo-root CWD.
+    """
     for d in _DATA_CANDIDATES:
         candidate = d / filename
         if candidate.is_file():
             return str(candidate)
-    return None
+    from tengri._data_setup import data_path
+
+    try:
+        return str(data_path(filename))
+    except FileNotFoundError:
+        return None
 
 
 # ── Dust emission model catalog ──────────────────────────────────
@@ -533,6 +549,16 @@ def _dl07_lazy_wrapper(*args, **kwargs):
                 "scientifically incorrect results (single-Gaussian PAH approximation). "
                 "Run: python scripts/convert_dl07_templates.py"
             )
+    # Already resolved. If the slot still holds *this* wrapper the first
+    # resolution failed (and its exception was swallowed upstream) — fail
+    # loudly instead of recursing forever, same guard as _make_lazy_loader.
+    if DUST_EMISSION_MODELS["draine_li2007"] is _dl07_lazy_wrapper:
+        raise RuntimeError(
+            "'draine_li2007' lazy loader is in an inconsistent state — the "
+            "first resolution did not replace the registry entry (template "
+            "files missing?). Check data/dl07_templates_v2.h5 or use the "
+            "modern SEDComponent path."
+        )
     return DUST_EMISSION_MODELS["draine_li2007"](*args, **kwargs)
 
 
