@@ -1502,6 +1502,56 @@ def kubota_done_disc(
     return l_nu_total * scale
 
 
+# ── Model 4: ADAF — DEPRECATED delegator to the faithful adaf_spectrum ────────
+
+
+def adaf_disc(
+    wavelength,
+    agn_log_lbol,
+    agn_frac=1.0,
+    agn_log_mbh=8.0,
+    agn_adaf_beta=0.5,
+    agn_adaf_delta=0.1,
+    agn_adaf_alpha=0.3,
+    **_legacy_kwargs,
+):
+    """DEPRECATED thin alias for the faithful Mahadevan 1997 ADAF (#898).
+
+    The old ``adaf_disc`` (which misapplied Eq. 49 and bundled an ad-hoc truncated
+    outer disc) was removed; this delegates to
+    :func:`~tengri.components.agn.adaf.adaf_spectrum`. The retired arguments
+    ``agn_log_ledd`` / ``agn_r_tr`` / ``agn_cos_inc`` are accepted for backward
+    compatibility but **ignored** (mdot is now derived from ``agn_log_lbol``).
+    New code should call ``adaf_spectrum`` directly. Slated for removal once its
+    remaining callers/tests migrate (see #898 follow-up).
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength [Angstrom].
+    agn_log_lbol : float
+        log10 of bolometric luminosity [Lsun].
+    agn_frac, agn_log_mbh, agn_adaf_beta, agn_adaf_delta, agn_adaf_alpha
+        Forwarded to :func:`adaf_spectrum` (see there).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        L_nu [erg/s/Hz], the faithful Mahadevan 1997 ADAF.
+    """
+    from tengri.components.agn.adaf import adaf_spectrum
+
+    return adaf_spectrum(
+        wavelength,
+        agn_log_lbol=agn_log_lbol,
+        agn_frac=agn_frac,
+        agn_log_mbh=agn_log_mbh,
+        agn_adaf_alpha=agn_adaf_alpha,
+        agn_adaf_beta=agn_adaf_beta,
+        agn_adaf_delta=agn_adaf_delta,
+    )
+
+
 # ── Model 5: RELAGN relativistic disc from precomputed grid ──────────────────
 
 

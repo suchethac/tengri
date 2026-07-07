@@ -98,39 +98,21 @@ class TestAdafDiscBounds:
         # ADAF should peak at longer wavelength (lower frequency)
         assert peak_adaf > peak_disc
 
-    def test_truncation_radius_affects_uv(self, optical_wavelength):
-        """Larger truncation radius reduces UV emission from outer disc.
-
-        A larger r_tr means the thin disc starts further out (cooler),
-        producing less UV/optical emission. This bounds the physical effect
-        of changing the inner/outer disc boundary.
+    def test_truncation_radius_retired(self, optical_wavelength):
+        """agn_r_tr (the bundled truncated outer disc) was retired in #898 — the
+        faithful Mahadevan 1997 ADAF is inner-flow only, so r_tr has no effect.
         """
         from tengri.components.agn.disc import adaf_disc
 
-        # UV band: 1000-3000 A
-        uv_mask = (optical_wavelength > 1000.0) & (optical_wavelength < 3000.0)
-
         l_small_tr = adaf_disc(
-            optical_wavelength,
-            agn_log_lbol=42.0,
-            agn_frac=1.0,
-            agn_log_mbh=8.0,
-            agn_log_ledd=-3.0,
-            agn_r_tr=30.0,
+            optical_wavelength, agn_log_lbol=10.0, agn_frac=1.0, agn_log_mbh=8.0, agn_r_tr=30.0
         )
         l_large_tr = adaf_disc(
-            optical_wavelength,
-            agn_log_lbol=42.0,
-            agn_frac=1.0,
-            agn_log_mbh=8.0,
-            agn_log_ledd=-3.0,
-            agn_r_tr=500.0,
+            optical_wavelength, agn_log_lbol=10.0, agn_frac=1.0, agn_log_mbh=8.0, agn_r_tr=500.0
         )
 
-        # Larger r_tr -> less UV (hotter inner disc is truncated further out)
-        uv_small = jnp.sum(l_small_tr[uv_mask])
-        uv_large = jnp.sum(l_large_tr[uv_mask])
-        assert uv_small > uv_large
+        # r_tr is a retired no-op kwarg -> identical SEDs.
+        assert bool(jnp.array_equal(l_small_tr, l_large_tr))
 
     def test_adaf_faint_at_high_ledd(self, wavelength):
         """At high L/L_Edd, ADAF component is faint relative to disc.
