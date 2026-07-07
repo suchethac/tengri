@@ -284,30 +284,31 @@ class TestADAFPhysics:
 
         For M=10^8 Msun: nu_peak ~ 10^12 Hz → λ ~ 0.3 mm = 3e6 A.
         """
-        from tengri.components.agn.disc import adaf_disc
+        from tengri.components.agn.adaf import adaf_spectrum
 
-        l_nu = adaf_disc(WAVE, agn_log_lbol=10.0, agn_log_mbh=8.0)
+        l_nu = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_log_mbh=8.0)
         peak_wave = float(WAVE[jnp.argmax(l_nu)])
         # Peak should be at λ > 10000 A (in IR/radio, not UV/optical)
         assert peak_wave > 10000.0, f"ADAF peak should be IR/radio, got {peak_wave:.0f} A"
 
-    def test_adaf_larger_rtr_weaker(self):
-        """Larger truncation radius → weaker ADAF (more energy advected)."""
-        from tengri.components.agn.disc import adaf_disc
+    def test_adaf_truncation_radius_retired(self):
+        """agn_r_tr (the bundled truncated outer disc) was retired in #898 — the
+        faithful Mahadevan 1997 ADAF is inner-flow only. adaf_spectrum ignores the
+        now-defunct kwarg, so the two calls are identical; this pins that the
+        parameter no longer has any effect."""
+        from tengri.components.agn.adaf import adaf_spectrum
 
-        l_small_rtr = adaf_disc(WAVE, agn_log_lbol=10.0, agn_r_tr=50.0)
-        l_large_rtr = adaf_disc(WAVE, agn_log_lbol=10.0, agn_r_tr=500.0)
-
-        # Both finite
-        chex.assert_tree_all_finite(l_small_rtr)
-        chex.assert_tree_all_finite(l_large_rtr)
+        l_a = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_r_tr=50.0)
+        l_b = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_r_tr=500.0)
+        chex.assert_tree_all_finite(l_a)
+        chex.assert_trees_all_equal(l_a, l_b)
 
     def test_adaf_beta_controls_synchrotron(self):
         """Higher beta (magnetic pressure) → stronger synchrotron emission."""
-        from tengri.components.agn.disc import adaf_disc
+        from tengri.components.agn.adaf import adaf_spectrum
 
-        l_low_b = adaf_disc(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.1)
-        l_high_b = adaf_disc(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.9)
+        l_low_b = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.1)
+        l_high_b = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_adaf_beta=0.9)
 
         # Radio/mm region where synchrotron dominates (λ > 1e5 A)
         radio_mask = (WAVE > 1e5) & (WAVE < 1e7)
@@ -321,10 +322,10 @@ class TestADAFPhysics:
 
     def test_synchrotron_peak_scales_with_mass(self):
         """Synchrotron peak ∝ M^{-1/2}: heavier BH → lower peak frequency."""
-        from tengri.components.agn.disc import adaf_disc
+        from tengri.components.agn.adaf import adaf_spectrum
 
-        l_low_m = adaf_disc(WAVE, agn_log_lbol=10.0, agn_log_mbh=7.0)
-        l_high_m = adaf_disc(WAVE, agn_log_lbol=10.0, agn_log_mbh=9.0)
+        l_low_m = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_log_mbh=7.0)
+        l_high_m = adaf_spectrum(WAVE, agn_log_lbol=10.0, agn_log_mbh=9.0)
 
         peak_low_m = float(WAVE[jnp.argmax(l_low_m)])
         peak_high_m = float(WAVE[jnp.argmax(l_high_m)])

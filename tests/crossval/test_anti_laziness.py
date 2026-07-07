@@ -210,33 +210,42 @@ class TestAGNParameterSensitivity:
             )
 
     def test_adaf_all_params_matter(self):
-        """ADAF model: each parameter must affect the output."""
-        from tengri.components.agn.disc import adaf_disc
+        """ADAF model (faithful Mahadevan 1997, #898): each parameter affects the
+        output. Evaluated in the low-mdot regime (log_lbol=9, log_mbh=9 -> mdot
+        ~1e-3, alpha_c>1) where the electron-heating delta is physically active:
+        Eq. 43 (high mdot, alpha_c<1) has no delta term, so delta is *correctly*
+        inert there. agn_r_tr / agn_log_ledd were retired in #898."""
+        from tengri.components.agn.adaf import adaf_spectrum
 
+        base = dict(agn_log_lbol=9.0, agn_log_mbh=9.0)
         params_to_test = {
-            "agn_r_tr": (50.0, 500.0),
+            "agn_adaf_alpha": (0.1, 0.4),
             "agn_adaf_beta": (0.1, 0.9),
-            "agn_adaf_delta": (0.001, 0.1),
-            "agn_log_mbh": (7.0, 9.0),
+            "agn_adaf_delta": (0.01, 0.4),
+            "agn_log_mbh": (8.0, 10.0),
         }
         for param, (v1, v2) in params_to_test.items():
-            l1 = adaf_disc(self._WAVE, agn_log_lbol=10.0, **{param: v1})
-            l2 = adaf_disc(self._WAVE, agn_log_lbol=10.0, **{param: v2})
-            # Some ADAF params (beta, delta) have subtle effects after
-            # renormalization but must still produce measurably different SEDs
+            l1 = adaf_spectrum(self._WAVE, **{**base, param: v1})
+            l2 = adaf_spectrum(self._WAVE, **{**base, param: v2})
             rel_diff = float(jnp.max(jnp.abs(l1 - l2) / (jnp.abs(l1) + 1e-50)))
             assert rel_diff > 1e-4, (
                 f"ADAF parameter {param} is IGNORED (max relative diff: {rel_diff:.2e})"
             )
 
     def test_agn_luminosity_scaling(self):
-        """10x L_bol must give ~10x total L_nu for all disc models."""
-        from tengri.components.agn.disc import adaf_disc, multicolor_disc, powerlaw_disc
+        """10x L_bol must give ~10x total L_nu for all disc models.
+
+        adaf is intentionally excluded: adaf_spectrum is normalized so that
+        int L_nu dnu = L_bol *exactly* by construction, and its spectral shape
+        shifts with L_bol (mdot is derived from it), so an on-grid-sum proxy is
+        not a valid 10x test. Its exact L_bol scaling is pinned by
+        test_adaf_mahadevan.py::TestSpectrumAssembly::test_normalizes_to_lbol.
+        """
+        from tengri.components.agn.disc import multicolor_disc, powerlaw_disc
 
         for name, fn, kwargs in [
             ("powerlaw", powerlaw_disc, {}),
             ("multicolor", multicolor_disc, {}),
-            ("adaf", adaf_disc, {"agn_log_ledd": -3.0}),
         ]:
             l_low = fn(self._WAVE, agn_log_lbol=10.0, **kwargs)
             l_high = fn(self._WAVE, agn_log_lbol=11.0, **kwargs)
@@ -522,13 +531,14 @@ class TestNotReturningDummies:
 
     def test_agn_seds_not_all_zeros(self):
         """AGN SEDs must have non-zero flux in their expected bands."""
-        from tengri.components.agn.disc import adaf_disc, multicolor_disc, powerlaw_disc
+        from tengri.components.agn.adaf import adaf_spectrum
+        from tengri.components.agn.disc import multicolor_disc, powerlaw_disc
 
         wave = jnp.geomspace(100.0, 1e8, 500)
         for name, fn, kwargs in [
             ("powerlaw", powerlaw_disc, {}),
             ("multicolor", multicolor_disc, {}),
-            ("adaf", adaf_disc, {}),
+            ("adaf", adaf_spectrum, {}),
         ]:
             l_nu = fn(wave, agn_log_lbol=11.0, **kwargs)
             total = float(jnp.sum(l_nu))

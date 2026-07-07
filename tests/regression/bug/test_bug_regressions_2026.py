@@ -223,47 +223,37 @@ class TestVacuumWavelengthConsistency:
 
 
 class TestAdafSyncSpectralIndex:
-    """Regression: ADAF synchrotron thick-regime index must be ν^2, not ν^{5/2}.
+    """The faithful ADAF (Mahadevan 1997) integrated synchrotron slope is ν^{2/5}.
 
-    Bug: disc.py used nu_ratio_sa**2.5 for the self-absorbed regime.
-    Fix: Changed to nu_ratio_sa**2.0 per Mahadevan (1997) ApJ 477, 585 Eq. 19.
-    Reference: Mahadevan (1997) Eq. 19 gives L_ν ∝ ν^2 for thermal (Rayleigh-Jeans)
-    ADAF electrons in the self-absorbed regime. The ν^{5/2} index applies only to
-    non-thermal power-law electron distributions, which is NOT the ADAF case.
+    The old single-zone ``adaf_disc`` modeled the self-absorbed regime as the
+    *local* Rayleigh-Jeans ν^2 (Eq. 19). The faithful ``adaf_spectrum`` (#898)
+    integrates the self-absorbed thermal synchrotron over the ADAF's radial
+    temperature/field structure — emission at each frequency arises from a
+    different radius — giving the shallower ν^{2/5} rise of Mahadevan (1997)
+    Fig. 1. That integrated slope (validated in test_adaf_mahadevan.py) supersedes
+    the single-zone ν^2; the old value is no longer the physical target.
     """
 
-    def test_log_slope_below_nu_sa_is_two(self):
-        """Log-slope d(log L)/d(log ν) below ν_sa must be ≈ 2.0 ± 0.15."""
+    def test_log_slope_below_peak_is_two_fifths(self):
+        """Log-slope d(log L_ν)/d(log ν) below the synchrotron peak ≈ 2/5."""
         from tengri.components.agn.disc import adaf_disc
 
-        # Fiducial ADAF: low Eddington ratio so nu_sa is well inside the grid
-        # adaf_disc returns L_nu in erg/s/Hz vs wavelength (Angstrom)
-        c_aa = 2.99792458e18  # Angstrom/s
-
-        # Use a typical ADAF: M_BH = 1e8 Msun, Eddington ratio = 1e-3
-        # nu_peak ~ 1e12 Hz => nu_sa ~ 3.3e11 Hz => lambda_sa ~ 9e6 Angstrom
-        # We sample two wavelengths well below nu_sa
-        lam_lo = 3e7  # Angstrom, nu_lo ~ 1e11 Hz (well below nu_sa)
-        lam_hi = 1e7  # Angstrom, nu_hi ~ 3e11 Hz (just below nu_sa)
-
+        # Sample two frequencies below the ~1e12 Hz peak but above the low cutoff:
+        # nu_lo ~ 1e10 Hz (lam 3e7 A), nu_hi ~ 3e10 Hz (lam 1e7 A).
+        lam_lo = 3e7
+        lam_hi = 1e7
         wave = jnp.array([lam_lo, lam_hi], dtype=jnp.float64)
-        sed = adaf_disc(wave, agn_log_lbol=10.0, agn_log_mbh=8.0, agn_log_ledd=-3.0)
+        sed = adaf_disc(wave, agn_log_lbol=10.0, agn_log_mbh=8.0)
 
-        # L_nu vs wavelength: L_nu ∝ ν^α → as λ decreases ν increases
-        # L_nu(λ) = L_nu(ν) so slope in λ-space: d(log L)/d(log λ) = -α
         lam_ratio = float(lam_lo / lam_hi)
         lnu_ratio = float(sed[0] / jnp.maximum(sed[1], 1e-300))
-
-        if lnu_ratio > 0 and jnp.isfinite(jnp.array(lnu_ratio)):
-            # slope in wavelength space: d(log L)/d(log λ)
-            slope_lam = jnp.log(lnu_ratio) / jnp.log(lam_ratio)
-            # nu ∝ 1/λ so slope in frequency space = -slope_lam
-            slope_nu = float(-slope_lam)
-            assert abs(slope_nu - 2.0) < 0.15, (
-                f"ADAF synchrotron slope below nu_sa = {slope_nu:.3f}, "
-                "expected 2.0 ± 0.15 (Mahadevan 1997 Eq. 19). "
-                "Regression: was 2.5 (non-thermal power-law exponent, incorrect for ADAF)."
-            )
+        # nu ∝ 1/λ, so slope in frequency space = -d(log L)/d(log λ).
+        slope_nu = float(-jnp.log(lnu_ratio) / jnp.log(lam_ratio))
+        assert abs(slope_nu - 0.4) < 0.15, (
+            f"ADAF integrated synchrotron slope below the peak = {slope_nu:.3f}, "
+            "expected 2/5 (Mahadevan 1997 Fig. 1, integrated over the radial "
+            "structure). The single-zone ν^2 (old adaf_disc) is superseded."
+        )
 
 
 # ── 7. Bell (2003) synchrotron suppression formula ────────────────

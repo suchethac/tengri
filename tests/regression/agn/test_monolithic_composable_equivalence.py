@@ -47,13 +47,11 @@ _TIGHT = 1e-5
 # Known block-level gaps: the composable block does not yet reproduce the
 # monolithic disc/torus bit-for-bit. Tracked, xfail(strict) — not loosened.
 #
-# NOTE (#898): adaf is deliberately NOT in this equivalence set. Its composable
-# block is now the *faithful* Mahadevan 1997 model, which has SURPASSED the
-# monolithic ``adaf_agn`` (built on the old ``adaf_disc`` that misapplied Eq. 49).
-# "Equivalence with monolithic" is therefore the wrong success criterion for
-# adaf — a strict-xfail here would keep "passing as expected failure" forever,
-# guarding the buggy side. Instead see ``test_adaf_surpasses_deprecated_monolithic``
-# below (documented-divergence) and the physics gate in test_adaf_mahadevan.py.
+# adaf is an EXACT case (no xfail): as of #898 the monolithic ``adaf_agn`` and
+# the composable ``disc='adaf'`` preset both use the faithful Mahadevan 1997
+# ``adaf_spectrum``, so the preset reproduces the monolithic to the Type-1/2
+# mask floor. (The Phase-1 documented-divergence gate was retired once the
+# monolithic path was unified onto the faithful physics.)
 _KUBOTA_GAP = "kubota_done disc block normalization ~39% off monolithic (#944)"
 _SKIRTOR_GAP = (
     "monolithic skirtor uses CIGALE's joint disc+torus energy balance; the "
@@ -72,6 +70,7 @@ _CASES = [
     pytest.param("multicolor_agn", U.multicolor_agn, id="multicolor_agn"),
     pytest.param("silva04", U.silva04_agn, id="silva04"),
     pytest.param("cat3d_wind", U.cat3d_wind_agn, id="cat3d_wind"),
+    pytest.param("adaf", U.adaf_agn, id="adaf"),
     pytest.param("richards2006", richards2006, id="richards2006"),
     pytest.param("kubota_done", U.kubota_done_full_agn, marks=_gap(_KUBOTA_GAP), id="kubota_done"),
     pytest.param(
@@ -107,39 +106,6 @@ def test_preset_reproduces_monolithic(preset_name, monolithic_fn):
         f"{preset_name}: composable preset diverges from monolithic by "
         f"max_rel={max_rel:.3e} (tol {_TIGHT:.0e}). The preset no longer "
         f"reproduces the physics it claims — check agn_norm / block selectors."
-    )
-
-
-def test_adaf_surpasses_deprecated_monolithic():
-    """The faithful composable ADAF has SURPASSED the monolithic reference (#898).
-
-    The monolithic ``adaf_disc`` misapplied Mahadevan 1997 Eq. 49 (radiative
-    luminosity scaled by L_bol, not L_Edd) and bundled an ad-hoc truncated disc;
-    the composable ``disc='adaf'`` block is now the faithful ``adaf_spectrum``.
-    "Equivalence with monolithic" is thus the wrong success criterion — so this
-    is a *documented-divergence* gate: the faithful model must differ from the
-    deprecated one by a wide margin (it does not merely re-normalize; the whole
-    spectral shape and the L_bol->mdot relation changed). Correctness of the
-    faithful physics is pinned independently in test_adaf_mahadevan.py.
-
-    The deprecated monolithic ``adaf_disc`` / ``adaf_agn`` remain only as the old
-    reference and are slated for removal in the monolithic-retirement follow-up.
-    """
-    from tengri.components.agn.adaf import adaf_spectrum
-
-    # Wide grid (UV -> mm) so the ADAF synchrotron peak is on-grid, where the two
-    # disc physics differ most.
-    wave = np.logspace(3.0, 8.0, 400)
-    faithful = np.asarray(adaf_spectrum(wave, agn_log_lbol=11.0, agn_log_mbh=8.0))
-    deprecated = np.asarray(
-        U.adaf_disc(wave, agn_log_lbol=11.0, agn_log_mbh=8.0, agn_log_ledd=-3.0)
-    )
-    denom = np.maximum(np.abs(deprecated), 1e-30)
-    max_rel = float(np.max(np.abs((faithful - deprecated) / denom)))
-    assert max_rel > 0.5, (
-        "The faithful ADAF (adaf_spectrum) should differ substantially from the "
-        f"deprecated monolithic adaf_disc, but max_rel={max_rel:.3e} — has the "
-        "block silently regressed to the old physics?"
     )
 
 
