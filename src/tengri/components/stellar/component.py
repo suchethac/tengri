@@ -1365,7 +1365,11 @@ class StellarSEDComponent:
             # delayed-tau age = 5 Gyr fiducial) and biased the CSP +1.2 % in
             # the optical vs FSPS / bagpipes / a dense reference. The GP-field
             # draw lives on the coarse lookback grid by construction, so the
-            # field path keeps the DSPS kernel.
+            # field path keeps the DSPS kernel. Consequence: parametric and
+            # field fits of the same galaxy use different age-weight kernels,
+            # a deliberate ≲1 % (optical) cross-family systematic — not a bug
+            # (#964); revisit only if the field path ever moves to a dense
+            # integrand.
             if not self.config.field:
                 _fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
                 # #765: inject the SFH's exact bin edges as knots so the step
