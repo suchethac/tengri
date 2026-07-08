@@ -8,7 +8,7 @@ make AGNFITTER-RX a radio-to-X-ray AGN-physics laboratory.
 
 AGNFITTER-RX is the natural AGN counterpart to the CIGALE, BAGPIPES, and
 Prospector reproductions in this series: where those are galaxy-centric, this
-one places tengri next to a code built specifically to characterise active
+one places tengri next to a code built specifically to characterize active
 nuclei across `8 < log ν/Hz < 20`.
 
 ## What this notebook compares

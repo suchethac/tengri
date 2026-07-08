@@ -51,7 +51,7 @@ driver at a custom location with `export SYNTHESIZER_GRID_DIR=/path/to/grids`.
 
 > **Grids.** The test grids are the same physics as the production grids
 > (Box: <https://sussex.app.box.com/v/SynthesizerGrids>) at lower resolution —
-> the AGN test grids sample each photoionisation axis at just two nodes. Because
+> the AGN test grids sample each photoionization axis at just two nodes. Because
 > both codes read the *same* file, the coarseness never appears as a
 > tengri-vs-Synthesizer disagreement. Swapping in a production grid (and
 > re-pointing `SYNTHESIZER_GRID_DIR`) is a drop-in higher-resolution re-render.
@@ -101,7 +101,7 @@ figures in `_figs/` are the visual one. The shared SSP grid (§1), the delayed-�
 SFH (§2), the DL07 dust IR (§6, far-IR peak agreeing to ~1 µm), and the IGM (§12)
 reproduce Synthesizer to floating point or a fraction of a percent. The nebular
 block (§8) is the deliberate exception — Synthesizer's Cloudy grid and tengri's
-Cue emulator use different photoionisation inputs, so the Hα ratio is reported
+Cue emulator use different photoionization inputs, so the Hα ratio is reported
 rather than forced to agree. In §9, the disc, torus, and inclination treatment
 are independent implementations and compared on shape/amplitude; the line regions
 share grids and so match in line content.

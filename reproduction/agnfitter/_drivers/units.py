@@ -26,7 +26,7 @@ import numpy as np
 
 # Speed of light in the two unit systems used below.
 C_ANGSTROM_PER_S: float = 2.998e18
-# Solar luminosity (AGNFITTER-RX normalises templates per L_sun; see
+# Solar luminosity (AGNFITTER-RX normalizes templates per L_sun; see
 # MODEL_AGNfitter.renorm_template). IAU 2015 nominal value.
 L_SUN_ERG_PER_S: float = 3.828e33
 
@@ -45,7 +45,7 @@ def lognu_fnu_to_lnu(log_nu_hz, F_nu):
         Base-10 logarithm of frequency in Hz.
     F_nu : array_like, shape (n,)
         Per-frequency luminosity density (arbitrary AGNFITTER-RX
-        normalisation). [erg/s/Hz up to a constant]
+        normalization). [erg/s/Hz up to a constant]
 
     Returns
     -------

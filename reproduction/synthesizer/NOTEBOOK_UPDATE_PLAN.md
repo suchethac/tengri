@@ -44,7 +44,7 @@ m = SEDModel.build(
     ssp_data=ssp,
     agn={'type': 'composable',
          'disc':  {'type': 'kubota_done'},
-         'torus': {'type': 'simple'},          # 1000 K greybody, matches Synthesizer
+         'torus': {'type': 'simple'},          # 1000 K graybody, matches Synthesizer
          'lines': {'type': 'nlr_blr_synthesizer'},  # NLR + BLR from the same Cloudy grids
          'agn_log_lbol': Fixed(agn_log_lbol), '*': FIXED},
     redshift=Fixed(0.0),
@@ -55,7 +55,7 @@ L_tot_t = np.asarray(m.predict_state({}).derived['sed_agn'])
 Note: the composable total will **not** bit-match the old hand-sum — the runner
 energy-couples the disc into the torus (`compose_l_nu`), whereas the hand-sum
 used an independent `torus_frac` split (a ~12% continuum difference). The
-composable behaviour is the more physical one; flag this in the panel caption.
+composable behavior is the more physical one; flag this in the panel caption.
 
 ## Changes (each maps to a numbered cell)
 
@@ -63,7 +63,7 @@ composable behaviour is the more physical one; flag this in the panel caption.
    Today these cells call `compute_nlr_sed_synthesizer(grid_path, ...)` directly.
    Add a short cell that builds the *same* unified AGN through the public grammar
    and shows the two SEDs overlay (they should agree — same grid, same
-   normalisation):
+   normalization):
    ```python
    model = SEDModel.build(
        ssp_data=ssp,

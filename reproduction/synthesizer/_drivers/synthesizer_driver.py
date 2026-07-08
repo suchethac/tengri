@@ -80,8 +80,8 @@ def ssp_spectrum(
     r"""Return one Synthesizer single-SSP ``incident`` spectrum.
 
     The ``incident`` grid spectrum is the pure stellar continuum (no nebular
-    reprocessing), normalised to 1 :math:`M_\odot` of stars formed — the direct
-    analogue of an FSPS/BC03 SSP.
+    reprocessing), normalized to 1 :math:`M_\odot` of stars formed — the direct
+    analog of an FSPS/BC03 SSP.
 
     Parameters
     ----------
@@ -107,7 +107,7 @@ def ssp_spectrum(
 
 
 # ---------------------------------------------------------------------------
-# §2 — star formation history (delayed-τ, the FSPS sfh=4 analogue)
+# §2 — star formation history (delayed-τ, the FSPS sfh=4 analog)
 # ---------------------------------------------------------------------------
 def sfh_curve(
     *, tau_gyr: float = 1.0, max_age_gyr: float = 5.0, ngrid: int = 512
@@ -128,11 +128,11 @@ def sfh_curve(
     t_lookback_yr : ndarray, shape (ngrid,)
         Lookback time [yr], 0 = observation epoch.
     sfr : ndarray, shape (ngrid,)
-        Star formation rate [M⊙/yr], normalised to 1 M⊙ formed.
+        Star formation rate [M⊙/yr], normalized to 1 M⊙ formed.
     """
     # Synthesizer's ``SFH.DelayedExponential`` is the delayed-exponential form
     # SFR(t) ∝ t·exp(−t/τ) in time-since-onset t. We evaluate that closed form
-    # directly (it *is* Synthesizer's parametrisation) and normalise to 1 M⊙
+    # directly (it *is* Synthesizer's parametrization) and normalize to 1 M⊙
     # formed, matching tengri's ``log_total_mass = 0``.
     age_since_start = np.linspace(0.0, max_age_gyr, ngrid)  # Gyr, 0 = onset
     shape = age_since_start * np.exp(-age_since_start / tau_gyr)

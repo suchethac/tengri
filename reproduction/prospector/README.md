@@ -43,7 +43,7 @@ notebook is built for an FSPS install compiled with **MIST isochrones +
 MILES spectral library** (the `python-fsps` default); `sp.libraries`
 reports the combination your build uses. tengri downloads the matching
 grid automatically (next section) — if your FSPS uses a different
-isochrone or library, swap the catalogue name in the "Common SSP grid"
+isochrone or library, swap the catalog name in the "Common SSP grid"
 cell so the two sides stay bit-faithful.
 
 ## The SSP grid (downloaded, not shipped)
@@ -55,7 +55,7 @@ tengri.download_ssp("fsps_mist_miles_chabrier", dest="_drivers/data")
 ```
 
 which fetches the pre-ported, DSPS-shaped HDF5 from the public
-catalogue (`tengri.list_known_ssps()` lists the ~20 available
+catalog (`tengri.list_known_ssps()` lists the ~20 available
 isochrone × library × IMF combinations). The grid is **bare-stellar**
 (no baked-in nebular emission), which is what the Cue nebular emulator
 in §8 requires. The file is cached under `_drivers/data/` and ignored by
@@ -95,5 +95,5 @@ are the visual one. In short: the shared SSP grid, the closed-form SFH
 shape, the attenuation curves, the dust-IR energy balance, and the
 Madau IGM reproduce FSPS to floating point or a fraction of a percent.
 The nebular block is the deliberate exception — FSPS's Byler+2017
-Cloudy grid and tengri's Cue emulator use different photoionisation
+Cloudy grid and tengri's Cue emulator use different photoionization
 inputs, so the Hα ratio is reported rather than forced to agree.

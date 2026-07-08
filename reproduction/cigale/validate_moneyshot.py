@@ -8,8 +8,8 @@ is consistent with pcigale at matched parameters. Run it directly:
         .venv/bin/python reproduction/cigale/validate_moneyshot.py
 
 Policy (per maintainer): do **not** tune CIGALE to force agreement. Where the
-two diverge, decide whether it is an expected modelling difference (different
-SSP, different SFH parameterisation, dust FUV extrapolation, disc model) or a
+two diverge, decide whether it is an expected modeling difference (different
+SSP, different SFH parameterization, dust FUV extrapolation, disc model) or a
 tengri bug — and in the latter case file an issue rather than patching here.
 
 The script prints a band-by-band ratio report and writes
@@ -151,7 +151,7 @@ def cigale_moneyshot():
             # CIGALE's dale2014 alpha is gridded; 2.0 is the nearest node to
             # the money-shot's alpha_dale=2.2 (a small, documented mismatch).
             ("dale2014", dict(alpha=2.0, fracAGN=0.0)),
-            # SKIRTOR analytic disc (disk_type=0) is the closest CIGALE analogue
+            # SKIRTOR analytic disc (disk_type=0) is the closest CIGALE analog
             # of tengri's multicolor disc; fracAGN sets the AGN/IR balance.
             (
                 "skirtor2016",
@@ -204,9 +204,9 @@ def main():
     w_t, L_t, sfr, mstar, dt = tengri_moneyshot(ssp)
     w_c, L_c, dc = cigale_moneyshot()
 
-    # Put both on CIGALE's grid; normalise CIGALE to tengri in the optical so
+    # Put both on CIGALE's grid; normalize CIGALE to tengri in the optical so
     # we compare SED *shapes* across nine decades, not absolute SSP/IMF/mass
-    # bookkeeping (different SSP libraries, different SFH normalisation).
+    # bookkeeping (different SSP libraries, different SFH normalization).
     L_t_on_c = U.regrid(w_t, L_t, w_c)
     opt = (w_c >= 3000) & (w_c <= 8000) & (L_c > 0) & (L_t_on_c > 0)
     norm = float(np.median(L_t_on_c[opt] / L_c[opt]))
@@ -226,7 +226,7 @@ def main():
         "radio (>1 cm)": (1e8, 3e9),
     }
     print(f"\n  tengri money-shot: M*={mstar:.2e} Msun, SFR={sfr:.1f} Msun/yr, z={Z}")
-    print(f"  optical normalisation tengri/CIGALE = {norm:.3g}× (factored out below)\n")
+    print(f"  optical normalization tengri/CIGALE = {norm:.3g}× (factored out below)\n")
     print(f"  {'band':<24} {'tengri/CIGALE':>14}   note")
     print("  " + "-" * 60)
     for name, (a, b) in bands.items():

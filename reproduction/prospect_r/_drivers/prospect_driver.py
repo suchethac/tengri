@@ -414,7 +414,7 @@ def nebular_lnu(
     r"""Return ProSpect's nebular-line :math:`L_\nu` [erg/s/Hz] for a given SFR.
 
     Calls ProSpect's ``emissionLines`` directly with the line-ratio lookup table
-    ``LKL10_NormHalpha`` (Levesque et al. 2010, normalised to Hα). ProSpect ties
+    ``LKL10_NormHalpha`` (Levesque et al. 2010, normalized to Hα). ProSpect ties
     the Hα luminosity to the star formation rate through a fixed coefficient
     (``L_Hα = SFR × 21612724 L⊙``) and distributes the remaining lines by the
     metallicity-dependent ratios in the table. The returned spectrum is nebular
@@ -429,12 +429,12 @@ def nebular_lnu(
     veldisp : float
         Line velocity dispersion [km/s] used to broaden the lines.
     q : float, optional
-        Ionisation parameter [cm/s] passed to ``emissionLines``. If ``None``
+        Ionization parameter [cm/s] passed to ``emissionLines``. If ``None``
         (default), ProSpect derives it from metallicity via ``Z2q`` (Orsi 2014),
         which at solar Z returns a low ``q ≈ 1.4e7`` cm/s appropriate for soft
-        ionisation — this strongly suppresses the collisionally-excited metal
+        ionization — this strongly suppresses the collisionally-excited metal
         lines ([O III], [O II]), giving an anomalously weak [O III]/Hα ≈ 0.014
-        (#761). To compare on a **matched ionisation parameter** against a Cloudy
+        (#761). To compare on a **matched ionization parameter** against a Cloudy
         grid run at ``logU``, pass ``q = U·c`` (e.g. ``logU = -2`` → ``q = 3e8``);
         recombination lines (Hα, Hβ) are q-insensitive so this only fixes the
         metal-line ratios.
@@ -486,7 +486,7 @@ def agn_torus_lnu(
     L_nu : ndarray, shape (n_wave,)
         AGN spectral luminosity [erg/s/Hz].
     log_lbol_lsun : float
-        ``log10(L_bol / L⊙)`` of the returned template, for normalising tengri.
+        ``log10(L_bol / L⊙)`` of the returned template, for normalizing tengri.
     """
     fn = _rfn(f"{model}_interp")
     template = _data(model)

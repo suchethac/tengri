@@ -33,7 +33,7 @@
 # evaluated live through `python-fsps` (the exact engine Prospector holds
 # in `CSPSpecBasis.ssp` during a fit). The right panel is tengri. Both
 # read the *same* stellar templates: tengri loads the FSPS MIST + MILES
-# Chabrier SSP grid from the public catalogue, so a §1 residual below
+# Chabrier SSP grid from the public catalog, so a §1 residual below
 # floating-point precision is interpolation alone, not a different
 # library. The grid is downloaded at run time, not shipped — see the
 # README.
@@ -154,7 +154,7 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 #
 # tengri reads the FSPS MIST isochrones + MILES spectral library at a
 # Chabrier IMF — the same templates the local FSPS install is compiled
-# with. The grid is fetched once from the public catalogue and cached
+# with. The grid is fetched once from the public catalog and cached
 # under `_drivers/data/`; it is not committed to the repository.
 
 # %%
@@ -177,7 +177,7 @@ print(
 # The lower panel shows the relative residual
 # `|tengri − FSPS| / FSPS`. Both sides read identical numerics, so the
 # residual floor is the float32 round-trip through the grid port — the
-# grey line marks 1e-6.
+# gray line marks 1e-6.
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -220,7 +220,7 @@ ax_r.set_yscale("log")
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"$|\Delta| / L_{\rm FSPS}$", fontsize=9)
 ax_r.set_ylim(1e-9, 1e-2)
-ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6, label="float32 round-trip floor")
+ax_r.axhline(1e-6, color="gray", linestyle=":", alpha=0.6, label="float32 round-trip floor")
 ax_r.legend(loc="upper right", fontsize=8)
 ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
@@ -239,7 +239,7 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 #
 # FSPS `sfh=4` (Prospector's `parametric_sfh` template) uses the
 # delayed-exponential `SFR(t) ∝ t · exp(−t/τ)`, peaking at `t = τ`.
-# tengri's `sfh.delayed` is the same closed form. Both normalise to the
+# tengri's `sfh.delayed` is the same closed form. Both normalize to the
 # same formed mass: FSPS via `mass`, tengri via `log_total_mass`.
 #
 # **What the right panel plots.** Not a fine-grid analytic curve — that
@@ -287,7 +287,7 @@ for ax, title in (
     ax.set_xscale("linear")
     ax.grid(True, alpha=0.3)
     ax.set_title(title)
-    ax.axvline(TAU_GYR_FIDUCIAL, color="grey", linestyle=":", alpha=0.6)
+    ax.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
 ax_l.plot(t_p_cosmic_gyr, sfr_p, "C0-", linewidth=2.0, label=rf"$\tau$ = {TAU_GYR_FIDUCIAL:g} Gyr")
 ax_l.legend(fontsize=9)
 ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
@@ -520,7 +520,7 @@ save_fig("prospector_02b_sfh_continuity_flex.png")
 # ### §2c Dirichlet (Leja+2017)
 #
 # The Dirichlet SFH places a symmetric prior on the fraction of star formation
-# in each bin. We lead with **Prospector's** parametrisation — the one users
+# in each bin. We lead with **Prospector's** parametrization — the one users
 # know: latent z-fractions → SFR fractions → bin masses
 # (`zfrac_to_masses`). tengri implements the same Leja+2017 family but with a
 # different latent variable (a stick-breaking prior on the *mass* fractions),
@@ -586,7 +586,7 @@ save_fig("prospector_02c_sfh_dirichlet.png")
 # The cleanest *matched-parameter* head-to-head against FSPS uses the shared
 # **continuity** basis — a sharp negative youngest log-SFR ratio is a recent
 # shutdown, and both codes forward-model the continuity SFH exactly. On top of
-# that comparison (blue/green), the grey dotted curve is tengri's dedicated
+# that comparison (blue/green), the gray dotted curve is tengri's dedicated
 # `psb_suess2022` template at matched `t_last`/`t_flex`, showing the parametric
 # PSB shape the family encodes directly.
 
@@ -786,7 +786,7 @@ print(
 # `dust_type=0`), and Kriek & Conroy 2013 (`dust_type=4`) — shown
 # against tengri's `calzetti`, `power_law`, and `kriek_conroy` laws.
 # Both sides evaluate the analytic law directly (tengri via
-# `tengri.dust.list_laws`), normalised to `A(λ)/A_V` at 5500 Å, so the
+# `tengri.dust.list_laws`), normalized to `A(λ)/A_V` at 5500 Å, so the
 # comparison is curve against curve with no SSP-convolution noise.
 #
 # The Kriek & Conroy row is compared against FSPS' own `dust_type=4`
@@ -812,7 +812,7 @@ wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
 def _norm_AV(wave, A):
-    """A(λ) normalised to A_V at 5500 Å."""
+    """A(λ) normalized to A_V at 5500 Å."""
     return A / A[np.argmin(np.abs(wave - 5500.0))]
 
 
@@ -937,7 +937,7 @@ save_fig("prospector_05_dust_applied.png")
 #
 # Absorbed stellar UV/optical reappears in the infrared. Prospector
 # enables the Draine & Li (2007) templates with `add_dust_emission=True`,
-# parametrised by `(q_PAH, U_min, γ)` — the FSPS default dust emission.
+# parametrized by `(q_PAH, U_min, γ)` — the FSPS default dust emission.
 # tengri uses its own DL07 template grid and enforces energy balance,
 # `L_IR_emitted ≡ L_absorbed`, to floating point; the residual is
 # annotated on the right.
@@ -1108,7 +1108,7 @@ save_fig("prospector_07_panchromatic.png")
 # %% [markdown]
 # ## §8 Nebular emission
 #
-# FSPS uses the Byler+2017 Cloudy grid (parametrised by `gas_logu`, `gas_logz`);
+# FSPS uses the Byler+2017 Cloudy grid (parametrized by `gas_logu`, `gas_logz`);
 # tengri uses Cue (Li et al. 2025), a neural emulator on a different Cloudy
 # version, so the lines differ accordingly. The panel reports the integrated,
 # continuum-subtracted line luminosity (width- and grid-independent).
@@ -1182,7 +1182,7 @@ save_fig("prospector_08_nebular.png")
 # continuum. tengri's `agn.torus = "nenkova"` is the matching block. We
 # read FSPS' actual torus luminosity from the difference (AGN on − AGN
 # off) and feed the same bolometric luminosity into tengri so the two
-# torus SEDs are normalised consistently.
+# torus SEDs are normalized consistently.
 #
 # tengri's `nenkova` block interpolates the *same* FSPS CLUMPY template
 # library (`Nenkova08_y010_torusg_n10_q2.0`) that Prospector uses, with a
@@ -1191,7 +1191,7 @@ save_fig("prospector_08_nebular.png")
 # not a frozen template. At matched bolometric luminosity the two torus SEDs
 # trace the same templates: the mid-IR peak wavelength and the 10 µm silicate
 # feature coincide, and the remaining amplitude difference comes only from how
-# each code normalises the torus to the AGN bolometric luminosity.
+# each code normalizes the torus to the AGN bolometric luminosity.
 
 # %%
 FAGN = 0.5
@@ -1278,7 +1278,7 @@ from tengri.igm import igm_transmission_madau
 Z_IGM = 4.0
 w_p_igm, T_p_igm = P.igm_transmission(zred=Z_IGM, age_gyr=0.05)
 
-# tengri's Madau is parametrised on observed-frame wavelengths.
+# tengri's Madau is parametrized on observed-frame wavelengths.
 wave_obs = w_p_igm * (1.0 + Z_IGM)
 T_t_igm = np.asarray(igm_transmission_madau(wave_obs, np.asarray(Z_IGM)))
 
@@ -1351,7 +1351,7 @@ resid[mask] = L_t_on_ext[mask] / L_ext[mask] - 1.0
 # Hβ 0.95×) plus line center/width mismatches. So the tight spread is a
 # clean continuum match, not evidence that the lines agree. Below 912 Å both
 # codes absorb the stellar Lyman continuum at `neb_fesc = 0` (the gas
-# reprocesses the ionising photons into nebular emission), so the region
+# reprocesses the ionizing photons into nebular emission), so the region
 # falls to zero on both sides — tengri now applies the same fesc absorption
 # on its two-component dust path (#825), matching FSPS.
 opt = mask & (w_ext >= 1000.0) & (w_ext <= 10000.0)

@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Reproducing Synthesizer with tengri
 #
-# Synthesizer (Lovell et al. 2025, OJA; Roper et al. 2026, JOSS — cite both) is a modular forward-modelling
+# Synthesizer (Lovell et al. 2025, OJA; Roper et al. 2026, JOSS — cite both) is a modular forward-modeling
 # package for synthetic galaxy observables. It builds spectra by extracting from
 # pre-computed HDF5 grids and walking an `EmissionModel` tree — stellar SSPs, a
 # parametric star formation history, attenuation and dust-emission laws, the
@@ -44,7 +44,7 @@
 # **Grids.** This notebook runs on Synthesizer's *test* grids
 # (`synthesizer-download --stellar-test-grids --agn-test-grids --dust-grid`).
 # The test grids are the same physics as the production grids at lower resolution
-# (the AGN test grids sample each photoionisation axis at just two nodes); the
+# (the AGN test grids sample each photoionization axis at just two nodes); the
 # coarseness is a property of both sides equally, so it never appears as a
 # tengri-vs-Synthesizer disagreement.
 #
@@ -152,7 +152,7 @@ print(
 # tengri (black dashed). The lower panel shows the relative residual
 # `|tengri − Synthesizer| / Synthesizer`. Both sides read identical numbers, so
 # the residual sits at the level set by the single-precision round-trip through
-# the shared grid (grey line, 1e-6) — there is no spectral-library difference to
+# the shared grid (gray line, 1e-6) — there is no spectral-library difference to
 # see here.
 
 # %%
@@ -194,7 +194,7 @@ ax_r.set_yscale("log")
 ax_r.set_xlabel(r"$\lambda$ [Å]")
 ax_r.set_ylabel(r"$|\Delta| / L_{\rm Syn}$", fontsize=9)
 ax_r.set_ylim(1e-9, 1e-2)
-ax_r.axhline(1e-6, color="grey", linestyle=":", alpha=0.6, label="single-precision floor")
+ax_r.axhline(1e-6, color="gray", linestyle=":", alpha=0.6, label="single-precision floor")
 ax_r.legend(loc="upper right", fontsize=8)
 ax_r.grid(True, alpha=0.3)
 fig.tight_layout()
@@ -211,7 +211,7 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # ## §2 Star formation history — delayed-τ
 #
 # Synthesizer's `SFH.DelayedExponential` uses `SFR(t) ∝ t · exp(−t/τ)`, peaking at
-# `t = τ`. tengri's `sfh.delayed` is the same closed form. Both normalise to 1 M⊙
+# `t = τ`. tengri's `sfh.delayed` is the same closed form. Both normalize to 1 M⊙
 # formed (Synthesizer via `initial_mass`, tengri via `log_total_mass`).
 #
 # **What the right panel plots.** Not a fine-grid analytic curve — that would
@@ -258,7 +258,7 @@ for ax, title in (
     ax.set_xlim(0, 5)
     ax.grid(True, alpha=0.3)
     ax.set_title(title)
-    ax.axvline(TAU_GYR_FIDUCIAL, color="grey", linestyle=":", alpha=0.6)
+    ax.axvline(TAU_GYR_FIDUCIAL, color="gray", linestyle=":", alpha=0.6)
 ax_l.plot(t_s_cosmic_gyr, sfr_s, "C0-", linewidth=2.0, label=rf"$\tau$ = {TAU_GYR_FIDUCIAL:g} Gyr")
 ax_l.legend(fontsize=9)
 ax_r.plot(t_t_cosmic_gyr, _sfr_history, "C1-", linewidth=2.0)
@@ -273,8 +273,8 @@ save_fig("synthesizer_02_sfh_delayed.png")
 # show `L_ν` vs `λ_rest` for the 10^10 M⊙ fiducial galaxy.
 #
 # Both sides form exactly 10^10 M⊙ and read the same SSPs (§1), so the printed
-# ~1.16× optical ratio is *not* a normalisation error — it is the two codes'
-# independent **SFH discretisations**: Synthesizer integrates
+# ~1.16× optical ratio is *not* a normalization error — it is the two codes'
+# independent **SFH discretizations**: Synthesizer integrates
 # an analytic SFZH onto the SSP age-bin edges (a third of the mass lands in the
 # wide log-spaced bin straddling the SFR peak), while tengri convolves on its
 # 64-point log-lookback grid. The mild chromatic spread (P5–P95 ≈ 1.11–1.19)
@@ -339,7 +339,7 @@ print(
 #
 # Synthesizer's `Calzetti2000` and `PowerLaw` attenuation laws (and a Calzetti law
 # with the 2175 Å Drude bump enabled) against tengri's `calzetti`, `power_law`,
-# and bump-modified laws. Both sides evaluate the analytic law directly, normalised
+# and bump-modified laws. Both sides evaluate the analytic law directly, normalized
 # to `A(λ)/A_V` at 5500 Å — curve against curve, no SSP-convolution noise.
 
 # %%
@@ -956,7 +956,7 @@ print(
 # **Caveat — the downloadable test grids don't distinguish NLR from BLR.**
 # `test_grid_agn-nlr` and `test_grid_agn-blr` are *byte-identical* placeholders,
 # so the BLR overlay here mirrors §9c. A genuine NLR-vs-BLR contrast (density,
-# ionisation, line ratios) needs production grids.
+# ionization, line ratios) needs production grids.
 
 # %%
 w_blr_s, L_blr_s = agn["blr"]
@@ -1169,7 +1169,7 @@ ax_inc.plot(
 # tengri's disc visibility, MEASURED from the composable model (not drawn): we
 # build the unified AGN once with the inclination free, then read the optical
 # disc continuum (5000 Å) as the sightline sweeps. The runner applies a smooth
-# sigmoid mask centred at inc_crit = 90° − θ_torus instead of Synthesizer's hard
+# sigmoid mask centered at inc_crit = 90° − θ_torus instead of Synthesizer's hard
 # step, so the disc visibility — and the inclination itself — stays a
 # differentiable fit parameter. This is the model's one deliberate departure
 # from Synthesizer; the curve below is the model's own output, not an overlay.
@@ -1214,7 +1214,7 @@ tengri_vis = tengri_vis / max(tengri_vis.max(), 1e-30)
 ax_inc.plot(incs, tengri_vis, "C1-", linewidth=2.0, label="tengri (composable model, measured)")
 ax_inc.axvline(
     90.0 - THETA_TORUS,
-    color="grey",
+    color="gray",
     linestyle=":",
     label=rf"$90°-\theta_{{torus}}$ = {90 - THETA_TORUS:g}°",
 )
@@ -1283,7 +1283,7 @@ print(
 # §7 configuration). The top panel is the overlay; the bottom is the fractional
 # residual `tengri / Synthesizer − 1` with the ±25 % band shaded. The optical
 # normalization ratio and its 16–84 % spread are reported — they carry the §3
-# SFH-discretisation offset, which is the dominant stellar-continuum difference.
+# SFH-discretization offset, which is the dominant stellar-continuum difference.
 
 # %%
 import chex
