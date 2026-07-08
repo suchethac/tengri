@@ -35,8 +35,11 @@ the steeply logU-varying lines. The ionizing-spectrum shape is
 
 from __future__ import annotations
 
+import contextlib
 import dataclasses
 import itertools
+import math
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -86,15 +89,34 @@ class NebularGridTable:
 
 
 def _axis_range(spec, name):
-    """(lo, hi) grid bounds for a free axis — from its prior, else the default."""
-    try:
-        dist = spec.get_distribution(name)
-        lo = float(getattr(dist, "low", getattr(dist, "minval", None)))
-        hi = float(getattr(dist, "high", getattr(dist, "maxval", None)))
-        if lo < hi:
-            return lo, hi
-    except (TypeError, ValueError, AttributeError, KeyError):
-        pass
+    """(lo, hi) grid bounds for a free axis — from its prior's finite support.
+
+    Reads the bounded prior's support (``bounds`` tuple, else ``lo``/``hi`` — the
+    attributes tengri's :class:`Uniform` / :class:`LogUniform` expose). Only when
+    the prior has no finite support (e.g. an unbounded Gaussian used as an axis)
+    does it fall back to :data:`_DEFAULT_RANGE`, and it warns rather than silently
+    ignoring the prior — a too-narrow grid would extrapolate and bias the fit.
+    """
+    dist = spec.get_distribution(name)
+    candidates = []
+    b = getattr(dist, "bounds", None)
+    if b is not None:
+        with contextlib.suppress(TypeError, ValueError, IndexError):
+            candidates.append((float(b[0]), float(b[1])))
+    lo, hi = getattr(dist, "lo", None), getattr(dist, "hi", None)
+    if lo is not None and hi is not None:
+        with contextlib.suppress(TypeError, ValueError):
+            candidates.append((float(lo), float(hi)))
+    for clo, chi in candidates:
+        if math.isfinite(clo) and math.isfinite(chi) and clo < chi:
+            return clo, chi
+    warnings.warn(
+        f"nebular grid: prior for {name!r} ({type(dist).__name__}) exposes no "
+        f"finite [lo, hi] support; falling back to default range "
+        f"{_DEFAULT_RANGE[name]}. If the prior is wider, pass ranges={{'{name}': "
+        f"(lo, hi)}} or the grid will extrapolate. ",
+        stacklevel=3,
+    )
     return _DEFAULT_RANGE[name]
 
 

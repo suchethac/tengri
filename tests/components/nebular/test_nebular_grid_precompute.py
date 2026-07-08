@@ -126,3 +126,18 @@ def test_reconstruct_is_jittable_and_gradient_safe():
     val = jax.jit(total)(jnp.asarray(-2.5))
     g = jax.jit(jax.grad(total))(jnp.asarray(-2.5))
     assert np.isfinite(float(val)) and np.isfinite(float(g))
+
+
+def test_axis_range_reads_prior_not_default():
+    """The grid axis spans the PRIOR support, not the fallback default range.
+
+    Regression: _axis_range read the wrong Uniform attributes (.low/.high) and
+    silently fell back to _DEFAULT_RANGE for every prior — the 'grid adapts to the
+    prior' claim was dead. A prior WIDER than the default (logU here) must widen
+    the axis; the old bug would clamp it to the default (-4, -1).
+    """
+    m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-5.0, 0.0)}, sfh_wild=FIXED)
+    table = precompute_nebular_grid(m, _LW, n_grid=4)
+    ax = np.asarray(table.axes[table.axis_names.index("neb_logU")])
+    assert ax.min() == pytest.approx(-5.0, abs=1e-6), f"axis min {ax.min()} != prior -5.0"
+    assert ax.max() == pytest.approx(0.0, abs=1e-6), f"axis max {ax.max()} != prior 0.0"

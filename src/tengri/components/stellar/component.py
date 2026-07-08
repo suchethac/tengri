@@ -326,6 +326,51 @@ __all__ = [
 _HI_LIMIT_AA: float = 911.76
 
 
+def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    r"""Ionizing photon rate :math:`Q_H` [photons/s] from a rest-frame L_nu SED.
+
+    THE single source of the Q_H integral — used by
+    :meth:`StellarSEDComponent.apply` (full SED) and by
+    :meth:`StellarSEDComponent.compute_nion` (SED-free, ionizing slice only), so
+    the two can never drift. Integrates :math:`\int_{\nu>c/\lambda_{\rm HI}}
+    L_\nu/(h\nu)\,d\nu` with the partial-bin Lyman-limit correction (#537): the
+    boundary bin's contribution is a rectangle from ``nu_edge`` to the last
+    ionizing grid point, not the trapezoid triangle a hard mask would give.
+
+    Parameters
+    ----------
+    sed_lnu : ndarray, shape (n_wave,)
+        Rest-frame stellar :math:`L_\nu` [erg/s/Hz] (pre-dust intrinsic SED).
+    wave : ndarray, shape (n_wave,)
+        Wavelength grid [Angstrom]; must span the Lyman limit (a few points
+        above 911.76 A suffice — the boundary bin needs the first non-ionizing
+        point).
+
+    Returns
+    -------
+    ndarray, shape ()
+        Ionizing photon rate [photons/s].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. Bit-exact whether given the full SSP grid or an
+    ionizing-only slice (the non-ionizing region contributes zero to the mask).
+    """
+    nu = C_AA / wave
+    nu_edge = C_AA / _HI_LIMIT_AA
+    integrand = sed_lnu / (H_PLANCK * nu)
+    ionizing_mask = wave < _HI_LIMIT_AA
+    integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
+    idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(wave.shape[0]), -1))
+    idx_above = idx_below + 1
+    integrand_below = integrand[idx_below]
+    # Boundary bin: subtract the trapezoid triangle, add the true rectangle.
+    triangle_overcount = 0.5 * integrand_below * jnp.abs(nu[idx_below] - nu[idx_above])
+    rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
+    nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
+    return nion_bulk - triangle_overcount + rectangle_correct
+
+
 @dataclass(frozen=True)
 class StellarSEDComponentConfig(SEDComponentConfig):
     """Frozen knobs for :class:`StellarSEDComponent`.
@@ -1379,30 +1424,9 @@ class StellarSEDComponent:
         # physical Lyman discontinuity and produces a Q_H consistent
         # with CIGALE's tabulated ``stellar.n_ly`` to within numerical
         # noise at any SSP grid spacing.
-        nu = C_AA / wave
-        nu_edge = C_AA / _HI_LIMIT_AA
-        integrand = sed_intrinsic / (H_PLANCK * nu)
-        ionizing_mask = wave < _HI_LIMIT_AA
-        integrand_masked = jnp.where(ionizing_mask, integrand, 0.0)
-        # Find the last ionizing grid point (wave_below < 911.76) and the
-        # first non-ionizing one (wave_above ≥ 911.76).
-        idx_below = jnp.argmax(jnp.where(ionizing_mask, jnp.arange(len(wave)), -1))
-        idx_above = idx_below + 1
-        nu_below = nu[idx_below]
-        nu_above = nu[idx_above]
-        integrand_below = integrand[idx_below]
-        # Bulk trapezoid integrates over every adjacent pair (including
-        # the (905, 915) boundary bin where one side has ``integrand``
-        # and the other is masked to zero — yielding a triangle of
-        # area ½·integrand_below·|ν_below − ν_above|). For SSPs with a
-        # sharp Lyman discontinuity the *correct* contribution from
-        # that bin is a rectangle from ν_edge to ν_below
-        # (= integrand_below · |ν_below − ν_edge|). Subtract the
-        # triangle, add the rectangle:
-        triangle_overcount = 0.5 * integrand_below * jnp.abs(nu_below - nu_above)
-        rectangle_correct = integrand_below * jnp.abs(nu_below - nu_edge)
-        nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
-        nion = nion_bulk - triangle_overcount + rectangle_correct
+        # Q_H via the single-sourced integral (partial-bin Lyman correction
+        # lives in _integrate_nion, shared with compute_nion for bit-exactness).
+        nion = _integrate_nion(sed_intrinsic, wave)
 
         # ── 11b. Project to pipeline wavelength grid ────────────────
         # When the pipeline runs on a panchromatic grid (radio/X-ray
@@ -1762,6 +1786,48 @@ class StellarSEDComponent:
         joint_weights = weights * _young_mult[None, :]
         joint_weights = joint_weights / joint_weights.sum()
         return joint_weights, total_mass, ssp_ages_yr
+
+    def compute_nion(self, params, ssp_data=None):
+        r"""SED-free ionizing photon rate :math:`Q_H` — no full-wavelength SED.
+
+        Reconstructs the stellar intrinsic SED on the **ionizing slice only**
+        (:math:`\lambda` below ~2x the Lyman limit — enough to include the
+        boundary bin) from the SED-free CSP weights (:meth:`compute_joint_weights`)
+        and integrates via the shared :func:`_integrate_nion`. Matches the
+        ``nion`` that :meth:`apply` publishes (both use the same integral and the
+        same reconstruction identity, ``sed = total_mass * L_sun * sum_ma
+        jw*ssp_flux``) without the ~6000-wavelength einsum — the FeaturePrecomp
+        entry for the Q_H-scaled nebular grid.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict (same shape as :meth:`apply`).
+        ssp_data : SSPData, optional
+            Override for the model's SSP grid.
+
+        Returns
+        -------
+        ndarray, shape ()
+            Ionizing photon rate [photons/s]. Raises (via
+            :meth:`compute_joint_weights`) for unsupported SFH / metallicity.
+
+        Notes
+        -----
+        **JIT-compatible**: yes. The ionizing-slice mask is static (SSP wave grid
+        is concrete), so the slice shape is fixed under jit.
+        """
+        ssp = ssp_data if ssp_data is not None else self.ssp_data
+        joint_weights, total_mass, _ = self.compute_joint_weights(params, ssp_data=ssp)
+        wave = ssp.ssp_wave
+        # Ionizing slice + a buffer so the boundary bin's first non-ionizing
+        # point is included; the non-ionizing region contributes zero to the
+        # Lyman mask, so slicing is bit-exact with the full-grid integral.
+        mask = wave < (2.0 * _HI_LIMIT_AA)
+        sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
+            joint_weights, ssp.ssp_flux[:, :, mask], axes=([0, 1], [0, 1])
+        )
+        return _integrate_nion(sed_ion, wave[mask])
 
 
 def _time_weighted_sfr(

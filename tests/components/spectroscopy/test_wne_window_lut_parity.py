@@ -291,6 +291,24 @@ def test_compute_joint_weights_bitidentical_to_predict_state():
     )
 
 
+def test_compute_nion_matches_predict_state():
+    """SED-free Q_H (compute_nion) matches the nion predict_state publishes.
+
+    compute_nion reconstructs only the ionizing slice (no ~6000-wave einsum) and
+    reuses the shared _integrate_nion; it must match the exact forward's nion to
+    floating-point noise, else the Q_H-scaled nebular fast path diverges.
+    """
+    m, _ssp = _dust_model()
+    stellar = _stellar_of(m)
+    worst = 0.0
+    for i in range(6):
+        p = dict(m.spec.sample(jax.random.PRNGKey(i)))
+        nion_exact = float(np.sum(np.asarray(m.predict_state(p).derived["nion"])))
+        nion_fast = float(np.asarray(stellar.compute_nion(p)))
+        worst = max(worst, abs(nion_fast - nion_exact) / max(abs(nion_exact), 1e-30))
+    assert worst < 1e-6, f"compute_nion diverges from predict_state by {worst:.2e}"
+
+
 def test_fast_path_is_faster_than_full_grid(real_ssp_only):
     """The window-LUT fast path must be materially faster than the full-grid path.
 
