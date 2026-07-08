@@ -847,14 +847,22 @@ def test_orchestrator_norm_close_to_legacy(ssp):
 
 
 def test_orchestrator_const_close_to_legacy(ssp):
-    """``const`` (constant SFH between two cosmic times) — orchestrator vs legacy."""
+    """``const`` (constant SFH between two lookback times) — orchestrator vs legacy.
+
+    Convention: ``start_gyr`` is when star formation *began* (the OLDER
+    lookback bound) and ``end_gyr`` when it stopped. The original fixture had
+    them swapped (start 0.5, end 5.0), which encodes an *empty* SF window —
+    both paths then compared DSPS's SFR_MIN-floor garbage against itself and
+    passed vacuously. The #964 CIC kernel returns honest zero weights for an
+    empty window, which exposed the swap.
+    """
     _check_sfh_variant_equivalence(
         ssp,
         "const",
         {
             "sfh_const_log_total_mass": 1.0,
-            "sfh_const_start_gyr": 0.5,
-            "sfh_const_end_gyr": 5.0,
+            "sfh_const_start_gyr": 5.0,
+            "sfh_const_end_gyr": 0.5,
         },
     )
 
