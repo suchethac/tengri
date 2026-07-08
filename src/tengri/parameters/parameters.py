@@ -870,6 +870,10 @@ class Parameters:
         # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young/birth-cloud
         # only (default; bagpipes). See DustSEDComponent.lyc_absorb_all.
         self.dust_lyc_absorb_all = bool(kwargs.pop("dust_lyc_absorb_all", False))
+        # Include the LyC (λ < 912 Å) in the dust energy-balance integral
+        # (FSPS/Prospector parity, ~10% higher L_IR for star-forming galaxies,
+        # #961) vs the canonical LyC-masked L_absorbed (default; #922, CIGALE).
+        self.dust_eb_include_lyc = bool(kwargs.pop("dust_eb_include_lyc", False))
 
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)

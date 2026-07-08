@@ -37,6 +37,15 @@ class DraineLi2007IRSEDComponent(EmissionPort):
     first call (at trace time). After lazy loading, all subsequent calls
     are pure JAX.
 
+    **3.3 µm PAH vs FSPS/Prospector (#963)**: tengri carries the original
+    Draine & Li (2007) 3.3 µm PAH feature. FSPS ships modified DL07 tables
+    with that one feature halved ("3.3um PAH reduced by 50%" per the FSPS
+    ``dust/dustem`` headers); everywhere else the two tabulations agree to
+    ≤1.2 % at matched (q_PAH, U_min). Bands sampling rest-frame ~3–3.6 µm
+    (e.g. WISE W1 at low z) therefore sit higher here than in
+    FSPS/Prospector — measured +65 % in the dust-only component, ~+5 % at
+    band level for a star-forming galaxy where starlight dominates W1.
+
     References
     ----------
     .. [1] Draine, B. T. & Li, A., 2007, "Infrared Emission from Dust",
