@@ -53,9 +53,12 @@ from tengri.utils.grid_interp import interp_nd_pchip
 #: a smooth interpolation axis) and the ionizing-spectrum params are SSP-derived.
 _CANDIDATE_AXES = ("met_logzsol", "neb_logU", "neb_logZ_gas")
 
-#: Fallback grid bounds when a free axis's prior exposes no ``low``/``high``.
+#: Fallback grid bounds used ONLY when a free axis's prior exposes no finite
+#: support (e.g. an unbounded Gaussian). Kept at least as wide as the standard
+#: priors (met_logzsol ~ Uniform(-2, 0.2/0.5)) so the fallback still spans the
+#: sampled region — the primary path reads the prior's actual bounds.
 _DEFAULT_RANGE = {
-    "met_logzsol": (-1.8, 0.4),
+    "met_logzsol": (-2.0, 0.5),
     "neb_logU": (-4.0, -1.0),
     "neb_logZ_gas": (-1.0, 0.5),
 }
@@ -148,8 +151,8 @@ def precompute_nebular_grid(
         Rest-frame vacuum target line wavelengths [Angstrom].
     n_grid : int, default 16
         Grid points per free axis. Denser → tighter interpolation (the met
-        dependence is nonlinear near solar; 16-24 gives < few e-3 on strong DESI
-        lines with the triweight kernel).
+        dependence is nonlinear near solar; 16-24 gives < few e-2 on strong DESI
+        lines with the node-exact PCHIP kernel).
     ranges : dict, optional
         Override ``{param: (lo, hi)}`` grid bounds. Defaults to each free param's
         prior support (else :data:`_DEFAULT_RANGE`).
@@ -240,8 +243,8 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
 
     Notes
     -----
-    **JIT-compatible / gradient-safe**: yes — triweight interpolation + a scalar
-    multiply + the cosmology divisor.
+    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP interpolation + a
+    scalar multiply + the cosmology divisor.
     """
     if not table.axis_names:
         log_lpq = table.log_line_per_qh
