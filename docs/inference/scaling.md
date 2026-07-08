@@ -17,9 +17,8 @@ benchmark.
 
 ## Setup
 
-* **Forward model.** Stochastic SFH = `tsnorm + field`: a parametric
-  truncated-skew-normal SFR peak plus a 128-node correlated-field
-  residual whose PSD is governed by hyperparameters
+* **Forward model.** Stochastic SFH: truncated-skew-normal SFR peak + 128-node
+  correlated-field residual with PSD governed by hyperparameters
   $(\sigma_{\rm PSD}, \tau_{\rm PSD})$.
 * **Per-galaxy free parameters** (10): peak SFR, peak lookback time,
   width, skew, truncation, $\sigma_{\rm PSD}$, $\tau_{\rm PSD}$,
@@ -62,14 +61,13 @@ from $N=4$ to $N=8192$, well under the 30 GB budget). Wall time goes
 linear in $N$ past $N \sim 128$ for both engines, with geoVI ~3× slower
 per iteration than MGVI; both plateau at 6 iterations once $N \gtrsim 64$.
 
-The headline scientific result is a negative one: with SDSS-only
-photometry the $\tau_{\rm PSD}$ marginal sits at ~150 Myr versus the
-injected truth of 20 Myr — the posterior collapses to the prior. The
-$\sigma_{\rm PSD}$ marginal lands near truth only because its prior mean
-($2.05$) happens to be near truth. The constraint half-width does not
-follow $1/\sqrt{N}$; it follows the prior. **Photometric SDSS broadband
-data carries almost no information about stochastic-SFH PSD on Myr
-timescales.**
+The headline scientific result is negative: with SDSS-only photometry,
+the $\tau_{\rm PSD}$ marginal sits at ~150 Myr versus the injected truth
+of 20 Myr — the posterior collapses to the prior. The $\sigma_{\rm PSD}$
+marginal lands near truth only because its prior mean ($2.05$) happens to
+match. The constraint half-width does not follow $1/\sqrt{N}$; it follows
+the prior. **Photometric SDSS broadband data cannot constrain
+stochastic-SFH PSD on Myr timescales.**
 
 ## Rich run — FUV/NUV + SDSS + JHK at 5% noise
 
@@ -115,7 +113,7 @@ JSON file changes, which is useful during long sweeps.
 parameter — it controls how many galaxies are vmapped per inner
 `lax.map` step in the catalog VI engine. K=1 streams one galaxy at a
 time (memory $\mathcal{O}(1)$ in N for `native_vi_linear`); K>1 trades
-memory for chunk parallelism.
+memory for parallelism.
 
 The library default is **K=1** because it is the only choice that's
 universally safe across all (N, hardware) combinations. The empirical
@@ -164,20 +162,18 @@ choice.
 | N > 1024 | 16 GB | 16 |
 | N > 1024 | ≥ 32 GB | 32 |
 
-geoVI follows the same shape but with longer absolute wall-times and
-slightly tighter memory headroom (Newton-CG inner solve dominates
-graph size). The K=32 elbow is the same.
+geoVI follows the same elbow; wall times are ~3× longer and memory
+headroom tighter (Newton-CG dominates the graph). The K=32 sweet spot
+holds.
 
 ## Spectroscopic run — covers Hα, Hβ, [OIII], 4000 Å break
 
-The basic and rich runs are broadband-only. Even rich (FUV→Ks) cannot
-constrain $\tau_{\rm PSD}$ on Myr timescales because every photometric
-band is an *integral* over time-weighted SFR — UV gives ~5–100 Myr
-total, NIR gives stellar mass, neither resolves the *correlation
-length* of SFH fluctuations. The signature that actually pins
-$\tau_{\rm PSD}$ is Hα/UV ratio: Hα probes ~10 Myr SFR (only stars
-producing ionizing photons), FUV ~100 Myr; their mismatch *is* the
-burstiness signal (Mehta+23, Asada+23, Faisst+19).
+Basic and rich runs are broadband-only. Even rich (FUV→Ks) cannot
+constrain $\tau_{\rm PSD}$ on Myr timescales: every photometric band is
+an *integral* over time-weighted SFR (UV: ~5–100 Myr, NIR: stellar mass).
+Neither resolves the *correlation length* of SFH fluctuations. The Hα/UV
+ratio pins $\tau_{\rm PSD}$: Hα probes ~10 Myr SFR, FUV ~100 Myr. Their
+mismatch is the burstiness signal (Mehta+23, Asada+23, Faisst+19).
 
 `PopulationFitter` supports `data_type="spectroscopy"`, which
 self-consistently produces continuum *and* emission lines from a
@@ -203,11 +199,10 @@ photometry).
 :width: 100%
 :align: center
 
-Spectroscopic mode: 3000–7500 Å rest at R≈500, 5% noise. Hα + Hβ +
-[OIII] together with the 4000 Å break and continuum SFH information
-let σ_PSD and τ_PSD posteriors recover the injected truth (σ=2,
-τ=20 Myr) in a way broadband photometry cannot. Run with
-`bench/scripts/benchmark_vi_xlarge.py --spec-obs --noise-frac 0.05 --ks 1
+Spectroscopic mode: 3000–7500 Å rest at R≈500, 5% noise. Hα, Hβ, [OIII],
+and the 4000 Å break allow σ_PSD and τ_PSD posteriors to recover the
+injected truth (σ=2, τ=20 Myr) in a way broadband photometry cannot. Run
+with `bench/scripts/benchmark_vi_xlarge.py --spec-obs --noise-frac 0.05 --ks 1
 --ns 4,8,...,1024`.
 ```
 
@@ -228,18 +223,16 @@ via a monkey-patched `predict_photometry`.
 
 Joint mode: 10-band photometry + 4 emission-line luminosities (Hα, Hβ,
 [OIII] 5007, [OII] 3727), 5% noise, MGVI K=1, N=4..512. **σ_PSD median
-brackets truth (σ=2.0) at every N from 4 onward** — broadband alone
-could only put the median on truth by prior-coincidence, joint mode
-puts it there because the data demands it. **But the constraint width
-does NOT tighten with N**: σ half-width plateaus around ~0.85 (≈ prior
-width) across 7 doublings of N (panel: bottom-right). Adding more
-galaxies adds independent realizations of an information-saturated
-posterior — the four lines fix σ on average but don't supply the extra
-independent dimensions needed to shrink it. **τ_PSD remains pinned at
-the prior mean** (~150 Myr): four scalar line fluxes per galaxy don't
-discriminate correlation length on Myr timescales. Run with
-`bench/scripts/benchmark_vi_xlarge.py --joint-obs --noise-frac 0.05 --ks 1
---ns 4,8,...,512`.
+brackets truth (σ=2.0) at every N from 4 onward** — broadband alone lands
+on truth by prior coincidence; joint mode lands there because the data
+demands it. **The constraint width does not tighten with N**: σ half-width
+plateaus ~0.85 (≈ prior width) across 7 doublings of N (bottom-right panel).
+Adding more galaxies adds independent realizations of an information-saturated
+posterior. The four lines fix σ on average but supply no extra independent
+dimensions to shrink it. **τ_PSD remains pinned at the prior mean** (~150 Myr):
+four scalar line fluxes cannot discriminate correlation length on Myr
+timescales. Run with `bench/scripts/benchmark_vi_xlarge.py --joint-obs
+--noise-frac 0.05 --ks 1 --ns 4,8,...,512`.
 ```
 
 **Key takeaway from the joint experiment:** *getting the median right
@@ -256,10 +249,8 @@ can plausibly shrink uncertainty 1/√N.
 ## Caveats
 
 * **Joint photometry + line-fluxes** for `PopulationFitter` is not yet
-  wired — the spec-mode covers the same physics by including Hα as
+  wired — spec-mode covers the same physics by including Hα as
   part of the spectrum. A direct joint photometry+`LineFluxData` mode
-  would be a small (~30-line) extension to the per-galaxy predict
-  path; tracked as future work.
-* **CPU only.** All numbers above are on CPU. The pure-JAX engines
-  carry the same kernels to GPU; chunk parallelism (large $K$) gives
-  far larger speedups there.
+  is a small (~30-line) extension to the per-galaxy predict path.
+* **CPU only.** All benchmarks are CPU. The pure-JAX engines carry the same
+  kernels to GPU; large $K$ gives far larger speedups there.

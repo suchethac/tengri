@@ -38,12 +38,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Files scanned: same scope that was converted in #819.
-DEFAULT_ROOTS = ("src", "tests", "docs", "examples", "notebooks")
+# Files scanned: same scope that was converted in #819, plus the
+# repo-root prose files (README slipped through the original sweep).
+DEFAULT_ROOTS = ("src", "tests", "docs", "examples", "notebooks", "README.md", "CONTRIBUTING.md")
 SUFFIXES = (".py", ".md", ".rst")
 # Excluded path fragments: generated output and archived notebook trees.
 EXCLUDE_PARTS = (
     "auto_examples",  # sphinx-gallery generated from examples/
+    "_build",  # local sphinx build output under docs/
     "archive",
     "archive_2",
     "_migrated_galleries",

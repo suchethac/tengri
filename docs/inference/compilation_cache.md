@@ -19,12 +19,11 @@ tengri auto-enables this cache on `import tengri`.
 import tengri  # cache auto-enabled at ~/.cache/tengri_jax_cache
 ```
 
-- Cache directory: `~/.cache/tengri_jax_cache` (matches the legacy path,
-  so existing user caches are preserved).
-- Min compile time threshold: 5 s — below this, compiles are not
-  persisted. This keeps the cache focused on the genuinely expensive
-  compiles (geoVI, MGVI, MCMC warmups) and skips the long tail of small
-  SSP/dust kernels that compile in 1–2 s and would otherwise bloat disk.
+- Cache directory: `~/.cache/tengri_jax_cache`.
+- Compiles faster than `min_compile_time_secs` are not persisted. The
+  default is tuned so that every kernel that costs real wall time — from
+  per-filter photometry kernels up to geoVI — survives a restart; see
+  `tengri.enable_persistent_cache` for the knob.
 
 ## Configuration
 
@@ -43,15 +42,11 @@ Disable entirely:
 export TENGRI_DISABLE_JAX_CACHE=1
 ```
 
-Programmatic control (for notebook cells where setting env vars before
-import is awkward):
+Programmatic control (for notebook cells):
 
 ```python
 import tengri
-tengri.enable_persistent_cache(
-    "/scratch/jax_cache",
-    min_compile_time_secs=5.0,
-)
+tengri.enable_persistent_cache("/scratch/jax_cache")
 ```
 
 `enable_persistent_cache` is idempotent — calling it again with the same
@@ -72,8 +67,8 @@ Implications:
 - **Different RNG seeds hit the same cache** — `PRNGKey` concrete values
   are not part of the key. Re-running with `key=jax.random.PRNGKey(42)`
   vs `PRNGKey(43)` is free after the first compile.
-- **Different `n_samples` triggers a fresh compile** — once. Subsequent
-  runs at the same `n_samples` hit the cache.
+- **Different `n_samples` triggers one fresh compile.** Subsequent runs at
+  the same `n_samples` hit the cache.
 - **A new JAX/jaxlib install invalidates everything.** Wipe the cache
   after `pip install -U jax`:
 
@@ -107,10 +102,9 @@ print(tengri.cache_size_bytes() / 1024**2, "MB")
 - **Benchmark sweeps.** `bench/scripts/benchmark_vi_xlarge.py` spawns one
   subprocess per `(N, K)` cell for clean peak-RSS measurement; the
   cache amortizes compile cost across the entire grid.
-- **Resume after crash.** Cache entries are persisted at compile
-  *finalization* (before run starts). A worker that finishes compile
-  and then crashes during run still leaves a usable artifact for the
-  next attempt.
+- **Resume after crash.** Cache entries are persisted after compile
+  completes. A worker that crashes mid-run leaves a usable artifact for
+  the next attempt.
 
 ## What it doesn't fix
 
@@ -125,7 +119,7 @@ print(tengri.cache_size_bytes() / 1024**2, "MB")
   changing it is a different cache key. The benchmark grid holds it
   fixed at 6.
 
-## Three-layer cache architecture (Phase B, 2026-05)
+## Three-layer cache architecture
 
 The on-disk persistent cache described above is one of three independent
 caches that work together. Each handles a different reuse boundary:

@@ -352,3 +352,21 @@ def test_infer_citation_keys_backend_adds_citations():
     g._last_backend = "mcmc_nuts"
     keys = g._infer_citation_keys()
     assert "blackjax" in keys
+
+
+def test_flux_unit_table_internally_consistent():
+    """Regression: the Jansky ladder in _FLUX_UNIT_TO_CGS must be decades apart.
+
+    Found 2026-07-08 while fact-checking the docs: ``uJy`` carried the Jy
+    factor (1e-23, a 1e6 silent flux error) and ``maggies`` carried
+    3631x the mJy factor (a 1e3 error). 1 Jy = 1e-23 erg/s/cm2/Hz and
+    1 maggie = 3631 Jy define the whole table.
+    """
+    from tengri.facade import _FLUX_UNIT_TO_CGS as units
+
+    jy = units["Jy"]
+    assert jy == 1e-23
+    assert units["mJy"] == pytest.approx(jy * 1e-3)
+    assert units["uJy"] == pytest.approx(jy * 1e-6)
+    assert units["nJy"] == pytest.approx(jy * 1e-9)
+    assert units["maggies"] == pytest.approx(3631 * jy)

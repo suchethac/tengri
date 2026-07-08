@@ -8,14 +8,14 @@
 Tengri is a panchromatic galaxy SED inference library, written in
 JAX. The same forward model covers stellar populations, dust,
 nebular emission, AGN, IGM, radio, and X-ray. Inference is modular too: the `Fitter`
-interface borrows optimisers from `optax`, samplers from `BlackJAX`,
+interface borrows optimizers from `optax`, samplers from `BlackJAX`,
 and variational inference from `NIFTy.re`, so a new backend lands as
 a registration rather than a port. Gradients are available
 everywhere, and they are exact.
 
 Tengri is pre-1.0 and developed as a community effort. The API is
 still moving in places, and the repository will move to the
-`tengri-project` GitHub organisation shortly, where collaborative
+`tengri-project` GitHub organization shortly, where collaborative
 development and issue tracking will live going forward.
 
 **Documentation:** [suchethacooray.com/tengri](https://suchethacooray.com/tengri/) · **Notebooks:** [`notebooks/`](https://github.com/suchethac/tengri/tree/main/notebooks)
@@ -36,11 +36,11 @@ three.
 
 JIT compilation gets the full physical model down to tens of
 microseconds per call on a single CPU core, which is enough for
-catalogue-scale inference without putting a neural emulator in the
+catalog-scale inference without putting a neural emulator in the
 loop. Exact gradients make HMC, variational inference, and Laplace
 approximation work in the $D \gtrsim 100$ parameter spaces where
 bursty correlated-field SFHs and hierarchical population fits live.
-And the codebase is organised so that physics lives in components and
+And the codebase is organized so that physics lives in components and
 instruments live in observation, which means a new SFH family, dust
 law, or AGN template lands as one file without any edits to the
 sampling engine.
@@ -102,7 +102,7 @@ Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. 
 
 ```python
 import tengri
-tengri.download_ssp()           # -> data/ssp_fsps_v3.2.h5 (or $TENGRI_DATA_DIR)
+tengri.download_ssp()           # -> data/fsps_prsc_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
 tengri.list_known_ssps()        # other grids
 ```
 
@@ -122,7 +122,7 @@ from tengri import (
     Observation, Photometry, load_ssp_data, recipes,
 )
 
-ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
+ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
@@ -239,12 +239,14 @@ For anything that doesn't fit in an issue (collaborations, the
 ## Reproduction
 
 Cross-validation against the established panchromatic SED codes is
-catalogued in
+cataloged in
 [docs/reproduction/](https://suchethacooray.com/tengri/reproduction/index.html).
-The first comparison is against [CIGALE](https://cigale.lam.fr/),
-component-for-component agreement on the AGN, dust, nebular, and
-X-ray paths, with a side-by-side notebook in the works. Prospector,
-BAGPIPES, MAGPHYS, x-cigale, GRAHSP, and Synthesizer follow.
+Five comparisons are live — [CIGALE](https://cigale.lam.fr/), BAGPIPES,
+Prospector/FSPS, AGNFITTER-RX, and ProSpect. Each is a notebook that
+puts the external code's output and tengri's on the same axes,
+component by component, and closes with a full-SED head-to-head with
+residuals. A Synthesizer comparison is written and under revision;
+MAGPHYS, x-cigale, and GRAHSP are next.
 
 ## Citation
 

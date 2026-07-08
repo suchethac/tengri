@@ -10,11 +10,7 @@ Scripts live under
 the single entry point is [Health check & dispatcher](#health-check-and-dispatcher).
 
 ```{warning}
-Numbers below were measured April–May 2026 on JAX 0.9 / Apple M-series
-and some pre-date recent forward-model changes. Re-run the relevant
-script before quoting in a paper or PR;
-[`bench/reports/`](https://github.com/suchethac/tengri/tree/main/bench/reports)
-carries the date of every measurement.
+Numbers below were measured April–May 2026 on JAX 0.9 / Apple M-series and may predate recent changes. Re-run the relevant script before citing in papers or PRs. Dates and full results: [`bench/reports/`](https://github.com/suchethac/tengri/tree/main/bench/reports).
 ```
 
 ## Headline numbers (Apple M-series CPU, x64, JAX 0.9, last run May 2026)
@@ -31,12 +27,11 @@ running on a single CPU core:
 | + radio + X-ray + AGN | 76.4 ms | 4.6 ms | 2.44 ms (31×) |
 | Kitchen sink (all emitters) | **76.1 ms** | **4.6 ms** | **2.45 ms** (31×) |
 
-The columns are the three internal forward strategies, selected at build time:
-**Exact** = `approx=None` (default; exact wave-grid integration), **Hybrid
-(precomputed)** = `approx=WavePrecomp()` (the SSP × filter lookup-table fast
-path), and **Compositional** = the default fused JIT kernel when no `approx=`
-LUT is requested. There is no `mode=` argument on `predict_photometry`; the
-strategy is fixed when the `SEDModel` is constructed.
+The columns show three internal forward strategies (selected at build time):
+**Exact** (`approx=None`, default), **Hybrid (precomputed)**
+(`approx=WavePrecomp()`, SSP×filter LUT), and **Compositional** (default
+fused JIT kernel when no `approx=`). The strategy is fixed at `SEDModel`
+construction.
 
 — *full table at [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md)*
 
@@ -139,33 +134,22 @@ tracks which scripts are due for a re-run.
 
 ## Hardware notes
 
-- All numbers above are **single CPU core** on Apple M-series hardware.
-  Tengri runs on JAX, so the same code executes on GPU/TPU without
-  modification — but those platforms have not been benchmarked. See the
-  [JAX installation guide](https://docs.jax.dev/en/latest/installation.html)
-  for GPU/TPU setup.
-- JAX Metal (Apple GPU) is experimental and causes test failures; CPU
-  is the supported reference platform for benchmarks. Set
-  `JAX_PLATFORMS=cpu` to be explicit.
-- Memory: smooth D = 7 fits run in ~100 MB; stochastic D = 137 in
-  ~1.5 GB. NUTS warmup with `dense_mass=True` peaks 3–6× steady state
-  on small models and can hit 20+ GB on D ≥ 8 with `dense_basis` SFHs;
-  multi-fit notebooks need `dense_mass=False`. See
-  [Memory expectations](memory.md) for the full table and the two
-  recurring OOM patterns.
+- All numbers above are **single CPU core** on Apple M-series. Tengri runs on JAX, so GPU/TPU work without modification but are not benchmarked. See [JAX installation](https://docs.jax.dev/en/latest/installation.html) for setup.
+- JAX Metal (Apple GPU) is experimental and causes test failures. CPU is the
+  reference platform. Set `JAX_PLATFORMS=cpu` explicitly.
+- **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS
+  warmup with `dense_mass=True` peaks 3–6× steady state; can hit 20+ GB on D
+  ≥ 8 with `dense_basis` SFHs. Multi-fit notebooks need `dense_mass=False`.
+  See [Memory expectations](memory.md).
 
 ## When numbers look wrong
 
-If `python -m tengri.bench` shows a much slower 1-galaxy timing than
-the table above:
+If `python -m tengri.bench` shows slower 1-galaxy timing than the table:
 
-1. Confirm `x64: True` (some downstream behavior assumes 64-bit).
-2. Confirm `default device: cpu` — Metal sometimes silently picks
-   itself up and slows things down. Force CPU with `JAX_PLATFORMS=cpu`.
-3. Check the cache size — if it's in the GB range with hundreds of
-   files, `tengri.clear_cache()` after a JAX upgrade is sometimes the
-   fix.
-4. The default `bench` SSP grid is whatever first matches `data/ssp_*.h5`;
-   a multi-Z, full-α/Fe grid is meaningfully slower than the
-   `prsc_miles` grid used in `notebooks/00_quickstart`. The relative
-   numbers (vmap speedup, exact-vs-hybrid ratio) are what matters.
+1. Confirm `x64: True`.
+2. Confirm `default device: cpu`. Metal sometimes silently activates; force
+   CPU with `JAX_PLATFORMS=cpu`.
+3. Check cache size. If in the GB range, try `tengri.clear_cache()` after JAX upgrade.
+4. The default SSP grid is the first `data/ssp_*.h5` found. Multi-Z,
+   full-α/Fe grids are slower than `prsc_miles`. The relative numbers (vmap
+   speedup, exact-vs-hybrid ratio) matter most.

@@ -20,12 +20,12 @@ Stan, ArviZ, and BlackJAX.
 
 ## Effective sample size (ESS)
 
-ESS measures how many independent samples your chain is worth. Autocorrelated chains
-produce many samples but little new information.
+ESS measures effective independent samples. Autocorrelated chains yield many
+samples but little new information.
 
-- **ESS > 100 per parameter**: minimum for reliable percentile estimates (median, 68% CI).
-- **ESS > 400 total**: minimum for stable posterior summaries across repeated runs.
-- **ESS < 50**: posterior summaries are unreliable. Run longer chains or switch methods.
+- **ESS > 100 per parameter**: minimum for reliable percentiles (median, 68% CI).
+- **ESS > 400 total**: minimum for stable summaries across runs.
+- **ESS < 50**: unreliable. Run longer or switch methods.
 
 ```python
 result = fitter.run("mcmc_raytrace", n_steps=2000, n_burnin=200)
@@ -44,15 +44,14 @@ that is expected. Focus on the physical parameters when assessing convergence.
 
 ## Divergences (NUTS only)
 
-Divergent transitions occur when NUTS encounters regions of high curvature that
-the leapfrog integrator cannot traverse accurately. They signal that the posterior
-may be unreliable in those regions.
+Divergent transitions signal high-curvature regions the leapfrog integrator
+cannot traverse accurately, indicating potentially unreliable posteriors in
+those regions.
 
 - **0 divergences**: ideal.
-- **< 5%**: investigate but results may still be usable. Check which parameters are
-  involved.
-- **> 5%**: serious problem. The sampler is systematically missing part of the posterior.
-  Consider reparametrization or switching to Ray Tracing.
+- **< 5%**: investigate; may still be usable. Check involved parameters.
+- **> 5%**: serious. Sampler systematically misses part of posterior.
+  Reparametrize or switch to Ray Tracing.
 
 ```python
 result = fitter.run("mcmc_nuts", n_warmup=500, n_burnin=50)
@@ -88,16 +87,15 @@ reported acceptance rate deviates significantly, the warmup may have failed.
 ## Known difficult parameters
 
 `dust_tau_bc`, `dust_tau_diff`, and `met_logzsol` consistently show low ESS
-across all samplers. This is a **physical limitation**, not a sampler bug.
+across all samplers due to age-dust-metallicity degeneracy (physical
+limitation, not a bug).
 
-The age-dust-metallicity degeneracy creates banana-shaped correlations in these
-parameters. The posterior is highly curved, making it hard for any sampler to
-explore efficiently. Practical consequences:
+Banana-shaped correlations create highly curved posteriors, making efficient sampling difficult:
 
-- These parameters need 2--5x more samples than others to reach ESS > 100.
-- geoVI handles the banana shape better than MGVI (which assumes a Gaussian).
-- If only these parameters have low ESS and everything else looks good,
-  the results are likely still usable --- just report wider uncertainties.
+- Require 2–5× more samples than others to reach ESS > 100.
+- geoVI handles the shape better than MGVI.
+- If only these parameters have low ESS while others look good, results are
+  likely usable — report wider uncertainties.
 
 ## Using the diagnostic functions
 
@@ -159,26 +157,24 @@ Warnings:
 
 ## geoVI / MGVI diagnostics
 
-Variational methods do not produce MCMC chains, so ESS and acceptance rate do not
-directly apply. Instead, check:
+Variational methods don't produce MCMC chains, so ESS and acceptance don't apply. Check:
 
-1. **KL convergence**: the Hamiltonian (loss) should decrease monotonically and
-   plateau. Oscillation or increase indicates instability.
+1. **KL convergence**: loss should decrease monotonically and plateau.
+   Oscillation or increase signals instability.
 
    ```python
    result = fitter.run("vi", n_iterations=15)
    print(result.diagnostics.get("loss_history"))
    ```
 
-2. **Multi-seed agreement**: run with `n_seeds > 1`. Seeds that disagree in
-   Hamiltonian by > 10% suggest multimodality or insufficient iterations.
+2. **Multi-seed agreement**: run with `n_seeds > 1`. > 10% Hamiltonian
+   disagreement suggests multimodality or insufficient iterations.
 
-3. **Comparison to MCMC**: when validating, run Ray Tracing or NUTS and compare
-   posteriors. If geoVI and RT agree, the variational approximation is adequate.
+3. **MCMC comparison**: run Ray Tracing or NUTS and compare posteriors.
+   Agreement validates the variational approximation.
 
 :::{note}
-For geoVI, check KL convergence across iterations and compare to RT posteriors
-when possible. This is the most reliable way to validate variational results.
+Check KL convergence and compare geoVI to RT posteriors when possible for reliable validation.
 :::
 
 ## Chi-squared per degree of freedom
@@ -212,11 +208,10 @@ If you see this warning, widen the prior in your `Parameters` and re-fit.
 ## When to worry vs. when it is OK
 
 **Likely fine:**
-- 1--2 parameters (especially dust/metallicity) have ESS slightly below 100,
-  but all others are well above. The age-dust-metallicity degeneracy is the cause.
-- RT acceptance rate is 45% instead of the "ideal" 50%. Any value in 30--70% is good.
-- chi2/dof is 1.3 for a 5-band photometric fit. Photometric calibration uncertainty
-  often inflates chi2 slightly.
+- 1–2 parameters (especially dust/metallicity) have ESS slightly below 100;
+  others well above. Age-dust-metallicity degeneracy.
+- RT acceptance rate 45% instead of "ideal" 50%. Any value in 30–70% is good.
+- chi2/dof = 1.3 for 5-band photometry. Photometric calibration uncertainty inflates chi2 slightly.
 
 **Investigate:**
 - ESS < 50 for *any* physical parameter.
@@ -231,17 +226,16 @@ If you see this warning, widen the prior in your `Parameters` and re-fit.
 
 ## Posterior predictive check
 
-Generate model predictions from posterior samples and verify they bracket the data:
+Generate predictions from posterior samples and verify they bracket the data:
 
 ```python
 for i in range(10):
     sample = {k: v[i] for k, v in result.samples.items()}
     pred = model.predict_photometry(sample)
-    # pred should bracket the data within noise
+    # pred should bracket data within noise
 ```
 
-If posterior predictions systematically miss certain bands, the model may be
-missing physics (e.g., AGN contribution, nebular emission).
+Systematic misses in certain bands suggest missing physics (e.g., AGN, nebular emission).
 
 ## References
 

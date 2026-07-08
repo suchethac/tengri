@@ -16,81 +16,57 @@ with < 32 GB if you're batch-authoring notebooks.
 | Spectroscopy (1000-pix optical, NUTS) | ~300 MB | 4–8 GB |
 | Joint photo + spec (NUTS) | ~500 MB | 6–10 GB |
 
-NUTS warmup with `dense_mass=True` peaks 3–6× higher than steady state
-because it traces a `vmap(vmap(...))` of the full predict graph. On D ≥ 8
-with `mean_sfh_type="dense_basis"` we have observed peaks of 20+ GB.
-**Multi-fit notebooks need `dense_mass=False`** unless you have explicit
-headroom — see [Pattern: multiple NUTS fits](#pattern-multiple-nuts-fits-per-process).
+NUTS warmup with `dense_mass=True` peaks 3–6× higher than steady state due
+to `vmap(vmap(...))` tracing. D ≥ 8 with `dense_basis` can hit 20+ GB.
+**Multi-fit notebooks need `dense_mass=False`** — see [Multiple NUTS
+fits](#pattern-multiple-nuts-fits-per-process).
 
 These numbers are CPU on Apple M-series; GPU peaks are typically lower
 because XLA can fuse more aggressively, but VRAM ceilings are tighter.
 
 ## Pattern: multiple NUTS fits per process
 
-**Symptom.** First fit runs fine, the second fit takes much longer to
-compile, the third fit OOMs or thrashes swap.
+**Symptom:** First fit OK, second compiles slowly, third OOMs.
 
-**Cause.** Each NUTS warmup compiles a dense-mass-matrix `vmap(vmap(...))`
-that pulls the entire `predict_photometry` (and `predict_spectrum`)
-graph into one program. Peak compile-time RSS is ~4 GB per fit on a
-typical pipeline; the JIT cache amortizes the *next call*, not the
-next *trace*. A different `Observation` or `n_warmup` invalidates the
-cache key, so each fit re-pays the compile cost.
+**Cause:** Each NUTS warmup compiles `vmap(vmap(...))` of the full predict
+graph (~4 GB per fit). The JIT cache amortizes next *calls* but not
+*traces*. Different `Observation` or `n_warmup` invalidates the key,
+re-paying compile cost.
 
-**Fixes, in order of preference.**
+**Fixes (in order):**
 
-1. **One NUTS fit per notebook**. Use MAP for cheaper "before" fits,
-   NUTS only for the headline posterior.
-2. If you genuinely need multiple posteriors (notebook 07 fits photo,
-   spec, and joint), share as much state as possible: same model, same
-   observation *type*, only the data array changes. The JIT cache
-   survives different data values for the same observation type.
-3. Drop the dense mass matrix:
-
-   ```python
-   fitter.run("mcmc_nuts", dense_mass=False, ...)
-   ```
-
-   This cuts compile peak by ~3× at the cost of ~2× sample
-   autocorrelation. Run more samples to compensate.
-4. Switch to plain HMC (`"mcmc_hmc"`) — same posterior target, much
-   smaller JIT graph (no doubling-binary-tree expansion in the trace).
+1. **One NUTS fit per notebook.** Use MAP for cheap "before" fits.
+2. Share state: same model, same observation *type*, only data changes. JIT cache survives.
+3. Drop dense mass: `fitter.run("mcmc_nuts", dense_mass=False, ...)`. Cuts
+   compile ~3× (costs ~2× autocorrelation; run more samples).
+4. Use HMC: `fitter.run("mcmc_hmc", ...)`. Smaller JIT graph, no binary-tree expansion.
 
 ## Pattern: background compile + macOS jetsam
 
-`Fitter` pre-compiles every inference backend (NUTS, MAP, geoVI,
-raytrace, NSS) on construction so the first user-facing call is fast.
-With `dust_emission="dale2014"` the geoVI compile alone pushes peak RSS
-to ~6 GB. On macOS this can trip the kernel's `jetsam` memory-pressure
-killer before the first call ever runs.
+`Fitter` pre-compiles every backend at construction so the first
+user-facing call is fast. On models with heavy template blocks, that
+background compile alone can reach several GB — on macOS enough to
+trip the `jetsam` memory killer before the first call runs.
 
-**Fix.** Disable background compile *before* `import tengri`:
+**Fix:** Disable background compile before `import tengri`:
 
 ```python
 import os
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
-import tengri  # <-- after the env var is set
+import tengri
 ```
 
-Every shipped spine notebook in `notebooks/` does this; if you author
-your own notebook for an OOM-prone configuration, copy the pattern.
+All spine notebooks do this; copy the pattern for OOM-prone configurations.
 
 ## JAX persistent compile cache
 
-JAX recompiles XLA programs on every cold start. Tengri auto-enables a
-persistent on-disk cache at `~/.cache/tengri_jax_cache` so subsequent
-runs hit it instead of re-compiling.
-
-```bash
-ls -lh ~/.cache/tengri_jax_cache/ | head -10        # confirm it's filling
-```
+JAX recompiles XLA on every cold start. Tengri auto-enables a persistent
+cache at `~/.cache/tengri_jax_cache` to avoid re-compiling.
 
 If the directory is empty after a notebook run:
-
-- Check the directory is writable.
-- Check `TENGRI_JAX_CACHE_DIR` if you set a custom location.
-- The default `min_compile_time_secs=5.0` skips small kernels — that's
-  intentional and not a bug.
+- Check writability.
+- Check `TENGRI_JAX_CACHE_DIR` if set.
+- Compiles faster than `min_compile_time_secs` are skipped by design.
 
 After upgrading JAX:
 
@@ -99,9 +75,7 @@ import tengri
 tengri.clear_cache()
 ```
 
-stale entries are evicted. See
-[compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md)
-for details.
+See [compilation_cache.md](https://github.com/suchethac/tengri/blob/main/docs/inference/compilation_cache.md) for details.
 
 ## A safety-net watchdog
 
@@ -124,17 +98,13 @@ done
 ```
 
 Logs go to `/tmp/oom_killer.log` so you can see what got killed. Drop
-the threshold to 10 GB only if you're not running NUTS on the
-`dale2014` pipeline — that legitimate workload can briefly cross 10 GB
+the threshold only if your heaviest legitimate fit stays under it —
+NUTS on a model with template dust emission can briefly cross 10 GB
 during compile.
 
 ## When to file a bug
 
-If a single notebook with a single fit and `dust_emission="dale2014"`
-peaks above 8 GB on your machine, that's a regression worth reporting.
-Baseline (April 2026): ~5 GB peak compile, ~1 GB steady state.
+A single fit peaking far above the table at the top of this page is a
+regression — file it with the model config and the observed peak RSS.
 
-The contributor-side write-up of these patterns lives at
-[`docs/dev/notebook_orchestration_oom.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/notebook_orchestration_oom.md);
-read that for the technical root cause and the subagent-zombie patterns
-that affect AI-assisted development.
+See [`docs/dev/notebook_orchestration_oom.md`](https://github.com/suchethac/tengri/blob/main/docs/dev/notebook_orchestration_oom.md) for technical root causes and subagent-zombie patterns.

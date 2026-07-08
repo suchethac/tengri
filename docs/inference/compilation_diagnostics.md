@@ -1,6 +1,8 @@
 # Diagnosing Recompilations
 
-When working with JAX inference on large models, cold compilation can dominate wall-clock time in tutorial notebooks. The compile-event tracer helps you understand exactly what is recompiling and why.
+When working with JAX inference on large models, cold compilation can
+dominate wall-clock time. The compile-event tracer shows what is recompiling
+and why.
 
 ## Quick Start
 
@@ -14,7 +16,9 @@ export TENGRI_LOG_COMPILES=1
 
 ### 2. Run your notebook
 
-Execute your notebook as normal. Events will be logged to `~/.cache/tengri_jax_cache/compile.log` (or override via `TENGRI_COMPILE_LOG_PATH`).
+Execute your notebook as normal. Events will be logged to
+`~/.cache/tengri_jax_cache/compile.log` (or override via
+`TENGRI_COMPILE_LOG_PATH`).
 
 ### 3. Analyze the log
 
@@ -36,7 +40,8 @@ The report includes:
 - **Total wall time**: Aggregate compilation time (seconds)
 - **Cache-hit ratio**: Proportion of fast (cached) vs. slow (cold) compiles
 - **Per-method breakdown**: Count, total, mean, and max duration for each inference method
-- **Spurious recompiles**: Consecutive events with different signatures (indicates unnecessary recompilation)
+- **Spurious recompiles**: Consecutive events with different signatures
+  (indicates unnecessary recompilation)
 
 Example output:
 
@@ -93,16 +98,18 @@ The log marks events as "cache hits" if they complete in < 1.0 s. This is a roug
 - **Cold compiles**: typically 5–30+ seconds (depends on graph size)
 - **Hybrid cases** (e.g., warm iteration with some tracing): 1–5 s
 
-The heuristic may have false positives on very fast hardware or false negatives on network-mounted storage.
+On fast hardware, the heuristic may flag slow loads as hits. On
+network-mounted storage, it may misclassify cache loads as cold compiles.
 
 ## Integration
 
-The tracer is automatically hooked into:
+The tracer hooks into:
 
 - `get_or_build_signal_response()` – Physics kernel compilation
 - `build_jit_engine()` – Inference engine (VI, geoVI, etc.)
 
-Each major compilation site is wrapped with a context manager that records timing and metadata. No changes are needed to your code.
+Each compilation site is wrapped with a context manager that records timing
+and metadata. No code changes required.
 
 ## Notes
 

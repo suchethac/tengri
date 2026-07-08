@@ -1,15 +1,14 @@
 # Data files shipped with tengri
 
-This directory holds the reference grids, lookup tables, and test fixtures
-that tengri's components load at runtime. Each entry below records:
+This directory holds reference grids, lookup tables, and test fixtures that
+tengri components load at runtime. Each entry records:
 
 - **Scientific source** — the paper / project the values originate from.
-- **Build path** — the upstream code or script that produced this exact file.
-- **Usage** — terms under which the *data file* is used and redistributed.
-  Most are paper-published data with citation-required use; a few have
-  formal software licenses inherited from their build tooling. The
-  ongoing port-vs-rewrite assessment for source code lives in
-  [`docs/dev/audits/upstream-port-licensing.md`](../docs/dev/audits/upstream-port-licensing.md).
+- **Build path** — upstream code or script that produced this file.
+- **Usage** — redistribution terms. Most are paper-published data (citation
+  required); some have formal licenses. See
+  [`docs/dev/audits/upstream-port-licensing.md`](../docs/dev/audits/upstream-port-licensing.md)
+  for source code assessment.
 
 ## Dust SED templates
 
@@ -22,10 +21,9 @@ that tengri's components load at runtime. Each entry below records:
 | `dale2014_templates.h5` | Dale et al. 2014 IR templates | `scripts/build_dale2014_grid.py` | Paper-published data; cite Dale+ 2014 |
 | `bosa_templates.h5` | BOSA — Boquien & Salim 2021 | `scripts/build_bosa_grid.py` | Paper-published data; cite Boquien & Salim 2021 |
 
-These dust IR template suites are scientific data distributed with their
-respective publications. The upstream pages do not carry SPDX-style
-software licenses; the convention is free scientific use with citation,
-which `tengri.cite_all()` and `CITATION.cff` handle automatically.
+Dust IR templates are scientific data distributed with their publications.
+Upstream sources lack SPDX licenses; the convention is free use with
+citation (`tengri.cite_all()` and `CITATION.cff` handle this).
 
 ## AGN templates
 
@@ -73,10 +71,9 @@ publishing tengri-based work that uses any of these curves.
 
 ## Test / regression reference fixtures (`*.npz`)
 
-These are not science-quality lookup tables — they are *reference outputs*
-captured from a specific upstream version and used to detect regressions
-in tengri's port of that algorithm. They are produced by build / port
-audit scripts and refreshed when the upstream changes.
+Reference outputs captured from specific upstream versions for detecting
+regressions in tengri's ports. Produced by build/audit scripts; refreshed
+when upstream changes.
 
 | File | Captured from | Used by |
 | --- | --- | --- |
@@ -85,12 +82,10 @@ audit scripts and refreshed when the upstream changes.
 | `fsps_nebular_reference.npz`, `fsps_spectrum_reference.npz` | python-fsps | nebular + SSP cross-checks |
 | `qsogen_reference.npz`, `qsogen_cont_bb_only.npz`, `qsogen_emline_template.dat`, `qsogen_lines_reference.npz`, `qsogen_manual_cont_bb.npz` | QSOgen | `tests/contract/test_qsogen.py` |
 
-These are derivative captures of upstream outputs. If the upstream code is
-permissively licensed, the captured arrays inherit that. The CIGALE
-fixture is captured-from-output, not copied source, so CeCILL §5
-("output of the software") generally treats it as user data rather than
-derivative work — but this is the most conservative item in the bunch and
-worth re-confirming before a 1.0 / Zenodo release.
+Derivative captures of upstream outputs. If upstream is permissively
+licensed, arrays inherit that. CIGALE fixtures are captured output (not
+copied source), so CeCILL §5 treats them as user data rather than
+derivatives — but worth re-confirming before 1.0 / Zenodo release.
 
 ## Adding a new template
 

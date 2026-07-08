@@ -15,9 +15,8 @@ tengri's forward model is a pipeline of independent physics modules:
 Parameters --> SFH --> SPS --> Dust --> Nebular --> AGN --> IGM --> Observation
 ```
 
-Each module is a pure JAX function (no side effects, JIT-compatible). To extend
-tengri, you write a new function that follows the same interface and register it
-with the model.
+To extend tengri, write a pure JAX function that follows the same interface
+and register it with the model.
 
 ## Adding a custom SFH parametrization
 
