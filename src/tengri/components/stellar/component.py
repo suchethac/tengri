@@ -279,7 +279,7 @@ def _joint_weights_cic_met_table(
 ):
     r"""CIC joint (met, age) weights for a per-age metallicity table (#964).
 
-    The per-age-metallicity analogue of :func:`_age_weights_cic`: each mass
+    The per-age-metallicity analog of :func:`_age_weights_cic`: each mass
     parcel is split between its bracketing SSP age nodes with log-age CIC
     weights, and simultaneously distributed over the metallicity axis with
     the lognormal MDF centered on the parcel's metallicity —

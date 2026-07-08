@@ -269,7 +269,7 @@ def load_ssp_data(filepath: str) -> SSPData:
 
         # Solar-luminosity unit contract (#969): ``ssp_flux`` is stored in
         # "Lsun/Hz per Msun", but WHICH Lsun depends on the code that wrote
-        # the file — the ported ``fsps_*`` catalogue grids carry FSPS's
+        # the file — the ported ``fsps_*`` catalog grids carry FSPS's
         # native numbers (Lsun = 3.839e33 erg/s, ``sps_vars.f90``), while
         # tengri converts to erg/s with the IAU 2015 value (3.828e33), a
         # flat 0.29 % absolute-flux offset. Rescale on load so the
@@ -307,7 +307,7 @@ def load_ssp_data(filepath: str) -> SSPData:
 
 
 #: FSPS's internal solar luminosity (``sps_vars.f90``, ``lsun = 3.839d33``)
-#: [erg/s]. The ported ``fsps_*`` catalogue grids store flux in units of
+#: [erg/s]. The ported ``fsps_*`` catalog grids store flux in units of
 #: this Lsun — verified by the reproduction notebook's §1 bit-match of the
 #: raw HDF5 values against live ``python-fsps`` output (#969).
 _FSPS_LSUN_ERG_PER_S: float = 3.839e33
@@ -321,7 +321,7 @@ def _detect_native_lsun(h5_file, filename: str) -> float | None:
     1. ``h5_file.attrs["lsun_erg_per_s"]`` — the explicit unit contract;
        ports should write this going forward.
     2. Filename prefix ``fsps_`` → FSPS's native 3.839e33 erg/s (the
-       published catalogue grids store FSPS's raw numbers; §1 of the
+       published catalog grids store FSPS's raw numbers; §1 of the
        Prospector reproduction pins this bit-exactly).
     3. ``None`` — unknown provenance; the loader assumes the file is
        already IAU-normalized and applies no rescale. Guessing a wrong
@@ -332,7 +332,7 @@ def _detect_native_lsun(h5_file, filename: str) -> float | None:
     h5_file : h5py.File
         Open HDF5 handle (for the attribute lookup).
     filename : str
-        Basename of the file (for the catalogue-prefix fallback).
+        Basename of the file (for the catalog-prefix fallback).
 
     Returns
     -------

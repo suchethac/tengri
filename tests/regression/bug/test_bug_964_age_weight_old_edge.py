@@ -29,7 +29,7 @@ pytestmark = pytest.mark.regression_bug
 
 def _reference_weights(sfr_fn, lg_age_gyr, n=1_000_000):
     """Dense CIC quadrature: split SFR(t)·dt parcels between bracketing nodes."""
-    age_yr = 10.0**np.asarray(lg_age_gyr) * 1e9
+    age_yr = 10.0 ** np.asarray(lg_age_gyr) * 1e9
     t = np.geomspace(1e3, age_yr[-1], n)
     sfr = sfr_fn(t)
     x_t = np.log10(t / 1e9)
