@@ -100,7 +100,7 @@ inputs, so the Hα ratio is reported rather than forced to agree.
 
 Two *default conventions* differ and are switchable (#961): tengri's
 energy balance excludes the Lyman continuum from dust heating (#922),
-so its far-IR sits ~9 % below FSPS at the star-forming fiducial —
+so its far-IR sits ~11 % below FSPS at the star-forming fiducial —
 `dust={'eb_include_lyc': True}` opts into the FSPS convention (§6
 prints both ratios). And tengri defaults the IGM **on** (Inoue+2014)
 where Prospector defaults it off — use `igm={'type': 'none'}` (or

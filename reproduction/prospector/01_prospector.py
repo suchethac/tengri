@@ -320,15 +320,19 @@ save_fig("prospector_02_sfh_delayed.png")
 # numbers drive both codes — the comparison is at matched parameters, not just
 # a matched shape.
 #
-# **Reading the residuals.** The remaining 0.3–2 % optical residuals below are
-# *not* a binning or sub-Myr-convention mismatch — pinning the 0–1 Myr edge on
-# both sides changes nothing (#962, measured null). A per-age-bin
-# decomposition against a dense code-independent reference localizes them to
-# tengri's DSPS age-weight handoff, which truncates the oldest slice of any
-# bin whose upper edge falls between SSP grid ages (young bins lose their
-# red-supergiant-rich tail: UV +4 %, optical −2 %, NIR −4 % for the 0–30 Myr
-# bin). Young-heavy fiducials (dirichlet, flex) expose this at the 1–2 %
-# level; old-heavy mixes (continuity) largely cancel it. Tracked in #964.
+# **Reading the residuals.** The remaining 0.3–2 % optical residuals below
+# are comparison-convention differences, not engine errors. tengri's age
+# weights match a dense code-independent quadrature of the same SSP arrays to
+# ~1e-4 per node for every family shown here (#964: the age-weight kernel is
+# cloud-in-cell, the convention FSPS matches; the old DSPS histogram handoff
+# lost the oldest slice of the SFH and was fixed). What remains on this axis:
+# Prospector's `agebins` floor the youngest bin edge at 1 Myr while tengri
+# fills the bin to lookback 0 (a ~3 % SFR-level difference *within* the
+# youngest bin — visible for young-heavy fiducials like dirichlet/flex,
+# cancelling for old-heavy mixes like continuity), FSPS converts with its own
+# L⊙ = 3.839e33 while tengri uses IAU 3.828e33 (a flat 0.29 %), and the
+# FSPS `sfh=3` tabular path carries its own quadrature. Pinning the sub-Myr
+# edge on both sides changes nothing (#962, measured null).
 
 # %%
 # Shared seven-bin lookback grid (tengri's DEFAULT_BIN_EDGES_GYR). Passed
@@ -726,12 +730,14 @@ save_fig("prospector_02e_sfh_ift_field.png")
 # nebular. Both panels show `L_ν` vs `λ_rest` for 1 M⊙ formed; the
 # surviving stellar mass is reported on each side.
 #
-# The printed ~+1 % optical ratio is a diagnosed tengri-side bias, not an
-# engine convention: FSPS matches a dense code-independent convolution of
-# the same SSP arrays to ≤0.1 %, while tengri's DSPS age-weight handoff
-# assigns zero weight to the first SSP node older than the SFH's maximum
-# age (here 5.012 Gyr vs age = 5.0 Gyr), re-attributing the oldest 3.8 %
-# of the mass to younger, brighter nodes. Tracked in #964.
+# The printed optical ratio sits within ~0.3 % of unity, and ~0.29 % of
+# that is a units constant, not physics: FSPS converts L_ν with its own
+# L⊙ = 3.839e33 erg/s while tengri uses the IAU value 3.828e33 on the same
+# ported grid. At matched constants the two engines agree to ≤0.15 % from
+# the Lyman continuum to the red — both match a dense code-independent
+# convolution of the same SSP arrays (the historical +1.2 % bias was the
+# DSPS age-weight handoff losing the oldest 3.8 % of the mass; fixed by
+# the cloud-in-cell age-weight kernel, #964).
 
 # %%
 w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0)
@@ -980,7 +986,7 @@ save_fig("prospector_05_dust_applied.png")
 # energy balance excludes the LyC (λ < 912 Å): those photons ionize
 # hydrogen and re-emerge as nebular emission, not dust heating — the
 # CIGALE convention (#922). At this star-forming fiducial the LyC carries
-# ~11 % of the absorbed energy, so tengri's far-IR sits ~9 % below
+# ~11 % of the absorbed energy, so tengri's far-IR sits ~11 % below
 # Prospector at identical parameters. Both ratios are printed below —
 # the default (LyC-masked) and the opt-in FSPS-parity mode
 # `dust={'eb_include_lyc': True}`, which closes the gap.
@@ -1068,7 +1074,7 @@ _peak_p = _p_fir[np.argmax(_L_fir)]
 print(f"§6 FSPS far-IR peak at {_peak_p / 1e4:.0f} µm")
 
 # FIR amplitude vs FSPS — quantifies the LyC energy-balance convention
-# (#961). The default (LyC-masked, #922) sits ~9 % low; the opt-in
+# (#961). The default (LyC-masked, #922) sits ~11 % low; the opt-in
 # `eb_include_lyc` FSPS-parity mode re-emits the full absorbed luminosity
 # like FSPS and closes the gap.
 _fir_win = (w_p_ir > 3e5) & (w_p_ir < 1e7)  # 30–1000 µm
@@ -1504,7 +1510,7 @@ plt.show()
 #
 # 1. **Far-IR amplitude** — tengri's canonical energy balance excludes the
 #    Lyman continuum from dust heating (#922), FSPS re-emits all of it;
-#    at this fiducial the difference is ~9 % in every FIR band. Opt into
+#    at this fiducial the difference is ~11 % in every FIR band. Opt into
 #    the FSPS convention with `dust={'eb_include_lyc': True}` (§6).
 # 2. **IGM** — `SEDModel.build` defaults the IGM **on** (Inoue+2014);
 #    Prospector defaults `add_igm_absorption=False`. At z = 1 this alone
