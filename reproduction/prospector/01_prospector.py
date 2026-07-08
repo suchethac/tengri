@@ -193,7 +193,12 @@ for ia in _age_idx:
     age_gyr = float(10.0 ** ssp.ssp_lg_age_gyr[ia])
     w_p, L_p = P.ssp_spectrum(logzsol=0.0, age_gyr=age_gyr)
     fps_ssp.append((w_p, L_p))
-    tng_ssp.append((ssp.ssp_wave, np.asarray(ssp.ssp_flux[i_zsun, ia, :]) * U.L_SUN_ERG_PER_S))
+    # tengri-side conversion uses tengri's own (IAU) L⊙: the loader rescales
+    # the ported grid's FSPS-native Lsun units to IAU on load (#969), so
+    # converting with the driver's FSPS constant would double-count 0.29 %.
+    tng_ssp.append(
+        (ssp.ssp_wave, np.asarray(tengri.units.lsun_to_erg_per_s(ssp.ssp_flux[i_zsun, ia, :])))
+    )
     age_labels.append(f"{age_gyr * 1e3:g} Myr" if age_gyr < 1 else f"{age_gyr:g} Gyr")
 
 fig, (ax, ax_r) = plt.subplots(
@@ -1297,7 +1302,9 @@ L_p_agn = np.clip(L_p_agn, 0.0, None)
 # then scaled to the 10^10 M⊙ galaxy. agn_log_lbol = log10(L_torus / L⊙).
 _nu = U.C_ANGSTROM_PER_S / w_p_agn[::-1]
 _L_agn_bol_erg = float(np.trapezoid(L_p_agn[::-1], _nu)) * MASS_SCALE
-_L_agn_bol_lsun = _L_agn_bol_erg / U.L_SUN_ERG_PER_S
+# tengri interprets agn_log_lbol with its own (IAU) L⊙, so convert the
+# FSPS-derived erg/s value through tengri's units module (#969).
+_L_agn_bol_lsun = float(tengri.units.erg_per_s_to_lsun(_L_agn_bol_erg))
 _agn_log_lbol = float(np.log10(_L_agn_bol_lsun))
 L_p_agn = L_p_agn * MASS_SCALE  # plot the 10^10 M⊙ galaxy's torus
 print(f"§9 FSPS torus L_bol = {_L_agn_bol_erg:.3e} erg/s = 10^{_agn_log_lbol:.2f} L⊙")

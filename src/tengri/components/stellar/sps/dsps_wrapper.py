@@ -267,6 +267,22 @@ def load_ssp_data(filepath: str) -> SSPData:
         # surviving-mass synthesizer can pick the right DSPS calibration.
         imf = _detect_imf(f, fp.name)
 
+        # Solar-luminosity unit contract (#969): ``ssp_flux`` is stored in
+        # "Lsun/Hz per Msun", but WHICH Lsun depends on the code that wrote
+        # the file — the ported ``fsps_*`` catalogue grids carry FSPS's
+        # native numbers (Lsun = 3.839e33 erg/s, ``sps_vars.f90``), while
+        # tengri converts to erg/s with the IAU 2015 value (3.828e33), a
+        # flat 0.29 % absolute-flux offset. Rescale on load so the
+        # in-memory arrays are IAU-Lsun-normalized and every downstream
+        # conversion is exact.
+        ssp_flux = jnp.array(f["ssp_flux"][:])
+        native_lsun = _detect_native_lsun(f, fp.name)
+        if native_lsun is not None:
+            from tengri.utils.physics_constants import L_SUN
+
+            if abs(native_lsun / L_SUN - 1.0) > 1e-12:
+                ssp_flux = ssp_flux * (native_lsun / L_SUN)
+
         if "ssp_mass_remaining" in f:
             mass_remaining = jnp.array(f["ssp_mass_remaining"][:])
         else:
@@ -280,7 +296,7 @@ def load_ssp_data(filepath: str) -> SSPData:
 
         return SSPData(
             ssp_wave=jnp.array(f["ssp_wave"][:]),
-            ssp_flux=jnp.array(f["ssp_flux"][:]),
+            ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
             ssp_mass_remaining=mass_remaining,
@@ -288,6 +304,47 @@ def load_ssp_data(filepath: str) -> SSPData:
             imf=imf,
             source=fp.stem,
         )
+
+
+#: FSPS's internal solar luminosity (``sps_vars.f90``, ``lsun = 3.839d33``)
+#: [erg/s]. The ported ``fsps_*`` catalogue grids store flux in units of
+#: this Lsun — verified by the reproduction notebook's §1 bit-match of the
+#: raw HDF5 values against live ``python-fsps`` output (#969).
+_FSPS_LSUN_ERG_PER_S: float = 3.839e33
+
+
+def _detect_native_lsun(h5_file, filename: str) -> float | None:
+    """Solar-luminosity constant the SSP file's flux units are based on (#969).
+
+    Resolution order (mirrors :func:`_detect_imf`):
+
+    1. ``h5_file.attrs["lsun_erg_per_s"]`` — the explicit unit contract;
+       ports should write this going forward.
+    2. Filename prefix ``fsps_`` → FSPS's native 3.839e33 erg/s (the
+       published catalogue grids store FSPS's raw numbers; §1 of the
+       Prospector reproduction pins this bit-exactly).
+    3. ``None`` — unknown provenance; the loader assumes the file is
+       already IAU-normalized and applies no rescale. Guessing a wrong
+       constant is worse than a documented 0.3 %-scale uncertainty.
+
+    Parameters
+    ----------
+    h5_file : h5py.File
+        Open HDF5 handle (for the attribute lookup).
+    filename : str
+        Basename of the file (for the catalogue-prefix fallback).
+
+    Returns
+    -------
+    float or None
+        The file's native Lsun [erg/s], or ``None`` when unknown.
+    """
+    attr = h5_file.attrs.get("lsun_erg_per_s") if hasattr(h5_file, "attrs") else None
+    if attr is not None:
+        return float(attr)
+    if filename.startswith("fsps_"):
+        return _FSPS_LSUN_ERG_PER_S
+    return None
 
 
 #: IMFs that ship in the public SSP catalog. Parsed out of HDF5 metadata
@@ -420,12 +477,34 @@ def load_ssp_data_dsps(filepath: str) -> SSPData:
         ssp_data = load_ssp_templates(fn=filepath)
         return SSPData(
             ssp_wave=jnp.array(ssp_data.ssp_wave),
-            ssp_flux=jnp.array(ssp_data.ssp_flux),
+            ssp_flux=_rescale_flux_to_iau_lsun(jnp.array(ssp_data.ssp_flux), filepath),
             ssp_lg_age_gyr=jnp.array(ssp_data.ssp_lg_age_gyr),
             ssp_lgmet=jnp.array(ssp_data.ssp_lgmet),
         )
     except ImportError:
         return load_ssp_data(filepath)
+
+
+def _rescale_flux_to_iau_lsun(ssp_flux: jnp.ndarray, filepath: str) -> jnp.ndarray:
+    """Apply the #969 native-Lsun rescale on the DSPS-native loader path."""
+    from pathlib import Path
+
+    try:
+        import h5py
+
+        with h5py.File(filepath, "r") as f:
+            native = _detect_native_lsun(f, Path(filepath).name)
+    except OSError:
+        # Unreadable as HDF5 — fall back to the filename heuristic alone.
+        name = Path(filepath).name
+        native = _FSPS_LSUN_ERG_PER_S if name.startswith("fsps_") else None
+    if native is None:
+        return ssp_flux
+    from tengri.utils.physics_constants import L_SUN
+
+    if abs(native / L_SUN - 1.0) <= 1e-12:
+        return ssp_flux
+    return ssp_flux * (native / L_SUN)
 
 
 def csp_age_dt(ssp_ages_yr: jnp.ndarray, method: str = "trapz") -> jnp.ndarray:
