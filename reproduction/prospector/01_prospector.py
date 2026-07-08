@@ -334,10 +334,10 @@ save_fig("prospector_02_sfh_delayed.png")
 # Prospector's `agebins` floor the youngest bin edge at 1 Myr while tengri
 # fills the bin to lookback 0 (a ~3 % SFR-level difference *within* the
 # youngest bin — visible for young-heavy fiducials like dirichlet/flex,
-# cancelling for old-heavy mixes like continuity), FSPS converts with its own
-# L⊙ = 3.839e33 while tengri uses IAU 3.828e33 (a flat 0.29 %), and the
-# FSPS `sfh=3` tabular path carries its own quadrature. Pinning the sub-Myr
-# edge on both sides changes nothing (#962, measured null).
+# cancelling for old-heavy mixes like continuity), and the FSPS `sfh=3`
+# tabular path carries its own quadrature. Pinning the sub-Myr edge on
+# both sides changes nothing (#962, measured null); the historical L⊙
+# constant mismatch is rescaled away at SSP load (#969).
 
 # %%
 # Shared seven-bin lookback grid (tengri's DEFAULT_BIN_EDGES_GYR). Passed
@@ -735,14 +735,13 @@ save_fig("prospector_02e_sfh_ift_field.png")
 # nebular. Both panels show `L_ν` vs `λ_rest` for 1 M⊙ formed; the
 # surviving stellar mass is reported on each side.
 #
-# The printed optical ratio sits within ~0.3 % of unity, and ~0.29 % of
-# that is a units constant, not physics: FSPS converts L_ν with its own
-# L⊙ = 3.839e33 erg/s while tengri uses the IAU value 3.828e33 on the same
-# ported grid. At matched constants the two engines agree to ≤0.15 % from
-# the Lyman continuum to the red — both match a dense code-independent
-# convolution of the same SSP arrays (the historical +1.2 % bias was the
-# DSPS age-weight handoff losing the oldest 3.8 % of the mass; fixed by
-# the cloud-in-cell age-weight kernel, #964).
+# The printed optical ratio sits at unity to ≤0.2 %: both engines match a
+# dense code-independent convolution of the same SSP arrays. Two historical
+# offsets were fixed to get here — the DSPS age-weight handoff lost the
+# oldest 3.8 % of the mass (+1.2 % optical bias with a blue tilt; replaced
+# by the cloud-in-cell age-weight kernel, #964), and the ported grid's
+# FSPS-native L⊙ units were converted with the IAU constant (a flat
+# 0.29 %; now rescaled at SSP load, #969).
 
 # %%
 w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0)
