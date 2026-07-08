@@ -250,46 +250,43 @@ def preintegrate_grid(
     # Redshift wavelengths to observed frame
     wave_obs = wave_rest * (1.0 + redshift)
 
-    # Compute filter effective wavelengths and integrals under weight w(λ).
-    # denom = ∫ T w dλ ;  λ_eff = ∫ λ T w dλ / ∫ T w dλ  (weight first moment,
-    # the self-consistent Taylor expansion center).
+    # Precompute filter-integrated photometry and moments on the union
+    # quadrature grid — template nodes + filter nodes, with the smooth
+    # transmission interpolated, never the template point-sampled at the
+    # filter table's nodes (#960). Matches lnu_filter_integral so the LUT
+    # and exact paths agree. λ_eff = ∫ λ T w dλ / ∫ T w dλ (weight first
+    # moment, the self-consistent Taylor expansion center) is evaluated on
+    # the SAME union grid so the moment Ψ vanishes for a flat template.
     eff_waves_obs = np.zeros(n_filters)
-    filter_denoms = np.zeros(n_filters)
-    for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
-        fw_np = np.asarray(fw, dtype=np.float64)
-        ft_np = np.asarray(ft, dtype=np.float64)
-        tw_np = ft_np * _filter_weight_np(fw_np, convention)
-        filter_denoms[f_idx] = _np_trapezoid(tw_np, fw_np)
-        eff_waves_obs[f_idx] = _np_trapezoid(tw_np * fw_np, fw_np) / np.maximum(
-            filter_denoms[f_idx], 1e-30
-        )
-
-    eff_waves_rest = eff_waves_obs / (1.0 + redshift)
-
-    # Precompute filter-integrated photometry and moments
     phot_flat = np.zeros((n_grid_points, n_filters))
     moment_flat = np.zeros((n_grid_points, n_filters)) if taylor else None
 
     for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
         fw_np = np.asarray(fw, dtype=np.float64)
         ft_np = np.asarray(ft, dtype=np.float64)
-        denom = filter_denoms[f_idx]
+        grid = np.sort(np.concatenate([wave_obs, fw_np]))
+        trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
+        tw_grid = trans_on_grid * _filter_weight_np(grid, convention)
+        denom = _np_trapezoid(tw_grid, grid)
+        eff_waves_obs[f_idx] = _np_trapezoid(tw_grid * grid, grid) / np.maximum(denom, 1e-30)
 
-        # Interpolate all templates to filter wavelengths
-        # Shape: (n_grid_points, n_filter_waves)
-        templates_on_filt = _vectorized_interp(fw_np, wave_obs, templates_flat)
+        # Interpolate all templates onto the union grid
+        # Shape: (n_grid_points, len(grid))
+        templates_on_grid = _vectorized_interp(grid, wave_obs, templates_flat)
 
         # Integrate: ∫ L_ν T w(λ) dλ   (w = 1/λ Bessell, 1/λ² energy)
-        weight = (ft_np * _filter_weight_np(fw_np, convention))[None, :]
-        integrand = templates_on_filt * weight
-        num = _np_trapezoid(integrand, fw_np, axis=-1)
+        weight = tw_grid[None, :]
+        integrand = templates_on_grid * weight
+        num = _np_trapezoid(integrand, grid, axis=-1)
         phot_flat[:, f_idx] = num / np.maximum(denom, 1e-30)
 
         # Compute Taylor moment if requested
         if taylor:
-            dlam = fw_np[None, :] - eff_waves_obs[f_idx]
-            num_moment = _np_trapezoid(templates_on_filt * dlam * weight, fw_np, axis=-1)
+            dlam = grid[None, :] - eff_waves_obs[f_idx]
+            num_moment = _np_trapezoid(templates_on_grid * dlam * weight, grid, axis=-1)
             moment_flat[:, f_idx] = num_moment / np.maximum(denom, 1e-30)
+
+    eff_waves_rest = eff_waves_obs / (1.0 + redshift)
 
     # Reshape back to original grid dimensions
     phot = jnp.array(phot_flat.reshape(*grid_dims, n_filters))

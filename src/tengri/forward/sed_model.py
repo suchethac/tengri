@@ -1393,6 +1393,9 @@ class SEDModel:
         # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) vs the
         # default young/birth-cloud-only (bagpipes). See DustSEDComponent.
         self._dust_lyc_absorb_all = bool(getattr(spec, "dust_lyc_absorb_all", False))
+        # Include LyC in the dust energy-balance integral (FSPS/Prospector
+        # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
+        self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
         from tengri.components.dust.attenuation import resolve_dust_law
 
         self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
@@ -2666,6 +2669,9 @@ class SEDModel:
         # Young-only vs absorb-all stellar LyC changes the baked below-912 chain
         # output but not its graph shape -> must enter the signature (color-leak).
         dust_lyc_absorb_all_sig = bool(getattr(self, "_dust_lyc_absorb_all", False))
+        # LyC-in-energy-balance (FSPS parity, #961) rescales L_IR without
+        # changing the graph shape -> must enter the signature (color-leak).
+        dust_eb_include_lyc_sig = bool(getattr(self, "_dust_eb_include_lyc", False))
 
         # Nebular backend (by class name)
         nebular_backend_name = (
@@ -2842,6 +2848,7 @@ class SEDModel:
             dust_law_overrides_sig,
             dust_lyman_cutoff_sig,
             dust_lyc_absorb_all_sig,
+            dust_eb_include_lyc_sig,
             nebular_backend_name,
             uses_igm,
             igm_model,
@@ -4878,6 +4885,7 @@ class SEDModel:
                 bc_params={k: float(v) for k, v in bc_params.items()},
                 diff_params={k: float(v) for k, v in diff_params.items()},
                 lyman_cutoff_aa=dust.config.lyman_cutoff_aa,
+                eb_include_lyc=dust.config.eb_include_lyc,
                 tau_bc_grid=_grid("dust_tau_bc"),
                 tau_diff_grid=_grid("dust_tau_diff"),
             )
@@ -5012,6 +5020,7 @@ class SEDModel:
             dust_law_overrides=getattr(self, "_dust_law_overrides", None),
             dust_lyman_cutoff_aa=getattr(self, "_dust_lyman_cutoff_aa", 0.0),
             dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
+            dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
             dust_model=getattr(self, "_dust_model", "two_component"),

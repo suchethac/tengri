@@ -534,16 +534,16 @@ def precompute_photometry_ztable(
     ssp_flux_np = np.asarray(ssp_data.ssp_flux)
     wave_ssp_np = np.asarray(ssp_data.ssp_wave)
 
-    # Precompute filter denominators and effective wavelengths (z-independent)
-    # under the bandpass weight w(λ) (ADR-0017): denom = ∫ T w dλ,
-    # λ_eff = ∫ λ T w dλ / ∫ T w dλ — must match preintegrate_grid /
-    # compute_flux_density so the LUT and exact paths agree.
-    filter_denoms = []
+    # Filter effective wavelengths (z-independent pivot for the IGM lookup)
+    # under the bandpass weight w(λ) (ADR-0017): λ_eff = ∫ λ T w dλ / ∫ T w dλ,
+    # evaluated on the filter's own nodes. The integral denominators — and the
+    # per-(z, filter) λ_eff the Taylor moment expands around — are computed on
+    # the union quadrature grid inside the z loop, matching
+    # lnu_filter_integral (#960) so the LUT and exact paths agree.
     eff_waves_obs = []  # observed-frame effective wavelengths (z-independent)
     for fw, ft in zip(filter_waves, filter_trans):
         fw_np, ft_np = np.asarray(fw), np.asarray(ft)
         tw_np = ft_np * _filter_weight_np(fw_np, convention)
-        filter_denoms.append(_np_trapezoid(tw_np, fw_np))
         eff_waves_obs.append(
             _np_trapezoid(tw_np * fw_np, fw_np) / max(_np_trapezoid(tw_np, fw_np), 1e-30)
         )
@@ -563,26 +563,38 @@ def precompute_photometry_ztable(
             igm_trans_all[zi] = np.asarray(igm_transmission(jnp.asarray(eff_waves_obs), z_val))
 
         # Pre-integrate SSP through each filter (vectorized over met × age)
+        # on the union quadrature grid — SED nodes + filter nodes, with the
+        # smooth transmission interpolated, never the SED point-sampled at
+        # the filter table's nodes (#960). Matches lnu_filter_integral so
+        # the LUT and exact paths agree.
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
-            denom = filter_denoms[f_idx]
-            tw_np = ft_np * _filter_weight_np(fw_np, convention)
+            grid = np.sort(np.concatenate([wave_obs, fw_np]))
+            trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
+            tw_np = trans_on_grid * _filter_weight_np(grid, convention)
+            denom = _np_trapezoid(tw_np, grid)
+            # λ_eff on the SAME union grid — the Taylor moment must expand
+            # around the weight's first moment under its own quadrature, so
+            # that Ψ ≡ 0 for a flat template.
+            eff_waves_rest_all[zi, f_idx] = (
+                _np_trapezoid(tw_np * grid, grid) / max(denom, 1e-30) / (1.0 + z_val)
+            )
 
-            ssp_on_filt = _vectorized_interp(fw_np, wave_obs, ssp_flux_np)
-            integrand = ssp_on_filt * tw_np[None, None, :]
-            num = _np_trapezoid(integrand, fw_np, axis=-1)
+            ssp_on_grid = _vectorized_interp(grid, wave_obs, ssp_flux_np)
+            integrand = ssp_on_grid * tw_np[None, None, :]
+            num = _np_trapezoid(integrand, grid, axis=-1)
             ssp_phot_all[zi, :, :, f_idx] = num / max(denom, 1e-30)
 
             # Taylor moment Ψ at this z and filter.
             # Ψ_{ijb} = ∫ SSP(λ) (λ - λ_eff_rest) T_b(λ_obs) w(λ_obs) dλ_obs / ∫ T_b w dλ_obs
             # Note: λ_eff_rest is the rest-frame effective wavelength of this filter at this z.
             if taylor_correction:
-                lambda_rest_per_obs = fw_np / (1.0 + z_val)
+                lambda_rest_per_obs = grid / (1.0 + z_val)
                 lambda_minus_eff = lambda_rest_per_obs - eff_waves_rest_all[zi, f_idx]
                 moment_integrand = (
-                    ssp_on_filt * tw_np[None, None, :] * lambda_minus_eff[None, None, :]
+                    ssp_on_grid * tw_np[None, None, :] * lambda_minus_eff[None, None, :]
                 )
-                moment_num = _np_trapezoid(moment_integrand, fw_np, axis=-1)
+                moment_num = _np_trapezoid(moment_integrand, grid, axis=-1)
                 ssp_phot_moment_all[zi, :, :, f_idx] = moment_num / max(denom, 1e-30)
 
         # Geometric flux scale

@@ -84,6 +84,51 @@ class FilterCurve:
     name: str = ""
 
 
+def _filter_integral_union(
+    L_nu: jnp.ndarray,
+    wave_obs: jnp.ndarray,
+    filter_wave: jnp.ndarray,
+    filter_trans: jnp.ndarray,
+    convention: FilterConvention,
+) -> jnp.ndarray:
+    r"""Filter-weighted mean of ``L_nu`` on the union quadrature grid (#960).
+
+    Integrates on the sorted union of the SED nodes and the filter nodes,
+    interpolating the *transmission* (smooth by construction) rather than
+    the SED. Point-sampling the SED at the filter table's nodes — the
+    pre-#960 quadrature — biases any band whose table is coarser than the
+    spectral structure it covers: SVO/sedpy instrument tables are 25–70 Å
+    spaced while MILES spectra carry ~1 Å absorption-line structure, which
+    produced band-dependent errors up to 3 % (SDSS g). FSPS
+    (``getmags.f90``) and sedpy integrate on the SED grid for the same
+    reason; the union grid additionally stays exact when a narrow filter
+    falls on a coarse region of the SED grid.
+
+    Both node arrays must be ascending; padded filter rows must be made
+    ascending first (:func:`_ascending_padded_filter_wave`).
+    """
+    grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
+    L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
+    trans_on_grid = jnp.interp(grid, filter_wave, filter_trans, left=0.0, right=0.0)
+    weight = trans_on_grid * _filter_weight(grid, convention)
+    num = jnp.trapezoid(L_on_grid * weight, grid)
+    den = jnp.trapezoid(weight, grid)
+    return num / jnp.maximum(den, 1e-30)
+
+
+def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
+    """Rewrite the zero-pad tail of a padded filter grid to ascend (#960).
+
+    ``jnp.interp`` requires ascending nodes; zero-padding (:func:`pad_filters`)
+    breaks that. Pad entries (``wave == 0``) are moved above the last valid
+    wavelength at 1 Å spacing. Their transmission is zero, so they contribute
+    nothing to the integrals; all-zero (padded-out) filter rows become an
+    ascending dummy grid whose zero transmission yields flux 0.
+    """
+    pos = jnp.arange(fw_padded.shape[0], dtype=fw_padded.dtype)
+    return jnp.where(fw_padded > 0.0, fw_padded, jnp.max(fw_padded) + 1.0 + pos)
+
+
 @functools.partial(jax.jit, static_argnames=("convention",))
 def lnu_filter_integral(
     L_nu_rest: jnp.ndarray,
@@ -139,6 +184,12 @@ def lnu_filter_integral(
     Eq. 5). Introduced in #398.e (per ADR-0016) to give components publishing
     ``_phot_lnu_precomp`` tensors a named function for "the L_ν step".
 
+    **Quadrature (#960)**: the integral is evaluated on the sorted union of
+    the SED nodes and the filter nodes, with the transmission interpolated —
+    never the SED alone at the filter table's nodes. Instrument filter tables
+    (25–70 Å spacing) under-sample MILES-resolution spectra; the pre-#960
+    point-sampling quadrature biased SDSS-like bands by up to 3 %.
+
     See Also
     --------
     compute_flux_density : The full L→F conversion (composes this with
@@ -146,11 +197,7 @@ def lnu_filter_integral(
     FilterConvention : The supported bandpass weights.
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    L_on_filter = jnp.interp(filter_wave, wave_obs, L_nu_rest, left=0.0, right=0.0)
-    weight = filter_trans * _filter_weight(filter_wave, convention)
-    num = jnp.trapezoid(L_on_filter * weight, filter_wave)
-    den = jnp.trapezoid(weight, filter_wave)
-    return num / jnp.maximum(den, 1e-30)
+    return _filter_integral_union(L_nu_rest, wave_obs, filter_wave, filter_trans, convention)
 
 
 def lnu_filter_integral_batch(
@@ -165,8 +212,8 @@ def lnu_filter_integral_batch(
 
     Vectorized, zero-padding-safe form of :func:`lnu_filter_integral` over a
     stack of filters ``(n_filters, max_len)``. This is the *exact* per-band
-    projection — the identical interpolate-onto-filter-grid-and-integrate the
-    exact photometry path uses (:func:`compute_flux_density_batch`), minus the
+    projection — the identical union-grid quadrature the exact photometry
+    path uses (:func:`compute_flux_density_batch`; see #960), minus the
     cosmological ``lnu_to_fnu`` step (the caller, ``predict_via_precomp``,
     applies cosmology after summing the L_ν families).
 
@@ -282,10 +329,12 @@ def compute_flux_density(
     Eq. 5). ``ENERGY`` replaces :math:`1/\\lambda` with :math:`1/\\lambda^2`
     (CIGALE; Boquien+2019). See :class:`FilterConvention`.
 
-    **Interpolation**: The rest-frame SED is evaluated on the observed-frame
-    filter grid via linear interpolation (``jnp.interp``). This assumes
-    the filter grid adequately samples the SED; under-sampling (rare filters)
-    may underestimate flux slightly.
+    **Quadrature (#960)**: the integral runs on the sorted union of the SED
+    nodes and the filter nodes; the (smooth) transmission is interpolated onto
+    that grid, never the (structured) SED onto the filter table alone. This
+    stays accurate both when the filter table is coarse (SVO instrument
+    tables vs MILES line structure) and when a narrow filter falls on a
+    coarse region of the SED grid.
 
     **Edge handling**: :math:`L_\\nu = 0` outside the SED wavelength domain
     (set via ``left=0.0, right=0.0``).
@@ -429,18 +478,17 @@ def _compute_flux_density_padded(
 
     Notes
     -----
-    Zero-padded entries contribute zero to the integral (``trans=0`` and
-    :func:`filter_weight` maps ``wave=0`` to weight 0), so no masking is
-    needed. Private helper for compute_flux_density_batch.
+    Zero-pad entries are rewritten to an ascending tail above the filter
+    (:func:`_ascending_padded_filter_wave`) so the union-grid interpolation
+    (#960) stays valid; their transmission is zero, so they contribute
+    nothing. Private helper for compute_flux_density_batch.
 
     """
     wave_obs = wave_rest * (1.0 + redshift)
-    sed_on_filter = jnp.interp(filter_wave_padded, wave_obs, sed_rest, left=0.0, right=0.0)
-    weight = filter_trans_padded * _filter_weight(filter_wave_padded, convention)
-    numerator = jnp.trapezoid(sed_on_filter * weight, filter_wave_padded)
-    denominator = jnp.trapezoid(weight, filter_wave_padded)
+    fw_safe = _ascending_padded_filter_wave(filter_wave_padded)
+    mean_lnu = _filter_integral_union(sed_rest, wave_obs, fw_safe, filter_trans_padded, convention)
     flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-    return flux_scale * numerator / jnp.maximum(denominator, 1e-30)
+    return flux_scale * mean_lnu
 
 
 @functools.partial(jax.jit, static_argnames=("convention",))

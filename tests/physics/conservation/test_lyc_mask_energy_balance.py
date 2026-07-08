@@ -182,14 +182,17 @@ class TestGoldenValues:
     only for a deliberate physics change, and record why in the commit.
     """
 
-    # Captured 2026-07-05 on the synthetic wide SSP (float64, CPU). The
-    # two_component value is bit-identical to the pre-#922 exact path (the
-    # consolidation is behavior-preserving there); single_screen / wg00
-    # changed deliberately when they gained the LyC mask (#922).
+    # Captured 2026-07-08 on the synthetic wide SSP (float64, CPU), after
+    # the #964 CIC age-weight kernel replaced the DSPS histogram handoff —
+    # a deliberate physics change (~+2.4 % L_absorbed here: the old kernel
+    # zeroed the SSP node bracketing the SFH's maximum age and pushed its
+    # mass onto younger nodes). Previous capture (2026-07-05, pre-#964):
+    # two_component 5.697121948709991e59, single_screen 7.149162290344824e59,
+    # wg00 6.745997586687046e59.
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
-        "two_component": 5.697121948709991e59,
-        "single_screen": 7.149162290344824e59,
-        "wg00": 6.745997586687046e59,
+        "two_component": 5.836943966100233e59,
+        "single_screen": 7.32462266124103e59,
+        "wg00": 6.911563171933806e59,
     }
 
     @pytest.mark.parametrize(
