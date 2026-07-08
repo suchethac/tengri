@@ -1,11 +1,10 @@
 # Citing tengri
 
-If tengri shows up in a publication, please cite the methods paper
-(in preparation) and the upstream codes whose physics, grids, and
-samplers we are building on. `tengri.cite_all()` returns a BibTeX
-block for every model, SSP, and inference backend that actually ran
-in your fit, so the acknowledgement list stays honest as you change
-components.
+If tengri shows up in a publication, cite the methods paper
+(in preparation) and the upstream codes providing physics, grids, and
+samplers. `tengri.cite_all()` returns BibTeX for every model, SSP, and
+inference backend that ran in your fit, so the acknowledgement stays
+in sync with the components you used.
 
 ## The tengri methods paper
 
@@ -83,6 +82,5 @@ print(tengri.cite_all(result))   # BibTeX for every component that ran
 ```
 
 `cite_all` walks the model and inference call graph and emits BibTeX
-for everything that contributed, including the specific SSP grid you
-loaded. It is the easiest way to keep the acknowledgement section of
-a paper in sync with the fit.
+for everything that contributed, including the SSP grid — the easiest
+way to keep a paper's acknowledgements in sync with the fit.

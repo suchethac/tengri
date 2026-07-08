@@ -16,9 +16,8 @@ from `NIFTy.re`. Gradients are available everywhere, and they are
 exact.
 
 Tengri is pre-1.0 and developed as a community effort. The public
-API is still moving in places, and the repository will move to the
-`tengri-project` GitHub organization shortly, where collaborative
-development and issue tracking will live going forward.
+API is still moving in places. The repository will move to the
+`tengri-project` GitHub organization shortly.
 
 ---
 

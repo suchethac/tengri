@@ -19,8 +19,8 @@ rather than assuming them.
 
 ## The batch API
 
-`fit_batch` fits a list of galaxies sequentially, sharing the XLA compilation
-cache so that only the first galaxy pays the compile cost:
+`fit_batch` fits a list of galaxies sequentially, sharing the XLA
+compilation cache so only the first galaxy pays the compile cost:
 
 ```python
 from tengri import Model, Parameters, Fitter
@@ -37,10 +37,9 @@ results = fitter.fit_batch(galaxies, method="vi", n_iterations=15)
 ```
 
 **Key points:**
-- The first galaxy takes ~15s (XLA compilation). Subsequent galaxies take ~2ms each
-  with `vi` thanks to the persistent XLA cache at `~/.cache/tengri_jax_cache`.
-- Any inference method works: `vi` (default), `mcmc_raytrace`, `mcmc_nuts`, etc.
-- `n_seeds=5` is set automatically for the `vi` family to improve robustness.
+- First galaxy: ~15s (compilation). Subsequent: ~2ms each (cached).
+- Any inference method works: `vi`, `mcmc_raytrace`, `mcmc_nuts`, etc.
+- `n_seeds=5` is set automatically for VI.
 
 ### Parameters
 
@@ -211,12 +210,12 @@ for the same model configuration.
 
 | Scenario | Use |
 |----------|-----|
-| Independent fits, no shared parameters | `model.fit_batch(observations)` |
-| Shared PSD / dust prior across population | `model.fit_population(observations)` |
-| Quick catalog exploration | `fit_batch` with `vi` |
-| Population-level SFH burstiness constraints | `fit_population` → `PopulationPosterior` |
+| Independent fits, no shared parameters | `fit_batch` |
+| Shared PSD / dust prior across population | `fit_population` |
+| Quick catalog exploration | `fit_batch` + `vi` |
+| Population-level SFH constraints | `fit_population` |
 
-See {doc}`hierarchical` for population-level inference with `PopulationFitter`.
+See {doc}`hierarchical` for population-level inference.
 
 For a single-galaxy version of the workflow, see the
 [`05_fitting_photometry`](../spine/05_fitting_photometry) and

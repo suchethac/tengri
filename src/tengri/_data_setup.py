@@ -226,8 +226,8 @@ def download_ssp(
     Examples
     --------
     >>> import tengri
-    >>> tengri.download_ssp()  # FSPS v3.2 → data/
-    >>> tengri.download_ssp("bc03_v3.2", dest="/scratch/ssp")
+    >>> tengri.download_ssp()  # default FSPS PARSEC+MILES grid → data/
+    >>> tengri.download_ssp("bc03_pdva_stelib_chabrier", dest="/scratch/ssp")
     """
     # Resolve target directory
     if dest is None:

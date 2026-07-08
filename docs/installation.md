@@ -54,22 +54,29 @@ to match the driver and CUDA versions on the host.
 discrepancies on the stochastic SFH path. Set `JAX_PLATFORMS=cpu` for
 any fit you intend to trust.
 
+On every backend, `import tengri` enables 64-bit precision globally
+(`jax_enable_x64`): squared luminosity distances overflow float32
+already at z > 0.01.
+
 ## SSP grids
 
 Tengri needs a pre-computed Simple Stellar Population grid in DSPS
-HDF5 format. The default FSPS MIST+C3K grid is the one used in the
-quickstart notebook.
+HDF5 format. The default is FSPS with PARSEC isochrones and the MILES
+library (Chabrier IMF) — bare-stellar, so the Cue and Cloudy nebular
+backends can sit on top. It is the grid the quickstart notebook uses.
 
 ```python
 import tengri
-tengri.download_ssp()          # → data/ssp_fsps_v3.2.h5 (or $TENGRI_DATA_DIR)
+tengri.download_ssp()          # → data/fsps_prsc_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
 tengri.list_known_ssps()       # other grids
 ```
 
-Or via shell:
+Or via shell — either the wrapper script or a direct fetch:
 
 ```bash
 bash scripts/setup_ssp.sh
+# or
+wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_prsc_miles_chabrier.h5 -P data/
 ```
 
 The full catalog of pre-formatted grids (BC03, BPASS, FSPS,

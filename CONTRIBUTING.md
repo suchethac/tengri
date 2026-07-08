@@ -49,7 +49,7 @@ Open issues and the roadmap track ongoing work — see
 
 Include:
 - a minimum reproducer (smallest snippet that triggers the bug),
-- expected vs actual behaviour,
+- expected vs actual behavior,
 - `pip show astro-tengri`, `python --version`, OS, JAX backend + version, and the value of `JAX_PLATFORMS`,
 - the full traceback.
 

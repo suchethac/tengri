@@ -55,16 +55,14 @@ info):
 
 ### Reading these numbers
 
-The N for 3σ values are an **idealized lower bound** assuming:
+The N for 3σ values assume independent observables and population-mean
+separability only — an idealized lower bound:
 
-1. **Independent observables** — the 10 broadband bands are highly
-   correlated through SFR-now, so combined z = √(Σz²) overcounts info.
-   Realistic factor ~2–4× upward.
-2. **Population-mean separability only** — the test uses (μ_A − μ_B) /
-   sqrt((s_A² + s_B²)/N), which captures only the **first moment** of
-   the nuisance-marginalized distribution. Higher moments (variance,
-   skew, covariance) carry additional info; a real population fitter
-   uses all of them.
+1. **Independent observables**: the 10 broadband bands are correlated via
+   SFR-now, so combined z = √(Σz²) overcounts by ~2–4×.
+2. **First-moment only**: the test uses (μ_A − μ_B) / sqrt((s_A² + s_B²)/N).
+   Higher moments (variance, skew, covariance) carry additional info; a real
+   population fitter uses all of them.
 
 Practically: the joint observable should reach 3σ on σ=1 vs σ=2 at
 N≈400–1000 in the actual hierarchical VI. The N=512 plateau in the joint
@@ -124,12 +122,11 @@ in the table.
 
 ## End-to-end validation: status
 
-`bench/scripts/benchmark_joint_indices_e2e.py` was written to validate the
-prior-predictive projection (N≈154 for 3σ σ_PSD discrimination with
-joint+indices) against an actual `PopulationFitter` posterior at
-N=256, 512, 1024.
+`bench/scripts/benchmark_joint_indices_e2e.py` validates the prior-predictive
+projection (N≈154 for 3σ σ_PSD discrimination with joint+indices) against
+actual `PopulationFitter` posteriors at N=256, 512, 1024.
 
-**Root cause isolated (2026-05-01 bisection — 2 attempts)**:
+**Root cause identified**:
 
 A control run with `--no-indices` (joint-only, LINE_NPIX=11 → 451-pt
 wave grid) at N=20, K=4 still triggers HLO blowup:
@@ -185,13 +182,12 @@ the joint forward is ~2× the HLO of photometry-only — pushing past the
 2 GB protobuf serialization ceiling once gradients and population
 fitter inner loops are layered on.
 
-**Resolution (2026-05-01 v4)**: a fused joint kernel turned out to be
-unnecessary. XLA's CSE was already sharing the SED-build subgraph
-across the separate `_compositional.photometry` /
-`_compositional.spectrum` JITs (evidence: HLO sizes were within 0.3%
-across v1/v2/v3 attempts that varied the spectrum projection
-mechanism). The 2.3 GB / 3.7 GB HLO is the *irreducible* cost of the
-joint forward + gradient + Newton-CG + N=20 population fitter graph.
+**Resolution**: a fused joint kernel turned out unnecessary. XLA's CSE
+already shares the SED-build subgraph across the separate
+`_compositional.photometry` / `_compositional.spectrum` JITs (HLO sizes
+within 0.3% across all attempts). The 2.3 GB / 3.7 GB HLO is the
+irreducible cost of the joint forward + gradient + Newton-CG +
+N=20 population fitter graph.
 
 The 2 GB warnings are **cache serialization failures**, not compile
 failures — XLA happily compiles the >2 GB graph but cannot persist it
@@ -219,11 +215,10 @@ photometry-only. This is the irreducible cost of the doubled HLO; not
 a target for further optimization. Future scaling tests should bump
 N=200+ and accept the ~hours-per-cell wall time.
 
-### Posterior recovery (2026-05-01 v5)
+### Posterior recovery
 
-The earlier biased σ=0.76 posterior was a **forward-model misspecification**,
-not a structural problem with the joint observable. Three settings had
-diverged from `benchmark_population_native` and were corrected:
+The biased σ=0.76 posterior was a **forward-model misspecification**, not a
+structural problem. Three settings had diverged from `benchmark_population_native`:
 
 - `n_grid: 64 → 128` — SFH log-age grid resolution. `n_grid=64`
   cannot represent τ=20 Myr fluctuations (~218 Myr/bin near present),
@@ -255,7 +250,7 @@ biased = forward model can't represent truth. Wide + centered on
 prior = data is uninformative. Both are valid outcomes, but the
 former demands you check the forward model, not the data.
 
-### Indices add τ-info but compute scaling is poor (2026-05-02 v6)
+### Indices add τ-info but compute scaling is poor
 
 After resolving the n_grid=64 / LINE_NPIX bias, two further forward-
 model issues surfaced when including Lick indices:

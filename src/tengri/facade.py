@@ -26,15 +26,15 @@ from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 
-# Unit conversion factors to erg/s/cm2/Hz (canonical internal unit)
+# To erg/s/cm2/Hz (canonical): 1 Jy = 1e-23; 1 maggie = 3631 Jy (AB zero point).
 _FLUX_UNIT_TO_CGS = {
     "erg/s/cm2/Hz": 1.0,
     "erg/s/cm^2/Hz": 1.0,  # alt notation
-    "uJy": 1e-23,
+    "uJy": 1e-29,
     "mJy": 1e-26,
     "Jy": 1e-23,
     "nJy": 1e-32,
-    "maggies": 3.631e-23,  # AB magnitude system
+    "maggies": 3.631e-20,
 }
 
 
@@ -413,8 +413,8 @@ class Galaxy:
                 "Flux data not available. Use Galaxy.from_arrays() to provide observed fluxes."
             )
 
-        # Instantiate Fitter
-        fitter = Fitter(self.model, self.flux_obs, self.noise, observation=self.observation)
+        # Instantiate Fitter (the model carries its Observation)
+        fitter = Fitter(self.model, self.flux_obs, self.noise)
 
         # Run inference
         self.result = fitter.run(backend, verbose=verbose, **kwargs)

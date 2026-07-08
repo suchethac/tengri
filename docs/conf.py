@@ -468,7 +468,6 @@ exclude_patterns = [
     # excluded here so they don't build as orphans (each emitted a
     # "not in any toctree" warning).
     "adr/**",
-    "install.md",
     "known_bugs.md",
     "NEBULAR_REFACTOR.md",
     "_notebooks/**",

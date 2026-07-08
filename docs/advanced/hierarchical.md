@@ -7,21 +7,19 @@ galaxy independently, `PopulationFitter` constrains the burstiness prior
 
 ## What is hierarchical PSD inference?
 
-In tengri's stochastic SFH model, each galaxy's star formation history is a
-Gaussian process (GP) realization governed by a power spectral density (PSD)
-with two parameters:
+In tengri's stochastic SFH model, each galaxy's SFH is a Gaussian process
+governed by two PSD parameters:
 
 - **psd_sigma**: amplitude of SFH fluctuations (burstiness strength)
-- **psd_tau_myr**: characteristic timescale in Myr (burstiness timescale)
+- **psd_tau_myr**: characteristic timescale in Myr
 
-When fitting a single galaxy, these PSD parameters are poorly constrained by
-photometry alone --- the data simply cannot distinguish "high sigma, short tau"
-from "low sigma, long tau" for one object.
+Single-galaxy photometry poorly constrains PSD parameters — the data cannot
+distinguish "high sigma, short tau" from "low sigma, long tau."
 
-Hierarchical inference solves this by sharing `psd_sigma` and `psd_tau_myr`
-across a population of N galaxies. Each galaxy still has its own dust,
-metallicity, and SFH realization, but the burstiness prior is learned from the
-ensemble. The constraint on shared parameters improves as sqrt(N).
+Hierarchical inference solves this by sharing PSD parameters across N
+galaxies. Each galaxy retains its own dust, metallicity, and SFH
+realization, but the burstiness prior is learned from the ensemble.
+Constraint improves as sqrt(N).
 
 ## Usage
 
@@ -70,24 +68,19 @@ result = hfitter.run("vi", key=jax.random.PRNGKey(0), n_iterations=25)
 
 ## The block Gibbs structure
 
-Jointly optimizing all parameters at once is inefficient because the shared PSD
-parameters couple to every galaxy. Instead, the hierarchical fitter uses a
-three-block Gibbs scheme that updates parameter groups in rotation:
+Joint optimization is inefficient because shared PSD couples to every
+galaxy. Instead, use a three-block Gibbs scheme:
 
-**Block 1 --- Shared PSD** (2 parameters): `psd_sigma`, `psd_tau_myr`. Updated
-first because they set the prior for every galaxy's SFH. Uses nonlinear
-resampling with 6 samples for precise population constraints.
+**Block 1 — Shared PSD** (2 parameters): `psd_sigma`, `psd_tau_myr`. Set
+prior for every galaxy's SFH. Nonlinear resampling, 6 samples.
 
-**Block 2 --- Per-galaxy physical parameters** (N x ~7 parameters): dust,
-metallicity, SFH backbone. Conditioned on the current PSD and SFH fields.
-Uses nonlinear resampling (geoVI) to handle the age-dust-metallicity banana.
+**Block 2 — Per-galaxy physical** (N × ~7 params): dust, metallicity, SFH
+backbone. geoVI handles age-dust-metallicity banana.
 
-**Block 3 --- Per-galaxy SFH fields** (N x n_grid parameters): the GP latent
-vectors. Nearly Gaussian conditioned on physical parameters, so MGVI (linear
-resampling) suffices. Cheapest block despite being the highest-dimensional.
+**Block 3 — Per-galaxy SFH fields** (N × n_grid params): GP latent vectors.
+Nearly Gaussian conditional; MGVI (linear) suffices.
 
-Each outer cycle updates all three blocks in sequence. Within each block, the
-standard resample+update schedule applies.
+Each outer cycle updates all three blocks in sequence with standard resample+update.
 
 ## Total parameter dimension
 
@@ -158,16 +151,14 @@ print(f"Pop B: sigma={result_b.psd_sigma:.2f}, tau={result_b.psd_tau_myr:.1f} My
 ## When to use hierarchical vs. individual fitting
 
 **Use hierarchical inference when:**
-- You want to learn the burstiness prior from data rather than fixing it.
-- You have a homogeneous population (same redshift range, similar masses).
-- N > 10 galaxies and you care about population-level SFH properties.
-- You are writing a paper about SFH burstiness.
+- You want to learn the burstiness prior from data.
+- You have a homogeneous population (same redshift, similar masses).
+- N > 10 and you care about population-level SFH properties.
 
-**Use `fit_batch` (independent fitting) when:**
-- You want quick per-galaxy results and do not need population constraints.
+**Use `fit_batch` when:**
+- You want quick per-galaxy results without population constraints.
 - Your sample is heterogeneous (mixed redshifts, mass ranges).
-- N < 10 --- too few galaxies to constrain shared parameters.
-- You already have a well-motivated PSD prior from previous work.
+- N < 10 or you already have a well-motivated PSD prior.
 
 ## Expected performance
 
