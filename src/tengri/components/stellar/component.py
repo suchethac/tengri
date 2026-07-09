@@ -1862,9 +1862,14 @@ class StellarSEDComponent:
         # than a boolean mask: ``ssp.ssp_flux[:, :, mask]`` raises
         # NonConcreteBooleanIndexError when ``ssp_flux`` is a traced jit input
         # (the fast nebular line path differentiates through this), whereas a
-        # static-length slice compiles cleanly. ``int(jnp.sum(...))`` is concrete
-        # for the fixed wave grid; it fails loudly if ever handed a traced grid.
-        n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
+        # static-length slice compiles cleanly. Prefer the build-time static bound
+        # (``_state.n_ion_bins``) — it is jit-safe even when ``wave`` is a traced
+        # jit input; ``int(jnp.sum(...))`` only works when ``wave`` is concrete
+        # (eager) and is the fallback for a component with no precompute state.
+        if self._state is not None and self._state.n_ion_bins is not None:
+            n_ion = self._state.n_ion_bins
+        else:
+            n_ion = int(jnp.sum(wave < (2.0 * _HI_LIMIT_AA)))
         sed_ion = (total_mass * LSUN_ERG_PER_S) * jnp.tensordot(
             joint_weights, ssp.ssp_flux[:, :, :n_ion], axes=([0, 1], [0, 1])
         )

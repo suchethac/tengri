@@ -174,6 +174,29 @@ def test_fast_joint_objective_jit_and_grad_safe():
     assert all(np.all(np.isfinite(np.asarray(g))) for g in grad.values())
 
 
+def test_fast_line_fluxes_jit_safe_without_state():
+    """predict_line_fluxes on a fast model is jit+grad safe with NO state passed.
+
+    The standalone path (no feature_state from the joint loss) routes through the
+    SED-free ``_compute_nion``. Regression: ``compute_nion`` recomputed the
+    ionizing-bin count via ``int(jnp.sum(wave < ...))`` — a ConcretizationTypeError
+    under jit when ``ssp_wave`` is a traced input — instead of the static
+    build-time ``_state.n_ion_bins``. All the other fast tests pass a shared state
+    (state.derived['nion']), so only this exercises the standalone jit path."""
+    m = _build(_CUE)
+    m.enable_fast_nebular(_LW, n_grid=8)
+    p = dict(m.spec.sample(jax.random.PRNGKey(1)))
+    fr = list(m.spec.free_params)
+    fp = {k: p[k] for k in fr}
+    fx = {k: v for k, v in p.items() if k not in fr}
+
+    def line_sum(q):
+        return jnp.sum(m.predict_line_fluxes({**fx, **q}, target_wavelengths=_LW))
+
+    g = jax.jit(jax.grad(line_sum))(fp)
+    assert all(np.all(np.isfinite(np.asarray(v))) for v in g.values())
+
+
 def test_nion_decoupling_is_bit_exact_with_full_sed():
     """predict_state's nion (integrated over the ionizing SLICE) is bit-exact with
     the full-SED integral. Guards the decoupling that lets the WavePrecomp LUT
