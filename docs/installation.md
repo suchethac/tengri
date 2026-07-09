@@ -112,9 +112,16 @@ upgrading JAX, wipe stale entries:
 import tengri; tengri.clear_cache()
 ```
 
+A sibling cache at `~/.cache/tengri_precomp` persists the photometry
+redshift table that free-redshift models precompute at build time, so
+the first `SEDModel.build` of a given SSP + filter set pays the cost
+once and subsequent builds — in any session — take seconds.
+
 Override the location or disable via env:
 
 ```bash
 export TENGRI_JAX_CACHE_DIR=/scratch/$USER/jax_cache
 export TENGRI_DISABLE_JAX_CACHE=1
+export TENGRI_PRECOMP_CACHE_DIR=/scratch/$USER/tengri_precomp
+export TENGRI_DISABLE_PRECOMP_CACHE=1
 ```

@@ -52,7 +52,7 @@ you set, which are free, and which fell back to library defaults.
 import jax
 import tengri
 from tengri import (
-    SEDModel, Fitter, ForwardModel,
+    SEDModel, Fitter, Fixed, ForwardModel,
     Observation, Photometry, load_ssp_data, recipes,
 )
 
@@ -62,8 +62,11 @@ obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-sed     = SEDModel.build(ssp_data=ssp, observation=obs,
-                         **recipes.star_forming_photometry())
+# Known-z mock: fixing redshift builds a single-z photometry table in
+# seconds (leave the recipe's free z for real catalogs).
+config  = recipes.star_forming_photometry()
+config["redshift"] = Fixed(0.05)
+sed     = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 forward = ForwardModel.build(sed=sed, observation=obs)
 
 key  = jax.random.PRNGKey(0)
