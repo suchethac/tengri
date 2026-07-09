@@ -245,8 +245,9 @@ Five comparisons are live — [CIGALE](https://cigale.lam.fr/), BAGPIPES,
 Prospector/FSPS, AGNFITTER-RX, and ProSpect. Each is a notebook that
 puts the external code's output and tengri's on the same axes,
 component by component, and closes with a full-SED head-to-head with
-residuals. A Synthesizer comparison is written and under revision;
-MAGPHYS, x-cigale, and GRAHSP are next.
+residuals. A Synthesizer comparison is written and under revision.
+Next in line — each with a scoped issue on the tracker — are BEAGLE,
+MAGPHYS, GRAHSP, and GalaPy.
 
 ## Citation
 
