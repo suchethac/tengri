@@ -3,11 +3,14 @@
 ## From PyPI
 
 ```bash
-pip install astro-tengri
+pip install "astro-tengri[all]"
 ```
 
 The distribution name on PyPI is `astro-tengri`; the Python import
 name is `tengri`. (`pip install tengri` is an unrelated 2017 package.)
+The `[all]` extra pulls in the optimizer and sampler backends (`optax`,
+`blackjax`) used by the quick-start examples; a bare install can build
+models and predict, but `Fitter.run` needs the extras.
 
 ## From source
 
