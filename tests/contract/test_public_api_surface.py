@@ -317,17 +317,39 @@ def test_demoted_and_advertised_are_disjoint() -> None:
 
 @pytest.mark.contract
 def test_new_subpackages_resolve() -> None:
-    """Phase 1 introduces ``tengri.plot``, ``.cosmology``, ``.units``."""
-    assert hasattr(tengri, "plot")
-    assert hasattr(tengri, "cosmology")
-    assert hasattr(tengri, "units")
+    """``tengri.plot`` / ``.cosmology`` / ``.units`` re-export identical objects.
 
-    # And they expose what we documented.
-    assert hasattr(tengri.cosmology, "PLANCK18")
-    assert hasattr(tengri.cosmology, "luminosity_distance")
-    assert hasattr(tengri.units, "fnu_to_jy")
-    assert hasattr(tengri.units, "ab_mag_to_fnu")
-    assert hasattr(tengri.plot, "plot_sed_fit")
+    Surface protected: the Phase-1 shim subpackages. Every name in each
+    shim's ``__all__`` must be the SAME object as in its canonical source
+    module — a diverging copy (stale import, accidental wrapper) would let
+    the two paths drift apart silently.
+    """
+    import types
+
+    import tengri.analysis.plotting as _plotting
+    import tengri.cosmology
+    import tengri.plot
+    import tengri.units
+    import tengri.utils.conversions as _conversions
+    import tengri.utils.cosmology as _cosmology
+    import tengri.utils.magnitudes as _magnitudes
+
+    shim_sources = [
+        (tengri.cosmology, (_cosmology,)),
+        (tengri.units, (_conversions, _magnitudes)),
+        (tengri.plot, (_plotting,)),
+    ]
+    for shim, sources in shim_sources:
+        diverged = []
+        for name in shim.__all__:
+            obj = getattr(shim, name)
+            if isinstance(obj, types.ModuleType):
+                continue
+            if not any(getattr(src, name, None) is obj for src in sources):
+                diverged.append(name)
+        assert not diverged, (
+            f"{shim.__name__}: names not identical to their canonical source module: {diverged}"
+        )
 
 
 # ── SEDModel predict-surface ratchet (cleanup PR-2, 2026-07) ────────

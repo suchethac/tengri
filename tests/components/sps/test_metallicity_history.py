@@ -141,11 +141,15 @@ class TestPSBTwoStepMetallicity:
 
 class TestMetallicityBins:
     def test_assigns_correct_metallicity_per_bin(self, ssp_lg_age_gyr, bin_edges_log_yr):
+        """Shape and finite values match input (bounds test: finiteness)."""
         n_bins = len(bin_edges_log_yr) - 1
         mets = jnp.linspace(-3.0, -1.0, n_bins)
         result = metallicity_bins_on_ssp_grid(ssp_lg_age_gyr, bin_edges_log_yr, mets)
         chex.assert_equal_shape([result, ssp_lg_age_gyr])
         chex.assert_tree_all_finite(result)
+        # Values should span the input range
+        assert jnp.min(result) >= jnp.min(mets) - 1e-6
+        assert jnp.max(result) <= jnp.max(mets) + 1e-6
 
     def test_uniform_metallicity(self, ssp_lg_age_gyr, bin_edges_log_yr):
         """If all bins have the same Z, output should be constant."""
@@ -257,12 +261,15 @@ class TestMetallicityBinsContinuity:
 
 class TestTabulatedMetallicity:
     def test_linear_ramp(self, ssp_lg_age_gyr):
-        """A linear Z(t) table should interpolate smoothly."""
+        """A linear Z(t) table should interpolate smoothly (bounds test: monotone vs input)."""
         met_log_age_yr = jnp.linspace(6.0, 10.14, 50)
         met_log_z_abs = jnp.linspace(-3.0, -1.5, 50)
         result = tabulated_metallicity_on_ssp_grid(ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs)
         chex.assert_equal_shape([result, ssp_lg_age_gyr])
         chex.assert_tree_all_finite(result)
+        # Interpolated values should stay within input range
+        assert jnp.min(result) >= jnp.min(met_log_z_abs) - 1e-6
+        assert jnp.max(result) <= jnp.max(met_log_z_abs) + 1e-6
 
     def test_constant_table(self, ssp_lg_age_gyr):
         """A constant Z table should give constant output."""
