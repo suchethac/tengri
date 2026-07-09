@@ -271,6 +271,11 @@ def pytest_configure(config):
     When the real file is present (e.g. after running
     scripts/download_cb19_templates.py), this hook is a no-op.
     """
+    # Keep the suite hermetic: never read or write the user's on-disk
+    # z-table cache (~/.cache/tengri_precomp). The cache's own contract
+    # tests opt back in with monkeypatch.delenv + a tmp_path cache dir.
+    os.environ.setdefault("TENGRI_DISABLE_PRECOMP_CACHE", "1")
+
     cb19_path = Path(__file__).parent.parent / "data" / "cb19_templates.h5"
     _create_cb19_fixture_if_missing(cb19_path)
     _create_silva04_fixture_if_missing(

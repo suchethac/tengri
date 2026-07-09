@@ -43,6 +43,15 @@ export TENGRI_JAX_CACHE_DIR=/scratch/$USER/jax_cache  # custom location
 export TENGRI_DISABLE_JAX_CACHE=1                     # opt out
 ```
 
+A sibling cache at `~/.cache/tengri_precomp` persists the WavePrecomp
+photometry z-table (the dominant numpy cost of a free-redshift
+`SEDModel.build` — the JAX cache cannot help it). Content-hashed on
+(SSP grid, filters, z grid, quadrature flags); the first build of a
+combination pays the quadrature, later builds load the npz in
+milliseconds. `TENGRI_PRECOMP_CACHE_DIR` / `TENGRI_DISABLE_PRECOMP_CACHE`
+mirror the JAX-cache knobs. The pytest suite disables it globally in
+`tests/conftest.py` (hermeticity); its contract tests opt back in.
+
 After upgrading JAX (`pip install -U jax`), wipe stale entries:
 
 ```python

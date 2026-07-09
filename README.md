@@ -118,7 +118,7 @@ bash scripts/setup_ssp.sh
 import jax
 import tengri
 from tengri import (
-    SEDModel, Fitter, ForwardModel,
+    SEDModel, Fitter, Fixed, ForwardModel,
     Observation, Photometry, load_ssp_data, recipes,
 )
 
@@ -128,8 +128,13 @@ obs = Observation(photometry=Photometry.from_names(
 ))
 
 # Pick a curated recipe and let it set sensible priors + defaults.
-sed = SEDModel.build(ssp_data=ssp, observation=obs,
-                     **recipes.star_forming_photometry())
+# The mock is at a known redshift, so fix z — the model then builds a
+# single-redshift photometry table in seconds instead of tabulating the
+# full z in (0.01, 6) grid. Leave z free (the recipe default) for real
+# catalogs with unknown redshifts.
+config = recipes.star_forming_photometry()
+config["redshift"] = Fixed(0.05)
+sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 forward = ForwardModel.build(sed=sed, observation=obs)
 
 key = jax.random.PRNGKey(0)
