@@ -86,7 +86,7 @@ class NebularGridTable:
     log_phot_per_qh : ndarray, shape ``(*grid_dims, n_filter)`` or None
         ``log10`` of the **intrinsic** (un-reddened) nebular filter-integrated
         rest-frame ``L_nu`` per unit ``nion`` [erg/s/Hz per (photons/s)] — the
-        broadband analogue of ``log_line_per_qh``, one column per photometric
+        broadband analog of ``log_line_per_qh``, one column per photometric
         filter. Reconstructs ``nebular_phot_lnu_precomp`` (the key
         :meth:`Observation.predict_via_precomp` consumes) without the per-eval
         Cue forward + filter integration. ``None`` when the reference model had
@@ -310,7 +310,7 @@ def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:
 def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
     r"""Reconstruct the intrinsic nebular photometry precompute — no Cue forward.
 
-    The broadband analogue of :func:`reconstruct_nebular_lines`. Returns the
+    The broadband analog of :func:`reconstruct_nebular_lines`. Returns the
     **rest-frame** filter-integrated ``L_nu`` (one column per filter) that the
     nebular component would publish as ``nebular_phot_lnu_precomp``:
 

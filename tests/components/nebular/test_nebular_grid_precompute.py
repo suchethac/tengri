@@ -186,7 +186,7 @@ def test_axis_range_reads_prior_not_default():
 def test_phot_channel_reconstructs_nebular_precomp():
     """Q_H x interp(phot_grid) matches the exact nebular_phot_lnu_precomp publish.
 
-    The broadband analogue of the line channel. A WavePrecomp model publishes
+    The broadband analog of the line channel. A WavePrecomp model publishes
     the intrinsic filter-integrated nebular L_nu (``nebular_phot_lnu_precomp``,
     the key predict_via_precomp consumes). The grid captures it per Q_H at build
     time; the reconstruction is what the fast forward would publish instead of
