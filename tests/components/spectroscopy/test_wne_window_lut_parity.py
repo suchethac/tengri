@@ -438,6 +438,39 @@ def test_predict_spectral_indices_fast_is_jittable():
     assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
 
 
+def test_window_lut_survives_joint_then_standalone_trace(real_ssp_only):
+    """Regression: the memoized window LUT must not leak tracers across jit traces.
+
+    The fast measure_line_fluxes / predict_spectral_indices LUT is built lazily on
+    first use. When that first use is inside a jit trace, the cached jnp arrays are
+    trace-tied; reusing the cache in a SECOND, separate trace raised
+    UnexpectedTracerError. jax.ensure_compile_time_eval forces the LUT to a
+    concrete compile-time constant. Reproduce the failing order — a joint fast
+    objective jit-grad FIRST (populates both caches mid-trace), then each fast
+    channel standalone.
+    """
+    from tengri.observation.line_measurement import default_line_defs
+
+    m, _ssp = _dust_model()
+    line_defs = default_line_defs(np.asarray([6564.61]), ("Halpha",))
+    p = dict(m.spec.sample(jax.random.PRNGKey(4)))
+    fr = list(m.spec.free_params)
+    fp = {k: p[k] for k in fr}
+    fx = {k: v for k, v in p.items() if k not in fr}
+
+    def _lines(q):
+        return jnp.sum(m.measure_line_fluxes({**fx, **q}, line_defs, fast=True))
+
+    def _idx(q):
+        return jnp.sum(m.predict_spectral_indices({**fx, **q}, _INDEX_SET, fast=True))
+
+    jax.jit(jax.grad(lambda q: _lines(q) + _idx(q)))(fp)  # caches built mid-trace
+    gl = jax.jit(jax.grad(_lines))(fp)  # standalone traces reuse the caches
+    gi = jax.jit(jax.grad(_idx))(fp)
+    assert all(np.all(np.isfinite(np.asarray(v))) for v in gl.values())
+    assert all(np.all(np.isfinite(np.asarray(v))) for v in gi.values())
+
+
 def test_predict_spectral_indices_fast_fills_slope_from_exact(real_ssp_only):
     """Slope indices are not LUT-expressible → filled from the exact SED, not NaN."""
     m, _ssp = _dust_model()

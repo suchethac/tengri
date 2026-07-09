@@ -3707,7 +3707,8 @@ class SEDModel:
         Depends only on the model's (concrete) SSP grid and the index windows,
         so it is built once per distinct index set and reused across evaluations
         — the FeaturePrecomp analog of the WavePrecomp SSP x filter LUT. Built
-        from concrete SSP data (not traced params), so it is safe under jit.
+        from concrete SSP data (not traced params), and forced to eager evaluation
+        so the cached LUT is a true compile-time constant (see below).
         """
         from tengri.observation.spectral_indices import precompute_index_windows
 
@@ -3718,9 +3719,15 @@ class SEDModel:
         key = tuple(index_defs)
         pc = cache.get(key)
         if pc is None:
-            pc = precompute_index_windows(
-                self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
-            )
+            # ``jax.ensure_compile_time_eval`` forces concrete evaluation even when
+            # first reached inside a jit trace; otherwise the cached jnp LUT holds
+            # trace-tied tracers that leak into a later trace (UnexpectedTracerError
+            # under a joint-then-standalone call order). Same fix as
+            # :meth:`_line_window_precomp`.
+            with jax.ensure_compile_time_eval():
+                pc = precompute_index_windows(
+                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, index_defs
+                )
             cache[key] = pc
         return pc
 
@@ -3739,7 +3746,16 @@ class SEDModel:
         key = tuple(line_defs)
         pc = cache.get(key)
         if pc is None:
-            pc = precompute_line_windows(self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs)
+            # Force eager (concrete) evaluation even when first reached inside a
+            # jit trace. Without this, ``precompute_line_windows`` runs its jnp
+            # ops abstractly, the cached ``pc`` holds DynamicJaxprTracers tied to
+            # that trace, and reusing the cache in a later trace raises
+            # UnexpectedTracerError. Inputs are the concrete build-time SSP grid,
+            # so this is a genuine compile-time constant.
+            with jax.ensure_compile_time_eval():
+                pc = precompute_line_windows(
+                    self.ssp_data.ssp_wave, self.ssp_data.ssp_flux, line_defs
+                )
             cache[key] = pc
         return pc
 
