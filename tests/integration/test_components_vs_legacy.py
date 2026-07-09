@@ -146,18 +146,36 @@ def test_stellar_only_legacy_runs(stellar_only_model):
 
 
 def test_orchestrator_vs_legacy_mstar_physical_agreement(stellar_only_model):
-    """log10(M*) from both paths agrees within 0.1 dex."""
+    """log10(M*) agrees between paths — compared like-for-like.
+
+    The old assertion compared legacy ``stellar_mass`` (documented "total
+    mass formed") against ``derived['log_mstar']`` (documented "surviving
+    stellar mass"): the ~0.19 dex "disagreement" it reported was the stellar
+    mass-loss return fraction (10**-0.19 ~= 0.65), not a path divergence.
+    Compare formed-vs-formed and surviving-vs-surviving instead — a strictly
+    stronger contract than the old mixed one.
+    """
     legacy_q = stellar_only_model.predict(_STELLAR_PARAMS)
     state = stellar_only_model.predict_state(_STELLAR_PARAMS)
 
-    legacy_log_mstar = float(jnp.log10(legacy_q.stellar_mass))
-    orch_log_mstar = float(state.derived["log_mstar"])
-    diff_dex = abs(legacy_log_mstar - orch_log_mstar)
-
-    assert diff_dex < 0.1, (
-        f"log10(M*) disagrees by {diff_dex:.3f} dex: "
-        f"legacy={legacy_log_mstar:.3f}, orch={orch_log_mstar:.3f}"
+    legacy_formed = float(jnp.log10(legacy_q.stellar_mass))
+    orch_formed = float(state.derived["log_mstar_formed"])
+    diff_formed = abs(legacy_formed - orch_formed)
+    assert diff_formed < 0.02, (
+        f"formed log10(M*) disagrees by {diff_formed:.3f} dex: "
+        f"legacy={legacy_formed:.3f}, orch={orch_formed:.3f}"
     )
+
+    legacy_surv = float(jnp.log10(legacy_q.stellar_mass_surviving))
+    orch_surv = float(state.derived["log_mstar"])
+    diff_surv = abs(legacy_surv - orch_surv)
+    assert diff_surv < 0.05, (
+        f"surviving log10(M*) disagrees by {diff_surv:.3f} dex: "
+        f"legacy={legacy_surv:.3f}, orch={orch_surv:.3f}"
+    )
+
+    # Physical ordering: surviving mass can never exceed formed mass.
+    assert orch_surv <= orch_formed + 1e-9
 
 
 # ── Strict bit-exact: gating criterion for monolith deletion ──────────

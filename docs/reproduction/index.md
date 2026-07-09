@@ -53,5 +53,6 @@ prospect_r
 synthesizer
 ```
 
-Comparisons with MAGPHYS, x-cigale, and GRAHSP will land as their
-physics reproduction notebooks come together.
+Comparisons with BEAGLE, MAGPHYS, GRAHSP, and GalaPy are scoped on the
+[issue tracker](https://github.com/suchethac/tengri/issues) and will
+land as their physics reproduction notebooks come together.

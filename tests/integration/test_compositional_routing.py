@@ -1,10 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Integration tests verifying compositional kernel routing for special SFH/metallicity modes.
+"""Integration tests for the special SFH/metallicity prediction modes.
 
 Tests cover:
-- evolving_metallicity=True routes through _predict_photometry_compositional
-- chem_evol=True routes through _predict_photometry_compositional
-- Tabular SFH (sfh_t_gyr + sfh_sfr) produces finite photometry without recompilation
+- evolving_metallicity=True: photometry is finite AND the evolving-Z ramp
+  measurably changes the prediction (not a silent no-op)
+- chem_evol=True: photometry is finite AND chem_yield changes the prediction
+  under jit (regression lock for the float()-on-tracer ConcretizationTypeError)
+- Tabular SFH (sfh_t_gyr + sfh_sfr): the component chain does not implement it
+  yet (orphaned by the kernel deletion) — the loud NotImplementedError gate is
+  locked so it can never silently return the registry placeholder's zeros
+
+The pre-ADR-0019 ``_compositional`` kernel attribute these tests once asserted
+was removed when the compositional/hybrid/exact modes collapsed into the one
+component-chain path; the routing guarantee is now behavioral, not structural.
 
 All tests require SSP data on disk and are skipped gracefully when missing.
 """
@@ -57,7 +65,7 @@ def filters():
 
 
 class TestEvolvingZRouting:
-    """Compositional kernel is built and returns finite photometry when evolving_metallicity=True."""  # noqa: E501
+    """Evolving-Z ramp: finite photometry and a measurable (non-no-op) effect."""
 
     @pytest.fixture(scope="class")
     def evolvingz_spec(self):
@@ -86,10 +94,24 @@ class TestEvolvingZRouting:
     def evolvingz_params(self, evolvingz_spec):
         return evolvingz_spec.sample(jax.random.PRNGKey(0))
 
-    def test_compositional_kernel_built(self, evolvingz_model):
-        """SEDModel must have built the compositional photometry kernel for evolving-Z."""
-        assert evolvingz_model._compositional is not None
-        assert evolvingz_model._compositional.photometry is not None
+    def test_evolving_z_ramp_is_not_a_noop(self, evolvingz_model, evolvingz_params):
+        """The evolving-Z ramp must measurably change the photometry.
+
+        A flat ramp (met_logzsol_0 == met_logzsol_final) and a strongly
+        evolving one must differ — guards the routing the retired
+        ``_compositional`` attribute assertion used to (indirectly) cover.
+        """
+        flat = {**evolvingz_params, "met_logzsol_0": -0.5, "met_logzsol_final": -0.5}
+        ramp = {**evolvingz_params, "met_logzsol_0": -2.0, "met_logzsol_final": 0.2}
+        phot_flat = evolvingz_model.predict_photometry(flat)
+        phot_ramp = evolvingz_model.predict_photometry(ramp)
+        # Ratio-based: AB flux densities are ~1e-27 erg/s/cm2/Hz, far below
+        # allclose's default atol=1e-8 — allclose is vacuously True on them.
+        max_ratio_dev = float(jnp.max(jnp.abs(phot_ramp / phot_flat - 1.0)))
+        assert max_ratio_dev > 1e-3, (
+            f"evolving_metallicity=True looks like a silent no-op: flat vs "
+            f"strongly evolving Z ramp differ by max {max_ratio_dev:.2e} (ratio)."
+        )
 
     def test_photometry_finite(self, evolvingz_model, evolvingz_params):
         phot = evolvingz_model.predict_photometry(evolvingz_params)
@@ -108,7 +130,7 @@ class TestEvolvingZRouting:
 
 
 class TestChemEvolRouting:
-    """Compositional kernel is built and returns finite photometry when chem_evol=True."""
+    """Chem-evol mode: finite photometry; chem_yield acts through jit."""
 
     @pytest.fixture(scope="class")
     def chemevol_spec(self):
@@ -135,10 +157,24 @@ class TestChemEvolRouting:
     def chemevol_params(self, chemevol_spec):
         return chemevol_spec.sample(jax.random.PRNGKey(1))
 
-    def test_compositional_kernel_built(self, chemevol_model):
-        """SEDModel must have built the compositional photometry kernel for chem-evol."""
-        assert chemevol_model._compositional is not None
-        assert chemevol_model._compositional.photometry is not None
+    def test_chem_yield_is_not_a_noop_under_jit(self, chemevol_model, chemevol_params):
+        """chem_yield must change the photometry, traced through jit.
+
+        Regression lock: the chem-evol branch cast its params with float(),
+        which raises ConcretizationTypeError on traced values — and would
+        freeze the closed-box yield at its default if ever eagerly bypassed.
+        Two different yields must give different photometry.
+        """
+        low = {**chemevol_params, "chem_yield": 0.01}
+        high = {**chemevol_params, "chem_yield": 0.06}
+        phot_low = chemevol_model.predict_photometry(low)
+        phot_high = chemevol_model.predict_photometry(high)
+        # Ratio-based (see evolving-Z test: allclose is vacuous at ~1e-27).
+        max_ratio_dev = float(jnp.max(jnp.abs(phot_high / phot_low - 1.0)))
+        assert max_ratio_dev > 1e-3, (
+            f"chem_yield looks like a silent no-op: yields 0.01 vs 0.06 differ "
+            f"by max {max_ratio_dev:.2e} (ratio) through predict_photometry."
+        )
 
     def test_photometry_finite(self, chemevol_model, chemevol_params):
         phot = chemevol_model.predict_photometry(chemevol_params)
@@ -157,13 +193,26 @@ class TestChemEvolRouting:
 
 
 class TestTabularSFHRouting:
-    """Tabular SFH (sfh_t_gyr + sfh_sfr in params dict) produces finite photometry.
+    """Tabular SFH (sfh_t_gyr + sfh_sfr) — orphaned feature, gate locked.
 
-    Calling predict_photometry twice with different SFH arrays exercises the
-    JIT-compiled kernel with traced (not concretized) array values — if the
-    tabular branch accidentally concretizes shapes or values the second call
-    would trigger a recompilation or raise a ConcretizationTypeError.
+    The runtime-table SFH lost its execution path when the legacy kernels
+    were deleted (ADR-0019 one-path migration): the registry entry is a
+    zeros placeholder ("actual tabulated SFH handled separately") and the
+    component chain gates ``sfh_model='table'`` with NotImplementedError.
+    Until the port lands, the one behavior worth locking is that the gate
+    stays LOUD — a model built with ``mean_sfh_type='table'`` must raise,
+    never silently predict from the placeholder's all-zero SFH.
+
+    The three functional tests are preserved, skipped, as the port's
+    acceptance criteria (finite photometry, no recompile across different
+    tables, correct shape).
     """
+
+    _PORT_SKIP = (
+        "tabular SFH awaits its component-chain port (execution path deleted "
+        "with the legacy kernels; registry entry is a zeros placeholder) — "
+        "these are the port's acceptance tests"
+    )
 
     @pytest.fixture(scope="class")
     def tabular_spec(self):
@@ -198,17 +247,27 @@ class TestTabularSFHRouting:
         )
         return {**base_params, "sfh_t_gyr": t_gyr, "sfh_sfr": sfr}
 
+    def test_table_gate_is_loud(self, tabular_spec, ssp_data, filters, base_params):
+        """The unported table mode must raise, never silently predict zeros."""
+        with pytest.raises(NotImplementedError, match="table"):
+            model = SEDModel(tabular_spec, ssp_data, filters=filters)
+            params = self._add_sfh(base_params, jax.random.PRNGKey(10))
+            model.predict_photometry(params)
+
+    @pytest.mark.skip(reason=_PORT_SKIP)
     def test_first_call_finite(self, tabular_model, base_params):
         params = self._add_sfh(base_params, jax.random.PRNGKey(10))
         phot = tabular_model.predict_photometry(params)
         assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry (call 1): {phot}"
 
+    @pytest.mark.skip(reason=_PORT_SKIP)
     def test_second_call_finite_no_recompile(self, tabular_model, base_params):
         """Second call with a different SFH array must succeed without error."""
         params = self._add_sfh(base_params, jax.random.PRNGKey(99))
         phot = tabular_model.predict_photometry(params)
         assert jnp.all(jnp.isfinite(phot)), f"Non-finite photometry (call 2): {phot}"
 
+    @pytest.mark.skip(reason=_PORT_SKIP)
     def test_photometry_shape(self, tabular_model, base_params):
         params = self._add_sfh(base_params, jax.random.PRNGKey(7))
         phot = tabular_model.predict_photometry(params)
