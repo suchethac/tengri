@@ -1906,8 +1906,10 @@ class Prediction:
         # Pull the catalog from the orchestrator's NebularSEDComponent
         # publication. BakedIn / Shock backends won't publish it; fall
         # back to all-NaN for those (matches the legacy "no catalog"
-        # behavior without raising).
-        state = model.predict_state(self._params)
+        # behavior without raising). Reuse the ForwardState cached by
+        # _ensure_sfh() — re-running predict_state here doubled the
+        # forward pass (and its transient memory) for pred.lines.
+        state = self._cache["_state"]
         derived = state.derived
         if "line_waves" in derived and "line_lums" in derived:
             self._cache["line_waves"] = jnp.asarray(derived["line_waves"])
