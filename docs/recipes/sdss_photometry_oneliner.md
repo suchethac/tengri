@@ -1,57 +1,53 @@
 # Recipe: Fit SDSS photometry with one function call
 
-## Scenario
-
-You have 5-band SDSS photometry (u, g, r, i, z) for a galaxy and want a stellar mass, star formation rate, and dust posterior in under a minute.
-
-## Prerequisites
-
-- tengri installed and up to date
-- SSP data cached at the path returned by `tengri.io.load_ssp_data()` (see load_ssp_data documentation for caching options)
-
-## One-liner fit
+You have 5-band SDSS photometry (u, g, r, i, z) for a galaxy and want to fit
+the stellar mass, star formation rate, and dust content with a single function
+call. The Galaxy facade wraps the full model-building pipeline into one line.
 
 ```python
-import tengri as tg
+import tengri
 
-galaxy = tg.Galaxy.from_arrays(
+ssp = tengri.load_ssp()
+
+galaxy = tengri.Galaxy.from_arrays(
     filters=["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-    flux=[1.2, 2.5, 3.1, 2.8, 2.3],          # nanomaggies
+    flux=[1.2, 2.5, 3.1, 2.8, 2.3],        # mJy
     flux_err=[0.1, 0.15, 0.12, 0.14, 0.11],
-    flux_unit="nanomaggies",
+    flux_unit="mJy",
     redshift=0.1,
-    ssp_path=tg.io.load_ssp_data(),
+    ssp=ssp,
     preset="starforming"
 )
 
-posterior = galaxy.fit(backend="map")
-print(posterior.summary())
+galaxy = galaxy.fit(backend="map")
+print(galaxy.summary())
 ```
 
-## Key parameters
+**Parameters:**
 
-- **`flux_unit`:** accepts `"maggies"`, `"nanomaggies"`, `"erg/s/cm^2/Angstrom"`, or `"Jy"`
-- **`backend`:** use `"map"` for point estimates (fast), `"vi"` for full uncertainty estimates (slower)
-- **`preset`:** `"starforming"`, `"quiescent"`, or `"agn"` — sets sensible parameter priors
+- `flux_unit`: one of `"erg/s/cm2/Hz"` (default), `"nJy"`, `"mJy"`, `"Jy"`, `"uJy"`, `"maggies"`
+- `redshift`: redshift of the galaxy (or leave None for photo-z mode)
+- `preset`: one of `"starforming"`, `"quiescent"`, `"high_z"`, `"photoz"`, `"jwst_spec"`, `"agn_host"`
+- `backend`: inference method — `"map"` (point estimate, fast), `"vi"` (full posterior, slower),
+  `"mcmc_nuts"`, `"laplace"`, etc. See `tengri.list_inference_methods()` for all available.
 
-## Get uncertainties
+**Get credible intervals:**
 
-For posterior samples instead of point estimate:
+For sampling-based posteriors (VI or MCMC), `summary()` reports medians
+with 68% intervals:
 
 ```python
-posterior = galaxy.fit(backend="vi")
-samples = posterior.sample(n=5000)
-print(f"log M_star: {samples['stellar_mass'].mean():.2f} +/- {samples['stellar_mass'].std():.2f}")
+galaxy = galaxy.fit(backend="vi")
+print(galaxy.summary())    # {param}_median, {param}_lo68, {param}_hi68
 ```
 
-## Cite dependencies
+**Bibliography:**
 
-At the end of your analysis:
+Every component, grid, and sampler that ran carries its citation:
 
 ```python
-galaxy.cite()  # Prints tengri, DSPS, MIST citations
+print(galaxy.bibliography.report())     # human-readable list
+print(galaxy.bibliography.to_bibtex())  # BibTeX for the paper
 ```
 
-## Runnable example
-
-See `notebooks/00_one_liner.py` for a full executable version with example data.
+See the [spine notebooks](../spine/00_quickstart) for full end-to-end examples.

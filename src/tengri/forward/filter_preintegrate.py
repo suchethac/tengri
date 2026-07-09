@@ -51,6 +51,9 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from tengri.observation.photometry import _filter_integral_union
+from tengri.utils.filter_convention import FilterConvention
+
 __all__ = ["preintegrate_ssp_filter_grid"]
 
 
@@ -59,6 +62,7 @@ def preintegrate_ssp_filter_grid(
     filter_waves: Sequence[jnp.ndarray],
     filter_trans: Sequence[jnp.ndarray],
     redshift: float = 0.0,
+    convention: FilterConvention = FilterConvention.BESSELL,
 ) -> jnp.ndarray:
     r"""Convolve every SSP template with every filter at construction time.
 
@@ -70,16 +74,19 @@ def preintegrate_ssp_filter_grid(
         \mathrm{SSP\_phot}[m, a, f] =
         \frac{\int L_\nu^{(m,a)}(\lambda_\mathrm{rest})
               T_f(\lambda_\mathrm{obs})\,
-              \lambda_\mathrm{obs}\,d\lambda_\mathrm{obs}}
+              w(\lambda_\mathrm{obs})\,d\lambda_\mathrm{obs}}
              {\int T_f(\lambda_\mathrm{obs})\,
-              \lambda_\mathrm{obs}\,d\lambda_\mathrm{obs}}
+              w(\lambda_\mathrm{obs})\,d\lambda_\mathrm{obs}}
 
-    where :math:`\lambda_\mathrm{obs} = (1+z)\lambda_\mathrm{rest}`.
-    Identical to the per-filter integral in
-    :func:`tengri.observation.photometry.compute_flux_density` but
-    without the ``(1+z)/4\pi d_L^2`` source→observer scaling — that
-    is applied later when the SSP grid is combined with mass-per-bin
-    weights.
+    where :math:`\lambda_\mathrm{obs} = (1+z)\lambda_\mathrm{rest}` and
+    :math:`w` is the bandpass weight of ``convention`` (photon-counting
+    :math:`1/\lambda` ``BESSELL`` default, per ADR-0017; pre-#960 this
+    function used a :math:`\lambda` weight, which matched neither
+    convention). Identical to the per-filter integral in
+    :func:`tengri.observation.photometry.compute_flux_density` —
+    union-grid quadrature included (#960) — but without the
+    ``(1+z)/4\pi d_L^2`` source→observer scaling; that is applied later
+    when the SSP grid is combined with mass-per-bin weights.
 
     Parameters
     ----------
@@ -123,18 +130,14 @@ def preintegrate_ssp_filter_grid(
     z = jnp.asarray(redshift)
     wave_obs = ssp_wave * (1.0 + z)
 
-    # The single-SSP filter integral has the same shape as the
-    # ``compute_flux_density`` integrand, sans the (1+z)/4πd_L² factor.
-    # This is broadcast-vmapped across (m, a) by jnp.apply_along_axis-style
-    # einsum.
+    # The single-SSP filter integral is exactly the ``lnu_filter_integral``
+    # union-grid quadrature (#960), sans the (1+z)/4πd_L² factor. This is
+    # broadcast-vmapped across (m, a).
     def _single_ssp_phot(sed_rest):
         """Integrate one SSP through every filter."""
 
         def _per_filter(fw, ft):
-            sed_at_filter = jnp.interp(fw, wave_obs, sed_rest, left=0.0, right=0.0)
-            num = jnp.trapezoid(sed_at_filter * ft * fw, fw)
-            den = jnp.trapezoid(ft * fw, fw)
-            return num / jnp.maximum(den, 1e-30)
+            return _filter_integral_union(sed_rest, wave_obs, fw, ft, convention)
 
         return jnp.asarray(
             [_per_filter(fw, ft) for fw, ft in zip(filter_waves, filter_trans, strict=False)]

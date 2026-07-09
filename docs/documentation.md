@@ -33,7 +33,7 @@ pip install -e ".[dev]"       # pytest, ruff, jupytext
 tengri needs DSPS-compatible SSP templates in HDF5. A [hosted catalog](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/) (BC03, BPASS, FSPS, ProGeny) is available. Example:
 
 ```bash
-wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/ssp_fsps_v3.2.h5 -P data/
+wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_prsc_miles_chabrier.h5 -P data/
 ```
 
 ## Spine notebooks
@@ -57,7 +57,7 @@ Tutorial pages in the sidebar are those **`.ipynb`** files rendered as HTML. Opt
 from tengri import SEDModel, Parameters, Fitter, Uniform, Gaussian
 from tengri import Observation, Photometry, load_ssp_data
 
-ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
+ssp = load_ssp_data("data/fsps_prsc_miles_chabrier.h5")
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))

@@ -41,7 +41,7 @@ def _build_model(components: dict[str, Any], *, spec_wavs: np.ndarray | None = N
     rest-frame :math:`L_\\lambda` in erg/s/Å — the units the rest of this
     driver expects. Setting an alternative redshift moves us into
     observed-frame and applies luminosity-distance dimming; callers that
-    want that behaviour should pass it explicitly via ``components``.
+    want that behavior should pass it explicitly via ``components``.
     """
     components = dict(components)
     components.setdefault("redshift", 0.0)

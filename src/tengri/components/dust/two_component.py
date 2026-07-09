@@ -131,6 +131,16 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: (``frac_obrun`` on the whole spectrum) and CIGALE (absorbed_old +
     #: absorbed_young). Static, non-fittable; enters ``compile_signature``.
     lyc_absorb_all: bool = False
+    #: Include the Lyman continuum (λ < 912 Å) in the dust energy-balance
+    #: integral. ``False`` (default) — canonical LyC-masked ``L_absorbed``
+    #: (#922): LyC photons ionize H and re-emerge as nebular emission, not
+    #: dust heating (CIGALE convention). ``True`` — all absorbed energy heats
+    #: dust, matching FSPS/Prospector, whose ``add_dust_emission`` re-emits
+    #: the full absorbed luminosity (measured ~10 % higher L_IR at the
+    #: star-forming reproduction fiducial, #961). Grammar key
+    #: ``dust={'eb_include_lyc': True}``. Static, non-fittable; enters
+    #: ``compile_signature``.
+    eb_include_lyc: bool = False
 
 
 @dataclass(frozen=True)
@@ -553,6 +563,10 @@ class DustSEDComponent:
                 eb_lut = _dir.get("energy_balance_lut")
         jw = state.derived.get("joint_weights")
         mass_scale = state.derived.get("stellar_mass_scale")
+        # FSPS-parity toggle (#961): None disables the canonical LyC mask so
+        # all absorbed energy heats dust. The fast-path LUT bakes the same
+        # choice at build time (sed_model passes config.eb_include_lyc).
+        _eb_cutoff = None if self.config.eb_include_lyc else 912.0
         if eb_lut is not None and jw is not None and mass_scale is not None:
             # Fast path (WavePrecomp): the stellar bolometric absorption comes
             # from a precomputed (tau_bc, tau_diff) LUT contracted with the
@@ -570,7 +584,9 @@ class DustSEDComponent:
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
             )
-            neb_absorbed = bolometric_absorbed(sed_neb, sed_neb_attenuated, nu, wave=wave)
+            neb_absorbed = bolometric_absorbed(
+                sed_neb, sed_neb_attenuated, nu, wave=wave, lyman_cutoff_aa=_eb_cutoff
+            )
             L_absorbed = jnp.abs(stellar_absorbed + neb_absorbed)
         else:
             from tengri.forward.energy_balance import bolometric_absorbed
@@ -581,6 +597,7 @@ class DustSEDComponent:
                     sed_attenuated + sed_neb_attenuated,
                     nu,
                     wave=wave,
+                    lyman_cutoff_aa=_eb_cutoff,
                 )
             )
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))

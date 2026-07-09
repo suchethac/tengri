@@ -54,7 +54,7 @@ obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sds
 sed = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
-    sfh={"type": "dpl", "*": FIXED, "log_total_mass": 10.0, 3.0)},
+    sfh={"type": "dpl", "*": FIXED, "log_total_mass": 10.0},
     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
     neb={"type": "none"},
     redshift=tengri.Fixed(0.05),
@@ -68,12 +68,6 @@ fitter = Fitter(forward, data=photometry_array, noise=noise_array)
 posterior = fitter.run("map")
 posterior.summary()
 ```
-
-The `SEDModel.build(...)` call is unchanged from previous releases — same
-nested-dict grammar, same SSP/observation arguments, same internal
-pipeline. The only addition is `ForwardModel.build(sed=..., observation=...)`
-on top, which gives inference a uniform `.predict(params) → dict`
-interface.
 
 ## Why the split?
 

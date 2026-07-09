@@ -43,27 +43,37 @@ A tengri fit is built from four things:
 
 ```python
 import jax
+import tengri
 from tengri import (
-    SEDModel, Parameters, Fitter,
-    Uniform, Observation, Photometry, load_ssp_data,
+    FREE, FIXED, Fixed, Uniform,
+    SEDModel, ForwardModel, Fitter, Observation, Photometry,
 )
 
-ssp = load_ssp_data("data/ssp_fsps_v3.2.h5")
+ssp = tengri.load_ssp()
 obs = Observation(
     photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 )
-spec = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2),
-    sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
-    sfh_tsnorm_width_gyr=Uniform(0.5, 5),
-    redshift=0.1,
+model = SEDModel.build(
+    ssp_data=ssp,
+    observation=obs,
+    sfh={"type": "dpl", "*": FREE,
+         "alpha": Uniform(0.5, 3.0),
+         "beta": Uniform(0.3, 2.0),
+         "tau_gyr": Uniform(0.5, 10),
+         "log_total_mass": Uniform(8, 12)},
+    dust={"type": "two_component", "*": FIXED},
+    neb={"type": "none"},
+    redshift=Fixed(0.1),
 )
-model = SEDModel(spec, ssp, observation=obs)
 
 # Mock recovery. For real data, pass your own (flux, noise) directly.
 key = jax.random.PRNGKey(0)
-mock = model.mock(spec.sample(key), key=key)
-fitter = Fitter(model, mock["flux_obs"], mock["noise"])
+params = model.spec.sample(key)
+flux = model.predict_photometry(params)
+noise = flux * 0.1
+
+forward = ForwardModel.build(sed=model, observation=obs)
+fitter = Fitter(forward, flux, noise)
 ```
 
 ## The four discovery calls
@@ -95,6 +105,5 @@ Jupyter. `tengri.search("torus")` does a keyword search across every menu.
 :maxdepth: 1
 :hidden:
 
-../install
 gpu
 ```

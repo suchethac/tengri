@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Convenience wrapper: download the default tengri SSP grid.
 # Usage: bash scripts/setup_ssp.sh [name] [dest]
+# Names are the short keys from tengri.list_known_ssps().
 # Examples:
-#   bash scripts/setup_ssp.sh                    # FSPS v3.2 → $TENGRI_DATA_DIR or data/
-#   bash scripts/setup_ssp.sh bc03_v3.2 /scratch/ssp
+#   bash scripts/setup_ssp.sh                    # default grid → $TENGRI_DATA_DIR or data/
+#   bash scripts/setup_ssp.sh bc03_pdva_stelib_chabrier /scratch/ssp
 
 set -euo pipefail
 
-NAME="${1:-fsps_v3.2}"
+NAME="${1:-fsps_prsc_miles_chabrier}"
 DEST="${2:-${TENGRI_DATA_DIR:-data}}"
 
 mkdir -p "$DEST"

@@ -2,10 +2,9 @@
 
 Tengri exposes one standardized objective to MAP, variational, and MCMC
 backends. The backend is just a string passed to `fitter.run(...)`:
-`"map"`, `"laplace"`, `"pathfinder"`, `"mcmc_nuts"`, `"mcmc_raytrace"`,
-`"evidence"`, `"vi"`. Canonical names are recorded in the
-[naming contract](https://github.com/suchethac/tengri/blob/main/docs/dev/NAMING_CONTRACT.md);
-the same forward model powers all of them.
+`"map"`, `"laplace"`, `"mcmc_nuts"`, `"mcmc_raytrace"`, `"mcmc_hmc"`, `"vi"`,
+and more. Call `tengri.list_inference_methods()` for the full registered list.
+The same forward model powers all of them.
 
 The spine notebooks introduce inference progressively:
 

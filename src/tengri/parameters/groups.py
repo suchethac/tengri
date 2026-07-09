@@ -1085,6 +1085,11 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     if "lyc_absorb_all" in dust_dict:
         result["dust_lyc_absorb_all"] = bool(dust_dict["lyc_absorb_all"])
 
+    # Include the LyC in the dust energy-balance integral (FSPS/Prospector
+    # parity) vs the canonical LyC-masked L_absorbed (default; #922/#961).
+    if "eb_include_lyc" in dust_dict:
+        result["dust_eb_include_lyc"] = bool(dust_dict["eb_include_lyc"])
+
     # Extract dust emission sub-block
     if "emission" in dust_dict:
         emission_dict = dust_dict["emission"]
@@ -1430,6 +1435,9 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             # Absorb ALL stellar LyC by neb_fesc (FSPS/CIGALE) vs young-only
             # (default; bagpipes). Two-component only.
             "lyc_absorb_all",
+            # Include LyC in the dust energy-balance integral (FSPS/Prospector
+            # parity) vs the canonical LyC-masked L_absorbed (#922/#961).
+            "eb_include_lyc",
         }
     ),
     "dust.emission": frozenset({"type", "*"}),
@@ -2101,6 +2109,7 @@ def _resolve_value(
             "Rv_neb",
             "lyman_cutoff",
             "lyc_absorb_all",
+            "eb_include_lyc",
         }
         if override_key in structural_keys:
             # These are structural keys, not parameters
@@ -2479,6 +2488,9 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
         # Round-trip the absorb-all LyC toggle (only emit when non-default).
         if bool(getattr(spec, "dust_lyc_absorb_all", False)):
             group_output["lyc_absorb_all"] = True
+        # Round-trip the FSPS-parity energy-balance toggle (non-default only).
+        if bool(getattr(spec, "dust_eb_include_lyc", False)):
+            group_output["eb_include_lyc"] = True
     elif group_name == "stellar":
         # Emit met_mode whenever it's non-default (default = 'delta').
         # Always-emit would force a stellar={} entry on every round-trip, which

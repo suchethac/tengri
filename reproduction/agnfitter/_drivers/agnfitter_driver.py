@@ -210,9 +210,9 @@ def _safe_load(rel_path: str):
 
 
 def _renorm(component: str, fnu: np.ndarray) -> np.ndarray:
-    """AGNFITTER-RX's per-component template renormalisation (cosmetic).
+    """AGNFITTER-RX's per-component template renormalization (cosmetic).
 
-    Reproduces ``MODEL_AGNfitter.renorm_template``. The notebook normalises at
+    Reproduces ``MODEL_AGNfitter.renorm_template``. The notebook normalizes at
     physical anchors, so these constants only keep the driver byte-faithful.
     """
     factors = {"BB": 1e60, "SB": 1e20, "TO": 1e-40, "GA": 1e18}
@@ -226,7 +226,7 @@ def list_disks() -> list[str]:
 
 
 def disk_axes(name: str) -> dict[str, np.ndarray]:
-    """Grid axes for a parameterised disk library (empty for fixed templates).
+    """Grid axes for a parameterized disk library (empty for fixed templates).
 
     Parameters
     ----------
@@ -273,7 +273,7 @@ def disk_template(
     name : {"R06", "SN12", "KD18", "THB21"}
         Disk library name.
     log_mbh, log_edd : float, optional
-        For SN12/KD18, the grid point to select (nearest-neighbour). Ignored
+        For SN12/KD18, the grid point to select (nearest-neighbor). Ignored
         for R06/THB21. Defaults to the grid midpoint.
 
     Returns
@@ -281,7 +281,7 @@ def disk_template(
     wave_aa : ndarray, shape (n,)
         Wavelength [Angstrom], ascending.
     L_nu : ndarray, shape (n,)
-        Disk luminosity density [erg/s/Hz], AGNFITTER-RX normalisation.
+        Disk luminosity density [erg/s/Hz], AGNFITTER-RX normalization.
     """
     name = name.upper()
     if name == "R06":
@@ -349,7 +349,7 @@ def torus_template(
     wave_aa : ndarray, shape (n,)
         Wavelength [Angstrom], ascending.
     L_nu : ndarray, shape (n,)
-        Torus luminosity density [erg/s/Hz], AGNFITTER-RX normalisation.
+        Torus luminosity density [erg/s/Hz], AGNFITTER-RX normalization.
     """
     name = name.upper()
     if name == "S04":
@@ -432,7 +432,7 @@ def cold_dust_template(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Load one cold-dust template in tengri units.
 
-    Reproduces ``MODEL_AGNfitter.STARBURST``. DH02_CE01 is parameterised by IR
+    Reproduces ``MODEL_AGNfitter.STARBURST``. DH02_CE01 is parameterized by IR
     luminosity; S17 (Schreiber et al. 2018) by dust temperature and PAH
     fraction.
 
@@ -452,7 +452,7 @@ def cold_dust_template(
     wave_aa : ndarray, shape (n,)
         Wavelength [Angstrom], ascending.
     L_nu : ndarray, shape (n,)
-        Cold-dust luminosity density [erg/s/Hz], AGNFITTER-RX normalisation.
+        Cold-dust luminosity density [erg/s/Hz], AGNFITTER-RX normalization.
     """
     name = name.upper()
     if name == "DH02_CE01":
@@ -526,7 +526,7 @@ def apply_bbb_reddening(wave_aa: np.ndarray, L_nu: np.ndarray, ebv: float) -> np
     L_nu : ndarray, shape (n,)
         Unreddened disk luminosity density [erg/s/Hz].
     ebv : float
-        Disk colour excess E(B-V)_BBB [mag].
+        Disk color excess E(B-V)_BBB [mag].
 
     Returns
     -------

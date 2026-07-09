@@ -20,25 +20,31 @@ tengri.list_recipes()                    # table: name, short_doc, ssp_requireme
 tengri.describe("star_forming_photometry")
 ```
 
-## The six recipes
+## The current set
 
 | Recipe | For | SSP requirement |
 |--------|-----|-----------------|
 | `star_forming_photometry` | Star-forming galaxies, broadband photometry, 0 < z < 6 | bare-stellar (Cue nebular) |
 | `quiescent_z0` | Quiescent galaxies at z ≈ 0.05 | bare-stellar (Cue nebular) |
+| `high_z` | High-redshift young starbursts (z > 3.5), strong nebular emission | wNE (with-nebular-emission) |
+| `photoz` | Photometric-redshift surveys (redshift-unconstrained) | any (nebular disabled) |
+| `stochastic_sfh_jwst` | JWST high-z with stochastic SFH burstiness | bare-stellar (Cue nebular) |
 | `agn_panchromatic` | AGN-dominated, multi-wavelength (disc + torus + NLR + radio + X-ray) | bare-stellar (Cue nebular) |
-| `stochastic_sfh_jwst` | JWST high-z with IFT correlated-field stochastic SFH | bare-stellar (Cue nebular) |
+| `composable_agn` | Fully composable AGN with disc, NLR, BLR, FeII, torus, attenuation | bare-stellar (Cue nebular) |
+| `unified_agn` | Faithful Synthesizer UnifiedAGN reproduction (Kubota & Done + Cloudy grids) | bare-stellar (Cue nebular) |
 | `mock_recovery_minimal` | Minimal model for recovery tests / benchmarking | any (nebular disabled) |
 | `dust_demo` | Forward-only dust-attenuation gallery sweeps | wNE (with-nebular-emission) |
 
 ## SSP requirement — read it first
 
-Four of the six recipes use the **Cue** nebular backend, which requires a
-**bare-stellar** SSP grid (no nebular emission baked in). Passing a `wNE`
-("with nebular emission") SSP to a Cue recipe raises at construction. `dust_demo`
-is the opposite — it expects a `wNE` grid. `tengri.describe("<recipe>")` prints
-the exact requirement and an example filename. Pre-formatted grids are mirrored
-at <https://halos.as.arizona.edu/suchethacooray/ssp-spectra/>.
+Most recipes use the **Cue** nebular backend, which requires a **bare-stellar**
+SSP grid (no nebular emission baked in). Passing a `wNE` ("with nebular emission")
+SSP to a Cue recipe raises at construction. The `high_z` and `dust_demo` recipes
+expect a `wNE` grid instead. The `photoz` and `mock_recovery_minimal` recipes
+disable nebular emission altogether and work with any grid.
+Call `tengri.describe("<recipe>")` to print the exact requirement and an example
+filename. Pre-formatted grids are available at
+<https://halos.as.arizona.edu/suchethacooray/ssp-spectra/>.
 
 ## Editing a recipe
 

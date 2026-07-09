@@ -145,7 +145,7 @@ def sfh_curve(
     FSPS ``sfh=4`` (and Prospector's ``parametric_sfh`` template) use the
     delayed-exponential form :math:`\\mathrm{SFR}(t)\\propto t\\,e^{-t/\\tau}`
     where :math:`t` is time since the onset of star formation. The curve
-    is normalised so the mass formed over ``[0, tage]`` is exactly 1 M⊙,
+    is normalized so the mass formed over ``[0, tage]`` is exactly 1 M⊙,
     matching tengri's ``log_total_mass = 0``.
 
     Parameters
@@ -162,7 +162,7 @@ def sfh_curve(
     t_lookback_yr : ndarray, shape (ngrid,)
         Lookback time [yr], 0 = observation epoch.
     sfr : ndarray, shape (ngrid,)
-        Star formation rate [M⊙/yr], normalised to 1 M⊙ formed.
+        Star formation rate [M⊙/yr], normalized to 1 M⊙ formed.
     """
     t_since_start = np.linspace(0.0, tage, ngrid)  # Gyr, 0 = formation
     shape = t_since_start * np.exp(-t_since_start / tau)
@@ -225,7 +225,7 @@ def csp_lnu_binned(
 ) -> tuple[np.ndarray, np.ndarray]:
     """FSPS spectrum for a binned (step-function) SFH via the ``sfh=3`` path.
 
-    This is the non-parametric analogue of :func:`csp_lnu`. Per-bin stellar
+    This is the non-parametric analog of :func:`csp_lnu`. Per-bin stellar
     masses are converted to a piecewise-constant SFR, handed to FSPS through
     :meth:`fsps.StellarPopulation.set_tabular_sfh`, and the integrated
     composite spectrum is read at the epoch of observation.
@@ -246,7 +246,7 @@ def csp_lnu_binned(
         Rest-frame wavelength [Å].
     L_nu : ndarray, shape (n_wave,)
         Spectral luminosity [erg/s/Hz] for the supplied formed mass (already
-        absolute — *not* per 1 M⊙, since ``masses`` carries the normalisation).
+        absolute — *not* per 1 M⊙, since ``masses`` carries the normalization).
 
     Notes
     -----
@@ -468,7 +468,7 @@ def csp_lnu(
     add_neb_emission : bool
         Attach the Byler (2017) nebular line + continuum grid.
     gas_logu, gas_logz : float
-        Nebular ionisation parameter :math:`\\log U` and gas-phase
+        Nebular ionization parameter :math:`\\log U` and gas-phase
         :math:`\\log_{10}(Z/Z_\\odot)`.
     add_agn_dust : bool
         Attach the Nenkova (2008) AGN torus.
@@ -599,8 +599,8 @@ def fsps_kriek_conroy_curve(wave_aa: np.ndarray, *, dust_index: float = 0.0) -> 
     Returns
     -------
     k : ndarray, shape (n_wave,)
-        Attenuation curve at :math:`\\tau_V = 1` (FSPS normalisation, not
-        renormalised to k(5500)=1 — divide by the V-band value for that).
+        Attenuation curve at :math:`\\tau_V = 1` (FSPS normalization, not
+        renormalized to k(5500)=1 — divide by the V-band value for that).
     """
     wl = np.asarray(wave_aa, dtype=np.float64)
     x = 1e4 / wl  # 1/micron

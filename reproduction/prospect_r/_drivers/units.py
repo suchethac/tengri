@@ -29,7 +29,7 @@ import numpy as np
 # Speed of light in Angstrom/s, for the L_lambda -> L_nu Jacobian.
 C_ANGSTROM_PER_S: float = 2.998e18
 # ProSpect's internal solar luminosity (constants.R, ``.lsol_to_erg``),
-# matched here so the absolute normalisation agrees with the R side.
+# matched here so the absolute normalization agrees with the R side.
 L_SUN_ERG_PER_S: float = 3.828e33
 
 
@@ -181,8 +181,8 @@ def two_panel_fig(figsize: tuple[float, float] = (12, 4.5)):
     return fig, ax_left, ax_right
 
 
-def line_lum(wave, L_nu, centre, half=12.0):
-    """Integrated emission-line luminosity [erg/s] within +/- ``half`` Å of ``centre``.
+def line_lum(wave, L_nu, center, half=12.0):
+    """Integrated emission-line luminosity [erg/s] within +/- ``half`` Å of ``center``.
 
     Converts ``L_nu`` [erg/s/Hz] to ``L_lambda`` [erg/s/Å], subtracts the
     in-window floor as a flat local continuum, and integrates the excess.
@@ -200,8 +200,8 @@ def line_lum(wave, L_nu, centre, half=12.0):
         Rest-frame wavelength grid [Å].
     L_nu : array_like, shape (n_wave,)
         Spectral luminosity density [erg/s/Hz] on ``wave``.
-    centre : float
-        Line-centre wavelength [Å].
+    center : float
+        Line-center wavelength [Å].
     half : float, optional
         Half-width of the integration window [Å]. Default 12.
 
@@ -213,7 +213,7 @@ def line_lum(wave, L_nu, centre, half=12.0):
     """
     wave = np.asarray(wave)
     L_nu = np.asarray(L_nu)
-    m = (wave >= centre - half) & (wave <= centre + half)
+    m = (wave >= center - half) & (wave <= center + half)
     if int(m.sum()) < 2:
         return 0.0
     order = np.argsort(wave[m])

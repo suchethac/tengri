@@ -99,6 +99,7 @@ def build_energy_balance_lut(
     bc_params: dict | None = None,
     diff_params: dict | None = None,
     lyman_cutoff_aa: float = 0.0,
+    eb_include_lyc: bool = False,
     tau_bc_grid: jnp.ndarray,
     tau_diff_grid: jnp.ndarray,
 ) -> EnergyBalanceLUT:
@@ -121,6 +122,11 @@ def build_energy_balance_lut(
     f_obscuration, t_birth_yr, transition_width_dex, bc_params, diff_params,
     lyman_cutoff_aa
         Passed verbatim to :func:`two_component_dust` for node-exact agreement.
+    eb_include_lyc : bool, optional
+        FSPS-parity toggle (#961): when True, the LyC (λ < 912 Å) is kept in
+        the absorbed-luminosity integrand — all absorbed energy heats dust —
+        instead of the canonical LyC mask (#922). Must match the runtime
+        ``DustSEDComponent.config.eb_include_lyc``.
     tau_bc_grid, tau_diff_grid : ndarray
         Optical-depth grid nodes (keyword-only).
 
@@ -129,7 +135,7 @@ def build_energy_balance_lut(
     EnergyBalanceLUT
     """
     nu = C_AA / ssp_wave  # (n_wave,)
-    mask = ssp_wave >= 912.0
+    mask = jnp.ones_like(ssp_wave, dtype=bool) if eb_include_lyc else (ssp_wave >= 912.0)
     sspm = ssp_flux * mask[None, None, :]  # (n_met, n_age, n_wave)
     B = jnp.trapezoid(sspm, nu, axis=-1)  # (n_met, n_age), signed
 

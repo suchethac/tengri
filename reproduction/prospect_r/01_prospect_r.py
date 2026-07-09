@@ -42,7 +42,7 @@
 # **What to expect.** The closed-form blocks — the SFH shapes (§2), the
 # mass-mapped metallicity history (§2b), the attenuation curves, the IGM —
 # reproduce ProSpect to a fraction of a percent. Nebular emission (§8) is where
-# the two codes use genuinely different inputs (different photoionisation grids),
+# the two codes use genuinely different inputs (different photoionization grids),
 # and that section quantifies the difference rather than smoothing it over.
 # ProSpect has no X-ray component, so that section is omitted; it does have
 # a radio continuum, which §11 includes.
@@ -147,7 +147,7 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # ## Common stellar library
 #
 # tengri reads its own BC03 (Padova 1994 + STELIB, Chabrier IMF) port from
-# the public catalogue; ProSpect reads its `BC03lr` library from the
+# the public catalog; ProSpect reads its `BC03lr` library from the
 # `ProSpectData` R package. Both descend from Bruzual & Charlot (2003), so
 # the grids should agree up to the resolution at which each was sampled.
 
@@ -256,11 +256,11 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # delayed form. The left panel shows ProSpect's analytic curves; the right reads
 # tengri's pipeline output from `state.derived["sfr_history"]` on the log-spaced
 # lookback grid the convolution actually uses — *not* a re-evaluated analytic
-# form. Both sides are normalised to the **same total stellar mass** (ProSpect's
+# form. Both sides are normalized to the **same total stellar mass** (ProSpect's
 # `mSFR=10` skew-normal forms ≈10^10.9 M⊙, and tengri's `log_total_mass` is set
 # to match), so the SFR amplitudes are directly comparable and tengri's skew
 # normal is overlaid on ProSpect's. The peaks (10 Gyr) and widths agree; the two
-# `snorm` implementations parametrise the skew slightly differently.
+# `snorm` implementations parametrize the skew slightly differently.
 
 # %%
 t_p_sn, sfr_p_sn = P.sfh_curve(sfh="snorm", **SNORM_FIDUCIAL)
@@ -486,7 +486,7 @@ U.panel(ax_l, ax_r, label_l="ProSpect  snorm + BC03", label_r="tengri  snorm + B
 ax_l.plot(w_p3, L_p3, "C0-", linewidth=1.5)
 ax_r.plot(s_stellar.wave, s_stellar.sed_intrinsic, "C1-", linewidth=1.5)
 # This BC03 grid does not carry a surviving-mass column, so log_mstar is NaN;
-# report the formed mass (what both codes are normalised to) instead.
+# report the formed mass (what both codes are normalized to) instead.
 m_formed = 10.0 ** float(s_stellar.derived["log_mstar_formed"])
 ax_r.text(
     0.05,
@@ -521,7 +521,7 @@ print(
 # birth-cloud term on young stars and a diffuse screen on all stars, each a
 # power law `τ(λ) = τ (λ/5500)^pow`. The default slope is −0.7. tengri's
 # `power_law` law is the same functional form, so the curves should lie on top
-# of each other once normalised to `A(λ)/A_V` at 5500 Å. The screen term also
+# of each other once normalized to `A(λ)/A_V` at 5500 Å. The screen term also
 # carries an optional 2175 Å bump (`Eb`), shown here against tengri's
 # bump-bearing `noll09` law for context.
 
@@ -816,7 +816,7 @@ print(
 # distributes the other lines by the metallicity-dependent ratios of the
 # Levesque et al. (2010) grid. tengri's nebular emitter is Cue (Li et al. 2025),
 # a neural emulator trained on Cloudy 17 that predicts the lines from the young
-# population's ionising spectrum. The two are built on different physics, and
+# population's ionizing spectrum. The two are built on different physics, and
 # Cue needs a bare-stellar SSP, so the tengri side switches from BC03 to the
 # FSPS MIST + MILES library it was validated against.
 #
@@ -826,15 +826,15 @@ print(
 # **integrated line luminosity** (width-independent), at a matched star
 # formation rate, for the brightest optical lines.
 #
-# **Matched ionisation parameter.** Left to itself, ProSpect's
-# `emissionLines` derives the ionisation parameter from metallicity via `Z2q`
+# **Matched ionization parameter.** Left to itself, ProSpect's
+# `emissionLines` derives the ionization parameter from metallicity via `Z2q`
 # (Orsi 2014), which at solar Z returns a soft `q ≈ 1.4e7` cm/s. That suppresses
 # the collisionally-excited metal lines, giving [O III]/Hα ≈ 0.014 — ~50× below
 # the Cloudy value and not comparable to Cue's grid run at `logU = -2`. We
 # therefore pass ProSpect the matching `q = U·c = 10^(-2)·c ≈ 3e8` cm/s. At this
-# matched ionisation ProSpect returns [O III]/Hα ≈ 0.21; the residual versus
+# matched ionization ProSpect returns [O III]/Hα ≈ 0.21; the residual versus
 # Cue's 0.72 is then a genuine Levesque-2010 vs
-# Cloudy-17 difference, not an ionisation-parameter mismatch. Recombination
+# Cloudy-17 difference, not an ionization-parameter mismatch. Recombination
 # lines (Hα, Hβ) are q-insensitive, so this leaves the Balmer comparison intact.
 
 # %%
@@ -847,7 +847,7 @@ ssp_neb = load_ssp_data(
 m_neb = SEDModel.build(
     ssp_data=ssp_neb,
     stellar={"logzsol": Fixed(0.0), "*": FIXED},
-    # Confine star formation to the last 10 Myr — a young, ionising population.
+    # Confine star formation to the last 10 Myr — a young, ionizing population.
     sfh={
         "type": "const",
         "start_gyr": Fixed(NEB_AGE_GYR),
@@ -864,7 +864,7 @@ w_t8 = np.asarray(s_neb.wave)
 L_t8 = np.asarray(s_neb.derived["sed_nebular"])
 
 # Match ProSpect's SFR to tengri's recent SFR so the line budgets are comparable,
-# and its ionisation parameter to Cue's logU = -2 (q = U·c) so the metal-line
+# and its ionization parameter to Cue's logU = -2 (q = U·c) so the metal-line
 # ratios are a fair physics comparison rather than a q mismatch.
 SFR_NEB = float(s_neb.derived["sfr_10myr"])
 _NEB_Q = 10.0**-2.0 * 2.99792458e10  # q = U·c [cm/s] for logU = -2  → ≈ 3.0e8
@@ -888,9 +888,9 @@ for _c, _name in _lines:
             f"    {_name} {_c:.0f} Å: ProSpect {_lp:.2e}, "
             f"tengri {_lt:.2e} erg/s → {_lt / _lp:.2f}×"
         )
-# Line *ratios* are the fair, normalisation-free comparison. The absolute Hα is
+# Line *ratios* are the fair, normalization-free comparison. The absolute Hα is
 # offset because ProSpect ties L_Hα to SFR via a fixed Kennicutt-style
-# coefficient, while Cue derives it from the ionising-photon budget — so the
+# coefficient, while Cue derives it from the ionizing-photon budget — so the
 # whole nebular spectrum carries that ~3x scale. The [O III]/Hα ratio isolates
 # the line physics: at the matched q it is a modest Levesque-2010 vs
 # Cloudy-17 difference, not the 50x q-mismatch artifact of the default Z2q.
@@ -975,7 +975,7 @@ print(
 # *same* point in the Stalevski (2016) library: inclination an=30° (cos_inc=0.866 —
 # a Type-1 sightline that looks into the polar cone and sees the disc), opening angle
 # ct=40°, optical depth ta=1, and p=q=1. ``agn_frac_agn=1`` routes the full bolometric
-# into the template, matching ProSpect's ``lum`` normalisation (tengri otherwise scales
+# into the template, matching ProSpect's ``lum`` normalization (tengri otherwise scales
 # the AGN down by ``frac_agn`` as a host-fraction knob).
 m_agn = SEDModel.build(
     ssp_data=ssp,
@@ -1017,7 +1017,7 @@ s_agn = m_agn.predict_state({})
 w_t9 = np.asarray(s_agn.wave)
 L_t9 = np.asarray(s_agn.derived["sed_agn"])
 
-# Confirm both sides carry the same AGN bolometric (sanity on the normalisation).
+# Confirm both sides carry the same AGN bolometric (sanity on the normalization).
 _nu_p9 = U.C_ANGSTROM_PER_S / w_p9[::-1]
 _nu_t9 = U.C_ANGSTROM_PER_S / w_t9[::-1]
 _lbol_p9 = float(np.trapezoid(L_p9[::-1], _nu_p9))
@@ -1069,7 +1069,7 @@ print(f"§9 torus νLν peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t
 # synchrotron emission tied to the star formation rate (`addradio_SF`). tengri's
 # `condon92` radio model (Condon 1992) is the matching star-formation radio
 # prescription. Both panels show the long-wavelength tail from the far-IR into
-# the radio; the comparison is of the radio slope and normalisation, which both
+# the radio; the comparison is of the radio slope and normalization, which both
 # trace the same SFR. (ProSpect has no X-ray component, so §10 is omitted.)
 
 # %%
@@ -1143,7 +1143,7 @@ if np.any(_rad) and L_p11[_rad].max() > 0:
 # the fiducial skew-normal SFH, Charlot & Fall attenuation, and Dale 2014 IR —
 # overlaid on ProSpect's own panchromatic output (the §7 configuration). The top
 # panel is the overlay; the bottom is the fractional residual `tengri/ProSpect −
-# 1` with the ±25 % band shaded. The optical normalisation ratio and its 16–84 %
+# 1` with the ±25 % band shaded. The optical normalization ratio and its 16–84 %
 # spread are printed.
 
 # %%
@@ -1224,7 +1224,7 @@ plt.show()
 # mode: the two agree to a couple of percent at the half-mass point and overlay
 # in both Z(lookback) and Z(cumulative mass). The one genuine difference left is
 # the nebular comparison (§8), a deliberate disagreement between two
-# photoionisation grids. ProSpect's EMILES library and Fritz (2006) torus have
+# photoionization grids. ProSpect's EMILES library and Fritz (2006) torus have
 # no tengri equivalent. The per-section scalars printed above are the
 # quantitative record; the figures in `_figs/`
 # are the visual one.
@@ -1240,7 +1240,7 @@ plt.show()
 # * Dale et al. 2014, ApJ 784, 83 — infrared dust emission templates
 # * Stalevski et al. 2012, MNRAS 420, 2756; 2016, MNRAS 458, 2288 — SKIRTOR
 # * Fritz et al. 2006, MNRAS 366, 767 — AGN torus library
-# * Levesque et al. 2010, ApJ 712, 1019 — nebular photoionisation grid
+# * Levesque et al. 2010, ApJ 712, 1019 — nebular photoionization grid
 # * Condon 1992, ARA&A 30, 575 — radio continuum from star formation
 # * Inoue et al. 2014, MNRAS 442, 1805 — IGM absorption
 # * Li et al. 2025 — Cue nebular emulator

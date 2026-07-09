@@ -18,7 +18,7 @@
 #
 # AGNFITTER-RX (Martínez-Ramírez et al. 2024, MNRAS 535, 2961) models the
 # radio-to-X-ray SEDs of active galaxies. Where CIGALE, BAGPIPES, and
-# Prospector are galaxy-centric, AGNFITTER-RX is built to *characterise the
+# Prospector are galaxy-centric, AGNFITTER-RX is built to *characterize the
 # AGN itself* — its four physical components (accretion disk, hot dusty
 # torus, relativistic jets / core radio, and hot corona) alongside a host
 # galaxy (stellar populations, cold dust, star-formation radio). Its
@@ -167,7 +167,7 @@ NO_DUST = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0)
 # ## tengri AGN helpers
 #
 # Each AGN face-off builds a single tengri block in isolation and reads the
-# AGN SED off ``state.derived["sed_agn"]``. We normalise shapes at a common
+# AGN SED off ``state.derived["sed_agn"]``. We normalize shapes at a common
 # anchor (2500 Å for disks, the IR peak for tori) so the comparison is of
 # spectral shape at matched parameters, independent of the per-code
 # luminosity bookkeeping.
@@ -210,7 +210,7 @@ def tengri_disc_model(model_type, *, log_lbol=11.0):
 
 
 def tengri_qsogen_full(*, log_lbol=11.0):
-    """tengri's THB21 analogue: qsogen continuum *with* its broad/narrow lines
+    """tengri's THB21 analog: qsogen continuum *with* its broad/narrow lines
     and FeII pseudo-continuum. THB21's defining feature is the emission-line
     forest (the 0.7 µm Hα+[N II] bump), so the disc-only continuum alone does
     not reproduce it — the lines and FeII blocks must be switched on."""
@@ -374,7 +374,7 @@ axl.set_title("Prevot SMC reddening law ($R_V$ = 2.72)")
 axl.grid(True, alpha=0.3)
 msk = (w_thb > 8e2) & (w_thb < 1e4)
 # Anchor the unreddened disk at 5000 A, then apply the true reddening ratio
-# so the reddened curve shows its genuine suppression (not re-normalised).
+# so the reddened curve shows its genuine suppression (not re-normalized).
 L_unred_n = norm_at(w_thb, L_thb, 5000)
 ratio = np.divide(L_thb_red, L_thb, out=np.ones_like(L_thb_red), where=L_thb > 0)
 axr.loglog(w_thb[msk], L_unred_n[msk], "C0-", lw=1.4, label="THB21, unreddened")
@@ -398,7 +398,7 @@ save_fig("agnfitter_04_dust_attenuation.png")
 #
 # AGNFITTER-RX offers two cold-dust libraries: the legacy DH02_CE01 (Dale &
 # Helou 2002 + Chary & Elbaz 2001) and S17 (Schreiber et al. 2018), a
-# flexible dust-continuum + PAH model parameterised by dust temperature and
+# flexible dust-continuum + PAH model parameterized by dust temperature and
 # PAH fraction. The paper frames cold dust through an *energy-balance* prior:
 # the cold-dust IR luminosity should at least match the dust-absorbed stellar
 # luminosity (a constraint it deliberately allows to relax for
@@ -419,13 +419,13 @@ save_fig("agnfitter_04_dust_attenuation.png")
 #   gap that motivated the `schreiber2018` port.
 # * **`dale2014`** — tengri's tabulated Dale+2014 library, the modern relative
 #   of AGNFITTER-RX's Dale & Helou 2002 (the "DH" in DH02_CE01). It is
-#   parameterised by the radiation-field hardness α rather than a dust
+#   parameterized by the radiation-field hardness α rather than a dust
 #   temperature, so it is not a node-for-node match to S17; shown here at
 #   α = 1.5 it peaks near S17 and carries its own (real, tabulated) PAH
 #   features. tengri has no direct DH02_CE01 port — `dale2014` is the closest
 #   counterpart.
 #
-# All curves are normalised at their FIR peak.
+# All curves are normalized at their FIR peak.
 
 # %%
 import jax.numpy as jnp
@@ -477,7 +477,7 @@ print(
 # ## §9a Accretion-disk library face-off
 #
 # The four AGNFITTER-RX disk libraries against their tengri counterparts,
-# all unreddened and normalised at 2500 Å. The decisive feature is the
+# all unreddened and normalized at 2500 Å. The decisive feature is the
 # narrow peak near 0.7 µm (Hα λ6563 + [N II] λλ6549,6585): present only in
 # the semi-empirical THB21, absent from the theory disks R06/SN12/KD18.
 # AGNFITTER-RX finds this single feature drives a ≈10¹⁰ likelihood gap.
@@ -501,10 +501,10 @@ print(
 #   accretion rate, so the original smooth-kernel interpolation smeared it by
 #   30–50% — now fixed).
 # * **KD18 — reproduced.** tengri's full Kubota & Done 3-zone block
-#   (`kubota_done`: a Novikov-Thorne outer disc + warm Comptonisation + a hot
+#   (`kubota_done`: a Novikov-Thorne outer disc + warm Comptonization + a hot
 #   corona) tracks AGNFITTER-RX's KD18 to ~1.3× across the UV–near-IR, peaking
 #   at ~3000 Å vs ~3700 Å. That smooth, featureless offset is the spread
-#   expected between two independent realisations of the same model —
+#   expected between two independent realizations of the same model —
 #   AGNFITTER-RX's is a precomputed template grid, tengri's integrates the
 #   three zones from scratch.
 # * **R06 — the same template, in two conventions.** Both sides use the
@@ -512,7 +512,7 @@ print(
 #   tengri stores it as the physically-correct L_ν (divides the published
 #   νL_ν by ν), so its peak sits at 1.2 µm, while AGNFITTER-RX carries the
 #   νL_ν array directly, so its R06 peaks at 3050 Å — a factor of ν bluer.
-#   The dotted grey curve shows tengri's `richards2006` *put back into
+#   The dotted gray curve shows tengri's `richards2006` *put back into
 #   AGNFITTER-RX's νL_ν convention* (multiply by ν, re-anchor at 2500 Å): it
 #   lands exactly on AGNFITTER-RX's R06 (median residual 0.0% over
 #   0.15–3 µm). So the apparent ~20× near-IR gap between the two solid curves
@@ -603,7 +603,7 @@ print(
 # %% [markdown]
 # ## §9b Accretion-disk reddening sweep
 #
-# The disk colour excess E(B−V)_BBB sweeps the UV continuum via the Prevot
+# The disk color excess E(B−V)_BBB sweeps the UV continuum via the Prevot
 # SMC law on both sides. AGNFITTER-RX applies it to the THB21 template;
 # tengri's `agn.atten = "smc_prevot"` reproduces the same reddening on its
 # disc.
@@ -632,7 +632,7 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # %% [markdown]
 # ## §9c Torus library face-off
 #
-# The four AGNFITTER-RX torus libraries against tengri's, all normalised at
+# The four AGNFITTER-RX torus libraries against tengri's, all normalized at
 # their mid-IR peak. tengri's `silva04` and `cat3d_wind` blocks are built
 # directly from these same AGNFITTER-RX libraries, so those two panels are a
 # direct cross-check — and they agree: peak-aligned, to ≲1.6×.
@@ -654,7 +654,7 @@ save_fig("agnfitter_09b_bbb_reddening.png")
 # can see the bit-faithful port land on the averaged library while the
 # full-grid block sits at longer wavelengths.
 #
-# Two residual pathologies the paper emphasises also live in this plot: the
+# Two residual pathologies the paper emphasizes also live in this plot: the
 # 10 µm silicate feature (NK08/CAT3D can over- or under-predict it depending
 # on inclination) and the 1.5–5 µm near-IR excess that the CAT3D polar-wind
 # component is designed to fill.
@@ -719,7 +719,7 @@ save_fig("agnfitter_09c_torus_library.png")
 # %% [markdown]
 # ### §9c″ Torus-library parity — full-spectrum shape ratio
 #
-# The tengri / AGNFITTER-RX peak-normalised shape ratio for each torus library,
+# The tengri / AGNFITTER-RX peak-normalized shape ratio for each torus library,
 # with the 1–100 µm median printed below. S04 and CAT3D-Wind (matched sightline)
 # reproduce AGNFITTER-RX; SKIRTOR and NK08 use different library reductions.
 
@@ -819,8 +819,8 @@ save_fig("agnfitter_09c2_skirtor_port.png")
 # The paper's winning model for 67% of its sample: the CAT3D-Wind torus on
 # the THB21 disk. We build the full AGN SED on both sides — AGNFITTER-RX's
 # THB21 disk plus its CAT3D-Wind torus, against tengri's composable AGN with
-# `disc = qsogen` (with its lines + FeII, i.e. the full THB21 analogue) and
-# `torus = cat3d_wind` — normalised at the disk's 2500 Å. Carrying the disc's
+# `disc = qsogen` (with its lines + FeII, i.e. the full THB21 analog) and
+# `torus = cat3d_wind` — normalized at the disk's 2500 Å. Carrying the disc's
 # emission lines is what reproduces the 0.7 µm bump on top of the torus hump.
 
 # %%
@@ -898,7 +898,7 @@ axl.grid(True, alpha=0.3)
 
 # Disk + α_ox X-ray extension on the AGNFITTER side. Δα_ox sets the X-ray
 # *amplitude* relative to the disk, so all three curves share one
-# normalisation (the Δα_ox = 0 peak) — normalising each at its own peak
+# normalization (the Δα_ox = 0 peak) — normalizing each at its own peak
 # would hide exactly the effect this panel is about.
 w_thb, L_thb = A.disk_template("THB21")
 _xray = {scat: A.disk_xray_extension(w_thb, L_thb, scatter=scat) for scat in (-0.4, 0.0, 0.4)}
@@ -1038,7 +1038,7 @@ plt.show()
 # ## §10b X-ray corona shape + host-galaxy floor
 #
 # Given the 2500 Å disk luminosity, the corona is a Γ = 1.8 power law with a
-# 300 keV cutoff whose 2 keV normalisation comes from the α_ox relation.
+# 300 keV cutoff whose 2 keV normalization comes from the α_ox relation.
 # tengri's `xray_agn_corona_from_disc` and AGNFITTER-RX's disk X-ray extension
 # build the same spectrum from the same inputs. The host galaxy contributes an
 # X-ray *floor* from its X-ray binaries (Mineo et al. 2014), which tengri's
@@ -1116,13 +1116,13 @@ save_fig("agnfitter_11b_radio_sf.png")
 # physical pieces, and the spectral *shapes* track across every band.
 
 # %%
-# Common observer grid spanning X-ray (~0.05 keV) to metre-wave radio.
+# Common observer grid spanning X-ray (~0.05 keV) to meter-wave radio.
 nu_grid = np.geomspace(1e8, 1e20, 4000)
 lam_grid = U.C_ANGSTROM_PER_S / nu_grid
 
 
 def _assemble(disc_wL, torus_wL, xray_wL, radio_fL, *, f_torus=0.5, f_xray=3e-2, f_radio=2e-4):
-    """Co-add normalised components onto nu_grid; disk anchored at 2500 Å."""
+    """Co-add normalized components onto nu_grid; disk anchored at 2500 Å."""
     disc = U.regrid(disc_wL[0], np.clip(disc_wL[1], 0, None), lam_grid)
     disc = disc / np.interp(2500.0, lam_grid[::-1], disc[::-1])
     tor = U.regrid(torus_wL[0], np.clip(torus_wL[1], 0, None), lam_grid)

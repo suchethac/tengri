@@ -1,14 +1,10 @@
 # Recipe: Fit a JWST NIRSpec spectrum
 
-## Scenario
+You have a JWST NIRSpec x1d extracted spectrum and want to fit the stellar mass
+and star formation history. Extract the 1D spectrum using the specutils bridge,
+then build an Observation manually.
 
-You have a JWST NIRSpec x1d 1D extracted spectrum and want a stellar mass and star formation history posterior.
-
-## Current state
-
-A one-liner `Galaxy.from_spectrum` constructor is planned but not yet shipped. In the interim, use the `from_spectrum1d` IO primitive to extract wavelength, flux, and error arrays, then build an Observation manually.
-
-## Extract spectrum from x1d file
+## Extract spectrum from FITS
 
 ```python
 from tengri.io import from_spectrum1d
@@ -26,26 +22,29 @@ print(f"Flux shape: {flux.shape}, Signal-to-noise: {(flux / err).mean():.1f}")
 
 ## Fit the spectrum
 
-See `notebooks/08_fitting_spectra.py` for a complete example showing how to construct a Spectroscopy observation and fit with stellar continuum and emission-line models.
-
-For joint fits combining NIRSpec with photometry (e.g., MIRI photometry), see `notebooks/14_joint_photometry_spectroscopy.py`.
-
-## Emission-line citations
-
-If your fit includes emission-line features, cite the relevant models:
+`Spectroscopy` carries the wavelength grid and instrument setup; the
+flux and error arrays go to `Fitter`:
 
 ```python
-import tengri as tg
-tg.cite("cue")   # Emission-line model
-tg.cite("nifty") # If using VI inference
+import tengri
+from tengri import SEDModel, Fitter, Spectroscopy, Observation, recipes
+
+spec = Spectroscopy(
+    wave_obs=wave,
+    resolution=1000.0,             # R of your grating/filter combination
+    eline_mode="marginalized",     # analytic emission-line amplitudes
+)
+obs = Observation(spectroscopy=spec)
+
+ssp = tengri.load_ssp()
+model = SEDModel.build(ssp_data=ssp, observation=obs,
+                       **recipes.star_forming_photometry())
+
+fitter = Fitter(model, flux, err)
+result = fitter.run("map")
+print(result.summary_table())
 ```
 
-## Next steps
-
-- Roadmap for one-liner: `Galaxy.from_spectrum(sp, redshift=..., preset=...)`
-- Track progress in GitHub issues
-
-## References
-
-- `from_spectrum1d`: Handles JWST x1d, HST/COS, and optical IFU formats
-- JWST data guide: https://jwst-docs.stsci.edu/
+The full spectroscopic walkthrough (calibration polynomials, line
+diagnostics) is [notebook 06](../spine/06_fitting_spectroscopy); joint
+NIRSpec + photometry fits are [notebook 07](../spine/07_joint_photo_spec).

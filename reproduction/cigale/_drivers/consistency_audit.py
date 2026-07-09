@@ -48,7 +48,7 @@ LOG_TOTAL_MASS_FIDUCIAL = 0.0
 # Metallicity match — solar-Z reference is library-dependent.
 # CIGALE's bc03 is built on Padova tracks, so its "metallicity=0.02" is
 # Z_abs = 0.02 (slightly super-solar in Padova: Zsun=0.0190, log10Zsun=-1.721).
-# tengri normalises met_logzsol against **Asplund 2009 Zsun = 0.0142**
+# tengri normalizes met_logzsol against **Asplund 2009 Zsun = 0.0142**
 # (LOG10_ZSUN = -1.8477; matches MIST). To put tengri's CSP at the same
 # absolute log_z as CIGALE's bc03 call we go through absolute:
 #     met_logzsol = log10(Z_abs_cigale) - tengri_LOG10_ZSUN

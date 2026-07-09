@@ -1,19 +1,19 @@
 # bench/ — performance scripts, reports, and raw results
 
-Everything performance-related ships from this one tree:
+Performance data organized as:
 
 ```
 bench/
 ├── README.md       — you are here
 ├── scripts/        — runnable Python benchmarks
-├── reports/        — dated, human-readable result write-ups (Markdown)
+├── reports/        — dated, human-readable results (Markdown)
 └── results/        — machine-readable raw outputs (JSON)
 ```
 
-The user-facing performance summary lives at
-[`docs/performance/index.md`](../docs/performance/index.md). This README
-is for contributors: where to put new benchmarks, where existing
-results came from, and the conventions that keep things tidy.
+User-facing summary:
+[`docs/performance/index.md`](../docs/performance/index.md). This README is
+for contributors: benchmark placement, where results come from, and tidy
+conventions.
 
 ## scripts/
 
@@ -107,13 +107,10 @@ artefacts.
 
 ## Adding a new benchmark
 
-1. Drop a `benchmark_<topic>.py` under `bench/scripts/`. Top docstring
-   should answer "what does this measure?" in one paragraph; downstream
-   tools (`bench help <name>`) read it.
-2. Add an entry to `BENCHMARK_SCRIPTS` in
-   `src/tengri/bench/__init__.py` so the dispatcher finds it.
-3. When you run the benchmark, write the human report to
-   `bench/reports/YYYY-MM-DD_<topic>.md` and any raw JSON to
-   `bench/results/`.
-4. If your numbers change a headline claim, update
-   `docs/performance/index.md`.
+1. Add `benchmark_<topic>.py` under `bench/scripts/`. Top docstring answers
+   "what does this measure?" (one paragraph); downstream tools (`bench help
+   <name>`) read it.
+2. Register in `BENCHMARK_SCRIPTS` (`src/tengri/bench/__init__.py`) so the dispatcher finds it.
+3. Write the human report to `bench/reports/YYYY-MM-DD_<topic>.md` and raw
+   JSON to `bench/results/`.
+4. If numbers change headline claims, update `docs/performance/index.md`.
