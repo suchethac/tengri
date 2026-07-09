@@ -1251,14 +1251,14 @@ class StellarSEDComponent:
                 closed_box_metallicity,
             )
 
-            yield_y = float(params.get("chem_yield", 0.03))
-            eta_outflow = float(params.get("chem_eta_outflow", 0.0))
-            f_gas_init = float(params.get("chem_f_gas_init", 0.9))
-            return_frac = float(params.get("chem_return_frac", 0.4))
+            # jnp.asarray, not float(): traced under jit (ConcretizationTypeError).
+            yield_y = jnp.asarray(params.get("chem_yield", 0.03))
+            eta_outflow = jnp.asarray(params.get("chem_eta_outflow", 0.0))
+            f_gas_init = jnp.asarray(params.get("chem_f_gas_init", 0.9))
+            return_frac = jnp.asarray(params.get("chem_return_frac", 0.4))
 
-            # Per-age metallicity on the SSP grid — mirrors legacy
-            # sed_model.py:3583. Uses log10(age/yr) on both grids; the
-            # SSP grid is ssp.ssp_lg_age_gyr + 9.0.
+            # Per-age metallicity on the SSP grid, in log10(age/yr) on both
+            # grids; the SSP grid is ssp.ssp_lg_age_gyr + 9.0.
             ssp_log_ages_yr = ssp.ssp_lg_age_gyr + 9.0
             lgmet_on_ssp_ages = chem_evol_metallicity_on_ssp_grid(
                 ssp_log_ages_yr,
