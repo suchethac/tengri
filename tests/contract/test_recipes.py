@@ -391,7 +391,7 @@ class TestRecipesBuildAndPredict:
         _build_and_predict(name, ssp_data_wne, synthetic_tophat_obs)
 
     _CUE_NAN_REASON = (
-        "Cue backend returns an all-NaN SED when the recent SFR (and with it "
+        "#1001: Cue backend returns an all-NaN SED when the recent SFR (and with it "
         "the ionizing budget fed to the emulator) collapses — quiescent/old "
         "SFH configurations. Silent-failure bug found by this test; fine with "
         "neb='none' and for stochastic_sfh_jwst (ongoing SF at z=4)."

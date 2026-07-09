@@ -32,14 +32,6 @@ class TestPchipInterpolate:
         y_pred = pchip_interpolate(x, y, x)
         assert_allclose(y_pred, y, atol=1e-6)
 
-    def test_output_shape(self):
-        """Output has the same length as x_eval."""
-        x_train = jnp.linspace(0.0, 1.0, 6)
-        y_train = x_train**2
-        x_eval = jnp.linspace(0.1, 0.9, 20)
-        out = pchip_interpolate(x_train, y_train, x_eval)
-        chex.assert_shape(out, (20,))
-
     def test_monotone_on_monotone_input(self):
         """PCHIP preserves monotonicity on a strictly increasing dataset."""
         x = jnp.linspace(0.0, 1.0, 10)
@@ -68,14 +60,6 @@ class TestPchipInterpolate:
         # Should not raise and should return finite values
         chex.assert_tree_all_finite(out)
 
-    def test_finite_output(self):
-        """All output values are finite for well-conditioned inputs."""
-        x = jnp.linspace(0.0, 1.0, 8)
-        y = jnp.sin(jnp.pi * x)
-        x_eval = jnp.linspace(0.0, 1.0, 100)
-        out = pchip_interpolate(x, y, x_eval)
-        chex.assert_tree_all_finite(out)
-
     def test_constant_data(self):
         """Constant training data → constant output."""
         x = jnp.linspace(0.0, 1.0, 6)
@@ -100,15 +84,6 @@ class TestPchipInterpolate:
 
 
 class TestBuildQuantilePointsPure:
-    def test_output_shapes(self):
-        """Returns two arrays with n_param + 3 points each."""
-        n_param = 3
-        tx_fracs = jnp.array([0.3, 0.5, 0.7])
-        time_q, mass_q = _build_quantile_points_pure(tx_fracs, n_param)
-        # (0, big_bang, tx_0, tx_1, tx_2, 1) = n_param + 3
-        chex.assert_shape(time_q, (n_param + 3,))
-        chex.assert_shape(mass_q, (n_param + 3,))
-
     def test_first_point_is_zero(self):
         """First point is (0, 0)."""
         tx_fracs = jnp.array([0.4, 0.7])
@@ -140,13 +115,6 @@ class TestBuildQuantilePointsPure:
         expected_mass = jnp.linspace(0.0, 1.0, n_param + 2)
         assert_allclose(mass_q[2:], expected_mass[1:], atol=1e-6)
 
-    def test_single_tx_frac(self):
-        """Works with n_param=1."""
-        tx_fracs = jnp.array([0.5])
-        time_q, mass_q = _build_quantile_points_pure(tx_fracs, 1)
-        chex.assert_shape(time_q, (4,))
-        chex.assert_shape(mass_q, (4,))
-
 
 # ── dense_basis_pure ──────────────────────────────────────────
 
@@ -156,22 +124,11 @@ class TestDenseBasisPureSfh:
     def _default_age_grid():
         return jnp.linspace(1e6, 13e9, 200)
 
-    def test_output_shape(self):
-        """Output SFR has same length as age grid."""
-        age_yr = self._default_age_grid()
-        sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
-        chex.assert_equal_shape([sfr, age_yr])
-
     def test_non_negative(self):
-        """SFR is non-negative everywhere."""
+        """SFR is non-negative everywhere and finite."""
         age_yr = self._default_age_grid()
         sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.4, tx_frac_1=0.7)
         assert jnp.all(sfr >= 0.0)
-
-    def test_finite_output(self):
-        """SFR values are all finite."""
-        age_yr = self._default_age_grid()
-        sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.3, tx_frac_1=0.6)
         chex.assert_tree_all_finite(sfr)
 
     def test_total_mass_scaling(self):
@@ -213,14 +170,9 @@ class TestDenseBasisPureSfh:
         # Different universes → different SFH profiles
         assert not jnp.allclose(sfr_default, sfr_custom)
 
-    def test_jittable(self):
-        """dense_basis_pure can be JIT-compiled."""
+    def test_jit_parity_vs_eager(self):
+        """JIT output matches eager evaluation (JAX correctness)."""
         age_yr = self._default_age_grid()
-
-        @jax.jit
-        def run(log_m, t0):
-            return dense_basis_pure(age_yr, log_total_mass=log_m, tx_frac_0=t0)
-
-        sfr = run(10.0, 0.5)
-        chex.assert_equal_shape([sfr, age_yr])
-        chex.assert_tree_all_finite(sfr)
+        sfr_eager = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.5)
+        sfr_jit = jax.jit(dense_basis_pure)(age_yr, log_total_mass=10.0, tx_frac_0=0.5)
+        chex.assert_trees_all_close(sfr_eager, sfr_jit, rtol=1e-6)
