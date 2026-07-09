@@ -83,12 +83,21 @@ class NebularGridTable:
         ``grid_dims`` matches ``axes``; a 0-axis table is shape ``(n_lines,)``.
     wavelengths : ndarray, shape (n_lines,)
         Rest-frame vacuum line wavelengths [Angstrom].
+    log_phot_per_qh : ndarray, shape ``(*grid_dims, n_filter)`` or None
+        ``log10`` of the **intrinsic** (un-reddened) nebular filter-integrated
+        rest-frame ``L_nu`` per unit ``nion`` [erg/s/Hz per (photons/s)] — the
+        broadband analogue of ``log_line_per_qh``, one column per photometric
+        filter. Reconstructs ``nebular_phot_lnu_precomp`` (the key
+        :meth:`Observation.predict_via_precomp` consumes) without the per-eval
+        Cue forward + filter integration. ``None`` when the reference model had
+        no ``WavePrecomp`` filters to integrate against (line-only grid).
     """
 
     axis_names: tuple
     axes: tuple
     log_line_per_qh: jnp.ndarray
     wavelengths: jnp.ndarray
+    log_phot_per_qh: jnp.ndarray | None = None
 
 
 def _axis_range(spec, name):
@@ -188,31 +197,47 @@ def precompute_nebular_grid(
         axes.append(jnp.linspace(lo, hi, n_grid))
     axes = tuple(axes)
 
-    def _row(point_values) -> jnp.ndarray:
+    def _row(point_values):
+        """(line_per_qh, phot_per_qh|None) at one grid point — the Cue forward."""
         p = dict(ref_params)
         for name, val in zip(axis_names, point_values, strict=True):
             p[name] = jnp.asarray(float(val))
         state = model.predict_state(p)
+        inv_qh = 1.0 / jnp.maximum(_nion_of_state(state), 1e-30)
         # intrinsic (redden=False) observed flux -> luminosity per Q_H
         flux = model.predict_line_fluxes(
             p, target_wavelengths=wavelengths, redden=False, state=state
         )
-        nion = _nion_of_state(state)
-        return jnp.asarray(flux) * ref_divisor / jnp.maximum(nion, 1e-30)
+        line_per_qh = jnp.asarray(flux) * ref_divisor * inv_qh
+        # intrinsic nebular filter-integrated rest-frame L_nu per Q_H (the exact
+        # per-eval publish, captured once at build time). Absent when the model
+        # has no WavePrecomp filters (line-only grid).
+        neb_phot = state.derived.get("nebular_phot_lnu_precomp")
+        phot_per_qh = None if neb_phot is None else jnp.asarray(neb_phot) * inv_qh
+        return line_per_qh, phot_per_qh
 
     if not axis_names:
-        line_per_qh = _row(())  # (n_lines,)
+        grid_shape: tuple = ()
+        points: list = [()]
     else:
         grid_shape = tuple(len(a) for a in axes)
-        rows = [_row(pt) for pt in itertools.product(*[list(a) for a in axes])]
-        line_per_qh = jnp.stack(rows).reshape(*grid_shape, wavelengths.shape[0])
+        points = list(itertools.product(*[list(a) for a in axes]))
+    rows = [_row(pt) for pt in points]
+
+    def _stack_log(vectors) -> jnp.ndarray:
+        # log space: nebular luminosities span decades across the ionization grid
+        arr = jnp.stack(vectors)  # (n_points, n_channel)
+        return jnp.log10(jnp.maximum(arr, 1e-300)).reshape(*grid_shape, arr.shape[-1])
+
+    log_line = _stack_log([r[0] for r in rows])
+    log_phot = None if rows[0][1] is None else _stack_log([r[1] for r in rows])
 
     return NebularGridTable(
         axis_names=axis_names,
         axes=axes,
-        # log space: line luminosities span decades across the ionization grid
-        log_line_per_qh=jnp.log10(jnp.maximum(line_per_qh, 1e-300)),
+        log_line_per_qh=log_line,
         wavelengths=wavelengths,
+        log_phot_per_qh=log_phot,
     )
 
 
@@ -253,3 +278,60 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
         log_lpq = interp_nd_pchip(table.log_line_per_qh, table.axes, point)
     lum = jnp.asarray(nion) * (10.0**log_lpq)  # node-exact geometric interp
     return lum / _four_pi_dl2(redshift)
+
+
+def reconstruct_nebular_phot(nion, params, table) -> jnp.ndarray:
+    r"""Reconstruct the intrinsic nebular photometry precompute — no Cue forward.
+
+    The broadband analogue of :func:`reconstruct_nebular_lines`. Returns the
+    **rest-frame** filter-integrated ``L_nu`` (one column per filter) that the
+    nebular component would publish as ``nebular_phot_lnu_precomp``:
+
+    .. math::
+
+        L_\nu^{\rm neb}(b) = n_{\rm ion}\,
+            \mathrm{interp}\bigl(\ell_b;\,Z_\star,\log U,\log Z_{\rm gas}\bigr)
+
+    **No cosmology or dust here** — unlike the line channel, this matches the
+    intrinsic precompute contract: :meth:`Observation.predict_via_precomp`
+    applies the young-limit dust screen (at the filter level) and the
+    ``(1+z)/(4 pi d_L^2)`` dimming downstream, exactly as it does for the exact
+    per-eval publish.
+
+    Parameters
+    ----------
+    nion : float
+        Ionizing photon rate for this evaluation (stellar-published; == q_h).
+    params : Mapping
+        Parameter dict — the free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`, built from a
+        ``WavePrecomp`` model so ``log_phot_per_qh`` is populated.
+
+    Returns
+    -------
+    ndarray, shape (n_filter,)
+        Intrinsic nebular filter-integrated rest-frame ``L_nu`` [erg/s/Hz].
+
+    Raises
+    ------
+    ValueError
+        If the table carries no photometry channel (``log_phot_per_qh is None``)
+        — rebuild from a ``WavePrecomp`` model with photometric filters.
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + a scalar multiply.
+    """
+    if table.log_phot_per_qh is None:
+        raise ValueError(
+            "NebularGridTable has no photometry channel (log_phot_per_qh is None). "
+            "Rebuild precompute_nebular_grid from a model built with "
+            "approx=WavePrecomp() and photometric filters."
+        )
+    if not table.axis_names:
+        log_ppq = table.log_phot_per_qh
+    else:
+        point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
+        log_ppq = interp_nd_pchip(table.log_phot_per_qh, table.axes, point)
+    return jnp.asarray(nion) * (10.0**log_ppq)  # rest-frame L_nu; consumer applies dust + z

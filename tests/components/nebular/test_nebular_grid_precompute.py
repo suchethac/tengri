@@ -23,10 +23,21 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, Uniform, load_ssp_data
+from tengri import (
+    FIXED,
+    FREE,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    Uniform,
+    WavePrecomp,
+    load_ssp_data,
+)
 from tengri.components.nebular.nebular_grid_precompute import (
     precompute_nebular_grid,
     reconstruct_nebular_lines,
+    reconstruct_nebular_phot,
 )
 from tengri.observation.line_flux_data import LineFluxData
 
@@ -66,6 +77,35 @@ def _model(neb, sfh_wild=FREE):
 
 def _nion(m, p):
     return float(np.sum(np.asarray(m.predict_state(p).derived["nion"])))
+
+
+_BANDS = ["galex_fuv", "galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1", "wise_w2"]
+
+
+def _wave_model(neb, sfh_wild=FREE):
+    """WavePrecomp Cue model with dust off — so it publishes nebular_phot_lnu_precomp."""
+    import warnings
+
+    _require()
+    ssp = load_ssp_data(_BARE)
+    obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_LINE_DATA)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "*": sfh_wild},
+            dust={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+                "tau_diff": Fixed(0.0),
+                "tau_bc": Fixed(0.0),
+            },
+            neb=neb,
+            redshift=Fixed(Z),
+            approx=WavePrecomp(),
+        )
 
 
 def test_axes_adapt_to_free_ionization():
@@ -141,3 +181,45 @@ def test_axis_range_reads_prior_not_default():
     ax = np.asarray(table.axes[table.axis_names.index("neb_logU")])
     assert ax.min() == pytest.approx(-5.0, abs=1e-6), f"axis min {ax.min()} != prior -5.0"
     assert ax.max() == pytest.approx(0.0, abs=1e-6), f"axis max {ax.max()} != prior 0.0"
+
+
+def test_phot_channel_reconstructs_nebular_precomp():
+    """Q_H x interp(phot_grid) matches the exact nebular_phot_lnu_precomp publish.
+
+    The broadband analogue of the line channel. A WavePrecomp model publishes
+    the intrinsic filter-integrated nebular L_nu (``nebular_phot_lnu_precomp``,
+    the key predict_via_precomp consumes). The grid captures it per Q_H at build
+    time; the reconstruction is what the fast forward would publish instead of
+    the per-eval Cue forward + filter integration.
+
+    met FIXED + logU free (the 'sometimes met is fixed' sweet spot) — the grid is
+    over the smooth gas axis, so the intrinsic-channel error stays tight.
+    """
+    m = _wave_model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    table = precompute_nebular_grid(m, _LW, n_grid=14)
+    assert table.axis_names == ("neb_logU",), table.axis_names
+    assert table.log_phot_per_qh is not None, "photometry channel missing"
+    assert table.log_phot_per_qh.shape == (14, len(_BANDS)), table.log_phot_per_qh.shape
+
+    worst = 0.0
+    for i in range(6):
+        p = dict(m.spec.sample(jax.random.PRNGKey(500 + i)))
+        st = m.predict_state(p)
+        exact = np.asarray(st.derived["nebular_phot_lnu_precomp"])  # rest-frame L_nu
+        nion = float(np.sum(np.asarray(st.derived["nion"])))
+        fast = np.asarray(reconstruct_nebular_phot(nion, p, table))
+        strong = np.abs(exact) > 1e-3 * np.max(np.abs(exact))
+        rel = np.max(np.abs(fast - exact)[strong] / (np.abs(exact)[strong] + 1e-40))
+        worst = max(worst, rel)
+    assert worst < 3e-2, f"nebular photometry reconstruction off by {worst:.2e}"
+
+
+def test_phot_channel_absent_without_wave_precomp():
+    """A line-only grid (no WavePrecomp filters) has no photometry channel, and
+    reconstruct_nebular_phot raises loudly rather than silently returning garbage."""
+    m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    table = precompute_nebular_grid(m, _LW, n_grid=4)
+    assert table.log_phot_per_qh is None
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    with pytest.raises(ValueError, match="no photometry channel"):
+        reconstruct_nebular_phot(_nion(m, p), p, table)
