@@ -1,5 +1,6 @@
 cloudy_grid_*.h5
 dl07_templates.h5
-cue_weights.npz
+# cue_weights.npz is tracked (10 MB, MIT upstream) — the Cue backend needs it
+# out of the box. Regenerate with scripts/convert_cue_weights.py.
 # claude-squad worktree symlink to repo data/ — not tracked
 data
