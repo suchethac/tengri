@@ -69,7 +69,7 @@ forward = ForwardModel.build(sed=sed, observation=obs)
 key  = jax.random.PRNGKey(0)
 mock = sed.mock(sed.spec.sample(key), key=key)
 
-fitter = Fitter(forward, mock["flux_obs"], mock["noise"])
+fitter = Fitter(forward, mock.flux_obs, mock.noise)
 result = fitter.run("mcmc_nuts")
 print(result.summary_table())
 ```

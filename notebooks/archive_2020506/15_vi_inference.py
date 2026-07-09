@@ -250,8 +250,8 @@ print("=" * 70)
 print("Running VI methods on 7-D parametric model")
 print("=" * 70)
 
-fitter_nifty = Fitter(model, mock["flux_obs"], mock["noise"])
-fitter_native = Fitter(model, mock["flux_obs"], mock["noise"])
+fitter_nifty = Fitter(model, mock.flux_obs, mock.noise)
+fitter_native = Fitter(model, mock.flux_obs, mock.noise)
 
 key = jax.random.PRNGKey(42)
 

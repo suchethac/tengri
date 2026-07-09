@@ -3229,7 +3229,7 @@ class SEDModel:
 
         Calls the nebular backend to compute line luminosities,
         selects target lines by wavelength matching, and converts
-        from luminosity (Lsun) to observed flux (erg/s/cm^2).
+        from luminosity (erg/s) to observed flux (erg/s/cm^2).
 
         **Raw forward-pass output.** For interactive access to individual
         named lines (with luminosities, ratios, and BPT diagnostics), see
@@ -4211,7 +4211,7 @@ class SEDModel:
             via ``all_waves`` / ``all_lums``. See
             :meth:`EmissionLines.get` for nearest-wavelength access to
             species the headline NamedTuple does not name (HeII 1640,
-            [O III] 4363, ...). All luminosities in Lsun.
+            [O III] 4363, ...). All luminosities in erg/s.
 
         Raises
         ------

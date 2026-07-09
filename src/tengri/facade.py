@@ -806,7 +806,9 @@ def doctor() -> str:
 
     if not found_ssp:
         lines.append("  WARNING: No SSP data found in common locations.")
-        lines.append("    Check TENGRI_DATA env var or download SSP grids.")
+        lines.append("    Run tengri.download_ssp() to fetch the default grid")
+        lines.append("    (tengri.list_known_ssps() shows alternatives), or point")
+        lines.append("    TENGRI_DATA at an existing SSP directory.")
 
     lines.append("")
 

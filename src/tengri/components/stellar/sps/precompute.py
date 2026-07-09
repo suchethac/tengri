@@ -570,6 +570,16 @@ def precompute_photometry_ztable(
         for f_idx, (fw, ft) in enumerate(zip(filter_waves, filter_trans)):
             fw_np, ft_np = np.asarray(fw), np.asarray(ft)
             grid = np.sort(np.concatenate([wave_obs, fw_np]))
+            # Transmission is identically zero outside the filter table's
+            # support (left=0/right=0 below), so union-grid segments with
+            # both endpoints beyond an edge integrate to exactly zero.
+            # Keep one node past each edge (the straddle segments) and drop
+            # the rest: the SSP grid spans 91 Å–100 µm while a band
+            # transmits over a narrow window, so this cuts the quadrature
+            # ~10–50× at identical integral values.
+            lo = max(np.searchsorted(grid, fw_np[0]) - 1, 0)
+            hi = min(np.searchsorted(grid, fw_np[-1], side="right") + 1, grid.size)
+            grid = grid[lo:hi]
             trans_on_grid = np.interp(grid, fw_np, ft_np, left=0.0, right=0.0)
             tw_np = trans_on_grid * _filter_weight_np(grid, convention)
             denom = _np_trapezoid(tw_np, grid)

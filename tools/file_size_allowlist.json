@@ -7,7 +7,7 @@
   "src/tengri/components/dust/emission_templates.py": 2419,
   "src/tengri/inference/posterior.py": 2349,
   "src/tengri/components/agn/disc.py": 2138,
-  "src/tengri/forward/prediction.py": 2152,
+  "src/tengri/forward/prediction.py": 2161,
   "src/tengri/inference/hierarchical.py": 2076,
   "src/tengri/components/stellar/sps/dsps_wrapper.py": 2117,
   "src/tengri/components/stellar/sfh/mean_sfh.py": 2036,
@@ -34,7 +34,7 @@
   "src/tengri/components/nebular/cloudy_grid.py": 1013,
   "src/tengri/observation/noise.py": 1011,
   "src/tengri/components/igm/igm.py": 1059,
-  "src/tengri/components/stellar/sps/precompute.py": 964,
+  "src/tengri/components/stellar/sps/precompute.py": 974,
   "src/tengri/observation/filters/__init__.py": 937,
   "src/tengri/components/radio/radio.py": 925,
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
@@ -44,6 +44,6 @@
   "src/tengri/observation/line_list.py": 841,
   "src/tengri/utils/sed_quantities.py": 837,
   "src/tengri/components/agn/qsogen.py": 826,
-  "src/tengri/facade.py": 820,
+  "src/tengri/facade.py": 822,
   "src/tengri/observation/spectroscopy.py": 807
 }

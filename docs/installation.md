@@ -3,11 +3,14 @@
 ## From PyPI
 
 ```bash
-pip install astro-tengri
+pip install "astro-tengri[all]"
 ```
 
 The distribution name on PyPI is `astro-tengri`; the Python import
 name is `tengri`. (`pip install tengri` is an unrelated 2017 package.)
+The `[all]` extra pulls in the optimizer and sampler backends (`optax`,
+`blackjax`) used by the quick-start examples; a bare install can build
+models and predict, but `Fitter.run` needs the extras.
 
 ## From source
 
@@ -38,7 +41,7 @@ pip install -e ".[all]"
 
 - Python ≥ 3.11
 - JAX ≥ 0.4.20
-- DSPS 0.4.6 (pinned; 0.4.7 removed `CosmoParams`)
+- DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time)
 - NIFTy ≥ 8.5 with the `re` extra
 - NumPy, Matplotlib, h5py
 

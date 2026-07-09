@@ -100,8 +100,8 @@ def main() -> None:
     key = jax.random.PRNGKey(7)
     truth = sed_model.spec.sample(key)
     mock = generate_mock(sed_model, truth, key=key, snr=30.0)
-    flux_obs = np.asarray(mock["flux_obs"])
-    noise = np.asarray(mock["noise"])
+    flux_obs = np.asarray(mock.flux_obs)
+    noise = np.asarray(mock.noise)
 
     methods = [
         "mcmc_nuts",
