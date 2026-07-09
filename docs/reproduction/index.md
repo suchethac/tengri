@@ -47,5 +47,6 @@ agnfitter
 prospect_r
 ```
 
-Comparisons with MAGPHYS, x-cigale, and GRAHSP will land as their
-reproduction notebooks come together.
+Comparisons with BEAGLE, MAGPHYS, GRAHSP, and GalaPy are scoped on the
+[issue tracker](https://github.com/suchethac/tengri/issues) and will
+land as their notebooks come together.
