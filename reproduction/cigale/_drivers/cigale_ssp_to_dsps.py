@@ -52,7 +52,7 @@ def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
     with open(filename, "rb") as f:
         ssp = pickle.load(f)
 
-    # ssp.info rows: [m_star surviving, m_gas returned, n_ly ionising photons s^-1]
+    # ssp.info rows: [m_star surviving, m_gas returned, n_ly ionizing photons s^-1]
     # m_star + m_gas = 1 exactly at every age (mass conservation).
     return {
         'wl': ssp.wl,                 # nm
@@ -61,7 +61,7 @@ def load_bc03_pickle(metallicity: float, imf: str = "chab") -> dict:
         'Z': ssp.Z,
         'm_star': ssp.info[0, :],     # surviving stellar mass fraction (n_age,)
         'm_gas':  ssp.info[1, :],     # mass returned to ISM (n_age,)
-        'n_ly':   ssp.info[2, :],     # ionising photon rate [s^-1 per Msun formed]
+        'n_ly':   ssp.info[2, :],     # ionizing photon rate [s^-1 per Msun formed]
         'imf': ssp.imf,
     }
 

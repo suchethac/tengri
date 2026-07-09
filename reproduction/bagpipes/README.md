@@ -33,7 +33,7 @@ pip install bagpipes jupytext jupyter
 
 Bagpipes' optional `pymultinest` dependency is only needed for
 posterior sampling and can be ignored here — we use
-`bagpipes.model_galaxy` for forward-modelling only. Tengri itself
+`bagpipes.model_galaxy` for forward-modeling only. Tengri itself
 should already be importable.
 
 ## Regenerating the BC03+MILES SSP grid
@@ -97,8 +97,8 @@ convention difference worth flagging for users moving between codes.
 | 4 | Dust attenuation curves | Calzetti, Cardelli, CF00, Salim — visual match. |
 | 5 | Attenuation applied | Matched at single-Av. |
 | 6 | DL07 dust IR + energy balance | Exact (`L_IR_emitted − L_absorbed = 0` to floating point). |
-| 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. Most of the gap is Cloudy v17 (Cue training set) vs Cloudy v25 (current BAGPIPES) plus bare-stellar vs SFH-integrated ionising-luminosity paths. |
-| 9 | LSF / velocity broadening | tengri `velocity_broaden` matches the analytic Gaussian σ = 150 km/s FWHM (7.78 Å vs 7.73 Å expected) to 0.7 %. BAGPIPES gives 9.5 Å — its native R_spec = 1000 carries ~127 km/s of resolution that adds in quadrature with `veldisp`. Both behaviours are correct; they bracket different conventions of "intrinsic line width". |
+| 8 | Nebular | tengri Cue Hα ≈ 3.6× BAGPIPES Cloudy v25 Hα at matched SFR and logU. Most of the gap is Cloudy v17 (Cue training set) vs Cloudy v25 (current BAGPIPES) plus bare-stellar vs SFH-integrated ionizing-luminosity paths. |
+| 9 | LSF / velocity broadening | tengri `velocity_broaden` matches the analytic Gaussian σ = 150 km/s FWHM (7.78 Å vs 7.73 Å expected) to 0.7 %. BAGPIPES gives 9.5 Å — its native R_spec = 1000 carries ~127 km/s of resolution that adds in quadrature with `veldisp`. Both behaviors are correct; they bracket different conventions of "intrinsic line width". |
 | 10 | Double power-law SFH | Same closed-form shape on both sides, **but applied in different time frames**: BAGPIPES treats `t` as cosmic age since the Big Bang, tengri treats it as lookback since formation. For matched `(α, β, τ)` the two curves are time-reversed images of each other. Not a bug — a convention difference researchers reading two papers should know about. |
 | 11 | Lognormal SFH | Same shape, same time-frame caveat as §10. BAGPIPES `tmax` ≡ cosmic age; tengri `peak_lbt_gyr` ≡ lookback time. |
 | 12 | Inoue14 IGM | Within ~1e-3 between 950–1216 Å. Tengri returns 0 below the Lyman limit (912 Å) — bagpipes returns the smooth continuum predicted by Inoue+2014. Tracked as a tengri follow-up. |
