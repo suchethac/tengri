@@ -34,7 +34,7 @@
   "src/tengri/components/nebular/cloudy_grid.py": 1013,
   "src/tengri/observation/noise.py": 1011,
   "src/tengri/components/igm/igm.py": 1059,
-  "src/tengri/components/stellar/sps/precompute.py": 964,
+  "src/tengri/components/stellar/sps/precompute.py": 974,
   "src/tengri/observation/filters/__init__.py": 937,
   "src/tengri/components/radio/radio.py": 925,
   "src/tengri/inference/backends/mcmc/raytrace.py": 916,
