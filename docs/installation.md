@@ -38,7 +38,7 @@ pip install -e ".[all]"
 
 - Python ≥ 3.11
 - JAX ≥ 0.4.20
-- DSPS 0.4.6 (pinned; 0.4.7 removed `CosmoParams`)
+- DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time)
 - NIFTy ≥ 8.5 with the `re` extra
 - NumPy, Matplotlib, h5py
 

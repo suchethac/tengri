@@ -46,6 +46,21 @@ def cue_model(synthetic_ssp_wide):
         )
 
 
+def test_sed_quantities_use_state_wave_grid(cue_model):
+    """Integrated SED quantities must use the pipeline's own wave grid.
+
+    The ForwardState evaluates on its own grid (auto-extended for dust
+    emission, trimmed to the modeling range) — before this fix,
+    ``pred.sed.l_bol`` and the luminosity-weighted age/metallicity
+    integrated state-grid SED arrays against the raw ``ssp_wave`` axis
+    and crashed with a broadcasting TypeError whenever the two differed
+    (the README-quickstart recipe model among them).
+    """
+    pred = cue_model.predict({})
+    assert np.isfinite(float(pred.sed.l_bol))
+    assert np.isfinite(float(pred.sed.luminosity_weighted_age_gyr))
+
+
 def test_lines_access_is_single_forward_pass(cue_model, monkeypatch):
     calls = []
     orig_predict_state = type(cue_model).predict_state
