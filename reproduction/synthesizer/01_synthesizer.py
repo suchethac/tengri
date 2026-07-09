@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Reproducing Synthesizer with tengri
+# # Reproducing Synthesizer's physics with tengri
 #
 # Synthesizer (Lovell et al. 2025, OJA; Roper et al. 2026, JOSS — cite both) is a modular forward-modeling
 # package for synthetic galaxy observables. It builds spectra by extracting from
@@ -37,8 +37,8 @@
 # interpolation alone, not a different spectral library. For the AGN line regions
 # (§9c, §9d) tengri reads the *same* `/spectra/nebular` reprocessed array that
 # Synthesizer's `UnifiedAGN` extracts for its NLR/BLR, through the public grammar
-# (`lines='nlr_synthesizer_spectra'`), so the line regions land on the same axes.
-# A discrete-line path (`nlr_synthesizer`, re-broadening the grid's `/lines` table)
+# (`nlr={'type': 'synthesizer_spectra'}`), so the line regions land on the same axes.
+# A discrete-line path (`nlr={'type': 'synthesizer'}`, re-broadening `/lines`)
 # also exists but is scrambled on the placeholder *test* grid.
 #
 # **Grids.** This notebook runs on Synthesizer's *test* grids
@@ -71,7 +71,17 @@ from reproduction.synthesizer._drivers import (
 )
 
 import tengri
-from tengri import FIXED, Fixed, SEDModel, Uniform, load_ssp_data
+from tengri import (
+    FIXED,
+    FREE,
+    Fixed,
+    Observation,
+    Photometry,
+    SEDModel,
+    Uniform,
+    WavePrecomp,
+    load_ssp_data,
+)
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -273,12 +283,14 @@ save_fig("synthesizer_02_sfh_delayed.png")
 # show `L_ν` vs `λ_rest` for the 10^10 M⊙ fiducial galaxy.
 #
 # Both sides form exactly 10^10 M⊙ and read the same SSPs (§1), so the printed
-# ~1.16× optical ratio is *not* a normalization error — it is the two codes'
+# ~1.09× optical ratio is *not* a normalization error — it is the two codes'
 # independent **SFH discretizations**: Synthesizer integrates
 # an analytic SFZH onto the SSP age-bin edges (a third of the mass lands in the
 # wide log-spaced bin straddling the SFR peak), while tengri convolves on its
-# 64-point log-lookback grid. The mild chromatic spread (P5–P95 ≈ 1.11–1.19)
-# follows from the slightly different age weighting, not a shape disagreement.
+# log-lookback quadrature, validated against a dense code-independent
+# convolution of the same SSP arrays (#964). The mild chromatic spread
+# (P5–P95 ≈ 1.05–1.10) follows from the different age weighting, not a
+# shape disagreement.
 
 # %%
 w_s3, L_s3 = S.stellar_sed(
@@ -735,7 +747,7 @@ BH_COS_INC = float(np.cos(np.radians(BH_INC)))
 _TORUS_FRAC = THETA_TORUS / 90.0
 
 
-def _agn_grammar(disc="kubota_done", torus="simple", lines="none", cos_inc=BH_COS_INC):
+def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos_inc=BH_COS_INC):
     """Build a composable AGN via the public API; return (wave, L_nu of sed_agn)."""
     m = SEDModel.build(
         ssp_data=ssp,
@@ -751,7 +763,8 @@ def _agn_grammar(disc="kubota_done", torus="simple", lines="none", cos_inc=BH_CO
             "type": "composable",
             "disc": {"type": disc},
             "torus": {"type": torus},
-            "lines": {"type": lines},
+            "nlr": {"type": nlr},
+            "blr": {"type": blr},
             "agn_log_lbol": Fixed(agn_log_lbol),
             # Match Synthesizer's black hole, not just its bolometric luminosity:
             # the kubota_done (qsosed) disc temperature profile — and therefore the
@@ -892,14 +905,14 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 # Synthesizer's `UnifiedAGN` builds its NLR emission from the grid's reprocessed
 # `/spectra/nebular` array (nebular continuum + lines, extracted isotropically at
 # `cosine_inclination = 0.5`). tengri now reads that *same* array through the
-# public grammar — `lines={'type': 'nlr_synthesizer_spectra'}` — so the two land
+# public grammar — `nlr={'type': 'synthesizer_spectra'}` — so the two land
 # on the same axes (overlay below): an [O III] 5007-dominant reprocessed spectrum
 # scaled by `L_bol × covering_fraction`. Shape correlation ≈ 0.97; the residual
 # line-peak smoothing is tengri's C²-grid interpolation blending the test grid's
 # two nodes per axis (the same gradient-friendly kernel as the §9f mask), which
 # shrinks on a production grid.
 #
-# The earlier discrete-line path (`nlr_synthesizer`, which re-broadens the grid's
+# The earlier discrete-line path (`nlr={'type': 'synthesizer'}`, which re-broadens the grid's
 # `/lines/luminosity` table) is still available for non-Synthesizer use, but on
 # this downloadable *test* grid the `/lines/*` arrays are a scrambled placeholder —
 # not parallel to `/lines/id` (off by up to 22660 Å) and inconsistent with
@@ -909,8 +922,8 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 w_nlr_s, L_nlr_s = agn["nlr"]
 # tengri's NLR through the *public* grammar, reading the same /spectra/nebular
 # array as UnifiedAGN. No torus, so subtracting the disc isolates the NLR.
-_wave_nlr, _L_with_nlr = _agn_grammar(torus="none", lines="nlr_synthesizer_spectra")
-_, _L_disc_only = _agn_grammar(torus="none", lines="none")
+_wave_nlr, _L_with_nlr = _agn_grammar(torus="none", nlr="synthesizer_spectra")
+_, _L_disc_only = _agn_grammar(torus="none")
 L_nlr_t = _L_with_nlr - _L_disc_only
 
 # Same physical product on a shared y-axis → overlay (not two independent panels).
@@ -945,8 +958,8 @@ print(
 # %% [markdown]
 # ### §9d Broad-line region
 #
-# The broad-line region reproduces the same way — `lines={'type':
-# 'blr_synthesizer_spectra'}` reads the BLR grid's `/spectra/nebular` array.
+# The broad-line region reproduces the same way — `blr={'type':
+# 'synthesizer_spectra'}` reads the BLR grid's `/spectra/nebular` array.
 # Synthesizer extracts *both* line regions isotropically (grid
 # `cosine_inclination = 0.5`), so the reproduction block returns the BLR on the
 # isotropic channel to match `UnifiedAGN`'s `blr` component. (tengri's physically
@@ -962,8 +975,8 @@ print(
 w_blr_s, L_blr_s = agn["blr"]
 # tengri's BLR through the *public* grammar, reading the same /spectra/nebular
 # array as UnifiedAGN's blr component (isotropic, cos=0.5).
-_wave_blr, _L_with_blr = _agn_grammar(torus="none", lines="blr_synthesizer_spectra")
-_, _L_disc_only2 = _agn_grammar(torus="none", lines="none")
+_wave_blr, _L_with_blr = _agn_grammar(torus="none", blr="synthesizer_spectra")
+_, _L_disc_only2 = _agn_grammar(torus="none")
 L_blr_t = _L_with_blr - _L_disc_only2
 fig, ax = plt.subplots(figsize=(9, 4.5))
 ax.plot(w_blr_s, L_blr_s, "C0-", lw=1.2, label="Synthesizer  UnifiedAGN BLR  (/spectra/nebular)")
@@ -1088,15 +1101,15 @@ print(
 # ``UnifiedAGN``, through the combined ``nlr_blr_synthesizer_spectra`` lines block.
 # The runner masks the disc with inclination while the line regions stay isotropic
 # (Synthesizer's convention) — no hand-assembly of raw adapter calls.
-w_t, L_tot_t = _agn_grammar(lines="nlr_blr_synthesizer_spectra")
+w_t, L_tot_t = _agn_grammar(nlr="synthesizer_spectra", blr="synthesizer_spectra")
 # Decompose it for the component panel, every piece through the same grammar:
 # disc-only and torus-only as standalone builds; the line regions as the
 # difference each makes on top of the disc+torus continuum.
 _, L_disc_t = _agn_grammar(torus="none")
 _, L_torus_t = _agn_grammar(disc="none")
 _, _L_cont = _agn_grammar()  # disc + torus, no lines
-L_nlr_t = _agn_grammar(lines="nlr_synthesizer_spectra")[1] - _L_cont
-L_blr_t = _agn_grammar(lines="blr_synthesizer_spectra")[1] - _L_cont
+L_nlr_t = _agn_grammar(nlr="synthesizer_spectra")[1] - _L_cont
+L_blr_t = _agn_grammar(blr="synthesizer_spectra")[1] - _L_cont
 
 fig = plt.figure(figsize=(13, 9))
 gs = fig.add_gridspec(2, 2, height_ratios=[3, 2])
@@ -1188,7 +1201,6 @@ _m_vis = SEDModel.build(
         "type": "composable",
         "disc": {"type": "kubota_done"},
         "torus": {"type": "simple"},
-        "lines": {"type": "none"},
         "agn_log_lbol": Fixed(agn_log_lbol),
         "agn_cos_inc": Uniform(0.0, 1.0),
         "agn_theta_torus": Fixed(THETA_TORUS),
@@ -1219,7 +1231,7 @@ ax_inc.axvline(
     label=rf"$90°-\theta_{{torus}}$ = {90 - THETA_TORUS:g}°",
 )
 ax_inc.set_xlabel("inclination [degrees]")
-ax_inc.set_ylabel("disc visibility, normalised")
+ax_inc.set_ylabel("disc visibility, normalized")
 ax_inc.set_title("Disc visibility vs inclination — hard step vs differentiable sigmoid")
 ax_inc.legend(fontsize=9)
 ax_inc.grid(True, alpha=0.3)
@@ -1229,6 +1241,118 @@ print(
     f"§9f disc mask (θ_torus={THETA_TORUS:g}°): "
     f"Synthesizer hard-zeros at inc>{90 - THETA_TORUS:g}°; tengri sigmoid stays differentiable."
 )
+
+
+# %% [markdown]
+# ### §9g Photometry under precompute — exact vs `WavePrecomp`
+#
+# Fits drive this same unified AGN through `predict_photometry`, usually with
+# the `approx=WavePrecomp()` lookup tables. Additive AGN emitters are
+# filter-integrated exactly under precompute (`lnu_filter_integral_batch`),
+# so the sharp line-region structure — the highest-risk case for any table
+# approximation — must survive to float level. Both paths below share one
+# FUV-to-mid-IR filter set at z = 0.05.
+
+# %%
+_g_filters = [
+    "galex_fuv",
+    "galex_nuv",
+    "sdss_u",
+    "sdss_g",
+    "sdss_r",
+    "sdss_i",
+    "sdss_z",
+    "2mass_j",
+    "2mass_ks",
+    "wise_w1",
+    "wise_w2",
+]
+_g_obs = Observation(photometry=Photometry.from_names(_g_filters))
+
+
+def _unified_phot(approx):
+    m = SEDModel.build(
+        ssp_data=ssp,
+        observation=_g_obs,
+        approx=approx,
+        sfh={
+            "type": "delayed",
+            "tau_gyr": Fixed(1.0),
+            "age_gyr": Fixed(5.0),
+            "log_total_mass": Fixed(0.0),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        agn={
+            "type": "composable",
+            "disc": {"type": "kubota_done"},
+            "torus": {"type": "simple"},
+            "nlr": {"type": "synthesizer_spectra"},
+            "blr": {"type": "synthesizer_spectra"},
+            "agn_log_lbol": Fixed(agn_log_lbol),
+            "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
+            "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
+            "agn_cos_inc": Fixed(BH_COS_INC),
+            "agn_theta_torus": Fixed(THETA_TORUS),
+            "agn_torus_frac": Fixed(_TORUS_FRAC),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.05),
+    )
+    return np.asarray(m.predict_photometry({}))
+
+
+_phot_exact = _unified_phot(None)
+_phot_lut = _unified_phot(WavePrecomp())
+_rel = np.abs(_phot_lut / _phot_exact - 1.0)
+
+fig, ax = plt.subplots(figsize=(9, 4))
+ax.bar(range(len(_g_filters)), np.maximum(_rel, 1e-17), color="C1")
+ax.set_xticks(range(len(_g_filters)))
+ax.set_xticklabels(_g_filters, rotation=45, ha="right", fontsize=8)
+ax.set_yscale("log")
+ax.set_ylabel(r"|WavePrecomp / exact $-$ 1|")
+ax.set_title("§9g unified-AGN photometry: precompute vs exact, per band")
+ax.grid(True, alpha=0.3, axis="y")
+fig.tight_layout()
+save_fig("synthesizer_09g_precompute_parity.png")
+print(f"§9g precompute vs exact photometry: max |Δ|/exact = {float(_rel.max()):.2e}")
+
+
+# %% [markdown]
+# ### §9h What a fit would free
+#
+# The same composable AGN with the block-scoped wildcard flipped to `FREE`.
+# `'*': FREE` frees only the parameters the *active* disc/torus/nlr/blr
+# blocks consume, and every freed parameter is guaranteed to move
+# `predict()` (contract: `tests/contract/test_agn_block_consumes.py`).
+
+# %%
+_m_free = SEDModel.build(
+    ssp_data=ssp,
+    sfh={
+        "type": "delayed",
+        "tau_gyr": Fixed(1.0),
+        "age_gyr": Fixed(5.0),
+        "log_total_mass": Fixed(0.0),
+        "*": FIXED,
+    },
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    agn={
+        "type": "composable",
+        "disc": {"type": "kubota_done"},
+        "torus": {"type": "simple"},
+        "nlr": {"type": "synthesizer_spectra"},
+        "blr": {"type": "synthesizer_spectra"},
+        "agn_log_lbol": Fixed(agn_log_lbol),
+        "*": FREE,
+    },
+    redshift=Fixed(0.0),
+)
+_agn_free = sorted(str(_p) for _p in _m_free.spec.free_params if str(_p).startswith("agn_"))
+print(f"§9h '*': FREE frees {len(_agn_free)} AGN parameters:")
+for _p in _agn_free:
+    print("   ", _p)
 
 
 # %% [markdown]

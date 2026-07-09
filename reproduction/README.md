@@ -1,6 +1,6 @@
-# Reproduction studies
+# Physics reproduction studies
 
-Component-by-component reproductions of tengri against the reference
+Component-by-component physics reproductions: tengri against the reference
 SED-fitting codes the community already relies on. Each subfolder
 holds one comparison.
 
@@ -16,9 +16,7 @@ reproduction/
 
 Each comparison ships a notebook (`01_<code>.py`, jupytext percent
 format), thin code-specific driver modules under `_drivers/`, and the
-rendered figures. All six folders are complete; the Synthesizer
-notebook is under revision and temporarily withheld from the published
-docs. AGNFITTER-RX is the AGN-first member of the series — a
+rendered figures. All six comparisons are live. AGNFITTER-RX is the AGN-first member of the series — a
 radio-to-X-ray deep dive on the four accretion-disk and four torus
 libraries — and reads the external code's template libraries directly
 rather than running its fitter. The Synthesizer notebook focuses on the
